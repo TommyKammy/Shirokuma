@@ -1,0 +1,89 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+
+# Editors and local workspace state
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.obsidian/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.csr
+*.token
+*.secret
+
+# Logs and runtime state
+*.log
+logs/
+tmp/
+temp/
+*.pid
+*.seed
+
+# Node / frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dist/
+build/
+.next/
+.nuxt/
+coverage/
+
+# Python
+__pycache__/
+*.py[cod]
+.python-version
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# JVM / Scala
+.gradle/
+target/
+*.class
+*.jar
+*.war
+
+# Rust / Go
+bin/
+*.test
+
+# Containers, Kubernetes, and local infrastructure
+.colima/
+.kube/
+*.kubeconfig
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Data lake and warehouse scratch data
+warehouse/
+metastore/
+catalog/
+object-store/
+data/
+scratch/
