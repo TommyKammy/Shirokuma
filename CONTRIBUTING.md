@@ -6,8 +6,14 @@ Run the repository-owned verification command before opening a pull request:
 make verify
 ```
 
+If a preserved supervisor worktree needs setup before verification, use the
+repository-owned preparation entrypoint:
+
+```bash
+make prepare
+```
+
 Keep machine-local state, credentials, generated data, and large warehouse
 scratch files out of git. If a local setting is required for development,
 document the variable name in the repository and keep the value outside the
 repository.
-

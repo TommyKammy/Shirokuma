@@ -8,3 +8,10 @@ Run the repository-owned verification command before opening a pull request:
 ```bash
 make verify
 ```
+
+The supervisor can run the repository-owned preparation command before local
+verification in preserved worktrees:
+
+```bash
+make prepare
+```

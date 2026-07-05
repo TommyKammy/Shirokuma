@@ -1,8 +1,11 @@
 SHELL := /bin/bash
 
-.PHONY: verify check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
+.PHONY: prepare verify check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
 
 verify: check-required-files check-newlines check-trailing-whitespace check-no-secret-filenames
+
+prepare:
+	@true
 
 check-required-files:
 	@test -f README.md
