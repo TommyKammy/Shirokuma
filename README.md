@@ -6,6 +6,15 @@ change path are defined in [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md).
 
 ## Development
 
+Shirokuma requires Go 1.24 or newer. Build the minimal CLI and inspect its
+current command surface with:
+
+```bash
+go build ./cmd/shirokuma
+go run ./cmd/shirokuma --help
+go run ./cmd/shirokuma version
+```
+
 Run the repository-owned verification command before opening a pull request:
 
 ```bash
