@@ -2,9 +2,9 @@ SHELL := /bin/bash
 PYTHON ?= python3
 PREFLIGHT_REF ?= origin/main
 
-.PHONY: prepare verify verify-security verify-design-context verify-preflight-parser verify-colima-baseline verify-ui-design-baseline verify-repository-skeleton verify-go supervisor-preflight check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
+.PHONY: prepare verify verify-security verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-ui-design-baseline verify-repository-skeleton verify-go supervisor-preflight check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
 
-verify: check-required-files verify-design-context verify-preflight-parser verify-colima-baseline verify-ui-design-baseline verify-repository-skeleton verify-go verify-security check-newlines check-trailing-whitespace check-no-secret-filenames
+verify: check-required-files verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-ui-design-baseline verify-repository-skeleton verify-go verify-security check-newlines check-trailing-whitespace check-no-secret-filenames
 
 prepare: verify-design-context
 
@@ -18,6 +18,9 @@ verify-design-context:
 
 verify-preflight-parser:
 	@$(PYTHON) -m unittest discover -s tests -p 'test_preflight_supervisor_issues.py'
+
+verify-supervisor-workflow-docs:
+	@$(PYTHON) -m unittest discover -s tests -p 'test_codex_supervisor_workflow_docs.py'
 
 verify-colima-baseline:
 	@$(PYTHON) -m unittest discover -s tests -p 'test_colima_baseline_docs.py'
