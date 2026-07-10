@@ -2,9 +2,9 @@ SHELL := /bin/bash
 PYTHON ?= python3
 PREFLIGHT_REF ?= origin/main
 
-.PHONY: prepare verify verify-design-context verify-preflight-parser supervisor-preflight check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
+.PHONY: prepare verify verify-design-context verify-preflight-parser verify-repository-skeleton verify-go supervisor-preflight check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
 
-verify: check-required-files verify-design-context verify-preflight-parser check-newlines check-trailing-whitespace check-no-secret-filenames
+verify: check-required-files verify-design-context verify-preflight-parser verify-repository-skeleton verify-go check-newlines check-trailing-whitespace check-no-secret-filenames
 
 prepare: verify-design-context
 
@@ -13,6 +13,20 @@ verify-design-context:
 
 verify-preflight-parser:
 	@$(PYTHON) -m unittest discover -s tests -p 'test_preflight_supervisor_issues.py'
+
+verify-repository-skeleton:
+	@$(PYTHON) scripts/verify_repository_skeleton.py
+
+verify-go:
+	@command -v go >/dev/null || { echo "go is required for repository verification"; exit 1; }
+	@command -v gofmt >/dev/null || { echo "gofmt is required for repository verification"; exit 1; }
+	@unformatted="$$(find . -type f -name '*.go' -not -path './.git/*' -exec gofmt -l {} +)"; test -z "$$unformatted" || { echo "gofmt required for:"; echo "$$unformatted"; exit 1; }
+	@go test ./...
+	@go vet ./...
+	@tmp="$$(mktemp -d)"; trap 'rm -rf "$$tmp"' EXIT; go build -o "$$tmp/shirokuma" ./cmd/shirokuma
+	@go run ./cmd/shirokuma --help >/dev/null
+	@test "$$(go run ./cmd/shirokuma version)" = "shirokuma dev"
+	@test "$$(go run ./cmd/shirokuma --version)" = "shirokuma version dev"
 
 supervisor-preflight:
 	@$(PYTHON) scripts/preflight_supervisor_issues.py --ref "$(PREFLIGHT_REF)"
