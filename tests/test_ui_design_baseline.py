@@ -134,6 +134,27 @@ class UIDesignBaselineTests(unittest.TestCase):
             [pawprint_text[label] for label in lifecycle],
             sorted(pawprint_text[label] for label in lifecycle),
         )
+
+        composite = ET.parse(
+            MOCKUP_ASSET_ROOT
+            / "shirokuma_ui_mockups_v0.2.2_business_composite.svg"
+        ).getroot()
+        composite_text = {
+            (node.text or "").strip(): float(node.attrib["y"])
+            for node in composite.iter("{http://www.w3.org/2000/svg}text")
+            if (node.text or "").strip() and "y" in node.attrib
+        }
+        composite_lifecycle = (
+            "PR #184 · opened",
+            "CI passed · 18 checks",
+            "Policy allowed · pol_718",
+            "Awaiting merge approval",
+        )
+        self.assertEqual(
+            [composite_text[label] for label in composite_lifecycle],
+            sorted(composite_text[label] for label in composite_lifecycle),
+        )
+
         for evidence_link in (
             "✓ Allowed · decision pol_718 ↗",
             "✓ Passed · CI run 184.18 ↗",
