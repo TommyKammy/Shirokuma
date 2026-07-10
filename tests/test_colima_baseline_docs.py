@@ -39,18 +39,28 @@ class ColimaBaselineDocumentationTests(unittest.TestCase):
             "docs/design/10_Research/106_ARM64_Container_Image_Compatibility.md",
             self.local_dev,
         )
-        self.assertIn("cloud-lab", self.topologies)
-        self.assertIn("non-default", self.topologies)
+        self.assertRegex(
+            self.topologies,
+            r"\|\s*`cloud-lab`\s*\|\s*non-default side option\s*\|",
+        )
 
     def test_lifecycle_and_recovery_commands_are_repeatable(self) -> None:
         for command in (
             "colima status --profile mac-studio-solo",
             "colima list --json",
+            "kubectl --context colima-mac-studio-solo get nodes -o wide",
             "colima stop --profile mac-studio-solo",
-            "colima delete --profile mac-studio-solo -f",
+            "colima delete --profile mac-studio-solo --data --force",
         ):
             with self.subTest(command=command):
                 self.assertIn(command, self.local_dev)
+
+        self.assertEqual(
+            self.local_dev.count(
+                "kubectl --context colima-mac-studio-solo get nodes -o wide"
+            ),
+            2,
+        )
 
 
 if __name__ == "__main__":

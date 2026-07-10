@@ -5,7 +5,7 @@ title: "Local Dev Environment"
 status: draft
 created: 2026-07-05
 updated: 2026-07-10
-version: "0.2.2"
+version: "0.2.3"
 area: "development"
 tags: [shirokuma, local-dev, colima]
 ---
@@ -82,7 +82,7 @@ Run both Colima views after start or recovery. `colima status` is the operator-r
 colima status --profile mac-studio-solo
 colima list --json
 colima ssh --profile mac-studio-solo -- uname -m
-kubectl get nodes -o wide
+kubectl --context colima-mac-studio-solo get nodes -o wide
 ```
 
 The accepted result is a running VZ VM reporting `aarch64`, Docker runtime, and a ready node from Colima built-in Kubernetes. A missing field, unexpected architecture, or unready node is a failed baseline, not an implied success.
@@ -108,7 +108,7 @@ colima status --profile mac-studio-solo
 colima list --json
 shirokuma chill --all
 colima stop --profile mac-studio-solo
-colima delete --profile mac-studio-solo -f
+colima delete --profile mac-studio-solo --data --force
 ```
 
 Recover the accepted `solo-lite` baseline with the same pinned command used for initial creation:
@@ -121,7 +121,7 @@ shirokuma init --profile mac-studio-solo
 colima status --profile mac-studio-solo
 colima list --json
 colima ssh --profile mac-studio-solo -- uname -m
-kubectl get nodes -o wide
+kubectl --context colima-mac-studio-solo get nodes -o wide
 ```
 
-If recovery verification fails, preserve the command output and exported data, stop the VM, and do not promote the lab as ready. Repeating `colima delete --profile mac-studio-solo -f` is safe only after reconfirming that required data has been exported.
+If recovery verification fails, preserve the command output and exported data, stop the VM, and do not promote the lab as ready. Repeating `colima delete --profile mac-studio-solo --data --force` is safe only after reconfirming that required data has been exported.

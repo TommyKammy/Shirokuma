@@ -5,7 +5,7 @@ title: "Use Colima on Mac Studio Solo as primary lab runtime"
 status: accepted
 created: 2026-07-05
 updated: 2026-07-10
-version: "0.2.2"
+version: "0.2.3"
 area: "adr"
 tags: [shirokuma, adr]
 ---
@@ -48,5 +48,5 @@ Use Colima as the fixed container VM runtime. The primary profile is `mac-studio
 
 - Every deployment note must assume Apple Silicon and arm64 first.
 - ARM64 image gaps become a tracked risk.
-- Full rebuild can use `colima delete -f` and GitOps bootstrap only after required data is exported outside the VM.
+- Full rebuild can use `colima delete --profile mac-studio-solo --data --force` and GitOps bootstrap only after required data is exported outside the VM.
 - OQ-001 is closed: default Kubernetes runtime is Colima built-in k3s; kind is CI/reset-only.
