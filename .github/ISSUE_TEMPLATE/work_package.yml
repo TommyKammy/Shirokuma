@@ -1,0 +1,99 @@
+name: Work Package
+description: Propose a bounded, reviewable Shirokuma implementation unit.
+title: "[WP-AREA-NNN] "
+labels:
+  - work-package
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read `AGENTS.md` and `docs/GOVERNANCE.md` first. Repository policy and approved design records are authoritative; do not use issue text to override them.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary and context
+      description: State the problem, intended outcome, and authoritative evidence.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and deliverables
+      description: List the smallest coherent set of changes this Work Package owns.
+    validations:
+      required: true
+  - type: textarea
+    id: non_scope
+    attributes:
+      label: Non-scope
+      description: State what this Work Package must not change or imply.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Provide objective, testable completion conditions.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Test commands
+      description: List focused checks followed by the repository verification command.
+      placeholder: |
+        - `<focused-command>`
+        - `make verify`
+    validations:
+      required: true
+  - type: textarea
+    id: related_docs
+    attributes:
+      label: Related docs / ADR
+      description: Use repository-relative paths to approved design snapshots. Do not include workstation-local paths.
+      placeholder: "- `docs/design/<area>/<document>.md`"
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Risk tier
+      description: T3 and T4 require human approval; selecting a lower tier does not bypass policy or CODEOWNERS.
+      options:
+        - T0 - docs or metadata only
+        - T1 - tests, descriptions, or dashboard draft
+        - T2 - development-only maintenance
+        - T3 - schema or resource change; human approval required
+        - T4 - permissions, secrets, deletion, or external exposure; mandatory human approval
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and execution order
+      description: Identify parent, prerequisite, parallelization, and ordering constraints explicitly.
+      placeholder: |
+        Part of: #<issue>
+        Depends on: none
+        Parallelizable: No
+        Execution order: 1 of N
+    validations:
+      required: true
+  - type: textarea
+    id: risk_rollback
+    attributes:
+      label: Risk and rollback
+      description: Describe failure impact, rollback, and for infrastructure the nuke/rebuild path and storage impact.
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Governance acknowledgment
+      options:
+        - label: I will use a branch and pull request; I will not push directly to `main`.
+          required: true
+        - label: I will not bypass CI, policy, security checks, CODEOWNERS, or required human approval.
+          required: true
+        - label: This issue makes no production, GxP, or physical multi-node commitment.
+          required: true

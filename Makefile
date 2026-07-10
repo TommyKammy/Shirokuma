@@ -18,8 +18,15 @@ check-required-files:
 	@test -f README.md
 	@test -f LICENSE
 	@test -f .gitignore
+	@test -f .github/CODEOWNERS
+	@test -f .github/ISSUE_TEMPLATE/config.yml
+	@test -f .github/ISSUE_TEMPLATE/work_package.yml
+	@test -f .github/ISSUE_TEMPLATE/bug_report.yml
+	@test -f .github/pull_request_template.md
 	@test -f .github/workflows/ci.yml
 	@test -f AGENTS.md
+	@test -f CONTRIBUTING.md
+	@test -f docs/GOVERNANCE.md
 	@test -f docs/design/context-manifest.json
 	@test -f docs/design/issue-context.json
 	@test -f scripts/verify_design_context.py

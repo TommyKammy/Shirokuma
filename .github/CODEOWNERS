@@ -1,0 +1,11 @@
+# Repository-wide ownership. GitHub branch protection remains the enforcement
+# boundary for required reviews.
+* @TommyKammy
+
+# Governance and automation changes require explicit owner review.
+/.github/ @TommyKammy
+/AGENTS.md @TommyKammy
+/docs/GOVERNANCE.md @TommyKammy
+/docs/design/ @TommyKammy
+/Makefile @TommyKammy
+/scripts/ @TommyKammy

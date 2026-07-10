@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Project governance
+    url: https://github.com/TommyKammy/Shirokuma/blob/main/docs/GOVERNANCE.md
+    about: Review the charter, scope, and approval boundaries before filing work.
