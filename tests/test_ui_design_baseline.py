@@ -11,6 +11,7 @@ MOCKUPS = UI_ROOT / "111_UI_Mockups_v0.2.2.md"
 INTERACTION_MODEL = UI_ROOT / "113_Interaction_Model.md"
 UI_REQUIREMENTS = ROOT / "docs/design/03_Requirements/038_UI_Requirements.md"
 TRACEABILITY_MATRIX = ROOT / "docs/design/03_Requirements/037_Traceability_Matrix.md"
+MOCKUP_ASSET_ROOT = ROOT / "docs/design/assets/ui_mockups"
 ISSUE_URL = "https://github.com/TommyKammy/Shirokuma/issues/5"
 
 
@@ -23,8 +24,13 @@ class UIDesignBaselineTests(unittest.TestCase):
         for reference in references:
             with self.subTest(reference=reference):
                 self.assertFalse(reference.startswith(("/", "~")))
+                resolved_reference = (MOCKUPS.parent / reference).resolve()
                 self.assertTrue(
-                    (MOCKUPS.parent / reference).resolve().is_file(),
+                    resolved_reference.is_relative_to(MOCKUP_ASSET_ROOT.resolve()),
+                    f"mockup asset escapes repository asset root: {reference}",
+                )
+                self.assertTrue(
+                    resolved_reference.is_file(),
                     f"missing mockup asset: {reference}",
                 )
 
@@ -53,15 +59,16 @@ class UIDesignBaselineTests(unittest.TestCase):
             ),
             "04_catalog_lineage.svg": (
                 "OWNER",
+                "DESCRIPTION",
+                "AI EXPLANATION",
                 "QUALITY",
                 "Impact analysis",
                 "LINEAGE",
             ),
         }
 
-        asset_root = ROOT / "docs/design/assets/ui_mockups"
         for filename, labels in expected.items():
-            content = (asset_root / filename).read_text(encoding="utf-8")
+            content = (MOCKUP_ASSET_ROOT / filename).read_text(encoding="utf-8")
             for label in labels:
                 with self.subTest(filename=filename, label=label):
                     self.assertIn(label, content)
