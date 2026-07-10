@@ -25,6 +25,7 @@
     {"source": "11_UI_UX/110_UI_Strategy.md", "target": "docs/design/11_UI_UX/110_UI_Strategy.md"},
     {"source": "11_UI_UX/111_UI_Mockups_v0.2.2.md", "target": "docs/design/11_UI_UX/111_UI_Mockups_v0.2.2.md"},
     {"source": "11_UI_UX/112_Information_Architecture.md", "target": "docs/design/11_UI_UX/112_Information_Architecture.md"},
+    {"source": "11_UI_UX/113_Interaction_Model.md", "target": "docs/design/11_UI_UX/113_Interaction_Model.md"},
     {"source": "99_Project_Files/AGENTS.md", "target": "docs/design/99_Project_Files/AGENTS.md"}
   ]
 }

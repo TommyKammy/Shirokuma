@@ -14,11 +14,11 @@ tags: [shirokuma, ui, mockup, v0.2.2]
 
 ## Composite
 
-![Shirokuma business UI mockups](../assets/ui_mockups/shirokuma_ui_mockups_v0.2.2_business_composite.png)
+![Shirokuma business UI mockups](../assets/ui_mockups/shirokuma_ui_mockups_v0.2.2_business_composite.svg)
 
 ## Screen 1: Den — Agent Mission Control
 
-![Den Agent Mission Control](../assets/ui_mockups/01_den_agent_mission_control.png)
+![Den Agent Mission Control](../assets/ui_mockups/01_den_agent_mission_control.svg)
 
 Purpose:
 
@@ -32,7 +32,7 @@ Key design decision:
 
 ## Screen 2: Virtual Warehouse
 
-![Virtual Warehouse](../assets/ui_mockups/02_virtual_warehouse.png)
+![Virtual Warehouse](../assets/ui_mockups/02_virtual_warehouse.svg)
 
 Purpose:
 
@@ -46,7 +46,7 @@ Key design decision:
 
 ## Screen 3: Pawprints — Agent audit timeline
 
-![Pawprints audit timeline](../assets/ui_mockups/03_pawprints_audit_timeline.png)
+![Pawprints audit timeline](../assets/ui_mockups/03_pawprints_audit_timeline.svg)
 
 Purpose:
 
@@ -60,7 +60,7 @@ Key design decision:
 
 ## Screen 4: Catalog & Lineage
 
-![Catalog lineage](../assets/ui_mockups/04_catalog_lineage.png)
+![Catalog lineage](../assets/ui_mockups/04_catalog_lineage.svg)
 
 Purpose:
 
@@ -77,3 +77,9 @@ Key design decision:
 - このモックはv0.2.2時点の情報設計・ビジュアル方向性を示すための静的画像である。
 - 実装時は、画面単位でFigma/Storybook/Playwright visual regressionへ展開する。
 - 日本語テキストはプロダクトトーン確認用であり、最終UIでは用語集に合わせて統一する。
+- SVGはリポジトリ内で差分レビューできるL0成果物であり、実装用コンポーネントではない。
+
+## Traceability
+
+- Work Package: [WP-L0-UX-001 / issue #5](https://github.com/TommyKammy/Shirokuma/issues/5)
+- Interaction model: [113_Interaction_Model.md](113_Interaction_Model.md)

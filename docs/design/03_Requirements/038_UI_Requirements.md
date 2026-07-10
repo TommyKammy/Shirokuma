@@ -29,3 +29,10 @@ tags: [shirokuma, ui, requirements]
 - [[11_UI_UX/110_UI_Strategy]]
 - [[11_UI_UX/111_UI_Mockups_v0.2.2]]
 - [[11_UI_UX/113_Interaction_Model]]
+
+## Work Package
+
+All requirements in this baseline are owned or initially visualized by
+[WP-L0-UX-001 / issue #5](https://github.com/TommyKammy/Shirokuma/issues/5).
+Later runtime Work Packages may implement them without changing the PR-only
+operating contract.

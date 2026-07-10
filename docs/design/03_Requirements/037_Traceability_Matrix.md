@@ -27,8 +27,8 @@ tags: [shirokuma, rtm, requirements]
 | NFR-PERF-001 | Benchmark harness | WP-L1-BENCH-001 |
 | NFR-AI-001 | Agent guardrails | WP-L2-POL-001 |
 
-| FR-UI-001 | Den UI / Proposal Queue | WP-L0-UX-001 |
-| FR-UI-002 | VirtualWarehouse UI / CRD diff | WP-L0-UX-001, WP-L3-VW-001 |
-| FR-UI-003 | Pawprint audit UI | WP-L0-UX-001, WP-L2-OBS-001 |
-| FR-UI-004 | Catalog & Lineage UI | WP-L0-UX-001, WP-L1-META-001 |
-| NFR-008 | Business application UX | WP-L0-UX-001 |
+| FR-UI-001 | Den UI / Proposal Queue | [WP-L0-UX-001](https://github.com/TommyKammy/Shirokuma/issues/5) |
+| FR-UI-002 | VirtualWarehouse UI / CRD diff | [WP-L0-UX-001](https://github.com/TommyKammy/Shirokuma/issues/5), WP-L3-VW-001 |
+| FR-UI-003 | Pawprint audit UI | [WP-L0-UX-001](https://github.com/TommyKammy/Shirokuma/issues/5), WP-L2-OBS-001 |
+| FR-UI-004 | Catalog & Lineage UI | [WP-L0-UX-001](https://github.com/TommyKammy/Shirokuma/issues/5), WP-L1-META-001 |
+| NFR-008 | Business application UX | [WP-L0-UX-001](https://github.com/TommyKammy/Shirokuma/issues/5) |

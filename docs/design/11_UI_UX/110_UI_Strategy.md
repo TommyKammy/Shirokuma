@@ -36,6 +36,19 @@ Fable 5/JAIのコンセプトレビューは採用する。ただしv0.2.2では
 | Typography | clear Japanese UI labels; numeric metrics use tabular style |
 | Dark theme | optional later; not the default mockup |
 
+## Accessibility baseline
+
+- Target WCAG 2.2 AA for the production implementation.
+- Express state with text or icons as well as color and preserve visible focus.
+- Support keyboard-only review and reduced motion.
+- Provide structured alternatives for diffs, charts, traces, and lineage DAGs.
+
+## Work Package
+
+[WP-L0-UX-001 / issue #5](https://github.com/TommyKammy/Shirokuma/issues/5)
+owns this strategy baseline. The detailed interaction contract is defined in
+[113_Interaction_Model.md](113_Interaction_Model.md).
+
 ## Product principles
 
 1. **Approval-first UI**: 主要CTAは「適用」ではなく「PRを作成」「Approve」「Request changes」。
