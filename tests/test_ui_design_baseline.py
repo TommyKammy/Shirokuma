@@ -116,6 +116,20 @@ class UIDesignBaselineTests(unittest.TestCase):
         )
 
     def test_mockups_link_authoritative_evidence_in_lifecycle_order(self) -> None:
+        den = ET.parse(
+            MOCKUP_ASSET_ROOT / "01_den_agent_mission_control.svg"
+        ).getroot()
+        den_text = {
+            (node.text or "").strip(): float(node.attrib["y"])
+            for node in den.findall("{http://www.w3.org/2000/svg}text")
+            if (node.text or "").strip() and "y" in node.attrib
+        }
+        den_lifecycle = ("CI completed", "Policy check passed")
+        self.assertEqual(
+            [den_text[label] for label in den_lifecycle],
+            sorted(den_text[label] for label in den_lifecycle),
+        )
+
         pawprints = ET.parse(
             MOCKUP_ASSET_ROOT / "03_pawprints_audit_timeline.svg"
         ).getroot()
