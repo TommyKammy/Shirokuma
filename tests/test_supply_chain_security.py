@@ -58,6 +58,24 @@ class SupplyChainSecurityTests(unittest.TestCase):
         self.assertIn("secret-like content", result.stderr)
         self.assertNotIn(token, result.stdout + result.stderr)
 
+    def test_secret_scan_reads_symlink_blob_without_following_target(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repository = root / "repository"
+            subprocess.run(["git", "init", "-q", str(repository)], check=True)
+            token = "AKIA" + "1234567890ABCDEF"
+            external = root / "external.txt"
+            external.write_text(f"cloud_access_key={token}\n", encoding="utf-8")
+            (repository / "external-link").symlink_to(external)
+            subprocess.run(
+                ["git", "-C", str(repository), "add", "external-link"], check=True
+            )
+
+            result = self.run_checker("scan-secrets", "--repo", str(repository))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(token, result.stdout + result.stderr)
+
     def test_high_or_critical_trivy_findings_are_rejected(self) -> None:
         for severity in ("HIGH", "CRITICAL"):
             with self.subTest(severity=severity), tempfile.TemporaryDirectory() as directory:
@@ -115,6 +133,19 @@ class SupplyChainSecurityTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("missing Results", result.stderr)
+
+    def test_empty_malformed_trivy_sections_are_rejected(self) -> None:
+        for category in ("Vulnerabilities", "Misconfigurations", "Secrets"):
+            with self.subTest(category=category), tempfile.TemporaryDirectory() as directory:
+                report = Path(directory) / "trivy.json"
+                report.write_text(
+                    json.dumps({"Results": [{category: {}}]}), encoding="utf-8"
+                )
+
+                result = self.run_checker("check-trivy", "--report", str(report))
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(f"{category} must be a list", result.stderr)
 
     def test_resident_image_without_digest_evidence_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -178,6 +209,29 @@ class SupplyChainSecurityTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("missing scan_artifact", result.stderr)
+
+    def test_null_resident_image_evidence_is_rejected(self) -> None:
+        for field in (
+            "version",
+            "source",
+            "sbom_artifact",
+            "scan_artifact",
+            "scanner_version",
+            "vulnerability_db_updated_at",
+        ):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                manifest = Path(directory) / "resident-images.json"
+                image = self.valid_image()
+                image[field] = None
+                manifest.write_text(
+                    json.dumps({"schema_version": 1, "images": [image]}),
+                    encoding="utf-8",
+                )
+
+                result = self.run_checker("check-images", "--manifest", str(manifest))
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(f"missing {field}", result.stderr)
 
     def test_future_vulnerability_database_timestamp_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -318,6 +372,7 @@ class SupplyChainSecurityTests(unittest.TestCase):
         workflow = WORKFLOW.read_text(encoding="utf-8")
         for required in (
             "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6",
+            "persist-credentials: false",
             "gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3",
             "aquasecurity/trivy-action@",
             "anchore/sbom-action@",

@@ -55,16 +55,32 @@ def tracked_files(repository: Path) -> list[str]:
     return [entry.decode("utf-8") for entry in output.split(b"\0") if entry]
 
 
+def read_tracked_text(repository: Path, relative: str) -> str | None:
+    path = repository / relative
+    try:
+        if path.is_symlink():
+            content = subprocess.run(
+                ["git", "-C", str(repository), "cat-file", "blob", f":./{relative}"],
+                check=True,
+                capture_output=True,
+            ).stdout.decode("utf-8")
+        else:
+            content = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return None
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise PolicyError(f"cannot read tracked file {relative}") from error
+    return content
+
+
 def scan_secrets(repository: Path) -> None:
     findings: list[str] = []
     for relative in tracked_files(repository):
         if SECRET_FILENAME.search(relative):
             findings.append(f"{relative}: secret-like filename")
             continue
-        path = repository / relative
-        try:
-            content = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+        content = read_tracked_text(repository, relative)
+        if content is None:
             continue
         if any(pattern.search(content) for pattern in SECRET_PATTERNS) or any(
             marker in content for marker in SECRET_MARKERS
@@ -87,7 +103,7 @@ def iter_trivy_findings(report: dict[str, Any]) -> list[dict[str, Any]]:
         if not isinstance(result, dict):
             raise PolicyError("Trivy report contains a malformed result")
         for category in ("Vulnerabilities", "Misconfigurations", "Secrets"):
-            entries = result.get(category) or []
+            entries = result[category] if category in result else []
             if not isinstance(entries, list):
                 raise PolicyError(f"Trivy report {category} must be a list")
             for entry in entries:
@@ -214,8 +230,14 @@ def check_images(manifest_path: Path, repository: Path) -> None:
         if not isinstance(image, dict):
             errors.append(f"{label}: entry must be an object")
             continue
-        component = str(image.get("component", label))
-        reference = str(image.get("reference", ""))
+        component_value = image.get("component")
+        component = (
+            component_value.strip()
+            if isinstance(component_value, str) and component_value.strip()
+            else label
+        )
+        reference_value = image.get("reference")
+        reference = reference_value if isinstance(reference_value, str) else ""
         ledger_references.add(reference)
         if not is_immutable_image_reference(reference):
             errors.append(
@@ -231,9 +253,15 @@ def check_images(manifest_path: Path, repository: Path) -> None:
             "scanner_version",
             "vulnerability_db_updated_at",
         ):
-            if not str(image.get(field, "")).strip():
+            value = image.get(field)
+            if not isinstance(value, str) or not value.strip():
                 errors.append(f"{component}: missing {field}")
-        database_timestamp = str(image.get("vulnerability_db_updated_at", "")).strip()
+        database_timestamp_value = image.get("vulnerability_db_updated_at")
+        database_timestamp = (
+            database_timestamp_value.strip()
+            if isinstance(database_timestamp_value, str)
+            else ""
+        )
         if database_timestamp:
             parsed_timestamp = parse_timestamp(database_timestamp)
             if parsed_timestamp is None:
@@ -251,9 +279,11 @@ def check_images(manifest_path: Path, repository: Path) -> None:
             errors.append(f"{component}: MinIO entries require fallback: true")
         if fallback is True:
             for field in ("cve_risk", "replacement_plan", "expires_on"):
-                if not str(image.get(field, "")).strip():
+                value = image.get(field)
+                if not isinstance(value, str) or not value.strip():
                     errors.append(f"{component}: fallback missing {field}")
-            expires_on = str(image.get("expires_on", "")).strip()
+            expires_on_value = image.get("expires_on")
+            expires_on = expires_on_value.strip() if isinstance(expires_on_value, str) else ""
             if expires_on and not is_future_iso_date(expires_on):
                 errors.append(f"{component}: expires_on must be a future YYYY-MM-DD date")
 
