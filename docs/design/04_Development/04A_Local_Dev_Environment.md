@@ -5,7 +5,7 @@ title: "Local Dev Environment"
 status: draft
 created: 2026-07-05
 updated: 2026-07-10
-version: "0.2.3"
+version: "0.2.4"
 area: "development"
 tags: [shirokuma, local-dev, colima]
 ---
@@ -76,6 +76,22 @@ The Agent Runtime must support cloud API and local OpenAI-compatible endpoint ro
 
 ## Status and lifecycle checks
 
+Use the repository-owned wrapper for the accepted baseline. It always targets
+`mac-studio-solo` and `colima-mac-studio-solo`; it does not depend on or change
+the caller's current kubectl context.
+
+```bash
+make colima-start
+make colima-status
+```
+
+`start` pins VZ, aarch64, 16 CPU, 96GB memory, 400GB disk, Docker, and Colima
+built-in Kubernetes. `status` fails closed unless the VM reports `aarch64`, at
+least one node reports `arm64` and `Ready=True`, `kubectl cluster-info` succeeds,
+and `helm list --kube-context colima-mac-studio-solo --all-namespaces` reaches
+the Kubernetes API. Run the underlying `scripts/colima_baseline.sh` directly
+when a Make target is unavailable.
+
 Run both Colima views after start or recovery. `colima status` is the operator-readable view; `colima list --json` is the repeatable machine-readable record.
 
 ```bash
@@ -107,8 +123,16 @@ Record the pre-reset state, stop workloads, and remove the VM:
 colima status --profile mac-studio-solo
 colima list --json
 shirokuma chill --all
-colima stop --profile mac-studio-solo
+colima stop --profile mac-studio-solo --force
 colima delete --profile mac-studio-solo --data --force
+```
+
+After exports and host free space have been checked, the automated equivalent
+requires an explicit data-loss acknowledgement and rebuilds the same pinned
+profile before running every status check:
+
+```bash
+scripts/colima_baseline.sh reset --confirm-data-loss
 ```
 
 Recover the accepted `solo-lite` baseline with the same pinned command used for initial creation:
@@ -116,7 +140,7 @@ Recover the accepted `solo-lite` baseline with the same pinned command used for 
 ```bash
 colima start --profile mac-studio-solo --vm-type=vz --arch aarch64 \
   --cpu 16 --memory 96 --disk 400 \
-  --kubernetes --runtime docker
+  --kubernetes --runtime docker --binfmt=false --activate=false
 shirokuma init --profile mac-studio-solo
 colima status --profile mac-studio-solo
 colima list --json
