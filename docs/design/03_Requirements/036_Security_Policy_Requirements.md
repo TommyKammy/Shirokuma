@@ -1,0 +1,36 @@
+---
+project: Shirokuma
+doc_id: "REQ-036"
+title: "Security Policy Requirements"
+status: draft
+created: 2026-07-05
+updated: 2026-07-05
+version: "0.2"
+area: "requirements"
+tags: [shirokuma, policy, requirements]
+---
+
+# Security Policy Requirements
+
+## Policy requirements
+
+| ID | Policy | Description |
+|---|---|---|
+| POL-001 | no-prod-direct-write | Agentによる本番直接変更禁止 |
+| POL-002 | no-secret-in-git | SecretsのGit混入禁止 |
+| POL-003 | deny-dangerous-sql | DROP/PURGE/DELETE大規模操作の禁止 |
+| POL-004 | deny-public-service | 外部公開Service/Ingressをデフォルト拒否 |
+| POL-005 | require-resource-limits | Podにresource requests/limits必須 |
+| POL-006 | require-owner-labels | K8s/DB/Metric/Assetにowner必須 |
+| POL-007 | require-rollback-plan | Infra PRにRollback記載必須 |
+| POL-008 | restrict-auto-merge | Auto-merge対象をTierで限定 |
+
+## Auto-merge tiers
+
+| Tier | 対象 | Approval |
+|---|---|---|
+| T0 | docs/metadata only | auto |
+| T1 | tests/descriptions/dashboard draft | auto after CI |
+| T2 | dev-only maintenance | auto after CI |
+| T3 | schema/resource change | human approval |
+| T4 | permissions/secrets/delete/external exposure | mandatory human approval |

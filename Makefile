@@ -1,17 +1,29 @@
 SHELL := /bin/bash
+PYTHON ?= python3
+PREFLIGHT_REF ?= origin/main
 
-.PHONY: prepare verify check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
+.PHONY: prepare verify verify-design-context supervisor-preflight check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
 
-verify: check-required-files check-newlines check-trailing-whitespace check-no-secret-filenames
+verify: check-required-files verify-design-context check-newlines check-trailing-whitespace check-no-secret-filenames
 
-prepare:
-	@true
+prepare: verify-design-context
+
+verify-design-context:
+	@$(PYTHON) scripts/verify_design_context.py
+
+supervisor-preflight:
+	@$(PYTHON) scripts/preflight_supervisor_issues.py --ref "$(PREFLIGHT_REF)"
 
 check-required-files:
 	@test -f README.md
 	@test -f LICENSE
 	@test -f .gitignore
 	@test -f .github/workflows/ci.yml
+	@test -f AGENTS.md
+	@test -f docs/design/context-manifest.json
+	@test -f docs/design/issue-context.json
+	@test -f scripts/verify_design_context.py
+	@test -f scripts/preflight_supervisor_issues.py
 
 check-newlines:
 	@missing=0; \
