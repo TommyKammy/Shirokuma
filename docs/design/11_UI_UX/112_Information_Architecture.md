@@ -78,3 +78,12 @@ Every object detail page should link to:
 - Pawprints;
 - policy decisions;
 - lineage impact.
+
+Recommendations, evidence, and reconciliation notes remain scoped to the
+selected authoritative object. Sibling or same-parent records are not included
+without an explicit link.
+
+## Work Package
+
+- [WP-L0-UX-001 / issue #5](https://github.com/TommyKammy/Shirokuma/issues/5)
+- [Interaction model](113_Interaction_Model.md)

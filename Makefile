@@ -2,9 +2,9 @@ SHELL := /bin/bash
 PYTHON ?= python3
 PREFLIGHT_REF ?= origin/main
 
-.PHONY: prepare verify verify-design-context verify-preflight-parser verify-colima-baseline verify-repository-skeleton verify-go supervisor-preflight check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
+.PHONY: prepare verify verify-design-context verify-preflight-parser verify-colima-baseline verify-ui-design-baseline verify-repository-skeleton verify-go supervisor-preflight check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
 
-verify: check-required-files verify-design-context verify-preflight-parser verify-colima-baseline verify-repository-skeleton verify-go check-newlines check-trailing-whitespace check-no-secret-filenames
+verify: check-required-files verify-design-context verify-preflight-parser verify-colima-baseline verify-ui-design-baseline verify-repository-skeleton verify-go check-newlines check-trailing-whitespace check-no-secret-filenames
 
 prepare: verify-design-context
 
@@ -16,6 +16,9 @@ verify-preflight-parser:
 
 verify-colima-baseline:
 	@$(PYTHON) -m unittest discover -s tests -p 'test_colima_baseline_docs.py'
+
+verify-ui-design-baseline:
+	@$(PYTHON) -m unittest discover -s tests -p 'test_ui_design_baseline.py'
 
 verify-repository-skeleton:
 	@$(PYTHON) scripts/verify_repository_skeleton.py
