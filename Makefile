@@ -2,14 +2,17 @@ SHELL := /bin/bash
 PYTHON ?= python3
 PREFLIGHT_REF ?= origin/main
 
-.PHONY: prepare verify verify-design-context supervisor-preflight check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
+.PHONY: prepare verify verify-design-context verify-preflight-parser supervisor-preflight check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
 
-verify: check-required-files verify-design-context check-newlines check-trailing-whitespace check-no-secret-filenames
+verify: check-required-files verify-design-context verify-preflight-parser check-newlines check-trailing-whitespace check-no-secret-filenames
 
 prepare: verify-design-context
 
 verify-design-context:
 	@$(PYTHON) scripts/verify_design_context.py
+
+verify-preflight-parser:
+	@$(PYTHON) -m unittest discover -s tests -p 'test_preflight_supervisor_issues.py'
 
 supervisor-preflight:
 	@$(PYTHON) scripts/preflight_supervisor_issues.py --ref "$(PREFLIGHT_REF)"

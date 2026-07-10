@@ -11,7 +11,7 @@ from verify_design_context import DESIGN_ROOT, ROOT, load_json, validate
 
 
 RELATED_SECTION = re.compile(
-    r"^## Related docs / ADR\s*$\n(?P<body>.*?)(?=^## |\Z)",
+    r"^#{2,3} Related docs / ADR\s*$\n(?P<body>.*?)(?=^#{2,3} |\Z)",
     re.IGNORECASE | re.MULTILINE | re.DOTALL,
 )
 MARKDOWN_PATH = re.compile(r"`([^`]+\.md)`")

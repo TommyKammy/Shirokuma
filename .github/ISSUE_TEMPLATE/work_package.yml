@@ -2,7 +2,7 @@ name: Work Package
 description: Propose a bounded, reviewable Shirokuma implementation unit.
 title: "[WP-AREA-NNN] "
 labels:
-  - work-package
+  - type:work-package
 body:
   - type: markdown
     attributes:
@@ -84,6 +84,13 @@ body:
     attributes:
       label: Risk and rollback
       description: Describe failure impact, rollback, and for infrastructure the nuke/rebuild path and storage impact.
+    validations:
+      required: true
+  - type: textarea
+    id: agent_instructions
+    attributes:
+      label: Agent instructions
+      description: Record issue-specific constraints and required handling that supplement, but do not override, repository policy or approved design records.
     validations:
       required: true
   - type: checkboxes
