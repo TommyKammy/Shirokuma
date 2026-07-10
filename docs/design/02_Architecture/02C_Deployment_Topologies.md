@@ -4,8 +4,8 @@ doc_id: "ARCH-02C"
 title: "Deployment Topologies"
 status: draft
 created: 2026-07-05
-updated: 2026-07-05
-version: "0.2.1"
+updated: 2026-07-10
+version: "0.2.2"
 area: "architecture"
 tags: [shirokuma, deployment, colima]
 ---
@@ -43,16 +43,17 @@ Rules:
 
 - Do not allocate all host memory to Colima. macOS, IDE, browser, and local LLM need reserved unified memory.
 - Local MLX LLM is **outside** Colima and therefore its memory budget must be reserved on macOS.
+- On the 512GB host, the VM memory maximum is 320GB and the minimum host reserve is 192GB. The limit is a ceiling, not a target; use the smallest profile that fits the active WP.
 - `--vm-type vz` is the default on Apple Silicon.
-- Rosetta is **not** default. Use `--vz-rosetta` only for a WP that explicitly accepts x86_64 emulation.
+- Rosetta is **not** default. Use `--vz-rosetta` only for a WP that records an explicit x86_64 decision and ARM64 compatibility evidence in [`106_ARM64_Container_Image_Compatibility.md`](../10_Research/106_ARM64_Container_Image_Compatibility.md).
 - Colima built-in k3s is the default Kubernetes runtime.
 - kind is reserved for CI/reset experiments and must not be the default long-running lab profile.
-- `cloud-lab`, `x86-multinode`, and `two-mac-cluster` are side options only.
+- `cloud-lab`, `x86-multinode`, and `two-mac-cluster` are non-default side options only.
 
 Example:
 
 ```bash
-colima start --vm-type=vz --arch aarch64 \
+colima start --profile mac-studio-solo --vm-type=vz --arch aarch64 \
   --cpu 32 --memory 192 --disk 1000 \
   --kubernetes --runtime docker
 ```
@@ -68,7 +69,7 @@ colima start --vm-type=vz --vz-rosetta --arch x86_64 \
 
 | Topology | Status | Note |
 |---|---|---|
-| `cloud-lab` | side option | Useful for x86_64 image gaps or cloud-like networking. Not primary. |
+| `cloud-lab` | non-default side option | Useful for x86_64 image gaps or cloud-like networking. It is not part of the primary local baseline. |
 | `x86-multinode` | future side option | Required for serious Ceph and HA validation. |
 | `mac-studio-plus-nas` | future side option | Backup/storage expansion only, not compute cluster. |
 | `two-mac-cluster` | out of scope in v0.2 | Mentioned only as future experiment. |
