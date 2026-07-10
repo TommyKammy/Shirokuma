@@ -115,6 +115,47 @@ class UIDesignBaselineTests(unittest.TestCase):
             catalog_text,
         )
 
+    def test_mockups_link_authoritative_evidence_in_lifecycle_order(self) -> None:
+        pawprints = ET.parse(
+            MOCKUP_ASSET_ROOT / "03_pawprints_audit_timeline.svg"
+        ).getroot()
+        pawprint_text = {
+            (node.text or "").strip(): float(node.attrib["y"])
+            for node in pawprints.findall("{http://www.w3.org/2000/svg}text")
+            if (node.text or "").strip()
+        }
+        lifecycle = (
+            "PULL REQUEST OPEN",
+            "CI PASSED",
+            "POLICY ALLOWED",
+            "AWAITING MERGE",
+        )
+        self.assertEqual(
+            [pawprint_text[label] for label in lifecycle],
+            sorted(pawprint_text[label] for label in lifecycle),
+        )
+        for evidence_link in (
+            "✓ Allowed · decision pol_718 ↗",
+            "✓ Passed · CI run 184.18 ↗",
+            "8,420 tokens · ¥12.40 · cost_441 ↗",
+        ):
+            self.assertIn(evidence_link, pawprint_text)
+
+        catalog = ET.parse(MOCKUP_ASSET_ROOT / "04_catalog_lineage.svg").getroot()
+        catalog_text = {
+            (node.text or "").strip()
+            for node in catalog.findall("{http://www.w3.org/2000/svg}text")
+        }
+        for object_link in (
+            "Git definition ↗",
+            "Latest PR / Issue ↗",
+            "Runtime status ↗",
+            "Pawprint ↗",
+            "Policy decision ↗",
+            "Impact analysis ↗",
+        ):
+            self.assertIn(object_link, catalog_text)
+
     def test_requirements_and_rtm_link_to_work_package(self) -> None:
         self.assertIn(ISSUE_URL, UI_REQUIREMENTS.read_text(encoding="utf-8"))
         rtm = TRACEABILITY_MATRIX.read_text(encoding="utf-8")
