@@ -210,6 +210,115 @@ class SupplyChainSecurityTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("missing scan_artifact", result.stderr)
 
+    def test_symlinked_resident_image_manifest_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "external-policy.json"
+            target.write_text(
+                json.dumps({"schema_version": 1, "images": []}), encoding="utf-8"
+            )
+            manifest = root / "resident-images.json"
+            manifest.symlink_to(target)
+
+            result = self.run_checker("check-images", "--manifest", str(manifest))
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("symbolic link", result.stderr)
+
+    def test_blocking_resident_image_scan_artifact_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = root / "resident-images.json"
+            report = root / "fixture.trivy.json"
+            report.write_text(
+                json.dumps(
+                    {
+                        "Results": [
+                            {
+                                "Target": "fixture",
+                                "Vulnerabilities": [
+                                    {
+                                        "VulnerabilityID": "CVE-2099-0003",
+                                        "Severity": "HIGH",
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [self.valid_image()]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker("check-images", "--manifest", str(manifest))
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("HIGH=1", result.stderr)
+
+    def test_missing_resident_image_scan_artifact_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = Path(directory) / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [self.valid_image()]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker("check-images", "--manifest", str(manifest))
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cannot read valid JSON", result.stderr)
+
+    def test_symlinked_resident_image_scan_artifact_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "external.trivy.json"
+            target.write_text(json.dumps({"Results": []}), encoding="utf-8")
+            (root / "fixture.trivy.json").symlink_to(target)
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [self.valid_image()]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker("check-images", "--manifest", str(manifest))
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("symbolic link scan_artifact", result.stderr)
+
+    def test_low_resident_image_scan_artifact_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "fixture.trivy.json").write_text(
+                json.dumps(
+                    {
+                        "Results": [
+                            {
+                                "Target": "fixture",
+                                "Vulnerabilities": [
+                                    {
+                                        "VulnerabilityID": "CVE-2099-0004",
+                                        "Severity": "LOW",
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [self.valid_image()]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker("check-images", "--manifest", str(manifest))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_null_resident_image_evidence_is_rejected(self) -> None:
         for field in (
             "version",
@@ -325,6 +434,35 @@ class SupplyChainSecurityTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("deploy/fixture.yaml", result.stderr)
         self.assertIn("missing from resident image ledger", result.stderr)
+
+    def test_inline_yaml_image_field_is_rejected_instead_of_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = Path(directory)
+            subprocess.run(["git", "init", "-q", str(repository)], check=True)
+            deployment = repository / "deploy" / "fixture.yaml"
+            deployment.parent.mkdir()
+            deployment.write_text(
+                "containers: [{name: app, image: registry.example.invalid/app:latest}]\n",
+                encoding="utf-8",
+            )
+            manifest = repository / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": []}), encoding="utf-8"
+            )
+            subprocess.run(
+                ["git", "-C", str(repository), "add", "deploy/fixture.yaml"], check=True
+            )
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--repo",
+                str(repository),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("inline flow-style image fields are unsupported", result.stderr)
 
     def test_unlisted_resident_helm_image_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

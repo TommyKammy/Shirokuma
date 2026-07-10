@@ -17,6 +17,7 @@ BLOCKING_SEVERITIES = {"HIGH", "CRITICAL"}
 IMAGE_DIGEST = re.compile(r"^(?P<repository>[^@\s]+)@sha256:[0-9a-f]{64}$")
 DEPLOYMENT_SUFFIXES = {".json", ".yaml", ".yml"}
 YAML_IMAGE_FIELD = re.compile(r"^\s*(?:-\s*)?image\s*:\s*(?P<value>.*?)\s*$")
+YAML_INLINE_IMAGE_FIELD = re.compile(r"(?:\{|\[|,)\s*[\"']?image[\"']?\s*:")
 SECRET_PATTERNS = (
     re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"),
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,255}\b"),
@@ -37,6 +38,8 @@ class PolicyError(RuntimeError):
 
 
 def load_json(path: Path) -> Any:
+    if path.is_symlink():
+        raise PolicyError(f"refusing to read symbolic link {path.name}")
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -134,6 +137,19 @@ def check_trivy(report_path: Path) -> None:
         raise PolicyError(f"Trivy blocking threshold crossed: {summary}")
 
 
+def scan_artifact_path(manifest_path: Path, value: str) -> Path:
+    relative = Path(value)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise PolicyError("scan_artifact must be relative to the resident image manifest")
+
+    current = manifest_path.parent
+    for part in relative.parts:
+        current /= part
+        if current.is_symlink():
+            raise PolicyError(f"refusing to read symbolic link scan_artifact {value}")
+    return current
+
+
 def is_immutable_image_reference(reference: str) -> bool:
     match = IMAGE_DIGEST.fullmatch(reference)
     if match is None:
@@ -196,6 +212,8 @@ def deployed_image_references(repository: Path) -> list[tuple[str, str]]:
         if path.suffix == ".json":
             references.extend(json_image_references(load_json(absolute), relative))
             continue
+        if absolute.is_symlink():
+            raise PolicyError(f"refusing to read symbolic link deployment manifest {relative}")
         try:
             lines = absolute.read_text(encoding="utf-8").splitlines()
         except (OSError, UnicodeDecodeError) as error:
@@ -203,6 +221,10 @@ def deployed_image_references(repository: Path) -> list[tuple[str, str]]:
         for line_number, line in enumerate(lines, start=1):
             match = YAML_IMAGE_FIELD.match(line)
             if match is None:
+                if YAML_INLINE_IMAGE_FIELD.search(line):
+                    raise PolicyError(
+                        f"{relative}:{line_number}: inline flow-style image fields are unsupported"
+                    )
                 continue
             reference = match.group("value").split(" #", 1)[0].strip()
             if len(reference) >= 2 and reference[0] == reference[-1] and reference[0] in "\"'":
@@ -286,6 +308,15 @@ def check_images(manifest_path: Path, repository: Path) -> None:
             expires_on = expires_on_value.strip() if isinstance(expires_on_value, str) else ""
             if expires_on and not is_future_iso_date(expires_on):
                 errors.append(f"{component}: expires_on must be a future YYYY-MM-DD date")
+
+    if not errors:
+        for index, image in enumerate(images):
+            component = image.get("component") or f"images[{index}]"
+            artifact = str(image["scan_artifact"]).strip()
+            try:
+                check_trivy(scan_artifact_path(manifest_path, artifact))
+            except PolicyError as error:
+                errors.append(f"{component}: invalid scan_artifact {artifact}: {error}")
 
     for path, reference in deployed_image_references(repository):
         if reference not in ledger_references:
