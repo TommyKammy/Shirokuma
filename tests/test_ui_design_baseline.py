@@ -90,6 +90,31 @@ class UIDesignBaselineTests(unittest.TestCase):
         self.assertIn("diff-remove", text_nodes["- size: L"])
         self.assertIn("diff-add", text_nodes["+ size: M"])
 
+    def test_mockups_show_policy_rule_and_git_provenance(self) -> None:
+        def rendered_text(filename: str) -> set[str]:
+            root = ET.parse(MOCKUP_ASSET_ROOT / filename).getroot()
+            return {
+                (node.text or "").strip()
+                for node in root.findall("{http://www.w3.org/2000/svg}text")
+            }
+
+        warehouse_text = rendered_text("02_virtual_warehouse.svg")
+        self.assertIn(
+            "Rule: OPA · warehouse.change.standard-review",
+            warehouse_text,
+        )
+        self.assertIn(
+            "Affects analytics-prod only · no storage change",
+            warehouse_text,
+        )
+
+        catalog_text = rendered_text("04_catalog_lineage.svg")
+        self.assertIn("Git definition ↗", catalog_text)
+        self.assertIn(
+            "catalog/analytics/orders_daily.yaml @ main",
+            catalog_text,
+        )
+
     def test_requirements_and_rtm_link_to_work_package(self) -> None:
         self.assertIn(ISSUE_URL, UI_REQUIREMENTS.read_text(encoding="utf-8"))
         rtm = TRACEABILITY_MATRIX.read_text(encoding="utf-8")
