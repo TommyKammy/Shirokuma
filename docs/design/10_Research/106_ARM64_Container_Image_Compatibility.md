@@ -25,14 +25,16 @@ Verification date: 2026-07-05. Primary target: Colima Linux/arm64 on Mac Studio 
 An ARM64 compatibility result alone does not admit an image to a resident
 profile. The implementing Work Package must add the exact
 `repository@sha256:<digest>` reference, upstream version and source, verified
-`linux/arm64` platform, vulnerability scan evidence, and image SBOM artifact to
-`security/resident-images.json`. High or Critical findings keep the image out of
-the resident profile.
+`linux/arm64` platform, retained scan and image SBOM artifact names, scanner
+version, and timezone-qualified vulnerability database timestamp to
+`security/resident-images.json`. Every tracked image reference under `deploy/`
+must match a ledger entry. High or Critical findings keep the image out of the
+resident profile.
 
-Fallback images additionally require a recorded CVE risk, an expiry date, and a
-replacement plan. Missing, malformed, or stale evidence fails closed. These
-requirements apply to later resident-component Work Packages; this L0 baseline
-does not add any resident service.
+Fallback images additionally require a recorded CVE risk, a future ISO expiry
+date, and a replacement plan. Missing, malformed, expired, or stale evidence
+fails closed. These requirements apply to later resident-component Work
+Packages; this L0 baseline does not add any resident service.
 
 ## Required components
 

@@ -11,7 +11,7 @@ prepare: verify-design-context
 verify-security:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_supply_chain_security.py'
 	@$(PYTHON) scripts/verify_supply_chain.py scan-secrets --repo .
-	@$(PYTHON) scripts/verify_supply_chain.py check-images --manifest security/resident-images.json
+	@$(PYTHON) scripts/verify_supply_chain.py check-images --manifest security/resident-images.json --repo .
 
 verify-design-context:
 	@$(PYTHON) scripts/verify_design_context.py

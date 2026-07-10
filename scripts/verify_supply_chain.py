@@ -8,12 +8,15 @@ import json
 import re
 import subprocess
 import sys
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 
 BLOCKING_SEVERITIES = {"HIGH", "CRITICAL"}
-IMAGE_DIGEST = re.compile(r"@sha256:[0-9a-f]{64}$")
+IMAGE_DIGEST = re.compile(r"^(?P<repository>[^@\s]+)@sha256:[0-9a-f]{64}$")
+DEPLOYMENT_SUFFIXES = {".json", ".yaml", ".yml"}
+YAML_IMAGE_FIELD = re.compile(r"^\s*(?:-\s*)?image\s*:\s*(?P<value>.*?)\s*$")
 SECRET_PATTERNS = (
     re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"),
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,255}\b"),
@@ -72,9 +75,9 @@ def scan_secrets(repository: Path) -> None:
 
 
 def iter_trivy_findings(report: dict[str, Any]) -> list[dict[str, Any]]:
-    results = report.get("Results")
-    if results is None:
-        return []
+    if "Results" not in report:
+        raise PolicyError("Trivy report is missing Results")
+    results = report["Results"]
     if not isinstance(results, list):
         raise PolicyError("Trivy report Results must be a list")
 
@@ -114,7 +117,77 @@ def check_trivy(report_path: Path) -> None:
         raise PolicyError(f"Trivy blocking threshold crossed: {summary}")
 
 
-def check_images(manifest_path: Path) -> None:
+def is_immutable_image_reference(reference: str) -> bool:
+    match = IMAGE_DIGEST.fullmatch(reference)
+    if match is None:
+        return False
+    return ":" not in match.group("repository").rsplit("/", 1)[-1]
+
+
+def is_timestamp(value: str) -> bool:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None
+
+
+def is_future_iso_date(value: str) -> bool:
+    if re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value) is None:
+        return False
+    try:
+        expiry = date.fromisoformat(value)
+    except ValueError:
+        return False
+    return expiry > date.today()
+
+
+def json_image_references(value: Any, path: str) -> list[tuple[str, str]]:
+    references: list[tuple[str, str]] = []
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key == "image":
+                if not isinstance(child, str) or not child.strip():
+                    raise PolicyError(f"{path}: image field must be a non-empty string")
+                references.append((path, child.strip()))
+            else:
+                references.extend(json_image_references(child, path))
+    elif isinstance(value, list):
+        for child in value:
+            references.extend(json_image_references(child, path))
+    return references
+
+
+def deployed_image_references(repository: Path) -> list[tuple[str, str]]:
+    references: list[tuple[str, str]] = []
+    for relative in tracked_files(repository):
+        path = Path(relative)
+        if not relative.startswith("deploy/") or path.suffix not in DEPLOYMENT_SUFFIXES:
+            continue
+        absolute = repository / path
+        if path.suffix == ".json":
+            references.extend(json_image_references(load_json(absolute), relative))
+            continue
+        try:
+            lines = absolute.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError) as error:
+            raise PolicyError(f"cannot read deployment manifest {relative}: {error}") from error
+        for line_number, line in enumerate(lines, start=1):
+            match = YAML_IMAGE_FIELD.match(line)
+            if match is None:
+                continue
+            reference = match.group("value").split(" #", 1)[0].strip()
+            if len(reference) >= 2 and reference[0] == reference[-1] and reference[0] in "\"'":
+                reference = reference[1:-1].strip()
+            if not reference:
+                raise PolicyError(
+                    f"{relative}:{line_number}: image field must be a non-empty string"
+                )
+            references.append((relative, reference))
+    return references
+
+
+def check_images(manifest_path: Path, repository: Path) -> None:
     manifest = load_json(manifest_path)
     if not isinstance(manifest, dict) or manifest.get("schema_version") != 1:
         raise PolicyError("resident image manifest requires schema_version 1")
@@ -123,6 +196,7 @@ def check_images(manifest_path: Path) -> None:
         raise PolicyError("resident image manifest requires an images list")
 
     errors: list[str] = []
+    ledger_references: set[str] = set()
     for index, image in enumerate(images):
         label = f"images[{index}]"
         if not isinstance(image, dict):
@@ -130,17 +204,41 @@ def check_images(manifest_path: Path) -> None:
             continue
         component = str(image.get("component", label))
         reference = str(image.get("reference", ""))
-        if not IMAGE_DIGEST.search(reference):
-            errors.append(f"{component}: reference requires a sha256 digest")
+        ledger_references.add(reference)
+        if not is_immutable_image_reference(reference):
+            errors.append(
+                f"{component}: reference requires exact repository@sha256 digest without a tag"
+            )
         if image.get("platform") != "linux/arm64":
             errors.append(f"{component}: platform must be linux/arm64")
-        for field in ("version", "source", "sbom_artifact"):
+        for field in (
+            "version",
+            "source",
+            "sbom_artifact",
+            "scan_artifact",
+            "scanner_version",
+            "vulnerability_db_updated_at",
+        ):
             if not str(image.get(field, "")).strip():
                 errors.append(f"{component}: missing {field}")
+        database_timestamp = str(image.get("vulnerability_db_updated_at", "")).strip()
+        if database_timestamp and not is_timestamp(database_timestamp):
+            errors.append(
+                f"{component}: vulnerability_db_updated_at requires an ISO-8601 timestamp with timezone"
+            )
         if image.get("fallback"):
             for field in ("cve_risk", "replacement_plan", "expires_on"):
                 if not str(image.get(field, "")).strip():
                     errors.append(f"{component}: fallback missing {field}")
+            expires_on = str(image.get("expires_on", "")).strip()
+            if expires_on and not is_future_iso_date(expires_on):
+                errors.append(f"{component}: expires_on must be a future YYYY-MM-DD date")
+
+    for path, reference in deployed_image_references(repository):
+        if reference not in ledger_references:
+            errors.append(
+                f"{path}: deployed image {reference} is missing from resident image ledger"
+            )
 
     if errors:
         raise PolicyError("resident image policy rejected manifest:\n" + "\n".join(errors))
@@ -158,6 +256,7 @@ def parser() -> argparse.ArgumentParser:
 
     images = commands.add_parser("check-images")
     images.add_argument("--manifest", type=Path, required=True)
+    images.add_argument("--repo", type=Path, default=Path.cwd())
     return root
 
 
@@ -169,7 +268,7 @@ def main() -> int:
         elif args.command == "check-trivy":
             check_trivy(args.report)
         elif args.command == "check-images":
-            check_images(args.manifest)
+            check_images(args.manifest, args.repo.resolve())
     except PolicyError as error:
         print(error, file=sys.stderr)
         return 1

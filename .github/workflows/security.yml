@@ -31,6 +31,17 @@ jobs:
           GITLEAKS_VERSION: 8.30.1
           GITLEAKS_ENABLE_COMMENTS: false
 
+      - name: Report all dependency and configuration findings
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.72.0
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: 0
+
       - name: Block High or Critical dependency and configuration findings
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -43,6 +54,7 @@ jobs:
           exit-code: 1
 
       - name: Generate and retain source SBOM
+        if: ${{ !cancelled() }}
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           path: .
