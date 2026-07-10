@@ -4,8 +4,8 @@ doc_id: "RES-106"
 title: "ARM64 Container Image Compatibility"
 status: draft
 created: 2026-07-05
-updated: 2026-07-05
-version: "0.2.1"
+updated: 2026-07-10
+version: "0.4"
 area: "research"
 tags: [shirokuma, arm64, apple-silicon]
 ---
@@ -19,6 +19,24 @@ Verification date: 2026-07-05. Primary target: Colima Linux/arm64 on Mac Studio 
 - Native `linux/arm64` is required for resident L0-L3 components unless a WP explicitly accepts x86_64/Rosetta.
 - x86_64/Rosetta is a fallback, not the default.
 - If image support is unknown, the component cannot become resident until a verification WP is complete.
+
+## Supply-chain evidence for resident decisions
+
+An ARM64 compatibility result alone does not admit an image to a resident
+profile. The implementing Work Package must add the exact
+`repository@sha256:<digest>` reference, upstream version and source, verified
+`linux/arm64` platform, retained scan and image SBOM artifact names, scanner
+version, and timezone-qualified vulnerability database timestamp to
+`security/resident-images.json`. Future vulnerability database timestamps are
+rejected. Every tracked image reference under `deploy/` and Helm templates under
+`charts/` must match a ledger entry. High or Critical findings keep the image
+out of the resident profile.
+
+Fallback images additionally require `fallback: true`, a recorded CVE risk, a
+future ISO expiry date, and a replacement plan. MinIO entries are always
+fallbacks. Missing, malformed, expired, future-dated, or stale evidence fails
+closed. These requirements apply to later resident-component Work Packages;
+this L0 baseline does not add any resident service.
 
 ## Required components
 
