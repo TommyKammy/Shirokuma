@@ -41,7 +41,8 @@ start_profile() {
     --memory 96 \
     --disk 400 \
     --kubernetes \
-    --runtime docker
+    --runtime docker \
+    --activate=false
 }
 
 capture_current_context() {
@@ -50,16 +51,32 @@ capture_current_context() {
 
 restore_current_context() {
   if [ -n "$original_context" ]; then
-    [ "$original_context" = "$CONTEXT" ] || \
-      "$KUBECTL_BIN" config use-context "$original_context" >/dev/null
+    "$KUBECTL_BIN" config use-context "$original_context" >/dev/null
   else
     "$KUBECTL_BIN" config unset current-context >/dev/null 2>&1 || true
   fi
 }
 
+require_status_field() {
+  field=$1
+  expected=$2
+  case "$status_json" in
+    *"\"${field}\":${expected},"*|*"\"${field}\":${expected}}"*) ;;
+    *) die "Colima profile does not match baseline: expected ${field}=${expected}" ;;
+  esac
+}
+
 verify_status() {
-  "$COLIMA_BIN" status --profile "$PROFILE"
+  status_json=$("$COLIMA_BIN" status --profile "$PROFILE" --json)
   "$COLIMA_BIN" list --json
+
+  require_status_field driver '"macOS Virtualization.Framework"'
+  require_status_field arch '"aarch64"'
+  require_status_field runtime '"docker"'
+  require_status_field kubernetes true
+  require_status_field cpu 16
+  require_status_field memory 103079215104
+  require_status_field disk 429496729600
 
   vm_arch=$("$COLIMA_BIN" ssh --profile "$PROFILE" -- uname -m)
   [ "$vm_arch" = "aarch64" ] || die "expected VM architecture aarch64, got: ${vm_arch:-missing}"
