@@ -2,7 +2,7 @@ SHELL := /bin/bash
 PYTHON ?= python3
 PREFLIGHT_REF ?= origin/main
 
-.PHONY: prepare verify verify-security verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-ui-design-baseline verify-repository-skeleton verify-go supervisor-preflight check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
+.PHONY: prepare verify verify-security verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-ui-design-baseline verify-repository-skeleton verify-go supervisor-preflight colima-start colima-status check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
 
 verify: check-required-files verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-ui-design-baseline verify-repository-skeleton verify-go verify-security check-newlines check-trailing-whitespace check-no-secret-filenames
 
@@ -23,7 +23,13 @@ verify-supervisor-workflow-docs:
 	@$(PYTHON) -m unittest discover -s tests -p 'test_codex_supervisor_workflow_docs.py'
 
 verify-colima-baseline:
-	@$(PYTHON) -m unittest discover -s tests -p 'test_colima_baseline_docs.py'
+	@$(PYTHON) -m unittest discover -s tests -p 'test_colima_baseline*.py'
+
+colima-start:
+	@./scripts/colima_baseline.sh start
+
+colima-status:
+	@./scripts/colima_baseline.sh status
 
 verify-ui-design-baseline:
 	@$(PYTHON) -m unittest discover -s tests -p 'test_ui_design_baseline.py'
@@ -63,6 +69,7 @@ check-required-files:
 	@test -f docs/design/issue-context.json
 	@test -f scripts/verify_design_context.py
 	@test -f scripts/preflight_supervisor_issues.py
+	@test -x scripts/colima_baseline.sh
 	@test -f scripts/verify_supply_chain.py
 	@test -f security/resident-images.json
 

@@ -5,7 +5,7 @@ title: "ARM64 Container Image Compatibility"
 status: draft
 created: 2026-07-05
 updated: 2026-07-10
-version: "0.4"
+version: "0.4.1"
 area: "research"
 tags: [shirokuma, arm64, apple-silicon]
 ---
@@ -13,6 +13,14 @@ tags: [shirokuma, arm64, apple-silicon]
 # ARM64 Container Image Compatibility
 
 Verification date: 2026-07-05. Primary target: Colima Linux/arm64 on Mac Studio M3 Ultra.
+
+## L0 platform baseline
+
+WP-L0-PLAT-001 uses Colima's native `aarch64` VZ VM and requires Kubernetes
+nodes to report `arm64`. No x86_64 emulation, Rosetta, alternate image, or other
+ARM64-native deviation is introduced by this Work Package. It adds no resident
+service image; component-specific digest and vulnerability evidence remains the
+responsibility of the later Work Package that admits that component.
 
 ## Policy
 
