@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
@@ -45,6 +46,8 @@ class UIDesignBaselineTests(unittest.TestCase):
             "01_den_agent_mission_control.svg": (
                 "Proposal queue",
                 "Review proposal",
+                "Core status",
+                "k3s healthy",
                 "GitOps reconciles",
             ),
             "02_virtual_warehouse.svg": (
@@ -72,6 +75,20 @@ class UIDesignBaselineTests(unittest.TestCase):
             for label in labels:
                 with self.subTest(filename=filename, label=label):
                     self.assertIn(label, content)
+
+    def test_warehouse_diff_uses_semantic_css_classes(self) -> None:
+        warehouse = MOCKUP_ASSET_ROOT / "02_virtual_warehouse.svg"
+        content = warehouse.read_text(encoding="utf-8")
+        root = ET.fromstring(content)
+        text_nodes = {
+            (node.text or "").strip(): set(node.attrib.get("class", "").split())
+            for node in root.findall("{http://www.w3.org/2000/svg}text")
+        }
+
+        self.assertIn(".diff-remove{fill:#fca5a5}", content)
+        self.assertIn(".diff-add{fill:#86efac}", content)
+        self.assertIn("diff-remove", text_nodes["- size: L"])
+        self.assertIn("diff-add", text_nodes["+ size: M"])
 
     def test_requirements_and_rtm_link_to_work_package(self) -> None:
         self.assertIn(ISSUE_URL, UI_REQUIREMENTS.read_text(encoding="utf-8"))
