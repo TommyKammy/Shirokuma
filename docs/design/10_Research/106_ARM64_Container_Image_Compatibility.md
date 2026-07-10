@@ -17,7 +17,8 @@ Verification date: 2026-07-05. Primary target: Colima Linux/arm64 on Mac Studio 
 ## L0 platform baseline
 
 WP-L0-PLAT-001 uses Colima's native `aarch64` VZ VM and requires Kubernetes
-nodes to report `arm64`. No x86_64 emulation, Rosetta, alternate image, or other
+nodes to report `arm64`; the pinned baseline disables foreign-architecture
+`binfmt` handlers. No x86_64 emulation, Rosetta, alternate image, or other
 ARM64-native deviation is introduced by this Work Package. It adds no resident
 service image; component-specific digest and vulnerability evidence remains the
 responsibility of the later Work Package that admits that component.

@@ -6,6 +6,7 @@ CONTEXT="colima-${PROFILE}"
 COLIMA_BIN="${COLIMA_BIN:-colima}"
 KUBECTL_BIN="${KUBECTL_BIN:-kubectl}"
 HELM_BIN="${HELM_BIN:-helm}"
+DOCKER_BIN="${DOCKER_BIN:-docker}"
 
 usage() {
   cat <<'EOF'
@@ -30,6 +31,7 @@ require_tools() {
   require_tool "$COLIMA_BIN"
   require_tool "$KUBECTL_BIN"
   require_tool "$HELM_BIN"
+  require_tool "$DOCKER_BIN"
 }
 
 start_profile() {
@@ -42,11 +44,13 @@ start_profile() {
     --disk 400 \
     --kubernetes \
     --runtime docker \
+    --binfmt=false \
     --activate=false
 }
 
 capture_current_context() {
   original_context=$("$KUBECTL_BIN" config current-context 2>/dev/null || true)
+  original_docker_context=$("$DOCKER_BIN" context show 2>/dev/null || true)
 }
 
 restore_current_context() {
@@ -54,6 +58,9 @@ restore_current_context() {
     "$KUBECTL_BIN" config use-context "$original_context" >/dev/null
   else
     "$KUBECTL_BIN" config unset current-context >/dev/null 2>&1 || true
+  fi
+  if [ -n "$original_docker_context" ]; then
+    "$DOCKER_BIN" context use "$original_docker_context" >/dev/null
   fi
 }
 
@@ -80,6 +87,24 @@ verify_status() {
 
   vm_arch=$("$COLIMA_BIN" ssh --profile "$PROFILE" -- uname -m)
   [ "$vm_arch" = "aarch64" ] || die "expected VM architecture aarch64, got: ${vm_arch:-missing}"
+
+  foreign_binfmt=$("$COLIMA_BIN" ssh --profile "$PROFILE" -- sh -c '
+    for handler in /proc/sys/fs/binfmt_misc/qemu-* /proc/sys/fs/binfmt_misc/rosetta; do
+      [ ! -e "$handler" ] || basename "$handler"
+    done
+  ')
+  [ -z "$foreign_binfmt" ] || \
+    die "foreign architecture emulation is enabled: $foreign_binfmt"
+
+  data_disk_bytes=$("$COLIMA_BIN" ssh --profile "$PROFILE" -- sh -c '
+    source=$(findmnt -n -o SOURCE /var/lib/docker) || exit 1
+    source=${source%%[*}
+    parent=$(lsblk -nro PKNAME "$source") || exit 1
+    [ -n "$parent" ] || exit 1
+    lsblk -bdnro SIZE "/dev/$parent"
+  ')
+  [ "$data_disk_bytes" = "429496729600" ] || \
+    die "Colima data disk does not match baseline: expected 429496729600 bytes, got ${data_disk_bytes:-missing}"
 
   "$KUBECTL_BIN" --context "$CONTEXT" cluster-info
 
@@ -127,7 +152,7 @@ main() {
       [ "$2" = "--confirm-data-loss" ] || die "reset requires --confirm-data-loss"
       require_tools
       capture_current_context
-      "$COLIMA_BIN" stop --profile "$PROFILE"
+      "$COLIMA_BIN" stop --profile "$PROFILE" --force
       "$COLIMA_BIN" delete --profile "$PROFILE" --data --force
       start_profile
       restore_current_context

@@ -123,7 +123,7 @@ Record the pre-reset state, stop workloads, and remove the VM:
 colima status --profile mac-studio-solo
 colima list --json
 shirokuma chill --all
-colima stop --profile mac-studio-solo
+colima stop --profile mac-studio-solo --force
 colima delete --profile mac-studio-solo --data --force
 ```
 
@@ -140,7 +140,7 @@ Recover the accepted `solo-lite` baseline with the same pinned command used for 
 ```bash
 colima start --profile mac-studio-solo --vm-type=vz --arch aarch64 \
   --cpu 16 --memory 96 --disk 400 \
-  --kubernetes --runtime docker
+  --kubernetes --runtime docker --binfmt=false --activate=false
 shirokuma init --profile mac-studio-solo
 colima status --profile mac-studio-solo
 colima list --json
