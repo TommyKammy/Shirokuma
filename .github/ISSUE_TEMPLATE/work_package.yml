@@ -11,14 +11,14 @@ body:
   - type: textarea
     id: summary
     attributes:
-      label: Summary and context
+      label: Summary
       description: State the problem, intended outcome, and authoritative evidence.
     validations:
       required: true
   - type: textarea
     id: scope
     attributes:
-      label: Scope and deliverables
+      label: Scope
       description: List the smallest coherent set of changes this Work Package owns.
     validations:
       required: true
@@ -39,7 +39,7 @@ body:
   - type: textarea
     id: verification
     attributes:
-      label: Test commands
+      label: Verification
       description: List focused checks followed by the repository verification command.
       placeholder: |
         - `<focused-command>`

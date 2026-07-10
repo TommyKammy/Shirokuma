@@ -5,7 +5,7 @@ title: "Issue and PR Workflow"
 status: draft
 created: 2026-07-05
 updated: 2026-07-10
-version: "0.3.0"
+version: "0.3.1"
 area: "development"
 tags: [shirokuma, github, workflow]
 ---
@@ -41,6 +41,10 @@ fields with concrete values:
 - Depends on
 - Parallelizable
 - Execution order
+
+The section names above are the exact Markdown headings emitted by the Work
+Package issue form. Renaming a form label must update this contract and its
+regression test in the same change.
 
 `Depends on: none` is an explicit value. `Part of` must name the authoritative
 parent issue, and `Execution order` must use a concrete position such as

@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_GUIDE = ROOT / "docs/design/04_Development/042_Codex_Supervisor_GitHub_Workflow.md"
 ISSUE_CONTRACT = ROOT / "docs/design/04_Development/044_Issue_and_PR_Workflow.md"
+ISSUE_FORM = ROOT / ".github/ISSUE_TEMPLATE/work_package.yml"
 
 
 def canonical_issue_example(document: str) -> str:
@@ -33,6 +34,11 @@ class CodexSupervisorWorkflowDocsTests(unittest.TestCase):
             '"localCiCommand": "make verify"',
             "CODEX_SUPERVISOR_CONFIG",
             "node dist/index.js issue-lint 2",
+            "Runner isolation",
+            "Network egress",
+            "No long-lived production-like secrets",
+            "Workspace mount only",
+            "Tool allowlist",
         ):
             with self.subTest(expected=expected):
                 self.assertIn(expected, guide)
@@ -57,7 +63,25 @@ class CodexSupervisorWorkflowDocsTests(unittest.TestCase):
             "Execution order:",
         ):
             with self.subTest(metadata=metadata):
-                self.assertRegex(example, rf"(?m)^{re.escape(metadata)}\s*\S")
+                self.assertRegex(example, rf"(?m)^{re.escape(metadata)}[ \t]*\S")
+
+        empty_metadata_example = example.replace("Depends on: none", "Depends on:")
+        self.assertNotRegex(empty_metadata_example, r"(?m)^Depends\ on:[ \t]*\S")
+
+    def test_work_package_form_emits_contract_heading_names(self) -> None:
+        issue_form = ISSUE_FORM.read_text(encoding="utf-8")
+
+        for heading in (
+            "Summary",
+            "Scope",
+            "Acceptance criteria",
+            "Verification",
+        ):
+            with self.subTest(heading=heading):
+                self.assertRegex(
+                    issue_form,
+                    rf"(?m)^\s+label: {re.escape(heading)}\s*$",
+                )
 
     def test_issue_contract_requires_supervisor_lint_fields(self) -> None:
         contract = ISSUE_CONTRACT.read_text(encoding="utf-8")

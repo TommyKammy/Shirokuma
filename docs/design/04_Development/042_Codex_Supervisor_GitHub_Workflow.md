@@ -5,7 +5,7 @@ title: "Codex Supervisor x GitHub Workflow"
 status: draft
 created: 2026-07-05
 updated: 2026-07-10
-version: "0.3.0"
+version: "0.3.1"
 area: "development"
 tags: [shirokuma, codex, github, agent]
 ---
@@ -88,6 +88,21 @@ This verifies the configured L0 issues and every `Related docs / ADR` path on
 the selected git ref. A missing document, unreachable authoritative ref, or
 contract error blocks execution.
 
+## Agent execution sandbox
+
+Prompt prohibitions do not establish an enforcement boundary. Every supervisor
+run must retain these sandbox controls:
+
+| Control | Requirement |
+|---|---|
+| Runner isolation | Coding agents run inside disposable containers or ephemeral VMs, not on the host shell. |
+| Network egress | Default deny; allow GitHub, package registries, and documented vendor endpoints only. |
+| Secrets | No long-lived production-like secrets. Use short-lived tokens or no secrets for code tasks. |
+| Filesystem | Workspace mount only. No access to host home, SSH keys, browser profiles, or Obsidian vault secrets. |
+| Package install | Dependency additions require diff review and lockfile update. No `curl | bash`. |
+| Tool allowlist | MCP tools are explicitly allowlisted per agent role. |
+| Audit | Every agent action creates a Pawprint event with model, tokens, repo, task, and risk tier. |
+
 ## Preserved worktree lifecycle
 
 For each selected issue the supervisor creates or reuses an isolated issue
@@ -139,4 +154,3 @@ blockers and must be surfaced explicitly.
 Rollback for this workflow is to stop scheduling the affected Work Package,
 close or revert its focused PR, and retain the GitHub issue and journal as the
 audit record. No workflow failure authorizes bypassing the protected path.
-
