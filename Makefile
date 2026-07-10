@@ -2,14 +2,17 @@ SHELL := /bin/bash
 PYTHON ?= python3
 PREFLIGHT_REF ?= origin/main
 
-.PHONY: prepare verify verify-design-context supervisor-preflight check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
+.PHONY: prepare verify verify-design-context verify-preflight-parser supervisor-preflight check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
 
-verify: check-required-files verify-design-context check-newlines check-trailing-whitespace check-no-secret-filenames
+verify: check-required-files verify-design-context verify-preflight-parser check-newlines check-trailing-whitespace check-no-secret-filenames
 
 prepare: verify-design-context
 
 verify-design-context:
 	@$(PYTHON) scripts/verify_design_context.py
+
+verify-preflight-parser:
+	@$(PYTHON) -m unittest discover -s tests -p 'test_preflight_supervisor_issues.py'
 
 supervisor-preflight:
 	@$(PYTHON) scripts/preflight_supervisor_issues.py --ref "$(PREFLIGHT_REF)"
@@ -18,8 +21,15 @@ check-required-files:
 	@test -f README.md
 	@test -f LICENSE
 	@test -f .gitignore
+	@test -f .github/CODEOWNERS
+	@test -f .github/ISSUE_TEMPLATE/config.yml
+	@test -f .github/ISSUE_TEMPLATE/work_package.yml
+	@test -f .github/ISSUE_TEMPLATE/bug_report.yml
+	@test -f .github/pull_request_template.md
 	@test -f .github/workflows/ci.yml
 	@test -f AGENTS.md
+	@test -f CONTRIBUTING.md
+	@test -f docs/GOVERNANCE.md
 	@test -f docs/design/context-manifest.json
 	@test -f docs/design/issue-context.json
 	@test -f scripts/verify_design_context.py

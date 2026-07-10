@@ -1,0 +1,73 @@
+name: Bug Report
+description: Report reproducible behavior that violates an approved contract.
+title: "[BUG] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include secrets, credentials, production data, or workstation-local absolute paths. Read `AGENTS.md` before proposing a fix.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe the observed behavior and its impact.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Focused reproduction
+      description: Give the narrowest repository-relative steps or command that reproduces the failure.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Cite the authoritative repository contract that defines the expected result.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Provide sanitized logs, failing checks, and environment facts. Use placeholders for local paths and credentials.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope, non-scope, and related docs / ADR
+      description: Bound the repair and list repository-relative design paths.
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Risk tier
+      options:
+        - T0 - docs or metadata only
+        - T1 - tests, descriptions, or dashboard draft
+        - T2 - development-only maintenance
+        - T3 - schema or resource change; human approval required
+        - T4 - permissions, secrets, deletion, or external exposure; mandatory human approval
+    validations:
+      required: true
+  - type: textarea
+    id: rollback
+    attributes:
+      label: Risk and rollback
+      description: State how a focused repair can be reverted and how durable state stays clean on failure.
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Governance acknowledgment
+      options:
+        - label: The report contains no secret, production data, or trusted conclusion based only on unverified input.
+          required: true
+        - label: Any repair will use the PR-only path and retain required approval boundaries.
+          required: true
