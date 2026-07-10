@@ -4,8 +4,8 @@ doc_id: "ADR-0016"
 title: "Use Colima on Mac Studio Solo as primary lab runtime"
 status: accepted
 created: 2026-07-05
-updated: 2026-07-05
-version: "0.2.1"
+updated: 2026-07-10
+version: "0.2.2"
 area: "adr"
 tags: [shirokuma, adr]
 ---
@@ -22,14 +22,16 @@ The v0.2 lab hardware is fixed: one Mac Studio M3 Ultra with 512GB unified memor
 
 ## Decision
 
-Use Colima as the fixed container VM runtime. The primary profile is `mac-studio-solo`: macOS → Colima VM Linux/arm64 → **Colima built-in k3s** → Shirokuma stack. Use `--vm-type vz` by default. Rosetta is opt-in only for explicit x86_64 experiments. kind is not the default long-running runtime; it is reserved for CI/reset experiments where disposable clusters are more important than persistence.
+Use Colima as the fixed container VM runtime. The primary profile is `mac-studio-solo`: macOS → Colima VM Linux/arm64 → **Colima built-in k3s** → Shirokuma stack. Use `--vm-type vz` and Docker runtime by default. Rosetta is opt-in only for a Work Package with explicit x86_64 scope and ARM64 compatibility evidence. kind is not the default long-running runtime; it is reserved for CI/reset experiments where disposable clusters are more important than persistence. Cloud lab remains a non-default side option.
 
 ## Resource policy
 
 - `solo-lite`: 16 CPU / 96GB / 400GB.
 - `solo-core`: 32 CPU / 192GB / 1TB.
 - `solo-heavy`: 48-64 CPU / 256-320GB / 2TB.
-- Reserve macOS memory for IDE, browser, Codex supervisor, and local MLX LLM.
+- The Colima VM has a hard memory maximum of 320GB on the 512GB host.
+- Reserve at least 192GB for macOS, IDE, browser, Codex supervisor, and local MLX LLM; lower the VM allocation when host pressure requires more.
+- Treat VM disk capacity as host SSD impact and keep exports or backups outside the VM before destructive reset.
 
 ## Alternatives Considered
 
@@ -46,5 +48,5 @@ Use Colima as the fixed container VM runtime. The primary profile is `mac-studio
 
 - Every deployment note must assume Apple Silicon and arm64 first.
 - ARM64 image gaps become a tracked risk.
-- Full rebuild can use `colima delete` and GitOps bootstrap.
+- Full rebuild can use `colima delete -f` and GitOps bootstrap only after required data is exported outside the VM.
 - OQ-001 is closed: default Kubernetes runtime is Colima built-in k3s; kind is CI/reset-only.
