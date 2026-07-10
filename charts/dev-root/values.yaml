@@ -1,0 +1,8 @@
+repository:
+  url: https://github.com/TommyKammy/Shirokuma.git
+  revision: main
+  path: deploy/gitops/dev
+
+destination:
+  server: https://kubernetes.default.svc
+  namespace: shirokuma-dev

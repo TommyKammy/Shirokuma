@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: repository-reconciliation-smoke
+  namespace: shirokuma-dev
+  labels:
+    app.kubernetes.io/part-of: shirokuma
+    shirokuma.dev/reconciliation-smoke: "true"
+data:
+  source: git
+  work_package: WP-L0-GITOPS-001

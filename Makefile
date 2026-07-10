@@ -1,10 +1,13 @@
 SHELL := /bin/bash
 PYTHON ?= python3
 PREFLIGHT_REF ?= origin/main
+TOFU ?= tofu
+TOFU_DIR ?= opentofu/dev
+KUBE_CONTEXT ?= colima-mac-studio-solo
 
-.PHONY: prepare verify verify-security verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-ui-design-baseline verify-repository-skeleton verify-go supervisor-preflight colima-start colima-status check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
+.PHONY: prepare verify verify-security verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-image-admission verify-ui-design-baseline verify-repository-skeleton verify-go supervisor-preflight colima-start colima-status tofu-init tofu-fmt tofu-validate gitops-bootstrap gitops-status gitops-teardown check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
 
-verify: check-required-files verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-ui-design-baseline verify-repository-skeleton verify-go verify-security check-newlines check-trailing-whitespace check-no-secret-filenames
+verify: check-required-files verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-ui-design-baseline verify-repository-skeleton verify-go verify-security check-newlines check-trailing-whitespace check-no-secret-filenames
 
 prepare: verify-design-context
 
@@ -24,6 +27,32 @@ verify-supervisor-workflow-docs:
 
 verify-colima-baseline:
 	@$(PYTHON) -m unittest discover -s tests -p 'test_colima_baseline*.py'
+
+verify-gitops-bootstrap: tofu-fmt tofu-validate
+	@$(PYTHON) -m unittest discover -s tests -p 'test_gitops_bootstrap.py'
+	@helm lint charts/dev-root
+
+verify-gitops-image-admission: verify-security
+	@$(PYTHON) scripts/verify_gitops_image_admission.py
+
+tofu-init:
+	@$(TOFU) -chdir=$(TOFU_DIR) init -backend=false -input=false
+
+tofu-fmt:
+	@$(TOFU) fmt -check -recursive
+
+tofu-validate: tofu-init
+	@$(TOFU) -chdir=$(TOFU_DIR) validate
+
+gitops-bootstrap: colima-status verify-gitops-image-admission tofu-init
+	@$(TOFU) -chdir=$(TOFU_DIR) apply -input=false
+
+gitops-status:
+	@kubectl --context $(KUBE_CONTEXT) -n argocd get applications
+	@argocd app list --core --kube-context $(KUBE_CONTEXT)
+
+gitops-teardown: tofu-init
+	@$(TOFU) -chdir=$(TOFU_DIR) destroy -input=false
 
 colima-start:
 	@./scripts/colima_baseline.sh start
