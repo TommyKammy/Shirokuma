@@ -8,7 +8,7 @@ import json
 import re
 import subprocess
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +29,7 @@ SECRET_MARKERS = (
 SECRET_FILENAME = re.compile(
     r"(^|/)(\.env|[^/]+\.(?:pem|key|p12|pfx|token|secret))$", re.IGNORECASE
 )
+MINIO_IDENTIFIER = re.compile(r"(^|[/:._-])minio([/:._-]|$)", re.IGNORECASE)
 
 
 class PolicyError(RuntimeError):
@@ -124,12 +125,14 @@ def is_immutable_image_reference(reference: str) -> bool:
     return ":" not in match.group("repository").rsplit("/", 1)[-1]
 
 
-def is_timestamp(value: str) -> bool:
+def parse_timestamp(value: str) -> datetime | None:
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
-        return False
-    return parsed.tzinfo is not None
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed
 
 
 def is_future_iso_date(value: str) -> bool:
@@ -158,11 +161,20 @@ def json_image_references(value: Any, path: str) -> list[tuple[str, str]]:
     return references
 
 
+def is_minio_image(image: dict[str, Any]) -> bool:
+    return any(
+        MINIO_IDENTIFIER.search(str(image.get(field, ""))) is not None
+        for field in ("component", "reference", "source")
+    )
+
+
 def deployed_image_references(repository: Path) -> list[tuple[str, str]]:
     references: list[tuple[str, str]] = []
     for relative in tracked_files(repository):
         path = Path(relative)
-        if not relative.startswith("deploy/") or path.suffix not in DEPLOYMENT_SUFFIXES:
+        is_deployment_manifest = relative.startswith("deploy/")
+        is_helm_template = relative.startswith("charts/") and "/templates/" in relative
+        if not (is_deployment_manifest or is_helm_template) or path.suffix not in DEPLOYMENT_SUFFIXES:
             continue
         absolute = repository / path
         if path.suffix == ".json":
@@ -222,11 +234,22 @@ def check_images(manifest_path: Path, repository: Path) -> None:
             if not str(image.get(field, "")).strip():
                 errors.append(f"{component}: missing {field}")
         database_timestamp = str(image.get("vulnerability_db_updated_at", "")).strip()
-        if database_timestamp and not is_timestamp(database_timestamp):
-            errors.append(
-                f"{component}: vulnerability_db_updated_at requires an ISO-8601 timestamp with timezone"
-            )
-        if image.get("fallback"):
+        if database_timestamp:
+            parsed_timestamp = parse_timestamp(database_timestamp)
+            if parsed_timestamp is None:
+                errors.append(
+                    f"{component}: vulnerability_db_updated_at requires an ISO-8601 timestamp with timezone"
+                )
+            elif parsed_timestamp.astimezone(timezone.utc) > datetime.now(timezone.utc):
+                errors.append(
+                    f"{component}: vulnerability_db_updated_at must not be in the future"
+                )
+        fallback = image.get("fallback")
+        if "fallback" in image and not isinstance(fallback, bool):
+            errors.append(f"{component}: fallback must be a boolean")
+        if is_minio_image(image) and fallback is not True:
+            errors.append(f"{component}: MinIO entries require fallback: true")
+        if fallback is True:
             for field in ("cve_risk", "replacement_plan", "expires_on"):
                 if not str(image.get(field, "")).strip():
                     errors.append(f"{component}: fallback missing {field}")

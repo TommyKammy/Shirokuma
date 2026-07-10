@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-10
-version: "0.3"
+version: "0.4"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -53,9 +53,11 @@ entry records the human-readable `version`, upstream `source`, `linux/arm64`
 `platform`, exact `repository@sha256:<digest>` reference, `sbom_artifact`,
 `scan_artifact`, `scanner_version`, and timezone-qualified
 `vulnerability_db_updated_at`. Mutable or tag-qualified references such as
-`latest` are never sufficient evidence. The deterministic gate reconciles every
-tracked image reference under `deploy/` with the ledger. An empty ledger is
-valid while L0 has no resident service images or deployment manifests.
+`latest` are never sufficient evidence. Future vulnerability database timestamps
+are rejected. The deterministic gate reconciles every tracked image reference
+under `deploy/` and Helm templates under `charts/` with the ledger. An empty
+ledger is valid while L0 has no resident service images, deployment manifests,
+or Helm chart images.
 
 CI generates a CycloneDX JSON source SBOM with Syft for every pull request and
 retains the workflow artifact for 30 days. Once resident images exist, each
@@ -66,8 +68,8 @@ digest for the lifetime of the release evidence.
 
 Pinned fallback images are exceptional and require `fallback: true`, documented
 CVE risk, a future ISO `expires_on` date, and a concrete replacement plan in
-the ledger. Expired or malformed dates fail closed. MinIO remains fallback-only;
-SeaweedFS stays the mainline object-storage choice.
+the ledger. Expired or malformed dates fail closed. Every MinIO entry must be
+marked as a fallback; SeaweedFS stays the mainline object-storage choice.
 
 ## Scanner or feed failure rollback
 

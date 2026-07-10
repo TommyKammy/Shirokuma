@@ -5,7 +5,7 @@ title: "ARM64 Container Image Compatibility"
 status: draft
 created: 2026-07-05
 updated: 2026-07-10
-version: "0.3"
+version: "0.4"
 area: "research"
 tags: [shirokuma, arm64, apple-silicon]
 ---
@@ -27,14 +27,16 @@ profile. The implementing Work Package must add the exact
 `repository@sha256:<digest>` reference, upstream version and source, verified
 `linux/arm64` platform, retained scan and image SBOM artifact names, scanner
 version, and timezone-qualified vulnerability database timestamp to
-`security/resident-images.json`. Every tracked image reference under `deploy/`
-must match a ledger entry. High or Critical findings keep the image out of the
-resident profile.
+`security/resident-images.json`. Future vulnerability database timestamps are
+rejected. Every tracked image reference under `deploy/` and Helm templates under
+`charts/` must match a ledger entry. High or Critical findings keep the image
+out of the resident profile.
 
-Fallback images additionally require a recorded CVE risk, a future ISO expiry
-date, and a replacement plan. Missing, malformed, expired, or stale evidence
-fails closed. These requirements apply to later resident-component Work
-Packages; this L0 baseline does not add any resident service.
+Fallback images additionally require `fallback: true`, a recorded CVE risk, a
+future ISO expiry date, and a replacement plan. MinIO entries are always
+fallbacks. Missing, malformed, expired, future-dated, or stale evidence fails
+closed. These requirements apply to later resident-component Work Packages;
+this L0 baseline does not add any resident service.
 
 ## Required components
 
