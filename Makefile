@@ -19,6 +19,8 @@ verify-repository-skeleton:
 
 verify-go:
 	@command -v go >/dev/null || { echo "go is required for repository verification"; exit 1; }
+	@command -v gofmt >/dev/null || { echo "gofmt is required for repository verification"; exit 1; }
+	@unformatted="$$(find . -type f -name '*.go' -not -path './.git/*' -exec gofmt -l {} +)"; test -z "$$unformatted" || { echo "gofmt required for:"; echo "$$unformatted"; exit 1; }
 	@go test ./...
 	@go vet ./...
 	@tmp="$$(mktemp -d)"; trap 'rm -rf "$$tmp"' EXIT; go build -o "$$tmp/shirokuma" ./cmd/shirokuma

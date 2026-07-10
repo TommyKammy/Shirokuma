@@ -28,10 +28,16 @@ REQUIRED_DIRECTORIES = (
 )
 
 REQUIRED_FILES = (
+    "agents/AGENTS.md",
+    "benchmarks/AGENTS.md",
+    "charts/AGENTS.md",
+    "cmd/shirokuma/AGENTS.md",
+    "controllers/AGENTS.md",
     "go.mod",
     "go.sum",
     "cmd/shirokuma/main.go",
     "internal/cli/root.go",
+    "policies/AGENTS.md",
 )
 
 
