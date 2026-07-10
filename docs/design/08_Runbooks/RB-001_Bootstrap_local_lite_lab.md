@@ -19,7 +19,7 @@ single `mac-studio-solo` host.
 
 ## Preconditions
 
-- Colima, kubectl, and Helm are installed.
+- Colima, the Docker CLI, kubectl, and Helm are installed.
 - The host can reserve 16 CPU, 96GB memory, and 400GB disk for the profile while
   retaining the required 192GB host memory reserve.
 - Host SSD free space has been checked. Any non-reproducible VM data has been
