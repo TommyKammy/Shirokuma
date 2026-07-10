@@ -4,8 +4,8 @@ doc_id: "RES-106"
 title: "ARM64 Container Image Compatibility"
 status: draft
 created: 2026-07-05
-updated: 2026-07-05
-version: "0.2.1"
+updated: 2026-07-10
+version: "0.3"
 area: "research"
 tags: [shirokuma, arm64, apple-silicon]
 ---
@@ -19,6 +19,20 @@ Verification date: 2026-07-05. Primary target: Colima Linux/arm64 on Mac Studio 
 - Native `linux/arm64` is required for resident L0-L3 components unless a WP explicitly accepts x86_64/Rosetta.
 - x86_64/Rosetta is a fallback, not the default.
 - If image support is unknown, the component cannot become resident until a verification WP is complete.
+
+## Supply-chain evidence for resident decisions
+
+An ARM64 compatibility result alone does not admit an image to a resident
+profile. The implementing Work Package must add the exact
+`repository@sha256:<digest>` reference, upstream version and source, verified
+`linux/arm64` platform, vulnerability scan evidence, and image SBOM artifact to
+`security/resident-images.json`. High or Critical findings keep the image out of
+the resident profile.
+
+Fallback images additionally require a recorded CVE risk, an expiry date, and a
+replacement plan. Missing, malformed, or stale evidence fails closed. These
+requirements apply to later resident-component Work Packages; this L0 baseline
+does not add any resident service.
 
 ## Required components
 

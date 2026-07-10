@@ -2,11 +2,16 @@ SHELL := /bin/bash
 PYTHON ?= python3
 PREFLIGHT_REF ?= origin/main
 
-.PHONY: prepare verify verify-design-context verify-preflight-parser verify-colima-baseline verify-ui-design-baseline verify-repository-skeleton verify-go supervisor-preflight check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
+.PHONY: prepare verify verify-security verify-design-context verify-preflight-parser verify-colima-baseline verify-ui-design-baseline verify-repository-skeleton verify-go supervisor-preflight check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
 
-verify: check-required-files verify-design-context verify-preflight-parser verify-colima-baseline verify-ui-design-baseline verify-repository-skeleton verify-go check-newlines check-trailing-whitespace check-no-secret-filenames
+verify: check-required-files verify-design-context verify-preflight-parser verify-colima-baseline verify-ui-design-baseline verify-repository-skeleton verify-go verify-security check-newlines check-trailing-whitespace check-no-secret-filenames
 
 prepare: verify-design-context
+
+verify-security:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_supply_chain_security.py'
+	@$(PYTHON) scripts/verify_supply_chain.py scan-secrets --repo .
+	@$(PYTHON) scripts/verify_supply_chain.py check-images --manifest security/resident-images.json
 
 verify-design-context:
 	@$(PYTHON) scripts/verify_design_context.py
@@ -47,6 +52,7 @@ check-required-files:
 	@test -f .github/ISSUE_TEMPLATE/bug_report.yml
 	@test -f .github/pull_request_template.md
 	@test -f .github/workflows/ci.yml
+	@test -f .github/workflows/security.yml
 	@test -f AGENTS.md
 	@test -f CONTRIBUTING.md
 	@test -f docs/GOVERNANCE.md
@@ -54,6 +60,8 @@ check-required-files:
 	@test -f docs/design/issue-context.json
 	@test -f scripts/verify_design_context.py
 	@test -f scripts/preflight_supervisor_issues.py
+	@test -f scripts/verify_supply_chain.py
+	@test -f security/resident-images.json
 
 check-newlines:
 	@missing=0; \

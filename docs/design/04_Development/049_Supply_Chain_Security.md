@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-07-05
-version: "0.2"
+updated: 2026-07-10
+version: "0.3"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -28,6 +28,52 @@ AI Coding Agentは、善意で悪性コードを実行するリスクがあり�
 | Install review | dependency changes require human review |
 | Script allowlist | only known scripts in AGENTS.md |
 | Network controls | no arbitrary outbound in CI where possible |
+
+## Pull request blocking baseline
+
+`make verify-security` is the deterministic local entry point and is also part of
+`make verify`. It rejects secret-like tracked filenames and contents, validates
+the resident image evidence ledger, and runs focused unsafe-input fixtures. The
+pull request workflow adds full-history gitleaks scanning plus Trivy filesystem
+scanning for dependencies, secrets, and misconfiguration. Any High or Critical
+finding is blocking; lower severities remain visible for follow-up. Scanner
+errors, malformed reports, unavailable feeds, and missing prerequisite evidence
+fail closed rather than silently reducing the gate.
+
+The actions and scanner releases in `.github/workflows/security.yml` are pinned.
+Updates must be isolated dependency changes with review of upstream release
+notes and a failing fixture before the pin is advanced.
+
+## Resident image and SBOM evidence
+
+Every image admitted to a resident profile must have an entry in
+`security/resident-images.json` before its deployment manifest is merged. Each
+entry records the human-readable version, upstream source, `linux/arm64`
+platform, an immutable `sha256` digest reference, and its SBOM artifact name.
+Mutable tags such as `latest` are never sufficient evidence. An empty ledger is
+valid while L0 has no resident service images.
+
+CI generates a CycloneDX JSON source SBOM with Syft for every pull request and
+retains the workflow artifact for 30 days. Once resident images exist, each
+digest gets a separate image SBOM and Trivy image scan before admission; the
+ledger points to that retained artifact. Release evidence must preserve the
+SBOM, scanner versions, vulnerability database timestamp, and immutable image
+digest for the lifetime of the release evidence.
+
+Pinned fallback images are exceptional and require `fallback: true`, documented
+CVE risk, a bounded `expires_on` date, and a concrete replacement plan in the
+ledger. MinIO remains fallback-only; SeaweedFS stays the mainline object-storage
+choice.
+
+## Scanner or feed failure rollback
+
+Security-tool and feed failures do not permit bypassing the check. First retry
+the pinned workflow to rule out a transient service failure. If the pinned tool
+or feed is broken, revert only the tool-version update to the last verified pin,
+record the outage and retained scan evidence in the Work Package, and rerun the
+unsafe fixtures plus the full gate. If no verified pin can scan successfully,
+keep the pull request blocked and open a follow-up prerequisite; do not replace
+the result with a guessed or stale success.
 
 ## Agent rules
 
