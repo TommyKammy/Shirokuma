@@ -40,6 +40,42 @@ class SupplyChainSecurityTests(unittest.TestCase):
             check=False,
         )
 
+    @staticmethod
+    def write_valid_sbom(root: Path) -> None:
+        (root / "fixture.cdx.json").write_text(
+            json.dumps(
+                {
+                    "bomFormat": "CycloneDX",
+                    "specVersion": "1.5",
+                    "version": 1,
+                    "components": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    @staticmethod
+    def write_trivy_report(
+        root: Path,
+        reference: str,
+        vulnerabilities: list[dict[str, str]] | None = None,
+    ) -> None:
+        (root / "fixture.trivy.json").write_text(
+            json.dumps(
+                {
+                    "ArtifactName": reference,
+                    "Metadata": {"RepoDigests": [reference]},
+                    "Results": [
+                        {
+                            "Target": reference,
+                            "Vulnerabilities": vulnerabilities or [],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
     def test_secret_like_tracked_content_is_rejected_without_echoing_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repository = Path(directory)
@@ -229,27 +265,20 @@ class SupplyChainSecurityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             manifest = root / "resident-images.json"
-            report = root / "fixture.trivy.json"
-            report.write_text(
-                json.dumps(
+            image = self.valid_image()
+            self.write_valid_sbom(root)
+            self.write_trivy_report(
+                root,
+                image["reference"],
+                [
                     {
-                        "Results": [
-                            {
-                                "Target": "fixture",
-                                "Vulnerabilities": [
-                                    {
-                                        "VulnerabilityID": "CVE-2099-0003",
-                                        "Severity": "HIGH",
-                                    }
-                                ],
-                            }
-                        ]
+                        "VulnerabilityID": "CVE-2099-0003",
+                        "Severity": "HIGH",
                     }
-                ),
-                encoding="utf-8",
+                ],
             )
             manifest.write_text(
-                json.dumps({"schema_version": 1, "images": [self.valid_image()]}),
+                json.dumps({"schema_version": 1, "images": [image]}),
                 encoding="utf-8",
             )
 
@@ -260,7 +289,9 @@ class SupplyChainSecurityTests(unittest.TestCase):
 
     def test_missing_resident_image_scan_artifact_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            manifest = Path(directory) / "resident-images.json"
+            root = Path(directory)
+            self.write_valid_sbom(root)
+            manifest = root / "resident-images.json"
             manifest.write_text(
                 json.dumps({"schema_version": 1, "images": [self.valid_image()]}),
                 encoding="utf-8",
@@ -274,6 +305,7 @@ class SupplyChainSecurityTests(unittest.TestCase):
     def test_symlinked_resident_image_scan_artifact_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            self.write_valid_sbom(root)
             target = root / "external.trivy.json"
             target.write_text(json.dumps({"Results": []}), encoding="utf-8")
             (root / "fixture.trivy.json").symlink_to(target)
@@ -291,33 +323,124 @@ class SupplyChainSecurityTests(unittest.TestCase):
     def test_low_resident_image_scan_artifact_is_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "fixture.trivy.json").write_text(
-                json.dumps(
+            image = self.valid_image()
+            self.write_valid_sbom(root)
+            self.write_trivy_report(
+                root,
+                image["reference"],
+                [
                     {
-                        "Results": [
-                            {
-                                "Target": "fixture",
-                                "Vulnerabilities": [
-                                    {
-                                        "VulnerabilityID": "CVE-2099-0004",
-                                        "Severity": "LOW",
-                                    }
-                                ],
-                            }
-                        ]
+                        "VulnerabilityID": "CVE-2099-0004",
+                        "Severity": "LOW",
                     }
-                ),
-                encoding="utf-8",
+                ],
             )
             manifest = root / "resident-images.json"
             manifest.write_text(
-                json.dumps({"schema_version": 1, "images": [self.valid_image()]}),
+                json.dumps({"schema_version": 1, "images": [image]}),
                 encoding="utf-8",
             )
 
             result = self.run_checker("check-images", "--manifest", str(manifest))
 
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_missing_resident_image_sbom_artifact_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = self.valid_image()
+            self.write_trivy_report(root, image["reference"])
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [image]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker("check-images", "--manifest", str(manifest))
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("invalid sbom_artifact", result.stderr)
+
+    def test_parent_traversal_resident_image_sbom_artifact_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            policy_root = root / "policy"
+            policy_root.mkdir()
+            self.write_valid_sbom(root)
+            image = self.valid_image()
+            image["sbom_artifact"] = "../fixture.cdx.json"
+            self.write_trivy_report(policy_root, image["reference"])
+            manifest = policy_root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [image]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker("check-images", "--manifest", str(manifest))
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("sbom_artifact must be relative", result.stderr)
+
+    def test_symlinked_resident_image_sbom_artifact_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            external = root / "external.cdx.json"
+            external.write_text(
+                json.dumps({"bomFormat": "CycloneDX"}), encoding="utf-8"
+            )
+            (root / "fixture.cdx.json").symlink_to(external)
+            image = self.valid_image()
+            self.write_trivy_report(root, image["reference"])
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [image]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker("check-images", "--manifest", str(manifest))
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("symbolic link sbom_artifact", result.stderr)
+
+    def test_scan_artifact_for_different_digest_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = self.valid_image()
+            other_reference = "registry.example.invalid/other@sha256:" + "b" * 64
+            self.write_valid_sbom(root)
+            self.write_trivy_report(root, other_reference)
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [image]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker("check-images", "--manifest", str(manifest))
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("does not match ledger reference", result.stderr)
+
+    def test_scan_repo_digest_overrides_conflicting_artifact_name(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = self.valid_image()
+            other_reference = "registry.example.invalid/other@sha256:" + "b" * 64
+            self.write_valid_sbom(root)
+            self.write_trivy_report(root, other_reference)
+            report_path = root / "fixture.trivy.json"
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            report["ArtifactName"] = image["reference"]
+            report_path.write_text(json.dumps(report), encoding="utf-8")
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [image]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker("check-images", "--manifest", str(manifest))
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("does not match ledger reference", result.stderr)
 
     def test_null_resident_image_evidence_is_rejected(self) -> None:
         for field in (
@@ -463,6 +586,37 @@ class SupplyChainSecurityTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("inline flow-style image fields are unsupported", result.stderr)
+
+    def test_quoted_yaml_image_key_is_not_ignored(self) -> None:
+        for key in ('"image"', "'image'"):
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as directory:
+                repository = Path(directory)
+                subprocess.run(["git", "init", "-q", str(repository)], check=True)
+                deployment = repository / "deploy" / "fixture.yaml"
+                deployment.parent.mkdir()
+                deployment.write_text(
+                    f"{key}: registry.example.invalid/app:latest\n",
+                    encoding="utf-8",
+                )
+                manifest = repository / "resident-images.json"
+                manifest.write_text(
+                    json.dumps({"schema_version": 1, "images": []}), encoding="utf-8"
+                )
+                subprocess.run(
+                    ["git", "-C", str(repository), "add", "deploy/fixture.yaml"],
+                    check=True,
+                )
+
+                result = self.run_checker(
+                    "check-images",
+                    "--manifest",
+                    str(manifest),
+                    "--repo",
+                    str(repository),
+                )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing from resident image ledger", result.stderr)
 
     def test_unlisted_resident_helm_image_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

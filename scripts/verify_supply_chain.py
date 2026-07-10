@@ -16,7 +16,9 @@ from typing import Any
 BLOCKING_SEVERITIES = {"HIGH", "CRITICAL"}
 IMAGE_DIGEST = re.compile(r"^(?P<repository>[^@\s]+)@sha256:[0-9a-f]{64}$")
 DEPLOYMENT_SUFFIXES = {".json", ".yaml", ".yml"}
-YAML_IMAGE_FIELD = re.compile(r"^\s*(?:-\s*)?image\s*:\s*(?P<value>.*?)\s*$")
+YAML_IMAGE_FIELD = re.compile(
+    r'''^\s*(?:-\s*)?(?:image|"image"|'image')\s*:\s*(?P<value>.*?)\s*$'''
+)
 YAML_INLINE_IMAGE_FIELD = re.compile(r"(?:\{|\[|,)\s*[\"']?image[\"']?\s*:")
 SECRET_PATTERNS = (
     re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"),
@@ -116,10 +118,34 @@ def iter_trivy_findings(report: dict[str, Any]) -> list[dict[str, Any]]:
     return findings
 
 
-def check_trivy(report_path: Path) -> None:
+def check_trivy(report_path: Path, expected_image_reference: str | None = None) -> None:
     report = load_json(report_path)
     if not isinstance(report, dict):
         raise PolicyError("Trivy report must be a JSON object")
+    if expected_image_reference is not None:
+        artifact_name = report.get("ArtifactName")
+        artifact_reference = artifact_name.strip() if isinstance(artifact_name, str) else ""
+        metadata = report.get("Metadata")
+        if metadata is not None and not isinstance(metadata, dict):
+            raise PolicyError("Trivy report Metadata must be an object")
+        repository_digests: list[str] = []
+        if isinstance(metadata, dict):
+            digest_values = metadata.get("RepoDigests", [])
+            if not isinstance(digest_values, list) or not all(
+                isinstance(value, str) for value in digest_values
+            ):
+                raise PolicyError("Trivy report Metadata.RepoDigests must be a string list")
+            repository_digests = [value.strip() for value in digest_values]
+        bound_reference_matches = (
+            expected_image_reference in repository_digests
+            if repository_digests
+            else artifact_reference == expected_image_reference
+        )
+        if not bound_reference_matches:
+            raise PolicyError(
+                "Trivy report target does not match ledger reference "
+                f"{expected_image_reference}"
+            )
     blocking = [
         finding
         for finding in iter_trivy_findings(report)
@@ -137,17 +163,23 @@ def check_trivy(report_path: Path) -> None:
         raise PolicyError(f"Trivy blocking threshold crossed: {summary}")
 
 
-def scan_artifact_path(manifest_path: Path, value: str) -> Path:
+def evidence_artifact_path(manifest_path: Path, value: str, field: str) -> Path:
     relative = Path(value)
     if relative.is_absolute() or ".." in relative.parts:
-        raise PolicyError("scan_artifact must be relative to the resident image manifest")
+        raise PolicyError(f"{field} must be relative to the resident image manifest")
 
     current = manifest_path.parent
     for part in relative.parts:
         current /= part
         if current.is_symlink():
-            raise PolicyError(f"refusing to read symbolic link scan_artifact {value}")
+            raise PolicyError(f"refusing to read symbolic link {field} {value}")
     return current
+
+
+def check_sbom(sbom_path: Path) -> None:
+    sbom = load_json(sbom_path)
+    if not isinstance(sbom, dict) or sbom.get("bomFormat") != "CycloneDX":
+        raise PolicyError("SBOM artifact must be a CycloneDX JSON object")
 
 
 def is_immutable_image_reference(reference: str) -> bool:
@@ -312,11 +344,17 @@ def check_images(manifest_path: Path, repository: Path) -> None:
     if not errors:
         for index, image in enumerate(images):
             component = image.get("component") or f"images[{index}]"
-            artifact = str(image["scan_artifact"]).strip()
-            try:
-                check_trivy(scan_artifact_path(manifest_path, artifact))
-            except PolicyError as error:
-                errors.append(f"{component}: invalid scan_artifact {artifact}: {error}")
+            reference = str(image["reference"])
+            for field in ("sbom_artifact", "scan_artifact"):
+                artifact = str(image[field]).strip()
+                try:
+                    artifact_path = evidence_artifact_path(manifest_path, artifact, field)
+                    if field == "sbom_artifact":
+                        check_sbom(artifact_path)
+                    else:
+                        check_trivy(artifact_path, expected_image_reference=reference)
+                except PolicyError as error:
+                    errors.append(f"{component}: invalid {field} {artifact}: {error}")
 
     for path, reference in deployed_image_references(repository):
         if reference not in ledger_references:

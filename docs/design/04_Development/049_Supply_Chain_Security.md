@@ -59,10 +59,13 @@ under `deploy/` and Helm templates under `charts/` with the ledger. An empty
 ledger is valid while L0 has no resident service images, deployment manifests,
 or Helm chart images.
 
-`scan_artifact` is a path relative to the resident image ledger and must be
-available when the deterministic gate runs. Symlinks and parent traversal are
-rejected, and the referenced Trivy JSON must pass the same High or Critical
-blocking threshold as direct report checks.
+`sbom_artifact` and `scan_artifact` are paths relative to the resident image
+ledger and must be available when the deterministic gate runs. Symlinks and
+parent traversal are rejected. The SBOM must be a CycloneDX JSON object. The
+referenced Trivy JSON must identify the same immutable ledger reference through
+`ArtifactName` or `Metadata.RepoDigests` and pass the same High or Critical
+blocking threshold as direct report checks. When `Metadata.RepoDigests` is
+populated, it is authoritative over the operator-facing `ArtifactName`.
 
 CI generates a CycloneDX JSON source SBOM with Syft for every pull request and
 retains the workflow artifact for 30 days. Once resident images exist, each
