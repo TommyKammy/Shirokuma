@@ -168,6 +168,11 @@ class UIDesignBaselineTests(unittest.TestCase):
             [composite_text[label] for label in composite_lifecycle],
             sorted(composite_text[label] for label in composite_lifecycle),
         )
+        composite_den_lifecycle = ("CI completed", "Policy passed")
+        self.assertEqual(
+            [composite_text[label] for label in composite_den_lifecycle],
+            sorted(composite_text[label] for label in composite_den_lifecycle),
+        )
 
         for evidence_link in (
             "✓ Allowed · decision pol_718 ↗",
