@@ -37,6 +37,7 @@ fields with concrete values:
 - Scope
 - Acceptance criteria
 - Verification
+- Related docs / ADR
 - Part of
 - Depends on
 - Parallelizable
@@ -49,8 +50,8 @@ regression test in the same change.
 `Depends on: none` is an explicit value. `Part of` must name the authoritative
 parent issue, and `Execution order` must use a concrete position such as
 `2 of 5`. Empty, TODO, placeholder, malformed, or guessed values block the
-issue. Include Non-scope, Related docs / ADR, Risk and rollback, Risk tier, and
-Agent instructions where the repository issue form requires them.
+issue. Include Non-scope, Risk and rollback, Risk tier, and Agent instructions
+where the repository issue form requires them.
 
 The contract is self-contained: an operator must be able to distinguish
 runnable, dependency-blocked, and malformed work from the issue and

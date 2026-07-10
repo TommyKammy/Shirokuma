@@ -52,6 +52,7 @@ class CodexSupervisorWorkflowDocsTests(unittest.TestCase):
             "Scope",
             "Acceptance criteria",
             "Verification",
+            "Related docs / ADR",
         ):
             with self.subTest(heading=heading):
                 self.assertRegex(example, rf"(?m)^## {re.escape(heading)}\s*$")
@@ -76,6 +77,7 @@ class CodexSupervisorWorkflowDocsTests(unittest.TestCase):
             "Scope",
             "Acceptance criteria",
             "Verification",
+            "Related docs / ADR",
         ):
             with self.subTest(heading=heading):
                 self.assertRegex(
@@ -91,6 +93,7 @@ class CodexSupervisorWorkflowDocsTests(unittest.TestCase):
             "Scope",
             "Acceptance criteria",
             "Verification",
+            "Related docs / ADR",
             "Part of",
             "Depends on",
             "Parallelizable",

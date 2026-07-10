@@ -86,7 +86,8 @@ make supervisor-preflight
 
 This verifies the configured L0 issues and every `Related docs / ADR` path on
 the selected git ref. A missing document, unreachable authoritative ref, or
-contract error blocks execution.
+reference mismatch blocks execution. Runnable-issue contract failures are
+enforced separately by `issue-lint` before scheduling.
 
 ## Agent execution sandbox
 
