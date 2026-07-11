@@ -12,6 +12,10 @@ const version = "dev"
 
 // NewRootCommand creates the root shirokuma command.
 func NewRootCommand(output io.Writer) *cobra.Command {
+	return newRootCommand(output, execRunner{})
+}
+
+func newRootCommand(output io.Writer, runner commandRunner) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "shirokuma",
 		Short:         "Operate the Shirokuma data cloud lab",
@@ -31,6 +35,7 @@ func NewRootCommand(output io.Writer) *cobra.Command {
 			return err
 		},
 	})
+	root.AddCommand(newDoctorCommand(runner))
 
 	return root
 }

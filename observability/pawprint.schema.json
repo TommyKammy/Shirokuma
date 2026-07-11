@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TommyKammy/Shirokuma/observability/pawprint.schema.json",
+  "title": "Shirokuma L0 Pawprint",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "recorded_at", "work", "verification", "policy", "outcome", "evidence"],
+  "properties": {
+    "schema_version": {"const": "1"},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "work": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "issue", "branch"],
+      "properties": {
+        "repository": {"type": "string", "pattern": "^[^/]+/[^/]+$"},
+        "issue": {"type": "integer", "minimum": 1},
+        "branch": {"type": "string", "minLength": 1},
+        "pull_request": {"type": ["integer", "null"], "minimum": 1}
+      }
+    },
+    "verification": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status"],
+        "properties": {
+          "name": {"type": "string", "maxLength": 120},
+          "status": {"enum": ["passed", "failed", "skipped"]},
+          "evidence_ref": {"type": "string", "maxLength": 240}
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["passed", "failed", "not_run"]},
+        "evidence_ref": {"type": "string", "maxLength": 240}
+      }
+    },
+    "outcome": {"enum": ["succeeded", "failed", "blocked", "cancelled"]},
+    "evidence": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {"type": "string", "maxLength": 240}
+    }
+  }
+}

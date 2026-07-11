@@ -1,0 +1,27 @@
+{
+  "schema_version": "1",
+  "recorded_at": "2026-07-12T00:00:00Z",
+  "work": {
+    "repository": "TommyKammy/Shirokuma",
+    "issue": 10,
+    "branch": "agent/issue-10-observability",
+    "pull_request": null
+  },
+  "verification": [
+    {
+      "name": "argocd-dev-root",
+      "status": "failed",
+      "evidence_ref": "doctor.json#checks/1"
+    }
+  ],
+  "policy": {
+    "status": "passed",
+    "evidence_ref": "doctor.json#checks/2"
+  },
+  "outcome": "blocked",
+  "evidence": [
+    "doctor.json",
+    "applications-summary.json",
+    "events-warning.json"
+  ]
+}

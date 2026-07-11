@@ -5,9 +5,9 @@ TOFU ?= tofu
 TOFU_DIR ?= opentofu/dev
 KUBE_CONTEXT ?= colima-mac-studio-solo
 
-.PHONY: prepare verify verify-security verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-image-admission verify-ui-design-baseline verify-repository-skeleton verify-go supervisor-preflight colima-start colima-status tofu-init tofu-fmt tofu-validate gitops-bootstrap gitops-status gitops-teardown check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
+.PHONY: prepare verify verify-security verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-image-admission verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go supervisor-preflight colima-start colima-status tofu-init tofu-fmt tofu-validate gitops-bootstrap gitops-status gitops-teardown check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
 
-verify: check-required-files verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-ui-design-baseline verify-repository-skeleton verify-go verify-security check-newlines check-trailing-whitespace check-no-secret-filenames
+verify: check-required-files verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go verify-security check-newlines check-trailing-whitespace check-no-secret-filenames
 
 prepare: verify-design-context
 
@@ -65,6 +65,9 @@ colima-status:
 
 verify-ui-design-baseline:
 	@$(PYTHON) -m unittest discover -s tests -p 'test_ui_design_baseline.py'
+
+verify-observability-baseline:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_observability_baseline.py'
 
 verify-repository-skeleton:
 	@$(PYTHON) scripts/verify_repository_skeleton.py
