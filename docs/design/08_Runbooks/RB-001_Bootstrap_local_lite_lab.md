@@ -4,8 +4,8 @@ doc_id: "RB-001"
 title: "Bootstrap local-lite lab"
 status: draft
 created: 2026-07-05
-updated: 2026-07-10
-version: "0.4"
+updated: 2026-07-12
+version: "0.4.1"
 area: "runbook"
 tags: [shirokuma, runbook]
 ---
@@ -64,6 +64,12 @@ image digest is backed by an admitted resident-image ledger entry. Missing,
 malformed, High, or Critical evidence blocks bootstrap; do not bypass this gate
 with a direct Helm or kubectl invocation.
 
+The Make targets are non-interactive for supervised execution. OpenTofu init
+uses the committed provider lock file in read-only mode, and apply/destroy use
+explicit auto-approval only after the repository-owned admission and status
+gates have run. `gitops-status` scopes Argo CD core-mode queries to the
+`argocd` namespace without changing the operator's current context.
+
 ```bash
 make tofu-fmt
 make tofu-validate
@@ -121,7 +127,7 @@ command output and exports, stop the VM, and do not treat the lab as ready.
 - `make tofu-fmt`
 - `make tofu-validate`
 - `kubectl --context colima-mac-studio-solo -n argocd get applications`
-- `argocd app list --core --kube-context colima-mac-studio-solo`
+- `make gitops-status`
 
 ## Rollback
 

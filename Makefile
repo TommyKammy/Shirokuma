@@ -36,7 +36,7 @@ verify-gitops-image-admission: verify-security
 	@$(PYTHON) scripts/verify_gitops_image_admission.py
 
 tofu-init:
-	@$(TOFU) -chdir=$(TOFU_DIR) init -backend=false -input=false
+	@$(TOFU) -chdir=$(TOFU_DIR) init -backend=false -input=false -lockfile=readonly
 
 tofu-fmt:
 	@$(TOFU) fmt -check -recursive
@@ -45,14 +45,17 @@ tofu-validate: tofu-init
 	@$(TOFU) -chdir=$(TOFU_DIR) validate
 
 gitops-bootstrap: colima-status verify-gitops-image-admission tofu-init
-	@$(TOFU) -chdir=$(TOFU_DIR) apply -input=false
+	@$(TOFU) -chdir=$(TOFU_DIR) apply -input=false -auto-approve
 
 gitops-status:
 	@kubectl --context $(KUBE_CONTEXT) -n argocd get applications
-	@argocd app list --core --kube-context $(KUBE_CONTEXT)
+	@kubeconfig="$$(mktemp)"; trap 'rm -f "$$kubeconfig"' EXIT; \
+		kubectl --context $(KUBE_CONTEXT) config view --raw --flatten --minify > "$$kubeconfig"; \
+		KUBECONFIG="$$kubeconfig" kubectl config set-context --current --namespace=argocd >/dev/null; \
+		KUBECONFIG="$$kubeconfig" argocd app list --core --kube-context $(KUBE_CONTEXT)
 
 gitops-teardown: tofu-init
-	@$(TOFU) -chdir=$(TOFU_DIR) destroy -input=false
+	@$(TOFU) -chdir=$(TOFU_DIR) destroy -input=false -auto-approve
 
 colima-start:
 	@./scripts/colima_baseline.sh start
