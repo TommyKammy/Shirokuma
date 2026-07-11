@@ -1,0 +1,12 @@
+{
+  "argocd": {
+    "repository": "quay.io/argoproj/argocd",
+    "tag": "v3.4.5@sha256:639b204272c87a1e2837aaaf235b0e35d7cff3f5d686692effbe0b277775861d",
+    "reference": "quay.io/argoproj/argocd@sha256:639b204272c87a1e2837aaaf235b0e35d7cff3f5d686692effbe0b277775861d"
+  },
+  "redis": {
+    "repository": "ecr-public.aws.com/docker/library/redis",
+    "tag": "8.2.3-alpine@sha256:2fe148588d93987cea3533873195ec2450f5dbf420c78606aaacad7b78bb5489",
+    "reference": "ecr-public.aws.com/docker/library/redis@sha256:2fe148588d93987cea3533873195ec2450f5dbf420c78606aaacad7b78bb5489"
+  }
+}

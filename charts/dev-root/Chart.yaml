@@ -1,0 +1,6 @@
+apiVersion: v2
+name: dev-root
+description: Repository-owned Argo CD dev root application
+type: application
+version: 0.1.0
+appVersion: "1.0"
