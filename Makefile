@@ -7,7 +7,7 @@ KUBE_CONTEXT ?= colima-mac-studio-solo
 FLUX ?= flux
 FLUX_VERSION ?= v2.9.1
 GITHUB_OWNER ?= TommyKammy
-GITHUB_REPOSITORY ?= Shirokuma
+FLUX_GITHUB_REPOSITORY ?= Shirokuma
 GIT_BRANCH ?= main
 FLUX_PATH ?= deploy/gitops/clusters/local-lite
 
@@ -54,9 +54,9 @@ flux-version-check:
 	@test "$$($(FLUX) version --client 2>/dev/null | awk '/^flux:/ {print $$2}')" = "$(FLUX_VERSION)" || { echo "flux $(FLUX_VERSION) is required"; exit 1; }
 
 gitops-bootstrap: colima-status verify-gitops-image-admission tofu-init flux-version-check
-	@$(TOFU) -chdir=$(TOFU_DIR) apply -input=false -auto-approve
 	@test -n "$${GITHUB_TOKEN:-}" || { echo "GITHUB_TOKEN is required for Flux bootstrap and is never persisted by this target"; exit 1; }
-	@$(FLUX) bootstrap github --owner=$(GITHUB_OWNER) --repository=$(GITHUB_REPOSITORY) --branch=$(GIT_BRANCH) --path=$(FLUX_PATH) --personal --components=source-controller,kustomize-controller,helm-controller,notification-controller --version=$(FLUX_VERSION) --context=$(KUBE_CONTEXT)
+	@$(TOFU) -chdir=$(TOFU_DIR) apply -input=false -auto-approve
+	@$(FLUX) bootstrap github --owner=$(GITHUB_OWNER) --repository=$(FLUX_GITHUB_REPOSITORY) --branch=$(GIT_BRANCH) --path=$(FLUX_PATH) --personal --components=source-controller,kustomize-controller,helm-controller,notification-controller --version=$(FLUX_VERSION) --context=$(KUBE_CONTEXT)
 
 gitops-status:
 	@kubectl --context $(KUBE_CONTEXT) -n flux-system get deployments
@@ -66,6 +66,7 @@ gitops-status:
 gitops-reconcile: flux-version-check
 	@$(FLUX) reconcile source git flux-system -n flux-system --context=$(KUBE_CONTEXT)
 	@$(FLUX) reconcile kustomization flux-system -n flux-system --with-source --context=$(KUBE_CONTEXT)
+	@$(FLUX) reconcile kustomization shirokuma-dev -n flux-system --context=$(KUBE_CONTEXT)
 
 gitops-teardown: tofu-init
 	@$(FLUX) uninstall --context=$(KUBE_CONTEXT) --namespace=flux-system --silent

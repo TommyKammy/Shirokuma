@@ -97,6 +97,17 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
         self.assertNotRegex(makefile, r"bootstrap github[^\n]*--silent")
         self.assertIn("--components=source-controller,kustomize-controller,helm-controller,notification-controller", makefile)
         self.assertIn("GITHUB_TOKEN is required", makefile)
+        self.assertIn("FLUX_GITHUB_REPOSITORY ?= Shirokuma", makefile)
+        self.assertNotRegex(makefile, r"(?m)^GITHUB_REPOSITORY \?=")
+        self.assertIn("--repository=$(FLUX_GITHUB_REPOSITORY)", makefile)
+        self.assertLess(
+            makefile.index("GITHUB_TOKEN is required"),
+            makefile.index("apply -input=false -auto-approve"),
+        )
+        self.assertIn(
+            "reconcile kustomization shirokuma-dev -n flux-system",
+            makefile,
+        )
         self.assertIn("flux-system", makefile)
 
     def run_image_admission(
