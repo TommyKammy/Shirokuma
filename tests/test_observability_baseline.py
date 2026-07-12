@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -6,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = ROOT / "observability" / "pawprint.schema.json"
 FIXTURE = ROOT / "observability" / "fixtures" / "failed-reconciliation.json"
+BOUND_EVIDENCE = ROOT / "scripts" / "bound_evidence.py"
 
 
 class ObservabilityBaselineTests(unittest.TestCase):
@@ -41,7 +44,9 @@ class ObservabilityBaselineTests(unittest.TestCase):
             ROOT / "docs/design/08_Runbooks/RB-002_Diagnose_failed_Argo_CD_sync.md"
         ).read_text(encoding="utf-8")
         for required in (
+            "set -o errexit -o nounset -o pipefail",
             "--tail=200",
+            "bound_evidence.py --max-bytes 1048576",
             ".items[:100][]",
             ".items[-100:][]",
             "conditions:[(.status.conditions // [])[:10][]",
@@ -49,6 +54,25 @@ class ObservabilityBaselineTests(unittest.TestCase):
             "30 days",
         ):
             self.assertIn(required, runbook)
+
+    def test_bound_evidence_preserves_small_input(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(BOUND_EVIDENCE), "--max-bytes", "128"],
+            input=b"bounded log\n",
+            capture_output=True,
+            check=True,
+        )
+        self.assertEqual(result.stdout, b"bounded log\n")
+
+    def test_bound_evidence_truncates_large_single_line(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(BOUND_EVIDENCE), "--max-bytes", "128"],
+            input=b"x" * 4096,
+            capture_output=True,
+            check=True,
+        )
+        self.assertEqual(len(result.stdout), 128)
+        self.assertTrue(result.stdout.endswith(b"[shirokuma evidence truncated]\n"))
 
 
 if __name__ == "__main__":

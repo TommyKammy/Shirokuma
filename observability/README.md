@@ -20,7 +20,8 @@ It discovers the repository root from the current directory; use
 No Prometheus, Loki, or ClickHouse service is added at L0. Evidence is retained
 with its PR for 30 days, then deleted unless an open incident or design decision
 requires it. Each file is capped at 1 MiB and collections use at most 100 events
-or 200 log lines per workload.
+or 200 log lines per workload. `scripts/bound_evidence.py` enforces the byte cap
+while draining command output so large single-line log records cannot exceed it.
 
 ## Pawprints
 

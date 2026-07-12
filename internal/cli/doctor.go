@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -20,6 +22,7 @@ const doctorSchemaVersion = "1"
 const (
 	kubernetesCheckTimeout = 15 * time.Second
 	policyCheckTimeout     = 2 * time.Minute
+	commandWaitDelay       = 2 * time.Second
 	maxReportedApps        = 10
 )
 
@@ -27,10 +30,28 @@ type commandRunner interface {
 	Run(context.Context, string, ...string) ([]byte, error)
 }
 
-type execRunner struct{}
+type execRunner struct {
+	waitDelay time.Duration
+}
 
-func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
-	return exec.CommandContext(ctx, name, args...).Output()
+func (runner execRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	command := exec.CommandContext(ctx, name, args...)
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	command.Cancel = func() error {
+		if command.Process == nil {
+			return os.ErrProcessDone
+		}
+		err := syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+		if errors.Is(err, syscall.ESRCH) {
+			return os.ErrProcessDone
+		}
+		return err
+	}
+	command.WaitDelay = runner.waitDelay
+	if command.WaitDelay <= 0 {
+		command.WaitDelay = commandWaitDelay
+	}
+	return command.Output()
 }
 
 type doctorCheck struct {

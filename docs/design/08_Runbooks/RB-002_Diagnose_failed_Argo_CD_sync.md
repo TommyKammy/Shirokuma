@@ -29,6 +29,7 @@ Argo CD同期失敗時の調査と修正PR手順。
    environment dumps, Secret resources, or raw agent prompts.
 
 ```bash
+set -o errexit -o nounset -o pipefail
 evidence_dir="$(mktemp -d)"
 shirokuma doctor --output json > "${evidence_dir}/doctor.json"
 ```
@@ -37,6 +38,7 @@ shirokuma doctor --output json > "${evidence_dir}/doctor.json"
    Secret bodies and the limits prevent unbounded PR artifacts.
 
 ```bash
+applications_tmp="${evidence_dir}/.applications-summary.json.tmp"
 kubectl --context colima-mac-studio-solo -n argocd get applications \
   -o json | jq '{schema_version:"1",items:[.items[:100][] | {
     name:.metadata.name,
@@ -44,21 +46,30 @@ kubectl --context colima-mac-studio-solo -n argocd get applications \
     sync:(.status.sync.status // "Unknown"),
     health:(.status.health.status // "Unknown"),
     conditions:[(.status.conditions // [])[:10][] | {type,lastTransitionTime}]
-  }]}' > "${evidence_dir}/applications-summary.json"
+  }]}' > "${applications_tmp}"
+test -s "${applications_tmp}"
+mv "${applications_tmp}" "${evidence_dir}/applications-summary.json"
+
+events_tmp="${evidence_dir}/.events-warning.json.tmp"
 kubectl --context colima-mac-studio-solo get events -A \
   --field-selector type=Warning --sort-by=.lastTimestamp \
   -o json | jq '{schema_version:"1",items:[.items[-100:][] | {
     type,reason,count,firstTimestamp,lastTimestamp,
     involvedObject:{kind:.involvedObject.kind,namespace:.involvedObject.namespace,name:.involvedObject.name}
-  }]}' > "${evidence_dir}/events-warning.json"
+  }]}' > "${events_tmp}"
+test -s "${events_tmp}"
+mv "${events_tmp}" "${evidence_dir}/events-warning.json"
 ```
 
 3. If a workload is implicated, retain no more than 200 lines. Review the file
    before attaching it to a PR.
 
 ```bash
+logs_tmp="${evidence_dir}/.repo-server-tail.log.tmp"
 kubectl --context colima-mac-studio-solo -n argocd logs deployment/argocd-repo-server \
-  --tail=200 > "${evidence_dir}/repo-server-tail.log"
+  --tail=200 | python3 scripts/bound_evidence.py --max-bytes 1048576 > "${logs_tmp}"
+test -s "${logs_tmp}"
+mv "${logs_tmp}" "${evidence_dir}/repo-server-tail.log"
 ```
 
 4. Record a Pawprint matching `observability/pawprint.schema.json`. Reference

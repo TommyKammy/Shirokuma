@@ -83,6 +83,19 @@ func TestExecRunnerParsesStdoutWithoutStderrWarnings(t *testing.T) {
 	}
 }
 
+func TestExecRunnerBoundsTimedOutProcessTree(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	_, err := (execRunner{waitDelay: 50 * time.Millisecond}).Run(ctx, "sh", "-c", "sleep 10 & wait")
+	if err == nil {
+		t.Fatal("Run() error = nil, want timeout")
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("Run() elapsed = %s, want at most 1s", elapsed)
+	}
+}
+
 func TestResolveRepositoryRootFromNestedDirectory(t *testing.T) {
 	root, err := resolveRepositoryRoot("")
 	if err != nil {
