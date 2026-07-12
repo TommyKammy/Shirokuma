@@ -12,8 +12,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATES = ROOT / "opentofu/dev/bootstrap-images.json"
 LEDGER = ROOT / "security/resident-images.json"
+CUSTOMIZATION = ROOT / "deploy/gitops/clusters/local-lite/flux-system/kustomization.yaml"
 DIGEST_REFERENCE = re.compile(r"^[^:@\s]+(?:/[^:@\s]+)+@sha256:[0-9a-f]{64}$")
 DEPLOYED_TAG = re.compile(r"^[^@\s]+@sha256:[0-9a-f]{64}$")
+PATCH_BLOCK = re.compile(
+    r"^  - patch: \|\n(?P<patch>(?: {6}.*\n)+)"
+    r" {4}target:\n(?P<target>(?: {6}.*(?:\n|$))+)",
+    re.MULTILINE,
+)
 
 
 def load_json(path: Path) -> object:
@@ -27,12 +33,40 @@ def load_json(path: Path) -> object:
         raise ValueError(f"cannot read trusted JSON input {display_path}: {error}") from error
 
 
+def load_customized_images(path: Path) -> dict[str, str]:
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise ValueError(f"cannot read Flux bootstrap customization {path}: {error}") from error
+
+    images: dict[str, str] = {}
+    for match in PATCH_BLOCK.finditer(content):
+        patch = match.group("patch")
+        target = match.group("target")
+        image_path = re.search(
+            r"^\s*path:\s*/spec/template/spec/containers/0/image\s*$",
+            patch,
+            re.MULTILINE,
+        )
+        value = re.search(r"^\s*value:\s*(\S+)\s*$", patch, re.MULTILINE)
+        kind = re.search(r"^\s*kind:\s*(\S+)\s*$", target, re.MULTILINE)
+        name = re.search(r"^\s*name:\s*(\S+)\s*$", target, re.MULTILINE)
+        if not image_path or not value or not kind or kind.group(1) != "Deployment" or not name:
+            continue
+        component = name.group(1)
+        if component in images:
+            raise ValueError(f"duplicate Flux image customization for {component}")
+        images[component] = value.group(1)
+    return images
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Verify that every deployed GitOps bootstrap image is admitted."
     )
     parser.add_argument("--candidates", type=Path, default=CANDIDATES)
     parser.add_argument("--ledger", type=Path, default=LEDGER)
+    parser.add_argument("--customization", type=Path, default=CUSTOMIZATION)
     return parser.parse_args(argv)
 
 
@@ -41,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         candidates = load_json(args.candidates)
         ledger = load_json(args.ledger)
+        customized_images = load_customized_images(args.customization)
     except ValueError as error:
         print(f"gitops-image-admission: {error}")
         return 1
@@ -83,11 +118,24 @@ def main(argv: list[str] | None = None) -> int:
                 f"{component}: declared reference {reference} does not match deployed image "
                 f"{deployed_reference}"
             )
+        customized_reference = customized_images.get(component)
+        if customized_reference != deployed_reference:
+            errors.append(
+                f"{component}: bootstrap customization deploys {customized_reference!r}, "
+                f"expected {deployed_reference}"
+            )
         if deployed_reference not in admitted:
             errors.append(
                 f"{component}: deployed image {deployed_reference} is not admitted by "
                 f"{args.ledger}"
             )
+
+    unexpected_customizations = sorted(set(customized_images) - set(candidates))
+    if unexpected_customizations:
+        errors.append(
+            "bootstrap customization has unexpected controller images: "
+            + ", ".join(unexpected_customizations)
+        )
 
     if errors:
         for error in errors:

@@ -138,7 +138,7 @@ example retains the same required headings and scheduling fields; the live
 5. Address current-head CI, policy, security, CODEOWNERS, and review findings.
 6. Merge only through repository authority after every required gate passes.
 
-Issue closure, PR merge, and any later Argo CD reconciliation are separate
+Issue closure, PR merge, and any later Flux reconciliation are separate
 authoritative lifecycle events. A status summary or failed post-mutation refresh
 must not rewrite an already recorded GitHub outcome.
 

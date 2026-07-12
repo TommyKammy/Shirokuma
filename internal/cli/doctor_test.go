@@ -7,6 +7,7 @@ import (
 	"errors"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -30,7 +31,8 @@ func (runner *fakeRunner) Run(_ context.Context, name string, args ...string) ([
 func TestDoctorJSONHealthy(t *testing.T) {
 	runner := &fakeRunner{responses: []fakeResponse{
 		{output: "ok\n"},
-		{output: `{"items":[{"metadata":{"name":"dev-root"},"status":{"sync":{"status":"Synced"},"health":{"status":"Healthy"}}}]}`},
+		{output: `{"items":[{"metadata":{"name":"source-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"kustomize-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"helm-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"notification-controller"},"status":{"replicas":1,"availableReplicas":1}}]}`},
+		{output: `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`},
 		{output: "policy ok"},
 	}}
 	var output bytes.Buffer
@@ -47,7 +49,7 @@ func TestDoctorJSONHealthy(t *testing.T) {
 	if report.Status != "healthy" || len(report.Checks) != 3 {
 		t.Fatalf("report = %#v", report)
 	}
-	wantCommands := []string{"kubectl", "kubectl", "make"}
+	wantCommands := []string{"kubectl", "kubectl", "kubectl", "make"}
 	var gotCommands []string
 	for _, call := range runner.calls {
 		gotCommands = append(gotCommands, call[0])
@@ -55,9 +57,21 @@ func TestDoctorJSONHealthy(t *testing.T) {
 	if !reflect.DeepEqual(gotCommands, wantCommands) {
 		t.Fatalf("commands = %v, want %v", gotCommands, wantCommands)
 	}
-	policyCall := runner.calls[2]
+	policyCall := runner.calls[3]
 	if len(policyCall) != 4 || policyCall[1] != "-C" || policyCall[3] != "verify-security" {
 		t.Fatalf("policy call = %v", policyCall)
+	}
+	resourceCall := strings.Join(runner.calls[2], " ")
+	for _, source := range []string{
+		"gitrepositories.source.toolkit.fluxcd.io",
+		"ocirepositories.source.toolkit.fluxcd.io",
+		"buckets.source.toolkit.fluxcd.io",
+		"helmrepositories.source.toolkit.fluxcd.io",
+		"helmcharts.source.toolkit.fluxcd.io",
+	} {
+		if !strings.Contains(resourceCall, source) {
+			t.Fatalf("resource call %q does not include %q", resourceCall, source)
+		}
 	}
 }
 
@@ -70,6 +84,38 @@ func TestDoctorRejectsInvalidOutputBeforeChecks(t *testing.T) {
 	}
 	if len(runner.calls) != 0 {
 		t.Fatalf("runner calls = %v, want none", runner.calls)
+	}
+}
+
+func TestCheckFluxRequiresExactControllerNames(t *testing.T) {
+	runner := &fakeRunner{responses: []fakeResponse{
+		{output: `{"items":[{"metadata":{"name":"source-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"kustomize-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"helm-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"image-reflector-controller"},"status":{"replicas":1,"availableReplicas":1}}]}`},
+	}}
+	check := checkFlux(context.Background(), runner, "test")
+	if check.Status != "degraded" || !strings.Contains(check.Summary, "notification-controller") {
+		t.Fatalf("check = %#v, want missing notification-controller", check)
+	}
+}
+
+func TestCheckFluxRejectsReadyConditionWithoutObservedGeneration(t *testing.T) {
+	runner := &fakeRunner{responses: []fakeResponse{
+		{output: `{"items":[{"metadata":{"name":"source-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"kustomize-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"helm-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"notification-controller"},"status":{"replicas":1,"availableReplicas":1}}]}`},
+		{output: `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"status":{"conditions":[{"type":"Ready","status":"True"}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`},
+	}}
+	check := checkFlux(context.Background(), runner, "test")
+	if check.Status != "degraded" || !strings.Contains(check.Summary, "GitRepository/flux-system/flux-system") {
+		t.Fatalf("check = %#v, want stale GitRepository", check)
+	}
+}
+
+func TestCheckFluxRejectsSuspendedResourceWithStaleReadyCondition(t *testing.T) {
+	runner := &fakeRunner{responses: []fakeResponse{
+		{output: `{"items":[{"metadata":{"name":"source-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"kustomize-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"helm-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"notification-controller"},"status":{"replicas":1,"availableReplicas":1}}]}`},
+		{output: `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"suspend":true},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`},
+	}}
+	check := checkFlux(context.Background(), runner, "test")
+	if check.Status != "degraded" || !strings.Contains(check.Summary, "Kustomization/flux-system/shirokuma-dev (suspended)") {
+		t.Fatalf("check = %#v, want suspended Kustomization", check)
 	}
 }
 
@@ -110,6 +156,7 @@ func TestRunDoctorBoundsFailureOutput(t *testing.T) {
 	runner := &fakeRunner{responses: []fakeResponse{
 		{err: errors.New("token=secret-value raw prompt contents")},
 		{err: errors.New("kubeconfig contents")},
+		{err: errors.New("resource output")},
 		{err: errors.New("repository output")},
 	}}
 	report := runDoctor(context.Background(), runner, "local-lite", "test", "/repo", time.Unix(0, 0).UTC())

@@ -5,7 +5,7 @@ title: "Bootstrap local-lite lab"
 status: draft
 created: 2026-07-05
 updated: 2026-07-12
-version: "0.4.1"
+version: "0.5"
 area: "runbook"
 tags: [shirokuma, runbook]
 ---
@@ -19,7 +19,7 @@ single `mac-studio-solo` host.
 
 ## Preconditions
 
-- Colima, the Docker CLI, kubectl, and Helm are installed.
+- Colima, the Docker CLI, kubectl, Helm, OpenTofu, and the repository-pinned Flux CLI are installed.
 - The host can reserve 16 CPU, 96GB memory, and 400GB disk for the profile while
   retaining the required 192GB host memory reserve.
 - Host SSD free space has been checked. Any non-reproducible VM data has been
@@ -57,40 +57,41 @@ architecture/readiness output is a failed baseline.
 
 ## GitOps bootstrap
 
-OpenTofu 1.12.3, Helm 4.2.3, kubectl, and the Argo CD CLI are required. The
-repository pins the OpenTofu providers, Argo CD chart, and workload image
-digests. Before any cluster mutation, the bootstrap target checks that every
-image digest is backed by an admitted resident-image ledger entry. Missing,
-malformed, High, or Critical evidence blocks bootstrap; do not bypass this gate
-with a direct Helm or kubectl invocation.
+OpenTofu 1.12.3, Helm 4.2.3, kubectl, and the repository-pinned Flux CLI are
+required. The repository pins the OpenTofu providers, `fluxcd/flux2`
+distribution, controller image digests, and workload image digests. Before any
+cluster mutation, the bootstrap target checks that every controller image is
+ARM64-capable and admitted by the fail-closed resident-image gate. Candidate
+manifests remain under `bootstrap/` rather than `deploy/` until admitted.
 
-The Make targets are non-interactive for supervised execution. OpenTofu init
-uses the committed provider lock file in read-only mode, and apply/destroy use
-explicit auto-approval only after the repository-owned admission and status
-gates have run. `gitops-status` scopes Argo CD core-mode queries to the
-`argocd` namespace without changing the operator's current context.
+The Make targets are non-interactive for supervised execution. OpenTofu manages
+cluster prerequisites; `flux bootstrap github` installs the four standard
+controllers into `flux-system` and creates repository sync resources without
+changing the operator's current Kubernetes context.
 
 ```bash
 make tofu-fmt
 make tofu-validate
+flux check --pre
 make gitops-bootstrap
 ```
 
-The OpenTofu root installs Argo CD into `argocd`, installs the repository-owned
-`dev-root` Application, and creates `shirokuma-dev`. It does not change the
-operator's current Kubernetes context. Confirm the authoritative Application
-state and the Git-reconciled smoke object with:
+Confirm controller readiness, Source/Kustomization state, and the
+Git-reconciled smoke object with:
 
 ```bash
+flux check
 make gitops-status
+flux get sources git -A
+flux get kustomizations -A
 kubectl --context colima-mac-studio-solo \
   -n shirokuma-dev get configmap repository-reconciliation-smoke
 ```
 
-The accepted result is `dev-root` at `Synced` and `Healthy`, with the smoke
-ConfigMap present. For repository-to-dev evidence, merge a bounded change to
-`deploy/gitops/dev/smoke-configmap.yaml` through the normal PR path and observe
-Argo CD reconcile it. A direct `kubectl apply` is not valid smoke evidence.
+The accepted result is four Available controller Deployments, a `GitRepository`
+and root/dev `Kustomization` at `Ready=True`, and the smoke ConfigMap present.
+Merge a bounded smoke change through the normal PR path and observe Flux
+reconcile the approved revision. Direct `kubectl apply` is not valid evidence.
 
 Teardown uses the same OpenTofu state and removes the releases and both managed
 namespaces:
@@ -126,7 +127,10 @@ command output and exports, stop the VM, and do not treat the lab as ready.
 - `helm list --kube-context colima-mac-studio-solo --all-namespaces`
 - `make tofu-fmt`
 - `make tofu-validate`
-- `kubectl --context colima-mac-studio-solo -n argocd get applications`
+- `kubectl --context colima-mac-studio-solo -n flux-system get deployments`
+- `flux check`
+- `flux get sources git -A`
+- `flux get kustomizations -A`
 - `make gitops-status`
 
 ## Rollback

@@ -28,6 +28,8 @@ You are working on Shirokuma, an agentic OSS data cloud lab running on a single 
 - Do not add Apache Ranger to the default L3 path; use OPA and native RBAC unless an ADR changes this.
 - Doris is benchmark-only, not resident.
 - Agents must not bypass GitHub PR, CI, policy checks, and CODEOWNERS.
+- Use pinned Flux v2 as the GitOps reconciler. Do not introduce Argo CD, Flux Operator, runtime `latest`, or direct cluster mutation unless a later accepted ADR changes this.
+- L0 Flux installs only source-controller, kustomize-controller, helm-controller, and notification-controller in `flux-system`.
 
 ## Supervisor context
 

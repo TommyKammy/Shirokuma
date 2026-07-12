@@ -2,8 +2,8 @@
 
 L0 uses bounded, on-demand diagnostics rather than a resident telemetry stack.
 Run `shirokuma doctor --output json` for PR evidence or `--output markdown` for
-operator review. The command summarizes Kubernetes readiness, Argo CD
-Application health, and the repository supply-chain policy without retaining
+operator review. The command summarizes Kubernetes readiness, Flux controller
+and reconciliation health, and the repository supply-chain policy without retaining
 command stdout, credentials, kubeconfig content, or prompts.
 It discovers the repository root from the current directory; use
 `--repo-root /path/to/Shirokuma` when invoking an installed binary elsewhere.
@@ -12,8 +12,8 @@ It discovers the repository root from the current directory; use
 
 | Signal | L0 source | Collection |
 |---|---|---|
-| health | Kubernetes `/readyz`, Argo CD Application status, policy gate | `shirokuma doctor --output json` |
-| events | warning events in `argocd` and the affected namespace | bounded JSON collected by RB-002 |
+| health | Kubernetes `/readyz`, Flux controller availability and Source/Kustomization/HelmRelease conditions, policy gate | `shirokuma doctor --output json` |
+| events | warning events in `flux-system` and the affected namespace | bounded JSON collected by RB-002 |
 | logs | affected controller/pod logs | tail only, collected by RB-002 |
 | metrics | `kubectl top` when Metrics API is available | snapshot only; absence is not a health failure |
 

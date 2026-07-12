@@ -1,0 +1,25 @@
+{
+  "flux_version": "v2.9.1",
+  "components": [
+    {
+      "name": "source-controller",
+      "version": "v1.9.2",
+      "reference": "ghcr.io/fluxcd/source-controller@sha256:4e9f7d179652cada516492ca341759fc07b5b7e58f7b57a5a9bfb631257c6d47"
+    },
+    {
+      "name": "kustomize-controller",
+      "version": "v1.9.2",
+      "reference": "ghcr.io/fluxcd/kustomize-controller@sha256:f5bc799e338bf779c55948adaee4c3eca83a833b98384c5fdef1674c1d658839"
+    },
+    {
+      "name": "helm-controller",
+      "version": "v1.6.2",
+      "reference": "ghcr.io/fluxcd/helm-controller@sha256:6c8e17a0b9554bd6f9848595e832f6499a728d07db477b31cc53ce632d2ee6cc"
+    },
+    {
+      "name": "notification-controller",
+      "version": "v1.9.2",
+      "reference": "ghcr.io/fluxcd/notification-controller@sha256:4fad21931eacf007a770b23fa5495201e4141ee5040218bac14ea90bee0ec996"
+    }
+  ]
+}

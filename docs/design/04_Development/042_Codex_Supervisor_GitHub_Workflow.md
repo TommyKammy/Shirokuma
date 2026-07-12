@@ -24,12 +24,12 @@ The only supported path is:
 ```text
 approved Issue → preserved issue worktree → issue branch → draft PR
   → local verification → CI/policy/security → review → merge
-  → Argo CD reconcile when deployment is in scope
+  → Flux reconciliation when deployment is in scope
 ```
 
 The agent must not push directly to `main`, approve a Tier 3 or Tier 4 change,
 merge around a required check, or apply high-risk state outside GitHub PR and
-Argo CD.
+Flux v2.
 
 ## Repository-owned supervisor contract
 
