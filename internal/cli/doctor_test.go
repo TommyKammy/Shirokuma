@@ -7,6 +7,7 @@ import (
 	"errors"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -71,6 +72,27 @@ func TestDoctorRejectsInvalidOutputBeforeChecks(t *testing.T) {
 	}
 	if len(runner.calls) != 0 {
 		t.Fatalf("runner calls = %v, want none", runner.calls)
+	}
+}
+
+func TestCheckFluxRequiresExactControllerNames(t *testing.T) {
+	runner := &fakeRunner{responses: []fakeResponse{
+		{output: `{"items":[{"metadata":{"name":"source-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"kustomize-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"helm-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"image-reflector-controller"},"status":{"replicas":1,"availableReplicas":1}}]}`},
+	}}
+	check := checkFlux(context.Background(), runner, "test")
+	if check.Status != "degraded" || !strings.Contains(check.Summary, "notification-controller") {
+		t.Fatalf("check = %#v, want missing notification-controller", check)
+	}
+}
+
+func TestCheckFluxRejectsReadyConditionWithoutObservedGeneration(t *testing.T) {
+	runner := &fakeRunner{responses: []fakeResponse{
+		{output: `{"items":[{"metadata":{"name":"source-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"kustomize-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"helm-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"notification-controller"},"status":{"replicas":1,"availableReplicas":1}}]}`},
+		{output: `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":2},"status":{"conditions":[{"type":"Ready","status":"True"}]}},{"kind":"Kustomization","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`},
+	}}
+	check := checkFlux(context.Background(), runner, "test")
+	if check.Status != "degraded" || !strings.Contains(check.Summary, "GitRepository/flux-system/flux-system") {
+		t.Fatalf("check = %#v, want stale GitRepository", check)
 	}
 }
 

@@ -5,7 +5,7 @@ title: "Diagnose failed Flux reconciliation"
 status: accepted
 created: 2026-07-05
 updated: 2026-07-12
-version: "0.4"
+version: "0.5"
 area: "runbook"
 tags: [shirokuma, runbook, gitops, flux]
 ---
@@ -36,6 +36,7 @@ set -o errexit -o nounset -o pipefail
 
 ```bash
 evidence_dir="artifacts/flux-reconciliation-$(date -u +%Y%m%dT%H%M%SZ)"
+kube_context="colima-mac-studio-solo"
 mkdir -p "${evidence_dir}"
 shirokuma doctor --output json > "${evidence_dir}/doctor.json"
 ```
@@ -43,15 +44,15 @@ shirokuma doctor --output json > "${evidence_dir}/doctor.json"
 2. controller、Source、Kustomization、HelmReleaseの状態をSecretなしで取得する。
 
 ```bash
-kubectl --context colima-mac-studio-solo -n flux-system get deployments \
+kubectl --context "${kube_context}" -n flux-system get deployments \
   -o wide > "${evidence_dir}/controllers.txt"
-flux get sources all -A --status-selector ready=false \
+flux get sources all -A --context "${kube_context}" --status-selector ready=false \
   | python3 scripts/bound_evidence.py --max-bytes 1048576 \
   > "${evidence_dir}/sources-not-ready.txt"
-flux get kustomizations -A --status-selector ready=false \
+flux get kustomizations -A --context "${kube_context}" --status-selector ready=false \
   | python3 scripts/bound_evidence.py --max-bytes 1048576 \
   > "${evidence_dir}/kustomizations-not-ready.txt"
-flux get helmreleases -A --status-selector ready=false \
+flux get helmreleases -A --context "${kube_context}" --status-selector ready=false \
   | python3 scripts/bound_evidence.py --max-bytes 1048576 \
   > "${evidence_dir}/helmreleases-not-ready.txt"
 ```
@@ -61,14 +62,15 @@ flux get helmreleases -A --status-selector ready=false \
 3. 対象resourceのconditions、observed revision、eventsを取得する。YAML全体やSecret参照先の値は保存しない。
 
 ```bash
-kubectl --context colima-mac-studio-solo -n flux-system \
+kubectl --context "${kube_context}" -n flux-system \
   describe gitrepository flux-system \
   > "${evidence_dir}/gitrepository-describe.txt"
-kubectl --context colima-mac-studio-solo -n flux-system \
+kubectl --context "${kube_context}" -n flux-system \
   describe kustomization flux-system \
   > "${evidence_dir}/kustomization-describe.txt"
-kubectl --context colima-mac-studio-solo get events -A \
+kubectl --context "${kube_context}" get events -A \
   --field-selector type=Warning \
+  | python3 scripts/bound_evidence.py --max-bytes 1048576 \
   > "${evidence_dir}/warning-events.txt"
 ```
 
@@ -81,7 +83,7 @@ kubectl --context colima-mac-studio-solo get events -A \
 
 ```bash
 logs_tmp="${evidence_dir}/.controller-tail.log.tmp"
-flux logs --all-namespaces --level=error --since=30m \
+flux logs --all-namespaces --context "${kube_context}" --level=error --since=30m \
   | python3 scripts/bound_evidence.py --max-bytes 1048576 \
   > "${logs_tmp}"
 test -s "${logs_tmp}"
@@ -107,8 +109,8 @@ gh pr create --draft --title "fix: remediate failed Flux reconciliation"
 6. PRがmergeされた後、通常intervalを待つか、bounded verificationとして対象resourceを明示して再reconcileする。
 
 ```bash
-flux reconcile source git flux-system -n flux-system
-flux reconcile kustomization flux-system -n flux-system --with-source
+flux reconcile source git flux-system -n flux-system --context "${kube_context}"
+flux reconcile kustomization flux-system -n flux-system --context "${kube_context}" --with-source
 ```
 
 ## Verification
@@ -116,7 +118,7 @@ flux reconcile kustomization flux-system -n flux-system --with-source
 - Flux standard controller DeploymentsがAvailableである。
 - 対象Sourceが承認済みrevisionで`Ready=True`を報告する。
 - 対象Kustomization/HelmReleaseが同じrevisionで`Ready=True`を報告する。
-- `flux get all -A`に予期しないNot Ready resourceがない。
+- `flux get all -A --context "${kube_context}"`に予期しないNot Ready resourceがない。
 - `shirokuma doctor`が`healthy`を報告する。
 - expected workloadとGit-reconciled smoke objectが存在する。
 - Issue/PR/PawprintのevidenceにSecret値と無制限logがない。

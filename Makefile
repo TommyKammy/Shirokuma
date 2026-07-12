@@ -56,7 +56,7 @@ flux-version-check:
 gitops-bootstrap: colima-status verify-gitops-image-admission tofu-init flux-version-check
 	@$(TOFU) -chdir=$(TOFU_DIR) apply -input=false -auto-approve
 	@test -n "$${GITHUB_TOKEN:-}" || { echo "GITHUB_TOKEN is required for Flux bootstrap and is never persisted by this target"; exit 1; }
-	@$(FLUX) bootstrap github --owner=$(GITHUB_OWNER) --repository=$(GITHUB_REPOSITORY) --branch=$(GIT_BRANCH) --path=$(FLUX_PATH) --personal --components=source-controller,kustomize-controller,helm-controller,notification-controller --version=$(FLUX_VERSION) --context=$(KUBE_CONTEXT) --silent
+	@$(FLUX) bootstrap github --owner=$(GITHUB_OWNER) --repository=$(GITHUB_REPOSITORY) --branch=$(GIT_BRANCH) --path=$(FLUX_PATH) --personal --components=source-controller,kustomize-controller,helm-controller,notification-controller --version=$(FLUX_VERSION) --context=$(KUBE_CONTEXT)
 
 gitops-status:
 	@kubectl --context $(KUBE_CONTEXT) -n flux-system get deployments

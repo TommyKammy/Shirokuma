@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import re
 import subprocess
@@ -22,6 +24,8 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
             "bootstrap/flux/v2.9.1/components.json",
             "deploy/gitops/dev/kustomization.yaml",
             "deploy/gitops/dev/smoke-configmap.yaml",
+            "deploy/gitops/clusters/local-lite/dev.yaml",
+            "deploy/gitops/clusters/local-lite/flux-system/kustomization.yaml",
         )
         missing = [path for path in required_files if not (ROOT / path).is_file()]
         self.assertEqual(missing, [], f"missing Flux bootstrap paths: {missing}")
@@ -47,6 +51,9 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
         inventory = json.loads(
             (ROOT / "bootstrap/flux/v2.9.1/components.json").read_text(encoding="utf-8")
         )
+        customization = (
+            ROOT / "deploy/gitops/clusters/local-lite/flux-system/kustomization.yaml"
+        ).read_text(encoding="utf-8")
 
         self.assertIn("FLUX_VERSION ?= v2.9.1", makefile)
         self.assertEqual(inventory["flux_version"], "v2.9.1")
@@ -66,12 +73,18 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
                 self.assertRegex(candidate["reference"], r"^ghcr\.io/fluxcd/.+@sha256:[0-9a-f]{64}$")
                 self.assertEqual(inventory_by_name[name]["reference"], candidate["reference"])
                 self.assertEqual(inventory_by_name[name]["version"], candidate["version"])
+                self.assertIn(f"value: {candidate['reference']}", customization)
+                self.assertIn(f"name: {name}", customization)
 
     def test_root_kustomization_is_the_only_apply_path_for_smoke_state(self) -> None:
         dev = (ROOT / "deploy/gitops/dev/kustomization.yaml").read_text(encoding="utf-8")
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
 
         self.assertIn("- smoke-configmap.yaml", dev)
+        sync = (ROOT / "deploy/gitops/clusters/local-lite/dev.yaml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("path: ./deploy/gitops/dev", sync)
         self.assertNotIn("kubectl apply", makefile)
         self.assertFalse((ROOT / "deploy/gitops/clusters/local-lite/flux-system/gotk-components.yaml").exists())
 
@@ -81,19 +94,27 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
         self.assertIn("apply -input=false -auto-approve", makefile)
         self.assertIn("destroy -input=false -auto-approve", makefile)
         self.assertIn("bootstrap github", makefile)
+        self.assertNotRegex(makefile, r"bootstrap github[^\n]*--silent")
         self.assertIn("--components=source-controller,kustomize-controller,helm-controller,notification-controller", makefile)
         self.assertIn("GITHUB_TOKEN is required", makefile)
         self.assertIn("flux-system", makefile)
 
     def run_image_admission(
-        self, candidates: dict[str, object], ledger: dict[str, object]
+        self,
+        candidates: dict[str, object],
+        ledger: dict[str, object],
+        customized_candidates: dict[str, object] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as temporary_directory:
             temporary_root = Path(temporary_directory)
             candidates_path = temporary_root / "candidates.json"
             ledger_path = temporary_root / "ledger.json"
+            customization_path = temporary_root / "kustomization.yaml"
             candidates_path.write_text(json.dumps(candidates), encoding="utf-8")
             ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+            customization_path.write_text(
+                self.customization(customized_candidates or candidates), encoding="utf-8"
+            )
             return subprocess.run(
                 [
                     sys.executable,
@@ -102,6 +123,8 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
                     str(candidates_path),
                     "--ledger",
                     str(ledger_path),
+                    "--customization",
+                    str(customization_path),
                 ],
                 cwd=ROOT,
                 capture_output=True,
@@ -116,6 +139,22 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
             "tag": f"v1.0.0@sha256:{digest}",
             "reference": f"{repository}@sha256:{digest}",
         }
+
+    @staticmethod
+    def customization(candidates: dict[str, object]) -> str:
+        patches = []
+        for component, candidate in candidates.items():
+            assert isinstance(candidate, dict)
+            patches.append(
+                "  - patch: |\n"
+                "      - op: replace\n"
+                "        path: /spec/template/spec/containers/0/image\n"
+                f"        value: {candidate['reference']}\n"
+                "    target:\n"
+                "      kind: Deployment\n"
+                f"      name: {component}\n"
+            )
+        return "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\npatches:\n" + "".join(patches)
 
     def test_unadmitted_bootstrap_images_fail_closed(self) -> None:
         candidate = self.candidate("registry.example.com/shirokuma/source-controller")
@@ -135,6 +174,17 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("not admitted", result.stdout)
+
+    def test_admission_checks_the_bootstrap_customization(self) -> None:
+        admitted = self.candidate("registry.example.com/trusted/source-controller")
+        customized = self.candidate("registry.example.com/untrusted/source-controller")
+        result = self.run_image_admission(
+            {"source-controller": admitted},
+            {"schema_version": 1, "images": [{"reference": admitted["reference"]}]},
+            {"source-controller": customized},
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("bootstrap customization deploys", result.stdout)
 
     def test_matching_deployed_image_can_be_admitted(self) -> None:
         candidate = self.candidate("registry.example.com/shirokuma/source-controller")

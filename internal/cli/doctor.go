@@ -204,6 +204,20 @@ func checkFlux(ctx context.Context, runner commandRunner, kubeContext string) do
 	if len(controllers.Items) != 4 {
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: fmt.Sprintf("expected 4 Flux controllers, found %d", len(controllers.Items))}
 	}
+	requiredControllers := []string{"source-controller", "kustomize-controller", "helm-controller", "notification-controller"}
+	foundControllers := make(map[string]bool, len(controllers.Items))
+	for _, controller := range controllers.Items {
+		foundControllers[controller.Metadata.Name] = true
+	}
+	var missingControllers []string
+	for _, name := range requiredControllers {
+		if !foundControllers[name] {
+			missingControllers = append(missingControllers, name)
+		}
+	}
+	if len(missingControllers) > 0 {
+		return doctorCheck{Name: "flux", Status: "degraded", Summary: fmt.Sprintf("missing required Flux controllers: %s", strings.Join(missingControllers, ", "))}
+	}
 	var unhealthy []string
 	for _, controller := range controllers.Items {
 		if controller.Status.Replicas < 1 || controller.Status.AvailableReplicas < controller.Status.Replicas {
@@ -224,7 +238,7 @@ func checkFlux(ctx context.Context, runner commandRunner, kubeContext string) do
 		kinds[resource.Kind]++
 		ready := false
 		for _, condition := range resource.Status.Conditions {
-			if condition.Type == "Ready" && condition.Status == "True" && (condition.ObservedGeneration == 0 || condition.ObservedGeneration == resource.Metadata.Generation) {
+			if condition.Type == "Ready" && condition.Status == "True" && condition.ObservedGeneration == resource.Metadata.Generation {
 				ready = true
 				break
 			}
