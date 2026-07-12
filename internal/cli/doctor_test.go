@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -54,6 +55,42 @@ func TestDoctorJSONHealthy(t *testing.T) {
 	if !reflect.DeepEqual(gotCommands, wantCommands) {
 		t.Fatalf("commands = %v, want %v", gotCommands, wantCommands)
 	}
+	policyCall := runner.calls[2]
+	if len(policyCall) != 4 || policyCall[1] != "-C" || policyCall[3] != "verify-security" {
+		t.Fatalf("policy call = %v", policyCall)
+	}
+}
+
+func TestDoctorRejectsInvalidOutputBeforeChecks(t *testing.T) {
+	runner := &fakeRunner{}
+	command := newRootCommand(&bytes.Buffer{}, runner)
+	command.SetArgs([]string{"doctor", "--output", "yaml"})
+	if err := command.Execute(); err == nil {
+		t.Fatal("Execute() error = nil, want unsupported output error")
+	}
+	if len(runner.calls) != 0 {
+		t.Fatalf("runner calls = %v, want none", runner.calls)
+	}
+}
+
+func TestExecRunnerParsesStdoutWithoutStderrWarnings(t *testing.T) {
+	output, err := (execRunner{}).Run(context.Background(), "sh", "-c", "printf ok; printf warning >&2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(output), "ok"; got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestResolveRepositoryRootFromNestedDirectory(t *testing.T) {
+	root, err := resolveRepositoryRoot("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regularFile(filepath.Join(root, "security", "resident-images.json")) {
+		t.Fatalf("resolved root %q is missing the security ledger", root)
+	}
 }
 
 func TestRunDoctorBoundsFailureOutput(t *testing.T) {
@@ -62,7 +99,7 @@ func TestRunDoctorBoundsFailureOutput(t *testing.T) {
 		{err: errors.New("kubeconfig contents")},
 		{err: errors.New("repository output")},
 	}}
-	report := runDoctor(context.Background(), runner, "local-lite", "test", time.Unix(0, 0).UTC())
+	report := runDoctor(context.Background(), runner, "local-lite", "test", "/repo", time.Unix(0, 0).UTC())
 	encoded, err := json.Marshal(report)
 	if err != nil {
 		t.Fatal(err)

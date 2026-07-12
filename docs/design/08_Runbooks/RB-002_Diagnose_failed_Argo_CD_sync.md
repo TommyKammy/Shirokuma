@@ -38,10 +38,19 @@ shirokuma doctor --output json > "${evidence_dir}/doctor.json"
 
 ```bash
 kubectl --context colima-mac-studio-solo -n argocd get applications \
-  -o json > "${evidence_dir}/applications-summary.json"
+  -o json | jq '{schema_version:"1",items:[.items[:100][] | {
+    name:.metadata.name,
+    namespace:.metadata.namespace,
+    sync:(.status.sync.status // "Unknown"),
+    health:(.status.health.status // "Unknown"),
+    conditions:[(.status.conditions // [])[:10][] | {type,lastTransitionTime}]
+  }]}' > "${evidence_dir}/applications-summary.json"
 kubectl --context colima-mac-studio-solo get events -A \
   --field-selector type=Warning --sort-by=.lastTimestamp \
-  -o json | jq '.items |= .[-100:]' > "${evidence_dir}/events-warning.json"
+  -o json | jq '{schema_version:"1",items:[.items[-100:][] | {
+    type,reason,count,firstTimestamp,lastTimestamp,
+    involvedObject:{kind:.involvedObject.kind,namespace:.involvedObject.namespace,name:.involvedObject.name}
+  }]}' > "${evidence_dir}/events-warning.json"
 ```
 
 3. If a workload is implicated, retain no more than 200 lines. Review the file

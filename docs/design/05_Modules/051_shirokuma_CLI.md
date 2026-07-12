@@ -41,6 +41,10 @@ are never copied into the report.
 shirokuma doctor --profile local-lite --context colima-mac-studio-solo --output json
 ```
 
+The repository root is discovered by walking upward from the current directory.
+Installed binaries invoked elsewhere must pass `--repo-root /path/to/Shirokuma`
+so the policy check runs against the intended checkout.
+
 The report status is `healthy` only when Kubernetes readiness, every discovered
 Argo CD Application, and repository policy are healthy. A degraded report is
 still emitted successfully so it can be attached as machine-readable triage

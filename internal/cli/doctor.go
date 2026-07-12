@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -28,7 +30,7 @@ type commandRunner interface {
 type execRunner struct{}
 
 func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
-	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+	return exec.CommandContext(ctx, name, args...).Output()
 }
 
 type doctorCheck struct {
@@ -66,36 +68,72 @@ func newDoctorCommand(runner commandRunner) *cobra.Command {
 	var outputFormat string
 	var profile string
 	var kubeContext string
+	var repositoryRoot string
 
 	command := &cobra.Command{
 		Use:   "doctor",
 		Short: "Report bounded cluster, Argo CD, and policy diagnostics",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			report := runDoctor(cmd.Context(), runner, profile, kubeContext, time.Now().UTC())
-			switch outputFormat {
-			case "json":
+			if outputFormat != "json" && outputFormat != "markdown" {
+				return fmt.Errorf("unsupported output format %q (use json or markdown)", outputFormat)
+			}
+			resolvedRoot, err := resolveRepositoryRoot(repositoryRoot)
+			if err != nil {
+				return err
+			}
+			report := runDoctor(cmd.Context(), runner, profile, kubeContext, resolvedRoot, time.Now().UTC())
+			if outputFormat == "json" {
 				encoder := json.NewEncoder(cmd.OutOrStdout())
 				encoder.SetIndent("", "  ")
 				return encoder.Encode(report)
-			case "markdown":
-				return writeDoctorMarkdown(cmd.OutOrStdout(), report)
-			default:
-				return fmt.Errorf("unsupported output format %q (use json or markdown)", outputFormat)
 			}
+			return writeDoctorMarkdown(cmd.OutOrStdout(), report)
 		},
 	}
 	command.Flags().StringVar(&outputFormat, "output", "markdown", "output format: json or markdown")
 	command.Flags().StringVar(&profile, "profile", "local-lite", "diagnostic profile")
 	command.Flags().StringVar(&kubeContext, "context", "colima-mac-studio-solo", "Kubernetes context")
+	command.Flags().StringVar(&repositoryRoot, "repo-root", "", "repository root (auto-detected from the current directory)")
 	return command
 }
 
-func runDoctor(ctx context.Context, runner commandRunner, profile, kubeContext string, now time.Time) doctorReport {
+func resolveRepositoryRoot(explicit string) (string, error) {
+	start := explicit
+	if start == "" {
+		var err error
+		start, err = os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("determine current directory: %w", err)
+		}
+	}
+	current, err := filepath.Abs(start)
+	if err != nil {
+		return "", fmt.Errorf("resolve repository root %q: %w", start, err)
+	}
+	for {
+		if regularFile(filepath.Join(current, "Makefile")) && regularFile(filepath.Join(current, "security", "resident-images.json")) {
+			return current, nil
+		}
+		parent := filepath.Dir(current)
+		if parent == current || explicit != "" {
+			break
+		}
+		current = parent
+	}
+	return "", fmt.Errorf("Shirokuma repository root not found from %q; use --repo-root", start)
+}
+
+func regularFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
+}
+
+func runDoctor(ctx context.Context, runner commandRunner, profile, kubeContext, repositoryRoot string, now time.Time) doctorReport {
 	checks := []doctorCheck{
 		checkCluster(ctx, runner, kubeContext),
 		checkArgoCD(ctx, runner, kubeContext),
-		checkPolicy(ctx, runner),
+		checkPolicy(ctx, runner, repositoryRoot),
 	}
 	status := "healthy"
 	for _, check := range checks {
@@ -158,10 +196,10 @@ func checkArgoCD(ctx context.Context, runner commandRunner, kubeContext string) 
 	return doctorCheck{Name: "argocd", Status: "healthy", Summary: fmt.Sprintf("%d application(s) are Synced and Healthy", len(applications.Items))}
 }
 
-func checkPolicy(ctx context.Context, runner commandRunner) doctorCheck {
+func checkPolicy(ctx context.Context, runner commandRunner, repositoryRoot string) doctorCheck {
 	checkContext, cancel := context.WithTimeout(ctx, policyCheckTimeout)
 	defer cancel()
-	if _, err := runner.Run(checkContext, "make", "verify-security"); err != nil {
+	if _, err := runner.Run(checkContext, "make", "-C", repositoryRoot, "verify-security"); err != nil {
 		return failedCheck("policy", err)
 	}
 	return doctorCheck{Name: "policy", Status: "healthy", Summary: "repository supply-chain policy passed"}

@@ -5,6 +5,8 @@ Run `shirokuma doctor --output json` for PR evidence or `--output markdown` for
 operator review. The command summarizes Kubernetes readiness, Argo CD
 Application health, and the repository supply-chain policy without retaining
 command stdout, credentials, kubeconfig content, or prompts.
+It discovers the repository root from the current directory; use
+`--repo-root /path/to/Shirokuma` when invoking an installed binary elsewhere.
 
 ## Baseline signals
 

@@ -40,7 +40,14 @@ class ObservabilityBaselineTests(unittest.TestCase):
         runbook = (
             ROOT / "docs/design/08_Runbooks/RB-002_Diagnose_failed_Argo_CD_sync.md"
         ).read_text(encoding="utf-8")
-        for required in ("--tail=200", ".items |= .[-100:]", "1 MiB", "30 days"):
+        for required in (
+            "--tail=200",
+            ".items[:100][]",
+            ".items[-100:][]",
+            "conditions:[(.status.conditions // [])[:10][]",
+            "1 MiB",
+            "30 days",
+        ):
             self.assertIn(required, runbook)
 
 
