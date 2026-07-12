@@ -102,4 +102,4 @@ Do not introduce Image Automation, Flux Operator, the community Helm chart, or d
 - Trivy 0.72.0、2026-07-12時点でHighはsource=3、kustomize=2、helm=2、notification=1、Criticalは全て0だった。
 - 主な検出は、Flux controller公開後に開示・修正されたGo stdlib、oras-go、fulcio、c-aresの脆弱性である。
 - 現行のHigh/Criticalゼロgateは維持するため、これらのdigestはresident-image ledgerへadmitしない。
-- repository側のFlux設計・隔離されたcandidate bootstrap manifest・doctor・Runbook移行は進行中だが、candidate manifestは`deploy/`へ置かない。live bootstrapは修正版を含む署名済みupstream patch releaseまでfail-closedとする。custom hardened imageを採用する場合は別ADRを必要とする。
+- repository側のFlux設計・隔離されたcandidate inventory・doctor・Runbook移行は進行中だが、未承認の完全manifestは保持せず`deploy/`へ置かない。live bootstrapは修正版を含む署名済みupstream patch releaseまでfail-closedとする。custom hardened imageを採用する場合は別ADRを必要とする。

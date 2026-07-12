@@ -13,8 +13,9 @@ status: in-progress
 - The migration branch uses `fluxcd/flux2 v2.9.1`, the four standard
   controllers, `GitRepository`, root/dev `Kustomization`, and Git smoke state.
 - Exact `linux/arm64` controller digests are recorded in
-  `opentofu/dev/bootstrap-images.json` and the isolated candidate manifests
-  under `bootstrap/flux/v2.9.1/`; they are intentionally absent from `deploy/`.
+  `opentofu/dev/bootstrap-images.json` and the isolated machine-readable
+  inventory under `bootstrap/flux/v2.9.1/`; no unapproved manifest is retained
+  under `deploy/`.
 - Trivy 0.72.0 on 2026-07-12 reports unresolved High findings in all four
   official controller images: source=3, kustomize=2, helm=2, notification=1;
   Critical=0 for all four.

@@ -19,9 +19,7 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
             "opentofu/dev/versions.tf",
             "opentofu/dev/bootstrap-images.json",
             "bootstrap/flux/v2.9.1/README.md",
-            "bootstrap/flux/v2.9.1/gotk-components.yaml",
-            "bootstrap/flux/v2.9.1/gotk-sync.yaml",
-            "bootstrap/flux/v2.9.1/kustomization.yaml",
+            "bootstrap/flux/v2.9.1/components.json",
             "deploy/gitops/dev/kustomization.yaml",
             "deploy/gitops/dev/smoke-configmap.yaml",
         )
@@ -46,11 +44,12 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
         candidates = json.loads(
             (ROOT / "opentofu/dev/bootstrap-images.json").read_text(encoding="utf-8")
         )
-        components = (ROOT / "bootstrap/flux/v2.9.1/gotk-components.yaml").read_text(
-            encoding="utf-8"
+        inventory = json.loads(
+            (ROOT / "bootstrap/flux/v2.9.1/components.json").read_text(encoding="utf-8")
         )
 
         self.assertIn("FLUX_VERSION ?= v2.9.1", makefile)
+        self.assertEqual(inventory["flux_version"], "v2.9.1")
         self.assertEqual(
             set(candidates),
             {
@@ -60,29 +59,18 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
                 "notification-controller",
             },
         )
+        inventory_by_name = {item["name"]: item for item in inventory["components"]}
+        self.assertEqual(set(inventory_by_name), set(candidates))
         for name, candidate in candidates.items():
             with self.subTest(component=name):
                 self.assertRegex(candidate["reference"], r"^ghcr\.io/fluxcd/.+@sha256:[0-9a-f]{64}$")
-                self.assertIn(candidate["reference"], components)
-        self.assertNotRegex(components, r"image: ghcr\.io/fluxcd/[^\s]+:v[0-9]")
-        self.assertIn(
-            "# Components: source-controller,kustomize-controller,helm-controller,notification-controller",
-            components,
-        )
-        self.assertEqual(components.count("kind: Deployment\n"), 4)
+                self.assertEqual(inventory_by_name[name]["reference"], candidate["reference"])
+                self.assertEqual(inventory_by_name[name]["version"], candidate["version"])
 
     def test_root_kustomization_is_the_only_apply_path_for_smoke_state(self) -> None:
-        sync = (ROOT / "bootstrap/flux/v2.9.1/gotk-sync.yaml").read_text(
-            encoding="utf-8"
-        )
         dev = (ROOT / "deploy/gitops/dev/kustomization.yaml").read_text(encoding="utf-8")
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
 
-        self.assertIn("kind: GitRepository", sync)
-        self.assertIn("kind: Kustomization", sync)
-        self.assertIn("path: ./deploy/gitops/clusters/local-lite", sync)
-        self.assertIn("prune: true", sync)
-        self.assertIn("wait: true", sync)
         self.assertIn("- smoke-configmap.yaml", dev)
         self.assertNotIn("kubectl apply", makefile)
         self.assertFalse((ROOT / "deploy/gitops/clusters/local-lite/flux-system/gotk-components.yaml").exists())
