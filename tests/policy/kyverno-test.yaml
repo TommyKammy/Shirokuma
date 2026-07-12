@@ -1,0 +1,87 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: shirokuma-l0-baseline
+policies:
+  - ../../policies/kyverno/baseline.yaml
+resources:
+  - allowed.yaml.fixture
+  - denied-privileged.yaml.fixture
+  - denied-host-namespace.yaml.fixture
+  - denied-host-path.yaml.fixture
+  - denied-host-port.yaml.fixture
+  - denied-missing-resources.yaml.fixture
+  - denied-mutable-image.yaml.fixture
+  - denied-node-port.yaml.fixture
+  - denied-ingress.yaml.fixture
+results:
+  - kind: Pod
+    policy: disallow-privileged-containers
+    resources: [allowed-pod]
+    result: pass
+    isValidatingPolicy: true
+  - kind: Pod
+    policy: disallow-host-namespaces
+    resources: [allowed-pod]
+    result: pass
+    isValidatingPolicy: true
+  - kind: Pod
+    policy: disallow-host-path
+    resources: [allowed-pod]
+    result: pass
+    isValidatingPolicy: true
+  - kind: Pod
+    policy: require-pod-resources
+    resources: [allowed-pod]
+    result: pass
+    isValidatingPolicy: true
+  - kind: Pod
+    policy: require-image-digest
+    resources: [allowed-pod]
+    result: pass
+    isValidatingPolicy: true
+  - kind: Service
+    policy: deny-public-service
+    resources: [allowed-internal-service]
+    result: pass
+    isValidatingPolicy: true
+  - kind: Pod
+    policy: disallow-privileged-containers
+    resources: [denied-privileged]
+    result: fail
+    isValidatingPolicy: true
+  - kind: Pod
+    policy: disallow-host-namespaces
+    resources: [denied-host-namespace]
+    result: fail
+    isValidatingPolicy: true
+  - kind: Pod
+    policy: disallow-host-path
+    resources: [denied-host-path]
+    result: fail
+    isValidatingPolicy: true
+  - kind: Pod
+    policy: disallow-host-ports
+    resources: [denied-host-port]
+    result: fail
+    isValidatingPolicy: true
+  - kind: Pod
+    policy: require-pod-resources
+    resources: [denied-missing-resources]
+    result: fail
+    isValidatingPolicy: true
+  - kind: Pod
+    policy: require-image-digest
+    resources: [denied-mutable-image]
+    result: fail
+    isValidatingPolicy: true
+  - kind: Service
+    policy: deny-public-service
+    resources: [denied-node-port]
+    result: fail
+    isValidatingPolicy: true
+  - kind: Ingress
+    policy: deny-public-service
+    resources: [denied-ingress]
+    result: fail
+    isValidatingPolicy: true

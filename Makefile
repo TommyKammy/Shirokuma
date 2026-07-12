@@ -6,15 +6,17 @@ TOFU_DIR ?= opentofu/dev
 KUBE_CONTEXT ?= colima-mac-studio-solo
 FLUX ?= flux
 FLUX_VERSION ?= v2.9.1
+KYVERNO ?= kyverno
+KYVERNO_VERSION ?= v1.18.2
 GITHUB_OWNER ?= TommyKammy
 FLUX_GITHUB_REPOSITORY ?= Shirokuma
 FLUX_GITHUB_PRIVATE ?= false
 FLUX_BOOTSTRAP_BRANCH ?= flux/bootstrap-local-lite
 FLUX_PATH ?= deploy/gitops/clusters/local-lite
 
-.PHONY: prepare verify verify-security verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-image-admission verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go supervisor-preflight colima-start colima-status tofu-init tofu-fmt tofu-validate flux-version-check gitops-bootstrap gitops-status gitops-reconcile gitops-teardown check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
+.PHONY: prepare verify verify-security verify-policy verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-image-admission verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go supervisor-preflight colima-start colima-status tofu-init tofu-fmt tofu-validate flux-version-check gitops-bootstrap gitops-status gitops-reconcile gitops-teardown check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
 
-verify: check-required-files verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go verify-security check-newlines check-trailing-whitespace check-no-secret-filenames
+verify: check-required-files verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go verify-security verify-policy check-newlines check-trailing-whitespace check-no-secret-filenames
 
 prepare: verify-design-context
 
@@ -22,6 +24,14 @@ verify-security:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_supply_chain_security.py'
 	@$(PYTHON) scripts/verify_supply_chain.py scan-secrets --repo .
 	@$(PYTHON) scripts/verify_supply_chain.py check-images --manifest security/resident-images.json --repo .
+
+verify-policy:
+	@command -v $(KYVERNO) >/dev/null || { echo "kyverno $(KYVERNO_VERSION) is required for policy verification"; exit 1; }
+	@$(KYVERNO) version | grep -F "$(patsubst v%,%,$(KYVERNO_VERSION))" >/dev/null || { echo "kyverno $(KYVERNO_VERSION) is required for policy verification"; exit 1; }
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_policy_exceptions.py'
+	@$(PYTHON) scripts/verify_policy_exceptions.py
+	@$(KYVERNO) test tests/policy --require-tests
+	@$(KYVERNO) apply policies/ --resource tests/policy/allowed.yaml.fixture
 
 verify-design-context:
 	@$(PYTHON) scripts/verify_design_context.py
@@ -122,7 +132,10 @@ check-required-files:
 	@test -f scripts/preflight_supervisor_issues.py
 	@test -x scripts/colima_baseline.sh
 	@test -f scripts/verify_supply_chain.py
+	@test -f scripts/verify_policy_exceptions.py
 	@test -f security/resident-images.json
+	@test -f policies/kyverno/baseline.yaml
+	@test -f tests/policy/kyverno-test.yaml
 
 check-newlines:
 	@missing=0; \

@@ -4,8 +4,8 @@ doc_id: "DEV-046"
 title: "CI CD Test Strategy"
 status: draft
 created: 2026-07-05
-updated: 2026-07-05
-version: "0.2"
+updated: 2026-07-13
+version: "0.3"
 area: "development"
 tags: [shirokuma, ci, testing]
 ---
@@ -33,6 +33,12 @@ tags: [shirokuma, ci, testing]
 - secret scan
 - build images
 - kind smoke test for affected components
+
+The L0 policy check pins Kyverno CLI `v1.18.2`, runs
+`make verify-policy`, requires declared allow/deny expectations, and validates
+the repository exception contract. The CI installer action is pinned by commit
+SHA. Cluster admission installation is a separate gated step and is not implied
+by offline policy success.
 
 ## Nightly
 

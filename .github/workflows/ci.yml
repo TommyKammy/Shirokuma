@@ -35,5 +35,10 @@ jobs:
         with:
           version: v4.2.3
 
+      - name: Set up Kyverno CLI
+        uses: kyverno/action-install-cli@fcee92fca5c883169ef9927acf543e0b5fc58289 # v0.2.0
+        with:
+          release: v1.18.2
+
       - name: Run repo-owned checks
         run: make verify
