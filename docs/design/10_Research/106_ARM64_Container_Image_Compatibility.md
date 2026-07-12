@@ -74,21 +74,27 @@ this L0 baseline does not add any resident service.
 
 ## GitOps candidate evidence
 
-### WP-L0-GITOPS-001 candidate scan
+### WP-L0-GITOPS-001 Flux candidate scan
 
-Argo CD chart `10.1.3` renders Argo CD `v3.4.5`, Dex `v2.45.1`, and Redis
-`8.2.3-alpine`. Dex is disabled for the local baseline because external SSO is
-not required. The remaining Argo CD and Redis candidates resolve to native
-`linux/arm64` manifests and are pinned by platform digest in
-`opentofu/dev/bootstrap-images.json`.
+ADR-0018 supersedes the former Argo CD candidate. Flux distribution `v2.9.1`
+selects source-controller `v1.9.2`, kustomize-controller `v1.9.2`,
+helm-controller `v1.6.2`, and notification-controller `v1.9.2`. Exact native
+`linux/arm64` digests are pinned in `opentofu/dev/bootstrap-images.json` and the
+generated Flux manifests.
 
-Trivy `0.72.0` scanning on 2026-07-10 found unresolved High or Critical
-vulnerabilities in both required candidates (Argo CD: 103 rendered findings,
-38 unique IDs; Redis: 15 rendered findings, 8 unique IDs). They are therefore
-not admitted to `security/resident-images.json`. `make gitops-bootstrap` fails
-closed at the image-admission gate until replacement digests produce retained
-SBOM and scan artifacts with no High or Critical result. No cluster install is
-approved from these candidate digests.
+Trivy `0.72.0` scanning on 2026-07-12 found unresolved High findings in every
+official controller candidate: source-controller=3,
+kustomize-controller=2, helm-controller=2, notification-controller=1;
+Critical=0 for all four. Findings include Go stdlib CVE-2026-39822,
+oras-go CVE-2026-50163, fulcio CVE-2026-49478, and c-ares CVE-2026-33630.
+The fixes were published after the Flux `v2.9.1` controller images.
+
+The candidates are not admitted to `security/resident-images.json`.
+`make gitops-bootstrap` remains fail-closed until a signed upstream patch
+release incorporates the fixed dependencies and produces retained SBOM and
+scan artifacts with High=0/Critical=0, or a separate ADR approves a custom
+hardened image supply chain. No live cluster install is approved from these
+candidate digests.
 
 ## WP decision rules
 

@@ -39,17 +39,24 @@
       "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md"
     ],
     "9": [
-      "docs/design/04_Development/046_CI_CD_Test_Strategy.md",
+      "docs/design/07_ADR/ADR-0018_Use_Flux_v2_as_the_GitOps_reconciler.md",
+      "docs/design/02_Architecture/024_GitOps_Reconciliation_Model.md",
       "docs/design/02_Architecture/02C_Deployment_Topologies.md",
-      "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md"
+      "docs/design/03_Requirements/034_Platform_Requirements.md",
+      "docs/design/06_WorkPackages/L0/WP-L0-GITOPS-001_OpenTofu_and_Flux_bootstrap.md",
+      "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md",
+      "docs/design/08_Runbooks/RB-002_Diagnose_failed_Flux_reconciliation.md"
     ],
     "10": [
+      "docs/design/07_ADR/ADR-0018_Use_Flux_v2_as_the_GitOps_reconciler.md",
       "docs/design/05_Modules/051_shirokuma_CLI.md",
-      "docs/design/08_Runbooks/RB-002_Diagnose_failed_Argo_CD_sync.md",
+      "docs/design/08_Runbooks/RB-002_Diagnose_failed_Flux_reconciliation.md",
       "docs/design/03_Requirements/030_Functional_Requirements.md",
       "docs/design/03_Requirements/033_Agent_Requirements.md"
     ],
     "11": [
+      "docs/design/07_ADR/ADR-0018_Use_Flux_v2_as_the_GitOps_reconciler.md",
+      "docs/design/02_Architecture/024_GitOps_Reconciliation_Model.md",
       "docs/design/03_Requirements/036_Security_Policy_Requirements.md",
       "docs/design/04_Development/046_CI_CD_Test_Strategy.md",
       "docs/design/03_Requirements/037_Traceability_Matrix.md"

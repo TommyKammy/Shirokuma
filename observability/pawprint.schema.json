@@ -29,6 +29,8 @@
         "properties": {
           "name": {"type": "string", "maxLength": 120},
           "status": {"enum": ["passed", "failed", "skipped"]},
+          "revision": {"type": "string", "maxLength": 160},
+          "condition": {"type": "string", "maxLength": 160},
           "evidence_ref": {"type": "string", "maxLength": 240}
         }
       }

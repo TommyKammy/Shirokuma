@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 import re
 import subprocess
@@ -10,64 +8,94 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+DIGEST = "a" * 64
 
 
 class GitOpsBootstrapContractTests(unittest.TestCase):
-    def test_repository_owns_declarative_bootstrap_entrypoints(self) -> None:
+    def test_repository_owns_flux_bootstrap_entrypoints(self) -> None:
         required_files = (
             "opentofu/dev/main.tf",
             "opentofu/dev/variables.tf",
             "opentofu/dev/versions.tf",
-            "charts/dev-root/Chart.yaml",
-            "charts/dev-root/templates/application.yaml",
+            "opentofu/dev/bootstrap-images.json",
+            "bootstrap/flux/v2.9.1/README.md",
+            "bootstrap/flux/v2.9.1/gotk-components.yaml",
+            "bootstrap/flux/v2.9.1/gotk-sync.yaml",
+            "bootstrap/flux/v2.9.1/kustomization.yaml",
+            "deploy/gitops/dev/kustomization.yaml",
             "deploy/gitops/dev/smoke-configmap.yaml",
         )
         missing = [path for path in required_files if not (ROOT / path).is_file()]
-
-        self.assertEqual(missing, [], f"missing GitOps bootstrap paths: {missing}")
+        self.assertEqual(missing, [], f"missing Flux bootstrap paths: {missing}")
 
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
-        for target in ("tofu-fmt:", "tofu-validate:", "gitops-bootstrap:", "gitops-teardown:"):
+        for target in (
+            "tofu-fmt:",
+            "tofu-validate:",
+            "flux-version-check:",
+            "gitops-bootstrap:",
+            "gitops-status:",
+            "gitops-reconcile:",
+            "gitops-teardown:",
+        ):
             with self.subTest(target=target):
                 self.assertIn(target, makefile)
 
-    def test_bootstrap_dependencies_and_workload_images_are_pinned(self) -> None:
-        versions = (ROOT / "opentofu/dev/versions.tf").read_text(encoding="utf-8")
-        main = (ROOT / "opentofu/dev/main.tf").read_text(encoding="utf-8")
-        images = (ROOT / "opentofu/dev/bootstrap-images.json").read_text(
+    def test_flux_distribution_and_controller_images_are_pinned(self) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        candidates = json.loads(
+            (ROOT / "opentofu/dev/bootstrap-images.json").read_text(encoding="utf-8")
+        )
+        components = (ROOT / "bootstrap/flux/v2.9.1/gotk-components.yaml").read_text(
             encoding="utf-8"
         )
 
-        self.assertIn('required_version = "= 1.12.3"', versions)
-        self.assertIn('version = "3.2.0"', versions)
-        self.assertIn('version = "3.2.1"', versions)
-        self.assertRegex(main, r'version\s*=\s*"10[.]1[.]3"')
-        self.assertGreaterEqual(len(re.findall(r"@sha256:[0-9a-f]{64}", images)), 4)
-        self.assertIn("jsondecode", main)
-        self.assertIn("enabled = false", main, "Dex must remain disabled in the local baseline")
+        self.assertIn("FLUX_VERSION ?= v2.9.1", makefile)
+        self.assertEqual(
+            set(candidates),
+            {
+                "source-controller",
+                "kustomize-controller",
+                "helm-controller",
+                "notification-controller",
+            },
+        )
+        for name, candidate in candidates.items():
+            with self.subTest(component=name):
+                self.assertRegex(candidate["reference"], r"^ghcr\.io/fluxcd/.+@sha256:[0-9a-f]{64}$")
+                self.assertIn(candidate["reference"], components)
+        self.assertNotRegex(components, r"image: ghcr\.io/fluxcd/[^\s]+:v[0-9]")
+        self.assertIn(
+            "# Components: source-controller,kustomize-controller,helm-controller,notification-controller",
+            components,
+        )
+        self.assertEqual(components.count("kind: Deployment\n"), 4)
 
-    def test_root_application_is_the_only_apply_path_for_smoke_state(self) -> None:
-        application = (ROOT / "charts/dev-root/templates/application.yaml").read_text(
+    def test_root_kustomization_is_the_only_apply_path_for_smoke_state(self) -> None:
+        sync = (ROOT / "bootstrap/flux/v2.9.1/gotk-sync.yaml").read_text(
             encoding="utf-8"
         )
+        dev = (ROOT / "deploy/gitops/dev/kustomization.yaml").read_text(encoding="utf-8")
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
 
-        self.assertIn("automated:", application)
-        self.assertIn("prune: true", application)
-        self.assertIn("selfHeal: true", application)
+        self.assertIn("kind: GitRepository", sync)
+        self.assertIn("kind: Kustomization", sync)
+        self.assertIn("path: ./deploy/gitops/clusters/local-lite", sync)
+        self.assertIn("prune: true", sync)
+        self.assertIn("wait: true", sync)
+        self.assertIn("- smoke-configmap.yaml", dev)
         self.assertNotIn("kubectl apply", makefile)
+        self.assertFalse((ROOT / "deploy/gitops/clusters/local-lite/flux-system/gotk-components.yaml").exists())
 
     def test_gitops_commands_are_reproducible_and_noninteractive(self) -> None:
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
-
         self.assertIn("init -backend=false -input=false -lockfile=readonly", makefile)
         self.assertIn("apply -input=false -auto-approve", makefile)
         self.assertIn("destroy -input=false -auto-approve", makefile)
-        self.assertIn("kubectl config set-context --current --namespace=argocd", makefile)
-        self.assertIn(
-            'KUBECONFIG="$$kubeconfig" argocd app list --core --kube-context $(KUBE_CONTEXT)',
-            makefile,
-        )
+        self.assertIn("bootstrap github", makefile)
+        self.assertIn("--components=source-controller,kustomize-controller,helm-controller,notification-controller", makefile)
+        self.assertIn("GITHUB_TOKEN is required", makefile)
+        self.assertIn("flux-system", makefile)
 
     def run_image_admission(
         self, candidates: dict[str, object], ledger: dict[str, object]
@@ -78,7 +106,6 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
             ledger_path = temporary_root / "ledger.json"
             candidates_path.write_text(json.dumps(candidates), encoding="utf-8")
             ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
-
             return subprocess.run(
                 [
                     sys.executable,
@@ -89,60 +116,46 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
                     str(ledger_path),
                 ],
                 cwd=ROOT,
-                text=True,
                 capture_output=True,
+                text=True,
                 check=False,
             )
 
-    def test_unadmitted_bootstrap_images_fail_closed(self) -> None:
-        digest = "a" * 64
-        reference = f"registry.example.com/shirokuma/argocd@sha256:{digest}"
-        result = self.run_image_admission(
-            {
-                "argocd": {
-                    "repository": "registry.example.com/shirokuma/argocd",
-                    "tag": f"v1.0.0@sha256:{digest}",
-                    "reference": reference,
-                }
-            },
-            {"images": []},
-        )
+    @staticmethod
+    def candidate(repository: str, digest: str = DIGEST) -> dict[str, str]:
+        return {
+            "repository": repository,
+            "tag": f"v1.0.0@sha256:{digest}",
+            "reference": f"{repository}@sha256:{digest}",
+        }
 
+    def test_unadmitted_bootstrap_images_fail_closed(self) -> None:
+        candidate = self.candidate("registry.example.com/shirokuma/source-controller")
+        result = self.run_image_admission(
+            {"source-controller": candidate},
+            {"schema_version": 1, "images": []},
+        )
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("is not admitted", result.stdout)
+        self.assertIn("not admitted", result.stdout)
 
     def test_admission_checks_the_image_actually_deployed(self) -> None:
-        digest = "b" * 64
-        admitted_reference = f"registry.example.com/trusted/argocd@sha256:{digest}"
+        admitted = self.candidate("registry.example.com/trusted/source-controller")
+        deployed = self.candidate("registry.example.com/untrusted/source-controller")
         result = self.run_image_admission(
-            {
-                "argocd": {
-                    "repository": "registry.example.com/untrusted/argocd",
-                    "tag": f"v1.0.0@sha256:{digest}",
-                    "reference": admitted_reference,
-                }
-            },
-            {"images": [{"reference": admitted_reference}]},
+            {"source-controller": deployed},
+            {"schema_version": 1, "images": [{"reference": admitted["reference"]}]},
         )
-
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("does not match deployed image", result.stdout)
+        self.assertIn("not admitted", result.stdout)
 
     def test_matching_deployed_image_can_be_admitted(self) -> None:
-        digest = "c" * 64
-        reference = f"registry.example.com/shirokuma/argocd@sha256:{digest}"
+        candidate = self.candidate("registry.example.com/shirokuma/source-controller")
         result = self.run_image_admission(
-            {
-                "argocd": {
-                    "repository": "registry.example.com/shirokuma/argocd",
-                    "tag": f"v1.0.0@sha256:{digest}",
-                    "reference": reference,
-                }
-            },
-            {"images": [{"reference": reference}]},
+            {"source-controller": candidate},
+            {"schema_version": 1, "images": [{"reference": candidate["reference"]}]},
         )
-
-        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("ok images=1", result.stdout)
 
 
 if __name__ == "__main__":

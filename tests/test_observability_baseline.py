@@ -41,15 +41,14 @@ class ObservabilityBaselineTests(unittest.TestCase):
 
     def test_runbook_uses_bounded_collection(self) -> None:
         runbook = (
-            ROOT / "docs/design/08_Runbooks/RB-002_Diagnose_failed_Argo_CD_sync.md"
+            ROOT / "docs/design/08_Runbooks/RB-002_Diagnose_failed_Flux_reconciliation.md"
         ).read_text(encoding="utf-8")
         for required in (
             "set -o errexit -o nounset -o pipefail",
-            "--tail=200",
             "bound_evidence.py --max-bytes 1048576",
-            ".items[:100][]",
-            ".items[-100:][]",
-            "conditions:[(.status.conditions // [])[:10][]",
+            "--since=30m",
+            "GitRepository",
+            "Kustomization",
             "1 MiB",
             "30 days",
         ):

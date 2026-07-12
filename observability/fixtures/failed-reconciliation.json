@@ -9,8 +9,10 @@
   },
   "verification": [
     {
-      "name": "argocd-dev-root",
+      "name": "flux-kustomization-dev",
       "status": "failed",
+      "revision": "main@sha1:0123456789abcdef",
+      "condition": "Ready=False/BuildFailed",
       "evidence_ref": "doctor.json#checks/1"
     }
   ],
@@ -21,7 +23,7 @@
   "outcome": "blocked",
   "evidence": [
     "doctor.json",
-    "applications-summary.json",
+    "flux-resources-summary.json",
     "events-warning.json"
   ]
 }

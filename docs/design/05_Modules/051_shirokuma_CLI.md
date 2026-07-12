@@ -45,8 +45,10 @@ The repository root is discovered by walking upward from the current directory.
 Installed binaries invoked elsewhere must pass `--repo-root /path/to/Shirokuma`
 so the policy check runs against the intended checkout.
 
-The report status is `healthy` only when Kubernetes readiness, every discovered
-Argo CD Application, and repository policy are healthy. A degraded report is
+The report status is `healthy` only when Kubernetes readiness, all four Flux
+controller Deployments, every discovered GitRepository/Kustomization/HelmRelease,
+and repository policy are healthy. Flux resources must report `Ready=True` for
+their observed generation. A degraded report is
 still emitted successfully so it can be attached as machine-readable triage
 evidence.
 

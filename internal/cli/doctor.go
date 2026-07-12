@@ -23,7 +23,7 @@ const (
 	kubernetesCheckTimeout = 15 * time.Second
 	policyCheckTimeout     = 2 * time.Minute
 	commandWaitDelay       = 2 * time.Second
-	maxReportedApps        = 10
+	maxReportedResources   = 10
 )
 
 type commandRunner interface {
@@ -69,18 +69,22 @@ type doctorReport struct {
 	Checks        []doctorCheck `json:"checks"`
 }
 
-type argoApplicationList struct {
+type kubernetesResourceList struct {
 	Items []struct {
+		Kind     string `json:"kind"`
 		Metadata struct {
-			Name string `json:"name"`
+			Name       string `json:"name"`
+			Namespace  string `json:"namespace"`
+			Generation int64  `json:"generation"`
 		} `json:"metadata"`
 		Status struct {
-			Sync struct {
-				Status string `json:"status"`
-			} `json:"sync"`
-			Health struct {
-				Status string `json:"status"`
-			} `json:"health"`
+			Replicas          int `json:"replicas"`
+			AvailableReplicas int `json:"availableReplicas"`
+			Conditions        []struct {
+				Type               string `json:"type"`
+				Status             string `json:"status"`
+				ObservedGeneration int64  `json:"observedGeneration"`
+			} `json:"conditions"`
 		} `json:"status"`
 	} `json:"items"`
 }
@@ -93,7 +97,7 @@ func newDoctorCommand(runner commandRunner) *cobra.Command {
 
 	command := &cobra.Command{
 		Use:   "doctor",
-		Short: "Report bounded cluster, Argo CD, and policy diagnostics",
+		Short: "Report bounded cluster, Flux, and policy diagnostics",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if outputFormat != "json" && outputFormat != "markdown" {
@@ -153,7 +157,7 @@ func regularFile(path string) bool {
 func runDoctor(ctx context.Context, runner commandRunner, profile, kubeContext, repositoryRoot string, now time.Time) doctorReport {
 	checks := []doctorCheck{
 		checkCluster(ctx, runner, kubeContext),
-		checkArgoCD(ctx, runner, kubeContext),
+		checkFlux(ctx, runner, kubeContext),
 		checkPolicy(ctx, runner, repositoryRoot),
 	}
 	status := "healthy"
@@ -186,35 +190,61 @@ func checkCluster(ctx context.Context, runner commandRunner, kubeContext string)
 	return doctorCheck{Name: "cluster", Status: "healthy", Summary: "Kubernetes readiness endpoint returned ok"}
 }
 
-func checkArgoCD(ctx context.Context, runner commandRunner, kubeContext string) doctorCheck {
+func checkFlux(ctx context.Context, runner commandRunner, kubeContext string) doctorCheck {
 	checkContext, cancel := context.WithTimeout(ctx, kubernetesCheckTimeout)
 	defer cancel()
-	output, err := runner.Run(checkContext, "kubectl", "--context", kubeContext, "-n", "argocd", "get", "applications.argoproj.io", "-o", "json")
+	controllerOutput, err := runner.Run(checkContext, "kubectl", "--context", kubeContext, "-n", "flux-system", "get", "deployments.apps", "-l", "app.kubernetes.io/part-of=flux", "-o", "json")
 	if err != nil {
-		return failedCheck("argocd", err)
+		return failedCheck("flux", err)
 	}
-	var applications argoApplicationList
-	if err := json.Unmarshal(output, &applications); err != nil {
-		return doctorCheck{Name: "argocd", Status: "degraded", Summary: "application response was not valid JSON"}
+	var controllers kubernetesResourceList
+	if err := json.Unmarshal(controllerOutput, &controllers); err != nil {
+		return doctorCheck{Name: "flux", Status: "degraded", Summary: "controller response was not valid JSON"}
 	}
-	if len(applications.Items) == 0 {
-		return doctorCheck{Name: "argocd", Status: "degraded", Summary: "no Argo CD applications found"}
+	if len(controllers.Items) != 4 {
+		return doctorCheck{Name: "flux", Status: "degraded", Summary: fmt.Sprintf("expected 4 Flux controllers, found %d", len(controllers.Items))}
 	}
 	var unhealthy []string
-	for _, application := range applications.Items {
-		if application.Status.Sync.Status != "Synced" || application.Status.Health.Status != "Healthy" {
-			unhealthy = append(unhealthy, application.Metadata.Name)
+	for _, controller := range controllers.Items {
+		if controller.Status.Replicas < 1 || controller.Status.AvailableReplicas < controller.Status.Replicas {
+			unhealthy = append(unhealthy, "Deployment/"+controller.Metadata.Name)
 		}
+	}
+
+	resourceOutput, err := runner.Run(checkContext, "kubectl", "--context", kubeContext, "get", "gitrepositories.source.toolkit.fluxcd.io,kustomizations.kustomize.toolkit.fluxcd.io,helmreleases.helm.toolkit.fluxcd.io", "-A", "-o", "json")
+	if err != nil {
+		return failedCheck("flux", err)
+	}
+	var resources kubernetesResourceList
+	if err := json.Unmarshal(resourceOutput, &resources); err != nil {
+		return doctorCheck{Name: "flux", Status: "degraded", Summary: "resource response was not valid JSON"}
+	}
+	kinds := map[string]int{}
+	for _, resource := range resources.Items {
+		kinds[resource.Kind]++
+		ready := false
+		for _, condition := range resource.Status.Conditions {
+			if condition.Type == "Ready" && condition.Status == "True" && (condition.ObservedGeneration == 0 || condition.ObservedGeneration == resource.Metadata.Generation) {
+				ready = true
+				break
+			}
+		}
+		if !ready {
+			unhealthy = append(unhealthy, fmt.Sprintf("%s/%s/%s", resource.Kind, resource.Metadata.Namespace, resource.Metadata.Name))
+		}
+	}
+	if kinds["GitRepository"] == 0 || kinds["Kustomization"] == 0 {
+		return doctorCheck{Name: "flux", Status: "degraded", Summary: "Flux GitRepository and Kustomization resources are required"}
 	}
 	if len(unhealthy) > 0 {
 		sort.Strings(unhealthy)
 		reported := unhealthy
-		if len(reported) > maxReportedApps {
-			reported = reported[:maxReportedApps]
+		if len(reported) > maxReportedResources {
+			reported = reported[:maxReportedResources]
 		}
-		return doctorCheck{Name: "argocd", Status: "degraded", Summary: fmt.Sprintf("%d application(s) are not Synced and Healthy; first %d: %s", len(unhealthy), len(reported), strings.Join(reported, ", "))}
+		return doctorCheck{Name: "flux", Status: "degraded", Summary: fmt.Sprintf("%d Flux resource(s) are not Ready; first %d: %s", len(unhealthy), len(reported), strings.Join(reported, ", "))}
 	}
-	return doctorCheck{Name: "argocd", Status: "healthy", Summary: fmt.Sprintf("%d application(s) are Synced and Healthy", len(applications.Items))}
+	return doctorCheck{Name: "flux", Status: "healthy", Summary: fmt.Sprintf("4 controllers and %d reconciled resource(s) are Ready", len(resources.Items))}
 }
 
 func checkPolicy(ctx context.Context, runner commandRunner, repositoryRoot string) doctorCheck {

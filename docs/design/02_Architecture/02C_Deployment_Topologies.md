@@ -65,6 +65,14 @@ colima start --vm-type=vz --vz-rosetta --arch x86_64 \
   --cpu 16 --memory 96 --disk 400
 ```
 
+## Flux placement
+
+- Flux controllers run on the `arm64` k3s node in `flux-system` for all accepted profiles.
+- L0 installs only source-controller, kustomize-controller, helm-controller, and notification-controller.
+- `solo-lite` must reserve enough capacity for one replica of each standard controller and bounded reconciliation bursts.
+- Controller images must resolve to `linux/arm64` and pass the repository supply-chain gate before they enter `deploy/`.
+- Flux Operator, image automation, source-watcher, sharding, and HA replicas are side options rather than baseline topology.
+
 ## Side options
 
 | Topology | Status | Note |

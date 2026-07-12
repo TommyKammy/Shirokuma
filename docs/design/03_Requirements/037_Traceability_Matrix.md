@@ -20,6 +20,7 @@ tags: [shirokuma, rtm, requirements]
 | FR-LAKE-001 | Iceberg/Polaris config | WP-L1-LAKE-002, WP-L1-LAKE-003 |
 | FR-WH-001 | VirtualWarehouse CRD | WP-L3-VW-001 |
 | FR-AGENT-001 | Agent PR workflow | WP-L0-AGENT-001, WP-L2-AGENT-001 |
+| PLAT-FLUX-001..008 | Flux bootstrap, Source/Kustomization reconciliation, supply-chain and credential gates | WP-L0-GITOPS-001, WP-L0-SEC-001, WP-L0-OBS-001 |
 | FR-META-001 | OpenMetadata/OpenLineage | WP-L1-META-001 |
 | FR-POL-001 | OPA/Kyverno policy bundle | WP-L0-POL-001 |
 | NFR-SEC-001 | Supply chain CI | WP-L0-SEC-001 |

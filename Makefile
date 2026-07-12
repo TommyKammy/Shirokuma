@@ -4,8 +4,14 @@ PREFLIGHT_REF ?= origin/main
 TOFU ?= tofu
 TOFU_DIR ?= opentofu/dev
 KUBE_CONTEXT ?= colima-mac-studio-solo
+FLUX ?= flux
+FLUX_VERSION ?= v2.9.1
+GITHUB_OWNER ?= TommyKammy
+GITHUB_REPOSITORY ?= Shirokuma
+GIT_BRANCH ?= main
+FLUX_PATH ?= deploy/gitops/clusters/local-lite
 
-.PHONY: prepare verify verify-security verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-image-admission verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go supervisor-preflight colima-start colima-status tofu-init tofu-fmt tofu-validate gitops-bootstrap gitops-status gitops-teardown check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
+.PHONY: prepare verify verify-security verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-image-admission verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go supervisor-preflight colima-start colima-status tofu-init tofu-fmt tofu-validate flux-version-check gitops-bootstrap gitops-status gitops-reconcile gitops-teardown check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
 
 verify: check-required-files verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go verify-security check-newlines check-trailing-whitespace check-no-secret-filenames
 
@@ -30,7 +36,6 @@ verify-colima-baseline:
 
 verify-gitops-bootstrap: tofu-fmt tofu-validate
 	@$(PYTHON) -m unittest discover -s tests -p 'test_gitops_bootstrap.py'
-	@helm lint charts/dev-root
 
 verify-gitops-image-admission: verify-security
 	@$(PYTHON) scripts/verify_gitops_image_admission.py
@@ -44,17 +49,26 @@ tofu-fmt:
 tofu-validate: tofu-init
 	@$(TOFU) -chdir=$(TOFU_DIR) validate
 
-gitops-bootstrap: colima-status verify-gitops-image-admission tofu-init
+flux-version-check:
+	@command -v $(FLUX) >/dev/null || { echo "flux $(FLUX_VERSION) is required"; exit 1; }
+	@test "$$($(FLUX) version --client 2>/dev/null | awk '/^flux:/ {print $$2}')" = "$(FLUX_VERSION)" || { echo "flux $(FLUX_VERSION) is required"; exit 1; }
+
+gitops-bootstrap: colima-status verify-gitops-image-admission tofu-init flux-version-check
 	@$(TOFU) -chdir=$(TOFU_DIR) apply -input=false -auto-approve
+	@test -n "$${GITHUB_TOKEN:-}" || { echo "GITHUB_TOKEN is required for Flux bootstrap and is never persisted by this target"; exit 1; }
+	@$(FLUX) bootstrap github --owner=$(GITHUB_OWNER) --repository=$(GITHUB_REPOSITORY) --branch=$(GIT_BRANCH) --path=$(FLUX_PATH) --personal --components=source-controller,kustomize-controller,helm-controller,notification-controller --version=$(FLUX_VERSION) --context=$(KUBE_CONTEXT) --silent
 
 gitops-status:
-	@kubectl --context $(KUBE_CONTEXT) -n argocd get applications
-	@kubeconfig="$$(mktemp)"; trap 'rm -f "$$kubeconfig"' EXIT; \
-		kubectl --context $(KUBE_CONTEXT) config view --raw --flatten --minify > "$$kubeconfig"; \
-		KUBECONFIG="$$kubeconfig" kubectl config set-context --current --namespace=argocd >/dev/null; \
-		KUBECONFIG="$$kubeconfig" argocd app list --core --kube-context $(KUBE_CONTEXT)
+	@kubectl --context $(KUBE_CONTEXT) -n flux-system get deployments
+	@$(FLUX) get sources git -A --context=$(KUBE_CONTEXT)
+	@$(FLUX) get kustomizations -A --context=$(KUBE_CONTEXT)
+
+gitops-reconcile: flux-version-check
+	@$(FLUX) reconcile source git flux-system -n flux-system --context=$(KUBE_CONTEXT)
+	@$(FLUX) reconcile kustomization flux-system -n flux-system --with-source --context=$(KUBE_CONTEXT)
 
 gitops-teardown: tofu-init
+	@$(FLUX) uninstall --context=$(KUBE_CONTEXT) --namespace=flux-system --silent
 	@$(TOFU) -chdir=$(TOFU_DIR) destroy -input=false -auto-approve
 
 colima-start:

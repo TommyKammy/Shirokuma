@@ -113,6 +113,24 @@ colima status --profile mac-studio-solo
 
 `colima stop` preserves the VM disk. Restart with the same profile command, then rerun all status checks above.
 
+## Flux status and lifecycle
+
+Use the repository-pinned Flux CLI and explicit Kubernetes context:
+
+```bash
+flux check --pre
+make gitops-bootstrap
+flux check
+flux get sources all -A
+flux get kustomizations -A
+make gitops-status
+```
+
+`make gitops-bootstrap` fails before cluster mutation unless every controller
+digest is admitted. Use `flux reconcile` only for bounded verification after an
+approved Git change, and `flux suspend` only with an Issue/Pawprint reason and
+resume condition.
+
 ## Reset and recovery
 
 Reset is destructive. Export any non-reproducible object data, catalog metadata, and other required evidence outside the Colima VM first. Confirm host free space can hold the export and the selected replacement disk capacity. Git-tracked manifests and GitOps state are the rebuild source; the VM disk is not a backup.
