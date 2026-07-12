@@ -61,6 +61,18 @@ func TestDoctorJSONHealthy(t *testing.T) {
 	if len(policyCall) != 4 || policyCall[1] != "-C" || policyCall[3] != "verify-security" {
 		t.Fatalf("policy call = %v", policyCall)
 	}
+	resourceCall := strings.Join(runner.calls[2], " ")
+	for _, source := range []string{
+		"gitrepositories.source.toolkit.fluxcd.io",
+		"ocirepositories.source.toolkit.fluxcd.io",
+		"buckets.source.toolkit.fluxcd.io",
+		"helmrepositories.source.toolkit.fluxcd.io",
+		"helmcharts.source.toolkit.fluxcd.io",
+	} {
+		if !strings.Contains(resourceCall, source) {
+			t.Fatalf("resource call %q does not include %q", resourceCall, source)
+		}
+	}
 }
 
 func TestDoctorRejectsInvalidOutputBeforeChecks(t *testing.T) {
@@ -93,6 +105,17 @@ func TestCheckFluxRejectsReadyConditionWithoutObservedGeneration(t *testing.T) {
 	check := checkFlux(context.Background(), runner, "test")
 	if check.Status != "degraded" || !strings.Contains(check.Summary, "GitRepository/flux-system/flux-system") {
 		t.Fatalf("check = %#v, want stale GitRepository", check)
+	}
+}
+
+func TestCheckFluxRejectsSuspendedResourceWithStaleReadyCondition(t *testing.T) {
+	runner := &fakeRunner{responses: []fakeResponse{
+		{output: `{"items":[{"metadata":{"name":"source-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"kustomize-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"helm-controller"},"status":{"replicas":1,"availableReplicas":1}},{"metadata":{"name":"notification-controller"},"status":{"replicas":1,"availableReplicas":1}}]}`},
+		{output: `{"items":[{"kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system","generation":1},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}},{"kind":"Kustomization","metadata":{"name":"shirokuma-dev","namespace":"flux-system","generation":1},"spec":{"suspend":true},"status":{"conditions":[{"type":"Ready","status":"True","observedGeneration":1}]}}]}`},
+	}}
+	check := checkFlux(context.Background(), runner, "test")
+	if check.Status != "degraded" || !strings.Contains(check.Summary, "Kustomization/flux-system/shirokuma-dev (suspended)") {
+		t.Fatalf("check = %#v, want suspended Kustomization", check)
 	}
 }
 

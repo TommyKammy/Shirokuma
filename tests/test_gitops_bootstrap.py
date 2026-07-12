@@ -98,8 +98,13 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
         self.assertIn("--components=source-controller,kustomize-controller,helm-controller,notification-controller", makefile)
         self.assertIn("GITHUB_TOKEN is required", makefile)
         self.assertIn("FLUX_GITHUB_REPOSITORY ?= Shirokuma", makefile)
+        self.assertIn("FLUX_GITHUB_PRIVATE ?= false", makefile)
+        self.assertIn("FLUX_BOOTSTRAP_BRANCH ?= flux/bootstrap-local-lite", makefile)
+        self.assertNotRegex(makefile, r"(?m)^GIT_BRANCH \?= main$")
         self.assertNotRegex(makefile, r"(?m)^GITHUB_REPOSITORY \?=")
         self.assertIn("--repository=$(FLUX_GITHUB_REPOSITORY)", makefile)
+        self.assertIn("--private=$(FLUX_GITHUB_PRIVATE)", makefile)
+        self.assertIn("--branch=$(FLUX_BOOTSTRAP_BRANCH)", makefile)
         self.assertLess(
             makefile.index("GITHUB_TOKEN is required"),
             makefile.index("apply -input=false -auto-approve"),

@@ -8,7 +8,8 @@ FLUX ?= flux
 FLUX_VERSION ?= v2.9.1
 GITHUB_OWNER ?= TommyKammy
 FLUX_GITHUB_REPOSITORY ?= Shirokuma
-GIT_BRANCH ?= main
+FLUX_GITHUB_PRIVATE ?= false
+FLUX_BOOTSTRAP_BRANCH ?= flux/bootstrap-local-lite
 FLUX_PATH ?= deploy/gitops/clusters/local-lite
 
 .PHONY: prepare verify verify-security verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-image-admission verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go supervisor-preflight colima-start colima-status tofu-init tofu-fmt tofu-validate flux-version-check gitops-bootstrap gitops-status gitops-reconcile gitops-teardown check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
@@ -56,7 +57,7 @@ flux-version-check:
 gitops-bootstrap: colima-status verify-gitops-image-admission tofu-init flux-version-check
 	@test -n "$${GITHUB_TOKEN:-}" || { echo "GITHUB_TOKEN is required for Flux bootstrap and is never persisted by this target"; exit 1; }
 	@$(TOFU) -chdir=$(TOFU_DIR) apply -input=false -auto-approve
-	@$(FLUX) bootstrap github --owner=$(GITHUB_OWNER) --repository=$(FLUX_GITHUB_REPOSITORY) --branch=$(GIT_BRANCH) --path=$(FLUX_PATH) --personal --components=source-controller,kustomize-controller,helm-controller,notification-controller --version=$(FLUX_VERSION) --context=$(KUBE_CONTEXT)
+	@$(FLUX) bootstrap github --owner=$(GITHUB_OWNER) --repository=$(FLUX_GITHUB_REPOSITORY) --private=$(FLUX_GITHUB_PRIVATE) --branch=$(FLUX_BOOTSTRAP_BRANCH) --path=$(FLUX_PATH) --personal --components=source-controller,kustomize-controller,helm-controller,notification-controller --version=$(FLUX_VERSION) --context=$(KUBE_CONTEXT)
 
 gitops-status:
 	@kubectl --context $(KUBE_CONTEXT) -n flux-system get deployments

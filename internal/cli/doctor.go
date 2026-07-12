@@ -77,6 +77,9 @@ type kubernetesResourceList struct {
 			Namespace  string `json:"namespace"`
 			Generation int64  `json:"generation"`
 		} `json:"metadata"`
+		Spec struct {
+			Suspend bool `json:"suspend"`
+		} `json:"spec"`
 		Status struct {
 			Replicas          int `json:"replicas"`
 			AvailableReplicas int `json:"availableReplicas"`
@@ -225,7 +228,7 @@ func checkFlux(ctx context.Context, runner commandRunner, kubeContext string) do
 		}
 	}
 
-	resourceOutput, err := runner.Run(checkContext, "kubectl", "--context", kubeContext, "get", "gitrepositories.source.toolkit.fluxcd.io,kustomizations.kustomize.toolkit.fluxcd.io,helmreleases.helm.toolkit.fluxcd.io", "-A", "-o", "json")
+	resourceOutput, err := runner.Run(checkContext, "kubectl", "--context", kubeContext, "get", "gitrepositories.source.toolkit.fluxcd.io,ocirepositories.source.toolkit.fluxcd.io,buckets.source.toolkit.fluxcd.io,helmrepositories.source.toolkit.fluxcd.io,helmcharts.source.toolkit.fluxcd.io,kustomizations.kustomize.toolkit.fluxcd.io,helmreleases.helm.toolkit.fluxcd.io", "-A", "-o", "json")
 	if err != nil {
 		return failedCheck("flux", err)
 	}
@@ -236,6 +239,11 @@ func checkFlux(ctx context.Context, runner commandRunner, kubeContext string) do
 	kinds := map[string]int{}
 	for _, resource := range resources.Items {
 		kinds[resource.Kind]++
+		resourceID := fmt.Sprintf("%s/%s/%s", resource.Kind, resource.Metadata.Namespace, resource.Metadata.Name)
+		if resource.Spec.Suspend {
+			unhealthy = append(unhealthy, resourceID+" (suspended)")
+			continue
+		}
 		ready := false
 		for _, condition := range resource.Status.Conditions {
 			if condition.Type == "Ready" && condition.Status == "True" && condition.ObservedGeneration == resource.Metadata.Generation {
@@ -244,7 +252,7 @@ func checkFlux(ctx context.Context, runner commandRunner, kubeContext string) do
 			}
 		}
 		if !ready {
-			unhealthy = append(unhealthy, fmt.Sprintf("%s/%s/%s", resource.Kind, resource.Metadata.Namespace, resource.Metadata.Name))
+			unhealthy = append(unhealthy, resourceID)
 		}
 	}
 	if kinds["GitRepository"] == 0 || kinds["Kustomization"] == 0 {
@@ -256,7 +264,7 @@ func checkFlux(ctx context.Context, runner commandRunner, kubeContext string) do
 		if len(reported) > maxReportedResources {
 			reported = reported[:maxReportedResources]
 		}
-		return doctorCheck{Name: "flux", Status: "degraded", Summary: fmt.Sprintf("%d Flux resource(s) are not Ready; first %d: %s", len(unhealthy), len(reported), strings.Join(reported, ", "))}
+		return doctorCheck{Name: "flux", Status: "degraded", Summary: fmt.Sprintf("%d Flux resource(s) are suspended or not Ready; first %d: %s", len(unhealthy), len(reported), strings.Join(reported, ", "))}
 	}
 	return doctorCheck{Name: "flux", Status: "healthy", Summary: fmt.Sprintf("4 controllers and %d reconciled resource(s) are Ready", len(resources.Items))}
 }
