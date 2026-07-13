@@ -64,7 +64,7 @@ class PolicyExceptionContractTests(unittest.TestCase):
                 "matchConditions": [
                     {
                         "name": "specific-pod",
-                        "expression": "object.metadata.namespace == 'shirokuma-dev' && object.metadata.name == 'debugger-11'",
+                        "expression": "object.kind == 'Pod' && object.metadata.namespace == 'shirokuma-dev' && object.metadata.name == 'debugger-11'",
                     }
                 ],
             },
@@ -154,6 +154,43 @@ class PolicyExceptionContractTests(unittest.TestCase):
         result = self.run_verifier([document])
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("owner and reviewer must differ", result.stdout)
+
+    def test_case_does_not_bypass_separate_review(self) -> None:
+        document = self.valid_exception()
+        document["metadata"]["annotations"][
+            "shirokuma.dev/exception-reviewer"
+        ] = "Platform-Team"
+        result = self.run_verifier([document])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("owner and reviewer must differ", result.stdout)
+
+    def test_predicate_requires_resource_kind(self) -> None:
+        document = self.valid_exception()
+        document["spec"]["matchConditions"][0]["expression"] = (
+            "object.metadata.namespace == 'shirokuma-dev' && "
+            "object.metadata.name == 'debugger-11'"
+        )
+        result = self.run_verifier([document])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("narrowly match resource metadata", result.stdout)
+
+    def test_label_cannot_replace_resource_name(self) -> None:
+        document = self.valid_exception()
+        document["spec"]["matchConditions"][0]["expression"] = (
+            "object.kind == 'Pod' && "
+            "object.metadata.namespace == 'shirokuma-dev' && "
+            "object.metadata.labels['debug'] == 'true'"
+        )
+        result = self.run_verifier([document])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("narrowly match resource metadata", result.stdout)
+
+    def test_pass_through_report_result_is_rejected(self) -> None:
+        document = self.valid_exception()
+        document["spec"]["reportResult"] = "pass"
+        result = self.run_verifier([document])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("spec.reportResult must be skip when set", result.stdout)
 
 
 if __name__ == "__main__":

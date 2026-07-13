@@ -19,6 +19,9 @@ METADATA_EQUALITY = re.compile(
     r"object\.metadata\.(?P<field>name|namespace|labels\[['\"][a-zA-Z0-9._/-]+['\"]\])"
     r"\s*==\s*['\"][^'\"*\s][^'\"*]*['\"]"
 )
+KIND_EQUALITY = re.compile(
+    r"object\.kind\s*==\s*['\"](?P<kind>[A-Za-z][A-Za-z0-9]*)['\"]"
+)
 REQUIRED_ANNOTATIONS = (
     "shirokuma.dev/exception-owner",
     "shirokuma.dev/exception-reviewer",
@@ -67,11 +70,17 @@ def is_narrow_metadata_expression(expression: object) -> bool:
     if not isinstance(expression, str):
         return False
     clauses = re.split(r"\s*&&\s*", expression.strip())
-    matches = [METADATA_EQUALITY.fullmatch(clause) for clause in clauses]
-    if not matches or any(match is None for match in matches):
+    metadata_matches = [METADATA_EQUALITY.fullmatch(clause) for clause in clauses]
+    kind_matches = [KIND_EQUALITY.fullmatch(clause) for clause in clauses]
+    if not clauses or any(
+        metadata_match is None and kind_match is None
+        for metadata_match, kind_match in zip(metadata_matches, kind_matches)
+    ):
         return False
-    fields = {match.group("field") for match in matches if match is not None}
-    return "namespace" in fields and any(field != "namespace" for field in fields)
+    fields = {
+        match.group("field") for match in metadata_matches if match is not None
+    }
+    return "namespace" in fields and "name" in fields and any(kind_matches)
 
 
 def validate_exception(
@@ -110,7 +119,7 @@ def validate_exception(
     if (
         isinstance(owner, str)
         and isinstance(reviewer, str)
-        and owner.strip() == reviewer.strip()
+        and owner.strip().casefold() == reviewer.strip().casefold()
     ):
         errors.append("exception owner and reviewer must differ")
     issue = annotations.get("shirokuma.dev/exception-issue")
@@ -130,6 +139,8 @@ def validate_exception(
     spec = document.get("spec")
     if not isinstance(spec, dict):
         return errors + ["spec must be an object"]
+    if "reportResult" in spec and spec.get("reportResult") != "skip":
+        errors.append("spec.reportResult must be skip when set")
     policy_refs = spec.get("policyRefs")
     if not isinstance(policy_refs, list) or not policy_refs:
         errors.append("spec.policyRefs must be a non-empty list")
