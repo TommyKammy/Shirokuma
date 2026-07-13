@@ -38,7 +38,7 @@ class PolicyExceptionContractTests(unittest.TestCase):
     @staticmethod
     def valid_exception() -> dict[str, object]:
         return {
-            "apiVersion": "policies.kyverno.io/v1beta1",
+            "apiVersion": "policies.kyverno.io/v1",
             "kind": "PolicyException",
             "metadata": {
                 "name": "temporary-debugger",
@@ -92,6 +92,25 @@ class PolicyExceptionContractTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("owner and reviewer must differ", result.stdout)
         self.assertIn("exact policy name", result.stdout)
+
+    def test_unknown_policy_reference_is_rejected(self) -> None:
+        document = self.valid_exception()
+        document["spec"]["policyRefs"][0]["name"] = "misspelled-policy"
+        result = self.run_verifier([document])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("reference a policy in the bundle", result.stdout)
+
+    def test_broad_metadata_predicates_are_rejected(self) -> None:
+        for expression in (
+            "has(object.metadata.name)",
+            "object.metadata.namespace != ''",
+        ):
+            with self.subTest(expression=expression):
+                document = self.valid_exception()
+                document["spec"]["matchConditions"][0]["expression"] = expression
+                result = self.run_verifier([document])
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("narrowly match resource metadata", result.stdout)
 
 
 if __name__ == "__main__":

@@ -12,8 +12,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DIRECTORY = ROOT / "policies/exceptions"
+DEFAULT_POLICY_BUNDLE = ROOT / "policies/kyverno/baseline.yaml"
 ISSUE_URL = re.compile(r"^https://github\.com/TommyKammy/Shirokuma/issues/[1-9][0-9]*$")
 NAME = re.compile(r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$")
+METADATA_EQUALITY = re.compile(
+    r"object\.metadata\.(?:name|namespace|labels\[['\"][a-zA-Z0-9._/-]+['\"]\])"
+    r"\s*==\s*['\"][^'\"*\s][^'\"*]*['\"]"
+)
 REQUIRED_ANNOTATIONS = (
     "shirokuma.dev/exception-owner",
     "shirokuma.dev/exception-reviewer",
@@ -40,7 +45,34 @@ def load_json(path: Path) -> object:
         raise ValueError(f"invalid JSON: {error}") from error
 
 
-def validate_exception(path: Path, now: datetime, max_days: int) -> list[str]:
+def load_policy_names(path: Path) -> set[str]:
+    if path.is_symlink():
+        raise ValueError("policy bundle symbolic links are forbidden")
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise ValueError(f"cannot read policy bundle: {error}") from error
+    names = set(
+        re.findall(
+            r"(?m)^kind: ValidatingPolicy\s*$\n^metadata:\s*$\n^  name: ([a-z0-9][-a-z0-9]*)\s*$",
+            content,
+        )
+    )
+    if not names:
+        raise ValueError("policy bundle contains no ValidatingPolicy resources")
+    return names
+
+
+def is_narrow_metadata_expression(expression: object) -> bool:
+    if not isinstance(expression, str):
+        return False
+    clauses = re.split(r"\s*&&\s*", expression.strip())
+    return bool(clauses) and all(METADATA_EQUALITY.fullmatch(clause) for clause in clauses)
+
+
+def validate_exception(
+    path: Path, now: datetime, max_days: int, policy_names: set[str]
+) -> list[str]:
     errors: list[str] = []
     try:
         document = load_json(path)
@@ -48,8 +80,8 @@ def validate_exception(path: Path, now: datetime, max_days: int) -> list[str]:
         return [str(error)]
     if not isinstance(document, dict):
         return ["document root must be an object"]
-    if document.get("apiVersion") != "policies.kyverno.io/v1beta1":
-        errors.append("apiVersion must be policies.kyverno.io/v1beta1")
+    if document.get("apiVersion") != "policies.kyverno.io/v1":
+        errors.append("apiVersion must be policies.kyverno.io/v1")
     if document.get("kind") != "PolicyException":
         errors.append("kind must be PolicyException")
 
@@ -98,6 +130,10 @@ def validate_exception(path: Path, now: datetime, max_days: int) -> list[str]:
             name = policy_ref.get("name")
             if not isinstance(name, str) or not NAME.fullmatch(name):
                 errors.append(f"spec.policyRefs[{index}].name must be an exact policy name")
+            elif name not in policy_names:
+                errors.append(
+                    f"spec.policyRefs[{index}].name must reference a policy in the bundle"
+                )
             if policy_ref.get("kind") != "ValidatingPolicy":
                 errors.append(f"spec.policyRefs[{index}].kind must be ValidatingPolicy")
 
@@ -110,12 +146,7 @@ def validate_exception(path: Path, now: datetime, max_days: int) -> list[str]:
                 errors.append(f"spec.matchConditions[{index}] must be an object")
                 continue
             expression = condition.get("expression")
-            if (
-                not isinstance(expression, str)
-                or "object.metadata." not in expression
-                or expression.strip().lower() in {"true", "1 == 1"}
-                or "*" in expression
-            ):
+            if not is_narrow_metadata_expression(expression):
                 errors.append(
                     f"spec.matchConditions[{index}].expression must narrowly match resource metadata"
                 )
@@ -125,6 +156,7 @@ def validate_exception(path: Path, now: datetime, max_days: int) -> list[str]:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--directory", type=Path, default=DEFAULT_DIRECTORY)
+    parser.add_argument("--policy-bundle", type=Path, default=DEFAULT_POLICY_BUNDLE)
     parser.add_argument("--max-days", type=int, default=30)
     parser.add_argument("--now", help="RFC 3339 timestamp used by deterministic tests")
     return parser.parse_args()
@@ -143,11 +175,16 @@ def main() -> int:
     if not args.directory.is_dir():
         print(f"policy-exceptions: directory does not exist: {args.directory}")
         return 1
+    try:
+        policy_names = load_policy_names(args.policy_bundle)
+    except ValueError as error:
+        print(f"policy-exceptions: invalid policy bundle: {error}")
+        return 1
 
     failures = 0
     files = sorted(args.directory.glob("*.json"))
     for path in files:
-        for error in validate_exception(path, now, args.max_days):
+        for error in validate_exception(path, now, args.max_days, policy_names):
             failures += 1
             print(f"policy-exceptions: {path}: {error}")
     if failures:

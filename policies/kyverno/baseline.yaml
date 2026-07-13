@@ -18,7 +18,7 @@ spec:
       - apiGroups: [""]
         apiVersions: [v1]
         operations: [CREATE, UPDATE]
-        resources: [pods]
+        resources: [pods, pods/ephemeralcontainers]
   validationActions: [Deny]
   variables:
     - name: allContainers
@@ -111,13 +111,12 @@ spec:
         resources: [pods]
   validationActions: [Deny]
   variables:
-    - name: allContainers
+    - name: workloadContainers
       expression: >-
-        object.spec.containers + object.spec.?initContainers.orValue([]) +
-        object.spec.?ephemeralContainers.orValue([])
+        object.spec.containers + object.spec.?initContainers.orValue([])
   validations:
     - expression: >-
-        variables.allContainers.all(container,
+        variables.workloadContainers.all(container,
         has(container.resources) &&
         has(container.resources.requests) &&
         has(container.resources.requests.cpu) &&
@@ -185,7 +184,7 @@ spec:
       - apiGroups: [""]
         apiVersions: [v1]
         operations: [CREATE, UPDATE]
-        resources: [pods]
+        resources: [pods, pods/ephemeralcontainers]
   validationActions: [Deny]
   variables:
     - name: allContainers
@@ -195,7 +194,7 @@ spec:
   validations:
     - expression: >-
         variables.allContainers.all(container,
-        container.image.matches('^[a-zA-Z0-9._-]+(/[a-zA-Z0-9._-]+)+@sha256:[0-9a-f]{64}$'))
+        container.image.matches('^[a-zA-Z0-9._-]+(:[0-9]+)?(/[a-zA-Z0-9._-]+)+@sha256:[0-9a-f]{64}$'))
       message: Images must use an exact untagged repository@sha256 digest.
 ---
 apiVersion: policies.kyverno.io/v1

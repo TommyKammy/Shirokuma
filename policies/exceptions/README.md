@@ -1,7 +1,7 @@
 # Policy exceptions
 
 Policy exceptions are disabled by default. A temporary exception must be a
-`policies.kyverno.io/v1beta1` `PolicyException` JSON file in this directory and
+`policies.kyverno.io/v1` `PolicyException` JSON file in this directory and
 must pass `scripts/verify_policy_exceptions.py`.
 
 Required annotations:
