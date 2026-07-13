@@ -34,6 +34,7 @@ verify-policy:
 	@$(KYVERNO) apply policies/ --resource tests/policy/allowed.yaml.fixture
 
 verify-design-context:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_arm64_compatibility_matrix.py'
 	@$(PYTHON) scripts/verify_design_context.py
 
 verify-preflight-parser:
