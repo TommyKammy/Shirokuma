@@ -132,6 +132,29 @@ class PolicyExceptionContractTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unsupported entry", result.stdout)
 
+    def test_missing_exception_name_is_rejected(self) -> None:
+        document = self.valid_exception()
+        del document["metadata"]["name"]
+        result = self.run_verifier([document])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("metadata.name must be a valid deterministic name", result.stdout)
+
+    def test_missing_match_condition_name_is_rejected(self) -> None:
+        document = self.valid_exception()
+        del document["spec"]["matchConditions"][0]["name"]
+        result = self.run_verifier([document])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("matchConditions[0].name must be a valid deterministic name", result.stdout)
+
+    def test_whitespace_does_not_bypass_separate_review(self) -> None:
+        document = self.valid_exception()
+        document["metadata"]["annotations"][
+            "shirokuma.dev/exception-reviewer"
+        ] = "platform-team "
+        result = self.run_verifier([document])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("owner and reviewer must differ", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

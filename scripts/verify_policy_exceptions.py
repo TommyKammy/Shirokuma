@@ -92,6 +92,9 @@ def validate_exception(
     metadata = document.get("metadata")
     if not isinstance(metadata, dict):
         return errors + ["metadata must be an object"]
+    resource_name = metadata.get("name")
+    if not isinstance(resource_name, str) or not NAME.fullmatch(resource_name):
+        errors.append("metadata.name must be a valid deterministic name")
     if metadata.get("namespace") != "policy-exceptions":
         errors.append("metadata.namespace must be policy-exceptions")
     annotations = metadata.get("annotations")
@@ -104,7 +107,11 @@ def validate_exception(
 
     owner = annotations.get("shirokuma.dev/exception-owner")
     reviewer = annotations.get("shirokuma.dev/exception-reviewer")
-    if isinstance(owner, str) and owner == reviewer:
+    if (
+        isinstance(owner, str)
+        and isinstance(reviewer, str)
+        and owner.strip() == reviewer.strip()
+    ):
         errors.append("exception owner and reviewer must differ")
     issue = annotations.get("shirokuma.dev/exception-issue")
     if isinstance(issue, str) and not ISSUE_URL.fullmatch(issue):
@@ -149,6 +156,11 @@ def validate_exception(
             if not isinstance(condition, dict):
                 errors.append(f"spec.matchConditions[{index}] must be an object")
                 continue
+            condition_name = condition.get("name")
+            if not isinstance(condition_name, str) or not NAME.fullmatch(condition_name):
+                errors.append(
+                    f"spec.matchConditions[{index}].name must be a valid deterministic name"
+                )
             expression = condition.get("expression")
             if not is_narrow_metadata_expression(expression):
                 errors.append(
