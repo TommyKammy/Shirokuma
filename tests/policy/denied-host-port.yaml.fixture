@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: denied-host-port
+  namespace: shirokuma-dev
+spec:
+  containers:
+    - name: app
+      image: registry.example.com/shirokuma/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      ports:
+        - containerPort: 8080
+          hostPort: 8080
+      resources:
+        requests:
+          cpu: 100m
+          memory: 64Mi
+        limits:
+          cpu: 500m
+          memory: 128Mi

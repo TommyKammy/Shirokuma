@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: denied-external-ips
+  namespace: shirokuma-dev
+spec:
+  type: ClusterIP
+  externalIPs:
+    - 203.0.113.10
+  selector:
+    app: denied
+  ports:
+    - port: 8080
+      targetPort: 8080

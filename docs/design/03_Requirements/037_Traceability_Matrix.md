@@ -4,8 +4,8 @@ doc_id: "REQ-037"
 title: "Traceability Matrix"
 status: draft
 created: 2026-07-05
-updated: 2026-07-05
-version: "0.2.2"
+updated: 2026-07-13
+version: "0.3"
 area: "requirements"
 tags: [shirokuma, rtm, requirements]
 ---
@@ -22,7 +22,7 @@ tags: [shirokuma, rtm, requirements]
 | FR-AGENT-001 | Agent PR workflow | WP-L0-AGENT-001, WP-L2-AGENT-001 |
 | PLAT-FLUX-001..008 | Flux bootstrap, Source/Kustomization reconciliation, supply-chain and credential gates | WP-L0-GITOPS-001, WP-L0-SEC-001, WP-L0-OBS-001 |
 | FR-META-001 | OpenMetadata/OpenLineage | WP-L1-META-001 |
-| FR-POL-001 | OPA/Kyverno policy bundle | WP-L0-POL-001 |
+| FR-POL-001 | Kyverno ValidatingPolicy bundle, deterministic fixtures, and bounded exceptions | WP-L0-POL-001; `policies/kyverno/baseline.yaml`; `tests/policy/`; `scripts/verify_policy_exceptions.py` |
 | NFR-SEC-001 | Supply chain CI | WP-L0-SEC-001 |
 | NFR-OBS-001 | AgentHouse/Pawprint | WP-L0-OBS-001, WP-L2-EVAL-001 |
 | NFR-PERF-001 | Benchmark harness | WP-L1-BENCH-001 |

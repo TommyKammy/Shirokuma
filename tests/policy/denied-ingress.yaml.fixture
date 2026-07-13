@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: denied-ingress
+  namespace: shirokuma-dev
+spec:
+  rules:
+    - host: denied.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: allowed-internal-service
+                port:
+                  number: 8080

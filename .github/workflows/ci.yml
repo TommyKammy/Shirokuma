@@ -35,5 +35,30 @@ jobs:
         with:
           version: v4.2.3
 
+      - name: Set up Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Set up verified Kyverno CLI
+        env:
+          KYVERNO_VERSION: v1.18.2
+        run: |
+          set -euo pipefail
+          archive="kyverno-cli_${KYVERNO_VERSION}_linux_x86_64.tar.gz"
+          release_url="https://github.com/kyverno/kyverno/releases/download/${KYVERNO_VERSION}"
+          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error \
+            "${release_url}/${archive}" -o "${RUNNER_TEMP}/${archive}"
+          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error \
+            "${release_url}/${archive}.sigstore.json" \
+            -o "${RUNNER_TEMP}/${archive}.sigstore.json"
+          cosign verify-blob \
+            --bundle "${RUNNER_TEMP}/${archive}.sigstore.json" \
+            --certificate-identity "https://github.com/kyverno/kyverno/.github/workflows/release.yaml@refs/tags/${KYVERNO_VERSION}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${RUNNER_TEMP}/${archive}"
+          mkdir -p "${RUNNER_TEMP}/kyverno-bin"
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/kyverno-bin" kyverno
+          chmod 0755 "${RUNNER_TEMP}/kyverno-bin/kyverno"
+          echo "${RUNNER_TEMP}/kyverno-bin" >> "${GITHUB_PATH}"
+
       - name: Run repo-owned checks
         run: make verify

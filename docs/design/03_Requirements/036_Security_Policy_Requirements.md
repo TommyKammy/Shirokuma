@@ -4,8 +4,8 @@ doc_id: "REQ-036"
 title: "Security Policy Requirements"
 status: draft
 created: 2026-07-05
-updated: 2026-07-05
-version: "0.2"
+updated: 2026-07-13
+version: "0.3"
 area: "requirements"
 tags: [shirokuma, policy, requirements]
 ---
@@ -24,6 +24,20 @@ tags: [shirokuma, policy, requirements]
 | POL-006 | require-owner-labels | K8s/DB/Metric/Assetにowner必須 |
 | POL-007 | require-rollback-plan | Infra PRにRollback記載必須 |
 | POL-008 | restrict-auto-merge | Auto-merge対象をTierで限定 |
+
+## L0 enforcement
+
+- `policies/kyverno/baseline.yaml` uses Kyverno v1.18 stable
+  `ValidatingPolicy` resources with `Deny` actions for privileged containers,
+  host namespaces, hostPath, hostPort, public Service/Ingress exposure,
+  resource requests/limits, and mutable images.
+- `security/resident-images.json` remains the exact image approval source. The
+  Kyverno digest rule and repository supply-chain check form one fail-closed
+  boundary; digest syntax alone is not image approval.
+- `policies/exceptions/` requires a separate owner and reviewer, a Shirokuma
+  Issue, a narrow metadata match, and an expiry no more than 30 days ahead.
+- CI validates policies and fixtures offline. Live Kyverno admission remains
+  blocked until controller images satisfy the resident-image gate.
 
 ## Auto-merge tiers
 
