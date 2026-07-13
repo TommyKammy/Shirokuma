@@ -224,6 +224,7 @@ spec:
     - expression: >-
         object.kind == 'Service' ?
         !['NodePort', 'LoadBalancer'].exists(type,
-        object.spec.?type.orValue('ClusterIP') == type) :
+        object.spec.?type.orValue('ClusterIP') == type) &&
+        object.spec.?externalIPs.orValue([]).size() == 0 :
         object.kind != 'Ingress'
-      message: NodePort, LoadBalancer, and Ingress exposure is forbidden by default.
+      message: NodePort, LoadBalancer, externalIPs, and Ingress exposure is forbidden by default.

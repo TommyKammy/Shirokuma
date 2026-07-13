@@ -16,7 +16,7 @@ DEFAULT_POLICY_BUNDLE = ROOT / "policies/kyverno/baseline.yaml"
 ISSUE_URL = re.compile(r"^https://github\.com/TommyKammy/Shirokuma/issues/[1-9][0-9]*$")
 NAME = re.compile(r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$")
 METADATA_EQUALITY = re.compile(
-    r"object\.metadata\.(?:name|namespace|labels\[['\"][a-zA-Z0-9._/-]+['\"]\])"
+    r"object\.metadata\.(?P<field>name|namespace|labels\[['\"][a-zA-Z0-9._/-]+['\"]\])"
     r"\s*==\s*['\"][^'\"*\s][^'\"*]*['\"]"
 )
 REQUIRED_ANNOTATIONS = (
@@ -67,7 +67,11 @@ def is_narrow_metadata_expression(expression: object) -> bool:
     if not isinstance(expression, str):
         return False
     clauses = re.split(r"\s*&&\s*", expression.strip())
-    return bool(clauses) and all(METADATA_EQUALITY.fullmatch(clause) for clause in clauses)
+    matches = [METADATA_EQUALITY.fullmatch(clause) for clause in clauses]
+    if not matches or any(match is None for match in matches):
+        return False
+    fields = {match.group("field") for match in matches if match is not None}
+    return "namespace" in fields and any(field != "namespace" for field in fields)
 
 
 def validate_exception(
@@ -182,7 +186,15 @@ def main() -> int:
         return 1
 
     failures = 0
-    files = sorted(args.directory.glob("*.json"))
+    entries = sorted(args.directory.iterdir())
+    unsupported = [
+        path for path in entries if path.name != "README.md" and path.suffix != ".json"
+    ]
+    if unsupported:
+        for path in unsupported:
+            print(f"policy-exceptions: unsupported entry: {path}")
+        return 1
+    files = [path for path in entries if path.suffix == ".json"]
     for path in files:
         for error in validate_exception(path, now, args.max_days, policy_names):
             failures += 1

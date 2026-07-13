@@ -27,7 +27,7 @@ verify-security:
 
 verify-policy:
 	@command -v $(KYVERNO) >/dev/null || { echo "kyverno $(KYVERNO_VERSION) is required for policy verification"; exit 1; }
-	@$(KYVERNO) version | grep -F "$(patsubst v%,%,$(KYVERNO_VERSION))" >/dev/null || { echo "kyverno $(KYVERNO_VERSION) is required for policy verification"; exit 1; }
+	@test "$$($(KYVERNO) version | awk '/^Version:/ {print $$2}')" = "$(patsubst v%,%,$(KYVERNO_VERSION))" || { echo "kyverno $(KYVERNO_VERSION) is required for policy verification"; exit 1; }
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_policy_exceptions.py'
 	@$(PYTHON) scripts/verify_policy_exceptions.py
 	@$(KYVERNO) test tests/policy --require-tests

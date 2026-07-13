@@ -13,6 +13,7 @@ resources:
   - denied-missing-resources.yaml.fixture
   - denied-mutable-image.yaml.fixture
   - denied-node-port.yaml.fixture
+  - denied-external-ips.yaml.fixture
   - denied-ingress.yaml.fixture
   - allowed-ephemeral-registry-port.yaml.fixture
   - denied-ephemeral-container.yaml.fixture
@@ -81,6 +82,11 @@ results:
   - kind: Service
     policy: deny-public-service
     resources: [denied-node-port]
+    result: fail
+    isValidatingPolicy: true
+  - kind: Service
+    policy: deny-public-service
+    resources: [denied-external-ips]
     result: fail
     isValidatingPolicy: true
   - kind: Ingress

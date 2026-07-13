@@ -13,13 +13,19 @@ NOW = "2026-07-13T00:00:00Z"
 
 
 class PolicyExceptionContractTests(unittest.TestCase):
-    def run_verifier(self, documents: list[dict[str, object]]) -> subprocess.CompletedProcess[str]:
+    def run_verifier(
+        self,
+        documents: list[dict[str, object]],
+        extra_files: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for index, document in enumerate(documents):
                 (root / f"exception-{index}.json").write_text(
                     json.dumps(document), encoding="utf-8"
                 )
+            for name, content in (extra_files or {}).items():
+                (root / name).write_text(content, encoding="utf-8")
             return subprocess.run(
                 [
                     sys.executable,
@@ -58,7 +64,7 @@ class PolicyExceptionContractTests(unittest.TestCase):
                 "matchConditions": [
                     {
                         "name": "specific-pod",
-                        "expression": "object.metadata.name == 'debugger-11'",
+                        "expression": "object.metadata.namespace == 'shirokuma-dev' && object.metadata.name == 'debugger-11'",
                     }
                 ],
             },
@@ -111,6 +117,20 @@ class PolicyExceptionContractTests(unittest.TestCase):
                 result = self.run_verifier([document])
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("narrowly match resource metadata", result.stdout)
+
+    def test_name_only_predicate_is_rejected(self) -> None:
+        document = self.valid_exception()
+        document["spec"]["matchConditions"][0][
+            "expression"
+        ] = "object.metadata.name == 'debugger-11'"
+        result = self.run_verifier([document])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("narrowly match resource metadata", result.stdout)
+
+    def test_non_json_manifest_is_rejected(self) -> None:
+        result = self.run_verifier([], {"exception.yaml": "kind: PolicyException\n"})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unsupported entry", result.stdout)
 
 
 if __name__ == "__main__":
