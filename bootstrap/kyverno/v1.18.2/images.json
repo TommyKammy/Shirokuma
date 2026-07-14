@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "kyverno_version": "v1.18.2",
+  "chart_version": "3.8.2",
+  "platform": "linux/arm64",
+  "observed_at": "2026-07-14",
+  "scanner_version": "trivy 0.72.0",
+  "vulnerability_db_updated_at": "2026-07-13T19:09:56.237113526Z",
+  "admission_status": "blocked",
+  "images": [
+    {
+      "component": "admission-controller",
+      "version": "v1.18.2",
+      "platform": "linux/arm64",
+      "reference": "reg.kyverno.io/kyverno/kyverno@sha256:80bc12c561d163abbfafc5aa13bf8985346cd68ceace44455ac50baeebdab9f2",
+      "scan_summary": {"high": 4, "critical": 0}
+    },
+    {
+      "component": "background-controller",
+      "version": "v1.18.2",
+      "platform": "linux/arm64",
+      "reference": "reg.kyverno.io/kyverno/background-controller@sha256:1afb4319d148335042ac61dff55a116e2f99cd204253ec473417b09b2b048794",
+      "scan_summary": {"high": 4, "critical": 0}
+    },
+    {
+      "component": "cleanup-controller",
+      "version": "v1.18.2",
+      "platform": "linux/arm64",
+      "reference": "reg.kyverno.io/kyverno/cleanup-controller@sha256:9c80fbe7fef669f3656668aaf49a9ace6a33b1959594efbe7b80dc84077a5095",
+      "scan_summary": {"high": 4, "critical": 0}
+    },
+    {
+      "component": "reports-controller",
+      "version": "v1.18.2",
+      "platform": "linux/arm64",
+      "reference": "reg.kyverno.io/kyverno/reports-controller@sha256:ba8a8f240fb0d3af1d36fb84e96f99d2f10abe7281255be7ee9ac8cd5a0f7767",
+      "scan_summary": {"high": 4, "critical": 0}
+    },
+    {
+      "component": "kyverno-cli",
+      "version": "v1.18.2",
+      "platform": "linux/arm64",
+      "reference": "reg.kyverno.io/kyverno/kyverno-cli@sha256:b0f31e545d95b9b912158e8d0a422a8b8f6c101ab797c601f18887083bd476f9",
+      "scan_summary": {"high": 6, "critical": 0}
+    },
+    {
+      "component": "kyvernopre",
+      "version": "v1.18.2",
+      "platform": "linux/arm64",
+      "reference": "reg.kyverno.io/kyverno/kyvernopre@sha256:862425a908ab26ff624ab5cc90cc4cff1ef1eb4f7078427774b22f69d8f8ca76",
+      "scan_summary": {"high": 4, "critical": 0}
+    },
+    {
+      "component": "readiness-checker-cleanup-hook",
+      "version": "v1.18.2",
+      "platform": "linux/arm64",
+      "reference": "ghcr.io/kyverno/readiness-checker@sha256:5c74ed254d0ec59ea333ecdc810a59607c8acf2bc9b0b259427a1cbca1ad070d",
+      "scan_summary": {"high": 1, "critical": 0}
+    },
+    {
+      "component": "readiness-checker-test-hook",
+      "version": "latest",
+      "platform": "linux/arm64",
+      "reference": "ghcr.io/kyverno/readiness-checker@sha256:efd37dd394d2cbc1a78850aacd67ee606841d4a2209472a24e4bdf6bb9308576",
+      "scan_summary": {"high": 12, "critical": 1}
+    }
+  ]
+}
