@@ -3,7 +3,7 @@
   "component": "seaweedfs",
   "version": "4.39",
   "platform": "linux/arm64",
-  "reference": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:8e391aaabcb0c5a527ecf686bad15e86ad29969d6889340caa4e4d4890c71237",
+  "reference": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:92f1018c0f1dc6d3129d096f2b9553beabc514518ba9d127e4fde5eb3233f7d0",
   "source": {
     "repository": "https://github.com/seaweedfs/seaweedfs",
     "commit": "db42bb49757b459551607939807017d7a9d5a94a",
@@ -14,15 +14,15 @@
     "repository": "TommyKammy/Shirokuma",
     "workflow": ".github/workflows/seaweedfs-arm64.yml",
     "ref": "refs/heads/codex/issue-41",
-    "workflow_sha": "6daf13169ff65746bc0c8a55d2de0ace590bf463",
-    "run_id": "29340121931",
+    "workflow_sha": "7cc3fd1a5376fa99de6922c54f3137d6c4ab4911",
+    "run_id": "29344735252",
     "run_attempt": "1"
   },
   "issuer": "https://token.actions.githubusercontent.com",
   "identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/seaweedfs-arm64.yml@refs/heads/codex/issue-41",
   "transparency_log": "verified by cosign-verify.json",
-  "slsa_provenance": "https://github.com/TommyKammy/Shirokuma/attestations/35271697",
-  "admission_status": "superseded_pending_rebuild",
+  "slsa_provenance": "https://github.com/TommyKammy/Shirokuma/attestations/35282295",
+  "admission_status": "approved",
   "vulnerabilities": {
     "critical": 0,
     "high": 0
@@ -31,21 +31,32 @@
     "name": "trivy",
     "version": "0.72.0",
     "vulnerability_db": {
-      "updated_at": null,
-      "status": "not-retained-by-bootstrap-run"
+      "version": 2,
+      "updated_at": "2026-07-13T19:09:56.237113526Z",
+      "downloaded_at": "2026-07-14T01:41:51.785604274Z"
     }
   },
   "artifacts": {
+    "cosign-verify.json": {
+      "sha256": "a5662e73752efbf5445ac8423944746b682786a0a830659bd46bfcc81978aafd"
+    },
     "seaweedfs-4.39-arm64.cdx.json": {
-      "sha256": "db4eca45877413a869bf1523c41c5a8727c929725b96089474f9cf107e06ac1e"
+      "sha256": "e82706f63e796a9092b0fda93aa14e5c5191fa2ff3b942092bec40a7775fcf1b"
+    },
+    "slsa-verify.json": {
+      "sha256": "6c50255999e6872e14982ff69812294faedb28e54c27d0aeab2002c4a0df755b"
+    },
+    "trivy-version.json": {
+      "sha256": "b0c02aa93accb44370c3fd34de079deca8e4448c880482ba5da1b97d7772aed1"
     },
     "trivy.json": {
-      "sha256": "5ead7ad0527d1e8d447afdd01e1abce8a11120555ea4c4ee29f5239b86695c15"
+      "sha256": "44b3aabe81e9b56274e10f4cd6b5a33aac6a43153b4fc9f16f3a601631f00dec"
     }
   },
   "github_actions_artifact": {
-    "id": "8313680555",
-    "name": "seaweedfs-4.39-arm64-29340121931",
-    "retention_days": 90
+    "id": "8315593067",
+    "name": "seaweedfs-4.39-arm64-29344735252",
+    "retention_days": 90,
+    "expires_at": "2026-10-12T15:18:12Z"
   }
 }

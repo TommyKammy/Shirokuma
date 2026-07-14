@@ -17,7 +17,7 @@ EXPECTED_UPSTREAM_MANIFEST_DIGEST = (
 EXPECTED_RELEASE_COMMIT = "db42bb49757b459551607939807017d7a9d5a94a"
 EXPECTED_RELEASE_TREE = "da91641fdd520e465c68fa48af3b3ad07ad86822"
 EXPECTED_TRUSTED_DIGEST = (
-    "sha256:8e391aaabcb0c5a527ecf686bad15e86ad29969d6889340caa4e4d4890c71237"
+    "sha256:92f1018c0f1dc6d3129d096f2b9553beabc514518ba9d127e4fde5eb3233f7d0"
 )
 EXPECTED_TRUSTED_REFERENCE = (
     "ghcr.io/tommykammy/shirokuma-seaweedfs@" + EXPECTED_TRUSTED_DIGEST
@@ -90,6 +90,8 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
                 self.assertRegex(action_ref, r"^[^@]+@[0-9a-f]{40}$")
         self.assertNotRegex(workflow, r"secrets\.(COSIGN|SIGNING|PRIVATE_KEY)")
         self.assertNotIn(r"\$(", workflow)
+        self.assertIn('json.dumps(record, indent=2) + "\\n"', workflow)
+        self.assertNotIn('json.dumps(record, indent=2) + "\\\\n"', workflow)
 
         decision = decision_path.read_text(encoding="utf-8")
         self.assertIn("status: accepted", decision)
@@ -110,14 +112,22 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertEqual(release["source"]["commit"], EXPECTED_RELEASE_COMMIT)
         self.assertEqual(release["source"]["tree"], EXPECTED_RELEASE_TREE)
         self.assertEqual(release["vulnerabilities"], {"critical": 0, "high": 0})
-        self.assertEqual(release["builder"]["run_id"], "29340121931")
+        self.assertEqual(release["builder"]["run_id"], "29344735252")
         self.assertEqual(
             release["builder"]["workflow_sha"],
-            "6daf13169ff65746bc0c8a55d2de0ace590bf463",
+            "7cc3fd1a5376fa99de6922c54f3137d6c4ab4911",
         )
-        self.assertEqual(release["admission_status"], "superseded_pending_rebuild")
+        self.assertEqual(release["admission_status"], "approved")
         self.assertEqual(release["scanner"]["version"], "0.72.0")
-        self.assertIsNone(release["scanner"]["vulnerability_db"]["updated_at"])
+        self.assertEqual(
+            release["scanner"]["vulnerability_db"]["updated_at"],
+            "2026-07-13T19:09:56.237113526Z",
+        )
+        self.assertEqual(
+            release["scanner"]["vulnerability_db"]["downloaded_at"],
+            "2026-07-14T01:41:51.785604274Z",
+        )
+        self.assertEqual(release["github_actions_artifact"]["id"], "8315593067")
         self.assertRegex(release["slsa_provenance"], r"/attestations/[0-9]+$")
         self.assertEqual(
             release["issuer"],
@@ -129,7 +139,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             "seaweedfs-arm64.yml@refs/heads/codex/issue-41",
         )
 
-    def test_source_build_candidate_is_blocked_pending_rebuild(self) -> None:
+    def test_source_build_candidate_is_admitted_for_parent_implementation(self) -> None:
         admission_path = ROOT / "bootstrap/seaweedfs/v4.39/admission.json"
         self.assertTrue(admission_path.is_file())
         admission = json.loads(admission_path.read_text(encoding="utf-8"))
@@ -138,13 +148,10 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertEqual(admission["component"], "seaweedfs")
         self.assertEqual(admission["version"], "4.39")
         self.assertEqual(admission["platform"], "linux/arm64")
-        self.assertEqual(admission["assessment"]["admission"], "blocked")
+        self.assertEqual(admission["assessment"]["admission"], "approved")
         self.assertIs(admission["assessment"]["exception_eligible"], False)
-        self.assertEqual(
-            {blocker["control"] for blocker in admission["assessment"]["blockers"]},
-            {"scan_freshness", "mini_port_contract"},
-        )
-        self.assertIs(admission["runtime_manifests"]["permitted"], False)
+        self.assertEqual(admission["assessment"]["blockers"], [])
+        self.assertIs(admission["runtime_manifests"]["permitted"], True)
 
         self.assertEqual(
             admission["upstream_candidate"]["index_reference"],
@@ -185,12 +192,15 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
                 "vulnerability_scan",
             },
         )
-        for name, control in controls.items():
+        for control in controls.values():
             with self.subTest(control=control["control"]):
-                expected_status = "incomplete" if name == "vulnerability_scan" else "verified"
-                self.assertEqual(control["status"], expected_status)
+                self.assertEqual(control["status"], "verified")
         self.assertEqual(controls["vulnerability_scan"]["critical"], 0)
         self.assertEqual(controls["vulnerability_scan"]["high"], 0)
+        self.assertEqual(
+            controls["vulnerability_scan"]["vulnerability_db_updated_at"],
+            "2026-07-13T19:09:56.237113526Z",
+        )
 
         for relative_path in admission["runtime_manifests"]["paths"]:
             path = ROOT / relative_path
@@ -240,7 +250,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
 
         self.assertEqual(
             admission["next_action"]["mode"],
-            "rebuild-and-record-trusted-artifact",
+            "implement-object-storage-profile",
         )
         self.assertIs(admission["next_action"]["decision_record_required"], False)
         self.assertGreaterEqual(len(admission["next_action"]["requirements"]), 4)

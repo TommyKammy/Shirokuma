@@ -107,22 +107,21 @@ part of the durable decision history.
 
 ## Publication evidence
 
-The bootstrap GitHub Actions run
-[`29340121931`](https://github.com/TommyKammy/Shirokuma/actions/runs/29340121931)
-published this linux/arm64 artifact:
+The replacement GitHub Actions run
+[`29344735252`](https://github.com/TommyKammy/Shirokuma/actions/runs/29344735252)
+published and admitted this linux/arm64 artifact:
 
-    ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:8e391aaabcb0c5a527ecf686bad15e86ad29969d6889340caa4e4d4890c71237
+    ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:92f1018c0f1dc6d3129d096f2b9553beabc514518ba9d127e4fde5eb3233f7d0
 
 The run verified the GitHub Actions OIDC workflow identity and immutable
-workflow SHA `6daf13169ff65746bc0c8a55d2de0ace590bf463` with keyless Cosign
+workflow SHA `7cc3fd1a5376fa99de6922c54f3137d6c4ab4911` with keyless Cosign
 and transparency-log evidence. GitHub retained SLSA provenance at
-[`attestation 35271697`](https://github.com/TommyKammy/Shirokuma/attestations/35271697).
-The exact-digest CycloneDX SBOM contains 248 components and Trivy reported zero
-Critical and zero High vulnerabilities. The bootstrap run did not retain the
-vulnerability DB timestamp, however, and its image metadata omitted the `weed
-mini` volume and admin HTTP ports. The artifact is therefore superseded and is
-not admitted. A replacement run must retain scanner freshness and corrected
-port metadata before ADR-0019-free admission.
+[`attestation 35282295`](https://github.com/TommyKammy/Shirokuma/attestations/35282295).
+The exact-digest CycloneDX SBOM and Trivy scan are retained in artifact
+`8315593067`; Trivy `0.72.0` reported zero Critical and zero High findings with
+vulnerability DB timestamp `2026-07-13T19:09:56.237113526Z`. The image metadata
+exposes the active `weed mini` volume HTTP port `9340` and admin HTTP port
+`23646`. No ADR-0019 vulnerability exception is required.
 
 The original upstream image remains rejected. This decision admits only the
 Shirokuma-built digest above, and parent Issue #26 still owns the resident-ledger

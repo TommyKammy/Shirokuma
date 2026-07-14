@@ -153,15 +153,16 @@ not:
 ADR-0019 cannot waive missing signature, transparency-log, or SLSA provenance
 evidence, so the upstream SeaweedFS image remains rejected. ADR-0020 instead
 approves the exact source revision for a repository-controlled build. GitHub
-Actions bootstrap run `29340121931` produced native `linux/arm64` artifact
-`ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:8e391aaabcb0c5a527ecf686bad15e86ad29969d6889340caa4e4d4890c71237`.
+Actions replacement run `29344735252` produced native `linux/arm64` artifact
+`ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:92f1018c0f1dc6d3129d096f2b9553beabc514518ba9d127e4fde5eb3233f7d0`.
 The workflow identity passed keyless Cosign and transparency-log verification,
-SLSA provenance is retained as attestation `35271697`, the CycloneDX SBOM is
-bound to the same digest, and Trivy reported Critical=0 and High=0. Review found
-that the run did not retain the vulnerability DB timestamp and the image
-metadata omitted active `weed mini` ports. This bootstrap digest remains
-superseded and blocked until a replacement run records both controls. No
-ADR-0019 vulnerability exception is used.
+immutable workflow SHA `7cc3fd1a5376fa99de6922c54f3137d6c4ab4911`
+is verified, SLSA provenance is retained as attestation `35282295`, and the
+CycloneDX SBOM is bound to the same digest. Trivy `0.72.0` reported Critical=0
+and High=0 with vulnerability DB timestamp
+`2026-07-13T19:09:56.237113526Z`. Corrected image metadata exposes `weed mini`
+ports `9340` and `23646`. The source-built digest is admitted without an
+ADR-0019 vulnerability exception.
 
 The machine-readable decision is retained at
 `bootstrap/seaweedfs/v4.39/admission.json`; the exact run evidence is retained at
