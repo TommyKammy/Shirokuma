@@ -1,0 +1,236 @@
+name: SeaweedFS 4.39 trusted arm64 build
+
+on:
+  push:
+    branches:
+      - codex/issue-41
+    paths:
+      - .github/workflows/seaweedfs-arm64.yml
+      - bootstrap/seaweedfs/v4.39/Containerfile
+      - bootstrap/seaweedfs/v4.39/source.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seaweedfs-4.39-arm64
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.repository == 'TommyKammy/Shirokuma' &&
+      (github.ref == 'refs/heads/codex/issue-41' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      IMAGE: ghcr.io/tommykammy/shirokuma-seaweedfs
+      SOURCE_COMMIT: db42bb49757b459551607939807017d7a9d5a94a
+      SOURCE_TREE: da91641fdd520e465c68fa48af3b3ad07ad86822
+      SOURCE_ARCHIVE_SHA256: 95b3ba34d191e2cc96063434f407087000a9ffcf22f95682ecd5ce40b5a3fab9
+
+    steps:
+      - name: Check out Shirokuma policy
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Check out the adopted SeaweedFS source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          repository: seaweedfs/seaweedfs
+          ref: db42bb49757b459551607939807017d7a9d5a94a
+          path: seaweedfs-src
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Fail closed unless immutable source evidence matches
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_commit=\$(git -C seaweedfs-src rev-parse HEAD)
+          actual_tree=\$(git -C seaweedfs-src rev-parse HEAD^{tree})
+          actual_archive=\$(git -C seaweedfs-src archive --format=tar HEAD | sha256sum | cut -d' ' -f1)
+          test "${actual_commit}" = "${SOURCE_COMMIT}"
+          test "${actual_tree}" = "${SOURCE_TREE}"
+          test "${actual_archive}" = "${SOURCE_ARCHIVE_SHA256}"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          evidence = json.loads(
+              Path("bootstrap/seaweedfs/v4.39/source.json").read_text(encoding="utf-8")
+          )
+          expected = {
+              "commit": os.environ["SOURCE_COMMIT"],
+              "tree": os.environ["SOURCE_TREE"],
+              "git_archive_sha256": os.environ["SOURCE_ARCHIVE_SHA256"],
+          }
+          for field, value in expected.items():
+              if evidence.get(field) != value:
+                  raise SystemExit(f"source evidence mismatch for {field}")
+          PY
+          rm -rf seaweedfs-src/.git
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish only linux/arm64
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: seaweedfs-src
+          file: bootstrap/seaweedfs/v4.39/Containerfile
+          platforms: linux/arm64
+          push: true
+          provenance: false
+          sbom: false
+          tags: ${{ env.IMAGE }}:4.39-arm64
+          build-args: |
+            SOURCE_COMMIT=${{ env.SOURCE_COMMIT }}
+
+      - name: Verify the published platform
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          platform=\$(docker buildx imagetools inspect "${IMAGE}@${DIGEST}" --format '{{json .Manifest.Platform}}')
+          test "${platform}" = '{"architecture":"arm64","os":"linux"}'
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Keyless-sign the immutable image and retain transparency evidence
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cosign sign --yes "${IMAGE}@${DIGEST}"
+          cosign verify \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --certificate-identity "https://github.com/TommyKammy/Shirokuma/.github/workflows/seaweedfs-arm64.yml@${GITHUB_REF}" \
+            --output json \
+            "${IMAGE}@${DIGEST}" > cosign-verify.json
+
+      - name: Publish SLSA provenance for the exact digest
+        id: provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Generate CycloneDX SBOM for the exact digest
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: cyclonedx-json
+          output-file: seaweedfs-4.39-arm64.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
+          syft-version: v1.46.0
+
+      - name: Scan the exact digest and block High or Critical findings
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.72.0
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: json
+          output: trivy.json
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: 1
+
+      - name: Keyless-attest the retained SBOM and scan
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cosign attest --yes --type cyclonedx \
+            --predicate seaweedfs-4.39-arm64.cdx.json "${IMAGE}@${DIGEST}"
+          cosign attest --yes --type https://shirokuma.dev/attestations/trivy/v1 \
+            --predicate trivy.json "${IMAGE}@${DIGEST}"
+
+      - name: Record exact release evidence
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          PROVENANCE_URL: ${{ steps.provenance.outputs.attestation-url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          digest = os.environ["DIGEST"]
+          image = os.environ["IMAGE"]
+          record = {
+              "schema_version": 1,
+              "component": "seaweedfs",
+              "version": "4.39",
+              "platform": "linux/arm64",
+              "reference": f"{image}@{digest}",
+              "source": {
+                  "repository": "https://github.com/seaweedfs/seaweedfs",
+                  "commit": os.environ["SOURCE_COMMIT"],
+                  "tree": os.environ["SOURCE_TREE"],
+                  "git_archive_sha256": os.environ["SOURCE_ARCHIVE_SHA256"],
+              },
+              "builder": {
+                  "repository": os.environ["GITHUB_REPOSITORY"],
+                  "workflow": ".github/workflows/seaweedfs-arm64.yml",
+                  "ref": os.environ["GITHUB_REF"],
+                  "run_id": os.environ["GITHUB_RUN_ID"],
+                  "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              },
+              "issuer": "https://token.actions.githubusercontent.com",
+              "identity": (
+                  "https://github.com/TommyKammy/Shirokuma/"
+                  f".github/workflows/seaweedfs-arm64.yml@{os.environ['GITHUB_REF']}"
+              ),
+              "transparency_log": "verified by cosign-verify.json",
+              "slsa_provenance": os.environ.get("PROVENANCE_URL", ""),
+              "artifacts": {
+                  name: {
+                      "sha256": hashlib.sha256(Path(name).read_bytes()).hexdigest()
+                  }
+                  for name in ("seaweedfs-4.39-arm64.cdx.json", "trivy.json")
+              },
+          }
+          Path("release-evidence.json").write_text(
+              json.dumps(record, indent=2) + "\\n", encoding="utf-8"
+          )
+          PY
+
+      - name: Retain independently downloadable evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: seaweedfs-4.39-arm64-${{ steps.build.outputs.digest }}
+          path: |
+            bootstrap/seaweedfs/v4.39/source.json
+            cosign-verify.json
+            release-evidence.json
+            seaweedfs-4.39-arm64.cdx.json
+            trivy.json
+          if-no-files-found: error
+          retention-days: 90

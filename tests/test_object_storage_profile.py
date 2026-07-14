@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -55,6 +56,13 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         ):
             with self.subTest(required=required):
                 self.assertIn(required, workflow)
+
+        action_refs = re.findall(r"^\s*uses:\s*([^\s#]+)", workflow, re.MULTILINE)
+        self.assertTrue(action_refs)
+        for action_ref in action_refs:
+            with self.subTest(action_ref=action_ref):
+                self.assertRegex(action_ref, r"^[^@]+@[0-9a-f]{40}$")
+        self.assertNotRegex(workflow, r"secrets\.(COSIGN|SIGNING|PRIVATE_KEY)")
 
     def test_blocked_candidate_is_recorded_without_runtime_manifests(self) -> None:
         admission_path = ROOT / "bootstrap/seaweedfs/v4.39/admission.json"

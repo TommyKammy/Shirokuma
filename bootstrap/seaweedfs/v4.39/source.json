@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "component": "seaweedfs",
+  "version": "4.39",
+  "repository": "https://github.com/seaweedfs/seaweedfs",
+  "commit": "db42bb49757b459551607939807017d7a9d5a94a",
+  "tree": "da91641fdd520e465c68fa48af3b3ad07ad86822",
+  "git_archive_sha256": "95b3ba34d191e2cc96063434f407087000a9ffcf22f95682ecd5ce40b5a3fab9",
+  "archive_command": "git archive --format=tar HEAD | sha256sum",
+  "adoption_record": "docs/design/07_ADR/ADR-0020_Adopt_SeaweedFS_4_39_source_for_arm64_build.md"
+}
