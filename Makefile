@@ -5,7 +5,7 @@ TOFU ?= tofu
 TOFU_DIR ?= opentofu/dev
 KUBE_CONTEXT ?= colima-mac-studio-solo
 FLUX ?= flux
-FLUX_VERSION ?= v2.9.1
+FLUX_VERSION ?= v2.9.2
 KYVERNO ?= kyverno
 KYVERNO_VERSION ?= v1.18.2
 GITHUB_OWNER ?= TommyKammy
@@ -23,7 +23,7 @@ prepare: verify-design-context
 verify-security:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_supply_chain_security.py'
 	@$(PYTHON) scripts/verify_supply_chain.py scan-secrets --repo .
-	@$(PYTHON) scripts/verify_supply_chain.py check-images --manifest security/resident-images.json --repo .
+	@$(PYTHON) scripts/verify_supply_chain.py check-images --manifest security/resident-images.json --repo . --profile local-lab --exceptions security/resident-image-exceptions.json
 
 verify-policy:
 	@command -v $(KYVERNO) >/dev/null || { echo "kyverno $(KYVERNO_VERSION) is required for policy verification"; exit 1; }
@@ -135,6 +135,7 @@ check-required-files:
 	@test -f scripts/verify_supply_chain.py
 	@test -f scripts/verify_policy_exceptions.py
 	@test -f security/resident-images.json
+	@test -f security/resident-image-exceptions.json
 	@test -f policies/kyverno/baseline.yaml
 	@test -f tests/policy/kyverno-test.yaml
 

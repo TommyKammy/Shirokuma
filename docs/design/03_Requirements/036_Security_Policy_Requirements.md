@@ -4,8 +4,8 @@ doc_id: "REQ-036"
 title: "Security Policy Requirements"
 status: draft
 created: 2026-07-05
-updated: 2026-07-13
-version: "0.3"
+updated: 2026-07-14
+version: "0.4"
 area: "requirements"
 tags: [shirokuma, policy, requirements]
 ---
@@ -34,10 +34,15 @@ tags: [shirokuma, policy, requirements]
 - `security/resident-images.json` remains the exact image approval source. The
   Kyverno digest rule and repository supply-chain check form one fail-closed
   boundary; digest syntax alone is not image approval.
+- `security/resident-image-exceptions.json` is a separate local-lab risk
+  acceptance source. It may allow only exact High findings for an admitted
+  digest for no more than 30 days. Critical, production use, missing evidence,
+  new findings, and stale exception records fail closed.
 - `policies/exceptions/` requires a separate owner and reviewer, a Shirokuma
   Issue, a narrow metadata match, and an expiry no more than 30 days ahead.
-- CI validates policies and fixtures offline. Live Kyverno admission remains
-  blocked until controller images satisfy the resident-image gate.
+- CI validates policies and fixtures offline. Live Kyverno admission may proceed
+  in the local lab only after the Flux controller images satisfy the ADR-0019
+  bounded resident-image gate.
 
 ## Auto-merge tiers
 

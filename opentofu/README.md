@@ -7,9 +7,9 @@ explicit `colima-mac-studio-solo` context and never change the operator's
 current Kubernetes context.
 
 Pinned OpenTofu inputs are recorded in `dev/versions.tf` and
-`dev/.terraform.lock.hcl`. The approved Flux distribution is `v2.9.1`; exact
+`dev/.terraform.lock.hcl`. The approved local-lab Flux distribution is `v2.9.2`; exact
 linux/arm64 controller candidates are recorded in `dev/bootstrap-images.json`
-and mirrored in the non-deployable inventory at `bootstrap/flux/v2.9.1/`.
+and mirrored in the inventory at `bootstrap/flux/v2.9.2/`.
 
 Format and validate a clean checkout with:
 

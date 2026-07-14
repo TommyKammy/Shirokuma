@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "flux_version": "v2.9.2",
+  "tools": {
+    "crane": "0.21.7",
+    "cosign": "3.1.1",
+    "syft": "1.46.0",
+    "trivy": "0.72.0"
+  },
+  "signature_policy": {
+    "issuer": "https://token.actions.githubusercontent.com",
+    "identity": "https://github.com/fluxcd/gha-workflows/.github/workflows/controller-release.yaml@refs/tags/v0.11.0"
+  },
+  "images": [
+    {
+      "component": "source-controller",
+      "version": "v1.9.3",
+      "source": "https://github.com/fluxcd/source-controller",
+      "platform": "linux/arm64",
+      "reference": "ghcr.io/fluxcd/source-controller@sha256:0f648a90e21bce0268ee29930bead4fbffba11e0b20d4a5f587c8fe2f17e3e5a",
+      "verified_at": "2026-07-14T00:35:00Z",
+      "signature": {
+        "verified": true,
+        "signed_index": "ghcr.io/fluxcd/source-controller@sha256:ff8f3c92f1bcb433e858c948040c3a3393fe73f5dd72048a4502bfaf0a4c26cd",
+        "arm64_in_signed_index": true,
+        "arm64_manifest_digest": "sha256:0f648a90e21bce0268ee29930bead4fbffba11e0b20d4a5f587c8fe2f17e3e5a",
+        "issuer": "https://token.actions.githubusercontent.com",
+        "identity": "https://github.com/fluxcd/gha-workflows/.github/workflows/controller-release.yaml@refs/tags/v0.11.0",
+        "workflow_repository": "fluxcd/source-controller",
+        "workflow_ref": "refs/tags/v1.9.3",
+        "commit": "ed61ebda88cd70159b24df1c8df50b1e6be4cc3d",
+        "transparency_log_index": 2162790303
+      },
+      "provenance": {
+        "predicate_type": "https://slsa.dev/provenance/v1",
+        "subject_digest": "sha256:0f648a90e21bce0268ee29930bead4fbffba11e0b20d4a5f587c8fe2f17e3e5a",
+        "source": "https://github.com/fluxcd/source-controller",
+        "version": "v1.9.3",
+        "revision": "ed61ebda88cd70159b24df1c8df50b1e6be4cc3d",
+        "builder": "https://github.com/fluxcd/source-controller/actions/runs/29242846328/attempts/1",
+        "attestation_manifest": "sha256:96cb31c17ef1a20ab53c7ce1006eff5b0ce2e817ed9a3c4fb248ba143fb745a9"
+      },
+      "upstream_sbom": {
+        "predicate_type": "https://spdx.dev/Document",
+        "subject_digest": "sha256:0f648a90e21bce0268ee29930bead4fbffba11e0b20d4a5f587c8fe2f17e3e5a",
+        "package_count": 335
+      }
+    },
+    {
+      "component": "kustomize-controller",
+      "version": "v1.9.3",
+      "source": "https://github.com/fluxcd/kustomize-controller",
+      "platform": "linux/arm64",
+      "reference": "ghcr.io/fluxcd/kustomize-controller@sha256:bfba7d249343683a5f9264fc6ad21bce5f9a0baac8d2a8c7527867312f96e9c9",
+      "verified_at": "2026-07-14T00:35:00Z",
+      "signature": {
+        "verified": true,
+        "signed_index": "ghcr.io/fluxcd/kustomize-controller@sha256:0203eb80743814f67bebb5f0b22c7db620bc461cc0b23732e0367a38fce04e4c",
+        "arm64_in_signed_index": true,
+        "arm64_manifest_digest": "sha256:bfba7d249343683a5f9264fc6ad21bce5f9a0baac8d2a8c7527867312f96e9c9",
+        "issuer": "https://token.actions.githubusercontent.com",
+        "identity": "https://github.com/fluxcd/gha-workflows/.github/workflows/controller-release.yaml@refs/tags/v0.11.0",
+        "workflow_repository": "fluxcd/kustomize-controller",
+        "workflow_ref": "refs/tags/v1.9.3",
+        "commit": "65f69a81269df88ab044f123d94c1f6b13d2193a",
+        "transparency_log_index": 2162754489
+      },
+      "provenance": {
+        "predicate_type": "https://slsa.dev/provenance/v1",
+        "subject_digest": "sha256:bfba7d249343683a5f9264fc6ad21bce5f9a0baac8d2a8c7527867312f96e9c9",
+        "source": "https://github.com/fluxcd/kustomize-controller",
+        "version": "v1.9.3",
+        "revision": "65f69a81269df88ab044f123d94c1f6b13d2193a",
+        "builder": "https://github.com/fluxcd/kustomize-controller/actions/runs/29242669230/attempts/1",
+        "attestation_manifest": "sha256:d6f7508ce2be8c637d3d74f5f40c0a630ac7f7de2517d2c027d288628ecd98ec"
+      },
+      "upstream_sbom": {
+        "predicate_type": "https://spdx.dev/Document",
+        "subject_digest": "sha256:bfba7d249343683a5f9264fc6ad21bce5f9a0baac8d2a8c7527867312f96e9c9",
+        "package_count": 296
+      }
+    },
+    {
+      "component": "helm-controller",
+      "version": "v1.6.2",
+      "source": "https://github.com/fluxcd/helm-controller",
+      "platform": "linux/arm64",
+      "reference": "ghcr.io/fluxcd/helm-controller@sha256:6c8e17a0b9554bd6f9848595e832f6499a728d07db477b31cc53ce632d2ee6cc",
+      "verified_at": "2026-07-14T00:35:00Z",
+      "signature": {
+        "verified": true,
+        "signed_index": "ghcr.io/fluxcd/helm-controller@sha256:e17ab0e5885d80cebb9890663f85d59cd3866adebfc09a4d8bd2d512ef980bc4",
+        "arm64_in_signed_index": true,
+        "arm64_manifest_digest": "sha256:6c8e17a0b9554bd6f9848595e832f6499a728d07db477b31cc53ce632d2ee6cc",
+        "issuer": "https://token.actions.githubusercontent.com",
+        "identity": "https://github.com/fluxcd/gha-workflows/.github/workflows/controller-release.yaml@refs/tags/v0.11.0",
+        "workflow_repository": "fluxcd/helm-controller",
+        "workflow_ref": "refs/tags/v1.6.2",
+        "commit": "7cabcd8becb9d88c0198d3555cbcaa662faf98a2",
+        "transparency_log_index": 2099894565
+      },
+      "provenance": {
+        "predicate_type": "https://slsa.dev/provenance/v1",
+        "subject_digest": "sha256:6c8e17a0b9554bd6f9848595e832f6499a728d07db477b31cc53ce632d2ee6cc",
+        "source": "https://github.com/fluxcd/helm-controller",
+        "version": "v1.6.2",
+        "revision": "7cabcd8becb9d88c0198d3555cbcaa662faf98a2",
+        "builder": "https://github.com/fluxcd/helm-controller/actions/runs/28861436743/attempts/1",
+        "attestation_manifest": "sha256:777650c2e089db2a61d1f7d5a9a18b80076039c000cd31ad6d221d6702139c2e"
+      },
+      "upstream_sbom": {
+        "predicate_type": "https://spdx.dev/Document",
+        "subject_digest": "sha256:6c8e17a0b9554bd6f9848595e832f6499a728d07db477b31cc53ce632d2ee6cc",
+        "package_count": 221
+      }
+    },
+    {
+      "component": "notification-controller",
+      "version": "v1.9.2",
+      "source": "https://github.com/fluxcd/notification-controller",
+      "platform": "linux/arm64",
+      "reference": "ghcr.io/fluxcd/notification-controller@sha256:4fad21931eacf007a770b23fa5495201e4141ee5040218bac14ea90bee0ec996",
+      "verified_at": "2026-07-14T00:35:00Z",
+      "signature": {
+        "verified": true,
+        "signed_index": "ghcr.io/fluxcd/notification-controller@sha256:9ce503e7bcb8493fafe2aaef0c2ac4396df4f6890256acf9cd444a2dcd2a69ed",
+        "arm64_in_signed_index": true,
+        "arm64_manifest_digest": "sha256:4fad21931eacf007a770b23fa5495201e4141ee5040218bac14ea90bee0ec996",
+        "issuer": "https://token.actions.githubusercontent.com",
+        "identity": "https://github.com/fluxcd/gha-workflows/.github/workflows/controller-release.yaml@refs/tags/v0.11.0",
+        "workflow_repository": "fluxcd/notification-controller",
+        "workflow_ref": "refs/tags/v1.9.2",
+        "commit": "8d2ed585e37c72177bb773867f40fa7d887bdcef",
+        "transparency_log_index": 2099886090
+      },
+      "provenance": {
+        "predicate_type": "https://slsa.dev/provenance/v1",
+        "subject_digest": "sha256:4fad21931eacf007a770b23fa5495201e4141ee5040218bac14ea90bee0ec996",
+        "source": "https://github.com/fluxcd/notification-controller",
+        "version": "v1.9.2",
+        "revision": "8d2ed585e37c72177bb773867f40fa7d887bdcef",
+        "builder": "https://github.com/fluxcd/notification-controller/actions/runs/28861358501/attempts/1",
+        "attestation_manifest": "sha256:64b357a49e66fc9b4b41722f74dec2e563a574e7e99caea0e05e77f73fe9ed8f"
+      },
+      "upstream_sbom": {
+        "predicate_type": "https://spdx.dev/Document",
+        "subject_digest": "sha256:4fad21931eacf007a770b23fa5495201e4141ee5040218bac14ea90bee0ec996",
+        "package_count": 224
+      }
+    }
+  ]
+}

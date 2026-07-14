@@ -5,14 +5,17 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import date, timedelta
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 CHECKER = ROOT / "scripts/verify_supply_chain.py"
 POLICY = ROOT / "security/resident-images.json"
+EXCEPTIONS = ROOT / "security/resident-image-exceptions.json"
 WORKFLOW = ROOT / ".github/workflows/security.yml"
 SECURITY_DOC = ROOT / "docs/design/04_Development/049_Supply_Chain_Security.md"
+LAB_ADR = "docs/design/07_ADR/ADR-0019_Allow_time_boxed_resident_image_exceptions_for_local_lab.md"
 
 
 class SupplyChainSecurityTests(unittest.TestCase):
@@ -27,6 +30,8 @@ class SupplyChainSecurityTests(unittest.TestCase):
             "source": "https://example.invalid/fixture",
             "sbom_artifact": "fixture.cdx.json",
             "scan_artifact": "fixture.trivy.json",
+            "supply_chain_artifact": "fixture.supply-chain.json",
+            "sbom_generator": "syft 1.46.0",
             "scanner_version": "0.72.0",
             "vulnerability_db_updated_at": "2026-07-01T00:00:00Z",
         }
@@ -53,6 +58,98 @@ class SupplyChainSecurityTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+
+    @staticmethod
+    def write_valid_supply_chain(root: Path, image: dict[str, str]) -> None:
+        digest = image["reference"].rsplit("@", 1)[1]
+        repository = image["reference"].rsplit("@", 1)[0]
+        (root / "fixture.supply-chain.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "images": [
+                        {
+                            "component": image["component"],
+                            "version": image["version"],
+                            "source": image["source"],
+                            "platform": "linux/arm64",
+                            "reference": image["reference"],
+                            "verified_at": "2026-07-01T00:00:00Z",
+                            "signature": {
+                                "verified": True,
+                                "signed_index": repository + "@sha256:" + "b" * 64,
+                                "arm64_in_signed_index": True,
+                                "arm64_manifest_digest": digest,
+                                "issuer": "https://token.actions.githubusercontent.com",
+                                "identity": "https://github.com/example/release.yml@refs/tags/v1",
+                                "workflow_repository": "example/fixture",
+                                "workflow_ref": "refs/tags/v1.0.0",
+                                "commit": "c" * 40,
+                                "transparency_log_index": 1,
+                            },
+                            "provenance": {
+                                "predicate_type": "https://slsa.dev/provenance/v1",
+                                "subject_digest": digest,
+                                "source": image["source"],
+                                "version": image["version"],
+                                "revision": "c" * 40,
+                                "builder": "https://example.invalid/actions/runs/1",
+                                "attestation_manifest": "sha256:" + "d" * 64,
+                            },
+                            "upstream_sbom": {
+                                "predicate_type": "https://spdx.dev/Document",
+                                "subject_digest": digest,
+                            },
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    @classmethod
+    def write_valid_evidence(cls, root: Path, image: dict[str, str]) -> None:
+        cls.write_valid_sbom(root)
+        cls.write_valid_supply_chain(root, image)
+
+    @staticmethod
+    def valid_exception(
+        image: dict[str, str],
+        cves: list[dict[str, str]],
+    ) -> dict[str, object]:
+        today = date.today()
+        return {
+            "component": image["component"],
+            "reference": image["reference"],
+            "scope": "mac-studio-solo/local-lab",
+            "max_severity": "HIGH",
+            "decision_record": LAB_ADR,
+            "approved_on": today.isoformat(),
+            "expires_on": (today + timedelta(days=30)).isoformat(),
+            "risk_acceptance": "Bounded development-only acceptance.",
+            "compensating_controls": [
+                "local lab only",
+                "trusted sources only",
+                "no public exposure",
+            ],
+            "replacement_plan": "Replace with a clean upstream image.",
+            "cves": cves,
+        }
+
+    @staticmethod
+    def write_exceptions(root: Path, entries: list[dict[str, object]]) -> Path:
+        path = root / "resident-image-exceptions.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "profile": "local-lab",
+                    "exceptions": entries,
+                }
+            ),
+            encoding="utf-8",
+        )
+        return path
 
     @staticmethod
     def write_trivy_report(
@@ -324,7 +421,7 @@ class SupplyChainSecurityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             image = self.valid_image()
-            self.write_valid_sbom(root)
+            self.write_valid_evidence(root, image)
             self.write_trivy_report(
                 root,
                 image["reference"],
@@ -344,6 +441,273 @@ class SupplyChainSecurityTests(unittest.TestCase):
             result = self.run_checker("check-images", "--manifest", str(manifest))
 
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_local_lab_exception_accepts_one_exact_high_finding(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = self.valid_image()
+            finding = {
+                "VulnerabilityID": "CVE-2099-1001",
+                "Severity": "HIGH",
+                "PkgName": "example.invalid/module",
+                "InstalledVersion": "v1.0.0",
+            }
+            exception_cve = {
+                "id": "CVE-2099-1001",
+                "severity": "HIGH",
+                "package": "example.invalid/module",
+                "installed_version": "v1.0.0",
+                "fixed_version": "",
+            }
+            self.write_valid_evidence(root, image)
+            self.write_trivy_report(root, image["reference"], [finding])
+            exceptions = self.write_exceptions(
+                root,
+                [self.valid_exception(image, [exception_cve])],
+            )
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [image]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--profile",
+                "local-lab",
+                "--exceptions",
+                str(exceptions),
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_local_lab_exception_rejects_unapproved_high_finding(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = self.valid_image()
+            approved_finding = {
+                "VulnerabilityID": "CVE-2099-1001",
+                "Severity": "HIGH",
+                "PkgName": "example.invalid/module",
+                "InstalledVersion": "v1.0.0",
+            }
+            new_finding = {
+                "VulnerabilityID": "CVE-2099-1002",
+                "Severity": "HIGH",
+                "PkgName": "example.invalid/other",
+                "InstalledVersion": "v2.0.0",
+            }
+            exception_cve = {
+                "id": "CVE-2099-1001",
+                "severity": "HIGH",
+                "package": "example.invalid/module",
+                "installed_version": "v1.0.0",
+                "fixed_version": "",
+            }
+            self.write_valid_evidence(root, image)
+            self.write_trivy_report(
+                root,
+                image["reference"],
+                [approved_finding, new_finding],
+            )
+            exceptions = self.write_exceptions(
+                root,
+                [self.valid_exception(image, [exception_cve])],
+            )
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [image]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--profile",
+                "local-lab",
+                "--exceptions",
+                str(exceptions),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unapproved=CVE-2099-1002", result.stderr)
+
+    def test_local_lab_exception_never_allows_critical(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = self.valid_image()
+            finding = {
+                "VulnerabilityID": "CVE-2099-1001",
+                "Severity": "CRITICAL",
+                "PkgName": "example.invalid/module",
+                "InstalledVersion": "v1.0.0",
+            }
+            exception_cve = {
+                "id": "CVE-2099-1001",
+                "severity": "HIGH",
+                "package": "example.invalid/module",
+                "installed_version": "v1.0.0",
+                "fixed_version": "",
+            }
+            self.write_valid_evidence(root, image)
+            self.write_trivy_report(root, image["reference"], [finding])
+            exceptions = self.write_exceptions(
+                root,
+                [self.valid_exception(image, [exception_cve])],
+            )
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [image]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--profile",
+                "local-lab",
+                "--exceptions",
+                str(exceptions),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("CRITICAL=1", result.stderr)
+
+    def test_local_lab_exception_rejects_stale_cve_record(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = self.valid_image()
+            exception_cve = {
+                "id": "CVE-2099-1001",
+                "severity": "HIGH",
+                "package": "example.invalid/module",
+                "installed_version": "v1.0.0",
+                "fixed_version": "1.0.1",
+            }
+            self.write_valid_evidence(root, image)
+            self.write_trivy_report(root, image["reference"])
+            exceptions = self.write_exceptions(
+                root,
+                [self.valid_exception(image, [exception_cve])],
+            )
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [image]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--profile",
+                "local-lab",
+                "--exceptions",
+                str(exceptions),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("stale=CVE-2099-1001", result.stderr)
+
+    def test_local_lab_exception_rejects_expired_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = self.valid_image()
+            exception_cve = {
+                "id": "CVE-2099-1001",
+                "severity": "HIGH",
+                "package": "example.invalid/module",
+                "installed_version": "v1.0.0",
+                "fixed_version": "",
+            }
+            entry = self.valid_exception(image, [exception_cve])
+            entry["approved_on"] = (date.today() - timedelta(days=31)).isoformat()
+            entry["expires_on"] = (date.today() - timedelta(days=1)).isoformat()
+            self.write_valid_evidence(root, image)
+            self.write_trivy_report(root, image["reference"])
+            exceptions = self.write_exceptions(root, [entry])
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [image]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--profile",
+                "local-lab",
+                "--exceptions",
+                str(exceptions),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("has expired", result.stderr)
+
+    def test_strict_profile_rejects_exception_input(self) -> None:
+        result = self.run_checker(
+            "check-images",
+            "--manifest",
+            str(POLICY),
+            "--exceptions",
+            str(EXCEPTIONS),
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("strict resident image profile does not allow exceptions", result.stderr)
+
+    def test_committed_local_lab_images_remain_blocked_by_strict_profile(self) -> None:
+        result = self.run_checker("check-images", "--manifest", str(POLICY))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Trivy blocking threshold crossed: HIGH=2", result.stderr)
+
+    def test_supply_chain_subject_must_match_ledger_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = self.valid_image()
+            self.write_valid_evidence(root, image)
+            evidence_path = root / "fixture.supply-chain.json"
+            evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+            evidence["images"][0]["provenance"]["subject_digest"] = "sha256:" + "f" * 64
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+            self.write_trivy_report(root, image["reference"])
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [image]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker("check-images", "--manifest", str(manifest))
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("provenance subject does not match", result.stderr)
+
+    def test_signed_index_repository_must_match_ledger(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = self.valid_image()
+            self.write_valid_evidence(root, image)
+            evidence_path = root / "fixture.supply-chain.json"
+            evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+            evidence["images"][0]["signature"]["signed_index"] = (
+                "registry.example.invalid/other@sha256:" + "b" * 64
+            )
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+            self.write_trivy_report(root, image["reference"])
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [image]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker("check-images", "--manifest", str(manifest))
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("signed index repository does not match", result.stderr)
 
     def test_missing_resident_image_sbom_artifact_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -448,6 +812,8 @@ class SupplyChainSecurityTests(unittest.TestCase):
             "source",
             "sbom_artifact",
             "scan_artifact",
+            "supply_chain_artifact",
+            "sbom_generator",
             "scanner_version",
             "vulnerability_db_updated_at",
         ):
@@ -658,7 +1024,15 @@ class SupplyChainSecurityTests(unittest.TestCase):
         self.assertIn("missing from resident image ledger", result.stderr)
 
     def test_committed_policy_and_ci_define_the_blocking_gate(self) -> None:
-        result = self.run_checker("check-images", "--manifest", str(POLICY))
+        result = self.run_checker(
+            "check-images",
+            "--manifest",
+            str(POLICY),
+            "--profile",
+            "local-lab",
+            "--exceptions",
+            str(EXCEPTIONS),
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
 
         workflow = WORKFLOW.read_text(encoding="utf-8")
@@ -684,6 +1058,9 @@ class SupplyChainSecurityTests(unittest.TestCase):
             "CVE risk",
             "replacement plan",
             "fail closed",
+            "local-lab",
+            "Critical",
+            "30 days",
         ):
             with self.subTest(required=required):
                 self.assertIn(required, documentation)

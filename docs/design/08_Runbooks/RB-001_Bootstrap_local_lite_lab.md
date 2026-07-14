@@ -4,8 +4,8 @@ doc_id: "RB-001"
 title: "Bootstrap local-lite lab"
 status: draft
 created: 2026-07-05
-updated: 2026-07-12
-version: "0.5"
+updated: 2026-07-14
+version: "0.6"
 area: "runbook"
 tags: [shirokuma, runbook]
 ---
@@ -61,8 +61,11 @@ OpenTofu 1.12.3, Helm 4.2.3, kubectl, and the repository-pinned Flux CLI are
 required. The repository pins the OpenTofu providers, `fluxcd/flux2`
 distribution, controller image digests, and workload image digests. Before any
 cluster mutation, the bootstrap target checks that every controller image is
-ARM64-capable and admitted by the fail-closed resident-image gate. Candidate
-manifests remain under `bootstrap/` rather than `deploy/` until admitted.
+ARM64-capable and admitted by the fail-closed resident-image gate. The
+`mac-studio-solo/local-lab` path may use only the exact, unexpired High findings
+approved by ADR-0019; Critical, new High, stale exceptions, evidence mismatch,
+and production use remain blocked. Candidate manifests remain under
+`bootstrap/` rather than `deploy/` until admitted.
 
 The Make targets are non-interactive for supervised execution. OpenTofu manages
 cluster prerequisites; `flux bootstrap github` installs the four standard

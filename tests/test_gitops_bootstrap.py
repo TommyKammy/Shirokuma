@@ -20,8 +20,8 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
             "opentofu/dev/variables.tf",
             "opentofu/dev/versions.tf",
             "opentofu/dev/bootstrap-images.json",
-            "bootstrap/flux/v2.9.1/README.md",
-            "bootstrap/flux/v2.9.1/components.json",
+            "bootstrap/flux/v2.9.2/README.md",
+            "bootstrap/flux/v2.9.2/components.json",
             "deploy/gitops/dev/kustomization.yaml",
             "deploy/gitops/dev/smoke-configmap.yaml",
             "deploy/gitops/clusters/local-lite/dev.yaml",
@@ -49,14 +49,14 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
             (ROOT / "opentofu/dev/bootstrap-images.json").read_text(encoding="utf-8")
         )
         inventory = json.loads(
-            (ROOT / "bootstrap/flux/v2.9.1/components.json").read_text(encoding="utf-8")
+            (ROOT / "bootstrap/flux/v2.9.2/components.json").read_text(encoding="utf-8")
         )
         customization = (
             ROOT / "deploy/gitops/clusters/local-lite/flux-system/kustomization.yaml"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("FLUX_VERSION ?= v2.9.1", makefile)
-        self.assertEqual(inventory["flux_version"], "v2.9.1")
+        self.assertIn("FLUX_VERSION ?= v2.9.2", makefile)
+        self.assertEqual(inventory["flux_version"], "v2.9.2")
         self.assertEqual(
             set(candidates),
             {
