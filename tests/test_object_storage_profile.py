@@ -51,6 +51,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             "actions/attest-build-provenance@",
             "cyclonedx-json",
             "severity: HIGH,CRITICAL",
+            "name: seaweedfs-4.39-arm64-${{ github.run_id }}",
             EXPECTED_RELEASE_COMMIT,
             EXPECTED_RELEASE_TREE,
         ):
