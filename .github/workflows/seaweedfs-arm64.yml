@@ -163,7 +163,7 @@ jobs:
             --driver-opt "image=${BUILDKIT_IMAGE}" \
             --use >/dev/null
           docker buildx inspect --bootstrap | tee "${RUNNER_TEMP}/buildx-inspect.txt"
-          actual_buildkit_version=$(awk '$1 == "BuildKit:" {print $2; exit}' "${RUNNER_TEMP}/buildx-inspect.txt")
+          actual_buildkit_version=$(awk '$1 == "BuildKit" && $2 == "version:" {print $3; exit}' "${RUNNER_TEMP}/buildx-inspect.txt")
           test "${actual_buildkit_version}" = "${BUILDKIT_VERSION}"
 
           builder_container=$(docker ps \
