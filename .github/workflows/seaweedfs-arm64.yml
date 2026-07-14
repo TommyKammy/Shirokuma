@@ -665,6 +665,10 @@ jobs:
           )
           if registry_bundle_matches != 1:
               raise SystemExit("registry does not contain exactly the retained bundle")
+          Path("registry-signature-bundles.jsonl").write_text(
+              json.dumps(bundle, separators=(",", ":")) + "\n",
+              encoding="utf-8",
+          )
           bundle_sha256 = hashlib.sha256(
               Path("cosign-signature-bundle.json").read_bytes()
           ).hexdigest()

@@ -464,7 +464,11 @@ def _validate_cosign(
         ]
     except json.JSONDecodeError as exc:
         _fail("COSIGN_REGISTRY_BUNDLES", str(exc))
-    _expect(bool(registry_bundles), "COSIGN_REGISTRY_BUNDLES", "empty")
+    _expect(
+        len(registry_bundles) == 1 and registry_bundles[0] == bundle,
+        "COSIGN_REGISTRY_BUNDLES",
+        "the retained registry set must contain only the exact signed bundle",
+    )
     exact_matches = sum(candidate == bundle for candidate in registry_bundles)
     _expect(exact_matches == 1, "COSIGN_REGISTRY_BUNDLE_MATCH", str(exact_matches))
     bundle_sha256 = _sha256(bundle_path)
