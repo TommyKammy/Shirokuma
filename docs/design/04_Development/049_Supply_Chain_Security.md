@@ -45,15 +45,32 @@ The actions and scanner releases in `.github/workflows/security.yml` are pinned.
 Updates must be isolated dependency changes with review of upstream release
 notes and a failing fixture before the pin is advanced.
 
-Repository-controlled image builds additionally use a closed-world trusted-build
-contract. The contract enumerates every artifact-producing, evidence-producing,
-or state-mutating tool: the complete Containerfile hash and frontend, base
-images, Buildx, BuildKit image digest and platform manifest, Syft, Trivy,
-Cosign, and the promotion tool. A tool absent from the contract is not permitted
-in the trusted path. Standalone release archives are downloaded without registry
+Repository-controlled image builds additionally use a closed-world contract for
+repository-selected release tools and SHA-pinned Actions over an explicit,
+non-hermetic GitHub-hosted runner substrate. The contract enumerates the complete
+workflow-file and Containerfile hashes, Dockerfile frontend, base images,
+Buildx, BuildKit image digest and platform manifest, Syft, Trivy, Cosign, and
+the promotion tool. A
+repository-selected release tool absent from the contract is not permitted.
+Docker, GitHub CLI, Git, Python, curl, tar, sha256sum, and other operating-system
+facilities supplied by the runner remain part of that trust boundary; the
+security-relevant direct tools, runner label, OS, and architecture are recorded
+instead of being misrepresented as independently pinned. Standalone release archives are downloaded without registry
 credentials, checked against an exact SHA-256 before extraction or execution,
 and only then made available to a credentialed step. The generated toolchain
 record must reconcile observed versions and image digests with the contract.
+The verified Buildx binary is installed under a run-private
+`DOCKER_CONFIG/cli-plugins` directory so Docker cannot silently select the
+runner's preinstalled plugin. Cosign writes one Sigstore bundle to both the
+durable evidence path and the OCI referrer; the workflow downloads the registry
+copy and requires an exact structural match before promotion. Workflow signer
+SHA (`GITHUB_WORKFLOW_SHA`) and source SHA (`GITHUB_SHA`) are recorded and
+verified as separate identities. The current contract explicitly selects the
+Rekor v1 public API; a Rekor v2 migration must change the endpoint, identity
+schema, validator, and fixtures together.
+The source record itself is hashed into release evidence. Its exact
+Containerfile digest and closed set of frontend, Go builder, and certificate
+image inputs must all be consumed by the Containerfile before publication.
 
 Trusted-tag publication is a two-stage state machine. The verify job may push
 only a run-scoped quarantine tag and must finish source checks, runtime smoke,
@@ -62,7 +79,14 @@ promotion job receives package-write permission, revalidates the retained
 candidate before credentials exist, installs the checksum-verified promotion
 tool, and moves the trusted tag without changing the digest. A missing gate,
 unretained candidate, failed revalidation, or digest mismatch prevents
-promotion.
+promotion. Candidate and final artifact names include both run ID and run
+attempt so a rerun cannot collide with an immutable earlier upload.
+The final evidence retains the exact pre-promotion release record as
+`candidate-release-evidence.json`; promotion is therefore auditable after the
+short-lived candidate artifact expires. Runtime evidence likewise retains raw
+Docker inspect output and reconciles the effective user, command, read-only
+root, tmpfs mounts, dropped capabilities, security option, and resource limits
+instead of trusting a self-asserted smoke-test summary.
 
 ## Resident image and SBOM evidence
 

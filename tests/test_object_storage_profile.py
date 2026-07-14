@@ -82,7 +82,9 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             "attestations: write",
             "linux/arm64",
             "cosign sign --yes",
-            '--certificate-github-workflow-sha "${GITHUB_SHA}"',
+            '--certificate-github-workflow-sha "${GITHUB_WORKFLOW_SHA}"',
+            '--signer-digest "${GITHUB_WORKFLOW_SHA}"',
+            '--source-digest "${GITHUB_SHA}"',
             "actions/attest-build-provenance@",
             "gh attestation verify",
             "githubWorkflowSHA",
@@ -172,8 +174,13 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertIn("Install and verify pinned Crane without credentials", workflow)
         self.assertIn("CRANE_VERSION: v0.21.7", workflow)
         self.assertNotIn("latest-release", workflow)
-        self.assertIn('"${CRANE_BIN}" tag "${IMAGE}@${DIGEST}" 4.39-arm64', promotion)
-        self.assertIn('"${CRANE_BIN}" digest "${IMAGE}:4.39-arm64"', promotion)
+        self.assertIn(
+            '"${CRANE_BIN}" tag "${IMAGE}@${DIGEST}" "${TRUSTED_TAG}"',
+            promotion,
+        )
+        self.assertIn(
+            '"${CRANE_BIN}" digest "${IMAGE}:${TRUSTED_TAG}"', promotion
+        )
         self.assertNotIn('docker push "${IMAGE}:4.39-arm64"', promotion)
         self.assertIn('test "${promoted_digest}" = "${DIGEST}"', promotion)
         generated_evidence = workflow[

@@ -17,13 +17,21 @@ the following trust chain:
   log fields;
 - `cosign-verify.json` records the exact issuer and workflow identity constraints
   that passed both bundle and registry verification;
+- `registry-signature-bundles.jsonl` proves that the registry contains exactly
+  the same Sigstore bundle retained in this directory;
 - `slsa-bundles.jsonl` and `slsa-verify.json` bind the digest to the exact
   workflow path, ref, SHA, run, attempt, builder, and source;
 - `toolchain.json` reconciles observed Buildx, BuildKit, Syft, Trivy, Cosign, and
   the deferred Crane promotion pin with the contract;
-- `runtime-smoke.json`, the CycloneDX SBOM, Trivy metadata/report, and
+- `runtime-container-inspect.json` and `runtime-smoke.json` bind the recorded
+  non-root, read-only, tmpfs, capability, and resource profile to Docker's
+  effective container configuration;
+- the CycloneDX SBOM, Trivy metadata/report, and
   `promotion-evidence.json` bind runtime fitness, vulnerability state, and the
-  digest-preserving trusted-tag transition to the same release.
+  digest-preserving trusted-tag transition to the same release;
+- `candidate-release-evidence.json` retains the exact pre-promotion record so
+  the candidate-to-final transition remains independently reproducible after
+  the short-lived candidate Actions artifact expires.
 
 These files must be replaced together after a new publication run. They approve
 the repository-controlled build artifact only. Runtime manifests remain blocked

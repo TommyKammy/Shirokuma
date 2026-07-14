@@ -36,16 +36,28 @@ The build inputs are digest-pinned in the source record. Go 1.25.12 is used
 because the upstream minimum Go 1.25.8 toolchain contains known, fixed
 High-severity standard-library vulnerabilities; the adopted SeaweedFS source
 tree itself remains unchanged.
+Release evidence hashes the complete source record and repeats its exact
+Containerfile digest and closed build-input map. The validator requires every
+pinned input to be present in the Containerfile, so a changed frontend, builder,
+or certificate image cannot inherit evidence from an earlier build.
 
 `bootstrap/seaweedfs/v4.39/trusted-build-contract.json` is the closed-world
 contract for this artifact. It pins the complete Containerfile hash, Buildx
-`v0.35.0` binary checksum, BuildKit `v0.31.1` image index and linux/arm64
-manifest digests, Syft `v1.46.0`, Trivy `v0.72.0`, Cosign `v3.0.6`, and Crane
-`v0.21.7` archive checksum. `scripts/verify_trusted_image.py` validates the same
+and workflow-file hashes, Buildx `v0.35.0` binary checksum, BuildKit `v0.31.1` image index and linux/arm64
+manifest digests, Syft `v1.46.0`, Trivy `v0.72.0`, Cosign `v3.1.1`, and Crane
+`v0.21.7` archive checksum. This Cosign signing path
+writes the same Sigstore bundle to the requested evidence file and OCI
+referrer. `scripts/verify_trusted_image.py` validates the same
 contract before the build, before promotion, in repository CI, and against the
 durable evidence. Mutation fixtures cover missing tools, mutable action refs,
-Containerfile drift, missing promotion dependency, and premature runtime
-permission.
+Containerfile drift, detached Docker plugin discovery, conflated workflow and
+source SHAs, rerun-unsafe artifact names, missing promotion dependency, and
+premature runtime permission.
+The contract's closed-world rule applies to tools downloaded or selected by the
+workflow. Docker, GitHub CLI, and operating-system utilities supplied by the
+GitHub-hosted `ubuntu-24.04-arm` runner remain in the explicit runner trust
+boundary and are recorded where they affect the evidence; they are not claimed
+to be independently pinned binaries.
 
 The builder identity is the GitHub Actions OIDC identity for
 .github/workflows/seaweedfs-arm64.yml in TommyKammy/Shirokuma. The workflow
@@ -63,10 +75,14 @@ The published digest must have all of the following before admission:
 - a keyless Cosign signature and Sigstore bundle containing the certificate,
   signed image manifest, Rekor log identity/index/time, SET, and inclusion proof,
   constrained to the exact workflow name, repository, ref, SHA, trigger, and
-  GitHub token issuer, plus an independently retained Rekor API entry;
+  GitHub token issuer, plus an independently retained Rekor API entry and a
+  registry-downloaded bundle that exactly matches the durable bundle. This
+  decision pins the public Rekor v1 API until a separately reviewed v2 evidence
+  migration is complete;
 - GitHub artifact-attestation SLSA provenance whose subject is the exact OCI
   digest and whose certificate, build config, builder, source ref, workflow
-  path, run, and attempt all identify the same workflow invocation;
+  path, run, and attempt all identify the same workflow invocation, with the
+  workflow signer SHA kept distinct from the source repository SHA;
 - a CycloneDX image SBOM and Trivy JSON scan generated for that digest;
 - Critical findings equal to zero and High findings equal to zero, unless each
   High is separately admitted under the exact, expiring ADR-0019 contract.
@@ -74,6 +90,7 @@ The published digest must have all of the following before admission:
 The SBOM and Trivy report are attached to the digest as keyless OCI
 attestations. Complete Cosign bundle and verification, Rekor response, raw image
 manifest, SLSA bundles and verification, observed toolchain, runtime-smoke,
+raw runtime container inspect, the exact pre-promotion release snapshot,
 promotion, SBOM, scanner metadata, and scan files are committed under
 `bootstrap/seaweedfs/v4.39/evidence/` and remain the durable source of truth for
 the admission lifetime. The workflow also mirrors those files as a GitHub

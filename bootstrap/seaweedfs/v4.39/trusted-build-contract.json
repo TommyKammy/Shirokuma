@@ -3,6 +3,12 @@
   "component": "seaweedfs",
   "version": "4.39",
   "platform": "linux/arm64",
+  "image": {
+    "repository": "ghcr.io/tommykammy/shirokuma-seaweedfs",
+    "trusted_tag": "4.39-arm64",
+    "quarantine_tag_template": "quarantine-{run_id}-{run_attempt}",
+    "registry_visibility_attempts": 6
+  },
   "source": {
     "evidence": "bootstrap/seaweedfs/v4.39/source.json",
     "containerfile": {
@@ -14,8 +20,81 @@
   "workflow": {
     "repository": "TommyKammy/Shirokuma",
     "path": ".github/workflows/seaweedfs-arm64.yml",
+    "sha256": "04b5f7ad034853cab335a69de682756dffc565b1a8872acab0a45b7e42aa4157",
     "runner": "ubuntu-24.04-arm",
+    "runner_trust_boundary": {
+      "provider": "github-hosted",
+      "unpinned_components": [
+        "ubuntu-base-utilities",
+        "docker-engine-and-cli",
+        "github-cli"
+      ],
+      "recorded_evidence": [
+        "runner-label-os-arch",
+        "docker-client-version",
+        "docker-server-version",
+        "github-cli-version",
+        "git-version",
+        "python3-version",
+        "curl-version",
+        "tar-version",
+        "sha256sum-version"
+      ]
+    },
     "issuer": "https://token.actions.githubusercontent.com",
+    "workflow_sha_environment": "GITHUB_WORKFLOW_SHA",
+    "source_sha_environment": "GITHUB_SHA",
+    "allowed_refs": [
+      "refs/heads/codex/issue-41",
+      "refs/heads/main"
+    ],
+    "allowed_steps": [
+      "Check out Shirokuma policy",
+      "Check out the adopted SeaweedFS source",
+      "Validate the closed-world trusted build contract",
+      "Fail closed unless immutable source evidence matches",
+      "Install and verify pinned Buildx and BuildKit without credentials",
+      "Log in to GHCR for the quarantine push",
+      "Build and publish only linux/arm64",
+      "Verify the published platform",
+      "Smoke-test non-root weed mini on the exact digest",
+      "Generate CycloneDX SBOM for the exact digest",
+      "Scan the exact digest and block High or Critical findings",
+      "Record Trivy scanner and vulnerability DB freshness",
+      "Install pinned Cosign after the vulnerability gate passes",
+      "Record pinned release tools and runner substrate",
+      "Keyless-sign the scanned immutable image and retain the verification bundle",
+      "Publish SLSA provenance for the scanned exact digest",
+      "Verify SLSA provenance from this exact workflow",
+      "Keyless-attest the retained SBOM and scan",
+      "Record the closed-world release evidence",
+      "Verify candidate evidence with the shared contract",
+      "Retain candidate evidence before trusted-tag promotion",
+      "Remove the ephemeral Buildx builder",
+      "Check out the reviewed promotion contract",
+      "Download retained candidate evidence",
+      "Revalidate candidate evidence before promotion credentials exist",
+      "Install and verify pinned Crane without credentials",
+      "Log in to GHCR for trusted-tag promotion",
+      "Promote the fully verified digest to the trusted tag",
+      "Verify final evidence after credentials are removed",
+      "Retain final promotion evidence"
+    ],
+    "allowed_actions": [
+      "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10",
+      "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10",
+      "docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9",
+      "docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8",
+      "anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610",
+      "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25",
+      "sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6",
+      "actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a",
+      "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+      "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10",
+      "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+      "docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9",
+      "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+    ],
     "gate_order": [
       "Validate the closed-world trusted build contract",
       "Install and verify pinned Buildx and BuildKit without credentials",
@@ -38,11 +117,17 @@
       "Retain final promotion evidence"
     ]
   },
+  "transparency_log": {
+    "base_url": "https://rekor.sigstore.dev",
+    "major_api_version": 1,
+    "entry_lookup_path": "/api/v1/log/entries?logIndex={log_index}"
+  },
   "toolchain": {
     "buildx": {
       "version": "v0.35.0",
       "linux_arm64_url": "https://github.com/docker/buildx/releases/download/v0.35.0/buildx-v0.35.0.linux-arm64",
-      "linux_arm64_sha256": "c4248d6cbc4a619a7e0b4609c11e509ad4ac0b475e1c64817c0ac20c5d90c766"
+      "linux_arm64_sha256": "c4248d6cbc4a619a7e0b4609c11e509ad4ac0b475e1c64817c0ac20c5d90c766",
+      "execution": "dedicated_docker_config_plugin"
     },
     "buildkit": {
       "version": "v0.31.1",
@@ -56,7 +141,7 @@
       "version": "v0.72.0"
     },
     "cosign": {
-      "version": "v3.0.6"
+      "version": "v3.1.1"
     },
     "crane": {
       "version": "v0.21.7",
@@ -71,8 +156,10 @@
       "cosign-verify.json",
       "image-manifest.json",
       "rekor-entry.json",
+      "runtime-container-inspect.json",
       "runtime-smoke.json",
       "seaweedfs-4.39-arm64.cdx.json",
+      "registry-signature-bundles.jsonl",
       "slsa-bundles.jsonl",
       "slsa-verify.json",
       "toolchain.json",
@@ -80,9 +167,12 @@
       "trivy.json"
     ],
     "promotion_required": [
+      "candidate-release-evidence.json",
       "promotion-evidence.json"
     ],
-    "actions_artifact_role": "retained mirror only"
+    "actions_artifact_role": "retained mirror only",
+    "candidate_retention_days": 7,
+    "final_retention_days": 90
   },
   "admission": {
     "artifact": "approved",
