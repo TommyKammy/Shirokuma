@@ -21,9 +21,9 @@ class KyvernoBootstrapContractTests(unittest.TestCase):
         self.assertEqual(admission["profile"], "local-lab")
         self.assertEqual(admission["status"], "blocked")
         self.assertEqual(admission["components"], [])
-        self.assertEqual(
-            set(admission["candidate_components"]),
-            {
+        self.assertCountEqual(
+            admission["candidate_components"],
+            [
                 "admission-controller",
                 "background-controller",
                 "cleanup-controller",
@@ -31,7 +31,7 @@ class KyvernoBootstrapContractTests(unittest.TestCase):
                 "kyverno-cli",
                 "kyvernopre",
                 "readiness-checker-cleanup-hook",
-            },
+            ],
         )
 
         images = {image["component"]: image for image in inventory["images"]}
