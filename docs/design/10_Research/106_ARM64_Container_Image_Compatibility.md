@@ -156,6 +156,14 @@ a trusted signed artifact or a separately approved source-build and signing
 path supplies those prerequisites. No deployment manifest or resident-ledger
 entry may be added before that boundary is satisfied.
 
+The machine-readable decision is retained at
+`bootstrap/seaweedfs/v4.39/admission.json`. The repository-owned
+`verify-object-storage-profile` check validates that exact immutable candidate,
+the three missing trust controls, and the absence of object-storage runtime
+manifests. This keeps the checkpoint green while failing closed; it does not
+reinterpret an intentionally missing workload as a CI defect or admission
+approval.
+
 ## GitOps candidate evidence
 
 ### WP-L0-GITOPS-001 Flux candidate scan

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 
@@ -8,34 +9,47 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ObjectStorageProfileContractTests(unittest.TestCase):
-    def test_flux_owns_seaweedfs_with_dependency_prune_and_readiness(self) -> None:
-        workload_path = ROOT / "deploy/gitops/object-storage/kustomization.yaml"
-        reconciliation_path = (
-            ROOT / "deploy/gitops/clusters/local-lite/object-storage.yaml"
+    def test_blocked_candidate_is_recorded_without_runtime_manifests(self) -> None:
+        admission_path = ROOT / "bootstrap/seaweedfs/v4.39/admission.json"
+        self.assertTrue(admission_path.is_file())
+        admission = json.loads(admission_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(admission["schema_version"], 1)
+        self.assertEqual(admission["component"], "seaweedfs")
+        self.assertEqual(admission["version"], "4.39")
+        self.assertEqual(admission["platform"], "linux/arm64")
+        self.assertEqual(admission["assessment"]["admission"], "blocked")
+        self.assertIs(admission["assessment"]["exception_eligible"], False)
+        self.assertIs(admission["runtime_manifests"]["permitted"], False)
+
+        index_reference = admission["candidate"]["index_reference"]
+        self.assertRegex(index_reference, r"@sha256:[0-9a-f]{64}$")
+        self.assertRegex(
+            admission["candidate"]["manifest_digest"],
+            r"^sha256:[0-9a-f]{64}$",
         )
 
-        self.assertTrue(workload_path.is_file(), f"missing {workload_path.relative_to(ROOT)}")
-        self.assertTrue(
-            reconciliation_path.is_file(),
-            f"missing {reconciliation_path.relative_to(ROOT)}",
+        blockers = admission["assessment"]["blockers"]
+        self.assertEqual(
+            {blocker["control"] for blocker in blockers},
+            {"signature", "source_revision_signature", "slsa_provenance"},
         )
+        for blocker in blockers:
+            with self.subTest(control=blocker["control"]):
+                self.assertEqual(blocker["status"], "missing")
+                self.assertTrue(blocker["evidence"].strip())
 
-        reconciliation = reconciliation_path.read_text(encoding="utf-8")
-        for required in (
-            "kind: Kustomization",
-            "name: shirokuma-object-storage",
-            "path: ./deploy/gitops/object-storage",
-            "prune: true",
-            "dependsOn:",
-            "name: shirokuma-dev",
-            "wait: true",
-            "healthChecks:",
-            "kind: StatefulSet",
-            "name: seaweedfs",
-            "namespace: shirokuma-storage",
-        ):
-            with self.subTest(required=required):
-                self.assertIn(required, reconciliation)
+        for relative_path in admission["runtime_manifests"]["paths"]:
+            path = ROOT / relative_path
+            with self.subTest(runtime_manifest=relative_path):
+                self.assertFalse(path.exists(), f"blocked candidate emitted {relative_path}")
+
+        self.assertEqual(
+            admission["next_action"]["mode"],
+            "approved-source-build-or-signed-upstream-release",
+        )
+        self.assertIs(admission["next_action"]["decision_record_required"], True)
+        self.assertGreaterEqual(len(admission["next_action"]["requirements"]), 4)
 
 
 if __name__ == "__main__":
