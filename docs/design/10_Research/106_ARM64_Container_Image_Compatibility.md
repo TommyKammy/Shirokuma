@@ -151,20 +151,23 @@ not:
   that can anchor a replacement linux/arm64 image build.
 
 ADR-0019 cannot waive missing signature, transparency-log, or SLSA provenance
-evidence. WP-L1-LAKE-001 therefore remains fail-closed until SeaweedFS publishes
-a trusted signed artifact or a separately approved source-build and signing
-path supplies those prerequisites. No deployment manifest or resident-ledger
-entry may be added before that boundary is satisfied.
+evidence, so the upstream SeaweedFS image remains rejected. ADR-0020 instead
+approves the exact source revision for a repository-controlled build. GitHub
+Actions run `29340121931` produced native `linux/arm64` artifact
+`ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:8e391aaabcb0c5a527ecf686bad15e86ad29969d6889340caa4e4d4890c71237`.
+The workflow identity passed keyless Cosign and transparency-log verification,
+SLSA provenance is retained as attestation `35271697`, the CycloneDX SBOM is
+bound to the same digest, and Trivy reported Critical=0 and High=0. No ADR-0019
+vulnerability exception is used.
 
 The machine-readable decision is retained at
-`bootstrap/seaweedfs/v4.39/admission.json`. The repository-owned
-`verify-object-storage-profile` check pins that exact immutable candidate,
-validates the three missing trust controls, scans the complete GitOps tree for
-SeaweedFS or object-storage resources, and rejects SeaweedFS resident-ledger
-entries while admission remains blocked. This keeps the checkpoint green while
-failing closed; it does not
-reinterpret an intentionally missing workload as a CI defect or admission
-approval.
+`bootstrap/seaweedfs/v4.39/admission.json`; the exact run evidence is retained at
+`bootstrap/seaweedfs/v4.39/release-evidence.json`. The repository-owned
+`verify-object-storage-profile` check preserves the upstream rejection, pins
+the admitted Shirokuma digest and workflow identity, and verifies that the
+source-build child did not add GitOps resources or a resident-ledger entry.
+Parent Issue #26 may add those runtime records only after this source-build PR
+is merged and the recorded evidence remains independently verifiable.
 
 ## GitOps candidate evidence
 

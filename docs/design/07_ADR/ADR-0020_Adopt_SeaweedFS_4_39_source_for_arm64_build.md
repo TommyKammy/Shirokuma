@@ -105,6 +105,28 @@ or scan verification fails:
 Earlier evidence explaining why the upstream candidate was rejected remains
 part of the durable decision history.
 
+## Publication evidence
+
+GitHub Actions run
+[`29340121931`](https://github.com/TommyKammy/Shirokuma/actions/runs/29340121931)
+published and verified this admitted linux/arm64 artifact:
+
+    ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:8e391aaabcb0c5a527ecf686bad15e86ad29969d6889340caa4e4d4890c71237
+
+The run verified the GitHub Actions OIDC workflow identity with keyless Cosign
+and transparency-log evidence. GitHub retained SLSA provenance at
+[`attestation 35271697`](https://github.com/TommyKammy/Shirokuma/attestations/35271697).
+The exact-digest CycloneDX SBOM contains 248 components. Trivy reported zero
+Critical and zero High vulnerabilities, so ADR-0019 is not used for this
+admission. `bootstrap/seaweedfs/v4.39/release-evidence.json` records the source,
+builder, identity, digest, evidence hashes, provenance URL, and Actions artifact
+identifier.
+
+The original upstream image remains rejected. This decision admits only the
+Shirokuma-built digest above, and parent Issue #26 still owns the resident-ledger
+entry, Flux resources, functional smoke, disk impact, backup/export, and
+teardown evidence.
+
 ## Verification
 
 Use the exact digest and workflow identity recorded by the publication run:
@@ -132,3 +154,4 @@ after the publication run completes.
 - docs/design/10_Research/106_ARM64_Container_Image_Compatibility.md
 - bootstrap/seaweedfs/v4.39/admission.json
 - bootstrap/seaweedfs/v4.39/source.json
+- bootstrap/seaweedfs/v4.39/release-evidence.json

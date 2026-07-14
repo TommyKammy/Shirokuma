@@ -1,53 +1,102 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "component": "seaweedfs",
   "version": "4.39",
   "source": "https://github.com/seaweedfs/seaweedfs",
   "release_commit": "db42bb49757b459551607939807017d7a9d5a94a",
   "platform": "linux/arm64",
-  "candidate": {
+  "upstream_candidate": {
     "index_reference": "chrislusf/seaweedfs@sha256:c7d6c721b30ae711db766bbbfd40192776e263d4e51e22f57baef7bef93c12c6",
     "manifest_digest": "sha256:22fe8c99253508a3d4bf2fb3c66130d9c3e238506b42c41aa3aee3bfbe3a6906"
   },
-  "assessment": {
-    "assessed_on": "2026-07-14",
-    "scope": "mac-studio-solo/local-lab",
+  "upstream_assessment": {
     "admission": "blocked",
-    "exception_eligible": false,
     "blockers": [
       {
         "control": "signature",
         "status": "missing",
-        "evidence": "cosign verify against the immutable index returned no signatures found"
+        "evidence": "cosign verify against the immutable upstream index returned no signatures found"
       },
       {
         "control": "source_revision_signature",
         "status": "missing",
-        "evidence": "release tag 4.39 resolves to an unsigned source commit"
+        "evidence": "release tag 4.39 resolves to an unsigned upstream source commit"
       },
       {
         "control": "slsa_provenance",
         "status": "missing",
         "evidence": "the upstream container release workflow disables provenance and has no attestation step"
       }
-    ],
-    "rationale": "ADR-0019 permits exact High vulnerability exceptions only; it does not waive signature, transparency-log, or provenance requirements."
+    ]
+  },
+  "admitted_candidate": {
+    "reference": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:8e391aaabcb0c5a527ecf686bad15e86ad29969d6889340caa4e4d4890c71237",
+    "manifest_digest": "sha256:8e391aaabcb0c5a527ecf686bad15e86ad29969d6889340caa4e4d4890c71237",
+    "source_evidence": "bootstrap/seaweedfs/v4.39/source.json",
+    "release_evidence": "bootstrap/seaweedfs/v4.39/release-evidence.json",
+    "builder": {
+      "issuer": "https://token.actions.githubusercontent.com",
+      "identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/seaweedfs-arm64.yml@refs/heads/codex/issue-41",
+      "run": "https://github.com/TommyKammy/Shirokuma/actions/runs/29340121931"
+    },
+    "controls": [
+      {
+        "control": "source_adoption",
+        "status": "verified",
+        "evidence": "ADR-0020 accepts the exact upstream commit, tree, and git archive checksum for the bounded local lab"
+      },
+      {
+        "control": "signature",
+        "status": "verified",
+        "evidence": "keyless Cosign signature verified with the recorded GitHub Actions issuer and workflow identity"
+      },
+      {
+        "control": "transparency_log",
+        "status": "verified",
+        "evidence": "Cosign verification returned transparency-log-backed entries in cosign-verify.json"
+      },
+      {
+        "control": "slsa_provenance",
+        "status": "verified",
+        "evidence": "https://github.com/TommyKammy/Shirokuma/attestations/35271697"
+      },
+      {
+        "control": "sbom",
+        "status": "verified",
+        "sha256": "db4eca45877413a869bf1523c41c5a8727c929725b96089474f9cf107e06ac1e"
+      },
+      {
+        "control": "vulnerability_scan",
+        "status": "verified",
+        "critical": 0,
+        "high": 0,
+        "sha256": "5ead7ad0527d1e8d447afdd01e1abce8a11120555ea4c4ee29f5239b86695c15"
+      }
+    ]
+  },
+  "assessment": {
+    "assessed_on": "2026-07-14",
+    "scope": "mac-studio-solo/local-lab",
+    "admission": "approved",
+    "exception_eligible": false,
+    "blockers": [],
+    "rationale": "The Shirokuma-controlled source build satisfies source adoption, signature, transparency-log, SLSA provenance, SBOM, and Critical=0/High=0 controls without an ADR-0019 vulnerability exception. The upstream image remains blocked."
   },
   "runtime_manifests": {
-    "permitted": false,
+    "permitted": true,
     "paths": [
       "deploy/gitops/object-storage/kustomization.yaml",
       "deploy/gitops/clusters/local-lite/object-storage.yaml"
     ]
   },
   "next_action": {
-    "mode": "approved-source-build-or-signed-upstream-release",
-    "decision_record_required": true,
+    "mode": "implement-object-storage-profile",
+    "decision_record_required": false,
     "requirements": [
-      "immutable linux/arm64 digest",
-      "Cosign signature with transparency-log evidence",
-      "SLSA provenance bound to the source revision",
-      "retained SBOM and vulnerability scan"
+      "add only the admitted digest to the resident image ledger",
+      "retain the release evidence and verification identity",
+      "add Flux-managed runtime resources in parent Issue #26",
+      "preserve backup, disk-impact, readiness, and teardown controls"
     ]
   }
 }
