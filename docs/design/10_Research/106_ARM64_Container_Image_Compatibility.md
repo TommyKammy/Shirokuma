@@ -5,7 +5,7 @@ title: "ARM64 Container Image Compatibility"
 status: draft
 created: 2026-07-05
 updated: 2026-07-14
-version: "0.6"
+version: "0.7"
 area: "research"
 tags: [shirokuma, arm64, apple-silicon]
 ---
@@ -130,6 +130,31 @@ their later Work Packages.
 | Dagster | official image | Verify selected tag before L1 | L1 | https://github.com/dagster-io/dagster |
 | dbt Core | Python/Rust binary/container | Native execution on macOS/arm64 or container; verify exact runner | L1 | https://github.com/dbt-labs/dbt-core |
 | OpenHands | container | Verify image arch; can run locally with selected backend | L0/L2 | https://github.com/All-Hands-AI/OpenHands |
+
+### WP-L1-LAKE-001 SeaweedFS admission recheck
+
+SeaweedFS `4.39` was rechecked on 2026-07-14 after the L0 entry gate closed.
+The registry index remains immutable at
+`chrislusf/seaweedfs@sha256:c7d6c721b30ae711db766bbbfd40192776e263d4e51e22f57baef7bef93c12c6`,
+and its linux/arm64 child manifest is
+`sha256:22fe8c99253508a3d4bf2fb3c66130d9c3e238506b42c41aa3aee3bfbe3a6906`.
+Platform and digest checks therefore pass, but authenticity and provenance do
+not:
+
+- `cosign verify` against the immutable index returns `no signatures found`.
+- Tag `4.39` is a lightweight tag at commit
+  `db42bb49757b459551607939807017d7a9d5a94a`; GitHub reports that commit as
+  unsigned.
+- The tag's `container_release_unified.yml` explicitly sets
+  `provenance: false` and contains no Cosign signing or attestation step.
+- The binary release workflows contain no retained provenance or signing step
+  that can anchor a replacement linux/arm64 image build.
+
+ADR-0019 cannot waive missing signature, transparency-log, or SLSA provenance
+evidence. WP-L1-LAKE-001 therefore remains fail-closed until SeaweedFS publishes
+a trusted signed artifact or a separately approved source-build and signing
+path supplies those prerequisites. No deployment manifest or resident-ledger
+entry may be added before that boundary is satisfied.
 
 ## GitOps candidate evidence
 
