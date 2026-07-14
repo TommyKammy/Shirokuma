@@ -201,6 +201,8 @@ jobs:
           exit-code: 1
 
       - name: Record Trivy scanner and vulnerability DB freshness
+        env:
+          TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
         shell: bash
         run: |
           set -euo pipefail

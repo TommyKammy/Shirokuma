@@ -73,6 +73,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             "githubWorkflowSHA",
             "cyclonedx-json",
             "trivy version --format json",
+            "TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy",
             "VulnerabilityDB",
             "severity: HIGH,CRITICAL",
             "name: seaweedfs-4.39-arm64-${{ github.run_id }}",
