@@ -10,3 +10,13 @@ paths = [
   '''^security/evidence/flux-v2\.9\.2/source-controller-v1\.9\.3-arm64\.cdx\.json$''',
   '''^security/evidence/flux-v2\.9\.2/source-controller-v1\.9\.3-arm64\.trivy\.json$''',
 ]
+
+[[allowlists]]
+description = "Public SHA-1 package hashes in retained SeaweedFS 4.39 CycloneDX evidence"
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^[0-9a-f]{40}$''']
+paths = [
+  '''^bootstrap/seaweedfs/v4\.39/evidence/seaweedfs-4\.39-arm64\.cdx\.json$''',
+  '''^bootstrap/seaweedfs/v4\.39/evidence/trivy\.json$''',
+]

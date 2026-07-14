@@ -37,6 +37,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         release_path = ROOT / "bootstrap/seaweedfs/v4.39/release-evidence.json"
         admission_path = ROOT / "bootstrap/seaweedfs/v4.39/admission.json"
         workflow_path = ROOT / ".github/workflows/seaweedfs-arm64.yml"
+        gitleaks_path = ROOT / ".gitleaks.toml"
         containerfile_path = ROOT / "bootstrap/seaweedfs/v4.39/Containerfile"
         durable_evidence_dir = ROOT / "bootstrap/seaweedfs/v4.39/evidence"
         decision_path = (
@@ -49,6 +50,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             release_path,
             admission_path,
             workflow_path,
+            gitleaks_path,
             containerfile_path,
             decision_path,
             durable_evidence_dir / "cosign-verify.json",
@@ -184,6 +186,21 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertIn('"runtime-smoke.json"', generated_evidence)
         self.assertIn('"runtime-smoke.log"', generated_evidence)
         self.assertIn('"promotion_tool": {', workflow)
+
+        gitleaks = gitleaks_path.read_text(encoding="utf-8")
+        self.assertIn(
+            "Public SHA-1 package hashes in retained SeaweedFS 4.39 CycloneDX evidence",
+            gitleaks,
+        )
+        self.assertIn(
+            r"^bootstrap/seaweedfs/v4\.39/evidence/seaweedfs-4\.39-arm64\.cdx\.json$",
+            gitleaks,
+        )
+        self.assertIn(
+            r"^bootstrap/seaweedfs/v4\.39/evidence/trivy\.json$",
+            gitleaks,
+        )
+        self.assertNotIn(r"^bootstrap/seaweedfs/v4\.39/evidence/.*", gitleaks)
 
         decision = decision_path.read_text(encoding="utf-8")
         self.assertIn("status: accepted", decision)
