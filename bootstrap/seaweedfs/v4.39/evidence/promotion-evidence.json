@@ -5,8 +5,8 @@
   "trusted_tag": "ghcr.io/tommykammy/shirokuma-seaweedfs:4.39-arm64",
   "trusted_tag_role": "non_authoritative_pointer",
   "trusted_tag_digest": "sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299",
-  "promoted_at": "2026-07-14T23:07:23.080481Z",
-  "run_id": "29375069400",
+  "promoted_at": "2026-07-14T23:31:09.854571Z",
+  "run_id": "29376271915",
   "run_attempt": "1",
   "tool": {
     "name": "crane",
@@ -15,9 +15,9 @@
     "verified_before_registry_login": true
   },
   "candidate": {
-    "artifact_name": "seaweedfs-4.39-arm64-candidate-29375069400-1",
+    "artifact_name": "seaweedfs-4.39-arm64-candidate-29376271915-1",
     "snapshot_file": "candidate-release-evidence.json",
-    "release_evidence_sha256": "f768ba4108bb088ff83cedb0db691f2d0ee59f38c1f0cef8ad15875b2439bc58",
-    "contract_sha256": "bca80e5e107a7f64c9e1d7fbe0eb5f0e240310e441e521ab689129f0803fc53b"
+    "release_evidence_sha256": "81296446984f875019d549cf3f38d8c04e37ce570b974c244d927b1c2b109e89",
+    "contract_sha256": "b9bcd8f8b1643e4490a65016ba9aea2160a26248ea25235ee08c3cf321c365a0"
   }
 }

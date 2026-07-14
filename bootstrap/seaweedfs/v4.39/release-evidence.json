@@ -7,7 +7,7 @@
   "digest": "sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299",
   "contract": {
     "path": "bootstrap/seaweedfs/v4.39/trusted-build-contract.json",
-    "sha256": "bca80e5e107a7f64c9e1d7fbe0eb5f0e240310e441e521ab689129f0803fc53b"
+    "sha256": "b9bcd8f8b1643e4490a65016ba9aea2160a26248ea25235ee08c3cf321c365a0"
   },
   "source": {
     "repository": "https://github.com/seaweedfs/seaweedfs",
@@ -28,15 +28,15 @@
     "workflow_name": "SeaweedFS 4.39 trusted arm64 build",
     "workflow": ".github/workflows/seaweedfs-arm64.yml",
     "ref": "refs/heads/codex/issue-41",
-    "workflow_sha": "20750d0e989118e1cdad8690290545e86f7219db",
-    "source_sha": "20750d0e989118e1cdad8690290545e86f7219db",
+    "workflow_sha": "d0977813fde644a2eead942444c1cb8c626ab3b6",
+    "source_sha": "d0977813fde644a2eead942444c1cb8c626ab3b6",
     "trigger": "push",
-    "run_id": "29375069400",
+    "run_id": "29376271915",
     "run_attempt": "1"
   },
   "issuer": "https://token.actions.githubusercontent.com",
   "identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/seaweedfs-arm64.yml@refs/heads/codex/issue-41",
-  "slsa_provenance": "https://github.com/TommyKammy/Shirokuma/attestations/35355272",
+  "slsa_provenance": "https://github.com/TommyKammy/Shirokuma/attestations/35357720",
   "admission_status": "approved",
   "vulnerabilities": {
     "critical": 0,
@@ -48,7 +48,7 @@
     "vulnerability_db": {
       "version": 2,
       "updated_at": "2026-07-14T19:03:26.337699315Z",
-      "downloaded_at": "2026-07-14T23:06:31.124144935Z"
+      "downloaded_at": "2026-07-14T23:30:08.329365967Z"
     }
   },
   "toolchain": {
@@ -82,9 +82,9 @@
     "rekor_response": "rekor-entry.json",
     "entries": [
       {
-        "uuid": "108e9186e8c5677a736173514dd63129994ba1714d9555b21e1d7ba5efa8589e58e3fc68147466e8",
-        "log_index": "2170891607",
-        "integrated_time": "1784070401",
+        "uuid": "108e9186e8c5677a155842fdd632d9f3c18c63e82846fa3ed90e0d95b051dbdfc020861fa05b5046",
+        "log_index": "2170914755",
+        "integrated_time": "1784071814",
         "log_id": "wNI9atQGlz+VWfO6LRygH4QUfY/8W4RFwiT5i5WRgB0=",
         "log_id_hex": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d"
       }
@@ -92,24 +92,24 @@
   },
   "promotion": {
     "status": "verified",
-    "run_id": "29375069400",
+    "run_id": "29376271915",
     "run_attempt": "1",
     "trusted_tag": "4.39-arm64",
     "trusted_tag_role": "non_authoritative_pointer",
     "trusted_tag_digest": "sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299",
     "evidence": "promotion-evidence.json",
-    "candidate_artifact": "seaweedfs-4.39-arm64-candidate-29375069400-1",
+    "candidate_artifact": "seaweedfs-4.39-arm64-candidate-29376271915-1",
     "candidate_release_evidence": "candidate-release-evidence.json",
-    "candidate_release_sha256": "f768ba4108bb088ff83cedb0db691f2d0ee59f38c1f0cef8ad15875b2439bc58"
+    "candidate_release_sha256": "81296446984f875019d549cf3f38d8c04e37ce570b974c244d927b1c2b109e89"
   },
   "artifacts": {
     "cosign-signature-bundle.json": {
       "path": "bootstrap/seaweedfs/v4.39/evidence/cosign-signature-bundle.json",
-      "sha256": "45fc1a2536eb652fd400d5f0c8e4f8fa0d99f5efc5ddf70e439e06471b40f098"
+      "sha256": "68cc85a0c3b7986fa18dd9c6c02614fe88bca560092581462c99917f54e259ff"
     },
     "cosign-verify.json": {
       "path": "bootstrap/seaweedfs/v4.39/evidence/cosign-verify.json",
-      "sha256": "8c52acfb8f0184eeb8d87204622a407426665253e094914f05d221879922687f"
+      "sha256": "a362a36c44b512fdbfa75d31ccac19adb94ff35521e566d08ff222fcfe206881"
     },
     "image-manifest.json": {
       "path": "bootstrap/seaweedfs/v4.39/evidence/image-manifest.json",
@@ -117,31 +117,31 @@
     },
     "rekor-entry.json": {
       "path": "bootstrap/seaweedfs/v4.39/evidence/rekor-entry.json",
-      "sha256": "8c39cb5beea75c69f111c20b01e687fc7faa56f3382f8d85524e12e0b52106e3"
+      "sha256": "735e31f299b41db5af5d565661bb0139d589d58c1a1b47e76797eab26f2b5190"
     },
     "runtime-container-inspect.json": {
       "path": "bootstrap/seaweedfs/v4.39/evidence/runtime-container-inspect.json",
-      "sha256": "f423b629ac9b8ec066073e446718262f7f4703ba38e584e61dc5c90debdf7a1a"
+      "sha256": "c7f41727df999e1d20d8792b9abc2dd54573c5018a20dc5fe806d46c26ba5833"
     },
     "runtime-smoke.json": {
       "path": "bootstrap/seaweedfs/v4.39/evidence/runtime-smoke.json",
-      "sha256": "b9e21508eea495efc1f31ad42488897e1204ce471688e5899948104dd974a7d2"
+      "sha256": "9c6f2b9689c164d04e04c9eeaea27ae3c20b5c681f00a5e3888b6a3e1777e05f"
     },
     "seaweedfs-4.39-arm64.cdx.json": {
       "path": "bootstrap/seaweedfs/v4.39/evidence/seaweedfs-4.39-arm64.cdx.json",
-      "sha256": "5726ad70bc137949695fdb1cd5b72f0d73f9912db11c75fdec863d29ba2c40e0"
+      "sha256": "377231040a64881960aa805906cb0983ee115b046d45cf8a111405c463e09da2"
     },
     "registry-signature-bundles.jsonl": {
       "path": "bootstrap/seaweedfs/v4.39/evidence/registry-signature-bundles.jsonl",
-      "sha256": "7410a7d2ba5b635ace1adf19063d461be5d2b0e1d915e010a5f866e91168cbb1"
+      "sha256": "1440a4b61700a02a81bb477e6280a06124597c0e8b8475276939a33305e0f9fe"
     },
     "slsa-bundles.jsonl": {
       "path": "bootstrap/seaweedfs/v4.39/evidence/slsa-bundles.jsonl",
-      "sha256": "8538f87256d81959d717ef92d9441397c2b0974e5e775d815cbcde624c016dfd"
+      "sha256": "80238f16f3685d32dd9ffa3eb3f8d9e01a90ba7f1bbf6fc231d542455627122f"
     },
     "slsa-verify.json": {
       "path": "bootstrap/seaweedfs/v4.39/evidence/slsa-verify.json",
-      "sha256": "628e15fbe60c61f29135df045647e7562ac9c34eee86b2eccd49cb233711c2ee"
+      "sha256": "1c8935d3df7b65792725560f4b78b71531be40467fb53daf2a0b6ac47fb96f45"
     },
     "toolchain.json": {
       "path": "bootstrap/seaweedfs/v4.39/evidence/toolchain.json",
@@ -149,24 +149,24 @@
     },
     "trivy-version.json": {
       "path": "bootstrap/seaweedfs/v4.39/evidence/trivy-version.json",
-      "sha256": "ba96d284a1e212f66498973ff66eef20d38264b053ff475301543816abfeee0a"
+      "sha256": "d826fa920904360975b96dc7e90bdf89c86e092ea450ab15bc5954455a84ef9f"
     },
     "trivy.json": {
       "path": "bootstrap/seaweedfs/v4.39/evidence/trivy.json",
-      "sha256": "48db7a3d56f6142220b243fbdb1d7b9db2d68cb1664cf172b7b36cbfc2c0ca58"
+      "sha256": "9e702982eccc2041d9e442e0beeef89e2a08616e262aca72e8956d25766d878a"
     },
     "candidate-release-evidence.json": {
       "path": "bootstrap/seaweedfs/v4.39/evidence/candidate-release-evidence.json",
-      "sha256": "f768ba4108bb088ff83cedb0db691f2d0ee59f38c1f0cef8ad15875b2439bc58"
+      "sha256": "81296446984f875019d549cf3f38d8c04e37ce570b974c244d927b1c2b109e89"
     },
     "promotion-evidence.json": {
       "path": "bootstrap/seaweedfs/v4.39/evidence/promotion-evidence.json",
-      "sha256": "d84e2015bfce6170a9fd59a689a78d25a749ea7dd3135e8ecf8b89a70801008f"
+      "sha256": "f637fdeaade17a9538bb495362b747d11505d33ecd8be92a401fd52cf788a7cf"
     }
   },
   "actions_artifact": {
     "role": "retained mirror only",
-    "final_name": "seaweedfs-4.39-arm64-29375069400-1",
+    "final_name": "seaweedfs-4.39-arm64-29376271915-1",
     "retention_days": 90
   }
 }

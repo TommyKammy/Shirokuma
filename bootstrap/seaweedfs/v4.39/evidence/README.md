@@ -36,6 +36,11 @@ the following trust chain:
 The mutable `4.39-arm64` tag is only a publication pointer. These files and the
 immutable digest, not the tag location, are the admission authority.
 
+`image-manifest.json` and `cosign-signature-bundle.json` preserve the exact
+producer bytes and may not end in a newline. The repository newline check
+exempts only these two byte-exact evidence files; their SHA-256 bindings remain
+mandatory.
+
 These files must be replaced together after a new publication run. They approve
 the repository-controlled build artifact only. Runtime manifests remain blocked
 until parent Issue #26 adds a source-build supply-chain record and proves its

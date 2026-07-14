@@ -7,7 +7,7 @@
     "github_workflow_name": "SeaweedFS 4.39 trusted arm64 build",
     "github_workflow_repository": "TommyKammy/Shirokuma",
     "github_workflow_ref": "refs/heads/codex/issue-41",
-    "github_workflow_sha": "20750d0e989118e1cdad8690290545e86f7219db",
+    "github_workflow_sha": "d0977813fde644a2eead942444c1cb8c626ab3b6",
     "github_workflow_trigger": "push"
   },
   "detached_bundle_verified": true,
@@ -15,12 +15,12 @@
   "registry_bundle": {
     "file": "registry-signature-bundles.jsonl",
     "exact_matches": 1,
-    "bundle_sha256": "45fc1a2536eb652fd400d5f0c8e4f8fa0d99f5efc5ddf70e439e06471b40f098"
+    "bundle_sha256": "68cc85a0c3b7986fa18dd9c6c02614fe88bca560092581462c99917f54e259ff"
   },
   "transparency_log": {
     "base_url": "https://rekor.sigstore.dev",
     "major_api_version": 1,
-    "entry_lookup": "/api/v1/log/entries?logIndex=2170891607"
+    "entry_lookup": "/api/v1/log/entries?logIndex=2170914755"
   },
   "verified_payloads": [
     {
@@ -38,9 +38,9 @@
   ],
   "rekor_entries": [
     {
-      "uuid": "108e9186e8c5677a736173514dd63129994ba1714d9555b21e1d7ba5efa8589e58e3fc68147466e8",
-      "log_index": "2170891607",
-      "integrated_time": "1784070401",
+      "uuid": "108e9186e8c5677a155842fdd632d9f3c18c63e82846fa3ed90e0d95b051dbdfc020861fa05b5046",
+      "log_index": "2170914755",
+      "integrated_time": "1784071814",
       "log_id": "wNI9atQGlz+VWfO6LRygH4QUfY/8W4RFwiT5i5WRgB0=",
       "log_id_hex": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d"
     }

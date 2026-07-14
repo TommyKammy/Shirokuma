@@ -153,17 +153,17 @@ not:
 ADR-0019 cannot waive missing signature, transparency-log, or SLSA provenance
 evidence, so the upstream SeaweedFS image remains rejected. ADR-0020 instead
 approves the exact source revision for a repository-controlled build. GitHub
-Actions hardened replacement run `29375069400`, attempt `1`, produced native
+Actions hardened replacement run `29376271915`, attempt `1`, produced native
 `linux/arm64` artifact
 `ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299`.
 The exact workflow and source SHA
-`20750d0e989118e1cdad8690290545e86f7219db`, workflow name/path/ref, trigger,
+`d0977813fde644a2eead942444c1cb8c626ab3b6`, workflow name/path/ref, trigger,
 runner environment, run ID, and attempt are bound by Cosign and SLSA
 verification. Cosign `v3.1.1` verified both detached and registry-retrieved
 bundles against the retained Rekor v1 entry, and SLSA provenance is retained as
-attestation `35355272`. Trivy `0.72.0` reported Critical=0 and High=0 with DB
+attestation `35357720`. Trivy `0.72.0` reported Critical=0 and High=0 with DB
 update time `2026-07-14T19:03:26.337699315Z` and download time
-`2026-07-14T23:06:31.124144935Z` before signing.
+`2026-07-14T23:30:08.329365967Z` before signing.
 
 The closed-world contract binds source archive, Containerfile, build inputs,
 Buildx checksum, and BuildKit index/arm64 digests. The effective container

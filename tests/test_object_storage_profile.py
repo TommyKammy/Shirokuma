@@ -28,14 +28,14 @@ EXPECTED_TRUSTED_DIGEST = (
 EXPECTED_TRUSTED_REFERENCE = (
     "ghcr.io/tommykammy/shirokuma-seaweedfs@" + EXPECTED_TRUSTED_DIGEST
 )
-EXPECTED_RUN_ID = "29375069400"
+EXPECTED_RUN_ID = "29376271915"
 EXPECTED_RUN_ATTEMPT = "1"
-EXPECTED_WORKFLOW_SHA = "20750d0e989118e1cdad8690290545e86f7219db"
+EXPECTED_WORKFLOW_SHA = "d0977813fde644a2eead942444c1cb8c626ab3b6"
 EXPECTED_ATTESTATION = (
-    "https://github.com/TommyKammy/Shirokuma/attestations/35355272"
+    "https://github.com/TommyKammy/Shirokuma/attestations/35357720"
 )
 EXPECTED_TRIVY_DB_UPDATED_AT = "2026-07-14T19:03:26.337699315Z"
-EXPECTED_TRIVY_DB_DOWNLOADED_AT = "2026-07-14T23:06:31.124144935Z"
+EXPECTED_TRIVY_DB_DOWNLOADED_AT = "2026-07-14T23:30:08.329365967Z"
 BLOCKED_GITOPS_MARKERS = ("seaweedfs", "object-storage", "object_storage")
 
 
@@ -360,6 +360,21 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertIs(cosign["detached_bundle_verified"], True)
         self.assertIs(cosign["registry_signature_verified"], True)
         self.assertEqual(cosign["registry_bundle"]["exact_matches"], 1)
+        signed_bundle = json.loads(
+            (durable_evidence_dir / "cosign-signature-bundle.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        registry_bundles = [
+            json.loads(line)
+            for line in (
+                durable_evidence_dir / "registry-signature-bundles.jsonl"
+            )
+            .read_text(encoding="utf-8")
+            .splitlines()
+            if line.strip()
+        ]
+        self.assertEqual(registry_bundles, [signed_bundle])
         self.assertEqual(len(cosign["verified_payloads"]), 1)
         self.assertEqual(
             cosign["verified_payloads"][0]["critical"]["image"][
@@ -393,7 +408,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         )
         self.assertEqual(
             release["artifacts"]["cosign-verify.json"]["sha256"],
-            "8c52acfb8f0184eeb8d87204622a407426665253e094914f05d221879922687f",
+            "a362a36c44b512fdbfa75d31ccac19adb94ff35521e566d08ff222fcfe206881",
         )
         self.assertEqual(
             release["toolchain"]["crane"],
@@ -549,7 +564,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         )
         self.assertEqual(
             controls["runtime_tmp"]["inspect_sha256"],
-            "f423b629ac9b8ec066073e446718262f7f4703ba38e584e61dc5c90debdf7a1a",
+            "c7f41727df999e1d20d8792b9abc2dd54573c5018a20dc5fe806d46c26ba5833",
         )
         self.assertEqual(
             controls["tag_promotion"]["trusted_tag_role"],

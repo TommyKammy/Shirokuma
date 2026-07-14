@@ -153,7 +153,7 @@ part of the durable decision history.
 ## Publication evidence
 
 GitHub Actions run
-[`29375069400`, attempt 1](https://github.com/TommyKammy/Shirokuma/actions/runs/29375069400/attempts/1)
+[`29376271915`, attempt 1](https://github.com/TommyKammy/Shirokuma/actions/runs/29376271915/attempts/1)
 executed the hardened closed-world build, verification, and promotion contract and
 admitted this linux/arm64 artifact:
 
@@ -161,11 +161,11 @@ admitted this linux/arm64 artifact:
 
 The OIDC identity, workflow name/path/ref, push trigger, workflow SHA, source
 SHA, run ID, and run attempt are all bound to immutable commit
-`20750d0e989118e1cdad8690290545e86f7219db`. Cosign `v3.1.1` verified both the
+`d0977813fde644a2eead942444c1cb8c626ab3b6`. Cosign `v3.1.1` verified both the
 detached bundle and the bundle retrieved from the registry, and the retained
 Rekor v1 response is structurally linked to the bundle entry. GitHub retained
 the exact-invocation SLSA provenance at
-[`attestation 35355272`](https://github.com/TommyKammy/Shirokuma/attestations/35355272);
+[`attestation 35357720`](https://github.com/TommyKammy/Shirokuma/attestations/35357720);
 multiple valid attestations are permitted, but every retained record must match
 the same subject and build identity.
 
@@ -175,7 +175,7 @@ inputs. Runner-provided Docker, GitHub CLI, Git, Python, curl, tar, and
 `sha256sum` versions are recorded explicitly as runner substrate rather than
 misrepresented as pinned inputs. Trivy `0.72.0` reported Critical=0 and High=0
 with database update time `2026-07-14T19:03:26.337699315Z` and download time
-`2026-07-14T23:06:31.124144935Z` before signing and provenance publication.
+`2026-07-14T23:30:08.329365967Z` before signing and provenance publication.
 The CycloneDX SBOM, scanner metadata, Cosign/Rekor/SLSA records, toolchain
 record, and raw container inspect are retained and hash-bound to the exact
 digest.
@@ -183,9 +183,9 @@ digest.
 The effective runtime inspect proves the non-root command, read-only root,
 exact writable `/tmp` and `/data` tmpfs options, all capabilities dropped,
 no-new-privileges, and bounded PID/memory settings. The immutable candidate
-snapshot was retained as artifact `seaweedfs-4.39-arm64-candidate-29375069400-1`
+snapshot was retained as artifact `seaweedfs-4.39-arm64-candidate-29376271915-1`
 before checksum-verified Crane `v0.21.7` promoted the unchanged digest. The
-final artifact `seaweedfs-4.39-arm64-29375069400-1` is a 90-day mirror; the
+final artifact `seaweedfs-4.39-arm64-29376271915-1` is a 90-day mirror; the
 committed evidence is authoritative. Trusted tag `4.39-arm64` is explicitly a
 `non_authoritative_pointer`: admission depends only on the digest plus the
 committed candidate-to-promotion-to-final evidence lineage. No ADR-0019
