@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "profile": "local-lab",
+  "exceptions": [
+    {
+      "component": "source-controller",
+      "reference": "ghcr.io/fluxcd/source-controller@sha256:0f648a90e21bce0268ee29930bead4fbffba11e0b20d4a5f587c8fe2f17e3e5a",
+      "scope": "mac-studio-solo/local-lab",
+      "max_severity": "HIGH",
+      "decision_record": "docs/design/07_ADR/ADR-0019_Allow_time_boxed_resident_image_exceptions_for_local_lab.md",
+      "approved_on": "2026-07-14",
+      "expires_on": "2026-08-13",
+      "risk_acceptance": "Development-only use accepts the listed dependency vulnerabilities while Flux bootstrap fitness is evaluated; this is not production approval or a claim that the findings are unreachable.",
+      "compensating_controls": [
+        "Run only in the local Colima/k3s lab without production data or production credentials.",
+        "Reconcile only repository-approved Git and OCI/Helm sources; do not process untrusted archives.",
+        "Do not expose the lab through a public Service or Ingress.",
+        "Rescan before renewal and whenever the pinned Flux distribution changes."
+      ],
+      "replacement_plan": "Replace with the first signed upstream Flux distribution whose exact arm64 image has no unapproved High or Critical findings, then remove this exception.",
+      "cves": [
+        {
+          "id": "CVE-2026-49478",
+          "severity": "HIGH",
+          "package": "github.com/sigstore/fulcio",
+          "installed_version": "v1.8.5",
+          "fixed_version": "1.8.6"
+        },
+        {
+          "id": "CVE-2026-50163",
+          "severity": "HIGH",
+          "package": "oras.land/oras-go/v2",
+          "installed_version": "v2.6.1",
+          "fixed_version": ""
+        }
+      ]
+    },
+    {
+      "component": "helm-controller",
+      "reference": "ghcr.io/fluxcd/helm-controller@sha256:6c8e17a0b9554bd6f9848595e832f6499a728d07db477b31cc53ce632d2ee6cc",
+      "scope": "mac-studio-solo/local-lab",
+      "max_severity": "HIGH",
+      "decision_record": "docs/design/07_ADR/ADR-0019_Allow_time_boxed_resident_image_exceptions_for_local_lab.md",
+      "approved_on": "2026-07-14",
+      "expires_on": "2026-08-13",
+      "risk_acceptance": "Development-only use accepts the listed dependency vulnerabilities while Flux bootstrap fitness is evaluated; this is not production approval or a claim that the findings are unreachable.",
+      "compensating_controls": [
+        "Run only in the local Colima/k3s lab without production data or production credentials.",
+        "Reconcile only repository-approved Git and OCI/Helm sources; do not process untrusted archives.",
+        "Do not expose the lab through a public Service or Ingress.",
+        "Rescan before renewal and whenever the pinned Flux distribution changes."
+      ],
+      "replacement_plan": "Replace with the first signed upstream Flux distribution whose exact arm64 image has no unapproved High or Critical findings, then remove this exception.",
+      "cves": [
+        {
+          "id": "CVE-2026-39822",
+          "severity": "HIGH",
+          "package": "stdlib",
+          "installed_version": "v1.26.4",
+          "fixed_version": "1.25.12, 1.26.5, 1.27.0-rc.2"
+        },
+        {
+          "id": "CVE-2026-50163",
+          "severity": "HIGH",
+          "package": "oras.land/oras-go/v2",
+          "installed_version": "v2.6.1",
+          "fixed_version": ""
+        }
+      ]
+    },
+    {
+      "component": "notification-controller",
+      "reference": "ghcr.io/fluxcd/notification-controller@sha256:4fad21931eacf007a770b23fa5495201e4141ee5040218bac14ea90bee0ec996",
+      "scope": "mac-studio-solo/local-lab",
+      "max_severity": "HIGH",
+      "decision_record": "docs/design/07_ADR/ADR-0019_Allow_time_boxed_resident_image_exceptions_for_local_lab.md",
+      "approved_on": "2026-07-14",
+      "expires_on": "2026-08-13",
+      "risk_acceptance": "Development-only use accepts the listed dependency vulnerabilities while Flux bootstrap fitness is evaluated; this is not production approval or a claim that the finding is unreachable.",
+      "compensating_controls": [
+        "Run only in the local Colima/k3s lab without production data or production credentials.",
+        "Reconcile only repository-approved Git and OCI/Helm sources; do not process untrusted archives.",
+        "Do not expose the lab through a public Service or Ingress.",
+        "Rescan before renewal and whenever the pinned Flux distribution changes."
+      ],
+      "replacement_plan": "Replace with the first signed upstream Flux distribution whose exact arm64 image has no unapproved High or Critical findings, then remove this exception.",
+      "cves": [
+        {
+          "id": "CVE-2026-39822",
+          "severity": "HIGH",
+          "package": "stdlib",
+          "installed_version": "v1.26.4",
+          "fixed_version": "1.25.12, 1.26.5, 1.27.0-rc.2"
+        }
+      ]
+    }
+  ]
+}

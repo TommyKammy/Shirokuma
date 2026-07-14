@@ -27,6 +27,7 @@
     ],
     "6": [
       "docs/design/04_Development/049_Supply_Chain_Security.md",
+      "docs/design/07_ADR/ADR-0019_Allow_time_boxed_resident_image_exceptions_for_local_lab.md",
       "docs/design/10_Research/106_ARM64_Container_Image_Compatibility.md"
     ],
     "7": [
@@ -40,6 +41,7 @@
     ],
     "9": [
       "docs/design/07_ADR/ADR-0018_Use_Flux_v2_as_the_GitOps_reconciler.md",
+      "docs/design/07_ADR/ADR-0019_Allow_time_boxed_resident_image_exceptions_for_local_lab.md",
       "docs/design/02_Architecture/024_GitOps_Reconciliation_Model.md",
       "docs/design/02_Architecture/02C_Deployment_Topologies.md",
       "docs/design/03_Requirements/034_Platform_Requirements.md",
@@ -56,6 +58,7 @@
     ],
     "11": [
       "docs/design/07_ADR/ADR-0018_Use_Flux_v2_as_the_GitOps_reconciler.md",
+      "docs/design/07_ADR/ADR-0019_Allow_time_boxed_resident_image_exceptions_for_local_lab.md",
       "docs/design/02_Architecture/024_GitOps_Reconciliation_Model.md",
       "docs/design/03_Requirements/036_Security_Policy_Requirements.md",
       "docs/design/04_Development/046_CI_CD_Test_Strategy.md",

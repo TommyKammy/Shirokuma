@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-07-10
-version: "0.4"
+updated: 2026-07-14
+version: "0.5"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -51,7 +51,7 @@ Every image admitted to a resident profile must have an entry in
 `security/resident-images.json` before its deployment manifest is merged. Each
 entry records the human-readable `version`, upstream `source`, `linux/arm64`
 `platform`, exact `repository@sha256:<digest>` reference, `sbom_artifact`,
-`scan_artifact`, `scanner_version`, and timezone-qualified
+`scan_artifact`, `supply_chain_artifact`, `sbom_generator`, `scanner_version`, and timezone-qualified
 `vulnerability_db_updated_at`. Mutable or tag-qualified references such as
 `latest` are never sufficient evidence. Future vulnerability database timestamps
 are rejected. The deterministic gate reconciles every tracked image reference
@@ -64,8 +64,16 @@ ledger and must be available when the deterministic gate runs. Symlinks and
 parent traversal are rejected. The SBOM must be a CycloneDX JSON object. The
 referenced Trivy JSON must identify the same immutable ledger reference through
 `ArtifactName` or `Metadata.RepoDigests` and pass the same High or Critical
-blocking threshold as direct report checks. When `Metadata.RepoDigests` is
-populated, it is authoritative over the operator-facing `ArtifactName`.
+blocking threshold as direct report checks unless the explicit `local-lab`
+profile resolves every High finding through the exception contract below.
+When `Metadata.RepoDigests` is populated, it is authoritative over the
+operator-facing `ArtifactName`.
+
+The `supply_chain_artifact` is a retained verification record. It binds the
+platform digest to a signed immutable OCI index, signer identity, issuer,
+transparency-log entry, SLSA provenance v1 subject, and upstream SPDX SBOM
+subject. The signed index must contain the exact linux/arm64 manifest. A present
+attestation without trusted signature verification is not sufficient evidence.
 
 CI generates a CycloneDX JSON source SBOM with Syft for every pull request and
 retains the workflow artifact for 30 days. Once resident images exist, each
@@ -78,6 +86,26 @@ Pinned fallback images are exceptional and require `fallback: true`, documented
 CVE risk, a future ISO `expires_on` date, and a concrete replacement plan in
 the ledger. Expired or malformed dates fail closed. Every MinIO entry must be
 marked as a fallback; SeaweedFS stays the mainline object-storage choice.
+
+## Local-lab resident image exceptions
+
+ADR-0019 permits a separate `local-lab` profile for development-only evaluation
+on `mac-studio-solo`. The default `strict` profile continues to require
+High=0/Critical=0. `check-trivy` also remains strict when run directly.
+
+`security/resident-image-exceptions.json` may acknowledge High findings only
+when each record matches the exact image digest, CVE, package, and installed
+version in the retained scan. The record must reference an existing ADR, state
+the bounded risk, list at least three compensating controls, provide a concrete
+replacement plan, and expire no more than 30 days after approval. Critical
+findings are never allowed. New or missing High findings, stale exceptions,
+digest/package/version mismatch, missing evidence, expired approval, public
+exposure, or production use fail closed.
+
+The local-lab profile is not a production certification and does not assert
+that an accepted CVE is unreachable. Production data and credentials, public
+Service/Ingress exposure, and untrusted Git/OCI/Helm sources remain outside the
+approved scope.
 
 ## Scanner or feed failure rollback
 

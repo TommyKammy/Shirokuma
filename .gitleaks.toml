@@ -1,0 +1,12 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Public SHA-1 package hashes in retained Flux v2.9.2 scanner evidence"
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^[0-9a-f]{40}$''']
+paths = [
+  '''^security/evidence/flux-v2\.9\.2/source-controller-v1\.9\.3-arm64\.cdx\.json$''',
+  '''^security/evidence/flux-v2\.9\.2/source-controller-v1\.9\.3-arm64\.trivy\.json$''',
+]

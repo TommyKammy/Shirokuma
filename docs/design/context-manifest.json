@@ -23,6 +23,7 @@
     {"source": "07_ADR/ADR-0015_Use_AGENTS_md_as_mandatory_repository_instruction.md", "target": "docs/design/07_ADR/ADR-0015_Use_AGENTS_md_as_mandatory_repository_instruction.md"},
     {"source": "07_ADR/ADR-0016_Use_Colima_on_Mac_Studio_Solo_as_primary_lab_runtime.md", "target": "docs/design/07_ADR/ADR-0016_Use_Colima_on_Mac_Studio_Solo_as_primary_lab_runtime.md"},
     {"source": "07_ADR/ADR-0018_Use_Flux_v2_as_the_GitOps_reconciler.md", "target": "docs/design/07_ADR/ADR-0018_Use_Flux_v2_as_the_GitOps_reconciler.md"},
+    {"source": "07_ADR/ADR-0019_Allow_time_boxed_resident_image_exceptions_for_local_lab.md", "target": "docs/design/07_ADR/ADR-0019_Allow_time_boxed_resident_image_exceptions_for_local_lab.md"},
     {"source": "08_Runbooks/RB-001_Bootstrap_local_lite_lab.md", "target": "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md"},
     {"source": "08_Runbooks/RB-002_Diagnose_failed_Flux_reconciliation.md", "target": "docs/design/08_Runbooks/RB-002_Diagnose_failed_Flux_reconciliation.md"},
     {"source": "10_Research/106_ARM64_Container_Image_Compatibility.md", "target": "docs/design/10_Research/106_ARM64_Container_Image_Compatibility.md"},

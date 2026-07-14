@@ -4,8 +4,8 @@ doc_id: "REQ-034"
 title: "Platform Requirements"
 status: draft
 created: 2026-07-05
-updated: 2026-07-12
-version: "0.2.1"
+updated: 2026-07-14
+version: "0.2.2"
 area: "requirements"
 tags: [shirokuma, platform, colima]
 ---
@@ -47,6 +47,7 @@ tags: [shirokuma, platform, colima]
 | PLAT-FLUX-006 | Private Git credentials must use the approved Secret path and least privilege. Credentials must not be committed or included in evidence. |
 | PLAT-FLUX-007 | Normal mutation and rollback must occur through Git PR/revert and Flux reconciliation, not direct cluster mutation. |
 | PLAT-FLUX-008 | OpenTofu must own cluster prerequisites; Flux must own Git-managed self-upgrade and workload reconciliation after bootstrap. |
+| PLAT-FLUX-009 | The default strict image profile must require High=0/Critical=0. The mac-studio-solo local lab may allow only ADR-approved, digest/CVE/package/version-bound High exceptions for at most 30 days; Critical and production use remain prohibited. |
 
 ## Storage policy
 

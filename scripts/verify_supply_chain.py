@@ -8,12 +8,15 @@ import json
 import re
 import subprocess
 import sys
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 
 BLOCKING_SEVERITIES = {"HIGH", "CRITICAL"}
+LAB_PROFILE = "local-lab"
+STRICT_PROFILE = "strict"
+MAX_EXCEPTION_DAYS = 30
 IMAGE_DIGEST = re.compile(r"^(?P<repository>[^@\s]+)@sha256:[0-9a-f]{64}$")
 DEPLOYMENT_SUFFIXES = {".json", ".yaml", ".yml"}
 YAML_IMAGE_FIELD = re.compile(
@@ -114,11 +117,31 @@ def iter_trivy_findings(report: dict[str, Any]) -> list[dict[str, Any]]:
             for entry in entries:
                 if not isinstance(entry, dict):
                     raise PolicyError(f"Trivy report {category} contains malformed data")
-                findings.append(entry)
+                finding = dict(entry)
+                finding["_category"] = category
+                findings.append(finding)
     return findings
 
 
-def check_trivy(report_path: Path, expected_image_reference: str | None = None) -> None:
+def high_finding_key(finding: dict[str, Any]) -> tuple[str, str, str]:
+    if finding.get("_category") != "Vulnerabilities":
+        raise PolicyError("local-lab exceptions only apply to vulnerability findings")
+    values = tuple(
+        str(finding.get(field, "")).strip()
+        for field in ("VulnerabilityID", "PkgName", "InstalledVersion")
+    )
+    if not all(values):
+        raise PolicyError(
+            "local-lab High findings require VulnerabilityID, PkgName, and InstalledVersion"
+        )
+    return values
+
+
+def check_trivy(
+    report_path: Path,
+    expected_image_reference: str | None = None,
+    allowed_high: set[tuple[str, str, str]] | None = None,
+) -> None:
     report = load_json(report_path)
     if not isinstance(report, dict):
         raise PolicyError("Trivy report must be a JSON object")
@@ -151,7 +174,39 @@ def check_trivy(report_path: Path, expected_image_reference: str | None = None) 
         for finding in iter_trivy_findings(report)
         if str(finding.get("Severity", "")).upper() in BLOCKING_SEVERITIES
     ]
-    if blocking:
+    critical = [
+        finding
+        for finding in blocking
+        if str(finding.get("Severity", "")).upper() == "CRITICAL"
+    ]
+    if critical:
+        raise PolicyError(f"Trivy blocking threshold crossed: CRITICAL={len(critical)}")
+
+    high = [
+        finding
+        for finding in blocking
+        if str(finding.get("Severity", "")).upper() == "HIGH"
+    ]
+    if allowed_high is not None:
+        observed_high = {high_finding_key(finding) for finding in high}
+        if observed_high != allowed_high:
+            unapproved = sorted(observed_high - allowed_high)
+            stale = sorted(allowed_high - observed_high)
+            details: list[str] = []
+            if unapproved:
+                details.append(
+                    "unapproved="
+                    + ",".join(f"{cve}/{package}/{version}" for cve, package, version in unapproved)
+                )
+            if stale:
+                details.append(
+                    "stale="
+                    + ",".join(f"{cve}/{package}/{version}" for cve, package, version in stale)
+                )
+            raise PolicyError("local-lab High exception mismatch: " + " ".join(details))
+        return
+
+    if high:
         counts = {
             severity: sum(
                 str(finding.get("Severity", "")).upper() == severity
@@ -182,6 +237,188 @@ def check_sbom(sbom_path: Path) -> None:
         raise PolicyError("SBOM artifact must be a CycloneDX JSON object")
 
 
+def reference_digest(reference: str) -> str:
+    return reference.rsplit("@", 1)[1]
+
+
+def check_supply_chain_evidence(
+    evidence_path: Path,
+    *,
+    component: str,
+    reference: str,
+    version: str,
+    source: str,
+) -> None:
+    evidence = load_json(evidence_path)
+    if not isinstance(evidence, dict) or evidence.get("schema_version") != 1:
+        raise PolicyError("supply-chain evidence requires schema_version 1")
+    records = evidence.get("images")
+    if not isinstance(records, list):
+        raise PolicyError("supply-chain evidence requires an images list")
+    matches = [
+        record
+        for record in records
+        if isinstance(record, dict)
+        and record.get("component") == component
+        and record.get("reference") == reference
+    ]
+    if len(matches) != 1:
+        raise PolicyError("supply-chain evidence requires one exact component/reference record")
+    record = matches[0]
+    expected_digest = reference_digest(reference)
+    if record.get("platform") != "linux/arm64":
+        raise PolicyError("supply-chain evidence platform must be linux/arm64")
+    if record.get("version") != version or record.get("source") != source:
+        raise PolicyError("supply-chain evidence version/source does not match the ledger")
+    verified_at = record.get("verified_at")
+    parsed_verified_at = parse_timestamp(verified_at) if isinstance(verified_at, str) else None
+    if parsed_verified_at is None:
+        raise PolicyError("supply-chain evidence requires a timezone-qualified verified_at")
+    if parsed_verified_at.astimezone(timezone.utc) > datetime.now(timezone.utc):
+        raise PolicyError("supply-chain evidence verified_at must not be in the future")
+
+    signature = record.get("signature")
+    if not isinstance(signature, dict) or signature.get("verified") is not True:
+        raise PolicyError("supply-chain evidence requires a verified signature")
+    signed_index = signature.get("signed_index")
+    if not isinstance(signed_index, str) or not is_immutable_image_reference(signed_index):
+        raise PolicyError("supply-chain evidence requires an immutable signed_index")
+    if signed_index.rsplit("@", 1)[0] != reference.rsplit("@", 1)[0]:
+        raise PolicyError("signed index repository does not match the ledger reference")
+    if signature.get("arm64_in_signed_index") is not True:
+        raise PolicyError("supply-chain signature must cover an index containing linux/arm64")
+    if signature.get("arm64_manifest_digest") != expected_digest:
+        raise PolicyError("signed index arm64 digest does not match the ledger digest")
+    for field in ("issuer", "identity", "workflow_repository", "workflow_ref", "commit"):
+        if not isinstance(signature.get(field), str) or not signature[field].strip():
+            raise PolicyError(f"supply-chain signature evidence missing {field}")
+    if not isinstance(signature.get("transparency_log_index"), int):
+        raise PolicyError("supply-chain signature evidence missing transparency_log_index")
+
+    provenance = record.get("provenance")
+    if not isinstance(provenance, dict):
+        raise PolicyError("supply-chain evidence requires provenance")
+    if provenance.get("predicate_type") != "https://slsa.dev/provenance/v1":
+        raise PolicyError("supply-chain provenance must use SLSA provenance v1")
+    if provenance.get("subject_digest") != expected_digest:
+        raise PolicyError("supply-chain provenance subject does not match the ledger digest")
+    if provenance.get("source") != source or provenance.get("version") != version:
+        raise PolicyError("supply-chain provenance source/version does not match the ledger")
+    for field in ("revision", "builder", "attestation_manifest"):
+        if not isinstance(provenance.get(field), str) or not provenance[field].strip():
+            raise PolicyError(f"supply-chain provenance missing {field}")
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", provenance["attestation_manifest"]):
+        raise PolicyError("supply-chain provenance attestation_manifest must be a sha256 digest")
+
+    upstream_sbom = record.get("upstream_sbom")
+    if not isinstance(upstream_sbom, dict):
+        raise PolicyError("supply-chain evidence requires an upstream SBOM attestation")
+    if upstream_sbom.get("predicate_type") != "https://spdx.dev/Document":
+        raise PolicyError("upstream SBOM attestation must use SPDX Document")
+    if upstream_sbom.get("subject_digest") != expected_digest:
+        raise PolicyError("upstream SBOM subject does not match the ledger digest")
+
+
+def exception_finding_key(value: Any, component: str) -> tuple[str, str, str] | None:
+    if not isinstance(value, dict):
+        return None
+    cve = value.get("id")
+    package = value.get("package")
+    installed_version = value.get("installed_version")
+    if not all(isinstance(field, str) and field.strip() for field in (cve, package, installed_version)):
+        return None
+    if value.get("severity") != "HIGH":
+        raise PolicyError(f"{component}: local-lab exceptions may only allow HIGH severity")
+    fixed_version = value.get("fixed_version")
+    if not isinstance(fixed_version, str):
+        raise PolicyError(f"{component}: exception fixed_version must be a string")
+    return cve.strip(), package.strip(), installed_version.strip()
+
+
+def load_lab_exceptions(
+    path: Path,
+    repository: Path,
+    ledger_references: set[str],
+) -> dict[str, set[tuple[str, str, str]]]:
+    document = load_json(path)
+    if not isinstance(document, dict) or document.get("schema_version") != 1:
+        raise PolicyError("resident image exceptions require schema_version 1")
+    if document.get("profile") != LAB_PROFILE:
+        raise PolicyError(f"resident image exceptions profile must be {LAB_PROFILE}")
+    entries = document.get("exceptions")
+    if not isinstance(entries, list):
+        raise PolicyError("resident image exceptions require an exceptions list")
+
+    approved: dict[str, set[tuple[str, str, str]]] = {}
+    for index, entry in enumerate(entries):
+        label = f"exceptions[{index}]"
+        if not isinstance(entry, dict):
+            raise PolicyError(f"{label}: entry must be an object")
+        component = entry.get("component")
+        if not isinstance(component, str) or not component.strip():
+            raise PolicyError(f"{label}: missing component")
+        reference = entry.get("reference")
+        if not isinstance(reference, str) or not is_immutable_image_reference(reference):
+            raise PolicyError(f"{component}: exception requires an immutable image reference")
+        if reference not in ledger_references:
+            raise PolicyError(f"{component}: exception reference is not present in the resident ledger")
+        if reference in approved:
+            raise PolicyError(f"{component}: duplicate exception reference")
+        if entry.get("scope") != "mac-studio-solo/local-lab":
+            raise PolicyError(f"{component}: exception scope must be mac-studio-solo/local-lab")
+        if entry.get("max_severity") != "HIGH":
+            raise PolicyError(f"{component}: exception max_severity must be HIGH")
+        for field in ("risk_acceptance", "replacement_plan"):
+            value = entry.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise PolicyError(f"{component}: exception missing {field}")
+        controls = entry.get("compensating_controls")
+        if not isinstance(controls, list) or len(controls) < 3 or not all(
+            isinstance(value, str) and value.strip() for value in controls
+        ):
+            raise PolicyError(f"{component}: exception requires at least three controls")
+
+        decision_record = entry.get("decision_record")
+        if not isinstance(decision_record, str) or not decision_record.strip():
+            raise PolicyError(f"{component}: exception missing decision_record")
+        decision_path = Path(decision_record)
+        if (
+            decision_path.is_absolute()
+            or ".." in decision_path.parts
+            or not decision_record.startswith("docs/design/07_ADR/")
+            or not (repository / decision_path).is_file()
+        ):
+            raise PolicyError(f"{component}: exception decision_record must be an existing ADR")
+
+        try:
+            approved_on = date.fromisoformat(str(entry.get("approved_on", "")))
+            expires_on = date.fromisoformat(str(entry.get("expires_on", "")))
+        except ValueError as error:
+            raise PolicyError(f"{component}: exception dates must use YYYY-MM-DD") from error
+        if approved_on > date.today():
+            raise PolicyError(f"{component}: exception approved_on must not be in the future")
+        if expires_on <= date.today():
+            raise PolicyError(f"{component}: exception has expired")
+        if expires_on > approved_on + timedelta(days=MAX_EXCEPTION_DAYS):
+            raise PolicyError(f"{component}: exception may not exceed {MAX_EXCEPTION_DAYS} days")
+
+        cves = entry.get("cves")
+        if not isinstance(cves, list) or not cves:
+            raise PolicyError(f"{component}: exception requires exact CVE records")
+        keys: set[tuple[str, str, str]] = set()
+        for cve in cves:
+            key = exception_finding_key(cve, component)
+            if key is None:
+                raise PolicyError(
+                    f"{component}: exception CVEs require id, package, and installed_version"
+                )
+            if key in keys:
+                raise PolicyError(f"{component}: duplicate exception CVE record")
+            keys.add(key)
+        approved[reference] = keys
+    return approved
+
+
 def is_immutable_image_reference(reference: str) -> bool:
     match = IMAGE_DIGEST.fullmatch(reference)
     if match is None:
@@ -190,8 +427,14 @@ def is_immutable_image_reference(reference: str) -> bool:
 
 
 def parse_timestamp(value: str) -> datetime | None:
+    normalized = value.replace("Z", "+00:00")
+    normalized = re.sub(
+        r"(\.[0-9]{6})[0-9]+(?=[+-][0-9]{2}:[0-9]{2}$)",
+        r"\1",
+        normalized,
+    )
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(normalized)
     except ValueError:
         return None
     if parsed.tzinfo is None:
@@ -269,13 +512,25 @@ def deployed_image_references(repository: Path) -> list[tuple[str, str]]:
     return references
 
 
-def check_images(manifest_path: Path, repository: Path) -> None:
+def check_images(
+    manifest_path: Path,
+    repository: Path,
+    *,
+    profile: str = STRICT_PROFILE,
+    exceptions_path: Path | None = None,
+) -> None:
     manifest = load_json(manifest_path)
     if not isinstance(manifest, dict) or manifest.get("schema_version") != 1:
         raise PolicyError("resident image manifest requires schema_version 1")
     images = manifest.get("images")
     if not isinstance(images, list):
         raise PolicyError("resident image manifest requires an images list")
+    if profile not in {STRICT_PROFILE, LAB_PROFILE}:
+        raise PolicyError(f"resident image profile must be {STRICT_PROFILE} or {LAB_PROFILE}")
+    if profile == STRICT_PROFILE and exceptions_path is not None:
+        raise PolicyError("strict resident image profile does not allow exceptions")
+    if profile == LAB_PROFILE and exceptions_path is None:
+        raise PolicyError("local-lab resident image profile requires --exceptions")
 
     errors: list[str] = []
     ledger_references: set[str] = set()
@@ -304,6 +559,8 @@ def check_images(manifest_path: Path, repository: Path) -> None:
             "source",
             "sbom_artifact",
             "scan_artifact",
+            "supply_chain_artifact",
+            "sbom_generator",
             "scanner_version",
             "vulnerability_db_updated_at",
         ):
@@ -341,18 +598,41 @@ def check_images(manifest_path: Path, repository: Path) -> None:
             if expires_on and not is_future_iso_date(expires_on):
                 errors.append(f"{component}: expires_on must be a future YYYY-MM-DD date")
 
+    lab_exceptions: dict[str, set[tuple[str, str, str]]] = {}
+    if not errors and exceptions_path is not None:
+        try:
+            lab_exceptions = load_lab_exceptions(
+                exceptions_path,
+                repository,
+                ledger_references,
+            )
+        except PolicyError as error:
+            errors.append(f"invalid resident image exceptions: {error}")
+
     if not errors:
         for index, image in enumerate(images):
             component = image.get("component") or f"images[{index}]"
             reference = str(image["reference"])
-            for field in ("sbom_artifact", "scan_artifact"):
+            for field in ("sbom_artifact", "scan_artifact", "supply_chain_artifact"):
                 artifact = str(image[field]).strip()
                 try:
                     artifact_path = evidence_artifact_path(manifest_path, artifact, field)
                     if field == "sbom_artifact":
                         check_sbom(artifact_path)
+                    elif field == "scan_artifact":
+                        check_trivy(
+                            artifact_path,
+                            expected_image_reference=reference,
+                            allowed_high=lab_exceptions.get(reference),
+                        )
                     else:
-                        check_trivy(artifact_path, expected_image_reference=reference)
+                        check_supply_chain_evidence(
+                            artifact_path,
+                            component=str(component),
+                            reference=reference,
+                            version=str(image["version"]),
+                            source=str(image["source"]),
+                        )
                 except PolicyError as error:
                     errors.append(f"{component}: invalid {field} {artifact}: {error}")
 
@@ -379,6 +659,8 @@ def parser() -> argparse.ArgumentParser:
     images = commands.add_parser("check-images")
     images.add_argument("--manifest", type=Path, required=True)
     images.add_argument("--repo", type=Path, default=Path.cwd())
+    images.add_argument("--profile", choices=(STRICT_PROFILE, LAB_PROFILE), default=STRICT_PROFILE)
+    images.add_argument("--exceptions", type=Path)
     return root
 
 
@@ -390,7 +672,12 @@ def main() -> int:
         elif args.command == "check-trivy":
             check_trivy(args.report)
         elif args.command == "check-images":
-            check_images(args.manifest, args.repo.resolve())
+            check_images(
+                args.manifest,
+                args.repo.resolve(),
+                profile=args.profile,
+                exceptions_path=args.exceptions,
+            )
     except PolicyError as error:
         print(error, file=sys.stderr)
         return 1

@@ -7,14 +7,14 @@ patches:
   - patch: |
       - op: replace
         path: /spec/template/spec/containers/0/image
-        value: ghcr.io/fluxcd/source-controller@sha256:4e9f7d179652cada516492ca341759fc07b5b7e58f7b57a5a9bfb631257c6d47
+        value: ghcr.io/fluxcd/source-controller@sha256:0f648a90e21bce0268ee29930bead4fbffba11e0b20d4a5f587c8fe2f17e3e5a
     target:
       kind: Deployment
       name: source-controller
   - patch: |
       - op: replace
         path: /spec/template/spec/containers/0/image
-        value: ghcr.io/fluxcd/kustomize-controller@sha256:f5bc799e338bf779c55948adaee4c3eca83a833b98384c5fdef1674c1d658839
+        value: ghcr.io/fluxcd/kustomize-controller@sha256:bfba7d249343683a5f9264fc6ad21bce5f9a0baac8d2a8c7527867312f96e9c9
     target:
       kind: Deployment
       name: kustomize-controller
