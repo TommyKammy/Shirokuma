@@ -99,6 +99,8 @@ jobs:
           push: true
           provenance: false
           sbom: false
+          cache-from: type=gha,scope=seaweedfs-4.39-arm64
+          cache-to: type=gha,mode=max,scope=seaweedfs-4.39-arm64
           tags: ${{ env.IMAGE }}:4.39-arm64
           build-args: |
             SOURCE_COMMIT=${{ env.SOURCE_COMMIT }}

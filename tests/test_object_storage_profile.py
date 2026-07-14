@@ -67,6 +67,9 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
 
         containerfile = containerfile_path.read_text(encoding="utf-8")
         self.assertNotIn(r"\${", containerfile)
+        for image in source["build_inputs"].values():
+            with self.subTest(build_input=image):
+                self.assertIn(image, containerfile)
         first_from = containerfile.index("FROM ")
         self.assertLess(containerfile.index("ARG GO_IMAGE="), first_from)
         self.assertLess(containerfile.index("ARG RUNTIME_IMAGE="), first_from)

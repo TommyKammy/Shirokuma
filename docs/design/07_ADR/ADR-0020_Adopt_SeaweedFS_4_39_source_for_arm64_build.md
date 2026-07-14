@@ -32,6 +32,11 @@ bootstrap/seaweedfs/v4.39/source.json for a repository-controlled linux/arm64
 build. The workflow verifies the commit, tree, and deterministic git-archive
 SHA-256 before building. A mismatch fails closed.
 
+The build inputs are digest-pinned in the source record. Go 1.25.12 is used
+because the upstream minimum Go 1.25.8 toolchain contains known, fixed
+High-severity standard-library vulnerabilities; the adopted SeaweedFS source
+tree itself remains unchanged.
+
 The builder identity is the GitHub Actions OIDC identity for
 .github/workflows/seaweedfs-arm64.yml in TommyKammy/Shirokuma. The workflow
 may publish only ghcr.io/tommykammy/shirokuma-seaweedfs:4.39-arm64, and the
