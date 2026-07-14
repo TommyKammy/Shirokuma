@@ -173,10 +173,10 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertEqual(release["source"]["commit"], EXPECTED_RELEASE_COMMIT)
         self.assertEqual(release["source"]["tree"], EXPECTED_RELEASE_TREE)
         self.assertEqual(release["vulnerabilities"], {"critical": 0, "high": 0})
-        self.assertEqual(release["builder"]["run_id"], "29357344875")
+        self.assertEqual(release["builder"]["run_id"], "29359679038")
         self.assertEqual(
             release["builder"]["workflow_sha"],
-            "2ff065f3ee9fe53edc4bc6c21daf855eaac8c04b",
+            "159e8601302cd6306d9d3bd9d847ea39275a9bf8",
         )
         self.assertEqual(release["admission_status"], "approved")
         self.assertEqual(release["scanner"]["version"], "0.72.0")
@@ -188,10 +188,18 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             release["scanner"]["vulnerability_db"]["downloaded_at"],
             "2026-07-14T01:41:51.785604274Z",
         )
-        self.assertEqual(release["github_actions_artifact"]["id"], "8320799708")
+        self.assertEqual(release["github_actions_artifact"]["id"], "8321634543")
         self.assertEqual(
             release["artifacts"]["cosign-verify.json"]["sha256"],
             "e631b3b84f7456bfa3b47e1743838145cb0d91f59585ea7344e12d492515c0fc",
+        )
+        self.assertEqual(
+            release["publication"]["trusted_tag_digest"],
+            EXPECTED_TRUSTED_DIGEST,
+        )
+        self.assertIs(
+            release["publication"]["promoted_after_evidence_retention"],
+            True,
         )
         self.assertRegex(release["slsa_provenance"], r"/attestations/[0-9]+$")
         self.assertEqual(
@@ -256,6 +264,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
                 "sbom",
                 "vulnerability_scan",
                 "runtime_tmp",
+                "tag_promotion",
             },
         )
         for control in controls.values():

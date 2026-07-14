@@ -37,8 +37,8 @@
     "builder": {
       "issuer": "https://token.actions.githubusercontent.com",
       "identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/seaweedfs-arm64.yml@refs/heads/codex/issue-41",
-      "workflow_sha": "2ff065f3ee9fe53edc4bc6c21daf855eaac8c04b",
-      "run": "https://github.com/TommyKammy/Shirokuma/actions/runs/29357344875"
+      "workflow_sha": "159e8601302cd6306d9d3bd9d847ea39275a9bf8",
+      "run": "https://github.com/TommyKammy/Shirokuma/actions/runs/29359679038"
     },
     "controls": [
       {
@@ -54,22 +54,22 @@
       {
         "control": "transparency_log",
         "status": "verified",
-        "evidence": "Cosign verification returned transparency-log-backed entries hashed in artifact 8320799708"
+        "evidence": "Cosign verification returned transparency-log-backed entries hashed in artifact 8321634543"
       },
       {
         "control": "workflow_revision",
         "status": "verified",
-        "evidence": "Cosign and GitHub attestation verification bind the artifact to workflow SHA 2ff065f3ee9fe53edc4bc6c21daf855eaac8c04b"
+        "evidence": "Cosign and GitHub attestation verification bind the artifact to workflow SHA 159e8601302cd6306d9d3bd9d847ea39275a9bf8"
       },
       {
         "control": "slsa_provenance",
         "status": "verified",
-        "evidence": "https://github.com/TommyKammy/Shirokuma/attestations/35313185"
+        "evidence": "https://github.com/TommyKammy/Shirokuma/attestations/35317398"
       },
       {
         "control": "sbom",
         "status": "verified",
-        "sha256": "15ba515adfc0eb4e18232cd341f0b3c6fabd795bf492cf4784c85bf570215614"
+        "sha256": "10ad541650807122d93ca3e54507b8678e66ee8d00d93549aaba9d129f02aab7"
       },
       {
         "control": "vulnerability_scan",
@@ -79,12 +79,17 @@
         "scanner_version": "0.72.0",
         "vulnerability_db_updated_at": "2026-07-13T19:09:56.237113526Z",
         "vulnerability_db_downloaded_at": "2026-07-14T01:41:51.785604274Z",
-        "sha256": "fbc5521271c965268fcf8fc11709699754103ffccc678999d4ea7532b34f4dd0"
+        "sha256": "976acf0d9e94c23b69a83814a60160254c602fd656f5ffd16302747a1c439cd4"
       },
       {
         "control": "runtime_tmp",
         "status": "verified",
         "evidence": "the non-root scratch image ran weed mini with writable /tmp for its default local sockets and cache"
+      },
+      {
+        "control": "tag_promotion",
+        "status": "verified",
+        "evidence": "run 29359679038 published to a run-scoped quarantine tag and promoted sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96 only after all gates and evidence retention passed"
       }
     ]
   },
@@ -94,7 +99,7 @@
     "admission": "approved",
     "exception_eligible": false,
     "blockers": [],
-    "rationale": "The hardened Shirokuma source build pins every build input, provides writable weed mini temporary storage, completes Critical=0/High=0 scanning before signing and provenance publication, and binds signature, transparency, SLSA, SBOM, scanner freshness, and generated evidence hashes to the exact digest. The upstream image remains blocked."
+    "rationale": "The hardened Shirokuma source build fail-closes on every recorded build input, provides writable weed mini temporary storage, completes Critical=0/High=0 scanning before signing and provenance publication, tolerates repeated valid attestations, and promotes the trusted tag from a run-scoped quarantine tag only after evidence retention. Signature, transparency, SLSA, SBOM, scanner freshness, and generated evidence hashes bind to the exact digest. The upstream image remains blocked."
   },
   "runtime_manifests": {
     "permitted": true,

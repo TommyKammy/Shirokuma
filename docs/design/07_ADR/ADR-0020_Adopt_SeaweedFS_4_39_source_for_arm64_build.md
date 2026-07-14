@@ -108,24 +108,28 @@ part of the durable decision history.
 ## Publication evidence
 
 The replacement GitHub Actions run
-[`29357344875`](https://github.com/TommyKammy/Shirokuma/actions/runs/29357344875)
+[`29359679038`](https://github.com/TommyKammy/Shirokuma/actions/runs/29359679038)
 published and admitted this hardened linux/arm64 artifact:
 
     ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96
 
 The run verified the GitHub Actions OIDC workflow identity and immutable
-workflow SHA `2ff065f3ee9fe53edc4bc6c21daf855eaac8c04b` with keyless Cosign
+workflow SHA `159e8601302cd6306d9d3bd9d847ea39275a9bf8` with keyless Cosign
 and transparency-log evidence. GitHub retained SLSA provenance at
-[`attestation 35313185`](https://github.com/TommyKammy/Shirokuma/attestations/35313185).
+[`attestation 35317398`](https://github.com/TommyKammy/Shirokuma/attestations/35317398).
 The exact-digest CycloneDX SBOM and Trivy scan are retained in artifact
-`8320799708`; Trivy `0.72.0` reported zero Critical and zero High findings with
+`8321634543`; Trivy `0.72.0` reported zero Critical and zero High findings with
 vulnerability DB timestamp `2026-07-13T19:09:56.237113526Z`. The image metadata
 exposes the active `weed mini` volume HTTP port `9340` and admin HTTP port
 `23646`, and the non-root default command starts successfully with writable
 `/tmp`. The Dockerfile frontend is pinned by digest, the vulnerability and DB
 freshness gates complete before signing or provenance publication, and the
 generated evidence hashes the Cosign verification output. No ADR-0019
-vulnerability exception is required.
+vulnerability exception is required. The build publishes first to run-scoped
+quarantine tag `quarantine-29359679038-1`; after all gates and evidence
+retention pass, Crane promotes the unchanged digest to trusted tag
+`4.39-arm64`. Repeated valid SLSA attestations are accepted when at least one
+matches the exact workflow SHA and digest.
 
 The original upstream image remains rejected. This decision admits only the
 hardened Shirokuma digest above, and parent Issue #26 still owns the resident-ledger

@@ -14,14 +14,14 @@
     "repository": "TommyKammy/Shirokuma",
     "workflow": ".github/workflows/seaweedfs-arm64.yml",
     "ref": "refs/heads/codex/issue-41",
-    "workflow_sha": "2ff065f3ee9fe53edc4bc6c21daf855eaac8c04b",
-    "run_id": "29357344875",
+    "workflow_sha": "159e8601302cd6306d9d3bd9d847ea39275a9bf8",
+    "run_id": "29359679038",
     "run_attempt": "1"
   },
   "issuer": "https://token.actions.githubusercontent.com",
   "identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/seaweedfs-arm64.yml@refs/heads/codex/issue-41",
   "transparency_log": "verified by cosign-verify.json",
-  "slsa_provenance": "https://github.com/TommyKammy/Shirokuma/attestations/35313185",
+  "slsa_provenance": "https://github.com/TommyKammy/Shirokuma/attestations/35317398",
   "admission_status": "approved",
   "vulnerabilities": {
     "critical": 0,
@@ -41,22 +41,28 @@
       "sha256": "e631b3b84f7456bfa3b47e1743838145cb0d91f59585ea7344e12d492515c0fc"
     },
     "seaweedfs-4.39-arm64.cdx.json": {
-      "sha256": "15ba515adfc0eb4e18232cd341f0b3c6fabd795bf492cf4784c85bf570215614"
+      "sha256": "10ad541650807122d93ca3e54507b8678e66ee8d00d93549aaba9d129f02aab7"
     },
     "slsa-verify.json": {
-      "sha256": "9fe7652bb7a632fb180ca6341daf13064a805b0aafbb285272f3574802a0cbdd"
+      "sha256": "5c2fbb9d5a3bcf84a6904a5f4b42e04c76a6b34994f4f958040b6f90f1965dbc"
     },
     "trivy-version.json": {
       "sha256": "b0c02aa93accb44370c3fd34de079deca8e4448c880482ba5da1b97d7772aed1"
     },
     "trivy.json": {
-      "sha256": "fbc5521271c965268fcf8fc11709699754103ffccc678999d4ea7532b34f4dd0"
+      "sha256": "976acf0d9e94c23b69a83814a60160254c602fd656f5ffd16302747a1c439cd4"
     }
   },
+  "publication": {
+    "quarantine_tag": "ghcr.io/tommykammy/shirokuma-seaweedfs:quarantine-29359679038-1",
+    "trusted_tag": "ghcr.io/tommykammy/shirokuma-seaweedfs:4.39-arm64",
+    "trusted_tag_digest": "sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96",
+    "promoted_after_evidence_retention": true
+  },
   "github_actions_artifact": {
-    "id": "8320799708",
-    "name": "seaweedfs-4.39-arm64-29357344875",
+    "id": "8321634543",
+    "name": "seaweedfs-4.39-arm64-29359679038",
     "retention_days": 90,
-    "expires_at": "2026-10-12T18:18:53Z"
+    "expires_at": "2026-10-12T18:53:25Z"
   }
 }
