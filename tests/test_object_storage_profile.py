@@ -21,7 +21,7 @@ EXPECTED_DOCKERFILE_FRONTEND = (
     "sha256:dbbd5e059e8a07ff7ea6233b213b36aa516b4c53c645f1817a4dd18b83cbea56"
 )
 EXPECTED_TRUSTED_DIGEST = (
-    "sha256:92f1018c0f1dc6d3129d096f2b9553beabc514518ba9d127e4fde5eb3233f7d0"
+    "sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96"
 )
 EXPECTED_TRUSTED_REFERENCE = (
     "ghcr.io/tommykammy/shirokuma-seaweedfs@" + EXPECTED_TRUSTED_DIGEST
@@ -142,15 +142,12 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertEqual(release["source"]["commit"], EXPECTED_RELEASE_COMMIT)
         self.assertEqual(release["source"]["tree"], EXPECTED_RELEASE_TREE)
         self.assertEqual(release["vulnerabilities"], {"critical": 0, "high": 0})
-        self.assertEqual(release["builder"]["run_id"], "29344735252")
+        self.assertEqual(release["builder"]["run_id"], "29357344875")
         self.assertEqual(
             release["builder"]["workflow_sha"],
-            "7cc3fd1a5376fa99de6922c54f3137d6c4ab4911",
+            "2ff065f3ee9fe53edc4bc6c21daf855eaac8c04b",
         )
-        self.assertEqual(
-            release["admission_status"],
-            "superseded_pending_hardened_rebuild",
-        )
+        self.assertEqual(release["admission_status"], "approved")
         self.assertEqual(release["scanner"]["version"], "0.72.0")
         self.assertEqual(
             release["scanner"]["vulnerability_db"]["updated_at"],
@@ -160,7 +157,11 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             release["scanner"]["vulnerability_db"]["downloaded_at"],
             "2026-07-14T01:41:51.785604274Z",
         )
-        self.assertEqual(release["github_actions_artifact"]["id"], "8315593067")
+        self.assertEqual(release["github_actions_artifact"]["id"], "8320799708")
+        self.assertEqual(
+            release["artifacts"]["cosign-verify.json"]["sha256"],
+            "e631b3b84f7456bfa3b47e1743838145cb0d91f59585ea7344e12d492515c0fc",
+        )
         self.assertRegex(release["slsa_provenance"], r"/attestations/[0-9]+$")
         self.assertEqual(
             release["issuer"],
@@ -172,7 +173,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             "seaweedfs-arm64.yml@refs/heads/codex/issue-41",
         )
 
-    def test_source_build_candidate_is_blocked_pending_hardened_rebuild(self) -> None:
+    def test_hardened_source_build_candidate_is_admitted(self) -> None:
         admission_path = ROOT / "bootstrap/seaweedfs/v4.39/admission.json"
         self.assertTrue(admission_path.is_file())
         admission = json.loads(admission_path.read_text(encoding="utf-8"))
@@ -181,13 +182,10 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertEqual(admission["component"], "seaweedfs")
         self.assertEqual(admission["version"], "4.39")
         self.assertEqual(admission["platform"], "linux/arm64")
-        self.assertEqual(admission["assessment"]["admission"], "blocked")
+        self.assertEqual(admission["assessment"]["admission"], "approved")
         self.assertIs(admission["assessment"]["exception_eligible"], False)
-        self.assertEqual(
-            {blocker["control"] for blocker in admission["assessment"]["blockers"]},
-            {"runtime_tmp", "dockerfile_frontend", "signing_order"},
-        )
-        self.assertIs(admission["runtime_manifests"]["permitted"], False)
+        self.assertEqual(admission["assessment"]["blockers"], [])
+        self.assertIs(admission["runtime_manifests"]["permitted"], True)
 
         self.assertEqual(
             admission["upstream_candidate"]["index_reference"],
@@ -226,6 +224,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
                 "slsa_provenance",
                 "sbom",
                 "vulnerability_scan",
+                "runtime_tmp",
             },
         )
         for control in controls.values():
@@ -286,7 +285,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
 
         self.assertEqual(
             admission["next_action"]["mode"],
-            "rebuild-and-record-hardened-artifact",
+            "implement-object-storage-profile",
         )
         self.assertIs(admission["next_action"]["decision_record_required"], False)
         self.assertGreaterEqual(len(admission["next_action"]["requirements"]), 4)

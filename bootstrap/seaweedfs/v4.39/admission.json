@@ -30,46 +30,46 @@
     ]
   },
   "admitted_candidate": {
-    "reference": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:92f1018c0f1dc6d3129d096f2b9553beabc514518ba9d127e4fde5eb3233f7d0",
-    "manifest_digest": "sha256:92f1018c0f1dc6d3129d096f2b9553beabc514518ba9d127e4fde5eb3233f7d0",
+    "reference": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96",
+    "manifest_digest": "sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96",
     "source_evidence": "bootstrap/seaweedfs/v4.39/source.json",
     "release_evidence": "bootstrap/seaweedfs/v4.39/release-evidence.json",
     "builder": {
       "issuer": "https://token.actions.githubusercontent.com",
       "identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/seaweedfs-arm64.yml@refs/heads/codex/issue-41",
-      "workflow_sha": "7cc3fd1a5376fa99de6922c54f3137d6c4ab4911",
-      "run": "https://github.com/TommyKammy/Shirokuma/actions/runs/29344735252"
+      "workflow_sha": "2ff065f3ee9fe53edc4bc6c21daf855eaac8c04b",
+      "run": "https://github.com/TommyKammy/Shirokuma/actions/runs/29357344875"
     },
     "controls": [
       {
         "control": "source_adoption",
         "status": "verified",
-        "evidence": "ADR-0020 accepts the exact upstream commit, tree, and git archive checksum for the bounded local lab"
+        "evidence": "ADR-0020 accepts the exact upstream commit, tree, archive checksum, and immutable Dockerfile frontend for the bounded local lab"
       },
       {
         "control": "signature",
         "status": "verified",
-        "evidence": "keyless Cosign verification bound the exact digest to the recorded issuer, workflow identity, and workflow SHA"
+        "evidence": "the exact digest passed the vulnerability gate before keyless signing bound it to the recorded issuer, identity, and workflow SHA"
       },
       {
         "control": "transparency_log",
         "status": "verified",
-        "evidence": "Cosign verification returned transparency-log-backed entries in artifact 8315593067"
+        "evidence": "Cosign verification returned transparency-log-backed entries hashed in artifact 8320799708"
       },
       {
         "control": "workflow_revision",
         "status": "verified",
-        "evidence": "Cosign and GitHub attestation verification bind the artifact to workflow SHA 7cc3fd1a5376fa99de6922c54f3137d6c4ab4911"
+        "evidence": "Cosign and GitHub attestation verification bind the artifact to workflow SHA 2ff065f3ee9fe53edc4bc6c21daf855eaac8c04b"
       },
       {
         "control": "slsa_provenance",
         "status": "verified",
-        "evidence": "https://github.com/TommyKammy/Shirokuma/attestations/35282295"
+        "evidence": "https://github.com/TommyKammy/Shirokuma/attestations/35313185"
       },
       {
         "control": "sbom",
         "status": "verified",
-        "sha256": "e82706f63e796a9092b0fda93aa14e5c5191fa2ff3b942092bec40a7775fcf1b"
+        "sha256": "15ba515adfc0eb4e18232cd341f0b3c6fabd795bf492cf4784c85bf570215614"
       },
       {
         "control": "vulnerability_scan",
@@ -79,49 +79,38 @@
         "scanner_version": "0.72.0",
         "vulnerability_db_updated_at": "2026-07-13T19:09:56.237113526Z",
         "vulnerability_db_downloaded_at": "2026-07-14T01:41:51.785604274Z",
-        "sha256": "44b3aabe81e9b56274e10f4cd6b5a33aac6a43153b4fc9f16f3a601631f00dec"
+        "sha256": "fbc5521271c965268fcf8fc11709699754103ffccc678999d4ea7532b34f4dd0"
+      },
+      {
+        "control": "runtime_tmp",
+        "status": "verified",
+        "evidence": "the non-root scratch image ran weed mini with writable /tmp for its default local sockets and cache"
       }
     ]
   },
   "assessment": {
     "assessed_on": "2026-07-15",
     "scope": "mac-studio-solo/local-lab",
-    "admission": "blocked",
+    "admission": "approved",
     "exception_eligible": false,
-    "blockers": [
-      {
-        "control": "runtime_tmp",
-        "status": "missing",
-        "evidence": "the scratch image does not provide writable /tmp for weed mini default sockets and WebDAV cache"
-      },
-      {
-        "control": "dockerfile_frontend",
-        "status": "floating",
-        "evidence": "the admitted build used the floating docker/dockerfile:1.7 frontend"
-      },
-      {
-        "control": "signing_order",
-        "status": "superseded",
-        "evidence": "the admitted workflow signed and published provenance before the vulnerability gate completed"
-      }
-    ],
-    "rationale": "The previously admitted source build is superseded pending a replacement with writable weed mini temporary storage, an immutable Dockerfile frontend, scan-before-sign ordering, and generated signature-evidence hashing. The upstream image remains blocked."
+    "blockers": [],
+    "rationale": "The hardened Shirokuma source build pins every build input, provides writable weed mini temporary storage, completes Critical=0/High=0 scanning before signing and provenance publication, and binds signature, transparency, SLSA, SBOM, scanner freshness, and generated evidence hashes to the exact digest. The upstream image remains blocked."
   },
   "runtime_manifests": {
-    "permitted": false,
+    "permitted": true,
     "paths": [
       "deploy/gitops/object-storage/kustomization.yaml",
       "deploy/gitops/clusters/local-lite/object-storage.yaml"
     ]
   },
   "next_action": {
-    "mode": "rebuild-and-record-hardened-artifact",
+    "mode": "implement-object-storage-profile",
     "decision_record_required": false,
     "requirements": [
-      "build with immutable Dockerfile frontend and writable /tmp",
-      "complete exact-digest vulnerability scan before signing or provenance publication",
-      "hash Cosign verification output in generated release evidence",
-      "record the replacement exact digest before resuming parent Issue #26"
+      "pin the admitted exact digest in the resident-image ledger and Flux resources",
+      "verify Flux reconciliation and functional S3 smoke on mac-studio-solo",
+      "record SSD impact and backup/export behavior",
+      "retain teardown and rebuild evidence for parent Issue #26"
     ]
   }
 }

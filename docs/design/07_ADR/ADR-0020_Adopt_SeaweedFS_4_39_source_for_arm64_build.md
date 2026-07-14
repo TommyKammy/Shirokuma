@@ -108,28 +108,27 @@ part of the durable decision history.
 ## Publication evidence
 
 The replacement GitHub Actions run
-[`29344735252`](https://github.com/TommyKammy/Shirokuma/actions/runs/29344735252)
-published this now-superseded linux/arm64 artifact:
+[`29357344875`](https://github.com/TommyKammy/Shirokuma/actions/runs/29357344875)
+published and admitted this hardened linux/arm64 artifact:
 
-    ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:92f1018c0f1dc6d3129d096f2b9553beabc514518ba9d127e4fde5eb3233f7d0
+    ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96
 
 The run verified the GitHub Actions OIDC workflow identity and immutable
-workflow SHA `7cc3fd1a5376fa99de6922c54f3137d6c4ab4911` with keyless Cosign
+workflow SHA `2ff065f3ee9fe53edc4bc6c21daf855eaac8c04b` with keyless Cosign
 and transparency-log evidence. GitHub retained SLSA provenance at
-[`attestation 35282295`](https://github.com/TommyKammy/Shirokuma/attestations/35282295).
+[`attestation 35313185`](https://github.com/TommyKammy/Shirokuma/attestations/35313185).
 The exact-digest CycloneDX SBOM and Trivy scan are retained in artifact
-`8315593067`; Trivy `0.72.0` reported zero Critical and zero High findings with
+`8320799708`; Trivy `0.72.0` reported zero Critical and zero High findings with
 vulnerability DB timestamp `2026-07-13T19:09:56.237113526Z`. The image metadata
 exposes the active `weed mini` volume HTTP port `9340` and admin HTTP port
-`23646`. Subsequent review found that the scratch image lacked writable `/tmp`
-for the default filer/S3 sockets and WebDAV cache, the Dockerfile frontend was
-floating, the workflow signed before its vulnerability gate, and generated
-evidence omitted the Cosign verification hash. This digest is superseded until
-a hardened replacement records all four controls. No ADR-0019 vulnerability
-exception is required.
+`23646`, and the non-root default command starts successfully with writable
+`/tmp`. The Dockerfile frontend is pinned by digest, the vulnerability and DB
+freshness gates complete before signing or provenance publication, and the
+generated evidence hashes the Cosign verification output. No ADR-0019
+vulnerability exception is required.
 
-The original upstream image remains rejected. This decision will admit only the
-hardened Shirokuma replacement, and parent Issue #26 still owns the resident-ledger
+The original upstream image remains rejected. This decision admits only the
+hardened Shirokuma digest above, and parent Issue #26 still owns the resident-ledger
 entry, Flux resources, functional smoke, disk impact, backup/export, and
 teardown evidence.
 

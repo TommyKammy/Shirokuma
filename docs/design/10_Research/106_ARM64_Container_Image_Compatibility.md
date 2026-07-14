@@ -153,18 +153,19 @@ not:
 ADR-0019 cannot waive missing signature, transparency-log, or SLSA provenance
 evidence, so the upstream SeaweedFS image remains rejected. ADR-0020 instead
 approves the exact source revision for a repository-controlled build. GitHub
-Actions replacement run `29344735252` produced native `linux/arm64` artifact
-`ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:92f1018c0f1dc6d3129d096f2b9553beabc514518ba9d127e4fde5eb3233f7d0`.
+Actions hardened replacement run `29357344875` produced native `linux/arm64`
+artifact
+`ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96`.
 The workflow identity passed keyless Cosign and transparency-log verification,
-immutable workflow SHA `7cc3fd1a5376fa99de6922c54f3137d6c4ab4911`
-is verified, SLSA provenance is retained as attestation `35282295`, and the
+immutable workflow SHA `2ff065f3ee9fe53edc4bc6c21daf855eaac8c04b`
+is verified, SLSA provenance is retained as attestation `35313185`, and the
 CycloneDX SBOM is bound to the same digest. Trivy `0.72.0` reported Critical=0
 and High=0 with vulnerability DB timestamp
 `2026-07-13T19:09:56.237113526Z`. Corrected image metadata exposes `weed mini`
-ports `9340` and `23646`. Review then found missing writable `/tmp`, a floating
-Dockerfile frontend, sign-before-scan ordering, and an omitted Cosign
-verification hash in generated evidence. The digest is superseded pending a
-hardened replacement; no ADR-0019 vulnerability exception is used.
+ports `9340` and `23646`; writable `/tmp` supports default sockets and cache.
+The Dockerfile frontend is immutable, scan and DB freshness gates precede
+signing, and generated evidence hashes Cosign verification. The hardened digest
+is admitted without an ADR-0019 vulnerability exception.
 
 The machine-readable decision is retained at
 `bootstrap/seaweedfs/v4.39/admission.json`; the exact run evidence is retained at
