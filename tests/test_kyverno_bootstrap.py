@@ -14,16 +14,15 @@ DIGEST_REFERENCE = re.compile(
 
 
 class KyvernoBootstrapContractTests(unittest.TestCase):
-    def test_only_seven_noncritical_images_are_admission_candidates(self) -> None:
+    def test_local_lab_admission_blocks_the_seven_noncritical_candidates(self) -> None:
         inventory = json.loads(INVENTORY.read_text(encoding="utf-8"))
 
-        candidates = {
-            image["component"]
-            for image in inventory["images"]
-            if image["scan_summary"]["critical"] == 0
-        }
+        admission = inventory["local_lab_admission"]
+        self.assertEqual(admission["profile"], "local-lab")
+        self.assertEqual(admission["status"], "blocked")
+        self.assertEqual(admission["components"], [])
         self.assertEqual(
-            candidates,
+            set(admission["candidate_components"]),
             {
                 "admission-controller",
                 "background-controller",
@@ -34,8 +33,23 @@ class KyvernoBootstrapContractTests(unittest.TestCase):
                 "readiness-checker-cleanup-hook",
             },
         )
+
+        images = {image["component"]: image for image in inventory["images"]}
+        candidates = [
+            images[component] for component in admission["candidate_components"]
+        ]
+        self.assertTrue(
+            all(image["scan_summary"]["critical"] == 0 for image in candidates)
+        )
         self.assertEqual(inventory["admission_status"], "blocked")
-        self.assertNotIn("local_lab_admission", inventory)
+        self.assertEqual(
+            admission["excluded"],
+            {
+                "component": "readiness-checker-test-hook",
+                "reason": "critical finding",
+                "helm_test_enabled": False,
+            },
+        )
 
     def test_v1_18_2_inventory_covers_every_chart_image(self) -> None:
         inventory = json.loads(INVENTORY.read_text(encoding="utf-8"))
