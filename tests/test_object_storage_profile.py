@@ -23,11 +23,19 @@ EXPECTED_DOCKERFILE_FRONTEND = (
     "sha256:dbbd5e059e8a07ff7ea6233b213b36aa516b4c53c645f1817a4dd18b83cbea56"
 )
 EXPECTED_TRUSTED_DIGEST = (
-    "sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96"
+    "sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299"
 )
 EXPECTED_TRUSTED_REFERENCE = (
     "ghcr.io/tommykammy/shirokuma-seaweedfs@" + EXPECTED_TRUSTED_DIGEST
 )
+EXPECTED_RUN_ID = "29375069400"
+EXPECTED_RUN_ATTEMPT = "1"
+EXPECTED_WORKFLOW_SHA = "20750d0e989118e1cdad8690290545e86f7219db"
+EXPECTED_ATTESTATION = (
+    "https://github.com/TommyKammy/Shirokuma/attestations/35355272"
+)
+EXPECTED_TRIVY_DB_UPDATED_AT = "2026-07-14T19:03:26.337699315Z"
+EXPECTED_TRIVY_DB_DOWNLOADED_AT = "2026-07-14T23:06:31.124144935Z"
 BLOCKED_GITOPS_MARKERS = ("seaweedfs", "object-storage", "object_storage")
 
 
@@ -53,10 +61,19 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             gitleaks_path,
             containerfile_path,
             decision_path,
+            durable_evidence_dir / "candidate-release-evidence.json",
+            durable_evidence_dir / "cosign-signature-bundle.json",
             durable_evidence_dir / "cosign-verify.json",
+            durable_evidence_dir / "image-manifest.json",
+            durable_evidence_dir / "promotion-evidence.json",
+            durable_evidence_dir / "registry-signature-bundles.jsonl",
+            durable_evidence_dir / "rekor-entry.json",
+            durable_evidence_dir / "runtime-container-inspect.json",
             durable_evidence_dir / "runtime-smoke.json",
             durable_evidence_dir / "seaweedfs-4.39-arm64.cdx.json",
+            durable_evidence_dir / "slsa-bundles.jsonl",
             durable_evidence_dir / "slsa-verify.json",
+            durable_evidence_dir / "toolchain.json",
             durable_evidence_dir / "trivy-version.json",
             durable_evidence_dir / "trivy.json",
         )
@@ -236,32 +253,50 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertEqual(release["source"]["commit"], EXPECTED_RELEASE_COMMIT)
         self.assertEqual(release["source"]["tree"], EXPECTED_RELEASE_TREE)
         self.assertEqual(release["vulnerabilities"], {"critical": 0, "high": 0})
-        self.assertEqual(release["builder"]["run_id"], "29362206249")
-        self.assertEqual(
-            release["builder"]["workflow_sha"],
-            "39225a3656e388999f6755ca642cd65f7ef6c6c7",
-        )
+        self.assertEqual(release["builder"]["run_id"], EXPECTED_RUN_ID)
+        self.assertEqual(release["builder"]["run_attempt"], EXPECTED_RUN_ATTEMPT)
+        self.assertEqual(release["builder"]["workflow_sha"], EXPECTED_WORKFLOW_SHA)
+        self.assertEqual(release["builder"]["source_sha"], EXPECTED_WORKFLOW_SHA)
         self.assertEqual(release["admission_status"], "approved")
         self.assertEqual(release["scanner"]["version"], "0.72.0")
         self.assertEqual(
             release["scanner"]["vulnerability_db"]["updated_at"],
-            "2026-07-14T13:08:09.929373878Z",
+            EXPECTED_TRIVY_DB_UPDATED_AT,
         )
         self.assertEqual(
             release["scanner"]["vulnerability_db"]["downloaded_at"],
-            "2026-07-14T19:33:42.133181068Z",
+            EXPECTED_TRIVY_DB_DOWNLOADED_AT,
         )
-        self.assertEqual(release["github_actions_artifact"]["id"], "8322642193")
         self.assertEqual(
-            release["github_actions_artifact"]["role"],
-            "short-term downloadable mirror of the Git-retained evidence",
+            release["actions_artifact"],
+            {
+                "role": "retained mirror only",
+                "final_name": f"seaweedfs-4.39-arm64-{EXPECTED_RUN_ID}-1",
+                "retention_days": 90,
+            },
+        )
+        self.assertEqual(
+            set(release["artifacts"]),
+            {
+                "candidate-release-evidence.json",
+                "cosign-signature-bundle.json",
+                "cosign-verify.json",
+                "image-manifest.json",
+                "promotion-evidence.json",
+                "registry-signature-bundles.jsonl",
+                "rekor-entry.json",
+                "runtime-container-inspect.json",
+                "runtime-smoke.json",
+                "seaweedfs-4.39-arm64.cdx.json",
+                "slsa-bundles.jsonl",
+                "slsa-verify.json",
+                "toolchain.json",
+                "trivy-version.json",
+                "trivy.json",
+            },
         )
         for name, artifact in release["artifacts"].items():
             with self.subTest(durable_artifact=name):
-                if "path" not in artifact:
-                    self.assertEqual(name, "runtime-smoke.log")
-                    self.assertIn("GitHub Actions artifact only", artifact["retention"])
-                    continue
                 path = ROOT / artifact["path"]
                 self.assertTrue(path.is_file())
                 self.assertFalse(path.is_symlink())
@@ -305,15 +340,34 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         cosign = json.loads(
             (durable_evidence_dir / "cosign-verify.json").read_text(encoding="utf-8")
         )
-        self.assertTrue(
-            any(
-                record.get("critical", {})
-                .get("image", {})
-                .get("docker-manifest-digest")
-                == EXPECTED_TRUSTED_DIGEST
-                for record in cosign
-            )
+        self.assertEqual(cosign["schema_version"], 1)
+        self.assertEqual(cosign["reference"], EXPECTED_TRUSTED_REFERENCE)
+        self.assertEqual(
+            cosign["certificate_constraints"],
+            {
+                "issuer": "https://token.actions.githubusercontent.com",
+                "identity": (
+                    "https://github.com/TommyKammy/Shirokuma/.github/workflows/"
+                    "seaweedfs-arm64.yml@refs/heads/codex/issue-41"
+                ),
+                "github_workflow_name": "SeaweedFS 4.39 trusted arm64 build",
+                "github_workflow_repository": "TommyKammy/Shirokuma",
+                "github_workflow_ref": "refs/heads/codex/issue-41",
+                "github_workflow_sha": EXPECTED_WORKFLOW_SHA,
+                "github_workflow_trigger": "push",
+            },
         )
+        self.assertIs(cosign["detached_bundle_verified"], True)
+        self.assertIs(cosign["registry_signature_verified"], True)
+        self.assertEqual(cosign["registry_bundle"]["exact_matches"], 1)
+        self.assertEqual(len(cosign["verified_payloads"]), 1)
+        self.assertEqual(
+            cosign["verified_payloads"][0]["critical"]["image"][
+                "docker-manifest-digest"
+            ],
+            EXPECTED_TRUSTED_DIGEST,
+        )
+        self.assertEqual(cosign["rekor_entries"], release["transparency_log"]["entries"])
 
         slsa = json.loads(
             (durable_evidence_dir / "slsa-verify.json").read_text(encoding="utf-8")
@@ -339,18 +393,28 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         )
         self.assertEqual(
             release["artifacts"]["cosign-verify.json"]["sha256"],
-            "e631b3b84f7456bfa3b47e1743838145cb0d91f59585ea7344e12d492515c0fc",
+            "8c52acfb8f0184eeb8d87204622a407426665253e094914f05d221879922687f",
         )
         self.assertEqual(
-            release["promotion_tool"],
+            release["toolchain"]["crane"],
             {
-                "name": "crane",
                 "version": "v0.21.7",
                 "archive_sha256": (
                     "b6ee979d9411dfb05ce35ab9e156fe5de7def11a230764a7856ffa2eb971fa88"
                 ),
+                "execution": "deferred_to_promotion_job",
             },
         )
+        promotion = json.loads(
+            (durable_evidence_dir / "promotion-evidence.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(promotion["run_id"], EXPECTED_RUN_ID)
+        self.assertEqual(promotion["run_attempt"], EXPECTED_RUN_ATTEMPT)
+        self.assertEqual(promotion["trusted_tag_digest"], EXPECTED_TRUSTED_DIGEST)
+        self.assertEqual(promotion["trusted_tag_role"], "non_authoritative_pointer")
+        self.assertIs(promotion["tool"]["verified_before_registry_login"], True)
         runtime_smoke = json.loads(
             (durable_evidence_dir / "runtime-smoke.json").read_text(
                 encoding="utf-8"
@@ -362,17 +426,31 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             runtime_smoke["command"], ["/usr/bin/weed", "mini", "-dir=/data"]
         )
         self.assertIs(runtime_smoke["read_only_rootfs"], True)
+        self.assertEqual(runtime_smoke["tmpfs"], ["/tmp", "/data"])
+        self.assertEqual(runtime_smoke["capabilities_dropped"], "ALL")
+        self.assertIs(runtime_smoke["no_new_privileges"], True)
         self.assertEqual(runtime_smoke["sustained_running_seconds"], 10)
         self.assertEqual(runtime_smoke["run_id"], release["builder"]["run_id"])
         self.assertEqual(
-            release["publication"]["trusted_tag_digest"],
+            runtime_smoke["run_attempt"], release["builder"]["run_attempt"]
+        )
+        self.assertEqual(
+            runtime_smoke["runtime_inspect"]["sha256"],
+            release["artifacts"]["runtime-container-inspect.json"]["sha256"],
+        )
+        self.assertEqual(
+            release["promotion"]["trusted_tag_digest"],
             EXPECTED_TRUSTED_DIGEST,
         )
-        self.assertIs(
-            release["publication"]["promoted_after_evidence_retention"],
-            True,
+        self.assertEqual(
+            release["promotion"]["trusted_tag_role"],
+            "non_authoritative_pointer",
         )
-        self.assertRegex(release["slsa_provenance"], r"/attestations/[0-9]+$")
+        self.assertEqual(
+            promotion["candidate"]["release_evidence_sha256"],
+            release["promotion"]["candidate_release_sha256"],
+        )
+        self.assertEqual(release["slsa_provenance"], EXPECTED_ATTESTATION)
         self.assertEqual(
             release["issuer"],
             "https://token.actions.githubusercontent.com",
@@ -430,6 +508,15 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             trusted["release_evidence"],
             "bootstrap/seaweedfs/v4.39/release-evidence.json",
         )
+        self.assertEqual(trusted["builder"]["workflow_sha"], EXPECTED_WORKFLOW_SHA)
+        self.assertEqual(trusted["builder"]["source_sha"], EXPECTED_WORKFLOW_SHA)
+        self.assertEqual(trusted["builder"]["run_id"], EXPECTED_RUN_ID)
+        self.assertEqual(trusted["builder"]["run_attempt"], EXPECTED_RUN_ATTEMPT)
+        self.assertEqual(
+            trusted["builder"]["run"],
+            f"https://github.com/TommyKammy/Shirokuma/actions/runs/"
+            f"{EXPECTED_RUN_ID}/attempts/{EXPECTED_RUN_ATTEMPT}",
+        )
         controls = {control["control"]: control for control in trusted["controls"]}
         self.assertEqual(
             set(controls),
@@ -452,7 +539,21 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertEqual(controls["vulnerability_scan"]["high"], 0)
         self.assertEqual(
             controls["vulnerability_scan"]["vulnerability_db_updated_at"],
-            "2026-07-14T13:08:09.929373878Z",
+            EXPECTED_TRIVY_DB_UPDATED_AT,
+        )
+        self.assertEqual(
+            controls["signature"]["workflow_sha"], EXPECTED_WORKFLOW_SHA
+        )
+        self.assertEqual(
+            controls["slsa_provenance"]["provenance"], EXPECTED_ATTESTATION
+        )
+        self.assertEqual(
+            controls["runtime_tmp"]["inspect_sha256"],
+            "f423b629ac9b8ec066073e446718262f7f4703ba38e584e61dc5c90debdf7a1a",
+        )
+        self.assertEqual(
+            controls["tag_promotion"]["trusted_tag_role"],
+            "non_authoritative_pointer",
         )
 
         for relative_path in admission["runtime_manifests"]["paths"]:

@@ -1,0 +1,236 @@
+[
+    {
+        "Id": "7533be900fa6fabeef7113ee50c23a92140d4698f0c6d725d8659d4b20b45cb3",
+        "Created": "2026-07-14T23:06:11.151119764Z",
+        "Path": "/usr/bin/weed",
+        "Args": [
+            "mini",
+            "-dir=/data"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 3134,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-07-14T23:06:11.223406898Z",
+            "FinishedAt": "0001-01-01T00:00:00Z"
+        },
+        "Image": "sha256:925000c01c875a0cc30fe5d5c13acc890617cf5e1cb4c7d9d2815d416683c37b",
+        "ResolvConfPath": "/var/lib/docker/containers/7533be900fa6fabeef7113ee50c23a92140d4698f0c6d725d8659d4b20b45cb3/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/7533be900fa6fabeef7113ee50c23a92140d4698f0c6d725d8659d4b20b45cb3/hostname",
+        "HostsPath": "/var/lib/docker/containers/7533be900fa6fabeef7113ee50c23a92140d4698f0c6d725d8659d4b20b45cb3/hosts",
+        "LogPath": "/var/lib/docker/containers/7533be900fa6fabeef7113ee50c23a92140d4698f0c6d725d8659d4b20b45cb3/7533be900fa6fabeef7113ee50c23a92140d4698f0c6d725d8659d4b20b45cb3-json.log",
+        "Name": "/seaweedfs-smoke-29375069400-1",
+        "RestartCount": 0,
+        "Driver": "overlay2",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "docker-default",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "bridge",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": [
+                "ALL"
+            ],
+            "CgroupnsMode": "private",
+            "Dns": [],
+            "DnsOptions": [],
+            "DnsSearch": [],
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": true,
+            "SecurityOpt": [
+                "no-new-privileges"
+            ],
+            "Tmpfs": {
+                "/data": "rw,nosuid,nodev,size=64m,uid=65532,gid=65532,mode=0755",
+                "/tmp": "rw,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=1777"
+            },
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 536870912,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": [],
+            "BlkioDeviceReadBps": [],
+            "BlkioDeviceWriteBps": [],
+            "BlkioDeviceReadIOps": [],
+            "BlkioDeviceWriteIOps": [],
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": [],
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 1073741824,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": 256,
+            "Ulimits": [],
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "MaskedPaths": [
+                "/proc/asound",
+                "/proc/acpi",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/sys/firmware",
+                "/sys/devices/virtual/powercap"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "GraphDriver": {
+            "Data": {
+                "ID": "7533be900fa6fabeef7113ee50c23a92140d4698f0c6d725d8659d4b20b45cb3",
+                "LowerDir": "/var/lib/docker/overlay2/e6224dc18b1f9600af6741edb900960c6add6855e39613a3d9906f9d01336b52-init/diff:/var/lib/docker/overlay2/9fd20ba5cbb83ffa951d3bb01a5570aaa34c498832eaf0d7078ceac3639a1841/diff:/var/lib/docker/overlay2/1629a19576c1bc1155189864bda5ab670bd220ab5e35a7ddc62e3ba474d098ab/diff:/var/lib/docker/overlay2/04d0e2e5ec943589aba76c83e8fad2f9a3d65f6ee43b6e024c73374060da5c30/diff:/var/lib/docker/overlay2/97d37db71b4c5bbf201c9b6ce1fe5700a2a5ba8cc1f4a7f9c8037d0b7b8c2129/diff:/var/lib/docker/overlay2/3471470058ddf5097259dcb0024ce5013a10519a8f5a7dec1010ac04e1349031/diff",
+                "MergedDir": "/var/lib/docker/overlay2/e6224dc18b1f9600af6741edb900960c6add6855e39613a3d9906f9d01336b52/merged",
+                "UpperDir": "/var/lib/docker/overlay2/e6224dc18b1f9600af6741edb900960c6add6855e39613a3d9906f9d01336b52/diff",
+                "WorkDir": "/var/lib/docker/overlay2/e6224dc18b1f9600af6741edb900960c6add6855e39613a3d9906f9d01336b52/work"
+            },
+            "Name": "overlay2"
+        },
+        "Mounts": [],
+        "Config": {
+            "Hostname": "7533be900fa6",
+            "Domainname": "",
+            "User": "65532:65532",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "ExposedPorts": {
+                "19333/tcp": {},
+                "23646/tcp": {},
+                "7333/tcp": {},
+                "8333/tcp": {},
+                "8888/tcp": {},
+                "9333/tcp": {},
+                "9340/tcp": {}
+            },
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            ],
+            "Cmd": [
+                "mini",
+                "-dir=/data"
+            ],
+            "Image": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299",
+            "Volumes": null,
+            "WorkingDir": "/",
+            "Entrypoint": [
+                "/usr/bin/weed"
+            ],
+            "OnBuild": null,
+            "Labels": {
+                "org.opencontainers.image.licenses": "Apache-2.0",
+                "org.opencontainers.image.revision": "db42bb49757b459551607939807017d7a9d5a94a",
+                "org.opencontainers.image.source": "https://github.com/seaweedfs/seaweedfs",
+                "org.opencontainers.image.title": "Shirokuma SeaweedFS",
+                "org.opencontainers.image.version": "4.39"
+            }
+        },
+        "NetworkSettings": {
+            "Bridge": "",
+            "SandboxID": "793ec52aedb0c4cd1cd6fe44c8e94d0b8b6051172916424ad9b84cf67eb5319a",
+            "SandboxKey": "/var/run/docker/netns/793ec52aedb0",
+            "Ports": {
+                "19333/tcp": null,
+                "23646/tcp": null,
+                "7333/tcp": null,
+                "8333/tcp": null,
+                "8888/tcp": null,
+                "9333/tcp": null,
+                "9340/tcp": null
+            },
+            "HairpinMode": false,
+            "LinkLocalIPv6Address": "",
+            "LinkLocalIPv6PrefixLen": 0,
+            "SecondaryIPAddresses": null,
+            "SecondaryIPv6Addresses": null,
+            "EndpointID": "63678ccf715713175a4ec42458c548972357858cddc3501ee8a981e1201eaa59",
+            "Gateway": "172.17.0.1",
+            "GlobalIPv6Address": "",
+            "GlobalIPv6PrefixLen": 0,
+            "IPAddress": "172.17.0.3",
+            "IPPrefixLen": 16,
+            "IPv6Gateway": "",
+            "MacAddress": "e6:be:55:3e:81:34",
+            "Networks": {
+                "bridge": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "MacAddress": "e6:be:55:3e:81:34",
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "37ff2c2f3148e92b9dd88ff6f48d7a618e7f3fcc6608f394245802d368b87b0d",
+                    "EndpointID": "63678ccf715713175a4ec42458c548972357858cddc3501ee8a981e1201eaa59",
+                    "Gateway": "172.17.0.1",
+                    "IPAddress": "172.17.0.3",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": null
+                }
+            }
+        }
+    }
+]

@@ -55,6 +55,52 @@ class TrustedImageContractTests(unittest.TestCase):
         self.assertNotIn("imjasonh/setup-crane@", workflow)
         self.assertNotIn("docker/setup-buildx-action@", workflow)
 
+    def test_repository_admission_controls_are_closed_and_release_bound(self) -> None:
+        release = json.loads((ROOT / verifier.RELEASE_PATH).read_text(encoding="utf-8"))
+        verifier._validate_repository_admission(ROOT, release)
+
+        def stale_sbom(data: dict) -> None:
+            for control in data["admitted_candidate"]["controls"]:
+                if control["control"] == "sbom":
+                    control["sha256"] = "0" * 64
+                    return
+
+        def duplicate_control(data: dict) -> None:
+            data["admitted_candidate"]["controls"].append(
+                dict(data["admitted_candidate"]["controls"][0])
+            )
+
+        def remove_control(data: dict) -> None:
+            data["admitted_candidate"]["controls"] = [
+                control
+                for control in data["admitted_candidate"]["controls"]
+                if control["control"] != "tag_promotion"
+            ]
+
+        def add_unreviewed_field(data: dict) -> None:
+            data["admitted_candidate"]["controls"][0]["unreviewed"] = True
+
+        mutations = (
+            (stale_sbom, "ADMISSION_CONTROL_BINDING"),
+            (duplicate_control, "ADMISSION_CONTROL_SET"),
+            (remove_control, "ADMISSION_CONTROL_SET"),
+            (add_unreviewed_field, "ADMISSION_CONTROL_KEYS"),
+        )
+        for mutate, expected_code in mutations:
+            with self.subTest(expected_code=expected_code):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    target = root / verifier.ADMISSION_PATH
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    data = json.loads(
+                        (ROOT / verifier.ADMISSION_PATH).read_text(encoding="utf-8")
+                    )
+                    mutate(data)
+                    target.write_text(json.dumps(data), encoding="utf-8")
+                    with self.assertRaises(verifier.ContractError) as caught:
+                        verifier._validate_repository_admission(root, release)
+                    self.assertEqual(caught.exception.code, expected_code)
+
     def test_contract_mutations_fail_with_stable_error_codes(self) -> None:
         def remove_buildkit(root: Path) -> None:
             path = root / verifier.CONTRACT_PATH

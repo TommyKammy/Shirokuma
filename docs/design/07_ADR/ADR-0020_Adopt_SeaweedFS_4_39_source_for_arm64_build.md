@@ -152,32 +152,44 @@ part of the durable decision history.
 
 ## Publication evidence
 
-The replacement GitHub Actions run
-[`29362206249`](https://github.com/TommyKammy/Shirokuma/actions/runs/29362206249)
-published and admitted this hardened linux/arm64 artifact:
+GitHub Actions run
+[`29375069400`, attempt 1](https://github.com/TommyKammy/Shirokuma/actions/runs/29375069400/attempts/1)
+executed the hardened closed-world build, verification, and promotion contract and
+admitted this linux/arm64 artifact:
 
-    ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96
+    ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299
 
-The run verified the GitHub Actions OIDC workflow identity and immutable
-workflow SHA `39225a3656e388999f6755ca642cd65f7ef6c6c7` with keyless Cosign
-and transparency-log evidence. GitHub retained SLSA provenance at
-[`attestation 35323800`](https://github.com/TommyKammy/Shirokuma/attestations/35323800).
-The exact-digest CycloneDX SBOM and Trivy scan are retained in Git under
-`bootstrap/seaweedfs/v4.39/evidence/` and mirrored in artifact `8322642193`;
-Trivy `0.72.0` reported zero Critical and zero High findings with
-vulnerability DB timestamp `2026-07-14T13:08:09.929373878Z`. The image metadata
-exposes the active `weed mini` volume HTTP port `9340` and admin HTTP port
-`23646`, and the non-root default command starts successfully with writable
-`/tmp` and `/data` tmpfs, a read-only root, all capabilities dropped, and
-no-new-privileges for the bounded 10-second smoke. The Dockerfile frontend is
-pinned by digest, the vulnerability and DB
-freshness gates complete before signing or provenance publication, and the
-generated evidence hashes the Cosign verification output. No ADR-0019
-vulnerability exception is required. The build publishes first to run-scoped
-quarantine tag `quarantine-29362206249-1`; after all gates and evidence
-retention pass, checksum-verified Crane `v0.21.7` promotes the unchanged digest to trusted tag
-`4.39-arm64`. Repeated valid SLSA attestations are accepted when at least one
-matches the exact workflow SHA and digest.
+The OIDC identity, workflow name/path/ref, push trigger, workflow SHA, source
+SHA, run ID, and run attempt are all bound to immutable commit
+`20750d0e989118e1cdad8690290545e86f7219db`. Cosign `v3.1.1` verified both the
+detached bundle and the bundle retrieved from the registry, and the retained
+Rekor v1 response is structurally linked to the bundle entry. GitHub retained
+the exact-invocation SLSA provenance at
+[`attestation 35355272`](https://github.com/TommyKammy/Shirokuma/attestations/35355272);
+multiple valid attestations are permitted, but every retained record must match
+the same subject and build identity.
+
+The contract pins the Dockerfile frontend, Buildx executable checksum, BuildKit
+index and linux/arm64 child digests, source archive, Containerfile, and all build
+inputs. Runner-provided Docker, GitHub CLI, Git, Python, curl, tar, and
+`sha256sum` versions are recorded explicitly as runner substrate rather than
+misrepresented as pinned inputs. Trivy `0.72.0` reported Critical=0 and High=0
+with database update time `2026-07-14T19:03:26.337699315Z` and download time
+`2026-07-14T23:06:31.124144935Z` before signing and provenance publication.
+The CycloneDX SBOM, scanner metadata, Cosign/Rekor/SLSA records, toolchain
+record, and raw container inspect are retained and hash-bound to the exact
+digest.
+
+The effective runtime inspect proves the non-root command, read-only root,
+exact writable `/tmp` and `/data` tmpfs options, all capabilities dropped,
+no-new-privileges, and bounded PID/memory settings. The immutable candidate
+snapshot was retained as artifact `seaweedfs-4.39-arm64-candidate-29375069400-1`
+before checksum-verified Crane `v0.21.7` promoted the unchanged digest. The
+final artifact `seaweedfs-4.39-arm64-29375069400-1` is a 90-day mirror; the
+committed evidence is authoritative. Trusted tag `4.39-arm64` is explicitly a
+`non_authoritative_pointer`: admission depends only on the digest plus the
+committed candidate-to-promotion-to-final evidence lineage. No ADR-0019
+vulnerability exception is required.
 
 The original upstream image remains rejected. This decision admits only the
 hardened Shirokuma artifact above. Runtime manifests remain blocked until parent

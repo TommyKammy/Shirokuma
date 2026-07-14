@@ -153,28 +153,32 @@ not:
 ADR-0019 cannot waive missing signature, transparency-log, or SLSA provenance
 evidence, so the upstream SeaweedFS image remains rejected. ADR-0020 instead
 approves the exact source revision for a repository-controlled build. GitHub
-Actions hardened replacement run `29362206249` produced native `linux/arm64`
-artifact
-`ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96`.
-The workflow identity passed keyless Cosign and transparency-log verification,
-immutable workflow SHA `39225a3656e388999f6755ca642cd65f7ef6c6c7`
-is verified, SLSA provenance is retained as attestation `35323800`, and the
-CycloneDX SBOM is bound to the same digest. Trivy `0.72.0` reported Critical=0
-and High=0 with vulnerability DB timestamp
-`2026-07-14T13:08:09.929373878Z`. Corrected image metadata exposes `weed mini`
-ports `9340` and `23646`; the exact digest sustained a 10-second non-root smoke
-with a read-only root, writable `/tmp` and `/data`, all capabilities dropped,
-and no-new-privileges.
-The Dockerfile frontend is immutable, scan and DB freshness gates precede
-signing, and generated evidence hashes Cosign verification. The hardened digest
-is promoted from a run-scoped quarantine tag only after evidence retention by
-checksum-verified Crane `v0.21.7` and is admitted without an ADR-0019
-vulnerability exception.
+Actions hardened replacement run `29375069400`, attempt `1`, produced native
+`linux/arm64` artifact
+`ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299`.
+The exact workflow and source SHA
+`20750d0e989118e1cdad8690290545e86f7219db`, workflow name/path/ref, trigger,
+runner environment, run ID, and attempt are bound by Cosign and SLSA
+verification. Cosign `v3.1.1` verified both detached and registry-retrieved
+bundles against the retained Rekor v1 entry, and SLSA provenance is retained as
+attestation `35355272`. Trivy `0.72.0` reported Critical=0 and High=0 with DB
+update time `2026-07-14T19:03:26.337699315Z` and download time
+`2026-07-14T23:06:31.124144935Z` before signing.
+
+The closed-world contract binds source archive, Containerfile, build inputs,
+Buildx checksum, and BuildKit index/arm64 digests. The effective container
+inspect proves the non-root command, read-only root, exact writable `/tmp` and
+`/data` tmpfs options, all capabilities dropped, no-new-privileges, and bounded
+PID/memory settings. Candidate, promotion, and final evidence are hash-linked;
+the `4.39-arm64` tag is a non-authoritative publication pointer, so admission
+uses only the immutable digest and committed evidence. The hardened artifact is
+admitted without an ADR-0019 vulnerability exception.
 
 The machine-readable decision is retained at
 `bootstrap/seaweedfs/v4.39/admission.json`; the exact run record is retained at
 `bootstrap/seaweedfs/v4.39/release-evidence.json`, and the complete Cosign,
-SLSA, runtime-smoke, CycloneDX, scanner, and Trivy evidence is retained under
+registry, Rekor, SLSA, raw runtime-inspect, CycloneDX, scanner, candidate, and
+promotion evidence is retained under
 `bootstrap/seaweedfs/v4.39/evidence/`. The repository-owned
 `verify-object-storage-profile` check preserves the upstream rejection, pins
 the admitted Shirokuma digest and workflow identity, validates those durable

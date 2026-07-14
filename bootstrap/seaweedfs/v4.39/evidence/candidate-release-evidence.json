@@ -91,16 +91,9 @@
     ]
   },
   "promotion": {
-    "status": "verified",
-    "run_id": "29375069400",
-    "run_attempt": "1",
+    "status": "pending",
     "trusted_tag": "4.39-arm64",
-    "trusted_tag_role": "non_authoritative_pointer",
-    "trusted_tag_digest": "sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299",
-    "evidence": "promotion-evidence.json",
-    "candidate_artifact": "seaweedfs-4.39-arm64-candidate-29375069400-1",
-    "candidate_release_evidence": "candidate-release-evidence.json",
-    "candidate_release_sha256": "f768ba4108bb088ff83cedb0db691f2d0ee59f38c1f0cef8ad15875b2439bc58"
+    "tool": "crane"
   },
   "artifacts": {
     "cosign-signature-bundle.json": {
@@ -154,19 +147,11 @@
     "trivy.json": {
       "path": "bootstrap/seaweedfs/v4.39/evidence/trivy.json",
       "sha256": "48db7a3d56f6142220b243fbdb1d7b9db2d68cb1664cf172b7b36cbfc2c0ca58"
-    },
-    "candidate-release-evidence.json": {
-      "path": "bootstrap/seaweedfs/v4.39/evidence/candidate-release-evidence.json",
-      "sha256": "f768ba4108bb088ff83cedb0db691f2d0ee59f38c1f0cef8ad15875b2439bc58"
-    },
-    "promotion-evidence.json": {
-      "path": "bootstrap/seaweedfs/v4.39/evidence/promotion-evidence.json",
-      "sha256": "d84e2015bfce6170a9fd59a689a78d25a749ea7dd3135e8ecf8b89a70801008f"
     }
   },
   "actions_artifact": {
     "role": "retained mirror only",
-    "final_name": "seaweedfs-4.39-arm64-29375069400-1",
-    "retention_days": 90
+    "candidate_name": "seaweedfs-4.39-arm64-candidate-29375069400-1",
+    "retention_days": 7
   }
 }

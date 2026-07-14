@@ -3,10 +3,10 @@
   "Trivy": {
     "Version": "0.72.0"
   },
-  "ReportID": "019f621e-f2dc-7643-b4f1-35aabbd1c5d7",
-  "CreatedAt": "2026-07-14T19:33:43.260412541Z",
+  "ReportID": "019f62e1-c8ee-7c76-a7fd-067b20531b88",
+  "CreatedAt": "2026-07-14T23:06:32.046818535Z",
   "ArtifactID": "sha256:b5e702ef27ae5c5e3d71132c5d7e7b91d776d450f77ca43d4b218487839f9d67",
-  "ArtifactName": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96",
+  "ArtifactName": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299",
   "ArtifactType": "container_image",
   "Metadata": {
     "Size": 132748288,
@@ -19,9 +19,9 @@
       "sha256:66bd2815cdd29fd58fdf76addc4e7d82f50cd16725b8300528ad2b7e8d0ef5e1"
     ],
     "RepoDigests": [
-      "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96"
+      "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299"
     ],
-    "Reference": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96",
+    "Reference": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299",
     "ImageConfig": {
       "architecture": "arm64",
       "created": "2026-07-14T18:21:24.948277333Z",

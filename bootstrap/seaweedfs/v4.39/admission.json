@@ -30,68 +30,135 @@
     ]
   },
   "admitted_candidate": {
-    "reference": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96",
-    "manifest_digest": "sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96",
+    "reference": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299",
+    "manifest_digest": "sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299",
     "source_evidence": "bootstrap/seaweedfs/v4.39/source.json",
     "release_evidence": "bootstrap/seaweedfs/v4.39/release-evidence.json",
     "builder": {
+      "repository": "TommyKammy/Shirokuma",
+      "workflow_name": "SeaweedFS 4.39 trusted arm64 build",
+      "workflow": ".github/workflows/seaweedfs-arm64.yml",
+      "ref": "refs/heads/codex/issue-41",
+      "workflow_sha": "20750d0e989118e1cdad8690290545e86f7219db",
+      "source_sha": "20750d0e989118e1cdad8690290545e86f7219db",
+      "trigger": "push",
+      "run_id": "29375069400",
+      "run_attempt": "1",
       "issuer": "https://token.actions.githubusercontent.com",
       "identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/seaweedfs-arm64.yml@refs/heads/codex/issue-41",
-      "workflow_sha": "39225a3656e388999f6755ca642cd65f7ef6c6c7",
-      "run": "https://github.com/TommyKammy/Shirokuma/actions/runs/29362206249"
+      "run": "https://github.com/TommyKammy/Shirokuma/actions/runs/29375069400/attempts/1"
     },
     "controls": [
       {
         "control": "source_adoption",
         "status": "verified",
+        "source_evidence": "bootstrap/seaweedfs/v4.39/source.json",
+        "source_evidence_sha256": "39c80d2d22479617f6a933585909cf075087c0b97f6e51a9008938666f283b05",
+        "commit": "db42bb49757b459551607939807017d7a9d5a94a",
+        "tree": "da91641fdd520e465c68fa48af3b3ad07ad86822",
+        "git_archive_sha256": "95b3ba34d191e2cc96063434f407087000a9ffcf22f95682ecd5ce40b5a3fab9",
+        "containerfile_sha256": "ad0e8bc802cbd8bd021b6578659d67cf92b100b2d080ed57a86b855d092bd8f8",
         "evidence": "ADR-0020 accepts the exact upstream commit, tree, archive checksum, and immutable Dockerfile frontend for the bounded local lab"
       },
       {
         "control": "signature",
         "status": "verified",
-        "evidence": "the exact digest passed the vulnerability gate before keyless signing bound it to the recorded issuer, identity, and workflow SHA"
+        "bundle": "bootstrap/seaweedfs/v4.39/evidence/cosign-signature-bundle.json",
+        "bundle_sha256": "45fc1a2536eb652fd400d5f0c8e4f8fa0d99f5efc5ddf70e439e06471b40f098",
+        "registry_bundles": "bootstrap/seaweedfs/v4.39/evidence/registry-signature-bundles.jsonl",
+        "registry_bundles_sha256": "7410a7d2ba5b635ace1adf19063d461be5d2b0e1d915e010a5f866e91168cbb1",
+        "verification": "bootstrap/seaweedfs/v4.39/evidence/cosign-verify.json",
+        "verification_sha256": "8c52acfb8f0184eeb8d87204622a407426665253e094914f05d221879922687f",
+        "issuer": "https://token.actions.githubusercontent.com",
+        "identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/seaweedfs-arm64.yml@refs/heads/codex/issue-41",
+        "workflow_sha": "20750d0e989118e1cdad8690290545e86f7219db",
+        "evidence": "sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299 passed the vulnerability gate before Cosign v3.1.1 keyless signing bound it to the exact issuer, identity, workflow name, workflow ref, workflow SHA, source SHA, trigger, run ID, and run attempt"
       },
       {
         "control": "transparency_log",
         "status": "verified",
-        "evidence": "Cosign verification returned transparency-log-backed entries retained at bootstrap/seaweedfs/v4.39/evidence/cosign-verify.json"
+        "rekor_response": "bootstrap/seaweedfs/v4.39/evidence/rekor-entry.json",
+        "rekor_response_sha256": "8c39cb5beea75c69f111c20b01e687fc7faa56f3382f8d85524e12e0b52106e3",
+        "entries": [
+          {
+            "uuid": "108e9186e8c5677a736173514dd63129994ba1714d9555b21e1d7ba5efa8589e58e3fc68147466e8",
+            "log_index": "2170891607",
+            "integrated_time": "1784070401",
+            "log_id": "wNI9atQGlz+VWfO6LRygH4QUfY/8W4RFwiT5i5WRgB0=",
+            "log_id_hex": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d"
+          }
+        ],
+        "evidence": "the local Cosign bundle, registry-retrieved bundle, exact Rekor v1 response, and verification payload are structurally linked and retained under bootstrap/seaweedfs/v4.39/evidence"
       },
       {
         "control": "workflow_revision",
         "status": "verified",
-        "evidence": "Cosign and GitHub attestation verification bind the artifact to workflow SHA 39225a3656e388999f6755ca642cd65f7ef6c6c7"
+        "repository": "TommyKammy/Shirokuma",
+        "workflow_name": "SeaweedFS 4.39 trusted arm64 build",
+        "workflow": ".github/workflows/seaweedfs-arm64.yml",
+        "ref": "refs/heads/codex/issue-41",
+        "workflow_sha": "20750d0e989118e1cdad8690290545e86f7219db",
+        "source_sha": "20750d0e989118e1cdad8690290545e86f7219db",
+        "trigger": "push",
+        "run_id": "29375069400",
+        "run_attempt": "1",
+        "evidence": "Cosign and GitHub attestation verification bind the artifact to SeaweedFS 4.39 trusted arm64 build at .github/workflows/seaweedfs-arm64.yml, workflow/source SHA 20750d0e989118e1cdad8690290545e86f7219db, push run 29375069400 attempt 1"
       },
       {
         "control": "slsa_provenance",
         "status": "verified",
-        "evidence": "https://github.com/TommyKammy/Shirokuma/attestations/35323800"
+        "provenance": "https://github.com/TommyKammy/Shirokuma/attestations/35355272",
+        "verification": "bootstrap/seaweedfs/v4.39/evidence/slsa-verify.json",
+        "verification_sha256": "628e15fbe60c61f29135df045647e7562ac9c34eee86b2eccd49cb233711c2ee",
+        "bundles": "bootstrap/seaweedfs/v4.39/evidence/slsa-bundles.jsonl",
+        "bundles_sha256": "8538f87256d81959d717ef92d9441397c2b0974e5e775d815cbcde624c016dfd",
+        "evidence": "https://github.com/TommyKammy/Shirokuma/actions/runs/29375069400/attempts/1; every retained attestation record passed exact subject, workflow, ref, workflow/source SHA, trigger, runner environment, run ID, and run-attempt checks"
       },
       {
         "control": "sbom",
         "status": "verified",
         "path": "bootstrap/seaweedfs/v4.39/evidence/seaweedfs-4.39-arm64.cdx.json",
-        "sha256": "1fafe26e83ac4c04579330f49231fad261ec5af59b3e9bdddcea50016eaaaffd"
+        "sha256": "5726ad70bc137949695fdb1cd5b72f0d73f9912db11c75fdec863d29ba2c40e0",
+        "evidence": "the retained CycloneDX SBOM names the exact admitted digest and is hash-bound by release-evidence.json"
       },
       {
         "control": "vulnerability_scan",
         "status": "verified",
         "critical": 0,
         "high": 0,
+        "scanner_name": "trivy",
         "scanner_version": "0.72.0",
-        "vulnerability_db_updated_at": "2026-07-14T13:08:09.929373878Z",
-        "vulnerability_db_downloaded_at": "2026-07-14T19:33:42.133181068Z",
+        "vulnerability_db_version": 2,
+        "vulnerability_db_updated_at": "2026-07-14T19:03:26.337699315Z",
+        "vulnerability_db_downloaded_at": "2026-07-14T23:06:31.124144935Z",
         "path": "bootstrap/seaweedfs/v4.39/evidence/trivy.json",
-        "sha256": "a656c22b7dfc86d9f75cacc38a8271fc25b929af0b9ea11469bfef6e438cc049"
+        "sha256": "48db7a3d56f6142220b243fbdb1d7b9db2d68cb1664cf172b7b36cbfc2c0ca58",
+        "evidence": "Trivy v0.72.0 scanned the exact admitted digest with the retained database metadata and found Critical=0 and High=0"
       },
       {
         "control": "runtime_tmp",
         "status": "verified",
-        "evidence": "run 29362206249 sustained non-root weed mini for 10 seconds with a read-only root, writable /tmp and /data tmpfs, all capabilities dropped, and no-new-privileges; retained at bootstrap/seaweedfs/v4.39/evidence/runtime-smoke.json"
+        "run_id": "29375069400",
+        "run_attempt": "1",
+        "summary": "bootstrap/seaweedfs/v4.39/evidence/runtime-smoke.json",
+        "summary_sha256": "b9e21508eea495efc1f31ad42488897e1204ce471688e5899948104dd974a7d2",
+        "inspect": "bootstrap/seaweedfs/v4.39/evidence/runtime-container-inspect.json",
+        "inspect_sha256": "f423b629ac9b8ec066073e446718262f7f4703ba38e584e61dc5c90debdf7a1a",
+        "evidence": "run 29375069400 attempt 1 sustained non-root weed mini for 10 seconds with the verified effective command, a read-only root, exact writable /tmp and /data tmpfs options, all capabilities dropped, no-new-privileges, and bounded PID/memory settings; the raw inspect and its bound summary are retained under bootstrap/seaweedfs/v4.39/evidence"
       },
       {
         "control": "tag_promotion",
         "status": "verified",
-        "evidence": "run 29362206249 verified Crane v0.21.7 archive sha256 b6ee979d9411dfb05ce35ab9e156fe5de7def11a230764a7856ffa2eb971fa88, published to a run-scoped quarantine tag, and promoted sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96 only after all gates and evidence retention passed"
+        "run_id": "29375069400",
+        "run_attempt": "1",
+        "digest": "sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299",
+        "trusted_tag": "4.39-arm64",
+        "trusted_tag_role": "non_authoritative_pointer",
+        "promotion": "bootstrap/seaweedfs/v4.39/evidence/promotion-evidence.json",
+        "promotion_sha256": "d84e2015bfce6170a9fd59a689a78d25a749ea7dd3135e8ecf8b89a70801008f",
+        "candidate": "bootstrap/seaweedfs/v4.39/evidence/candidate-release-evidence.json",
+        "candidate_sha256": "f768ba4108bb088ff83cedb0db691f2d0ee59f38c1f0cef8ad15875b2439bc58",
+        "evidence": "run 29375069400 attempt 1 verified Crane v0.21.7 archive sha256 b6ee979d9411dfb05ce35ab9e156fe5de7def11a230764a7856ffa2eb971fa88 before registry login, linked the immutable candidate snapshot to the promotion record, and promoted sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299 only after all gates and candidate evidence retention passed; the trusted tag is a non-authoritative publication pointer"
       }
     ]
   },
@@ -101,7 +168,7 @@
     "admission": "approved",
     "exception_eligible": false,
     "blockers": [],
-    "rationale": "The hardened Shirokuma source build fail-closes on every recorded build input, provides writable weed mini temporary storage, completes Critical=0/High=0 scanning before signing and provenance publication, tolerates repeated valid attestations, and promotes the trusted tag from a run-scoped quarantine tag only after evidence retention. Signature, transparency, SLSA, SBOM, scanner freshness, and generated evidence hashes bind to the exact digest. The upstream image remains blocked."
+    "rationale": "The hardened Shirokuma source build uses a closed-world workflow and toolchain contract, binds source, Containerfile, workflow, trigger, runner substrate, run ID, and attempt to the exact digest, and verifies the effective runtime configuration rather than requested flags. Critical=0/High=0 scanning precedes signing and provenance publication; durable Cosign, registry, Rekor, SLSA, SBOM, scanner, runtime-inspect, candidate, promotion, and final evidence form one hash-linked lineage. Admission relies only on the immutable digest and committed final evidence; the trusted tag is non-authoritative and the upstream image remains blocked."
   },
   "runtime_manifests": {
     "permitted": false,

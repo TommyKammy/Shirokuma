@@ -1236,6 +1236,158 @@ def _validate_repository_admission(root: Path, release: Dict[str, Any]) -> None:
         "repository, workflow, ref, SHA, run, issuer, or identity mismatch",
     )
 
+    raw_controls = admitted.get("controls")
+    _expect(
+        isinstance(raw_controls, list),
+        "ADMISSION_CONTROL_SET",
+        "controls must be a list",
+    )
+    controls: Dict[str, Dict[str, Any]] = {}
+    for control in raw_controls:
+        _expect(
+            isinstance(control, dict),
+            "ADMISSION_CONTROL_SET",
+            "every control must be an object",
+        )
+        name = control.get("control")
+        _expect(
+            isinstance(name, str) and name and name not in controls,
+            "ADMISSION_CONTROL_SET",
+            "control names must be non-empty and unique",
+        )
+        _expect(
+            control.get("status") == "verified"
+            and isinstance(control.get("evidence"), str)
+            and bool(control["evidence"].strip()),
+            "ADMISSION_CONTROL_STATE",
+            f"{name} must be verified with non-empty evidence",
+        )
+        controls[name] = control
+
+    artifacts = release["artifacts"]
+    source = release["source"]
+    scanner = release["scanner"]
+    promotion = release["promotion"]
+
+    def artifact_binding(name: str) -> Dict[str, str]:
+        return artifacts[name]
+
+    signature_bundle = artifact_binding("cosign-signature-bundle.json")
+    signature_registry = artifact_binding("registry-signature-bundles.jsonl")
+    signature_verify = artifact_binding("cosign-verify.json")
+    rekor_response = artifact_binding("rekor-entry.json")
+    slsa_verify = artifact_binding("slsa-verify.json")
+    slsa_bundles = artifact_binding("slsa-bundles.jsonl")
+    sbom = artifact_binding("seaweedfs-4.39-arm64.cdx.json")
+    trivy = artifact_binding("trivy.json")
+    runtime_summary = artifact_binding("runtime-smoke.json")
+    runtime_inspect = artifact_binding("runtime-container-inspect.json")
+    promotion_evidence = artifact_binding("promotion-evidence.json")
+    candidate_evidence = artifact_binding("candidate-release-evidence.json")
+
+    expected_bindings: Dict[str, Dict[str, Any]] = {
+        "source_adoption": {
+            "source_evidence": source["evidence"],
+            "source_evidence_sha256": source["evidence_sha256"],
+            "commit": source["commit"],
+            "tree": source["tree"],
+            "git_archive_sha256": source["git_archive_sha256"],
+            "containerfile_sha256": source["containerfile_sha256"],
+        },
+        "signature": {
+            "bundle": signature_bundle["path"],
+            "bundle_sha256": signature_bundle["sha256"],
+            "registry_bundles": signature_registry["path"],
+            "registry_bundles_sha256": signature_registry["sha256"],
+            "verification": signature_verify["path"],
+            "verification_sha256": signature_verify["sha256"],
+            "issuer": release["issuer"],
+            "identity": release["identity"],
+            "workflow_sha": release_builder["workflow_sha"],
+        },
+        "transparency_log": {
+            "rekor_response": rekor_response["path"],
+            "rekor_response_sha256": rekor_response["sha256"],
+            "entries": release["transparency_log"]["entries"],
+        },
+        "workflow_revision": {
+            key: release_builder[key]
+            for key in (
+                "repository",
+                "workflow_name",
+                "workflow",
+                "ref",
+                "workflow_sha",
+                "source_sha",
+                "trigger",
+                "run_id",
+                "run_attempt",
+            )
+        },
+        "slsa_provenance": {
+            "provenance": release["slsa_provenance"],
+            "verification": slsa_verify["path"],
+            "verification_sha256": slsa_verify["sha256"],
+            "bundles": slsa_bundles["path"],
+            "bundles_sha256": slsa_bundles["sha256"],
+        },
+        "sbom": {
+            "path": sbom["path"],
+            "sha256": sbom["sha256"],
+        },
+        "vulnerability_scan": {
+            "critical": release["vulnerabilities"]["critical"],
+            "high": release["vulnerabilities"]["high"],
+            "scanner_name": scanner["name"],
+            "scanner_version": scanner["version"],
+            "vulnerability_db_version": scanner["vulnerability_db"]["version"],
+            "vulnerability_db_updated_at": scanner["vulnerability_db"][
+                "updated_at"
+            ],
+            "vulnerability_db_downloaded_at": scanner["vulnerability_db"][
+                "downloaded_at"
+            ],
+            "path": trivy["path"],
+            "sha256": trivy["sha256"],
+        },
+        "runtime_tmp": {
+            "run_id": str(release_builder["run_id"]),
+            "run_attempt": str(release_builder["run_attempt"]),
+            "summary": runtime_summary["path"],
+            "summary_sha256": runtime_summary["sha256"],
+            "inspect": runtime_inspect["path"],
+            "inspect_sha256": runtime_inspect["sha256"],
+        },
+        "tag_promotion": {
+            "run_id": str(promotion["run_id"]),
+            "run_attempt": str(promotion["run_attempt"]),
+            "digest": promotion["trusted_tag_digest"],
+            "trusted_tag": promotion["trusted_tag"],
+            "trusted_tag_role": promotion["trusted_tag_role"],
+            "promotion": promotion_evidence["path"],
+            "promotion_sha256": promotion_evidence["sha256"],
+            "candidate": candidate_evidence["path"],
+            "candidate_sha256": candidate_evidence["sha256"],
+        },
+    }
+    _expect(
+        set(controls) == set(expected_bindings),
+        "ADMISSION_CONTROL_SET",
+        "admission controls must match the closed required set",
+    )
+    for name, expected in expected_bindings.items():
+        control = controls[name]
+        _expect(
+            set(control) == {"control", "status", "evidence", *expected},
+            "ADMISSION_CONTROL_KEYS",
+            f"{name} fields do not match the closed schema",
+        )
+        _expect(
+            all(control.get(key) == value for key, value in expected.items()),
+            "ADMISSION_CONTROL_BINDING",
+            f"{name} does not bind to the current release evidence",
+        )
+
 
 def validate_release_bundle(
     root: Path,
