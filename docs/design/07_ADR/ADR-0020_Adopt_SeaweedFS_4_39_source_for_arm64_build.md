@@ -56,10 +56,13 @@ The published digest must have all of the following before admission:
   High is separately admitted under the exact, expiring ADR-0019 contract.
 
 The SBOM and Trivy report are attached to the digest as keyless OCI
-attestations. The workflow also retains the source record, verification output,
-provenance link, SBOM, and scan as a GitHub Actions artifact for 90 days. OCI
-signature and attestation retention follows the GHCR package version: the
-evidence must not be deleted while the digest remains admitted.
+attestations. Complete Cosign verification, SLSA verification, runtime-smoke,
+SBOM, scanner metadata, and scan files are committed under
+`bootstrap/seaweedfs/v4.39/evidence/` and remain the durable source of truth for
+the admission lifetime. The workflow also mirrors those files as a GitHub
+Actions artifact for 90 days. OCI signature and attestation retention follows
+the GHCR package version: neither the Git evidence nor the OCI attachments may
+be deleted while the digest remains admitted.
 
 This is a Shirokuma source-adoption signature. It proves what Shirokuma built
 and which workflow built it; it does not assert that SeaweedFS upstream signed
@@ -84,8 +87,9 @@ Shirokuma owns the security and maintenance risk introduced by adopting an
 unsigned upstream revision. Repository-controlled provenance makes the build
 reproducible and attributable but cannot retroactively supply upstream
 authorship. The scratch runtime image reduces resident packages and scan
-surface; later functional smoke remains the responsibility of the parent work
-package.
+surface. This child runs a bounded non-root `weed mini` startup smoke against
+the exact digest; the parent work package still owns functional S3 and
+persistence smoke.
 
 The build and retained workflow artifacts consume GitHub Actions, GHCR, and
 artifact storage only. This child task allocates no host SSD capacity and
@@ -117,8 +121,9 @@ The run verified the GitHub Actions OIDC workflow identity and immutable
 workflow SHA `159e8601302cd6306d9d3bd9d847ea39275a9bf8` with keyless Cosign
 and transparency-log evidence. GitHub retained SLSA provenance at
 [`attestation 35317398`](https://github.com/TommyKammy/Shirokuma/attestations/35317398).
-The exact-digest CycloneDX SBOM and Trivy scan are retained in artifact
-`8321634543`; Trivy `0.72.0` reported zero Critical and zero High findings with
+The exact-digest CycloneDX SBOM and Trivy scan are retained in Git under
+`bootstrap/seaweedfs/v4.39/evidence/` and mirrored in artifact `8321634543`;
+Trivy `0.72.0` reported zero Critical and zero High findings with
 vulnerability DB timestamp `2026-07-13T19:09:56.237113526Z`. The image metadata
 exposes the active `weed mini` volume HTTP port `9340` and admin HTTP port
 `23646`, and the non-root default command starts successfully with writable
@@ -132,8 +137,10 @@ retention pass, Crane promotes the unchanged digest to trusted tag
 matches the exact workflow SHA and digest.
 
 The original upstream image remains rejected. This decision admits only the
-hardened Shirokuma digest above, and parent Issue #26 still owns the resident-ledger
-entry, Flux resources, functional smoke, disk impact, backup/export, and
+hardened Shirokuma artifact above. Runtime manifests remain blocked until parent
+Issue #26 adds a source-build supply-chain record backed by the committed files
+and proves its proposed resident-ledger entry passes `check-images`; the parent
+also owns Flux resources, functional smoke, disk impact, backup/export, and
 teardown evidence.
 
 ## Verification

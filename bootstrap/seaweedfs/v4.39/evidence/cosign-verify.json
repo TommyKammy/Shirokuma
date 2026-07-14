@@ -1,0 +1,2 @@
+
+[{"critical":{"identity":{"docker-reference":"ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96"},"image":{"docker-manifest-digest":"sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96"},"type":"https://sigstore.dev/cosign/sign/v1"},"optional":{}}]

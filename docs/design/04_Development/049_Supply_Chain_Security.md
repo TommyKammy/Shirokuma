@@ -82,6 +82,14 @@ ledger points to that retained artifact. Release evidence must preserve the
 SBOM, scanner versions, vulnerability database timestamp, and immutable image
 digest for the lifetime of the release evidence.
 
+Repository-controlled source builds retain the complete Cosign verification,
+SLSA verification, image SBOM, scanner metadata, and Trivy report in Git for the
+admission lifetime. A GitHub Actions artifact may mirror those files for
+operator download, but its finite retention window is not the durable source of
+truth. A source-built candidate remains blocked from runtime manifests until a
+resident-ledger supply-chain record backed by those retained files passes
+`check-images`.
+
 Pinned fallback images are exceptional and require `fallback: true`, documented
 CVE risk, a future ISO `expires_on` date, and a concrete replacement plan in
 the ledger. Expired or malformed dates fail closed. Every MinIO entry must be

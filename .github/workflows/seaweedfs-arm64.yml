@@ -34,6 +34,8 @@ jobs:
       SOURCE_COMMIT: db42bb49757b459551607939807017d7a9d5a94a
       SOURCE_TREE: da91641fdd520e465c68fa48af3b3ad07ad86822
       SOURCE_ARCHIVE_SHA256: 95b3ba34d191e2cc96063434f407087000a9ffcf22f95682ecd5ce40b5a3fab9
+      CRANE_VERSION: v0.21.7
+      CRANE_ARCHIVE_SHA256: b6ee979d9411dfb05ce35ab9e156fe5de7def11a230764a7856ffa2eb971fa88
 
     steps:
       - name: Check out Shirokuma policy
@@ -140,6 +142,62 @@ jobs:
           docker pull "${IMAGE}@${DIGEST}"
           platform=$(docker image inspect "${IMAGE}@${DIGEST}" --format '{{.Os}}/{{.Architecture}}')
           test "${platform}" = 'linux/arm64'
+
+      - name: Smoke-test non-root weed mini on the exact digest
+        timeout-minutes: 2
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          container_name="seaweedfs-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup() {
+            docker logs "${container_name}" > runtime-smoke.log 2>&1 || true
+            docker rm --force "${container_name}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          runtime_user=$(docker image inspect "${IMAGE}@${DIGEST}" --format '{{.Config.User}}')
+          test "${runtime_user}" = '65532:65532'
+          docker run --detach \
+            --name "${container_name}" \
+            --user 65532:65532 \
+            --read-only \
+            --tmpfs /tmp:rw,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=1777 \
+            --tmpfs /data:rw,nosuid,nodev,size=64m,uid=65532,gid=65532,mode=0755 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --pids-limit 256 \
+            --memory 512m \
+            "${IMAGE}@${DIGEST}" >/dev/null
+
+          for attempt in {1..10}; do
+            test "$(docker inspect "${container_name}" --format '{{.State.Running}}')" = 'true'
+            sleep 1
+          done
+
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          record = {
+              "schema_version": 1,
+              "reference": f"{os.environ['IMAGE']}@{os.environ['DIGEST']}",
+              "user": "65532:65532",
+              "command": ["/usr/bin/weed", "mini", "-dir=/data"],
+              "read_only_rootfs": True,
+              "tmpfs": ["/tmp", "/data"],
+              "capabilities_dropped": "ALL",
+              "no_new_privileges": True,
+              "sustained_running_seconds": 10,
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+          }
+          Path("runtime-smoke.json").write_text(
+              json.dumps(record, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
 
       - name: Generate CycloneDX SBOM for the exact digest
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
@@ -312,12 +370,19 @@ jobs:
                       "downloaded_at": vulnerability_db["DownloadedAt"],
                   },
               },
+              "promotion_tool": {
+                  "name": "crane",
+                  "version": os.environ["CRANE_VERSION"],
+                  "archive_sha256": os.environ["CRANE_ARCHIVE_SHA256"],
+              },
               "artifacts": {
                   name: {
                       "sha256": hashlib.sha256(Path(name).read_bytes()).hexdigest()
                   }
                   for name in (
                       "cosign-verify.json",
+                      "runtime-smoke.json",
+                      "runtime-smoke.log",
                       "seaweedfs-4.39-arm64.cdx.json",
                       "slsa-verify.json",
                       "trivy-version.json",
@@ -338,6 +403,8 @@ jobs:
             bootstrap/seaweedfs/v4.39/source.json
             cosign-verify.json
             release-evidence.json
+            runtime-smoke.json
+            runtime-smoke.log
             seaweedfs-4.39-arm64.cdx.json
             slsa-verify.json
             trivy-version.json
@@ -347,6 +414,18 @@ jobs:
 
       - name: Install Crane for digest-preserving tag promotion
         uses: imjasonh/setup-crane@feee3b6bb0d4c68370f256a4502498c9227e5c6b # v0.7
+        with:
+          version: v0.21.7
+
+      - name: Verify the pinned Crane release archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          crane_dir=$(dirname "$(command -v crane)")
+          archive="${crane_dir}/go-containerregistry_Linux_arm64.tar.gz"
+          test -f "${archive}"
+          echo "${CRANE_ARCHIVE_SHA256}  ${archive}" | sha256sum --check --strict
+          crane version
 
       - name: Promote the fully verified digest to the trusted tag
         env:

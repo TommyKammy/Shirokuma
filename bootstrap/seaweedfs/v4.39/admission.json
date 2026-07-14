@@ -54,7 +54,7 @@
       {
         "control": "transparency_log",
         "status": "verified",
-        "evidence": "Cosign verification returned transparency-log-backed entries hashed in artifact 8321634543"
+        "evidence": "Cosign verification returned transparency-log-backed entries retained at bootstrap/seaweedfs/v4.39/evidence/cosign-verify.json"
       },
       {
         "control": "workflow_revision",
@@ -69,6 +69,7 @@
       {
         "control": "sbom",
         "status": "verified",
+        "path": "bootstrap/seaweedfs/v4.39/evidence/seaweedfs-4.39-arm64.cdx.json",
         "sha256": "10ad541650807122d93ca3e54507b8678e66ee8d00d93549aaba9d129f02aab7"
       },
       {
@@ -79,6 +80,7 @@
         "scanner_version": "0.72.0",
         "vulnerability_db_updated_at": "2026-07-13T19:09:56.237113526Z",
         "vulnerability_db_downloaded_at": "2026-07-14T01:41:51.785604274Z",
+        "path": "bootstrap/seaweedfs/v4.39/evidence/trivy.json",
         "sha256": "976acf0d9e94c23b69a83814a60160254c602fd656f5ffd16302747a1c439cd4"
       },
       {
@@ -102,7 +104,14 @@
     "rationale": "The hardened Shirokuma source build fail-closes on every recorded build input, provides writable weed mini temporary storage, completes Critical=0/High=0 scanning before signing and provenance publication, tolerates repeated valid attestations, and promotes the trusted tag from a run-scoped quarantine tag only after evidence retention. Signature, transparency, SLSA, SBOM, scanner freshness, and generated evidence hashes bind to the exact digest. The upstream image remains blocked."
   },
   "runtime_manifests": {
-    "permitted": true,
+    "permitted": false,
+    "blockers": [
+      {
+        "control": "resident_evidence_contract",
+        "status": "pending",
+        "evidence": "the parent must add a repository-source-build supply-chain record and prove the proposed SeaweedFS resident-ledger entry passes scripts/verify_supply_chain.py check-images before any runtime manifest is merged"
+      }
+    ],
     "paths": [
       "deploy/gitops/object-storage/kustomization.yaml",
       "deploy/gitops/clusters/local-lite/object-storage.yaml"
@@ -112,7 +121,9 @@
     "mode": "implement-object-storage-profile",
     "decision_record_required": false,
     "requirements": [
-      "pin the admitted exact digest in the resident-image ledger and Flux resources",
+      "add a source-build supply-chain record backed by the retained SBOM, Trivy, Cosign, and SLSA files",
+      "prove the proposed resident-image ledger entry passes make verify-security before adding Flux resources",
+      "pin the admitted exact digest in the resident-image ledger and Flux resources only after that gate passes",
       "verify Flux reconciliation and functional S3 smoke on mac-studio-solo",
       "record SSD impact and backup/export behavior",
       "retain teardown and rebuild evidence for parent Issue #26"

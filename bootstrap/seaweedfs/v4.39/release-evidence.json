@@ -38,18 +38,23 @@
   },
   "artifacts": {
     "cosign-verify.json": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/cosign-verify.json",
       "sha256": "e631b3b84f7456bfa3b47e1743838145cb0d91f59585ea7344e12d492515c0fc"
     },
     "seaweedfs-4.39-arm64.cdx.json": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/seaweedfs-4.39-arm64.cdx.json",
       "sha256": "10ad541650807122d93ca3e54507b8678e66ee8d00d93549aaba9d129f02aab7"
     },
     "slsa-verify.json": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/slsa-verify.json",
       "sha256": "5c2fbb9d5a3bcf84a6904a5f4b42e04c76a6b34994f4f958040b6f90f1965dbc"
     },
     "trivy-version.json": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/trivy-version.json",
       "sha256": "b0c02aa93accb44370c3fd34de079deca8e4448c880482ba5da1b97d7772aed1"
     },
     "trivy.json": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/trivy.json",
       "sha256": "976acf0d9e94c23b69a83814a60160254c602fd656f5ffd16302747a1c439cd4"
     }
   },
@@ -62,6 +67,7 @@
   "github_actions_artifact": {
     "id": "8321634543",
     "name": "seaweedfs-4.39-arm64-29359679038",
+    "role": "short-term downloadable mirror of the Git-retained evidence",
     "retention_days": 90,
     "expires_at": "2026-10-12T18:53:25Z"
   }

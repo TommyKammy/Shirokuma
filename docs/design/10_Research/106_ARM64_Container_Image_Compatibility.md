@@ -169,13 +169,16 @@ is promoted from a run-scoped quarantine tag only after evidence retention and
 is admitted without an ADR-0019 vulnerability exception.
 
 The machine-readable decision is retained at
-`bootstrap/seaweedfs/v4.39/admission.json`; the exact run evidence is retained at
-`bootstrap/seaweedfs/v4.39/release-evidence.json`. The repository-owned
+`bootstrap/seaweedfs/v4.39/admission.json`; the exact run record is retained at
+`bootstrap/seaweedfs/v4.39/release-evidence.json`, and the complete Cosign,
+SLSA, runtime-smoke, CycloneDX, scanner, and Trivy evidence is retained under
+`bootstrap/seaweedfs/v4.39/evidence/`. The repository-owned
 `verify-object-storage-profile` check preserves the upstream rejection, pins
-the admitted Shirokuma digest and workflow identity, and verifies that the
-source-build child did not add GitOps resources or a resident-ledger entry.
-Parent Issue #26 may add those runtime records only after this source-build PR
-is merged and the recorded evidence remains independently verifiable.
+the admitted Shirokuma digest and workflow identity, validates those durable
+files, and verifies that the source-build child did not add GitOps resources or
+a resident-ledger entry. Parent Issue #26 may add runtime records only after a
+source-build supply-chain record backed by those files makes its proposed
+resident-ledger entry pass `check-images`.
 
 ## GitOps candidate evidence
 

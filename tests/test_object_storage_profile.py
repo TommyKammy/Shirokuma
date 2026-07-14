@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import re
 import unittest
@@ -36,6 +38,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         admission_path = ROOT / "bootstrap/seaweedfs/v4.39/admission.json"
         workflow_path = ROOT / ".github/workflows/seaweedfs-arm64.yml"
         containerfile_path = ROOT / "bootstrap/seaweedfs/v4.39/Containerfile"
+        durable_evidence_dir = ROOT / "bootstrap/seaweedfs/v4.39/evidence"
         decision_path = (
             ROOT
             / "docs/design/07_ADR/ADR-0020_Adopt_SeaweedFS_4_39_source_for_arm64_build.md"
@@ -48,6 +51,11 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             workflow_path,
             containerfile_path,
             decision_path,
+            durable_evidence_dir / "cosign-verify.json",
+            durable_evidence_dir / "seaweedfs-4.39-arm64.cdx.json",
+            durable_evidence_dir / "slsa-verify.json",
+            durable_evidence_dir / "trivy-version.json",
+            durable_evidence_dir / "trivy.json",
         )
         missing = [
             path.relative_to(ROOT).as_posix()
@@ -85,6 +93,17 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             "quarantine-${{ github.run_id }}-${{ github.run_attempt }}",
             "Promote the fully verified digest to the trusted tag",
             "name: seaweedfs-4.39-arm64-${{ github.run_id }}",
+            "Smoke-test non-root weed mini on the exact digest",
+            'runtime_user=$(docker image inspect "${IMAGE}@${DIGEST}"',
+            "--user 65532:65532",
+            "--read-only",
+            "--tmpfs /tmp:",
+            "--tmpfs /data:",
+            "runtime-smoke.json",
+            "runtime-smoke.log",
+            "version: v0.21.7",
+            "b6ee979d9411dfb05ce35ab9e156fe5de7def11a230764a7856ffa2eb971fa88",
+            "sha256sum --check --strict",
             EXPECTED_RELEASE_COMMIT,
             EXPECTED_RELEASE_TREE,
         ):
@@ -111,6 +130,18 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         )
         self.assertLess(scan_step, sign_step)
         self.assertLess(sign_step, provenance_step)
+        platform_step = workflow.index("- name: Verify the published platform")
+        smoke_step = workflow.index(
+            "- name: Smoke-test non-root weed mini on the exact digest"
+        )
+        sbom_step = workflow.index("- name: Generate CycloneDX SBOM")
+        self.assertLess(platform_step, smoke_step)
+        self.assertLess(smoke_step, sbom_step)
+        smoke = workflow[smoke_step:sbom_step]
+        self.assertIn('"${IMAGE}@${DIGEST}"', smoke)
+        self.assertIn("timeout-minutes: 2", smoke)
+        self.assertIn("trap cleanup EXIT", smoke)
+        self.assertIn("sustained_running_seconds", smoke)
         self.assertIn("if not matches:", workflow)
         self.assertNotIn(
             'if len(matches) != 1:\n              raise SystemExit("SLSA provenance',
@@ -134,6 +165,12 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertLess(retain_step, promote_step)
         promotion = workflow[promote_step:]
         self.assertIn("imjasonh/setup-crane@", workflow)
+        self.assertIn(
+            "imjasonh/setup-crane@feee3b6bb0d4c68370f256a4502498c9227e5c6b",
+            workflow,
+        )
+        self.assertIn("version: v0.21.7", workflow)
+        self.assertNotIn("latest-release", workflow)
         self.assertIn('crane tag "${IMAGE}@${DIGEST}" 4.39-arm64', promotion)
         self.assertIn('crane digest "${IMAGE}:4.39-arm64"', promotion)
         self.assertNotIn('docker push "${IMAGE}:4.39-arm64"', promotion)
@@ -144,6 +181,9 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             )
         ]
         self.assertIn('"cosign-verify.json"', generated_evidence)
+        self.assertIn('"runtime-smoke.json"', generated_evidence)
+        self.assertIn('"runtime-smoke.log"', generated_evidence)
+        self.assertIn('"promotion_tool": {', workflow)
 
         decision = decision_path.read_text(encoding="utf-8")
         self.assertIn("status: accepted", decision)
@@ -190,6 +230,87 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         )
         self.assertEqual(release["github_actions_artifact"]["id"], "8321634543")
         self.assertEqual(
+            release["github_actions_artifact"]["role"],
+            "short-term downloadable mirror of the Git-retained evidence",
+        )
+        for name, artifact in release["artifacts"].items():
+            with self.subTest(durable_artifact=name):
+                path = ROOT / artifact["path"]
+                self.assertTrue(path.is_file())
+                self.assertFalse(path.is_symlink())
+                self.assertEqual(
+                    hashlib.sha256(path.read_bytes()).hexdigest(),
+                    artifact["sha256"],
+                )
+        sbom = json.loads(
+            (durable_evidence_dir / "seaweedfs-4.39-arm64.cdx.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(sbom["bomFormat"], "CycloneDX")
+        self.assertEqual(sbom["metadata"]["component"]["version"], EXPECTED_TRUSTED_DIGEST)
+
+        scan = json.loads(
+            (durable_evidence_dir / "trivy.json").read_text(encoding="utf-8")
+        )
+        self.assertIn(EXPECTED_TRUSTED_REFERENCE, scan["Metadata"]["RepoDigests"])
+        blocking_findings = [
+            finding
+            for result in scan["Results"]
+            for finding in result.get("Vulnerabilities") or []
+            if finding.get("Severity") in {"HIGH", "CRITICAL"}
+        ]
+        self.assertEqual(blocking_findings, [])
+
+        scanner = json.loads(
+            (durable_evidence_dir / "trivy-version.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(scanner["Version"], release["scanner"]["version"])
+        self.assertEqual(
+            scanner["VulnerabilityDB"]["UpdatedAt"],
+            release["scanner"]["vulnerability_db"]["updated_at"],
+        )
+        self.assertEqual(
+            scanner["VulnerabilityDB"]["DownloadedAt"],
+            release["scanner"]["vulnerability_db"]["downloaded_at"],
+        )
+
+        cosign = json.loads(
+            (durable_evidence_dir / "cosign-verify.json").read_text(encoding="utf-8")
+        )
+        self.assertTrue(
+            any(
+                record.get("critical", {})
+                .get("image", {})
+                .get("docker-manifest-digest")
+                == EXPECTED_TRUSTED_DIGEST
+                for record in cosign
+            )
+        )
+
+        slsa = json.loads(
+            (durable_evidence_dir / "slsa-verify.json").read_text(encoding="utf-8")
+        )
+        expected_workflow_sha = release["builder"]["workflow_sha"]
+        self.assertTrue(
+            any(
+                record["verificationResult"]["signature"]["certificate"].get(
+                    "githubWorkflowSHA"
+                )
+                == expected_workflow_sha
+                and any(
+                    subject.get("digest", {}).get("sha256")
+                    == EXPECTED_TRUSTED_DIGEST.removeprefix("sha256:")
+                    for subject in json.loads(
+                        base64.b64decode(
+                            record["attestation"]["bundle"]["dsseEnvelope"]["payload"]
+                        )
+                    ).get("subject", [])
+                )
+                for record in slsa
+            )
+        )
+        self.assertEqual(
             release["artifacts"]["cosign-verify.json"]["sha256"],
             "e631b3b84f7456bfa3b47e1743838145cb0d91f59585ea7344e12d492515c0fc",
         )
@@ -224,7 +345,14 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertEqual(admission["assessment"]["admission"], "approved")
         self.assertIs(admission["assessment"]["exception_eligible"], False)
         self.assertEqual(admission["assessment"]["blockers"], [])
-        self.assertIs(admission["runtime_manifests"]["permitted"], True)
+        self.assertIs(admission["runtime_manifests"]["permitted"], False)
+        self.assertEqual(
+            {
+                blocker["control"]
+                for blocker in admission["runtime_manifests"]["blockers"]
+            },
+            {"resident_evidence_contract"},
+        )
 
         self.assertEqual(
             admission["upstream_candidate"]["index_reference"],
