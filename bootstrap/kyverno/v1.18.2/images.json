@@ -7,6 +7,25 @@
   "scanner_version": "trivy 0.72.0",
   "vulnerability_db_updated_at": "2026-07-13T19:09:56.237113526Z",
   "admission_status": "blocked",
+  "local_lab_admission": {
+    "profile": "local-lab",
+    "status": "blocked",
+    "candidate_components": [
+      "admission-controller",
+      "background-controller",
+      "cleanup-controller",
+      "reports-controller",
+      "kyverno-cli",
+      "kyvernopre",
+      "readiness-checker-cleanup-hook"
+    ],
+    "components": [],
+    "excluded": {
+      "component": "readiness-checker-test-hook",
+      "reason": "critical finding",
+      "helm_test_enabled": false
+    }
+  },
   "images": [
     {
       "component": "admission-controller",
