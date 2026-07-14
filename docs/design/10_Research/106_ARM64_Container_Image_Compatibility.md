@@ -153,12 +153,15 @@ not:
 ADR-0019 cannot waive missing signature, transparency-log, or SLSA provenance
 evidence, so the upstream SeaweedFS image remains rejected. ADR-0020 instead
 approves the exact source revision for a repository-controlled build. GitHub
-Actions run `29340121931` produced native `linux/arm64` artifact
+Actions bootstrap run `29340121931` produced native `linux/arm64` artifact
 `ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:8e391aaabcb0c5a527ecf686bad15e86ad29969d6889340caa4e4d4890c71237`.
 The workflow identity passed keyless Cosign and transparency-log verification,
 SLSA provenance is retained as attestation `35271697`, the CycloneDX SBOM is
-bound to the same digest, and Trivy reported Critical=0 and High=0. No ADR-0019
-vulnerability exception is used.
+bound to the same digest, and Trivy reported Critical=0 and High=0. Review found
+that the run did not retain the vulnerability DB timestamp and the image
+metadata omitted active `weed mini` ports. This bootstrap digest remains
+superseded and blocked until a replacement run records both controls. No
+ADR-0019 vulnerability exception is used.
 
 The machine-readable decision is retained at
 `bootstrap/seaweedfs/v4.39/admission.json`; the exact run evidence is retained at

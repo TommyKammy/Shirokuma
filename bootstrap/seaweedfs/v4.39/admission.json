@@ -56,6 +56,11 @@
         "evidence": "Cosign verification returned transparency-log-backed entries in cosign-verify.json"
       },
       {
+        "control": "workflow_revision",
+        "status": "verified",
+        "evidence": "Cosign and GitHub attestation verification bind the bootstrap artifact to workflow SHA 6daf13169ff65746bc0c8a55d2de0ace590bf463"
+      },
+      {
         "control": "slsa_provenance",
         "status": "verified",
         "evidence": "https://github.com/TommyKammy/Shirokuma/attestations/35271697"
@@ -67,9 +72,11 @@
       },
       {
         "control": "vulnerability_scan",
-        "status": "verified",
+        "status": "incomplete",
         "critical": 0,
         "high": 0,
+        "scanner_version": "0.72.0",
+        "vulnerability_db_updated_at": null,
         "sha256": "5ead7ad0527d1e8d447afdd01e1abce8a11120555ea4c4ee29f5239b86695c15"
       }
     ]
@@ -77,26 +84,37 @@
   "assessment": {
     "assessed_on": "2026-07-14",
     "scope": "mac-studio-solo/local-lab",
-    "admission": "approved",
+    "admission": "blocked",
     "exception_eligible": false,
-    "blockers": [],
-    "rationale": "The Shirokuma-controlled source build satisfies source adoption, signature, transparency-log, SLSA provenance, SBOM, and Critical=0/High=0 controls without an ADR-0019 vulnerability exception. The upstream image remains blocked."
+    "blockers": [
+      {
+        "control": "scan_freshness",
+        "status": "missing",
+        "evidence": "the bootstrap run did not retain the Trivy vulnerability DB timestamp"
+      },
+      {
+        "control": "mini_port_contract",
+        "status": "superseded",
+        "evidence": "the bootstrap image metadata does not expose the weed mini volume and admin HTTP ports"
+      }
+    ],
+    "rationale": "ADR-0020 is accepted and the bootstrap artifact is bound to an immutable workflow SHA, but a replacement artifact must retain scanner freshness and corrected weed mini port metadata before runtime admission. The upstream image remains blocked."
   },
   "runtime_manifests": {
-    "permitted": true,
+    "permitted": false,
     "paths": [
       "deploy/gitops/object-storage/kustomization.yaml",
       "deploy/gitops/clusters/local-lite/object-storage.yaml"
     ]
   },
   "next_action": {
-    "mode": "implement-object-storage-profile",
+    "mode": "rebuild-and-record-trusted-artifact",
     "decision_record_required": false,
     "requirements": [
-      "add only the admitted digest to the resident image ledger",
-      "retain the release evidence and verification identity",
-      "add Flux-managed runtime resources in parent Issue #26",
-      "preserve backup, disk-impact, readiness, and teardown controls"
+      "build from the accepted source with corrected weed mini port metadata",
+      "verify signature and SLSA provenance against the immutable workflow SHA",
+      "retain Trivy version and vulnerability DB freshness metadata",
+      "record the replacement exact digest before resuming parent Issue #26"
     ]
   }
 }

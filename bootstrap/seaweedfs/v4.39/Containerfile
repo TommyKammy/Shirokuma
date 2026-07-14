@@ -31,6 +31,6 @@ COPY --from=builder /out/weed /usr/bin/weed
 COPY --from=builder --chown=65532:65532 /out/data /data
 COPY --from=builder --chown=65532:65532 /src/docker/filer.toml /etc/seaweedfs/filer.toml
 USER 65532:65532
-EXPOSE 7333 8080 8333 8888 9333 19333
+EXPOSE 7333 8333 8888 9333 9340 19333 23646
 ENTRYPOINT ["/usr/bin/weed"]
 CMD ["mini", "-dir=/data"]

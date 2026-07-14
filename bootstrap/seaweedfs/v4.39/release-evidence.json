@@ -14,6 +14,7 @@
     "repository": "TommyKammy/Shirokuma",
     "workflow": ".github/workflows/seaweedfs-arm64.yml",
     "ref": "refs/heads/codex/issue-41",
+    "workflow_sha": "6daf13169ff65746bc0c8a55d2de0ace590bf463",
     "run_id": "29340121931",
     "run_attempt": "1"
   },
@@ -21,9 +22,18 @@
   "identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/seaweedfs-arm64.yml@refs/heads/codex/issue-41",
   "transparency_log": "verified by cosign-verify.json",
   "slsa_provenance": "https://github.com/TommyKammy/Shirokuma/attestations/35271697",
+  "admission_status": "superseded_pending_rebuild",
   "vulnerabilities": {
     "critical": 0,
     "high": 0
+  },
+  "scanner": {
+    "name": "trivy",
+    "version": "0.72.0",
+    "vulnerability_db": {
+      "updated_at": null,
+      "status": "not-retained-by-bootstrap-run"
+    }
   },
   "artifacts": {
     "seaweedfs-4.39-arm64.cdx.json": {

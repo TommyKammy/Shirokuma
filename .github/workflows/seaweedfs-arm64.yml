@@ -128,6 +128,7 @@ jobs:
           cosign verify \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             --certificate-identity "https://github.com/TommyKammy/Shirokuma/.github/workflows/seaweedfs-arm64.yml@${GITHUB_REF}" \
+            --certificate-github-workflow-sha "${GITHUB_SHA}" \
             --output json \
             "${IMAGE}@${DIGEST}" > cosign-verify.json
 
@@ -138,6 +139,44 @@ jobs:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
+
+      - name: Verify SLSA provenance against the immutable workflow revision
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh attestation verify "oci://${IMAGE}@${DIGEST}" \
+            --repo "${GITHUB_REPOSITORY}" --format json > slsa-verify.json
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          from pathlib import Path
+
+          records = json.loads(Path("slsa-verify.json").read_text(encoding="utf-8"))
+          expected_digest = os.environ["DIGEST"].removeprefix("sha256:")
+          expected_sha = os.environ["GITHUB_SHA"]
+          matches = []
+          for record in records:
+              certificate = record["verificationResult"]["signature"]["certificate"]
+              payload = record["attestation"]["bundle"]["dsseEnvelope"]["payload"]
+              statement = json.loads(base64.b64decode(payload))
+              subjects = statement.get("subject", [])
+              if (
+                  statement.get("predicateType") == "https://slsa.dev/provenance/v1"
+                  and certificate.get("githubWorkflowSHA") == expected_sha
+                  and certificate.get("buildConfigDigest") == expected_sha
+                  and any(
+                      subject.get("digest", {}).get("sha256") == expected_digest
+                      for subject in subjects
+                  )
+              ):
+                  matches.append(record)
+          if len(matches) != 1:
+              raise SystemExit("SLSA provenance is not bound to the exact workflow SHA and digest")
+          PY
 
       - name: Generate CycloneDX SBOM for the exact digest
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
@@ -160,6 +199,23 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: false
           exit-code: 1
+
+      - name: Record Trivy scanner and vulnerability DB freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+          trivy version --format json > trivy-version.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          metadata = json.loads(Path("trivy-version.json").read_text(encoding="utf-8"))
+          if metadata.get("Version") != "0.72.0":
+              raise SystemExit("unexpected Trivy version")
+          database = metadata.get("VulnerabilityDB", {})
+          if not database.get("UpdatedAt") or not database.get("DownloadedAt"):
+              raise SystemExit("missing Trivy vulnerability DB freshness metadata")
+          PY
 
       - name: Keyless-attest the retained SBOM and scan
         env:
@@ -187,6 +243,10 @@ jobs:
 
           digest = os.environ["DIGEST"]
           image = os.environ["IMAGE"]
+          trivy_metadata = json.loads(
+              Path("trivy-version.json").read_text(encoding="utf-8")
+          )
+          vulnerability_db = trivy_metadata["VulnerabilityDB"]
           record = {
               "schema_version": 1,
               "component": "seaweedfs",
@@ -203,6 +263,7 @@ jobs:
                   "repository": os.environ["GITHUB_REPOSITORY"],
                   "workflow": ".github/workflows/seaweedfs-arm64.yml",
                   "ref": os.environ["GITHUB_REF"],
+                  "workflow_sha": os.environ["GITHUB_SHA"],
                   "run_id": os.environ["GITHUB_RUN_ID"],
                   "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
               },
@@ -213,11 +274,26 @@ jobs:
               ),
               "transparency_log": "verified by cosign-verify.json",
               "slsa_provenance": os.environ.get("PROVENANCE_URL", ""),
+              "vulnerabilities": {"critical": 0, "high": 0},
+              "scanner": {
+                  "name": "trivy",
+                  "version": trivy_metadata["Version"],
+                  "vulnerability_db": {
+                      "version": vulnerability_db["Version"],
+                      "updated_at": vulnerability_db["UpdatedAt"],
+                      "downloaded_at": vulnerability_db["DownloadedAt"],
+                  },
+              },
               "artifacts": {
                   name: {
                       "sha256": hashlib.sha256(Path(name).read_bytes()).hexdigest()
                   }
-                  for name in ("seaweedfs-4.39-arm64.cdx.json", "trivy.json")
+                  for name in (
+                      "seaweedfs-4.39-arm64.cdx.json",
+                      "slsa-verify.json",
+                      "trivy-version.json",
+                      "trivy.json",
+                  )
               },
           }
           Path("release-evidence.json").write_text(
@@ -234,6 +310,8 @@ jobs:
             cosign-verify.json
             release-evidence.json
             seaweedfs-4.39-arm64.cdx.json
+            slsa-verify.json
+            trivy-version.json
             trivy.json
           if-no-files-found: error
           retention-days: 90

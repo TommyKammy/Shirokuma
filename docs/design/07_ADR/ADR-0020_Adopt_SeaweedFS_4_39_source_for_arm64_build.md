@@ -2,10 +2,10 @@
 project: Shirokuma
 doc_id: "ADR-0020"
 title: "Adopt SeaweedFS 4.39 source for the bounded arm64 build"
-status: proposed
+status: accepted
 created: 2026-07-14
-updated: 2026-07-14
-version: "0.1"
+updated: 2026-07-15
+version: "0.2"
 area: "architecture"
 tags: [shirokuma, adr, seaweedfs, arm64, supply-chain]
 ---
@@ -107,20 +107,22 @@ part of the durable decision history.
 
 ## Publication evidence
 
-GitHub Actions run
+The bootstrap GitHub Actions run
 [`29340121931`](https://github.com/TommyKammy/Shirokuma/actions/runs/29340121931)
-published and verified this admitted linux/arm64 artifact:
+published this linux/arm64 artifact:
 
     ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:8e391aaabcb0c5a527ecf686bad15e86ad29969d6889340caa4e4d4890c71237
 
-The run verified the GitHub Actions OIDC workflow identity with keyless Cosign
+The run verified the GitHub Actions OIDC workflow identity and immutable
+workflow SHA `6daf13169ff65746bc0c8a55d2de0ace590bf463` with keyless Cosign
 and transparency-log evidence. GitHub retained SLSA provenance at
 [`attestation 35271697`](https://github.com/TommyKammy/Shirokuma/attestations/35271697).
-The exact-digest CycloneDX SBOM contains 248 components. Trivy reported zero
-Critical and zero High vulnerabilities, so ADR-0019 is not used for this
-admission. `bootstrap/seaweedfs/v4.39/release-evidence.json` records the source,
-builder, identity, digest, evidence hashes, provenance URL, and Actions artifact
-identifier.
+The exact-digest CycloneDX SBOM contains 248 components and Trivy reported zero
+Critical and zero High vulnerabilities. The bootstrap run did not retain the
+vulnerability DB timestamp, however, and its image metadata omitted the `weed
+mini` volume and admin HTTP ports. The artifact is therefore superseded and is
+not admitted. A replacement run must retain scanner freshness and corrected
+port metadata before ADR-0019-free admission.
 
 The original upstream image remains rejected. This decision admits only the
 Shirokuma-built digest above, and parent Issue #26 still owns the resident-ledger
