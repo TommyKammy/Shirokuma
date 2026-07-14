@@ -184,11 +184,18 @@ def validate_static_contract(root: Path) -> Dict[str, Any]:
     _expect(
         image_contract.get("repository") == "ghcr.io/tommykammy/shirokuma-seaweedfs"
         and image_contract.get("trusted_tag") == f"{contract['version']}-arm64"
+        and image_contract.get("trusted_tag_role") == "non_authoritative_pointer"
         and image_contract.get("quarantine_tag_template")
         == "quarantine-{run_id}-{run_attempt}"
         and image_contract.get("registry_visibility_attempts") == 6,
         "IMAGE_CONTRACT",
         "unexpected repository, tag, or registry retry policy",
+    )
+    _expect(
+        workflow_record.get("name") == "SeaweedFS 4.39 trusted arm64 build"
+        and workflow_record.get("allowed_triggers") == ["push", "workflow_dispatch"],
+        "WORKFLOW_IDENTITY_CONTRACT",
+        "workflow name or trigger set mismatch",
     )
     transparency_log = contract.get("transparency_log", {})
     _expect(
@@ -393,13 +400,20 @@ def _validate_cosign(
     _expect(verification.get("reference") == release["reference"], "COSIGN_REFERENCE", "mismatch")
     constraints = verification.get("certificate_constraints", {})
     builder = release["builder"]
-    for field, expected in (
-        ("issuer", release["issuer"]),
-        ("identity", release["identity"]),
-        ("github_workflow_sha", builder["workflow_sha"]),
-        ("github_workflow_ref", builder["ref"]),
-    ):
-        _expect(constraints.get(field) == expected, "COSIGN_CERTIFICATE_CONSTRAINT", field)
+    _expect(
+        constraints
+        == {
+            "issuer": release["issuer"],
+            "identity": release["identity"],
+            "github_workflow_name": builder["workflow_name"],
+            "github_workflow_repository": builder["repository"],
+            "github_workflow_ref": builder["ref"],
+            "github_workflow_sha": builder["workflow_sha"],
+            "github_workflow_trigger": builder["trigger"],
+        },
+        "COSIGN_CERTIFICATE_CONSTRAINT",
+        "constraint set differs from the release builder identity",
+    )
     payloads = verification.get("verified_payloads")
     _expect(isinstance(payloads, list) and payloads, "COSIGN_VERIFIED_PAYLOAD", "empty")
     digest = _digest_hex(release["reference"])
@@ -409,13 +423,20 @@ def _validate_cosign(
         image = critical.get("image") or critical.get("Image") or {}
         return image.get("docker-manifest-digest") or image.get("Docker-manifest-digest")
 
+    def payload_reference(payload: Dict[str, Any]) -> Optional[str]:
+        critical = payload.get("critical") or payload.get("Critical") or {}
+        identity = critical.get("identity") or critical.get("Identity") or {}
+        return identity.get("docker-reference") or identity.get("Docker-reference")
+
     _expect(
-        any(
-            payload_digest(payload) == f"sha256:{digest}"
+        all(
+            isinstance(payload, dict)
+            and payload_digest(payload) == f"sha256:{digest}"
+            and payload_reference(payload) == release["reference"]
             for payload in payloads
         ),
         "COSIGN_VERIFIED_PAYLOAD",
-        "digest mismatch",
+        "every verified payload must match the exact reference and digest",
     )
     _expect(
         verification.get("detached_bundle_verified") is True,
@@ -480,10 +501,15 @@ def _validate_cosign(
         )
     statement = _decode_dsse_statement(bundle)
     _expect(statement.get("predicateType") == "https://sigstore.dev/cosign/sign/v1", "COSIGN_PREDICATE", "unexpected")
+    subjects = statement.get("subject", [])
     _expect(
-        any(subject.get("digest", {}).get("sha256") == digest for subject in statement.get("subject", [])),
+        isinstance(subjects, list)
+        and len(subjects) == 1
+        and subjects[0].get("digest") == {"sha256": digest}
+        and subjects[0].get("name", "") == ""
+        and subjects[0].get("annotations", {}) == {},
         "COSIGN_SUBJECT",
-        "digest mismatch",
+        "exactly one digest-only subject is required",
     )
     recorded_rekor = verification.get("rekor_entries")
     _expect(isinstance(recorded_rekor, list) and len(recorded_rekor) == len(tlog_entries), "COSIGN_REKOR_RECORD", "mismatch")
@@ -579,9 +605,13 @@ def _validate_slsa(release: Dict[str, Any], path: Path, bundles_path: Path) -> N
             definition.get("buildType") == "https://actions.github.io/buildtypes/workflow/v1",
             certificate.get("issuer") == release["issuer"],
             certificate.get("subjectAlternativeName") == identity,
+            certificate.get("githubWorkflowName") == builder["workflow_name"],
             certificate.get("githubWorkflowRepository") == repository,
             certificate.get("githubWorkflowRef") == workflow_ref,
             certificate.get("githubWorkflowSHA") == workflow_sha,
+            certificate.get("githubWorkflowTrigger") == builder["trigger"],
+            certificate.get("buildTrigger") == builder["trigger"],
+            certificate.get("runnerEnvironment") == "github-hosted",
             certificate.get("buildSignerURI") == identity,
             certificate.get("buildSignerDigest") == workflow_sha,
             certificate.get("buildConfigURI") == identity,
@@ -920,6 +950,7 @@ def _validate_promotion(
             "status",
             "reference",
             "trusted_tag",
+            "trusted_tag_role",
             "trusted_tag_digest",
             "promoted_at",
             "run_id",
@@ -955,6 +986,11 @@ def _validate_promotion(
         promotion.get("trusted_tag") == expected_trusted_reference,
         "PROMOTION_TRUSTED_TAG",
         "contract mismatch",
+    )
+    _expect(
+        promotion.get("trusted_tag_role") == contract["image"]["trusted_tag_role"],
+        "PROMOTION_TRUSTED_TAG_ROLE",
+        "tag pointer must not be an admission authority",
     )
     _expect(
         str(promotion.get("run_id")) == str(builder["run_id"])
@@ -1020,6 +1056,7 @@ def _validate_promotion(
             "run_id",
             "run_attempt",
             "trusted_tag",
+            "trusted_tag_role",
             "trusted_tag_digest",
             "evidence",
             "candidate_artifact",
@@ -1038,6 +1075,8 @@ def _validate_promotion(
     )
     _expect(
         release_promotion.get("trusted_tag") == contract["image"]["trusted_tag"]
+        and release_promotion.get("trusted_tag_role")
+        == contract["image"]["trusted_tag_role"]
         and release_promotion.get("trusted_tag_digest") == release["digest"],
         "RELEASE_PROMOTION_TAG",
         "trusted tag mismatch",
@@ -1176,10 +1215,12 @@ def _validate_repository_admission(root: Path, release: Dict[str, Any]) -> None:
     release_builder = release["builder"]
     expected_builder = {
         "repository": release_builder["repository"],
+        "workflow_name": release_builder["workflow_name"],
         "workflow": release_builder["workflow"],
         "ref": release_builder["ref"],
         "workflow_sha": release_builder["workflow_sha"],
         "source_sha": release_builder["source_sha"],
+        "trigger": release_builder["trigger"],
         "run_id": str(release_builder["run_id"]),
         "run_attempt": str(release_builder["run_attempt"]),
         "issuer": release["issuer"],
@@ -1285,10 +1326,12 @@ def validate_release_bundle(
         set(builder)
         == {
             "repository",
+            "workflow_name",
             "workflow",
             "ref",
             "workflow_sha",
             "source_sha",
+            "trigger",
             "run_id",
             "run_attempt",
         },
@@ -1308,8 +1351,10 @@ def validate_release_bundle(
     )
     _expect(
         builder.get("repository") == workflow_contract["repository"]
+        and builder.get("workflow_name") == workflow_contract["name"]
         and builder.get("workflow") == workflow_contract["path"]
         and builder.get("ref") in workflow_contract["allowed_refs"]
+        and builder.get("trigger") in workflow_contract["allowed_triggers"]
         and str(builder.get("run_id", "")).isdigit()
         and str(builder.get("run_attempt", "")).isdigit()
         and release.get("issuer") == workflow_contract["issuer"]

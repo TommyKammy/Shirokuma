@@ -6,6 +6,7 @@
   "image": {
     "repository": "ghcr.io/tommykammy/shirokuma-seaweedfs",
     "trusted_tag": "4.39-arm64",
+    "trusted_tag_role": "non_authoritative_pointer",
     "quarantine_tag_template": "quarantine-{run_id}-{run_attempt}",
     "registry_visibility_attempts": 6
   },
@@ -19,8 +20,9 @@
   },
   "workflow": {
     "repository": "TommyKammy/Shirokuma",
+    "name": "SeaweedFS 4.39 trusted arm64 build",
     "path": ".github/workflows/seaweedfs-arm64.yml",
-    "sha256": "04b5f7ad034853cab335a69de682756dffc565b1a8872acab0a45b7e42aa4157",
+    "sha256": "a93605bc3cc219e5eb316345cfbd2544c3f7fff48c20de3c5b58bf92b01935c8",
     "runner": "ubuntu-24.04-arm",
     "runner_trust_boundary": {
       "provider": "github-hosted",
@@ -47,6 +49,10 @@
     "allowed_refs": [
       "refs/heads/codex/issue-41",
       "refs/heads/main"
+    ],
+    "allowed_triggers": [
+      "push",
+      "workflow_dispatch"
     ],
     "allowed_steps": [
       "Check out Shirokuma policy",

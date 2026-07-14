@@ -64,7 +64,10 @@ The builder identity is the GitHub Actions OIDC identity for
 first publishes a run-scoped quarantine reference. A separate promotion job may
 move only ghcr.io/tommykammy/shirokuma-seaweedfs:4.39-arm64 after retained
 candidate evidence passes the shared validator. The admission record must use
-the resulting immutable digest. The verify job grants only contents:read,
+the resulting immutable digest. That mutable tag is a non-authoritative
+publication pointer, not an admission signal; a post-tag evidence failure keeps
+the run and digest inadmissible until final evidence is retained and committed.
+The verify job grants only contents:read,
 packages:write, id-token:write, and attestations:write; the promotion job has no
 OIDC or attestation permission. It installs checksum-verified Crane before GHCR
 credentials exist, uses the ephemeral OIDC identity for keyless Cosign

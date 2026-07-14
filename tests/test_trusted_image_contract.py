@@ -347,6 +347,7 @@ class TrustedImageContractTests(unittest.TestCase):
                 "run_id": builder["run_id"],
                 "run_attempt": builder["run_attempt"],
                 "trusted_tag": contract["image"]["trusted_tag"],
+                "trusted_tag_role": contract["image"]["trusted_tag_role"],
                 "trusted_tag_digest": digest,
                 "evidence": promotion_path.name,
                 "candidate_artifact": candidate_artifact,
@@ -372,6 +373,7 @@ class TrustedImageContractTests(unittest.TestCase):
                     + ":"
                     + contract["image"]["trusted_tag"]
                 ),
+                "trusted_tag_role": contract["image"]["trusted_tag_role"],
                 "trusted_tag_digest": digest,
                 "promoted_at": "2026-07-15T00:00:00Z",
                 "run_id": builder["run_id"],

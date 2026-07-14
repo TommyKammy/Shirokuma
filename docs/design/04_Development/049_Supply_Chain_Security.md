@@ -78,9 +78,13 @@ SBOM, scan, signing, provenance, and candidate evidence retention. A separate
 promotion job receives package-write permission, revalidates the retained
 candidate before credentials exist, installs the checksum-verified promotion
 tool, and moves the trusted tag without changing the digest. A missing gate,
-unretained candidate, failed revalidation, or digest mismatch prevents
-promotion. Candidate and final artifact names include both run ID and run
-attempt so a rerun cannot collide with an immutable earlier upload.
+unretained candidate, failed revalidation, or digest mismatch prevents the tag
+move. The mutable tag is only a non-authoritative publication pointer: a failure
+while generating, validating, or retaining final evidence may leave that pointer
+at the new digest, but cannot admit it. Admission requires the immutable digest,
+successfully retained final evidence, and the reviewed Git-committed admission
+record. Candidate and final artifact names include both run ID and run attempt
+so a rerun cannot collide with an immutable earlier upload.
 The final evidence retains the exact pre-promotion release record as
 `candidate-release-evidence.json`; promotion is therefore auditable after the
 short-lived candidate artifact expires. Runtime evidence likewise retains raw

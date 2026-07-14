@@ -33,6 +33,9 @@ the following trust chain:
   the candidate-to-final transition remains independently reproducible after
   the short-lived candidate Actions artifact expires.
 
+The mutable `4.39-arm64` tag is only a publication pointer. These files and the
+immutable digest, not the tag location, are the admission authority.
+
 These files must be replaced together after a new publication run. They approve
 the repository-controlled build artifact only. Runtime manifests remain blocked
 until parent Issue #26 adds a source-build supply-chain record and proves its

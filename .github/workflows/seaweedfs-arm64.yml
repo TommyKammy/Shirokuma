@@ -597,6 +597,21 @@ jobs:
           material = bundle["verificationMaterial"]
           if not material.get("certificate", {}).get("rawBytes"):
               raise SystemExit("bundle certificate is missing")
+          statement = json.loads(
+              base64.b64decode(
+                  bundle["dsseEnvelope"]["payload"], validate=True
+              )
+          )
+          subjects = statement.get("subject", [])
+          expected_digest = os.environ["DIGEST"].removeprefix("sha256:")
+          if not (
+              statement.get("predicateType") == "https://sigstore.dev/cosign/sign/v1"
+              and len(subjects) == 1
+              and subjects[0].get("digest") == {"sha256": expected_digest}
+              and subjects[0].get("name", "") == ""
+              and subjects[0].get("annotations", {}) == {}
+          ):
+              raise SystemExit("bundle subject is not the exact image digest")
           entries = material.get("tlogEntries", [])
           if len(entries) != 1:
               raise SystemExit("exactly one bundle tlog entry is required")
@@ -623,18 +638,28 @@ jobs:
           )
           if any(left != right for left, right in stable_pairs):
               raise SystemExit("Rekor API entry does not match the signed bundle")
-          payload_digests = set()
+          if not isinstance(payloads, list) or not payloads:
+              raise SystemExit("registry verification returned no payloads")
+          expected_reference = f"{os.environ['IMAGE']}@{os.environ['DIGEST']}"
           for payload in payloads:
               critical = payload.get("critical", payload.get("Critical", {}))
               image = critical.get("image", critical.get("Image", {}))
+              identity = critical.get("identity", critical.get("Identity", {}))
               payload_digest = image.get(
                   "docker-manifest-digest",
                   image.get("Docker-manifest-digest"),
               )
-              if payload_digest:
-                  payload_digests.add(payload_digest)
-          if os.environ["DIGEST"] not in payload_digests:
-              raise SystemExit("registry verification payload digest mismatch")
+              payload_reference = identity.get(
+                  "docker-reference",
+                  identity.get("Docker-reference"),
+              )
+              if (
+                  payload_digest != os.environ["DIGEST"]
+                  or payload_reference != expected_reference
+              ):
+                  raise SystemExit(
+                      "registry verification payload reference or digest mismatch"
+                  )
           registry_bundle_matches = sum(
               candidate == bundle for candidate in registry_bundles
           )
@@ -749,10 +774,15 @@ jobs:
                   certificate.get("issuer")
                   == "https://token.actions.githubusercontent.com",
                   certificate.get("subjectAlternativeName") == identity,
+                  certificate.get("githubWorkflowName") == os.environ["GITHUB_WORKFLOW"],
                   certificate.get("githubWorkflowRepository") == repository,
                   certificate.get("githubWorkflowRef") == os.environ["GITHUB_REF"],
                   certificate.get("githubWorkflowSHA")
                   == os.environ["GITHUB_WORKFLOW_SHA"],
+                  certificate.get("githubWorkflowTrigger")
+                  == os.environ["GITHUB_EVENT_NAME"],
+                  certificate.get("buildTrigger") == os.environ["GITHUB_EVENT_NAME"],
+                  certificate.get("runnerEnvironment") == "github-hosted",
                   certificate.get("buildSignerURI") == identity,
                   certificate.get("buildSignerDigest")
                   == os.environ["GITHUB_WORKFLOW_SHA"],
@@ -877,10 +907,12 @@ jobs:
               },
               "builder": {
                   "repository": os.environ["GITHUB_REPOSITORY"],
+                  "workflow_name": os.environ["GITHUB_WORKFLOW"],
                   "workflow": ".github/workflows/seaweedfs-arm64.yml",
                   "ref": os.environ["GITHUB_REF"],
                   "workflow_sha": os.environ["GITHUB_WORKFLOW_SHA"],
                   "source_sha": os.environ["GITHUB_SHA"],
+                  "trigger": os.environ["GITHUB_EVENT_NAME"],
                   "run_id": os.environ["GITHUB_RUN_ID"],
                   "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
               },
@@ -1093,6 +1125,7 @@ jobs:
               "status": "verified",
               "reference": f"{os.environ['IMAGE']}@{os.environ['PROMOTED_DIGEST']}",
               "trusted_tag": f"{os.environ['IMAGE']}:{os.environ['TRUSTED_TAG']}",
+              "trusted_tag_role": "non_authoritative_pointer",
               "trusted_tag_digest": os.environ["PROMOTED_DIGEST"],
               "promoted_at": datetime.datetime.now(
                   datetime.timezone.utc
@@ -1117,6 +1150,7 @@ jobs:
               "run_id": os.environ["GITHUB_RUN_ID"],
               "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
               "trusted_tag": os.environ["TRUSTED_TAG"],
+              "trusted_tag_role": "non_authoritative_pointer",
               "trusted_tag_digest": os.environ["PROMOTED_DIGEST"],
               "evidence": "promotion-evidence.json",
               "candidate_artifact": candidate_artifact_name,
