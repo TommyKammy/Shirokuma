@@ -715,6 +715,22 @@ jobs:
           PY
           rm cosign-payloads.json
 
+      - name: Mirror GHCR credentials for provenance publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          default_config_dir="${HOME}/.docker"
+          default_config="${default_config_dir}/config.json"
+          backup="${RUNNER_TEMP}/docker-config-before-provenance.json"
+          mkdir -p "${default_config_dir}"
+          if [ -e "${default_config}" ]; then
+            install -m 0600 "${default_config}" "${backup}"
+            echo "PROVENANCE_DOCKER_CONFIG_BACKUP=1" >> "${GITHUB_ENV}"
+          else
+            echo "PROVENANCE_DOCKER_CONFIG_BACKUP=0" >> "${GITHUB_ENV}"
+          fi
+          install -m 0600 "${DOCKER_CONFIG}/config.json" "${default_config}"
+
       - name: Publish SLSA provenance for the scanned exact digest
         id: provenance
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
@@ -722,6 +738,19 @@ jobs:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
+
+      - name: Remove provenance credential mirror
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          default_config="${HOME}/.docker/config.json"
+          backup="${RUNNER_TEMP}/docker-config-before-provenance.json"
+          rm -f "${default_config}"
+          if [ "${PROVENANCE_DOCKER_CONFIG_BACKUP:-0}" = "1" ]; then
+            install -m 0600 "${backup}" "${default_config}"
+            rm -f "${backup}"
+          fi
 
       - name: Verify SLSA provenance from this exact workflow
         env:

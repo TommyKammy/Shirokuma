@@ -61,7 +61,10 @@ and only then made available to a credentialed step. The generated toolchain
 record must reconcile observed versions and image digests with the contract.
 The verified Buildx binary is installed under a run-private
 `DOCKER_CONFIG/cli-plugins` directory so Docker cannot silently select the
-runner's preinstalled plugin. Cosign writes one Sigstore bundle to both the
+runner's preinstalled plugin. Because GitHub's provenance publisher reads the
+default Docker config rather than that isolated directory, the workflow mirrors
+the already-issued GHCR credential only for the publisher step and restores or
+removes the default config in an `always()` cleanup step. Cosign writes one Sigstore bundle to both the
 durable evidence path and the OCI referrer; the workflow downloads the registry
 copy and requires an exact structural match before promotion. Workflow signer
 SHA (`GITHUB_WORKFLOW_SHA`) and source SHA (`GITHUB_SHA`) are recorded and

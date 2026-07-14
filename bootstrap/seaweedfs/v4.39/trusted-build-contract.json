@@ -22,7 +22,7 @@
     "repository": "TommyKammy/Shirokuma",
     "name": "SeaweedFS 4.39 trusted arm64 build",
     "path": ".github/workflows/seaweedfs-arm64.yml",
-    "sha256": "a93605bc3cc219e5eb316345cfbd2544c3f7fff48c20de3c5b58bf92b01935c8",
+    "sha256": "bbdebd9c5b145faedf20680b16c3244cdec026c56e8dd5fb734c205095f95e9d",
     "runner": "ubuntu-24.04-arm",
     "runner_trust_boundary": {
       "provider": "github-hosted",
@@ -70,7 +70,9 @@
       "Install pinned Cosign after the vulnerability gate passes",
       "Record pinned release tools and runner substrate",
       "Keyless-sign the scanned immutable image and retain the verification bundle",
+      "Mirror GHCR credentials for provenance publication",
       "Publish SLSA provenance for the scanned exact digest",
+      "Remove provenance credential mirror",
       "Verify SLSA provenance from this exact workflow",
       "Keyless-attest the retained SBOM and scan",
       "Record the closed-world release evidence",

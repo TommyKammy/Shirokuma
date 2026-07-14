@@ -58,6 +58,10 @@ workflow. Docker, GitHub CLI, and operating-system utilities supplied by the
 GitHub-hosted `ubuntu-24.04-arm` runner remain in the explicit runner trust
 boundary and are recorded where they affect the evidence; they are not claimed
 to be independently pinned binaries.
+The verified Buildx plugin remains in an isolated Docker config. The GHCR
+credential is mirrored to the default Docker config only while GitHub's
+provenance action publishes its OCI attestation, then removed or restored by an
+`always()` cleanup step.
 
 The builder identity is the GitHub Actions OIDC identity for
 .github/workflows/seaweedfs-arm64.yml in TommyKammy/Shirokuma. The workflow
