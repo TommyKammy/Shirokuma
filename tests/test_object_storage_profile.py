@@ -133,7 +133,10 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         )
         self.assertLess(retain_step, promote_step)
         promotion = workflow[promote_step:]
-        self.assertIn('docker push "${IMAGE}:4.39-arm64"', promotion)
+        self.assertIn("imjasonh/setup-crane@", workflow)
+        self.assertIn('crane tag "${IMAGE}@${DIGEST}" 4.39-arm64', promotion)
+        self.assertIn('crane digest "${IMAGE}:4.39-arm64"', promotion)
+        self.assertNotIn('docker push "${IMAGE}:4.39-arm64"', promotion)
         self.assertIn('test "${promoted_digest}" = "${DIGEST}"', promotion)
         generated_evidence = workflow[
             workflow.index('"artifacts": {') : workflow.index(

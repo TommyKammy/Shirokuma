@@ -345,19 +345,15 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+      - name: Install Crane for digest-preserving tag promotion
+        uses: imjasonh/setup-crane@feee3b6bb0d4c68370f256a4502498c9227e5c6b # v0.7
+
       - name: Promote the fully verified digest to the trusted tag
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         shell: bash
         run: |
           set -euo pipefail
-          image_id=$(docker image inspect "${IMAGE}@${DIGEST}" --format '{{.Id}}')
-          docker tag "${image_id}" "${IMAGE}:4.39-arm64"
-          push_output=$(docker push "${IMAGE}:4.39-arm64")
-          printf '%s\n' "${push_output}"
-          promoted_digest=$(
-            printf '%s\n' "${push_output}" |
-              sed -n 's/.*digest: \(sha256:[0-9a-f]\{64\}\).*/\1/p' |
-              tail -n 1
-          )
+          crane tag "${IMAGE}@${DIGEST}" 4.39-arm64
+          promoted_digest=$(crane digest "${IMAGE}:4.39-arm64")
           test "${promoted_digest}" = "${DIGEST}"
