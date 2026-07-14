@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "component": "seaweedfs",
+  "version": "4.39",
+  "platform": "linux/arm64",
+  "source": {
+    "evidence": "bootstrap/seaweedfs/v4.39/source.json",
+    "containerfile": {
+      "path": "bootstrap/seaweedfs/v4.39/Containerfile",
+      "sha256": "ad0e8bc802cbd8bd021b6578659d67cf92b100b2d080ed57a86b855d092bd8f8",
+      "frontend": "docker/dockerfile:1.7.0@sha256:dbbd5e059e8a07ff7ea6233b213b36aa516b4c53c645f1817a4dd18b83cbea56"
+    }
+  },
+  "workflow": {
+    "repository": "TommyKammy/Shirokuma",
+    "path": ".github/workflows/seaweedfs-arm64.yml",
+    "runner": "ubuntu-24.04-arm",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "gate_order": [
+      "Validate the closed-world trusted build contract",
+      "Install and verify pinned Buildx and BuildKit without credentials",
+      "Log in to GHCR for the quarantine push",
+      "Build and publish only linux/arm64",
+      "Verify the published platform",
+      "Smoke-test non-root weed mini on the exact digest",
+      "Generate CycloneDX SBOM for the exact digest",
+      "Scan the exact digest and block High or Critical findings",
+      "Install pinned Cosign after the vulnerability gate passes",
+      "Keyless-sign the scanned immutable image and retain the verification bundle",
+      "Publish SLSA provenance for the scanned exact digest",
+      "Verify SLSA provenance from this exact workflow",
+      "Keyless-attest the retained SBOM and scan",
+      "Record the closed-world release evidence",
+      "Retain candidate evidence before trusted-tag promotion",
+      "Install and verify pinned Crane without credentials",
+      "Log in to GHCR for trusted-tag promotion",
+      "Promote the fully verified digest to the trusted tag",
+      "Retain final promotion evidence"
+    ]
+  },
+  "toolchain": {
+    "buildx": {
+      "version": "v0.35.0",
+      "linux_arm64_url": "https://github.com/docker/buildx/releases/download/v0.35.0/buildx-v0.35.0.linux-arm64",
+      "linux_arm64_sha256": "c4248d6cbc4a619a7e0b4609c11e509ad4ac0b475e1c64817c0ac20c5d90c766"
+    },
+    "buildkit": {
+      "version": "v0.31.1",
+      "image": "moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a",
+      "linux_arm64_manifest_digest": "sha256:4eee950fb9d134cbf4e228ea3906eb4c7403323334af013c443302f7b74f2737"
+    },
+    "syft": {
+      "version": "v1.46.0"
+    },
+    "trivy": {
+      "version": "v0.72.0"
+    },
+    "cosign": {
+      "version": "v3.0.6"
+    },
+    "crane": {
+      "version": "v0.21.7",
+      "linux_arm64_archive_url": "https://github.com/google/go-containerregistry/releases/download/v0.21.7/go-containerregistry_Linux_arm64.tar.gz",
+      "linux_arm64_archive_sha256": "b6ee979d9411dfb05ce35ab9e156fe5de7def11a230764a7856ffa2eb971fa88"
+    }
+  },
+  "evidence": {
+    "directory": "bootstrap/seaweedfs/v4.39/evidence",
+    "candidate_required": [
+      "cosign-signature-bundle.json",
+      "cosign-verify.json",
+      "image-manifest.json",
+      "rekor-entry.json",
+      "runtime-smoke.json",
+      "seaweedfs-4.39-arm64.cdx.json",
+      "slsa-bundles.jsonl",
+      "slsa-verify.json",
+      "toolchain.json",
+      "trivy-version.json",
+      "trivy.json"
+    ],
+    "promotion_required": [
+      "promotion-evidence.json"
+    ],
+    "actions_artifact_role": "retained mirror only"
+  },
+  "admission": {
+    "artifact": "approved",
+    "runtime_manifests_permitted": false,
+    "runtime_unblocker": "parent issue #26 must add source-build evidence and pass scripts/verify_supply_chain.py check-images"
+  }
+}

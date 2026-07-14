@@ -54,6 +54,7 @@ verify-kyverno-bootstrap:
 
 verify-object-storage-profile:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_object_storage_profile.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_trusted_image_contract.py'
 
 verify-gitops-image-admission: verify-security
 	@$(PYTHON) scripts/verify_gitops_image_admission.py

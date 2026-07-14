@@ -37,27 +37,44 @@ because the upstream minimum Go 1.25.8 toolchain contains known, fixed
 High-severity standard-library vulnerabilities; the adopted SeaweedFS source
 tree itself remains unchanged.
 
+`bootstrap/seaweedfs/v4.39/trusted-build-contract.json` is the closed-world
+contract for this artifact. It pins the complete Containerfile hash, Buildx
+`v0.35.0` binary checksum, BuildKit `v0.31.1` image index and linux/arm64
+manifest digests, Syft `v1.46.0`, Trivy `v0.72.0`, Cosign `v3.0.6`, and Crane
+`v0.21.7` archive checksum. `scripts/verify_trusted_image.py` validates the same
+contract before the build, before promotion, in repository CI, and against the
+durable evidence. Mutation fixtures cover missing tools, mutable action refs,
+Containerfile drift, missing promotion dependency, and premature runtime
+permission.
+
 The builder identity is the GitHub Actions OIDC identity for
 .github/workflows/seaweedfs-arm64.yml in TommyKammy/Shirokuma. The workflow
-may publish only ghcr.io/tommykammy/shirokuma-seaweedfs:4.39-arm64, and the
-admission record must use the resulting immutable digest. The workflow grants
-only contents:read, packages:write, id-token:write, and attestations:write. It
-uses the ephemeral OIDC identity for keyless Cosign operations and stores no
-signing key.
+first publishes a run-scoped quarantine reference. A separate promotion job may
+move only ghcr.io/tommykammy/shirokuma-seaweedfs:4.39-arm64 after retained
+candidate evidence passes the shared validator. The admission record must use
+the resulting immutable digest. The verify job grants only contents:read,
+packages:write, id-token:write, and attestations:write; the promotion job has no
+OIDC or attestation permission. It installs checksum-verified Crane before GHCR
+credentials exist, uses the ephemeral OIDC identity for keyless Cosign
+operations, and stores no signing key.
 
 The published digest must have all of the following before admission:
 
-- a keyless Cosign signature and Rekor transparency-log evidence constrained
-  to the repository workflow identity and GitHub token issuer;
+- a keyless Cosign signature and Sigstore bundle containing the certificate,
+  signed image manifest, Rekor log identity/index/time, SET, and inclusion proof,
+  constrained to the exact workflow name, repository, ref, SHA, trigger, and
+  GitHub token issuer, plus an independently retained Rekor API entry;
 - GitHub artifact-attestation SLSA provenance whose subject is the exact OCI
-  digest and whose builder is the same workflow;
+  digest and whose certificate, build config, builder, source ref, workflow
+  path, run, and attempt all identify the same workflow invocation;
 - a CycloneDX image SBOM and Trivy JSON scan generated for that digest;
 - Critical findings equal to zero and High findings equal to zero, unless each
   High is separately admitted under the exact, expiring ADR-0019 contract.
 
 The SBOM and Trivy report are attached to the digest as keyless OCI
-attestations. Complete Cosign verification, SLSA verification, runtime-smoke,
-SBOM, scanner metadata, and scan files are committed under
+attestations. Complete Cosign bundle and verification, Rekor response, raw image
+manifest, SLSA bundles and verification, observed toolchain, runtime-smoke,
+promotion, SBOM, scanner metadata, and scan files are committed under
 `bootstrap/seaweedfs/v4.39/evidence/` and remain the durable source of truth for
 the admission lifetime. The workflow also mirrors those files as a GitHub
 Actions artifact for 90 days. OCI signature and attestation retention follows

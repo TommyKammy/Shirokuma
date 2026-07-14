@@ -91,8 +91,8 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             "TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy",
             "VulnerabilityDB",
             "severity: HIGH,CRITICAL",
-            "actual_inputs",
-            "source evidence build_inputs do not match Containerfile",
+            "trusted-build-contract.json",
+            "python3 scripts/verify_trusted_image.py contract",
             "quarantine-${{ github.run_id }}-${{ github.run_attempt }}",
             "Promote the fully verified digest to the trusted tag",
             "name: seaweedfs-4.39-arm64-${{ github.run_id }}",
@@ -104,7 +104,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             "--tmpfs /data:",
             "runtime-smoke.json",
             "runtime-smoke.log",
-            "version: v0.21.7",
+            "CRANE_VERSION: v0.21.7",
             "b6ee979d9411dfb05ce35ab9e156fe5de7def11a230764a7856ffa2eb971fa88",
             "sha256sum --check --strict",
             EXPECTED_RELEASE_COMMIT,
@@ -160,33 +160,31 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         )
         self.assertNotIn(":4.39-arm64", build_step)
         retain_step = workflow.index(
-            "- name: Retain independently downloadable evidence"
+            "- name: Retain candidate evidence before trusted-tag promotion"
         )
         promote_step = workflow.index(
             "- name: Promote the fully verified digest to the trusted tag"
         )
         self.assertLess(retain_step, promote_step)
         promotion = workflow[promote_step:]
-        self.assertIn("imjasonh/setup-crane@", workflow)
-        self.assertIn(
-            "imjasonh/setup-crane@feee3b6bb0d4c68370f256a4502498c9227e5c6b",
-            workflow,
-        )
-        self.assertIn("version: v0.21.7", workflow)
+        self.assertNotIn("imjasonh/setup-crane@", workflow)
+        self.assertNotIn("docker/setup-buildx-action@", workflow)
+        self.assertIn("Install and verify pinned Crane without credentials", workflow)
+        self.assertIn("CRANE_VERSION: v0.21.7", workflow)
         self.assertNotIn("latest-release", workflow)
-        self.assertIn('crane tag "${IMAGE}@${DIGEST}" 4.39-arm64', promotion)
-        self.assertIn('crane digest "${IMAGE}:4.39-arm64"', promotion)
+        self.assertIn('"${CRANE_BIN}" tag "${IMAGE}@${DIGEST}" 4.39-arm64', promotion)
+        self.assertIn('"${CRANE_BIN}" digest "${IMAGE}:4.39-arm64"', promotion)
         self.assertNotIn('docker push "${IMAGE}:4.39-arm64"', promotion)
         self.assertIn('test "${promoted_digest}" = "${DIGEST}"', promotion)
         generated_evidence = workflow[
-            workflow.index('"artifacts": {') : workflow.index(
+            workflow.index("evidence_names = (") : workflow.index(
                 'Path("release-evidence.json")'
             )
         ]
         self.assertIn('"cosign-verify.json"', generated_evidence)
         self.assertIn('"runtime-smoke.json"', generated_evidence)
-        self.assertIn('"runtime-smoke.log"', generated_evidence)
-        self.assertIn('"promotion_tool": {', workflow)
+        self.assertIn('"cosign-signature-bundle.json"', generated_evidence)
+        self.assertIn('"toolchain": toolchain["tools"]', workflow)
 
         gitleaks = gitleaks_path.read_text(encoding="utf-8")
         self.assertIn(

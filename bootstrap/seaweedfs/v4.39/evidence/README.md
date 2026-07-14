@@ -1,16 +1,32 @@
 # SeaweedFS 4.39 admission evidence
 
 This directory is the durable, repository-retained evidence for the exact
-SeaweedFS image named by `../release-evidence.json`. The GitHub Actions artifact
-is a 90-day downloadable mirror; it is not the only retained copy.
+SeaweedFS image named by `../release-evidence.json`. The final GitHub Actions
+artifact is a 90-day downloadable mirror; it is not the only retained copy.
 
-Each file path and SHA-256 digest is recorded in `../release-evidence.json`.
-`tests/test_object_storage_profile.py` verifies that the files exist, are not
-symlinks, and still match those hashes. The SBOM, Trivy report, scanner metadata,
-Cosign verification, SLSA verification, and bounded runtime-smoke evidence must
-be replaced together after a new publication run.
+`../trusted-build-contract.json` is the closed-world contract. It enumerates the
+Containerfile, builder, signing, scanning, evidence, and promotion toolchain.
+`scripts/verify_trusted_image.py repository --root .` verifies that every
+required file exists, is not a symlink, matches its recorded SHA-256, and closes
+the following trust chain:
 
-These files approve the repository-controlled build artifact only. Runtime
-manifests remain blocked until the parent work adds a source-build supply-chain
-record and proves its proposed resident-image ledger entry passes
+- `image-manifest.json` hashes to the admitted OCI digest;
+- `cosign-signature-bundle.json` retains the certificate, signed payload, Rekor
+  log identity/index/time, signed entry timestamp, and inclusion proof;
+- `rekor-entry.json` retains the independently queried Rekor UUID and stable
+  log fields;
+- `cosign-verify.json` records the exact issuer and workflow identity constraints
+  that passed both bundle and registry verification;
+- `slsa-bundles.jsonl` and `slsa-verify.json` bind the digest to the exact
+  workflow path, ref, SHA, run, attempt, builder, and source;
+- `toolchain.json` reconciles observed Buildx, BuildKit, Syft, Trivy, Cosign, and
+  the deferred Crane promotion pin with the contract;
+- `runtime-smoke.json`, the CycloneDX SBOM, Trivy metadata/report, and
+  `promotion-evidence.json` bind runtime fitness, vulnerability state, and the
+  digest-preserving trusted-tag transition to the same release.
+
+These files must be replaced together after a new publication run. They approve
+the repository-controlled build artifact only. Runtime manifests remain blocked
+until parent Issue #26 adds a source-build supply-chain record and proves its
+proposed resident-image ledger entry passes
 `scripts/verify_supply_chain.py check-images`.

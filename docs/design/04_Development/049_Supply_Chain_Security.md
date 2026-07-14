@@ -45,6 +45,25 @@ The actions and scanner releases in `.github/workflows/security.yml` are pinned.
 Updates must be isolated dependency changes with review of upstream release
 notes and a failing fixture before the pin is advanced.
 
+Repository-controlled image builds additionally use a closed-world trusted-build
+contract. The contract enumerates every artifact-producing, evidence-producing,
+or state-mutating tool: the complete Containerfile hash and frontend, base
+images, Buildx, BuildKit image digest and platform manifest, Syft, Trivy,
+Cosign, and the promotion tool. A tool absent from the contract is not permitted
+in the trusted path. Standalone release archives are downloaded without registry
+credentials, checked against an exact SHA-256 before extraction or execution,
+and only then made available to a credentialed step. The generated toolchain
+record must reconcile observed versions and image digests with the contract.
+
+Trusted-tag publication is a two-stage state machine. The verify job may push
+only a run-scoped quarantine tag and must finish source checks, runtime smoke,
+SBOM, scan, signing, provenance, and candidate evidence retention. A separate
+promotion job receives package-write permission, revalidates the retained
+candidate before credentials exist, installs the checksum-verified promotion
+tool, and moves the trusted tag without changing the digest. A missing gate,
+unretained candidate, failed revalidation, or digest mismatch prevents
+promotion.
+
 ## Resident image and SBOM evidence
 
 Every image admitted to a resident profile must have an entry in
@@ -83,10 +102,16 @@ SBOM, scanner versions, vulnerability database timestamp, and immutable image
 digest for the lifetime of the release evidence.
 
 Repository-controlled source builds retain the complete Cosign verification,
-SLSA verification, image SBOM, scanner metadata, and Trivy report in Git for the
-admission lifetime. A GitHub Actions artifact may mirror those files for
-operator download, but its finite retention window is not the durable source of
-truth. A source-built candidate remains blocked from runtime manifests until a
+Sigstore bundle v0.3 certificate and Rekor inclusion snapshot, independently
+queried Rekor entry, raw signed image manifest, exact-workflow SLSA verification
+and bundles, observed toolchain, runtime smoke, image SBOM, scanner metadata,
+Trivy report, and promotion result in Git for the admission lifetime. Cosign
+verification binds issuer, identity, workflow name, repository, ref, SHA, and
+trigger. SLSA verification uses CLI signer/source filters and then reconciles
+the certificate, workflow path/ref/SHA, run and attempt, builder identity, and
+subject digest. A GitHub Actions artifact may mirror those files for operator
+download, but its finite retention window is not the durable source of truth. A
+source-built candidate remains blocked from runtime manifests until a
 resident-ledger supply-chain record backed by those retained files passes
 `check-images`.
 
