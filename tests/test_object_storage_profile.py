@@ -13,10 +13,49 @@ EXPECTED_INDEX_REFERENCE = (
 EXPECTED_MANIFEST_DIGEST = (
     "sha256:22fe8c99253508a3d4bf2fb3c66130d9c3e238506b42c41aa3aee3bfbe3a6906"
 )
+EXPECTED_RELEASE_COMMIT = "db42bb49757b459551607939807017d7a9d5a94a"
+EXPECTED_RELEASE_TREE = "da91641fdd520e465c68fa48af3b3ad07ad86822"
 BLOCKED_GITOPS_MARKERS = ("seaweedfs", "object-storage", "object_storage")
 
 
 class ObjectStorageProfileContractTests(unittest.TestCase):
+    def test_trusted_arm64_source_build_contract_is_present(self) -> None:
+        evidence_path = ROOT / "bootstrap/seaweedfs/v4.39/source.json"
+        workflow_path = ROOT / ".github/workflows/seaweedfs-arm64.yml"
+        containerfile_path = ROOT / "bootstrap/seaweedfs/v4.39/Containerfile"
+        decision_path = (
+            ROOT
+            / "docs/design/07_ADR/ADR-0020_Adopt_SeaweedFS_4_39_source_for_arm64_build.md"
+        )
+
+        required_paths = (evidence_path, workflow_path, containerfile_path, decision_path)
+        missing = [path.relative_to(ROOT).as_posix() for path in required_paths if not path.is_file()]
+        self.assertFalse(missing, f"missing trusted build contract: {', '.join(missing)}")
+
+        source = json.loads(evidence_path.read_text(encoding="utf-8"))
+        self.assertEqual(source["version"], "4.39")
+        self.assertEqual(source["commit"], EXPECTED_RELEASE_COMMIT)
+        self.assertEqual(source["tree"], EXPECTED_RELEASE_TREE)
+        self.assertRegex(source["git_archive_sha256"], r"^[0-9a-f]{64}$")
+
+        workflow = workflow_path.read_text(encoding="utf-8")
+        for required in (
+            "permissions:",
+            "contents: read",
+            "packages: write",
+            "id-token: write",
+            "attestations: write",
+            "linux/arm64",
+            "cosign sign --yes",
+            "actions/attest-build-provenance@",
+            "cyclonedx-json",
+            "severity: HIGH,CRITICAL",
+            EXPECTED_RELEASE_COMMIT,
+            EXPECTED_RELEASE_TREE,
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, workflow)
+
     def test_blocked_candidate_is_recorded_without_runtime_manifests(self) -> None:
         admission_path = ROOT / "bootstrap/seaweedfs/v4.39/admission.json"
         self.assertTrue(admission_path.is_file())
