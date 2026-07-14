@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 ARG GO_IMAGE=golang:1.25.8-alpine@sha256:8e02eb337d9e0ea459e041f1ee5eece41cbb61f1d83e7d883a3e2fb4862063fa
+ARG RUNTIME_IMAGE=alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS builder
 
 ARG TARGETOS
@@ -16,7 +17,6 @@ RUN test -n "${SOURCE_COMMIT}" && \
       -ldflags="-s -w -extldflags -static -X github.com/seaweedfs/seaweedfs/weed/util/version.COMMIT=${SOURCE_COMMIT}" \
       -o /out/weed .
 
-ARG RUNTIME_IMAGE=alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
 FROM ${RUNTIME_IMAGE} AS certificates
 
 FROM scratch

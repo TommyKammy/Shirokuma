@@ -67,6 +67,9 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
 
         containerfile = containerfile_path.read_text(encoding="utf-8")
         self.assertNotIn(r"\${", containerfile)
+        first_from = containerfile.index("FROM ")
+        self.assertLess(containerfile.index("ARG GO_IMAGE="), first_from)
+        self.assertLess(containerfile.index("ARG RUNTIME_IMAGE="), first_from)
 
     def test_blocked_candidate_is_recorded_without_runtime_manifests(self) -> None:
         admission_path = ROOT / "bootstrap/seaweedfs/v4.39/admission.json"
