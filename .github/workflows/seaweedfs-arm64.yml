@@ -54,9 +54,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          actual_commit=\$(git -C seaweedfs-src rev-parse HEAD)
-          actual_tree=\$(git -C seaweedfs-src rev-parse HEAD^{tree})
-          actual_archive=\$(git -C seaweedfs-src archive --format=tar HEAD | sha256sum | cut -d' ' -f1)
+          actual_commit=$(git -C seaweedfs-src rev-parse HEAD)
+          actual_tree=$(git -C seaweedfs-src rev-parse HEAD^{tree})
+          actual_archive=$(git -C seaweedfs-src archive --format=tar HEAD | sha256sum | cut -d' ' -f1)
           test "${actual_commit}" = "${SOURCE_COMMIT}"
           test "${actual_tree}" = "${SOURCE_TREE}"
           test "${actual_archive}" = "${SOURCE_ARCHIVE_SHA256}"
@@ -109,7 +109,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          platform=\$(docker buildx imagetools inspect "${IMAGE}@${DIGEST}" --format '{{json .Manifest.Platform}}')
+          platform=$(docker buildx imagetools inspect "${IMAGE}@${DIGEST}" --format '{{json .Manifest.Platform}}')
           test "${platform}" = '{"architecture":"arm64","os":"linux"}'
 
       - name: Install Cosign

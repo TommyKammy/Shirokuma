@@ -8,12 +8,12 @@ ARG TARGETARCH
 ARG SOURCE_COMMIT
 WORKDIR /src
 COPY . .
-RUN test -n "\${SOURCE_COMMIT}" && \
+RUN test -n "${SOURCE_COMMIT}" && \
     mkdir -p /out/data && \
     cd weed && \
-    CGO_ENABLED=0 GOOS="\${TARGETOS}" GOARCH="\${TARGETARCH}" \
+    CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -trimpath \
-      -ldflags="-s -w -extldflags -static -X github.com/seaweedfs/seaweedfs/weed/util/version.COMMIT=\${SOURCE_COMMIT}" \
+      -ldflags="-s -w -extldflags -static -X github.com/seaweedfs/seaweedfs/weed/util/version.COMMIT=${SOURCE_COMMIT}" \
       -o /out/weed .
 
 ARG RUNTIME_IMAGE=alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
@@ -24,7 +24,7 @@ ARG SOURCE_COMMIT
 LABEL org.opencontainers.image.title="Shirokuma SeaweedFS" \
       org.opencontainers.image.version="4.39" \
       org.opencontainers.image.source="https://github.com/seaweedfs/seaweedfs" \
-      org.opencontainers.image.revision="\${SOURCE_COMMIT}" \
+      org.opencontainers.image.revision="${SOURCE_COMMIT}" \
       org.opencontainers.image.licenses="Apache-2.0"
 COPY --from=certificates /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder /out/weed /usr/bin/weed

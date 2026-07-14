@@ -63,6 +63,10 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             with self.subTest(action_ref=action_ref):
                 self.assertRegex(action_ref, r"^[^@]+@[0-9a-f]{40}$")
         self.assertNotRegex(workflow, r"secrets\.(COSIGN|SIGNING|PRIVATE_KEY)")
+        self.assertNotIn(r"\$(", workflow)
+
+        containerfile = containerfile_path.read_text(encoding="utf-8")
+        self.assertNotIn(r"\${", containerfile)
 
     def test_blocked_candidate_is_recorded_without_runtime_manifests(self) -> None:
         admission_path = ROOT / "bootstrap/seaweedfs/v4.39/admission.json"
