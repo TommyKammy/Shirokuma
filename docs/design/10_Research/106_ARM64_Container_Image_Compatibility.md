@@ -158,9 +158,11 @@ entry may be added before that boundary is satisfied.
 
 The machine-readable decision is retained at
 `bootstrap/seaweedfs/v4.39/admission.json`. The repository-owned
-`verify-object-storage-profile` check validates that exact immutable candidate,
-the three missing trust controls, and the absence of object-storage runtime
-manifests. This keeps the checkpoint green while failing closed; it does not
+`verify-object-storage-profile` check pins that exact immutable candidate,
+validates the three missing trust controls, scans the complete GitOps tree for
+SeaweedFS or object-storage resources, and rejects SeaweedFS resident-ledger
+entries while admission remains blocked. This keeps the checkpoint green while
+failing closed; it does not
 reinterpret an intentionally missing workload as a CI defect or admission
 approval.
 
