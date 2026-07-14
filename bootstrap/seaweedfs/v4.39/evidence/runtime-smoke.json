@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "reference": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96",
+  "user": "65532:65532",
+  "command": [
+    "/usr/bin/weed",
+    "mini",
+    "-dir=/data"
+  ],
+  "read_only_rootfs": true,
+  "tmpfs": [
+    "/tmp",
+    "/data"
+  ],
+  "capabilities_dropped": "ALL",
+  "no_new_privileges": true,
+  "sustained_running_seconds": 10,
+  "run_id": "29362206249",
+  "run_attempt": "1"
+}

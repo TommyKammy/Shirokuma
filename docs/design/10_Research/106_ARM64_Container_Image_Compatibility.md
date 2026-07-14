@@ -153,20 +153,23 @@ not:
 ADR-0019 cannot waive missing signature, transparency-log, or SLSA provenance
 evidence, so the upstream SeaweedFS image remains rejected. ADR-0020 instead
 approves the exact source revision for a repository-controlled build. GitHub
-Actions hardened replacement run `29359679038` produced native `linux/arm64`
+Actions hardened replacement run `29362206249` produced native `linux/arm64`
 artifact
 `ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96`.
 The workflow identity passed keyless Cosign and transparency-log verification,
-immutable workflow SHA `159e8601302cd6306d9d3bd9d847ea39275a9bf8`
-is verified, SLSA provenance is retained as attestation `35317398`, and the
+immutable workflow SHA `39225a3656e388999f6755ca642cd65f7ef6c6c7`
+is verified, SLSA provenance is retained as attestation `35323800`, and the
 CycloneDX SBOM is bound to the same digest. Trivy `0.72.0` reported Critical=0
 and High=0 with vulnerability DB timestamp
-`2026-07-13T19:09:56.237113526Z`. Corrected image metadata exposes `weed mini`
-ports `9340` and `23646`; writable `/tmp` supports default sockets and cache.
+`2026-07-14T13:08:09.929373878Z`. Corrected image metadata exposes `weed mini`
+ports `9340` and `23646`; the exact digest sustained a 10-second non-root smoke
+with a read-only root, writable `/tmp` and `/data`, all capabilities dropped,
+and no-new-privileges.
 The Dockerfile frontend is immutable, scan and DB freshness gates precede
 signing, and generated evidence hashes Cosign verification. The hardened digest
-is promoted from a run-scoped quarantine tag only after evidence retention and
-is admitted without an ADR-0019 vulnerability exception.
+is promoted from a run-scoped quarantine tag only after evidence retention by
+checksum-verified Crane `v0.21.7` and is admitted without an ADR-0019
+vulnerability exception.
 
 The machine-readable decision is retained at
 `bootstrap/seaweedfs/v4.39/admission.json`; the exact run record is retained at

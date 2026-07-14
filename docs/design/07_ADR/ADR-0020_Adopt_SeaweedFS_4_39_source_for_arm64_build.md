@@ -112,27 +112,29 @@ part of the durable decision history.
 ## Publication evidence
 
 The replacement GitHub Actions run
-[`29359679038`](https://github.com/TommyKammy/Shirokuma/actions/runs/29359679038)
+[`29362206249`](https://github.com/TommyKammy/Shirokuma/actions/runs/29362206249)
 published and admitted this hardened linux/arm64 artifact:
 
     ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96
 
 The run verified the GitHub Actions OIDC workflow identity and immutable
-workflow SHA `159e8601302cd6306d9d3bd9d847ea39275a9bf8` with keyless Cosign
+workflow SHA `39225a3656e388999f6755ca642cd65f7ef6c6c7` with keyless Cosign
 and transparency-log evidence. GitHub retained SLSA provenance at
-[`attestation 35317398`](https://github.com/TommyKammy/Shirokuma/attestations/35317398).
+[`attestation 35323800`](https://github.com/TommyKammy/Shirokuma/attestations/35323800).
 The exact-digest CycloneDX SBOM and Trivy scan are retained in Git under
-`bootstrap/seaweedfs/v4.39/evidence/` and mirrored in artifact `8321634543`;
+`bootstrap/seaweedfs/v4.39/evidence/` and mirrored in artifact `8322642193`;
 Trivy `0.72.0` reported zero Critical and zero High findings with
-vulnerability DB timestamp `2026-07-13T19:09:56.237113526Z`. The image metadata
+vulnerability DB timestamp `2026-07-14T13:08:09.929373878Z`. The image metadata
 exposes the active `weed mini` volume HTTP port `9340` and admin HTTP port
 `23646`, and the non-root default command starts successfully with writable
-`/tmp`. The Dockerfile frontend is pinned by digest, the vulnerability and DB
+`/tmp` and `/data` tmpfs, a read-only root, all capabilities dropped, and
+no-new-privileges for the bounded 10-second smoke. The Dockerfile frontend is
+pinned by digest, the vulnerability and DB
 freshness gates complete before signing or provenance publication, and the
 generated evidence hashes the Cosign verification output. No ADR-0019
 vulnerability exception is required. The build publishes first to run-scoped
-quarantine tag `quarantine-29359679038-1`; after all gates and evidence
-retention pass, Crane promotes the unchanged digest to trusted tag
+quarantine tag `quarantine-29362206249-1`; after all gates and evidence
+retention pass, checksum-verified Crane `v0.21.7` promotes the unchanged digest to trusted tag
 `4.39-arm64`. Repeated valid SLSA attestations are accepted when at least one
 matches the exact workflow SHA and digest.
 

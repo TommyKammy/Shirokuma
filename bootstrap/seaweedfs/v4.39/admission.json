@@ -37,8 +37,8 @@
     "builder": {
       "issuer": "https://token.actions.githubusercontent.com",
       "identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/seaweedfs-arm64.yml@refs/heads/codex/issue-41",
-      "workflow_sha": "159e8601302cd6306d9d3bd9d847ea39275a9bf8",
-      "run": "https://github.com/TommyKammy/Shirokuma/actions/runs/29359679038"
+      "workflow_sha": "39225a3656e388999f6755ca642cd65f7ef6c6c7",
+      "run": "https://github.com/TommyKammy/Shirokuma/actions/runs/29362206249"
     },
     "controls": [
       {
@@ -59,18 +59,18 @@
       {
         "control": "workflow_revision",
         "status": "verified",
-        "evidence": "Cosign and GitHub attestation verification bind the artifact to workflow SHA 159e8601302cd6306d9d3bd9d847ea39275a9bf8"
+        "evidence": "Cosign and GitHub attestation verification bind the artifact to workflow SHA 39225a3656e388999f6755ca642cd65f7ef6c6c7"
       },
       {
         "control": "slsa_provenance",
         "status": "verified",
-        "evidence": "https://github.com/TommyKammy/Shirokuma/attestations/35317398"
+        "evidence": "https://github.com/TommyKammy/Shirokuma/attestations/35323800"
       },
       {
         "control": "sbom",
         "status": "verified",
         "path": "bootstrap/seaweedfs/v4.39/evidence/seaweedfs-4.39-arm64.cdx.json",
-        "sha256": "10ad541650807122d93ca3e54507b8678e66ee8d00d93549aaba9d129f02aab7"
+        "sha256": "1fafe26e83ac4c04579330f49231fad261ec5af59b3e9bdddcea50016eaaaffd"
       },
       {
         "control": "vulnerability_scan",
@@ -78,20 +78,20 @@
         "critical": 0,
         "high": 0,
         "scanner_version": "0.72.0",
-        "vulnerability_db_updated_at": "2026-07-13T19:09:56.237113526Z",
-        "vulnerability_db_downloaded_at": "2026-07-14T01:41:51.785604274Z",
+        "vulnerability_db_updated_at": "2026-07-14T13:08:09.929373878Z",
+        "vulnerability_db_downloaded_at": "2026-07-14T19:33:42.133181068Z",
         "path": "bootstrap/seaweedfs/v4.39/evidence/trivy.json",
-        "sha256": "976acf0d9e94c23b69a83814a60160254c602fd656f5ffd16302747a1c439cd4"
+        "sha256": "a656c22b7dfc86d9f75cacc38a8271fc25b929af0b9ea11469bfef6e438cc049"
       },
       {
         "control": "runtime_tmp",
         "status": "verified",
-        "evidence": "the non-root scratch image ran weed mini with writable /tmp for its default local sockets and cache"
+        "evidence": "run 29362206249 sustained non-root weed mini for 10 seconds with a read-only root, writable /tmp and /data tmpfs, all capabilities dropped, and no-new-privileges; retained at bootstrap/seaweedfs/v4.39/evidence/runtime-smoke.json"
       },
       {
         "control": "tag_promotion",
         "status": "verified",
-        "evidence": "run 29359679038 published to a run-scoped quarantine tag and promoted sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96 only after all gates and evidence retention passed"
+        "evidence": "run 29362206249 verified Crane v0.21.7 archive sha256 b6ee979d9411dfb05ce35ab9e156fe5de7def11a230764a7856ffa2eb971fa88, published to a run-scoped quarantine tag, and promoted sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96 only after all gates and evidence retention passed"
       }
     ]
   },

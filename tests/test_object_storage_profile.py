@@ -54,6 +54,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             containerfile_path,
             decision_path,
             durable_evidence_dir / "cosign-verify.json",
+            durable_evidence_dir / "runtime-smoke.json",
             durable_evidence_dir / "seaweedfs-4.39-arm64.cdx.json",
             durable_evidence_dir / "slsa-verify.json",
             durable_evidence_dir / "trivy-version.json",
@@ -230,28 +231,32 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertEqual(release["source"]["commit"], EXPECTED_RELEASE_COMMIT)
         self.assertEqual(release["source"]["tree"], EXPECTED_RELEASE_TREE)
         self.assertEqual(release["vulnerabilities"], {"critical": 0, "high": 0})
-        self.assertEqual(release["builder"]["run_id"], "29359679038")
+        self.assertEqual(release["builder"]["run_id"], "29362206249")
         self.assertEqual(
             release["builder"]["workflow_sha"],
-            "159e8601302cd6306d9d3bd9d847ea39275a9bf8",
+            "39225a3656e388999f6755ca642cd65f7ef6c6c7",
         )
         self.assertEqual(release["admission_status"], "approved")
         self.assertEqual(release["scanner"]["version"], "0.72.0")
         self.assertEqual(
             release["scanner"]["vulnerability_db"]["updated_at"],
-            "2026-07-13T19:09:56.237113526Z",
+            "2026-07-14T13:08:09.929373878Z",
         )
         self.assertEqual(
             release["scanner"]["vulnerability_db"]["downloaded_at"],
-            "2026-07-14T01:41:51.785604274Z",
+            "2026-07-14T19:33:42.133181068Z",
         )
-        self.assertEqual(release["github_actions_artifact"]["id"], "8321634543")
+        self.assertEqual(release["github_actions_artifact"]["id"], "8322642193")
         self.assertEqual(
             release["github_actions_artifact"]["role"],
             "short-term downloadable mirror of the Git-retained evidence",
         )
         for name, artifact in release["artifacts"].items():
             with self.subTest(durable_artifact=name):
+                if "path" not in artifact:
+                    self.assertEqual(name, "runtime-smoke.log")
+                    self.assertIn("GitHub Actions artifact only", artifact["retention"])
+                    continue
                 path = ROOT / artifact["path"]
                 self.assertTrue(path.is_file())
                 self.assertFalse(path.is_symlink())
@@ -331,6 +336,29 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             release["artifacts"]["cosign-verify.json"]["sha256"],
             "e631b3b84f7456bfa3b47e1743838145cb0d91f59585ea7344e12d492515c0fc",
         )
+        self.assertEqual(
+            release["promotion_tool"],
+            {
+                "name": "crane",
+                "version": "v0.21.7",
+                "archive_sha256": (
+                    "b6ee979d9411dfb05ce35ab9e156fe5de7def11a230764a7856ffa2eb971fa88"
+                ),
+            },
+        )
+        runtime_smoke = json.loads(
+            (durable_evidence_dir / "runtime-smoke.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(runtime_smoke["reference"], EXPECTED_TRUSTED_REFERENCE)
+        self.assertEqual(runtime_smoke["user"], "65532:65532")
+        self.assertEqual(
+            runtime_smoke["command"], ["/usr/bin/weed", "mini", "-dir=/data"]
+        )
+        self.assertIs(runtime_smoke["read_only_rootfs"], True)
+        self.assertEqual(runtime_smoke["sustained_running_seconds"], 10)
+        self.assertEqual(runtime_smoke["run_id"], release["builder"]["run_id"])
         self.assertEqual(
             release["publication"]["trusted_tag_digest"],
             EXPECTED_TRUSTED_DIGEST,
@@ -419,7 +447,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertEqual(controls["vulnerability_scan"]["high"], 0)
         self.assertEqual(
             controls["vulnerability_scan"]["vulnerability_db_updated_at"],
-            "2026-07-13T19:09:56.237113526Z",
+            "2026-07-14T13:08:09.929373878Z",
         )
 
         for relative_path in admission["runtime_manifests"]["paths"]:

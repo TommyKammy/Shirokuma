@@ -3,8 +3,8 @@
   "Trivy": {
     "Version": "0.72.0"
   },
-  "ReportID": "019f61fa-f575-7570-abb1-4935825c8fca",
-  "CreatedAt": "2026-07-14T18:54:24.629359179Z",
+  "ReportID": "019f621e-f2dc-7643-b4f1-35aabbd1c5d7",
+  "CreatedAt": "2026-07-14T19:33:43.260412541Z",
   "ArtifactID": "sha256:b5e702ef27ae5c5e3d71132c5d7e7b91d776d450f77ca43d4b218487839f9d67",
   "ArtifactName": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cbf49d40f1d879dd4baba866fb2f203aba971023f3843253fbd4028469093e96",
   "ArtifactType": "container_image",
