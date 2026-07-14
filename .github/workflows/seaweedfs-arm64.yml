@@ -299,7 +299,7 @@ jobs:
               },
           }
           Path("release-evidence.json").write_text(
-              json.dumps(record, indent=2) + "\\n", encoding="utf-8"
+              json.dumps(record, indent=2) + "\n", encoding="utf-8"
           )
           PY
 
