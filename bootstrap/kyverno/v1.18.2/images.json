@@ -51,11 +51,18 @@
       "scan_summary": {"high": 4, "critical": 0}
     },
     {
-      "component": "readiness-checker",
+      "component": "readiness-checker-cleanup-hook",
       "version": "v1.18.2",
       "platform": "linux/arm64",
       "reference": "ghcr.io/kyverno/readiness-checker@sha256:5c74ed254d0ec59ea333ecdc810a59607c8acf2bc9b0b259427a1cbca1ad070d",
       "scan_summary": {"high": 1, "critical": 0}
+    },
+    {
+      "component": "readiness-checker-test-hook",
+      "version": "latest",
+      "platform": "linux/arm64",
+      "reference": "ghcr.io/kyverno/readiness-checker@sha256:efd37dd394d2cbc1a78850aacd67ee606841d4a2209472a24e4bdf6bb9308576",
+      "scan_summary": {"high": 12, "critical": 1}
     }
   ]
 }
