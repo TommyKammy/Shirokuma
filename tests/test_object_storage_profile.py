@@ -80,6 +80,10 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             "TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy",
             "VulnerabilityDB",
             "severity: HIGH,CRITICAL",
+            "actual_inputs",
+            "source evidence build_inputs do not match Containerfile",
+            "quarantine-${{ github.run_id }}-${{ github.run_attempt }}",
+            "Promote the fully verified digest to the trusted tag",
             "name: seaweedfs-4.39-arm64-${{ github.run_id }}",
             EXPECTED_RELEASE_COMMIT,
             EXPECTED_RELEASE_TREE,
@@ -107,6 +111,30 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         )
         self.assertLess(scan_step, sign_step)
         self.assertLess(sign_step, provenance_step)
+        self.assertIn("if not matches:", workflow)
+        self.assertNotIn(
+            'if len(matches) != 1:\n              raise SystemExit("SLSA provenance',
+            workflow,
+        )
+        build_step = workflow[
+            workflow.index("- name: Build and publish only linux/arm64") :
+            workflow.index("- name: Verify the published platform")
+        ]
+        self.assertIn(
+            "quarantine-${{ github.run_id }}-${{ github.run_attempt }}",
+            build_step,
+        )
+        self.assertNotIn(":4.39-arm64", build_step)
+        retain_step = workflow.index(
+            "- name: Retain independently downloadable evidence"
+        )
+        promote_step = workflow.index(
+            "- name: Promote the fully verified digest to the trusted tag"
+        )
+        self.assertLess(retain_step, promote_step)
+        promotion = workflow[promote_step:]
+        self.assertIn('docker push "${IMAGE}:4.39-arm64"', promotion)
+        self.assertIn('test "${promoted_digest}" = "${DIGEST}"', promotion)
         generated_evidence = workflow[
             workflow.index('"artifacts": {') : workflow.index(
                 'Path("release-evidence.json")'

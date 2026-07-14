@@ -68,6 +68,21 @@ jobs:
           evidence = json.loads(
               Path("bootstrap/seaweedfs/v4.39/source.json").read_text(encoding="utf-8")
           )
+          containerfile = Path(
+              "bootstrap/seaweedfs/v4.39/Containerfile"
+          ).read_text(encoding="utf-8")
+
+          def arg_value(name: str) -> str:
+              prefix = f"ARG {name}="
+              matches = [
+                  line.removeprefix(prefix)
+                  for line in containerfile.splitlines()
+                  if line.startswith(prefix)
+              ]
+              if len(matches) != 1:
+                  raise SystemExit(f"Containerfile must define exactly one {name}")
+              return matches[0]
+
           expected = {
               "commit": os.environ["SOURCE_COMMIT"],
               "tree": os.environ["SOURCE_TREE"],
@@ -76,6 +91,17 @@ jobs:
           for field, value in expected.items():
               if evidence.get(field) != value:
                   raise SystemExit(f"source evidence mismatch for {field}")
+          syntax_prefix = "# syntax="
+          syntax_line = containerfile.splitlines()[0]
+          if not syntax_line.startswith(syntax_prefix):
+              raise SystemExit("Containerfile must pin its syntax frontend")
+          actual_inputs = {
+              "dockerfile_frontend": syntax_line.removeprefix(syntax_prefix),
+              "go": arg_value("GO_IMAGE"),
+              "certificates": arg_value("RUNTIME_IMAGE"),
+          }
+          if evidence.get("build_inputs") != actual_inputs:
+              raise SystemExit("source evidence build_inputs do not match Containerfile")
           PY
           rm -rf seaweedfs-src/.git
 
@@ -101,7 +127,7 @@ jobs:
           sbom: false
           cache-from: type=gha,scope=seaweedfs-4.39-arm64
           cache-to: type=gha,mode=max,scope=seaweedfs-4.39-arm64
-          tags: ${{ env.IMAGE }}:4.39-arm64
+          tags: ${{ env.IMAGE }}:quarantine-${{ github.run_id }}-${{ github.run_attempt }}
           build-args: |
             SOURCE_COMMIT=${{ env.SOURCE_COMMIT }}
 
@@ -215,7 +241,7 @@ jobs:
                   )
               ):
                   matches.append(record)
-          if len(matches) != 1:
+          if not matches:
               raise SystemExit("SLSA provenance is not bound to the exact workflow SHA and digest")
           PY
 
@@ -318,3 +344,20 @@ jobs:
             trivy.json
           if-no-files-found: error
           retention-days: 90
+
+      - name: Promote the fully verified digest to the trusted tag
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_id=$(docker image inspect "${IMAGE}@${DIGEST}" --format '{{.Id}}')
+          docker tag "${image_id}" "${IMAGE}:4.39-arm64"
+          push_output=$(docker push "${IMAGE}:4.39-arm64")
+          printf '%s\n' "${push_output}"
+          promoted_digest=$(
+            printf '%s\n' "${push_output}" |
+              sed -n 's/.*digest: \(sha256:[0-9a-f]\{64\}\).*/\1/p' |
+              tail -n 1
+          )
+          test "${promoted_digest}" = "${DIGEST}"
