@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7.0@sha256:dbbd5e059e8a07ff7ea6233b213b36aa516b4c53c645f1817a4dd18b83cbea56
 
 ARG GO_IMAGE=golang:1.25.12-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587
 ARG RUNTIME_IMAGE=alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
@@ -10,7 +10,7 @@ ARG SOURCE_COMMIT
 WORKDIR /src
 COPY . .
 RUN test -n "${SOURCE_COMMIT}" && \
-    mkdir -p /out/data && \
+    mkdir -p /out/data /out/tmp && \
     cd weed && \
     CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" \
       go build -trimpath \
@@ -29,6 +29,7 @@ LABEL org.opencontainers.image.title="Shirokuma SeaweedFS" \
 COPY --from=certificates /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder /out/weed /usr/bin/weed
 COPY --from=builder --chown=65532:65532 /out/data /data
+COPY --from=builder --chown=65532:65532 /out/tmp /tmp
 COPY --from=builder --chown=65532:65532 /src/docker/filer.toml /etc/seaweedfs/filer.toml
 USER 65532:65532
 EXPOSE 7333 8333 8888 9333 9340 19333 23646

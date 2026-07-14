@@ -86,26 +86,42 @@
   "assessment": {
     "assessed_on": "2026-07-15",
     "scope": "mac-studio-solo/local-lab",
-    "admission": "approved",
+    "admission": "blocked",
     "exception_eligible": false,
-    "blockers": [],
-    "rationale": "The Shirokuma-controlled source build satisfies source adoption, exact workflow revision, signature, transparency-log, SLSA provenance, SBOM, corrected weed mini port metadata, and Critical=0/High=0 controls with retained Trivy freshness. The upstream image remains blocked."
+    "blockers": [
+      {
+        "control": "runtime_tmp",
+        "status": "missing",
+        "evidence": "the scratch image does not provide writable /tmp for weed mini default sockets and WebDAV cache"
+      },
+      {
+        "control": "dockerfile_frontend",
+        "status": "floating",
+        "evidence": "the admitted build used the floating docker/dockerfile:1.7 frontend"
+      },
+      {
+        "control": "signing_order",
+        "status": "superseded",
+        "evidence": "the admitted workflow signed and published provenance before the vulnerability gate completed"
+      }
+    ],
+    "rationale": "The previously admitted source build is superseded pending a replacement with writable weed mini temporary storage, an immutable Dockerfile frontend, scan-before-sign ordering, and generated signature-evidence hashing. The upstream image remains blocked."
   },
   "runtime_manifests": {
-    "permitted": true,
+    "permitted": false,
     "paths": [
       "deploy/gitops/object-storage/kustomization.yaml",
       "deploy/gitops/clusters/local-lite/object-storage.yaml"
     ]
   },
   "next_action": {
-    "mode": "implement-object-storage-profile",
+    "mode": "rebuild-and-record-hardened-artifact",
     "decision_record_required": false,
     "requirements": [
-      "pin the admitted exact digest in the resident-image ledger and Flux resources",
-      "verify Flux reconciliation and functional S3 smoke on mac-studio-solo",
-      "record SSD impact and backup/export behavior",
-      "retain teardown and rebuild evidence for parent Issue #26"
+      "build with immutable Dockerfile frontend and writable /tmp",
+      "complete exact-digest vulnerability scan before signing or provenance publication",
+      "hash Cosign verification output in generated release evidence",
+      "record the replacement exact digest before resuming parent Issue #26"
     ]
   }
 }

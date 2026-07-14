@@ -109,7 +109,7 @@ part of the durable decision history.
 
 The replacement GitHub Actions run
 [`29344735252`](https://github.com/TommyKammy/Shirokuma/actions/runs/29344735252)
-published and admitted this linux/arm64 artifact:
+published this now-superseded linux/arm64 artifact:
 
     ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:92f1018c0f1dc6d3129d096f2b9553beabc514518ba9d127e4fde5eb3233f7d0
 
@@ -121,10 +121,15 @@ The exact-digest CycloneDX SBOM and Trivy scan are retained in artifact
 `8315593067`; Trivy `0.72.0` reported zero Critical and zero High findings with
 vulnerability DB timestamp `2026-07-13T19:09:56.237113526Z`. The image metadata
 exposes the active `weed mini` volume HTTP port `9340` and admin HTTP port
-`23646`. No ADR-0019 vulnerability exception is required.
+`23646`. Subsequent review found that the scratch image lacked writable `/tmp`
+for the default filer/S3 sockets and WebDAV cache, the Dockerfile frontend was
+floating, the workflow signed before its vulnerability gate, and generated
+evidence omitted the Cosign verification hash. This digest is superseded until
+a hardened replacement records all four controls. No ADR-0019 vulnerability
+exception is required.
 
-The original upstream image remains rejected. This decision admits only the
-Shirokuma-built digest above, and parent Issue #26 still owns the resident-ledger
+The original upstream image remains rejected. This decision will admit only the
+hardened Shirokuma replacement, and parent Issue #26 still owns the resident-ledger
 entry, Flux resources, functional smoke, disk impact, backup/export, and
 teardown evidence.
 

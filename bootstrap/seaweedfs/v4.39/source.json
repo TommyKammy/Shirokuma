@@ -8,6 +8,7 @@
   "git_archive_sha256": "95b3ba34d191e2cc96063434f407087000a9ffcf22f95682ecd5ce40b5a3fab9",
   "archive_command": "git archive --format=tar HEAD | sha256sum",
   "build_inputs": {
+    "dockerfile_frontend": "docker/dockerfile:1.7.0@sha256:dbbd5e059e8a07ff7ea6233b213b36aa516b4c53c645f1817a4dd18b83cbea56",
     "go": "golang:1.25.12-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587",
     "certificates": "alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659"
   },

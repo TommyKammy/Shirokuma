@@ -16,6 +16,10 @@ EXPECTED_UPSTREAM_MANIFEST_DIGEST = (
 )
 EXPECTED_RELEASE_COMMIT = "db42bb49757b459551607939807017d7a9d5a94a"
 EXPECTED_RELEASE_TREE = "da91641fdd520e465c68fa48af3b3ad07ad86822"
+EXPECTED_DOCKERFILE_FRONTEND = (
+    "docker/dockerfile:1.7.0@"
+    "sha256:dbbd5e059e8a07ff7ea6233b213b36aa516b4c53c645f1817a4dd18b83cbea56"
+)
 EXPECTED_TRUSTED_DIGEST = (
     "sha256:92f1018c0f1dc6d3129d096f2b9553beabc514518ba9d127e4fde5eb3233f7d0"
 )
@@ -92,6 +96,23 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertNotIn(r"\$(", workflow)
         self.assertIn('json.dumps(record, indent=2) + "\\n"', workflow)
         self.assertNotIn('json.dumps(record, indent=2) + "\\\\n"', workflow)
+        scan_step = workflow.index(
+            "- name: Scan the exact digest and block High or Critical findings"
+        )
+        sign_step = workflow.index(
+            "- name: Keyless-sign the scanned immutable image"
+        )
+        provenance_step = workflow.index(
+            "- name: Publish SLSA provenance for the scanned exact digest"
+        )
+        self.assertLess(scan_step, sign_step)
+        self.assertLess(sign_step, provenance_step)
+        generated_evidence = workflow[
+            workflow.index('"artifacts": {') : workflow.index(
+                'Path("release-evidence.json")'
+            )
+        ]
+        self.assertIn('"cosign-verify.json"', generated_evidence)
 
         decision = decision_path.read_text(encoding="utf-8")
         self.assertIn("status: accepted", decision)
@@ -101,11 +122,20 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         for image in source["build_inputs"].values():
             with self.subTest(build_input=image):
                 self.assertIn(image, containerfile)
+        self.assertEqual(
+            source["build_inputs"]["dockerfile_frontend"],
+            EXPECTED_DOCKERFILE_FRONTEND,
+        )
         first_from = containerfile.index("FROM ")
         self.assertLess(containerfile.index("ARG GO_IMAGE="), first_from)
         self.assertLess(containerfile.index("ARG RUNTIME_IMAGE="), first_from)
         self.assertIn("EXPOSE 7333 8333 8888 9333 9340 19333 23646", containerfile)
         self.assertNotIn("EXPOSE 7333 8080", containerfile)
+        self.assertIn("mkdir -p /out/data /out/tmp", containerfile)
+        self.assertIn(
+            "COPY --from=builder --chown=65532:65532 /out/tmp /tmp",
+            containerfile,
+        )
 
         release = json.loads(release_path.read_text(encoding="utf-8"))
         self.assertEqual(release["reference"], EXPECTED_TRUSTED_REFERENCE)
@@ -117,7 +147,10 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             release["builder"]["workflow_sha"],
             "7cc3fd1a5376fa99de6922c54f3137d6c4ab4911",
         )
-        self.assertEqual(release["admission_status"], "approved")
+        self.assertEqual(
+            release["admission_status"],
+            "superseded_pending_hardened_rebuild",
+        )
         self.assertEqual(release["scanner"]["version"], "0.72.0")
         self.assertEqual(
             release["scanner"]["vulnerability_db"]["updated_at"],
@@ -139,7 +172,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             "seaweedfs-arm64.yml@refs/heads/codex/issue-41",
         )
 
-    def test_source_build_candidate_is_admitted_for_parent_implementation(self) -> None:
+    def test_source_build_candidate_is_blocked_pending_hardened_rebuild(self) -> None:
         admission_path = ROOT / "bootstrap/seaweedfs/v4.39/admission.json"
         self.assertTrue(admission_path.is_file())
         admission = json.loads(admission_path.read_text(encoding="utf-8"))
@@ -148,10 +181,13 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertEqual(admission["component"], "seaweedfs")
         self.assertEqual(admission["version"], "4.39")
         self.assertEqual(admission["platform"], "linux/arm64")
-        self.assertEqual(admission["assessment"]["admission"], "approved")
+        self.assertEqual(admission["assessment"]["admission"], "blocked")
         self.assertIs(admission["assessment"]["exception_eligible"], False)
-        self.assertEqual(admission["assessment"]["blockers"], [])
-        self.assertIs(admission["runtime_manifests"]["permitted"], True)
+        self.assertEqual(
+            {blocker["control"] for blocker in admission["assessment"]["blockers"]},
+            {"runtime_tmp", "dockerfile_frontend", "signing_order"},
+        )
+        self.assertIs(admission["runtime_manifests"]["permitted"], False)
 
         self.assertEqual(
             admission["upstream_candidate"]["index_reference"],
@@ -250,7 +286,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
 
         self.assertEqual(
             admission["next_action"]["mode"],
-            "implement-object-storage-profile",
+            "rebuild-and-record-hardened-artifact",
         )
         self.assertIs(admission["next_action"]["decision_record_required"], False)
         self.assertGreaterEqual(len(admission["next_action"]["requirements"]), 4)

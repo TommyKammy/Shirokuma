@@ -22,7 +22,7 @@
   "identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/seaweedfs-arm64.yml@refs/heads/codex/issue-41",
   "transparency_log": "verified by cosign-verify.json",
   "slsa_provenance": "https://github.com/TommyKammy/Shirokuma/attestations/35282295",
-  "admission_status": "approved",
+  "admission_status": "superseded_pending_hardened_rebuild",
   "vulnerabilities": {
     "critical": 0,
     "high": 0

@@ -161,8 +161,10 @@ is verified, SLSA provenance is retained as attestation `35282295`, and the
 CycloneDX SBOM is bound to the same digest. Trivy `0.72.0` reported Critical=0
 and High=0 with vulnerability DB timestamp
 `2026-07-13T19:09:56.237113526Z`. Corrected image metadata exposes `weed mini`
-ports `9340` and `23646`. The source-built digest is admitted without an
-ADR-0019 vulnerability exception.
+ports `9340` and `23646`. Review then found missing writable `/tmp`, a floating
+Dockerfile frontend, sign-before-scan ordering, and an omitted Cosign
+verification hash in generated evidence. The digest is superseded pending a
+hardened replacement; no ADR-0019 vulnerability exception is used.
 
 The machine-readable decision is retained at
 `bootstrap/seaweedfs/v4.39/admission.json`; the exact run evidence is retained at
