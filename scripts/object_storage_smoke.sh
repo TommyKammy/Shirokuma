@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KUBE_CONTEXT="${KUBE_CONTEXT:-colima-mac-studio-solo}"
-KUBE_NAMESPACE="${KUBE_NAMESPACE:-shirokuma-dev}"
+KUBE_NAMESPACE="${KUBE_NAMESPACE:-shirokuma-storage}"
 S3_SERVICE="${S3_SERVICE:-seaweedfs-s3}"
 S3_LOCAL_PORT="${S3_LOCAL_PORT:-18333}"
 S3_SMOKE_BUCKET="${S3_SMOKE_BUCKET:-shirokuma-smoke-$(date -u +%Y%m%d%H%M%S)-$$}"

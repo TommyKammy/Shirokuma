@@ -51,10 +51,18 @@ class ExportClient:
 
 
 class BoundedRestoreClient:
-    def __init__(self) -> None:
+    def __init__(self, existing_objects: list[S3Object] | None = None) -> None:
         self.puts: list[str] = []
+        self.list_calls = 0
+        self.existing_objects = list(existing_objects or [])
         self._current_key: str | None = None
         self._current_body: bytes | None = None
+
+    def list_objects(self, bucket: str, prefix: str = "") -> list[S3Object]:
+        if bucket != BUCKET or prefix:
+            raise AssertionError("restore must inspect the complete target bucket")
+        self.list_calls += 1
+        return list(self.existing_objects)
 
     def put_object(self, bucket: str, key: str, body: bytes) -> None:
         if bucket != BUCKET:
@@ -245,6 +253,56 @@ class TwoPassRestoreTests(unittest.TestCase):
             ):
                 object_storage_backup.restore_bucket(client, BUCKET, source, root)
             self.assertEqual(client.puts, [])
+            self.assertEqual(client.list_calls, 0)
+
+    def test_nonempty_target_bucket_blocks_every_upload_after_export_validation(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            source, _ = build_export(root, {"object": b"payload"})
+            client = BoundedRestoreClient(
+                [S3Object(key="already-present", size=1, etag="unused")]
+            )
+
+            with self.assertRaisesRegex(
+                object_storage_backup.BackupError, "target bucket must be empty"
+            ):
+                object_storage_backup.restore_bucket(client, BUCKET, source, root)
+
+            self.assertEqual(client.list_calls, 1)
+            self.assertEqual(client.puts, [])
+
+    def test_manifest_counts_require_nonnegative_exact_integers(self) -> None:
+        invalid_values = (
+            ("object_count", True),
+            ("object_count", -1),
+            ("object_count", 1.0),
+            ("total_bytes", True),
+            ("total_bytes", -1),
+            ("total_bytes", 1.0),
+        )
+        for field, invalid_value in invalid_values:
+            with self.subTest(field=field, invalid_value=invalid_value):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory).resolve()
+                    source, manifest = build_export(root, {"object": b"x"})
+                    manifest[field] = invalid_value
+                    (source / "manifest.json").write_text(
+                        json.dumps(manifest), encoding="utf-8"
+                    )
+                    client = BoundedRestoreClient()
+
+                    with self.assertRaisesRegex(
+                        object_storage_backup.BackupError,
+                        "object count|total bytes",
+                    ):
+                        object_storage_backup.restore_bucket(
+                            client, BUCKET, source, root
+                        )
+
+                    self.assertEqual(client.list_calls, 0)
+                    self.assertEqual(client.puts, [])
 
     def test_duplicate_content_deduplicates_and_duplicate_keys_fail_closed(self) -> None:
         payload = b"same-content"

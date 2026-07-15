@@ -5,7 +5,7 @@ title: "WP-L1-LAKE-001 SeaweedFS-first object storage profile"
 status: in-progress
 created: 2026-07-05
 updated: 2026-07-16
-version: "1.2.1"
+version: "1.3"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -53,7 +53,8 @@ documented compatibility experiment, never as a co-equal primary path.
 ## Deliverables
 
 - Flux-managed SeaweedFS manifests and pinned resident-image evidence.
-- IaC-managed bucket, credentials boundary, and lifecycle placeholder.
+- IaC-managed `shirokuma-storage`/`shirokuma-dev` namespace boundary, bucket,
+  credentials boundary, and lifecycle placeholder.
 - Repository-owned `scripts/object_storage_backup.py` export/restore/inventory
   helper plus disk-impact, rollback, teardown, and nuke/rebuild procedure in
   [[08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo]].
@@ -72,8 +73,13 @@ documented compatibility experiment, never as a co-equal primary path.
 - Flux reports the object-storage Kustomization and SeaweedFS workload
   `Ready=True`; no direct-apply path is introduced.
 - `NetworkPolicy/seaweedfs-s3-ingress` admits only TCP `8333` from
-  same-namespace pods labeled `shirokuma.dev/object-storage-client: "true"`;
-  workload clients cannot reach a SeaweedFS non-S3 listener port.
+  `shirokuma-dev` pods labeled
+  `shirokuma.dev/object-storage-client: "true"`; workload clients cannot reach
+  a SeaweedFS non-S3 listener port.
+- SeaweedFS, its Service/PVC, and the Admin-bearing server config Secret are
+  isolated in the OpenTofu-managed `shirokuma-storage` namespace. Application
+  workloads and their bucket-scoped Secret remain in `shirokuma-dev`, so an
+  application pod cannot mount the server Secret by name.
 - HTTP startup/liveness `/healthz` and readiness `/readyz` probes pass on the S3
   port, both credential Secrets exist, and authenticated CRUD succeeds. An
   existing Pod or StatefulSet at `Ready=True` is not sufficient data-plane or
@@ -81,6 +87,9 @@ documented compatibility experiment, never as a co-equal primary path.
 - Bucket create/read/write/delete, pod-restart persistence, backup/export, and
   restore smoke are observed on `colima-mac-studio-solo` without retaining
   credential values in logs or Git.
+- Restore validates the complete export before mutation and refuses a target
+  bucket containing any object before the first upload. A partial restore retry
+  starts only after the target bucket has been made completely empty again.
 - SeaweedFS built-in Iceberg REST Catalog is documented as local-lite optional, not mainline.
 - If MinIO is used, exact digest/tag, CVE risk, and replacement plan are recorded.
 - Ceph references are removed from primary path.
@@ -133,21 +142,22 @@ dependency-blocked.
 
 | Concern | Repository contract |
 |---|---|
-| Namespace | `shirokuma-dev` |
+| Storage namespace | `shirokuma-storage`; OpenTofu-managed; contains SeaweedFS, Service, PVC, NetworkPolicy, ConfigMap, and server config Secret |
+| Application namespace | `shirokuma-dev`; OpenTofu-managed; contains the bucket-scoped application Secret and opted-in clients |
 | Flux object | `flux-system/Kustomization/shirokuma-object-storage` |
 | Flux path | `./deploy/gitops/object-storage` |
 | Workload | `StatefulSet/seaweedfs` |
 | Persistent data | `volumeClaimTemplate/seaweedfs-data` -> `PersistentVolumeClaim/seaweedfs-data-seaweedfs-0`, `20Gi`, retained/prune-protected |
 | Managed bucket | `shirokuma-lakehouse` |
 | S3 Service | `Service/seaweedfs-s3`, `ClusterIP`, port `8333` |
-| In-cluster endpoint | `http://seaweedfs-s3.shirokuma-dev.svc.cluster.local:8333` |
+| In-cluster endpoint | `http://seaweedfs-s3.shirokuma-storage.svc.cluster.local:8333` |
 | S3 client contract | region `us-east-1`, path-style access, lifecycle `none-local-lite-placeholder`, delete-nonempty disabled |
 | Network boundary | `NetworkPolicy/seaweedfs-s3-ingress`; SeaweedFS ingress is TCP `8333` only from `shirokuma-dev` pods labeled `shirokuma.dev/object-storage-client: "true"` |
 | HTTP probes | startup/liveness `GET /healthz`; readiness `GET /readyz`; named port `s3` (`8333`) |
 | Operator identity | `shirokuma-local-lite-operator`, `Admin`; operator smoke, backup, restore, and bucket administration only |
 | Application identity | `shirokuma-lakehouse-application`; `Read`, `List`, `Tagging`, and `Write` scoped to `shirokuma-lakehouse` only |
-| Server credentials | `Secret/seaweedfs-s3-credentials`, key `s3.json`, contains both identity definitions from OpenTofu sensitive inputs |
-| Consumer credentials | `Secret/seaweedfs-s3-application-credentials`, bucket-scoped application keys and S3 connection contract only |
+| Server credentials | `shirokuma-storage/Secret/seaweedfs-s3-credentials`, key `s3.json`, contains both identity definitions from OpenTofu sensitive inputs; application pods cannot mount this cross-namespace Secret |
+| Consumer credentials | `shirokuma-dev/Secret/seaweedfs-s3-application-credentials`, bucket-scoped application keys and cross-namespace S3 connection contract only |
 | Credential generation | `shirokuma.dev/s3-credential-generation`; the two Secret annotations and StatefulSet pod-template annotation use the same positive integer |
 | Reconciliation | `dependsOn: shirokuma-dev`, `prune: true`, `wait: true`, `timeout: 10m`, StatefulSet health check |
 
