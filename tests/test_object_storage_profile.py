@@ -19,6 +19,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import verify_trusted_image as trusted_image_verifier  # noqa: E402
 import object_storage_backup as object_storage_backup  # noqa: E402
 import object_storage_s3 as object_storage_s3  # noqa: E402
+from verify_gitops_teardown import (  # noqa: E402
+    OBJECT_STORAGE_MANIFEST,
+    validate_object_storage_gitops_state,
+)
 EXPECTED_UPSTREAM_INDEX_REFERENCE = (
     "chrislusf/seaweedfs@"
     "sha256:c7d6c721b30ae711db766bbbfd40192776e263d4e51e22f57baef7bef93c12c6"
@@ -354,8 +358,15 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
                 "deploy/gitops/clusters/local-lite/object-storage.yaml",
             ],
         )
+        gitops_state = validate_object_storage_gitops_state(ROOT)
         for relative in admission["runtime_manifests"]["paths"]:
-            self.assertTrue((ROOT / relative).is_file())
+            if (
+                relative == OBJECT_STORAGE_MANIFEST.as_posix()
+                and gitops_state.mode == "issue-26-teardown"
+            ):
+                self.assertEqual(gitops_state.missing_path, relative)
+            else:
+                self.assertTrue((ROOT / relative).is_file())
 
         resident = json.loads(
             (ROOT / "security/resident-images.json").read_text(encoding="utf-8")
@@ -388,6 +399,13 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
 
 class ObjectStorageGitOpsRuntimeTests(unittest.TestCase):
     def test_flux_runtime_has_explicit_dependency_readiness_and_prune_contract(self) -> None:
+        state = validate_object_storage_gitops_state(ROOT)
+        if state.mode == "issue-26-teardown":
+            self.assertEqual(
+                state.missing_path,
+                "deploy/gitops/clusters/local-lite/object-storage.yaml",
+            )
+            return
         flux = (
             ROOT / "deploy/gitops/clusters/local-lite/object-storage.yaml"
         ).read_text(encoding="utf-8")
