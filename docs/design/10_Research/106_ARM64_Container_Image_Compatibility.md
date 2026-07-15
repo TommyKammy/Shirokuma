@@ -152,40 +152,37 @@ not:
 
 ADR-0019 cannot waive missing signature, transparency-log, or SLSA provenance
 evidence, so the upstream SeaweedFS image remains rejected. ADR-0020 instead
-approves the exact source revision for a repository-controlled build. GitHub
-Actions hardened replacement run `29376271915`, attempt `1`, produced native
-`linux/arm64` artifact
-`ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299`.
-The exact workflow and source SHA
-`d0977813fde644a2eead942444c1cb8c626ab3b6`, workflow name/path/ref, trigger,
-runner environment, run ID, and attempt are bound by Cosign and SLSA
-verification. Cosign `v3.1.1` verified both detached and registry-retrieved
-bundles against the retained Rekor v1 entry, and SLSA provenance is retained as
-attestation `35357720`. Trivy `0.72.0` reported Critical=0 and High=0 with DB
-update time `2026-07-14T19:03:26.337699315Z` and download time
-`2026-07-14T23:30:08.329365967Z` before signing.
+approves the exact source revision for a repository-controlled build. Trusted
+publication is now main-only and two-phase: the builder, contract, and verifier
+merge first; the merged workflow then publishes from `refs/heads/main`; a
+follow-up evidence-only PR admits the resulting digest. The current state is
+`pending_main_publication`, so no replacement digest is yet admitted.
 
 The closed-world contract binds source archive, Containerfile, build inputs,
-Buildx checksum, and BuildKit index/arm64 digests. The effective container
-inspect proves the non-root command, read-only root, exact writable `/tmp` and
-`/data` tmpfs options, all capabilities dropped, no-new-privileges, and bounded
-PID/memory settings. Candidate, promotion, and final evidence are hash-linked;
-the `4.39-arm64` tag is a non-authoritative publication pointer, so admission
-uses only the immutable digest and committed evidence. The hardened artifact is
-admitted without an ADR-0019 vulnerability exception.
+the deterministic Go vendor archive, Buildx checksum, and BuildKit index/arm64
+digests. Compilation is network-disabled and the trusted build imports or
+exports no mutable BuildKit/GHA cache. Repository verification uses pinned
+Cosign `v3.1.1` to cryptographically reverify the retained certificate, DSSE
+signature, workflow identity, and transparency material rather than trusting
+JSON structure alone.
+
+Bootstrap run `29379475587`, attempt `1`, exercised the offline arm64 build,
+runtime, scan, signing, provenance, and promotion gates for digest
+`sha256:027be5ea9a172bbe2c29adb8928061b89ceb2a11261f5248a77653070b106d6d`.
+Its final artifact is `seaweedfs-4.39-arm64-29379475587-1` and SLSA attestation
+is `35365038`. Because it ran from `codex/issue-41`, it is explicitly recorded
+as `not_admitted_branch_publication`; it proves implementation fitness but does
+not authorize runtime use.
 
 The machine-readable decision is retained at
-`bootstrap/seaweedfs/v4.39/admission.json`; the exact run record is retained at
-`bootstrap/seaweedfs/v4.39/release-evidence.json`, and the complete Cosign,
-registry, Rekor, SLSA, raw runtime-inspect, CycloneDX, scanner, candidate, and
-promotion evidence is retained under
-`bootstrap/seaweedfs/v4.39/evidence/`. The repository-owned
-`verify-object-storage-profile` check preserves the upstream rejection, pins
-the admitted Shirokuma digest and workflow identity, validates those durable
-files, and verifies that the source-build child did not add GitOps resources or
-a resident-ledger entry. Parent Issue #26 may add runtime records only after a
-source-build supply-chain record backed by those files makes its proposed
-resident-ledger entry pass `check-images`.
+`bootstrap/seaweedfs/v4.39/admission.json`. While pending,
+`release-evidence.json` and generated evidence are intentionally absent and the
+repository-owned audit proves that runtime permission remains false. After the
+main run, the complete Cosign, registry, Rekor, SLSA, raw runtime-inspect,
+CycloneDX, scanner, candidate, and promotion set must be copied together under
+`bootstrap/seaweedfs/v4.39/evidence/` and approved in the follow-up PR. Parent
+Issue #26 may add runtime records only after that source-build supply-chain
+record makes its proposed resident-ledger entry pass `check-images`.
 
 ## GitOps candidate evidence
 

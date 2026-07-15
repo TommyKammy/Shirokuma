@@ -36,7 +36,7 @@
     "repository": "TommyKammy/Shirokuma",
     "name": "SeaweedFS 4.39 trusted arm64 build",
     "path": ".github/workflows/seaweedfs-arm64.yml",
-    "sha256": "041170a977d9e70594f3fcbc8bcaba2f8fb9a76ecf0e637b0c2f6360cac5e4dd",
+    "sha256": "59fb23581a86256430dae83b28c5ff2a34f0e00b7128a839ea87201bec8cc3da",
     "runner": "ubuntu-24.04-arm",
     "runner_trust_boundary": {
       "provider": "github-hosted",
@@ -61,13 +61,18 @@
     "workflow_sha_environment": "GITHUB_WORKFLOW_SHA",
     "source_sha_environment": "GITHUB_SHA",
     "allowed_refs": [
-      "refs/heads/codex/issue-41",
       "refs/heads/main"
     ],
     "allowed_triggers": [
       "push",
       "workflow_dispatch"
     ],
+    "build_cache": {
+      "mode": "disabled",
+      "no_cache": true,
+      "cache_from": [],
+      "cache_to": []
+    },
     "allowed_steps": [
       "Check out Shirokuma policy",
       "Check out the adopted SeaweedFS source",
@@ -205,7 +210,11 @@
     "final_retention_days": 90
   },
   "admission": {
-    "artifact": "approved",
+    "approval_state_source": "bootstrap/seaweedfs/v4.39/admission.json",
+    "required_approved_state": "approved",
+    "pending_state": "pending_main_publication",
+    "publisher_ref": "refs/heads/main",
+    "evidence_transition": "follow-up-evidence-only-pr",
     "runtime_manifests_permitted": false,
     "runtime_unblocker": "parent issue #26 must add source-build evidence and pass scripts/verify_supply_chain.py check-images"
   }

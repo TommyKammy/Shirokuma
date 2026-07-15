@@ -8,6 +8,8 @@ import base64
 import hashlib
 import json
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
@@ -57,6 +59,87 @@ def _load_json(path: Path) -> Any:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _verify_retained_cosign_bundle(
+    contract: Dict[str, Any],
+    release: Dict[str, Any],
+    bundle_path: Path,
+    manifest_path: Path,
+) -> None:
+    """Cryptographically reverify retained Git evidence with pinned Cosign."""
+
+    cosign = shutil.which("cosign")
+    _expect(cosign is not None, "COSIGN_BINARY", "cosign is required")
+    expected_version = contract["toolchain"]["cosign"]["version"]
+    try:
+        version_result = subprocess.run(
+            [cosign, "version", "--json"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        _fail("COSIGN_VERSION", str(exc))
+    _expect(
+        version_result.returncode == 0,
+        "COSIGN_VERSION",
+        version_result.stderr.strip() or "version command failed",
+    )
+    try:
+        version_record = json.loads(version_result.stdout)
+    except json.JSONDecodeError as exc:
+        _fail("COSIGN_VERSION", str(exc))
+    _expect(
+        isinstance(version_record, dict),
+        "COSIGN_VERSION",
+        "version output must be a JSON object",
+    )
+    actual_version = version_record.get("gitVersion")
+    _expect(
+        actual_version == expected_version,
+        "COSIGN_VERSION",
+        f"expected {expected_version}, got {actual_version}",
+    )
+
+    builder = release["builder"]
+    command = [
+        cosign,
+        "verify-blob",
+        "--bundle",
+        str(bundle_path),
+        "--certificate-identity",
+        release["identity"],
+        "--certificate-oidc-issuer",
+        release["issuer"],
+        "--certificate-github-workflow-name",
+        builder["workflow_name"],
+        "--certificate-github-workflow-ref",
+        builder["ref"],
+        "--certificate-github-workflow-repository",
+        builder["repository"],
+        "--certificate-github-workflow-sha",
+        builder["workflow_sha"],
+        str(manifest_path),
+    ]
+    try:
+        verification = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        _fail("COSIGN_CRYPTO_VERIFY", str(exc))
+    _expect(
+        verification.returncode == 0,
+        "COSIGN_CRYPTO_VERIFY",
+        verification.stderr.strip()
+        or verification.stdout.strip()
+        or "retained bundle verification failed",
+    )
 
 
 def _safe_repo_path(root: Path, relative: str, code: str) -> Path:
@@ -293,9 +376,30 @@ def validate_static_contract(root: Path) -> Dict[str, Any]:
     )
     _expect(
         workflow_record.get("name") == "SeaweedFS 4.39 trusted arm64 build"
-        and workflow_record.get("allowed_triggers") == ["push", "workflow_dispatch"],
+        and workflow_record.get("allowed_triggers") == ["push", "workflow_dispatch"]
+        and workflow_record.get("allowed_refs") == ["refs/heads/main"],
         "WORKFLOW_IDENTITY_CONTRACT",
-        "workflow name or trigger set mismatch",
+        "workflow name, trigger set, or publisher ref mismatch",
+    )
+    _expect(
+        workflow_record.get("build_cache")
+        == {
+            "mode": "disabled",
+            "no_cache": True,
+            "cache_from": [],
+            "cache_to": [],
+        }
+        and "no-cache: true" in workflow
+        and "cache-from:" not in workflow
+        and "cache-to:" not in workflow,
+        "BUILD_CACHE_POLICY",
+        "trusted builds must not import or export mutable BuildKit cache",
+    )
+    _expect(
+        "      - codex/issue-41" not in workflow
+        and workflow.count("github.ref == 'refs/heads/main'") >= 2,
+        "MAIN_ONLY_PUBLICATION",
+        "write-capable build and promotion jobs must be main-only",
     )
     transparency_log = contract.get("transparency_log", {})
     _expect(
@@ -446,7 +550,32 @@ def validate_static_contract(root: Path) -> Dict[str, Any]:
 
     admission_contract = contract["admission"]
     _expect(
-        admission.get("assessment", {}).get("admission") == admission_contract["artifact"],
+        set(admission_contract)
+        == {
+            "approval_state_source",
+            "required_approved_state",
+            "pending_state",
+            "publisher_ref",
+            "evidence_transition",
+            "runtime_manifests_permitted",
+            "runtime_unblocker",
+        }
+        and admission_contract["approval_state_source"]
+        == ADMISSION_PATH.as_posix()
+        and admission_contract["required_approved_state"] == "approved"
+        and admission_contract["pending_state"] == "pending_main_publication"
+        and admission_contract["publisher_ref"] == "refs/heads/main"
+        and admission_contract["evidence_transition"]
+        == "follow-up-evidence-only-pr",
+        "ADMISSION_LIFECYCLE_CONTRACT",
+        "publication and evidence transition must be main-only and two-phase",
+    )
+    _expect(
+        admission.get("assessment", {}).get("admission")
+        in {
+            admission_contract["pending_state"],
+            admission_contract["required_approved_state"],
+        },
         "ADMISSION_ARTIFACT_STATE",
         "mismatch",
     )
@@ -494,6 +623,8 @@ def _validate_cosign(
     manifest_path: Path,
     registry_bundles_path: Path,
     rekor_path: Path,
+    *,
+    cryptographic_reverification: bool = False,
 ) -> Dict[str, Any]:
     verification = _load_json(verification_path)
     _expect(verification.get("schema_version") == 1, "COSIGN_VERIFY_SCHEMA", "expected schema 1")
@@ -670,6 +801,13 @@ def _validate_cosign(
         _fail("COSIGN_REKOR_LOG_ID", str(exc))
     _expect(api_entry.get("logID") == bundle_log_id_hex, "COSIGN_REKOR_RESPONSE", "log id")
     _expect(recorded_rekor[0].get("uuid") == uuid, "COSIGN_REKOR_RECORD", "uuid")
+    if cryptographic_reverification:
+        _verify_retained_cosign_bundle(
+            contract,
+            release,
+            bundle_path,
+            manifest_path,
+        )
     return verification
 
 
@@ -1759,6 +1897,7 @@ def validate_release_bundle(
         paths["image-manifest.json"],
         paths["registry-signature-bundles.jsonl"],
         paths["rekor-entry.json"],
+        cryptographic_reverification=repository_mode,
     )
     _expect(
         release.get("transparency_log")
@@ -1807,9 +1946,192 @@ def validate_release_bundle(
     return release
 
 
+def validate_pending_main_publication(
+    root: Path,
+    contract: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Validate the fail-closed state between policy merge and main publication."""
+
+    root = root.resolve()
+    if contract is None:
+        contract = validate_static_contract(root)
+    admission = _load_json(root / ADMISSION_PATH)
+    _expect(
+        set(admission)
+        == {
+            "schema_version",
+            "component",
+            "version",
+            "platform",
+            "upstream_candidate",
+            "upstream_assessment",
+            "lifecycle",
+            "bootstrap_observation",
+            "assessment",
+            "runtime_manifests",
+            "next_action",
+        },
+        "PENDING_ADMISSION_SCHEMA",
+        "unexpected or missing top-level field",
+    )
+    _expect(
+        admission.get("schema_version") == 3
+        and admission.get("component") == contract["component"]
+        and admission.get("version") == contract["version"]
+        and admission.get("platform") == contract["platform"],
+        "PENDING_ADMISSION_IDENTITY",
+        "schema, component, version, or platform mismatch",
+    )
+
+    lifecycle = admission["lifecycle"]
+    admission_contract = contract["admission"]
+    expected_lifecycle = {
+        "phase": admission_contract["pending_state"],
+        "publisher_ref": admission_contract["publisher_ref"],
+        "workflow": contract["workflow"]["path"],
+        "workflow_sha256": contract["workflow"]["sha256"],
+        "contract": CONTRACT_PATH.as_posix(),
+        "contract_sha256": _sha256(root / CONTRACT_PATH),
+        "source": SOURCE_PATH.as_posix(),
+        "source_sha256": _sha256(root / SOURCE_PATH),
+        "transition": admission_contract["evidence_transition"],
+    }
+    _expect(
+        lifecycle == expected_lifecycle,
+        "PENDING_LIFECYCLE_BINDING",
+        "pending state does not bind the current source, contract, and workflow",
+    )
+
+    assessment = admission["assessment"]
+    blockers = assessment.get("blockers")
+    _expect(
+        assessment.get("admission") == admission_contract["pending_state"]
+        and assessment.get("exception_eligible") is False
+        and isinstance(assessment.get("rationale"), str)
+        and bool(assessment["rationale"].strip())
+        and isinstance(blockers, list)
+        and len(blockers) == 1
+        and blockers[0].get("control") == "main_branch_publication"
+        and blockers[0].get("status") == "pending"
+        and bool(blockers[0].get("evidence", "").strip()),
+        "PENDING_ADMISSION_STATE",
+        "main publication must remain an explicit non-waivable blocker",
+    )
+
+    observation = admission["bootstrap_observation"]
+    _expect(
+        set(observation)
+        == {
+            "run",
+            "source_sha",
+            "digest",
+            "artifact",
+            "attestation",
+            "disposition",
+        }
+        and re.fullmatch(
+            r"https://github\.com/TommyKammy/Shirokuma/actions/runs/"
+            r"[0-9]+/attempts/[0-9]+",
+            observation.get("run", ""),
+        )
+        is not None
+        and re.fullmatch(r"[0-9a-f]{40}", observation.get("source_sha", ""))
+        is not None
+        and re.fullmatch(
+            r"sha256:[0-9a-f]{64}", observation.get("digest", "")
+        )
+        is not None
+        and re.fullmatch(
+            r"seaweedfs-4\.39-arm64-[0-9]+-[0-9]+",
+            observation.get("artifact", ""),
+        )
+        is not None
+        and re.fullmatch(
+            r"https://github\.com/TommyKammy/Shirokuma/attestations/[0-9]+",
+            observation.get("attestation", ""),
+        )
+        is not None
+        and observation.get("disposition")
+        == "not_admitted_branch_publication",
+        "BOOTSTRAP_OBSERVATION",
+        "branch publication may be recorded but never admitted",
+    )
+
+    runtime = admission["runtime_manifests"]
+    _expect(
+        runtime.get("permitted") is False
+        and {
+            blocker.get("control")
+            for blocker in runtime.get("blockers", [])
+            if isinstance(blocker, dict)
+        }
+        == {"main_branch_release_evidence", "resident_evidence_contract"},
+        "PENDING_RUNTIME_STATE",
+        "runtime use must remain blocked until main evidence and parent admission",
+    )
+    for relative in runtime.get("paths", []):
+        _expect(
+            not _safe_repo_path(root, relative, "PENDING_RUNTIME_PATH").exists(),
+            "PENDING_RUNTIME_PATH",
+            relative,
+        )
+
+    _expect(
+        not (root / RELEASE_PATH).exists(),
+        "PENDING_STALE_RELEASE",
+        "pending state must not retain a release ledger from another contract",
+    )
+    evidence_dir = root / RELEASE_PATH.parent / "evidence"
+    _expect(
+        evidence_dir.is_dir(),
+        "PENDING_STALE_EVIDENCE",
+        "evidence directory is missing",
+    )
+    generated = {
+        path.name
+        for path in evidence_dir.iterdir()
+        if path.is_file() and path.name != "README.md"
+    }
+    _expect(
+        not generated,
+        "PENDING_STALE_EVIDENCE",
+        repr(sorted(generated)),
+    )
+    next_action = admission["next_action"]
+    _expect(
+        next_action.get("mode") == "publish-from-main-then-evidence-pr"
+        and next_action.get("decision_record_required") is False
+        and isinstance(next_action.get("requirements"), list)
+        and len(next_action["requirements"]) >= 4,
+        "PENDING_NEXT_ACTION",
+        "two-phase transition is incomplete",
+    )
+    return admission
+
+
+def validate_repository_audit(root: Path) -> Dict[str, Any]:
+    """Audit either a strict admitted release or the explicit pending state."""
+
+    root = root.resolve()
+    contract = validate_static_contract(root)
+    admission = _load_json(root / ADMISSION_PATH)
+    state = admission.get("assessment", {}).get("admission")
+    if state == contract["admission"]["pending_state"]:
+        return validate_pending_main_publication(root, contract)
+    _expect(
+        state == contract["admission"]["required_approved_state"],
+        "ADMISSION_ARTIFACT_STATE",
+        str(state),
+    )
+    return validate_release_bundle(root, require_promotion=True)
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("contract", "candidate", "final", "repository"))
+    parser.add_argument(
+        "mode",
+        choices=("contract", "candidate", "final", "repository", "audit"),
+    )
     parser.add_argument("--root", type=Path, default=Path("."))
     parser.add_argument("--evidence-dir", type=Path)
     return parser
@@ -1828,8 +2150,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 args.evidence_dir,
                 require_promotion=args.mode == "final",
             )
-        else:
+        elif args.mode == "repository":
             validate_release_bundle(args.root, require_promotion=True)
+        else:
+            validate_repository_audit(args.root)
     except ContractError as exc:
         print(str(exc), file=sys.stderr)
         return 1

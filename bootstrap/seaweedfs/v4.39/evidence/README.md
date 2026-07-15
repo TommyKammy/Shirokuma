@@ -1,48 +1,34 @@
 # SeaweedFS 4.39 admission evidence
 
-This directory is the durable, repository-retained evidence for the exact
-SeaweedFS image named by `../release-evidence.json`. The final GitHub Actions
-artifact is a 90-day downloadable mirror; it is not the only retained copy.
+This directory is populated only from a successful trusted publication on
+`refs/heads/main`. A feature branch may change and validate the builder,
+contract, and verifier, but it cannot publish, sign, promote, or approve its own
+image.
 
-`../trusted-build-contract.json` is the closed-world contract. It enumerates the
-Containerfile, builder, signing, scanning, evidence, and promotion toolchain.
-`scripts/verify_trusted_image.py repository --root .` verifies that every
-required file exists, is not a symlink, matches its recorded SHA-256, and closes
-the following trust chain:
+The lifecycle is deliberately split into two reviewed phases:
 
-- `image-manifest.json` hashes to the admitted OCI digest;
-- `cosign-signature-bundle.json` retains the certificate, signed payload, Rekor
-  log identity/index/time, signed entry timestamp, and inclusion proof;
-- `rekor-entry.json` retains the independently queried Rekor UUID and stable
-  log fields;
-- `cosign-verify.json` records the exact issuer and workflow identity constraints
-  that passed both bundle and registry verification;
-- `registry-signature-bundles.jsonl` proves that the registry contains exactly
-  the same Sigstore bundle retained in this directory;
-- `slsa-bundles.jsonl` and `slsa-verify.json` bind the digest to the exact
-  workflow path, ref, SHA, run, attempt, builder, and source;
-- `toolchain.json` reconciles observed Buildx, BuildKit, Syft, Trivy, Cosign, and
-  the deferred Crane promotion pin with the contract;
-- `runtime-container-inspect.json` and `runtime-smoke.json` bind the recorded
-  non-root, read-only, tmpfs, capability, and resource profile to Docker's
-  effective container configuration;
-- the CycloneDX SBOM, Trivy metadata/report, and
-  `promotion-evidence.json` bind runtime fitness, vulnerability state, and the
-  digest-preserving trusted-tag transition to the same release;
-- `candidate-release-evidence.json` retains the exact pre-promotion record so
-  the candidate-to-final transition remains independently reproducible after
-  the short-lived candidate Actions artifact expires.
+1. merge the main-only builder, closed input contract, and verifier;
+2. let the merged workflow publish from `main`, then copy its complete final
+   artifact into this directory in an evidence-only follow-up PR.
 
-The mutable `4.39-arm64` tag is only a publication pointer. These files and the
-immutable digest, not the tag location, are the admission authority.
+Until phase 2 completes, `../admission.json` is
+`pending_main_publication`, `../release-evidence.json` is absent, and runtime
+manifests remain forbidden. A successful feature-branch bootstrap run may be
+recorded for diagnostic value, but it is never admission authority.
 
-`image-manifest.json` and `cosign-signature-bundle.json` preserve the exact
-producer bytes and may not end in a newline. The repository newline check
-exempts only these two byte-exact evidence files; their SHA-256 bindings remain
-mandatory.
+For an approved release, `scripts/verify_trusted_image.py repository --root .`
+requires the complete evidence set and re-runs pinned Cosign v3.1.1 against the
+retained raw OCI manifest and Sigstore bundle. The check therefore verifies the
+Fulcio certificate chain, workflow identity, DSSE signature, and transparency
+log material cryptographically; JSON shape and self-reported claims alone are
+not sufficient.
 
-These files must be replaced together after a new publication run. They approve
-the repository-controlled build artifact only. Runtime manifests remain blocked
-until parent Issue #26 adds a source-build supply-chain record and proves its
-proposed resident-image ledger entry passes
-`scripts/verify_supply_chain.py check-images`.
+The final artifact must be copied byte-for-byte as one set. Its expected files
+are enumerated by `../trusted-build-contract.json`, including the reviewed Go
+module manifest and deterministic vendor archive. Generated evidence must never
+be mixed across runs.
+
+The mutable `4.39-arm64` tag is only a publication pointer. After approval, the
+immutable digest plus repository-retained evidence are the authority. Runtime
+use remains separately blocked until parent Issue #26 adds and verifies its
+resident-image supply-chain record.

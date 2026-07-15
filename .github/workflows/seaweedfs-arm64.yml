@@ -3,7 +3,6 @@ name: SeaweedFS 4.39 trusted arm64 build
 on:
   push:
     branches:
-      - codex/issue-41
       - main
     paths:
       - .github/workflows/seaweedfs-arm64.yml
@@ -49,7 +48,7 @@ jobs:
   verify:
     if: >-
       github.repository == 'TommyKammy/Shirokuma' &&
-      (github.ref == 'refs/heads/codex/issue-41' || github.ref == 'refs/heads/main')
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
     permissions:
@@ -288,8 +287,7 @@ jobs:
           push: true
           provenance: false
           sbom: false
-          cache-from: type=gha,scope=seaweedfs-4.39-arm64
-          cache-to: type=gha,mode=max,scope=seaweedfs-4.39-arm64
+          no-cache: true
           tags: ${{ env.IMAGE }}:quarantine-${{ github.run_id }}-${{ github.run_attempt }}
           build-args: |
             SOURCE_COMMIT=${{ env.SOURCE_COMMIT }}
@@ -947,7 +945,11 @@ jobs:
 
           digest = os.environ["DIGEST"]
           source_path = Path("bootstrap/seaweedfs/v4.39/source.json")
+          contract_path = Path(
+              "bootstrap/seaweedfs/v4.39/trusted-build-contract.json"
+          )
           source_evidence = json.loads(source_path.read_text(encoding="utf-8"))
+          contract = json.loads(contract_path.read_text(encoding="utf-8"))
           trivy = json.loads(Path("trivy.json").read_text(encoding="utf-8"))
           trivy_metadata = json.loads(
               Path("trivy-version.json").read_text(encoding="utf-8")
@@ -993,12 +995,8 @@ jobs:
               "reference": f"{os.environ['IMAGE']}@{digest}",
               "digest": digest,
               "contract": {
-                  "path": "bootstrap/seaweedfs/v4.39/trusted-build-contract.json",
-                  "sha256": hashlib.sha256(
-                      Path(
-                          "bootstrap/seaweedfs/v4.39/trusted-build-contract.json"
-                      ).read_bytes()
-                  ).hexdigest(),
+                  "path": contract_path.as_posix(),
+                  "sha256": hashlib.sha256(contract_path.read_bytes()).hexdigest(),
               },
               "source": {
                   "repository": "https://github.com/seaweedfs/seaweedfs",
@@ -1028,7 +1026,7 @@ jobs:
                   f"/.github/workflows/seaweedfs-arm64.yml@{os.environ['GITHUB_REF']}"
               ),
               "slsa_provenance": os.environ["PROVENANCE_URL"],
-              "admission_status": "approved",
+              "admission_status": contract["admission"]["required_approved_state"],
               "vulnerabilities": {"critical": critical, "high": high},
               "scanner": {
                   "name": "trivy",
@@ -1143,6 +1141,10 @@ jobs:
 
   promote:
     needs: verify
+    if: >-
+      github.repository == 'TommyKammy/Shirokuma' &&
+      github.ref == 'refs/heads/main' &&
+      needs.verify.result == 'success'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
     permissions:

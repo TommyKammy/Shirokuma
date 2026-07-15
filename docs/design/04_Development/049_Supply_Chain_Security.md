@@ -81,8 +81,16 @@ before it enters the build context and inside the Containerfile. Compilation
 must use `--network=none`, `-mod=vendor`, `GOPROXY=off`, `GOSUMDB=off`,
 `GOTOOLCHAIN=local`, and disabled VCS so neither first-build availability nor
 ambient module-cache state is an unrecorded input.
+Trusted builds must also set BuildKit `no-cache` and must not import or export a
+shared GitHub Actions cache. Reusing a mutable layer that is absent from the
+contract and release evidence violates the closed-world claim even when the
+source and vendor archive are unchanged.
 
-Trusted-tag publication is a two-stage state machine. The verify job may push
+Trusted-tag publication is main-only and uses two review phases. Feature
+branches may validate the static builder and contract, but may not receive the
+write-capable publication path or approve their own evidence. After the policy
+PR merges, `refs/heads/main` runs a two-stage publication state machine. The
+verify job may push
 only a run-scoped quarantine tag and must finish source checks, runtime smoke,
 SBOM, scan, signing, provenance, and candidate evidence retention. A separate
 promotion job receives package-write permission, revalidates the retained
@@ -93,8 +101,11 @@ move. The mutable tag is only a non-authoritative publication pointer: a failure
 while generating, validating, or retaining final evidence may leave that pointer
 at the new digest, but cannot admit it. Admission requires the immutable digest,
 successfully retained final evidence, and the reviewed Git-committed admission
-record. Candidate and final artifact names include both run ID and run attempt
-so a rerun cannot collide with an immutable earlier upload.
+record in a follow-up evidence-only PR. The interval between policy merge and
+that evidence PR is explicitly `pending_main_publication`; release evidence is
+absent and runtime use is forbidden. Candidate and final artifact names include
+both run ID and run attempt so a rerun cannot collide with an immutable earlier
+upload.
 The final evidence retains the exact pre-promotion release record as
 `candidate-release-evidence.json`; promotion is therefore auditable after the
 short-lived candidate artifact expires. Runtime evidence likewise retains raw
@@ -152,6 +163,13 @@ download, but its finite retention window is not the durable source of truth. A
 source-built candidate remains blocked from runtime manifests until a
 resident-ledger supply-chain record backed by those retained files passes
 `check-images`.
+
+Git-only repository verification must not trust the retained certificate or
+the claimed verification JSON structurally. It invokes the contract-pinned
+Cosign version against the retained v0.3 bundle and raw OCI manifest with the
+exact issuer and GitHub workflow constraints. A missing binary, version drift,
+invalid Fulcio chain, identity mismatch, invalid DSSE signature, or invalid
+transparency material fails closed.
 
 For the pinned Cosign v3 format, `cosign verify IMAGE@DIGEST` is the
 authoritative registry-image check. A separate `verify-blob` check may bind the

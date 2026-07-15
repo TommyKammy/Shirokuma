@@ -63,10 +63,15 @@ already checked against that image digest. This signing path writes the same
 Sigstore bundle to the requested evidence file and OCI referrer.
 `scripts/verify_trusted_image.py` validates the same
 contract before the build, before promotion, in repository CI, and against the
-durable evidence. Mutation fixtures cover missing tools, mutable action refs,
+durable evidence. Repository verification invokes pinned Cosign `v3.1.1`
+against the retained bundle and raw OCI manifest, so the Fulcio certificate,
+workflow identity, DSSE signature, and transparency material are verified
+cryptographically rather than accepted from self-reported JSON. Mutation
+fixtures cover missing tools, mutable action refs,
 Containerfile drift, detached Docker plugin discovery, conflated workflow and
-source SHAs, rerun-unsafe artifact names, missing promotion dependency, and
-premature runtime permission.
+source SHAs, rerun-unsafe artifact names, missing promotion dependency,
+feature-branch publication, mutable BuildKit cache, and premature runtime
+permission.
 The contract's closed-world rule applies to tools downloaded or selected by the
 workflow. Docker, GitHub CLI, and operating-system utilities supplied by the
 GitHub-hosted `ubuntu-24.04-arm` runner remain in the explicit runner trust
@@ -78,18 +83,25 @@ provenance action publishes its OCI attestation, then removed or restored by an
 `always()` cleanup step.
 
 The builder identity is the GitHub Actions OIDC identity for
-.github/workflows/seaweedfs-arm64.yml in TommyKammy/Shirokuma. The workflow
-first publishes a run-scoped quarantine reference. A separate promotion job may
+.github/workflows/seaweedfs-arm64.yml in TommyKammy/Shirokuma at
+`refs/heads/main`. Feature branches cannot enter either write-capable job. The
+main workflow first publishes a run-scoped quarantine reference. A separate
+promotion job may
 move only ghcr.io/tommykammy/shirokuma-seaweedfs:4.39-arm64 after retained
 candidate evidence passes the shared validator. The admission record must use
 the resulting immutable digest. That mutable tag is a non-authoritative
 publication pointer, not an admission signal; a post-tag evidence failure keeps
 the run and digest inadmissible until final evidence is retained and committed.
-The verify job grants only contents:read,
+The main-only verify job grants only contents:read,
 packages:write, id-token:write, and attestations:write; the promotion job has no
 OIDC or attestation permission. It installs checksum-verified Crane before GHCR
 credentials exist, uses the ephemeral OIDC identity for keyless Cosign
 operations, and stores no signing key.
+
+The trusted build imports and exports no BuildKit cache and sets
+`no-cache: true`. The deterministic vendor archive is verified before a
+`--network=none` build, so an admitted digest cannot reuse an unretained mutable
+layer from an earlier run.
 
 The published digest must have all of the following before admission:
 
@@ -115,9 +127,10 @@ bundle and verification, Rekor response, raw image
 manifest, SLSA bundles and verification, observed toolchain, runtime-smoke,
 raw runtime container inspect, the exact pre-promotion release snapshot,
 promotion, SBOM, scanner metadata, and scan files are committed under
-`bootstrap/seaweedfs/v4.39/evidence/` and remain the durable source of truth for
-the admission lifetime. The workflow also mirrors those files as a GitHub
-Actions artifact for 90 days. OCI signature and attestation retention follows
+`bootstrap/seaweedfs/v4.39/evidence/` by a follow-up evidence-only PR and then
+remain the durable source of truth for the admission lifetime. The main
+workflow also mirrors those files as a GitHub Actions artifact for 90 days. OCI
+signature and attestation retention follows
 the GHCR package version: neither the Git evidence nor the OCI attachments may
 be deleted while the digest remains admitted.
 
@@ -157,7 +170,8 @@ creates no object-store data, so it adds no backup/export obligation.
 If source identity, platform, signature, transparency entry, provenance, SBOM,
 or scan verification fails:
 
-1. leave or return bootstrap/seaweedfs/v4.39/admission.json to blocked;
+1. leave or return bootstrap/seaweedfs/v4.39/admission.json to
+   `pending_main_publication` or blocked;
 2. remove the affected digest from any resident-image ledger;
 3. revoke or delete the affected GHCR package version and its attestations;
 4. revert the workflow or source-adoption record that created the mismatch;
@@ -168,51 +182,37 @@ part of the durable decision history.
 
 ## Publication evidence
 
-GitHub Actions run
-[`29376271915`, attempt 1](https://github.com/TommyKammy/Shirokuma/actions/runs/29376271915/attempts/1)
-executed the hardened closed-world build, verification, and promotion contract and
-admitted this linux/arm64 artifact:
+Publication uses a two-phase lifecycle to remove the self-approval loop between
+builder policy and release evidence:
 
-    ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299
+1. PR #42 merges the source inputs, main-only no-cache workflow, contract, and
+   verifier while `admission.json` remains `pending_main_publication`;
+2. the merged workflow publishes, signs, scans, and promotes from
+   `refs/heads/main` only;
+3. a follow-up evidence-only PR copies that run's complete final artifact,
+   changes admission to `approved`, and performs pinned Cosign cryptographic
+   reverification.
 
-The OIDC identity, workflow name/path/ref, push trigger, workflow SHA, source
-SHA, run ID, and run attempt are all bound to immutable commit
-`d0977813fde644a2eead942444c1cb8c626ab3b6`. Cosign `v3.1.1` verified both the
-detached bundle and the bundle retrieved from the registry, and the retained
-Rekor v1 response is structurally linked to the bundle entry. GitHub retained
-the exact-invocation SLSA provenance at
-[`attestation 35357720`](https://github.com/TommyKammy/Shirokuma/attestations/35357720);
-multiple valid attestations are permitted, but every retained record must match
-the same subject and build identity.
+No current digest is admitted during phase 1. `release-evidence.json` and the
+generated evidence set are intentionally absent, and runtime manifests remain
+blocked. This avoids treating evidence created by the same unmerged branch that
+defined its publisher as approval authority.
 
-The contract pins the Dockerfile frontend, Buildx executable checksum, BuildKit
-index and linux/arm64 child digests, source archive, Containerfile, and all build
-inputs. Runner-provided Docker, GitHub CLI, Git, Python, curl, tar, and
-`sha256sum` versions are recorded explicitly as runner substrate rather than
-misrepresented as pinned inputs. Trivy `0.72.0` reported Critical=0 and High=0
-with database update time `2026-07-14T19:03:26.337699315Z` and download time
-`2026-07-14T23:30:08.329365967Z` before signing and provenance publication.
-The CycloneDX SBOM, scanner metadata, Cosign/Rekor/SLSA records, toolchain
-record, and raw container inspect are retained and hash-bound to the exact
-digest.
+Bootstrap run
+[`29379475587`, attempt 1](https://github.com/TommyKammy/Shirokuma/actions/runs/29379475587/attempts/1)
+successfully exercised the retained vendor input, offline arm64 build, scan,
+Cosign, provenance, runtime, and promotion gates for digest
+`sha256:027be5ea9a172bbe2c29adb8928061b89ceb2a11261f5248a77653070b106d6d`.
+Its final artifact is `seaweedfs-4.39-arm64-29379475587-1` and its SLSA record is
+[`attestation 35365038`](https://github.com/TommyKammy/Shirokuma/attestations/35365038).
+Because that run originated from `codex/issue-41`, it is recorded only as
+`not_admitted_branch_publication`; it cannot satisfy phase 2 or authorize
+runtime use.
 
-The effective runtime inspect proves the non-root command, read-only root,
-exact writable `/tmp` and `/data` tmpfs options, all capabilities dropped,
-no-new-privileges, and bounded PID/memory settings. The immutable candidate
-snapshot was retained as artifact `seaweedfs-4.39-arm64-candidate-29376271915-1`
-before checksum-verified Crane `v0.21.7` promoted the unchanged digest. The
-final artifact `seaweedfs-4.39-arm64-29376271915-1` is a 90-day mirror; the
-committed evidence is authoritative. Trusted tag `4.39-arm64` is explicitly a
-`non_authoritative_pointer`: admission depends only on the digest plus the
-committed candidate-to-promotion-to-final evidence lineage. No ADR-0019
-vulnerability exception is required.
-
-The original upstream image remains rejected. This decision admits only the
-hardened Shirokuma artifact above. Runtime manifests remain blocked until parent
-Issue #26 adds a source-build supply-chain record backed by the committed files
-and proves its proposed resident-ledger entry passes `check-images`; the parent
-also owns Flux resources, functional smoke, disk impact, backup/export, and
-teardown evidence.
+The original upstream image remains rejected. After the main run is committed,
+parent Issue #26 must still add the source-build supply-chain record and prove
+its proposed resident-ledger entry passes `check-images`; it also owns Flux
+resources, functional smoke, disk impact, backup/export, and teardown evidence.
 
 ## Verification
 
@@ -229,8 +229,10 @@ Use the exact digest and workflow identity recorded by the publication run:
       --certificate-identity '<workflow-identity>' --type cyclonedx \
       ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:<digest>
 
-The committed admission record supplies the exact digest and workflow identity
-after the publication run completes.
+The approved follow-up admission record supplies the exact digest and main
+workflow identity after the publication run completes. During
+`pending_main_publication`, the strict `repository` verifier intentionally
+fails; `audit` verifies that this pending state is closed and runtime-disabled.
 
 ## Related
 

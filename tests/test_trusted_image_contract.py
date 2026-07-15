@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import os
@@ -10,6 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Callable
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +26,7 @@ STATIC_PATHS = (
     Path("bootstrap/seaweedfs/v4.39/go-vendor.tar.xz"),
     Path("bootstrap/seaweedfs/v4.39/source.json"),
     Path("bootstrap/seaweedfs/v4.39/trusted-build-contract.json"),
+    Path("bootstrap/seaweedfs/v4.39/evidence/README.md"),
 )
 
 
@@ -66,51 +67,25 @@ class TrustedImageContractTests(unittest.TestCase):
         self.assertNotIn("imjasonh/setup-crane@", workflow)
         self.assertNotIn("docker/setup-buildx-action@", workflow)
 
-    def test_repository_admission_controls_are_closed_and_release_bound(self) -> None:
-        release = json.loads((ROOT / verifier.RELEASE_PATH).read_text(encoding="utf-8"))
-        verifier._validate_repository_admission(ROOT, release)
-
-        def stale_sbom(data: dict) -> None:
-            for control in data["admitted_candidate"]["controls"]:
-                if control["control"] == "sbom":
-                    control["sha256"] = "0" * 64
-                    return
-
-        def duplicate_control(data: dict) -> None:
-            data["admitted_candidate"]["controls"].append(
-                dict(data["admitted_candidate"]["controls"][0])
-            )
-
-        def remove_control(data: dict) -> None:
-            data["admitted_candidate"]["controls"] = [
-                control
-                for control in data["admitted_candidate"]["controls"]
-                if control["control"] != "tag_promotion"
-            ]
-
-        def add_unreviewed_field(data: dict) -> None:
-            data["admitted_candidate"]["controls"][0]["unreviewed"] = True
-
-        mutations = (
-            (stale_sbom, "ADMISSION_CONTROL_BINDING"),
-            (duplicate_control, "ADMISSION_CONTROL_SET"),
-            (remove_control, "ADMISSION_CONTROL_SET"),
-            (add_unreviewed_field, "ADMISSION_CONTROL_KEYS"),
+    def test_pending_repository_audit_is_explicit_and_fail_closed(self) -> None:
+        admission = verifier.validate_repository_audit(ROOT)
+        self.assertEqual(
+            admission["assessment"]["admission"], "pending_main_publication"
         )
-        for mutate, expected_code in mutations:
-            with self.subTest(expected_code=expected_code):
-                with tempfile.TemporaryDirectory() as directory:
-                    root = Path(directory)
-                    target = root / verifier.ADMISSION_PATH
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    data = json.loads(
-                        (ROOT / verifier.ADMISSION_PATH).read_text(encoding="utf-8")
-                    )
-                    mutate(data)
-                    target.write_text(json.dumps(data), encoding="utf-8")
-                    with self.assertRaises(verifier.ContractError) as caught:
-                        verifier._validate_repository_admission(root, release)
-                    self.assertEqual(caught.exception.code, expected_code)
+        with self.assertRaises(verifier.ContractError) as caught:
+            verifier.validate_release_bundle(ROOT, require_promotion=True)
+        self.assertEqual(caught.exception.code, "EVIDENCE_MISSING")
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._copy_static_tree(root)
+            path = root / verifier.ADMISSION_PATH
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data["bootstrap_observation"]["disposition"] = "approved"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            with self.assertRaises(verifier.ContractError) as caught:
+                verifier.validate_repository_audit(root)
+            self.assertEqual(caught.exception.code, "BOOTSTRAP_OBSERVATION")
 
     def test_contract_mutations_fail_with_stable_error_codes(self) -> None:
         def remove_buildkit(root: Path) -> None:
@@ -227,6 +202,25 @@ class TrustedImageContractTests(unittest.TestCase):
             )
             path.write_text(workflow, encoding="utf-8")
 
+        def restore_mutable_gha_cache(root: Path) -> None:
+            path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = path.read_text(encoding="utf-8").replace(
+                "          no-cache: true\n",
+                "          no-cache: true\n"
+                "          cache-from: type=gha,scope=seaweedfs-4.39-arm64\n",
+                1,
+            )
+            path.write_text(workflow, encoding="utf-8")
+
+        def permit_issue_branch_publication(root: Path) -> None:
+            path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = path.read_text(encoding="utf-8").replace(
+                "      - main\n",
+                "      - codex/issue-41\n      - main\n",
+                1,
+            )
+            path.write_text(workflow, encoding="utf-8")
+
         def remove_promotion_dependency(root: Path) -> None:
             path = root / ".github/workflows/seaweedfs-arm64.yml"
             workflow = path.read_text(encoding="utf-8").replace(
@@ -294,6 +288,8 @@ class TrustedImageContractTests(unittest.TestCase):
             (expose_credentials_before_buildx_verification, "BUILDX_CREDENTIAL_BOUNDARY"),
             (change_final_retention, "FINAL_RETENTION"),
             (redirect_image_repository, "IMAGE_WORKFLOW_BINDING"),
+            (restore_mutable_gha_cache, "BUILD_CACHE_POLICY"),
+            (permit_issue_branch_publication, "MAIN_ONLY_PUBLICATION"),
             (detach_buildx_from_docker_plugin_discovery, "BUILDX_PLUGIN_DISCOVERY"),
             (conflate_workflow_and_source_sha, "WORKFLOW_SHA_SEMANTICS"),
             (remove_run_attempt_from_candidate_artifact, "WORKFLOW_CONTRACT_LITERAL"),
@@ -313,98 +309,58 @@ class TrustedImageContractTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertIsNone(verifier.REKOR_UUID_RE.fullmatch(value))
 
-    def test_cosign_v3_bundle_contract_rejects_legacy_and_wrong_predicate(self) -> None:
-        contract = verifier.load_contract(ROOT)
-        release = json.loads((ROOT / verifier.RELEASE_PATH).read_text(encoding="utf-8"))
-        evidence = ROOT / "bootstrap/seaweedfs/v4.39/evidence"
-
-        def validate(
-            bundle: Path, registry: Path, verification: Path = evidence / "cosign-verify.json"
-        ) -> None:
-            verifier._validate_cosign(
+    def test_repository_cosign_reverification_is_pinned_and_cryptographic(self) -> None:
+        contract = {
+            "toolchain": {"cosign": {"version": "v3.1.1"}},
+        }
+        release = {
+            "identity": (
+                "https://github.com/TommyKammy/Shirokuma/.github/workflows/"
+                "seaweedfs-arm64.yml@refs/heads/main"
+            ),
+            "issuer": "https://token.actions.githubusercontent.com",
+            "builder": {
+                "workflow_name": "SeaweedFS 4.39 trusted arm64 build",
+                "ref": "refs/heads/main",
+                "repository": "TommyKammy/Shirokuma",
+                "workflow_sha": "a" * 40,
+            },
+        }
+        version = mock.Mock(
+            returncode=0,
+            stdout=json.dumps({"gitVersion": "v3.1.1"}),
+            stderr="",
+        )
+        verified = mock.Mock(returncode=0, stdout="Verified OK\n", stderr="")
+        with mock.patch.object(verifier.shutil, "which", return_value="/bin/cosign"), mock.patch.object(
+            verifier.subprocess, "run", side_effect=[version, verified]
+        ) as run:
+            verifier._verify_retained_cosign_bundle(
                 contract,
                 release,
-                verification,
-                bundle,
-                evidence / "image-manifest.json",
-                registry,
-                evidence / "rekor-entry.json",
+                Path("bundle.json"),
+                Path("manifest.json"),
             )
+        command = run.call_args_list[1].args[0]
+        self.assertEqual(command[:2], ["/bin/cosign", "verify-blob"])
+        self.assertIn("--bundle", command)
+        self.assertIn("--certificate-identity", command)
+        self.assertIn("--certificate-oidc-issuer", command)
+        self.assertIn("--certificate-github-workflow-sha", command)
+        self.assertEqual(command[-1], "manifest.json")
 
-        with tempfile.TemporaryDirectory() as directory:
-            temporary = Path(directory)
-            original_bundle = json.loads(
-                (evidence / "cosign-signature-bundle.json").read_text(
-                    encoding="utf-8"
-                )
-            )
-            bundle_path = temporary / "cosign-signature-bundle.json"
-            bundle_path.write_text(json.dumps(original_bundle), encoding="utf-8")
-            legacy_path = temporary / "legacy.jsonl"
-            legacy_path.write_text(
-                json.dumps({"Base64Signature": "invalid", "Payload": "invalid"})
-                + "\n",
-                encoding="utf-8",
-            )
+        rejected = mock.Mock(returncode=1, stdout="", stderr="invalid signature")
+        with mock.patch.object(verifier.shutil, "which", return_value="/bin/cosign"), mock.patch.object(
+            verifier.subprocess, "run", side_effect=[version, rejected]
+        ):
             with self.assertRaises(verifier.ContractError) as caught:
-                validate(bundle_path, legacy_path)
-            self.assertEqual(caught.exception.code, "COSIGN_REGISTRY_FORMAT")
-
-            wrong = json.loads(json.dumps(original_bundle))
-            statement = json.loads(
-                base64.b64decode(wrong["dsseEnvelope"]["payload"])
-            )
-            statement["predicateType"] = "https://example.invalid/predicate"
-            wrong["dsseEnvelope"]["payload"] = base64.b64encode(
-                json.dumps(statement, separators=(",", ":")).encode("utf-8")
-            ).decode("ascii")
-            bundle_path.write_text(json.dumps(wrong), encoding="utf-8")
-            registry_path = temporary / "registry-signature-bundles.jsonl"
-            registry_path.write_text(json.dumps(wrong) + "\n", encoding="utf-8")
-            verification = json.loads(
-                (evidence / "cosign-verify.json").read_text(encoding="utf-8")
-            )
-            verification["registry_bundle"]["bundle_sha256"] = hashlib.sha256(
-                bundle_path.read_bytes()
-            ).hexdigest()
-            verification_path = temporary / "cosign-verify.json"
-            verification_path.write_text(json.dumps(verification), encoding="utf-8")
-            with self.assertRaises(verifier.ContractError) as caught:
-                validate(bundle_path, registry_path, verification_path)
-            self.assertEqual(caught.exception.code, "COSIGN_PREDICATE")
-
-    def test_retained_sbom_and_scan_are_bound_to_the_release(self) -> None:
-        contract = verifier.load_contract(ROOT)
-        release = json.loads((ROOT / verifier.RELEASE_PATH).read_text(encoding="utf-8"))
-        release.setdefault("digest", "sha256:" + verifier._digest_hex(release["reference"]))
-        evidence = ROOT / "bootstrap/seaweedfs/v4.39/evidence"
-        verifier._validate_sbom(
-            release,
-            contract,
-            evidence / "seaweedfs-4.39-arm64.cdx.json",
-        )
-        verifier._validate_trivy(
-            release,
-            contract,
-            evidence / "trivy.json",
-            evidence / "trivy-version.json",
-        )
-
-        with tempfile.TemporaryDirectory() as directory:
-            mutated = Path(directory) / "trivy.json"
-            report = json.loads((evidence / "trivy.json").read_text(encoding="utf-8"))
-            report["Results"][0].setdefault("Vulnerabilities", []).append(
-                {"Severity": "HIGH"}
-            )
-            mutated.write_text(json.dumps(report), encoding="utf-8")
-            with self.assertRaises(verifier.ContractError) as caught:
-                verifier._validate_trivy(
-                    release,
+                verifier._verify_retained_cosign_bundle(
                     contract,
-                    mutated,
-                    evidence / "trivy-version.json",
+                    release,
+                    Path("bundle.json"),
+                    Path("manifest.json"),
                 )
-            self.assertEqual(caught.exception.code, "TRIVY_VULNERABILITIES")
+        self.assertEqual(caught.exception.code, "COSIGN_CRYPTO_VERIFY")
 
     def test_runtime_smoke_is_bound_to_raw_docker_inspect(self) -> None:
         release = {
