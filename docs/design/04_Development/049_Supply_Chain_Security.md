@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-07-15
-version: "0.7"
+updated: 2026-07-16
+version: "0.8"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -40,6 +40,20 @@ finding is blocking; a separate non-blocking all-severity Trivy pass keeps lower
 severities visible in the workflow log for follow-up. Scanner
 errors, malformed reports, unavailable feeds, and missing prerequisite evidence
 fail closed rather than silently reducing the gate.
+
+Flux v2.9.2が生成する
+`deploy/gitops/clusters/local-lite/flux-system/gotk-components.yaml`の
+cluster-wide controller RBACに対してのみ、Trivy `KSV-0041`と`KSV-0046`をsingle-user
+local labの期限付き例外とします。`.trivyignore.yaml`はcanonical YAMLで
+記述し、`scripts/verify_trivyignore.py`が完全一致する2つのID、単一の完全一致path、
+2つのexact `statement`、`2026-08-14`のUTC calendar date `expired_at`から生成した
+canonical bytesとの完全一致と、非期限切れかつ30日以内というcontractをfail closedで
+検証します。Trivy v0.72.0と同じくdate scalarをUTC midnightへ変換するため、
+effective expiry instantは`2026-08-14T00:00:00Z`です。この瞬間は有効で、1秒後は
+期限切れとなります。期限更新にはvalidator codeとignore fileの同時reviewが必要です。
+all-severityのreport scanは例外を適用せずfindingを
+ログへ残し、High/Criticalのblocking scanだけがこのignore fileを使います。
+期限到来またはID/path/schemaの拡張は`make verify-security`を失敗させます。
 
 The actions and scanner releases in `.github/workflows/security.yml` are pinned.
 Updates must be isolated dependency changes with review of upstream release

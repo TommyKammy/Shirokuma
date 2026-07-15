@@ -10,6 +10,8 @@ import unittest
 from datetime import date, timedelta
 from pathlib import Path
 
+from scripts.verify_supply_chain import deployed_image_references
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CHECKER = ROOT / "scripts/verify_supply_chain.py"
@@ -1191,6 +1193,60 @@ class SupplyChainSecurityTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("deploy/fixture.yaml", result.stderr)
         self.assertIn("missing from resident image ledger", result.stderr)
+
+    def test_generated_flux_images_are_effectively_resolved_only_at_canonical_path(self) -> None:
+        required = (
+            "opentofu/dev/bootstrap-images.json",
+            "bootstrap/flux/v2.9.2/components.json",
+            "security/resident-images.json",
+            "deploy/gitops/clusters/local-lite/flux-system/kustomization.yaml",
+            "deploy/gitops/clusters/local-lite/flux-system/gotk-components.yaml",
+            "deploy/gitops/clusters/local-lite/flux-system/gotk-sync.yaml",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            repository = Path(directory)
+            subprocess.run(["git", "init", "-q", str(repository)], check=True)
+            for relative in required:
+                destination = repository / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / relative, destination)
+            subprocess.run(
+                ["git", "-C", str(repository), "add", *required], check=True
+            )
+
+            references = deployed_image_references(repository)
+            candidates = json.loads(
+                (repository / "opentofu/dev/bootstrap-images.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            expected = {candidate["reference"] for candidate in candidates.values()}
+            self.assertEqual({reference for _, reference in references}, expected)
+            self.assertEqual(
+                {path for path, _ in references},
+                {
+                    "deploy/gitops/clusters/local-lite/flux-system/"
+                    "gotk-components.yaml"
+                },
+            )
+
+            canonical = repository / required[-2]
+            noncanonical = canonical.with_name("copied-gotk-components.yaml")
+            canonical.rename(noncanonical)
+            subprocess.run(
+                ["git", "-C", str(repository), "add", "-A"], check=True
+            )
+            untrusted = deployed_image_references(repository)
+
+        self.assertEqual(len(untrusted), 4)
+        self.assertTrue(all("@sha256:" not in reference for _, reference in untrusted))
+        self.assertEqual(
+            {path for path, _ in untrusted},
+            {
+                "deploy/gitops/clusters/local-lite/flux-system/"
+                "copied-gotk-components.yaml"
+            },
+        )
 
     def test_inline_yaml_image_field_is_rejected_instead_of_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
