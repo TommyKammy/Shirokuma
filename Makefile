@@ -153,7 +153,7 @@ check-newlines:
 	while IFS= read -r file; do \
 		[ -f "$$file" ] || continue; \
 		case "$$file" in \
-			*.png|*.jpg|*.jpeg|*.gif|*.ico|*.pdf|*.zip|*.gz|*.tgz|*.jar|*.war) continue ;; \
+			*.png|*.jpg|*.jpeg|*.gif|*.ico|*.pdf|*.zip|*.gz|*.tgz|*.xz|*.jar|*.war) continue ;; \
 			bootstrap/seaweedfs/v4.39/evidence/cosign-signature-bundle.json|bootstrap/seaweedfs/v4.39/evidence/image-manifest.json) continue ;; \
 		esac; \
 		if [ -s "$$file" ] && [ "$$(tail -c 1 "$$file" | wc -l | tr -d ' ')" = "0" ]; then \

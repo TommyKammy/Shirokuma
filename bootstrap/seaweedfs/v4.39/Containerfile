@@ -13,9 +13,9 @@ COPY . .
 RUN --network=none \
     test -n "${SOURCE_COMMIT}" && \
     test -n "${GO_VENDOR_BUNDLE_SHA256}" && \
-    echo "${GO_VENDOR_BUNDLE_SHA256}  /src/.shirokuma/go-vendor.tar.gz" \
+    echo "${GO_VENDOR_BUNDLE_SHA256}  /src/.shirokuma/go-vendor.tar.xz" \
       | sha256sum -c - && \
-    tar -xzf /src/.shirokuma/go-vendor.tar.gz -C /src && \
+    tar -xJf /src/.shirokuma/go-vendor.tar.xz -C /src && \
     test -f /src/vendor/modules.txt && \
     rm -rf /src/.shirokuma && \
     mkdir -p /out/data /out/tmp && \

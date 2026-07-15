@@ -29,7 +29,7 @@ EXPECTED_GO_SUM_SHA256 = (
     "aad1bb8e81de6f2dee8481cc9df387efdf87012c28207d5af5d6d19a16562f6e"
 )
 EXPECTED_VENDOR_BUNDLE_SHA256 = (
-    "d6ac5fce5faf9dc99e49cdd5c183f59f0e6c4a4c3a61f2649bca10c9f78a6391"
+    "62703c68abf35ea13f4b3f9d80a452b3c988fd49033dd59aeddf950326992445"
 )
 EXPECTED_TRUSTED_DIGEST = (
     "sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299"
@@ -59,7 +59,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         module_manifest_path = (
             ROOT / "bootstrap/seaweedfs/v4.39/go-module-inputs.json"
         )
-        vendor_bundle_path = ROOT / "bootstrap/seaweedfs/v4.39/go-vendor.tar.gz"
+        vendor_bundle_path = ROOT / "bootstrap/seaweedfs/v4.39/go-vendor.tar.xz"
         durable_evidence_dir = ROOT / "bootstrap/seaweedfs/v4.39/evidence"
         decision_path = (
             ROOT
@@ -128,7 +128,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             "severity: HIGH,CRITICAL",
             "trusted-build-contract.json",
             "go-module-inputs.json",
-            "go-vendor.tar.gz",
+            "go-vendor.tar.xz",
             "python3 scripts/verify_trusted_image.py contract",
             "quarantine-${{ github.run_id }}-${{ github.run_attempt }}",
             "Promote the fully verified digest to the trusted tag",
@@ -228,7 +228,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertIn('"cosign-signature-bundle.json"', generated_evidence)
         self.assertIn('"toolchain": toolchain["tools"]', workflow)
         self.assertIn('"go-module-inputs.json"', generated_evidence)
-        self.assertIn('"go-vendor.tar.gz"', generated_evidence)
+        self.assertIn('"go-vendor.tar.xz"', generated_evidence)
 
         gitleaks = gitleaks_path.read_text(encoding="utf-8")
         self.assertIn(
@@ -244,6 +244,14 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             gitleaks,
         )
         self.assertNotIn(r"^bootstrap/seaweedfs/v4\.39/evidence/.*", gitleaks)
+        self.assertIn(
+            "Public source and checksum hashes in the retained SeaweedFS Go module manifest",
+            gitleaks,
+        )
+        self.assertIn(
+            r"^bootstrap/seaweedfs/v4\.39/go-module-inputs\.json$",
+            gitleaks,
+        )
 
         decision = decision_path.read_text(encoding="utf-8")
         self.assertIn("status: accepted", decision)
@@ -340,7 +348,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
                 "cosign-signature-bundle.json",
                 "cosign-verify.json",
                 "go-module-inputs.json",
-                "go-vendor.tar.gz",
+                "go-vendor.tar.xz",
                 "image-manifest.json",
                 "promotion-evidence.json",
                 "registry-signature-bundles.jsonl",

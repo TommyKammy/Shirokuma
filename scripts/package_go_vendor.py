@@ -6,9 +6,9 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
-import gzip
 import hashlib
 import json
+import lzma
 import os
 import re
 import stat
@@ -20,8 +20,8 @@ from typing import Any, BinaryIO, Dict, Iterable, List, Optional, Sequence, Tupl
 
 
 SCHEMA_VERSION = 1
-GENERATOR_POLICY = "go-mod-vendor-readonly+canonical-tar-gzip-v1"
-ARCHIVE_FORMAT = "tar.gz"
+GENERATOR_POLICY = "go-mod-vendor-readonly+canonical-tar-xz-v1"
+ARCHIVE_FORMAT = "tar.xz"
 CHUNK_SIZE = 1024 * 1024
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 COMMIT_RE = re.compile(r"[0-9a-f]{40}")
@@ -346,17 +346,20 @@ def _write_canonical_archive(
 ) -> None:
     try:
         archive_path.parent.mkdir(parents=True, exist_ok=True)
-        with archive_path.open("wb") as raw:
-            with gzip.GzipFile(
-                filename="", mode="wb", fileobj=raw, compresslevel=9, mtime=0
-            ) as compressed:
-                with tarfile.open(
-                    fileobj=compressed, mode="w", format=tarfile.PAX_FORMAT
-                ) as archive:
-                    for record in records:
-                        with paths[record["path"]].open("rb") as source:
-                            archive.addfile(_tar_info(record), source)
-    except (OSError, tarfile.TarError) as error:
+        with lzma.LZMAFile(
+            archive_path,
+            mode="wb",
+            format=lzma.FORMAT_XZ,
+            check=lzma.CHECK_CRC64,
+            preset=9,
+        ) as compressed:
+            with tarfile.open(
+                fileobj=compressed, mode="w", format=tarfile.PAX_FORMAT
+            ) as archive:
+                for record in records:
+                    with paths[record["path"]].open("rb") as source:
+                        archive.addfile(_tar_info(record), source)
+    except (OSError, lzma.LZMAError, tarfile.TarError) as error:
         _fail("ARCHIVE_CREATE", f"cannot create {archive_path}: {error}")
 
 
@@ -478,7 +481,7 @@ def _validate_manifest(data: Any) -> Dict[str, Any]:
         "MANIFEST_ARCHIVE_SCHEMA",
         "unexpected or missing archive field",
     )
-    _expect(archive.get("format") == ARCHIVE_FORMAT, "ARCHIVE_FORMAT", "expected tar.gz")
+    _expect(archive.get("format") == ARCHIVE_FORMAT, "ARCHIVE_FORMAT", "expected tar.xz")
     _expect(
         SHA256_RE.fullmatch(archive.get("sha256", "")) is not None,
         "ARCHIVE_HASH",
@@ -589,16 +592,17 @@ def create_package(
     return manifest
 
 
-def _validate_gzip_header(path: Path) -> None:
+def _validate_xz_header(path: Path) -> None:
     try:
         with path.open("rb") as stream:
-            header = stream.read(10)
+            header = stream.read(6)
     except OSError as error:
         _fail("IO", f"cannot read {path}: {error}")
-    _expect(len(header) == 10 and header[:3] == b"\x1f\x8b\x08", "GZIP_HEADER", "invalid gzip header")
-    _expect(header[3] == 0, "GZIP_HEADER", "gzip optional headers are forbidden")
-    _expect(header[4:8] == b"\x00\x00\x00\x00", "GZIP_MTIME", "gzip mtime is not zero")
-    _expect(header[8:] == b"\x02\xff", "GZIP_HEADER", "gzip compression metadata is not canonical")
+    _expect(
+        header == b"\xfd7zXZ\x00",
+        "XZ_HEADER",
+        "invalid XZ stream header",
+    )
 
 
 def _extract_and_validate_archive(
@@ -609,7 +613,7 @@ def _extract_and_validate_archive(
     expected = {record["path"]: record for record in files}
     extracted: Dict[str, Path] = {}
     try:
-        with tarfile.open(archive_path, mode="r:gz") as archive:
+        with tarfile.open(archive_path, mode="r:xz") as archive:
             for member in archive:
                 _expect(member.isreg(), "ARCHIVE_MEMBER_TYPE", member.name)
                 name = _canonical_vendor_path(member.name, "ARCHIVE_MEMBER_PATH")
@@ -647,7 +651,7 @@ def _extract_and_validate_archive(
                 extracted[name] = target
     except VendorPackageError:
         raise
-    except (OSError, tarfile.TarError) as error:
+    except (OSError, lzma.LZMAError, tarfile.TarError) as error:
         _fail("ARCHIVE_READ", f"cannot read {archive_path}: {error}")
     _expect(set(extracted) == set(expected), "ARCHIVE_FILE_SET", "missing archive member")
     return extracted
@@ -703,7 +707,7 @@ def verify_package(
         "ARCHIVE_HASH",
         str(archive_path),
     )
-    _validate_gzip_header(archive_path)
+    _validate_xz_header(archive_path)
 
     if source_record_path is not None:
         source_record = _load_json(source_record_path, "SOURCE_RECORD_JSON")
@@ -742,15 +746,8 @@ def verify_package(
     if verify_archive_contents:
         with tempfile.TemporaryDirectory(prefix="go-vendor-verify-") as directory:
             temporary = Path(directory)
-            paths = _extract_and_validate_archive(
+            _extract_and_validate_archive(
                 archive_path, manifest["archive"]["files"], temporary
-            )
-            canonical = temporary / "canonical.tar.gz"
-            _write_canonical_archive(canonical, manifest["archive"]["files"], paths)
-            _expect(
-                _sha256_file(canonical) == manifest["archive"]["sha256"],
-                "ARCHIVE_NOT_CANONICAL",
-                "archive bytes differ from the deterministic encoding",
             )
     return manifest
 

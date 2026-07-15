@@ -1410,7 +1410,7 @@ def _validate_repository_admission(root: Path, release: Dict[str, Any]) -> None:
     signature_registry = artifact_binding("registry-signature-bundles.jsonl")
     signature_verify = artifact_binding("cosign-verify.json")
     module_manifest = artifact_binding("go-module-inputs.json")
-    vendor_bundle = artifact_binding("go-vendor.tar.gz")
+    vendor_bundle = artifact_binding("go-vendor.tar.xz")
     rekor_response = artifact_binding("rekor-entry.json")
     slsa_verify = artifact_binding("slsa-verify.json")
     slsa_bundles = artifact_binding("slsa-bundles.jsonl")
@@ -1744,7 +1744,7 @@ def validate_release_bundle(
 
     try:
         package_go_vendor.verify_package(
-            archive_path=paths["go-vendor.tar.gz"],
+            archive_path=paths["go-vendor.tar.xz"],
             manifest_path=paths["go-module-inputs.json"],
             source_record_path=retained_source_path,
         )

@@ -11,7 +11,7 @@ on:
       - bootstrap/seaweedfs/v4.39/source.json
       - bootstrap/seaweedfs/v4.39/trusted-build-contract.json
       - bootstrap/seaweedfs/v4.39/go-module-inputs.json
-      - bootstrap/seaweedfs/v4.39/go-vendor.tar.gz
+      - bootstrap/seaweedfs/v4.39/go-vendor.tar.xz
       - scripts/package_go_vendor.py
       - scripts/verify_trusted_image.py
   workflow_dispatch:
@@ -164,14 +164,14 @@ jobs:
           PY
           python3 scripts/package_go_vendor.py verify \
             --source-record bootstrap/seaweedfs/v4.39/source.json \
-            --bundle bootstrap/seaweedfs/v4.39/go-vendor.tar.gz \
+            --bundle bootstrap/seaweedfs/v4.39/go-vendor.tar.xz \
             --manifest bootstrap/seaweedfs/v4.39/go-module-inputs.json
-          cp bootstrap/seaweedfs/v4.39/go-vendor.tar.gz go-vendor.tar.gz
+          cp bootstrap/seaweedfs/v4.39/go-vendor.tar.xz go-vendor.tar.xz
           cp bootstrap/seaweedfs/v4.39/go-module-inputs.json go-module-inputs.json
-          vendor_bundle_sha256=$(sha256sum go-vendor.tar.gz | cut -d' ' -f1)
+          vendor_bundle_sha256=$(sha256sum go-vendor.tar.xz | cut -d' ' -f1)
           echo "GO_VENDOR_BUNDLE_SHA256=${vendor_bundle_sha256}" >> "${GITHUB_ENV}"
           mkdir -p seaweedfs-src/.shirokuma
-          cp go-vendor.tar.gz seaweedfs-src/.shirokuma/go-vendor.tar.gz
+          cp go-vendor.tar.xz seaweedfs-src/.shirokuma/go-vendor.tar.xz
           rm -rf seaweedfs-src/.git
 
       - name: Install and verify pinned Buildx and BuildKit without credentials
@@ -971,7 +971,7 @@ jobs:
               "cosign-signature-bundle.json",
               "cosign-verify.json",
               "go-module-inputs.json",
-              "go-vendor.tar.gz",
+              "go-vendor.tar.xz",
               "image-manifest.json",
               "rekor-entry.json",
               "runtime-container-inspect.json",
@@ -1054,7 +1054,7 @@ jobs:
                   name: {
                       "path": (
                           f"bootstrap/seaweedfs/v4.39/{name}"
-                          if name in {"go-module-inputs.json", "go-vendor.tar.gz"}
+                          if name in {"go-module-inputs.json", "go-vendor.tar.xz"}
                           else f"{evidence_root}/{name}"
                       ),
                       "sha256": hashlib.sha256(Path(name).read_bytes()).hexdigest(),
@@ -1089,7 +1089,7 @@ jobs:
             cosign-signature-bundle.json \
             cosign-verify.json \
             go-module-inputs.json \
-            go-vendor.tar.gz \
+            go-vendor.tar.xz \
             image-manifest.json \
             rekor-entry.json \
             release-evidence.json \
@@ -1118,7 +1118,7 @@ jobs:
             cosign-signature-bundle.json
             cosign-verify.json
             go-module-inputs.json
-            go-vendor.tar.gz
+            go-vendor.tar.xz
             image-manifest.json
             rekor-entry.json
             release-evidence.json

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import base64
-import gzip
 import hashlib
 import importlib.util
 import json
+import lzma
 import os
 import tarfile
 import tempfile
@@ -75,7 +75,7 @@ class GoVendorPackageTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def _create(self, suffix: str = "one") -> tuple[Path, Path, dict]:
-        archive = self.root / f"vendor-{suffix}.tar.gz"
+        archive = self.root / f"vendor-{suffix}.tar.xz"
         manifest = self.root / f"vendor-{suffix}.json"
         result = packager.create_package(
             vendor_dir=self.vendor,
@@ -138,17 +138,20 @@ class GoVendorPackageTests(unittest.TestCase):
         )
 
     def _replace_archive(self, archive: Path, members: list[tuple[tarfile.TarInfo, bytes]]) -> None:
-        with archive.open("wb") as raw:
-            with gzip.GzipFile(
-                filename="", mode="wb", fileobj=raw, compresslevel=9, mtime=0
-            ) as compressed:
-                with tarfile.open(
-                    fileobj=compressed, mode="w", format=tarfile.PAX_FORMAT
-                ) as output:
-                    for info, content in members:
-                        import io
+        with lzma.LZMAFile(
+            archive,
+            mode="wb",
+            format=lzma.FORMAT_XZ,
+            check=lzma.CHECK_CRC64,
+            preset=9,
+        ) as compressed:
+            with tarfile.open(
+                fileobj=compressed, mode="w", format=tarfile.PAX_FORMAT
+            ) as output:
+                for info, content in members:
+                    import io
 
-                        output.addfile(info, io.BytesIO(content))
+                    output.addfile(info, io.BytesIO(content))
 
     @staticmethod
     def _regular_info(path: str, content: bytes, mode: int = 0o644) -> tarfile.TarInfo:
@@ -176,7 +179,7 @@ class GoVendorPackageTests(unittest.TestCase):
         self.assertEqual(manifest["generator"]["go_image"], GO_IMAGE)
         self.assertEqual(manifest["generator"]["go_version"], GO_VERSION)
         self.assertEqual(manifest["generator"]["policy"], packager.GENERATOR_POLICY)
-        self.assertEqual(first_archive.read_bytes()[4:8], b"\x00\x00\x00\x00")
+        self.assertEqual(first_archive.read_bytes()[:6], b"\xfd7zXZ\x00")
 
         self.assertEqual(
             [(module["path"], module["version"]) for module in manifest["modules"]],
@@ -284,7 +287,7 @@ class GoVendorPackageTests(unittest.TestCase):
         self._assert_error(
             "MANIFEST_SCHEMA",
             lambda: packager.verify_package(
-                archive_path=self.root / "vendor-schema.tar.gz",
+                archive_path=self.root / "vendor-schema.tar.xz",
                 manifest_path=clean_manifest,
             ),
         )
@@ -341,7 +344,7 @@ class GoVendorPackageTests(unittest.TestCase):
         self.assertEqual(exit_code, 2)
 
     def test_create_and_verify_cli_use_the_workflow_interface(self) -> None:
-        archive = self.root / "cli-vendor.tar.gz"
+        archive = self.root / "cli-vendor.tar.xz"
         manifest = self.root / "cli-module-inputs.json"
         exit_code = packager.main(
             [

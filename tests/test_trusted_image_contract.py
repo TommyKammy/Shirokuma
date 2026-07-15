@@ -23,7 +23,7 @@ STATIC_PATHS = (
     Path("bootstrap/seaweedfs/v4.39/Containerfile"),
     Path("bootstrap/seaweedfs/v4.39/admission.json"),
     Path("bootstrap/seaweedfs/v4.39/go-module-inputs.json"),
-    Path("bootstrap/seaweedfs/v4.39/go-vendor.tar.gz"),
+    Path("bootstrap/seaweedfs/v4.39/go-vendor.tar.xz"),
     Path("bootstrap/seaweedfs/v4.39/source.json"),
     Path("bootstrap/seaweedfs/v4.39/trusted-build-contract.json"),
 )
@@ -34,7 +34,7 @@ class TrustedImageContractTests(unittest.TestCase):
         for relative in STATIC_PATHS:
             target = destination / relative
             target.parent.mkdir(parents=True, exist_ok=True)
-            if relative.name == "go-vendor.tar.gz":
+            if relative.name == "go-vendor.tar.xz":
                 try:
                     os.link(ROOT / relative, target)
                 except OSError:

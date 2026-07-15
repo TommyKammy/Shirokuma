@@ -42,7 +42,7 @@ pinned input to be present in the Containerfile, so a changed frontend, builder,
 or certificate image cannot inherit evidence from an earlier build.
 
 The upstream tree has no root vendor directory. Shirokuma therefore retains a
-deterministic `go-vendor.tar.gz` plus a replacement-aware module graph and every
+deterministic `go-vendor.tar.xz` plus a replacement-aware module graph and every
 vendored file hash. The workflow validates both retained files before they enter
 the build context; the Containerfile verifies the archive hash, extracts it, and
 runs `go build` with `--network=none`, `-mod=vendor`, `GOPROXY=off`,
