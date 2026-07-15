@@ -5,7 +5,7 @@ title: "Operate, back up, and rebuild SeaweedFS on mac-studio-solo"
 status: draft
 created: 2026-07-05
 updated: 2026-07-16
-version: "1.2"
+version: "1.3"
 area: "runbook"
 tags: [shirokuma, runbook, seaweedfs, backup, rebuild, colima]
 ---
@@ -81,6 +81,40 @@ must respond, and authenticated CRUD must pass.
 - `scripts/colima_baseline.sh reset --confirm-data-loss` is the only documented
   whole-profile destructive action. It deletes the entire Colima data disk,
   including the prune-protected PVC.
+
+## Legacy `shirokuma-dev` PVC migration boundary
+
+The former
+`shirokuma-dev/PersistentVolumeClaim/seaweedfs-data-seaweedfs-0` and the current
+`shirokuma-storage/PersistentVolumeClaim/seaweedfs-data-seaweedfs-0` are
+different namespaced objects. Kubernetes does not support moving a PVC between
+namespaces in place. Relabeling, patching a PV/PVC binding, copying claim YAML,
+or changing the StatefulSet namespace is not an accepted migration and can
+silently detach the data from the reviewed ownership and retention contract.
+
+Before OpenTofu apply, `make gitops-bootstrap` performs a read-only
+`kubectl get ... --ignore-not-found -o name` lookup for the legacy claim. A
+lookup failure stops bootstrap; a returned claim name stops bootstrap and
+requires this sequence:
+
+1. Keep the legacy workload and claim intact, quiesce every writer, and use the
+   authenticated endpoint and operator credential contract from its last
+   accepted revision to complete the Backup/export procedure below. If an
+   authenticated object export and matching before/after inventories cannot be
+   produced, stop; filesystem copying or a Secret export is not a substitute.
+2. Verify the export, adjacent inventories, manifest hash, external free space,
+   and owner-only storage outside Colima.
+3. Run the whole-profile Nuke and rebuild procedure. This intentionally removes
+   the legacy namespaced PVC together with the Colima data disk; do not delete
+   only the legacy claim or bypass the bootstrap preflight.
+4. Bootstrap the accepted `shirokuma-storage` layout, complete the staging to
+   `main` handoff in RB-001, prove that the new managed bucket is completely
+   empty, and restore through the object API. Retain the export until all
+   persistence and CRUD gates pass.
+
+There is no in-place or non-destructive namespace-move path. The only accepted
+data-preserving transition is authenticated export, whole-profile rebuild, and
+validated restore.
 
 ## Preconditions and readiness gate
 
@@ -310,7 +344,10 @@ export and confirmation.
 
 1. Complete the backup/export procedure and verify the paired inventories,
    export manifest, manifest hash, and smoke output. Confirm `EXPORT_DIR` is a
-   guarded child of `SHIROKUMA_HOST_EXPORT_ROOT` outside Colima.
+   guarded child of `SHIROKUMA_HOST_EXPORT_ROOT` outside Colima. When migrating
+   the legacy `shirokuma-dev` PVC, first satisfy the legacy migration boundary
+   above; the rebuild is the namespace transition and not merely a capacity
+   reset.
 2. Capture secret-free pre-reset evidence:
 
 ```bash
