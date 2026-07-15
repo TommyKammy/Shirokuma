@@ -41,13 +41,27 @@ Containerfile digest and closed build-input map. The validator requires every
 pinned input to be present in the Containerfile, so a changed frontend, builder,
 or certificate image cannot inherit evidence from an earlier build.
 
+The upstream tree has no root vendor directory. Shirokuma therefore retains a
+deterministic `go-vendor.tar.gz` plus a replacement-aware module graph and every
+vendored file hash. The workflow validates both retained files before they enter
+the build context; the Containerfile verifies the archive hash, extracts it, and
+runs `go build` with `--network=none`, `-mod=vendor`, `GOPROXY=off`,
+`GOSUMDB=off`, `GOTOOLCHAIN=local`, and VCS disabled. Rebuilding this adopted
+artifact no longer depends on a Go proxy, checksum database, VCS host, or an
+ambient module cache.
+
 `bootstrap/seaweedfs/v4.39/trusted-build-contract.json` is the closed-world
 contract for this artifact. It pins the complete Containerfile hash, Buildx
 and workflow-file hashes, Buildx `v0.35.0` binary checksum, BuildKit `v0.31.1` image index and linux/arm64
 manifest digests, Syft `v1.46.0`, Trivy `v0.72.0`, Cosign `v3.1.1`, and Crane
-`v0.21.7` archive checksum. This Cosign signing path
-writes the same Sigstore bundle to the requested evidence file and OCI
-referrer. `scripts/verify_trusted_image.py` validates the same
+`v0.21.7` archive checksum. The Cosign contract fixes the v0.3 DSSE bundle,
+`sign/v1` predicate, bundle-first JSONL registry download, and rejection of the
+legacy `Base64Signature`/`Payload` format. `cosign verify IMAGE@DIGEST` is the
+authoritative registry image verification; `verify-blob` is an additional
+binding from the detached bundle to the raw OCI manifest bytes whose SHA-256 was
+already checked against that image digest. This signing path writes the same
+Sigstore bundle to the requested evidence file and OCI referrer.
+`scripts/verify_trusted_image.py` validates the same
 contract before the build, before promotion, in repository CI, and against the
 durable evidence. Mutation fixtures cover missing tools, mutable action refs,
 Containerfile drift, detached Docker plugin discovery, conflated workflow and
@@ -95,7 +109,9 @@ The published digest must have all of the following before admission:
   High is separately admitted under the exact, expiring ADR-0019 contract.
 
 The SBOM and Trivy report are attached to the digest as keyless OCI
-attestations. Complete Cosign bundle and verification, Rekor response, raw image
+attestations. The retained vendor archive and module/file manifest are immutable
+source-build inputs outside the runtime evidence directory. Complete Cosign
+bundle and verification, Rekor response, raw image
 manifest, SLSA bundles and verification, observed toolchain, runtime-smoke,
 raw runtime container inspect, the exact pre-promotion release snapshot,
 promotion, SBOM, scanner metadata, and scan files are committed under
@@ -117,10 +133,10 @@ runtime deployment, credentials, buckets, PersistentVolumes, Flux resources,
 multi-architecture publication, production use, or general third-party image
 hosting.
 
-Any source revision, base-image digest, target platform, workflow identity, or
-package-name change requires a reviewed update to this record and regenerated
-evidence. Missing, malformed, mixed-digest, or unverifiable evidence keeps the
-resident-image gate blocked.
+Any source revision, Go module graph or vendor archive, base-image digest,
+target platform, workflow identity, or package-name change requires a reviewed
+update to this record and regenerated evidence. Missing, malformed,
+mixed-digest, or unverifiable evidence keeps the resident-image gate blocked.
 
 ## Consequences
 

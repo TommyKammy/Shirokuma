@@ -14,15 +14,29 @@
     "evidence": "bootstrap/seaweedfs/v4.39/source.json",
     "containerfile": {
       "path": "bootstrap/seaweedfs/v4.39/Containerfile",
-      "sha256": "ad0e8bc802cbd8bd021b6578659d67cf92b100b2d080ed57a86b855d092bd8f8",
+      "sha256": "146575aa78097b823c550143b2dfc68e1f1e7425b7221973b60b4c3b7d02054e",
       "frontend": "docker/dockerfile:1.7.0@sha256:dbbd5e059e8a07ff7ea6233b213b36aa516b4c53c645f1817a4dd18b83cbea56"
+    },
+    "module_inputs": {
+      "bundle": "go-vendor.tar.gz",
+      "bundle_sha256": "d6ac5fce5faf9dc99e49cdd5c183f59f0e6c4a4c3a61f2649bca10c9f78a6391",
+      "manifest": "go-module-inputs.json",
+      "manifest_sha256": "62f6daf527118bb954b6a178e999f9a77ac57de17acc54e52ac62f5b773806ad",
+      "go_mod_sha256": "640ea9c352d46a1a444fed027adf3440cc63023afdef96c302533ecb89d7409a",
+      "go_sum_sha256": "aad1bb8e81de6f2dee8481cc9df387efdf87012c28207d5af5d6d19a16562f6e",
+      "go_image": "golang:1.25.12-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587",
+      "go_version": "1.25.12",
+      "generator_policy": "go-mod-vendor-readonly+canonical-tar-gzip-v1",
+      "module_count": 1152,
+      "replacement_count": 2,
+      "file_count": 18934
     }
   },
   "workflow": {
     "repository": "TommyKammy/Shirokuma",
     "name": "SeaweedFS 4.39 trusted arm64 build",
     "path": ".github/workflows/seaweedfs-arm64.yml",
-    "sha256": "0c0539ad995e6559e6de2b4ed585ca4e7130181d2e1c973c337aa0debc7bfd64",
+    "sha256": "e3e606f84477cbdc734c8e90676112029e71492a69ec7076c4db7c25d8630ab2",
     "runner": "ubuntu-24.04-arm",
     "runner_trust_boundary": {
       "provider": "github-hosted",
@@ -69,7 +83,7 @@
       "Record Trivy scanner and vulnerability DB freshness",
       "Install pinned Cosign after the vulnerability gate passes",
       "Record pinned release tools and runner substrate",
-      "Keyless-sign the scanned immutable image and retain the verification bundle",
+      "Keyless-sign the scanned immutable image, bind the detached bundle, and verify the registry image",
       "Mirror GHCR credentials for provenance publication",
       "Publish SLSA provenance for the scanned exact digest",
       "Remove provenance credential mirror",
@@ -113,7 +127,7 @@
       "Generate CycloneDX SBOM for the exact digest",
       "Scan the exact digest and block High or Critical findings",
       "Install pinned Cosign after the vulnerability gate passes",
-      "Keyless-sign the scanned immutable image and retain the verification bundle",
+      "Keyless-sign the scanned immutable image, bind the detached bundle, and verify the registry image",
       "Publish SLSA provenance for the scanned exact digest",
       "Verify SLSA provenance from this exact workflow",
       "Keyless-attest the retained SBOM and scan",
@@ -149,7 +163,13 @@
       "version": "v0.72.0"
     },
     "cosign": {
-      "version": "v3.1.1"
+      "version": "v3.1.1",
+      "bundle_media_type": "application/vnd.dev.sigstore.bundle.v0.3+json",
+      "predicate_type": "https://sigstore.dev/cosign/sign/v1",
+      "registry_download_format": "sigstore-bundle-v0.3-jsonl",
+      "legacy_signature_records_permitted": false,
+      "detached_bundle_role": "bind-image-digest-to-raw-oci-manifest",
+      "authoritative_image_verification": "cosign verify IMAGE@DIGEST"
     },
     "crane": {
       "version": "v0.21.7",
@@ -162,6 +182,8 @@
     "candidate_required": [
       "cosign-signature-bundle.json",
       "cosign-verify.json",
+      "go-module-inputs.json",
+      "go-vendor.tar.gz",
       "image-manifest.json",
       "rekor-entry.json",
       "runtime-container-inspect.json",

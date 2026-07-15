@@ -74,6 +74,13 @@ schema, validator, and fixtures together.
 The source record itself is hashed into release evidence. Its exact
 Containerfile digest and closed set of frontend, Go builder, and certificate
 image inputs must all be consumed by the Containerfile before publication.
+When an adopted Go source tree does not contain a root vendor directory, the
+trusted build must retain a deterministic vendor archive and a
+replacement-aware module/file manifest in Git. The archive hash is checked both
+before it enters the build context and inside the Containerfile. Compilation
+must use `--network=none`, `-mod=vendor`, `GOPROXY=off`, `GOSUMDB=off`,
+`GOTOOLCHAIN=local`, and disabled VCS so neither first-build availability nor
+ambient module-cache state is an unrecorded input.
 
 Trusted-tag publication is a two-stage state machine. The verify job may push
 only a run-scoped quarantine tag and must finish source checks, runtime smoke,
@@ -145,6 +152,13 @@ download, but its finite retention window is not the durable source of truth. A
 source-built candidate remains blocked from runtime manifests until a
 resident-ledger supply-chain record backed by those retained files passes
 `check-images`.
+
+For the pinned Cosign v3 format, `cosign verify IMAGE@DIGEST` is the
+authoritative registry-image check. A separate `verify-blob` check may bind the
+detached v0.3 `sign/v1` DSSE bundle to raw OCI manifest bytes only after those
+bytes hash to the exact image digest. Registry signature download must remain
+bundle-first JSONL; legacy `Base64Signature`/`Payload` records, a
+`messageSignature`, or another predicate type fail closed.
 
 Pinned fallback images are exceptional and require `fallback: true`, documented
 CVE risk, a future ISO `expires_on` date, and a concrete replacement plan in

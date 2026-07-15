@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "component": "seaweedfs",
   "version": "4.39",
   "repository": "https://github.com/seaweedfs/seaweedfs",
@@ -7,11 +7,25 @@
   "tree": "da91641fdd520e465c68fa48af3b3ad07ad86822",
   "git_archive_sha256": "95b3ba34d191e2cc96063434f407087000a9ffcf22f95682ecd5ce40b5a3fab9",
   "archive_command": "git archive --format=tar HEAD | sha256sum",
-  "containerfile_sha256": "ad0e8bc802cbd8bd021b6578659d67cf92b100b2d080ed57a86b855d092bd8f8",
+  "containerfile_sha256": "146575aa78097b823c550143b2dfc68e1f1e7425b7221973b60b4c3b7d02054e",
   "build_inputs": {
     "dockerfile_frontend": "docker/dockerfile:1.7.0@sha256:dbbd5e059e8a07ff7ea6233b213b36aa516b4c53c645f1817a4dd18b83cbea56",
     "go": "golang:1.25.12-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587",
     "certificates": "alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659"
+  },
+  "module_inputs": {
+    "bundle": "go-vendor.tar.gz",
+    "bundle_sha256": "d6ac5fce5faf9dc99e49cdd5c183f59f0e6c4a4c3a61f2649bca10c9f78a6391",
+    "manifest": "go-module-inputs.json",
+    "manifest_sha256": "62f6daf527118bb954b6a178e999f9a77ac57de17acc54e52ac62f5b773806ad",
+    "go_mod_sha256": "640ea9c352d46a1a444fed027adf3440cc63023afdef96c302533ecb89d7409a",
+    "go_sum_sha256": "aad1bb8e81de6f2dee8481cc9df387efdf87012c28207d5af5d6d19a16562f6e",
+    "go_image": "golang:1.25.12-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587",
+    "go_version": "1.25.12",
+    "generator_policy": "go-mod-vendor-readonly+canonical-tar-gzip-v1",
+    "module_count": 1152,
+    "replacement_count": 2,
+    "file_count": 18934
   },
   "trusted_build_contract": "bootstrap/seaweedfs/v4.39/trusted-build-contract.json",
   "adoption_record": "docs/design/07_ADR/ADR-0020_Adopt_SeaweedFS_4_39_source_for_arm64_build.md"

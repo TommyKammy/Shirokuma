@@ -12,6 +12,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
+import package_go_vendor
+
 
 CONTRACT_PATH = Path("bootstrap/seaweedfs/v4.39/trusted-build-contract.json")
 SOURCE_PATH = Path("bootstrap/seaweedfs/v4.39/source.json")
@@ -91,7 +93,13 @@ def validate_static_contract(root: Path) -> Dict[str, Any]:
     admission = _load_json(root / ADMISSION_PATH)
 
     source_contract = source.get("trusted_build_contract")
-    _expect(source.get("schema_version") == 2, "SOURCE_SCHEMA", "expected schema 2")
+    _expect(
+        set(contract.get("source", {}))
+        == {"evidence", "containerfile", "module_inputs"},
+        "SOURCE_CONTRACT_SCHEMA",
+        "trusted source contract has unexpected or missing fields",
+    )
+    _expect(source.get("schema_version") == 3, "SOURCE_SCHEMA", "expected schema 3")
     _expect(source_contract == CONTRACT_PATH.as_posix(), "SOURCE_CONTRACT", str(source_contract))
     _expect(source.get("component") == contract["component"], "SOURCE_COMPONENT", "mismatch")
     _expect(source.get("version") == contract["version"], "SOURCE_VERSION", "mismatch")
@@ -125,12 +133,104 @@ def validate_static_contract(root: Path) -> Dict[str, Any]:
         )
         _expect(value in container_text, "SOURCE_BUILD_INPUT_USE", name)
 
+    module_inputs = source.get("module_inputs")
+    contract_module_inputs = contract["source"].get("module_inputs")
+    _expect(
+        isinstance(module_inputs, dict)
+        and set(module_inputs) == package_go_vendor.SOURCE_RECORD_MODULE_INPUT_KEYS
+        and module_inputs == contract_module_inputs,
+        "MODULE_INPUT_CONTRACT",
+        "source and contract must contain the same closed Go module input set",
+    )
+    _expect(
+        module_inputs["go_image"] == build_inputs["go"]
+        and module_inputs["generator_policy"]
+        == package_go_vendor.GENERATOR_POLICY,
+        "MODULE_INPUT_CONTRACT",
+        "Go image or vendor generator policy differs",
+    )
+    for field in (
+        "go_mod_sha256",
+        "go_sum_sha256",
+        "bundle_sha256",
+        "manifest_sha256",
+    ):
+        _expect(
+            SHA256_RE.fullmatch(str(module_inputs[field])) is not None,
+            "MODULE_INPUT_HASH",
+            field,
+        )
+    _expect(
+        module_inputs["module_count"] > 0
+        and module_inputs["replacement_count"] >= 0
+        and module_inputs["file_count"] > 0,
+        "MODULE_INPUT_COUNT",
+        "module, replacement, and file counts must be bounded",
+    )
+    module_root = SOURCE_PATH.parent
+    bundle_path = _safe_repo_path(
+        root,
+        (module_root / module_inputs["bundle"]).as_posix(),
+        "MODULE_INPUT_PATH",
+    )
+    manifest_path = _safe_repo_path(
+        root,
+        (module_root / module_inputs["manifest"]).as_posix(),
+        "MODULE_INPUT_PATH",
+    )
+    _expect(bundle_path.is_file(), "MODULE_INPUT_MISSING", bundle_path.as_posix())
+    _expect(manifest_path.is_file(), "MODULE_INPUT_MISSING", manifest_path.as_posix())
+    _expect(
+        _sha256(bundle_path) == module_inputs["bundle_sha256"]
+        and _sha256(manifest_path) == module_inputs["manifest_sha256"],
+        "MODULE_INPUT_HASH",
+        "bundle or manifest differs from the trusted contract",
+    )
+    try:
+        package_go_vendor.verify_package(
+            archive_path=bundle_path,
+            manifest_path=manifest_path,
+            source_record_path=root / SOURCE_PATH,
+            verify_archive_contents=False,
+        )
+    except package_go_vendor.VendorPackageError as error:
+        _fail("MODULE_INPUT_PACKAGE", f"{error.code}: {error.detail}")
+    required_vendor_policy = (
+        "RUN --network=none",
+        "GOFLAGS=-mod=vendor",
+        "GOPROXY=off",
+        "GOSUMDB=off",
+        "GOTOOLCHAIN=local",
+        "'GOVCS=*:off'",
+        "GO_VENDOR_BUNDLE_SHA256",
+        "dev.shirokuma.go-vendor-bundle.sha256",
+    )
+    _expect(
+        all(value in container_text for value in required_vendor_policy),
+        "MODULE_BUILD_POLICY",
+        "Containerfile does not enforce the retained offline vendor build",
+    )
+
     toolchain = contract.get("toolchain", {})
     expected_tools = {"buildx", "buildkit", "syft", "trivy", "cosign", "crane"}
     _expect(set(toolchain) == expected_tools, "TOOLCHAIN_CLOSED_WORLD", repr(sorted(toolchain)))
     for name, record in toolchain.items():
         version = record.get("version", "")
         _expect(re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", version) is not None, "TOOL_VERSION", name)
+    _expect(
+        toolchain["cosign"]
+        == {
+            "version": "v3.1.1",
+            "bundle_media_type": "application/vnd.dev.sigstore.bundle.v0.3+json",
+            "predicate_type": "https://sigstore.dev/cosign/sign/v1",
+            "registry_download_format": "sigstore-bundle-v0.3-jsonl",
+            "legacy_signature_records_permitted": False,
+            "detached_bundle_role": "bind-image-digest-to-raw-oci-manifest",
+            "authoritative_image_verification": "cosign verify IMAGE@DIGEST",
+        },
+        "COSIGN_FORMAT_CONTRACT",
+        "Cosign v3.1.1 bundle and image-verification semantics differ",
+    )
     for tool, field in (
         ("buildx", "linux_arm64_sha256"),
         ("crane", "linux_arm64_archive_sha256"),
@@ -455,7 +555,12 @@ def _validate_cosign(
     _expect(_sha256(manifest_path) == digest, "COSIGN_MANIFEST_DIGEST", "mismatch")
 
     bundle = _load_json(bundle_path)
-    _expect(bundle.get("mediaType") == "application/vnd.dev.sigstore.bundle.v0.3+json", "COSIGN_BUNDLE_MEDIA", "v0.3 required")
+    cosign_contract = contract["toolchain"]["cosign"]
+    _expect(
+        bundle.get("mediaType") == cosign_contract["bundle_media_type"],
+        "COSIGN_BUNDLE_MEDIA",
+        "v0.3 required",
+    )
     try:
         registry_bundles = [
             json.loads(line)
@@ -464,6 +569,19 @@ def _validate_cosign(
         ]
     except json.JSONDecodeError as exc:
         _fail("COSIGN_REGISTRY_BUNDLES", str(exc))
+    _expect(
+        all(
+            isinstance(candidate, dict)
+            and candidate.get("mediaType") == cosign_contract["bundle_media_type"]
+            and "dsseEnvelope" in candidate
+            and "messageSignature" not in candidate
+            and "Base64Signature" not in candidate
+            and "Payload" not in candidate
+            for candidate in registry_bundles
+        ),
+        "COSIGN_REGISTRY_FORMAT",
+        "legacy or non-DSSE registry signature record is forbidden",
+    )
     _expect(
         len(registry_bundles) == 1 and registry_bundles[0] == bundle,
         "COSIGN_REGISTRY_BUNDLES",
@@ -504,7 +622,11 @@ def _validate_cosign(
             "missing",
         )
     statement = _decode_dsse_statement(bundle)
-    _expect(statement.get("predicateType") == "https://sigstore.dev/cosign/sign/v1", "COSIGN_PREDICATE", "unexpected")
+    _expect(
+        statement.get("predicateType") == cosign_contract["predicate_type"],
+        "COSIGN_PREDICATE",
+        "unexpected",
+    )
     subjects = statement.get("subject", [])
     _expect(
         isinstance(subjects, list)
@@ -831,6 +953,14 @@ def _validate_runtime(
     config = container.get("Config", {})
     host = container.get("HostConfig", {})
     _expect(config.get("User") == "65532:65532", "RUNTIME_INSPECT_USER", "non-root user mismatch")
+    _expect(
+        (config.get("Labels") or {}).get(
+            "dev.shirokuma.go-vendor-bundle.sha256"
+        )
+        == release["source"]["module_inputs"]["bundle_sha256"],
+        "RUNTIME_VENDOR_BUNDLE",
+        "image label does not bind the retained Go vendor bundle",
+    )
     _expect(container.get("Path") == "/usr/bin/weed", "RUNTIME_INSPECT_COMMAND", "path mismatch")
     _expect(container.get("Args") == ["mini", "-dir=/data"], "RUNTIME_INSPECT_COMMAND", "args mismatch")
     _expect(host.get("ReadonlyRootfs") is True, "RUNTIME_INSPECT_READ_ONLY", "required")
@@ -1279,6 +1409,8 @@ def _validate_repository_admission(root: Path, release: Dict[str, Any]) -> None:
     signature_bundle = artifact_binding("cosign-signature-bundle.json")
     signature_registry = artifact_binding("registry-signature-bundles.jsonl")
     signature_verify = artifact_binding("cosign-verify.json")
+    module_manifest = artifact_binding("go-module-inputs.json")
+    vendor_bundle = artifact_binding("go-vendor.tar.gz")
     rekor_response = artifact_binding("rekor-entry.json")
     slsa_verify = artifact_binding("slsa-verify.json")
     slsa_bundles = artifact_binding("slsa-bundles.jsonl")
@@ -1297,6 +1429,14 @@ def _validate_repository_admission(root: Path, release: Dict[str, Any]) -> None:
             "tree": source["tree"],
             "git_archive_sha256": source["git_archive_sha256"],
             "containerfile_sha256": source["containerfile_sha256"],
+            "go_mod_sha256": source["module_inputs"]["go_mod_sha256"],
+            "go_sum_sha256": source["module_inputs"]["go_sum_sha256"],
+            "module_count": source["module_inputs"]["module_count"],
+            "replacement_count": source["module_inputs"]["replacement_count"],
+            "module_manifest": module_manifest["path"],
+            "module_manifest_sha256": module_manifest["sha256"],
+            "vendor_bundle": vendor_bundle["path"],
+            "vendor_bundle_sha256": vendor_bundle["sha256"],
         },
         "signature": {
             "bundle": signature_bundle["path"],
@@ -1541,6 +1681,7 @@ def validate_release_bundle(
             "evidence_sha256": _sha256(retained_source_path),
             "containerfile_sha256": source.get("containerfile_sha256"),
             "build_inputs": source.get("build_inputs"),
+            "module_inputs": source.get("module_inputs"),
         },
         "RELEASE_SOURCE",
         "source record mismatch",
@@ -1600,6 +1741,15 @@ def validate_release_bundle(
         _expect(SHA256_RE.fullmatch(expected_hash) is not None, "EVIDENCE_HASH", name)
         _expect(_sha256(path) == expected_hash, "EVIDENCE_HASH", name)
         paths[name] = path
+
+    try:
+        package_go_vendor.verify_package(
+            archive_path=paths["go-vendor.tar.gz"],
+            manifest_path=paths["go-module-inputs.json"],
+            source_record_path=retained_source_path,
+        )
+    except package_go_vendor.VendorPackageError as error:
+        _fail("MODULE_INPUT_PACKAGE", f"{error.code}: {error.detail}")
 
     cosign_verification = _validate_cosign(
         contract,

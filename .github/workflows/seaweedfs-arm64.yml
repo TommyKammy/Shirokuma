@@ -10,6 +10,9 @@ on:
       - bootstrap/seaweedfs/v4.39/Containerfile
       - bootstrap/seaweedfs/v4.39/source.json
       - bootstrap/seaweedfs/v4.39/trusted-build-contract.json
+      - bootstrap/seaweedfs/v4.39/go-module-inputs.json
+      - bootstrap/seaweedfs/v4.39/go-vendor.tar.gz
+      - scripts/package_go_vendor.py
       - scripts/verify_trusted_image.py
   workflow_dispatch:
 
@@ -102,6 +105,8 @@ jobs:
           container_path = Path("bootstrap/seaweedfs/v4.39/Containerfile")
           evidence = json.loads(source_path.read_text(encoding="utf-8"))
           contract = json.loads(contract_path.read_text(encoding="utf-8"))
+          if evidence.get("schema_version") != 3:
+              raise SystemExit("source evidence schema must be 3")
           expected = {
               "commit": os.environ["SOURCE_COMMIT"],
               "tree": os.environ["SOURCE_TREE"],
@@ -126,7 +131,47 @@ jobs:
           for name, pinned_input in build_inputs.items():
               if pinned_input not in container_text:
                   raise SystemExit(f"pinned build input is not consumed: {name}")
+
+          module_inputs = evidence.get("module_inputs", {})
+          if module_inputs != contract["source"].get("module_inputs"):
+              raise SystemExit("source and trusted contract module inputs differ")
+          expected_module_keys = {
+              "go_mod_sha256",
+              "go_sum_sha256",
+              "go_image",
+              "go_version",
+              "generator_policy",
+              "bundle",
+              "bundle_sha256",
+              "manifest",
+              "manifest_sha256",
+              "module_count",
+              "replacement_count",
+              "file_count",
+          }
+          if set(module_inputs) != expected_module_keys:
+              raise SystemExit("source module input contract is not closed-world")
+          if module_inputs["go_image"] != build_inputs["go"]:
+              raise SystemExit("source module input Go image differs")
+          source_root = Path("seaweedfs-src")
+          for name, expected_hash in (
+              ("go.mod", module_inputs["go_mod_sha256"]),
+              ("go.sum", module_inputs["go_sum_sha256"]),
+          ):
+              actual_hash = hashlib.sha256((source_root / name).read_bytes()).hexdigest()
+              if actual_hash != expected_hash:
+                  raise SystemExit(f"upstream {name} differs from module input contract")
           PY
+          python3 scripts/package_go_vendor.py verify \
+            --source-record bootstrap/seaweedfs/v4.39/source.json \
+            --bundle bootstrap/seaweedfs/v4.39/go-vendor.tar.gz \
+            --manifest bootstrap/seaweedfs/v4.39/go-module-inputs.json
+          cp bootstrap/seaweedfs/v4.39/go-vendor.tar.gz go-vendor.tar.gz
+          cp bootstrap/seaweedfs/v4.39/go-module-inputs.json go-module-inputs.json
+          vendor_bundle_sha256=$(sha256sum go-vendor.tar.gz | cut -d' ' -f1)
+          echo "GO_VENDOR_BUNDLE_SHA256=${vendor_bundle_sha256}" >> "${GITHUB_ENV}"
+          mkdir -p seaweedfs-src/.shirokuma
+          cp go-vendor.tar.gz seaweedfs-src/.shirokuma/go-vendor.tar.gz
           rm -rf seaweedfs-src/.git
 
       - name: Install and verify pinned Buildx and BuildKit without credentials
@@ -248,6 +293,7 @@ jobs:
           tags: ${{ env.IMAGE }}:quarantine-${{ github.run_id }}-${{ github.run_attempt }}
           build-args: |
             SOURCE_COMMIT=${{ env.SOURCE_COMMIT }}
+            GO_VENDOR_BUNDLE_SHA256=${{ env.GO_VENDOR_BUNDLE_SHA256 }}
 
       - name: Verify the published platform
         env:
@@ -500,7 +546,7 @@ jobs:
           )
           PY
 
-      - name: Keyless-sign the scanned immutable image and retain the verification bundle
+      - name: Keyless-sign the scanned immutable image, bind the detached bundle, and verify the registry image
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         shell: bash
@@ -512,6 +558,10 @@ jobs:
             > image-manifest.json
           echo "${DIGEST#sha256:}  image-manifest.json" | sha256sum --check --strict
 
+          # Cosign v3.1.1 signs the image digest as a sign/v1 DSSE bundle. The
+          # blob verification below rebinds that detached bundle to the exact
+          # content-addressed OCI manifest bytes; the subsequent `cosign verify`
+          # remains the authoritative registry image verification.
           cosign sign --yes --bundle cosign-signature-bundle.json "${IMAGE}@${DIGEST}"
           cosign verify-blob \
             --bundle cosign-signature-bundle.json \
@@ -594,6 +644,26 @@ jobs:
           rekor = json.loads(Path("rekor-entry.json").read_text(encoding="utf-8"))
           if bundle.get("mediaType") != "application/vnd.dev.sigstore.bundle.v0.3+json":
               raise SystemExit("unexpected Sigstore bundle format")
+          for candidate in registry_bundles:
+              if "Base64Signature" in candidate or "Payload" in candidate:
+                  raise SystemExit(
+                      "Cosign v3.1.1 closed-world contract rejects legacy signature records"
+                  )
+              if candidate.get("mediaType") != (
+                  "application/vnd.dev.sigstore.bundle.v0.3+json"
+              ):
+                  raise SystemExit("registry signature is not a Sigstore v0.3 bundle")
+              if "dsseEnvelope" not in candidate or "messageSignature" in candidate:
+                  raise SystemExit("registry signature is not the required DSSE bundle")
+              candidate_statement = json.loads(
+                  base64.b64decode(
+                      candidate["dsseEnvelope"]["payload"], validate=True
+                  )
+              )
+              if candidate_statement.get("predicateType") != (
+                  "https://sigstore.dev/cosign/sign/v1"
+              ):
+                  raise SystemExit("registry bundle has an unexpected predicate type")
           material = bundle["verificationMaterial"]
           if not material.get("certificate", {}).get("rawBytes"):
               raise SystemExit("bundle certificate is missing")
@@ -900,6 +970,8 @@ jobs:
           evidence_names = (
               "cosign-signature-bundle.json",
               "cosign-verify.json",
+              "go-module-inputs.json",
+              "go-vendor.tar.gz",
               "image-manifest.json",
               "rekor-entry.json",
               "runtime-container-inspect.json",
@@ -937,6 +1009,7 @@ jobs:
                   "evidence_sha256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
                   "containerfile_sha256": source_evidence["containerfile_sha256"],
                   "build_inputs": source_evidence["build_inputs"],
+                  "module_inputs": source_evidence["module_inputs"],
               },
               "builder": {
                   "repository": os.environ["GITHUB_REPOSITORY"],
@@ -979,7 +1052,11 @@ jobs:
               },
               "artifacts": {
                   name: {
-                      "path": f"{evidence_root}/{name}",
+                      "path": (
+                          f"bootstrap/seaweedfs/v4.39/{name}"
+                          if name in {"go-module-inputs.json", "go-vendor.tar.gz"}
+                          else f"{evidence_root}/{name}"
+                      ),
                       "sha256": hashlib.sha256(Path(name).read_bytes()).hexdigest(),
                   }
                   for name in evidence_names
@@ -1011,6 +1088,8 @@ jobs:
           for name in \
             cosign-signature-bundle.json \
             cosign-verify.json \
+            go-module-inputs.json \
+            go-vendor.tar.gz \
             image-manifest.json \
             rekor-entry.json \
             release-evidence.json \
@@ -1038,6 +1117,8 @@ jobs:
             bootstrap/seaweedfs/v4.39/trusted-build-contract.json
             cosign-signature-bundle.json
             cosign-verify.json
+            go-module-inputs.json
+            go-vendor.tar.gz
             image-manifest.json
             rekor-entry.json
             release-evidence.json

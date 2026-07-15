@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -19,6 +22,8 @@ STATIC_PATHS = (
     Path(".github/workflows/seaweedfs-arm64.yml"),
     Path("bootstrap/seaweedfs/v4.39/Containerfile"),
     Path("bootstrap/seaweedfs/v4.39/admission.json"),
+    Path("bootstrap/seaweedfs/v4.39/go-module-inputs.json"),
+    Path("bootstrap/seaweedfs/v4.39/go-vendor.tar.gz"),
     Path("bootstrap/seaweedfs/v4.39/source.json"),
     Path("bootstrap/seaweedfs/v4.39/trusted-build-contract.json"),
 )
@@ -29,7 +34,13 @@ class TrustedImageContractTests(unittest.TestCase):
         for relative in STATIC_PATHS:
             target = destination / relative
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(ROOT / relative, target)
+            if relative.name == "go-vendor.tar.gz":
+                try:
+                    os.link(ROOT / relative, target)
+                except OSError:
+                    shutil.copy2(ROOT / relative, target)
+            else:
+                shutil.copy2(ROOT / relative, target)
 
     def _assert_mutation_fails(
         self,
@@ -124,6 +135,42 @@ class TrustedImageContractTests(unittest.TestCase):
             data["build_inputs"]["go"] = (
                 "docker.io/library/golang@sha256:" + "a" * 64
             )
+            path.write_text(json.dumps(data), encoding="utf-8")
+
+        def alter_module_bundle_hash(root: Path) -> None:
+            for relative in (verifier.SOURCE_PATH, verifier.CONTRACT_PATH):
+                path = root / relative
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if relative == verifier.SOURCE_PATH:
+                    data["module_inputs"]["bundle_sha256"] = "0" * 64
+                else:
+                    data["source"]["module_inputs"]["bundle_sha256"] = "0" * 64
+                path.write_text(json.dumps(data), encoding="utf-8")
+
+        def permit_networked_module_build(root: Path) -> None:
+            container_path = root / "bootstrap/seaweedfs/v4.39/Containerfile"
+            container = container_path.read_text(encoding="utf-8").replace(
+                "      GOPROXY=off \\\n",
+                "      GOPROXY=https://proxy.golang.org \\\n",
+                1,
+            )
+            container_path.write_text(container, encoding="utf-8")
+            container_hash = hashlib.sha256(container.encode("utf-8")).hexdigest()
+            source_path = root / verifier.SOURCE_PATH
+            source = json.loads(source_path.read_text(encoding="utf-8"))
+            source["containerfile_sha256"] = container_hash
+            source_path.write_text(json.dumps(source), encoding="utf-8")
+            contract_path = root / verifier.CONTRACT_PATH
+            contract = json.loads(contract_path.read_text(encoding="utf-8"))
+            contract["source"]["containerfile"]["sha256"] = container_hash
+            contract_path.write_text(json.dumps(contract), encoding="utf-8")
+
+        def permit_legacy_cosign_records(root: Path) -> None:
+            path = root / verifier.CONTRACT_PATH
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data["toolchain"]["cosign"][
+                "legacy_signature_records_permitted"
+            ] = True
             path.write_text(json.dumps(data), encoding="utf-8")
 
         def unpin_action(root: Path) -> None:
@@ -238,6 +285,9 @@ class TrustedImageContractTests(unittest.TestCase):
             (switch_rekor_api_without_migration, "REKOR_API_CONTRACT"),
             (alter_containerfile, "CONTAINERFILE_HASH"),
             (redirect_source_build_input, "SOURCE_BUILD_INPUT_USE"),
+            (alter_module_bundle_hash, "MODULE_INPUT_HASH"),
+            (permit_networked_module_build, "MODULE_BUILD_POLICY"),
+            (permit_legacy_cosign_records, "COSIGN_FORMAT_CONTRACT"),
             (unpin_action, "ACTION_NOT_SHA_PINNED"),
             (add_anonymous_unpinned_action, "ACTION_NOT_SHA_PINNED"),
             (add_unapproved_pinned_action, "WORKFLOW_ACTION_CLOSED_WORLD"),
@@ -262,6 +312,66 @@ class TrustedImageContractTests(unittest.TestCase):
         for value in ("a" * 63, "a" * 65, "g" * 64):
             with self.subTest(value=value):
                 self.assertIsNone(verifier.REKOR_UUID_RE.fullmatch(value))
+
+    def test_cosign_v3_bundle_contract_rejects_legacy_and_wrong_predicate(self) -> None:
+        contract = verifier.load_contract(ROOT)
+        release = json.loads((ROOT / verifier.RELEASE_PATH).read_text(encoding="utf-8"))
+        evidence = ROOT / "bootstrap/seaweedfs/v4.39/evidence"
+
+        def validate(
+            bundle: Path, registry: Path, verification: Path = evidence / "cosign-verify.json"
+        ) -> None:
+            verifier._validate_cosign(
+                contract,
+                release,
+                verification,
+                bundle,
+                evidence / "image-manifest.json",
+                registry,
+                evidence / "rekor-entry.json",
+            )
+
+        with tempfile.TemporaryDirectory() as directory:
+            temporary = Path(directory)
+            original_bundle = json.loads(
+                (evidence / "cosign-signature-bundle.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            bundle_path = temporary / "cosign-signature-bundle.json"
+            bundle_path.write_text(json.dumps(original_bundle), encoding="utf-8")
+            legacy_path = temporary / "legacy.jsonl"
+            legacy_path.write_text(
+                json.dumps({"Base64Signature": "invalid", "Payload": "invalid"})
+                + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(verifier.ContractError) as caught:
+                validate(bundle_path, legacy_path)
+            self.assertEqual(caught.exception.code, "COSIGN_REGISTRY_FORMAT")
+
+            wrong = json.loads(json.dumps(original_bundle))
+            statement = json.loads(
+                base64.b64decode(wrong["dsseEnvelope"]["payload"])
+            )
+            statement["predicateType"] = "https://example.invalid/predicate"
+            wrong["dsseEnvelope"]["payload"] = base64.b64encode(
+                json.dumps(statement, separators=(",", ":")).encode("utf-8")
+            ).decode("ascii")
+            bundle_path.write_text(json.dumps(wrong), encoding="utf-8")
+            registry_path = temporary / "registry-signature-bundles.jsonl"
+            registry_path.write_text(json.dumps(wrong) + "\n", encoding="utf-8")
+            verification = json.loads(
+                (evidence / "cosign-verify.json").read_text(encoding="utf-8")
+            )
+            verification["registry_bundle"]["bundle_sha256"] = hashlib.sha256(
+                bundle_path.read_bytes()
+            ).hexdigest()
+            verification_path = temporary / "cosign-verify.json"
+            verification_path.write_text(json.dumps(verification), encoding="utf-8")
+            with self.assertRaises(verifier.ContractError) as caught:
+                validate(bundle_path, registry_path, verification_path)
+            self.assertEqual(caught.exception.code, "COSIGN_PREDICATE")
 
     def test_retained_sbom_and_scan_are_bound_to_the_release(self) -> None:
         contract = verifier.load_contract(ROOT)
@@ -301,10 +411,18 @@ class TrustedImageContractTests(unittest.TestCase):
             "reference": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:" + "a" * 64,
             "digest": "sha256:" + "a" * 64,
             "builder": {"run_id": "12345", "run_attempt": "2"},
+            "source": {
+                "module_inputs": {"bundle_sha256": "b" * 64},
+            },
         }
         inspect_payload = [
             {
-                "Config": {"User": "65532:65532"},
+                "Config": {
+                    "User": "65532:65532",
+                    "Labels": {
+                        "dev.shirokuma.go-vendor-bundle.sha256": "b" * 64,
+                    },
+                },
                 "Path": "/usr/bin/weed",
                 "Args": ["mini", "-dir=/data"],
                 "HostConfig": {

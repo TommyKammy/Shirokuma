@@ -22,6 +22,15 @@ EXPECTED_DOCKERFILE_FRONTEND = (
     "docker/dockerfile:1.7.0@"
     "sha256:dbbd5e059e8a07ff7ea6233b213b36aa516b4c53c645f1817a4dd18b83cbea56"
 )
+EXPECTED_GO_MOD_SHA256 = (
+    "640ea9c352d46a1a444fed027adf3440cc63023afdef96c302533ecb89d7409a"
+)
+EXPECTED_GO_SUM_SHA256 = (
+    "aad1bb8e81de6f2dee8481cc9df387efdf87012c28207d5af5d6d19a16562f6e"
+)
+EXPECTED_VENDOR_BUNDLE_SHA256 = (
+    "d6ac5fce5faf9dc99e49cdd5c183f59f0e6c4a4c3a61f2649bca10c9f78a6391"
+)
 EXPECTED_TRUSTED_DIGEST = (
     "sha256:cde502bffee14bdcd735cb253c86a3ea56d0634a9a75574ff0b4657ca2daf299"
 )
@@ -47,6 +56,10 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         workflow_path = ROOT / ".github/workflows/seaweedfs-arm64.yml"
         gitleaks_path = ROOT / ".gitleaks.toml"
         containerfile_path = ROOT / "bootstrap/seaweedfs/v4.39/Containerfile"
+        module_manifest_path = (
+            ROOT / "bootstrap/seaweedfs/v4.39/go-module-inputs.json"
+        )
+        vendor_bundle_path = ROOT / "bootstrap/seaweedfs/v4.39/go-vendor.tar.gz"
         durable_evidence_dir = ROOT / "bootstrap/seaweedfs/v4.39/evidence"
         decision_path = (
             ROOT
@@ -60,6 +73,8 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             workflow_path,
             gitleaks_path,
             containerfile_path,
+            module_manifest_path,
+            vendor_bundle_path,
             decision_path,
             durable_evidence_dir / "candidate-release-evidence.json",
             durable_evidence_dir / "cosign-signature-bundle.json",
@@ -85,6 +100,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertFalse(missing, f"missing trusted build contract: {', '.join(missing)}")
 
         source = json.loads(evidence_path.read_text(encoding="utf-8"))
+        self.assertEqual(source["schema_version"], 3)
         self.assertEqual(source["version"], "4.39")
         self.assertEqual(source["commit"], EXPECTED_RELEASE_COMMIT)
         self.assertEqual(source["tree"], EXPECTED_RELEASE_TREE)
@@ -111,6 +127,8 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             "VulnerabilityDB",
             "severity: HIGH,CRITICAL",
             "trusted-build-contract.json",
+            "go-module-inputs.json",
+            "go-vendor.tar.gz",
             "python3 scripts/verify_trusted_image.py contract",
             "quarantine-${{ github.run_id }}-${{ github.run_attempt }}",
             "Promote the fully verified digest to the trusted tag",
@@ -209,6 +227,8 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertIn('"runtime-smoke.json"', generated_evidence)
         self.assertIn('"cosign-signature-bundle.json"', generated_evidence)
         self.assertIn('"toolchain": toolchain["tools"]', workflow)
+        self.assertIn('"go-module-inputs.json"', generated_evidence)
+        self.assertIn('"go-vendor.tar.gz"', generated_evidence)
 
         gitleaks = gitleaks_path.read_text(encoding="utf-8")
         self.assertIn(
@@ -243,9 +263,47 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertIn("EXPOSE 7333 8333 8888 9333 9340 19333 23646", containerfile)
         self.assertNotIn("EXPOSE 7333 8080", containerfile)
         self.assertIn("mkdir -p /out/data /out/tmp", containerfile)
+        for required in (
+            "RUN --network=none",
+            "GOFLAGS=-mod=vendor",
+            "GOPROXY=off",
+            "GOSUMDB=off",
+            "GOTOOLCHAIN=local",
+            "'GOVCS=*:off'",
+            "GO_VENDOR_BUNDLE_SHA256",
+            "dev.shirokuma.go-vendor-bundle.sha256",
+        ):
+            with self.subTest(vendor_policy=required):
+                self.assertIn(required, containerfile)
         self.assertIn(
             "COPY --from=builder --chown=65532:65532 /out/tmp /tmp",
             containerfile,
+        )
+
+        module_inputs = source["module_inputs"]
+        self.assertEqual(module_inputs["go_mod_sha256"], EXPECTED_GO_MOD_SHA256)
+        self.assertEqual(module_inputs["go_sum_sha256"], EXPECTED_GO_SUM_SHA256)
+        self.assertEqual(
+            module_inputs["bundle_sha256"], EXPECTED_VENDOR_BUNDLE_SHA256
+        )
+        self.assertEqual(module_inputs["module_count"], 1152)
+        self.assertEqual(module_inputs["replacement_count"], 2)
+        self.assertEqual(module_inputs["file_count"], 18934)
+        module_manifest = json.loads(
+            module_manifest_path.read_text(encoding="utf-8")
+        )
+        self.assertEqual(len(module_manifest["modules"]), 1152)
+        self.assertEqual(
+            sum(
+                module["replacement"] is not None
+                for module in module_manifest["modules"]
+            ),
+            2,
+        )
+        self.assertEqual(len(module_manifest["archive"]["files"]), 18934)
+        self.assertEqual(
+            hashlib.sha256(vendor_bundle_path.read_bytes()).hexdigest(),
+            EXPECTED_VENDOR_BUNDLE_SHA256,
         )
 
         release = json.loads(release_path.read_text(encoding="utf-8"))
@@ -281,6 +339,8 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
                 "candidate-release-evidence.json",
                 "cosign-signature-bundle.json",
                 "cosign-verify.json",
+                "go-module-inputs.json",
+                "go-vendor.tar.gz",
                 "image-manifest.json",
                 "promotion-evidence.json",
                 "registry-signature-bundles.jsonl",
