@@ -1,0 +1,22 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: shirokuma-object-storage
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: shirokuma-dev
+  interval: 10m
+  retryInterval: 1m
+  timeout: 10m
+  path: ./deploy/gitops/object-storage
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  wait: true
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: StatefulSet
+      name: seaweedfs
+      namespace: shirokuma-dev

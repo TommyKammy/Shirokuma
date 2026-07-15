@@ -4,8 +4,8 @@ doc_id: "RB-001"
 title: "Bootstrap local-lite lab"
 status: draft
 created: 2026-07-05
-updated: 2026-07-14
-version: "0.6"
+updated: 2026-07-16
+version: "0.9"
 area: "runbook"
 tags: [shirokuma, runbook]
 ---
@@ -96,22 +96,42 @@ and root/dev `Kustomization` at `Ready=True`, and the smoke ConfigMap present.
 Merge a bounded smoke change through the normal PR path and observe Flux
 reconcile the approved revision. Direct `kubectl apply` is not valid evidence.
 
-Teardown uses the same OpenTofu state and removes the releases and both managed
-namespaces:
+This is the GitOps control-plane gate, not an application data-plane gate. Once
+the Issue #26 object-store revision is present, follow
+[[08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo]] to verify
+`NetworkPolicy/seaweedfs-s3-ingress`, both credential Secrets, HTTP `/healthz`
+and `/readyz`, and authenticated CRUD. A running Pod at `Ready=True` can outlive
+a deleted required Secret and does not by itself prove either Secret existence
+or S3 usability. Application clients must use the bucket-scoped
+`Secret/seaweedfs-s3-application-credentials` and opt in with
+`shirokuma.dev/object-storage-client: "true"`; they never receive the operator
+`Admin` identity.
+
+Teardown uses the same OpenTofu state and removes the Flux installation and
+`shirokuma-dev` namespace:
 
 ```bash
 make gitops-teardown
 ```
 
-The bootstrap adds no persistent data volume and has negligible impact on the
-400GB Colima disk allocation. Future application data remains subject to the
-export and free-space checks below.
+This command is destructive once the Issue #26 object-store revision is active.
+It uninstalls Flux and then destroys the OpenTofu-managed namespace; namespace
+deletion also removes `PersistentVolumeClaim/seaweedfs-data-seaweedfs-0` and can
+delete its backing volume and all object data. Before running it, quiesce
+writers and complete the verified export and paired inventory procedure in
+[[08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo]]. The SeaweedFS profile
+requests a retained `20Gi` PVC; actual object and metadata growth consumes host
+SSD inside the 400GB Colima disk and is not negligible operationally.
 
 ## Reset and recovery
 
 Reset deletes the entire profile disk. First export non-reproducible object
 data, catalog metadata, and required evidence outside the VM; confirm host free
 space can hold both the export and replacement 400GB profile. Then run:
+
+For SeaweedFS inventory, checksum, restore, persistence, and Issue #26 closure
+evidence, follow [[08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo]] before
+executing the reset command.
 
 ```bash
 scripts/colima_baseline.sh reset --confirm-data-loss
@@ -135,6 +155,8 @@ command output and exports, stop the VM, and do not treat the lab as ready.
 - `flux get sources git -A`
 - `flux get kustomizations -A`
 - `make gitops-status`
+- RB-013 object-storage NetworkPolicy, Secret-existence, HTTP probe, and
+  authenticated CRUD gate when Issue #26 resources are present
 
 ## Rollback
 

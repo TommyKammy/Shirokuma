@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -36,6 +37,23 @@ SECRET_FILENAME = re.compile(
     r"(^|/)(\.env|[^/]+\.(?:pem|key|p12|pfx|token|secret))$", re.IGNORECASE
 )
 MINIO_IDENTIFIER = re.compile(r"(^|[/:._-])minio([/:._-]|$)", re.IGNORECASE)
+SIGNED_INDEX_EVIDENCE_MODE = "signed_oci_index"
+REPOSITORY_SOURCE_BUILD_EVIDENCE_MODE = "repository_source_build"
+SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+CANONICAL_REPOSITORY_SOURCE_BUILDS = {
+    ("seaweedfs", "4.39"): {
+        "reference": (
+            "ghcr.io/tommykammy/shirokuma-seaweedfs@"
+            "sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421"
+        ),
+        "admission": "bootstrap/seaweedfs/v4.39/admission.json",
+        "release_evidence": "bootstrap/seaweedfs/v4.39/release-evidence.json",
+        "sbom_source": (
+            "bootstrap/seaweedfs/v4.39/evidence/seaweedfs-4.39-arm64.cdx.json"
+        ),
+        "scan_source": "bootstrap/seaweedfs/v4.39/evidence/trivy.json",
+    }
+}
 
 
 class PolicyError(RuntimeError):
@@ -218,17 +236,103 @@ def check_trivy(
         raise PolicyError(f"Trivy blocking threshold crossed: {summary}")
 
 
-def evidence_artifact_path(manifest_path: Path, value: str, field: str) -> Path:
+def reject_manifest_ancestor_symlinks(
+    manifest_path: Path,
+    repository: Path,
+    field: str,
+) -> Path:
+    repository_root = repository.absolute()
+    manifest_parent = manifest_path.absolute().parent
+    if manifest_parent.is_symlink():
+        raise PolicyError(
+            f"refusing to read {field} through symbolic link ancestor {manifest_parent}"
+        )
+    try:
+        relative_parent = manifest_parent.relative_to(repository_root)
+    except ValueError:
+        try:
+            manifest_parent.resolve(strict=False).relative_to(
+                repository_root.resolve(strict=False)
+            )
+        except ValueError:
+            return manifest_parent
+        raise PolicyError(f"refusing to read {field} through a symbolic link ancestor")
+
+    current = repository_root
+    for part in relative_parent.parts:
+        current /= part
+        if current.is_symlink():
+            raise PolicyError(
+                f"refusing to read {field} through symbolic link ancestor {current}"
+            )
+    return manifest_parent
+
+
+def evidence_artifact_path(
+    manifest_path: Path,
+    repository: Path,
+    value: str,
+    field: str,
+) -> Path:
     relative = Path(value)
     if relative.is_absolute() or ".." in relative.parts:
         raise PolicyError(f"{field} must be relative to the resident image manifest")
 
-    current = manifest_path.parent
+    current = reject_manifest_ancestor_symlinks(manifest_path, repository, field)
     for part in relative.parts:
         current /= part
         if current.is_symlink():
             raise PolicyError(f"refusing to read symbolic link {field} {value}")
     return current
+
+
+def repository_artifact_path(repository: Path, value: str, field: str) -> Path:
+    relative = Path(value)
+    if not relative.parts or relative.is_absolute() or ".." in relative.parts:
+        raise PolicyError(f"{field} must be a repository-relative path")
+
+    current = repository
+    for part in relative.parts:
+        current /= part
+        if current.is_symlink():
+            raise PolicyError(f"refusing to read symbolic link {field} {value}")
+    try:
+        current.relative_to(repository)
+    except ValueError as error:
+        raise PolicyError(f"{field} escapes the repository") from error
+    return current
+
+
+def file_sha256(path: Path, field: str) -> str:
+    if path.is_symlink():
+        raise PolicyError(f"refusing to hash symbolic link {field} {path.name}")
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError as error:
+        raise PolicyError(f"cannot read {field} {path.name}: {error}") from error
+
+
+def checked_repository_binding(
+    repository: Path,
+    binding: Any,
+    field: str,
+) -> tuple[Path, str]:
+    if not isinstance(binding, dict):
+        raise PolicyError(f"repository source-build evidence requires {field} binding")
+    value = binding.get("path")
+    expected_sha256 = binding.get("sha256")
+    if not isinstance(value, str) or not value.strip():
+        raise PolicyError(f"repository source-build {field}.path must be non-empty")
+    if not isinstance(expected_sha256, str) or not SHA256_HEX.fullmatch(expected_sha256):
+        raise PolicyError(f"repository source-build {field}.sha256 must be lowercase SHA-256")
+    path = repository_artifact_path(repository, value, f"{field}.path")
+    observed_sha256 = file_sha256(path, field)
+    if observed_sha256 != expected_sha256:
+        raise PolicyError(
+            f"repository source-build {field} hash mismatch: "
+            f"expected {expected_sha256}, got {observed_sha256}"
+        )
+    return path, observed_sha256
 
 
 def check_sbom(sbom_path: Path) -> None:
@@ -241,42 +345,14 @@ def reference_digest(reference: str) -> str:
     return reference.rsplit("@", 1)[1]
 
 
-def check_supply_chain_evidence(
-    evidence_path: Path,
+def check_signed_index_supply_chain_record(
+    record: dict[str, Any],
     *,
-    component: str,
     reference: str,
     version: str,
     source: str,
 ) -> None:
-    evidence = load_json(evidence_path)
-    if not isinstance(evidence, dict) or evidence.get("schema_version") != 1:
-        raise PolicyError("supply-chain evidence requires schema_version 1")
-    records = evidence.get("images")
-    if not isinstance(records, list):
-        raise PolicyError("supply-chain evidence requires an images list")
-    matches = [
-        record
-        for record in records
-        if isinstance(record, dict)
-        and record.get("component") == component
-        and record.get("reference") == reference
-    ]
-    if len(matches) != 1:
-        raise PolicyError("supply-chain evidence requires one exact component/reference record")
-    record = matches[0]
     expected_digest = reference_digest(reference)
-    if record.get("platform") != "linux/arm64":
-        raise PolicyError("supply-chain evidence platform must be linux/arm64")
-    if record.get("version") != version or record.get("source") != source:
-        raise PolicyError("supply-chain evidence version/source does not match the ledger")
-    verified_at = record.get("verified_at")
-    parsed_verified_at = parse_timestamp(verified_at) if isinstance(verified_at, str) else None
-    if parsed_verified_at is None:
-        raise PolicyError("supply-chain evidence requires a timezone-qualified verified_at")
-    if parsed_verified_at.astimezone(timezone.utc) > datetime.now(timezone.utc):
-        raise PolicyError("supply-chain evidence verified_at must not be in the future")
-
     signature = record.get("signature")
     if not isinstance(signature, dict) or signature.get("verified") is not True:
         raise PolicyError("supply-chain evidence requires a verified signature")
@@ -317,6 +393,280 @@ def check_supply_chain_evidence(
         raise PolicyError("upstream SBOM attestation must use SPDX Document")
     if upstream_sbom.get("subject_digest") != expected_digest:
         raise PolicyError("upstream SBOM subject does not match the ledger digest")
+
+
+def check_repository_source_build_record(
+    record: dict[str, Any],
+    *,
+    repository: Path,
+    component: str,
+    reference: str,
+    version: str,
+    source: str,
+    sbom_path: Path,
+    scan_path: Path,
+    sbom_generator: str,
+    scanner_version: str,
+    vulnerability_db_updated_at: str,
+) -> None:
+    source_build = record.get("repository_source_build")
+    if not isinstance(source_build, dict):
+        raise PolicyError("repository_source_build mode requires repository_source_build evidence")
+
+    canonical = CANONICAL_REPOSITORY_SOURCE_BUILDS.get((component, version))
+    if canonical is None:
+        raise PolicyError(
+            f"repository_source_build mode is not approved for {component} {version}"
+        )
+    if reference != canonical["reference"]:
+        raise PolicyError(
+            "repository source-build reference does not match the canonical approved digest"
+        )
+
+    admission_path, _ = checked_repository_binding(
+        repository,
+        source_build.get("admission"),
+        "repository_source_build.admission",
+    )
+    release_path, _ = checked_repository_binding(
+        repository,
+        source_build.get("release_evidence"),
+        "repository_source_build.release_evidence",
+    )
+    if source_build["admission"].get("path") != canonical["admission"]:
+        raise PolicyError("repository source-build admission path is not canonical")
+    if source_build["release_evidence"].get("path") != canonical["release_evidence"]:
+        raise PolicyError("repository source-build release evidence path is not canonical")
+
+    resident_evidence = source_build.get("resident_evidence")
+    if not isinstance(resident_evidence, dict):
+        raise PolicyError("repository source-build evidence requires resident_evidence")
+    bound_sources: dict[str, tuple[Path, str]] = {}
+    for name, observed_path in (("sbom", sbom_path), ("scan", scan_path)):
+        binding = resident_evidence.get(name)
+        if not isinstance(binding, dict):
+            raise PolicyError(f"repository source-build evidence requires {name} binding")
+        resident_path, resident_sha256 = checked_repository_binding(
+            repository,
+            binding.get("resident"),
+            f"repository_source_build.resident_evidence.{name}.resident",
+        )
+        source_path, source_sha256 = checked_repository_binding(
+            repository,
+            binding.get("source"),
+            f"repository_source_build.resident_evidence.{name}.source",
+        )
+        if binding["source"].get("path") != canonical[f"{name}_source"]:
+            raise PolicyError(
+                f"repository source-build {name} source path is not canonical"
+            )
+        if resident_path.resolve(strict=False) != observed_path.resolve(strict=False):
+            raise PolicyError(
+                f"repository source-build {name} resident path does not match the ledger artifact"
+            )
+        if resident_sha256 != source_sha256:
+            raise PolicyError(f"repository source-build {name} hashes do not match")
+        try:
+            if resident_path.read_bytes() != source_path.read_bytes():
+                raise PolicyError(f"repository source-build {name} bytes do not match")
+        except OSError as error:
+            raise PolicyError(f"cannot compare repository source-build {name}: {error}") from error
+        bound_sources[name] = (source_path, source_sha256)
+
+    admission = load_json(admission_path)
+    release = load_json(release_path)
+    if not isinstance(admission, dict) or admission.get("schema_version") != 2:
+        raise PolicyError("repository source-build admission requires schema_version 2")
+    if not isinstance(release, dict) or release.get("schema_version") != 2:
+        raise PolicyError("repository source-build release evidence requires schema_version 2")
+
+    expected_digest = reference_digest(reference)
+    for label, evidence in (("admission", admission), ("release evidence", release)):
+        if evidence.get("component") != component or evidence.get("version") != version:
+            raise PolicyError(f"repository source-build {label} component/version mismatch")
+        if evidence.get("platform") != "linux/arm64":
+            raise PolicyError(f"repository source-build {label} platform must be linux/arm64")
+    if admission.get("source") != source:
+        raise PolicyError("repository source-build admission source does not match the ledger")
+    release_source = release.get("source")
+    if not isinstance(release_source, dict) or release_source.get("repository") != source:
+        raise PolicyError("repository source-build release source does not match the ledger")
+
+    assessment = admission.get("assessment")
+    candidate = admission.get("admitted_candidate")
+    if not isinstance(assessment, dict) or assessment.get("admission") != "approved":
+        raise PolicyError("repository source-build admission must be approved")
+    if not isinstance(candidate, dict):
+        raise PolicyError("repository source-build admission requires an admitted_candidate")
+    if (
+        candidate.get("reference") != reference
+        or candidate.get("manifest_digest") != expected_digest
+    ):
+        raise PolicyError("repository source-build admission candidate does not match the ledger")
+    release_value = source_build.get("release_evidence")
+    if candidate.get("release_evidence") != release_value.get("path"):
+        raise PolicyError("repository source-build admission release path mismatch")
+    if (
+        release.get("admission_status") != "approved"
+        or release.get("reference") != reference
+        or release.get("digest") != expected_digest
+    ):
+        raise PolicyError("repository source-build release admission does not match the ledger")
+
+    controls = candidate.get("controls")
+    if not isinstance(controls, list):
+        raise PolicyError("repository source-build admission requires controls")
+    control_records = {
+        value.get("control"): value
+        for value in controls
+        if isinstance(value, dict) and isinstance(value.get("control"), str)
+    }
+    required_controls = {
+        "source_adoption",
+        "signature",
+        "transparency_log",
+        "workflow_revision",
+        "slsa_provenance",
+        "sbom",
+        "vulnerability_scan",
+        "runtime_tmp",
+        "tag_promotion",
+    }
+    if len(control_records) != len(controls) or not required_controls.issubset(control_records):
+        raise PolicyError("repository source-build admission controls are missing or duplicated")
+    for name in required_controls:
+        if control_records[name].get("status") != "verified":
+            raise PolicyError(f"repository source-build admission control {name} is not verified")
+
+    sbom_source_path, sbom_sha256 = bound_sources["sbom"]
+    scan_source_path, scan_sha256 = bound_sources["scan"]
+    sbom_control = control_records["sbom"]
+    scan_control = control_records["vulnerability_scan"]
+    if sbom_control.get("path") != str(sbom_source_path.relative_to(repository)):
+        raise PolicyError("repository source-build SBOM control path mismatch")
+    if sbom_control.get("sha256") != sbom_sha256:
+        raise PolicyError("repository source-build SBOM control hash mismatch")
+    if scan_control.get("path") != str(scan_source_path.relative_to(repository)):
+        raise PolicyError("repository source-build scan control path mismatch")
+    if scan_control.get("sha256") != scan_sha256:
+        raise PolicyError("repository source-build scan control hash mismatch")
+    if scan_control.get("critical") != 0 or scan_control.get("high") != 0:
+        raise PolicyError("repository source-build scan requires Critical=0 and High=0")
+    observed_scanner = (
+        f"{scan_control.get('scanner_name')} {scan_control.get('scanner_version')}"
+    )
+    if observed_scanner != scanner_version:
+        raise PolicyError("repository source-build scanner version does not match the ledger")
+    if scan_control.get("vulnerability_db_updated_at") != vulnerability_db_updated_at:
+        raise PolicyError(
+            "repository source-build vulnerability DB timestamp does not match the ledger"
+        )
+
+    artifacts = release.get("artifacts")
+    if not isinstance(artifacts, dict):
+        raise PolicyError("repository source-build release evidence requires artifacts")
+    for name, source_path, sha256 in (
+        ("seaweedfs-4.39-arm64.cdx.json", sbom_source_path, sbom_sha256),
+        ("trivy.json", scan_source_path, scan_sha256),
+    ):
+        artifact = artifacts.get(name)
+        if not isinstance(artifact, dict):
+            raise PolicyError(f"repository source-build release evidence missing {name}")
+        if artifact.get("path") != str(source_path.relative_to(repository)):
+            raise PolicyError(f"repository source-build release {name} path mismatch")
+        if artifact.get("sha256") != sha256:
+            raise PolicyError(f"repository source-build release {name} hash mismatch")
+    vulnerabilities = release.get("vulnerabilities")
+    if not isinstance(vulnerabilities, dict) or (
+        vulnerabilities.get("critical") != 0 or vulnerabilities.get("high") != 0
+    ):
+        raise PolicyError("repository source-build release requires Critical=0 and High=0")
+    scanner = release.get("scanner")
+    observed_release_scanner = (
+        f"{scanner.get('name')} {scanner.get('version')}"
+        if isinstance(scanner, dict)
+        else ""
+    )
+    if observed_release_scanner != scanner_version:
+        raise PolicyError("repository source-build release scanner version mismatch")
+    vulnerability_db = scanner.get("vulnerability_db")
+    if (
+        not isinstance(vulnerability_db, dict)
+        or vulnerability_db.get("updated_at") != vulnerability_db_updated_at
+    ):
+        raise PolicyError("repository source-build release vulnerability DB timestamp mismatch")
+    toolchain = release.get("toolchain")
+    syft = toolchain.get("syft") if isinstance(toolchain, dict) else None
+    syft_version = str(syft.get("version", "")).removeprefix("v") if isinstance(syft, dict) else ""
+    if f"syft {syft_version}" != sbom_generator:
+        raise PolicyError("repository source-build SBOM generator does not match the ledger")
+
+
+def check_supply_chain_evidence(
+    evidence_path: Path,
+    *,
+    repository: Path,
+    component: str,
+    reference: str,
+    version: str,
+    source: str,
+    sbom_path: Path,
+    scan_path: Path,
+    sbom_generator: str,
+    scanner_version: str,
+    vulnerability_db_updated_at: str,
+) -> None:
+    evidence = load_json(evidence_path)
+    if not isinstance(evidence, dict) or evidence.get("schema_version") != 1:
+        raise PolicyError("supply-chain evidence requires schema_version 1")
+    records = evidence.get("images")
+    if not isinstance(records, list):
+        raise PolicyError("supply-chain evidence requires an images list")
+    matches = [
+        record
+        for record in records
+        if isinstance(record, dict)
+        and record.get("component") == component
+        and record.get("reference") == reference
+    ]
+    if len(matches) != 1:
+        raise PolicyError("supply-chain evidence requires one exact component/reference record")
+    record = matches[0]
+    if record.get("platform") != "linux/arm64":
+        raise PolicyError("supply-chain evidence platform must be linux/arm64")
+    if record.get("version") != version or record.get("source") != source:
+        raise PolicyError("supply-chain evidence version/source does not match the ledger")
+    verified_at = record.get("verified_at")
+    parsed_verified_at = parse_timestamp(verified_at) if isinstance(verified_at, str) else None
+    if parsed_verified_at is None:
+        raise PolicyError("supply-chain evidence requires a timezone-qualified verified_at")
+    if parsed_verified_at.astimezone(timezone.utc) > datetime.now(timezone.utc):
+        raise PolicyError("supply-chain evidence verified_at must not be in the future")
+
+    mode = record.get("evidence_mode", SIGNED_INDEX_EVIDENCE_MODE)
+    if mode == SIGNED_INDEX_EVIDENCE_MODE:
+        check_signed_index_supply_chain_record(
+            record,
+            reference=reference,
+            version=version,
+            source=source,
+        )
+    elif mode == REPOSITORY_SOURCE_BUILD_EVIDENCE_MODE:
+        check_repository_source_build_record(
+            record,
+            repository=repository,
+            component=component,
+            reference=reference,
+            version=version,
+            source=source,
+            sbom_path=sbom_path,
+            scan_path=scan_path,
+            sbom_generator=sbom_generator,
+            scanner_version=scanner_version,
+            vulnerability_db_updated_at=vulnerability_db_updated_at,
+        )
+    else:
+        raise PolicyError(f"unsupported supply-chain evidence_mode {mode!r}")
 
 
 def exception_finding_key(value: Any, component: str) -> tuple[str, str, str] | None:
@@ -616,7 +966,12 @@ def check_images(
             for field in ("sbom_artifact", "scan_artifact", "supply_chain_artifact"):
                 artifact = str(image[field]).strip()
                 try:
-                    artifact_path = evidence_artifact_path(manifest_path, artifact, field)
+                    artifact_path = evidence_artifact_path(
+                        manifest_path,
+                        repository,
+                        artifact,
+                        field,
+                    )
                     if field == "sbom_artifact":
                         check_sbom(artifact_path)
                     elif field == "scan_artifact":
@@ -628,10 +983,28 @@ def check_images(
                     else:
                         check_supply_chain_evidence(
                             artifact_path,
+                            repository=repository,
                             component=str(component),
                             reference=reference,
                             version=str(image["version"]),
                             source=str(image["source"]),
+                            sbom_path=evidence_artifact_path(
+                                manifest_path,
+                                repository,
+                                str(image["sbom_artifact"]).strip(),
+                                "sbom_artifact",
+                            ),
+                            scan_path=evidence_artifact_path(
+                                manifest_path,
+                                repository,
+                                str(image["scan_artifact"]).strip(),
+                                "scan_artifact",
+                            ),
+                            sbom_generator=str(image["sbom_generator"]),
+                            scanner_version=str(image["scanner_version"]),
+                            vulnerability_db_updated_at=str(
+                                image["vulnerability_db_updated_at"]
+                            ),
                         )
                 except PolicyError as error:
                     errors.append(f"{component}: invalid {field} {artifact}: {error}")

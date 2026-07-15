@@ -24,6 +24,7 @@ verify-security:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_supply_chain_security.py'
 	@$(PYTHON) scripts/verify_supply_chain.py scan-secrets --repo .
 	@$(PYTHON) scripts/verify_supply_chain.py check-images --manifest security/resident-images.json --repo . --profile local-lab --exceptions security/resident-image-exceptions.json
+	@$(PYTHON) scripts/verify_trusted_image.py audit --root .
 
 verify-policy:
 	@command -v $(KYVERNO) >/dev/null || { echo "kyverno $(KYVERNO_VERSION) is required for policy verification"; exit 1; }
@@ -54,6 +55,7 @@ verify-kyverno-bootstrap:
 
 verify-object-storage-profile:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_object_storage_profile.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_object_storage_backup.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_package_go_vendor.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_trusted_image_contract.py'
 	@$(PYTHON) scripts/verify_trusted_image.py audit --root .
