@@ -250,6 +250,7 @@ state are intentionally excluded.
 - Bootstrap bridge PR: [#47](https://github.com/TommyKammy/Shirokuma/pull/47)
 - Teardown drill PR: [#48](https://github.com/TommyKammy/Shirokuma/pull/48)
 - Teardown rollback PR: [#49](https://github.com/TommyKammy/Shirokuma/pull/49)
+- Closure evidence PR: [#50](https://github.com/TommyKammy/Shirokuma/pull/50)
 - Main publication: [run 29418029340 attempt 1](https://github.com/TommyKammy/Shirokuma/actions/runs/29418029340/attempts/1)
 - GitHub depends on: `#1`, `#8`, `#25`
 - Execution order: `2 of 10`
