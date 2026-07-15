@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-07-14
-version: "0.5"
+updated: 2026-07-15
+version: "0.6"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -52,6 +52,19 @@ workflow-file and Containerfile hashes, Dockerfile frontend, base images,
 Buildx, BuildKit image digest and platform manifest, Syft, Trivy, Cosign, and
 the promotion tool. A
 repository-selected release tool absent from the contract is not permitted.
+Static validation also binds the adopted source record to the workflow before
+any build starts: the global commit, tree, and archive pins must equal
+`source.json`, and the source checkout repository and ref must equal that same
+record. Repository coordinates must be a literal GitHub owner/name slug; runtime
+expressions are forbidden. The three source pins may occur only in the canonical
+top-level `env`; job- and step-level shadowing is rejected. The complete job set
+and canonical block structure are closed by the contract. Every `jobs.*.steps`
+entry must start with a non-empty `name`; unnamed
+`run` or `uses` entries are rejected, and the complete ordered step-name set is
+closed by the contract. The retained Trivy image scan is likewise fixed to
+`vuln`, `HIGH,CRITICAL`, `ignore-unfixed=false`, `vuln-type=os,library`, and
+`exit-code=1`; changing the workflow and its recorded hash together cannot
+weaken these semantic filters.
 Docker, GitHub CLI, Git, Python, curl, tar, sha256sum, and other operating-system
 facilities supplied by the runner remain part of that trust boundary; the
 security-relevant direct tools, runner label, OS, and architecture are recorded
@@ -73,6 +86,10 @@ SHA (`GITHUB_WORKFLOW_SHA`) and source SHA (`GITHUB_SHA`) are recorded and
 verified as separate identities. The current contract explicitly selects the
 Rekor v1 public API; a Rekor v2 migration must change the endpoint, identity
 schema, validator, and fixtures together.
+The pending static-audit lifecycle does not require a local Cosign binary,
+because no admitted bundles exist yet. Once admission becomes `approved`, the
+repository verifier fails closed unless the exact contract-pinned Cosign is
+available and all retained bundles pass cryptographic revalidation.
 The source record itself is hashed into release evidence. Its exact
 Containerfile digest and closed set of frontend, Go builder, and certificate
 image inputs must all be consumed by the Containerfile before publication. The

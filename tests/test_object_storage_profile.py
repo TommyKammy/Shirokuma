@@ -122,6 +122,21 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             ],
         )
         self.assertEqual(
+            contract["workflow"]["trivy_action_inputs"],
+            {
+                "version": "v0.72.0",
+                "image-ref": "${{ env.IMAGE }}@${{ steps.build.outputs.digest }}",
+                "format": "json",
+                "output": "trivy.json",
+                "scanners": "vuln",
+                "severity": "HIGH,CRITICAL",
+                "ignore-unfixed": "false",
+                "vuln-type": "os,library",
+                "exit-code": "1",
+            },
+        )
+        self.assertEqual(contract["workflow"]["allowed_jobs"], ["verify", "promote"])
+        self.assertEqual(
             contract["admission"],
             {
                 "approval_state_source": "bootstrap/seaweedfs/v4.39/admission.json",
@@ -155,8 +170,9 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         ci = ci_path.read_text(encoding="utf-8")
         makefile = makefile_path.read_text(encoding="utf-8")
         self.assertIn("cosign-release: v3.1.1", ci)
-        self.assertIn("COSIGN_VERSION ?= v3.1.1", makefile)
         self.assertIn("scripts/verify_trusted_image.py audit --root .", makefile)
+        self.assertNotIn("command -v $(COSIGN)", makefile)
+        self.assertNotIn("COSIGN_VERSION", makefile)
         self.assertIn("scripts/package_go_vendor.py reproduce", ci)
         self.assertIn("go-version: 1.25.12", ci)
         self.assertIn("actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16", ci)

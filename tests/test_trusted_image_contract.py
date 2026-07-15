@@ -155,7 +155,12 @@ class TrustedImageContractTests(unittest.TestCase):
                 value = value[key]  # type: ignore[index]
 
     def test_pending_repository_audit_is_explicit_and_fail_closed(self) -> None:
-        admission = verifier.validate_repository_audit(ROOT)
+        with mock.patch.object(
+            verifier.shutil,
+            "which",
+            side_effect=AssertionError("pending audit must not look up Cosign"),
+        ):
+            admission = verifier.validate_repository_audit(ROOT)
         self.assertEqual(
             admission["assessment"]["admission"], "pending_main_publication"
         )
@@ -189,6 +194,25 @@ class TrustedImageContractTests(unittest.TestCase):
         )
 
     def test_contract_mutations_fail_with_stable_error_codes(self) -> None:
+        def rebind_workflow_and_contract(root: Path) -> None:
+            workflow_path = root / ".github/workflows/seaweedfs-arm64.yml"
+            contract_path = root / verifier.CONTRACT_PATH
+            contract = json.loads(contract_path.read_text(encoding="utf-8"))
+            contract["workflow"]["sha256"] = hashlib.sha256(
+                workflow_path.read_bytes()
+            ).hexdigest()
+            contract_path.write_text(json.dumps(contract), encoding="utf-8")
+
+            admission_path = root / verifier.ADMISSION_PATH
+            admission = json.loads(admission_path.read_text(encoding="utf-8"))
+            admission["lifecycle"]["workflow_sha256"] = contract["workflow"][
+                "sha256"
+            ]
+            admission["lifecycle"]["contract_sha256"] = hashlib.sha256(
+                contract_path.read_bytes()
+            ).hexdigest()
+            admission_path.write_text(json.dumps(admission), encoding="utf-8")
+
         def replace_and_rehash_containerfile(
             root: Path,
             old: str,
@@ -395,6 +419,167 @@ class TrustedImageContractTests(unittest.TestCase):
                 1,
             )
             path.write_text(workflow, encoding="utf-8")
+
+        def add_unnamed_run_step_and_rebind(root: Path) -> None:
+            path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = path.read_text(encoding="utf-8").replace(
+                "    steps:\n",
+                "    steps:\n      - run: echo unreviewed-command\n",
+                1,
+            )
+            path.write_text(workflow, encoding="utf-8")
+            rebind_workflow_and_contract(root)
+
+        def add_bare_unnamed_run_step_and_rebind(root: Path) -> None:
+            path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = path.read_text(encoding="utf-8").replace(
+                "    steps:\n",
+                "    steps:\n      -\n        run: echo unreviewed-command\n",
+                1,
+            )
+            path.write_text(workflow, encoding="utf-8")
+            rebind_workflow_and_contract(root)
+
+        def add_noncanonical_unnamed_job_and_rebind(root: Path) -> None:
+            path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = path.read_text(encoding="utf-8").replace(
+                "jobs:\n",
+                "jobs:\n"
+                "  unreviewed:\n"
+                "    runs-on: ubuntu-24.04-arm\n"
+                "    steps:\n"
+                "        - run: echo unreviewed-command\n",
+                1,
+            )
+            path.write_text(workflow, encoding="utf-8")
+            rebind_workflow_and_contract(root)
+
+        def add_explicit_key_unnamed_job_and_rebind(root: Path) -> None:
+            path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = path.read_text(encoding="utf-8").replace(
+                "jobs:\n",
+                "jobs:\n"
+                "  unreviewed:\n"
+                "    runs-on: ubuntu-24.04-arm\n"
+                "    ? steps\n"
+                "    :\n"
+                "      - run: echo unreviewed-command\n",
+                1,
+            )
+            path.write_text(workflow, encoding="utf-8")
+            rebind_workflow_and_contract(root)
+
+        def add_flow_style_unnamed_job_and_rebind(root: Path) -> None:
+            path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = path.read_text(encoding="utf-8").replace(
+                "jobs:\n",
+                "jobs:\n"
+                "  unreviewed: {runs-on: ubuntu-24.04-arm, "
+                "steps: [{run: echo unreviewed-command}]}\n",
+                1,
+            )
+            path.write_text(workflow, encoding="utf-8")
+            rebind_workflow_and_contract(root)
+
+        def weaken_trivy_policy_and_rebind(root: Path) -> None:
+            workflow_path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = workflow_path.read_text(encoding="utf-8").replace(
+                "          severity: HIGH,CRITICAL\n",
+                "          severity: CRITICAL\n",
+                1,
+            )
+            workflow_path.write_text(workflow, encoding="utf-8")
+            contract_path = root / verifier.CONTRACT_PATH
+            contract = json.loads(contract_path.read_text(encoding="utf-8"))
+            contract["workflow"]["trivy_action_inputs"]["severity"] = "CRITICAL"
+            contract_path.write_text(json.dumps(contract), encoding="utf-8")
+            rebind_workflow_and_contract(root)
+
+        def drift_source_pin_and_rebind(root: Path) -> None:
+            path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = path.read_text(encoding="utf-8").replace(
+                "  SOURCE_COMMIT: db42bb49757b459551607939807017d7a9d5a94a",
+                f"  SOURCE_COMMIT: {'f' * 40}",
+                1,
+            )
+            path.write_text(workflow, encoding="utf-8")
+            rebind_workflow_and_contract(root)
+
+        def drift_source_checkout_and_rebind(root: Path) -> None:
+            path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = path.read_text(encoding="utf-8").replace(
+                "          repository: seaweedfs/seaweedfs",
+                "          repository: attacker/seaweedfs",
+                1,
+            )
+            path.write_text(workflow, encoding="utf-8")
+            rebind_workflow_and_contract(root)
+
+        def inject_dynamic_source_repository_and_rebind(root: Path) -> None:
+            source_path = root / verifier.SOURCE_PATH
+            source = json.loads(source_path.read_text(encoding="utf-8"))
+            source["repository"] = (
+                "https://github.com/seaweedfs/${{ github.repository_owner }}"
+            )
+            source_path.write_text(json.dumps(source), encoding="utf-8")
+
+            workflow_path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = workflow_path.read_text(encoding="utf-8").replace(
+                "          repository: seaweedfs/seaweedfs\n",
+                "          repository: seaweedfs/${{ github.repository_owner }}\n",
+                1,
+            )
+            workflow_path.write_text(workflow, encoding="utf-8")
+            rebind_workflow_and_contract(root)
+
+            admission_path = root / verifier.ADMISSION_PATH
+            admission = json.loads(admission_path.read_text(encoding="utf-8"))
+            admission["lifecycle"]["source_sha256"] = hashlib.sha256(
+                source_path.read_bytes()
+            ).hexdigest()
+            admission_path.write_text(json.dumps(admission), encoding="utf-8")
+
+        def shadow_source_commit_with_flow_env_and_rebind(root: Path) -> None:
+            source = json.loads((root / verifier.SOURCE_PATH).read_text(encoding="utf-8"))
+            original = source["commit"]
+            workflow_path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = workflow_path.read_text(encoding="utf-8").replace(
+                "  verify:\n",
+                f"  verify:\n    env: {{SOURCE_COMMIT: {'f' * 40}}}\n",
+                1,
+            ).replace(
+                "      - name: Fail closed unless immutable source evidence matches\n",
+                "      - name: Fail closed unless immutable source evidence matches\n"
+                f"        env: {{SOURCE_COMMIT: {original}}}\n",
+                1,
+            )
+            workflow_path.write_text(workflow, encoding="utf-8")
+            rebind_workflow_and_contract(root)
+
+        def shadow_source_commit_with_quoted_env_key_and_rebind(root: Path) -> None:
+            workflow_path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = workflow_path.read_text(encoding="utf-8").replace(
+                "  verify:\n",
+                "  verify:\n"
+                "    env:\n"
+                f"      \"SOURCE_COMMIT\": {'f' * 40}\n",
+                1,
+            )
+            workflow_path.write_text(workflow, encoding="utf-8")
+            rebind_workflow_and_contract(root)
+
+        def shadow_source_commit_with_explicit_env_key_and_rebind(root: Path) -> None:
+            workflow_path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = workflow_path.read_text(encoding="utf-8").replace(
+                "  verify:\n",
+                "  verify:\n"
+                "    env:\n"
+                "      ? SOURCE_COMMIT\n"
+                f"      : {'f' * 40}\n",
+                1,
+            )
+            workflow_path.write_text(workflow, encoding="utf-8")
+            rebind_workflow_and_contract(root)
 
         def add_unapproved_pinned_action(root: Path) -> None:
             path = root / ".github/workflows/seaweedfs-arm64.yml"
@@ -612,8 +797,35 @@ class TrustedImageContractTests(unittest.TestCase):
             (permit_networked_module_build, "CONTAINERFILE_BUILDER_RUN"),
             (permit_legacy_cosign_records, "COSIGN_FORMAT_CONTRACT"),
             (unpin_action, "ACTION_NOT_SHA_PINNED"),
-            (add_anonymous_unpinned_action, "ACTION_NOT_SHA_PINNED"),
-            (add_unapproved_pinned_action, "WORKFLOW_ACTION_CLOSED_WORLD"),
+            (add_anonymous_unpinned_action, "WORKFLOW_STEP_CLOSED_WORLD"),
+            (add_unnamed_run_step_and_rebind, "WORKFLOW_STEP_CLOSED_WORLD"),
+            (add_bare_unnamed_run_step_and_rebind, "WORKFLOW_STEP_CLOSED_WORLD"),
+            (
+                add_noncanonical_unnamed_job_and_rebind,
+                "WORKFLOW_STEP_CLOSED_WORLD",
+            ),
+            (
+                add_explicit_key_unnamed_job_and_rebind,
+                "WORKFLOW_STEP_CLOSED_WORLD",
+            ),
+            (
+                add_flow_style_unnamed_job_and_rebind,
+                "WORKFLOW_STEP_CLOSED_WORLD",
+            ),
+            (add_unapproved_pinned_action, "WORKFLOW_STEP_CLOSED_WORLD"),
+            (weaken_trivy_policy_and_rebind, "TRIVY_SCAN_POLICY"),
+            (drift_source_pin_and_rebind, "WORKFLOW_SOURCE_PIN"),
+            (drift_source_checkout_and_rebind, "WORKFLOW_SOURCE_PIN"),
+            (inject_dynamic_source_repository_and_rebind, "WORKFLOW_SOURCE_PIN"),
+            (shadow_source_commit_with_flow_env_and_rebind, "WORKFLOW_SOURCE_PIN"),
+            (
+                shadow_source_commit_with_quoted_env_key_and_rebind,
+                "WORKFLOW_SOURCE_PIN",
+            ),
+            (
+                shadow_source_commit_with_explicit_env_key_and_rebind,
+                "WORKFLOW_SOURCE_PIN",
+            ),
             (expose_credentials_before_buildx_verification, "BUILDX_CREDENTIAL_BOUNDARY"),
             (hide_early_credentials_after_login_comment, "BUILDX_CREDENTIAL_BOUNDARY"),
             (change_final_retention, "FINAL_RETENTION"),
@@ -650,6 +862,11 @@ class TrustedImageContractTests(unittest.TestCase):
         contract = {
             "toolchain": {"cosign": {"version": "v3.1.1"}},
         }
+        with mock.patch.object(verifier.shutil, "which", return_value=None):
+            with self.assertRaises(verifier.ContractError) as caught:
+                verifier._require_pinned_cosign(contract)
+        self.assertEqual(caught.exception.code, "COSIGN_BINARY")
+
         release = {
             "identity": (
                 "https://github.com/TommyKammy/Shirokuma/.github/workflows/"

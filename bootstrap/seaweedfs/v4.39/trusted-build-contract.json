@@ -36,7 +36,7 @@
     "repository": "TommyKammy/Shirokuma",
     "name": "SeaweedFS 4.39 trusted arm64 build",
     "path": ".github/workflows/seaweedfs-arm64.yml",
-    "sha256": "7a24fe852bde83d697119da6f359e382ff9fe0c98c5dc0f2f1f4c413f63e1be2",
+    "sha256": "f097273d79c9595d42be816152ff1aabc862faf2667cb0648434280ce8b8ac06",
     "runner": "ubuntu-24.04-arm",
     "runner_trust_boundary": {
       "provider": "github-hosted",
@@ -88,6 +88,21 @@
       "no-cache",
       "tags",
       "build-args"
+    ],
+    "trivy_action_inputs": {
+      "version": "v0.72.0",
+      "image-ref": "${{ env.IMAGE }}@${{ steps.build.outputs.digest }}",
+      "format": "json",
+      "output": "trivy.json",
+      "scanners": "vuln",
+      "severity": "HIGH,CRITICAL",
+      "ignore-unfixed": "false",
+      "vuln-type": "os,library",
+      "exit-code": "1"
+    },
+    "allowed_jobs": [
+      "verify",
+      "promote"
     ],
     "allowed_steps": [
       "Check out Shirokuma policy",

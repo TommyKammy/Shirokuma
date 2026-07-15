@@ -15,6 +15,20 @@ Until phase 2 completes, `../admission.json` is
 `pending_main_publication`, `../release-evidence.json` is absent, and runtime
 manifests remain forbidden. A successful feature-branch bootstrap run may be
 recorded for diagnostic value, but it is never admission authority.
+This pending audit validates the complete static contract without requiring a
+local Cosign binary. Cosign becomes mandatory only after evidence is admitted,
+when the verifier can and must cryptographically revalidate the retained
+bundles.
+
+Before any trusted build, the static verifier binds the workflow's global
+source commit, tree, and archive digest and its checkout repository/ref to
+`../source.json`; repository coordinates must be a literal GitHub owner/name
+slug, and source pins cannot be shadowed by job or step `env` entries. The job
+set and canonical block grammar are closed. Every job
+step must have a non-empty name and the exact ordered
+step-name set is closed by the contract. The retained Trivy scan policy is also
+closed to `vuln`, `HIGH,CRITICAL`, `ignore-unfixed=false`,
+`vuln-type=os,library`, and `exit-code=1`.
 
 For an approved release, `scripts/verify_trusted_image.py repository --root .`
 requires the complete evidence set and re-runs pinned Cosign v3.1.1 against the

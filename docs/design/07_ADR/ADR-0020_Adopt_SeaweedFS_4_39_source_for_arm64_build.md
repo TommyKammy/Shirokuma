@@ -5,7 +5,7 @@ title: "Adopt SeaweedFS 4.39 source for the bounded arm64 build"
 status: accepted
 created: 2026-07-14
 updated: 2026-07-15
-version: "0.2"
+version: "0.3"
 area: "architecture"
 tags: [shirokuma, adr, seaweedfs, arm64, supply-chain]
 ---
@@ -78,6 +78,20 @@ durable evidence. Repository verification invokes pinned Cosign `v3.1.1`
 against the retained bundle and raw OCI manifest, so the Fulcio certificate,
 workflow identity, DSSE signature, and transparency material are verified
 cryptographically rather than accepted from self-reported JSON.
+Before the build, static validation binds the workflow's global source commit,
+tree, and archive digest plus its checkout repository/ref to `source.json`.
+The repository must remain a literal GitHub owner/name slug rather than a
+runtime expression. Source pins may occur only in the canonical top-level
+`env`; job- and step-level shadowing is rejected. The allowed job set and
+canonical block grammar are closed by the contract.
+Every workflow job step must have a non-empty name and the exact ordered set of
+step names is closed by the contract, so an unnamed `run` or `uses` entry cannot
+evade gate-order validation. The Trivy scan step and contract must both retain
+the exact policy `scanners=vuln`, `severity=HIGH,CRITICAL`,
+`ignore-unfixed=false`, `vuln-type=os,library`, and `exit-code=1`.
+The `pending_main_publication` audit path checks this static contract without
+requiring Cosign; the exact pinned Cosign becomes fail-closed once retained
+evidence is admitted and cryptographic verification is possible and required.
 The same pinned verifier cryptographically checks every retained SLSA bundle and
 the dedicated CycloneDX and Trivy attestation bundles. The signed predicates
 must be structurally identical to the retained SBOM and scan JSON, so an

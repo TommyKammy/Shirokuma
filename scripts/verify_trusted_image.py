@@ -28,7 +28,12 @@ REMOTE_ACTION_RE = re.compile(
     r"^\s*(?:-\s+)?uses:\s+([^\s@]+)@([0-9a-f]{40})(?:\s+#.*)?$"
 )
 USES_LINE_RE = re.compile(r"^\s*(?:-\s+)?uses:")
-STEP_NAME_RE = re.compile(r"^ {6}- name:\s*(.+?)\s*$", re.MULTILINE)
+STEP_KEY_RE = re.compile(r"^(\s*)(?:steps|['\"]steps['\"])\s*:(.*?)$")
+STEP_ENTRY_RE = re.compile(r"^(\s*)-\s*(.*?)\s*$")
+STEP_NAME_FIELD_RE = re.compile(r"^name:\s*(.+?)\s*$")
+STEP_PROPERTY_RE = re.compile(r"^ {8}[A-Za-z_][A-Za-z0-9_-]*\s*:")
+ENV_KEY_RE = re.compile(r"^(\s*)(?:env|['\"]env['\"])\s*:(.*?)$")
+ENV_FIELD_RE = re.compile(r"^(\s*)([A-Za-z_][A-Za-z0-9_-]*)\s*:(.*?)$")
 
 
 class ContractError(RuntimeError):
@@ -47,6 +52,191 @@ def _fail(code: str, detail: str) -> None:
 def _expect(condition: bool, code: str, detail: str) -> None:
     if not condition:
         _fail(code, detail)
+
+
+def _validate_workflow_source_env(
+    workflow: str,
+    source_pins: Dict[str, Any],
+) -> None:
+    """Require source pins only in the canonical global env block."""
+
+    lines = workflow.splitlines()
+    _expect(
+        lines.count("env:") == 1,
+        "WORKFLOW_SOURCE_PIN",
+        "workflow must contain one canonical top-level env block",
+    )
+    observed: Dict[str, List[tuple[int, str]]] = {
+        name: [] for name in source_pins
+    }
+    env_indentation: Optional[int] = None
+    for value in lines:
+        env_key = ENV_KEY_RE.fullmatch(value)
+        if env_key is not None:
+            indentation = len(env_key.group(1))
+            _expect(
+                value == f"{' ' * indentation}env:",
+                "WORKFLOW_SOURCE_PIN",
+                f"env must use canonical block syntax: {value.strip()}",
+            )
+            env_indentation = indentation
+            continue
+        if env_indentation is None or not value.strip() or value.lstrip().startswith("#"):
+            continue
+        indentation = len(value) - len(value.lstrip(" "))
+        if indentation <= env_indentation:
+            env_indentation = None
+            continue
+        if indentation == env_indentation + 2:
+            field = ENV_FIELD_RE.fullmatch(value)
+            _expect(
+                field is not None,
+                "WORKFLOW_SOURCE_PIN",
+                f"env field must use a canonical simple key: {value.strip()}",
+            )
+            name = field.group(2)
+            if name in observed:
+                observed[name].append((env_indentation, field.group(3).strip()))
+    for name, expected in source_pins.items():
+        _expect(
+            observed[name] == [(0, expected)],
+            "WORKFLOW_SOURCE_PIN",
+            f"{name} must occur once in global env and equal the source record",
+        )
+
+
+def _workflow_steps(
+    workflow: str,
+    allowed_jobs: Any,
+) -> tuple[List[str], Dict[str, int]]:
+    """Enumerate every job step and require its first key to be a unique name."""
+
+    _expect(
+        isinstance(allowed_jobs, list)
+        and bool(allowed_jobs)
+        and all(
+            isinstance(name, str)
+            and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", name) is not None
+            for name in allowed_jobs
+        )
+        and len(allowed_jobs) == len(set(allowed_jobs)),
+        "WORKFLOW_STEP_CLOSED_WORLD",
+        "workflow allowed_jobs must be a non-empty unique canonical list",
+    )
+    lines = workflow.splitlines()
+    jobs_boundaries = [index for index, line in enumerate(lines) if line == "jobs:"]
+    _expect(
+        len(jobs_boundaries) == 1,
+        "WORKFLOW_STEP_CLOSED_WORLD",
+        "workflow must contain one canonical top-level jobs block",
+    )
+    actual_jobs: List[str] = []
+    for value in lines[jobs_boundaries[0] + 1 :]:
+        if not value.strip() or value.lstrip().startswith("#"):
+            continue
+        indentation = len(value) - len(value.lstrip(" "))
+        _expect(
+            indentation >= 2,
+            "WORKFLOW_STEP_CLOSED_WORLD",
+            f"jobs must be the final top-level workflow key: {value.strip()}",
+        )
+        if indentation == 2:
+            job = re.fullmatch(r"  ([A-Za-z_][A-Za-z0-9_-]*):", value)
+            _expect(
+                job is not None,
+                "WORKFLOW_STEP_CLOSED_WORLD",
+                f"job declaration must use canonical block syntax: {value.strip()}",
+            )
+            actual_jobs.append(job.group(1))
+        elif indentation == 4:
+            _expect(
+                re.match(r"^ {4}[A-Za-z_][A-Za-z0-9_-]*\s*:", value)
+                is not None,
+                "WORKFLOW_STEP_CLOSED_WORLD",
+                f"job property must use a canonical simple key: {value.strip()}",
+            )
+    _expect(
+        actual_jobs == allowed_jobs,
+        "WORKFLOW_STEP_CLOSED_WORLD",
+        f"workflow jobs differ from contract: {actual_jobs}",
+    )
+
+    names: List[str] = []
+    positions: Dict[str, int] = {}
+    in_steps = False
+    steps_in_block = 0
+    offset = 0
+    for line in workflow.splitlines(keepends=True):
+        value = line.rstrip("\r\n")
+        step_key = STEP_KEY_RE.fullmatch(value)
+        if step_key is not None:
+            _expect(
+                value == "    steps:",
+                "WORKFLOW_STEP_CLOSED_WORLD",
+                f"workflow steps key must use canonical job indentation: {value.strip()}",
+            )
+            if in_steps:
+                _expect(
+                    steps_in_block > 0,
+                    "WORKFLOW_STEP_CLOSED_WORLD",
+                    "workflow steps block is empty",
+                )
+            in_steps = True
+            steps_in_block = 0
+            offset += len(line)
+            continue
+        if in_steps and value.strip():
+            indentation = len(value) - len(value.lstrip(" "))
+            if indentation <= 4:
+                _expect(
+                    steps_in_block > 0,
+                    "WORKFLOW_STEP_CLOSED_WORLD",
+                    "workflow steps block is empty",
+                )
+                in_steps = False
+            else:
+                entry = STEP_ENTRY_RE.fullmatch(value)
+                if entry is not None:
+                    entry_indentation = len(entry.group(1))
+                    _expect(
+                        entry_indentation >= 6
+                        and (steps_in_block > 0 or entry_indentation == 6),
+                        "WORKFLOW_STEP_CLOSED_WORLD",
+                        f"workflow step sequence must use canonical indentation: {value.strip()}",
+                    )
+                    if entry_indentation != 6:
+                        offset += len(line)
+                        continue
+                    named = STEP_NAME_FIELD_RE.fullmatch(entry.group(2))
+                    _expect(
+                        named is not None and bool(named.group(1).strip()),
+                        "WORKFLOW_STEP_CLOSED_WORLD",
+                        f"every workflow step must begin with name: {value.strip()}",
+                    )
+                    name = named.group(1).strip()
+                    _expect(
+                        name not in positions,
+                        "WORKFLOW_STEP_CLOSED_WORLD",
+                        f"duplicate step name: {name}",
+                    )
+                    names.append(name)
+                    positions[name] = offset
+                    steps_in_block += 1
+                elif indentation == 8:
+                    _expect(
+                        STEP_PROPERTY_RE.match(value) is not None,
+                        "WORKFLOW_STEP_CLOSED_WORLD",
+                        f"step property must use a canonical simple key: {value.strip()}",
+                    )
+        offset += len(line)
+    if in_steps:
+        _expect(
+            steps_in_block > 0,
+            "WORKFLOW_STEP_CLOSED_WORLD",
+            "workflow steps block is empty",
+        )
+    _expect(bool(names), "WORKFLOW_STEP_CLOSED_WORLD", "no workflow steps found")
+    return names, positions
 
 
 def _load_json(path: Path) -> Any:
@@ -637,15 +827,61 @@ def validate_static_contract(
     )
     workflow_path = _safe_repo_path(root, workflow_record["path"], "WORKFLOW_PATH")
     workflow = workflow_path.read_text(encoding="utf-8")
-    workflow_step_matches = list(STEP_NAME_RE.finditer(workflow))
-    actual_steps = [match.group(1) for match in workflow_step_matches]
-    workflow_step_positions = {
-        match.group(1): match.start() for match in workflow_step_matches
+    source_pins = {
+        "SOURCE_COMMIT": source.get("commit"),
+        "SOURCE_TREE": source.get("tree"),
+        "SOURCE_ARCHIVE_SHA256": source.get("git_archive_sha256"),
     }
+    source_repository = re.fullmatch(
+        r"https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)",
+        str(source.get("repository")),
+    )
     _expect(
-        len(workflow_step_positions) == len(workflow_step_matches),
-        "WORKFLOW_STEP_CLOSED_WORLD",
-        "duplicate step names are forbidden",
+        source_repository is not None
+        and re.fullmatch(r"[0-9a-f]{40}", str(source_pins["SOURCE_COMMIT"]))
+        is not None
+        and re.fullmatch(r"[0-9a-f]{40}", str(source_pins["SOURCE_TREE"]))
+        is not None
+        and SHA256_RE.fullmatch(str(source_pins["SOURCE_ARCHIVE_SHA256"]))
+        is not None,
+        "WORKFLOW_SOURCE_PIN",
+        "source record contains an invalid repository, commit, tree, or archive hash",
+    )
+    _validate_workflow_source_env(workflow, source_pins)
+    actual_steps, workflow_step_positions = _workflow_steps(
+        workflow,
+        workflow_record.get("allowed_jobs"),
+    )
+    source_checkout_step = "Check out the adopted SeaweedFS source"
+    setup_go_step = "Set up exact Go for vendor provenance regeneration"
+    _expect(
+        source_checkout_step in workflow_step_positions
+        and setup_go_step in workflow_step_positions
+        and workflow_step_positions[source_checkout_step]
+        < workflow_step_positions[setup_go_step],
+        "WORKFLOW_SOURCE_PIN",
+        "source checkout step boundary is ambiguous",
+    )
+    actual_source_checkout = workflow[
+        workflow_step_positions[source_checkout_step] : workflow_step_positions[
+            setup_go_step
+        ]
+    ].rstrip()
+    expected_source_checkout = (
+        "      - name: Check out the adopted SeaweedFS source\n"
+        "        uses: actions/checkout@"
+        "df4cb1c069e1874edd31b4311f1884172cec0e10 # v6\n"
+        "        with:\n"
+        f"          repository: {source_repository.group(1)}\n"
+        f"          ref: {source_pins['SOURCE_COMMIT']}\n"
+        "          path: seaweedfs-src\n"
+        "          fetch-depth: 1\n"
+        "          persist-credentials: false"
+    )
+    _expect(
+        actual_source_checkout == expected_source_checkout,
+        "WORKFLOW_SOURCE_PIN",
+        "source checkout bytes differ from the retained source record",
     )
     _expect(f"runs-on: {workflow_record['runner']}" in workflow, "WORKFLOW_RUNNER", workflow_record["runner"])
     _expect(
@@ -749,6 +985,58 @@ def validate_static_contract(
         actual_build_step == expected_build_step,
         "BUILD_ACTION_POLICY",
         "build action bytes differ from the reviewed closed invocation",
+    )
+    expected_trivy_action_inputs = {
+        "version": toolchain["trivy"]["version"],
+        "image-ref": "${{ env.IMAGE }}@${{ steps.build.outputs.digest }}",
+        "format": "json",
+        "output": "trivy.json",
+        "scanners": "vuln",
+        "severity": "HIGH,CRITICAL",
+        "ignore-unfixed": "false",
+        "vuln-type": "os,library",
+        "exit-code": "1",
+    }
+    _expect(
+        workflow_record.get("trivy_action_inputs")
+        == expected_trivy_action_inputs,
+        "TRIVY_SCAN_POLICY",
+        "Trivy action inputs differ from the complete vulnerability policy",
+    )
+    scan_step_name = "Scan the exact digest and block High or Critical findings"
+    record_scan_step_name = "Record Trivy scanner and vulnerability DB freshness"
+    _expect(
+        scan_step_name in workflow_step_positions
+        and record_scan_step_name in workflow_step_positions
+        and workflow_step_positions[scan_step_name]
+        < workflow_step_positions[record_scan_step_name],
+        "TRIVY_SCAN_POLICY",
+        "Trivy scan and evidence step boundary is ambiguous",
+    )
+    actual_scan_step = workflow[
+        workflow_step_positions[scan_step_name] : workflow_step_positions[
+            record_scan_step_name
+        ]
+    ].rstrip()
+    expected_scan_step = (
+        "      - name: Scan the exact digest and block High or Critical findings\n"
+        "        uses: aquasecurity/trivy-action@"
+        "ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0\n"
+        "        with:\n"
+        f"          version: {expected_trivy_action_inputs['version']}\n"
+        "          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}\n"
+        "          format: json\n"
+        "          output: trivy.json\n"
+        "          scanners: vuln\n"
+        "          severity: HIGH,CRITICAL\n"
+        "          ignore-unfixed: false\n"
+        "          vuln-type: os,library\n"
+        "          exit-code: 1"
+    )
+    _expect(
+        actual_scan_step == expected_scan_step,
+        "TRIVY_SCAN_POLICY",
+        "Trivy scan step bytes differ from the reviewed closed invocation",
     )
     _expect(
         "      - codex/issue-41" not in workflow

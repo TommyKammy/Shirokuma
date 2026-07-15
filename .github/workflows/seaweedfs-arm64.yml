@@ -457,6 +457,7 @@ jobs:
           scanners: vuln
           severity: HIGH,CRITICAL
           ignore-unfixed: false
+          vuln-type: os,library
           exit-code: 1
 
       - name: Record Trivy scanner and vulnerability DB freshness

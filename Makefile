@@ -8,8 +8,6 @@ FLUX ?= flux
 FLUX_VERSION ?= v2.9.2
 KYVERNO ?= kyverno
 KYVERNO_VERSION ?= v1.18.2
-COSIGN ?= cosign
-COSIGN_VERSION ?= v3.1.1
 GITHUB_OWNER ?= TommyKammy
 FLUX_GITHUB_REPOSITORY ?= Shirokuma
 FLUX_GITHUB_PRIVATE ?= false
@@ -58,8 +56,6 @@ verify-object-storage-profile:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_object_storage_profile.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_package_go_vendor.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_trusted_image_contract.py'
-	@command -v $(COSIGN) >/dev/null || { echo "cosign $(COSIGN_VERSION) is required for admitted evidence verification"; exit 1; }
-	@test "$$($(COSIGN) version --json | $(PYTHON) -c 'import json,sys; print(json.load(sys.stdin)["gitVersion"])')" = "$(COSIGN_VERSION)" || { echo "cosign $(COSIGN_VERSION) is required for admitted evidence verification"; exit 1; }
 	@$(PYTHON) scripts/verify_trusted_image.py audit --root .
 
 verify-gitops-image-admission: verify-security
