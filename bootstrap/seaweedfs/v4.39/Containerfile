@@ -1,0 +1,60 @@
+# syntax=docker/dockerfile:1.7.0@sha256:dbbd5e059e8a07ff7ea6233b213b36aa516b4c53c645f1817a4dd18b83cbea56
+
+ARG GO_IMAGE=golang:1.25.12-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587
+ARG RUNTIME_IMAGE=alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS builder
+
+ARG TARGETOS
+ARG TARGETARCH
+ARG SOURCE_COMMIT
+ARG GO_VENDOR_BUNDLE_SHA256
+WORKDIR /src
+COPY . .
+RUN --network=none \
+    test -n "${SOURCE_COMMIT}" && \
+    test -n "${GO_VENDOR_BUNDLE_SHA256}" && \
+    echo "${GO_VENDOR_BUNDLE_SHA256}  /src/.shirokuma/go-vendor.tar.xz" \
+      | sha256sum -c - && \
+    tar -xJf /src/.shirokuma/go-vendor.tar.xz -C /src && \
+    test -f /src/vendor/modules.txt && \
+    rm -rf /src/.shirokuma && \
+    mkdir -p /out/data /out/tmp && \
+    cd /src/weed && \
+    env \
+      CGO_ENABLED=0 \
+      GOOS="${TARGETOS}" \
+      GOARCH="${TARGETARCH}" \
+      GOENV=off \
+      GOTOOLCHAIN=local \
+      GOWORK=off \
+      GOFLAGS=-mod=vendor \
+      GOPROXY=off \
+      GOSUMDB=off \
+      GOPRIVATE= \
+      GONOPROXY= \
+      GONOSUMDB= \
+      'GOVCS=*:off' \
+      go build -buildvcs=false -trimpath \
+      -ldflags="-s -w -extldflags -static -X github.com/seaweedfs/seaweedfs/weed/util/version.COMMIT=${SOURCE_COMMIT}" \
+      -o /out/weed .
+
+FROM ${RUNTIME_IMAGE} AS certificates
+
+FROM scratch
+ARG SOURCE_COMMIT
+ARG GO_VENDOR_BUNDLE_SHA256
+LABEL org.opencontainers.image.title="Shirokuma SeaweedFS" \
+      org.opencontainers.image.version="4.39" \
+      org.opencontainers.image.source="https://github.com/seaweedfs/seaweedfs" \
+      org.opencontainers.image.revision="${SOURCE_COMMIT}" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      dev.shirokuma.go-vendor-bundle.sha256="${GO_VENDOR_BUNDLE_SHA256}"
+COPY --from=certificates /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=builder /out/weed /usr/bin/weed
+COPY --from=builder --chown=65532:65532 /out/data /data
+COPY --from=builder --chown=65532:65532 /out/tmp /tmp
+COPY --from=builder --chown=65532:65532 /src/docker/filer.toml /etc/seaweedfs/filer.toml
+USER 65532:65532
+EXPOSE 7333 8333 8888 9333 9340 19333 23646
+ENTRYPOINT ["/usr/bin/weed"]
+CMD ["mini", "-dir=/data"]

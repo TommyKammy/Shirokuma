@@ -1,0 +1,270 @@
+{
+  "schema_version": 1,
+  "component": "seaweedfs",
+  "version": "4.39",
+  "platform": "linux/arm64",
+  "image": {
+    "repository": "ghcr.io/tommykammy/shirokuma-seaweedfs",
+    "trusted_tag": "4.39-arm64",
+    "trusted_tag_role": "non_authoritative_pointer",
+    "quarantine_tag_template": "quarantine-{run_id}-{run_attempt}",
+    "registry_visibility_attempts": 6
+  },
+  "source": {
+    "evidence": "bootstrap/seaweedfs/v4.39/source.json",
+    "containerfile": {
+      "path": "bootstrap/seaweedfs/v4.39/Containerfile",
+      "sha256": "ed61b86d3e13ca8acdc325afdd4186ec14a8d87344b0cb2002141b16aeef8482",
+      "frontend": "docker/dockerfile:1.7.0@sha256:dbbd5e059e8a07ff7ea6233b213b36aa516b4c53c645f1817a4dd18b83cbea56"
+    },
+    "module_inputs": {
+      "bundle": "go-vendor.tar.xz",
+      "bundle_sha256": "62703c68abf35ea13f4b3f9d80a452b3c988fd49033dd59aeddf950326992445",
+      "manifest": "go-module-inputs.json",
+      "manifest_sha256": "1eb5746a5aff57eb3768bfa87d7e8f3caff1528660b1e73f23966adf9e4bc197",
+      "go_mod_sha256": "640ea9c352d46a1a444fed027adf3440cc63023afdef96c302533ecb89d7409a",
+      "go_sum_sha256": "aad1bb8e81de6f2dee8481cc9df387efdf87012c28207d5af5d6d19a16562f6e",
+      "go_image": "golang:1.25.12-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587",
+      "go_version": "1.25.12",
+      "generator_policy": "go-mod-vendor-authenticated-subset+canonical-tar-xz-v2",
+      "module_count": 496,
+      "replacement_count": 2,
+      "file_count": 18934
+    }
+  },
+  "workflow": {
+    "repository": "TommyKammy/Shirokuma",
+    "name": "SeaweedFS 4.39 trusted arm64 build",
+    "path": ".github/workflows/seaweedfs-arm64.yml",
+    "sha256": "f097273d79c9595d42be816152ff1aabc862faf2667cb0648434280ce8b8ac06",
+    "runner": "ubuntu-24.04-arm",
+    "runner_trust_boundary": {
+      "provider": "github-hosted",
+      "unpinned_components": [
+        "ubuntu-base-utilities",
+        "docker-engine-and-cli",
+        "github-cli"
+      ],
+      "recorded_evidence": [
+        "runner-label-os-arch",
+        "docker-client-version",
+        "docker-server-version",
+        "github-cli-version",
+        "git-version",
+        "python3-version",
+        "curl-version",
+        "tar-version",
+        "sha256sum-version"
+      ]
+    },
+    "issuer": "https://token.actions.githubusercontent.com",
+    "workflow_sha_environment": "GITHUB_WORKFLOW_SHA",
+    "source_sha_environment": "GITHUB_SHA",
+    "allowed_refs": [
+      "refs/heads/main"
+    ],
+    "allowed_triggers": [
+      "push",
+      "workflow_dispatch"
+    ],
+    "build_cache": {
+      "mode": "disabled",
+      "no_cache": true,
+      "cache_from": [],
+      "cache_to": []
+    },
+    "build_arguments": [
+      "SOURCE_COMMIT",
+      "GO_VENDOR_BUNDLE_SHA256"
+    ],
+    "build_action_inputs": [
+      "builder",
+      "context",
+      "file",
+      "platforms",
+      "push",
+      "provenance",
+      "sbom",
+      "no-cache",
+      "tags",
+      "build-args"
+    ],
+    "trivy_action_inputs": {
+      "version": "v0.72.0",
+      "image-ref": "${{ env.IMAGE }}@${{ steps.build.outputs.digest }}",
+      "format": "json",
+      "output": "trivy.json",
+      "scanners": "vuln",
+      "severity": "HIGH,CRITICAL",
+      "ignore-unfixed": "false",
+      "vuln-type": "os,library",
+      "exit-code": "1"
+    },
+    "allowed_jobs": [
+      "verify",
+      "promote"
+    ],
+    "allowed_steps": [
+      "Check out Shirokuma policy",
+      "Check out the adopted SeaweedFS source",
+      "Set up exact Go for vendor provenance regeneration",
+      "Validate the closed-world trusted build contract",
+      "Fail closed unless immutable source evidence matches",
+      "Install and verify pinned Buildx and BuildKit without credentials",
+      "Log in to GHCR for the quarantine push",
+      "Build and publish only linux/arm64",
+      "Verify the published platform",
+      "Smoke-test non-root weed mini on the exact digest",
+      "Generate CycloneDX SBOM for the exact digest",
+      "Scan the exact digest and block High or Critical findings",
+      "Record Trivy scanner and vulnerability DB freshness",
+      "Install pinned Cosign after the vulnerability gate passes",
+      "Record pinned release tools and runner substrate",
+      "Keyless-sign the scanned immutable image, bind the detached bundle, and verify the registry image",
+      "Mirror GHCR credentials for provenance publication",
+      "Publish SLSA provenance for the scanned exact digest",
+      "Remove provenance credential mirror",
+      "Verify SLSA provenance from this exact workflow",
+      "Keyless-attest the retained SBOM and scan",
+      "Record the closed-world release evidence",
+      "Verify candidate evidence with the shared contract",
+      "Retain candidate evidence before trusted-tag promotion",
+      "Remove the ephemeral Buildx builder",
+      "Check out the reviewed promotion contract",
+      "Download retained candidate evidence",
+      "Revalidate candidate evidence before promotion credentials exist",
+      "Install and verify pinned Crane without credentials",
+      "Log in to GHCR for trusted-tag promotion",
+      "Promote the fully verified digest to the trusted tag",
+      "Verify final evidence after credentials are removed",
+      "Retain final promotion evidence"
+    ],
+    "allowed_actions": [
+      "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10",
+      "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10",
+      "actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16",
+      "docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9",
+      "docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8",
+      "anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610",
+      "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25",
+      "sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6",
+      "actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a",
+      "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+      "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10",
+      "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+      "docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9",
+      "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+    ],
+    "gate_order": [
+      "Set up exact Go for vendor provenance regeneration",
+      "Validate the closed-world trusted build contract",
+      "Fail closed unless immutable source evidence matches",
+      "Install and verify pinned Buildx and BuildKit without credentials",
+      "Log in to GHCR for the quarantine push",
+      "Build and publish only linux/arm64",
+      "Verify the published platform",
+      "Smoke-test non-root weed mini on the exact digest",
+      "Generate CycloneDX SBOM for the exact digest",
+      "Scan the exact digest and block High or Critical findings",
+      "Install pinned Cosign after the vulnerability gate passes",
+      "Keyless-sign the scanned immutable image, bind the detached bundle, and verify the registry image",
+      "Publish SLSA provenance for the scanned exact digest",
+      "Verify SLSA provenance from this exact workflow",
+      "Keyless-attest the retained SBOM and scan",
+      "Record the closed-world release evidence",
+      "Retain candidate evidence before trusted-tag promotion",
+      "Install and verify pinned Crane without credentials",
+      "Log in to GHCR for trusted-tag promotion",
+      "Promote the fully verified digest to the trusted tag",
+      "Retain final promotion evidence"
+    ]
+  },
+  "transparency_log": {
+    "base_url": "https://rekor.sigstore.dev",
+    "major_api_version": 1,
+    "entry_lookup_path": "/api/v1/log/entries?logIndex={log_index}"
+  },
+  "toolchain": {
+    "buildx": {
+      "version": "v0.35.0",
+      "linux_arm64_url": "https://github.com/docker/buildx/releases/download/v0.35.0/buildx-v0.35.0.linux-arm64",
+      "linux_arm64_sha256": "c4248d6cbc4a619a7e0b4609c11e509ad4ac0b475e1c64817c0ac20c5d90c766",
+      "execution": "dedicated_docker_config_plugin"
+    },
+    "buildkit": {
+      "version": "v0.31.1",
+      "image": "moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a",
+      "linux_arm64_manifest_digest": "sha256:4eee950fb9d134cbf4e228ea3906eb4c7403323334af013c443302f7b74f2737"
+    },
+    "syft": {
+      "version": "v1.46.0"
+    },
+    "trivy": {
+      "version": "v0.72.0"
+    },
+    "cosign": {
+      "version": "v3.1.1",
+      "bundle_media_type": "application/vnd.dev.sigstore.bundle.v0.3+json",
+      "predicate_type": "https://sigstore.dev/cosign/sign/v1",
+      "registry_download_format": "sigstore-bundle-v0.3-jsonl",
+      "legacy_signature_records_permitted": false,
+      "detached_bundle_role": "bind-image-digest-to-raw-oci-manifest",
+      "authoritative_image_verification": "cosign verify IMAGE@DIGEST",
+      "attestation_predicates": {
+        "sbom": {
+          "artifact": "sbom-attestation-bundle.json",
+          "cli_type": "cyclonedx",
+          "predicate_type": "https://cyclonedx.org/bom"
+        },
+        "vulnerability_scan": {
+          "artifact": "trivy-attestation-bundle.json",
+          "cli_type": "https://shirokuma.dev/attestations/trivy/v1",
+          "predicate_type": "https://shirokuma.dev/attestations/trivy/v1"
+        }
+      }
+    },
+    "crane": {
+      "version": "v0.21.7",
+      "linux_arm64_archive_url": "https://github.com/google/go-containerregistry/releases/download/v0.21.7/go-containerregistry_Linux_arm64.tar.gz",
+      "linux_arm64_archive_sha256": "b6ee979d9411dfb05ce35ab9e156fe5de7def11a230764a7856ffa2eb971fa88"
+    }
+  },
+  "evidence": {
+    "directory": "bootstrap/seaweedfs/v4.39/evidence",
+    "candidate_required": [
+      "cosign-signature-bundle.json",
+      "cosign-verify.json",
+      "go-module-inputs.json",
+      "go-vendor.tar.xz",
+      "image-manifest.json",
+      "rekor-entry.json",
+      "runtime-container-inspect.json",
+      "runtime-smoke.json",
+      "sbom-attestation-bundle.json",
+      "seaweedfs-4.39-arm64.cdx.json",
+      "registry-signature-bundles.jsonl",
+      "slsa-bundles.jsonl",
+      "slsa-verify.json",
+      "toolchain.json",
+      "trivy-version.json",
+      "trivy-attestation-bundle.json",
+      "trivy.json"
+    ],
+    "promotion_required": [
+      "candidate-release-evidence.json",
+      "promotion-evidence.json"
+    ],
+    "actions_artifact_role": "retained mirror only",
+    "candidate_retention_days": 7,
+    "final_retention_days": 90
+  },
+  "admission": {
+    "approval_state_source": "bootstrap/seaweedfs/v4.39/admission.json",
+    "required_approved_state": "approved",
+    "pending_state": "pending_main_publication",
+    "publisher_ref": "refs/heads/main",
+    "evidence_transition": "follow-up-evidence-only-pr",
+    "runtime_manifests_permitted": false,
+    "runtime_unblocker": "parent issue #26 must add source-build evidence and pass scripts/verify_supply_chain.py check-images"
+  }
+}

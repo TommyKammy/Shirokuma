@@ -1,53 +1,93 @@
 {
-  "schema_version": 1,
+  "schema_version": 3,
   "component": "seaweedfs",
   "version": "4.39",
-  "source": "https://github.com/seaweedfs/seaweedfs",
-  "release_commit": "db42bb49757b459551607939807017d7a9d5a94a",
   "platform": "linux/arm64",
-  "candidate": {
+  "upstream_candidate": {
     "index_reference": "chrislusf/seaweedfs@sha256:c7d6c721b30ae711db766bbbfd40192776e263d4e51e22f57baef7bef93c12c6",
     "manifest_digest": "sha256:22fe8c99253508a3d4bf2fb3c66130d9c3e238506b42c41aa3aee3bfbe3a6906"
   },
-  "assessment": {
-    "assessed_on": "2026-07-14",
-    "scope": "mac-studio-solo/local-lab",
+  "upstream_assessment": {
     "admission": "blocked",
-    "exception_eligible": false,
     "blockers": [
       {
         "control": "signature",
         "status": "missing",
-        "evidence": "cosign verify against the immutable index returned no signatures found"
+        "evidence": "cosign verify against the immutable upstream index returned no signatures found"
       },
       {
         "control": "source_revision_signature",
         "status": "missing",
-        "evidence": "release tag 4.39 resolves to an unsigned source commit"
+        "evidence": "release tag 4.39 resolves to an unsigned upstream source commit"
       },
       {
         "control": "slsa_provenance",
         "status": "missing",
         "evidence": "the upstream container release workflow disables provenance and has no attestation step"
       }
+    ]
+  },
+  "lifecycle": {
+    "phase": "pending_main_publication",
+    "publisher_ref": "refs/heads/main",
+    "workflow": ".github/workflows/seaweedfs-arm64.yml",
+    "workflow_sha256": "f097273d79c9595d42be816152ff1aabc862faf2667cb0648434280ce8b8ac06",
+    "contract": "bootstrap/seaweedfs/v4.39/trusted-build-contract.json",
+    "contract_sha256": "10d5b01da6a4cc0e38901d6cdcde423dbf83c8cca34eea374b9f97be0a5fb5ac",
+    "source": "bootstrap/seaweedfs/v4.39/source.json",
+    "source_sha256": "089b7392bb7346039cbf4e69161d6856ec8405a7decddb3dd76350ed363647c1",
+    "transition": "follow-up-evidence-only-pr"
+  },
+  "bootstrap_observation": {
+    "run": "https://github.com/TommyKammy/Shirokuma/actions/runs/29379475587/attempts/1",
+    "source_sha": "1ed307a3cc57bd92a99fb6ce7c64ddcacd932c49",
+    "digest": "sha256:027be5ea9a172bbe2c29adb8928061b89ceb2a11261f5248a77653070b106d6d",
+    "artifact": "seaweedfs-4.39-arm64-29379475587-1",
+    "attestation": "https://github.com/TommyKammy/Shirokuma/attestations/35365038",
+    "disposition": "not_admitted_branch_publication"
+  },
+  "assessment": {
+    "assessed_on": "2026-07-15",
+    "scope": "mac-studio-solo/local-lab",
+    "admission": "pending_main_publication",
+    "exception_eligible": false,
+    "blockers": [
+      {
+        "control": "main_branch_publication",
+        "status": "pending",
+        "evidence": "The reviewed source, workflow, contract, and verifier must first merge; only refs/heads/main may publish, sign, and promote the trusted digest."
+      }
     ],
-    "rationale": "ADR-0019 permits exact High vulnerability exceptions only; it does not waive signature, transparency-log, or provenance requirements."
+    "rationale": "A feature branch may validate the policy but cannot approve its own publisher. The successful bootstrap run is retained as a non-admitted observation; approval requires a fresh main-branch run and an evidence-only follow-up PR."
   },
   "runtime_manifests": {
     "permitted": false,
+    "blockers": [
+      {
+        "control": "main_branch_release_evidence",
+        "status": "pending",
+        "evidence": "No current release-evidence.json is admitted until the main-only workflow succeeds and its final artifact is reviewed in a follow-up PR."
+      },
+      {
+        "control": "resident_evidence_contract",
+        "status": "pending",
+        "evidence": "The parent must add a repository-source-build supply-chain record and prove the proposed SeaweedFS resident-image ledger entry against the admitted main-run evidence."
+      }
+    ],
     "paths": [
       "deploy/gitops/object-storage/kustomization.yaml",
       "deploy/gitops/clusters/local-lite/object-storage.yaml"
     ]
   },
   "next_action": {
-    "mode": "approved-source-build-or-signed-upstream-release",
-    "decision_record_required": true,
+    "mode": "publish-from-main-then-evidence-pr",
+    "decision_record_required": false,
     "requirements": [
-      "immutable linux/arm64 digest",
-      "Cosign signature with transparency-log evidence",
-      "SLSA provenance bound to the source revision",
-      "retained SBOM and vulnerability scan"
+      "merge the main-only no-cache trusted build policy",
+      "complete the trusted workflow from refs/heads/main",
+      "cryptographically reverify the retained Cosign bundle with pinned Cosign v3.1.1",
+      "commit the complete final artifact and approved admission in an evidence-only follow-up PR",
+      "keep runtime manifests blocked until parent Issue #26 closes its resident-image contract"
     ]
   }
 }

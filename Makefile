@@ -54,6 +54,9 @@ verify-kyverno-bootstrap:
 
 verify-object-storage-profile:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_object_storage_profile.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_package_go_vendor.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_trusted_image_contract.py'
+	@$(PYTHON) scripts/verify_trusted_image.py audit --root .
 
 verify-gitops-image-admission: verify-security
 	@$(PYTHON) scripts/verify_gitops_image_admission.py
@@ -150,7 +153,8 @@ check-newlines:
 	while IFS= read -r file; do \
 		[ -f "$$file" ] || continue; \
 		case "$$file" in \
-			*.png|*.jpg|*.jpeg|*.gif|*.ico|*.pdf|*.zip|*.gz|*.tgz|*.jar|*.war) continue ;; \
+			*.png|*.jpg|*.jpeg|*.gif|*.ico|*.pdf|*.zip|*.gz|*.tgz|*.xz|*.jar|*.war) continue ;; \
+			bootstrap/seaweedfs/v4.39/evidence/cosign-signature-bundle.json|bootstrap/seaweedfs/v4.39/evidence/image-manifest.json) continue ;; \
 		esac; \
 		if [ -s "$$file" ] && [ "$$(tail -c 1 "$$file" | wc -l | tr -d ' ')" = "0" ]; then \
 			echo "missing final newline: $$file"; \
@@ -160,7 +164,7 @@ check-newlines:
 	exit $$missing
 
 check-trailing-whitespace:
-	@if git grep -nE '[[:blank:]]$$' -- ':!LICENSE' ':!*.png' ':!*.jpg' ':!*.jpeg' ':!*.gif' ':!*.ico' ':!*.pdf'; then \
+	@if git grep -I -nE '[[:blank:]]$$' -- ':!LICENSE' ':!*.png' ':!*.jpg' ':!*.jpeg' ':!*.gif' ':!*.ico' ':!*.pdf'; then \
 		echo "trailing whitespace found"; \
 		exit 1; \
 	fi

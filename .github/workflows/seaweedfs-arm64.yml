@@ -1,0 +1,1385 @@
+name: SeaweedFS 4.39 trusted arm64 build
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/seaweedfs-arm64.yml
+      - bootstrap/seaweedfs/v4.39/Containerfile
+      - bootstrap/seaweedfs/v4.39/source.json
+      - bootstrap/seaweedfs/v4.39/trusted-build-contract.json
+      - bootstrap/seaweedfs/v4.39/go-module-inputs.json
+      - bootstrap/seaweedfs/v4.39/go-vendor.tar.xz
+      - scripts/package_go_vendor.py
+      - scripts/verify_trusted_image.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seaweedfs-4.39-arm64
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/tommykammy/shirokuma-seaweedfs
+  TRUSTED_TAG: 4.39-arm64
+  SOURCE_COMMIT: db42bb49757b459551607939807017d7a9d5a94a
+  SOURCE_TREE: da91641fdd520e465c68fa48af3b3ad07ad86822
+  SOURCE_ARCHIVE_SHA256: 95b3ba34d191e2cc96063434f407087000a9ffcf22f95682ecd5ce40b5a3fab9
+  BUILDX_VERSION: v0.35.0
+  BUILDX_URL: https://github.com/docker/buildx/releases/download/v0.35.0/buildx-v0.35.0.linux-arm64
+  BUILDX_BINARY_SHA256: c4248d6cbc4a619a7e0b4609c11e509ad4ac0b475e1c64817c0ac20c5d90c766
+  BUILDKIT_VERSION: v0.31.1
+  BUILDKIT_IMAGE: moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a
+  BUILDKIT_IMAGE_DIGEST: sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a
+  BUILDKIT_ARM64_MANIFEST_DIGEST: sha256:4eee950fb9d134cbf4e228ea3906eb4c7403323334af013c443302f7b74f2737
+  SYFT_VERSION: v1.46.0
+  TRIVY_VERSION: v0.72.0
+  COSIGN_VERSION: v3.1.1
+  REKOR_URL: https://rekor.sigstore.dev
+  REKOR_MAJOR_API_VERSION: "1"
+  CRANE_VERSION: v0.21.7
+  CRANE_URL: https://github.com/google/go-containerregistry/releases/download/v0.21.7/go-containerregistry_Linux_arm64.tar.gz
+  CRANE_ARCHIVE_SHA256: b6ee979d9411dfb05ce35ab9e156fe5de7def11a230764a7856ffa2eb971fa88
+
+jobs:
+  verify:
+    if: >-
+      github.repository == 'TommyKammy/Shirokuma' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      candidate_artifact: seaweedfs-4.39-arm64-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+
+    steps:
+      - name: Check out Shirokuma policy
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Check out the adopted SeaweedFS source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          repository: seaweedfs/seaweedfs
+          ref: db42bb49757b459551607939807017d7a9d5a94a
+          path: seaweedfs-src
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up exact Go for vendor provenance regeneration
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: 1.25.12
+          cache: false
+
+      - name: Validate the closed-world trusted build contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trusted_image.py contract --root .
+
+      - name: Fail closed unless immutable source evidence matches
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_commit=$(git -C seaweedfs-src rev-parse HEAD)
+          actual_tree=$(git -C seaweedfs-src rev-parse HEAD^{tree})
+          actual_archive=$(git -C seaweedfs-src archive --format=tar HEAD | sha256sum | cut -d' ' -f1)
+          test "${actual_commit}" = "${SOURCE_COMMIT}"
+          test "${actual_tree}" = "${SOURCE_TREE}"
+          test "${actual_archive}" = "${SOURCE_ARCHIVE_SHA256}"
+          python3 - <<'PY'
+          import json
+          import hashlib
+          import os
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, str(Path("scripts").resolve()))
+          from verify_trusted_image import validate_containerfile_build_inputs
+
+          source_path = Path("bootstrap/seaweedfs/v4.39/source.json")
+          contract_path = Path(
+              "bootstrap/seaweedfs/v4.39/trusted-build-contract.json"
+          )
+          container_path = Path("bootstrap/seaweedfs/v4.39/Containerfile")
+          evidence = json.loads(source_path.read_text(encoding="utf-8"))
+          contract = json.loads(contract_path.read_text(encoding="utf-8"))
+          if evidence.get("schema_version") != 3:
+              raise SystemExit("source evidence schema must be 3")
+          expected = {
+              "commit": os.environ["SOURCE_COMMIT"],
+              "tree": os.environ["SOURCE_TREE"],
+              "git_archive_sha256": os.environ["SOURCE_ARCHIVE_SHA256"],
+          }
+          for field, value in expected.items():
+              if evidence.get(field) != value:
+                  raise SystemExit(f"source evidence mismatch for {field}")
+          container_bytes = container_path.read_bytes()
+          container_sha256 = hashlib.sha256(container_bytes).hexdigest()
+          container_contract = contract["source"]["containerfile"]
+          if evidence.get("containerfile_sha256") != container_sha256:
+              raise SystemExit("source evidence Containerfile hash mismatch")
+          if container_contract.get("sha256") != container_sha256:
+              raise SystemExit("trusted contract Containerfile hash mismatch")
+          build_inputs = evidence.get("build_inputs", {})
+          if set(build_inputs) != {"dockerfile_frontend", "go", "certificates"}:
+              raise SystemExit("source build inputs are not closed-world")
+          if build_inputs["dockerfile_frontend"] != container_contract.get("frontend"):
+              raise SystemExit("Dockerfile frontend differs from trusted contract")
+          container_text = container_bytes.decode("utf-8")
+          validate_containerfile_build_inputs(
+              container_text,
+              build_inputs,
+              container_contract["frontend"],
+          )
+
+          module_inputs = evidence.get("module_inputs", {})
+          if module_inputs != contract["source"].get("module_inputs"):
+              raise SystemExit("source and trusted contract module inputs differ")
+          expected_module_keys = {
+              "go_mod_sha256",
+              "go_sum_sha256",
+              "go_image",
+              "go_version",
+              "generator_policy",
+              "bundle",
+              "bundle_sha256",
+              "manifest",
+              "manifest_sha256",
+              "module_count",
+              "replacement_count",
+              "file_count",
+          }
+          if set(module_inputs) != expected_module_keys:
+              raise SystemExit("source module input contract is not closed-world")
+          if module_inputs["go_image"] != build_inputs["go"]:
+              raise SystemExit("source module input Go image differs")
+          source_root = Path("seaweedfs-src")
+          for name, expected_hash in (
+              ("go.mod", module_inputs["go_mod_sha256"]),
+              ("go.sum", module_inputs["go_sum_sha256"]),
+          ):
+              actual_hash = hashlib.sha256((source_root / name).read_bytes()).hexdigest()
+              if actual_hash != expected_hash:
+                  raise SystemExit(f"upstream {name} differs from module input contract")
+          PY
+          python3 scripts/package_go_vendor.py verify \
+            --source-record bootstrap/seaweedfs/v4.39/source.json \
+            --bundle bootstrap/seaweedfs/v4.39/go-vendor.tar.xz \
+            --manifest bootstrap/seaweedfs/v4.39/go-module-inputs.json
+          python3 scripts/package_go_vendor.py reproduce \
+            --source-root seaweedfs-src \
+            --source-record bootstrap/seaweedfs/v4.39/source.json \
+            --bundle bootstrap/seaweedfs/v4.39/go-vendor.tar.xz \
+            --manifest bootstrap/seaweedfs/v4.39/go-module-inputs.json
+          cp bootstrap/seaweedfs/v4.39/go-vendor.tar.xz go-vendor.tar.xz
+          cp bootstrap/seaweedfs/v4.39/go-module-inputs.json go-module-inputs.json
+          vendor_bundle_sha256=$(sha256sum go-vendor.tar.xz | cut -d' ' -f1)
+          echo "GO_VENDOR_BUNDLE_SHA256=${vendor_bundle_sha256}" >> "${GITHUB_ENV}"
+          mkdir -p seaweedfs-src/.shirokuma
+          cp go-vendor.tar.xz seaweedfs-src/.shirokuma/go-vendor.tar.xz
+          rm -rf seaweedfs-src/.git
+
+      - name: Install and verify pinned Buildx and BuildKit without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = "Linux"
+          test "$(uname -m)" = "aarch64"
+
+          export DOCKER_CONFIG="${RUNNER_TEMP}/docker-config"
+          plugin_dir="${DOCKER_CONFIG}/cli-plugins"
+          buildx_bin="${plugin_dir}/docker-buildx"
+          mkdir -p "${plugin_dir}"
+          curl --fail --location \
+            --proto '=https' --tlsv1.2 \
+            --retry 5 --retry-all-errors \
+            --output "${buildx_bin}.download" "${BUILDX_URL}"
+          echo "${BUILDX_BINARY_SHA256}  ${buildx_bin}.download" \
+            | sha256sum --check --strict
+          install -m 0755 "${buildx_bin}.download" "${buildx_bin}"
+          echo "DOCKER_CONFIG=${DOCKER_CONFIG}" >> "${GITHUB_ENV}"
+
+          buildx_output=$(docker buildx version)
+          case "${buildx_output}" in
+            *" ${BUILDX_VERSION} "*) ;;
+            *) echo "unexpected Buildx version: ${buildx_output}" >&2; exit 1 ;;
+          esac
+
+          docker buildx imagetools inspect --raw "${BUILDKIT_IMAGE}" \
+            > "${RUNNER_TEMP}/buildkit-index.json"
+          echo "${BUILDKIT_IMAGE_DIGEST#sha256:}  ${RUNNER_TEMP}/buildkit-index.json" \
+            | sha256sum --check --strict
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          index = json.loads(
+              Path(os.environ["RUNNER_TEMP"], "buildkit-index.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          matches = [
+              item["digest"]
+              for item in index.get("manifests", [])
+              if item.get("platform", {}).get("os") == "linux"
+              and item.get("platform", {}).get("architecture") == "arm64"
+              and not item.get("platform", {}).get("variant")
+          ]
+          if matches != [os.environ["BUILDKIT_ARM64_MANIFEST_DIGEST"]]:
+              raise SystemExit(f"unexpected BuildKit arm64 manifest: {matches}")
+          PY
+
+          builder_name="shirokuma-seaweedfs-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker buildx create \
+            --name "${builder_name}" \
+            --driver docker-container \
+            --driver-opt "image=${BUILDKIT_IMAGE}" \
+            --use >/dev/null
+          docker buildx inspect --bootstrap | tee "${RUNNER_TEMP}/buildx-inspect.txt"
+          actual_buildkit_version=$(awk '$1 == "BuildKit" && $2 == "version:" {print $3; exit}' "${RUNNER_TEMP}/buildx-inspect.txt")
+          test "${actual_buildkit_version}" = "${BUILDKIT_VERSION}"
+
+          builder_container=$(docker ps \
+            --filter "name=buildx_buildkit_${builder_name}" \
+            --format '{{.ID}}')
+          test -n "${builder_container}"
+          test "$(printf '%s\n' "${builder_container}" | wc -l | tr -d ' ')" = "1"
+          actual_buildkit_image=$(docker inspect "${builder_container}" --format '{{.Config.Image}}')
+          test "${actual_buildkit_image}" = "${BUILDKIT_IMAGE}"
+
+          export ACTUAL_BUILDKIT_VERSION="${actual_buildkit_version}"
+          export ACTUAL_BUILDKIT_IMAGE="${actual_buildkit_image}"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          record = {
+              "buildx": {
+                  "version": os.environ["BUILDX_VERSION"],
+                  "binary_sha256": os.environ["BUILDX_BINARY_SHA256"],
+                  "execution": "dedicated_docker_config_plugin",
+              },
+              "buildkit": {
+                  "version": os.environ["ACTUAL_BUILDKIT_VERSION"],
+                  "image": os.environ["ACTUAL_BUILDKIT_IMAGE"],
+                  "linux_arm64_manifest_digest": os.environ[
+                      "BUILDKIT_ARM64_MANIFEST_DIGEST"
+                  ],
+              },
+          }
+          Path("builder-metadata.json").write_text(
+              json.dumps(record, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+          echo "BUILDER_NAME=${builder_name}" >> "${GITHUB_ENV}"
+
+      - name: Log in to GHCR for the quarantine push
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish only linux/arm64
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          builder: ${{ env.BUILDER_NAME }}
+          context: seaweedfs-src
+          file: bootstrap/seaweedfs/v4.39/Containerfile
+          platforms: linux/arm64
+          push: true
+          provenance: false
+          sbom: false
+          no-cache: true
+          tags: ${{ env.IMAGE }}:quarantine-${{ github.run_id }}-${{ github.run_attempt }}
+          build-args: |
+            SOURCE_COMMIT=${{ env.SOURCE_COMMIT }}
+            GO_VENDOR_BUNDLE_SHA256=${{ env.GO_VENDOR_BUNDLE_SHA256 }}
+
+      - name: Verify the published platform
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull "${IMAGE}@${DIGEST}"
+          platform=$(docker image inspect "${IMAGE}@${DIGEST}" --format '{{.Os}}/{{.Architecture}}')
+          test "${platform}" = 'linux/arm64'
+
+      - name: Smoke-test non-root weed mini on the exact digest
+        timeout-minutes: 2
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          container_name="seaweedfs-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup() {
+            docker logs "${container_name}" > runtime-smoke.log 2>&1 || true
+            docker rm --force "${container_name}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          runtime_user=$(docker image inspect "${IMAGE}@${DIGEST}" --format '{{.Config.User}}')
+          test "${runtime_user}" = '65532:65532'
+          docker run --detach \
+            --name "${container_name}" \
+            --user 65532:65532 \
+            --read-only \
+            --tmpfs /tmp:rw,nosuid,nodev,size=16m,uid=65532,gid=65532,mode=1777 \
+            --tmpfs /data:rw,nosuid,nodev,size=64m,uid=65532,gid=65532,mode=0755 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --pids-limit 256 \
+            --memory 512m \
+            "${IMAGE}@${DIGEST}" >/dev/null
+
+          for attempt in {1..10}; do
+            test "$(docker inspect "${container_name}" --format '{{.State.Running}}')" = 'true'
+            sleep 1
+          done
+
+          docker inspect "${container_name}" > runtime-container-inspect.json
+
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          inspect_path = Path("runtime-container-inspect.json")
+          containers = json.loads(inspect_path.read_text(encoding="utf-8"))
+          if len(containers) != 1:
+              raise SystemExit("runtime inspect must contain exactly one container")
+          container = containers[0]
+          config = container.get("Config", {})
+          host = container.get("HostConfig", {})
+          if config.get("User") != "65532:65532":
+              raise SystemExit("unexpected effective runtime user")
+          if container.get("Path") != "/usr/bin/weed" or container.get("Args") != [
+              "mini",
+              "-dir=/data",
+          ]:
+              raise SystemExit("unexpected effective runtime command")
+          if host.get("ReadonlyRootfs") is not True:
+              raise SystemExit("runtime root filesystem is not read-only")
+          expected_tmpfs = {
+              "/tmp": {
+                  "rw",
+                  "nosuid",
+                  "nodev",
+                  "size=16m",
+                  "uid=65532",
+                  "gid=65532",
+                  "mode=1777",
+              },
+              "/data": {
+                  "rw",
+                  "nosuid",
+                  "nodev",
+                  "size=64m",
+                  "uid=65532",
+                  "gid=65532",
+                  "mode=0755",
+              },
+          }
+          actual_tmpfs = host.get("Tmpfs", {})
+          if set(actual_tmpfs) != set(expected_tmpfs):
+              raise SystemExit("unexpected effective tmpfs mounts")
+          for mount, expected_options in expected_tmpfs.items():
+              if set(actual_tmpfs[mount].split(",")) != expected_options:
+                  raise SystemExit(f"unexpected effective tmpfs options for {mount}")
+          if host.get("CapDrop") != ["ALL"]:
+              raise SystemExit("runtime capabilities are not fully dropped")
+          security_options = host.get("SecurityOpt", [])
+          if len(security_options) != 1 or not security_options[0].startswith(
+              "no-new-privileges"
+          ):
+              raise SystemExit("no-new-privileges is not effective")
+          if host.get("PidsLimit") != 256 or host.get("Memory") != 536870912:
+              raise SystemExit("unexpected runtime resource bounds")
+
+          record = {
+              "schema_version": 2,
+              "result": "passed",
+              "reference": f"{os.environ['IMAGE']}@{os.environ['DIGEST']}",
+              "digest": os.environ["DIGEST"],
+              "user": "65532:65532",
+              "command": ["/usr/bin/weed", "mini", "-dir=/data"],
+              "read_only_rootfs": True,
+              "tmpfs": ["/tmp", "/data"],
+              "capabilities_dropped": "ALL",
+              "no_new_privileges": True,
+              "sustained_running_seconds": 10,
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "runtime_inspect": {
+                  "file": "runtime-container-inspect.json",
+                  "sha256": hashlib.sha256(inspect_path.read_bytes()).hexdigest(),
+              },
+          }
+          Path("runtime-smoke.json").write_text(
+              json.dumps(record, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+
+      - name: Generate CycloneDX SBOM for the exact digest
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: cyclonedx-json
+          output-file: seaweedfs-4.39-arm64.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
+          syft-version: v1.46.0
+
+      - name: Scan the exact digest and block High or Critical findings
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.72.0
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: json
+          output: trivy.json
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          vuln-type: os,library
+          exit-code: 1
+
+      - name: Record Trivy scanner and vulnerability DB freshness
+        env:
+          TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
+        shell: bash
+        run: |
+          set -euo pipefail
+          trivy version --format json > trivy-version.json
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          metadata = json.loads(Path("trivy-version.json").read_text(encoding="utf-8"))
+          if metadata.get("Version") != os.environ["TRIVY_VERSION"].removeprefix("v"):
+              raise SystemExit("unexpected Trivy version")
+          database = metadata.get("VulnerabilityDB", {})
+          if not database.get("UpdatedAt") or not database.get("DownloadedAt"):
+              raise SystemExit("missing Trivy vulnerability DB freshness metadata")
+          PY
+
+      - name: Install pinned Cosign after the vulnerability gate passes
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.1
+
+      - name: Record pinned release tools and runner substrate
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_cosign_version=$(cosign version | awk '$1 == "GitVersion:" {print $2; exit}')
+          test "${actual_cosign_version}" = "${COSIGN_VERSION}"
+          export ACTUAL_COSIGN_VERSION="${actual_cosign_version}"
+          export DOCKER_CLIENT_VERSION=$(docker version --format '{{.Client.Version}}')
+          export DOCKER_SERVER_VERSION=$(docker version --format '{{.Server.Version}}')
+          export GH_VERSION=$(gh --version | awk 'NR == 1 {print $3}')
+          export GIT_VERSION=$(git --version)
+          export PYTHON_VERSION=$(python3 --version)
+          export CURL_VERSION=$(curl --version | awk 'NR == 1')
+          export TAR_VERSION=$(tar --version | awk 'NR == 1')
+          export SHA256SUM_VERSION=$(sha256sum --version | awk 'NR == 1')
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          builder = json.loads(Path("builder-metadata.json").read_text(encoding="utf-8"))
+          sbom = json.loads(
+              Path("seaweedfs-4.39-arm64.cdx.json").read_text(encoding="utf-8")
+          )
+          trivy = json.loads(Path("trivy-version.json").read_text(encoding="utf-8"))
+          syft = [
+              item
+              for item in sbom["metadata"]["tools"]["components"]
+              if item.get("name") == "syft"
+          ]
+          if len(syft) != 1:
+              raise SystemExit("SBOM must identify exactly one Syft version")
+          syft_version = "v" + syft[0]["version"].removeprefix("v")
+          trivy_version = "v" + trivy["Version"].removeprefix("v")
+          if syft_version != os.environ["SYFT_VERSION"]:
+              raise SystemExit("unexpected Syft version")
+          if trivy_version != os.environ["TRIVY_VERSION"]:
+              raise SystemExit("unexpected Trivy version")
+
+          record = {
+              "schema_version": 1,
+              "runner": {
+                  "label": "ubuntu-24.04-arm",
+                  "os": os.environ["RUNNER_OS"],
+                  "arch": os.environ["RUNNER_ARCH"],
+              },
+              "runner_tools": {
+                  "docker_client": os.environ["DOCKER_CLIENT_VERSION"],
+                  "docker_server": os.environ["DOCKER_SERVER_VERSION"],
+                  "github_cli": os.environ["GH_VERSION"],
+                  "git": os.environ["GIT_VERSION"],
+                  "python3": os.environ["PYTHON_VERSION"],
+                  "curl": os.environ["CURL_VERSION"],
+                  "tar": os.environ["TAR_VERSION"],
+                  "sha256sum": os.environ["SHA256SUM_VERSION"],
+              },
+              "credential_boundary": (
+                  "standalone archives verified before credentialed execution"
+              ),
+              "tools": {
+                  "buildx": builder["buildx"],
+                  "buildkit": builder["buildkit"],
+                  "syft": {"version": syft_version},
+                  "trivy": {"version": trivy_version},
+                  "cosign": {"version": os.environ["ACTUAL_COSIGN_VERSION"]},
+                  "crane": {
+                      "version": os.environ["CRANE_VERSION"],
+                      "archive_sha256": os.environ["CRANE_ARCHIVE_SHA256"],
+                      "execution": "deferred_to_promotion_job",
+                  },
+              },
+          }
+          Path("toolchain.json").write_text(
+              json.dumps(record, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+
+      - name: Keyless-sign the scanned immutable image, bind the detached bundle, and verify the registry image
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/seaweedfs-arm64.yml@${GITHUB_REF}"
+
+          docker buildx imagetools inspect --raw "${IMAGE}@${DIGEST}" \
+            > image-manifest.json
+          echo "${DIGEST#sha256:}  image-manifest.json" | sha256sum --check --strict
+
+          # Cosign v3.1.1 signs the image digest as a sign/v1 DSSE bundle. The
+          # blob verification below rebinds that detached bundle to the exact
+          # content-addressed OCI manifest bytes; the subsequent `cosign verify`
+          # remains the authoritative registry image verification.
+          cosign sign --yes --bundle cosign-signature-bundle.json "${IMAGE}@${DIGEST}"
+          cosign verify-blob \
+            --bundle cosign-signature-bundle.json \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --certificate-identity "${identity}" \
+            --certificate-github-workflow-name "${GITHUB_WORKFLOW}" \
+            --certificate-github-workflow-repository "${GITHUB_REPOSITORY}" \
+            --certificate-github-workflow-ref "${GITHUB_REF}" \
+            --certificate-github-workflow-sha "${GITHUB_WORKFLOW_SHA}" \
+            --certificate-github-workflow-trigger "${GITHUB_EVENT_NAME}" \
+            image-manifest.json
+
+          for registry_attempt in 1 2 3 4 5 6; do
+            if cosign verify \
+              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+              --certificate-identity "${identity}" \
+              --certificate-github-workflow-name "${GITHUB_WORKFLOW}" \
+              --certificate-github-workflow-repository "${GITHUB_REPOSITORY}" \
+              --certificate-github-workflow-ref "${GITHUB_REF}" \
+              --certificate-github-workflow-sha "${GITHUB_WORKFLOW_SHA}" \
+              --certificate-github-workflow-trigger "${GITHUB_EVENT_NAME}" \
+              --output json \
+              "${IMAGE}@${DIGEST}" > cosign-payloads.json.tmp \
+              && cosign download signature "${IMAGE}@${DIGEST}" \
+                > registry-signature-bundles.jsonl.tmp \
+              && test -s registry-signature-bundles.jsonl.tmp
+            then
+              mv cosign-payloads.json.tmp cosign-payloads.json
+              mv registry-signature-bundles.jsonl.tmp \
+                registry-signature-bundles.jsonl
+              break
+            fi
+            rm -f cosign-payloads.json.tmp registry-signature-bundles.jsonl.tmp
+            if [ "${registry_attempt}" -eq 6 ]; then
+              echo "registry signature was not visible after bounded retries" >&2
+              exit 1
+            fi
+            sleep "$((registry_attempt * 2))"
+          done
+
+          rekor_index=$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          bundle = json.loads(
+              Path("cosign-signature-bundle.json").read_text(encoding="utf-8")
+          )
+          entries = bundle["verificationMaterial"]["tlogEntries"]
+          if len(entries) != 1:
+              raise SystemExit("exactly one Rekor entry is required")
+          print(entries[0]["logIndex"])
+          PY
+          )
+          curl --fail --location \
+            --proto '=https' --tlsv1.2 \
+            --retry 5 --retry-all-errors \
+            --output rekor-entry.json \
+            "${REKOR_URL}/api/v1/log/entries?logIndex=${rekor_index}"
+
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          bundle = json.loads(
+              Path("cosign-signature-bundle.json").read_text(encoding="utf-8")
+          )
+          payloads = json.loads(
+              Path("cosign-payloads.json").read_text(encoding="utf-8")
+          )
+          registry_bundles = [
+              json.loads(line)
+              for line in Path("registry-signature-bundles.jsonl")
+              .read_text(encoding="utf-8")
+              .splitlines()
+              if line.strip()
+          ]
+          rekor = json.loads(Path("rekor-entry.json").read_text(encoding="utf-8"))
+          if bundle.get("mediaType") != "application/vnd.dev.sigstore.bundle.v0.3+json":
+              raise SystemExit("unexpected Sigstore bundle format")
+          for candidate in registry_bundles:
+              if "Base64Signature" in candidate or "Payload" in candidate:
+                  raise SystemExit(
+                      "Cosign v3.1.1 closed-world contract rejects legacy signature records"
+                  )
+              if candidate.get("mediaType") != (
+                  "application/vnd.dev.sigstore.bundle.v0.3+json"
+              ):
+                  raise SystemExit("registry signature is not a Sigstore v0.3 bundle")
+              if "dsseEnvelope" not in candidate or "messageSignature" in candidate:
+                  raise SystemExit("registry signature is not the required DSSE bundle")
+              candidate_statement = json.loads(
+                  base64.b64decode(
+                      candidate["dsseEnvelope"]["payload"], validate=True
+                  )
+              )
+              if candidate_statement.get("predicateType") != (
+                  "https://sigstore.dev/cosign/sign/v1"
+              ):
+                  raise SystemExit("registry bundle has an unexpected predicate type")
+          material = bundle["verificationMaterial"]
+          if not material.get("certificate", {}).get("rawBytes"):
+              raise SystemExit("bundle certificate is missing")
+          statement = json.loads(
+              base64.b64decode(
+                  bundle["dsseEnvelope"]["payload"], validate=True
+              )
+          )
+          subjects = statement.get("subject", [])
+          expected_digest = os.environ["DIGEST"].removeprefix("sha256:")
+          if not (
+              statement.get("predicateType") == "https://sigstore.dev/cosign/sign/v1"
+              and len(subjects) == 1
+              and subjects[0].get("digest") == {"sha256": expected_digest}
+              and subjects[0].get("name", "") == ""
+              and subjects[0].get("annotations", {}) == {}
+          ):
+              raise SystemExit("bundle subject is not the exact image digest")
+          entries = material.get("tlogEntries", [])
+          if len(entries) != 1:
+              raise SystemExit("exactly one bundle tlog entry is required")
+          entry = entries[0]
+          proof = entry.get("inclusionProof", {})
+          if not (
+              entry.get("canonicalizedBody")
+              and entry.get("inclusionPromise", {}).get("signedEntryTimestamp")
+              and proof.get("checkpoint")
+              and proof.get("rootHash")
+              and proof.get("treeSize")
+              and isinstance(proof.get("hashes"), list)
+          ):
+              raise SystemExit("incomplete Rekor inclusion evidence")
+          if not isinstance(rekor, dict) or len(rekor) != 1:
+              raise SystemExit("expected one Rekor API entry")
+          uuid, api_entry = next(iter(rekor.items()))
+          log_id_hex = base64.b64decode(entry["logId"]["keyId"], validate=True).hex()
+          stable_pairs = (
+              (str(api_entry.get("logIndex")), str(entry["logIndex"])),
+              (str(api_entry.get("integratedTime")), str(entry["integratedTime"])),
+              (api_entry.get("logID"), log_id_hex),
+              (api_entry.get("body"), entry["canonicalizedBody"]),
+          )
+          if any(left != right for left, right in stable_pairs):
+              raise SystemExit("Rekor API entry does not match the signed bundle")
+          if not isinstance(payloads, list) or not payloads:
+              raise SystemExit("registry verification returned no payloads")
+          expected_reference = f"{os.environ['IMAGE']}@{os.environ['DIGEST']}"
+          for payload in payloads:
+              critical = payload.get("critical", payload.get("Critical", {}))
+              image = critical.get("image", critical.get("Image", {}))
+              identity = critical.get("identity", critical.get("Identity", {}))
+              payload_digest = image.get(
+                  "docker-manifest-digest",
+                  image.get("Docker-manifest-digest"),
+              )
+              payload_reference = identity.get(
+                  "docker-reference",
+                  identity.get("Docker-reference"),
+              )
+              if (
+                  payload_digest != os.environ["DIGEST"]
+                  or payload_reference != expected_reference
+              ):
+                  raise SystemExit(
+                      "registry verification payload reference or digest mismatch"
+                  )
+          registry_bundle_matches = sum(
+              candidate == bundle for candidate in registry_bundles
+          )
+          if registry_bundle_matches != 1:
+              raise SystemExit("registry does not contain exactly the retained bundle")
+          Path("registry-signature-bundles.jsonl").write_text(
+              json.dumps(bundle, separators=(",", ":")) + "\n",
+              encoding="utf-8",
+          )
+          bundle_sha256 = hashlib.sha256(
+              Path("cosign-signature-bundle.json").read_bytes()
+          ).hexdigest()
+
+          record = {
+              "schema_version": 1,
+              "reference": f"{os.environ['IMAGE']}@{os.environ['DIGEST']}",
+              "certificate_constraints": {
+                  "issuer": "https://token.actions.githubusercontent.com",
+                  "identity": (
+                      f"https://github.com/{os.environ['GITHUB_REPOSITORY']}"
+                      f"/.github/workflows/seaweedfs-arm64.yml@{os.environ['GITHUB_REF']}"
+                  ),
+                  "github_workflow_name": os.environ["GITHUB_WORKFLOW"],
+                  "github_workflow_repository": os.environ["GITHUB_REPOSITORY"],
+                  "github_workflow_ref": os.environ["GITHUB_REF"],
+                  "github_workflow_sha": os.environ["GITHUB_WORKFLOW_SHA"],
+                  "github_workflow_trigger": os.environ["GITHUB_EVENT_NAME"],
+              },
+              "detached_bundle_verified": True,
+              "registry_signature_verified": True,
+              "registry_bundle": {
+                  "file": "registry-signature-bundles.jsonl",
+                  "exact_matches": registry_bundle_matches,
+                  "bundle_sha256": bundle_sha256,
+              },
+              "transparency_log": {
+                  "base_url": os.environ["REKOR_URL"],
+                  "major_api_version": int(os.environ["REKOR_MAJOR_API_VERSION"]),
+                  "entry_lookup": (
+                      f"/api/v1/log/entries?logIndex={entry['logIndex']}"
+                  ),
+              },
+              "verified_payloads": payloads,
+              "rekor_entries": [
+                  {
+                      "uuid": uuid,
+                      "log_index": str(entry["logIndex"]),
+                      "integrated_time": str(entry["integratedTime"]),
+                      "log_id": entry["logId"]["keyId"],
+                      "log_id_hex": log_id_hex,
+                  }
+              ],
+          }
+          Path("cosign-verify.json").write_text(
+              json.dumps(record, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+          rm cosign-payloads.json
+
+      - name: Mirror GHCR credentials for provenance publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          default_config_dir="${HOME}/.docker"
+          default_config="${default_config_dir}/config.json"
+          backup="${RUNNER_TEMP}/docker-config-before-provenance.json"
+          mkdir -p "${default_config_dir}"
+          if [ -e "${default_config}" ]; then
+            install -m 0600 "${default_config}" "${backup}"
+            echo "PROVENANCE_DOCKER_CONFIG_BACKUP=1" >> "${GITHUB_ENV}"
+          else
+            echo "PROVENANCE_DOCKER_CONFIG_BACKUP=0" >> "${GITHUB_ENV}"
+          fi
+          install -m 0600 "${DOCKER_CONFIG}/config.json" "${default_config}"
+
+      - name: Publish SLSA provenance for the scanned exact digest
+        id: provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Remove provenance credential mirror
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          default_config="${HOME}/.docker/config.json"
+          backup="${RUNNER_TEMP}/docker-config-before-provenance.json"
+          rm -f "${default_config}"
+          if [ "${PROVENANCE_DOCKER_CONFIG_BACKUP:-0}" = "1" ]; then
+            install -m 0600 "${backup}" "${default_config}"
+            rm -f "${backup}"
+          fi
+
+      - name: Verify SLSA provenance from this exact workflow
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh attestation verify "oci://${IMAGE}@${DIGEST}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --predicate-type "https://slsa.dev/provenance/v1" \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/seaweedfs-arm64.yml" \
+            --signer-digest "${GITHUB_WORKFLOW_SHA}" \
+            --source-digest "${GITHUB_SHA}" \
+            --source-ref "${GITHUB_REF}" \
+            --format json > slsa-verify.json
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          from pathlib import Path
+
+          records = json.loads(Path("slsa-verify.json").read_text(encoding="utf-8"))
+          expected_digest = os.environ["DIGEST"].removeprefix("sha256:")
+          repository = os.environ["GITHUB_REPOSITORY"]
+          repository_url = f"https://github.com/{repository}"
+          workflow_path = ".github/workflows/seaweedfs-arm64.yml"
+          identity = f"{repository_url}/{workflow_path}@{os.environ['GITHUB_REF']}"
+          invocation = (
+              f"{repository_url}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+              f"/attempts/{os.environ['GITHUB_RUN_ATTEMPT']}"
+          )
+          matches = []
+          bundles = []
+          for record in records:
+              certificate = record["verificationResult"]["signature"]["certificate"]
+              bundle = record["attestation"]["bundle"]
+              statement = json.loads(
+                  base64.b64decode(bundle["dsseEnvelope"]["payload"])
+              )
+              predicate = statement.get("predicate", {})
+              definition = predicate.get("buildDefinition", {})
+              workflow = definition.get("externalParameters", {}).get("workflow", {})
+              details = predicate.get("runDetails", {})
+              conditions = (
+                  statement.get("_type") == "https://in-toto.io/Statement/v1",
+                  statement.get("predicateType") == "https://slsa.dev/provenance/v1",
+                  definition.get("buildType")
+                  == "https://actions.github.io/buildtypes/workflow/v1",
+                  certificate.get("issuer")
+                  == "https://token.actions.githubusercontent.com",
+                  certificate.get("subjectAlternativeName") == identity,
+                  certificate.get("githubWorkflowName") == os.environ["GITHUB_WORKFLOW"],
+                  certificate.get("githubWorkflowRepository") == repository,
+                  certificate.get("githubWorkflowRef") == os.environ["GITHUB_REF"],
+                  certificate.get("githubWorkflowSHA")
+                  == os.environ["GITHUB_WORKFLOW_SHA"],
+                  certificate.get("githubWorkflowTrigger")
+                  == os.environ["GITHUB_EVENT_NAME"],
+                  certificate.get("buildTrigger") == os.environ["GITHUB_EVENT_NAME"],
+                  certificate.get("runnerEnvironment") == "github-hosted",
+                  certificate.get("buildSignerURI") == identity,
+                  certificate.get("buildSignerDigest")
+                  == os.environ["GITHUB_WORKFLOW_SHA"],
+                  certificate.get("buildConfigURI") == identity,
+                  certificate.get("buildConfigDigest")
+                  == os.environ["GITHUB_WORKFLOW_SHA"],
+                  certificate.get("sourceRepositoryURI") == repository_url,
+                  certificate.get("sourceRepositoryDigest") == os.environ["GITHUB_SHA"],
+                  certificate.get("sourceRepositoryRef") == os.environ["GITHUB_REF"],
+                  certificate.get("runInvocationURI") == invocation,
+                  workflow.get("repository") == repository_url,
+                  workflow.get("path") == workflow_path,
+                  workflow.get("ref") == os.environ["GITHUB_REF"],
+                  details.get("builder", {}).get("id") == identity,
+                  details.get("metadata", {}).get("invocationId") == invocation,
+                  any(
+                      subject.get("name") == os.environ["IMAGE"]
+                      and subject.get("digest", {}).get("sha256") == expected_digest
+                      for subject in statement.get("subject", [])
+                  ),
+              )
+              if all(conditions):
+                  matches.append(record)
+                  bundles.append(bundle)
+          if not matches:
+              raise SystemExit("no SLSA provenance matches the workflow invocation")
+          Path("slsa-verify.json").write_text(
+              json.dumps(matches, indent=2) + "\n", encoding="utf-8"
+          )
+          Path("slsa-bundles.jsonl").write_text(
+              "".join(json.dumps(bundle, separators=(",", ":")) + "\n" for bundle in bundles),
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Keyless-attest the retained SBOM and scan
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          verify_attestation_bundle() {
+            local bundle="$1"
+            local predicate_type="$2"
+            cosign verify-blob-attestation \
+              --bundle "${bundle}" \
+              --type "${predicate_type}" \
+              --certificate-identity \
+                "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/seaweedfs-arm64.yml@${GITHUB_REF}" \
+              --certificate-oidc-issuer \
+                "https://token.actions.githubusercontent.com" \
+              --certificate-github-workflow-name "${GITHUB_WORKFLOW}" \
+              --certificate-github-workflow-ref "${GITHUB_REF}" \
+              --certificate-github-workflow-repository "${GITHUB_REPOSITORY}" \
+              --certificate-github-workflow-sha "${GITHUB_WORKFLOW_SHA}" \
+              --certificate-github-workflow-trigger "${GITHUB_EVENT_NAME}" \
+              --digest "${DIGEST#sha256:}" \
+              --digestAlg sha256
+          }
+
+          cosign attest --yes \
+            --bundle sbom-attestation-bundle.json \
+            --type cyclonedx \
+            --predicate seaweedfs-4.39-arm64.cdx.json "${IMAGE}@${DIGEST}"
+          verify_attestation_bundle \
+            sbom-attestation-bundle.json cyclonedx
+
+          cosign attest --yes \
+            --bundle trivy-attestation-bundle.json \
+            --type https://shirokuma.dev/attestations/trivy/v1 \
+            --predicate trivy.json "${IMAGE}@${DIGEST}"
+          verify_attestation_bundle \
+            trivy-attestation-bundle.json \
+            https://shirokuma.dev/attestations/trivy/v1
+
+      - name: Record the closed-world release evidence
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          PROVENANCE_URL: ${{ steps.provenance.outputs.attestation-url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          digest = os.environ["DIGEST"]
+          source_path = Path("bootstrap/seaweedfs/v4.39/source.json")
+          contract_path = Path(
+              "bootstrap/seaweedfs/v4.39/trusted-build-contract.json"
+          )
+          source_evidence = json.loads(source_path.read_text(encoding="utf-8"))
+          contract = json.loads(contract_path.read_text(encoding="utf-8"))
+          trivy = json.loads(Path("trivy.json").read_text(encoding="utf-8"))
+          trivy_metadata = json.loads(
+              Path("trivy-version.json").read_text(encoding="utf-8")
+          )
+          toolchain = json.loads(Path("toolchain.json").read_text(encoding="utf-8"))
+          transparency = json.loads(
+              Path("cosign-verify.json").read_text(encoding="utf-8")
+          )
+          critical = 0
+          high = 0
+          for result in trivy.get("Results") or []:
+              for vulnerability in result.get("Vulnerabilities") or []:
+                  if vulnerability.get("Severity") == "CRITICAL":
+                      critical += 1
+                  elif vulnerability.get("Severity") == "HIGH":
+                      high += 1
+          if critical or high:
+              raise SystemExit("release evidence cannot record blocked vulnerabilities")
+
+          evidence_names = (
+              "cosign-signature-bundle.json",
+              "cosign-verify.json",
+              "go-module-inputs.json",
+              "go-vendor.tar.xz",
+              "image-manifest.json",
+              "rekor-entry.json",
+              "runtime-container-inspect.json",
+              "runtime-smoke.json",
+              "sbom-attestation-bundle.json",
+              "seaweedfs-4.39-arm64.cdx.json",
+              "registry-signature-bundles.jsonl",
+              "slsa-bundles.jsonl",
+              "slsa-verify.json",
+              "toolchain.json",
+              "trivy-version.json",
+              "trivy-attestation-bundle.json",
+              "trivy.json",
+          )
+          evidence_root = "bootstrap/seaweedfs/v4.39/evidence"
+          record = {
+              "schema_version": 2,
+              "component": "seaweedfs",
+              "version": "4.39",
+              "platform": "linux/arm64",
+              "reference": f"{os.environ['IMAGE']}@{digest}",
+              "digest": digest,
+              "contract": {
+                  "path": contract_path.as_posix(),
+                  "sha256": hashlib.sha256(contract_path.read_bytes()).hexdigest(),
+              },
+              "source": {
+                  "repository": "https://github.com/seaweedfs/seaweedfs",
+                  "commit": os.environ["SOURCE_COMMIT"],
+                  "tree": os.environ["SOURCE_TREE"],
+                  "git_archive_sha256": os.environ["SOURCE_ARCHIVE_SHA256"],
+                  "evidence": "bootstrap/seaweedfs/v4.39/source.json",
+                  "evidence_sha256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
+                  "containerfile_sha256": source_evidence["containerfile_sha256"],
+                  "build_inputs": source_evidence["build_inputs"],
+                  "module_inputs": source_evidence["module_inputs"],
+              },
+              "builder": {
+                  "repository": os.environ["GITHUB_REPOSITORY"],
+                  "workflow_name": os.environ["GITHUB_WORKFLOW"],
+                  "workflow": ".github/workflows/seaweedfs-arm64.yml",
+                  "ref": os.environ["GITHUB_REF"],
+                  "workflow_sha": os.environ["GITHUB_WORKFLOW_SHA"],
+                  "source_sha": os.environ["GITHUB_SHA"],
+                  "trigger": os.environ["GITHUB_EVENT_NAME"],
+                  "run_id": os.environ["GITHUB_RUN_ID"],
+                  "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              },
+              "issuer": "https://token.actions.githubusercontent.com",
+              "identity": (
+                  f"https://github.com/{os.environ['GITHUB_REPOSITORY']}"
+                  f"/.github/workflows/seaweedfs-arm64.yml@{os.environ['GITHUB_REF']}"
+              ),
+              "slsa_provenance": os.environ["PROVENANCE_URL"],
+              "admission_status": contract["admission"]["required_approved_state"],
+              "vulnerabilities": {"critical": critical, "high": high},
+              "scanner": {
+                  "name": "trivy",
+                  "version": trivy_metadata["Version"],
+                  "vulnerability_db": {
+                      "version": trivy_metadata["VulnerabilityDB"]["Version"],
+                      "updated_at": trivy_metadata["VulnerabilityDB"]["UpdatedAt"],
+                      "downloaded_at": trivy_metadata["VulnerabilityDB"]["DownloadedAt"],
+                  },
+              },
+              "toolchain": toolchain["tools"],
+              "transparency_log": {
+                  "bundle": "cosign-signature-bundle.json",
+                  "rekor_response": "rekor-entry.json",
+                  "entries": transparency["rekor_entries"],
+              },
+              "promotion": {
+                  "status": "pending",
+                  "trusted_tag": os.environ["TRUSTED_TAG"],
+                  "tool": "crane",
+              },
+              "artifacts": {
+                  name: {
+                      "path": (
+                          f"bootstrap/seaweedfs/v4.39/{name}"
+                          if name in {"go-module-inputs.json", "go-vendor.tar.xz"}
+                          else f"{evidence_root}/{name}"
+                      ),
+                      "sha256": hashlib.sha256(Path(name).read_bytes()).hexdigest(),
+                  }
+                  for name in evidence_names
+              },
+              "actions_artifact": {
+                  "role": "retained mirror only",
+                  "candidate_name": (
+                      f"seaweedfs-4.39-arm64-candidate-{os.environ['GITHUB_RUN_ID']}"
+                      f"-{os.environ['GITHUB_RUN_ATTEMPT']}"
+                  ),
+                  "retention_days": 7,
+              },
+          }
+          Path("release-evidence.json").write_text(
+              json.dumps(record, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+
+      - name: Verify candidate evidence with the shared contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate_dir="${RUNNER_TEMP}/candidate-evidence"
+          policy_dir="${candidate_dir}/bootstrap/seaweedfs/v4.39"
+          mkdir -p "${policy_dir}"
+          cp bootstrap/seaweedfs/v4.39/source.json "${policy_dir}/source.json"
+          cp bootstrap/seaweedfs/v4.39/trusted-build-contract.json \
+            "${policy_dir}/trusted-build-contract.json"
+          for name in \
+            cosign-signature-bundle.json \
+            cosign-verify.json \
+            go-module-inputs.json \
+            go-vendor.tar.xz \
+            image-manifest.json \
+            rekor-entry.json \
+            release-evidence.json \
+            registry-signature-bundles.jsonl \
+            runtime-container-inspect.json \
+            runtime-smoke.json \
+            sbom-attestation-bundle.json \
+            seaweedfs-4.39-arm64.cdx.json \
+            slsa-bundles.jsonl \
+            slsa-verify.json \
+            toolchain.json \
+            trivy-version.json \
+            trivy-attestation-bundle.json \
+            trivy.json
+          do
+            cp "${name}" "${candidate_dir}/${name}"
+          done
+          python3 scripts/verify_trusted_image.py candidate \
+            --root . --evidence-dir "${candidate_dir}"
+
+      - name: Retain candidate evidence before trusted-tag promotion
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: seaweedfs-4.39-arm64-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            bootstrap/seaweedfs/v4.39/source.json
+            bootstrap/seaweedfs/v4.39/trusted-build-contract.json
+            cosign-signature-bundle.json
+            cosign-verify.json
+            go-module-inputs.json
+            go-vendor.tar.xz
+            image-manifest.json
+            rekor-entry.json
+            release-evidence.json
+            registry-signature-bundles.jsonl
+            runtime-container-inspect.json
+            runtime-smoke.json
+            runtime-smoke.log
+            sbom-attestation-bundle.json
+            seaweedfs-4.39-arm64.cdx.json
+            slsa-bundles.jsonl
+            slsa-verify.json
+            toolchain.json
+            trivy-version.json
+            trivy-attestation-bundle.json
+            trivy.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Remove the ephemeral Buildx builder
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: docker buildx rm "${BUILDER_NAME}"
+
+  promote:
+    needs: verify
+    if: >-
+      github.repository == 'TommyKammy/Shirokuma' &&
+      github.ref == 'refs/heads/main' &&
+      needs.verify.result == 'success'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Check out the reviewed promotion contract
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Download retained candidate evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.verify.outputs.candidate_artifact }}
+          path: candidate-evidence
+
+      - name: Revalidate candidate evidence before promotion credentials exist
+        env:
+          PROMOTION_DIGEST: ${{ needs.verify.outputs.digest }}
+          CANDIDATE_ARTIFACT: ${{ needs.verify.outputs.candidate_artifact }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trusted_image.py promotion-preflight \
+            --root . \
+            --evidence-dir candidate-evidence \
+            --run-id "${GITHUB_RUN_ID}" \
+            --run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --digest "${PROMOTION_DIGEST}" \
+            --candidate-artifact "${CANDIDATE_ARTIFACT}"
+
+      - name: Install and verify pinned Crane without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = "Linux"
+          test "$(uname -m)" = "aarch64"
+
+          archive="${RUNNER_TEMP}/go-containerregistry_Linux_arm64.tar.gz"
+          bindir="${RUNNER_TEMP}/crane-${CRANE_VERSION}"
+          curl --fail --location \
+            --proto '=https' --tlsv1.2 \
+            --retry 5 --retry-all-errors \
+            --output "${archive}" "${CRANE_URL}"
+          echo "${CRANE_ARCHIVE_SHA256}  ${archive}" \
+            | sha256sum --check --strict
+          mkdir -p "${bindir}"
+          tar --extract --gzip --file "${archive}" \
+            --directory "${bindir}" crane
+          chmod 0755 "${bindir}/crane"
+          actual_version=$("${bindir}/crane" version)
+          test "${actual_version}" = "${CRANE_VERSION#v}"
+          echo "CRANE_BIN=${bindir}/crane" >> "${GITHUB_ENV}"
+
+      - name: Log in to GHCR for trusted-tag promotion
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote the fully verified digest to the trusted tag
+        env:
+          DIGEST: ${{ needs.verify.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          "${CRANE_BIN}" tag "${IMAGE}@${DIGEST}" "${TRUSTED_TAG}"
+          promoted_digest=$("${CRANE_BIN}" digest "${IMAGE}:${TRUSTED_TAG}")
+          test "${promoted_digest}" = "${DIGEST}"
+          export PROMOTED_DIGEST="${promoted_digest}"
+          python3 - <<'PY'
+          import datetime
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          candidate = Path("candidate-evidence")
+          release_path = candidate / "release-evidence.json"
+          candidate_release_bytes = release_path.read_bytes()
+          candidate_release_sha256 = hashlib.sha256(
+              candidate_release_bytes
+          ).hexdigest()
+          candidate_snapshot_path = candidate / "candidate-release-evidence.json"
+          candidate_snapshot_path.write_bytes(candidate_release_bytes)
+          release = json.loads(candidate_release_bytes)
+          builder_run_id = str(release["builder"]["run_id"])
+          builder_run_attempt = str(release["builder"]["run_attempt"])
+          promotion_run_id = os.environ["GITHUB_RUN_ID"]
+          promotion_run_attempt = os.environ["GITHUB_RUN_ATTEMPT"]
+          if promotion_run_id != builder_run_id:
+              raise SystemExit("promotion and candidate must share one workflow run")
+          if int(promotion_run_attempt) < int(builder_run_attempt):
+              raise SystemExit("promotion attempt cannot precede candidate attempt")
+          candidate_artifact_name = (
+              f"seaweedfs-4.39-arm64-candidate-{builder_run_id}"
+              f"-{builder_run_attempt}"
+          )
+          candidate_link = {
+              "artifact_name": candidate_artifact_name,
+              "snapshot_file": "candidate-release-evidence.json",
+              "release_evidence_sha256": candidate_release_sha256,
+              "contract_sha256": release["contract"]["sha256"],
+          }
+          record = {
+              "schema_version": 1,
+              "status": "verified",
+              "reference": f"{os.environ['IMAGE']}@{os.environ['PROMOTED_DIGEST']}",
+              "trusted_tag": f"{os.environ['IMAGE']}:{os.environ['TRUSTED_TAG']}",
+              "trusted_tag_role": "non_authoritative_pointer",
+              "trusted_tag_digest": os.environ["PROMOTED_DIGEST"],
+              "promoted_at": datetime.datetime.now(
+                  datetime.timezone.utc
+              ).isoformat().replace("+00:00", "Z"),
+              "run_id": promotion_run_id,
+              "run_attempt": promotion_run_attempt,
+              "tool": {
+                  "name": "crane",
+                  "version": os.environ["CRANE_VERSION"],
+                  "archive_sha256": os.environ["CRANE_ARCHIVE_SHA256"],
+                  "verified_before_registry_login": True,
+              },
+              "candidate": candidate_link,
+          }
+          promotion_path = candidate / "promotion-evidence.json"
+          promotion_path.write_text(
+              json.dumps(record, indent=2) + "\n", encoding="utf-8"
+          )
+
+          release["promotion"] = {
+              "status": "verified",
+              "run_id": promotion_run_id,
+              "run_attempt": promotion_run_attempt,
+              "trusted_tag": os.environ["TRUSTED_TAG"],
+              "trusted_tag_role": "non_authoritative_pointer",
+              "trusted_tag_digest": os.environ["PROMOTED_DIGEST"],
+              "evidence": "promotion-evidence.json",
+              "candidate_artifact": candidate_artifact_name,
+              "candidate_release_evidence": "candidate-release-evidence.json",
+              "candidate_release_sha256": candidate_release_sha256,
+          }
+          release["artifacts"]["candidate-release-evidence.json"] = {
+              "path": (
+                  "bootstrap/seaweedfs/v4.39/evidence/"
+                  "candidate-release-evidence.json"
+              ),
+              "sha256": candidate_release_sha256,
+          }
+          release["artifacts"]["promotion-evidence.json"] = {
+              "path": (
+                  "bootstrap/seaweedfs/v4.39/evidence/promotion-evidence.json"
+              ),
+              "sha256": hashlib.sha256(promotion_path.read_bytes()).hexdigest(),
+          }
+          release["actions_artifact"] = {
+              "role": "retained mirror only",
+              "final_name": (
+                  f"seaweedfs-4.39-arm64-{promotion_run_id}"
+                  f"-{promotion_run_attempt}"
+              ),
+              "retention_days": 90,
+          }
+          release_path.write_text(
+              json.dumps(release, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+          docker logout ghcr.io
+
+      - name: Verify final evidence after credentials are removed
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trusted_image.py final \
+            --root . --evidence-dir candidate-evidence
+
+      - name: Retain final promotion evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: seaweedfs-4.39-arm64-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate-evidence
+          if-no-files-found: error
+          retention-days: 90

@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-07-14
-version: "0.5"
+updated: 2026-07-15
+version: "0.6"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -45,6 +45,129 @@ The actions and scanner releases in `.github/workflows/security.yml` are pinned.
 Updates must be isolated dependency changes with review of upstream release
 notes and a failing fixture before the pin is advanced.
 
+Repository-controlled image builds additionally use a closed-world contract for
+repository-selected release tools and SHA-pinned Actions over an explicit,
+non-hermetic GitHub-hosted runner substrate. The contract enumerates the complete
+workflow-file and Containerfile hashes, Dockerfile frontend, base images,
+Buildx, BuildKit image digest and platform manifest, Syft, Trivy, Cosign, and
+the promotion tool. A
+repository-selected release tool absent from the contract is not permitted.
+Static validation also binds the adopted source record to the workflow before
+any build starts: the global commit, tree, and archive pins must equal
+`source.json`, and the source checkout repository and ref must equal that same
+record. Repository coordinates must be a literal GitHub owner/name slug; runtime
+expressions are forbidden. The three source pins may occur only in the canonical
+top-level `env`; job- and step-level shadowing is rejected. The complete job set
+and canonical block structure are closed by the contract. Every `jobs.*.steps`
+entry must start with a non-empty `name`; unnamed
+`run` or `uses` entries are rejected, and the complete ordered step-name set is
+closed by the contract. The retained Trivy image scan is likewise fixed to
+`vuln`, `HIGH,CRITICAL`, `ignore-unfixed=false`, `vuln-type=os,library`, and
+`exit-code=1`; changing the workflow and its recorded hash together cannot
+weaken these semantic filters.
+Docker, GitHub CLI, Git, Python, curl, tar, sha256sum, and other operating-system
+facilities supplied by the runner remain part of that trust boundary; the
+security-relevant direct tools, runner label, OS, and architecture are recorded
+instead of being misrepresented as independently pinned. Standalone release archives are downloaded without registry
+credentials, checked against an exact SHA-256 before extraction or execution,
+and only then made available to a credentialed step. The generated toolchain
+record must reconcile observed versions and image digests with the contract.
+The verified Buildx binary is installed under a run-private
+`DOCKER_CONFIG/cli-plugins` directory so Docker cannot silently select the
+runner's preinstalled plugin. Because GitHub's provenance publisher reads the
+default Docker config rather than that isolated directory, the workflow mirrors
+the already-issued GHCR credential only for the publisher step and restores or
+removes the default config in an `always()` cleanup step. Cosign writes the image
+signature bundle to both the durable evidence path and the OCI referrer; the
+workflow downloads the registry copy and requires an exact structural match
+before promotion. The CycloneDX SBOM and Trivy scan are also retained as v0.3
+DSSE attestation bundles and verified before candidate retention. Workflow signer
+SHA (`GITHUB_WORKFLOW_SHA`) and source SHA (`GITHUB_SHA`) are recorded and
+verified as separate identities. The current contract explicitly selects the
+Rekor v1 public API; a Rekor v2 migration must change the endpoint, identity
+schema, validator, and fixtures together.
+The pending static-audit lifecycle does not require a local Cosign binary,
+because no admitted bundles exist yet. Once admission becomes `approved`, the
+repository verifier fails closed unless the exact contract-pinned Cosign is
+available and all retained bundles pass cryptographic revalidation.
+The source record itself is hashed into release evidence. Its exact
+Containerfile digest and closed set of frontend, Go builder, and certificate
+image inputs must all be consumed by the Containerfile before publication. The
+validator folds Dockerfile continuations into logical instructions, requires
+the sole first-line syntax directive, rejects alternate parser directives and
+heredocs, and parses the complete global image-ARG set and every FROM stage. An
+obsolete pin left in a comment or continuation body is not evidence that the
+build consumes it. Each stage has a closed instruction sequence; the builder
+has one exact network-disabled vendor-verification and Go-build RUN, the
+certificate stage has no added instruction, and the scratch stage fixes every
+COPY, user, entrypoint, and command. The build action fixes its complete input
+mapping, including the reviewed context and Containerfile, and may pass only
+`SOURCE_COMMIT` and `GO_VENDOR_BUNDLE_SHA256`; alternate files, contexts, extra
+inputs, and reviewed base-image ARG overrides are forbidden.
+When an adopted Go source tree does not contain a root vendor directory, the
+trusted build must retain a deterministic vendor archive and a
+replacement-aware module/file manifest in Git. The archive hash is checked both
+before it enters the build context and inside the Containerfile. Pull-request
+audit fully extracts every retained archive member. It also checks out the exact
+recorded source commit and tree, selects Go `1.25.12`, creates fresh `GOMODCACHE`,
+`GOCACHE`, `GOPATH`, and `HOME` directories, and downloads only the modules
+required by the vendored package set from `https://proxy.golang.org` with
+`sum.golang.org` authentication. Private,
+direct-VCS, ambient Go-environment, workspace, and toolchain fallback are all
+disabled. The first `go mod vendor` therefore authenticates every downloaded
+module needed by the vendored package set. The gate checks the 496 actual
+vendored module records, including versioned replacements, against the pinned
+upstream `go.sum`, runs `go mod verify`, then switches to `GOPROXY=off` and
+`GOSUMDB=off` and regenerates `vendor` again. Both generated trees must match
+every retained path, size, mode, and SHA-256 value—including
+`vendor/modules.txt`. Network or checksum-service failure is fail-closed; it
+does not authorize a fallback. The same regeneration gate runs in the main
+publisher before registry credentials exist. Compilation
+must use `--network=none`, `-mod=vendor`, `GOPROXY=off`, `GOSUMDB=off`,
+`GOTOOLCHAIN=local`, and disabled VCS so neither first-build availability nor
+ambient module-cache state is an unrecorded input.
+
+The networked module download is a provenance-regeneration audit, not a build
+input. The admitted image is still compiled only from the reviewed retained
+archive with networking disabled. A future fully offline provenance audit would
+also need a reviewed module-proxy artifact; until then, proxy or checksum-database
+unavailability blocks regeneration instead of weakening it.
+Trusted builds must also set BuildKit `no-cache` and must not import or export a
+shared GitHub Actions cache. Reusing a mutable layer that is absent from the
+contract and release evidence violates the closed-world claim even when the
+source and vendor archive are unchanged.
+
+Trusted-tag publication is main-only and uses two review phases. Feature
+branches may validate the static builder and contract, but may not receive the
+write-capable publication path or approve their own evidence. After the policy
+PR merges, `refs/heads/main` runs a two-stage publication state machine. The
+verify job may push
+only a run-scoped quarantine tag and must finish source checks, runtime smoke,
+SBOM, scan, signing, provenance, and candidate evidence retention. A separate
+promotion job receives package-write permission, revalidates the retained
+candidate and binds its artifact name, digest, run ID, and monotonic attempt
+before credentials exist. It then installs the checksum-verified promotion
+tool and moves the trusted tag without changing the digest. A missing gate,
+unretained candidate, failed revalidation, or digest mismatch prevents the tag
+move. The mutable tag is only a non-authoritative publication pointer: a failure
+while generating, validating, or retaining final evidence may leave that pointer
+at the new digest, but cannot admit it. Admission requires the immutable digest,
+successfully retained final evidence, and the reviewed Git-committed admission
+record in a follow-up evidence-only PR. The interval between policy merge and
+that evidence PR is explicitly `pending_main_publication`; release evidence is
+absent and runtime use is forbidden. Candidate and final artifact names include
+both run ID and run attempt so a rerun cannot collide with an immutable earlier
+upload. The candidate name remains bound to the verify job's builder attempt,
+while promotion and the final artifact record the attempt that actually moved
+the tag. A promotion-only retry must stay in the same workflow run and may only
+advance, never precede, the builder attempt.
+The final evidence retains the exact pre-promotion release record as
+`candidate-release-evidence.json`; promotion is therefore auditable after the
+short-lived candidate artifact expires. Runtime evidence likewise retains raw
+Docker inspect output and reconciles the effective user, command, read-only
+root, tmpfs mounts, dropped capabilities, security option, and resource limits
+instead of trusting a self-asserted smoke-test summary.
+
 ## Resident image and SBOM evidence
 
 Every image admitted to a resident profile must have an entry in
@@ -81,6 +204,40 @@ digest gets a separate image SBOM and Trivy image scan before admission; the
 ledger points to that retained artifact. Release evidence must preserve the
 SBOM, scanner versions, vulnerability database timestamp, and immutable image
 digest for the lifetime of the release evidence.
+
+Repository-controlled source builds retain the complete Cosign verification,
+Sigstore bundle v0.3 certificate and Rekor inclusion snapshot, independently
+queried Rekor entry, raw signed image manifest, exact-workflow SLSA verification
+and bundles, observed toolchain, runtime smoke, image SBOM and its attestation
+bundle, scanner metadata, Trivy report and its attestation bundle, and promotion
+result in Git for the admission lifetime. Cosign
+verification binds issuer, identity, workflow name, repository, ref, SHA, and
+trigger. SLSA verification uses CLI signer/source filters and then reconciles
+the certificate, workflow path/ref/SHA, run and attempt, builder identity, and
+subject digest. Repository verification also requires the signed SLSA
+`resolvedDependencies` entry to name the exact source ref and commit, rather
+than trusting the retained verification JSON's source fields. A GitHub Actions
+artifact may mirror those files for operator download, but its finite retention
+window is not the durable source of truth. A source-built candidate remains
+blocked from runtime manifests until a
+resident-ledger supply-chain record backed by those retained files passes
+`check-images`.
+
+Git-only repository verification must not trust retained certificates,
+verification JSON, SBOM, or scan results structurally. It invokes the
+contract-pinned Cosign version against the retained image-signature, SLSA, SBOM,
+and Trivy v0.3 bundles with the exact issuer, GitHub workflow, digest, and
+predicate-type constraints. The signed SBOM and scan predicates must equal the
+retained JSON objects before their semantic gates run. A missing binary, version
+drift, invalid Fulcio chain, identity mismatch, invalid DSSE signature, predicate
+substitution, or invalid transparency material fails closed.
+
+For the pinned Cosign v3 format, `cosign verify IMAGE@DIGEST` is the
+authoritative registry-image check. A separate `verify-blob` check may bind the
+detached v0.3 `sign/v1` DSSE bundle to raw OCI manifest bytes only after those
+bytes hash to the exact image digest. Registry signature download must remain
+bundle-first JSONL; legacy `Base64Signature`/`Payload` records, a
+`messageSignature`, or another predicate type fail closed.
 
 Pinned fallback images are exceptional and require `fallback: true`, documented
 CVE risk, a future ISO `expires_on` date, and a concrete replacement plan in

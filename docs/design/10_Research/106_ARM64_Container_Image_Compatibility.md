@@ -151,20 +151,38 @@ not:
   that can anchor a replacement linux/arm64 image build.
 
 ADR-0019 cannot waive missing signature, transparency-log, or SLSA provenance
-evidence. WP-L1-LAKE-001 therefore remains fail-closed until SeaweedFS publishes
-a trusted signed artifact or a separately approved source-build and signing
-path supplies those prerequisites. No deployment manifest or resident-ledger
-entry may be added before that boundary is satisfied.
+evidence, so the upstream SeaweedFS image remains rejected. ADR-0020 instead
+approves the exact source revision for a repository-controlled build. Trusted
+publication is now main-only and two-phase: the builder, contract, and verifier
+merge first; the merged workflow then publishes from `refs/heads/main`; a
+follow-up evidence-only PR admits the resulting digest. The current state is
+`pending_main_publication`, so no replacement digest is yet admitted.
+
+The closed-world contract binds source archive, Containerfile, build inputs,
+the deterministic Go vendor archive, Buildx checksum, and BuildKit index/arm64
+digests. Compilation is network-disabled and the trusted build imports or
+exports no mutable BuildKit/GHA cache. Repository verification uses pinned
+Cosign `v3.1.1` to cryptographically reverify the retained certificate, DSSE
+signature, workflow identity, and transparency material rather than trusting
+JSON structure alone.
+
+Bootstrap run `29379475587`, attempt `1`, exercised the offline arm64 build,
+runtime, scan, signing, provenance, and promotion gates for digest
+`sha256:027be5ea9a172bbe2c29adb8928061b89ceb2a11261f5248a77653070b106d6d`.
+Its final artifact is `seaweedfs-4.39-arm64-29379475587-1` and SLSA attestation
+is `35365038`. Because it ran from `codex/issue-41`, it is explicitly recorded
+as `not_admitted_branch_publication`; it proves implementation fitness but does
+not authorize runtime use.
 
 The machine-readable decision is retained at
-`bootstrap/seaweedfs/v4.39/admission.json`. The repository-owned
-`verify-object-storage-profile` check pins that exact immutable candidate,
-validates the three missing trust controls, scans the complete GitOps tree for
-SeaweedFS or object-storage resources, and rejects SeaweedFS resident-ledger
-entries while admission remains blocked. This keeps the checkpoint green while
-failing closed; it does not
-reinterpret an intentionally missing workload as a CI defect or admission
-approval.
+`bootstrap/seaweedfs/v4.39/admission.json`. While pending,
+`release-evidence.json` and generated evidence are intentionally absent and the
+repository-owned audit proves that runtime permission remains false. After the
+main run, the complete Cosign, registry, Rekor, SLSA, raw runtime-inspect,
+CycloneDX, scanner, candidate, and promotion set must be copied together under
+`bootstrap/seaweedfs/v4.39/evidence/` and approved in the follow-up PR. Parent
+Issue #26 may add runtime records only after that source-build supply-chain
+record makes its proposed resident-ledger entry pass `check-images`.
 
 ## GitOps candidate evidence
 
