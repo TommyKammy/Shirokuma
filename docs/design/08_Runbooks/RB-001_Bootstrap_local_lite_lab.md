@@ -5,7 +5,7 @@ title: "Bootstrap local-lite lab"
 status: draft
 created: 2026-07-05
 updated: 2026-07-16
-version: "1.0.1"
+version: "1.1.0"
 area: "runbook"
 tags: [shirokuma, runbook]
 ---
@@ -92,12 +92,62 @@ export TF_VAR_seaweedfs_s3_application_secret_key="$(python3 -c 'import secrets;
 empty, it stops before OpenTofu mutates the cluster. It also rejects equal
 operator/application access keys. Do not weaken or bypass this preflight.
 
+The same target performs a read-only lookup for the legacy
+`shirokuma-dev/PersistentVolumeClaim/seaweedfs-data-seaweedfs-0` before
+OpenTofu apply. A lookup error fails closed. If that PVC exists, bootstrap
+stops: a PVC cannot be moved in place between Kubernetes namespaces, and
+retaining or relabeling it does not migrate its data to `shirokuma-storage`.
+Complete the verified export in RB-013, reset the whole `mac-studio-solo`
+profile, bootstrap the accepted namespace layout, and restore into the empty
+managed bucket. Do not delete the legacy PVC or bypass this guard as a shortcut.
+
 ```bash
 make tofu-fmt
 make tofu-validate
 flux check --pre
 make gitops-bootstrap
 ```
+
+### Bootstrap branch staging and `main` handoff
+
+`FLUX_BOOTSTRAP_BRANCH=flux/bootstrap-local-lite` is a staging branch used only
+to let the pinned Flux CLI publish and install its generated manifests. It is
+not the steady-state reconciliation branch. Complete this handoff after initial
+bootstrap or any recovery bootstrap:
+
+1. Confirm the staging branch contains the CLI-generated
+   `flux-system/gotk-components.yaml` and `flux-system/gotk-sync.yaml` for Flux
+   `v2.9.2`. Do not edit the generated controller resources on the staging
+   branch.
+2. From a focused branch based on current `origin/main`, bring in exactly those
+   two generated files. Change only the `GitRepository.spec.ref.branch` in
+   `gotk-sync.yaml` to `main`; retain the repository-owned Kustomize patches
+   that replace all four controller tags with their admitted exact digests.
+3. Run `make verify-gitops-bootstrap`, `make verify-security`, and
+   `make verify-gitops-image-admission`. The gate must reject a missing, extra,
+   duplicate, sidecar, init-container, repository, tag, version, patch, digest,
+   ledger, or sync-field mismatch. Merge the normal reviewed PR to `main` only
+   when all gates pass.
+4. Create a bridge branch from `flux/bootstrap-local-lite`, merge the accepted
+   `main`, and require the following comparison to be empty before merging a PR
+   whose base is `flux/bootstrap-local-lite`:
+
+```bash
+git diff --exit-code origin/main -- deploy/gitops/clusters/local-lite
+```
+
+5. Keep the staging branch until Flux reports the merged `main` revision.
+   Confirm that `flux-system/GitRepository/flux-system` uses branch `main`, and
+   that the root, dev, and object-storage Kustomizations are `Ready=True` at
+   that revision. Do not delete the staging branch or call the handoff complete
+   while the live Source still reports the staging branch or an older revision.
+
+`make gitops-reconcile` always reconciles the root and dev resources. It first
+performs a read-only lookup for the optional
+`flux-system/Kustomization/shirokuma-object-storage`: absence is an expected
+successful skip (including after its GitOps teardown), while an API lookup
+failure stops the target. It never turns an authorization, transport, or other
+lookup error into an absence.
 
 After bootstrap completes, remove the credentials from the shell environment
 without printing them:

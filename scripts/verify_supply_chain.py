@@ -13,6 +13,19 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+try:
+    from verify_gitops_image_admission import (
+        AdmissionError as FluxAdmissionError,
+        GOTK_COMPONENTS_REPOSITORY_PATH,
+        resolve_effective_flux_images,
+    )
+except ModuleNotFoundError:  # pragma: no cover - supports module-style test imports
+    from scripts.verify_gitops_image_admission import (
+        AdmissionError as FluxAdmissionError,
+        GOTK_COMPONENTS_REPOSITORY_PATH,
+        resolve_effective_flux_images,
+    )
+
 
 BLOCKING_SEVERITIES = {"HIGH", "CRITICAL"}
 LAB_PROFILE = "local-lab"
@@ -834,6 +847,27 @@ def deployed_image_references(repository: Path) -> list[tuple[str, str]]:
         if not (is_deployment_manifest or is_helm_template) or path.suffix not in DEPLOYMENT_SUFFIXES:
             continue
         absolute = repository / path
+        if relative == GOTK_COMPONENTS_REPOSITORY_PATH:
+            flux_inputs = {
+                "candidates_path": repository / "opentofu/dev/bootstrap-images.json",
+                "inventory_path": repository / "bootstrap/flux/v2.9.2/components.json",
+                "ledger_path": repository / "security/resident-images.json",
+                "customization_path": repository
+                / "deploy/gitops/clusters/local-lite/flux-system/kustomization.yaml",
+                "components_path": absolute,
+                "sync_path": repository
+                / "deploy/gitops/clusters/local-lite/flux-system/gotk-sync.yaml",
+            }
+            for label, flux_path in flux_inputs.items():
+                reject_manifest_ancestor_symlinks(flux_path, repository, label)
+            try:
+                effective = resolve_effective_flux_images(**flux_inputs)
+            except FluxAdmissionError as error:
+                raise PolicyError(
+                    f"{relative}: generated Flux image admission failed: {error}"
+                ) from error
+            references.extend((relative, reference) for reference in effective.values())
+            continue
         if path.suffix == ".json":
             references.extend(json_image_references(load_json(absolute), relative))
             continue

@@ -57,6 +57,7 @@ jobs:
           scanners: vuln,secret,misconfig
           severity: HIGH,CRITICAL
           ignore-unfixed: false
+          trivyignores: .trivyignore.yaml
           exit-code: 1
 
       - name: Generate and retain source SBOM
