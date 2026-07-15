@@ -19,3 +19,13 @@ resource "kubernetes_namespace_v1" "dev" {
     }
   }
 }
+
+resource "kubernetes_namespace_v1" "storage" {
+  metadata {
+    name = "shirokuma-storage"
+    labels = {
+      "app.kubernetes.io/part-of"    = "shirokuma"
+      "app.kubernetes.io/managed-by" = "OpenTofu"
+    }
+  }
+}

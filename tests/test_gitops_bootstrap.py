@@ -113,7 +113,54 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
             "reconcile kustomization shirokuma-dev -n flux-system",
             makefile,
         )
+        self.assertIn(
+            "reconcile kustomization shirokuma-object-storage -n flux-system",
+            makefile,
+        )
         self.assertIn("flux-system", makefile)
+
+    def test_gitops_bootstrap_preflights_all_secret_inputs_before_apply(self) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        target = makefile.split("gitops-bootstrap:", 1)[1].split("\ngitops-status:", 1)[0]
+        apply_offset = target.index("apply -input=false -auto-approve")
+        required_variables = (
+            "GITHUB_TOKEN",
+            "TF_VAR_seaweedfs_s3_operator_access_key",
+            "TF_VAR_seaweedfs_s3_operator_secret_key",
+            "TF_VAR_seaweedfs_s3_application_access_key",
+            "TF_VAR_seaweedfs_s3_application_secret_key",
+        )
+
+        for variable in required_variables:
+            with self.subTest(variable=variable):
+                reference = f"$${{{variable}:-}}"
+                self.assertIn(reference, target)
+                self.assertLess(target.index(reference), apply_offset)
+                self.assertNotIn(f'echo "$${{{variable}}}"', target)
+
+    def test_gitops_teardown_preflights_destroy_before_flux_uninstall(self) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        target = makefile.split("gitops-teardown:", 1)[1].split(
+            "\ncolima-start:", 1
+        )[0]
+        plan_offset = target.index("plan -destroy -refresh=false -input=false")
+        uninstall_offset = target.index("uninstall --context=$(KUBE_CONTEXT)")
+        destroy_offset = target.index("destroy -input=false -auto-approve")
+        required_variables = (
+            "TF_VAR_seaweedfs_s3_operator_access_key",
+            "TF_VAR_seaweedfs_s3_operator_secret_key",
+            "TF_VAR_seaweedfs_s3_application_access_key",
+            "TF_VAR_seaweedfs_s3_application_secret_key",
+        )
+
+        for variable in required_variables:
+            with self.subTest(variable=variable):
+                reference = f"$${{{variable}:-}}"
+                self.assertIn(reference, target)
+                self.assertLess(target.index(reference), plan_offset)
+                self.assertNotIn(f'echo "$${{{variable}}}"', target)
+        self.assertLess(plan_offset, uninstall_offset)
+        self.assertLess(uninstall_offset, destroy_offset)
 
     def run_image_admission(
         self,

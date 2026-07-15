@@ -5,7 +5,7 @@ title: "Bootstrap local-lite lab"
 status: draft
 created: 2026-07-05
 updated: 2026-07-16
-version: "0.9"
+version: "1.0.1"
 area: "runbook"
 tags: [shirokuma, runbook]
 ---
@@ -72,11 +72,41 @@ cluster prerequisites; `flux bootstrap github` installs the four standard
 controllers into `flux-system` and creates repository sync resources without
 changing the operator's current Kubernetes context.
 
+Before `make gitops-bootstrap`, generate all four required S3 values in a
+dedicated trusted owner-only shell. Do not enable `set -x`, run `env` or
+`export -p`, echo the variables, write them to a dotenv file, or paste values
+into a terminal, log, Issue, or PR. The command substitutions below deliver
+fresh values directly into the shell variables without displaying or recording
+the generated values; the shell history contains only the generation commands.
+
+```bash
+set +x
+umask 077
+export TF_VAR_seaweedfs_s3_operator_access_key="$(python3 -c 'import secrets; print(secrets.token_hex(16))')"
+export TF_VAR_seaweedfs_s3_operator_secret_key="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+export TF_VAR_seaweedfs_s3_application_access_key="$(python3 -c 'import secrets; print(secrets.token_hex(16))')"
+export TF_VAR_seaweedfs_s3_application_secret_key="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+```
+
+`make gitops-bootstrap` has a fail-closed preflight: if any variable is unset or
+empty, it stops before OpenTofu mutates the cluster. It also rejects equal
+operator/application access keys. Do not weaken or bypass this preflight.
+
 ```bash
 make tofu-fmt
 make tofu-validate
 flux check --pre
 make gitops-bootstrap
+```
+
+After bootstrap completes, remove the credentials from the shell environment
+without printing them:
+
+```bash
+unset TF_VAR_seaweedfs_s3_operator_access_key
+unset TF_VAR_seaweedfs_s3_operator_secret_key
+unset TF_VAR_seaweedfs_s3_application_access_key
+unset TF_VAR_seaweedfs_s3_application_secret_key
 ```
 
 Confirm controller readiness, Source/Kustomization state, and the
@@ -99,26 +129,42 @@ reconcile the approved revision. Direct `kubectl apply` is not valid evidence.
 This is the GitOps control-plane gate, not an application data-plane gate. Once
 the Issue #26 object-store revision is present, follow
 [[08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo]] to verify
-`NetworkPolicy/seaweedfs-s3-ingress`, both credential Secrets, HTTP `/healthz`
-and `/readyz`, and authenticated CRUD. A running Pod at `Ready=True` can outlive
-a deleted required Secret and does not by itself prove either Secret existence
-or S3 usability. Application clients must use the bucket-scoped
-`Secret/seaweedfs-s3-application-credentials` and opt in with
-`shirokuma.dev/object-storage-client: "true"`; they never receive the operator
-`Admin` identity.
+`shirokuma-storage/NetworkPolicy/seaweedfs-s3-ingress`, the
+`shirokuma-storage` server Secret, the `shirokuma-dev` application Secret, HTTP
+`/healthz` and `/readyz`, and authenticated CRUD. A running Pod at `Ready=True`
+can outlive a deleted required Secret and does not by itself prove either
+Secret existence or S3 usability. Application clients must use the
+bucket-scoped `shirokuma-dev/Secret/seaweedfs-s3-application-credentials`, call
+`http://seaweedfs-s3.shirokuma-storage.svc.cluster.local:8333`, and opt in with
+`shirokuma.dev/object-storage-client: "true"`; they cannot mount the
+cross-namespace `shirokuma-storage/Secret/seaweedfs-s3-credentials` and never
+receive the operator `Admin` identity.
 
 Teardown uses the same OpenTofu state and removes the Flux installation and
-`shirokuma-dev` namespace:
+both `shirokuma-storage` and `shirokuma-dev` namespaces:
+
+OpenTofu evaluates all four required S3 variables during destroy even though it
+will delete, rather than update, the Secrets. In the same trusted owner-only
+shell, re-export four fresh valid values with the non-logging generation block
+above. They are destroy evaluation inputs and do not need to recover the
+deployed credentials. `make gitops-teardown` fails before any cluster mutation
+when a variable is missing or invalid, and completes a non-mutating destroy plan
+before it uninstalls Flux.
 
 ```bash
 make gitops-teardown
+unset TF_VAR_seaweedfs_s3_operator_access_key
+unset TF_VAR_seaweedfs_s3_operator_secret_key
+unset TF_VAR_seaweedfs_s3_application_access_key
+unset TF_VAR_seaweedfs_s3_application_secret_key
 ```
 
 This command is destructive once the Issue #26 object-store revision is active.
-It uninstalls Flux and then destroys the OpenTofu-managed namespace; namespace
-deletion also removes `PersistentVolumeClaim/seaweedfs-data-seaweedfs-0` and can
-delete its backing volume and all object data. Before running it, quiesce
-writers and complete the verified export and paired inventory procedure in
+It uninstalls Flux and then destroys both OpenTofu-managed namespaces;
+`shirokuma-storage` deletion also removes
+`PersistentVolumeClaim/seaweedfs-data-seaweedfs-0` and can delete its backing
+volume and all object data. Before running it, quiesce writers and complete the
+verified export and paired inventory procedure in
 [[08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo]]. The SeaweedFS profile
 requests a retained `20Gi` PVC; actual object and metadata growth consumes host
 SSD inside the 400GB Colima disk and is not negligible operationally.

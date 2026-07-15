@@ -34,7 +34,7 @@ locals {
 resource "kubernetes_secret_v1" "seaweedfs_s3_credentials" {
   metadata {
     name      = "seaweedfs-s3-credentials"
-    namespace = kubernetes_namespace_v1.dev.metadata[0].name
+    namespace = kubernetes_namespace_v1.storage.metadata[0].name
     annotations = {
       "shirokuma.dev/s3-credential-generation" = var.seaweedfs_s3_credential_generation
     }
@@ -81,7 +81,7 @@ resource "kubernetes_secret_v1" "seaweedfs_s3_application_credentials" {
   data = {
     AWS_ACCESS_KEY_ID     = var.seaweedfs_s3_application_access_key
     AWS_SECRET_ACCESS_KEY = var.seaweedfs_s3_application_secret_key
-    S3_ENDPOINT           = "http://seaweedfs-s3.shirokuma-dev.svc.cluster.local:8333"
+    S3_ENDPOINT           = "http://seaweedfs-s3.shirokuma-storage.svc.cluster.local:8333"
     S3_BUCKET             = local.seaweedfs_s3_bucket
     S3_REGION             = "us-east-1"
     S3_PATH_STYLE         = "true"

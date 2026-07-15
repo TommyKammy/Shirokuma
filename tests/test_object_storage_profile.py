@@ -404,7 +404,7 @@ class ObjectStorageGitOpsRuntimeTests(unittest.TestCase):
             "healthChecks:",
             "kind: StatefulSet",
             "name: seaweedfs",
-            "namespace: shirokuma-dev",
+            "namespace: shirokuma-storage",
         ):
             with self.subTest(required=required):
                 self.assertIn(required, flux)
@@ -496,8 +496,11 @@ class ObjectStorageGitOpsRuntimeTests(unittest.TestCase):
         self.assertNotIn("NodePort", service)
         self.assertNotIn("LoadBalancer", service)
         self.assertNotIn("externalIPs", service)
+        self.assertIn("namespace: shirokuma-storage", service)
+        self.assertIn("namespace: shirokuma-storage", contract)
+        self.assertIn("namespace: shirokuma-storage", kustomization)
         self.assertIn(
-            "S3_ENDPOINT: http://seaweedfs-s3.shirokuma-dev.svc.cluster.local:8333",
+            "S3_ENDPOINT: http://seaweedfs-s3.shirokuma-storage.svc.cluster.local:8333",
             contract,
         )
         self.assertIn("S3_BUCKET: shirokuma-lakehouse", contract)
@@ -523,6 +526,7 @@ class ObjectStorageGitOpsRuntimeTests(unittest.TestCase):
         for required in (
             "kind: NetworkPolicy",
             "name: seaweedfs-s3-ingress",
+            "namespace: shirokuma-storage",
             "kubernetes.io/metadata.name: shirokuma-dev",
             'shirokuma.dev/object-storage-client: "true"',
             "protocol: TCP\n          port: 8333",
@@ -536,14 +540,24 @@ class ObjectStorageGitOpsRuntimeTests(unittest.TestCase):
         self.assertIn("--kubernetes", baseline)
         self.assertNotIn("--disable-network-policy", baseline)
 
-    def test_opentofu_owns_only_the_secret_boundary_and_commits_no_value(self) -> None:
+    def test_opentofu_owns_namespace_and_secret_boundaries_without_values(self) -> None:
+        main = (ROOT / "opentofu/dev/main.tf").read_text(encoding="utf-8")
         variables = (ROOT / "opentofu/dev/variables.tf").read_text(encoding="utf-8")
         secret = (ROOT / "opentofu/dev/object-storage.tf").read_text(
             encoding="utf-8"
         )
+        outputs = (ROOT / "opentofu/dev/outputs.tf").read_text(encoding="utf-8")
         stateful = (
             ROOT / "deploy/gitops/object-storage/statefulset.yaml"
         ).read_text(encoding="utf-8")
+        for required in (
+            'resource "kubernetes_namespace_v1" "dev"',
+            'name = "shirokuma-dev"',
+            'resource "kubernetes_namespace_v1" "storage"',
+            'name = "shirokuma-storage"',
+        ):
+            with self.subTest(namespace_contract=required):
+                self.assertIn(required, main)
         for name in (
             "seaweedfs_s3_operator_access_key",
             "seaweedfs_s3_operator_secret_key",
@@ -585,7 +599,23 @@ class ObjectStorageGitOpsRuntimeTests(unittest.TestCase):
         ):
             with self.subTest(required=required):
                 self.assertIn(required, secret)
+        server_secret = re.search(
+            r'resource "kubernetes_secret_v1" "seaweedfs_s3_credentials" '
+            r"\{(?P<body>.*?)(?=\nresource )",
+            secret,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(server_secret)
+        self.assertIn(
+            "namespace = kubernetes_namespace_v1.storage.metadata[0].name",
+            server_secret.group("body"),
+        )
+        self.assertNotIn(
+            "namespace = kubernetes_namespace_v1.dev.metadata[0].name",
+            server_secret.group("body"),
+        )
         self.assertIn("secretName: seaweedfs-s3-credentials", stateful)
+        self.assertIn("namespace: shirokuma-storage", stateful)
         self.assertNotIn("optional: true", stateful)
         self.assertIn('shirokuma.dev/s3-credential-generation: "1"', stateful)
         self.assertNotIn("stringData:", stateful)
@@ -598,6 +628,23 @@ class ObjectStorageGitOpsRuntimeTests(unittest.TestCase):
         )
         self.assertIsNotNone(application_secret)
         self.assertNotIn("seaweedfs_s3_operator_", application_secret.group("body"))
+        self.assertIn(
+            "namespace = kubernetes_namespace_v1.dev.metadata[0].name",
+            application_secret.group("body"),
+        )
+        self.assertIn(
+            'S3_ENDPOINT           = "http://seaweedfs-s3.shirokuma-storage.svc.cluster.local:8333"',
+            application_secret.group("body"),
+        )
+
+        for required in (
+            'output "seaweedfs_s3_secret_namespace"',
+            'output "seaweedfs_s3_application_secret_namespace"',
+            'output "seaweedfs_s3_endpoint"',
+            'value       = "http://seaweedfs-s3.shirokuma-storage.svc.cluster.local:8333"',
+        ):
+            with self.subTest(output_contract=required):
+                self.assertIn(required, outputs)
 
         generation = re.search(
             r'variable "seaweedfs_s3_credential_generation" '
@@ -615,6 +662,7 @@ class ObjectStorageGitOpsRuntimeTests(unittest.TestCase):
         )
         client = (ROOT / "scripts/object_storage_s3.py").read_text(encoding="utf-8")
         for required in (
+            'KUBE_NAMESPACE="${KUBE_NAMESPACE:-shirokuma-storage}"',
             "port-forward --address 127.0.0.1",
             'service/${S3_SERVICE}',
             "object_storage_s3.py\" smoke",
