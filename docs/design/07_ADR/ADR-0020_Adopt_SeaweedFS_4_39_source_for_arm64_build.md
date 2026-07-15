@@ -68,8 +68,12 @@ against the retained bundle and raw OCI manifest, so the Fulcio certificate,
 workflow identity, DSSE signature, and transparency material are verified
 cryptographically rather than accepted from self-reported JSON. Mutation
 fixtures cover missing tools, mutable action refs,
-Containerfile drift, detached Docker plugin discovery, conflated workflow and
-source SHAs, rerun-unsafe artifact names, missing promotion dependency,
+Containerfile drift, comment/continuation/heredoc decoys, alternate parser
+directives, split Dockerfile keywords, extra networked builder instructions,
+alternate build contexts/files, base-image build-argument overrides, detached
+Docker plugin discovery, conflated workflow and source SHAs, partial-rerun
+builder/promotion lineage, pre-credential promotion binding, rerun-unsafe
+artifact names, missing promotion dependency,
 feature-branch publication, mutable BuildKit cache, and premature runtime
 permission.
 The contract's closed-world rule applies to tools downloaded or selected by the
@@ -92,6 +96,10 @@ candidate evidence passes the shared validator. The admission record must use
 the resulting immutable digest. That mutable tag is a non-authoritative
 publication pointer, not an admission signal; a post-tag evidence failure keeps
 the run and digest inadmissible until final evidence is retained and committed.
+Candidate lineage is keyed to the verify job's builder attempt. Promotion
+evidence and the final artifact are keyed to the actual promotion attempt, which
+may be later when only failed jobs are rerun; the validator requires the same
+workflow run ID and a monotonic attempt number.
 The main-only verify job grants only contents:read,
 packages:write, id-token:write, and attestations:write; the promotion job has no
 OIDC or attestation permission. It installs checksum-verified Crane before GHCR

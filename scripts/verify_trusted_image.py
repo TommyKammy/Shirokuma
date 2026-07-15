@@ -27,7 +27,7 @@ REMOTE_ACTION_RE = re.compile(
     r"^\s*(?:-\s+)?uses:\s+([^\s@]+)@([0-9a-f]{40})(?:\s+#.*)?$"
 )
 USES_LINE_RE = re.compile(r"^\s*(?:-\s+)?uses:")
-STEP_NAME_RE = re.compile(r"^\s*-\s+name:\s*(.+?)\s*$", re.MULTILINE)
+STEP_NAME_RE = re.compile(r"^ {6}- name:\s*(.+?)\s*$", re.MULTILINE)
 
 
 class ContractError(RuntimeError):
@@ -160,6 +160,217 @@ def _digest_hex(reference: str) -> str:
     return digest
 
 
+def _containerfile_logical_instructions(
+    lines: Sequence[str],
+) -> List[tuple[int, str]]:
+    logical_instructions: List[tuple[int, str]] = []
+    continued_parts: List[str] = []
+    continued_from_line = 0
+    for line_number, raw_line in enumerate(lines, start=1):
+        line = raw_line.strip()
+        if not continued_parts and (not line or line.startswith("#")):
+            continue
+        _expect(
+            not (continued_parts and (not line or line.startswith("#"))),
+            "CONTAINERFILE_LOGICAL_LINES",
+            f"ambiguous blank or comment in continuation at line {line_number}",
+        )
+        _expect(
+            "<<" not in line,
+            "CONTAINERFILE_HEREDOC",
+            f"heredoc syntax is outside the reviewed grammar at line {line_number}",
+        )
+        trailing_escapes = len(line) - len(line.rstrip("\\"))
+        _expect(
+            trailing_escapes <= 1,
+            "CONTAINERFILE_LOGICAL_LINES",
+            f"ambiguous trailing escapes at line {line_number}",
+        )
+        if not continued_parts:
+            continued_from_line = line_number
+        if trailing_escapes == 1:
+            continued_parts.append(line[:-1])
+            continue
+        continued_parts.append(line)
+        logical_instruction = "".join(continued_parts)
+        _expect(
+            "<<" not in logical_instruction,
+            "CONTAINERFILE_HEREDOC",
+            f"split heredoc syntax at line {continued_from_line}",
+        )
+        logical_instructions.append(
+            (
+                continued_from_line,
+                logical_instruction,
+            )
+        )
+        continued_parts = []
+    _expect(
+        not continued_parts,
+        "CONTAINERFILE_LOGICAL_LINES",
+        f"unterminated continuation from line {continued_from_line}",
+    )
+    return logical_instructions
+
+
+def validate_containerfile_build_inputs(
+    container_text: str,
+    build_inputs: Dict[str, Any],
+    frontend: str,
+) -> None:
+    """Bind reviewed image pins to the Dockerfile instructions that consume them."""
+
+    lines = container_text.splitlines()
+    expected_directive = f"# syntax={frontend}"
+    parser_directives = [
+        line.strip()
+        for line in lines
+        if re.match(
+            r"^#\s*(?:syntax|escape|check)\s*=",
+            line.strip(),
+            re.IGNORECASE,
+        )
+    ]
+    _expect(
+        bool(lines)
+        and lines[0] == expected_directive
+        and parser_directives == [expected_directive],
+        "CONTAINERFILE_SYNTAX_DIRECTIVE",
+        "the first line must be the sole reviewed syntax directive",
+    )
+
+    logical_instructions = _containerfile_logical_instructions(lines)
+
+    global_args: Dict[str, str] = {}
+    from_instructions: List[str] = []
+    stage_instructions: List[List[str]] = []
+    before_first_from = True
+    for line_number, line in logical_instructions:
+        keyword = line.split(None, 1)[0].upper()
+        if keyword == "FROM":
+            before_first_from = False
+            from_instructions.append(line)
+            stage_instructions.append([])
+            continue
+        if not before_first_from:
+            stage_instructions[-1].append(line)
+            continue
+        _expect(
+            keyword == "ARG",
+            "CONTAINERFILE_GLOBAL_ARGS",
+            f"unexpected global instruction at line {line_number}",
+        )
+        match = re.fullmatch(r"ARG\s+([A-Z_][A-Z0-9_]*)=(\S+)", line)
+        _expect(
+            match is not None,
+            "CONTAINERFILE_GLOBAL_ARGS",
+            f"invalid global ARG at line {line_number}",
+        )
+        name, value = match.groups()
+        _expect(
+            name not in global_args,
+            "CONTAINERFILE_GLOBAL_ARGS",
+            f"duplicate global ARG {name}",
+        )
+        global_args[name] = value
+
+    expected_args = {
+        "GO_IMAGE": build_inputs["go"],
+        "RUNTIME_IMAGE": build_inputs["certificates"],
+    }
+    _expect(
+        global_args == expected_args,
+        "CONTAINERFILE_GLOBAL_ARGS",
+        "global image ARG defaults differ from reviewed pins",
+    )
+    _expect(
+        from_instructions
+        == [
+            "FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS builder",
+            "FROM ${RUNTIME_IMAGE} AS certificates",
+            "FROM scratch",
+        ],
+        "CONTAINERFILE_STAGE_PLAN",
+        "build stages do not consume the reviewed image ARGs exactly",
+    )
+
+    expected_builder_prefix = [
+        "ARG TARGETOS",
+        "ARG TARGETARCH",
+        "ARG SOURCE_COMMIT",
+        "ARG GO_VENDOR_BUNDLE_SHA256",
+        "WORKDIR /src",
+        "COPY . .",
+    ]
+    builder_instructions = stage_instructions[0]
+    _expect(
+        len(builder_instructions) == len(expected_builder_prefix) + 1
+        and builder_instructions[:-1] == expected_builder_prefix
+        and builder_instructions[-1].startswith("RUN --network=none "),
+        "CONTAINERFILE_BUILDER_STAGE",
+        "builder stage instruction set or order differs",
+    )
+    expected_builder_run = (
+        'RUN --network=none test -n "${SOURCE_COMMIT}" && '
+        'test -n "${GO_VENDOR_BUNDLE_SHA256}" && '
+        'echo "${GO_VENDOR_BUNDLE_SHA256}  '
+        '/src/.shirokuma/go-vendor.tar.xz" | sha256sum -c - && '
+        "tar -xJf /src/.shirokuma/go-vendor.tar.xz -C /src && "
+        "test -f /src/vendor/modules.txt && rm -rf /src/.shirokuma && "
+        "mkdir -p /out/data /out/tmp && cd /src/weed && env "
+        'CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" '
+        "GOENV=off GOTOOLCHAIN=local GOWORK=off GOFLAGS=-mod=vendor "
+        "GOPROXY=off GOSUMDB=off GOPRIVATE= GONOPROXY= GONOSUMDB= "
+        "'GOVCS=*:off' go build -buildvcs=false -trimpath "
+        '-ldflags="-s -w -extldflags -static -X '
+        "github.com/seaweedfs/seaweedfs/weed/util/version.COMMIT="
+        '${SOURCE_COMMIT}" -o /out/weed .'
+    )
+    _expect(
+        builder_instructions[-1] == expected_builder_run,
+        "CONTAINERFILE_BUILDER_RUN",
+        "offline vendor verification and shell command must match exactly",
+    )
+
+    _expect(
+        stage_instructions[1] == [],
+        "CONTAINERFILE_CERTIFICATE_STAGE",
+        "certificate stage must only provide the pinned base filesystem",
+    )
+    expected_final_instructions = [
+        "ARG SOURCE_COMMIT",
+        "ARG GO_VENDOR_BUNDLE_SHA256",
+        (
+            'LABEL org.opencontainers.image.title="Shirokuma SeaweedFS" '
+            'org.opencontainers.image.version="4.39" '
+            'org.opencontainers.image.source="https://github.com/seaweedfs/seaweedfs" '
+            'org.opencontainers.image.revision="${SOURCE_COMMIT}" '
+            'org.opencontainers.image.licenses="Apache-2.0" '
+            'dev.shirokuma.go-vendor-bundle.sha256="${GO_VENDOR_BUNDLE_SHA256}"'
+        ),
+        (
+            "COPY --from=certificates /etc/ssl/certs/ca-certificates.crt "
+            "/etc/ssl/certs/ca-certificates.crt"
+        ),
+        "COPY --from=builder /out/weed /usr/bin/weed",
+        "COPY --from=builder --chown=65532:65532 /out/data /data",
+        "COPY --from=builder --chown=65532:65532 /out/tmp /tmp",
+        (
+            "COPY --from=builder --chown=65532:65532 /src/docker/filer.toml "
+            "/etc/seaweedfs/filer.toml"
+        ),
+        "USER 65532:65532",
+        "EXPOSE 7333 8333 8888 9333 9340 19333 23646",
+        'ENTRYPOINT ["/usr/bin/weed"]',
+        'CMD ["mini", "-dir=/data"]',
+    ]
+    _expect(
+        stage_instructions[2] == expected_final_instructions,
+        "CONTAINERFILE_FINAL_STAGE",
+        "runtime stage instruction set or order differs",
+    )
+
+
 def load_contract(root: Path) -> Dict[str, Any]:
     contract = _load_json(root / CONTRACT_PATH)
     _expect(contract.get("schema_version") == 1, "CONTRACT_SCHEMA", "expected schema 1")
@@ -214,7 +425,11 @@ def validate_static_contract(root: Path) -> Dict[str, Any]:
             "SOURCE_BUILD_INPUT_PIN",
             name,
         )
-        _expect(value in container_text, "SOURCE_BUILD_INPUT_USE", name)
+    validate_containerfile_build_inputs(
+        container_text,
+        build_inputs,
+        container["frontend"],
+    )
 
     module_inputs = source.get("module_inputs")
     contract_module_inputs = contract["source"].get("module_inputs")
@@ -278,22 +493,6 @@ def validate_static_contract(root: Path) -> Dict[str, Any]:
         )
     except package_go_vendor.VendorPackageError as error:
         _fail("MODULE_INPUT_PACKAGE", f"{error.code}: {error.detail}")
-    required_vendor_policy = (
-        "RUN --network=none",
-        "GOFLAGS=-mod=vendor",
-        "GOPROXY=off",
-        "GOSUMDB=off",
-        "GOTOOLCHAIN=local",
-        "'GOVCS=*:off'",
-        "GO_VENDOR_BUNDLE_SHA256",
-        "dev.shirokuma.go-vendor-bundle.sha256",
-    )
-    _expect(
-        all(value in container_text for value in required_vendor_policy),
-        "MODULE_BUILD_POLICY",
-        "Containerfile does not enforce the retained offline vendor build",
-    )
-
     toolchain = contract.get("toolchain", {})
     expected_tools = {"buildx", "buildkit", "syft", "trivy", "cosign", "crane"}
     _expect(set(toolchain) == expected_tools, "TOOLCHAIN_CLOSED_WORLD", repr(sorted(toolchain)))
@@ -356,6 +555,16 @@ def validate_static_contract(root: Path) -> Dict[str, Any]:
     )
     workflow_path = _safe_repo_path(root, workflow_record["path"], "WORKFLOW_PATH")
     workflow = workflow_path.read_text(encoding="utf-8")
+    workflow_step_matches = list(STEP_NAME_RE.finditer(workflow))
+    actual_steps = [match.group(1) for match in workflow_step_matches]
+    workflow_step_positions = {
+        match.group(1): match.start() for match in workflow_step_matches
+    }
+    _expect(
+        len(workflow_step_positions) == len(workflow_step_matches),
+        "WORKFLOW_STEP_CLOSED_WORLD",
+        "duplicate step names are forbidden",
+    )
     _expect(f"runs-on: {workflow_record['runner']}" in workflow, "WORKFLOW_RUNNER", workflow_record["runner"])
     _expect(
         workflow_record.get("workflow_sha_environment") == "GITHUB_WORKFLOW_SHA"
@@ -394,6 +603,70 @@ def validate_static_contract(root: Path) -> Dict[str, Any]:
         and "cache-to:" not in workflow,
         "BUILD_CACHE_POLICY",
         "trusted builds must not import or export mutable BuildKit cache",
+    )
+    expected_build_arguments = [
+        "SOURCE_COMMIT",
+        "GO_VENDOR_BUNDLE_SHA256",
+    ]
+    expected_build_action_inputs = [
+        "builder",
+        "context",
+        "file",
+        "platforms",
+        "push",
+        "provenance",
+        "sbom",
+        "no-cache",
+        "tags",
+        "build-args",
+    ]
+    _expect(
+        workflow_record.get("build_action_inputs")
+        == expected_build_action_inputs
+        and workflow_record.get("build_arguments") == expected_build_arguments,
+        "BUILD_ACTION_POLICY",
+        "build action input or argument contract differs from the closed set",
+    )
+    build_step_name = "Build and publish only linux/arm64"
+    verify_step_name = "Verify the published platform"
+    _expect(
+        build_step_name in workflow_step_positions
+        and verify_step_name in workflow_step_positions
+        and workflow_step_positions[build_step_name]
+        < workflow_step_positions[verify_step_name],
+        "BUILD_ACTION_POLICY",
+        "build or verification step boundary is ambiguous",
+    )
+    actual_build_step = workflow[
+        workflow_step_positions[build_step_name] : workflow_step_positions[
+            verify_step_name
+        ]
+    ].rstrip()
+    expected_build_step = (
+        "      - name: Build and publish only linux/arm64\n"
+        "        id: build\n"
+        "        uses: docker/build-push-action@"
+        "10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6\n"
+        "        with:\n"
+        "          builder: ${{ env.BUILDER_NAME }}\n"
+        "          context: seaweedfs-src\n"
+        f"          file: {container['path']}\n"
+        f"          platforms: {contract['platform']}\n"
+        "          push: true\n"
+        "          provenance: false\n"
+        "          sbom: false\n"
+        "          no-cache: true\n"
+        "          tags: ${{ env.IMAGE }}:quarantine-"
+        "${{ github.run_id }}-${{ github.run_attempt }}\n"
+        "          build-args: |\n"
+        "            SOURCE_COMMIT=${{ env.SOURCE_COMMIT }}\n"
+        "            GO_VENDOR_BUNDLE_SHA256="
+        "${{ env.GO_VENDOR_BUNDLE_SHA256 }}"
+    )
+    _expect(
+        actual_build_step == expected_build_step,
+        "BUILD_ACTION_POLICY",
+        "build action bytes differ from the reviewed closed invocation",
     )
     _expect(
         "      - codex/issue-41" not in workflow
@@ -435,7 +708,6 @@ def validate_static_contract(root: Path) -> Dict[str, Any]:
         "workflow target differs from contract",
     )
 
-    actual_steps = STEP_NAME_RE.findall(workflow)
     _expect(
         actual_steps == workflow_record.get("allowed_steps"),
         "WORKFLOW_STEP_CLOSED_WORLD",
@@ -478,6 +750,9 @@ def validate_static_contract(root: Path) -> Dict[str, Any]:
         "cosign-signature-bundle.json",
         "toolchain.json",
         "promotion-evidence.json",
+        "scripts/verify_trusted_image.py promotion-preflight",
+        'builder_run_id = str(release["builder"]["run_id"])',
+        'builder_run_attempt = str(release["builder"]["run_attempt"])',
         f"IMAGE: {image_contract['repository']}",
         f"TRUSTED_TAG: {image_contract['trusted_tag']}",
         image_contract["quarantine_tag_template"].format(
@@ -493,18 +768,52 @@ def validate_static_contract(root: Path) -> Dict[str, Any]:
 
     positions: List[int] = []
     for name in workflow_record["gate_order"]:
-        marker = f"- name: {name}"
-        _expect(marker in workflow, "WORKFLOW_GATE_MISSING", name)
-        positions.append(workflow.index(marker))
+        _expect(
+            name in workflow_step_positions,
+            "WORKFLOW_GATE_MISSING",
+            name,
+        )
+        positions.append(workflow_step_positions[name])
     _expect(positions == sorted(positions), "WORKFLOW_GATE_ORDER", "gate order differs from contract")
     _expect("needs: verify" in workflow, "PROMOTION_DEPENDENCY", "promote job must need verify")
 
-    buildx_install = workflow.index("- name: Install and verify pinned Buildx and BuildKit without credentials")
-    quarantine_login = workflow.index("- name: Log in to GHCR for the quarantine push")
-    crane_install = workflow.index("- name: Install and verify pinned Crane without credentials")
-    promotion_login = workflow.index("- name: Log in to GHCR for trusted-tag promotion")
+    buildx_install = workflow_step_positions[
+        "Install and verify pinned Buildx and BuildKit without credentials"
+    ]
+    quarantine_login = workflow_step_positions[
+        "Log in to GHCR for the quarantine push"
+    ]
+    crane_install = workflow_step_positions[
+        "Install and verify pinned Crane without credentials"
+    ]
+    promotion_login = workflow_step_positions[
+        "Log in to GHCR for trusted-tag promotion"
+    ]
+    promotion_preflight = workflow_step_positions[
+        "Revalidate candidate evidence before promotion credentials exist"
+    ]
+    promote_step = workflow_step_positions[
+        "Promote the fully verified digest to the trusted tag"
+    ]
+    promotion_preflight_command = workflow.find(
+        "scripts/verify_trusted_image.py promotion-preflight",
+        promotion_preflight,
+        crane_install,
+    )
+    promotion_tag = workflow.find(
+        '"${CRANE_BIN}" tag',
+        promote_step,
+        workflow_step_positions["Verify final evidence after credentials are removed"],
+    )
     _expect(buildx_install < quarantine_login, "BUILDX_CREDENTIAL_BOUNDARY", "install must precede login")
     _expect(crane_install < promotion_login, "CRANE_CREDENTIAL_BOUNDARY", "install must precede login")
+    _expect(
+        promotion_preflight_command >= promotion_preflight
+        and promotion_tag >= promote_step
+        and promotion_preflight < crane_install < promotion_login < promotion_tag,
+        "PROMOTION_PREFLIGHT_ORDER",
+        "candidate lineage and digest must be bound before promotion credentials",
+    )
     _expect(
         "secrets.GITHUB_TOKEN" not in workflow[:quarantine_login]
         and "docker login" not in workflow[:quarantine_login],
@@ -521,10 +830,13 @@ def validate_static_contract(root: Path) -> Dict[str, Any]:
 
     evidence_contract = contract["evidence"]
     candidate_retention = workflow[
-        workflow.index("- name: Retain candidate evidence before trusted-tag promotion"):
-        workflow.index("- name: Remove the ephemeral Buildx builder")
+        workflow_step_positions[
+            "Retain candidate evidence before trusted-tag promotion"
+        ] : workflow_step_positions["Remove the ephemeral Buildx builder"]
     ]
-    final_retention = workflow[workflow.index("- name: Retain final promotion evidence"):]
+    final_retention = workflow[
+        workflow_step_positions["Retain final promotion evidence"] :
+    ]
     _expect(
         f"retention-days: {evidence_contract['candidate_retention_days']}" in candidate_retention,
         "CANDIDATE_RETENTION",
@@ -1208,6 +1520,29 @@ def _validate_runtime(
     _expect(smoke.get("result") == "passed", "RUNTIME_SMOKE_RESULT", "not passed")
 
 
+def _validate_promotion_execution_identity(
+    builder: Dict[str, Any],
+    promotion_run_id: str,
+    promotion_run_attempt: str,
+) -> None:
+    builder_run_id = str(builder["run_id"])
+    builder_run_attempt = str(builder["run_attempt"])
+    _expect(
+        promotion_run_id.isdigit()
+        and promotion_run_attempt.isdigit()
+        and int(promotion_run_id) > 0
+        and int(promotion_run_attempt) > 0
+        and promotion_run_id == builder_run_id,
+        "PROMOTION_RUN_IDENTITY",
+        "promotion must belong to the candidate workflow run",
+    )
+    _expect(
+        int(promotion_run_attempt) >= int(builder_run_attempt),
+        "PROMOTION_ATTEMPT_ORDER",
+        "promotion attempt precedes candidate build attempt",
+    )
+
+
 def _validate_promotion(
     release: Dict[str, Any],
     contract: Dict[str, Any],
@@ -1264,11 +1599,12 @@ def _validate_promotion(
         "PROMOTION_TRUSTED_TAG_ROLE",
         "tag pointer must not be an admission authority",
     )
-    _expect(
-        str(promotion.get("run_id")) == str(builder["run_id"])
-        and str(promotion.get("run_attempt")) == str(builder["run_attempt"]),
-        "PROMOTION_RUN_IDENTITY",
-        "builder run mismatch",
+    promotion_run_id = str(promotion.get("run_id", ""))
+    promotion_run_attempt = str(promotion.get("run_attempt", ""))
+    _validate_promotion_execution_identity(
+        builder,
+        promotion_run_id,
+        promotion_run_attempt,
     )
     crane = contract["toolchain"]["crane"]
     tool = promotion.get("tool", {})
@@ -1340,10 +1676,10 @@ def _validate_promotion(
     )
     _expect(release_promotion.get("status") == "verified", "PROMOTION_STATUS", "release record")
     _expect(
-        str(release_promotion.get("run_id")) == str(builder["run_id"])
-        and str(release_promotion.get("run_attempt")) == str(builder["run_attempt"]),
+        str(release_promotion.get("run_id")) == promotion_run_id
+        and str(release_promotion.get("run_attempt")) == promotion_run_attempt,
         "RELEASE_PROMOTION_RUN_IDENTITY",
-        "builder run mismatch",
+        "release and promotion evidence execution identities differ",
     )
     _expect(
         release_promotion.get("trusted_tag") == contract["image"]["trusted_tag"]
@@ -1671,6 +2007,24 @@ def _validate_repository_admission(root: Path, release: Dict[str, Any]) -> None:
         )
 
 
+def _expected_actions_artifact_name(
+    release: Dict[str, Any],
+    require_promotion: bool,
+) -> str:
+    artifact_prefix = "seaweedfs-4.39-arm64"
+    if require_promotion:
+        identity = release.get("promotion", {})
+        return (
+            f"{artifact_prefix}-{identity.get('run_id')}"
+            f"-{identity.get('run_attempt')}"
+        )
+    identity = release.get("builder", {})
+    return (
+        f"{artifact_prefix}-candidate-{identity.get('run_id')}"
+        f"-{identity.get('run_attempt')}"
+    )
+
+
 def validate_release_bundle(
     root: Path,
     evidence_dir: Optional[Path] = None,
@@ -1840,17 +2194,14 @@ def validate_release_bundle(
     )
 
     actions_artifact = release.get("actions_artifact", {})
-    artifact_prefix = "seaweedfs-4.39-arm64"
+    expected_artifact_name = _expected_actions_artifact_name(
+        release,
+        require_promotion,
+    )
     if require_promotion:
-        expected_artifact_name = (
-            f"{artifact_prefix}-{builder['run_id']}-{builder['run_attempt']}"
-        )
         actual_artifact_name = actions_artifact.get("final_name")
         expected_retention = contract["evidence"]["final_retention_days"]
     else:
-        expected_artifact_name = (
-            f"{artifact_prefix}-candidate-{builder['run_id']}-{builder['run_attempt']}"
-        )
         actual_artifact_name = actions_artifact.get("candidate_name")
         expected_retention = contract["evidence"]["candidate_retention_days"]
     _expect(
@@ -1943,6 +2294,44 @@ def validate_release_bundle(
         _expect(release.get("promotion", {}).get("status") == "pending", "PROMOTION_STATUS", "candidate must be pending")
     if repository_mode:
         _validate_repository_admission(root, release)
+    return release
+
+
+def validate_promotion_preflight(
+    root: Path,
+    evidence_dir: Path,
+    run_id: str,
+    run_attempt: str,
+    digest: str,
+    candidate_artifact: str,
+) -> Dict[str, Any]:
+    """Bind a validated candidate to the exact promotion execution before login."""
+
+    release = validate_release_bundle(
+        root,
+        evidence_dir,
+        require_promotion=False,
+    )
+    _validate_promotion_execution_identity(
+        release["builder"],
+        run_id,
+        run_attempt,
+    )
+    expected_candidate = _expected_actions_artifact_name(
+        release,
+        require_promotion=False,
+    )
+    _expect(
+        candidate_artifact == expected_candidate
+        and release["actions_artifact"]["candidate_name"] == expected_candidate,
+        "PROMOTION_CANDIDATE_ARTIFACT",
+        "downloaded candidate is not the builder-attempt artifact",
+    )
+    _expect(
+        digest == release["digest"],
+        "PROMOTION_TARGET_DIGEST",
+        "promotion output digest differs from validated candidate evidence",
+    )
     return release
 
 
@@ -2130,10 +2519,21 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "mode",
-        choices=("contract", "candidate", "final", "repository", "audit"),
+        choices=(
+            "contract",
+            "candidate",
+            "promotion-preflight",
+            "final",
+            "repository",
+            "audit",
+        ),
     )
     parser.add_argument("--root", type=Path, default=Path("."))
     parser.add_argument("--evidence-dir", type=Path)
+    parser.add_argument("--run-id")
+    parser.add_argument("--run-attempt")
+    parser.add_argument("--digest")
+    parser.add_argument("--candidate-artifact")
     return parser
 
 
@@ -2149,6 +2549,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 args.root,
                 args.evidence_dir,
                 require_promotion=args.mode == "final",
+            )
+        elif args.mode == "promotion-preflight":
+            required = {
+                "evidence-dir": args.evidence_dir,
+                "run-id": args.run_id,
+                "run-attempt": args.run_attempt,
+                "digest": args.digest,
+                "candidate-artifact": args.candidate_artifact,
+            }
+            missing = [name for name, value in required.items() if value is None]
+            if missing:
+                _fail(
+                    "ARGUMENT",
+                    "promotion-preflight requires " + ", ".join(missing),
+                )
+            validate_promotion_preflight(
+                args.root,
+                args.evidence_dir,
+                args.run_id,
+                args.run_attempt,
+                args.digest,
+                args.candidate_artifact,
             )
         elif args.mode == "repository":
             validate_release_bundle(args.root, require_promotion=True)

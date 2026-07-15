@@ -73,7 +73,18 @@ Rekor v1 public API; a Rekor v2 migration must change the endpoint, identity
 schema, validator, and fixtures together.
 The source record itself is hashed into release evidence. Its exact
 Containerfile digest and closed set of frontend, Go builder, and certificate
-image inputs must all be consumed by the Containerfile before publication.
+image inputs must all be consumed by the Containerfile before publication. The
+validator folds Dockerfile continuations into logical instructions, requires
+the sole first-line syntax directive, rejects alternate parser directives and
+heredocs, and parses the complete global image-ARG set and every FROM stage. An
+obsolete pin left in a comment or continuation body is not evidence that the
+build consumes it. Each stage has a closed instruction sequence; the builder
+has one exact network-disabled vendor-verification and Go-build RUN, the
+certificate stage has no added instruction, and the scratch stage fixes every
+COPY, user, entrypoint, and command. The build action fixes its complete input
+mapping, including the reviewed context and Containerfile, and may pass only
+`SOURCE_COMMIT` and `GO_VENDOR_BUNDLE_SHA256`; alternate files, contexts, extra
+inputs, and reviewed base-image ARG overrides are forbidden.
 When an adopted Go source tree does not contain a root vendor directory, the
 trusted build must retain a deterministic vendor archive and a
 replacement-aware module/file manifest in Git. The archive hash is checked both
@@ -94,8 +105,9 @@ verify job may push
 only a run-scoped quarantine tag and must finish source checks, runtime smoke,
 SBOM, scan, signing, provenance, and candidate evidence retention. A separate
 promotion job receives package-write permission, revalidates the retained
-candidate before credentials exist, installs the checksum-verified promotion
-tool, and moves the trusted tag without changing the digest. A missing gate,
+candidate and binds its artifact name, digest, run ID, and monotonic attempt
+before credentials exist. It then installs the checksum-verified promotion
+tool and moves the trusted tag without changing the digest. A missing gate,
 unretained candidate, failed revalidation, or digest mismatch prevents the tag
 move. The mutable tag is only a non-authoritative publication pointer: a failure
 while generating, validating, or retaining final evidence may leave that pointer
@@ -105,7 +117,10 @@ record in a follow-up evidence-only PR. The interval between policy merge and
 that evidence PR is explicitly `pending_main_publication`; release evidence is
 absent and runtime use is forbidden. Candidate and final artifact names include
 both run ID and run attempt so a rerun cannot collide with an immutable earlier
-upload.
+upload. The candidate name remains bound to the verify job's builder attempt,
+while promotion and the final artifact record the attempt that actually moved
+the tag. A promotion-only retry must stay in the same workflow run and may only
+advance, never precede, the builder attempt.
 The final evidence retains the exact pre-promotion release record as
 `candidate-release-evidence.json`; promotion is therefore auditable after the
 short-lived candidate artifact expires. Runtime evidence likewise retains raw

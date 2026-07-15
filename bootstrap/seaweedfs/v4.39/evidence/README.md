@@ -32,3 +32,8 @@ The mutable `4.39-arm64` tag is only a publication pointer. After approval, the
 immutable digest plus repository-retained evidence are the authority. Runtime
 use remains separately blocked until parent Issue #26 adds and verifies its
 resident-image supply-chain record.
+
+Before promotion credentials are exposed, the workflow revalidates the complete
+candidate and binds the downloaded artifact and target digest to the builder
+attempt. A promotion-only retry retains that candidate attempt while recording
+the later promotion attempt in the final artifact.

@@ -95,7 +95,11 @@ jobs:
           import json
           import hashlib
           import os
+          import sys
           from pathlib import Path
+
+          sys.path.insert(0, str(Path("scripts").resolve()))
+          from verify_trusted_image import validate_containerfile_build_inputs
 
           source_path = Path("bootstrap/seaweedfs/v4.39/source.json")
           contract_path = Path(
@@ -127,9 +131,11 @@ jobs:
           if build_inputs["dockerfile_frontend"] != container_contract.get("frontend"):
               raise SystemExit("Dockerfile frontend differs from trusted contract")
           container_text = container_bytes.decode("utf-8")
-          for name, pinned_input in build_inputs.items():
-              if pinned_input not in container_text:
-                  raise SystemExit(f"pinned build input is not consumed: {name}")
+          validate_containerfile_build_inputs(
+              container_text,
+              build_inputs,
+              container_contract["frontend"],
+          )
 
           module_inputs = evidence.get("module_inputs", {})
           if module_inputs != contract["source"].get("module_inputs"):
@@ -1164,11 +1170,19 @@ jobs:
           path: candidate-evidence
 
       - name: Revalidate candidate evidence before promotion credentials exist
+        env:
+          PROMOTION_DIGEST: ${{ needs.verify.outputs.digest }}
+          CANDIDATE_ARTIFACT: ${{ needs.verify.outputs.candidate_artifact }}
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/verify_trusted_image.py candidate \
-            --root . --evidence-dir candidate-evidence
+          python3 scripts/verify_trusted_image.py promotion-preflight \
+            --root . \
+            --evidence-dir candidate-evidence \
+            --run-id "${GITHUB_RUN_ID}" \
+            --run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --digest "${PROMOTION_DIGEST}" \
+            --candidate-artifact "${CANDIDATE_ARTIFACT}"
 
       - name: Install and verify pinned Crane without credentials
         shell: bash
@@ -1226,9 +1240,17 @@ jobs:
           candidate_snapshot_path = candidate / "candidate-release-evidence.json"
           candidate_snapshot_path.write_bytes(candidate_release_bytes)
           release = json.loads(candidate_release_bytes)
+          builder_run_id = str(release["builder"]["run_id"])
+          builder_run_attempt = str(release["builder"]["run_attempt"])
+          promotion_run_id = os.environ["GITHUB_RUN_ID"]
+          promotion_run_attempt = os.environ["GITHUB_RUN_ATTEMPT"]
+          if promotion_run_id != builder_run_id:
+              raise SystemExit("promotion and candidate must share one workflow run")
+          if int(promotion_run_attempt) < int(builder_run_attempt):
+              raise SystemExit("promotion attempt cannot precede candidate attempt")
           candidate_artifact_name = (
-              f"seaweedfs-4.39-arm64-candidate-{os.environ['GITHUB_RUN_ID']}"
-              f"-{os.environ['GITHUB_RUN_ATTEMPT']}"
+              f"seaweedfs-4.39-arm64-candidate-{builder_run_id}"
+              f"-{builder_run_attempt}"
           )
           candidate_link = {
               "artifact_name": candidate_artifact_name,
@@ -1246,8 +1268,8 @@ jobs:
               "promoted_at": datetime.datetime.now(
                   datetime.timezone.utc
               ).isoformat().replace("+00:00", "Z"),
-              "run_id": os.environ["GITHUB_RUN_ID"],
-              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "run_id": promotion_run_id,
+              "run_attempt": promotion_run_attempt,
               "tool": {
                   "name": "crane",
                   "version": os.environ["CRANE_VERSION"],
@@ -1263,8 +1285,8 @@ jobs:
 
           release["promotion"] = {
               "status": "verified",
-              "run_id": os.environ["GITHUB_RUN_ID"],
-              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "run_id": promotion_run_id,
+              "run_attempt": promotion_run_attempt,
               "trusted_tag": os.environ["TRUSTED_TAG"],
               "trusted_tag_role": "non_authoritative_pointer",
               "trusted_tag_digest": os.environ["PROMOTED_DIGEST"],
@@ -1289,8 +1311,8 @@ jobs:
           release["actions_artifact"] = {
               "role": "retained mirror only",
               "final_name": (
-                  f"seaweedfs-4.39-arm64-{os.environ['GITHUB_RUN_ID']}"
-                  f"-{os.environ['GITHUB_RUN_ATTEMPT']}"
+                  f"seaweedfs-4.39-arm64-{promotion_run_id}"
+                  f"-{promotion_run_attempt}"
               ),
               "retention_days": 90,
           }

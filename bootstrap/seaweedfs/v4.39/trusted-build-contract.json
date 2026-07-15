@@ -36,7 +36,7 @@
     "repository": "TommyKammy/Shirokuma",
     "name": "SeaweedFS 4.39 trusted arm64 build",
     "path": ".github/workflows/seaweedfs-arm64.yml",
-    "sha256": "59fb23581a86256430dae83b28c5ff2a34f0e00b7128a839ea87201bec8cc3da",
+    "sha256": "02c59339648b23b78511b7b45946fa1898d2e1c14e1bd498b578fe599ec953d6",
     "runner": "ubuntu-24.04-arm",
     "runner_trust_boundary": {
       "provider": "github-hosted",
@@ -73,6 +73,22 @@
       "cache_from": [],
       "cache_to": []
     },
+    "build_arguments": [
+      "SOURCE_COMMIT",
+      "GO_VENDOR_BUNDLE_SHA256"
+    ],
+    "build_action_inputs": [
+      "builder",
+      "context",
+      "file",
+      "platforms",
+      "push",
+      "provenance",
+      "sbom",
+      "no-cache",
+      "tags",
+      "build-args"
+    ],
     "allowed_steps": [
       "Check out Shirokuma policy",
       "Check out the adopted SeaweedFS source",

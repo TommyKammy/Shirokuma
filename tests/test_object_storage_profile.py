@@ -3,12 +3,16 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import sys
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PROFILE = ROOT / "bootstrap/seaweedfs/v4.39"
+sys.path.insert(0, str(ROOT / "scripts"))
+
+import verify_trusted_image as trusted_image_verifier  # noqa: E402
 EXPECTED_UPSTREAM_INDEX_REFERENCE = (
     "chrislusf/seaweedfs@"
     "sha256:c7d6c721b30ae711db766bbbfd40192776e263d4e51e22f57baef7bef93c12c6"
@@ -99,6 +103,25 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             },
         )
         self.assertEqual(
+            contract["workflow"]["build_arguments"],
+            ["SOURCE_COMMIT", "GO_VENDOR_BUNDLE_SHA256"],
+        )
+        self.assertEqual(
+            contract["workflow"]["build_action_inputs"],
+            [
+                "builder",
+                "context",
+                "file",
+                "platforms",
+                "push",
+                "provenance",
+                "sbom",
+                "no-cache",
+                "tags",
+                "build-args",
+            ],
+        )
+        self.assertEqual(
             contract["admission"],
             {
                 "approval_state_source": "bootstrap/seaweedfs/v4.39/admission.json",
@@ -182,9 +205,11 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertLess(retain_step, promote_step)
 
         containerfile = containerfile_path.read_text(encoding="utf-8")
-        for image in source["build_inputs"].values():
-            with self.subTest(build_input=image):
-                self.assertIn(image, containerfile)
+        trusted_image_verifier.validate_containerfile_build_inputs(
+            containerfile,
+            source["build_inputs"],
+            contract["source"]["containerfile"]["frontend"],
+        )
         for required in (
             "RUN --network=none",
             "GOFLAGS=-mod=vendor",
