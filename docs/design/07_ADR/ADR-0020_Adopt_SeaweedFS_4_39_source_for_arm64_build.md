@@ -42,13 +42,24 @@ pinned input to be present in the Containerfile, so a changed frontend, builder,
 or certificate image cannot inherit evidence from an earlier build.
 
 The upstream tree has no root vendor directory. Shirokuma therefore retains a
-deterministic `go-vendor.tar.xz` plus a replacement-aware module graph and every
-vendored file hash. The workflow validates both retained files before they enter
-the build context; the Containerfile verifies the archive hash, extracts it, and
-runs `go build` with `--network=none`, `-mod=vendor`, `GOPROXY=off`,
+deterministic `go-vendor.tar.xz` plus a replacement-aware authenticated record
+for every actually vendored module and every vendored file hash. Pull-request
+audit fully extracts the retained archive and,
+from the exact clean source commit/tree/archive with Go `1.25.12`, authenticates a
+fresh module cache through `proxy.golang.org` and `sum.golang.org`. It then disables
+proxy, checksum-database, VCS, private-module, workspace, ambient environment, and
+toolchain fallback, regenerates `vendor`, checks all 496 effective module
+checksums against the pinned upstream `go.sum`, and requires every generated file
+record to equal the retained manifest. It then repeats regeneration with the
+proxy and checksum database disabled. The same gate
+runs on main before registry credentials. The workflow validates both retained
+files before they enter the build context; the Containerfile verifies the archive
+hash, extracts it, and runs `go build` with `--network=none`, `-mod=vendor`, `GOPROXY=off`,
 `GOSUMDB=off`, `GOTOOLCHAIN=local`, and VCS disabled. Rebuilding this adopted
-artifact no longer depends on a Go proxy, checksum database, VCS host, or an
-ambient module cache.
+image from its reviewed inputs no longer depends on a Go proxy, checksum database,
+VCS host, or an ambient module cache. Provenance regeneration remains a separate
+networked, fail-closed audit; service unavailability cannot fall back to an
+unauthenticated source.
 
 `bootstrap/seaweedfs/v4.39/trusted-build-contract.json` is the closed-world
 contract for this artifact. It pins the complete Containerfile hash, Buildx

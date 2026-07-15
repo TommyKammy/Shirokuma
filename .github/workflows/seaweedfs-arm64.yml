@@ -75,6 +75,12 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Set up exact Go for vendor provenance regeneration
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: 1.25.12
+          cache: false
+
       - name: Validate the closed-world trusted build contract
         shell: bash
         run: |
@@ -168,6 +174,11 @@ jobs:
                   raise SystemExit(f"upstream {name} differs from module input contract")
           PY
           python3 scripts/package_go_vendor.py verify \
+            --source-record bootstrap/seaweedfs/v4.39/source.json \
+            --bundle bootstrap/seaweedfs/v4.39/go-vendor.tar.xz \
+            --manifest bootstrap/seaweedfs/v4.39/go-module-inputs.json
+          python3 scripts/package_go_vendor.py reproduce \
+            --source-root seaweedfs-src \
             --source-record bootstrap/seaweedfs/v4.39/source.json \
             --bundle bootstrap/seaweedfs/v4.39/go-vendor.tar.xz \
             --manifest bootstrap/seaweedfs/v4.39/go-module-inputs.json

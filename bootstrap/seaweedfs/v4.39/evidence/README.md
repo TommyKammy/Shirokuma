@@ -29,6 +29,17 @@ are enumerated by `../trusted-build-contract.json`, including the reviewed Go
 module manifest, deterministic vendor archive, and dedicated SBOM and Trivy
 attestation bundles. Generated evidence must never be mixed across runs.
 
+Repository audit fully extracts the retained vendor archive. Pull-request CI and
+the main publisher also regenerate `vendor` from the exact clean upstream source
+using Go 1.25.12 and a fresh module cache authenticated by the public Go proxy and
+checksum database. The subsequent proxy-disabled regeneration must match every
+retained file record, while all 496 actually vendored effective module
+checksums—including replacements—must match the pinned upstream `go.sum`.
+Network, checksum, VCS, private-module, ambient
+cache, workspace, and toolchain fallback are forbidden; failure keeps admission
+pending. This networked provenance check is separate from the image build, which
+continues to consume only the retained archive with `--network=none`.
+
 The mutable `4.39-arm64` tag is only a publication pointer. After approval, the
 immutable digest plus repository-retained evidence are the authority. Runtime
 use remains separately blocked until parent Issue #26 adds and verifies its

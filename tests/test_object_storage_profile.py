@@ -157,6 +157,9 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertIn("cosign-release: v3.1.1", ci)
         self.assertIn("COSIGN_VERSION ?= v3.1.1", makefile)
         self.assertIn("scripts/verify_trusted_image.py audit --root .", makefile)
+        self.assertIn("scripts/package_go_vendor.py reproduce", ci)
+        self.assertIn("go-version: 1.25.12", ci)
+        self.assertIn("actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16", ci)
 
         for required in (
             "linux/arm64",
@@ -169,6 +172,8 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
             "go-module-inputs.json",
             "go-vendor.tar.xz",
             "python3 scripts/verify_trusted_image.py contract",
+            "python3 scripts/package_go_vendor.py reproduce",
+            "Set up exact Go for vendor provenance regeneration",
             "Smoke-test non-root weed mini on the exact digest",
             "--user 65532:65532",
             "--read-only",
@@ -233,11 +238,11 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertEqual(
             module_inputs["bundle_sha256"], EXPECTED_VENDOR_BUNDLE_SHA256
         )
-        self.assertEqual(module_inputs["module_count"], 1152)
+        self.assertEqual(module_inputs["module_count"], 496)
         self.assertEqual(module_inputs["replacement_count"], 2)
         self.assertEqual(module_inputs["file_count"], 18934)
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        self.assertEqual(len(manifest["modules"]), 1152)
+        self.assertEqual(len(manifest["modules"]), 496)
         self.assertEqual(
             sum(module["replacement"] is not None for module in manifest["modules"]),
             2,

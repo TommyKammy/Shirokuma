@@ -6,10 +6,12 @@ import importlib.util
 import json
 import lzma
 import os
+import shutil
 import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,10 +43,26 @@ class GoVendorPackageTests(unittest.TestCase):
         tool = self.vendor / "example.com/alpha/generate.sh"
         tool.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
         tool.chmod(0o755)
+        (self.vendor / "modules.txt").write_text(
+            "# example.com/alpha v1.2.3 => example.com/alpha-fork v1.2.4\n"
+            "## explicit; go 1.25\n"
+            "example.com/alpha\n"
+            "# example.com/zeta v1.0.0\n"
+            "## explicit; go 1.25\n"
+            "example.com/zeta\n"
+            "# example.com/alpha => example.com/alpha-fork v1.2.4\n",
+            encoding="utf-8",
+        )
         self.go_mod = self.root / "input/go.mod"
         self.go_sum = self.root / "input/go.sum"
         self.go_mod.write_text("module example.test/app\n\ngo 1.25\n", encoding="utf-8")
-        self.go_sum.write_text("fixture sums are represented by the graph\n", encoding="utf-8")
+        self.go_sum.write_text(
+            f"example.com/alpha-fork v1.2.4 {h1('alpha replacement')}\n"
+            f"example.com/alpha-fork v1.2.4/go.mod {h1('alpha replacement.mod')}\n"
+            f"example.com/zeta v1.0.0 {h1('zeta')}\n"
+            f"example.com/zeta v1.0.0/go.mod {h1('zeta.mod')}\n",
+            encoding="utf-8",
+        )
         self.graph = self.root / "module-graph.json"
         records = [
             {
@@ -198,6 +216,34 @@ class GoVendorPackageTests(unittest.TestCase):
         for record in files:
             self.assertEqual(set(record), packager.FILE_KEYS)
 
+    def test_manifest_retains_only_the_authenticated_vendored_subset(self) -> None:
+        unused = {
+            "Path": "example.com/unused",
+            "Version": "v9.9.9",
+            "Sum": h1("unused"),
+            "GoModSum": h1("unused.mod"),
+        }
+        with self.graph.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(unused) + "\n")
+
+        _, _, manifest = self._create("subset")
+
+        self.assertEqual(
+            [(module["path"], module["version"]) for module in manifest["modules"]],
+            [("example.com/alpha", "v1.2.3"), ("example.com/zeta", "v1.0.0")],
+        )
+
+    def test_create_rejects_a_vendored_module_missing_from_pinned_go_sum(
+        self,
+    ) -> None:
+        self.go_sum.write_text(
+            f"example.com/alpha-fork v1.2.4 {h1('alpha replacement')}\n"
+            f"example.com/alpha-fork v1.2.4/go.mod {h1('alpha replacement.mod')}\n",
+            encoding="utf-8",
+        )
+
+        self._assert_error("VENDORED_MODULE_SUM", lambda: self._create("missing-sum"))
+
     def test_verify_accepts_expected_source_and_generator(self) -> None:
         archive, manifest, _ = self._create()
         verified = packager.verify_package(
@@ -324,6 +370,146 @@ class GoVendorPackageTests(unittest.TestCase):
             ),
         )
 
+    def test_reproduction_rejects_self_consistent_vendor_tampering(self) -> None:
+        reproduced_vendor = self.root / "reproduced-vendor"
+        shutil.copytree(self.vendor, reproduced_vendor)
+        archive, manifest, data = self._create("reproduction")
+        source_record = self.root / "source-reproduction.json"
+        self._write_source_record(source_record, archive, manifest, data)
+        packager.verify_reproduced_package(
+            source_root=self.root / "input",
+            source_record_path=source_record,
+            archive_path=archive,
+            manifest_path=manifest,
+            reproduced_vendor_dir=reproduced_vendor,
+            reproduced_module_graph_path=self.graph,
+        )
+
+        (self.vendor / "example.com/alpha/alpha.go").write_text(
+            "package omega\n", encoding="utf-8"
+        )
+        archive, manifest, data = self._create("tampered")
+        self._write_source_record(source_record, archive, manifest, data)
+        self._assert_error(
+            "REPRODUCED_VENDOR_CONTENT",
+            lambda: packager.verify_reproduced_package(
+                source_root=self.root / "input",
+                source_record_path=source_record,
+                archive_path=archive,
+                manifest_path=manifest,
+                reproduced_vendor_dir=reproduced_vendor,
+                reproduced_module_graph_path=self.graph,
+            ),
+        )
+
+    def test_reproduction_rejects_a_different_authenticated_module_graph(self) -> None:
+        archive, manifest, data = self._create("graph-reproduction")
+        source_record = self.root / "source-graph-reproduction.json"
+        self._write_source_record(source_record, archive, manifest, data)
+        different_graph = self.root / "different-module-graph.json"
+        records = [json.loads(line) for line in self.graph.read_text().splitlines()]
+        records[0]["Sum"] = h1("different authenticated module")
+        different_graph.write_text(
+            "\n".join(json.dumps(record) for record in records) + "\n",
+            encoding="utf-8",
+        )
+        self._assert_error(
+            "VENDORED_MODULE_SUM",
+            lambda: packager.verify_reproduced_package(
+                source_root=self.root / "input",
+                source_record_path=source_record,
+                archive_path=archive,
+                manifest_path=manifest,
+                reproduced_vendor_dir=self.vendor,
+                reproduced_module_graph_path=different_graph,
+            ),
+        )
+
+    def test_reproduction_uses_fresh_authenticated_then_offline_go_boundaries(
+        self,
+    ) -> None:
+        _, _, manifest = self._create("boundary")
+        source_root = self.root / "clean-source"
+        source_root.mkdir()
+        shutil.copy2(self.go_mod, source_root / "go.mod")
+        shutil.copy2(self.go_sum, source_root / "go.sum")
+        source_record = self.root / "source-boundary.json"
+        source_record.write_text(
+            json.dumps(
+                {
+                    "commit": SOURCE_COMMIT,
+                    "tree": "d" * 40,
+                    "git_archive_sha256": "e" * 64,
+                }
+            ),
+            encoding="utf-8",
+        )
+        go_phases: list[tuple[str, dict[str, str]]] = []
+
+        def run_checked(command, *, cwd, env, code):
+            executable = Path(command[0]).name
+            if executable == "git":
+                if command[1:3] == ["rev-parse", "HEAD"]:
+                    return SOURCE_COMMIT + "\n"
+                if command[1:3] == ["rev-parse", "HEAD^{tree}"]:
+                    return "d" * 40 + "\n"
+                return ""
+            if command[1:3] == ["env", "GOVERSION"]:
+                return "go1.25.12\n"
+            if command[1:3] == ["mod", "vendor"]:
+                go_phases.append(("vendor", dict(env)))
+                shutil.copytree(self.vendor, Path(command[-1]))
+            elif command[1:3] == ["mod", "verify"]:
+                go_phases.append(("verify", dict(env)))
+            return ""
+
+        with mock.patch.object(
+            packager, "verify_package", return_value=manifest
+        ), mock.patch.object(
+            packager.shutil,
+            "which",
+            side_effect=lambda name: f"/fake/{name}",
+        ), mock.patch.object(
+            packager,
+            "_run_checked",
+            side_effect=run_checked,
+        ), mock.patch.object(
+            packager,
+            "_sha256_command_stdout",
+            return_value="e" * 64,
+        ):
+            packager.reproduce_package(
+                source_root=source_root,
+                source_record_path=source_record,
+                archive_path=self.root / "unused.tar.xz",
+                manifest_path=self.root / "unused.json",
+            )
+
+        self.assertEqual(
+            [name for name, _ in go_phases],
+            ["vendor", "verify", "vendor", "verify"],
+        )
+        authenticated = go_phases[0][1]
+        offline = go_phases[2][1]
+        self.assertEqual(authenticated["GOPROXY"], "https://proxy.golang.org")
+        self.assertEqual(authenticated["GOSUMDB"], "sum.golang.org")
+        self.assertEqual(authenticated["GOVCS"], "*:off")
+        self.assertEqual(authenticated["GOTOOLCHAIN"], "local")
+        self.assertEqual(authenticated["GOWORK"], "off")
+        self.assertEqual(authenticated["GOENV"], "off")
+        self.assertEqual(authenticated["GOAUTH"], "off")
+        self.assertNotEqual(
+            authenticated["GOMODCACHE"], os.environ.get("GOMODCACHE")
+        )
+        for name in ("GOPRIVATE", "GONOPROXY", "GONOSUMDB", "GOINSECURE"):
+            self.assertEqual(authenticated[name], "")
+        self.assertEqual(offline["GOPROXY"], "off")
+        self.assertEqual(offline["GOSUMDB"], "off")
+        self.assertEqual(
+            {environment["GOMODCACHE"] for _, environment in go_phases},
+            {authenticated["GOMODCACHE"]},
+        )
+
     def test_cli_reports_stable_error_code(self) -> None:
         archive, manifest, data = self._create()
         source_record = self.root / "source-cli.json"
@@ -383,6 +569,25 @@ class GoVendorPackageTests(unittest.TestCase):
             ),
             0,
         )
+
+        with mock.patch.object(packager, "reproduce_package") as reproduce:
+            self.assertEqual(
+                packager.main(
+                    [
+                        "reproduce",
+                        "--source-root",
+                        os.fspath(self.root / "input"),
+                        "--source-record",
+                        os.fspath(source_record),
+                        "--bundle",
+                        os.fspath(archive),
+                        "--manifest",
+                        os.fspath(manifest),
+                    ]
+                ),
+                0,
+            )
+        reproduce.assert_called_once()
 
 
 if __name__ == "__main__":

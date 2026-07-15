@@ -174,6 +174,20 @@ class TrustedImageContractTests(unittest.TestCase):
                 verifier.validate_repository_audit(root)
             self.assertEqual(caught.exception.code, "BOOTSTRAP_OBSERVATION")
 
+    def test_pending_repository_audit_extracts_the_retained_vendor_bundle(
+        self,
+    ) -> None:
+        with mock.patch.object(
+            verifier.package_go_vendor,
+            "verify_package",
+        ) as verify:
+            verifier.validate_repository_audit(ROOT)
+        verify.assert_called_once()
+        self.assertIs(
+            verify.call_args.kwargs["verify_archive_contents"],
+            True,
+        )
+
     def test_contract_mutations_fail_with_stable_error_codes(self) -> None:
         def replace_and_rehash_containerfile(
             root: Path,

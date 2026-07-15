@@ -446,7 +446,11 @@ def load_contract(root: Path) -> Dict[str, Any]:
     return contract
 
 
-def validate_static_contract(root: Path) -> Dict[str, Any]:
+def validate_static_contract(
+    root: Path,
+    *,
+    verify_module_archive_contents: bool = False,
+) -> Dict[str, Any]:
     root = root.resolve()
     contract = load_contract(root)
     source = _load_json(root / SOURCE_PATH)
@@ -555,7 +559,7 @@ def validate_static_contract(root: Path) -> Dict[str, Any]:
             archive_path=bundle_path,
             manifest_path=manifest_path,
             source_record_path=root / SOURCE_PATH,
-            verify_archive_contents=False,
+            verify_archive_contents=verify_module_archive_contents,
         )
     except package_go_vendor.VendorPackageError as error:
         _fail("MODULE_INPUT_PACKAGE", f"{error.code}: {error.detail}")
@@ -832,6 +836,8 @@ def validate_static_contract(root: Path) -> Dict[str, Any]:
         "toolchain.json",
         "promotion-evidence.json",
         "scripts/verify_trusted_image.py promotion-preflight",
+        "scripts/package_go_vendor.py reproduce",
+        "--source-root seaweedfs-src",
         'builder_run_id = str(release["builder"]["run_id"])',
         'builder_run_attempt = str(release["builder"]["run_attempt"])',
         f"IMAGE: {image_contract['repository']}",
@@ -2532,6 +2538,7 @@ def validate_release_bundle(
             archive_path=paths["go-vendor.tar.xz"],
             manifest_path=paths["go-module-inputs.json"],
             source_record_path=retained_source_path,
+            verify_archive_contents=True,
         )
     except package_go_vendor.VendorPackageError as error:
         _fail("MODULE_INPUT_PACKAGE", f"{error.code}: {error.detail}")
@@ -2799,9 +2806,15 @@ def validate_repository_audit(root: Path) -> Dict[str, Any]:
     """Audit either a strict admitted release or the explicit pending state."""
 
     root = root.resolve()
-    contract = validate_static_contract(root)
+    declared_contract = load_contract(root)
     admission = _load_json(root / ADMISSION_PATH)
     state = admission.get("assessment", {}).get("admission")
+    contract = validate_static_contract(
+        root,
+        verify_module_archive_contents=(
+            state == declared_contract["admission"]["pending_state"]
+        ),
+    )
     if state == contract["admission"]["pending_state"]:
         return validate_pending_main_publication(root, contract)
     _expect(

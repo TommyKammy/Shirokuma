@@ -90,10 +90,31 @@ inputs, and reviewed base-image ARG overrides are forbidden.
 When an adopted Go source tree does not contain a root vendor directory, the
 trusted build must retain a deterministic vendor archive and a
 replacement-aware module/file manifest in Git. The archive hash is checked both
-before it enters the build context and inside the Containerfile. Compilation
+before it enters the build context and inside the Containerfile. Pull-request
+audit fully extracts every retained archive member. It also checks out the exact
+recorded source commit and tree, selects Go `1.25.12`, creates fresh `GOMODCACHE`,
+`GOCACHE`, `GOPATH`, and `HOME` directories, and downloads only the modules
+required by the vendored package set from `https://proxy.golang.org` with
+`sum.golang.org` authentication. Private,
+direct-VCS, ambient Go-environment, workspace, and toolchain fallback are all
+disabled. The first `go mod vendor` therefore authenticates every downloaded
+module needed by the vendored package set. The gate checks the 496 actual
+vendored module records, including versioned replacements, against the pinned
+upstream `go.sum`, runs `go mod verify`, then switches to `GOPROXY=off` and
+`GOSUMDB=off` and regenerates `vendor` again. Both generated trees must match
+every retained path, size, mode, and SHA-256 value—including
+`vendor/modules.txt`. Network or checksum-service failure is fail-closed; it
+does not authorize a fallback. The same regeneration gate runs in the main
+publisher before registry credentials exist. Compilation
 must use `--network=none`, `-mod=vendor`, `GOPROXY=off`, `GOSUMDB=off`,
 `GOTOOLCHAIN=local`, and disabled VCS so neither first-build availability nor
 ambient module-cache state is an unrecorded input.
+
+The networked module download is a provenance-regeneration audit, not a build
+input. The admitted image is still compiled only from the reviewed retained
+archive with networking disabled. A future fully offline provenance audit would
+also need a reviewed module-proxy artifact; until then, proxy or checksum-database
+unavailability blocks regeneration instead of weakening it.
 Trusted builds must also set BuildKit `no-cache` and must not import or export a
 shared GitHub Actions cache. Reusing a mutable layer that is absent from the
 contract and release evidence violates the closed-world claim even when the

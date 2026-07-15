@@ -11,7 +11,9 @@ import json
 import lzma
 import os
 import re
+import shutil
 import stat
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -19,8 +21,8 @@ from pathlib import Path, PurePosixPath
 from typing import Any, BinaryIO, Dict, Iterable, List, Optional, Sequence, Tuple
 
 
-SCHEMA_VERSION = 1
-GENERATOR_POLICY = "go-mod-vendor-readonly+canonical-tar-xz-v1"
+SCHEMA_VERSION = 2
+GENERATOR_POLICY = "go-mod-vendor-authenticated-subset+canonical-tar-xz-v2"
 ARCHIVE_FORMAT = "tar.xz"
 CHUNK_SIZE = 1024 * 1024
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
@@ -68,6 +70,60 @@ def _fail(code: str, detail: str) -> None:
 def _expect(condition: bool, code: str, detail: str) -> None:
     if not condition:
         _fail(code, detail)
+
+
+def _run_checked(
+    command: Sequence[str],
+    *,
+    cwd: Path,
+    env: Dict[str, str],
+    code: str,
+) -> str:
+    try:
+        result = subprocess.run(
+            list(command),
+            cwd=cwd,
+            env=env,
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except OSError as error:
+        _fail(code, str(error))
+    if result.returncode != 0:
+        output = (result.stderr or result.stdout).strip().splitlines()
+        _fail(code, output[-1] if output else f"exit {result.returncode}")
+    return result.stdout
+
+
+def _sha256_command_stdout(
+    command: Sequence[str],
+    *,
+    cwd: Path,
+    env: Dict[str, str],
+    code: str,
+) -> str:
+    try:
+        process = subprocess.Popen(
+            list(command),
+            cwd=cwd,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except OSError as error:
+        _fail(code, str(error))
+    _expect(process.stdout is not None, code, "missing command stdout")
+    digest = hashlib.sha256()
+    for chunk in iter(lambda: process.stdout.read(CHUNK_SIZE), b""):
+        digest.update(chunk)
+    stderr = process.stderr.read() if process.stderr is not None else b""
+    return_code = process.wait()
+    if return_code != 0:
+        output = stderr.decode("utf-8", errors="replace").strip().splitlines()
+        _fail(code, output[-1] if output else f"exit {return_code}")
+    return digest.hexdigest()
 
 
 def _sha256_stream(stream: BinaryIO) -> Tuple[str, int]:
@@ -246,6 +302,85 @@ def _sanitize_module_graph(records: Iterable[Dict[str, Any]]) -> List[Dict[str, 
     _expect(bool(modules), "MODULE_GRAPH_RECORD", "no versioned modules found")
     modules.sort(key=lambda item: (item["path"], item["version"]))
     return modules
+
+
+def _vendored_module_identities(modules_txt_path: Path) -> List[Tuple[str, str]]:
+    try:
+        lines = modules_txt_path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as error:
+        _fail("VENDORED_MODULES", f"cannot read {modules_txt_path}: {error}")
+    identities: List[Tuple[str, str]] = []
+    seen = set()
+    for line in lines:
+        if not line.startswith("# ") or line.startswith("## "):
+            continue
+        left = line[2:].split(" => ", 1)[0].split()
+        if len(left) == 1:
+            continue  # replacement footer without the original version
+        _expect(len(left) == 2, "VENDORED_MODULES", line)
+        identity = (
+            _module_path(left[0], line),
+            _module_identity(left[1], "version", line),
+        )
+        _expect(identity not in seen, "VENDORED_MODULES", f"duplicate {identity}")
+        seen.add(identity)
+        identities.append(identity)
+    _expect(bool(identities), "VENDORED_MODULES", "vendor/modules.txt is empty")
+    _expect(
+        identities == sorted(identities),
+        "VENDORED_MODULES",
+        "module headers are not ordered",
+    )
+    return identities
+
+
+def _go_sum_entries(go_sum_path: Path) -> Dict[Tuple[str, str], str]:
+    try:
+        lines = go_sum_path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as error:
+        _fail("GO_SUM", f"cannot read {go_sum_path}: {error}")
+    entries: Dict[Tuple[str, str], str] = {}
+    for index, line in enumerate(lines):
+        fields = line.split()
+        _expect(len(fields) == 3, "GO_SUM", f"line {index + 1}")
+        path = _module_path(fields[0], f"go.sum line {index + 1}")
+        version = _module_identity(fields[1], "version", f"go.sum line {index + 1}")
+        value = _validate_h1(fields[2], "GO_SUM", f"go.sum line {index + 1}")
+        key = (path, version)
+        _expect(
+            key not in entries or entries[key] == value,
+            "GO_SUM",
+            f"conflicting checksum for {path} {version}",
+        )
+        entries[key] = value
+    return entries
+
+
+def _select_authenticated_vendored_modules(
+    modules: List[Dict[str, Any]],
+    modules_txt_path: Path,
+    go_sum_path: Path,
+) -> List[Dict[str, Any]]:
+    by_identity = {
+        (module["path"], module["version"]): module for module in modules
+    }
+    sums = _go_sum_entries(go_sum_path)
+    selected: List[Dict[str, Any]] = []
+    for identity in _vendored_module_identities(modules_txt_path):
+        module = by_identity.get(identity)
+        _expect(module is not None, "VENDORED_MODULE_GRAPH", repr(identity))
+        replacement = module["replacement"]
+        effective = replacement if replacement is not None else module
+        path = effective["path"]
+        version = effective["version"]
+        _expect(
+            sums.get((path, version)) == effective["sum"]
+            and sums.get((path, f"{version}/go.mod")) == effective["go_mod_sum"],
+            "VENDORED_MODULE_SUM",
+            f"{path}@{version} is not authenticated by the pinned go.sum",
+        )
+        selected.append(module)
+    return selected
 
 
 def _canonical_vendor_path(value: Any, code: str = "VENDOR_PATH") -> str:
@@ -439,7 +574,11 @@ def _validate_manifest(data: Any) -> Dict[str, Any]:
         "MANIFEST_SCHEMA",
         "unexpected or missing top-level field",
     )
-    _expect(data.get("schema_version") == SCHEMA_VERSION, "MANIFEST_VERSION", "expected 1")
+    _expect(
+        data.get("schema_version") == SCHEMA_VERSION,
+        "MANIFEST_VERSION",
+        f"expected {SCHEMA_VERSION}",
+    )
     source = data.get("source")
     _expect(
         isinstance(source, dict) and set(source) == SOURCE_KEYS,
@@ -552,8 +691,12 @@ def create_package(
             _fail("ARCHIVE_OUTPUT", f"output is inside vendor tree: {output}")
     _expect(archive_path.resolve() != manifest_path.resolve(), "ARCHIVE_OUTPUT", "archive and manifest paths match")
 
-    modules = _sanitize_module_graph(_load_json_stream(module_graph_path))
     files, paths = _collect_vendor_files(vendor_dir)
+    modules = _select_authenticated_vendored_modules(
+        _sanitize_module_graph(_load_json_stream(module_graph_path)),
+        vendor_dir / "modules.txt",
+        go_sum_path,
+    )
     _write_canonical_archive(archive_path, files, paths)
     manifest = {
         "schema_version": SCHEMA_VERSION,
@@ -752,6 +895,252 @@ def verify_package(
     return manifest
 
 
+def _compare_reproduced_inputs(
+    manifest: Dict[str, Any],
+    reproduced_vendor_dir: Path,
+    go_sum_path: Path,
+    reproduced_module_graph_path: Optional[Path] = None,
+) -> None:
+    module_candidates = manifest["modules"]
+    if reproduced_module_graph_path is not None:
+        module_candidates = _sanitize_module_graph(
+            _load_json_stream(reproduced_module_graph_path)
+        )
+    reproduced_modules = _select_authenticated_vendored_modules(
+        module_candidates,
+        reproduced_vendor_dir / "modules.txt",
+        go_sum_path,
+    )
+    _expect(
+        reproduced_modules == manifest["modules"],
+        "REPRODUCED_MODULE_GRAPH",
+        "clean-cache module graph differs from the retained manifest",
+    )
+    reproduced_files, _ = _collect_vendor_files(reproduced_vendor_dir)
+    _expect(
+        reproduced_files == manifest["archive"]["files"],
+        "REPRODUCED_VENDOR_CONTENT",
+        "clean-cache vendor tree differs from the retained manifest",
+    )
+
+
+def verify_reproduced_package(
+    *,
+    source_root: Path,
+    source_record_path: Path,
+    archive_path: Path,
+    manifest_path: Path,
+    reproduced_vendor_dir: Path,
+    reproduced_module_graph_path: Path,
+) -> Dict[str, Any]:
+    """Bind a retained package to independently regenerated Go inputs."""
+
+    source_record = _load_json(source_record_path, "SOURCE_RECORD_JSON")
+    _expect(isinstance(source_record, dict), "SOURCE_RECORD_SCHEMA", "not an object")
+    manifest = verify_package(
+        archive_path=archive_path,
+        manifest_path=manifest_path,
+        expected_source_commit=source_record.get("commit"),
+        go_mod_path=source_root / "go.mod",
+        go_sum_path=source_root / "go.sum",
+        source_record_path=source_record_path,
+    )
+    _compare_reproduced_inputs(
+        manifest,
+        reproduced_vendor_dir,
+        source_root / "go.sum",
+        reproduced_module_graph_path,
+    )
+    return manifest
+
+
+def reproduce_package(
+    *,
+    source_root: Path,
+    source_record_path: Path,
+    archive_path: Path,
+    manifest_path: Path,
+    go_command: str = "go",
+    git_command: str = "git",
+) -> Dict[str, Any]:
+    """Regenerate vendor inputs from an authenticated, fresh module cache."""
+
+    source_root = source_root.resolve()
+    source_record = _load_json(source_record_path, "SOURCE_RECORD_JSON")
+    _expect(isinstance(source_record, dict), "SOURCE_RECORD_SCHEMA", "not an object")
+    commit = source_record.get("commit")
+    tree = source_record.get("tree")
+    _expect(COMMIT_RE.fullmatch(commit or "") is not None, "REPRODUCTION_SOURCE", "commit")
+    _expect(COMMIT_RE.fullmatch(tree or "") is not None, "REPRODUCTION_SOURCE", "tree")
+    _expect(
+        not (source_root / "vendor").exists(),
+        "REPRODUCTION_SOURCE",
+        "source checkout must not contain an ambient vendor directory",
+    )
+
+    manifest = verify_package(
+        archive_path=archive_path,
+        manifest_path=manifest_path,
+        expected_source_commit=commit,
+        go_mod_path=source_root / "go.mod",
+        go_sum_path=source_root / "go.sum",
+        source_record_path=source_record_path,
+    )
+    expected_go_version = manifest["generator"]["go_version"]
+    go_binary = shutil.which(go_command)
+    git_binary = shutil.which(git_command)
+    _expect(go_binary is not None, "REPRODUCTION_GO", f"not found: {go_command}")
+    _expect(git_binary is not None, "REPRODUCTION_GIT", f"not found: {git_command}")
+
+    base_env = {
+        "PATH": os.environ.get("PATH", ""),
+        "LC_ALL": "C",
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "safe.directory",
+        "GIT_CONFIG_VALUE_0": str(source_root),
+    }
+    head = _run_checked(
+        [git_binary, "rev-parse", "HEAD"],
+        cwd=source_root,
+        env=base_env,
+        code="REPRODUCTION_SOURCE",
+    ).strip()
+    actual_tree = _run_checked(
+        [git_binary, "rev-parse", "HEAD^{tree}"],
+        cwd=source_root,
+        env=base_env,
+        code="REPRODUCTION_SOURCE",
+    ).strip()
+    status = _run_checked(
+        [git_binary, "status", "--porcelain=v1", "--untracked-files=all"],
+        cwd=source_root,
+        env=base_env,
+        code="REPRODUCTION_SOURCE",
+    ).strip()
+    actual_archive_sha256 = _sha256_command_stdout(
+        [git_binary, "archive", "--format=tar", "HEAD"],
+        cwd=source_root,
+        env=base_env,
+        code="REPRODUCTION_SOURCE",
+    )
+    _expect(
+        head == commit
+        and actual_tree == tree
+        and actual_archive_sha256 == source_record.get("git_archive_sha256")
+        and not status,
+        "REPRODUCTION_SOURCE",
+        "source checkout is not the exact clean recorded commit, tree, and archive",
+    )
+
+    before_go_mod = _sha256_file(source_root / "go.mod")
+    before_go_sum = _sha256_file(source_root / "go.sum")
+    with tempfile.TemporaryDirectory(prefix="go-vendor-reproduce-") as directory:
+        temporary = Path(directory)
+        paths = {
+            name: temporary / name
+            for name in ("gocache", "gomodcache", "gopath", "home", "tmp")
+        }
+        for path in paths.values():
+            path.mkdir()
+        reproduction_env = {
+            "PATH": os.environ.get("PATH", ""),
+            "HOME": str(paths["home"]),
+            "TMPDIR": str(paths["tmp"]),
+            "LC_ALL": "C",
+            "CGO_ENABLED": "0",
+            "GO111MODULE": "on",
+            "GOARCH": "arm64",
+            "GOAUTH": "off",
+            "GOCACHE": str(paths["gocache"]),
+            "GOENV": "off",
+            "GOFLAGS": "-mod=readonly",
+            "GOINSECURE": "",
+            "GOMODCACHE": str(paths["gomodcache"]),
+            "GONOPROXY": "",
+            "GONOSUMDB": "",
+            "GOOS": "linux",
+            "GOPATH": str(paths["gopath"]),
+            "GOPRIVATE": "",
+            "GOPROXY": "https://proxy.golang.org",
+            "GOSUMDB": "sum.golang.org",
+            "GOTOOLCHAIN": "local",
+            "GOVCS": "*:off",
+            "GOWORK": "off",
+        }
+        actual_go_version = _run_checked(
+            [go_binary, "env", "GOVERSION"],
+            cwd=source_root,
+            env=reproduction_env,
+            code="REPRODUCTION_GO_VERSION",
+        ).strip()
+        _expect(
+            actual_go_version == f"go{expected_go_version}",
+            "REPRODUCTION_GO_VERSION",
+            actual_go_version,
+        )
+        authenticated_vendor_dir = temporary / "authenticated-vendor"
+        _run_checked(
+            [go_binary, "mod", "vendor", "-o", str(authenticated_vendor_dir)],
+            cwd=source_root,
+            env=reproduction_env,
+            code="REPRODUCTION_DOWNLOAD",
+        )
+        _run_checked(
+            [go_binary, "mod", "verify"],
+            cwd=source_root,
+            env=reproduction_env,
+            code="REPRODUCTION_CACHE_VERIFY",
+        )
+        _compare_reproduced_inputs(
+            manifest,
+            authenticated_vendor_dir,
+            source_root / "go.sum",
+        )
+
+        offline_env = dict(reproduction_env)
+        offline_env.update({"GOPROXY": "off", "GOSUMDB": "off"})
+        reproduced_vendor_dir = temporary / "vendor"
+        _run_checked(
+            [go_binary, "mod", "vendor", "-o", str(reproduced_vendor_dir)],
+            cwd=source_root,
+            env=offline_env,
+            code="REPRODUCED_VENDOR_CONTENT",
+        )
+        _run_checked(
+            [go_binary, "mod", "verify"],
+            cwd=source_root,
+            env=offline_env,
+            code="REPRODUCTION_CACHE_VERIFY",
+        )
+        _compare_reproduced_inputs(
+            manifest,
+            reproduced_vendor_dir,
+            source_root / "go.sum",
+        )
+
+    after_status = _run_checked(
+        [git_binary, "status", "--porcelain=v1", "--untracked-files=all"],
+        cwd=source_root,
+        env=base_env,
+        code="REPRODUCTION_SOURCE",
+    ).strip()
+    after_go_mod = _sha256_file(source_root / "go.mod")
+    after_go_sum = _sha256_file(source_root / "go.sum")
+    mutations = []
+    if after_status:
+        mutations.append("git status is not clean")
+    if after_go_mod != before_go_mod:
+        mutations.append("go.mod changed")
+    if after_go_sum != before_go_sum:
+        mutations.append("go.sum changed")
+    _expect(
+        not mutations,
+        "REPRODUCTION_SOURCE_MUTATION",
+        ", ".join(mutations),
+    )
+    return manifest
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -773,6 +1162,17 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--go-sum", type=Path)
     verify.add_argument("--expected-go-image")
     verify.add_argument("--expected-go-version")
+
+    reproduce = subparsers.add_parser(
+        "reproduce",
+        help="regenerate vendor inputs with a fresh authenticated module cache",
+    )
+    reproduce.add_argument("--source-root", type=Path, required=True)
+    reproduce.add_argument("--source-record", type=Path, required=True)
+    reproduce.add_argument("--bundle", type=Path, required=True)
+    reproduce.add_argument("--manifest", type=Path, required=True)
+    reproduce.add_argument("--go-command", default="go")
+    reproduce.add_argument("--git-command", default="git")
     return parser
 
 
@@ -791,7 +1191,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 archive_path=arguments.bundle,
                 manifest_path=arguments.manifest,
             )
-        else:
+        elif arguments.command == "verify":
             verify_package(
                 archive_path=arguments.bundle,
                 manifest_path=arguments.manifest,
@@ -801,6 +1201,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 expected_go_image=arguments.expected_go_image,
                 expected_go_version=arguments.expected_go_version,
                 source_record_path=arguments.source_record,
+            )
+        else:
+            reproduce_package(
+                source_root=arguments.source_root,
+                source_record_path=arguments.source_record,
+                archive_path=arguments.bundle,
+                manifest_path=arguments.manifest,
+                go_command=arguments.go_command,
+                git_command=arguments.git_command,
             )
     except VendorPackageError as error:
         print(f"ERROR[{error.code}]: {error.detail}", file=sys.stderr)
