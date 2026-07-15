@@ -14,6 +14,7 @@ CHECKER = ROOT / "scripts/verify_supply_chain.py"
 POLICY = ROOT / "security/resident-images.json"
 EXCEPTIONS = ROOT / "security/resident-image-exceptions.json"
 WORKFLOW = ROOT / ".github/workflows/security.yml"
+GITLEAKS_CONFIG = ROOT / ".gitleaks.toml"
 SECURITY_DOC = ROOT / "docs/design/04_Development/049_Supply_Chain_Security.md"
 LAB_ADR = "docs/design/07_ADR/ADR-0019_Allow_time_boxed_resident_image_exceptions_for_local_lab.md"
 
@@ -1064,6 +1065,57 @@ class SupplyChainSecurityTests(unittest.TestCase):
         ):
             with self.subTest(required=required):
                 self.assertIn(required, documentation)
+
+    def test_retained_evidence_policy_exceptions_are_exact_path_only(self) -> None:
+        config = GITLEAKS_CONFIG.read_text(encoding="utf-8")
+
+        def allowlist_paths(description: str, secret_pattern: str) -> set[str]:
+            start = config.index(f'description = "{description}"')
+            end = config.find("[[allowlists]]", start)
+            block = config[start:] if end == -1 else config[start:end]
+            self.assertIn('condition = "AND"', block)
+            self.assertIn('regexTarget = "secret"', block)
+            self.assertIn(f"regexes = ['''{secret_pattern}''']", block)
+            self.assertIn('targetRules = ["sourcegraph-access-token"]', block)
+            paths = block.split("paths = [", 1)[1].split("]", 1)[0]
+            return {
+                line.strip().rstrip(",").strip("'")
+                for line in paths.splitlines()
+                if line.strip()
+            }
+
+        self.assertEqual(
+            allowlist_paths(
+                "Public Sigstore bundle material retained for SeaweedFS 4.39 attestation verification",
+                r"^(db42bb49757b459551607939807017d7a9d5a94a|311b400a3baa667ba1727949a95ae0d2e70d41d2)$",
+            ),
+            {
+                r"^bootstrap/seaweedfs/v4\.39/evidence/sbom-attestation-bundle\.json$",
+                r"^bootstrap/seaweedfs/v4\.39/evidence/trivy-attestation-bundle\.json$",
+            },
+        )
+        self.assertEqual(
+            allowlist_paths(
+                "Public source and checksum hashes in the retained SeaweedFS Go module manifest",
+                r"^db42bb49757b459551607939807017d7a9d5a94a$",
+            ),
+            {
+                r"^bootstrap/seaweedfs/v4\.39/go-module-inputs\.json$",
+                r"^bootstrap/seaweedfs/v4\.39/evidence/go-module-inputs\.json$",
+            },
+        )
+        self.assertNotIn(r"^bootstrap/seaweedfs/v4\.39/evidence/.*$", config)
+
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        for path in (
+            "bootstrap/seaweedfs/v4.39/evidence/cosign-signature-bundle.json",
+            "bootstrap/seaweedfs/v4.39/evidence/image-manifest.json",
+            "bootstrap/seaweedfs/v4.39/evidence/sbom-attestation-bundle.json",
+            "bootstrap/seaweedfs/v4.39/evidence/trivy-attestation-bundle.json",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(path, makefile)
+        self.assertNotIn("bootstrap/seaweedfs/v4.39/evidence/*.json", makefile)
 
 
 if __name__ == "__main__":

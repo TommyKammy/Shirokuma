@@ -22,9 +22,23 @@ paths = [
 ]
 
 [[allowlists]]
+description = "Public Sigstore bundle material retained for SeaweedFS 4.39 attestation verification"
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^(db42bb49757b459551607939807017d7a9d5a94a|311b400a3baa667ba1727949a95ae0d2e70d41d2)$''']
+targetRules = ["sourcegraph-access-token"]
+paths = [
+  '''^bootstrap/seaweedfs/v4\.39/evidence/sbom-attestation-bundle\.json$''',
+  '''^bootstrap/seaweedfs/v4\.39/evidence/trivy-attestation-bundle\.json$''',
+]
+
+[[allowlists]]
 description = "Public source and checksum hashes in the retained SeaweedFS Go module manifest"
 condition = "AND"
+regexTarget = "secret"
+regexes = ['''^db42bb49757b459551607939807017d7a9d5a94a$''']
 targetRules = ["sourcegraph-access-token"]
 paths = [
   '''^bootstrap/seaweedfs/v4\.39/go-module-inputs\.json$''',
+  '''^bootstrap/seaweedfs/v4\.39/evidence/go-module-inputs\.json$''',
 ]

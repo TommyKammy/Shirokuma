@@ -4,15 +4,15 @@ doc_id: "RES-106"
 title: "ARM64 Container Image Compatibility"
 status: draft
 created: 2026-07-05
-updated: 2026-07-14
-version: "0.7"
+updated: 2026-07-15
+version: "0.8"
 area: "research"
 tags: [shirokuma, arm64, apple-silicon]
 ---
 
 # ARM64 Container Image Compatibility
 
-Verification date: 2026-07-14. Primary target: Colima Linux/arm64 on Mac Studio M3 Ultra.
+Verification date: 2026-07-15. Primary target: Colima Linux/arm64 on Mac Studio M3 Ultra.
 
 ## L0 platform baseline
 
@@ -155,8 +155,9 @@ evidence, so the upstream SeaweedFS image remains rejected. ADR-0020 instead
 approves the exact source revision for a repository-controlled build. Trusted
 publication is now main-only and two-phase: the builder, contract, and verifier
 merge first; the merged workflow then publishes from `refs/heads/main`; a
-follow-up evidence-only PR admits the resulting digest. The current state is
-`pending_main_publication`, so no replacement digest is yet admitted.
+follow-up evidence-only PR admits the resulting digest. Main run `29418029340`,
+attempt `1`, completed that transition and admitted
+`sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421`.
 
 The closed-world contract binds source archive, Containerfile, build inputs,
 the deterministic Go vendor archive, Buildx checksum, and BuildKit index/arm64
@@ -175,14 +176,13 @@ as `not_admitted_branch_publication`; it proves implementation fitness but does
 not authorize runtime use.
 
 The machine-readable decision is retained at
-`bootstrap/seaweedfs/v4.39/admission.json`. While pending,
-`release-evidence.json` and generated evidence are intentionally absent and the
-repository-owned audit proves that runtime permission remains false. After the
-main run, the complete Cosign, registry, Rekor, SLSA, raw runtime-inspect,
-CycloneDX, scanner, candidate, and promotion set must be copied together under
-`bootstrap/seaweedfs/v4.39/evidence/` and approved in the follow-up PR. Parent
-Issue #26 may add runtime records only after that source-build supply-chain
-record makes its proposed resident-ledger entry pass `check-images`.
+`bootstrap/seaweedfs/v4.39/admission.json`. The complete Cosign, registry,
+Rekor, SLSA, raw runtime-inspect, CycloneDX, scanner, candidate, and promotion
+set from final artifact `seaweedfs-4.39-arm64-29418029340-1` is retained under
+`bootstrap/seaweedfs/v4.39/evidence/`. Repository audit cryptographically
+reverifies that set. Runtime permission remains false: parent Issue #26 may add
+runtime records only after the source-build supply-chain record makes its
+proposed resident-ledger entry pass `check-images`.
 
 ## GitOps candidate evidence
 

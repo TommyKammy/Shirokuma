@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-15
-version: "0.6"
+version: "0.7"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -161,6 +161,12 @@ upload. The candidate name remains bound to the verify job's builder attempt,
 while promotion and the final artifact record the attempt that actually moved
 the tag. A promotion-only retry must stay in the same workflow run and may only
 advance, never precede, the builder attempt.
+For SeaweedFS 4.39, this transition completed from main run `29418029340`,
+attempt `1`, admitting
+`ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421`.
+The Git-committed evidence remains insufficient for runtime by itself: parent
+Issue #26 must still add the resident source-build record and pass
+`check-images`.
 The final evidence retains the exact pre-promotion release record as
 `candidate-release-evidence.json`; promotion is therefore auditable after the
 short-lived candidate artifact expires. Runtime evidence likewise retains raw
