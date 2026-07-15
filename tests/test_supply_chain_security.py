@@ -1359,6 +1359,17 @@ class SupplyChainSecurityTests(unittest.TestCase):
 
         self.assertEqual(
             allowlist_paths(
+                "Public SHA-1 package hashes in retained SeaweedFS 4.39 CycloneDX evidence",
+                r"^[0-9a-f]{40}$",
+            ),
+            {
+                r"^bootstrap/seaweedfs/v4\.39/evidence/seaweedfs-4\.39-arm64\.cdx\.json$",
+                r"^bootstrap/seaweedfs/v4\.39/evidence/trivy\.json$",
+                r"^security/evidence/seaweedfs-v4\.39/seaweedfs-4\.39-arm64\.cdx\.json$",
+            },
+        )
+        self.assertEqual(
+            allowlist_paths(
                 "Public Sigstore bundle material retained for SeaweedFS 4.39 attestation verification",
                 r"^(db42bb49757b459551607939807017d7a9d5a94a|311b400a3baa667ba1727949a95ae0d2e70d41d2)$",
             ),
