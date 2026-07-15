@@ -10,10 +10,11 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from verify_design_context import DESIGN_ROOT, ROOT, load_json, validate
 
 
-RELATED_SECTION = re.compile(
-    r"^#{2,3}[ \t]+Related docs / ADR[ \t]*\r?\n"
-    r"(?P<body>.*?)(?=^#{2,3}[ \t]+|\Z)",
-    re.IGNORECASE | re.MULTILINE | re.DOTALL,
+ATX_HEADING = re.compile(
+    r"^ {0,3}(?P<marks>#{2,3})(?:[ \t]+(?P<title>.*?))?[ \t]*$"
+)
+FENCE_OPEN = re.compile(
+    r"^ {0,3}(?P<marker>`{3,}|~{3,})(?P<info>.*)$"
 )
 CODE_SPAN = re.compile(r"`(?P<value>[^`\r\n]+)`")
 ISSUE_QUERY_LIMIT = 1000
@@ -40,13 +41,83 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def lines_outside_fences(body: str) -> list[str]:
+    lines: list[str] = []
+    fence_character: str | None = None
+    fence_length = 0
+    inside_html_comment = False
+    for line in body.splitlines():
+        if fence_character is not None:
+            closing = re.fullmatch(
+                rf" {{0,3}}{re.escape(fence_character)}"
+                rf"{{{fence_length},}}[ \t]*",
+                line,
+            )
+            if closing is not None:
+                fence_character = None
+                fence_length = 0
+            continue
+
+        visible: list[str] = []
+        cursor = 0
+        while cursor < len(line):
+            if inside_html_comment:
+                comment_end = line.find("-->", cursor)
+                if comment_end == -1:
+                    cursor = len(line)
+                    break
+                inside_html_comment = False
+                cursor = comment_end + 3
+                continue
+
+            comment_start = line.find("<!--", cursor)
+            if comment_start == -1:
+                visible.append(line[cursor:])
+                cursor = len(line)
+                break
+            visible.append(line[cursor:comment_start])
+            inside_html_comment = True
+            cursor = comment_start + 4
+
+        visible_line = "".join(visible)
+        opening = FENCE_OPEN.fullmatch(visible_line)
+        if opening is not None:
+            marker = opening.group("marker")
+            info = opening.group("info")
+            if marker[0] != "`" or "`" not in info:
+                fence_character = marker[0]
+                fence_length = len(marker)
+                continue
+        lines.append(visible_line)
+    return lines
+
+
+def related_sections(body: str) -> list[str]:
+    sections: list[str] = []
+    current: list[str] | None = None
+    for line in lines_outside_fences(body):
+        heading = ATX_HEADING.fullmatch(line)
+        if heading is not None:
+            if current is not None:
+                sections.append("\n".join(current))
+            title = (heading.group("title") or "").strip()
+            title = re.sub(r"[ \t]+#+[ \t]*$", "", title).strip()
+            current = [] if title.casefold() == "related docs / adr" else None
+            continue
+        if current is not None:
+            current.append(line)
+    if current is not None:
+        sections.append("\n".join(current))
+    return sections
+
+
 def extract_references(body: str) -> list[str]:
-    sections = list(RELATED_SECTION.finditer(body))
+    sections = related_sections(body)
     if len(sections) != 1:
         return []
     return [
         match.group("value")
-        for match in CODE_SPAN.finditer(sections[0].group("body"))
+        for match in CODE_SPAN.finditer(sections[0])
     ]
 
 
@@ -68,7 +139,7 @@ def repo_path_error(value: str, *, require_markdown: bool) -> str | None:
 
 
 def validate_related_docs(body: str) -> tuple[list[str], list[str]]:
-    sections = list(RELATED_SECTION.finditer(body))
+    sections = related_sections(body)
     if len(sections) != 1:
         return [], [
             "must contain exactly one Related docs / ADR section "
@@ -77,7 +148,7 @@ def validate_related_docs(body: str) -> tuple[list[str], list[str]]:
 
     references = [
         match.group("value")
-        for match in CODE_SPAN.finditer(sections[0].group("body"))
+        for match in CODE_SPAN.finditer(sections[0])
     ]
     errors: list[str] = []
     if not references:
@@ -142,8 +213,36 @@ def decode_live_issues(
 def git_path_exists(ref: str, repo_path: str) -> bool:
     if repo_path_error(repo_path, require_markdown=False) is not None:
         return False
-    result = run(["git", "cat-file", "-t", f"{ref}:{repo_path}"], check=False)
-    return result.returncode == 0 and result.stdout.strip() == "blob"
+    result = run(
+        [
+            "git",
+            "--literal-pathspecs",
+            "ls-tree",
+            "-z",
+            ref,
+            "--",
+            repo_path,
+        ],
+        check=False,
+    )
+    if result.returncode != 0:
+        return False
+
+    records = result.stdout.split("\0")
+    if records and records[-1] == "":
+        records.pop()
+    if len(records) != 1:
+        return False
+
+    metadata, separator, actual_path = records[0].partition("\t")
+    fields = metadata.split()
+    return (
+        separator == "\t"
+        and actual_path == repo_path
+        and len(fields) == 3
+        and fields[0] in {"100644", "100755"}
+        and fields[1] == "blob"
+    )
 
 
 def main() -> int:
@@ -223,12 +322,15 @@ def main() -> int:
             checked_references += 1
             if not git_path_exists(args.ref, reference):
                 errors.append(
-                    f"issue #{issue_number} reference is absent from "
+                    f"issue #{issue_number} reference is absent or not a "
+                    "regular file in "
                     f"{args.ref}: {reference}"
                 )
 
     if not git_path_exists(args.ref, "AGENTS.md"):
-        errors.append(f"root AGENTS.md is absent from {args.ref}")
+        errors.append(
+            f"root AGENTS.md is absent or not a regular file in {args.ref}"
+        )
 
     if errors:
         for error in errors:

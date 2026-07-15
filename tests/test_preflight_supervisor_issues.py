@@ -146,6 +146,101 @@ T0 - docs or metadata only
         self.assertEqual(references, ["AGENTS.md", "docs/design/work-package.md"])
         self.assertEqual(errors, [])
 
+    def test_fenced_only_heading_does_not_create_a_section(self) -> None:
+        body = """\
+```markdown
+## Related docs / ADR
+- `docs/design/README.md`
+```
+"""
+
+        references, errors = preflight.validate_related_docs(body)
+
+        self.assertEqual(references, [])
+        self.assertEqual(
+            errors,
+            ["must contain exactly one Related docs / ADR section (found 0)"],
+        )
+
+    def test_fenced_duplicate_heading_does_not_duplicate_real_section(self) -> None:
+        body = related_body("docs/design/real.md") + """\
+
+~~~markdown
+## Related docs / ADR
+- `docs/design/example.md`
+~~~
+"""
+
+        references, errors = preflight.validate_related_docs(body)
+
+        self.assertEqual(references, ["docs/design/real.md"])
+        self.assertEqual(errors, [])
+
+    def test_fenced_code_span_inside_section_is_not_a_reference(self) -> None:
+        body = """\
+### Related docs / ADR
+
+- `docs/design/real.md`
+
+   ````markdown
+   `docs/design/example.md`
+   ````
+
+### Risk tier
+T1
+"""
+
+        references, errors = preflight.validate_related_docs(body)
+
+        self.assertEqual(references, ["docs/design/real.md"])
+        self.assertEqual(errors, [])
+
+    def test_html_comment_only_heading_does_not_create_a_section(self) -> None:
+        body = """\
+<!--
+## Related docs / ADR
+- `docs/design/README.md`
+-->
+"""
+
+        references, errors = preflight.validate_related_docs(body)
+
+        self.assertEqual(references, [])
+        self.assertEqual(
+            errors,
+            ["must contain exactly one Related docs / ADR section (found 0)"],
+        )
+
+    def test_html_comment_duplicate_does_not_duplicate_real_section(self) -> None:
+        body = related_body("docs/design/real.md") + """\
+
+<!--
+## Related docs / ADR
+- `docs/design/example.md`
+-->
+"""
+
+        references, errors = preflight.validate_related_docs(body)
+
+        self.assertEqual(references, ["docs/design/real.md"])
+        self.assertEqual(errors, [])
+
+    def test_html_comment_code_span_inside_section_is_not_a_reference(self) -> None:
+        body = """\
+## Related docs / ADR
+
+- `docs/design/real.md`
+<!-- `docs/design/hidden.md` -->
+
+## Risk tier
+T1
+"""
+
+        references, errors = preflight.validate_related_docs(body)
+
+        self.assertEqual(references, ["docs/design/real.md"])
+        self.assertEqual(errors, [])
+
 
 class DecodeLiveIssuesTests(unittest.TestCase):
     def test_keeps_all_open_query_results_without_l0_number_filtering(self) -> None:
@@ -191,27 +286,63 @@ class DecodeLiveIssuesTests(unittest.TestCase):
 
 
 class GitPathTests(unittest.TestCase):
-    def test_requires_a_blob_at_the_selected_ref(self) -> None:
+    def test_requires_a_regular_blob_at_the_selected_ref(self) -> None:
         with patch.object(
             preflight,
             "run",
-            return_value=completed(["git"], stdout="blob\n"),
+            return_value=completed(
+                ["git"],
+                stdout=(
+                    "100644 blob 0123456789abcdef"
+                    "\tdocs/design/valid.md\0"
+                ),
+            ),
         ) as run_mock:
             self.assertTrue(
                 preflight.git_path_exists("origin/main", "docs/design/valid.md")
             )
         run_mock.assert_called_once_with(
-            ["git", "cat-file", "-t", "origin/main:docs/design/valid.md"],
+            [
+                "git",
+                "--literal-pathspecs",
+                "ls-tree",
+                "-z",
+                "origin/main",
+                "--",
+                "docs/design/valid.md",
+            ],
             check=False,
         )
 
         with patch.object(
             preflight,
             "run",
-            return_value=completed(["git"], stdout="tree\n"),
+            return_value=completed(
+                ["git"],
+                stdout=(
+                    "040000 tree 0123456789abcdef"
+                    "\tdocs/design/tree.md\0"
+                ),
+            ),
         ):
             self.assertFalse(
                 preflight.git_path_exists("origin/main", "docs/design/tree.md")
+            )
+
+    def test_rejects_git_symlink_even_though_it_is_a_blob(self) -> None:
+        with patch.object(
+            preflight,
+            "run",
+            return_value=completed(
+                ["git"],
+                stdout=(
+                    "120000 blob 0123456789abcdef"
+                    "\tdocs/design/link.md\0"
+                ),
+            ),
+        ):
+            self.assertFalse(
+                preflight.git_path_exists("origin/main", "docs/design/link.md")
             )
 
     def test_rejects_unsafe_paths_before_invoking_git(self) -> None:
@@ -322,7 +453,9 @@ class MainTests(unittest.TestCase):
         )
 
         self.assertEqual(result, 1)
-        self.assertIn("reference is absent from test-ref", output)
+        self.assertIn(
+            "reference is absent or not a regular file in test-ref", output
+        )
 
     def test_missing_agents_file_fails_closed(self) -> None:
         def path_exists(_ref: str, path: str) -> bool:
@@ -334,7 +467,9 @@ class MainTests(unittest.TestCase):
         )
 
         self.assertEqual(result, 1)
-        self.assertIn("root AGENTS.md is absent from test-ref", output)
+        self.assertIn(
+            "root AGENTS.md is absent or not a regular file in test-ref", output
+        )
 
     def test_github_and_origin_fetch_failures_remain_blocking(self) -> None:
         result, output, _ = self.run_main(
@@ -347,6 +482,20 @@ class MainTests(unittest.TestCase):
         self.assertEqual(result, 1)
         self.assertIn("unable to refresh origin/main", output)
         self.assertIn("unable to read live GitHub issues", output)
+
+    def test_query_limit_reached_fails_closed(self) -> None:
+        with patch.object(preflight, "ISSUE_QUERY_LIMIT", 2):
+            result, output, commands = self.run_main(
+                issues=[
+                    live_issue(27, related_body("docs/design/first.md")),
+                    live_issue(28, related_body("docs/design/second.md")),
+                ]
+            )
+
+        self.assertEqual(result, 1)
+        self.assertIn("query reached its safety limit", output)
+        gh_command = commands[0]
+        self.assertEqual(gh_command[gh_command.index("--limit") + 1], "2")
 
 
 if __name__ == "__main__":
