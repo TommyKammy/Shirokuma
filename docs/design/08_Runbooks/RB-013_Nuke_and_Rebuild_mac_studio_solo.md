@@ -5,7 +5,7 @@ title: "Operate, back up, and rebuild SeaweedFS on mac-studio-solo"
 status: draft
 created: 2026-07-05
 updated: 2026-07-16
-version: "1.3"
+version: "1.4"
 area: "runbook"
 tags: [shirokuma, runbook, seaweedfs, backup, rebuild, colima]
 ---
@@ -335,6 +335,20 @@ OpenTofu, not Flux, and remain until an OpenTofu destroy or explicit
 replacement. The retained PVC continues to consume host SSD space and is not
 proof of a valid backup. Re-adding the accepted Git resources is the rollback
 path.
+
+For Issue #26 acceptance only, the child manifest may be absent while the
+repository contains the exact, time-boxed marker at
+`security/gitops-teardown/issue-26-object-storage.json`. The repo-owned
+validator admits only that one missing path, the PVC plus the operator/server
+and application Secret identities listed above, and a canonical UTC validity
+window no longer than 30 days. It rejects a concurrent normal manifest,
+additional marker state, broader resource scope, malformed timestamps, and an
+expired marker. Because the marker is outside
+`deploy/gitops/clusters/local-lite`, Flux never renders it as a Kubernetes
+resource; root pruning removes the child Kustomization and its workload objects.
+Rollback is a reviewed PR that restores
+`deploy/gitops/clusters/local-lite/object-storage.yaml`, removes the marker, and
+then reconciles Flux before re-running readiness, persistence, and CRUD checks.
 
 There is no GitOps path in this Work Package for deleting only the PVC. If data
 must be destroyed, use the whole-profile nuke/rebuild path below after explicit
