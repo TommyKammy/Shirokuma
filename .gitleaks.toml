@@ -24,7 +24,7 @@ paths = [
 [[allowlists]]
 description = "Public source and checksum hashes in the retained SeaweedFS Go module manifest"
 condition = "AND"
-rules = ["sourcegraph-access-token"]
+targetRules = ["sourcegraph-access-token"]
 paths = [
   '''^bootstrap/seaweedfs/v4\.39/go-module-inputs\.json$''',
 ]
