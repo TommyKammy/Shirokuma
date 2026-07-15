@@ -2,10 +2,10 @@
 project: Shirokuma
 doc_id: "WP-L1-LAKE-001"
 title: "WP-L1-LAKE-001 SeaweedFS-first object storage profile"
-status: in-progress
+status: completed
 created: 2026-07-05
 updated: 2026-07-16
-version: "1.3"
+version: "1.4"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -131,12 +131,13 @@ PR #43 merged the retained main-run evidence and moved artifact admission to
 This approval permits the exact digest to enter the resident-image ledger; it
 does not prove that a Kubernetes runtime is ready or that data is durable.
 
-Issue #26 adds the repository-source-build ledger record, Flux resources,
-credential boundary, smoke contract, and operator runbook. The live
-`Ready=True`, CRUD, pod-restart persistence, host SSD impact, backup/export,
-restore, and teardown observations are still required. Until those observations
-are retained without secrets, Issue #26 remains open and WP-L1-LAKE-002 stays
-dependency-blocked.
+Issue #26 repository and runtime acceptance is retained below. The record covers
+Flux readiness, HTTP probes, CRUD and IAM denial, restart persistence,
+backup/export and restore, host SSD impact, and GitOps teardown/rollback without
+retaining credentials. NetworkPolicy rendering was verified, while live
+pod-to-pod enforcement remains explicitly limited to spec-only evidence because
+no eligible application Pod existed. This closure record makes Issue #27 the
+next executable child after Issue #26 closes.
 
 ## Runtime contract
 
@@ -223,6 +224,21 @@ make verify
 Passing these repository gates is necessary but does not satisfy the live
 closure observations in the Acceptance Criteria and RB-013.
 
+## Live acceptance evidence
+
+The observations below were collected on `colima-mac-studio-solo` on
+2026-07-16. Credential values, workstation-absolute backup paths, and OpenTofu
+state are intentionally excluded.
+
+| Concern | Secret-free observation |
+|---|---|
+| Flux and workload readiness | PR #46 promoted the Flux v2.9.2 canonical manifests and `main` source contract; PR #47 completed the staging-to-main bridge. Acceptance baseline `main@sha1:2609910cdf3654b94909ac0498bdc7135f2be12b` reconciled successfully. `flux-system`, `shirokuma-dev`, and `shirokuma-object-storage` reported `Ready=True`; all four Flux controllers, `StatefulSet/seaweedfs`, and its Pod were Ready on approved immutable digests. SeaweedFS used `sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421`; `/healthz` and `/readyz` probes passed, and the `20Gi` PVC was `Bound`. Post-rollback readiness was reconfirmed at `main@sha1:3f71957763c3def1487ef7fe01eb56ca02853842`. |
+| CRUD and IAM boundary | Operator temporary-bucket create/read/write/list/delete succeeded. The application identity successfully performed Put/Get/List/Delete in `shirokuma-lakehouse`; CreateBucket, DeleteBucket, and Put to another bucket each returned HTTP `403`. No credential value was retained. |
+| Persistence and restart | `acceptance/persistence.bin` was `102400` bytes with SHA-256 `d8e82f2a1e10ce259f3955a3d946a3f1d643927b371374bb7d38fdff54f1e96f`. The bytes and digest matched before and after the Colima restart, after restore, and after the GitOps teardown/rollback recreation. Post-rollback operator smoke also passed. |
+| Export, restore, and host SSD | Export inventory recorded `object_count=1` and `total_bytes=102400`; source, post-export, and post-restore inventories matched, and manifest/payload digests verified. Restore refused the non-empty target before its first upload; after the target was emptied, restore and readback succeeded. Host/export permissions were `0700`/`0600`. The export directory occupied `104 KiB`, the guarded backup root occupied `124 KiB` total, and the target filesystem reported `2900673716 KiB` (about `2.70 TiB`) free after capture. The Colima profile has a `400 GiB` maximum VM disk and the retained PVC is `20Gi`. |
+| Flux teardown and rollback | Teardown PR #48 merged as `1e37494435db2465d5d6bf3fb68b6054836d71ae` and removed the object-storage child from the Flux root. After reconciliation, the child Kustomization and workload resources were absent while PVC `57d415f5-d1e8-4e09-a4a8-41704891e4a9`, storage Secret `13904276-650c-409b-8c13-bf7eaa94ed83`, and application Secret `37b0b8fb-f3dc-4a3b-afc7-14cf713fd5f9` were retained. Rollback PR #49 merged as `3f71957763c3def1487ef7fe01eb56ca02853842`; readiness, the same retained-resource UIDs, and the persistence digest were reconfirmed. |
+| NetworkPolicy limitation | The rendered `NetworkPolicy/seaweedfs-s3-ingress` admits TCP `8333` only from opted-in `shirokuma-dev` clients. No GitOps-managed application Pod existed during acceptance, so pod-to-pod enforcement and non-S3-port denial were not exercised live; this remains spec-only evidence. The IAM denial boundary above was exercised live. |
+
 ## GitHub Tracking
 
 - Epic: [#24](https://github.com/TommyKammy/Shirokuma/issues/24)
@@ -230,12 +246,16 @@ closure observations in the Acceptance Criteria and RB-013.
 - Trusted artifact child: [#41](https://github.com/TommyKammy/Shirokuma/issues/41)
 - Trusted artifact PR: [#42](https://github.com/TommyKammy/Shirokuma/pull/42)
 - Main evidence PR: [#43](https://github.com/TommyKammy/Shirokuma/pull/43)
+- Flux main handoff PR: [#46](https://github.com/TommyKammy/Shirokuma/pull/46)
+- Bootstrap bridge PR: [#47](https://github.com/TommyKammy/Shirokuma/pull/47)
+- Teardown drill PR: [#48](https://github.com/TommyKammy/Shirokuma/pull/48)
+- Teardown rollback PR: [#49](https://github.com/TommyKammy/Shirokuma/pull/49)
 - Main publication: [run 29418029340 attempt 1](https://github.com/TommyKammy/Shirokuma/actions/runs/29418029340/attempts/1)
 - GitHub depends on: `#1`, `#8`, `#25`
 - Execution order: `2 of 10`
-- Queue: artifact admission is complete. Issue #26 repository implementation is
-  in progress; keep it open until live Ready/CRUD/persistence/backup-restore and
-  teardown evidence is accepted. Issue #27 remains dependency-blocked.
+- Queue: Issue #26 repository and live acceptance are complete; this document is
+  the closure record. Issue #27 is the next executable child after GitHub records
+  Issue #26 as closed.
 
 ## Definition of Done
 
