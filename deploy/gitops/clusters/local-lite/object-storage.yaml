@@ -19,4 +19,4 @@ spec:
     - apiVersion: apps/v1
       kind: StatefulSet
       name: seaweedfs
-      namespace: shirokuma-dev
+      namespace: shirokuma-storage

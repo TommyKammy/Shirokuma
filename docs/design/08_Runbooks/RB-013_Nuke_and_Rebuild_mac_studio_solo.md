@@ -5,7 +5,7 @@ title: "Operate, back up, and rebuild SeaweedFS on mac-studio-solo"
 status: draft
 created: 2026-07-05
 updated: 2026-07-16
-version: "1.1.2"
+version: "1.2"
 area: "runbook"
 tags: [shirokuma, runbook, seaweedfs, backup, rebuild, colima]
 ---
@@ -24,28 +24,29 @@ production backup, durability, disaster-recovery, or SLA claim.
 | Concern | Value |
 |---|---|
 | Kubernetes context | `colima-mac-studio-solo` |
-| Namespace | `shirokuma-dev` |
+| Storage namespace | `shirokuma-storage`; SeaweedFS, Service, PVC, NetworkPolicy, ConfigMap, and server config Secret |
+| Application namespace | `shirokuma-dev`; bucket-scoped application Secret and opted-in clients |
 | Flux Kustomization | `flux-system/shirokuma-object-storage` |
-| Workload | `StatefulSet/seaweedfs` |
-| PersistentVolumeClaim | template `seaweedfs-data` -> runtime `seaweedfs-data-seaweedfs-0`, `20Gi`, retained/prune-protected |
+| Workload | `shirokuma-storage/StatefulSet/seaweedfs` |
+| PersistentVolumeClaim | `shirokuma-storage`; template `seaweedfs-data` -> runtime `seaweedfs-data-seaweedfs-0`, `20Gi`, retained/prune-protected |
 | Managed bucket | `shirokuma-lakehouse` |
 | S3 Service | `seaweedfs-s3`, `ClusterIP`, port `8333` |
-| In-cluster endpoint | `http://seaweedfs-s3.shirokuma-dev.svc.cluster.local:8333` |
+| In-cluster endpoint | `http://seaweedfs-s3.shirokuma-storage.svc.cluster.local:8333` |
 | S3 client contract | region `us-east-1`, path-style access, lifecycle `none-local-lite-placeholder`, delete-nonempty disabled |
-| NetworkPolicy | `seaweedfs-s3-ingress`; TCP `8333` only from same-namespace pods labeled `shirokuma.dev/object-storage-client: "true"` |
+| NetworkPolicy | `shirokuma-storage/seaweedfs-s3-ingress`; TCP `8333` only from `shirokuma-dev` pods labeled `shirokuma.dev/object-storage-client: "true"` |
 | HTTP probes | startup/liveness `GET /healthz`; readiness `GET /readyz`; named port `s3` (`8333`) |
 | Operator identity | `shirokuma-local-lite-operator`, `Admin` |
 | Application identity | `shirokuma-lakehouse-application`, bucket-scoped `Read`, `List`, `Tagging`, and `Write` |
-| Server config Secret | `seaweedfs-s3-credentials`, key `s3.json`, generated from OpenTofu sensitive inputs |
-| Application Secret | `seaweedfs-s3-application-credentials`, bucket-scoped keys and S3 connection settings |
+| Server config Secret | `shirokuma-storage/seaweedfs-s3-credentials`, key `s3.json`, generated from OpenTofu sensitive inputs; unavailable to application pods by namespace boundary |
+| Application Secret | `shirokuma-dev/seaweedfs-s3-application-credentials`, bucket-scoped keys and cross-namespace S3 connection settings |
 | Credential generation | `shirokuma.dev/s3-credential-generation`, shared by both Secret annotations and the StatefulSet pod template |
 | Colima profile | `mac-studio-solo`, `solo-lite`, 400GB virtual disk |
 
 The contract above is desired state. Before operating on data, confirm that the
 observed Flux revision contains the merged Issue #26 commit and that the
 Kustomization and StatefulSet are ready. That control-plane result is not the
-data-plane gate: both Secrets must exist, `/healthz` and `/readyz` must respond,
-and authenticated CRUD must pass.
+data-plane gate: both namespaced Secrets must exist, `/healthz` and `/readyz`
+must respond, and authenticated CRUD must pass.
 
 ## Safety boundaries
 
@@ -56,9 +57,11 @@ and authenticated CRUD must pass.
   SeaweedFS `s3.json` format. Never export a Kubernetes Secret manifest.
 - Use `shirokuma-local-lite-operator` only for operator smoke, backup, restore,
   and bucket administration. Application workloads consume
-  `Secret/seaweedfs-s3-application-credentials` as
+  `shirokuma-dev/Secret/seaweedfs-s3-application-credentials` as
   `shirokuma-lakehouse-application`; never distribute the `Admin` identity to
-  Polaris, Trino, or another application pod.
+  Polaris, Trino, or another application pod. Application pods cannot mount
+  `shirokuma-storage/Secret/seaweedfs-s3-credentials` because Secret references
+  cannot cross namespaces.
 - OpenTofu `sensitive` redacts normal CLI output but does not encrypt local
   state. Treat `opentofu/dev/terraform.tfstate*` and every state backup as
   credential material: never commit them, include them in the object-store
@@ -70,7 +73,7 @@ and authenticated CRUD must pass.
 - Do not use `kubectl apply`, `kubectl edit`, direct scaling, or a cluster-only
   patch. Desired-state rollback and teardown go through a reviewed Git PR and
   Flux reconciliation.
-- `PersistentVolumeClaim/seaweedfs-data-seaweedfs-0` is retained and
+- `shirokuma-storage/PersistentVolumeClaim/seaweedfs-data-seaweedfs-0` is retained and
   prune-protected. Removing the Flux
   workload must not be interpreted as deleting its data.
 - Do not reset Colima until a content export is outside the VM and the export
@@ -93,13 +96,15 @@ flux get kustomization shirokuma-object-storage \
   --namespace flux-system \
   --context colima-mac-studio-solo
 kubectl --context colima-mac-studio-solo \
-  --namespace shirokuma-dev \
+  --namespace shirokuma-storage \
   rollout status statefulset/seaweedfs --timeout=10m
 kubectl --context colima-mac-studio-solo \
-  --namespace shirokuma-dev \
+  --namespace shirokuma-storage \
   get service/seaweedfs-s3 persistentvolumeclaim/seaweedfs-data-seaweedfs-0 \
-  networkpolicy/seaweedfs-s3-ingress secret/seaweedfs-s3-credentials \
-  secret/seaweedfs-s3-application-credentials
+  networkpolicy/seaweedfs-s3-ingress secret/seaweedfs-s3-credentials
+kubectl --context colima-mac-studio-solo \
+  --namespace shirokuma-dev \
+  get secret/seaweedfs-s3-application-credentials
 ```
 
 Stop if the Flux Kustomization is not `Ready=True`, the observed revision does
@@ -134,7 +139,7 @@ test ! -e "$EXPORT_DIR"
 df -Pk "$SHIROKUMA_HOST_EXPORT_ROOT"
 colima status --profile mac-studio-solo --json
 kubectl --context colima-mac-studio-solo \
-  --namespace shirokuma-dev \
+  --namespace shirokuma-storage \
   get persistentvolumeclaim/seaweedfs-data-seaweedfs-0
 ```
 
@@ -154,7 +159,7 @@ the absolute path to repository documentation.
 
 ```bash
 kubectl --context colima-mac-studio-solo \
-  --namespace shirokuma-dev \
+  --namespace shirokuma-storage \
   port-forward service/seaweedfs-s3 18333:8333
 ```
 
@@ -283,16 +288,19 @@ For a bad image, configuration, or resource change:
 2. Wait for Flux to reconcile that Git revision. Do not patch the live
    StatefulSet.
 3. Re-run the readiness gate and `scripts/object_storage_smoke.sh`.
-4. Confirm `persistentvolumeclaim/seaweedfs-data-seaweedfs-0` remains Bound and the known
-   persistence-smoke object remains readable.
+4. Confirm
+   `shirokuma-storage/persistentvolumeclaim/seaweedfs-data-seaweedfs-0` remains
+   Bound and the known persistence-smoke object remains readable.
 
 For a non-destructive object-store teardown, export first, then remove the
 object-storage Kustomization and workload resources through a reviewed Git PR.
-Flux may prune the StatefulSet, Service, ConfigMap, and NetworkPolicy, but the
-prune-protected PVC remains. The two credential Secrets are owned by OpenTofu,
-not Flux, and remain until an OpenTofu destroy or explicit replacement. The
-retained PVC continues to consume host SSD space and is not proof of a valid
-backup. Re-adding the accepted Git resources is the rollback path.
+Flux may prune the `shirokuma-storage` StatefulSet, Service, ConfigMap, and
+NetworkPolicy, but the prune-protected PVC remains. The server Secret in
+`shirokuma-storage` and application Secret in `shirokuma-dev` are owned by
+OpenTofu, not Flux, and remain until an OpenTofu destroy or explicit
+replacement. The retained PVC continues to consume host SSD space and is not
+proof of a valid backup. Re-adding the accepted Git resources is the rollback
+path.
 
 There is no GitOps path in this Work Package for deleting only the PVC. If data
 must be destroyed, use the whole-profile nuke/rebuild path below after explicit
@@ -311,7 +319,7 @@ make colima-status > artifacts/seaweedfs-rebuild/colima-before.txt
 flux get kustomizations -A --context colima-mac-studio-solo \
   > artifacts/seaweedfs-rebuild/flux-before.txt
 kubectl --context colima-mac-studio-solo \
-  --namespace shirokuma-dev \
+  --namespace shirokuma-storage \
   get statefulset/seaweedfs persistentvolumeclaim/seaweedfs-data-seaweedfs-0 \
   > artifacts/seaweedfs-rebuild/storage-before.txt
 ```
@@ -331,7 +339,11 @@ operator's prior kubectl/Docker contexts, and fails unless the baseline status
 gate passes.
 
 4. Bootstrap Flux through the repository path and wait for the merged Issue
-   #26 revision. Never use direct `kubectl apply` as a shortcut.
+   #26 revision. First generate and export all four S3 `TF_VAR_*` values without
+   displaying or recording them by following
+   [[08_Runbooks/RB-001_Bootstrap_local_lite_lab]]. The bootstrap preflight
+   fails closed if any value is missing or empty. Never use direct
+   `kubectl apply` as a shortcut.
 
 ```bash
 make tofu-validate
@@ -341,7 +353,7 @@ flux get kustomization shirokuma-object-storage \
   --namespace flux-system \
   --context colima-mac-studio-solo
 kubectl --context colima-mac-studio-solo \
-  --namespace shirokuma-dev \
+  --namespace shirokuma-storage \
   rollout status statefulset/seaweedfs --timeout=10m
 ```
 
@@ -352,11 +364,18 @@ the merged object-storage manifests.
 
 1. Re-establish the local port-forward, guarded host root, and exactly one
    secure credential source from the backup section.
-2. Restore the exported contents only after Flux and the empty managed bucket
-   are ready:
+2. Restore the exported contents only after Flux and the completely empty
+   managed bucket are ready. Capture and assert the pre-restore zero-object
+   inventory before invoking restore; the restore helper independently lists
+   the target again and refuses a non-empty target before its first upload:
 
 ```bash
 shasum -a 256 -c "${EXPORT_DIR}.manifest.json.sha256"
+python3 scripts/object_storage_backup.py inventory \
+  --bucket "$S3_BUCKET" \
+  > "${EXPORT_DIR}.pre-restore-target-inventory.json"
+python3 -c 'import json,sys; i=json.load(open(sys.argv[1])); assert type(i["object_count"]) is int and i["object_count"] == 0; assert type(i["total_bytes"]) is int and i["total_bytes"] == 0' \
+  "${EXPORT_DIR}.pre-restore-target-inventory.json"
 python3 scripts/object_storage_backup.py restore \
   --bucket "$S3_BUCKET" \
   --input "$EXPORT_DIR"
@@ -374,15 +393,20 @@ scripts/object_storage_smoke.sh
    read a retained persistence-smoke object and run CRUD smoke again.
 
 Restore rejects an unsupported or malformed manifest, a symlink or path escape,
-size/digest drift, duplicate key, inconsistent total, or a bucket mismatch. It
-uses two passes: pass 1 validates the complete manifest and every referenced
-blob without any upload; pass 2 reopens and revalidates one blob at a time,
-uploads it, and verifies the readback SHA-256. Payload memory is therefore
-`O(largest object)` rather than `O(total export bytes)`. The pre-export and
-restored inventories, export manifest and hash, Flux observed revision,
-StatefulSet readiness, PVC binding, CRUD output, and persistence readback form
-the bounded recovery evidence. Inventory differences must be explained before
-the lab is called ready.
+size/digest drift, duplicate key, inconsistent total, bucket mismatch, or any
+pre-existing target object. It has no overwrite mode. It uses two validation
+gates: pass 1 validates the complete manifest and every referenced blob without
+any upload, then the empty-target preflight must pass; pass 2 reopens and
+revalidates one blob at a time, uploads it, and verifies the readback SHA-256.
+Payload memory is therefore `O(largest object)` rather than `O(total export
+bytes)`. If an upload/readback failure leaves a partial restore, do not rerun
+restore over it: stop, make the target bucket completely empty through the
+approved operator recovery path (or rebuild it), recapture a zero-object
+inventory, and only then retry. The pre-export, pre-restore, and restored
+inventories, export manifest and hash, Flux observed revision, StatefulSet
+readiness, PVC binding, CRUD output, and persistence readback form the bounded
+recovery evidence. Inventory differences must be explained before the lab is
+called ready.
 
 ## Rollback and failure handling
 
@@ -403,18 +427,20 @@ evidence from `colima-mac-studio-solo`:
 
 - Flux object-storage Kustomization and SeaweedFS StatefulSet `Ready=True` at
   the merged revision.
-- `NetworkPolicy/seaweedfs-s3-ingress` admits only labeled S3 clients on TCP
-  `8333`; no workload client path to a separate non-S3 listener is introduced.
-- Both credential Secrets exist, `/healthz` and `/readyz` pass, and authenticated
-  CRUD succeeds with the separated operator identity. Ready state alone is not
-  accepted.
+- `shirokuma-storage/NetworkPolicy/seaweedfs-s3-ingress` admits only opted-in
+  `shirokuma-dev` S3 clients on TCP `8333`; no workload client path to a
+  separate non-S3 listener is introduced.
+- The Admin-bearing server Secret exists only in `shirokuma-storage`, the
+  bucket-scoped application Secret exists in `shirokuma-dev`, `/healthz` and
+  `/readyz` pass, and authenticated CRUD succeeds with the separated operator
+  identity. Ready state alone is not accepted.
 - Resident-image local-lab gate passes for the exact admitted digest while
   strict mode still rejects any exception-dependent image.
 - Bucket create/read/write/delete succeeds.
 - A retained object survives a GitOps-driven pod rollout.
 - PVC capacity and host/export free-space impact are recorded.
-- Backup/export checksums and inventory verify, restore succeeds, and CRUD
-  passes after restore.
+- Backup/export checksums and inventory verify, the empty-target restore
+  preflight passes, restore succeeds, and CRUD passes after restore.
 - GitOps rollback/non-destructive teardown is documented and the destructive
   nuke/rebuild boundary is acknowledged.
 

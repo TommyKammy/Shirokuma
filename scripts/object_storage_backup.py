@@ -318,7 +318,12 @@ def restore_bucket(
     records = manifest.get("objects")
     if not isinstance(records, list):
         raise BackupError("export manifest objects must be an array")
-    if manifest.get("object_count") != len(records):
+    object_count = manifest.get("object_count")
+    if (
+        type(object_count) is not int
+        or object_count < 0
+        or object_count != len(records)
+    ):
         raise BackupError("export manifest object count is inconsistent")
 
     validated: list[tuple[str, Path, int, str]] = []
@@ -359,8 +364,15 @@ def restore_bucket(
         if actual_size != size or actual_digest != digest:
             raise BackupError("export object failed size or SHA-256 verification")
         validated.append((key, object_path, size, digest))
-    if manifest.get("total_bytes") != declared_total_bytes:
+    total_bytes = manifest.get("total_bytes")
+    if (
+        type(total_bytes) is not int
+        or total_bytes < 0
+        or total_bytes != declared_total_bytes
+    ):
         raise BackupError("export manifest total bytes is inconsistent")
+    if client.list_objects(bucket, ""):
+        raise BackupError("restore target bucket must be empty")
 
     restored = 0
     for key, object_path, size, digest in validated:
