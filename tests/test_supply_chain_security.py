@@ -1307,6 +1307,8 @@ class SupplyChainSecurityTests(unittest.TestCase):
         for required in (
             "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6",
             "persist-credentials: false",
+            "sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2",
+            "cosign-release: v3.1.1",
             "gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3",
             "aquasecurity/trivy-action@",
             "anchore/sbom-action@",
@@ -1389,7 +1391,7 @@ class SupplyChainSecurityTests(unittest.TestCase):
         self.assertEqual(
             allowlist_paths(
                 "Public immutable GitHub Action commit pins asserted by supply-chain tests",
-                r"^(df4cb1c069e1874edd31b4311f1884172cec0e10|e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e)$",
+                r"^(df4cb1c069e1874edd31b4311f1884172cec0e10|e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e|6f9f17788090df1f26f669e9d70d6ae9567deba6)$",
             ),
             {r"^tests/test_supply_chain_security\.py$"},
         )

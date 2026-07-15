@@ -58,7 +58,7 @@ paths = [
 description = "Public immutable GitHub Action commit pins asserted by supply-chain tests"
 condition = "AND"
 regexTarget = "secret"
-regexes = ['''^(df4cb1c069e1874edd31b4311f1884172cec0e10|e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e)$''']
+regexes = ['''^(df4cb1c069e1874edd31b4311f1884172cec0e10|e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e|6f9f17788090df1f26f669e9d70d6ae9567deba6)$''']
 targetRules = ["sourcegraph-access-token"]
 paths = [
   '''^tests/test_supply_chain_security\.py$''',
