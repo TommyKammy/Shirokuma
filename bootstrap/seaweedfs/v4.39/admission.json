@@ -31,9 +31,9 @@
     "phase": "pending_main_publication",
     "publisher_ref": "refs/heads/main",
     "workflow": ".github/workflows/seaweedfs-arm64.yml",
-    "workflow_sha256": "02c59339648b23b78511b7b45946fa1898d2e1c14e1bd498b578fe599ec953d6",
+    "workflow_sha256": "3a2f167e84964eb544117f869edc79102936fbcc2a2d398c16f8dcb4f0731302",
     "contract": "bootstrap/seaweedfs/v4.39/trusted-build-contract.json",
-    "contract_sha256": "a62e1ce4909e71c8acb1e5d32bc0d888d6624651fae0087dde8071f6f2003ea1",
+    "contract_sha256": "3b0803a811ac0bd592e53b57a7d208385d2a0a3069f7405db182d16fdda5ad80",
     "source": "bootstrap/seaweedfs/v4.39/source.json",
     "source_sha256": "855dfeb16102f5c8032cce12f43acd7d3c6e2f344800a476d8fdd6b974aeb43d",
     "transition": "follow-up-evidence-only-pr"

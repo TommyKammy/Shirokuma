@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+import base64
 import hashlib
 import json
 import os
@@ -31,6 +33,34 @@ STATIC_PATHS = (
 
 
 class TrustedImageContractTests(unittest.TestCase):
+    @staticmethod
+    def _attestation_bundle(
+        contract: dict[str, object],
+        statement: dict[str, object],
+    ) -> dict[str, object]:
+        return {
+            "mediaType": contract["toolchain"]["cosign"]["bundle_media_type"],  # type: ignore[index]
+            "dsseEnvelope": {
+                "payload": base64.b64encode(
+                    json.dumps(statement, separators=(",", ":")).encode("utf-8")
+                ).decode("ascii"),
+                "signatures": [
+                    {
+                        "keyid": "",
+                        "sig": base64.b64encode(b"test-signature").decode("ascii"),
+                    }
+                ],
+            },
+            "verificationMaterial": {
+                "certificate": {
+                    "rawBytes": base64.b64encode(b"test-certificate").decode(
+                        "ascii"
+                    )
+                },
+                "tlogEntries": [{}],
+            },
+        }
+
     def _copy_static_tree(self, destination: Path) -> None:
         for relative in STATIC_PATHS:
             target = destination / relative
@@ -66,6 +96,63 @@ class TrustedImageContractTests(unittest.TestCase):
         self.assertIn("needs: verify", workflow)
         self.assertNotIn("imjasonh/setup-crane@", workflow)
         self.assertNotIn("docker/setup-buildx-action@", workflow)
+        self.assertEqual(
+            contract["toolchain"]["cosign"]["attestation_predicates"],
+            {
+                "sbom": {
+                    "artifact": "sbom-attestation-bundle.json",
+                    "cli_type": "cyclonedx",
+                    "predicate_type": "https://cyclonedx.org/bom",
+                },
+                "vulnerability_scan": {
+                    "artifact": "trivy-attestation-bundle.json",
+                    "cli_type": "https://shirokuma.dev/attestations/trivy/v1",
+                    "predicate_type": "https://shirokuma.dev/attestations/trivy/v1",
+                },
+            },
+        )
+        self.assertIn(
+            "sbom-attestation-bundle.json",
+            contract["evidence"]["candidate_required"],
+        )
+        self.assertIn(
+            "trivy-attestation-bundle.json",
+            contract["evidence"]["candidate_required"],
+        )
+
+    def test_literal_contract_paths_exist_in_the_reviewed_schema(self) -> None:
+        tree = ast.parse(
+            (ROOT / "scripts/verify_trusted_image.py").read_text(encoding="utf-8")
+        )
+        contract = verifier.load_contract(ROOT)
+
+        def literal_path(node: ast.AST) -> tuple[str, ...] | None:
+            keys: list[str] = []
+            current = node
+            while isinstance(current, ast.Subscript):
+                if not (
+                    isinstance(current.slice, ast.Constant)
+                    and isinstance(current.slice.value, str)
+                ):
+                    return None
+                keys.append(current.slice.value)
+                current = current.value
+            if not isinstance(current, ast.Name) or current.id != "contract":
+                return None
+            return tuple(reversed(keys))
+
+        paths = {
+            path
+            for node in ast.walk(tree)
+            if (path := literal_path(node)) is not None
+        }
+        self.assertTrue(paths)
+        for path in sorted(paths):
+            value: object = contract
+            for key in path:
+                self.assertIsInstance(value, dict, msg=".".join(path))
+                self.assertIn(key, value, msg=".".join(path))
+                value = value[key]  # type: ignore[index]
 
     def test_pending_repository_audit_is_explicit_and_fail_closed(self) -> None:
         admission = verifier.validate_repository_audit(ROOT)
@@ -597,6 +684,423 @@ class TrustedImageContractTests(unittest.TestCase):
                     Path("manifest.json"),
                 )
         self.assertEqual(caught.exception.code, "COSIGN_CRYPTO_VERIFY")
+
+    def test_repository_attestation_reverification_is_pinned_and_cryptographic(
+        self,
+    ) -> None:
+        contract = {"toolchain": {"cosign": {"version": "v3.1.1"}}}
+        digest = "a" * 64
+        release = {
+            "reference": (
+                "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:" + digest
+            ),
+            "identity": (
+                "https://github.com/TommyKammy/Shirokuma/.github/workflows/"
+                "seaweedfs-arm64.yml@refs/heads/main"
+            ),
+            "issuer": "https://token.actions.githubusercontent.com",
+            "builder": {
+                "workflow_name": "SeaweedFS 4.39 trusted arm64 build",
+                "ref": "refs/heads/main",
+                "repository": "TommyKammy/Shirokuma",
+                "workflow_sha": "b" * 40,
+                "trigger": "push",
+            },
+        }
+        version = mock.Mock(
+            returncode=0,
+            stdout=json.dumps({"gitVersion": "v3.1.1"}),
+            stderr="",
+        )
+        verified = mock.Mock(returncode=0, stdout="", stderr="Verified OK\n")
+        with mock.patch.object(
+            verifier.shutil, "which", return_value="/bin/cosign"
+        ), mock.patch.object(
+            verifier.subprocess, "run", side_effect=[version, verified]
+        ) as run:
+            verifier._verify_retained_attestation_bundle(
+                contract,
+                release,
+                Path("bundle.json"),
+                "https://slsa.dev/provenance/v1",
+            )
+        command = run.call_args_list[1].args[0]
+        self.assertEqual(
+            command[:2], ["/bin/cosign", "verify-blob-attestation"]
+        )
+        self.assertIn("--certificate-github-workflow-trigger", command)
+        self.assertEqual(command[command.index("--digest") + 1], digest)
+        self.assertEqual(command[command.index("--digestAlg") + 1], "sha256")
+
+        rejected = mock.Mock(returncode=1, stdout="", stderr="invalid DSSE")
+        with mock.patch.object(
+            verifier.shutil, "which", return_value="/bin/cosign"
+        ), mock.patch.object(
+            verifier.subprocess, "run", side_effect=[version, rejected]
+        ):
+            with self.assertRaises(verifier.ContractError) as caught:
+                verifier._verify_retained_attestation_bundle(
+                    contract,
+                    release,
+                    Path("bundle.json"),
+                    "https://slsa.dev/provenance/v1",
+                )
+        self.assertEqual(caught.exception.code, "ATTESTATION_CRYPTO_VERIFY")
+
+    def test_signed_sbom_and_trivy_predicates_must_equal_retained_evidence(
+        self,
+    ) -> None:
+        contract = verifier.load_contract(ROOT)
+        digest = "a" * 64
+        repository = "ghcr.io/tommykammy/shirokuma-seaweedfs"
+        release = {
+            "reference": f"{repository}@sha256:{digest}",
+        }
+        predicates = {
+            "sbom": {
+                "bomFormat": "CycloneDX",
+                "components": [{"name": "weed"}],
+            },
+            "vulnerability_scan": {"Results": []},
+        }
+        contracts = contract["toolchain"]["cosign"]["attestation_predicates"]
+        for kind, predicate in predicates.items():
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as directory:
+                predicate_contract = contracts[kind]
+                statement = {
+                    "_type": "https://in-toto.io/Statement/v0.1",
+                    "predicateType": predicate_contract["predicate_type"],
+                    "subject": [
+                        {"name": repository, "digest": {"sha256": digest}}
+                    ],
+                    "predicate": predicate,
+                }
+                bundle = self._attestation_bundle(contract, statement)
+                root = Path(directory)
+                bundle_path = root / predicate_contract["artifact"]
+                predicate_path = root / f"{kind}.json"
+                bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
+                predicate_path.write_text(json.dumps(predicate), encoding="utf-8")
+                verifier._validate_attested_predicate_bundle(
+                    release,
+                    contract,
+                    bundle_path,
+                    predicate_path,
+                    predicate_contract,
+                )
+                with mock.patch.object(
+                    verifier, "_verify_retained_attestation_bundle"
+                ) as verify:
+                    verifier._validate_attested_predicate_bundle(
+                        release,
+                        contract,
+                        bundle_path,
+                        predicate_path,
+                        predicate_contract,
+                        cryptographic_reverification=True,
+                    )
+                verify.assert_called_once_with(
+                    contract,
+                    release,
+                    bundle_path,
+                    predicate_contract["cli_type"],
+                )
+
+                predicate_path.write_text(json.dumps({}), encoding="utf-8")
+                with self.assertRaises(verifier.ContractError) as caught:
+                    verifier._validate_attested_predicate_bundle(
+                        release,
+                        contract,
+                        bundle_path,
+                        predicate_path,
+                        predicate_contract,
+                    )
+                self.assertEqual(caught.exception.code, "ATTESTATION_PREDICATE")
+
+    def test_attested_predicate_bundle_rejects_identity_and_format_tampering(
+        self,
+    ) -> None:
+        contract = verifier.load_contract(ROOT)
+        digest = "a" * 64
+        repository = "ghcr.io/tommykammy/shirokuma-seaweedfs"
+        release = {"reference": f"{repository}@sha256:{digest}"}
+        predicate = {"bomFormat": "CycloneDX", "components": []}
+        predicate_contract = contract["toolchain"]["cosign"][
+            "attestation_predicates"
+        ]["sbom"]
+        baseline_statement = {
+            "_type": "https://in-toto.io/Statement/v0.1",
+            "predicateType": predicate_contract["predicate_type"],
+            "subject": [{"name": repository, "digest": {"sha256": digest}}],
+            "predicate": predicate,
+        }
+
+        def write_bundle(path: Path, bundle: dict[str, object]) -> None:
+            path.write_text(json.dumps(bundle), encoding="utf-8")
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle_path = root / predicate_contract["artifact"]
+            predicate_path = root / "sbom.json"
+            predicate_path.write_text(json.dumps(predicate), encoding="utf-8")
+            statement_cases = (
+                (
+                    lambda value: value.update({"predicateType": "wrong"}),
+                    "ATTESTATION_STATEMENT",
+                ),
+                (
+                    lambda value: value["subject"][0].update({"name": "wrong"}),
+                    "ATTESTATION_SUBJECT",
+                ),
+                (
+                    lambda value: value["subject"][0]["digest"].update(
+                        {"sha256": "b" * 64}
+                    ),
+                    "ATTESTATION_SUBJECT",
+                ),
+                (
+                    lambda value: value["subject"].append(value["subject"][0]),
+                    "ATTESTATION_SUBJECT",
+                ),
+            )
+            for mutate, expected_code in statement_cases:
+                with self.subTest(expected_code=expected_code, mutate=mutate):
+                    statement = json.loads(json.dumps(baseline_statement))
+                    mutate(statement)
+                    write_bundle(
+                        bundle_path,
+                        self._attestation_bundle(contract, statement),
+                    )
+                    with self.assertRaises(verifier.ContractError) as caught:
+                        verifier._validate_attested_predicate_bundle(
+                            release,
+                            contract,
+                            bundle_path,
+                            predicate_path,
+                            predicate_contract,
+                        )
+                    self.assertEqual(caught.exception.code, expected_code)
+
+            format_cases = (
+                lambda value: value.pop("dsseEnvelope"),
+                lambda value: value["dsseEnvelope"].pop("payload"),
+                lambda value: value["dsseEnvelope"].pop("signatures"),
+                lambda value: value.pop("verificationMaterial"),
+                lambda value: value["verificationMaterial"].pop("certificate"),
+                lambda value: value["verificationMaterial"].update(
+                    {"tlogEntries": []}
+                ),
+            )
+            for mutate in format_cases:
+                with self.subTest(format_mutation=mutate):
+                    bundle = self._attestation_bundle(
+                        contract,
+                        json.loads(json.dumps(baseline_statement)),
+                    )
+                    mutate(bundle)
+                    write_bundle(bundle_path, bundle)
+                    with self.assertRaises(verifier.ContractError) as caught:
+                        verifier._validate_attested_predicate_bundle(
+                            release,
+                            contract,
+                            bundle_path,
+                            predicate_path,
+                            predicate_contract,
+                        )
+                    self.assertEqual(
+                        caught.exception.code,
+                        "ATTESTATION_BUNDLE_FORMAT",
+                    )
+
+            malformed = self._attestation_bundle(contract, baseline_statement)
+            malformed["dsseEnvelope"]["payload"] = {"not": "base64"}
+            write_bundle(bundle_path, malformed)
+            with self.assertRaises(verifier.ContractError) as caught:
+                verifier._validate_attested_predicate_bundle(
+                    release,
+                    contract,
+                    bundle_path,
+                    predicate_path,
+                    predicate_contract,
+                )
+            self.assertEqual(caught.exception.code, "ATTESTATION_BUNDLE_FORMAT")
+
+    def test_repository_mode_is_propagated_to_every_attestation_validator(
+        self,
+    ) -> None:
+        contract = verifier.load_contract(ROOT)
+        paths = {
+            "slsa-verify.json": Path("slsa-verify.json"),
+            "slsa-bundles.jsonl": Path("slsa-bundles.jsonl"),
+            "sbom-attestation-bundle.json": Path("sbom-bundle.json"),
+            "seaweedfs-4.39-arm64.cdx.json": Path("sbom.json"),
+            "trivy-attestation-bundle.json": Path("trivy-bundle.json"),
+            "trivy.json": Path("trivy.json"),
+        }
+        release: dict[str, object] = {}
+        with mock.patch.object(verifier, "_validate_slsa") as slsa, mock.patch.object(
+            verifier, "_validate_attested_predicate_bundle"
+        ) as predicate:
+            verifier._validate_retained_attestations(
+                release,
+                contract,
+                paths,
+                cryptographic_reverification=True,
+            )
+        slsa.assert_called_once_with(
+            release,
+            contract,
+            paths["slsa-verify.json"],
+            paths["slsa-bundles.jsonl"],
+            cryptographic_reverification=True,
+        )
+        self.assertEqual(predicate.call_count, 2)
+        self.assertTrue(
+            all(
+                call.kwargs == {"cryptographic_reverification": True}
+                for call in predicate.call_args_list
+            )
+        )
+
+    def test_slsa_repository_mode_reverifies_each_exact_bundle(self) -> None:
+        contract = verifier.load_contract(ROOT)
+        digest = "a" * 64
+        repository = "TommyKammy/Shirokuma"
+        repository_url = f"https://github.com/{repository}"
+        image_repository = "ghcr.io/tommykammy/shirokuma-seaweedfs"
+        workflow_path = ".github/workflows/seaweedfs-arm64.yml"
+        workflow_ref = "refs/heads/main"
+        workflow_sha = "b" * 40
+        source_sha = "c" * 40
+        identity = f"{repository_url}/{workflow_path}@{workflow_ref}"
+        invocation = f"{repository_url}/actions/runs/123/attempts/4"
+        builder = {
+            "repository": repository,
+            "workflow_name": "SeaweedFS 4.39 trusted arm64 build",
+            "workflow": workflow_path,
+            "ref": workflow_ref,
+            "workflow_sha": workflow_sha,
+            "source_sha": source_sha,
+            "trigger": "push",
+            "run_id": "123",
+            "run_attempt": "4",
+        }
+        release = {
+            "reference": f"{image_repository}@sha256:{digest}",
+            "identity": identity,
+            "issuer": "https://token.actions.githubusercontent.com",
+            "builder": builder,
+        }
+        statement = {
+            "_type": "https://in-toto.io/Statement/v1",
+            "predicateType": "https://slsa.dev/provenance/v1",
+            "subject": [
+                {"name": image_repository, "digest": {"sha256": digest}}
+            ],
+            "predicate": {
+                "buildDefinition": {
+                    "buildType": "https://actions.github.io/buildtypes/workflow/v1",
+                    "externalParameters": {
+                        "workflow": {
+                            "repository": repository_url,
+                            "path": workflow_path,
+                            "ref": workflow_ref,
+                        }
+                    },
+                    "internalParameters": {
+                        "github": {
+                            "event_name": "push",
+                            "runner_environment": "github-hosted",
+                        }
+                    },
+                    "resolvedDependencies": [
+                        {
+                            "uri": f"git+{repository_url}@{workflow_ref}",
+                            "digest": {"gitCommit": source_sha},
+                        }
+                    ],
+                },
+                "runDetails": {
+                    "builder": {"id": identity},
+                    "metadata": {"invocationId": invocation},
+                },
+            },
+        }
+        bundle = self._attestation_bundle(contract, statement)
+        certificate = {
+            "issuer": release["issuer"],
+            "subjectAlternativeName": identity,
+            "githubWorkflowName": builder["workflow_name"],
+            "githubWorkflowRepository": repository,
+            "githubWorkflowRef": workflow_ref,
+            "githubWorkflowSHA": workflow_sha,
+            "githubWorkflowTrigger": "push",
+            "buildTrigger": "push",
+            "runnerEnvironment": "github-hosted",
+            "buildSignerURI": identity,
+            "buildSignerDigest": workflow_sha,
+            "buildConfigURI": identity,
+            "buildConfigDigest": workflow_sha,
+            "sourceRepositoryURI": repository_url,
+            "sourceRepositoryDigest": source_sha,
+            "sourceRepositoryRef": workflow_ref,
+            "runInvocationURI": invocation,
+        }
+        record = {
+            "verificationResult": {"signature": {"certificate": certificate}},
+            "attestation": {"bundle": bundle},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            records_path = root / "slsa-verify.json"
+            bundles_path = root / "slsa-bundles.jsonl"
+            records_path.write_text(json.dumps([record]), encoding="utf-8")
+            bundles_path.write_text(json.dumps(bundle) + "\n", encoding="utf-8")
+            with mock.patch.object(
+                verifier, "_verify_retained_attestation_bundle"
+            ) as verify:
+                verifier._validate_slsa(
+                    release,
+                    contract,
+                    records_path,
+                    bundles_path,
+                    cryptographic_reverification=True,
+                )
+            verify.assert_called_once()
+            self.assertEqual(
+                verify.call_args.args[-1], "https://slsa.dev/provenance/v1"
+            )
+
+            wrong_statement = json.loads(json.dumps(statement))
+            wrong_statement["predicate"]["buildDefinition"][
+                "resolvedDependencies"
+            ][0]["digest"]["gitCommit"] = "d" * 40
+            wrong_bundle = self._attestation_bundle(contract, wrong_statement)
+            wrong_record = json.loads(json.dumps(record))
+            wrong_record["attestation"]["bundle"] = wrong_bundle
+            records_path.write_text(
+                json.dumps([wrong_record]), encoding="utf-8"
+            )
+            bundles_path.write_text(
+                json.dumps(wrong_bundle) + "\n", encoding="utf-8"
+            )
+            with self.assertRaises(verifier.ContractError) as caught:
+                verifier._validate_slsa(
+                    release,
+                    contract,
+                    records_path,
+                    bundles_path,
+                )
+            self.assertEqual(caught.exception.code, "SLSA_WORKFLOW_IDENTITY")
+
+    def test_release_admission_status_uses_the_declared_contract_state(self) -> None:
+        contract = verifier.load_contract(ROOT)
+        release = {"admission_status": "approved"}
+        verifier._validate_release_admission_status(release, contract)
+        release["admission_status"] = "pending_main_publication"
+        with self.assertRaises(verifier.ContractError) as caught:
+            verifier._validate_release_admission_status(release, contract)
+        self.assertEqual(caught.exception.code, "RELEASE_ADMISSION_STATUS")
 
     def test_runtime_smoke_is_bound_to_raw_docker_inspect(self) -> None:
         release = {

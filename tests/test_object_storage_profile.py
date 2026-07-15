@@ -161,6 +161,9 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         for required in (
             "linux/arm64",
             "cosign sign --yes",
+            "cosign verify-blob-attestation",
+            "sbom-attestation-bundle.json",
+            "trivy-attestation-bundle.json",
             '--certificate-github-workflow-sha "${GITHUB_WORKFLOW_SHA}"',
             "actions/attest-build-provenance@",
             "go-module-inputs.json",

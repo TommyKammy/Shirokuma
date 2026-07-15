@@ -36,7 +36,7 @@
     "repository": "TommyKammy/Shirokuma",
     "name": "SeaweedFS 4.39 trusted arm64 build",
     "path": ".github/workflows/seaweedfs-arm64.yml",
-    "sha256": "02c59339648b23b78511b7b45946fa1898d2e1c14e1bd498b578fe599ec953d6",
+    "sha256": "3a2f167e84964eb544117f869edc79102936fbcc2a2d398c16f8dcb4f0731302",
     "runner": "ubuntu-24.04-arm",
     "runner_trust_boundary": {
       "provider": "github-hosted",
@@ -190,7 +190,19 @@
       "registry_download_format": "sigstore-bundle-v0.3-jsonl",
       "legacy_signature_records_permitted": false,
       "detached_bundle_role": "bind-image-digest-to-raw-oci-manifest",
-      "authoritative_image_verification": "cosign verify IMAGE@DIGEST"
+      "authoritative_image_verification": "cosign verify IMAGE@DIGEST",
+      "attestation_predicates": {
+        "sbom": {
+          "artifact": "sbom-attestation-bundle.json",
+          "cli_type": "cyclonedx",
+          "predicate_type": "https://cyclonedx.org/bom"
+        },
+        "vulnerability_scan": {
+          "artifact": "trivy-attestation-bundle.json",
+          "cli_type": "https://shirokuma.dev/attestations/trivy/v1",
+          "predicate_type": "https://shirokuma.dev/attestations/trivy/v1"
+        }
+      }
     },
     "crane": {
       "version": "v0.21.7",
@@ -209,12 +221,14 @@
       "rekor-entry.json",
       "runtime-container-inspect.json",
       "runtime-smoke.json",
+      "sbom-attestation-bundle.json",
       "seaweedfs-4.39-arm64.cdx.json",
       "registry-signature-bundles.jsonl",
       "slsa-bundles.jsonl",
       "slsa-verify.json",
       "toolchain.json",
       "trivy-version.json",
+      "trivy-attestation-bundle.json",
       "trivy.json"
     ],
     "promotion_required": [

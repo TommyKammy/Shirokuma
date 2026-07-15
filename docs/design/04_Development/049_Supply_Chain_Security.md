@@ -64,9 +64,11 @@ The verified Buildx binary is installed under a run-private
 runner's preinstalled plugin. Because GitHub's provenance publisher reads the
 default Docker config rather than that isolated directory, the workflow mirrors
 the already-issued GHCR credential only for the publisher step and restores or
-removes the default config in an `always()` cleanup step. Cosign writes one Sigstore bundle to both the
-durable evidence path and the OCI referrer; the workflow downloads the registry
-copy and requires an exact structural match before promotion. Workflow signer
+removes the default config in an `always()` cleanup step. Cosign writes the image
+signature bundle to both the durable evidence path and the OCI referrer; the
+workflow downloads the registry copy and requires an exact structural match
+before promotion. The CycloneDX SBOM and Trivy scan are also retained as v0.3
+DSSE attestation bundles and verified before candidate retention. Workflow signer
 SHA (`GITHUB_WORKFLOW_SHA`) and source SHA (`GITHUB_SHA`) are recorded and
 verified as separate identities. The current contract explicitly selects the
 Rekor v1 public API; a Rekor v2 migration must change the endpoint, identity
@@ -168,23 +170,29 @@ digest for the lifetime of the release evidence.
 Repository-controlled source builds retain the complete Cosign verification,
 Sigstore bundle v0.3 certificate and Rekor inclusion snapshot, independently
 queried Rekor entry, raw signed image manifest, exact-workflow SLSA verification
-and bundles, observed toolchain, runtime smoke, image SBOM, scanner metadata,
-Trivy report, and promotion result in Git for the admission lifetime. Cosign
+and bundles, observed toolchain, runtime smoke, image SBOM and its attestation
+bundle, scanner metadata, Trivy report and its attestation bundle, and promotion
+result in Git for the admission lifetime. Cosign
 verification binds issuer, identity, workflow name, repository, ref, SHA, and
 trigger. SLSA verification uses CLI signer/source filters and then reconciles
 the certificate, workflow path/ref/SHA, run and attempt, builder identity, and
-subject digest. A GitHub Actions artifact may mirror those files for operator
-download, but its finite retention window is not the durable source of truth. A
-source-built candidate remains blocked from runtime manifests until a
+subject digest. Repository verification also requires the signed SLSA
+`resolvedDependencies` entry to name the exact source ref and commit, rather
+than trusting the retained verification JSON's source fields. A GitHub Actions
+artifact may mirror those files for operator download, but its finite retention
+window is not the durable source of truth. A source-built candidate remains
+blocked from runtime manifests until a
 resident-ledger supply-chain record backed by those retained files passes
 `check-images`.
 
-Git-only repository verification must not trust the retained certificate or
-the claimed verification JSON structurally. It invokes the contract-pinned
-Cosign version against the retained v0.3 bundle and raw OCI manifest with the
-exact issuer and GitHub workflow constraints. A missing binary, version drift,
-invalid Fulcio chain, identity mismatch, invalid DSSE signature, or invalid
-transparency material fails closed.
+Git-only repository verification must not trust retained certificates,
+verification JSON, SBOM, or scan results structurally. It invokes the
+contract-pinned Cosign version against the retained image-signature, SLSA, SBOM,
+and Trivy v0.3 bundles with the exact issuer, GitHub workflow, digest, and
+predicate-type constraints. The signed SBOM and scan predicates must equal the
+retained JSON objects before their semantic gates run. A missing binary, version
+drift, invalid Fulcio chain, identity mismatch, invalid DSSE signature, predicate
+substitution, or invalid transparency material fails closed.
 
 For the pinned Cosign v3 format, `cosign verify IMAGE@DIGEST` is the
 authoritative registry-image check. A separate `verify-blob` check may bind the

@@ -66,8 +66,12 @@ contract before the build, before promotion, in repository CI, and against the
 durable evidence. Repository verification invokes pinned Cosign `v3.1.1`
 against the retained bundle and raw OCI manifest, so the Fulcio certificate,
 workflow identity, DSSE signature, and transparency material are verified
-cryptographically rather than accepted from self-reported JSON. Mutation
-fixtures cover missing tools, mutable action refs,
+cryptographically rather than accepted from self-reported JSON.
+The same pinned verifier cryptographically checks every retained SLSA bundle and
+the dedicated CycloneDX and Trivy attestation bundles. The signed predicates
+must be structurally identical to the retained SBOM and scan JSON, so an
+evidence-only PR cannot replace a report and merely update its recorded hash.
+Mutation fixtures cover missing tools, mutable action refs,
 Containerfile drift, comment/continuation/heredoc decoys, alternate parser
 directives, split Dockerfile keywords, extra networked builder instructions,
 alternate build contexts/files, base-image build-argument overrides, detached
@@ -129,10 +133,14 @@ The published digest must have all of the following before admission:
   High is separately admitted under the exact, expiring ADR-0019 contract.
 
 The SBOM and Trivy report are attached to the digest as keyless OCI
-attestations. The retained vendor archive and module/file manifest are immutable
-source-build inputs outside the runtime evidence directory. Complete Cosign
-bundle and verification, Rekor response, raw image
-manifest, SLSA bundles and verification, observed toolchain, runtime-smoke,
+attestations, and their v0.3 DSSE bundles are retained beside the raw predicate
+files. Repository verification uses `cosign verify-blob-attestation` with the
+exact workflow identity and digest, then compares each signed predicate with its
+retained JSON object. The retained vendor archive and module/file manifest are
+immutable source-build inputs outside the runtime evidence directory. Complete
+Cosign bundle and verification, Rekor response, raw image manifest, SLSA bundles
+and verification, SBOM and Trivy attestation bundles, observed toolchain,
+runtime-smoke,
 raw runtime container inspect, the exact pre-promotion release snapshot,
 promotion, SBOM, scanner metadata, and scan files are committed under
 `bootstrap/seaweedfs/v4.39/evidence/` by a follow-up evidence-only PR and then

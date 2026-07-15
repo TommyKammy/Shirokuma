@@ -18,15 +18,16 @@ recorded for diagnostic value, but it is never admission authority.
 
 For an approved release, `scripts/verify_trusted_image.py repository --root .`
 requires the complete evidence set and re-runs pinned Cosign v3.1.1 against the
-retained raw OCI manifest and Sigstore bundle. The check therefore verifies the
-Fulcio certificate chain, workflow identity, DSSE signature, and transparency
-log material cryptographically; JSON shape and self-reported claims alone are
-not sufficient.
+retained image-signature, SLSA, CycloneDX, and Trivy Sigstore bundles. The check
+therefore verifies the Fulcio certificate chain, workflow identity, digest,
+predicate type, DSSE signature, and transparency material cryptographically.
+The signed SBOM and scan predicates must equal the retained JSON objects; shape,
+self-reported claims, and updated Git hashes alone are not sufficient.
 
 The final artifact must be copied byte-for-byte as one set. Its expected files
 are enumerated by `../trusted-build-contract.json`, including the reviewed Go
-module manifest and deterministic vendor archive. Generated evidence must never
-be mixed across runs.
+module manifest, deterministic vendor archive, and dedicated SBOM and Trivy
+attestation bundles. Generated evidence must never be mixed across runs.
 
 The mutable `4.39-arm64` tag is only a publication pointer. After approval, the
 immutable digest plus repository-retained evidence are the authority. Runtime

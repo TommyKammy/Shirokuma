@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -61,13 +62,8 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _verify_retained_cosign_bundle(
-    contract: Dict[str, Any],
-    release: Dict[str, Any],
-    bundle_path: Path,
-    manifest_path: Path,
-) -> None:
-    """Cryptographically reverify retained Git evidence with pinned Cosign."""
+def _require_pinned_cosign(contract: Dict[str, Any]) -> str:
+    """Return the reviewed Cosign binary after enforcing its exact version."""
 
     cosign = shutil.which("cosign")
     _expect(cosign is not None, "COSIGN_BINARY", "cosign is required")
@@ -102,6 +98,18 @@ def _verify_retained_cosign_bundle(
         "COSIGN_VERSION",
         f"expected {expected_version}, got {actual_version}",
     )
+    return cosign
+
+
+def _verify_retained_cosign_bundle(
+    contract: Dict[str, Any],
+    release: Dict[str, Any],
+    bundle_path: Path,
+    manifest_path: Path,
+) -> None:
+    """Cryptographically reverify the retained image-signature bundle."""
+
+    cosign = _require_pinned_cosign(contract)
 
     builder = release["builder"]
     command = [
@@ -139,6 +147,64 @@ def _verify_retained_cosign_bundle(
         verification.stderr.strip()
         or verification.stdout.strip()
         or "retained bundle verification failed",
+    )
+
+
+def _verify_retained_attestation_bundle(
+    contract: Dict[str, Any],
+    release: Dict[str, Any],
+    bundle_path: Path,
+    predicate_type: str,
+) -> None:
+    """Cryptographically reverify one retained DSSE attestation bundle."""
+
+    cosign = _require_pinned_cosign(contract)
+    builder = release["builder"]
+    command = [
+        cosign,
+        "verify-blob-attestation",
+        "--bundle",
+        str(bundle_path),
+        "--type",
+        predicate_type,
+        "--certificate-identity",
+        release["identity"],
+        "--certificate-oidc-issuer",
+        release["issuer"],
+        "--certificate-github-workflow-name",
+        builder["workflow_name"],
+        "--certificate-github-workflow-ref",
+        builder["ref"],
+        "--certificate-github-workflow-repository",
+        builder["repository"],
+        "--certificate-github-workflow-sha",
+        builder["workflow_sha"],
+        "--certificate-github-workflow-trigger",
+        builder["trigger"],
+        "--digest",
+        _digest_hex(release["reference"]),
+        "--digestAlg",
+        "sha256",
+    ]
+    try:
+        verification = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        _fail("ATTESTATION_CRYPTO_VERIFY", str(exc))
+    _expect(
+        verification.returncode == 0,
+        "ATTESTATION_CRYPTO_VERIFY",
+        f"{bundle_path.name}: "
+        + (
+            verification.stderr.strip()
+            or verification.stdout.strip()
+            or "retained attestation verification failed"
+        ),
     )
 
 
@@ -509,6 +575,18 @@ def validate_static_contract(root: Path) -> Dict[str, Any]:
             "legacy_signature_records_permitted": False,
             "detached_bundle_role": "bind-image-digest-to-raw-oci-manifest",
             "authoritative_image_verification": "cosign verify IMAGE@DIGEST",
+            "attestation_predicates": {
+                "sbom": {
+                    "artifact": "sbom-attestation-bundle.json",
+                    "cli_type": "cyclonedx",
+                    "predicate_type": "https://cyclonedx.org/bom",
+                },
+                "vulnerability_scan": {
+                    "artifact": "trivy-attestation-bundle.json",
+                    "cli_type": "https://shirokuma.dev/attestations/trivy/v1",
+                    "predicate_type": "https://shirokuma.dev/attestations/trivy/v1",
+                },
+            },
         },
         "COSIGN_FORMAT_CONTRACT",
         "Cosign v3.1.1 bundle and image-verification semantics differ",
@@ -748,6 +826,9 @@ def validate_static_contract(root: Path) -> Dict[str, Any]:
         "seaweedfs-4.39-arm64-${{ github.run_id }}-${{ github.run_attempt }}",
         "--signer-workflow",
         "cosign-signature-bundle.json",
+        "sbom-attestation-bundle.json",
+        "trivy-attestation-bundle.json",
+        "cosign verify-blob-attestation",
         "toolchain.json",
         "promotion-evidence.json",
         "scripts/verify_trusted_image.py promotion-preflight",
@@ -921,10 +1002,69 @@ def _decode_dsse_statement(bundle: Dict[str, Any]) -> Dict[str, Any]:
     try:
         payload = base64.b64decode(envelope["payload"], validate=True)
         statement = json.loads(payload)
-    except (KeyError, ValueError, json.JSONDecodeError) as exc:
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         _fail("COSIGN_DSSE", str(exc))
     _expect(isinstance(statement, dict), "COSIGN_DSSE", "payload is not an object")
     return statement
+
+
+def _validate_attestation_bundle_structure(
+    bundle: Dict[str, Any],
+    bundle_path: Path,
+) -> None:
+    """Reject incomplete detached bundles before inspecting their statements."""
+
+    envelope = bundle.get("dsseEnvelope")
+    _expect(
+        isinstance(envelope, dict)
+        and isinstance(envelope.get("payload"), str)
+        and bool(envelope["payload"])
+        and "messageSignature" not in bundle,
+        "ATTESTATION_BUNDLE_FORMAT",
+        f"{bundle_path.name}: complete DSSE envelope required",
+    )
+    signatures = envelope.get("signatures")
+    _expect(
+        isinstance(signatures, list)
+        and len(signatures) == 1
+        and isinstance(signatures[0], dict)
+        and isinstance(signatures[0].get("sig"), str)
+        and bool(signatures[0]["sig"]),
+        "ATTESTATION_BUNDLE_FORMAT",
+        f"{bundle_path.name}: exactly one DSSE signature required",
+    )
+    material = bundle.get("verificationMaterial")
+    _expect(
+        isinstance(material, dict),
+        "ATTESTATION_BUNDLE_FORMAT",
+        f"{bundle_path.name}: verification material required",
+    )
+    certificate_record = material.get("certificate")
+    raw_certificate = (
+        certificate_record.get("rawBytes")
+        if isinstance(certificate_record, dict)
+        else None
+    )
+    tlog_entries = material.get("tlogEntries")
+    _expect(
+        isinstance(raw_certificate, str)
+        and bool(raw_certificate)
+        and isinstance(tlog_entries, list)
+        and len(tlog_entries) == 1
+        and isinstance(tlog_entries[0], dict),
+        "ATTESTATION_BUNDLE_FORMAT",
+        f"{bundle_path.name}: certificate and one transparency-log entry required",
+    )
+    try:
+        signature = base64.b64decode(signatures[0]["sig"], validate=True)
+        certificate = base64.b64decode(raw_certificate, validate=True)
+    except (TypeError, ValueError) as exc:
+        _fail("ATTESTATION_BUNDLE_FORMAT", f"{bundle_path.name}: {exc}")
+    _expect(
+        bool(signature) and bool(certificate),
+        "ATTESTATION_BUNDLE_FORMAT",
+        f"{bundle_path.name}: empty signature or certificate",
+    )
 
 
 def _validate_cosign(
@@ -1126,14 +1266,29 @@ def _validate_cosign(
 def _slsa_statement(record: Dict[str, Any]) -> Dict[str, Any]:
     try:
         payload = record["attestation"]["bundle"]["dsseEnvelope"]["payload"]
-        return json.loads(base64.b64decode(payload))
-    except (KeyError, ValueError, json.JSONDecodeError) as exc:
+        statement = json.loads(base64.b64decode(payload, validate=True))
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         _fail("SLSA_PAYLOAD", str(exc))
+    _expect(isinstance(statement, dict), "SLSA_PAYLOAD", "payload is not an object")
+    return statement
 
 
-def _validate_slsa(release: Dict[str, Any], path: Path, bundles_path: Path) -> None:
+def _validate_slsa(
+    release: Dict[str, Any],
+    contract: Dict[str, Any],
+    path: Path,
+    bundles_path: Path,
+    *,
+    cryptographic_reverification: bool = False,
+) -> None:
     records = _load_json(path)
-    _expect(isinstance(records, list) and records, "SLSA_RECORDS", "empty")
+    _expect(
+        isinstance(records, list)
+        and bool(records)
+        and all(isinstance(record, dict) for record in records),
+        "SLSA_RECORDS",
+        "non-empty object records required",
+    )
     try:
         retained_bundles = [
             json.loads(line)
@@ -1143,6 +1298,15 @@ def _validate_slsa(release: Dict[str, Any], path: Path, bundles_path: Path) -> N
     except json.JSONDecodeError as exc:
         _fail("SLSA_BUNDLES", str(exc))
     _expect(bool(retained_bundles), "SLSA_BUNDLES", "empty")
+    for bundle in retained_bundles:
+        _expect(
+            isinstance(bundle, dict)
+            and bundle.get("mediaType")
+            == contract["toolchain"]["cosign"]["bundle_media_type"],
+            "SLSA_BUNDLE_FORMAT",
+            "v0.3 bundle required",
+        )
+        _validate_attestation_bundle_structure(bundle, bundles_path)
     retained_bundle_keys = [
         json.dumps(bundle, sort_keys=True, separators=(",", ":"))
         for bundle in retained_bundles
@@ -1174,6 +1338,8 @@ def _validate_slsa(release: Dict[str, Any], path: Path, bundles_path: Path) -> N
         predicate = statement.get("predicate", {})
         definition = predicate.get("buildDefinition", {})
         workflow = definition.get("externalParameters", {}).get("workflow", {})
+        internal = definition.get("internalParameters", {}).get("github", {})
+        resolved_dependencies = definition.get("resolvedDependencies")
         details = predicate.get("runDetails", {})
         conditions = (
             statement.get("_type") == "https://in-toto.io/Statement/v1",
@@ -1199,6 +1365,15 @@ def _validate_slsa(release: Dict[str, Any], path: Path, bundles_path: Path) -> N
             workflow.get("repository") == repository_url,
             workflow.get("path") == workflow_path,
             workflow.get("ref") == workflow_ref,
+            internal.get("event_name") == builder["trigger"],
+            internal.get("runner_environment") == "github-hosted",
+            resolved_dependencies
+            == [
+                {
+                    "uri": f"git+{repository_url}@{workflow_ref}",
+                    "digest": {"gitCommit": source_sha},
+                }
+            ],
             details.get("builder", {}).get("id") == identity,
             details.get("metadata", {}).get("invocationId") == invocation,
             statement.get("subject") == expected_subject,
@@ -1220,6 +1395,103 @@ def _validate_slsa(release: Dict[str, Any], path: Path, bundles_path: Path) -> N
         "SLSA_BUNDLES",
         "retained bundle order or multiset differs from the verified records",
     )
+    if cryptographic_reverification:
+        with tempfile.TemporaryDirectory(prefix="shirokuma-slsa-") as directory:
+            for index, bundle in enumerate(retained_bundles):
+                bundle_path = Path(directory) / f"slsa-bundle-{index}.json"
+                bundle_path.write_text(
+                    json.dumps(bundle, separators=(",", ":")) + "\n",
+                    encoding="utf-8",
+                )
+                _verify_retained_attestation_bundle(
+                    contract,
+                    release,
+                    bundle_path,
+                    "https://slsa.dev/provenance/v1",
+                )
+
+
+def _validate_attested_predicate_bundle(
+    release: Dict[str, Any],
+    contract: Dict[str, Any],
+    bundle_path: Path,
+    predicate_path: Path,
+    predicate_contract: Dict[str, str],
+    *,
+    cryptographic_reverification: bool = False,
+) -> None:
+    """Bind a retained predicate JSON file to its signed DSSE statement."""
+
+    bundle = _load_json(bundle_path)
+    cosign_contract = contract["toolchain"]["cosign"]
+    _expect(
+        bundle.get("mediaType") == cosign_contract["bundle_media_type"],
+        "ATTESTATION_BUNDLE_MEDIA",
+        bundle_path.name,
+    )
+    _validate_attestation_bundle_structure(bundle, bundle_path)
+    statement = _decode_dsse_statement(bundle)
+    digest = _digest_hex(release["reference"])
+    repository = release["reference"].split("@", 1)[0]
+    _expect(
+        statement.get("_type") == "https://in-toto.io/Statement/v0.1"
+        and statement.get("predicateType")
+        == predicate_contract["predicate_type"],
+        "ATTESTATION_STATEMENT",
+        bundle_path.name,
+    )
+    _expect(
+        statement.get("subject")
+        == [{"name": repository, "digest": {"sha256": digest}}],
+        "ATTESTATION_SUBJECT",
+        bundle_path.name,
+    )
+    _expect(
+        statement.get("predicate") == _load_json(predicate_path),
+        "ATTESTATION_PREDICATE",
+        f"{bundle_path.name} does not sign {predicate_path.name}",
+    )
+    if cryptographic_reverification:
+        _verify_retained_attestation_bundle(
+            contract,
+            release,
+            bundle_path,
+            predicate_contract["cli_type"],
+        )
+
+
+def _validate_retained_attestations(
+    release: Dict[str, Any],
+    contract: Dict[str, Any],
+    paths: Dict[str, Path],
+    *,
+    cryptographic_reverification: bool,
+) -> None:
+    """Validate and, in repository mode, reverify every retained attestation."""
+
+    _validate_slsa(
+        release,
+        contract,
+        paths["slsa-verify.json"],
+        paths["slsa-bundles.jsonl"],
+        cryptographic_reverification=cryptographic_reverification,
+    )
+    attestation_contract = contract["toolchain"]["cosign"][
+        "attestation_predicates"
+    ]
+    for kind, predicate_artifact in (
+        ("sbom", "seaweedfs-4.39-arm64.cdx.json"),
+        ("vulnerability_scan", "trivy.json"),
+    ):
+        predicate_contract = attestation_contract[kind]
+        _validate_attested_predicate_bundle(
+            release,
+            contract,
+            paths[predicate_contract["artifact"]],
+            paths[predicate_artifact],
+            predicate_contract,
+            cryptographic_reverification=cryptographic_reverification,
+        )
 
 
 def _validate_sbom(release: Dict[str, Any], contract: Dict[str, Any], path: Path) -> None:
@@ -1785,7 +2057,11 @@ def _validate_promotion(
     )
 
 
-def _validate_repository_admission(root: Path, release: Dict[str, Any]) -> None:
+def _validate_repository_admission(
+    root: Path,
+    release: Dict[str, Any],
+    contract: Dict[str, Any],
+) -> None:
     admission = _load_json(root / ADMISSION_PATH)
     _expect(admission.get("schema_version") == 2, "ADMISSION_SCHEMA", "expected schema 2")
     _expect(
@@ -1889,7 +2165,9 @@ def _validate_repository_admission(root: Path, release: Dict[str, Any]) -> None:
     slsa_verify = artifact_binding("slsa-verify.json")
     slsa_bundles = artifact_binding("slsa-bundles.jsonl")
     sbom = artifact_binding("seaweedfs-4.39-arm64.cdx.json")
+    sbom_attestation = artifact_binding("sbom-attestation-bundle.json")
     trivy = artifact_binding("trivy.json")
+    trivy_attestation = artifact_binding("trivy-attestation-bundle.json")
     runtime_summary = artifact_binding("runtime-smoke.json")
     runtime_inspect = artifact_binding("runtime-container-inspect.json")
     promotion_evidence = artifact_binding("promotion-evidence.json")
@@ -1952,6 +2230,11 @@ def _validate_repository_admission(root: Path, release: Dict[str, Any]) -> None:
         "sbom": {
             "path": sbom["path"],
             "sha256": sbom["sha256"],
+            "attestation_bundle": sbom_attestation["path"],
+            "attestation_bundle_sha256": sbom_attestation["sha256"],
+            "predicate_type": contract["toolchain"]["cosign"][
+                "attestation_predicates"
+            ]["sbom"]["predicate_type"],
         },
         "vulnerability_scan": {
             "critical": release["vulnerabilities"]["critical"],
@@ -1967,6 +2250,11 @@ def _validate_repository_admission(root: Path, release: Dict[str, Any]) -> None:
             ],
             "path": trivy["path"],
             "sha256": trivy["sha256"],
+            "attestation_bundle": trivy_attestation["path"],
+            "attestation_bundle_sha256": trivy_attestation["sha256"],
+            "predicate_type": contract["toolchain"]["cosign"][
+                "attestation_predicates"
+            ]["vulnerability_scan"]["predicate_type"],
         },
         "runtime_tmp": {
             "run_id": str(release_builder["run_id"]),
@@ -2022,6 +2310,18 @@ def _expected_actions_artifact_name(
     return (
         f"{artifact_prefix}-candidate-{identity.get('run_id')}"
         f"-{identity.get('run_attempt')}"
+    )
+
+
+def _validate_release_admission_status(
+    release: Dict[str, Any],
+    contract: Dict[str, Any],
+) -> None:
+    _expect(
+        release.get("admission_status")
+        == contract["admission"]["required_approved_state"],
+        "RELEASE_ADMISSION_STATUS",
+        "contract mismatch",
     )
 
 
@@ -2178,11 +2478,7 @@ def validate_release_bundle(
         "RELEASE_SOURCE",
         "source record mismatch",
     )
-    _expect(
-        release.get("admission_status") == contract["admission"]["artifact"],
-        "RELEASE_ADMISSION_STATUS",
-        "contract mismatch",
-    )
+    _validate_release_admission_status(release, contract)
     _expect(
         release.get("contract")
         == {
@@ -2260,10 +2556,11 @@ def validate_release_bundle(
         "RELEASE_TRANSPARENCY_LOG",
         "file or Rekor entry linkage mismatch",
     )
-    _validate_slsa(
+    _validate_retained_attestations(
         release,
-        paths["slsa-verify.json"],
-        paths["slsa-bundles.jsonl"],
+        contract,
+        paths,
+        cryptographic_reverification=repository_mode,
     )
     _validate_sbom(release, contract, paths["seaweedfs-4.39-arm64.cdx.json"])
     _validate_trivy(
@@ -2293,7 +2590,7 @@ def validate_release_bundle(
     else:
         _expect(release.get("promotion", {}).get("status") == "pending", "PROMOTION_STATUS", "candidate must be pending")
     if repository_mode:
-        _validate_repository_admission(root, release)
+        _validate_repository_admission(root, release, contract)
     return release
 
 

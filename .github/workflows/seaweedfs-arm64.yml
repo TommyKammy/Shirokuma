@@ -931,10 +931,39 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cosign attest --yes --type cyclonedx \
+          verify_attestation_bundle() {
+            local bundle="$1"
+            local predicate_type="$2"
+            cosign verify-blob-attestation \
+              --bundle "${bundle}" \
+              --type "${predicate_type}" \
+              --certificate-identity \
+                "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/seaweedfs-arm64.yml@${GITHUB_REF}" \
+              --certificate-oidc-issuer \
+                "https://token.actions.githubusercontent.com" \
+              --certificate-github-workflow-name "${GITHUB_WORKFLOW}" \
+              --certificate-github-workflow-ref "${GITHUB_REF}" \
+              --certificate-github-workflow-repository "${GITHUB_REPOSITORY}" \
+              --certificate-github-workflow-sha "${GITHUB_WORKFLOW_SHA}" \
+              --certificate-github-workflow-trigger "${GITHUB_EVENT_NAME}" \
+              --digest "${DIGEST#sha256:}" \
+              --digestAlg sha256
+          }
+
+          cosign attest --yes \
+            --bundle sbom-attestation-bundle.json \
+            --type cyclonedx \
             --predicate seaweedfs-4.39-arm64.cdx.json "${IMAGE}@${DIGEST}"
-          cosign attest --yes --type https://shirokuma.dev/attestations/trivy/v1 \
+          verify_attestation_bundle \
+            sbom-attestation-bundle.json cyclonedx
+
+          cosign attest --yes \
+            --bundle trivy-attestation-bundle.json \
+            --type https://shirokuma.dev/attestations/trivy/v1 \
             --predicate trivy.json "${IMAGE}@${DIGEST}"
+          verify_attestation_bundle \
+            trivy-attestation-bundle.json \
+            https://shirokuma.dev/attestations/trivy/v1
 
       - name: Record the closed-world release evidence
         env:
@@ -984,12 +1013,14 @@ jobs:
               "rekor-entry.json",
               "runtime-container-inspect.json",
               "runtime-smoke.json",
+              "sbom-attestation-bundle.json",
               "seaweedfs-4.39-arm64.cdx.json",
               "registry-signature-bundles.jsonl",
               "slsa-bundles.jsonl",
               "slsa-verify.json",
               "toolchain.json",
               "trivy-version.json",
+              "trivy-attestation-bundle.json",
               "trivy.json",
           )
           evidence_root = "bootstrap/seaweedfs/v4.39/evidence"
@@ -1100,11 +1131,13 @@ jobs:
             registry-signature-bundles.jsonl \
             runtime-container-inspect.json \
             runtime-smoke.json \
+            sbom-attestation-bundle.json \
             seaweedfs-4.39-arm64.cdx.json \
             slsa-bundles.jsonl \
             slsa-verify.json \
             toolchain.json \
             trivy-version.json \
+            trivy-attestation-bundle.json \
             trivy.json
           do
             cp "${name}" "${candidate_dir}/${name}"
@@ -1130,11 +1163,13 @@ jobs:
             runtime-container-inspect.json
             runtime-smoke.json
             runtime-smoke.log
+            sbom-attestation-bundle.json
             seaweedfs-4.39-arm64.cdx.json
             slsa-bundles.jsonl
             slsa-verify.json
             toolchain.json
             trivy-version.json
+            trivy-attestation-bundle.json
             trivy.json
           if-no-files-found: error
           retention-days: 7
