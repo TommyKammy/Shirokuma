@@ -1,0 +1,142 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: seaweedfs
+  namespace: shirokuma-dev
+  labels:
+    app.kubernetes.io/name: seaweedfs
+    app.kubernetes.io/component: object-storage
+    app.kubernetes.io/part-of: shirokuma
+spec:
+  replicas: 1
+  serviceName: seaweedfs-s3
+  podManagementPolicy: OrderedReady
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: seaweedfs
+      app.kubernetes.io/component: object-storage
+  template:
+    metadata:
+      annotations:
+        shirokuma.dev/s3-credential-generation: "1"
+      labels:
+        app.kubernetes.io/name: seaweedfs
+        app.kubernetes.io/component: object-storage
+        app.kubernetes.io/part-of: shirokuma
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: seaweedfs
+          image: ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421
+          imagePullPolicy: IfNotPresent
+          args:
+            - -logtostderr=true
+            - mini
+            - -dir=/data
+            - -bucket=$(S3_BUCKET)
+            - -s3.config=/etc/seaweedfs/credentials/s3.json
+            - -s3.allowDeleteBucketNotEmpty=false
+            - -s3.iam.readOnly=true
+            - -s3.port=8333
+            - -s3.port.iceberg=0
+            - -s3.metricsPort=0
+            - -master.telemetry=false
+            - -webdav=false
+            - -admin.ui=false
+            - -metricsPort=0
+          envFrom:
+            - configMapRef:
+                name: object-storage-contract
+          ports:
+            - name: s3
+              containerPort: 8333
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: s3
+              scheme: HTTP
+            initialDelaySeconds: 5
+            failureThreshold: 60
+            periodSeconds: 5
+            timeoutSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: s3
+              scheme: HTTP
+            initialDelaySeconds: 5
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: s3
+              scheme: HTTP
+            initialDelaySeconds: 30
+            failureThreshold: 3
+            periodSeconds: 30
+            timeoutSeconds: 2
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+          volumeMounts:
+            - name: seaweedfs-data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+            - name: s3-credentials
+              mountPath: /etc/seaweedfs/credentials
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: s3-credentials
+          secret:
+            secretName: seaweedfs-s3-credentials
+            defaultMode: 0440
+  volumeClaimTemplates:
+    - metadata:
+        name: seaweedfs-data
+        annotations:
+          kustomize.toolkit.fluxcd.io/prune: disabled
+        labels:
+          app.kubernetes.io/name: seaweedfs
+          app.kubernetes.io/component: object-storage
+          app.kubernetes.io/part-of: shirokuma
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 20Gi

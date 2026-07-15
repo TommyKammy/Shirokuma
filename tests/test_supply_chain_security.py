@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -112,6 +114,35 @@ class SupplyChainSecurityTests(unittest.TestCase):
     def write_valid_evidence(cls, root: Path, image: dict[str, str]) -> None:
         cls.write_valid_sbom(root)
         cls.write_valid_supply_chain(root, image)
+
+    @staticmethod
+    def write_repository_source_build_fixture(root: Path) -> Path:
+        image = next(
+            image
+            for image in json.loads(POLICY.read_text(encoding="utf-8"))["images"]
+            if image["component"] == "seaweedfs"
+        )
+        manifest = root / "security/resident-images.json"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(
+            json.dumps({"schema_version": 1, "images": [image]}),
+            encoding="utf-8",
+        )
+        paths = (
+            "bootstrap/seaweedfs/v4.39/admission.json",
+            "bootstrap/seaweedfs/v4.39/release-evidence.json",
+            "bootstrap/seaweedfs/v4.39/evidence/seaweedfs-4.39-arm64.cdx.json",
+            "bootstrap/seaweedfs/v4.39/evidence/trivy.json",
+            "security/evidence/seaweedfs-v4.39/seaweedfs-4.39-arm64.cdx.json",
+            "security/evidence/seaweedfs-v4.39/trivy.json",
+            "security/evidence/seaweedfs-v4.39/supply-chain.json",
+        )
+        for relative in paths:
+            destination = root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / relative, destination)
+        subprocess.run(["git", "init", "-q", str(root)], check=True)
+        return manifest.resolve()
 
     @staticmethod
     def valid_exception(
@@ -420,7 +451,8 @@ class SupplyChainSecurityTests(unittest.TestCase):
 
     def test_low_resident_image_scan_artifact_is_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
             image = self.valid_image()
             self.write_valid_evidence(root, image)
             self.write_trivy_report(
@@ -439,13 +471,20 @@ class SupplyChainSecurityTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            result = self.run_checker("check-images", "--manifest", str(manifest))
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--repo",
+                str(root),
+            )
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_local_lab_exception_accepts_one_exact_high_finding(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
             image = self.valid_image()
             finding = {
                 "VulnerabilityID": "CVE-2099-1001",
@@ -466,6 +505,9 @@ class SupplyChainSecurityTests(unittest.TestCase):
                 root,
                 [self.valid_exception(image, [exception_cve])],
             )
+            decision_record = root / LAB_ADR
+            decision_record.parent.mkdir(parents=True)
+            decision_record.write_text("# Fixture decision record\n", encoding="utf-8")
             manifest = root / "resident-images.json"
             manifest.write_text(
                 json.dumps({"schema_version": 1, "images": [image]}),
@@ -476,6 +518,8 @@ class SupplyChainSecurityTests(unittest.TestCase):
                 "check-images",
                 "--manifest",
                 str(manifest),
+                "--repo",
+                str(root),
                 "--profile",
                 "local-lab",
                 "--exceptions",
@@ -709,6 +753,229 @@ class SupplyChainSecurityTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("signed index repository does not match", result.stderr)
+
+    def test_repository_source_build_evidence_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = self.write_repository_source_build_fixture(root)
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--repo",
+                str(root),
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_repository_source_build_admission_path_must_be_canonical(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = self.write_repository_source_build_fixture(root)
+            original = root / "bootstrap/seaweedfs/v4.39/admission.json"
+            substitute = root / "bootstrap/seaweedfs/v4.39/admission-copy.json"
+            shutil.copy2(original, substitute)
+            evidence_path = root / "security/evidence/seaweedfs-v4.39/supply-chain.json"
+            evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+            evidence["images"][0]["repository_source_build"]["admission"]["path"] = (
+                "bootstrap/seaweedfs/v4.39/admission-copy.json"
+            )
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--repo",
+                str(root),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("admission path is not canonical", result.stderr)
+
+    def test_repository_source_build_release_artifacts_must_be_canonical(self) -> None:
+        cases = (
+            (
+                ("release_evidence",),
+                "bootstrap/seaweedfs/v4.39/release-evidence.json",
+                "bootstrap/seaweedfs/v4.39/release-evidence-copy.json",
+                "release evidence path is not canonical",
+            ),
+            (
+                ("resident_evidence", "sbom", "source"),
+                "bootstrap/seaweedfs/v4.39/evidence/seaweedfs-4.39-arm64.cdx.json",
+                "bootstrap/seaweedfs/v4.39/evidence/sbom-copy.json",
+                "sbom source path is not canonical",
+            ),
+            (
+                ("resident_evidence", "scan", "source"),
+                "bootstrap/seaweedfs/v4.39/evidence/trivy.json",
+                "bootstrap/seaweedfs/v4.39/evidence/trivy-copy.json",
+                "scan source path is not canonical",
+            ),
+        )
+        for keys, original, substitute, expected in cases:
+            with self.subTest(binding=".".join(keys)), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                manifest = self.write_repository_source_build_fixture(root)
+                shutil.copy2(root / original, root / substitute)
+                evidence_path = root / "security/evidence/seaweedfs-v4.39/supply-chain.json"
+                evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+                binding = evidence["images"][0]["repository_source_build"]
+                for key in keys:
+                    binding = binding[key]
+                binding["path"] = substitute
+                evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+                result = self.run_checker(
+                    "check-images",
+                    "--manifest",
+                    str(manifest),
+                    "--repo",
+                    str(root),
+                )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(expected, result.stderr)
+
+    def test_repository_source_build_parent_traversal_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = self.write_repository_source_build_fixture(root)
+            evidence_path = root / "security/evidence/seaweedfs-v4.39/supply-chain.json"
+            evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+            evidence["images"][0]["repository_source_build"]["admission"]["path"] = (
+                "../admission.json"
+            )
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--repo",
+                str(root),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must be a repository-relative path", result.stderr)
+
+    def test_repository_source_build_symlink_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = self.write_repository_source_build_fixture(root)
+            admission_path = root / "bootstrap/seaweedfs/v4.39/admission.json"
+            target = root / "external-admission.json"
+            shutil.copy2(admission_path, target)
+            admission_path.unlink()
+            admission_path.symlink_to(target)
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--repo",
+                str(root),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("symbolic link repository_source_build.admission.path", result.stderr)
+
+    def test_symlinked_manifest_parent_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository_source_build_fixture(root)
+            alias = root / "security-alias"
+            alias.symlink_to(root / "security", target_is_directory=True)
+            manifest = alias / "resident-images.json"
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--repo",
+                str(root),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("symbolic link ancestor", result.stderr)
+
+    def test_symlinked_manifest_ancestor_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_repository_source_build_fixture(root)
+            alias = root / "repository-alias"
+            alias.symlink_to(root, target_is_directory=True)
+            manifest = alias / "security/resident-images.json"
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--repo",
+                str(root),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("symbolic link ancestor", result.stderr)
+
+    def test_verify_security_runs_canonical_trusted_image_audit(self) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        verify_security = makefile.split("verify-security:\n", 1)[1].split("\n\n", 1)[0]
+        self.assertIn(
+            "scripts/verify_trusted_image.py audit --root .",
+            verify_security,
+        )
+
+    def test_repository_source_build_resident_bytes_are_bound_to_bootstrap(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = self.write_repository_source_build_fixture(root)
+            resident_sbom = (
+                root
+                / "security/evidence/seaweedfs-v4.39/seaweedfs-4.39-arm64.cdx.json"
+            )
+            resident_sbom.write_bytes(resident_sbom.read_bytes() + b"\n")
+            evidence_path = root / "security/evidence/seaweedfs-v4.39/supply-chain.json"
+            evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+            resident_binding = evidence["images"][0]["repository_source_build"][
+                "resident_evidence"
+            ]["sbom"]["resident"]
+            resident_binding["sha256"] = hashlib.sha256(resident_sbom.read_bytes()).hexdigest()
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--repo",
+                str(root),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("repository source-build sbom hashes do not match", result.stderr)
+
+    def test_repository_source_build_source_hash_drift_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = self.write_repository_source_build_fixture(root)
+            source_scan = root / "bootstrap/seaweedfs/v4.39/evidence/trivy.json"
+            source_scan.write_bytes(source_scan.read_bytes() + b"\n")
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--repo",
+                str(root),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "repository_source_build.resident_evidence.scan.source hash mismatch",
+            result.stderr,
+        )
 
     def test_missing_resident_image_sbom_artifact_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1069,14 +1336,18 @@ class SupplyChainSecurityTests(unittest.TestCase):
     def test_retained_evidence_policy_exceptions_are_exact_path_only(self) -> None:
         config = GITLEAKS_CONFIG.read_text(encoding="utf-8")
 
-        def allowlist_paths(description: str, secret_pattern: str) -> set[str]:
+        def allowlist_paths(
+            description: str,
+            secret_pattern: str,
+            target_rule: str = "sourcegraph-access-token",
+        ) -> set[str]:
             start = config.index(f'description = "{description}"')
             end = config.find("[[allowlists]]", start)
             block = config[start:] if end == -1 else config[start:end]
             self.assertIn('condition = "AND"', block)
             self.assertIn('regexTarget = "secret"', block)
             self.assertIn(f"regexes = ['''{secret_pattern}''']", block)
-            self.assertIn('targetRules = ["sourcegraph-access-token"]', block)
+            self.assertIn(f'targetRules = ["{target_rule}"]', block)
             paths = block.split("paths = [", 1)[1].split("]", 1)[0]
             return {
                 line.strip().rstrip(",").strip("'")
@@ -1104,7 +1375,35 @@ class SupplyChainSecurityTests(unittest.TestCase):
                 r"^bootstrap/seaweedfs/v4\.39/evidence/go-module-inputs\.json$",
             },
         )
+        self.assertEqual(
+            allowlist_paths(
+                "SeaweedFS S3 secret variable references in OpenTofu and their contract assertions",
+                r"^(var\.seaweedfs_s3_operator_secret_key|var\.seaweedfs_s3_application_secret_key)$",
+                "generic-api-key",
+            ),
+            {
+                r"^opentofu/dev/object-storage\.tf$",
+                r"^tests/test_object_storage_profile\.py$",
+            },
+        )
+        self.assertEqual(
+            allowlist_paths(
+                "Public immutable GitHub Action commit pins asserted by supply-chain tests",
+                r"^(df4cb1c069e1874edd31b4311f1884172cec0e10|e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e)$",
+            ),
+            {r"^tests/test_supply_chain_security\.py$"},
+        )
+        self.assertEqual(
+            allowlist_paths(
+                "Public SeaweedFS 4.39 source commit in retained Trivy evidence",
+                r"^db42bb49757b459551607939807017d7a9d5a94a$",
+            ),
+            {r"^security/evidence/seaweedfs-v4\.39/trivy\.json$"},
+        )
         self.assertNotIn(r"^bootstrap/seaweedfs/v4\.39/evidence/.*$", config)
+        self.assertNotIn(r"^opentofu/dev/.*$", config)
+        self.assertNotIn(r"^tests/.*$", config)
+        self.assertNotIn(r"^security/evidence/seaweedfs-v4\.39/.*$", config)
 
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         for path in (

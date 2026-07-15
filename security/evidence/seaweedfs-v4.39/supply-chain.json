@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "images": [
+    {
+      "component": "seaweedfs",
+      "version": "4.39",
+      "source": "https://github.com/seaweedfs/seaweedfs",
+      "platform": "linux/arm64",
+      "reference": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421",
+      "verified_at": "2026-07-15T14:00:00Z",
+      "evidence_mode": "repository_source_build",
+      "repository_source_build": {
+        "admission": {
+          "path": "bootstrap/seaweedfs/v4.39/admission.json",
+          "sha256": "56f6a83e5b77ccba4654fefddcd223531af1014fc210260900962c68b4e5c26c"
+        },
+        "release_evidence": {
+          "path": "bootstrap/seaweedfs/v4.39/release-evidence.json",
+          "sha256": "8a8bc4b7b26722ee821f40ab7c58bb4f76be310579ccc8cde78a91935a965aa0"
+        },
+        "resident_evidence": {
+          "sbom": {
+            "resident": {
+              "path": "security/evidence/seaweedfs-v4.39/seaweedfs-4.39-arm64.cdx.json",
+              "sha256": "79a4c4fce4cf3909a68d1f6bf5eee8bbeb24b2591b05eb92db26ffb9e3ca0a98"
+            },
+            "source": {
+              "path": "bootstrap/seaweedfs/v4.39/evidence/seaweedfs-4.39-arm64.cdx.json",
+              "sha256": "79a4c4fce4cf3909a68d1f6bf5eee8bbeb24b2591b05eb92db26ffb9e3ca0a98"
+            }
+          },
+          "scan": {
+            "resident": {
+              "path": "security/evidence/seaweedfs-v4.39/trivy.json",
+              "sha256": "31a64ea3c6d5d4900ca73e05aa9bf4b691dd6541c41da037c02efda5b3792e86"
+            },
+            "source": {
+              "path": "bootstrap/seaweedfs/v4.39/evidence/trivy.json",
+              "sha256": "31a64ea3c6d5d4900ca73e05aa9bf4b691dd6541c41da037c02efda5b3792e86"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

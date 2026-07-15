@@ -52,6 +52,19 @@
       "sbom_generator": "syft 1.46.0",
       "scanner_version": "trivy 0.72.0",
       "vulnerability_db_updated_at": "2026-07-13T19:09:56.237113526Z"
+    },
+    {
+      "component": "seaweedfs",
+      "version": "4.39",
+      "source": "https://github.com/seaweedfs/seaweedfs",
+      "platform": "linux/arm64",
+      "reference": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421",
+      "sbom_artifact": "evidence/seaweedfs-v4.39/seaweedfs-4.39-arm64.cdx.json",
+      "scan_artifact": "evidence/seaweedfs-v4.39/trivy.json",
+      "supply_chain_artifact": "evidence/seaweedfs-v4.39/supply-chain.json",
+      "sbom_generator": "syft 1.46.0",
+      "scanner_version": "trivy 0.72.0",
+      "vulnerability_db_updated_at": "2026-07-15T07:37:19.83151832Z"
     }
   ]
 }

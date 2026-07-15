@@ -42,3 +42,34 @@ paths = [
   '''^bootstrap/seaweedfs/v4\.39/go-module-inputs\.json$''',
   '''^bootstrap/seaweedfs/v4\.39/evidence/go-module-inputs\.json$''',
 ]
+
+[[allowlists]]
+description = "SeaweedFS S3 secret variable references in OpenTofu and their contract assertions"
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^(var\.seaweedfs_s3_operator_secret_key|var\.seaweedfs_s3_application_secret_key)$''']
+targetRules = ["generic-api-key"]
+paths = [
+  '''^opentofu/dev/object-storage\.tf$''',
+  '''^tests/test_object_storage_profile\.py$''',
+]
+
+[[allowlists]]
+description = "Public immutable GitHub Action commit pins asserted by supply-chain tests"
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^(df4cb1c069e1874edd31b4311f1884172cec0e10|e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e)$''']
+targetRules = ["sourcegraph-access-token"]
+paths = [
+  '''^tests/test_supply_chain_security\.py$''',
+]
+
+[[allowlists]]
+description = "Public SeaweedFS 4.39 source commit in retained Trivy evidence"
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^db42bb49757b459551607939807017d7a9d5a94a$''']
+targetRules = ["sourcegraph-access-token"]
+paths = [
+  '''^security/evidence/seaweedfs-v4\.39/trivy\.json$''',
+]
