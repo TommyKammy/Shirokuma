@@ -1,0 +1,187 @@
+{
+  "schema_version": 2,
+  "component": "seaweedfs",
+  "version": "4.39",
+  "platform": "linux/arm64",
+  "reference": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421",
+  "digest": "sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421",
+  "contract": {
+    "path": "bootstrap/seaweedfs/v4.39/trusted-build-contract.json",
+    "sha256": "10d5b01da6a4cc0e38901d6cdcde423dbf83c8cca34eea374b9f97be0a5fb5ac"
+  },
+  "source": {
+    "repository": "https://github.com/seaweedfs/seaweedfs",
+    "commit": "db42bb49757b459551607939807017d7a9d5a94a",
+    "tree": "da91641fdd520e465c68fa48af3b3ad07ad86822",
+    "git_archive_sha256": "95b3ba34d191e2cc96063434f407087000a9ffcf22f95682ecd5ce40b5a3fab9",
+    "evidence": "bootstrap/seaweedfs/v4.39/source.json",
+    "evidence_sha256": "089b7392bb7346039cbf4e69161d6856ec8405a7decddb3dd76350ed363647c1",
+    "containerfile_sha256": "ed61b86d3e13ca8acdc325afdd4186ec14a8d87344b0cb2002141b16aeef8482",
+    "build_inputs": {
+      "dockerfile_frontend": "docker/dockerfile:1.7.0@sha256:dbbd5e059e8a07ff7ea6233b213b36aa516b4c53c645f1817a4dd18b83cbea56",
+      "go": "golang:1.25.12-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587",
+      "certificates": "alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659"
+    },
+    "module_inputs": {
+      "bundle": "go-vendor.tar.xz",
+      "bundle_sha256": "62703c68abf35ea13f4b3f9d80a452b3c988fd49033dd59aeddf950326992445",
+      "manifest": "go-module-inputs.json",
+      "manifest_sha256": "1eb5746a5aff57eb3768bfa87d7e8f3caff1528660b1e73f23966adf9e4bc197",
+      "go_mod_sha256": "640ea9c352d46a1a444fed027adf3440cc63023afdef96c302533ecb89d7409a",
+      "go_sum_sha256": "aad1bb8e81de6f2dee8481cc9df387efdf87012c28207d5af5d6d19a16562f6e",
+      "go_image": "golang:1.25.12-alpine@sha256:56961d79ea8129efddcc0b8643fd8a5416b4e6228cfd477e3fd61deb2672c587",
+      "go_version": "1.25.12",
+      "generator_policy": "go-mod-vendor-authenticated-subset+canonical-tar-xz-v2",
+      "module_count": 496,
+      "replacement_count": 2,
+      "file_count": 18934
+    }
+  },
+  "builder": {
+    "repository": "TommyKammy/Shirokuma",
+    "workflow_name": "SeaweedFS 4.39 trusted arm64 build",
+    "workflow": ".github/workflows/seaweedfs-arm64.yml",
+    "ref": "refs/heads/main",
+    "workflow_sha": "5072b9f5b084a25c03895d430f03c94753410a05",
+    "source_sha": "5072b9f5b084a25c03895d430f03c94753410a05",
+    "trigger": "push",
+    "run_id": "29418029340",
+    "run_attempt": "1"
+  },
+  "issuer": "https://token.actions.githubusercontent.com",
+  "identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/seaweedfs-arm64.yml@refs/heads/main",
+  "slsa_provenance": "https://github.com/TommyKammy/Shirokuma/attestations/35452942",
+  "admission_status": "approved",
+  "vulnerabilities": {
+    "critical": 0,
+    "high": 0
+  },
+  "scanner": {
+    "name": "trivy",
+    "version": "0.72.0",
+    "vulnerability_db": {
+      "version": 2,
+      "updated_at": "2026-07-15T07:37:19.83151832Z",
+      "downloaded_at": "2026-07-15T13:09:58.356834194Z"
+    }
+  },
+  "toolchain": {
+    "buildx": {
+      "version": "v0.35.0",
+      "binary_sha256": "c4248d6cbc4a619a7e0b4609c11e509ad4ac0b475e1c64817c0ac20c5d90c766",
+      "execution": "dedicated_docker_config_plugin"
+    },
+    "buildkit": {
+      "version": "v0.31.1",
+      "image": "moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a",
+      "linux_arm64_manifest_digest": "sha256:4eee950fb9d134cbf4e228ea3906eb4c7403323334af013c443302f7b74f2737"
+    },
+    "syft": {
+      "version": "v1.46.0"
+    },
+    "trivy": {
+      "version": "v0.72.0"
+    },
+    "cosign": {
+      "version": "v3.1.1"
+    },
+    "crane": {
+      "version": "v0.21.7",
+      "archive_sha256": "b6ee979d9411dfb05ce35ab9e156fe5de7def11a230764a7856ffa2eb971fa88",
+      "execution": "deferred_to_promotion_job"
+    }
+  },
+  "transparency_log": {
+    "bundle": "cosign-signature-bundle.json",
+    "rekor_response": "rekor-entry.json",
+    "entries": [
+      {
+        "uuid": "108e9186e8c5677a9fed32450ea8e2b56da1b669449a87e939d33734cb90602de4a20573d4a9b8ec",
+        "log_index": "2172988661",
+        "integrated_time": "1784121233",
+        "log_id": "wNI9atQGlz+VWfO6LRygH4QUfY/8W4RFwiT5i5WRgB0=",
+        "log_id_hex": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d"
+      }
+    ]
+  },
+  "promotion": {
+    "status": "pending",
+    "trusted_tag": "4.39-arm64",
+    "tool": "crane"
+  },
+  "artifacts": {
+    "cosign-signature-bundle.json": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/cosign-signature-bundle.json",
+      "sha256": "6b16e507aa3079bc6e86f89e1711cb20d2ec763b63514915a38487a6c340d1d2"
+    },
+    "cosign-verify.json": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/cosign-verify.json",
+      "sha256": "9b8296bb615e5e8ea20f119eccc98dcdecb8e7073b6c18a6b7917fc884a64df0"
+    },
+    "go-module-inputs.json": {
+      "path": "bootstrap/seaweedfs/v4.39/go-module-inputs.json",
+      "sha256": "1eb5746a5aff57eb3768bfa87d7e8f3caff1528660b1e73f23966adf9e4bc197"
+    },
+    "go-vendor.tar.xz": {
+      "path": "bootstrap/seaweedfs/v4.39/go-vendor.tar.xz",
+      "sha256": "62703c68abf35ea13f4b3f9d80a452b3c988fd49033dd59aeddf950326992445"
+    },
+    "image-manifest.json": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/image-manifest.json",
+      "sha256": "d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421"
+    },
+    "rekor-entry.json": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/rekor-entry.json",
+      "sha256": "8c7db576d078d7cfb9f0e3ee199c1fa871b4b5f8382e1f6c6d150d67633e3fcf"
+    },
+    "runtime-container-inspect.json": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/runtime-container-inspect.json",
+      "sha256": "ec8985c2793867a8c3fa294ed8d6a2d9c8eee34c39f1dda9dbf415be7c52e156"
+    },
+    "runtime-smoke.json": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/runtime-smoke.json",
+      "sha256": "1602ae8403b855fd5d62d664de15db129b03e27455dd2662611e20908577d857"
+    },
+    "sbom-attestation-bundle.json": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/sbom-attestation-bundle.json",
+      "sha256": "4f032f2a5a5769b0f6f96b87d7d6d5ea96e6ad2910f3d37f31aa8f3c10bb2943"
+    },
+    "seaweedfs-4.39-arm64.cdx.json": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/seaweedfs-4.39-arm64.cdx.json",
+      "sha256": "79a4c4fce4cf3909a68d1f6bf5eee8bbeb24b2591b05eb92db26ffb9e3ca0a98"
+    },
+    "registry-signature-bundles.jsonl": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/registry-signature-bundles.jsonl",
+      "sha256": "33c2ee1357479d91223db3fcc6f4199a54cf726726dacac3d3918112c99dc423"
+    },
+    "slsa-bundles.jsonl": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/slsa-bundles.jsonl",
+      "sha256": "799f3d76f3c3f7c9f94c07243859b20cbf3001b632d7e764f1dd2e097eb5ba49"
+    },
+    "slsa-verify.json": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/slsa-verify.json",
+      "sha256": "c15d6cd28e0384a4f552305dce6ed029a436dad62cf2f6353514047385ef5a4e"
+    },
+    "toolchain.json": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/toolchain.json",
+      "sha256": "1e84f189ac5ca9a915f8a5096bce0202a0a88feeae85ed89af34d12cca0c43ba"
+    },
+    "trivy-version.json": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/trivy-version.json",
+      "sha256": "9b6d73c84c6c070d989453c41a7494e570ba26a983195799ee8493fb4329a892"
+    },
+    "trivy-attestation-bundle.json": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/trivy-attestation-bundle.json",
+      "sha256": "dce4f11ba86f7bac3b45608c4ffa09ddb4033c23239303b7edbfa0b9288ddc77"
+    },
+    "trivy.json": {
+      "path": "bootstrap/seaweedfs/v4.39/evidence/trivy.json",
+      "sha256": "31a64ea3c6d5d4900ca73e05aa9bf4b691dd6541c41da037c02efda5b3792e86"
+    }
+  },
+  "actions_artifact": {
+    "role": "retained mirror only",
+    "candidate_name": "seaweedfs-4.39-arm64-candidate-29418029340-1",
+    "retention_days": 7
+  }
+}

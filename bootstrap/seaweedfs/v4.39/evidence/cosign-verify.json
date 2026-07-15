@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "reference": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421",
+  "certificate_constraints": {
+    "issuer": "https://token.actions.githubusercontent.com",
+    "identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/seaweedfs-arm64.yml@refs/heads/main",
+    "github_workflow_name": "SeaweedFS 4.39 trusted arm64 build",
+    "github_workflow_repository": "TommyKammy/Shirokuma",
+    "github_workflow_ref": "refs/heads/main",
+    "github_workflow_sha": "5072b9f5b084a25c03895d430f03c94753410a05",
+    "github_workflow_trigger": "push"
+  },
+  "detached_bundle_verified": true,
+  "registry_signature_verified": true,
+  "registry_bundle": {
+    "file": "registry-signature-bundles.jsonl",
+    "exact_matches": 1,
+    "bundle_sha256": "6b16e507aa3079bc6e86f89e1711cb20d2ec763b63514915a38487a6c340d1d2"
+  },
+  "transparency_log": {
+    "base_url": "https://rekor.sigstore.dev",
+    "major_api_version": 1,
+    "entry_lookup": "/api/v1/log/entries?logIndex=2172988661"
+  },
+  "verified_payloads": [
+    {
+      "critical": {
+        "identity": {
+          "docker-reference": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421"
+        },
+        "image": {
+          "docker-manifest-digest": "sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421"
+        },
+        "type": "https://sigstore.dev/cosign/sign/v1"
+      },
+      "optional": {}
+    }
+  ],
+  "rekor_entries": [
+    {
+      "uuid": "108e9186e8c5677a9fed32450ea8e2b56da1b669449a87e939d33734cb90602de4a20573d4a9b8ec",
+      "log_index": "2172988661",
+      "integrated_time": "1784121233",
+      "log_id": "wNI9atQGlz+VWfO6LRygH4QUfY/8W4RFwiT5i5WRgB0=",
+      "log_id_hex": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d"
+    }
+  ]
+}

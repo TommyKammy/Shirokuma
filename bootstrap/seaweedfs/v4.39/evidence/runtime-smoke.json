@@ -1,0 +1,26 @@
+{
+  "schema_version": 2,
+  "result": "passed",
+  "reference": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421",
+  "digest": "sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421",
+  "user": "65532:65532",
+  "command": [
+    "/usr/bin/weed",
+    "mini",
+    "-dir=/data"
+  ],
+  "read_only_rootfs": true,
+  "tmpfs": [
+    "/tmp",
+    "/data"
+  ],
+  "capabilities_dropped": "ALL",
+  "no_new_privileges": true,
+  "sustained_running_seconds": 10,
+  "run_id": "29418029340",
+  "run_attempt": "1",
+  "runtime_inspect": {
+    "file": "runtime-container-inspect.json",
+    "sha256": "ec8985c2793867a8c3fa294ed8d6a2d9c8eee34c39f1dda9dbf415be7c52e156"
+  }
+}

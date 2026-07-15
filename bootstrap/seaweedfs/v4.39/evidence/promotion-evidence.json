@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "status": "verified",
+  "reference": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421",
+  "trusted_tag": "ghcr.io/tommykammy/shirokuma-seaweedfs:4.39-arm64",
+  "trusted_tag_role": "non_authoritative_pointer",
+  "trusted_tag_digest": "sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421",
+  "promoted_at": "2026-07-15T13:15:04.101315Z",
+  "run_id": "29418029340",
+  "run_attempt": "1",
+  "tool": {
+    "name": "crane",
+    "version": "v0.21.7",
+    "archive_sha256": "b6ee979d9411dfb05ce35ab9e156fe5de7def11a230764a7856ffa2eb971fa88",
+    "verified_before_registry_login": true
+  },
+  "candidate": {
+    "artifact_name": "seaweedfs-4.39-arm64-candidate-29418029340-1",
+    "snapshot_file": "candidate-release-evidence.json",
+    "release_evidence_sha256": "e24239a2cae70d7d19f6af2a4be9a1b9a48dc4c66c0d731e329126f54e8c9fdf",
+    "contract_sha256": "10d5b01da6a4cc0e38901d6cdcde423dbf83c8cca34eea374b9f97be0a5fb5ac"
+  }
+}

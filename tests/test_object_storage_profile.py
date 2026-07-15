@@ -75,10 +75,12 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
                 self.assertTrue(path.is_file())
                 self.assertFalse(path.is_symlink())
 
-        self.assertFalse((PROFILE / "release-evidence.json").exists())
+        release_path = PROFILE / "release-evidence.json"
+        self.assertTrue(release_path.is_file())
+        release = json.loads(release_path.read_text(encoding="utf-8"))
         self.assertEqual(
             {path.name for path in (PROFILE / "evidence").iterdir()},
-            {"README.md"},
+            {"README.md", *release["artifacts"]},
         )
 
         source = json.loads(source_path.read_text(encoding="utf-8"))
@@ -271,52 +273,51 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         self.assertIn("pending_main_publication", decision)
         self.assertIn("follow-up evidence-only PR", decision)
 
-    def test_candidate_is_fail_closed_pending_main_publication(self) -> None:
+    def test_main_publication_is_approved_but_runtime_remains_blocked(self) -> None:
         admission_path = PROFILE / "admission.json"
         admission = json.loads(admission_path.read_text(encoding="utf-8"))
-        contract = json.loads(
-            (PROFILE / "trusted-build-contract.json").read_text(encoding="utf-8")
+        release = json.loads(
+            (PROFILE / "release-evidence.json").read_text(encoding="utf-8")
         )
-        source_path = PROFILE / "source.json"
-        workflow_path = ROOT / ".github/workflows/seaweedfs-arm64.yml"
 
-        self.assertEqual(admission["schema_version"], 3)
-        self.assertEqual(
-            admission["assessment"]["admission"], "pending_main_publication"
-        )
+        self.assertEqual(admission["schema_version"], 2)
+        self.assertEqual(admission["assessment"]["admission"], "approved")
         self.assertIs(admission["assessment"]["exception_eligible"], False)
+        self.assertEqual(admission["assessment"]["blockers"], [])
         self.assertEqual(
-            {item["control"] for item in admission["assessment"]["blockers"]},
-            {"main_branch_publication"},
+            admission["admitted_candidate"]["reference"], release["reference"]
         )
         self.assertEqual(
-            admission["bootstrap_observation"]["disposition"],
-            "not_admitted_branch_publication",
+            admission["admitted_candidate"]["manifest_digest"],
+            release["digest"],
         )
         self.assertEqual(
-            admission["lifecycle"],
+            admission["admitted_candidate"]["builder"]["ref"], "refs/heads/main"
+        )
+        self.assertEqual(
+            admission["admitted_candidate"]["builder"]["run_id"], "29418029340"
+        )
+        self.assertEqual(
             {
-                "phase": "pending_main_publication",
-                "publisher_ref": "refs/heads/main",
-                "workflow": ".github/workflows/seaweedfs-arm64.yml",
-                "workflow_sha256": sha256(workflow_path),
-                "contract": "bootstrap/seaweedfs/v4.39/trusted-build-contract.json",
-                "contract_sha256": sha256(
-                    PROFILE / "trusted-build-contract.json"
-                ),
-                "source": "bootstrap/seaweedfs/v4.39/source.json",
-                "source_sha256": sha256(source_path),
-                "transition": "follow-up-evidence-only-pr",
+                item["control"]
+                for item in admission["admitted_candidate"]["controls"]
             },
-        )
-        self.assertEqual(
-            admission["lifecycle"]["workflow_sha256"],
-            contract["workflow"]["sha256"],
+            {
+                "source_adoption",
+                "signature",
+                "transparency_log",
+                "workflow_revision",
+                "slsa_provenance",
+                "sbom",
+                "vulnerability_scan",
+                "runtime_tmp",
+                "tag_promotion",
+            },
         )
         self.assertIs(admission["runtime_manifests"]["permitted"], False)
         self.assertEqual(
             {item["control"] for item in admission["runtime_manifests"]["blockers"]},
-            {"main_branch_release_evidence", "resident_evidence_contract"},
+            {"resident_evidence_contract"},
         )
         self.assertEqual(
             admission["upstream_candidate"]["index_reference"],
@@ -332,7 +333,7 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
         )
         self.assertEqual(
             admission["next_action"]["mode"],
-            "publish-from-main-then-evidence-pr",
+            "implement-object-storage-profile",
         )
 
         for relative in admission["runtime_manifests"]["paths"]:

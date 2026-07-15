@@ -1,7 +1,9 @@
 {
-  "schema_version": 3,
+  "schema_version": 2,
   "component": "seaweedfs",
   "version": "4.39",
+  "source": "https://github.com/seaweedfs/seaweedfs",
+  "release_commit": "db42bb49757b459551607939807017d7a9d5a94a",
   "platform": "linux/arm64",
   "upstream_candidate": {
     "index_reference": "chrislusf/seaweedfs@sha256:c7d6c721b30ae711db766bbbfd40192776e263d4e51e22f57baef7bef93c12c6",
@@ -27,51 +29,168 @@
       }
     ]
   },
-  "lifecycle": {
-    "phase": "pending_main_publication",
-    "publisher_ref": "refs/heads/main",
-    "workflow": ".github/workflows/seaweedfs-arm64.yml",
-    "workflow_sha256": "f097273d79c9595d42be816152ff1aabc862faf2667cb0648434280ce8b8ac06",
-    "contract": "bootstrap/seaweedfs/v4.39/trusted-build-contract.json",
-    "contract_sha256": "10d5b01da6a4cc0e38901d6cdcde423dbf83c8cca34eea374b9f97be0a5fb5ac",
-    "source": "bootstrap/seaweedfs/v4.39/source.json",
-    "source_sha256": "089b7392bb7346039cbf4e69161d6856ec8405a7decddb3dd76350ed363647c1",
-    "transition": "follow-up-evidence-only-pr"
-  },
-  "bootstrap_observation": {
-    "run": "https://github.com/TommyKammy/Shirokuma/actions/runs/29379475587/attempts/1",
-    "source_sha": "1ed307a3cc57bd92a99fb6ce7c64ddcacd932c49",
-    "digest": "sha256:027be5ea9a172bbe2c29adb8928061b89ceb2a11261f5248a77653070b106d6d",
-    "artifact": "seaweedfs-4.39-arm64-29379475587-1",
-    "attestation": "https://github.com/TommyKammy/Shirokuma/attestations/35365038",
-    "disposition": "not_admitted_branch_publication"
+  "admitted_candidate": {
+    "reference": "ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421",
+    "manifest_digest": "sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421",
+    "source_evidence": "bootstrap/seaweedfs/v4.39/source.json",
+    "release_evidence": "bootstrap/seaweedfs/v4.39/release-evidence.json",
+    "builder": {
+      "repository": "TommyKammy/Shirokuma",
+      "workflow_name": "SeaweedFS 4.39 trusted arm64 build",
+      "workflow": ".github/workflows/seaweedfs-arm64.yml",
+      "ref": "refs/heads/main",
+      "workflow_sha": "5072b9f5b084a25c03895d430f03c94753410a05",
+      "source_sha": "5072b9f5b084a25c03895d430f03c94753410a05",
+      "trigger": "push",
+      "run_id": "29418029340",
+      "run_attempt": "1",
+      "issuer": "https://token.actions.githubusercontent.com",
+      "identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/seaweedfs-arm64.yml@refs/heads/main",
+      "run": "https://github.com/TommyKammy/Shirokuma/actions/runs/29418029340/attempts/1"
+    },
+    "controls": [
+      {
+        "control": "source_adoption",
+        "status": "verified",
+        "evidence": "ADR-0020 accepts the exact upstream commit, tree, archive checksum, closed module inputs, vendor bundle, and immutable Containerfile frontend",
+        "source_evidence": "bootstrap/seaweedfs/v4.39/source.json",
+        "source_evidence_sha256": "089b7392bb7346039cbf4e69161d6856ec8405a7decddb3dd76350ed363647c1",
+        "commit": "db42bb49757b459551607939807017d7a9d5a94a",
+        "tree": "da91641fdd520e465c68fa48af3b3ad07ad86822",
+        "git_archive_sha256": "95b3ba34d191e2cc96063434f407087000a9ffcf22f95682ecd5ce40b5a3fab9",
+        "containerfile_sha256": "ed61b86d3e13ca8acdc325afdd4186ec14a8d87344b0cb2002141b16aeef8482",
+        "go_mod_sha256": "640ea9c352d46a1a444fed027adf3440cc63023afdef96c302533ecb89d7409a",
+        "go_sum_sha256": "aad1bb8e81de6f2dee8481cc9df387efdf87012c28207d5af5d6d19a16562f6e",
+        "module_count": 496,
+        "replacement_count": 2,
+        "module_manifest": "bootstrap/seaweedfs/v4.39/go-module-inputs.json",
+        "module_manifest_sha256": "1eb5746a5aff57eb3768bfa87d7e8f3caff1528660b1e73f23966adf9e4bc197",
+        "vendor_bundle": "bootstrap/seaweedfs/v4.39/go-vendor.tar.xz",
+        "vendor_bundle_sha256": "62703c68abf35ea13f4b3f9d80a452b3c988fd49033dd59aeddf950326992445"
+      },
+      {
+        "control": "signature",
+        "status": "verified",
+        "evidence": "Pinned Cosign v3.1.1 cryptographically reverified the retained keyless signature and registry bundles for the exact digest",
+        "bundle": "bootstrap/seaweedfs/v4.39/evidence/cosign-signature-bundle.json",
+        "bundle_sha256": "6b16e507aa3079bc6e86f89e1711cb20d2ec763b63514915a38487a6c340d1d2",
+        "registry_bundles": "bootstrap/seaweedfs/v4.39/evidence/registry-signature-bundles.jsonl",
+        "registry_bundles_sha256": "33c2ee1357479d91223db3fcc6f4199a54cf726726dacac3d3918112c99dc423",
+        "verification": "bootstrap/seaweedfs/v4.39/evidence/cosign-verify.json",
+        "verification_sha256": "9b8296bb615e5e8ea20f119eccc98dcdecb8e7073b6c18a6b7917fc884a64df0",
+        "issuer": "https://token.actions.githubusercontent.com",
+        "identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/seaweedfs-arm64.yml@refs/heads/main",
+        "workflow_sha": "5072b9f5b084a25c03895d430f03c94753410a05"
+      },
+      {
+        "control": "transparency_log",
+        "status": "verified",
+        "evidence": "Retained Rekor response and signed bundle transparency material were cryptographically reverified",
+        "rekor_response": "bootstrap/seaweedfs/v4.39/evidence/rekor-entry.json",
+        "rekor_response_sha256": "8c7db576d078d7cfb9f0e3ee199c1fa871b4b5f8382e1f6c6d150d67633e3fcf",
+        "entries": [
+          {
+            "uuid": "108e9186e8c5677a9fed32450ea8e2b56da1b669449a87e939d33734cb90602de4a20573d4a9b8ec",
+            "log_index": "2172988661",
+            "integrated_time": "1784121233",
+            "log_id": "wNI9atQGlz+VWfO6LRygH4QUfY/8W4RFwiT5i5WRgB0=",
+            "log_id_hex": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d"
+          }
+        ]
+      },
+      {
+        "control": "workflow_revision",
+        "status": "verified",
+        "evidence": "The admitted artifact was published only by the reviewed refs/heads/main workflow revision",
+        "repository": "TommyKammy/Shirokuma",
+        "workflow_name": "SeaweedFS 4.39 trusted arm64 build",
+        "workflow": ".github/workflows/seaweedfs-arm64.yml",
+        "ref": "refs/heads/main",
+        "workflow_sha": "5072b9f5b084a25c03895d430f03c94753410a05",
+        "source_sha": "5072b9f5b084a25c03895d430f03c94753410a05",
+        "trigger": "push",
+        "run_id": "29418029340",
+        "run_attempt": "1"
+      },
+      {
+        "control": "slsa_provenance",
+        "status": "verified",
+        "evidence": "GitHub SLSA provenance for the exact digest and main workflow identity was retained and verified",
+        "provenance": "https://github.com/TommyKammy/Shirokuma/attestations/35452942",
+        "verification": "bootstrap/seaweedfs/v4.39/evidence/slsa-verify.json",
+        "verification_sha256": "c15d6cd28e0384a4f552305dce6ed029a436dad62cf2f6353514047385ef5a4e",
+        "bundles": "bootstrap/seaweedfs/v4.39/evidence/slsa-bundles.jsonl",
+        "bundles_sha256": "799f3d76f3c3f7c9f94c07243859b20cbf3001b632d7e764f1dd2e097eb5ba49"
+      },
+      {
+        "control": "sbom",
+        "status": "verified",
+        "evidence": "CycloneDX SBOM and its signed attestation bind to the admitted digest",
+        "path": "bootstrap/seaweedfs/v4.39/evidence/seaweedfs-4.39-arm64.cdx.json",
+        "sha256": "79a4c4fce4cf3909a68d1f6bf5eee8bbeb24b2591b05eb92db26ffb9e3ca0a98",
+        "attestation_bundle": "bootstrap/seaweedfs/v4.39/evidence/sbom-attestation-bundle.json",
+        "attestation_bundle_sha256": "4f032f2a5a5769b0f6f96b87d7d6d5ea96e6ad2910f3d37f31aa8f3c10bb2943",
+        "predicate_type": "https://cyclonedx.org/bom"
+      },
+      {
+        "control": "vulnerability_scan",
+        "status": "verified",
+        "evidence": "Trivy reported Critical=0 and High=0 with fresh DB metadata and a signed scan attestation",
+        "critical": 0,
+        "high": 0,
+        "scanner_name": "trivy",
+        "scanner_version": "0.72.0",
+        "vulnerability_db_version": 2,
+        "vulnerability_db_updated_at": "2026-07-15T07:37:19.83151832Z",
+        "vulnerability_db_downloaded_at": "2026-07-15T13:09:58.356834194Z",
+        "path": "bootstrap/seaweedfs/v4.39/evidence/trivy.json",
+        "sha256": "31a64ea3c6d5d4900ca73e05aa9bf4b691dd6541c41da037c02efda5b3792e86",
+        "attestation_bundle": "bootstrap/seaweedfs/v4.39/evidence/trivy-attestation-bundle.json",
+        "attestation_bundle_sha256": "dce4f11ba86f7bac3b45608c4ffa09ddb4033c23239303b7edbfa0b9288ddc77",
+        "predicate_type": "https://shirokuma.dev/attestations/trivy/v1"
+      },
+      {
+        "control": "runtime_tmp",
+        "status": "verified",
+        "evidence": "The exact digest completed the non-root temporary weed mini startup smoke and retained container inspection",
+        "run_id": "29418029340",
+        "run_attempt": "1",
+        "summary": "bootstrap/seaweedfs/v4.39/evidence/runtime-smoke.json",
+        "summary_sha256": "1602ae8403b855fd5d62d664de15db129b03e27455dd2662611e20908577d857",
+        "inspect": "bootstrap/seaweedfs/v4.39/evidence/runtime-container-inspect.json",
+        "inspect_sha256": "ec8985c2793867a8c3fa294ed8d6a2d9c8eee34c39f1dda9dbf415be7c52e156"
+      },
+      {
+        "control": "tag_promotion",
+        "status": "verified",
+        "evidence": "The verified candidate digest was promoted unchanged to the non-authoritative trusted tag",
+        "run_id": "29418029340",
+        "run_attempt": "1",
+        "digest": "sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421",
+        "trusted_tag": "4.39-arm64",
+        "trusted_tag_role": "non_authoritative_pointer",
+        "promotion": "bootstrap/seaweedfs/v4.39/evidence/promotion-evidence.json",
+        "promotion_sha256": "7c8df00b2ef5a449d70d299457ba39bf45e506df2c4f96dd650ce5f542340ced",
+        "candidate": "bootstrap/seaweedfs/v4.39/evidence/candidate-release-evidence.json",
+        "candidate_sha256": "e24239a2cae70d7d19f6af2a4be9a1b9a48dc4c66c0d731e329126f54e8c9fdf"
+      }
+    ]
   },
   "assessment": {
     "assessed_on": "2026-07-15",
     "scope": "mac-studio-solo/local-lab",
-    "admission": "pending_main_publication",
+    "admission": "approved",
     "exception_eligible": false,
-    "blockers": [
-      {
-        "control": "main_branch_publication",
-        "status": "pending",
-        "evidence": "The reviewed source, workflow, contract, and verifier must first merge; only refs/heads/main may publish, sign, and promote the trusted digest."
-      }
-    ],
-    "rationale": "A feature branch may validate the policy but cannot approve its own publisher. The successful bootstrap run is retained as a non-admitted observation; approval requires a fresh main-branch run and an evidence-only follow-up PR."
+    "blockers": [],
+    "rationale": "The Shirokuma-controlled main-branch source build satisfies source adoption, keyless signature, transparency-log, SLSA provenance, SBOM, Critical=0/High=0 scan, runtime smoke, and unchanged tag-promotion controls without an ADR-0019 exception. Runtime deployment remains separately blocked until parent Issue #26 completes its resident-image contract."
   },
   "runtime_manifests": {
     "permitted": false,
     "blockers": [
       {
-        "control": "main_branch_release_evidence",
-        "status": "pending",
-        "evidence": "No current release-evidence.json is admitted until the main-only workflow succeeds and its final artifact is reviewed in a follow-up PR."
-      },
-      {
         "control": "resident_evidence_contract",
         "status": "pending",
-        "evidence": "The parent must add a repository-source-build supply-chain record and prove the proposed SeaweedFS resident-image ledger entry against the admitted main-run evidence."
+        "evidence": "Parent Issue #26 must add the repository source-build supply-chain record, pass check-images, and retain Flux, functional smoke, disk-impact, backup/export, and teardown evidence."
       }
     ],
     "paths": [
@@ -80,14 +199,13 @@
     ]
   },
   "next_action": {
-    "mode": "publish-from-main-then-evidence-pr",
+    "mode": "implement-object-storage-profile",
     "decision_record_required": false,
     "requirements": [
-      "merge the main-only no-cache trusted build policy",
-      "complete the trusted workflow from refs/heads/main",
-      "cryptographically reverify the retained Cosign bundle with pinned Cosign v3.1.1",
-      "commit the complete final artifact and approved admission in an evidence-only follow-up PR",
-      "keep runtime manifests blocked until parent Issue #26 closes its resident-image contract"
+      "add only the admitted immutable digest to the resident image ledger",
+      "add the repository source-build supply-chain record and pass scripts/verify_supply_chain.py check-images",
+      "add Flux-managed runtime resources in parent Issue #26",
+      "preserve backup, disk-impact, readiness, functional smoke, and teardown controls"
     ]
   }
 }

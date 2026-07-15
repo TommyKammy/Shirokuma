@@ -73,6 +73,99 @@ class TrustedImageContractTests(unittest.TestCase):
             else:
                 shutil.copy2(ROOT / relative, target)
 
+    def _write_pending_admission(self, root: Path) -> None:
+        approved = json.loads(
+            (root / verifier.ADMISSION_PATH).read_text(encoding="utf-8")
+        )
+        contract_path = root / verifier.CONTRACT_PATH
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        source_path = root / verifier.SOURCE_PATH
+        pending = {
+            "schema_version": 3,
+            "component": contract["component"],
+            "version": contract["version"],
+            "platform": contract["platform"],
+            "upstream_candidate": approved["upstream_candidate"],
+            "upstream_assessment": approved["upstream_assessment"],
+            "lifecycle": {
+                "phase": contract["admission"]["pending_state"],
+                "publisher_ref": contract["admission"]["publisher_ref"],
+                "workflow": contract["workflow"]["path"],
+                "workflow_sha256": contract["workflow"]["sha256"],
+                "contract": verifier.CONTRACT_PATH.as_posix(),
+                "contract_sha256": hashlib.sha256(
+                    contract_path.read_bytes()
+                ).hexdigest(),
+                "source": verifier.SOURCE_PATH.as_posix(),
+                "source_sha256": hashlib.sha256(
+                    source_path.read_bytes()
+                ).hexdigest(),
+                "transition": contract["admission"]["evidence_transition"],
+            },
+            "bootstrap_observation": {
+                "run": (
+                    "https://github.com/TommyKammy/Shirokuma/actions/runs/"
+                    "29379475587/attempts/1"
+                ),
+                "source_sha": "1ed307a3cc57bd92a99fb6ce7c64ddcacd932c49",
+                "digest": (
+                    "sha256:"
+                    "027be5ea9a172bbe2c29adb8928061b89ceb2a11261f5248a77653070b106d6d"
+                ),
+                "artifact": "seaweedfs-4.39-arm64-29379475587-1",
+                "attestation": (
+                    "https://github.com/TommyKammy/Shirokuma/attestations/35365038"
+                ),
+                "disposition": "not_admitted_branch_publication",
+            },
+            "assessment": {
+                "assessed_on": "2026-07-15",
+                "scope": "mac-studio-solo/local-lab",
+                "admission": contract["admission"]["pending_state"],
+                "exception_eligible": False,
+                "blockers": [
+                    {
+                        "control": "main_branch_publication",
+                        "status": "pending",
+                        "evidence": "Only a reviewed main publication may approve.",
+                    }
+                ],
+                "rationale": "Main publication evidence is not yet admitted.",
+            },
+            "runtime_manifests": {
+                "permitted": False,
+                "blockers": [
+                    {
+                        "control": "main_branch_release_evidence",
+                        "status": "pending",
+                        "evidence": "No main release evidence is admitted.",
+                    },
+                    {
+                        "control": "resident_evidence_contract",
+                        "status": "pending",
+                        "evidence": "Parent Issue #26 remains incomplete.",
+                    },
+                ],
+                "paths": [
+                    "deploy/gitops/object-storage/kustomization.yaml",
+                    "deploy/gitops/clusters/local-lite/object-storage.yaml",
+                ],
+            },
+            "next_action": {
+                "mode": "publish-from-main-then-evidence-pr",
+                "decision_record_required": False,
+                "requirements": [
+                    "publish from main",
+                    "retain complete evidence",
+                    "review the evidence-only transition",
+                    "keep runtime blocked until parent completion",
+                ],
+            },
+        }
+        (root / verifier.ADMISSION_PATH).write_text(
+            json.dumps(pending), encoding="utf-8"
+        )
+
     def _assert_mutation_fails(
         self,
         mutate: Callable[[Path], None],
@@ -155,22 +248,23 @@ class TrustedImageContractTests(unittest.TestCase):
                 value = value[key]  # type: ignore[index]
 
     def test_pending_repository_audit_is_explicit_and_fail_closed(self) -> None:
-        with mock.patch.object(
-            verifier.shutil,
-            "which",
-            side_effect=AssertionError("pending audit must not look up Cosign"),
-        ):
-            admission = verifier.validate_repository_audit(ROOT)
-        self.assertEqual(
-            admission["assessment"]["admission"], "pending_main_publication"
-        )
-        with self.assertRaises(verifier.ContractError) as caught:
-            verifier.validate_release_bundle(ROOT, require_promotion=True)
-        self.assertEqual(caught.exception.code, "EVIDENCE_MISSING")
-
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._copy_static_tree(root)
+            self._write_pending_admission(root)
+            with mock.patch.object(
+                verifier.shutil,
+                "which",
+                side_effect=AssertionError("pending audit must not look up Cosign"),
+            ):
+                admission = verifier.validate_repository_audit(root)
+            self.assertEqual(
+                admission["assessment"]["admission"], "pending_main_publication"
+            )
+            with self.assertRaises(verifier.ContractError) as caught:
+                verifier.validate_release_bundle(root, require_promotion=True)
+            self.assertEqual(caught.exception.code, "EVIDENCE_MISSING")
+
             path = root / verifier.ADMISSION_PATH
             data = json.loads(path.read_text(encoding="utf-8"))
             data["bootstrap_observation"]["disposition"] = "approved"
@@ -182,16 +276,32 @@ class TrustedImageContractTests(unittest.TestCase):
     def test_pending_repository_audit_extracts_the_retained_vendor_bundle(
         self,
     ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._copy_static_tree(root)
+            self._write_pending_admission(root)
+            with mock.patch.object(
+                verifier.package_go_vendor,
+                "verify_package",
+            ) as verify:
+                verifier.validate_repository_audit(root)
+            verify.assert_called_once()
+            self.assertIs(
+                verify.call_args.kwargs["verify_archive_contents"],
+                True,
+            )
+
+    def test_approved_repository_audit_routes_to_release_verification(
+        self,
+    ) -> None:
         with mock.patch.object(
-            verifier.package_go_vendor,
-            "verify_package",
-        ) as verify:
-            verifier.validate_repository_audit(ROOT)
-        verify.assert_called_once()
-        self.assertIs(
-            verify.call_args.kwargs["verify_archive_contents"],
-            True,
-        )
+            verifier,
+            "validate_release_bundle",
+            return_value={"admission_status": "approved"},
+        ) as validate:
+            release = verifier.validate_repository_audit(ROOT)
+        validate.assert_called_once_with(ROOT.resolve(), require_promotion=True)
+        self.assertEqual(release["admission_status"], "approved")
 
     def test_contract_mutations_fail_with_stable_error_codes(self) -> None:
         def rebind_workflow_and_contract(root: Path) -> None:
@@ -205,12 +315,13 @@ class TrustedImageContractTests(unittest.TestCase):
 
             admission_path = root / verifier.ADMISSION_PATH
             admission = json.loads(admission_path.read_text(encoding="utf-8"))
-            admission["lifecycle"]["workflow_sha256"] = contract["workflow"][
-                "sha256"
-            ]
-            admission["lifecycle"]["contract_sha256"] = hashlib.sha256(
-                contract_path.read_bytes()
-            ).hexdigest()
+            if "lifecycle" in admission:
+                admission["lifecycle"]["workflow_sha256"] = contract["workflow"][
+                    "sha256"
+                ]
+                admission["lifecycle"]["contract_sha256"] = hashlib.sha256(
+                    contract_path.read_bytes()
+                ).hexdigest()
             admission_path.write_text(json.dumps(admission), encoding="utf-8")
 
         def replace_and_rehash_containerfile(
@@ -534,9 +645,10 @@ class TrustedImageContractTests(unittest.TestCase):
 
             admission_path = root / verifier.ADMISSION_PATH
             admission = json.loads(admission_path.read_text(encoding="utf-8"))
-            admission["lifecycle"]["source_sha256"] = hashlib.sha256(
-                source_path.read_bytes()
-            ).hexdigest()
+            if "lifecycle" in admission:
+                admission["lifecycle"]["source_sha256"] = hashlib.sha256(
+                    source_path.read_bytes()
+                ).hexdigest()
             admission_path.write_text(json.dumps(admission), encoding="utf-8")
 
         def shadow_source_commit_with_flow_env_and_rebind(root: Path) -> None:

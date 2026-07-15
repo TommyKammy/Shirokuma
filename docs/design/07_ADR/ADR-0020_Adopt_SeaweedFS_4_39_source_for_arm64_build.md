@@ -5,7 +5,7 @@ title: "Adopt SeaweedFS 4.39 source for the bounded arm64 build"
 status: accepted
 created: 2026-07-14
 updated: 2026-07-15
-version: "0.3"
+version: "0.4"
 area: "architecture"
 tags: [shirokuma, adr, seaweedfs, arm64, supply-chain]
 ---
@@ -234,10 +234,19 @@ builder policy and release evidence:
    changes admission to `approved`, and performs pinned Cosign cryptographic
    reverification.
 
-No current digest is admitted during phase 1. `release-evidence.json` and the
-generated evidence set are intentionally absent, and runtime manifests remain
-blocked. This avoids treating evidence created by the same unmerged branch that
-defined its publisher as approval authority.
+Phase 2 completed from main run
+[`29418029340`, attempt 1](https://github.com/TommyKammy/Shirokuma/actions/runs/29418029340/attempts/1).
+The final artifact `seaweedfs-4.39-arm64-29418029340-1` and SLSA
+[`attestation 35452942`](https://github.com/TommyKammy/Shirokuma/attestations/35452942)
+admit
+`ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421`.
+Runtime manifests remain blocked until parent Issue #26 completes the resident
+source-build contract.
+
+During phase 1 no current digest was admitted: `release-evidence.json` and the
+generated evidence set were intentionally absent. This avoided treating
+evidence created by the same unmerged branch that defined its publisher as
+approval authority.
 
 Bootstrap run
 [`29379475587`, attempt 1](https://github.com/TommyKammy/Shirokuma/actions/runs/29379475587/attempts/1)

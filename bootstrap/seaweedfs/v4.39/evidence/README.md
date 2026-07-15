@@ -11,14 +11,15 @@ The lifecycle is deliberately split into two reviewed phases:
 2. let the merged workflow publish from `main`, then copy its complete final
    artifact into this directory in an evidence-only follow-up PR.
 
-Until phase 2 completes, `../admission.json` is
-`pending_main_publication`, `../release-evidence.json` is absent, and runtime
-manifests remain forbidden. A successful feature-branch bootstrap run may be
-recorded for diagnostic value, but it is never admission authority.
-This pending audit validates the complete static contract without requiring a
-local Cosign binary. Cosign becomes mandatory only after evidence is admitted,
-when the verifier can and must cryptographically revalidate the retained
-bundles.
+Phase 2 completed from main run
+[`29418029340`, attempt 1](https://github.com/TommyKammy/Shirokuma/actions/runs/29418029340/attempts/1).
+The admitted immutable digest is
+`sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421`;
+the complete final artifact is `seaweedfs-4.39-arm64-29418029340-1`.
+`../admission.json` is now `approved`, and repository audit uses pinned
+Cosign v3.1.1 to cryptographically revalidate every retained bundle.
+Runtime manifests remain forbidden until parent Issue #26 adds the resident
+supply-chain record and passes `check-images`.
 
 Before any trusted build, the static verifier binds the workflow's global
 source commit, tree, and archive digest and its checkout repository/ref to
