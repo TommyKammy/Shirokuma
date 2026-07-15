@@ -22,6 +22,8 @@ prepare: verify-design-context
 
 verify-security:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_supply_chain_security.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_trivyignore.py'
+	@$(PYTHON) scripts/verify_trivyignore.py
 	@$(PYTHON) scripts/verify_supply_chain.py scan-secrets --repo .
 	@$(PYTHON) scripts/verify_supply_chain.py check-images --manifest security/resident-images.json --repo . --profile local-lab --exceptions security/resident-image-exceptions.json
 	@$(PYTHON) scripts/verify_trusted_image.py audit --root .
@@ -155,6 +157,8 @@ check-required-files:
 	@test -f scripts/preflight_supervisor_issues.py
 	@test -x scripts/colima_baseline.sh
 	@test -f scripts/verify_supply_chain.py
+	@test -f scripts/verify_trivyignore.py
+	@test -f .trivyignore.yaml
 	@test -f scripts/verify_policy_exceptions.py
 	@test -f security/resident-images.json
 	@test -f security/resident-image-exceptions.json

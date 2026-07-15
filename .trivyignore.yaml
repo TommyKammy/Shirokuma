@@ -1,0 +1,11 @@
+misconfigurations:
+  - id: KSV-0041
+    paths:
+      - deploy/gitops/clusters/local-lite/flux-system/gotk-components.yaml
+    statement: "Flux v2.9.2 generates cluster-scoped controller RBAC that reads credential, decryption, and provider Secrets for reconciliation; this path-scoped exception is limited to the single-user local lab while the upstream RBAC surface is reviewed."
+    expired_at: 2026-08-14
+  - id: KSV-0046
+    paths:
+      - deploy/gitops/clusters/local-lite/flux-system/gotk-components.yaml
+    statement: "Flux v2.9.2 generates cluster-scoped controller RBAC for reconciliation; this path-scoped exception is limited to the single-user local lab while the upstream RBAC surface is reviewed."
+    expired_at: 2026-08-14
