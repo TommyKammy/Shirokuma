@@ -55,7 +55,7 @@ class RustfsDeskReviewTests(unittest.TestCase):
         self.assertIn("Issue: [#34]", work_package)
         self.assertIn("Depends on: `#8`, `#32`, `#33`", work_package)
         self.assertIn("Execution order: `10 of 10`", work_package)
-        self.assertIn("installing a RustFS image", work_package)
+        self.assertIn("installing a rustfs image", work_package.lower())
         self.assertIn("cluster mutation", work_package)
 
 

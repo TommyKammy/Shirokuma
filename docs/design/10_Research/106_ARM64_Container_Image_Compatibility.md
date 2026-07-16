@@ -5,7 +5,7 @@ title: "ARM64 Container Image Compatibility"
 status: draft
 created: 2026-07-05
 updated: 2026-07-16
-version: "0.9"
+version: "0.10"
 area: "research"
 tags: [shirokuma, arm64, apple-silicon]
 ---
@@ -132,7 +132,7 @@ their later Work Packages.
 | Component | Image / Deployment | ARM64 status | v0.2 decision | Source / note |
 |---|---|---|---|---|
 | MinIO | `minio/minio` or source build | Repo archived/no longer maintained/source-only; arm64 may work only for pinned legacy/source builds | fallback only | https://github.com/minio/minio |
-| RustFS | project image | Verify selected tag and maturity | experiment | https://github.com/rustfs/rustfs |
+| RustFS | `rustfs/rustfs:1.0.0-beta.9@sha256:f75d0bca6ca322c4e59f7125f73dd9ab709b22f71396a42c95bce7f74c99e53b` (desk-review observation only; no pull) | Registry index inspected 2026-07-16 contains `linux/arm64` child `sha256:4096ed795289d07b8a81711cf30cf3645230e932154f50c7946015bb85ab129a`; versioned GNU/musl aarch64 release assets also exist | remain experimental; prerelease, signer trust, retained SBOM/scan with High=0/Critical=0, and S3/Iceberg smoke are unresolved | [desk review](108_RustFS_Maturity_Assessment.md), [release](https://github.com/rustfs/rustfs/releases/tag/1.0.0-beta.9), [image tags](https://hub.docker.com/r/rustfs/rustfs/tags) |
 | Cube Core | container image | Verify selected tag before L3 | L3 | https://github.com/cube-js/cube |
 | Superset | official image/chart | Verify selected tag before L1 | L1 | https://superset.apache.org |
 | Dagster | official image | Verify selected tag before L1 | L1 | https://github.com/dagster-io/dagster |
