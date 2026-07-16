@@ -924,27 +924,40 @@ def _is_trino_workload(
     document: str,
     release_path: Path | None = None,
     chart_references: HelmChartReferences | None = None,
+    admitted_images: set[str] | None = None,
 ) -> bool:
     scalar_items = _document_scalars(document)
     scalars = dict(scalar_items)
+    container_images = {
+        value
+        for path, value in scalar_items
+        if path == ("spec", "template", "spec", "containers", "image")
+    }
     if scalars.get(("kind",)) == "HelmRelease":
         return _is_component_helm_release(
             document,
             _has_trino_identity,
+            admitted_images,
             release_path=release_path,
             chart_references=chart_references,
         )
-    return scalars.get(("kind",)) in WORKLOAD_KINDS and any(
-        _has_trino_identity(scalars.get(path))
-        for path in (
-            ("metadata", "name"),
-            ("metadata", "labels", "app.kubernetes.io/name"),
+    return (
+        scalars.get(("kind",)) in WORKLOAD_KINDS
+        and any(
+            _has_trino_identity(scalars.get(path))
+            for path in (
+                ("metadata", "name"),
+                ("metadata", "labels", "app.kubernetes.io/name"),
+            )
         )
+        and (admitted_images is None or bool(container_images & admitted_images))
     )
 
 
 def _trino_workload_manifests(
-    deploy_root: Path = DEPLOY_ROOT, charts_root: Path = CHARTS_ROOT
+    deploy_root: Path = DEPLOY_ROOT,
+    charts_root: Path = CHARTS_ROOT,
+    admitted_images: set[str] | None = None,
 ) -> list[Path]:
     workloads = []
     chart_references = _helm_chart_references(deploy_root, charts_root)
@@ -953,7 +966,12 @@ def _trino_workload_manifests(
             r"(?m)^---[ \t]*(?:#.*)?$", path.read_text(encoding="utf-8")
         )
         if any(
-            _is_trino_workload(document, path, chart_references)
+            _is_trino_workload(
+                document,
+                path,
+                chart_references,
+                admitted_images,
+            )
             for document in documents
         ):
             workloads.append(_display_path(path))
@@ -1125,6 +1143,68 @@ class TrinoWorkloadDetectionTests(unittest.TestCase):
             with self.subTest(kind=kind, identity=identity):
                 manifest = f"kind: {kind}\nmetadata:\n{identity}\n"
                 self.assertTrue(_is_trino_workload(manifest))
+
+    def test_admission_aware_detection_requires_the_admitted_image(self) -> None:
+        admitted_image = "registry.example/trino@sha256:" + "a" * 64
+        manifest = (
+            "apiVersion: apps/v1\n"
+            "kind: Deployment\n"
+            "metadata:\n"
+            "  name: trino\n"
+            "spec:\n"
+            "  template:\n"
+            "    spec:\n"
+            "      containers:\n"
+            "        - name: trino\n"
+            f"          image: {admitted_image}\n"
+        )
+
+        self.assertFalse(
+            _is_trino_workload(
+                manifest,
+                admitted_images={"registry.example/trino@sha256:" + "b" * 64},
+            )
+        )
+        self.assertTrue(
+            _is_trino_workload(manifest, admitted_images={admitted_image})
+        )
+
+    def test_admission_aware_helmrelease_requires_the_admitted_image(self) -> None:
+        admitted_image = "registry.example/trino@sha256:" + "a" * 64
+        manifest = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: trino\n"
+            "spec:\n"
+            "  chart:\n"
+            "    spec:\n"
+            "      chart: trino\n"
+            "      sourceRef:\n"
+            "        kind: HelmRepository\n"
+            "        name: trino\n"
+            "  values:\n"
+            "    image:\n"
+            f"      reference: {admitted_image}\n"
+        )
+        chart_references = {
+            ("HelmRepository", "default", "trino"): ("trino",)
+        }
+
+        self.assertFalse(
+            _is_trino_workload(
+                manifest,
+                chart_references=chart_references,
+                admitted_images={"registry.example/trino@sha256:" + "b" * 64},
+            )
+        )
+        self.assertTrue(
+            _is_trino_workload(
+                manifest,
+                chart_references=chart_references,
+                admitted_images={admitted_image},
+            )
+        )
 
     def test_accepts_flux_helmrelease_identity(self) -> None:
         identities = (
