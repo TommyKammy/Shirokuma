@@ -61,7 +61,11 @@ def _helm_release_uses_admitted_image(
     for reference in admitted_images:
         repository, separator, digest = reference.rpartition("@")
         if reference in values or (
-            separator and repository in values and digest in values
+            separator
+            and any(
+                {repository, digest} <= grouped_values
+                for grouped_values in values_by_parent.values()
+            )
         ):
             return True
         registry, slash, repository_path = repository.partition("/")
@@ -121,6 +125,17 @@ def _yaml_sequence_values(document: str, target_path: tuple[str, ...]) -> list[s
             if not match.group("value").strip():
                 stack.append((indent, key))
             continue
+
+        inline_value = match.group("value").strip()
+        if inline_value:
+            inline_match = re.fullmatch(r"\[(?P<values>.*)\](?:\s+#.*)?", inline_value)
+            if inline_match is None:
+                return []
+            values = [
+                _strip_yaml_scalar(item)
+                for item in inline_match.group("values").split(",")
+            ]
+            return values if values and all(values) else []
 
         values: list[str] = []
         for candidate in lines[index + 1 :]:
@@ -411,6 +426,7 @@ def _scoped_helm_resource(
         )
         if scoped is not None:
             return scoped
+        return resources.get((kind, namespace, name))
     unscoped = resources.get((kind, namespace, name))
     if unscoped is not None:
         return unscoped
@@ -471,7 +487,7 @@ def _local_chart_value_items(
     )
     values_files = declared_values_files or ["values.yaml"]
     if not chart_root.is_dir():
-        return None if declared_values_files else []
+        return None
     items: list[tuple[tuple[str, ...], str]] = []
     for values_file in values_files:
         candidate = (chart_root / values_file).resolve()
@@ -490,7 +506,9 @@ def _local_chart_value_items(
     return items
 
 
-def _postrenderer_image_references(document: str) -> tuple[str, ...]:
+def _postrenderer_images(
+    document: str,
+) -> tuple[tuple[str, str | None], ...]:
     prefix = ("spec", "postRenderers", "kustomize", "images")
     images: list[dict[str, str]] = []
     current: dict[str, str] | None = None
@@ -507,13 +525,15 @@ def _postrenderer_image_references(document: str) -> tuple[str, ...]:
     if current is not None:
         images.append(current)
 
-    references = []
+    replacements = []
     for image in images:
+        name = image.get("name")
         repository = image.get("newName", image.get("name"))
         digest = image.get("digest")
-        if repository and digest:
-            references.append(f"{repository}@{digest}")
-    return tuple(references)
+        if name:
+            reference = f"{repository}@{digest}" if repository and digest else None
+            replacements.append((name, reference))
+    return tuple(replacements)
 
 
 def _effective_helm_value_items(
@@ -527,26 +547,25 @@ def _effective_helm_value_items(
     if chart_items is None:
         return None
     _merge_helm_value_items(effective, chart_items)
-    if values_sources:
-        for kind, name, values_key, target_path in _values_from_references(document):
-            namespace = dict(_document_scalars(document)).get(
-                ("metadata", "namespace"), "default"
-            )
-            source = _scoped_helm_resource(
-                values_sources, kind, namespace, name, release_path
-            )
-            if not isinstance(source, dict) or values_key not in source:
-                return None
-            content = source[values_key]
-            if target_path:
-                path = tuple(part for part in target_path.split(".") if part)
-                items = [(('spec', 'values', *path), content.strip())]
-            else:
-                items = [
-                    (("spec", "values", *path), value)
-                    for path, value in _document_scalars(content)
-                ]
-            _merge_helm_value_items(effective, items)
+    for kind, name, values_key, target_path in _values_from_references(document):
+        namespace = dict(_document_scalars(document)).get(
+            ("metadata", "namespace"), "default"
+        )
+        source = _scoped_helm_resource(
+            values_sources or {}, kind, namespace, name, release_path
+        )
+        if not isinstance(source, dict) or values_key not in source:
+            return None
+        content = source[values_key]
+        if target_path:
+            path = tuple(part for part in target_path.split(".") if part)
+            items = [(('spec', 'values', *path), content.strip())]
+        else:
+            items = [
+                (("spec", "values", *path), value)
+                for path, value in _document_scalars(content)
+            ]
+        _merge_helm_value_items(effective, items)
     inline_items = [
         (path, value)
         for path, value in _document_scalars(document)
@@ -582,15 +601,21 @@ def _is_component_helm_release(
         return False
     if admitted_images is None:
         return True
-    postrenderer_images = _postrenderer_image_references(document)
-    if postrenderer_images:
-        return bool(set(postrenderer_images) & admitted_images)
     effective_items = _effective_helm_value_items(
         document, values_sources, release_path, charts_root
     )
-    return effective_items is not None and _helm_release_uses_admitted_image(
-        effective_items, admitted_images
+    uses_admitted_image = (
+        effective_items is not None
+        and _helm_release_uses_admitted_image(effective_items, admitted_images)
     )
+    component_replacements = [
+        reference
+        for name, reference in _postrenderer_images(document)
+        if identity_matcher(name) or identity_matcher(PurePosixPath(name).name)
+    ]
+    if component_replacements:
+        return any(reference in admitted_images for reference in component_replacements)
+    return uses_admitted_image
 
 
 def _is_trino_workload(
@@ -675,8 +700,16 @@ def _is_postgresql_workload(
             charts_root,
             chart_references,
         )
-    return scalars.get(("kind",)) in WORKLOAD_KINDS and bool(
-        container_images & admitted_images
+    return (
+        scalars.get(("kind",)) in WORKLOAD_KINDS
+        and any(
+            _has_postgresql_identity(scalars.get(path))
+            for path in (
+                ("metadata", "name"),
+                ("metadata", "labels", "app.kubernetes.io/name"),
+            )
+        )
+        and bool(container_images & admitted_images)
     )
 
 
@@ -859,7 +892,6 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
         for kind, identity in (
             ("Deployment", "  name: postgresql"),
             ("StatefulSet", "  labels:\n    app.kubernetes.io/name: postgres"),
-            ("Deployment", "  name: metadata-store"),
         ):
             with self.subTest(kind=kind, identity=identity):
                 manifest = (
@@ -909,6 +941,23 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
         )
         self.assertTrue(_is_postgresql_workload(manifest, {image}))
 
+    def test_rejects_image_fields_split_across_value_groups(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        manifest = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: postgresql\n"
+            "spec:\n"
+            "  values:\n"
+            "    main:\n"
+            "      repository: registry.example/postgresql\n"
+            "    sidecar:\n"
+            f"      digest: sha256:{'c' * 64}\n"
+        )
+
+        self.assertFalse(_is_postgresql_workload(manifest, {image}))
+
     def test_accepts_values_from_configmap_with_admitted_image(self) -> None:
         image = "cgr.dev/chainguard/postgres@sha256:" + "c" * 64
         values = (
@@ -936,7 +985,7 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
             "spec:\n"
             "  chart:\n"
             "    spec:\n"
-            "      chart: ./charts/postgresql\n"
+            "      chart: postgresql\n"
             "  valuesFrom:\n"
             "    - kind: ConfigMap\n"
             "      name: postgresql-values\n"
@@ -1003,6 +1052,45 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
 
         self.assertEqual(workloads, [admitted_manifest])
 
+    def test_values_from_does_not_bind_to_another_overlay(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        source = (
+            "apiVersion: v1\n"
+            "kind: ConfigMap\n"
+            "metadata:\n"
+            "  name: postgresql-values\n"
+            "data:\n"
+            "  values.yaml: |\n"
+            "    image:\n"
+            f"      reference: {image}\n"
+        )
+        release = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: postgresql\n"
+            "spec:\n"
+            "  valuesFrom:\n"
+            "    - kind: ConfigMap\n"
+            "      name: postgresql-values\n"
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            deploy_root = Path(temporary_directory) / "deploy"
+            charts_root = Path(temporary_directory) / "charts"
+            overlay_a = deploy_root / "overlay-a"
+            overlay_b = deploy_root / "overlay-b"
+            overlay_a.mkdir(parents=True)
+            overlay_b.mkdir(parents=True)
+            charts_root.mkdir()
+            (overlay_a / "release.yaml").write_text(release, encoding="utf-8")
+            (overlay_b / "values.yaml").write_text(source, encoding="utf-8")
+
+            workloads = _postgresql_workload_manifests(
+                deploy_root, charts_root, {image}
+            )
+
+        self.assertEqual(workloads, [])
+
     def test_accepts_local_chart_effective_values(self) -> None:
         image = "registry.example/postgresql@sha256:" + "c" * 64
         cases = (
@@ -1039,6 +1127,66 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
                 )
 
             self.assertEqual(workloads, [release])
+
+    def test_inline_values_files_override_default_chart_values(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        other_image = "registry.example/other@sha256:" + "d" * 64
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            deploy_root = Path(temporary_directory) / "deploy"
+            charts_root = Path(temporary_directory) / "charts"
+            chart_root = charts_root / "postgresql"
+            deploy_root.mkdir()
+            chart_root.mkdir(parents=True)
+            (chart_root / "values.yaml").write_text(
+                f"image:\n  reference: {image}\n", encoding="utf-8"
+            )
+            (chart_root / "values-arm64.yaml").write_text(
+                f"image:\n  reference: {other_image}\n", encoding="utf-8"
+            )
+            release = deploy_root / "postgresql.yaml"
+            release.write_text(
+                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+                "kind: HelmRelease\n"
+                "metadata:\n"
+                "  name: postgresql\n"
+                "spec:\n"
+                "  chart:\n"
+                "    spec:\n"
+                "      chart: ./charts/postgresql\n"
+                "      valuesFiles: [values-arm64.yaml]\n",
+                encoding="utf-8",
+            )
+
+            workloads = _postgresql_workload_manifests(
+                deploy_root, charts_root, {image}
+            )
+
+        self.assertEqual(workloads, [])
+
+    def test_missing_local_chart_rejects_inline_image_values(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        manifest = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: postgresql\n"
+            "spec:\n"
+            "  chart:\n"
+            "    spec:\n"
+            "      chart: ./charts/postgresql\n"
+            "  values:\n"
+            "    image:\n"
+            f"      reference: {image}\n"
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            charts_root = Path(temporary_directory) / "charts"
+            charts_root.mkdir()
+
+            self.assertFalse(
+                _is_postgresql_workload(
+                    manifest, {image}, charts_root=charts_root
+                )
+            )
 
     def test_rejects_admitted_image_overridden_by_later_helm_values(self) -> None:
         image = "registry.example/postgresql@sha256:" + "c" * 64
@@ -1103,6 +1251,48 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
 
         self.assertTrue(_is_postgresql_workload(release, {image}))
 
+    def test_unrelated_postrenderer_preserves_admitted_component_image(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        release = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: postgresql\n"
+            "spec:\n"
+            "  values:\n"
+            "    image:\n"
+            f"      reference: {image}\n"
+            "  postRenderers:\n"
+            "    - kustomize:\n"
+            "        images:\n"
+            "          - name: metrics-sidecar\n"
+            "            newName: registry.example/metrics-sidecar\n"
+            f"            digest: sha256:{'d' * 64}\n"
+        )
+
+        self.assertTrue(_is_postgresql_workload(release, {image}))
+
+    def test_component_postrenderer_overrides_admitted_values(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        release = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: postgresql\n"
+            "spec:\n"
+            "  values:\n"
+            "    image:\n"
+            f"      reference: {image}\n"
+            "  postRenderers:\n"
+            "    - kustomize:\n"
+            "        images:\n"
+            "          - name: postgresql\n"
+            "            newName: registry.example/other\n"
+            f"            digest: sha256:{'d' * 64}\n"
+        )
+
+        self.assertFalse(_is_postgresql_workload(release, {image}))
+
     def test_values_from_requires_the_referenced_source_and_namespace(self) -> None:
         image = "registry.example/postgresql@sha256:" + "c" * 64
         release = (
@@ -1123,6 +1313,24 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
         self.assertFalse(
             _is_postgresql_workload(release, {image}, unbound_sources)
         )
+
+    def test_values_from_requires_a_discovered_source(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        release = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: postgresql\n"
+            "spec:\n"
+            "  valuesFrom:\n"
+            "    - kind: ConfigMap\n"
+            "      name: missing-values\n"
+            "  values:\n"
+            "    image:\n"
+            f"      reference: {image}\n"
+        )
+
+        self.assertFalse(_is_postgresql_workload(release, {image}, {}))
 
     def test_rejects_postgresql_resource_without_workload_or_admission(self) -> None:
         image = "registry.example/postgresql@sha256:" + "c" * 64
@@ -1155,6 +1363,17 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
                 "        - image: registry.example/other@sha256:"
                 + "d" * 64
                 + "\n",
+                {image},
+            ),
+            (
+                "kind: StatefulSet\n"
+                "metadata:\n"
+                "  name: unrelated-cache\n"
+                "spec:\n"
+                "  template:\n"
+                "    spec:\n"
+                "      containers:\n"
+                f"        - image: {image}\n",
                 {image},
             ),
         )
