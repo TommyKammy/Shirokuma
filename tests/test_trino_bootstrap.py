@@ -35,6 +35,14 @@ HELM_RELEASE_IDENTITY_PATHS = (
 )
 HELM_VALUES_SOURCE_KINDS = {"ConfigMap", "Secret"}
 HELM_CHART_REF_KINDS = {"ExternalArtifact", "HelmChart", "OCIRepository"}
+HELM_IMAGE_VALUE_KEYS = {
+    "digest",
+    "image",
+    "name",
+    "reference",
+    "registry",
+    "repository",
+}
 HelmResourceKey = tuple[object, ...]
 HelmValuesSources = dict[HelmResourceKey, dict[str, str]]
 HelmChartReferences = dict[HelmResourceKey, tuple[str, ...]]
@@ -46,14 +54,25 @@ def _has_trino_identity(value: str | None) -> bool:
     )
 
 
+def _is_helm_image_value_path(path: tuple[str, ...]) -> bool:
+    value_path = tuple(part.lower() for part in path[2:])
+    if not ({"image", "images"} & set(value_path)):
+        return False
+    return value_path[-1] in HELM_IMAGE_VALUE_KEYS or (
+        len(value_path) >= 2 and value_path[-2] == "images"
+    )
+
+
 def _helm_release_uses_admitted_image(
     scalar_items: list[tuple[tuple[str, ...], str]], admitted_images: set[str]
 ) -> bool:
-    value_items = [
-        (path, value)
-        for path, value in scalar_items
-        if path[:2] == ("spec", "values")
-    ]
+    value_items: list[tuple[tuple[str, ...], str]] = []
+    for path, value in scalar_items:
+        if path[:2] != ("spec", "values"):
+            continue
+        for expanded_path, expanded_value in _yaml_flow_mapping_items(value, path):
+            if _is_helm_image_value_path(expanded_path):
+                value_items.append((expanded_path, expanded_value))
     values = {value for _, value in value_items}
     values_by_parent: dict[tuple[str, ...], set[str]] = {}
     for path, value in value_items:
@@ -209,6 +228,18 @@ def _yaml_flow_mapping_items(
     for key, nested_value in mapping.items():
         items.extend(_yaml_flow_mapping_items(nested_value, (*prefix, key)))
     return items
+
+
+def _yaml_flow_sequence_mappings(value: str) -> list[dict[str, str]]:
+    value = value.strip()
+    if not (value.startswith("[") and value.endswith("]")):
+        return []
+    mappings = [
+        _yaml_flow_mapping(item) for item in _split_yaml_flow_items(value[1:-1])
+    ]
+    if not mappings or any(mapping is None for mapping in mappings):
+        return []
+    return [mapping for mapping in mappings if mapping is not None]
 
 
 def _values_from_references(
@@ -745,6 +776,11 @@ def _yaml_postrenderer_images(document: str) -> list[dict[str, str]]:
         ):
             continue
 
+        inline_value = match.group("value").strip()
+        if inline_value:
+            images.extend(_yaml_flow_sequence_mappings(inline_value))
+            continue
+
         images_indent = indent
         current: dict[str, str] | None = None
         for candidate in lines[index + 1 :]:
@@ -753,6 +789,10 @@ def _yaml_postrenderer_images(document: str) -> list[dict[str, str]]:
             candidate_indent = len(candidate) - len(candidate.lstrip(" "))
             if candidate_indent <= images_indent:
                 break
+            inline_item_match = re.match(
+                r"^[ ]*-[ ]*(?P<value>\{.*\})[ ]*(?:#.*)?$",
+                candidate,
+            )
             item_match = re.match(
                 r"^[ ]*-[ ]*(?P<key>[^:#][^:]*):(?P<value>.*)$",
                 candidate,
@@ -761,7 +801,14 @@ def _yaml_postrenderer_images(document: str) -> list[dict[str, str]]:
                 r"^[ ]*(?P<key>[^:#][^:]*):(?P<value>.*)$",
                 candidate,
             )
-            if item_match is not None:
+            if inline_item_match is not None:
+                if current is not None:
+                    images.append(current)
+                    current = None
+                mapping = _yaml_flow_mapping(inline_item_match.group("value"))
+                if mapping is not None:
+                    images.append(mapping)
+            elif item_match is not None:
                 if current is not None:
                     images.append(current)
                 current = {
@@ -1235,6 +1282,23 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
 
         self.assertFalse(_is_postgresql_workload(manifest, {image}))
 
+    def test_rejects_admitted_digest_outside_image_values(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        other_image = "registry.example/postgresql@sha256:" + "d" * 64
+        manifest = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: postgresql\n"
+            "spec:\n"
+            "  values:\n"
+            "    image:\n"
+            f"      reference: {other_image}\n"
+            f"      note: {image}\n"
+        )
+
+        self.assertFalse(_is_postgresql_workload(manifest, {image}))
+
     def test_accepts_values_from_configmap_with_admitted_image(self) -> None:
         image = "cgr.dev/chainguard/postgres@sha256:" + "c" * 64
         values = (
@@ -1608,6 +1672,33 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
 
         self.assertFalse(_is_postgresql_workload(release, {image}))
 
+    def test_inline_postrenderer_overrides_admitted_values(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        inline_images = (
+            "        images: [{name: postgresql, newName: registry.example/other, "
+            f"digest: sha256:{'d' * 64}}}]\n",
+            "        images:\n"
+            "          - {name: postgresql, newName: registry.example/other, "
+            f"digest: sha256:{'d' * 64}}}\n",
+        )
+        for images in inline_images:
+            with self.subTest(images=images):
+                release = (
+                    "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+                    "kind: HelmRelease\n"
+                    "metadata:\n"
+                    "  name: postgresql\n"
+                    "spec:\n"
+                    "  values:\n"
+                    "    image:\n"
+                    f"      reference: {image}\n"
+                    "  postRenderers:\n"
+                    "    - kustomize:\n"
+                    f"{images}"
+                )
+
+                self.assertFalse(_is_postgresql_workload(release, {image}))
+
     def test_values_from_requires_the_referenced_source_and_namespace(self) -> None:
         image = "registry.example/postgresql@sha256:" + "c" * 64
         release = (
@@ -1720,6 +1811,31 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
             "    kind: OCIRepository\n"
             "    name: postgresql\n"
             f"  values: {{image: {{reference: {image}}}}}\n"
+        )
+
+        self.assertTrue(
+            _is_postgresql_workload(
+                release,
+                {image},
+                chart_references={
+                    ("OCIRepository", "default", "postgresql"): ("postgresql",)
+                },
+            )
+        )
+
+    def test_accepts_mixed_block_and_flow_inline_values(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        release = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: postgresql\n"
+            "spec:\n"
+            "  chartRef:\n"
+            "    kind: OCIRepository\n"
+            "    name: postgresql\n"
+            "  values:\n"
+            f"    image: {{reference: {image}}}\n"
         )
 
         self.assertTrue(
