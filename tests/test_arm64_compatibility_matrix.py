@@ -5,6 +5,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MATRIX = ROOT / "docs/design/10_Research/106_ARM64_Container_Image_Compatibility.md"
+POLARIS_WORK_PACKAGE = (
+    ROOT
+    / "docs/design/06_WorkPackages/L1/WP-L1-LAKE-002_Polaris_catalog_bootstrap.md"
+)
 
 REQUIRED_COMPONENTS = {
     "Trino",
@@ -50,7 +54,8 @@ def table_cells(line: str) -> list[str]:
 class Arm64CompatibilityMatrixTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        lines = MATRIX.read_text(encoding="utf-8").splitlines()
+        cls.matrix_text = MATRIX.read_text(encoding="utf-8")
+        lines = cls.matrix_text.splitlines()
         header_index = next(
             index for index, line in enumerate(lines) if table_cells(line) == EXPECTED_HEADER
         )
@@ -116,6 +121,37 @@ class Arm64CompatibilityMatrixTests(unittest.TestCase):
         self.assertIn("High=0", row["Signature / provenance"])
         self.assertIn("Critical=0", row["Signature / provenance"])
         self.assertIn("runtime remains blocked", row["v0.2 decision"])
+
+    def test_postgresql_follow_up_inventory_and_owner_remain_explicit(self) -> None:
+        registry_section = self.matrix_text.split(
+            "### Registry inspection method", 1
+        )[1].split("### Focused image-smoke follow-up", 1)[0]
+        self.assertIn("crane digest", registry_section)
+        self.assertIn("crane manifest", registry_section)
+        self.assertIn("Chainguard PostgreSQL 18.4", registry_section)
+        self.assertIn("2026-07-16", registry_section)
+        self.assertIn(
+            "sha256:3dc629a917612f1630c6f8e7a17f23a42cbd5917b9b3080972b70b1583daff34",
+            registry_section,
+        )
+        self.assertIn(
+            "sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+            registry_section,
+        )
+        follow_up_section = self.matrix_text.split(
+            "### Focused image-smoke follow-up", 1
+        )[1].split("### Unchanged later-scope rows", 1)[0]
+        self.assertIn(
+            "WP-L1-LAKE-002 for\nPolaris and PostgreSQL", follow_up_section
+        )
+
+    def test_polaris_work_package_keeps_storage_prerequisites_explicit(self) -> None:
+        work_package = POLARIS_WORK_PACKAGE.read_text(encoding="utf-8")
+        self.assertIn(
+            "docs/design/06_WorkPackages/L1/WP-L1-LAKE-001_Object_storage_profile.md",
+            work_package,
+        )
+        self.assertIn("metadata-storage host SSD impact", work_package)
 
 
 if __name__ == "__main__":

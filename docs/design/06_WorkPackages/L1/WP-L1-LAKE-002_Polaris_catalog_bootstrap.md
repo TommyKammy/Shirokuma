@@ -54,12 +54,14 @@ admission境界をADR-0021へ固定します。
 - [ ] Flux reports the catalog Kustomization and both workloads Ready=True.
 - [ ] Catalog create/list/read smoke passes against the approved S3 endpoint.
 - [ ] Credentials remain outside Git and policy checks pass.
-- [ ] Backup/restore, rollback, and teardown procedures are verified and documented.
+- [ ] Backup/restore, rollback, teardown, and metadata-storage host SSD impact are
+  verified and documented.
 - [ ] CI and required human review pass on the focused PR chain.
 
 ## Related docs / ADR
 
 - `docs/design/01_Product/010_Project_Charter.md`
+- `docs/design/06_WorkPackages/L1/WP-L1-LAKE-001_Object_storage_profile.md`
 - `docs/design/07_ADR/ADR-0018_Use_Flux_v2_as_the_GitOps_reconciler.md`
 - `docs/design/07_ADR/ADR-0020_Adopt_SeaweedFS_4_39_source_for_arm64_build.md`
 - `docs/design/07_ADR/ADR-0021_Adopt_Polaris_1_6_0_source_build_and_Chainguard_PostgreSQL.md`

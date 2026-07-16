@@ -94,6 +94,13 @@ ClickHouse 25.8.28.1, Gravitino 1.3.0, Amoro 0.8.1-incubating, Trino Gateway
 20, and Spark 4.1.2. Comet and Gluten use the source/JAR evidence recorded in
 their rows instead of a container manifest.
 
+The Chainguard PostgreSQL 18.4 candidate was inspected with the same command
+path on 2026-07-16. The resolved index digest
+`sha256:3dc629a917612f1630c6f8e7a17f23a42cbd5917b9b3080972b70b1583daff34`
+and `linux/arm64` child digest
+`sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8`
+are recorded in its row and must be re-resolved before admission.
+
 ### Focused image-smoke follow-up
 
 No image is pulled, run, installed, or admitted by this research Work Package.
@@ -113,9 +120,9 @@ creating a resident resource or on-demand job:
    with Comet, and prove automatic fallback to Spark; Gluten is excluded.
 
 The follow-up owners are WP-L1-LAKE-001 for SeaweedFS, WP-L1-LAKE-002 for
-Polaris, WP-L1-QUERY-001 for Trino, WP-L1-DATAOPS-001 for Spark and Comet, and
-WP-L1-META-001 for OpenMetadata. A missing signer, SBOM, scan, architecture, or
-cleanup signal keeps the component blocked.
+Polaris and PostgreSQL, WP-L1-QUERY-001 for Trino, WP-L1-DATAOPS-001 for Spark
+and Comet, and WP-L1-META-001 for OpenMetadata. A missing signer, SBOM, scan,
+architecture, or cleanup signal keeps the component blocked.
 
 ### Unchanged later-scope rows
 
