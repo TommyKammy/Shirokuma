@@ -9,6 +9,7 @@ MATRIX = ROOT / "docs/design/10_Research/106_ARM64_Container_Image_Compatibility
 REQUIRED_COMPONENTS = {
     "Trino",
     "Apache Polaris",
+    "PostgreSQL",
     "OpenMetadata",
     "SeaweedFS",
     "StarRocks",
@@ -24,6 +25,7 @@ REQUIRED_COMPONENTS = {
 CRITICAL_PATH = {
     "SeaweedFS",
     "Apache Polaris",
+    "PostgreSQL",
     "Trino",
     "Apache Spark",
     "OpenMetadata",
@@ -60,7 +62,7 @@ class Arm64CompatibilityMatrixTests(unittest.TestCase):
             if len(cells) == len(EXPECTED_HEADER):
                 cls.rows[cells[0]] = dict(zip(EXPECTED_HEADER, cells))
 
-    def test_all_issue_25_components_have_complete_evidence_rows(self) -> None:
+    def test_all_required_components_have_complete_evidence_rows(self) -> None:
         self.assertEqual(REQUIRED_COMPONENTS, REQUIRED_COMPONENTS & self.rows.keys())
         ambiguous = re.compile(r"\b(?:unknown|verify|tbd|todo)\b", re.IGNORECASE)
         for component in sorted(REQUIRED_COMPONENTS):
@@ -68,7 +70,8 @@ class Arm64CompatibilityMatrixTests(unittest.TestCase):
             with self.subTest(component=component):
                 self.assertRegex(row["Upstream release"], r"\d")
                 self.assertIn("linux/arm64", row["linux/arm64 evidence"])
-                self.assertEqual("Apache-2.0", row["License"])
+                expected_license = "PostgreSQL" if component == "PostgreSQL" else "Apache-2.0"
+                self.assertEqual(expected_license, row["License"])
                 self.assertNotRegex(row["Signature / provenance"], ambiguous)
                 self.assertRegex(row["v0.2 decision"], r"^(?:mainline|fallback|scope-out)\b")
                 self.assertGreaterEqual(row["Primary sources"].count("https://"), 2)
@@ -101,6 +104,18 @@ class Arm64CompatibilityMatrixTests(unittest.TestCase):
         self.assertIn("repository build", row["Image or build path"])
         self.assertIn("runtime remains blocked", row["v0.2 decision"])
         self.assertIn("main publication", row["Fallback owner / risk / replacement"])
+
+    def test_postgresql_candidate_evidence_remains_fail_closed(self) -> None:
+        row = self.rows["PostgreSQL"]
+        self.assertIn("@sha256:", row["Image or build path"])
+        self.assertIn(
+            "sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+            row["linux/arm64 evidence"],
+        )
+        self.assertIn("Cosign", row["Signature / provenance"])
+        self.assertIn("High=0", row["Signature / provenance"])
+        self.assertIn("Critical=0", row["Signature / provenance"])
+        self.assertIn("runtime remains blocked", row["v0.2 decision"])
 
 
 if __name__ == "__main__":

@@ -61,6 +61,7 @@ admission境界をADR-0021へ固定します。
 
 - `docs/design/01_Product/010_Project_Charter.md`
 - `docs/design/07_ADR/ADR-0018_Use_Flux_v2_as_the_GitOps_reconciler.md`
+- `docs/design/07_ADR/ADR-0020_Adopt_SeaweedFS_4_39_source_for_arm64_build.md`
 - `docs/design/07_ADR/ADR-0021_Adopt_Polaris_1_6_0_source_build_and_Chainguard_PostgreSQL.md`
 - `docs/design/02_Architecture/024_GitOps_Reconciliation_Model.md`
 - `docs/design/03_Requirements/034_Platform_Requirements.md`

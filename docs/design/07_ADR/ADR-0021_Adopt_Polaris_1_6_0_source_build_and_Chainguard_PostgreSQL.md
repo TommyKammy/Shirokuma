@@ -71,7 +71,7 @@ WP-L1-LAKE-002 remains incomplete until both exact digests enter
 `shirokuma-object-storage`, and live Ready plus catalog create/list/read evidence
 is recorded.
 
-## Verificationn
+## Verification
 
 The source-build checkpoint must pass:
 
