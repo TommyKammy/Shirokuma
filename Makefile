@@ -38,6 +38,7 @@ verify-policy:
 
 verify-design-context:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_arm64_compatibility_matrix.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_rustfs_desk_review.py'
 	@$(PYTHON) scripts/verify_design_context.py
 
 verify-preflight-parser:
