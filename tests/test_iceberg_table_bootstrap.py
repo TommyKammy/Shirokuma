@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import unittest
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Iterator
 
@@ -11,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 GITOPS_ROOT = ROOT / "deploy/gitops"
 RESIDENT_IMAGES = ROOT / "security/resident-images.json"
 WORKLOAD_KINDS = {"Deployment", "StatefulSet"}
+POLARIS_COMPONENT = "polaris"
 
 
 def _mapping_scalars(document: str) -> Iterator[tuple[tuple[str, ...], str]]:
@@ -27,7 +29,7 @@ def _mapping_scalars(document: str) -> Iterator[tuple[tuple[str, ...], str]]:
         while stack and indent <= stack[-1][0]:
             stack.pop()
 
-        key = match.group("key").strip()
+        key = match.group("key").strip().removeprefix("- ").strip()
         value = match.group("value").split(" #", maxsplit=1)[0].strip()
         path = tuple(item[1] for item in stack) + (key,)
         if value:
@@ -57,14 +59,24 @@ def _is_polaris_workload(document: str, admitted_images: set[str]) -> bool:
     ) and bool(container_images & admitted_images)
 
 
-def _admitted_image_references() -> set[str]:
+def _component_image_references(
+    ledger: Mapping[str, Sequence[Mapping[str, str]]], component: str
+) -> set[str]:
+    return {
+        entry["reference"]
+        for entry in ledger["images"]
+        if entry.get("component") == component
+    }
+
+
+def _admitted_polaris_image_references() -> set[str]:
     ledger = json.loads(RESIDENT_IMAGES.read_text(encoding="utf-8"))
-    return {entry["reference"] for entry in ledger["images"]}
+    return _component_image_references(ledger, POLARIS_COMPONENT)
 
 
 def _polaris_workload_manifests() -> list[Path]:
     workloads = []
-    admitted_images = _admitted_image_references()
+    admitted_images = _admitted_polaris_image_references()
     for path in GITOPS_ROOT.rglob("*.yaml"):
         documents = re.split(r"(?m)^---[ \t]*(?:#.*)?$", path.read_text(encoding="utf-8"))
         if any(_is_polaris_workload(document, admitted_images) for document in documents):
@@ -90,6 +102,37 @@ class PolarisWorkloadDetectionTests(unittest.TestCase):
                     f"          image: {image}\n"
                 )
                 self.assertTrue(_is_polaris_workload(manifest, {image}))
+
+    def test_accepts_image_as_first_container_field(self) -> None:
+        image = "registry.example/polaris@sha256:" + "a" * 64
+        manifest = (
+            "apiVersion: apps/v1\n"
+            "kind: Deployment\n"
+            "metadata:\n"
+            "  name: polaris\n"
+            "spec:\n"
+            "  template:\n"
+            "    spec:\n"
+            "      containers:\n"
+            f"        - image: {image}\n"
+            "          name: polaris\n"
+        )
+        self.assertTrue(_is_polaris_workload(manifest, {image}))
+
+    def test_admits_only_polaris_component_images(self) -> None:
+        polaris_image = "registry.example/polaris@sha256:" + "a" * 64
+        seaweedfs_image = "registry.example/seaweedfs@sha256:" + "b" * 64
+        ledger = {
+            "images": (
+                {"component": "seaweedfs", "reference": seaweedfs_image},
+                {"component": POLARIS_COMPONENT, "reference": polaris_image},
+            )
+        }
+
+        self.assertEqual(
+            {polaris_image},
+            _component_image_references(ledger, POLARIS_COMPONENT),
+        )
 
     def test_rejects_non_workload_polaris_resources(self) -> None:
         image = "registry.example/polaris@sha256:" + "a" * 64
