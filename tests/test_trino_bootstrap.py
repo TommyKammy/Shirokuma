@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import unittest
+from collections.abc import Callable
 from pathlib import Path
 
 from test_iceberg_table_bootstrap import (
@@ -15,12 +16,19 @@ from test_iceberg_table_bootstrap import (
     _deployment_manifest_paths,
     _display_path,
     _document_scalars,
+    _has_polaris_identity,
+    _is_polaris_workload,
     _polaris_workload_manifests,
 )
 
 TRINO_COMPONENT = "trino"
 POSTGRESQL_COMPONENT = "postgresql"
-TRINO_ARTIFACT_KINDS = WORKLOAD_KINDS | {"HelmRelease"}
+HELM_RELEASE_IDENTITY_PATHS = (
+    ("metadata", "name"),
+    ("metadata", "labels", "app.kubernetes.io/name"),
+    ("spec", "releaseName"),
+    ("spec", "chart", "spec", "chart"),
+)
 
 
 def _has_trino_identity(value: str | None) -> bool:
@@ -29,9 +37,45 @@ def _has_trino_identity(value: str | None) -> bool:
     )
 
 
+def _helm_release_uses_admitted_image(
+    scalar_items: list[tuple[tuple[str, ...], str]], admitted_images: set[str]
+) -> bool:
+    values = {
+        value
+        for path, value in scalar_items
+        if path[:2] == ("spec", "values")
+    }
+    for reference in admitted_images:
+        repository, separator, digest = reference.rpartition("@")
+        if reference in values or (
+            separator and repository in values and digest in values
+        ):
+            return True
+    return False
+
+
+def _is_component_helm_release(
+    scalar_items: list[tuple[tuple[str, ...], str]],
+    identity_matcher: Callable[[str | None], bool],
+    admitted_images: set[str] | None = None,
+) -> bool:
+    scalars = dict(scalar_items)
+    if scalars.get(("kind",)) != "HelmRelease" or not any(
+        identity_matcher(scalars.get(path))
+        for path in HELM_RELEASE_IDENTITY_PATHS
+    ):
+        return False
+    return admitted_images is None or _helm_release_uses_admitted_image(
+        scalar_items, admitted_images
+    )
+
+
 def _is_trino_workload(document: str) -> bool:
-    scalars = dict(_document_scalars(document))
-    return scalars.get(("kind",)) in TRINO_ARTIFACT_KINDS and any(
+    scalar_items = _document_scalars(document)
+    scalars = dict(scalar_items)
+    if scalars.get(("kind",)) == "HelmRelease":
+        return _is_component_helm_release(scalar_items, _has_trino_identity)
+    return scalars.get(("kind",)) in WORKLOAD_KINDS and any(
         _has_trino_identity(scalars.get(path))
         for path in (
             ("metadata", "name"),
@@ -78,6 +122,10 @@ def _is_postgresql_workload(document: str, admitted_images: set[str]) -> bool:
         for path, value in scalar_items
         if path == ("spec", "template", "spec", "containers", "image")
     }
+    if scalars.get(("kind",)) == "HelmRelease":
+        return _is_component_helm_release(
+            scalar_items, _has_postgresql_identity, admitted_images
+        )
     return scalars.get(("kind",)) in WORKLOAD_KINDS and any(
         _has_postgresql_identity(scalars.get(path))
         for path in (
@@ -85,6 +133,40 @@ def _is_postgresql_workload(document: str, admitted_images: set[str]) -> bool:
             ("metadata", "labels", "app.kubernetes.io/name"),
         )
     ) and bool(container_images & admitted_images)
+
+
+def _is_polaris_prerequisite_workload(
+    document: str, admitted_images: set[str]
+) -> bool:
+    if _is_polaris_workload(document, admitted_images):
+        return True
+    return _is_component_helm_release(
+        _document_scalars(document), _has_polaris_identity, admitted_images
+    )
+
+
+def _polaris_prerequisite_workload_manifests(
+    deploy_root: Path = DEPLOY_ROOT,
+    charts_root: Path = CHARTS_ROOT,
+    admitted_images: set[str] | None = None,
+) -> list[Path]:
+    if admitted_images is None:
+        admitted_images = _admitted_polaris_image_references()
+    workloads = set(
+        _polaris_workload_manifests(
+            deploy_root, charts_root, admitted_images=admitted_images
+        )
+    )
+    for path in _deployment_manifest_paths(deploy_root, charts_root):
+        documents = re.split(
+            r"(?m)^---[ \t]*(?:#.*)?$", path.read_text(encoding="utf-8")
+        )
+        if any(
+            _is_polaris_prerequisite_workload(document, admitted_images)
+            for document in documents
+        ):
+            workloads.add(_display_path(path))
+    return sorted(workloads)
 
 
 def _postgresql_workload_manifests(
@@ -136,13 +218,22 @@ class TrinoWorkloadDetectionTests(unittest.TestCase):
                 self.assertTrue(_is_trino_workload(manifest))
 
     def test_accepts_flux_helmrelease_identity(self) -> None:
-        manifest = (
-            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-            "kind: HelmRelease\n"
-            "metadata:\n"
-            "  name: trino\n"
+        identities = (
+            "metadata:\n  name: trino\n",
+            "metadata:\n  name: query-engine\nspec:\n  releaseName: trino\n",
+            (
+                "metadata:\n  name: query-engine\nspec:\n  chart:\n"
+                "    spec:\n      chart: trino\n"
+            ),
         )
-        self.assertTrue(_is_trino_workload(manifest))
+        for identity in identities:
+            with self.subTest(identity=identity):
+                manifest = (
+                    "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+                    "kind: HelmRelease\n"
+                    f"{identity}"
+                )
+                self.assertTrue(_is_trino_workload(manifest))
 
     def test_rejects_non_workload_trino_resource(self) -> None:
         manifest = "kind: Service\nmetadata:\n  name: trino\n"
@@ -166,6 +257,24 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
                     f"        - image: {image}\n"
                 )
                 self.assertTrue(_is_postgresql_workload(manifest, {image}))
+
+    def test_accepts_postgresql_helmrelease_with_admitted_image(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        manifest = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: metadata-store\n"
+            "spec:\n"
+            "  chart:\n"
+            "    spec:\n"
+            "      chart: postgresql\n"
+            "  values:\n"
+            "    image:\n"
+            f"      reference: {image}\n"
+        )
+        self.assertTrue(_is_postgresql_workload(manifest, {image}))
+        self.assertFalse(_is_postgresql_workload(manifest, set()))
 
     def test_rejects_postgresql_resource_without_workload_or_admission(self) -> None:
         image = "registry.example/postgresql@sha256:" + "c" * 64
@@ -193,6 +302,25 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
                 self.assertFalse(
                     _is_postgresql_workload(manifest, admitted_images)
                 )
+
+
+class PolarisPrerequisiteWorkloadDetectionTests(unittest.TestCase):
+    def test_accepts_polaris_helmrelease_with_admitted_image(self) -> None:
+        image = "registry.example/polaris@sha256:" + "a" * 64
+        manifest = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: catalog\n"
+            "spec:\n"
+            "  releaseName: polaris\n"
+            "  values:\n"
+            "    image:\n"
+            "      repository: registry.example/polaris\n"
+            f"      digest: sha256:{'a' * 64}\n"
+        )
+        self.assertTrue(_is_polaris_prerequisite_workload(manifest, {image}))
+        self.assertFalse(_is_polaris_prerequisite_workload(manifest, set()))
 
 
 class TrinoBootstrapPrerequisiteTests(unittest.TestCase):
@@ -277,7 +405,9 @@ class TrinoBootstrapPrerequisiteTests(unittest.TestCase):
         trino_images = _admitted_trino_image_references()
         trino_workloads = _trino_workload_manifests()
         polaris_images = _admitted_polaris_image_references()
-        polaris_workloads = _polaris_workload_manifests()
+        polaris_workloads = _polaris_prerequisite_workload_manifests(
+            admitted_images=polaris_images
+        )
         postgresql_images = _admitted_postgresql_image_references()
         postgresql_workloads = _postgresql_workload_manifests(
             admitted_images=postgresql_images
