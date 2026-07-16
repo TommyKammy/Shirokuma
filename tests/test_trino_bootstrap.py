@@ -156,9 +156,51 @@ def _strip_yaml_scalar(value: str) -> str:
     return value.split(" #", maxsplit=1)[0].strip().strip("'\"")
 
 
+def _split_yaml_flow_items(value: str) -> list[str]:
+    items: list[str] = []
+    start = 0
+    depth = 0
+    quote: str | None = None
+    escaped = False
+    for index, character in enumerate(value):
+        if escaped:
+            escaped = False
+            continue
+        if quote is not None:
+            if character == "\\" and quote == '"':
+                escaped = True
+            elif character == quote:
+                quote = None
+            continue
+        if character in {"'", '"'}:
+            quote = character
+        elif character in "[{":
+            depth += 1
+        elif character in "]}":
+            depth -= 1
+        elif character == "," and depth == 0:
+            items.append(value[start:index].strip())
+            start = index + 1
+    items.append(value[start:].strip())
+    return [item for item in items if item]
+
+
+def _yaml_flow_mapping(value: str) -> dict[str, str] | None:
+    value = value.strip()
+    if not (value.startswith("{") and value.endswith("}")):
+        return None
+    mapping: dict[str, str] = {}
+    for item in _split_yaml_flow_items(value[1:-1]):
+        key, separator, raw_value = item.partition(":")
+        if not separator or not key.strip() or not raw_value.strip():
+            return None
+        mapping[_strip_yaml_scalar(key)] = _strip_yaml_scalar(raw_value)
+    return mapping
+
+
 def _values_from_references(
     document: str,
-) -> list[tuple[str, str, str, str | None]]:
+) -> list[tuple[str, str, str, str | None, bool]]:
     try:
         parsed = json.loads(document)
     except json.JSONDecodeError:
@@ -176,16 +218,18 @@ def _values_from_references(
             name = item.get("name")
             values_key = item.get("valuesKey", "values.yaml")
             target_path = item.get("targetPath")
+            optional = item.get("optional", False)
             if (
                 kind in HELM_VALUES_SOURCE_KINDS
                 and isinstance(name, str)
                 and isinstance(values_key, str)
                 and (target_path is None or isinstance(target_path, str))
+                and isinstance(optional, bool)
             ):
-                references.append((kind, name, values_key, target_path))
+                references.append((kind, name, values_key, target_path, optional))
         return references
 
-    references: list[tuple[str, str, str, str | None]] = []
+    references: list[tuple[str, str, str, str | None, bool]] = []
     lines = document.splitlines()
     stack: list[tuple[int, str]] = []
     index = 0
@@ -206,6 +250,32 @@ def _values_from_references(
         if path != ("spec", "valuesFrom"):
             if not match.group("value").strip():
                 stack.append((indent, key))
+            index += 1
+            continue
+
+        inline_value = match.group("value").strip()
+        if inline_value:
+            inline_match = re.fullmatch(
+                r"\[(?P<items>.*)\](?:\s+#.*)?", inline_value
+            )
+            if inline_match is None:
+                return []
+            for raw_item in _split_yaml_flow_items(inline_match.group("items")):
+                item = _yaml_flow_mapping(raw_item)
+                if item is None:
+                    return []
+                kind = item.get("kind")
+                name = item.get("name")
+                if kind in HELM_VALUES_SOURCE_KINDS and name:
+                    references.append(
+                        (
+                            kind,
+                            name,
+                            item.get("valuesKey", "values.yaml"),
+                            item.get("targetPath"),
+                            item.get("optional", "false").lower() == "true",
+                        )
+                    )
             index += 1
             continue
 
@@ -239,6 +309,7 @@ def _values_from_references(
                                 name,
                                 current.get("valuesKey", "values.yaml"),
                                 current.get("targetPath"),
+                                current.get("optional", "false").lower() == "true",
                             )
                         )
                 current = {
@@ -261,6 +332,7 @@ def _values_from_references(
                         name,
                         current.get("valuesKey", "values.yaml"),
                         current.get("targetPath"),
+                        current.get("optional", "false").lower() == "true",
                     )
                 )
     return references
@@ -396,7 +468,13 @@ def _helm_chart_references(
             scalars = dict(_document_scalars(document))
             kind = scalars.get(("kind",))
             name = scalars.get(("metadata", "name"))
-            if kind not in {"OCIRepository", "HelmChart"} or not name:
+            if kind not in {
+                "Bucket",
+                "GitRepository",
+                "HelmChart",
+                "HelmRepository",
+                "OCIRepository",
+            } or not name:
                 continue
             namespace = scalars.get(("metadata", "namespace"), "default")
             identity = (path.parent.resolve(), kind, namespace, name)
@@ -460,6 +538,43 @@ def _referenced_chart_identities(
     return values if isinstance(values, tuple) else ()
 
 
+def _helm_release_chart_source_resolves(
+    document: str,
+    chart_references: HelmChartReferences | None,
+    release_path: Path | None,
+) -> bool:
+    scalars = dict(_document_scalars(document))
+    release_namespace = scalars.get(("metadata", "namespace"), "default")
+    chart = scalars.get(("spec", "chart", "spec", "chart"))
+    chart_ref_kind = scalars.get(("spec", "chartRef", "kind"))
+    chart_ref_name = scalars.get(("spec", "chartRef", "name"))
+
+    if chart is not None:
+        kind = scalars.get(("spec", "chart", "spec", "sourceRef", "kind"))
+        name = scalars.get(("spec", "chart", "spec", "sourceRef", "name"))
+        namespace = scalars.get(
+            ("spec", "chart", "spec", "sourceRef", "namespace"),
+            release_namespace,
+        )
+    elif chart_ref_kind is not None or chart_ref_name is not None:
+        kind = chart_ref_kind
+        name = chart_ref_name
+        namespace = scalars.get(
+            ("spec", "chartRef", "namespace"), release_namespace
+        )
+    else:
+        return True
+
+    if not kind or not name or chart_references is None:
+        return False
+    return (
+        _scoped_helm_resource(
+            chart_references, kind, namespace, name, release_path
+        )
+        is not None
+    )
+
+
 def _local_chart_root(document: str, charts_root: Path) -> Path | None:
     chart = dict(_document_scalars(document)).get(
         ("spec", "chart", "spec", "chart")
@@ -485,15 +600,25 @@ def _local_chart_value_items(
     declared_values_files = _yaml_sequence_values(
         document, ("spec", "chart", "spec", "valuesFiles")
     )
-    values_files = declared_values_files or ["values.yaml"]
     if not chart_root.is_dir():
         return None
+    source_root = charts_root.parent.resolve()
+    ignore_missing = (
+        dict(_document_scalars(document))
+        .get(("spec", "chart", "spec", "ignoreMissingValuesFiles"), "false")
+        .lower()
+        == "true"
+    )
     items: list[tuple[tuple[str, ...], str]] = []
+    values_files = declared_values_files or ["values.yaml"]
     for values_file in values_files:
-        candidate = (chart_root / values_file).resolve()
-        if candidate != chart_root and chart_root not in candidate.parents:
+        base = source_root if declared_values_files else chart_root
+        candidate = (base / values_file).resolve()
+        if candidate != base and base not in candidate.parents:
             return None
         if not candidate.is_file():
+            if declared_values_files and ignore_missing:
+                continue
             if declared_values_files:
                 return None
             continue
@@ -509,21 +634,39 @@ def _local_chart_value_items(
 def _postrenderer_images(
     document: str,
 ) -> tuple[tuple[str, str | None], ...]:
-    prefix = ("spec", "postRenderers", "kustomize", "images")
     images: list[dict[str, str]] = []
-    current: dict[str, str] | None = None
-    for path, value in _document_scalars(document):
-        if path[:-1] != prefix:
-            continue
-        field = path[-1]
-        if field == "name":
-            if current is not None:
-                images.append(current)
-            current = {field: value}
-        elif current is not None and field in {"newName", "newTag", "digest"}:
-            current[field] = value
-    if current is not None:
-        images.append(current)
+    try:
+        parsed = json.loads(document)
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, dict):
+        spec = parsed.get("spec", {})
+        renderers = (
+            spec.get("postRenderers", []) if isinstance(spec, dict) else []
+        )
+        if isinstance(renderers, list):
+            for renderer in renderers:
+                if not isinstance(renderer, dict):
+                    continue
+                kustomize = renderer.get("kustomize", {})
+                raw_images = (
+                    kustomize.get("images", [])
+                    if isinstance(kustomize, dict)
+                    else []
+                )
+                if isinstance(raw_images, list):
+                    images.extend(
+                        {
+                            key: value
+                            for key, value in image.items()
+                            if key in {"name", "newName", "newTag", "digest"}
+                            and isinstance(value, str)
+                        }
+                        for image in raw_images
+                        if isinstance(image, dict)
+                    )
+    else:
+        images.extend(_yaml_postrenderer_images(document))
 
     replacements = []
     for image in images:
@@ -534,6 +677,69 @@ def _postrenderer_images(
             reference = f"{repository}@{digest}" if repository and digest else None
             replacements.append((name, reference))
     return tuple(replacements)
+
+
+def _yaml_postrenderer_images(document: str) -> list[dict[str, str]]:
+    images: list[dict[str, str]] = []
+    lines = document.splitlines()
+    stack: list[tuple[int, str]] = []
+    postrenderers_indent: int | None = None
+    for index, raw_line in enumerate(lines):
+        match = re.match(
+            r"^(?P<indent>[ ]*)(?P<key>[^:#][^:]*):(?P<value>.*)$",
+            raw_line,
+        )
+        if match is None:
+            continue
+        indent = len(match.group("indent"))
+        raw_key = match.group("key").strip()
+        while stack and indent <= stack[-1][0]:
+            stack.pop()
+        key = raw_key.removeprefix("- ").strip().strip("'\"")
+        path = tuple(item[1] for item in stack) + (key,)
+        if path == ("spec", "postRenderers"):
+            postrenderers_indent = indent
+        if not match.group("value").strip():
+            stack.append((indent, key))
+        if (
+            postrenderers_indent is None
+            or path[:2] != ("spec", "postRenderers")
+            or path[-2:] != ("kustomize", "images")
+            or indent <= postrenderers_indent
+        ):
+            continue
+
+        images_indent = indent
+        current: dict[str, str] | None = None
+        for candidate in lines[index + 1 :]:
+            if not candidate.strip() or candidate.lstrip().startswith("#"):
+                continue
+            candidate_indent = len(candidate) - len(candidate.lstrip(" "))
+            if candidate_indent <= images_indent:
+                break
+            item_match = re.match(
+                r"^[ ]*-[ ]*(?P<key>[^:#][^:]*):(?P<value>.*)$",
+                candidate,
+            )
+            field_match = re.match(
+                r"^[ ]*(?P<key>[^:#][^:]*):(?P<value>.*)$",
+                candidate,
+            )
+            if item_match is not None:
+                if current is not None:
+                    images.append(current)
+                current = {
+                    item_match.group("key").strip().strip("'\""): _strip_yaml_scalar(
+                        item_match.group("value")
+                    )
+                }
+            elif current is not None and field_match is not None:
+                current[field_match.group("key").strip().strip("'\"")] = (
+                    _strip_yaml_scalar(field_match.group("value"))
+                )
+        if current is not None:
+            images.append(current)
+    return images
 
 
 def _effective_helm_value_items(
@@ -547,14 +753,20 @@ def _effective_helm_value_items(
     if chart_items is None:
         return None
     _merge_helm_value_items(effective, chart_items)
-    for kind, name, values_key, target_path in _values_from_references(document):
+    for kind, name, values_key, target_path, optional in _values_from_references(
+        document
+    ):
         namespace = dict(_document_scalars(document)).get(
             ("metadata", "namespace"), "default"
         )
         source = _scoped_helm_resource(
             values_sources or {}, kind, namespace, name, release_path
         )
-        if not isinstance(source, dict) or values_key not in source:
+        if not isinstance(source, dict):
+            if optional:
+                continue
+            return None
+        if values_key not in source:
             return None
         content = source[values_key]
         if target_path:
@@ -601,6 +813,10 @@ def _is_component_helm_release(
         return False
     if admitted_images is None:
         return True
+    if not _helm_release_chart_source_resolves(
+        document, chart_references, release_path
+    ):
+        return False
     effective_items = _effective_helm_value_items(
         document, values_sources, release_path, charts_root
     )
@@ -915,12 +1131,26 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
             "  chart:\n"
             "    spec:\n"
             "      chart: postgresql\n"
+            "      sourceRef:\n"
+            "        kind: HelmRepository\n"
+            "        name: postgresql\n"
             "  values:\n"
             "    image:\n"
             f"      reference: {image}\n"
         )
-        self.assertTrue(_is_postgresql_workload(manifest, {image}))
-        self.assertFalse(_is_postgresql_workload(manifest, set()))
+        chart_references = {
+            ("HelmRepository", "default", "postgresql"): ("postgresql",)
+        }
+        self.assertTrue(
+            _is_postgresql_workload(
+                manifest, {image}, chart_references=chart_references
+            )
+        )
+        self.assertFalse(
+            _is_postgresql_workload(
+                manifest, set(), chart_references=chart_references
+            )
+        )
 
     def test_accepts_split_postgresql_helm_image_values(self) -> None:
         image = "cgr.dev/chainguard/postgres@sha256:" + "c" * 64
@@ -939,7 +1169,15 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
             "      repository: chainguard/postgres\n"
             f"      digest: sha256:{'c' * 64}\n"
         )
-        self.assertTrue(_is_postgresql_workload(manifest, {image}))
+        self.assertTrue(
+            _is_postgresql_workload(
+                manifest,
+                {image},
+                chart_references={
+                    ("OCIRepository", "default", "postgresql"): ("postgresql",)
+                },
+            )
+        )
 
     def test_rejects_image_fields_split_across_value_groups(self) -> None:
         image = "registry.example/postgresql@sha256:" + "c" * 64
@@ -976,6 +1214,13 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
             "  values.yaml: |\n"
             + "".join(f"    {line}\n" for line in values.splitlines())
         )
+        chart_source = (
+            "apiVersion: source.toolkit.fluxcd.io/v1\n"
+            "kind: GitRepository\n"
+            "metadata:\n"
+            "  name: shirokuma\n"
+            "  namespace: catalog\n"
+        )
         release = (
             "apiVersion: helm.toolkit.fluxcd.io/v2\n"
             "kind: HelmRelease\n"
@@ -986,6 +1231,9 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
             "  chart:\n"
             "    spec:\n"
             "      chart: postgresql\n"
+            "      sourceRef:\n"
+            "        kind: GitRepository\n"
+            "        name: shirokuma\n"
             "  valuesFrom:\n"
             "    - kind: ConfigMap\n"
             "      name: postgresql-values\n"
@@ -996,7 +1244,10 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
             deploy_root.mkdir()
             charts_root.mkdir()
             manifest = deploy_root / "catalog.yaml"
-            manifest.write_text(source + "---\n" + release, encoding="utf-8")
+            manifest.write_text(
+                chart_source + "---\n" + source + "---\n" + release,
+                encoding="utf-8",
+            )
 
             workloads = _postgresql_workload_manifests(
                 deploy_root, charts_root, {image}
@@ -1095,7 +1346,11 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
         image = "registry.example/postgresql@sha256:" + "c" * 64
         cases = (
             ("values.yaml", ""),
-            ("values-arm64.yaml", "      valuesFiles:\n        - values-arm64.yaml\n"),
+            (
+                "values-arm64.yaml",
+                "      valuesFiles:\n"
+                "        - charts/postgresql/values-arm64.yaml\n",
+            ),
         )
         for values_file, values_files_field in cases:
             with self.subTest(values_file=values_file), tempfile.TemporaryDirectory() as temporary_directory:
@@ -1110,6 +1365,11 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
                 )
                 release = deploy_root / "postgresql.yaml"
                 release.write_text(
+                    "apiVersion: source.toolkit.fluxcd.io/v1\n"
+                    "kind: GitRepository\n"
+                    "metadata:\n"
+                    "  name: shirokuma\n"
+                    "---\n"
                     "apiVersion: helm.toolkit.fluxcd.io/v2\n"
                     "kind: HelmRelease\n"
                     "metadata:\n"
@@ -1118,6 +1378,9 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
                     "  chart:\n"
                     "    spec:\n"
                     "      chart: ./charts/postgresql\n"
+                    "      sourceRef:\n"
+                    "        kind: GitRepository\n"
+                    "        name: shirokuma\n"
                     f"{values_files_field}",
                     encoding="utf-8",
                 )
@@ -1332,6 +1595,244 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
 
         self.assertFalse(_is_postgresql_workload(release, {image}, {}))
 
+    def test_optional_values_from_allows_an_absent_source(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        release = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: postgresql\n"
+            "spec:\n"
+            "  chartRef:\n"
+            "    kind: OCIRepository\n"
+            "    name: postgresql\n"
+            "  valuesFrom:\n"
+            "    - kind: ConfigMap\n"
+            "      name: optional-values\n"
+            "      optional: true\n"
+            "  values:\n"
+            "    image:\n"
+            f"      reference: {image}\n"
+        )
+
+        self.assertTrue(
+            _is_postgresql_workload(
+                release,
+                {image},
+                {},
+                chart_references={
+                    ("OCIRepository", "default", "postgresql"): ("postgresql",)
+                },
+            )
+        )
+
+    def test_accepts_flow_style_values_from(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        release = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: postgresql\n"
+            "spec:\n"
+            "  chartRef:\n"
+            "    kind: OCIRepository\n"
+            "    name: postgresql\n"
+            "  valuesFrom: [{kind: ConfigMap, name: postgresql-values}]\n"
+        )
+        sources = {
+            ("ConfigMap", "default", "postgresql-values"): {
+                "values.yaml": f"image:\n  reference: {image}\n"
+            }
+        }
+
+        self.assertTrue(
+            _is_postgresql_workload(
+                release,
+                {image},
+                sources,
+                chart_references={
+                    ("OCIRepository", "default", "postgresql"): ("postgresql",)
+                },
+            )
+        )
+
+    def test_ignore_missing_values_files_preserves_inline_values(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            charts_root = Path(temporary_directory) / "charts"
+            chart_root = charts_root / "postgresql"
+            chart_root.mkdir(parents=True)
+            (chart_root / "values.yaml").write_text("replicas: 1\n", encoding="utf-8")
+            release = (
+                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+                "kind: HelmRelease\n"
+                "metadata:\n"
+                "  name: postgresql\n"
+                "spec:\n"
+                "  chart:\n"
+                "    spec:\n"
+                "      chart: ./charts/postgresql\n"
+                "      sourceRef:\n"
+                "        kind: GitRepository\n"
+                "        name: shirokuma\n"
+                "      valuesFiles: [env/missing.yaml]\n"
+                "      ignoreMissingValuesFiles: true\n"
+                "  values:\n"
+                "    image:\n"
+                f"      reference: {image}\n"
+            )
+
+            self.assertTrue(
+                _is_postgresql_workload(
+                    release,
+                    {image},
+                    charts_root=charts_root,
+                    chart_references={
+                        ("GitRepository", "default", "shirokuma"): ("shirokuma",)
+                    },
+                )
+            )
+
+    def test_resolves_values_files_from_the_source_root(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            source_root = Path(temporary_directory)
+            charts_root = source_root / "charts"
+            chart_root = charts_root / "postgresql"
+            values_root = source_root / "env"
+            chart_root.mkdir(parents=True)
+            values_root.mkdir()
+            (chart_root / "values.yaml").write_text("replicas: 1\n", encoding="utf-8")
+            (values_root / "postgresql.yaml").write_text(
+                f"image:\n  reference: {image}\n", encoding="utf-8"
+            )
+            release = (
+                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+                "kind: HelmRelease\n"
+                "metadata:\n"
+                "  name: postgresql\n"
+                "spec:\n"
+                "  chart:\n"
+                "    spec:\n"
+                "      chart: ./charts/postgresql\n"
+                "      sourceRef:\n"
+                "        kind: GitRepository\n"
+                "        name: shirokuma\n"
+                "      valuesFiles: [env/postgresql.yaml]\n"
+            )
+
+            self.assertTrue(
+                _is_postgresql_workload(
+                    release,
+                    {image},
+                    charts_root=charts_root,
+                    chart_references={
+                        ("GitRepository", "default", "shirokuma"): ("shirokuma",)
+                    },
+                )
+            )
+
+    def test_postrenderer_image_fields_can_precede_name(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        release = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: postgresql\n"
+            "spec:\n"
+            "  postRenderers:\n"
+            "    - kustomize:\n"
+            "        images:\n"
+            "          - newName: registry.example/postgresql\n"
+            f"            digest: sha256:{'c' * 64}\n"
+            "            name: postgresql\n"
+        )
+
+        self.assertTrue(_is_postgresql_workload(release, {image}))
+
+    def test_checks_every_postrenderer(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        release = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: postgresql\n"
+            "spec:\n"
+            "  postRenderers:\n"
+            "    - kustomize:\n"
+            "        images:\n"
+            "          - name: metrics-sidecar\n"
+            "            newName: registry.example/metrics-sidecar\n"
+            f"            digest: sha256:{'d' * 64}\n"
+            "    - kustomize:\n"
+            "        images:\n"
+            "          - name: postgresql\n"
+            "            newName: registry.example/postgresql\n"
+            f"            digest: sha256:{'c' * 64}\n"
+        )
+
+        self.assertTrue(_is_postgresql_workload(release, {image}))
+
+    def test_preserves_json_postrenderer_detection(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        release = json.dumps(
+            {
+                "apiVersion": "helm.toolkit.fluxcd.io/v2",
+                "kind": "HelmRelease",
+                "metadata": {"name": "postgresql"},
+                "spec": {
+                    "postRenderers": [
+                        {
+                            "kustomize": {
+                                "images": [
+                                    {
+                                        "digest": "sha256:" + "c" * 64,
+                                        "newName": "registry.example/postgresql",
+                                        "name": "postgresql",
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+            }
+        )
+
+        self.assertTrue(_is_postgresql_workload(release, {image}))
+
+    def test_requires_a_resolvable_helm_chart_source(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        releases = (
+            (
+                "  chart:\n"
+                "    spec:\n"
+                "      chart: postgresql\n"
+            ),
+            (
+                "  chartRef:\n"
+                "    kind: OCIRepository\n"
+                "    name: postgresql\n"
+            ),
+        )
+        for chart in releases:
+            with self.subTest(chart=chart):
+                release = (
+                    "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+                    "kind: HelmRelease\n"
+                    "metadata:\n"
+                    "  name: postgresql\n"
+                    "spec:\n"
+                    f"{chart}"
+                    "  values:\n"
+                    "    image:\n"
+                    f"      reference: {image}\n"
+                )
+                self.assertFalse(
+                    _is_postgresql_workload(
+                        release, {image}, chart_references={}
+                    )
+                )
+
     def test_rejects_postgresql_resource_without_workload_or_admission(self) -> None:
         image = "registry.example/postgresql@sha256:" + "c" * 64
         manifests = (
@@ -1423,7 +1924,14 @@ class PolarisPrerequisiteWorkloadDetectionTests(unittest.TestCase):
             }
         }
         self.assertTrue(
-            _is_polaris_prerequisite_workload(manifest, {image}, sources)
+            _is_polaris_prerequisite_workload(
+                manifest,
+                {image},
+                sources,
+                chart_references={
+                    ("OCIRepository", "default", "polaris"): ("polaris",)
+                },
+            )
         )
 
 
