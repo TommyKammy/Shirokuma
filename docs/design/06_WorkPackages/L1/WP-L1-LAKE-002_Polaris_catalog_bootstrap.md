@@ -72,9 +72,11 @@ admission境界をADR-0021へ固定します。
 
 - Epic: [#24](https://github.com/TommyKammy/Shirokuma/issues/24)
 - Issue: [#27](https://github.com/TommyKammy/Shirokuma/issues/27)
+- Draft PR: [#52](https://github.com/TommyKammy/Shirokuma/pull/52)
 - GitHub depends on: `#26` (closed 2026-07-16 JST)
 - Execution order: `3 of 10`
-- Queue: active; supply-chain selection checkpoint in progress.
+- Queue: supply-chain selection checkpoint is in draft review; trusted Polaris
+  build/publication and evidence admission remain the next implementation step.
 
 ## Definition of Done
 
