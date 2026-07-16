@@ -94,6 +94,14 @@ class Arm64CompatibilityMatrixTests(unittest.TestCase):
                 self.assertIn("Risk:", fallback)
                 self.assertIn("Replace:", fallback)
 
+    def test_polaris_source_build_decision_remains_fail_closed(self) -> None:
+        row = self.rows["Apache Polaris"]
+        self.assertIn("upstream", row["Image or build path"])
+        self.assertIn("rejected", row["Image or build path"])
+        self.assertIn("repository build", row["Image or build path"])
+        self.assertIn("runtime remains blocked", row["v0.2 decision"])
+        self.assertIn("main publication", row["Fallback owner / risk / replacement"])
+
 
 if __name__ == "__main__":
     unittest.main()
