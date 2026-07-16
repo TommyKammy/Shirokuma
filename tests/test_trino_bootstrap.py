@@ -34,6 +34,7 @@ HELM_RELEASE_IDENTITY_PATHS = (
     ("spec", "chartRef", "name"),
 )
 HELM_VALUES_SOURCE_KINDS = {"ConfigMap", "Secret"}
+HELM_CHART_REF_KINDS = {"ExternalArtifact", "HelmChart", "OCIRepository"}
 HelmResourceKey = tuple[object, ...]
 HelmValuesSources = dict[HelmResourceKey, dict[str, str]]
 HelmChartReferences = dict[HelmResourceKey, tuple[str, ...]]
@@ -196,6 +197,18 @@ def _yaml_flow_mapping(value: str) -> dict[str, str] | None:
             return None
         mapping[_strip_yaml_scalar(key)] = _strip_yaml_scalar(raw_value)
     return mapping
+
+
+def _yaml_flow_mapping_items(
+    value: str, prefix: tuple[str, ...]
+) -> list[tuple[tuple[str, ...], str]]:
+    mapping = _yaml_flow_mapping(value)
+    if mapping is None:
+        return [(prefix, _strip_yaml_scalar(value))]
+    items: list[tuple[tuple[str, ...], str]] = []
+    for key, nested_value in mapping.items():
+        items.extend(_yaml_flow_mapping_items(nested_value, (*prefix, key)))
+    return items
 
 
 def _values_from_references(
@@ -470,6 +483,7 @@ def _helm_chart_references(
             name = scalars.get(("metadata", "name"))
             if kind not in {
                 "Bucket",
+                "ExternalArtifact",
                 "GitRepository",
                 "HelmChart",
                 "HelmRepository",
@@ -497,6 +511,7 @@ def _scoped_helm_resource(
     namespace: str,
     name: str,
     release_path: Path | None,
+    allow_shared_namespace: bool = False,
 ) -> object | None:
     if release_path is not None:
         scoped = resources.get(
@@ -504,7 +519,11 @@ def _scoped_helm_resource(
         )
         if scoped is not None:
             return scoped
-        return resources.get((kind, namespace, name))
+        unscoped = resources.get((kind, namespace, name))
+        if unscoped is not None:
+            return unscoped
+        if not allow_shared_namespace:
+            return None
     unscoped = resources.get((kind, namespace, name))
     if unscoped is not None:
         return unscoped
@@ -533,7 +552,12 @@ def _referenced_chart_identities(
         scalars.get(("metadata", "namespace"), "default"),
     )
     values = _scoped_helm_resource(
-        chart_references, kind, namespace, name, release_path
+        chart_references,
+        kind,
+        namespace,
+        name,
+        release_path,
+        allow_shared_namespace=True,
     )
     return values if isinstance(values, tuple) else ()
 
@@ -549,27 +573,39 @@ def _helm_release_chart_source_resolves(
     chart_ref_kind = scalars.get(("spec", "chartRef", "kind"))
     chart_ref_name = scalars.get(("spec", "chartRef", "name"))
 
-    if chart is not None:
+    if chart_references is None:
+        return True
+
+    has_chart = chart is not None
+    has_chart_ref = chart_ref_kind is not None or chart_ref_name is not None
+    if has_chart == has_chart_ref:
+        return False
+
+    if has_chart:
         kind = scalars.get(("spec", "chart", "spec", "sourceRef", "kind"))
         name = scalars.get(("spec", "chart", "spec", "sourceRef", "name"))
         namespace = scalars.get(
             ("spec", "chart", "spec", "sourceRef", "namespace"),
             release_namespace,
         )
-    elif chart_ref_kind is not None or chart_ref_name is not None:
+    else:
+        if chart_ref_kind not in HELM_CHART_REF_KINDS:
+            return False
         kind = chart_ref_kind
         name = chart_ref_name
         namespace = scalars.get(
             ("spec", "chartRef", "namespace"), release_namespace
         )
-    else:
-        return True
-
-    if not kind or not name or chart_references is None:
+    if not kind or not name:
         return False
     return (
         _scoped_helm_resource(
-            chart_references, kind, namespace, name, release_path
+            chart_references,
+            kind,
+            namespace,
+            name,
+            release_path,
+            allow_shared_namespace=True,
         )
         is not None
     )
@@ -778,11 +814,14 @@ def _effective_helm_value_items(
                 for path, value in _document_scalars(content)
             ]
         _merge_helm_value_items(effective, items)
-    inline_items = [
-        (path, value)
-        for path, value in _document_scalars(document)
-        if path[:2] == ("spec", "values")
-    ]
+    inline_items: list[tuple[tuple[str, ...], str]] = []
+    for path, value in _document_scalars(document):
+        if path[:2] != ("spec", "values"):
+            continue
+        if path == ("spec", "values"):
+            inline_items.extend(_yaml_flow_mapping_items(value, path))
+        else:
+            inline_items.append((path, value))
     _merge_helm_value_items(effective, inline_items)
     return list(effective.items())
 
@@ -830,7 +869,7 @@ def _is_component_helm_release(
         if identity_matcher(name) or identity_matcher(PurePosixPath(name).name)
     ]
     if component_replacements:
-        return any(reference in admitted_images for reference in component_replacements)
+        return component_replacements[-1] in admitted_images
     return uses_admitted_image
 
 
@@ -1273,9 +1312,18 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
             "metadata:\n"
             "  name: postgresql\n"
             "spec:\n"
+            "  chartRef:\n"
+            "    kind: OCIRepository\n"
+            "    name: postgresql\n"
             "  valuesFrom:\n"
             "    - kind: ConfigMap\n"
             "      name: postgresql-values\n"
+        )
+        chart_source = (
+            "apiVersion: source.toolkit.fluxcd.io/v1\n"
+            "kind: OCIRepository\n"
+            "metadata:\n"
+            "  name: postgresql\n"
         )
         with tempfile.TemporaryDirectory() as temporary_directory:
             deploy_root = Path(temporary_directory) / "deploy"
@@ -1287,7 +1335,11 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
             charts_root.mkdir()
             admitted_manifest = overlay_a / "catalog.yaml"
             admitted_manifest.write_text(
-                source_template.format(image=image) + "---\n" + release,
+                source_template.format(image=image)
+                + "---\n"
+                + chart_source
+                + "---\n"
+                + release,
                 encoding="utf-8",
             )
             (overlay_b / "values.yaml").write_text(
@@ -1656,6 +1708,30 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
             )
         )
 
+    def test_accepts_flow_style_inline_values(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        release = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: postgresql\n"
+            "spec:\n"
+            "  chartRef:\n"
+            "    kind: OCIRepository\n"
+            "    name: postgresql\n"
+            f"  values: {{image: {{reference: {image}}}}}\n"
+        )
+
+        self.assertTrue(
+            _is_postgresql_workload(
+                release,
+                {image},
+                chart_references={
+                    ("OCIRepository", "default", "postgresql"): ("postgresql",)
+                },
+            )
+        )
+
     def test_ignore_missing_values_files_preserves_inline_values(self) -> None:
         image = "registry.example/postgresql@sha256:" + "c" * 64
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -1773,6 +1849,40 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
 
         self.assertTrue(_is_postgresql_workload(release, {image}))
 
+    def test_last_component_postrenderer_override_wins(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        release = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: postgresql\n"
+            "spec:\n"
+            "  chartRef:\n"
+            "    kind: OCIRepository\n"
+            "    name: postgresql\n"
+            "  postRenderers:\n"
+            "    - kustomize:\n"
+            "        images:\n"
+            "          - name: postgresql\n"
+            "            newName: registry.example/postgresql\n"
+            f"            digest: sha256:{'c' * 64}\n"
+            "    - kustomize:\n"
+            "        images:\n"
+            "          - name: postgresql\n"
+            "            newName: registry.example/postgresql\n"
+            f"            digest: sha256:{'d' * 64}\n"
+        )
+
+        self.assertFalse(
+            _is_postgresql_workload(
+                release,
+                {image},
+                chart_references={
+                    ("OCIRepository", "default", "postgresql"): ("postgresql",)
+                },
+            )
+        )
+
     def test_preserves_json_postrenderer_detection(self) -> None:
         image = "registry.example/postgresql@sha256:" + "c" * 64
         release = json.dumps(
@@ -1832,6 +1942,91 @@ class PostgreSQLWorkloadDetectionTests(unittest.TestCase):
                         release, {image}, chart_references={}
                     )
                 )
+
+    def test_rejects_helmrelease_without_chart_reference(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        release = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: postgresql\n"
+            "spec:\n"
+            "  values:\n"
+            "    image:\n"
+            f"      reference: {image}\n"
+        )
+
+        self.assertFalse(
+            _is_postgresql_workload(release, {image}, chart_references={})
+        )
+
+    def test_rejects_unsupported_chart_ref_kind(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        release = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: postgresql\n"
+            "spec:\n"
+            "  chartRef:\n"
+            "    kind: GitRepository\n"
+            "    name: postgresql\n"
+            "  values:\n"
+            "    image:\n"
+            f"      reference: {image}\n"
+        )
+
+        self.assertFalse(
+            _is_postgresql_workload(
+                release,
+                {image},
+                chart_references={
+                    ("GitRepository", "default", "postgresql"): ("postgresql",)
+                },
+            )
+        )
+
+    def test_resolves_explicitly_namespaced_shared_chart_source(self) -> None:
+        image = "registry.example/postgresql@sha256:" + "c" * 64
+        release = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: postgresql\n"
+            "  namespace: catalog\n"
+            "spec:\n"
+            "  chart:\n"
+            "    spec:\n"
+            "      chart: postgresql\n"
+            "      sourceRef:\n"
+            "        kind: GitRepository\n"
+            "        name: flux-system\n"
+            "        namespace: flux-system\n"
+            "  values:\n"
+            "    image:\n"
+            f"      reference: {image}\n"
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            release_path = root / "catalog" / "release.yaml"
+            shared_source_dir = root / "flux-system"
+            chart_references = {
+                (
+                    shared_source_dir.resolve(),
+                    "GitRepository",
+                    "flux-system",
+                    "flux-system",
+                ): ("flux-system",)
+            }
+            self.assertTrue(
+                _is_postgresql_workload(
+                    release,
+                    {image},
+                    release_path=release_path,
+                    chart_references=chart_references,
+                )
+            )
 
     def test_rejects_postgresql_resource_without_workload_or_admission(self) -> None:
         image = "registry.example/postgresql@sha256:" + "c" * 64
