@@ -16,6 +16,10 @@ RESIDENT_IMAGES = ROOT / "security/resident-images.json"
 DEPLOYMENT_SUFFIXES = {".json", ".yaml", ".yml"}
 WORKLOAD_KINDS = {"Deployment", "StatefulSet"}
 POLARIS_COMPONENT = "polaris"
+BOOTSTRAP_KINDS = {"Job", "CronJob"}
+ICEBERG_BOOTSTRAP_IDENTITY = re.compile(
+    r"(?:iceberg|catalog[-_ ]bootstrap|table[-_ ]bootstrap)", re.IGNORECASE
+)
 
 
 def _mapping_scalars(document: str) -> Iterator[tuple[tuple[str, ...], str]]:
@@ -140,6 +144,31 @@ def _polaris_workload_manifests(
         if any(_is_polaris_workload(document, admitted_images) for document in documents):
             workloads.append(_display_path(path))
     return workloads
+
+
+def _iceberg_bootstrap_manifests(
+    deploy_root: Path = DEPLOY_ROOT,
+    charts_root: Path = CHARTS_ROOT,
+) -> list[Path]:
+    manifests: list[Path] = []
+    for path in _deployment_manifest_paths(deploy_root, charts_root):
+        documents = re.split(
+            r"(?m)^---[ \t]*(?:#.*)?$", path.read_text(encoding="utf-8")
+        )
+        for document in documents:
+            scalars = dict(_document_scalars(document))
+            identities = (
+                scalars.get(("metadata", "name")),
+                scalars.get(("metadata", "labels", "app.kubernetes.io/name")),
+                scalars.get(("spec", "template", "spec", "containers", "name")),
+            )
+            if scalars.get(("kind",)) in BOOTSTRAP_KINDS and any(
+                identity and ICEBERG_BOOTSTRAP_IDENTITY.search(identity)
+                for identity in identities
+            ):
+                manifests.append(_display_path(path))
+                break
+    return sorted(manifests, key=str)
 
 
 class PolarisWorkloadDetectionTests(unittest.TestCase):
@@ -301,6 +330,48 @@ class PolarisWorkloadDetectionTests(unittest.TestCase):
         self.assertFalse(_is_polaris_workload(manifest, set()))
 
 
+class IcebergBootstrapDetectionTests(unittest.TestCase):
+    def test_detects_bootstrap_job_without_flagging_storage_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            deploy_root = root / "deploy"
+            charts_root = root / "charts"
+            deploy_root.mkdir()
+            charts_root.mkdir()
+            (deploy_root / "storage.yaml").write_text(
+                "apiVersion: apps/v1\n"
+                "kind: StatefulSet\n"
+                "metadata:\n"
+                "  name: seaweedfs\n"
+                "spec:\n"
+                "  template:\n"
+                "    spec:\n"
+                "      containers:\n"
+                "        - name: seaweedfs\n"
+                "          args:\n"
+                "            - -s3.port.iceberg=0\n",
+                encoding="utf-8",
+            )
+            (deploy_root / "bootstrap.yaml").write_text(
+                "apiVersion: batch/v1\n"
+                "kind: Job\n"
+                "metadata:\n"
+                "  name: iceberg-table-bootstrap\n"
+                "spec:\n"
+                "  template:\n"
+                "    spec:\n"
+                "      containers:\n"
+                "        - name: bootstrap\n"
+                "          image: registry.example/bootstrap@sha256:" + "a" * 64 + "\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                [deploy_root / "bootstrap.yaml"],
+                _iceberg_bootstrap_manifests(deploy_root, charts_root),
+            )
+
+
 class IcebergTableBootstrapPrerequisiteTests(unittest.TestCase):
     def test_missing_polaris_workload_keeps_bootstrap_blocked(self) -> None:
         self.assertEqual(
@@ -308,7 +379,13 @@ class IcebergTableBootstrapPrerequisiteTests(unittest.TestCase):
             _polaris_workload_manifests(),
             "Replace this blocker regression with the Iceberg bootstrap checks once "
             "an approved Polaris Deployment or StatefulSet is materialized through "
-            "deploy or a Helm chart template",
+                "deploy or a Helm chart template",
+        )
+        self.assertEqual(
+            [],
+            _iceberg_bootstrap_manifests(),
+            "Iceberg namespace/table bootstrap resources must remain absent until "
+            "an admitted Polaris workload and its catalog readiness evidence exist",
         )
 
 
