@@ -75,11 +75,14 @@ admission境界をADR-0021へ固定します。
 
 - Epic: [#24](https://github.com/TommyKammy/Shirokuma/issues/24)
 - Issue: [#27](https://github.com/TommyKammy/Shirokuma/issues/27)
-- Draft PR: [#52](https://github.com/TommyKammy/Shirokuma/pull/52)
+- PR: [#52](https://github.com/TommyKammy/Shirokuma/pull/52) (merged)
+- Runtime follow-up Epic: [#60](https://github.com/TommyKammy/Shirokuma/issues/60)
+- Runtime follow-up Issue: [#61](https://github.com/TommyKammy/Shirokuma/issues/61)
 - GitHub depends on: `#26` (closed 2026-07-16 JST)
 - Execution order: `3 of 10`
-- Queue: supply-chain selection checkpoint is in draft review; trusted Polaris
-  build/publication and evidence admission remain the next implementation step.
+- Queue: #27 closed after the supply-chain selection checkpoint. Runtime scope
+  is now executable as #61: trusted Polaris build/publication, PostgreSQL
+  admission, Flux workloads, Ready evidence, and catalog smoke.
 
 ## Definition of Done
 
