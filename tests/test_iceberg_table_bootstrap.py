@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, NamedTuple
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,6 +47,16 @@ HELM_CHART_SOURCE_KINDS = {
     "OCIRepository",
 }
 HELM_VALUES_SOURCE_KINDS = {"ConfigMap", "Secret"}
+KUSTOMIZATION_FILENAMES = ("kustomization.yaml", "kustomization.yml", "Kustomization")
+
+ScalarItems = list[tuple[tuple[str, ...], str]]
+
+
+class ManifestResource(NamedTuple):
+    path: Path
+    document: str
+    scalar_items: ScalarItems
+    namespace: str
 
 
 def _mapping_scalars(document: str) -> Iterator[tuple[tuple[str, ...], str]]:
@@ -98,6 +108,306 @@ def _document_scalars(document: str) -> list[tuple[tuple[str, ...], str]]:
     return list(_json_scalars(parsed))
 
 
+def _strip_yaml_scalar(value: str) -> str:
+    return value.split(" #", maxsplit=1)[0].strip().strip("'\"")
+
+
+def _flow_mapping_fields(value: str) -> dict[str, str]:
+    return {
+        match.group("field"): _strip_yaml_scalar(match.group("value"))
+        for match in re.finditer(
+            r"(?:^|[,{])\s*(?P<field>[A-Za-z][A-Za-z0-9]*)\s*:\s*"
+            r"(?P<value>\"[^\"]*\"|'[^']*'|[^,}\]]+)",
+            value,
+        )
+    }
+
+
+def _yaml_mapping_sequence(
+    document: str, target_path: tuple[str, ...]
+) -> list[dict[str, str]]:
+    try:
+        parsed = json.loads(document)
+    except json.JSONDecodeError:
+        parsed = None
+
+    if isinstance(parsed, dict):
+        value: object = parsed
+        for part in target_path:
+            if not isinstance(value, dict) or part not in value:
+                return []
+            value = value[part]
+        if not isinstance(value, list):
+            return []
+        return [
+            {str(key): str(item) for key, item in entry.items()}
+            for entry in value
+            if isinstance(entry, dict)
+        ]
+
+    lines = document.splitlines()
+    stack: list[tuple[int, str]] = []
+    for index, raw_line in enumerate(lines):
+        match = re.match(
+            r"^(?P<indent>[ ]*)(?P<key>[^:#][^:]*):(?P<value>.*)$",
+            raw_line,
+        )
+        if match is None:
+            continue
+        indent = len(match.group("indent"))
+        while stack and indent <= stack[-1][0]:
+            stack.pop()
+        key = match.group("key").strip().strip("'\"")
+        path = tuple(item[1] for item in stack) + (key,)
+        if path != target_path:
+            if not match.group("value").strip():
+                stack.append((indent, key))
+            continue
+
+        inline_value = match.group("value").strip()
+        if inline_value:
+            return [
+                _flow_mapping_fields(mapping)
+                for mapping in re.findall(r"\{[^{}]*\}", inline_value)
+            ]
+
+        entries: list[dict[str, str]] = []
+        current: dict[str, str] | None = None
+        item_indent: int | None = None
+        for candidate in lines[index + 1 :]:
+            if not candidate.strip() or candidate.lstrip().startswith("#"):
+                continue
+            candidate_indent = len(candidate) - len(candidate.lstrip(" "))
+            if candidate_indent <= indent:
+                break
+            item_match = re.match(
+                r"^[ ]*-[ ]*(?P<value>.*?)[ ]*$", candidate
+            )
+            if item_match is not None:
+                if current is not None:
+                    entries.append(current)
+                current = {}
+                item_indent = candidate_indent
+                item_value = item_match.group("value")
+                if item_value.startswith("{"):
+                    current.update(_flow_mapping_fields(item_value))
+                else:
+                    field_match = re.match(
+                        r"(?P<field>[^:#][^:]*):(?P<value>.*)$",
+                        item_value,
+                    )
+                    if field_match is not None:
+                        current[
+                            field_match.group("field").strip().strip("'\"")
+                        ] = _strip_yaml_scalar(field_match.group("value"))
+                continue
+            if current is None or item_indent is None:
+                return []
+            field_match = re.match(
+                r"^[ ]*(?P<field>[^:#][^:]*):(?P<value>.*)$",
+                candidate,
+            )
+            if field_match is None or candidate_indent <= item_indent:
+                return []
+            current[
+                field_match.group("field").strip().strip("'\"")
+            ] = _strip_yaml_scalar(field_match.group("value"))
+        if current is not None:
+            entries.append(current)
+        return entries
+    return []
+
+
+def _yaml_sequence_values(
+    document: str, target_path: tuple[str, ...]
+) -> list[str]:
+    try:
+        parsed = json.loads(document)
+    except json.JSONDecodeError:
+        parsed = None
+
+    if isinstance(parsed, dict):
+        value: object = parsed
+        for part in target_path:
+            if not isinstance(value, dict) or part not in value:
+                return []
+            value = value[part]
+        if not isinstance(value, list):
+            return []
+        return [item for item in value if isinstance(item, str)]
+
+    lines = document.splitlines()
+    stack: list[tuple[int, str]] = []
+    for index, raw_line in enumerate(lines):
+        match = re.match(
+            r"^(?P<indent>[ ]*)(?P<key>[^:#][^:]*):(?P<value>.*)$",
+            raw_line,
+        )
+        if match is None:
+            continue
+        indent = len(match.group("indent"))
+        while stack and indent <= stack[-1][0]:
+            stack.pop()
+        key = match.group("key").strip().strip("'\"")
+        path = tuple(item[1] for item in stack) + (key,)
+        if path != target_path:
+            if not match.group("value").strip():
+                stack.append((indent, key))
+            continue
+
+        inline_value = match.group("value").strip()
+        if inline_value:
+            inline_match = re.fullmatch(
+                r"\[(?P<values>.*)\](?:\s+#.*)?", inline_value
+            )
+            if inline_match is None:
+                return []
+            values = [
+                _strip_yaml_scalar(item)
+                for item in inline_match.group("values").split(",")
+            ]
+            return values if values and all(values) else []
+
+        values: list[str] = []
+        for candidate in lines[index + 1 :]:
+            if not candidate.strip() or candidate.lstrip().startswith("#"):
+                continue
+            candidate_indent = len(candidate) - len(candidate.lstrip(" "))
+            if candidate_indent <= indent:
+                break
+            item_match = re.match(r"^[ ]*-[ ]*(?P<value>.+?)\s*$", candidate)
+            if item_match is None:
+                return []
+            values.append(_strip_yaml_scalar(item_match.group("value")))
+        return values
+    return []
+
+
+def _yaml_string_mapping(document: str, field: str) -> dict[str, str]:
+    lines = document.splitlines()
+    entries: dict[str, str] = {}
+    for index, raw_line in enumerate(lines):
+        if re.match(rf"^{re.escape(field)}:[ ]*(?:#.*)?$", raw_line) is None:
+            continue
+        cursor = index + 1
+        while cursor < len(lines):
+            candidate = lines[cursor]
+            if not candidate.strip() or candidate.lstrip().startswith("#"):
+                cursor += 1
+                continue
+            indent = len(candidate) - len(candidate.lstrip(" "))
+            if indent == 0:
+                break
+            item_match = re.match(
+                r"^(?P<indent>[ ]*)(?P<key>[^:#][^:]*):(?P<value>.*)$",
+                candidate,
+            )
+            if item_match is None:
+                cursor += 1
+                continue
+            key_indent = len(item_match.group("indent"))
+            key = item_match.group("key").strip().strip("'\"")
+            raw_value = item_match.group("value").strip()
+            if raw_value.startswith(("|", ">")):
+                block_lines: list[str] = []
+                cursor += 1
+                while cursor < len(lines):
+                    block_line = lines[cursor]
+                    block_indent = len(block_line) - len(
+                        block_line.lstrip(" ")
+                    )
+                    if block_line.strip() and block_indent <= key_indent:
+                        break
+                    block_lines.append(
+                        block_line[min(len(block_line), key_indent + 2) :]
+                    )
+                    cursor += 1
+                entries[key] = "\n".join(block_lines)
+                continue
+            entries[key] = _strip_yaml_scalar(raw_value)
+            cursor += 1
+        break
+    return entries
+
+
+def _manifest_item_documents(document: str) -> list[str]:
+    try:
+        parsed = json.loads(document)
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, dict):
+        if parsed.get("kind") != "List":
+            return [document]
+        items = parsed.get("items")
+        if not isinstance(items, list):
+            return []
+        return [
+            json.dumps(item)
+            for item in items
+            if isinstance(item, dict)
+        ]
+
+    if dict(_document_scalars(document)).get(("kind",)) != "List":
+        return [document]
+    lines = document.splitlines()
+    items_index = next(
+        (
+            index
+            for index, line in enumerate(lines)
+            if re.match(r"^items:[ ]*(?:#.*)?$", line)
+        ),
+        None,
+    )
+    if items_index is None:
+        return []
+
+    item_documents: list[list[str]] = []
+    item_indent: int | None = None
+    current: list[str] | None = None
+    for line in lines[items_index + 1 :]:
+        if not line.strip() or line.lstrip().startswith("#"):
+            if current is not None:
+                current.append("")
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        sequence_match = re.match(r"^(?P<indent>[ ]*)-[ ]*(?P<value>.*)$", line)
+        if sequence_match is not None and (
+            item_indent is None or indent == item_indent
+        ):
+            if current is not None:
+                item_documents.append(current)
+            item_indent = indent
+            current = [sequence_match.group("value")]
+            continue
+        if current is None or item_indent is None or indent <= item_indent:
+            break
+        current.append(line[min(len(line), item_indent + 2) :])
+    if current is not None:
+        item_documents.append(current)
+    return ["\n".join(lines).strip() + "\n" for lines in item_documents]
+
+
+def _effective_kustomize_namespace(
+    path: Path, deploy_root: Path, charts_root: Path
+) -> str:
+    roots = (deploy_root.resolve(), charts_root.resolve())
+    current = path.parent.resolve()
+    while any(current == root or current.is_relative_to(root) for root in roots):
+        for filename in KUSTOMIZATION_FILENAMES:
+            kustomization = current / filename
+            if not kustomization.is_file():
+                continue
+            namespace = dict(
+                _document_scalars(kustomization.read_text(encoding="utf-8"))
+            ).get(("namespace",))
+            if namespace:
+                return namespace
+        if current in roots:
+            break
+        current = current.parent
+    return "default"
+
+
 def _has_polaris_identity(value: str | None) -> bool:
     return value == "polaris" or bool(value and re.fullmatch(r"polaris[-_][a-z0-9_-]+", value))
 
@@ -116,94 +426,103 @@ def _path_starts_with(path: tuple[str, ...], prefix: tuple[str, ...]) -> bool:
 def _is_bootstrap_container_identity_path(path: tuple[str, ...]) -> bool:
     return any(
         path == root
-        or path in {root + ("image",), root + ("name",)}
+        or (
+            path[:-1] == root
+            and path[-1].lstrip("{").casefold() in {"image", "name"}
+        )
         for root in BOOTSTRAP_CONTAINER_ROOT_PATHS
     )
 
 
 def _resource_key(
-    scalar_items: list[tuple[tuple[str, ...], str]],
+    scalar_items: ScalarItems,
+    effective_namespace: str,
 ) -> tuple[str, str, str] | None:
     scalars = dict(scalar_items)
     kind = scalars.get(("kind",))
     name = scalars.get(("metadata", "name"))
     if not kind or not name:
         return None
-    return kind, scalars.get(("metadata", "namespace"), "default"), name
+    return (
+        kind,
+        scalars.get(("metadata", "namespace"), effective_namespace),
+        name,
+    )
 
 
 def _helm_values_from_references(
-    scalar_items: list[tuple[tuple[str, ...], str]],
+    document: str,
 ) -> set[tuple[str, str]]:
-    references: set[tuple[str, str]] = set()
-    current: dict[str, str] = {}
-
-    def record_current() -> None:
-        name = current.get("name")
-        kind = current.get("kind", "ConfigMap")
+    references = set()
+    for entry in _yaml_mapping_sequence(document, ("spec", "valuesFrom")):
+        name = entry.get("name")
+        kind = entry.get("kind", "ConfigMap")
         if name and kind in HELM_VALUES_SOURCE_KINDS:
             references.add((kind, name))
-
-    for path, value in scalar_items:
-        if not _path_starts_with(path, ("spec", "valuesFrom")):
-            continue
-        if path == ("spec", "valuesFrom"):
-            for mapping in re.findall(r"\{(?P<mapping>[^{}]+)\}", value):
-                fields = {
-                    match.group("field"): match.group("value").strip("'\"")
-                    for match in re.finditer(
-                        r"(?:^|,)\s*(?P<field>kind|name)\s*:\s*"
-                        r"(?P<value>[^,\]}\s]+)",
-                        mapping,
-                    )
-                }
-                name = fields.get("name")
-                kind = fields.get("kind", "ConfigMap")
-                if name and kind in HELM_VALUES_SOURCE_KINDS:
-                    references.add((kind, name))
-            continue
-
-        field = path[-1]
-        if field not in {"kind", "name"}:
-            continue
-        if field in current or (
-            field == "kind" and "name" in current
-        ):
-            record_current()
-            current = {}
-        current[field] = value
-
-    record_current()
     return references
 
 
 def _resource_has_bootstrap_identity(
-    scalar_items: list[tuple[tuple[str, ...], str]],
+    scalar_items: ScalarItems,
 ) -> bool:
     return any(_has_iceberg_bootstrap_identity(value) for _, value in scalar_items)
 
 
-def _values_source_has_bootstrap_identity(
-    scalar_items: list[tuple[tuple[str, ...], str]],
-) -> bool:
-    scalars = dict(scalar_items)
-    if scalars.get(("kind",)) != "Secret":
-        return _resource_has_bootstrap_identity(scalar_items)
+def _values_source_data(document: str, kind: str) -> dict[str, str]:
+    try:
+        parsed = json.loads(document)
+    except json.JSONDecodeError:
+        parsed = None
 
-    for path, value in scalar_items:
-        if _path_starts_with(path, ("stringData",)) and (
-            _has_iceberg_bootstrap_identity(value)
-        ):
-            return True
-        if not _path_starts_with(path, ("data",)):
-            continue
+    if isinstance(parsed, dict):
+        raw_data = parsed.get("data", {})
+        string_data = parsed.get("stringData", {})
+        encoded_data = (
+            {
+                str(key): value
+                for key, value in raw_data.items()
+                if isinstance(value, str)
+            }
+            if isinstance(raw_data, dict)
+            else {}
+        )
+        plain_data = (
+            {
+                str(key): value
+                for key, value in string_data.items()
+                if isinstance(value, str)
+            }
+            if isinstance(string_data, dict)
+            else {}
+        )
+    else:
+        encoded_data = _yaml_string_mapping(document, "data")
+        plain_data = _yaml_string_mapping(document, "stringData")
+
+    if kind == "ConfigMap":
+        return encoded_data
+    decoded = {}
+    for key, value in encoded_data.items():
         try:
-            decoded = base64.b64decode(value, validate=True).decode("utf-8")
+            decoded[key] = base64.b64decode(
+                "".join(value.split()), validate=True
+            ).decode("utf-8")
         except (binascii.Error, UnicodeDecodeError, ValueError):
             continue
-        if _has_iceberg_bootstrap_identity(decoded):
-            return True
-    return False
+    decoded.update(plain_data)
+    return decoded
+
+
+def _values_source_has_bootstrap_identity(
+    resource: ManifestResource,
+) -> bool:
+    if _resource_has_bootstrap_identity(resource.scalar_items):
+        return True
+    kind = dict(resource.scalar_items).get(("kind",), "")
+    return any(
+        _has_iceberg_bootstrap_identity(value)
+        for value in _values_source_data(resource.document, kind).values()
+    )
 
 
 def _flow_mapping_field(
@@ -226,28 +545,28 @@ def _flow_mapping_field(
 def _scoped_resources(
     resources: Mapping[
         tuple[str, str, str],
-        Sequence[tuple[Path, list[tuple[tuple[str, ...], str]]]],
+        Sequence[ManifestResource],
     ],
     kind: str,
     namespace: str,
     name: str,
     release_path: Path,
-) -> Sequence[list[tuple[tuple[str, ...], str]]]:
+) -> Sequence[ManifestResource]:
     candidates = resources.get((kind, namespace, name), ())
     local = [
-        scalar_items
-        for path, scalar_items in candidates
-        if path.parent.resolve() == release_path.parent.resolve()
+        resource
+        for resource in candidates
+        if resource.path.parent.resolve() == release_path.parent.resolve()
     ]
     if local:
         return local
     if len(candidates) == 1:
-        return (candidates[0][1],)
+        return (candidates[0],)
     return ()
 
 
 def _reference_field(
-    scalar_items: list[tuple[tuple[str, ...], str]],
+    scalar_items: ScalarItems,
     mapping_path: tuple[str, ...],
     field: str,
 ) -> str | None:
@@ -257,10 +576,53 @@ def _reference_field(
     )
 
 
+def _chart_resource_has_bootstrap_identity(
+    resource: ManifestResource,
+    resources: Mapping[
+        tuple[str, str, str],
+        Sequence[ManifestResource],
+    ],
+) -> bool:
+    if _resource_has_bootstrap_identity(resource.scalar_items):
+        return True
+    if dict(resource.scalar_items).get(("kind",)) != "HelmChart":
+        return False
+
+    source_ref_path = ("spec", "sourceRef")
+    source_name = _reference_field(
+        resource.scalar_items, source_ref_path, "name"
+    )
+    source_kind = _reference_field(
+        resource.scalar_items, source_ref_path, "kind"
+    )
+    source_namespace = (
+        _reference_field(
+            resource.scalar_items, source_ref_path, "namespace"
+        )
+        or resource.namespace
+    )
+    if (
+        not source_name
+        or source_kind not in HELM_CHART_SOURCE_KINDS
+    ):
+        return False
+    return any(
+        _resource_has_bootstrap_identity(source.scalar_items)
+        for source in _scoped_resources(
+            resources,
+            source_kind,
+            source_namespace,
+            source_name,
+            resource.path,
+        )
+    )
+
+
 def _local_chart_has_bootstrap_values(
     chart_reference: str | None,
     charts_root: Path,
     release_path: Path,
+    release_document: str,
 ) -> bool:
     if (
         not chart_reference
@@ -285,8 +647,29 @@ def _local_chart_has_bootstrap_values(
         candidate = candidate.resolve()
         if not candidate.is_relative_to(charts_root_resolved):
             continue
-        for values_name in ("values.yaml", "values.yml"):
-            values_path = candidate / values_name
+
+        declared_values_files = _yaml_sequence_values(
+            release_document, ("spec", "chart", "spec", "valuesFiles")
+        )
+        if declared_values_files:
+            source_root = charts_root.parent.resolve()
+            values_paths = [
+                (source_root / values_file).resolve()
+                for values_file in declared_values_files
+            ]
+            values_paths = [
+                values_path
+                for values_path in values_paths
+                if values_path == source_root
+                or values_path.is_relative_to(source_root)
+            ]
+        else:
+            values_paths = [
+                candidate / values_name
+                for values_name in ("values.yaml", "values.yml")
+            ]
+
+        for values_path in values_paths:
             if not values_path.is_file():
                 continue
             scalar_items = _document_scalars(
@@ -298,14 +681,14 @@ def _local_chart_has_bootstrap_values(
 
 
 def _helm_release_has_bootstrap_identity(
-    scalar_items: list[tuple[tuple[str, ...], str]],
+    release: ManifestResource,
     resources: Mapping[
         tuple[str, str, str],
-        Sequence[tuple[Path, list[tuple[tuple[str, ...], str]]]],
+        Sequence[ManifestResource],
     ],
-    release_path: Path,
     charts_root: Path,
 ) -> bool:
+    scalar_items = release.scalar_items
     scalars = dict(scalar_items)
     if any(
         (
@@ -318,7 +701,9 @@ def _helm_release_has_bootstrap_identity(
     ):
         return True
 
-    release_namespace = scalars.get(("metadata", "namespace"), "default")
+    release_namespace = scalars.get(
+        ("metadata", "namespace"), release.namespace
+    )
     chart_ref_name = scalars.get(
         ("spec", "chartRef", "name")
     ) or _flow_mapping_field(
@@ -340,13 +725,13 @@ def _helm_release_has_bootstrap_identity(
             or release_namespace
         )
         if chart_ref_kind in HELM_CHART_REF_KINDS and any(
-            _resource_has_bootstrap_identity(resource)
+            _chart_resource_has_bootstrap_identity(resource, resources)
             for resource in _scoped_resources(
                 resources,
                 chart_ref_kind,
                 chart_ref_namespace,
                 chart_ref_name,
-                release_path,
+                release.path,
             )
         ):
             return True
@@ -367,13 +752,13 @@ def _helm_release_has_bootstrap_identity(
             or release_namespace
         )
         if chart_source_kind in HELM_CHART_SOURCE_KINDS and any(
-            _resource_has_bootstrap_identity(resource)
+            _resource_has_bootstrap_identity(resource.scalar_items)
             for resource in _scoped_resources(
                 resources,
                 chart_source_kind,
                 chart_source_namespace,
                 chart_source_name,
-                release_path,
+                release.path,
             )
         ):
             return True
@@ -384,19 +769,21 @@ def _helm_release_has_bootstrap_identity(
         scalar_items, ("spec", "chart", "spec"), "chart"
     )
     if _local_chart_has_bootstrap_values(
-        chart_reference, charts_root, release_path
+        chart_reference, charts_root, release.path, release.document
     ):
         return True
 
     return any(
         _values_source_has_bootstrap_identity(resource)
-        for source_kind, source_name in _helm_values_from_references(scalar_items)
+        for source_kind, source_name in _helm_values_from_references(
+            release.document
+        )
         for resource in _scoped_resources(
             resources,
             source_kind,
             release_namespace,
             source_name,
-            release_path,
+            release.path,
         )
     )
 
@@ -476,27 +863,37 @@ def _iceberg_bootstrap_manifests(
     deploy_root: Path = DEPLOY_ROOT,
     charts_root: Path = CHARTS_ROOT,
 ) -> list[Path]:
-    manifest_documents: list[
-        tuple[Path, list[tuple[tuple[str, ...], str]]]
-    ] = []
+    manifest_resources: list[ManifestResource] = []
     resources: dict[
         tuple[str, str, str],
-        list[tuple[Path, list[tuple[tuple[str, ...], str]]]],
+        list[ManifestResource],
     ] = {}
     for path in _deployment_manifest_paths(deploy_root, charts_root):
         documents = re.split(
             r"(?m)^---[ \t]*(?:#.*)?$", path.read_text(encoding="utf-8")
         )
         for document in documents:
-            scalar_items = _document_scalars(document)
-            manifest_documents.append((path, scalar_items))
-            resource_key = _resource_key(scalar_items)
-            if resource_key is not None:
-                resources.setdefault(resource_key, []).append((path, scalar_items))
+            for resource_document in _manifest_item_documents(document):
+                scalar_items = _document_scalars(resource_document)
+                effective_namespace = _effective_kustomize_namespace(
+                    path, deploy_root, charts_root
+                )
+                resource = ManifestResource(
+                    path,
+                    resource_document,
+                    scalar_items,
+                    effective_namespace,
+                )
+                manifest_resources.append(resource)
+                resource_key = _resource_key(
+                    scalar_items, effective_namespace
+                )
+                if resource_key is not None:
+                    resources.setdefault(resource_key, []).append(resource)
 
     manifests: set[Path] = set()
-    for path, scalar_items in manifest_documents:
-        scalars = dict(scalar_items)
+    for resource in manifest_resources:
+        scalars = dict(resource.scalar_items)
         kind = scalars.get(("kind",))
         is_bootstrap = kind in BOOTSTRAP_KINDS and any(
             (
@@ -508,14 +905,14 @@ def _iceberg_bootstrap_manifests(
                 or _is_bootstrap_container_identity_path(identity_path)
             )
             and _has_iceberg_bootstrap_identity(value)
-            for identity_path, value in scalar_items
+            for identity_path, value in resource.scalar_items
         )
         if kind == "HelmRelease":
             is_bootstrap = _helm_release_has_bootstrap_identity(
-                scalar_items, resources, path, charts_root
+                resource, resources, charts_root
             )
         if is_bootstrap:
-            manifests.add(_display_path(path))
+            manifests.add(_display_path(resource.path))
     return sorted(manifests, key=str)
 
 
@@ -1130,6 +1527,227 @@ class IcebergBootstrapDetectionTests(unittest.TestCase):
 
             self.assertEqual(
                 [deploy_root / "release.yaml"],
+                _iceberg_bootstrap_manifests(deploy_root, charts_root),
+            )
+
+    def test_preserves_name_first_values_from_kind(self) -> None:
+        release = (
+            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+            "kind: HelmRelease\n"
+            "metadata:\n"
+            "  name: catalog-task\n"
+            "spec:\n"
+            "  valuesFrom:\n"
+            "    - name: catalog-values\n"
+            "      kind: Secret\n"
+        )
+
+        self.assertEqual(
+            {("Secret", "catalog-values")},
+            _helm_values_from_references(release),
+        )
+
+    def test_decodes_line_wrapped_secret_data(self) -> None:
+        encoded_values = base64.b64encode(
+            b"fullnameOverride: iceberg-table-bootstrap\n"
+        ).decode("ascii")
+        midpoint = len(encoded_values) // 2
+        secret = (
+            "apiVersion: v1\n"
+            "kind: Secret\n"
+            "metadata:\n"
+            "  name: catalog-values\n"
+            "data:\n"
+            "  values.yaml: |\n"
+            f"    {encoded_values[:midpoint]}\n"
+            f"    {encoded_values[midpoint:]}\n"
+        )
+        resource = ManifestResource(
+            Path("secret.yaml"),
+            secret,
+            _document_scalars(secret),
+            "default",
+        )
+
+        self.assertTrue(_values_source_has_bootstrap_identity(resource))
+
+    def test_resolves_values_from_with_kustomize_namespace(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            deploy_root = root / "deploy"
+            charts_root = root / "charts"
+            deploy_root.mkdir()
+            charts_root.mkdir()
+            (deploy_root / "kustomization.yaml").write_text(
+                "apiVersion: kustomize.config.k8s.io/v1beta1\n"
+                "kind: Kustomization\n"
+                "namespace: shirokuma-lake\n"
+                "resources:\n"
+                "  - values.yaml\n"
+                "  - release.yaml\n",
+                encoding="utf-8",
+            )
+            (deploy_root / "values.yaml").write_text(
+                "apiVersion: v1\n"
+                "kind: ConfigMap\n"
+                "metadata:\n"
+                "  name: catalog-values\n"
+                "data:\n"
+                "  values.yaml: |\n"
+                "    fullnameOverride: iceberg-table-bootstrap\n",
+                encoding="utf-8",
+            )
+            (deploy_root / "release.yaml").write_text(
+                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+                "kind: HelmRelease\n"
+                "metadata:\n"
+                "  name: catalog-task\n"
+                "spec:\n"
+                "  valuesFrom:\n"
+                "    - kind: ConfigMap\n"
+                "      name: catalog-values\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                [deploy_root / "release.yaml"],
+                _iceberg_bootstrap_manifests(deploy_root, charts_root),
+            )
+
+    def test_detects_flow_mapping_container_list_item(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            deploy_root = root / "deploy"
+            charts_root = root / "charts"
+            deploy_root.mkdir()
+            charts_root.mkdir()
+            (deploy_root / "job.yaml").write_text(
+                "apiVersion: batch/v1\n"
+                "kind: Job\n"
+                "metadata:\n"
+                "  name: catalog-task\n"
+                "spec:\n"
+                "  template:\n"
+                "    spec:\n"
+                "      containers:\n"
+                "        - {name: iceberg-table-bootstrap, "
+                "image: registry.example/bootstrap@sha256:"
+                + "a" * 64
+                + "}\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                [deploy_root / "job.yaml"],
+                _iceberg_bootstrap_manifests(deploy_root, charts_root),
+            )
+
+    def test_follows_helmchart_source_ref_from_chart_ref_release(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            deploy_root = root / "deploy"
+            charts_root = root / "charts"
+            deploy_root.mkdir()
+            charts_root.mkdir()
+            (deploy_root / "source.yaml").write_text(
+                "apiVersion: source.toolkit.fluxcd.io/v1\n"
+                "kind: GitRepository\n"
+                "metadata:\n"
+                "  name: catalog-source\n"
+                "spec:\n"
+                "  url: https://github.example/iceberg-table-bootstrap.git\n"
+                "---\n"
+                "apiVersion: source.toolkit.fluxcd.io/v1\n"
+                "kind: HelmChart\n"
+                "metadata:\n"
+                "  name: catalog-chart\n"
+                "spec:\n"
+                "  chart: ./charts/catalog-task\n"
+                "  sourceRef:\n"
+                "    kind: GitRepository\n"
+                "    name: catalog-source\n",
+                encoding="utf-8",
+            )
+            (deploy_root / "release.yaml").write_text(
+                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+                "kind: HelmRelease\n"
+                "metadata:\n"
+                "  name: catalog-task\n"
+                "spec:\n"
+                "  chartRef:\n"
+                "    kind: HelmChart\n"
+                "    name: catalog-chart\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                [deploy_root / "release.yaml"],
+                _iceberg_bootstrap_manifests(deploy_root, charts_root),
+            )
+
+    def test_scans_helmrelease_selected_local_values_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            deploy_root = root / "deploy"
+            charts_root = root / "charts"
+            chart_root = charts_root / "catalog-task"
+            deploy_root.mkdir()
+            chart_root.mkdir(parents=True)
+            (chart_root / "values.yaml").write_text(
+                "fullnameOverride: catalog-task\n",
+                encoding="utf-8",
+            )
+            (chart_root / "bootstrap-values.yaml").write_text(
+                "fullnameOverride: iceberg-table-bootstrap\n",
+                encoding="utf-8",
+            )
+            (deploy_root / "release.yaml").write_text(
+                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+                "kind: HelmRelease\n"
+                "metadata:\n"
+                "  name: catalog-task\n"
+                "spec:\n"
+                "  chart:\n"
+                "    spec:\n"
+                "      chart: ./charts/catalog-task\n"
+                "      valuesFiles:\n"
+                "        - ./charts/catalog-task/bootstrap-values.yaml\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                [deploy_root / "release.yaml"],
+                _iceberg_bootstrap_manifests(deploy_root, charts_root),
+            )
+
+    def test_unwraps_bootstrap_job_from_kubernetes_list(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            deploy_root = root / "deploy"
+            charts_root = root / "charts"
+            deploy_root.mkdir()
+            charts_root.mkdir()
+            (deploy_root / "list.yaml").write_text(
+                "apiVersion: v1\n"
+                "kind: List\n"
+                "items:\n"
+                "  - apiVersion: batch/v1\n"
+                "    kind: Job\n"
+                "    metadata:\n"
+                "      name: iceberg-table-bootstrap\n"
+                "    spec:\n"
+                "      template:\n"
+                "        spec:\n"
+                "          containers:\n"
+                "            - name: bootstrap\n"
+                "              image: registry.example/bootstrap@sha256:"
+                + "b" * 64
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                [deploy_root / "list.yaml"],
                 _iceberg_bootstrap_manifests(deploy_root, charts_root),
             )
 
