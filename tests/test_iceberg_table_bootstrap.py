@@ -17,8 +17,26 @@ DEPLOYMENT_SUFFIXES = {".json", ".yaml", ".yml"}
 WORKLOAD_KINDS = {"Deployment", "StatefulSet"}
 POLARIS_COMPONENT = "polaris"
 BOOTSTRAP_KINDS = {"Job", "CronJob"}
-ICEBERG_BOOTSTRAP_IDENTITY = re.compile(
-    r"(?:iceberg|catalog[-_ ]bootstrap|table[-_ ]bootstrap)", re.IGNORECASE
+BOOTSTRAP_CONTAINER_IDENTITY_PATHS = (
+    ("spec", "template", "spec", "containers", "name"),
+    ("spec", "template", "spec", "initContainers", "name"),
+    ("spec", "jobTemplate", "spec", "template", "spec", "containers", "name"),
+    (
+        "spec",
+        "jobTemplate",
+        "spec",
+        "template",
+        "spec",
+        "initContainers",
+        "name",
+    ),
+)
+HELM_RELEASE_IDENTITY_PATHS = (
+    ("metadata", "name"),
+    ("metadata", "labels", "app.kubernetes.io/name"),
+    ("spec", "releaseName"),
+    ("spec", "chart", "spec", "chart"),
+    ("spec", "chartRef", "name"),
 )
 
 
@@ -73,6 +91,15 @@ def _document_scalars(document: str) -> list[tuple[tuple[str, ...], str]]:
 
 def _has_polaris_identity(value: str | None) -> bool:
     return value == "polaris" or bool(value and re.fullmatch(r"polaris[-_][a-z0-9_-]+", value))
+
+
+def _has_iceberg_bootstrap_identity(value: str | None) -> bool:
+    if not value:
+        return False
+    identity_tokens = {
+        token for token in re.split(r"[-_ /]+", value.casefold()) if token
+    }
+    return {"iceberg", "bootstrap"} <= identity_tokens
 
 
 def _is_polaris_workload(document: str, admitted_images: set[str]) -> bool:
@@ -156,15 +183,22 @@ def _iceberg_bootstrap_manifests(
             r"(?m)^---[ \t]*(?:#.*)?$", path.read_text(encoding="utf-8")
         )
         for document in documents:
-            scalars = dict(_document_scalars(document))
-            identities = (
-                scalars.get(("metadata", "name")),
-                scalars.get(("metadata", "labels", "app.kubernetes.io/name")),
-                scalars.get(("spec", "template", "spec", "containers", "name")),
-            )
-            if scalars.get(("kind",)) in BOOTSTRAP_KINDS and any(
-                identity and ICEBERG_BOOTSTRAP_IDENTITY.search(identity)
-                for identity in identities
+            scalar_items = _document_scalars(document)
+            scalars = dict(scalar_items)
+            kind = scalars.get(("kind",))
+            identity_paths = ()
+            if kind in BOOTSTRAP_KINDS:
+                identity_paths = (
+                    ("metadata", "name"),
+                    ("metadata", "labels", "app.kubernetes.io/name"),
+                    *BOOTSTRAP_CONTAINER_IDENTITY_PATHS,
+                )
+            elif kind == "HelmRelease":
+                identity_paths = HELM_RELEASE_IDENTITY_PATHS
+
+            if any(
+                path in identity_paths and _has_iceberg_bootstrap_identity(value)
+                for path, value in scalar_items
             ):
                 manifests.append(_display_path(path))
                 break
@@ -371,6 +405,101 @@ class IcebergBootstrapDetectionTests(unittest.TestCase):
                 _iceberg_bootstrap_manifests(deploy_root, charts_root),
             )
 
+    def test_scans_every_job_and_cronjob_container_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            deploy_root = root / "deploy"
+            charts_root = root / "charts"
+            deploy_root.mkdir()
+            charts_root.mkdir()
+            (deploy_root / "job.yaml").write_text(
+                "apiVersion: batch/v1\n"
+                "kind: Job\n"
+                "metadata:\n"
+                "  name: catalog-task\n"
+                "spec:\n"
+                "  template:\n"
+                "    spec:\n"
+                "      containers:\n"
+                "        - name: iceberg-table-bootstrap\n"
+                "          image: registry.example/bootstrap@sha256:" + "a" * 64 + "\n"
+                "        - name: sidecar\n"
+                "          image: registry.example/sidecar@sha256:" + "b" * 64 + "\n",
+                encoding="utf-8",
+            )
+            (deploy_root / "cronjob.yaml").write_text(
+                "apiVersion: batch/v1\n"
+                "kind: CronJob\n"
+                "metadata:\n"
+                "  name: catalog-task\n"
+                "spec:\n"
+                "  jobTemplate:\n"
+                "    spec:\n"
+                "      template:\n"
+                "        spec:\n"
+                "          containers:\n"
+                "            - name: iceberg-table-bootstrap\n"
+                "              image: registry.example/bootstrap@sha256:"
+                + "c" * 64
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                [deploy_root / "cronjob.yaml", deploy_root / "job.yaml"],
+                _iceberg_bootstrap_manifests(deploy_root, charts_root),
+            )
+
+    def test_detects_bootstrap_helmrelease_chart_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            deploy_root = root / "deploy"
+            charts_root = root / "charts"
+            deploy_root.mkdir()
+            charts_root.mkdir()
+            (deploy_root / "release.yaml").write_text(
+                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+                "kind: HelmRelease\n"
+                "metadata:\n"
+                "  name: catalog-task\n"
+                "spec:\n"
+                "  chart:\n"
+                "    spec:\n"
+                "      chart: charts/iceberg-table-bootstrap\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                [deploy_root / "release.yaml"],
+                _iceberg_bootstrap_manifests(deploy_root, charts_root),
+            )
+
+    def test_ignores_non_bootstrap_iceberg_jobs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            deploy_root = root / "deploy"
+            charts_root = root / "charts"
+            deploy_root.mkdir()
+            charts_root.mkdir()
+            (deploy_root / "catalog-smoke.yaml").write_text(
+                "apiVersion: batch/v1\n"
+                "kind: Job\n"
+                "metadata:\n"
+                "  name: iceberg-catalog-smoke\n"
+                "spec:\n"
+                "  template:\n"
+                "    spec:\n"
+                "      containers:\n"
+                "        - name: iceberg-maintenance\n"
+                "          image: registry.example/maintenance@sha256:" + "d" * 64 + "\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                [],
+                _iceberg_bootstrap_manifests(deploy_root, charts_root),
+            )
+
 
 class IcebergTableBootstrapPrerequisiteTests(unittest.TestCase):
     def test_missing_polaris_workload_keeps_bootstrap_blocked(self) -> None:
@@ -379,7 +508,7 @@ class IcebergTableBootstrapPrerequisiteTests(unittest.TestCase):
             _polaris_workload_manifests(),
             "Replace this blocker regression with the Iceberg bootstrap checks once "
             "an approved Polaris Deployment or StatefulSet is materialized through "
-                "deploy or a Helm chart template",
+            "deploy or a Helm chart template",
         )
         self.assertEqual(
             [],
