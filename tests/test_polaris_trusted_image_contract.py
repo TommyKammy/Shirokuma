@@ -334,6 +334,68 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         self._rewrite_json(root, verifier.RESIDENT_LEDGER, mutate)
         self._assert_code(root, "LEDGER_BLOCK", "must be an object")
 
+    def test_neutral_catalog_image_in_ledger_fails_closed(self) -> None:
+        cases = (
+            (
+                "catalog-service",
+                "registry.example/neutral@sha256:" + "0" * 64,
+            ),
+            (
+                "metadata-service",
+                "registry.example/iceberg-rest@sha256:" + "1" * 64,
+            ),
+            (
+                "catalog-service",
+                "registry.example/iceberg-rest@sha256:" + "2" * 64,
+            ),
+            (
+                "catalogservice",
+                "registry.example/neutral@sha256:" + "3" * 64,
+            ),
+            (
+                "IcebergCatalog",
+                "registry.example/neutral@sha256:" + "4" * 64,
+            ),
+            (
+                "metadata-service",
+                "registry.example/icebergrest@sha256:" + "5" * 64,
+            ),
+            (
+                "metastoredb",
+                "registry.example/neutral@sha256:" + "6" * 64,
+            ),
+        )
+        for component, reference in cases:
+            with self.subTest(component=component, reference=reference):
+                root = self._fixture()
+
+                def mutate(value: dict[str, object]) -> None:
+                    value["images"].append(  # type: ignore[union-attr]
+                        {
+                            "component": component,
+                            "reference": reference,
+                        }
+                    )
+
+                self._rewrite_json(root, verifier.RESIDENT_LEDGER, mutate)
+                self._assert_code(root, "LEDGER_BLOCK", component)
+
+    def test_unrelated_ledger_identity_is_not_a_catalog_match(self) -> None:
+        root = self._fixture()
+
+        def mutate(value: dict[str, object]) -> None:
+            value["images"].append(  # type: ignore[union-attr]
+                {
+                    "component": "unrelated-service",
+                    "reference": (
+                        "registry.example/unrelated@sha256:" + "0" * 64
+                    ),
+                }
+            )
+
+        self._rewrite_json(root, verifier.RESIDENT_LEDGER, mutate)
+        verifier._audit_ledger(root)
+
     def test_runtime_manifest_before_atomic_admission_fails_closed(self) -> None:
         root = self._fixture()
         manifest = root / "deploy/gitops/catalog/deployment.yaml"
@@ -531,6 +593,226 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 manifest.parent.mkdir(parents=True)
                 manifest.write_text(content, encoding="utf-8")
                 self._assert_code(root, "RUNTIME_BLOCK", filename)
+
+    def test_neutral_path_catalog_deployment_fails_closed(self) -> None:
+        root = self._fixture()
+        manifest = root / "deploy/gitops/lakehouse/rest.yaml"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(
+            "apiVersion: apps/v1\n"
+            "kind: Deployment\n"
+            "metadata:\n"
+            "  name: iceberg-catalog\n"
+            "spec:\n"
+            "  template:\n"
+            "    spec:\n"
+            "      containers:\n"
+            "        - name: rest\n"
+            "          image: registry.example/iceberg-rest@sha256:"
+            + "0" * 64
+            + "\n",
+            encoding="utf-8",
+        )
+        self._assert_code(root, "RUNTIME_BLOCK", "rest.yaml")
+
+    def test_catalog_identity_fields_fail_closed(self) -> None:
+        cases = {
+            "name-only.yaml": (
+                "kind: Deployment\n"
+                "metadata:\n"
+                "  name: iceberg-catalog\n"
+                "image: registry.example/neutral\n"
+            ),
+            "image-only.yaml": (
+                "kind: Deployment\n"
+                "metadata:\n"
+                "  name: neutral\n"
+                "image: registry.example/iceberg-rest\n"
+            ),
+            "compact.json": (
+                '{"kind":"Deployment","metadata":{"name":"catalog-service"}}\n'
+            ),
+            "workload.tf": (
+                'resource "kubernetes_deployment_v1" "neutral" {\n'
+                "  metadata {\n"
+                '    name = "iceberg-catalog"\n'
+                "  }\n"
+                "}\n"
+            ),
+            "block-name.yaml": (
+                "kind: Deployment\n"
+                "metadata:\n"
+                "  name: >-\n"
+                "    iceberg-catalog\n"
+            ),
+            "block-image.yaml": (
+                "kind: Deployment\n"
+                "image: |\n"
+                "  registry.example/iceberg-rest\n"
+            ),
+            "anchor-name.yaml": (
+                "kind: Deployment\n"
+                "metadata:\n"
+                "  annotations:\n"
+                "    runtime-name: &runtime_name iceberg-catalog\n"
+                "  name: *runtime_name\n"
+            ),
+        }
+        for filename, content in cases.items():
+            with self.subTest(filename=filename):
+                root = self._fixture()
+                manifest = root / "deploy/gitops/lakehouse" / filename
+                manifest.parent.mkdir(parents=True)
+                manifest.write_text(content, encoding="utf-8")
+                self._assert_code(root, "RUNTIME_BLOCK", filename)
+
+    def test_neutral_opentofu_secret_resources_fail_closed(self) -> None:
+        cases = {
+            "db.tf": 'resource "kubernetes_secret_v1" "db" {}\n',
+            "db.tofu": (
+                'resource\n  "kubernetes_secret_v1_data"\n  "db"\n  {}\n'
+            ),
+            "db.tf.json": (
+                '{"resource":{"kubernetes_secret_v1":{"db":{"data":{}}}}}\n'
+            ),
+            "db.tofu.json": (
+                '{"resource":{"kubernetes_secret_v1_data":{"db":{}}}}\n'
+            ),
+            "db-block-after-resource.tf": (
+                'resource /* formatting */ "kubernetes_secret_v1" "db" {}\n'
+            ),
+            "db-line-after-type.tofu": (
+                'resource "kubernetes_secret_v1" // formatting\n'
+                '  "db" {}\n'
+            ),
+            "db-hash-before-body.tf": (
+                'resource "kubernetes_secret_v1" "db" # formatting\n'
+                "  {}\n"
+            ),
+            "db-block-before-body.tofu": (
+                'resource "kubernetes_secret_v1" "db" /* formatting */ {}\n'
+            ),
+            "db-template-comment-markers.tf": (
+                "locals {\n"
+                '  start = "${format("%s", "/*")}"\n'
+                "}\n"
+                'resource "kubernetes_secret_v1" "db" {}\n'
+                "locals {\n"
+                '  end = "${format("%s", "*/")}"\n'
+                "}\n"
+            ),
+            "db-escaped-label.tf": (
+                'resource "kubernetes_secret\\u005fv1" "db" {}\n'
+            ),
+            "db-bom.tf": (
+                "\ufeffresource \"kubernetes_secret_v1\" \"db\" {}\n"
+            ),
+        }
+        for filename, content in cases.items():
+            with self.subTest(filename=filename):
+                root = self._fixture()
+                manifest = root / "opentofu/dev" / filename
+                manifest.parent.mkdir(parents=True)
+                manifest.write_text(content, encoding="utf-8")
+                self._assert_code(root, "RUNTIME_BLOCK", filename)
+
+    def test_approved_opentofu_secret_file_is_exact_hash_only(self) -> None:
+        root = self._fixture()
+        relative = "opentofu/dev/object-storage.tf"
+        destination = root / relative
+        destination.parent.mkdir(parents=True)
+        shutil.copy2(ROOT / relative, destination)
+        verifier.audit(root)
+
+        destination.write_text(
+            destination.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        self._assert_code(root, "RUNTIME_BLOCK", relative)
+
+    def test_benign_opentofu_resource_is_not_a_secret(self) -> None:
+        root = self._fixture()
+        manifest = root / "opentofu/dev/namespace.tf"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(
+            'resource "kubernetes_namespace_v1" "lakehouse" {}\n',
+            encoding="utf-8",
+        )
+        verifier.audit(root)
+
+    def test_opentofu_secret_examples_in_non_code_are_ignored(self) -> None:
+        cases = {
+            "hash-comment.tf": (
+                '# resource "kubernetes_secret_v1" "db" {}\n'
+            ),
+            "slash-comment.tf": (
+                '// resource "kubernetes_secret_v1" "db" {}\n'
+            ),
+            "block-comment.tf": (
+                "/*\n"
+                'resource "kubernetes_secret_v1" "db" {}\n'
+                "*/\n"
+            ),
+            "heredoc.tf": (
+                "locals {\n"
+                "  note = <<EOT\n"
+                'resource "kubernetes_secret_v1" "db" {}\n'
+                "EOT\n"
+                "}\n"
+            ),
+            "unicode-heredoc.tf": (
+                "locals {\n"
+                "  note = <<Ü\n"
+                'resource "kubernetes_secret_v1" "db" {}\n'
+                "Ü\n"
+                "}\n"
+            ),
+            "template-comment-markers.tf": (
+                "locals {\n"
+                '  start = "${format("%s", "/*")}"\n'
+                '  end = "${format("%s", "*/")}"\n'
+                "}\n"
+            ),
+        }
+        for filename, content in cases.items():
+            with self.subTest(filename=filename):
+                root = self._fixture()
+                manifest = root / "opentofu/dev" / filename
+                manifest.parent.mkdir(parents=True)
+                manifest.write_text(content, encoding="utf-8")
+                verifier.audit(root)
+
+    def test_disabled_iceberg_flag_is_not_a_catalog_identity_field(self) -> None:
+        root = self._fixture()
+        relative = "deploy/gitops/object-storage/statefulset.yaml"
+        destination = root / relative
+        destination.parent.mkdir(parents=True)
+        shutil.copy2(ROOT / relative, destination)
+        verifier.audit(root)
+
+    def test_disabled_iceberg_flag_exception_is_exactly_bounded(self) -> None:
+        approved_line = "            - -s3.port.iceberg=0"
+        cases = {
+            "wrong-path": (
+                "deploy/gitops/other/statefulset.yaml",
+                approved_line + "\n",
+            ),
+            "duplicate": (
+                "deploy/gitops/object-storage/statefulset.yaml",
+                approved_line + "\n" + approved_line + "\n",
+            ),
+            "changed-value": (
+                "deploy/gitops/object-storage/statefulset.yaml",
+                approved_line.replace("=0", "=1") + "\n",
+            ),
+        }
+        for label, (relative, content) in cases.items():
+            with self.subTest(label=label):
+                root = self._fixture()
+                destination = root / relative
+                destination.parent.mkdir(parents=True)
+                destination.write_text(content, encoding="utf-8")
+                self._assert_code(root, "RUNTIME_BLOCK", relative)
 
     def test_postgres_credential_prose_is_not_an_assignment(self) -> None:
         root = self._fixture()

@@ -130,6 +130,17 @@ RUNTIME_ENABLEMENT_REQUIREMENTS = [
 RUNTIME_ROOTS = (Path("deploy"), Path("charts"), Path("opentofu"))
 RUNTIME_GENERATED_DIRS = {".terraform"}
 RUNTIME_IDENTITY = re.compile(r"(?:polaris|postgres(?:ql)?)", re.IGNORECASE)
+CATALOG_IDENTITY_MARKERS = ("catalog", "iceberg", "metastore")
+APPROVED_RUNTIME_CATALOG_LINES = {
+    "deploy/gitops/object-storage/statefulset.yaml": (
+        "            - -s3.port.iceberg=0"
+    ),
+}
+APPROVED_OPENTOFU_SECRET_FILES = {
+    "opentofu/dev/object-storage.tf": (
+        "94f2c064b972cf412fde7bae1049006a9a01cebe95993fff2daec4a525fa8524"
+    ),
+}
 RUNTIME_CONTEXT_PATH = re.compile(
     r"(?:^|/)(?:catalog|iceberg)(?:/|$)",
     re.IGNORECASE,
@@ -165,6 +176,16 @@ RUNTIME_POSTGRES_CREDENTIAL = re.compile(
     rf"""{RUNTIME_POSTGRES_CREDENTIAL_NAME}\s*="""
     rf"""|[\[{{,]\s*["']?{RUNTIME_POSTGRES_CREDENTIAL_NAME}\s*=)""",
     re.IGNORECASE | re.MULTILINE | re.VERBOSE,
+)
+RUNTIME_CATALOG_MARKER = re.compile(
+    r"(?:catalog|iceberg|metastore)",
+    re.IGNORECASE,
+)
+RUNTIME_OPENTOFU_RESOURCE = re.compile(
+    r'^[ \t]*resource[ \t\r\n]+"'
+    r'((?:\\.|[^"\\\r\n])*)"[ \t\r\n]+"'
+    r'[^"\r\n]+"[ \t\r\n]*\{',
+    re.IGNORECASE | re.MULTILINE,
 )
 
 
@@ -1151,9 +1172,19 @@ def _audit_ledger(root: Path) -> None:
         component = str(entry.get("component", ""))
         normalized_component = re.sub(r"[^a-z0-9]", "", component.lower())
         serialized = json.dumps(entry, sort_keys=True).lower()
+        identity = " ".join(
+            str(entry.get(field, ""))
+            for field in ("component", "reference", "source")
+        ).lower()
+        catalog_identity = any(
+            marker in str(entry.get(field, "")).lower()
+            for field in ("component", "reference", "source")
+            for marker in CATALOG_IDENTITY_MARKERS
+        )
         if (
             normalized_component in aliases
-            or RUNTIME_IDENTITY.search(serialized)
+            or RUNTIME_IDENTITY.search(identity)
+            or catalog_identity
             or any(marker in serialized for marker in reference_markers)
         ):
             blocked.append(component or "<unnamed>")
@@ -1178,6 +1209,210 @@ def _runtime_files(root: Path) -> Iterable[Path]:
                 yield path
 
 
+def _hcl_heredoc_end(relative: str, text: str, start: int) -> int | None:
+    opener = re.match(
+        r"<<(-?)([^\s]+)[ \t]*\r?\n",
+        text[start:],
+    )
+    if opener is None:
+        return None
+
+    delimiter = re.escape(opener.group(2))
+    indent = r"[ \t]*" if opener.group(1) else ""
+    body_start = start + opener.end()
+    closer = re.search(
+        rf"(?m)^{indent}{delimiter}[ \t]*\r?$",
+        text[body_start:],
+    )
+    if closer is None:
+        _fail(
+            "RUNTIME_BLOCK",
+            f"unterminated heredoc in OpenTofu configuration {relative}",
+        )
+    return body_start + closer.end()
+
+
+def _scan_hcl_template_expression(relative: str, text: str, start: int) -> int:
+    index = start
+    length = len(text)
+    depth = 1
+    while index < length:
+        if text[index] == '"':
+            index = _scan_hcl_quoted_string(relative, text, index)
+            continue
+        if text[index] == "#" or text.startswith("//", index):
+            end = text.find("\n", index)
+            index = length if end == -1 else end
+            continue
+        if text.startswith("/*", index):
+            end = text.find("*/", index + 2)
+            if end == -1:
+                _fail(
+                    "RUNTIME_BLOCK",
+                    f"unterminated block comment in OpenTofu configuration {relative}",
+                )
+            index = end + 2
+            continue
+        if text.startswith("<<", index):
+            heredoc_end = _hcl_heredoc_end(relative, text, index)
+            if heredoc_end is not None:
+                index = heredoc_end
+                continue
+        if text[index] == "{":
+            depth += 1
+        elif text[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return index + 1
+        index += 1
+
+    _fail(
+        "RUNTIME_BLOCK",
+        f"unterminated template expression in OpenTofu configuration {relative}",
+    )
+
+
+def _scan_hcl_quoted_string(relative: str, text: str, start: int) -> int:
+    index = start + 1
+    length = len(text)
+    while index < length:
+        if text[index] == "\\":
+            if index + 1 >= length:
+                break
+            index += 2
+            continue
+        if text.startswith(("$${", "%%{"), index):
+            index += 3
+            continue
+        if text.startswith(("${", "%{"), index):
+            index = _scan_hcl_template_expression(relative, text, index + 2)
+            continue
+        if text[index] == '"':
+            return index + 1
+        if text[index] in "\r\n":
+            _fail(
+                "RUNTIME_BLOCK",
+                f"newline in quoted string in OpenTofu configuration {relative}",
+            )
+        index += 1
+
+    _fail(
+        "RUNTIME_BLOCK",
+        f"unterminated quoted string in OpenTofu configuration {relative}",
+    )
+
+
+def _mask_hcl_non_code(relative: str, text: str) -> str:
+    masked = list(text)
+    length = len(text)
+
+    def mask(start: int, end: int) -> None:
+        for index in range(start, end):
+            if masked[index] not in "\r\n":
+                masked[index] = " "
+
+    index = 0
+    while index < length:
+        if text[index] == '"':
+            index = _scan_hcl_quoted_string(relative, text, index)
+            continue
+        if text[index] == "#" or text.startswith("//", index):
+            end = text.find("\n", index)
+            if end == -1:
+                end = length
+            mask(index, end)
+            index = end
+            continue
+        if text.startswith("/*", index):
+            end = text.find("*/", index + 2)
+            if end == -1:
+                _fail(
+                    "RUNTIME_BLOCK",
+                    f"unterminated block comment in OpenTofu configuration {relative}",
+                )
+            end += 2
+            mask(index, end)
+            index = end
+            continue
+        if text.startswith("<<", index):
+            heredoc_end = _hcl_heredoc_end(relative, text, index)
+            if heredoc_end is not None:
+                mask(index, heredoc_end)
+                index = heredoc_end
+                continue
+        index += 1
+
+    return "".join(masked)
+
+
+def _decode_hcl_label(relative: str, raw: str) -> str:
+    def replace_long_unicode_escape(match: re.Match[str]) -> str:
+        try:
+            return chr(int(match.group(1), 16))
+        except (ValueError, OverflowError):
+            _fail(
+                "RUNTIME_BLOCK",
+                f"invalid Unicode escape in OpenTofu configuration {relative}",
+            )
+
+    expanded = re.sub(r"\\U([0-9A-Fa-f]{8})", replace_long_unicode_escape, raw)
+    try:
+        decoded = json.loads(f'"{expanded}"')
+    except json.JSONDecodeError as error:
+        _fail(
+            "RUNTIME_BLOCK",
+            f"cannot decode OpenTofu resource label in {relative}: {error}",
+        )
+    _expect(
+        isinstance(decoded, str),
+        "RUNTIME_BLOCK",
+        f"OpenTofu resource label must be a string in {relative}",
+    )
+    return decoded
+
+
+def _has_opentofu_secret_resource(relative: str, text: str) -> bool:
+    lowered = relative.lower()
+    if lowered.endswith((".tf.json", ".tofu.json")):
+        try:
+            document = json.loads(text)
+        except json.JSONDecodeError as error:
+            _fail(
+                "RUNTIME_BLOCK",
+                f"cannot parse OpenTofu JSON configuration {relative}: {error}",
+            )
+        if not isinstance(document, dict):
+            return False
+        resources = document.get("resource")
+        if not isinstance(resources, dict):
+            return False
+        return any(
+            re.fullmatch(r"kubernetes_secret[a-z0-9_-]*", str(resource_type), re.I)
+            for resource_type in resources
+        )
+    if lowered.endswith((".tf", ".tofu")):
+        inspected = _mask_hcl_non_code(relative, text.removeprefix("\ufeff"))
+        return any(
+            re.fullmatch(
+                r"kubernetes_secret[a-z0-9_-]*",
+                _decode_hcl_label(relative, match.group(1)),
+                re.I,
+            )
+            for match in RUNTIME_OPENTOFU_RESOURCE.finditer(inspected)
+        )
+    return False
+
+
+def _has_unapproved_catalog_marker(relative: str, text: str) -> bool:
+    approved_line = APPROVED_RUNTIME_CATALOG_LINES.get(relative)
+    inspected = text
+    if approved_line is not None:
+        lines = text.splitlines()
+        if lines.count(approved_line) == 1:
+            inspected = "\n".join(line for line in lines if line != approved_line)
+    return bool(RUNTIME_CATALOG_MARKER.search(inspected))
+
+
 def _audit_runtime_absence(root: Path) -> None:
     matches: list[str] = []
     for path in _runtime_files(root):
@@ -1199,10 +1434,17 @@ def _audit_runtime_absence(root: Path) -> None:
                 "RUNTIME_BLOCK",
                 f"cannot inspect runtime-root file as UTF-8 text: {path}: {error}",
             )
+        unapproved_opentofu_secret = (
+            relative.startswith("opentofu/")
+            and _has_opentofu_secret_resource(relative, text)
+            and APPROVED_OPENTOFU_SECRET_FILES.get(relative) != _sha256(path)
+        )
         if (
             RUNTIME_IDENTITY.search(text)
             or RUNTIME_SECRET_MANIFEST.search(text)
             or RUNTIME_POSTGRES_CREDENTIAL.search(text)
+            or _has_unapproved_catalog_marker(relative, text)
+            or unapproved_opentofu_secret
         ):
             matches.append(relative)
     _expect(
