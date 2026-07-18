@@ -304,6 +304,36 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         self._rewrite_json(root, verifier.RESIDENT_LEDGER, mutate)
         self._assert_code(root, "LEDGER_BLOCK", "metadata-store")
 
+    def test_alternate_postgres_repository_in_ledger_fails_closed(self) -> None:
+        for reference in (
+            "docker.io/library/postgres@sha256:" + "0" * 64,
+            "docker.io/bitnami/postgresql@sha256:" + "1" * 64,
+        ):
+            with self.subTest(reference=reference):
+                root = self._fixture()
+
+                def mutate(value: dict[str, object]) -> None:
+                    value["images"].append(  # type: ignore[union-attr]
+                        {
+                            "component": "metadata-store",
+                            "reference": reference,
+                        }
+                    )
+
+                self._rewrite_json(root, verifier.RESIDENT_LEDGER, mutate)
+                self._assert_code(root, "LEDGER_BLOCK", "metadata-store")
+
+    def test_non_object_postgres_ledger_entry_fails_closed(self) -> None:
+        root = self._fixture()
+
+        def mutate(value: dict[str, object]) -> None:
+            value["images"].append(  # type: ignore[union-attr]
+                "docker.io/library/postgres@sha256:" + "0" * 64
+            )
+
+        self._rewrite_json(root, verifier.RESIDENT_LEDGER, mutate)
+        self._assert_code(root, "LEDGER_BLOCK", "must be an object")
+
     def test_runtime_manifest_before_atomic_admission_fails_closed(self) -> None:
         root = self._fixture()
         manifest = root / "deploy/gitops/catalog/deployment.yaml"
@@ -361,6 +391,156 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             encoding="utf-8",
         )
         self._assert_code(root, "RUNTIME_BLOCK", "database.txt")
+
+    def test_neutral_path_postgres_secret_fails_closed(self) -> None:
+        root = self._fixture()
+        manifest = root / "deploy/gitops/iceberg/db-secret.yaml"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(
+            "apiVersion: v1\n"
+            "kind: Secret\n"
+            "metadata:\n"
+            "  name: db\n"
+            "stringData:\n"
+            "  PGHOST: database\n"
+            "  PGPASSWORD: example\n",
+            encoding="utf-8",
+        )
+        self._assert_code(root, "RUNTIME_BLOCK", "db-secret.yaml")
+
+    def test_path_neutral_postgres_assignment_fails_closed(self) -> None:
+        root = self._fixture()
+        manifest = root / "deploy/gitops/lakehouse/settings.yaml"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(
+            "apiVersion: v1\n"
+            "kind: ConfigMap\n"
+            "metadata:\n"
+            "  name: settings\n"
+            "data:\n"
+            "  PGHOST: database\n",
+            encoding="utf-8",
+        )
+        self._assert_code(root, "RUNTIME_BLOCK", "settings.yaml")
+
+    def test_compact_json_postgres_assignment_fails_closed(self) -> None:
+        root = self._fixture()
+        manifest = root / "deploy/gitops/lakehouse/settings.json"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(
+            '{"kind":"ConfigMap","data":{"PGHOST":"database"}}\n',
+            encoding="utf-8",
+        )
+        self._assert_code(root, "RUNTIME_BLOCK", "settings.json")
+
+    def test_inline_yaml_postgres_assignment_fails_closed(self) -> None:
+        root = self._fixture()
+        manifest = root / "deploy/gitops/lakehouse/settings.yaml"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(
+            "kind: ConfigMap\n"
+            "data: {PGHOST: database}\n",
+            encoding="utf-8",
+        )
+        self._assert_code(root, "RUNTIME_BLOCK", "settings.yaml")
+
+    def test_path_neutral_secret_manifest_fails_closed(self) -> None:
+        root = self._fixture()
+        manifest = root / "deploy/gitops/lakehouse/settings.yaml"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(
+            "apiVersion: v1\n"
+            "kind: Secret\n"
+            "metadata:\n"
+            "  name: settings\n"
+            "stringData:\n"
+            "  username: catalog\n"
+            "  password: example\n",
+            encoding="utf-8",
+        )
+        self._assert_code(root, "RUNTIME_BLOCK", "settings.yaml")
+
+    def test_plural_secret_path_fails_closed(self) -> None:
+        root = self._fixture()
+        manifest = root / "deploy/gitops/secrets/settings.yaml"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(
+            "apiVersion: v1\n"
+            "kind: ConfigMap\n"
+            "metadata:\n"
+            "  name: settings\n",
+            encoding="utf-8",
+        )
+        self._assert_code(root, "RUNTIME_BLOCK", "settings.yaml")
+
+    def test_secret_bearing_crd_kinds_fail_closed(self) -> None:
+        for kind in (
+            "SealedSecret",
+            "ExternalSecret",
+            "ClusterExternalSecret",
+            "SecretProviderClass",
+            "SecretStore",
+        ):
+            with self.subTest(kind=kind):
+                root = self._fixture()
+                manifest = root / "deploy/gitops/lakehouse/settings.yaml"
+                manifest.parent.mkdir(parents=True)
+                manifest.write_text(
+                    "apiVersion: example.io/v1\n"
+                    f"kind: {kind}\n"
+                    "metadata:\n"
+                    "  name: settings\n",
+                    encoding="utf-8",
+                )
+                self._assert_code(root, "RUNTIME_BLOCK", "settings.yaml")
+
+    def test_yaml_list_item_secret_kind_fails_closed(self) -> None:
+        root = self._fixture()
+        manifest = root / "deploy/gitops/lakehouse/settings.yaml"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(
+            "apiVersion: v1\n"
+            "items:\n"
+            "  - kind: Secret\n"
+            "    metadata:\n"
+            "      name: settings\n",
+            encoding="utf-8",
+        )
+        self._assert_code(root, "RUNTIME_BLOCK", "settings.yaml")
+
+    def test_postgres_environment_string_forms_fail_closed(self) -> None:
+        cases = {
+            "yaml-list": (
+                "settings.yaml",
+                "environment:\n"
+                '  - "PGHOST=database"\n',
+            ),
+            "shell-export": (
+                "settings.env",
+                "export PGPASSWORD=example\n",
+            ),
+            "compact-json-array": (
+                "settings.json",
+                '{"environment":["PGHOST=database"]}\n',
+            ),
+        }
+        for name, (filename, content) in cases.items():
+            with self.subTest(name=name):
+                root = self._fixture()
+                manifest = root / "deploy/gitops/lakehouse" / filename
+                manifest.parent.mkdir(parents=True)
+                manifest.write_text(content, encoding="utf-8")
+                self._assert_code(root, "RUNTIME_BLOCK", filename)
+
+    def test_postgres_credential_prose_is_not_an_assignment(self) -> None:
+        root = self._fixture()
+        note = root / "deploy/notes.txt"
+        note.parent.mkdir(parents=True)
+        note.write_text(
+            "documentation: PGHOST is configured externally\n",
+            encoding="utf-8",
+        )
+        verifier.audit(root)
 
 
 if __name__ == "__main__":

@@ -130,6 +130,42 @@ RUNTIME_ENABLEMENT_REQUIREMENTS = [
 RUNTIME_ROOTS = (Path("deploy"), Path("charts"), Path("opentofu"))
 RUNTIME_GENERATED_DIRS = {".terraform"}
 RUNTIME_IDENTITY = re.compile(r"(?:polaris|postgres(?:ql)?)", re.IGNORECASE)
+RUNTIME_CONTEXT_PATH = re.compile(
+    r"(?:^|/)(?:catalog|iceberg)(?:/|$)",
+    re.IGNORECASE,
+)
+RUNTIME_CREDENTIAL_PATH = re.compile(
+    r"(?:^|[/_.-])(?:secrets?|credentials?)(?:[/_.-]|$)",
+    re.IGNORECASE,
+)
+RUNTIME_SECRET_KIND = r"(?:[A-Za-z0-9]*Secret[A-Za-z0-9]*)"
+RUNTIME_SECRET_MANIFEST = re.compile(
+    rf"""(?:^"""
+    rf"""\s*(?:-\s*)?["']?kind["']?\s*[:=]\s*"""
+    rf"""["']?{RUNTIME_SECRET_KIND}["']?"""
+    rf"""\s*,?\s*(?:\#.*)?$"""
+    rf"""|[{{,]\s*["']?kind["']?\s*[:=]\s*"""
+    rf"""["']?{RUNTIME_SECRET_KIND}["']?(?=\s*[,}}]))""",
+    re.IGNORECASE | re.MULTILINE | re.VERBOSE,
+)
+RUNTIME_POSTGRES_CREDENTIAL_NAME = (
+    r"(?:PG(?:HOST|PORT|DATABASE|USER|PASSWORD|PASSFILE|SERVICE|SERVICEFILE)"
+    r"|POSTGRES(?:QL)?_(?:HOST|PORT|DB|DATABASE|USER|PASSWORD)"
+    r"|DATABASE_URL)"
+)
+RUNTIME_POSTGRES_CREDENTIAL = re.compile(
+    rf"""(?:^"""
+    rf"""\s*(?:-\s*)?["']?{RUNTIME_POSTGRES_CREDENTIAL_NAME}["']?\s*[:=]"""
+    rf"""|[{{,]\s*["']?{RUNTIME_POSTGRES_CREDENTIAL_NAME}["']?\s*[:=]"""
+    rf"""|^\s*(?:-\s*)?["']?name["']?\s*[:=]\s*"""
+    rf"""["']?{RUNTIME_POSTGRES_CREDENTIAL_NAME}["']?\s*,?\s*(?:\#.*)?$"""
+    rf"""|[{{,]\s*["']?name["']?\s*[:=]\s*"""
+    rf"""["']?{RUNTIME_POSTGRES_CREDENTIAL_NAME}["']?(?=\s*[,}}])"""
+    rf"""|^\s*(?:(?:-\s*)|(?:(?:export|env)\s+))?["']?"""
+    rf"""{RUNTIME_POSTGRES_CREDENTIAL_NAME}\s*="""
+    rf"""|[\[{{,]\s*["']?{RUNTIME_POSTGRES_CREDENTIAL_NAME}\s*=)""",
+    re.IGNORECASE | re.MULTILINE | re.VERBOSE,
+)
 
 
 class ContractError(RuntimeError):
@@ -1106,14 +1142,19 @@ def _audit_ledger(root: Path) -> None:
         "shirokuma-polaris",
     }
     blocked: list[str] = []
-    for entry in images:
-        if not isinstance(entry, dict):
-            continue
+    for index, entry in enumerate(images):
+        _expect(
+            isinstance(entry, dict),
+            "LEDGER_BLOCK",
+            f"ledger images[{index}] must be an object",
+        )
         component = str(entry.get("component", ""))
         normalized_component = re.sub(r"[^a-z0-9]", "", component.lower())
         serialized = json.dumps(entry, sort_keys=True).lower()
-        if normalized_component in aliases or any(
-            marker in serialized for marker in reference_markers
+        if (
+            normalized_component in aliases
+            or RUNTIME_IDENTITY.search(serialized)
+            or any(marker in serialized for marker in reference_markers)
         ):
             blocked.append(component or "<unnamed>")
     blocked.sort()
@@ -1144,10 +1185,10 @@ def _audit_runtime_absence(root: Path) -> None:
         if path.is_symlink():
             matches.append(relative)
             continue
-        if RUNTIME_IDENTITY.search(relative) or re.search(
-            r"(?:^|/)(?:catalog)(?:/|$)",
-            relative,
-            re.IGNORECASE,
+        if (
+            RUNTIME_IDENTITY.search(relative)
+            or RUNTIME_CONTEXT_PATH.search(relative)
+            or RUNTIME_CREDENTIAL_PATH.search(relative)
         ):
             matches.append(relative)
             continue
@@ -1158,7 +1199,11 @@ def _audit_runtime_absence(root: Path) -> None:
                 "RUNTIME_BLOCK",
                 f"cannot inspect runtime-root file as UTF-8 text: {path}: {error}",
             )
-        if RUNTIME_IDENTITY.search(text):
+        if (
+            RUNTIME_IDENTITY.search(text)
+            or RUNTIME_SECRET_MANIFEST.search(text)
+            or RUNTIME_POSTGRES_CREDENTIAL.search(text)
+        ):
             matches.append(relative)
     _expect(
         not matches,
