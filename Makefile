@@ -70,7 +70,7 @@ verify-object-storage-profile:
 verify-polaris-runtime:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_polaris_runtime.py'
 
-verify-iceberg-table-bootstrap:
+verify-iceberg-table-bootstrap: flux-version-check
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_iceberg_table_bootstrap.py'
 
 verify-trino-bootstrap:
