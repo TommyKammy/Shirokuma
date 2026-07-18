@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import argparse
 import base64
+import binascii
 import hashlib
 import json
 import re
 import sys
+import unicodedata
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -98,6 +100,33 @@ POSTGRES_ALLOWED_PATHS = {
     "evidence",
     "evidence/README.md",
 }
+POLARIS_PENDING_PATHS = {"v1.6.0"} | {
+    f"v1.6.0/{relative}" for relative in POLARIS_ALLOWED_PATHS
+}
+POSTGRES_PENDING_PATHS = {"v18.4"} | {
+    f"v18.4/{relative}" for relative in POSTGRES_ALLOWED_PATHS
+}
+PENDING_BOOTSTRAP_NAMESPACES = {
+    "polaris": "polaris",
+    "postgres": "postgresql",
+}
+PENDING_BOOTSTRAP_ARTIFACT_MARKERS = {
+    "admission",
+    "attestation",
+    "containerfile",
+    "contract",
+    "dependency",
+    "dockerfile",
+    "evidence",
+    "gradle",
+    "key",
+    "provenance",
+    "release",
+    "sbom",
+    "scan",
+    "signature",
+    "source",
+}
 PENDING_WORKFLOW_INVENTORY = {
     ".github/workflows/ci.yml": (
         "36666a76c07b428adda5fe71e4bd21643d05e66f56043dcef514101add63dd72"
@@ -129,8 +158,54 @@ RUNTIME_ENABLEMENT_REQUIREMENTS = [
 ]
 RUNTIME_ROOTS = (Path("deploy"), Path("charts"), Path("opentofu"))
 RUNTIME_GENERATED_DIRS = {".terraform"}
+RETAINED_EVIDENCE_ROOT = Path("security/evidence")
+RETAINED_EVIDENCE_JSON_SUFFIXES = {".json", ".jsonl"}
+RETAINED_EVIDENCE_DOCUMENT_SUFFIXES = {".md"}
+MAX_DSSE_PAYLOAD_BYTES = 16 * 1024 * 1024
 RUNTIME_IDENTITY = re.compile(r"(?:polaris|postgres(?:ql)?)", re.IGNORECASE)
 CATALOG_IDENTITY_MARKERS = ("catalog", "iceberg", "metastore")
+CATALOG_PATH_CONTEXT_WORDS = {
+    "api",
+    "controller",
+    "db",
+    "gateway",
+    "hive",
+    "job",
+    "metadata",
+    "operator",
+    "rest",
+    "server",
+    "service",
+    "store",
+    "v",
+    "worker",
+}
+PENDING_EVIDENCE_PATH_TOKENS = {
+    "polaris",
+    "postgres",
+    "postgresql",
+    *CATALOG_IDENTITY_MARKERS,
+}
+PENDING_EVIDENCE_CONTEXT_WORDS = CATALOG_PATH_CONTEXT_WORDS | {
+    "archive",
+    "attestation",
+    "bundle",
+    "evidence",
+    "image",
+    "provenance",
+    "release",
+    "sbom",
+    "scan",
+    "signature",
+    "supplychain",
+}
+PENDING_IMAGE_REFERENCE_MARKERS = {
+    "apache/polaris",
+    "c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+    "cgr.dev/chainguard/postgres",
+    "ghcr.io/tommykammy/shirokuma-polaris",
+    "shirokuma-polaris",
+}
 APPROVED_RUNTIME_CATALOG_LINES = {
     "deploy/gitops/object-storage/statefulset.yaml": (
         "            - -s3.port.iceberg=0"
@@ -141,9 +216,8 @@ APPROVED_OPENTOFU_SECRET_FILES = {
         "94f2c064b972cf412fde7bae1049006a9a01cebe95993fff2daec4a525fa8524"
     ),
 }
-RUNTIME_CONTEXT_PATH = re.compile(
-    r"(?:^|/)(?:catalog|iceberg)(?:/|$)",
-    re.IGNORECASE,
+PATH_CAMEL_BOUNDARY = re.compile(
+    r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])"
 )
 RUNTIME_CREDENTIAL_PATH = re.compile(
     r"(?:^|[/_.-])(?:secrets?|credentials?)(?:[/_.-]|$)",
@@ -158,6 +232,11 @@ RUNTIME_SECRET_MANIFEST = re.compile(
     rf"""|[{{,]\s*["']?kind["']?\s*[:=]\s*"""
     rf"""["']?{RUNTIME_SECRET_KIND}["']?(?=\s*[,}}]))""",
     re.IGNORECASE | re.MULTILINE | re.VERBOSE,
+)
+RUNTIME_BLOCK_SCALAR_VALUE = re.compile(
+    r"""(?:(?:![^\s]+|&[^\s]+)\s+)*"""
+    r"""(?P<style>[>|])(?P<modifier>[1-9]?[+-]?|[+-]?[1-9]?)?\s*$""",
+    re.IGNORECASE | re.VERBOSE,
 )
 RUNTIME_POSTGRES_CREDENTIAL_NAME = (
     r"(?:PG(?:HOST|PORT|DATABASE|USER|PASSWORD|PASSFILE|SERVICE|SERVICEFILE)"
@@ -1052,9 +1131,45 @@ def _audit_pending_files(root: Path) -> None:
             "FORBIDDEN_PATH",
             f"{relative} must remain absent while dependency closure is pending",
         )
+    bootstrap_root = root / "bootstrap"
+    _expect(
+        bootstrap_root.is_dir() and not bootstrap_root.is_symlink(),
+        "FORBIDDEN_PATH",
+        "invalid bootstrap root",
+    )
+    for candidate in bootstrap_root.rglob("*"):
+        if not candidate.is_file():
+            continue
+        relative_candidate = candidate.relative_to(bootstrap_root)
+        namespace_skeleton = _identity_skeleton(
+            relative_candidate.parent.parts
+        )
+        filename_skeleton = _identity_skeleton((relative_candidate.name,))
+        build_artifact = bool(
+            _path_identity_tokens(
+                unicodedata.normalize("NFKC", relative_candidate.name)
+            )
+            & PENDING_BOOTSTRAP_ARTIFACT_MARKERS
+        )
+        for marker, canonical in PENDING_BOOTSTRAP_NAMESPACES.items():
+            identity_bearing_path = _skeleton_contains_marker(
+                namespace_skeleton,
+                marker,
+            ) or (
+                build_artifact
+                and _skeleton_contains_marker(filename_skeleton, marker)
+            )
+            if not identity_bearing_path:
+                continue
+            _expect(
+                relative_candidate.parts[0] == canonical,
+                "FORBIDDEN_PATH",
+                "noncanonical pending bootstrap namespace is forbidden: "
+                f"{candidate.relative_to(root)}",
+            )
     for relative_root, allowed in (
-        (Path("bootstrap/polaris/v1.6.0"), POLARIS_ALLOWED_PATHS),
-        (Path("bootstrap/postgresql/v18.4"), POSTGRES_ALLOWED_PATHS),
+        (Path("bootstrap/polaris"), POLARIS_PENDING_PATHS),
+        (Path("bootstrap/postgresql"), POSTGRES_PENDING_PATHS),
     ):
         directory = root / relative_root
         _expect(
@@ -1144,6 +1259,367 @@ def _audit_pending_files(root: Path) -> None:
         )
 
 
+def _iter_string_values(value: Any) -> Iterable[str]:
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, Mapping):
+        for nested in value.values():
+            yield from _iter_string_values(nested)
+    elif isinstance(value, list):
+        for nested in value:
+            yield from _iter_string_values(nested)
+
+
+def _mapping_field(value: Mapping[str, Any], name: str) -> Any:
+    normalized_name = re.sub(r"[^a-z0-9]", "", name.lower())
+    for key, nested in value.items():
+        normalized_key = re.sub(r"[^a-z0-9]", "", str(key).lower())
+        if normalized_key == normalized_name:
+            return nested
+    return None
+
+
+def _identity_skeleton(parts: Iterable[str]) -> str:
+    normalized = unicodedata.normalize("NFKC", "".join(parts)).casefold()
+    return "".join(
+        character
+        if character.isascii() and character.isalnum()
+        else "?"
+        if character.isalnum()
+        else ""
+        for character in normalized
+    )
+
+
+def _skeleton_contains_marker(value: str, marker: str) -> bool:
+    for offset in range(len(value) - len(marker) + 1):
+        candidate = value[offset : offset + len(marker)]
+        ascii_matches = sum(
+            actual == expected
+            for actual, expected in zip(candidate, marker)
+        )
+        if (
+            ascii_matches >= max(3, len(marker) // 2)
+            and all(
+                actual == expected or actual == "?"
+                for actual, expected in zip(candidate, marker)
+            )
+        ):
+            return True
+    return False
+
+
+def _path_identity_tokens(value: str) -> set[str]:
+    separated = PATH_CAMEL_BOUNDARY.sub("/", value)
+    return set(re.findall(r"[a-z0-9]+", separated.lower()))
+
+
+def _is_segmented_identity(
+    value: str,
+    identities: set[str],
+    context_words: set[str],
+) -> bool:
+    candidate = re.sub(r"\d+$", "", value.casefold())
+    if not candidate:
+        return False
+    words = identities | context_words
+    states = {(0, False)}
+    while states:
+        offset, found_identity = states.pop()
+        if offset == len(candidate):
+            return found_identity
+        for word in words:
+            if candidate.startswith(word, offset):
+                states.add(
+                    (
+                        offset + len(word),
+                        found_identity or word in identities,
+                    )
+                )
+    return False
+
+
+def _is_catalog_identity_token(value: str) -> bool:
+    return _is_segmented_identity(
+        value,
+        set(CATALOG_IDENTITY_MARKERS),
+        CATALOG_PATH_CONTEXT_WORDS,
+    )
+
+
+def _has_catalog_path_identity(value: str) -> bool:
+    return any(
+        _is_catalog_identity_token(token)
+        for token in _path_identity_tokens(value)
+    )
+
+
+def _contains_bounded_marker(value: str, marker: str) -> bool:
+    return bool(
+        re.search(
+            rf"(?<![a-z0-9]){re.escape(marker)}(?![a-z0-9])",
+            value,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _retained_evidence_subject_values(document: Any) -> Iterable[str]:
+    stack = [(document, True)]
+    while stack:
+        value, is_root = stack.pop()
+        if isinstance(value, list):
+            stack.extend((nested, is_root) for nested in value)
+            continue
+        if not isinstance(value, Mapping):
+            continue
+
+        if is_root:
+            for field in (
+                "component",
+                "image",
+                "reference",
+                "repository",
+                "source",
+                "uri",
+            ):
+                yield from _iter_string_values(_mapping_field(value, field))
+            if _mapping_field(value, "spdxVersion") is not None:
+                yield from _iter_string_values(_mapping_field(value, "name"))
+
+        for key, nested in value.items():
+            normalized_key = re.sub(r"[^a-z0-9]", "", str(key).lower())
+            if normalized_key in {
+                "artifactname",
+                "dockerreference",
+                "imagereference",
+                "repodigests",
+                "subjectreference",
+            }:
+                yield from _iter_string_values(nested)
+
+            if normalized_key in {"image", "images"}:
+                entries = nested if isinstance(nested, list) else [nested]
+                for entry in entries:
+                    if not isinstance(entry, Mapping):
+                        continue
+                    for field in (
+                        "component",
+                        "image",
+                        "name",
+                        "reference",
+                        "repository",
+                        "source",
+                        "uri",
+                    ):
+                        yield from _iter_string_values(
+                            _mapping_field(entry, field)
+                        )
+
+            if normalized_key == "subject":
+                entries = nested if isinstance(nested, list) else [nested]
+                for entry in entries:
+                    if not isinstance(entry, Mapping):
+                        continue
+                    for field in ("component", "name", "reference", "uri"):
+                        yield from _iter_string_values(
+                            _mapping_field(entry, field)
+                        )
+
+            if normalized_key == "metadata" and isinstance(nested, Mapping):
+                component = _mapping_field(nested, "component")
+                if isinstance(component, Mapping):
+                    for field in ("bom-ref", "name", "purl", "reference"):
+                        yield from _iter_string_values(
+                            _mapping_field(component, field)
+                        )
+
+            if isinstance(nested, (Mapping, list)):
+                stack.append((nested, False))
+
+
+def _decoded_dsse_payload(document: Any, relative: str) -> Any | None:
+    if not isinstance(document, Mapping):
+        return None
+    payload_type = _mapping_field(document, "payloadType")
+    payload = _mapping_field(document, "payload")
+    if payload_type is None and payload is None:
+        return None
+    _expect(
+        isinstance(payload_type, str) and isinstance(payload, str),
+        "FORBIDDEN_PATH",
+        f"invalid DSSE envelope in retained evidence: {relative}",
+    )
+    normalized_type = payload_type.casefold()
+    _expect(
+        "in-toto" in normalized_type or "json" in normalized_type,
+        "FORBIDDEN_PATH",
+        f"unsupported DSSE payload type in retained evidence: {relative}",
+    )
+    _expect(
+        len(payload) <= ((MAX_DSSE_PAYLOAD_BYTES + 2) // 3) * 4,
+        "FORBIDDEN_PATH",
+        f"DSSE payload is too large to inspect: {relative}",
+    )
+    try:
+        decoded = base64.b64decode(payload, validate=True)
+    except (binascii.Error, ValueError) as error:
+        _fail(
+            "FORBIDDEN_PATH",
+            f"invalid DSSE payload in retained evidence {relative}: {error}",
+        )
+    _expect(
+        len(decoded) <= MAX_DSSE_PAYLOAD_BYTES,
+        "FORBIDDEN_PATH",
+        f"DSSE payload is too large to inspect: {relative}",
+    )
+    try:
+        return json.loads(
+            decoded.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_pairs,
+        )
+    except (UnicodeError, ValueError) as error:
+        _fail(
+            "FORBIDDEN_PATH",
+            f"cannot inspect DSSE payload in retained evidence {relative}: {error}",
+        )
+
+
+def _expanded_retained_evidence_documents(
+    document: Any,
+    relative: str,
+) -> Iterable[Any]:
+    stack = [(document, 0)]
+    while stack:
+        value, depth = stack.pop()
+        yield value
+        if isinstance(value, list):
+            stack.extend((nested, depth) for nested in value)
+            continue
+        if isinstance(value, Mapping):
+            for key, nested in value.items():
+                normalized_key = re.sub(
+                    r"[^a-z0-9]",
+                    "",
+                    str(key).casefold(),
+                )
+                if normalized_key != "dsseenvelope":
+                    continue
+                _expect(
+                    isinstance(nested, Mapping),
+                    "FORBIDDEN_PATH",
+                    f"invalid Sigstore DSSE envelope: {relative}",
+                )
+                stack.append((nested, depth))
+        decoded = _decoded_dsse_payload(value, relative)
+        if decoded is None:
+            continue
+        _expect(
+            depth < 4,
+            "FORBIDDEN_PATH",
+            f"DSSE envelope nesting is too deep: {relative}",
+        )
+        stack.append((decoded, depth + 1))
+
+
+def _is_pending_evidence_identity(values: Iterable[str]) -> bool:
+    for value in values:
+        tokens = _path_identity_tokens(value)
+        if (
+            any(
+                _is_segmented_identity(
+                    token,
+                    PENDING_EVIDENCE_PATH_TOKENS,
+                    PENDING_EVIDENCE_CONTEXT_WORDS,
+                )
+                for token in tokens
+            )
+            or any(
+                _contains_bounded_marker(value, marker)
+                for marker in PENDING_IMAGE_REFERENCE_MARKERS
+            )
+        ):
+            return True
+    return False
+
+
+def _audit_retained_pending_evidence(root: Path) -> None:
+    directory = root / RETAINED_EVIDENCE_ROOT
+    if not directory.exists():
+        return
+    _expect(
+        directory.is_dir() and not directory.is_symlink(),
+        "FORBIDDEN_PATH",
+        f"invalid retained evidence root: {RETAINED_EVIDENCE_ROOT}",
+    )
+    for path in directory.rglob("*"):
+        relative = path.relative_to(root).as_posix()
+        evidence_relative = path.relative_to(directory).as_posix()
+        path_tokens = _path_identity_tokens(evidence_relative)
+        _expect(
+            not any(
+                _is_segmented_identity(
+                    token,
+                    PENDING_EVIDENCE_PATH_TOKENS,
+                    PENDING_EVIDENCE_CONTEXT_WORDS,
+                )
+                for token in path_tokens
+            ),
+            "FORBIDDEN_PATH",
+            f"pending catalog evidence cannot be retained: {relative}",
+        )
+        _expect(
+            not path.is_symlink(),
+            "FORBIDDEN_PATH",
+            f"retained evidence symlink cannot be audited: {relative}",
+        )
+        if not path.is_file():
+            continue
+        suffix = path.suffix.lower()
+        if suffix in RETAINED_EVIDENCE_DOCUMENT_SUFFIXES:
+            continue
+        _expect(
+            suffix in RETAINED_EVIDENCE_JSON_SUFFIXES,
+            "FORBIDDEN_PATH",
+            f"unsupported retained evidence format: {relative}",
+        )
+        try:
+            text = path.read_text(encoding="utf-8")
+            if suffix == ".jsonl":
+                documents = [
+                    json.loads(line, object_pairs_hook=_reject_duplicate_pairs)
+                    for line in text.splitlines()
+                    if line.strip()
+                ]
+            else:
+                documents = [
+                    json.loads(text, object_pairs_hook=_reject_duplicate_pairs)
+                ]
+        except (OSError, UnicodeError, ValueError) as error:
+            _fail(
+                "FORBIDDEN_PATH",
+                f"cannot inspect retained evidence {relative}: {error}",
+            )
+        expanded_documents = [
+            nested
+            for document in documents
+            for nested in _expanded_retained_evidence_documents(
+                document,
+                relative,
+            )
+        ]
+        _expect(
+            not any(
+                _is_pending_evidence_identity(
+                    _retained_evidence_subject_values(document)
+                )
+                for document in expanded_documents
+            ),
+            "FORBIDDEN_PATH",
+            f"pending catalog evidence cannot be retained: {relative}",
+        )
+
+
 def _audit_ledger(root: Path) -> None:
     ledger = _load_json(root, RESIDENT_LEDGER, "LEDGER_BLOCK")
     images = ledger.get("images")
@@ -1154,13 +1630,6 @@ def _audit_ledger(root: Path) -> None:
         "polaris",
         "postgres",
         "postgresql",
-    }
-    reference_markers = {
-        "apache/polaris",
-        "c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
-        "cgr.dev/chainguard/postgres",
-        "ghcr.io/tommykammy/shirokuma-polaris",
-        "shirokuma-polaris",
     }
     blocked: list[str] = []
     for index, entry in enumerate(images):
@@ -1185,7 +1654,9 @@ def _audit_ledger(root: Path) -> None:
             normalized_component in aliases
             or RUNTIME_IDENTITY.search(identity)
             or catalog_identity
-            or any(marker in serialized for marker in reference_markers)
+            or any(
+                marker in serialized for marker in PENDING_IMAGE_REFERENCE_MARKERS
+            )
         ):
             blocked.append(component or "<unnamed>")
     blocked.sort()
@@ -1413,6 +1884,489 @@ def _has_unapproved_catalog_marker(relative: str, text: str) -> bool:
     return bool(RUNTIME_CATALOG_MARKER.search(inspected))
 
 
+def _yaml_code_line(line: str) -> str:
+    in_single = False
+    in_double = False
+    index = 0
+    while index < len(line):
+        character = line[index]
+        if in_single:
+            if (
+                character == "'"
+                and index + 1 < len(line)
+                and line[index + 1] == "'"
+            ):
+                index += 2
+                continue
+            if character == "'":
+                in_single = False
+        elif in_double:
+            if character == "\\":
+                index += 2
+                continue
+            if character == '"':
+                in_double = False
+        elif character == "'":
+            in_single = True
+        elif character == '"':
+            in_double = True
+        elif character == "#" and (
+            index == 0 or line[index - 1].isspace()
+        ):
+            return line[:index]
+        index += 1
+    return line
+
+
+def _has_secret_block_scalar(text: str) -> bool:
+    lines = text.splitlines()
+    code_lines = [_yaml_code_line(line) for line in lines]
+    for index in range(len(lines)):
+        header = _secret_block_scalar_header(code_lines, index)
+        if header is None:
+            continue
+        header_index, base_indent = header
+        content_indent: int | None = None
+        content: list[str] = []
+        leading_blank = False
+        for candidate in lines[header_index + 1 :]:
+            if not candidate.strip():
+                if content_indent is None:
+                    leading_blank = True
+                continue
+            indent = len(candidate) - len(candidate.lstrip(" \t"))
+            if content_indent is None:
+                if indent <= base_indent:
+                    break
+                content_indent = indent
+            elif indent < content_indent:
+                break
+            content.append(candidate[content_indent:].strip())
+        if not leading_blank and len(content) == 1 and re.fullmatch(
+            RUNTIME_SECRET_KIND,
+            content[0],
+            re.IGNORECASE,
+        ):
+            return True
+    return False
+
+
+def _has_secret_manifest(text: str) -> bool:
+    return (
+        bool(RUNTIME_SECRET_MANIFEST.search(text))
+        or _has_parsed_secret_manifest(text)
+        or _has_secret_block_scalar(text)
+    )
+
+
+def _quoted_yaml_scalar(line: str, start: int) -> tuple[str, int] | None:
+    quote = line[start]
+    index = start + 1
+    value: list[str] = []
+    while index < len(line):
+        character = line[index]
+        if quote == "'":
+            if (
+                character == "'"
+                and index + 1 < len(line)
+                and line[index + 1] == "'"
+            ):
+                value.append("'")
+                index += 2
+                continue
+            if character == "'":
+                return "".join(value), index + 1
+            value.append(character)
+            index += 1
+            continue
+        if character == "\\":
+            index += 1
+            if index >= len(line):
+                return None
+            escape = line[index]
+            if escape in {"x", "u", "U"}:
+                width = {"x": 2, "u": 4, "U": 8}[escape]
+                encoded = line[index + 1 : index + 1 + width]
+                if len(encoded) != width or not re.fullmatch(
+                    rf"[0-9A-Fa-f]{{{width}}}",
+                    encoded,
+                ):
+                    return None
+                value.append(chr(int(encoded, 16)))
+                index += width + 1
+            else:
+                escaped_values = {
+                    "0": "\0",
+                    "a": "\a",
+                    "b": "\b",
+                    "t": "\t",
+                    "n": "\n",
+                    "v": "\v",
+                    "f": "\f",
+                    "r": "\r",
+                    "e": "\x1b",
+                    " ": " ",
+                    '"': '"',
+                    "/": "/",
+                    "\\": "\\",
+                    "N": "\x85",
+                    "_": "\xa0",
+                    "L": "\u2028",
+                    "P": "\u2029",
+                }
+                if escape not in escaped_values:
+                    return None
+                value.append(escaped_values[escape])
+                index += 1
+            continue
+        if character == '"':
+            return "".join(value), index + 1
+        value.append(character)
+        index += 1
+    return None
+
+
+def _yaml_mapping_entry(
+    line: str,
+) -> tuple[str, str, int, bool] | None:
+    candidate = line.lstrip(" \t")
+    indent = len(line) - len(candidate)
+    item = False
+    item_width = 0
+    if candidate.startswith("-") and (
+        len(candidate) == 1 or candidate[1].isspace()
+    ):
+        item = True
+        remainder = candidate[1:]
+        candidate = remainder.lstrip(" \t")
+        item_width = 1 + len(remainder) - len(candidate)
+    candidate = _strip_yaml_node_properties(candidate)
+    if not candidate:
+        return None
+    if candidate[0] in {"'", '"'}:
+        parsed = _quoted_yaml_scalar(candidate, 0)
+        if parsed is None:
+            return None
+        key, end = parsed
+    else:
+        match = re.match(r"[A-Za-z][A-Za-z0-9_-]*", candidate)
+        if match is None:
+            return None
+        key = match.group(0)
+        end = match.end()
+    remainder = candidate[end:].lstrip(" \t")
+    if not remainder.startswith(":"):
+        return None
+    return key, remainder[1:].strip(), indent + item_width, item
+
+
+def _explicit_yaml_key_entry(
+    line: str,
+) -> tuple[str, int, bool] | None:
+    candidate = line.lstrip(" \t")
+    indent = len(line) - len(candidate)
+    item = False
+    item_width = 0
+    if candidate.startswith("-") and (
+        len(candidate) == 1 or candidate[1].isspace()
+    ):
+        item = True
+        remainder = candidate[1:]
+        candidate = remainder.lstrip(" \t")
+        item_width = 1 + len(remainder) - len(candidate)
+    if not candidate.startswith("?"):
+        return None
+    candidate = _strip_yaml_node_properties(candidate[1:].strip())
+    if not candidate:
+        return None
+    if candidate[0] in {"'", '"'}:
+        parsed = _quoted_yaml_scalar(candidate, 0)
+        if parsed is None:
+            return None
+        key, end = parsed
+        if candidate[end:].strip():
+            return None
+    elif re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", candidate):
+        key = candidate
+    else:
+        return None
+    return key, indent + item_width, item
+
+
+def _strip_yaml_node_properties(value: str) -> str:
+    candidate = value
+    while True:
+        node_property = re.match(r"(?:![^\s]+|&[^\s]+)(?:\s+|$)", candidate)
+        if node_property is None:
+            return candidate
+        candidate = candidate[node_property.end() :].lstrip()
+
+
+def _yaml_document_base_indent(lines: list[str], index: int) -> int:
+    start = index
+    while start > 0 and lines[start - 1].strip() not in {"---", "..."}:
+        start -= 1
+    end = index + 1
+    while end < len(lines) and lines[end].strip() not in {"---", "..."}:
+        end += 1
+    indents = [
+        len(line) - len(line.lstrip(" \t"))
+        for line in lines[start:end]
+        if line.strip() and not line.lstrip().startswith("%")
+    ]
+    return min(indents, default=0)
+
+
+def _block_scalar_value(value: str) -> bool:
+    match = RUNTIME_BLOCK_SCALAR_VALUE.fullmatch(value)
+    return match is not None and "-" in (match.group("modifier") or "")
+
+
+def _secret_block_scalar_header(
+    lines: list[str],
+    index: int,
+) -> tuple[int, int] | None:
+    line = lines[index]
+    entry = _yaml_mapping_entry(line)
+    if (
+        entry is not None
+        and entry[0].casefold() == "kind"
+        and _block_scalar_value(entry[1])
+        and (
+            entry[3]
+            or entry[2]
+            == _yaml_document_base_indent(lines, index)
+        )
+    ):
+        return index, entry[2]
+
+    explicit = _explicit_yaml_key_entry(line)
+    if (
+        explicit is None
+        or explicit[0].casefold() != "kind"
+        or (
+            not explicit[2]
+            and explicit[1]
+            != _yaml_document_base_indent(lines, index)
+        )
+    ):
+        return None
+    for value_index in range(index + 1, len(lines)):
+        value_line = lines[value_index]
+        if not value_line.strip():
+            continue
+        stripped = value_line.lstrip(" \t")
+        if not stripped.startswith(":"):
+            return None
+        value = stripped[1:].strip()
+        if _block_scalar_value(value):
+            indent = len(value_line) - len(stripped)
+            return value_index, max(explicit[1], indent)
+        return None
+    return None
+
+
+def _yaml_scalar_value(value: str) -> str | None:
+    candidate = _strip_yaml_node_properties(value.strip())
+    if not candidate:
+        return None
+    if candidate[0] in {"'", '"'}:
+        parsed = _quoted_yaml_scalar(candidate, 0)
+        if parsed is None:
+            return None
+        scalar, end = parsed
+        if candidate[end:].strip() not in {"", ","}:
+            return None
+        return scalar
+    match = re.fullmatch(r"([A-Za-z0-9_-]+)\s*,?", candidate)
+    return match.group(1) if match is not None else None
+
+
+def _is_secret_kind(value: Any) -> bool:
+    return isinstance(value, str) and bool(
+        re.fullmatch(RUNTIME_SECRET_KIND, value, re.IGNORECASE)
+    )
+
+
+def _json_has_secret_manifest(value: Any) -> bool:
+    if isinstance(value, list):
+        return any(_json_has_secret_manifest(nested) for nested in value)
+    if not isinstance(value, Mapping):
+        return False
+    kind = next(
+        (
+            nested
+            for key, nested in value.items()
+            if str(key).casefold() == "kind"
+        ),
+        None,
+    )
+    if _is_secret_kind(kind):
+        return True
+    items = next(
+        (
+            nested
+            for key, nested in value.items()
+            if str(key).casefold() == "items"
+        ),
+        None,
+    )
+    return isinstance(items, list) and any(
+        _json_has_secret_manifest(nested) for nested in items
+    )
+
+
+def _has_parsed_secret_manifest(text: str) -> bool:
+    inspected = text.removeprefix("\ufeff")
+    try:
+        document = json.loads(inspected)
+    except (json.JSONDecodeError, ValueError):
+        pass
+    else:
+        return _json_has_secret_manifest(document)
+
+    lines = [_yaml_code_line(line) for line in inspected.splitlines()]
+    for index, line in enumerate(lines):
+        document_base_indent = _yaml_document_base_indent(lines, index)
+        entry = _yaml_mapping_entry(line)
+        if (
+            entry is not None
+            and entry[0].casefold() == "kind"
+            and (entry[3] or entry[2] == document_base_indent)
+            and _is_secret_kind(_yaml_scalar_value(entry[1]))
+        ):
+            return True
+
+        explicit = _explicit_yaml_key_entry(line)
+        if (
+            explicit is None
+            or explicit[0].casefold() != "kind"
+            or (
+                not explicit[2]
+                and explicit[1] != document_base_indent
+            )
+        ):
+            continue
+        for value_line in lines[index + 1 :]:
+            if not value_line.strip():
+                continue
+            stripped = value_line.lstrip(" \t")
+            if not stripped.startswith(":"):
+                break
+            if _is_secret_kind(_yaml_scalar_value(stripped[1:])):
+                return True
+            break
+    return False
+
+
+def _root_mapping_has_secret_generator(value: Any) -> bool:
+    return isinstance(value, Mapping) and any(
+        str(key).casefold() == "secretgenerator" for key in value
+    )
+
+
+def _root_flow_mapping_has_secret_generator(document: str) -> bool:
+    candidate = document.strip()
+    if not candidate.startswith("{"):
+        return False
+    index = 0
+    mapping_depth = 0
+    sequence_depth = 0
+    while index < len(candidate):
+        character = candidate[index]
+        if character in {"'", '"'}:
+            parsed = _quoted_yaml_scalar(candidate, index)
+            if parsed is None:
+                return False
+            value, index = parsed
+            following = candidate[index:].lstrip()
+            if (
+                mapping_depth == 1
+                and sequence_depth == 0
+                and value.casefold() == "secretgenerator"
+                and following.startswith(":")
+            ):
+                return True
+            continue
+        if character == "{":
+            mapping_depth += 1
+            index += 1
+            continue
+        if character == "}":
+            mapping_depth -= 1
+            index += 1
+            continue
+        if character == "[":
+            sequence_depth += 1
+            index += 1
+            continue
+        if character == "]":
+            sequence_depth -= 1
+            index += 1
+            continue
+        match = re.match(r"[A-Za-z][A-Za-z0-9_-]*", candidate[index:])
+        if match is None:
+            index += 1
+            continue
+        value = match.group(0)
+        index += len(value)
+        if (
+            mapping_depth == 1
+            and sequence_depth == 0
+            and value.casefold() == "secretgenerator"
+            and candidate[index:].lstrip().startswith(":")
+        ):
+            return True
+    return False
+
+
+def _has_secret_generator(text: str) -> bool:
+    inspected = text.removeprefix("\ufeff")
+    try:
+        document = json.loads(inspected)
+    except (json.JSONDecodeError, ValueError):
+        pass
+    else:
+        return _root_mapping_has_secret_generator(document)
+
+    code_lines = [_yaml_code_line(line) for line in inspected.splitlines()]
+    for index, line in enumerate(code_lines):
+        document_base_indent = _yaml_document_base_indent(code_lines, index)
+        entry = _yaml_mapping_entry(line)
+        if (
+            entry is not None
+            and entry[2] == document_base_indent
+            and not entry[3]
+            and entry[0].casefold() == "secretgenerator"
+        ):
+            return True
+        explicit_key = _explicit_yaml_key_entry(line)
+        if (
+            explicit_key is not None
+            and explicit_key[1] == document_base_indent
+            and not explicit_key[2]
+            and explicit_key[0].casefold() == "secretgenerator"
+        ):
+            for candidate in code_lines[index + 1 :]:
+                if not candidate.strip():
+                    continue
+                if candidate.lstrip().startswith(":"):
+                    return True
+                break
+    documents: list[list[str]] = [[]]
+    for line in code_lines:
+        if line.strip() == "---":
+            documents.append([])
+        elif line.lstrip().startswith("--- "):
+            documents.append([line.lstrip()[4:]])
+        else:
+            documents[-1].append(line)
+    return any(
+        _root_flow_mapping_has_secret_generator("\n".join(document))
+        for document in documents
+    )
+
+
 def _audit_runtime_absence(root: Path) -> None:
     matches: list[str] = []
     for path in _runtime_files(root):
@@ -1422,7 +2376,7 @@ def _audit_runtime_absence(root: Path) -> None:
             continue
         if (
             RUNTIME_IDENTITY.search(relative)
-            or RUNTIME_CONTEXT_PATH.search(relative)
+            or _has_catalog_path_identity(relative)
             or RUNTIME_CREDENTIAL_PATH.search(relative)
         ):
             matches.append(relative)
@@ -1441,7 +2395,8 @@ def _audit_runtime_absence(root: Path) -> None:
         )
         if (
             RUNTIME_IDENTITY.search(text)
-            or RUNTIME_SECRET_MANIFEST.search(text)
+            or _has_secret_manifest(text)
+            or _has_secret_generator(text)
             or RUNTIME_POSTGRES_CREDENTIAL.search(text)
             or _has_unapproved_catalog_marker(relative, text)
             or unapproved_opentofu_secret
@@ -1462,6 +2417,7 @@ def audit(root: Path) -> None:
     _audit_polaris_admission(root)
     _audit_postgres_admission(root)
     _audit_pending_files(root)
+    _audit_retained_pending_evidence(root)
     _audit_ledger(root)
     _audit_runtime_absence(root)
 
