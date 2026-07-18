@@ -33,12 +33,30 @@ BOOTSTRAP_CONTAINER_ROOT_PATHS = (
     ),
 )
 HELM_RELEASE_IDENTITY_PATHS = (
-    ("metadata", "name"),
-    ("metadata", "labels", "app.kubernetes.io/name"),
-    ("spec", "releaseName"),
     ("spec", "chart", "spec", "chart"),
     ("spec", "chartRef", "name"),
 )
+HELM_VALUE_IDENTITY_FIELDS = {
+    "app.kubernetes.io/name",
+    "containername",
+    "cronjobname",
+    "fullnameoverride",
+    "image",
+    "jobname",
+    "nameoverride",
+    "resourcename",
+    "workloadname",
+}
+HELM_VALUE_IMAGE_FIELDS = {"repository", "tag"}
+HELM_VALUE_IDENTITY_NAME_PARENTS = {
+    "container",
+    "cronjob",
+    "image",
+    "job",
+    "metadata",
+    "resource",
+    "workload",
+}
 HELM_CHART_REF_KINDS = {"ExternalArtifact", "HelmChart", "OCIRepository"}
 HELM_CHART_SOURCE_KINDS = {
     "Bucket",
@@ -88,7 +106,7 @@ def _mapping_scalars(document: str) -> Iterator[tuple[tuple[str, ...], str]]:
             stack.pop()
 
         key = raw_key.removeprefix("- ").strip().strip("'\"")
-        value = match.group("value").split(" #", maxsplit=1)[0].strip()
+        value = _strip_yaml_comment(match.group("value")).strip()
         path = tuple(item[1] for item in stack) + (key,)
         if value:
             yield path, value.strip("'\"")
@@ -124,8 +142,29 @@ def _document_scalars(document: str) -> list[tuple[tuple[str, ...], str]]:
     return list(_json_scalars(parsed))
 
 
+def _strip_yaml_comment(value: str) -> str:
+    quote: str | None = None
+    escaped = False
+    for index, character in enumerate(value):
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif character == "\\" and quote == '"':
+                escaped = True
+            elif character == quote:
+                quote = None
+            continue
+        if character in {"'", '"'}:
+            quote = character
+        elif character == "#" and (
+            index == 0 or value[index - 1].isspace()
+        ):
+            return value[:index]
+    return value
+
+
 def _strip_yaml_scalar(value: str) -> str:
-    return value.split(" #", maxsplit=1)[0].strip().strip("'\"")
+    return _strip_yaml_comment(value).strip().strip("'\"")
 
 
 def _split_flow_collection(value: str) -> list[str]:
@@ -266,12 +305,14 @@ def _yaml_mapping_sequence(
             stack.pop()
         key = match.group("key").strip().strip("'\"")
         path = tuple(item[1] for item in stack) + (key,)
+        inline_value = _strip_yaml_comment(
+            match.group("value")
+        ).strip()
         if path != target_path:
-            if not match.group("value").strip():
+            if not inline_value:
                 stack.append((indent, key))
             continue
 
-        inline_value = match.group("value").strip()
         if inline_value:
             return [
                 _flow_mapping_fields(mapping)
@@ -357,12 +398,14 @@ def _yaml_sequence_values(
             stack.pop()
         key = match.group("key").strip().strip("'\"")
         path = tuple(item[1] for item in stack) + (key,)
+        inline_value = _strip_yaml_comment(
+            match.group("value")
+        ).strip()
         if path != target_path:
-            if not match.group("value").strip():
+            if not inline_value:
                 stack.append((indent, key))
             continue
 
-        inline_value = match.group("value").strip()
         if inline_value:
             inline_match = re.fullmatch(
                 r"\[(?P<values>.*)\](?:\s+#.*)?", inline_value
@@ -568,8 +611,9 @@ def _generated_values_resources(
         ("namespace",),
         _effective_kustomize_namespace(path, deploy_root, charts_root),
     )
-    prefix = scalars.get(("namePrefix",), "")
-    suffix = scalars.get(("nameSuffix",), "")
+    prefix, suffix = _effective_kustomize_name_parts(
+        path, deploy_root, charts_root
+    )
     source_root = path.parent.resolve()
     generated: list[ManifestResource] = []
     for field, kind in (
@@ -781,6 +825,23 @@ def _resource_key(
     )
 
 
+def _resource_keys(
+    resource: ManifestResource,
+) -> set[tuple[str, str, str]]:
+    raw_key = _resource_key(resource.scalar_items, resource.namespace)
+    if raw_key is None:
+        return set()
+    kind, namespace, name = raw_key
+    return {
+        raw_key,
+        (
+            kind,
+            namespace,
+            f"{resource.name_prefix}{name}{resource.name_suffix}",
+        ),
+    }
+
+
 def _helm_values_from_references(
     document: str,
 ) -> list[HelmValuesReference]:
@@ -927,6 +988,52 @@ def _metadata_identity_values(
     return values
 
 
+def _helm_value_identity_path(path: tuple[str, ...]) -> bool:
+    if not path:
+        return False
+    field = path[-1].casefold()
+    if field in HELM_VALUE_IDENTITY_FIELDS:
+        return True
+    if field in HELM_VALUE_IMAGE_FIELDS:
+        return len(path) > 1 and path[-2].casefold() in {
+            "image",
+            "images",
+        }
+    return (
+        field == "name"
+        and len(path) > 1
+        and path[-2].casefold() in HELM_VALUE_IDENTITY_NAME_PARENTS
+    )
+
+
+def _effective_helm_release_name(release: ManifestResource) -> str | None:
+    scalars = dict(release.scalar_items)
+    explicit_name = _reference_field(
+        release.scalar_items, ("spec",), "releaseName"
+    )
+    if explicit_name:
+        return explicit_name
+
+    resource_name = scalars.get(
+        ("metadata", "name")
+    ) or _flow_mapping_field(
+        release.scalar_items, ("metadata",), "name"
+    )
+    if not resource_name:
+        return None
+    transformed_name = (
+        f"{release.name_prefix}{resource_name}{release.name_suffix}"
+    )
+    target_namespace = _reference_field(
+        release.scalar_items, ("spec",), "targetNamespace"
+    )
+    return (
+        f"{target_namespace}-{transformed_name}"
+        if target_namespace
+        else transformed_name
+    )
+
+
 def _scoped_resources(
     resources: Mapping[
         tuple[str, str, str],
@@ -1035,8 +1142,14 @@ def _local_chart_value_items(
         if not candidate.is_relative_to(charts_root_resolved):
             continue
 
+        values_files_path = (
+            ("spec", "valuesFiles")
+            if dict(_document_scalars(release_document)).get(("kind",))
+            == "HelmChart"
+            else ("spec", "chart", "spec", "valuesFiles")
+        )
         declared_values_files = _yaml_sequence_values(
-            release_document, ("spec", "chart", "spec", "valuesFiles")
+            release_document, values_files_path
         )
         if declared_values_files:
             source_root = charts_root.parent.resolve()
@@ -1074,13 +1187,14 @@ def _merged_helm_values_have_bootstrap_identity(
     release_namespace: str,
     chart_reference: str | None,
     allow_local_chart_values: bool,
+    chart_values_document: str | None = None,
 ) -> bool:
     merged: dict[tuple[str, ...], str] = dict(
         _local_chart_value_items(
             chart_reference,
             charts_root,
             release.path,
-            release.document,
+            chart_values_document or release.document,
             allow_local_chart_values,
         )
     )
@@ -1102,8 +1216,9 @@ def _merged_helm_values_have_bootstrap_identity(
         }
     )
     return any(
-        _has_iceberg_bootstrap_identity(value)
-        for value in merged.values()
+        _helm_value_identity_path(path)
+        and _has_iceberg_bootstrap_identity(value)
+        for path, value in merged.items()
     )
 
 
@@ -1117,9 +1232,8 @@ def _helm_release_has_bootstrap_identity(
 ) -> bool:
     scalar_items = release.scalar_items
     scalars = dict(scalar_items)
-    if any(
-        _has_iceberg_bootstrap_identity(value)
-        for value in _metadata_identity_values(scalar_items)
+    if _has_iceberg_bootstrap_identity(
+        _effective_helm_release_name(release)
     ):
         return True
     if any(
@@ -1175,17 +1289,43 @@ def _helm_release_has_bootstrap_identity(
             )
             or release_namespace
         )
-        if chart_ref_kind in HELM_CHART_REF_KINDS and any(
-            _chart_resource_has_bootstrap_identity(resource, resources)
-            for resource in _scoped_resources(
+        if chart_ref_kind in HELM_CHART_REF_KINDS:
+            chart_resources = _scoped_resources(
                 resources,
                 chart_ref_kind,
                 chart_ref_namespace,
                 chart_ref_name,
                 release.path,
             )
-        ):
-            return True
+            if any(
+                _chart_resource_has_bootstrap_identity(resource, resources)
+                for resource in chart_resources
+            ):
+                return True
+            for chart_resource in chart_resources:
+                if (
+                    dict(chart_resource.scalar_items).get(("kind",))
+                    != "HelmChart"
+                ):
+                    continue
+                chart_reference = _reference_field(
+                    chart_resource.scalar_items, ("spec",), "chart"
+                )
+                chart_source_kind = _reference_field(
+                    chart_resource.scalar_items,
+                    ("spec", "sourceRef"),
+                    "kind",
+                )
+                if _merged_helm_values_have_bootstrap_identity(
+                    release,
+                    resources,
+                    charts_root,
+                    release_namespace,
+                    chart_reference,
+                    chart_source_kind in {None, "GitRepository"},
+                    chart_resource.document,
+                ):
+                    return True
 
     chart_source_ref_path = ("spec", "chart", "spec", "sourceRef")
     chart_source_name = _reference_field(
@@ -1325,11 +1465,7 @@ def _iceberg_bootstrap_manifests(
                 path, document, deploy_root, charts_root
             ):
                 manifest_resources.append(generated_resource)
-                resource_key = _resource_key(
-                    generated_resource.scalar_items,
-                    generated_resource.namespace,
-                )
-                if resource_key is not None:
+                for resource_key in _resource_keys(generated_resource):
                     resources.setdefault(resource_key, []).append(
                         generated_resource
                     )
@@ -1344,10 +1480,7 @@ def _iceberg_bootstrap_manifests(
                     name_suffix,
                 )
                 manifest_resources.append(resource)
-                resource_key = _resource_key(
-                    scalar_items, effective_namespace
-                )
-                if resource_key is not None:
+                for resource_key in _resource_keys(resource):
                     resources.setdefault(resource_key, []).append(resource)
 
     manifests: set[Path] = set()
@@ -2623,6 +2756,265 @@ class IcebergBootstrapDetectionTests(unittest.TestCase):
 
             self.assertEqual(
                 [],
+                _iceberg_bootstrap_manifests(deploy_root, charts_root),
+            )
+
+    def test_uses_transformed_helmrelease_name_as_default_release_name(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            deploy_root = root / "deploy"
+            charts_root = root / "charts"
+            deploy_root.mkdir()
+            charts_root.mkdir()
+            (deploy_root / "kustomization.yaml").write_text(
+                "apiVersion: kustomize.config.k8s.io/v1beta1\n"
+                "kind: Kustomization\n"
+                "namePrefix: iceberg-\n"
+                "nameSuffix: -bootstrap\n"
+                "resources:\n"
+                "  - release.yaml\n",
+                encoding="utf-8",
+            )
+            (deploy_root / "release.yaml").write_text(
+                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+                "kind: HelmRelease\n"
+                "metadata:\n"
+                "  name: table\n"
+                "spec:\n"
+                "  chart:\n"
+                "    spec:\n"
+                "      chart: catalog-task\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                [deploy_root / "release.yaml"],
+                _iceberg_bootstrap_manifests(deploy_root, charts_root),
+            )
+
+    def test_indexes_kustomize_transformed_source_names(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            deploy_root = root / "deploy"
+            charts_root = root / "charts"
+            deploy_root.mkdir()
+            charts_root.mkdir()
+            (deploy_root / "kustomization.yaml").write_text(
+                "apiVersion: kustomize.config.k8s.io/v1beta1\n"
+                "kind: Kustomization\n"
+                "namePrefix: tenant-\n"
+                "nameSuffix: -v1\n"
+                "resources:\n"
+                "  - values.yaml\n"
+                "  - release.yaml\n",
+                encoding="utf-8",
+            )
+            (deploy_root / "values.yaml").write_text(
+                "apiVersion: v1\n"
+                "kind: ConfigMap\n"
+                "metadata:\n"
+                "  name: catalog-values\n"
+                "data:\n"
+                "  values.yaml: |\n"
+                "    fullnameOverride: iceberg-table-bootstrap\n",
+                encoding="utf-8",
+            )
+            (deploy_root / "release.yaml").write_text(
+                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+                "kind: HelmRelease\n"
+                "metadata:\n"
+                "  name: catalog-task\n"
+                "spec:\n"
+                "  valuesFrom:\n"
+                "    - kind: ConfigMap\n"
+                "      name: tenant-catalog-values-v1\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                [deploy_root / "release.yaml"],
+                _iceberg_bootstrap_manifests(deploy_root, charts_root),
+            )
+
+    def test_uses_explicit_release_name_instead_of_object_metadata(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            deploy_root = root / "deploy"
+            charts_root = root / "charts"
+            deploy_root.mkdir()
+            charts_root.mkdir()
+            (deploy_root / "named-release.yaml").write_text(
+                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+                "kind: HelmRelease\n"
+                "metadata:\n"
+                "  name: iceberg-table-bootstrap\n"
+                "spec:\n"
+                "  releaseName: catalog-task\n"
+                "  chart:\n"
+                "    spec:\n"
+                "      chart: catalog-task\n",
+                encoding="utf-8",
+            )
+            (deploy_root / "labelled-release.yaml").write_text(
+                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+                "kind: HelmRelease\n"
+                "metadata:\n"
+                "  name: catalog-task\n"
+                "  labels:\n"
+                "    app.kubernetes.io/name: iceberg-table-bootstrap\n"
+                "spec:\n"
+                "  releaseName: catalog-task\n"
+                "  chart:\n"
+                "    spec:\n"
+                "      chart: catalog-task\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                [],
+                _iceberg_bootstrap_manifests(deploy_root, charts_root),
+            )
+
+    def test_reads_values_from_after_comment_only_mapping_key(self) -> None:
+        self.assertEqual(
+            "'iceberg # bootstrap'",
+            _strip_yaml_comment("'iceberg # bootstrap'"),
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            deploy_root = root / "deploy"
+            charts_root = root / "charts"
+            deploy_root.mkdir()
+            charts_root.mkdir()
+            (deploy_root / "values.yaml").write_text(
+                "apiVersion: v1\n"
+                "kind: ConfigMap\n"
+                "metadata:\n"
+                "  name: catalog-values\n"
+                "data:\n"
+                "  values.yaml: |\n"
+                "    fullnameOverride: iceberg-table-bootstrap\n",
+                encoding="utf-8",
+            )
+            (deploy_root / "release.yaml").write_text(
+                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+                "kind: HelmRelease\n"
+                "metadata:\n"
+                "  name: catalog-task\n"
+                "spec: # release configuration\n"
+                "  valuesFrom: # merged values\n"
+                "    - kind: ConfigMap\n"
+                "      name: catalog-values\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                [deploy_root / "release.yaml"],
+                _iceberg_bootstrap_manifests(deploy_root, charts_root),
+            )
+
+    def test_ignores_non_identity_helm_values(self) -> None:
+        for identity_path in (
+            ("image", "repository"),
+            ("image", "tag"),
+            ("job", "name"),
+        ):
+            with self.subTest(identity_path=identity_path):
+                self.assertTrue(_helm_value_identity_path(identity_path))
+        for configuration_path in (
+            ("database", "tag"),
+            ("source", "repository"),
+            ("env", "name"),
+        ):
+            with self.subTest(configuration_path=configuration_path):
+                self.assertFalse(
+                    _helm_value_identity_path(configuration_path)
+                )
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            deploy_root = root / "deploy"
+            charts_root = root / "charts"
+            deploy_root.mkdir()
+            charts_root.mkdir()
+            (deploy_root / "release.yaml").write_text(
+                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+                "kind: HelmRelease\n"
+                "metadata:\n"
+                "  name: catalog-task\n"
+                "spec:\n"
+                "  values:\n"
+                "    env:\n"
+                "      - name: ICEBERG_TABLE_BOOTSTRAP_DISABLED\n"
+                "        value: 'true'\n"
+                "    featureGate: iceberg-table-bootstrap-disabled\n"
+                "    database:\n"
+                "      tag: iceberg-table-bootstrap-disabled\n"
+                "    source:\n"
+                "      repository: iceberg-table-bootstrap-examples\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                [],
+                _iceberg_bootstrap_manifests(deploy_root, charts_root),
+            )
+
+    def test_reads_selected_helmchart_values_from_chart_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            deploy_root = root / "deploy"
+            charts_root = root / "charts"
+            chart_root = charts_root / "catalog-task"
+            deploy_root.mkdir()
+            chart_root.mkdir(parents=True)
+            (chart_root / "values.yaml").write_text(
+                "fullnameOverride: catalog-task\n",
+                encoding="utf-8",
+            )
+            (chart_root / "bootstrap-values.yaml").write_text(
+                "fullnameOverride: iceberg-table-bootstrap\n",
+                encoding="utf-8",
+            )
+            (deploy_root / "source.yaml").write_text(
+                "apiVersion: source.toolkit.fluxcd.io/v1\n"
+                "kind: GitRepository\n"
+                "metadata:\n"
+                "  name: catalog-source\n"
+                "spec:\n"
+                "  url: https://github.example/catalog.git\n"
+                "---\n"
+                "apiVersion: source.toolkit.fluxcd.io/v1\n"
+                "kind: HelmChart\n"
+                "metadata:\n"
+                "  name: catalog-chart\n"
+                "spec:\n"
+                "  chart: ./charts/catalog-task\n"
+                "  valuesFiles:\n"
+                "    - ./charts/catalog-task/bootstrap-values.yaml\n"
+                "  sourceRef:\n"
+                "    kind: GitRepository\n"
+                "    name: catalog-source\n",
+                encoding="utf-8",
+            )
+            (deploy_root / "release.yaml").write_text(
+                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+                "kind: HelmRelease\n"
+                "metadata:\n"
+                "  name: catalog-task\n"
+                "spec:\n"
+                "  chartRef:\n"
+                "    kind: HelmChart\n"
+                "    name: catalog-chart\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                [deploy_root / "release.yaml"],
                 _iceberg_bootstrap_manifests(deploy_root, charts_root),
             )
 
