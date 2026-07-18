@@ -1,102 +1,51 @@
 from __future__ import annotations
 
 import base64
-import binascii
 import json
 import re
 import tempfile
+import textwrap
+import threading
 import unittest
 from collections.abc import Mapping, Sequence
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Iterator, NamedTuple
+from typing import Any, Iterator
+
+from gitops_render import (
+    RenderError,
+    RepositoryContext,
+    default_repository_context,
+    iceberg_bootstrap_manifests,
+    polaris_workload_manifests,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DEPLOY_ROOT = ROOT / "deploy"
 CHARTS_ROOT = ROOT / "charts"
 RESIDENT_IMAGES = ROOT / "security/resident-images.json"
+LOCAL_GIT_URL = "ssh://git@github.com/TommyKammy/Shirokuma"
 DEPLOYMENT_SUFFIXES = {".json", ".yaml", ".yml"}
 WORKLOAD_KINDS = {"Deployment", "StatefulSet"}
 POLARIS_COMPONENT = "polaris"
-BOOTSTRAP_KINDS = {"Job", "CronJob"}
-BOOTSTRAP_CONTAINER_ROOT_PATHS = (
-    ("spec", "template", "spec", "containers"),
-    ("spec", "template", "spec", "initContainers"),
-    ("spec", "jobTemplate", "spec", "template", "spec", "containers"),
-    (
-        "spec",
-        "jobTemplate",
-        "spec",
-        "template",
-        "spec",
-        "initContainers",
-    ),
-)
-HELM_RELEASE_IDENTITY_PATHS = (
-    ("spec", "chart", "spec", "chart"),
-    ("spec", "chartRef", "name"),
-)
-HELM_VALUE_IDENTITY_FIELDS = {
-    "app.kubernetes.io/name",
-    "containername",
-    "cronjobname",
-    "fullnameoverride",
-    "image",
-    "jobname",
-    "nameoverride",
-    "resourcename",
-    "workloadname",
-}
-HELM_VALUE_IMAGE_FIELDS = {"repository", "tag"}
-HELM_VALUE_IDENTITY_NAME_PARENTS = {
-    "container",
-    "cronjob",
-    "image",
-    "job",
-    "metadata",
-    "resource",
-    "workload",
-}
-HELM_CHART_REF_KINDS = {"ExternalArtifact", "HelmChart", "OCIRepository"}
-HELM_CHART_SOURCE_KINDS = {
-    "Bucket",
-    "GitRepository",
-    "HelmRepository",
-    "OCIRepository",
-}
-HELM_VALUES_SOURCE_KINDS = {"ConfigMap", "Secret"}
-KUSTOMIZATION_FILENAMES = ("kustomization.yaml", "kustomization.yml", "Kustomization")
-
-ScalarItems = list[tuple[tuple[str, ...], str]]
-IdentityState = dict[tuple[str, ...], str]
 
 
-class ManifestResource(NamedTuple):
-    path: Path
-    document: str
-    scalar_items: ScalarItems
-    namespace: str
-    name_prefix: str = ""
-    name_suffix: str = ""
-
-
-class HelmValuesReference(NamedTuple):
-    kind: str
-    name: str
-    values_key: str
-    target_path: str | None
-
-
-def _mapping_scalars(document: str) -> Iterator[tuple[tuple[str, ...], str]]:
+# Compatibility surface used by the downstream Trino prerequisite tests.  The
+# Iceberg detector below does not use this source-text parser.
+def _mapping_scalars(
+    document: str,
+) -> Iterator[tuple[tuple[str, ...], str]]:
     stack: list[tuple[int, str]] = []
     for raw_line in document.splitlines():
         if not raw_line.strip() or raw_line.lstrip().startswith("#"):
             continue
-
-        match = re.match(r"^(?P<indent>[ ]*)(?P<key>[^:#][^:]*):(?P<value>.*)$", raw_line)
+        match = re.match(
+            r"^(?P<indent>[ ]*)(?P<key>[^:#][^:]*):(?P<value>.*)$",
+            raw_line,
+        )
         if match is None:
             continue
-
         indent = len(match.group("indent"))
         raw_key = match.group("key").strip()
         is_sequence_item = raw_key.startswith("- ")
@@ -105,9 +54,8 @@ def _mapping_scalars(document: str) -> Iterator[tuple[tuple[str, ...], str]]:
             or (indent == stack[-1][0] and not is_sequence_item)
         ):
             stack.pop()
-
         key = raw_key.removeprefix("- ").strip().strip("'\"")
-        value = _strip_yaml_comment(match.group("value")).strip()
+        value = match.group("value").split(" #", maxsplit=1)[0].strip()
         path = tuple(item[1] for item in stack) + (key,)
         if value:
             yield path, value.strip("'\"")
@@ -116,7 +64,8 @@ def _mapping_scalars(document: str) -> Iterator[tuple[tuple[str, ...], str]]:
 
 
 def _json_scalars(
-    value: object, path: tuple[str, ...] = ()
+    value: object,
+    path: tuple[str, ...] = (),
 ) -> Iterator[tuple[tuple[str, ...], str]]:
     if isinstance(value, Mapping):
         for key, item in value.items():
@@ -132,1527 +81,21 @@ def _document_scalars(document: str) -> list[tuple[tuple[str, ...], str]]:
     try:
         parsed = json.loads(document)
     except json.JSONDecodeError:
-        scalar_items = list(_mapping_scalars(document))
-        ordered_items: ScalarItems = []
-        for path, value in scalar_items:
-            ordered_items.append((path, value))
-            if value.strip().startswith(("{", "[")):
-                ordered_items.extend(
-                    _flow_value_scalar_items(value, path)
-                )
-        return _resolve_yaml_scalar_aliases(ordered_items)
+        return list(_mapping_scalars(document))
     return list(_json_scalars(parsed))
 
 
-def _strip_yaml_comment(value: str) -> str:
-    quote: str | None = None
-    escaped = False
-    for index, character in enumerate(value):
-        if quote is not None:
-            if escaped:
-                escaped = False
-            elif character == "\\" and quote == '"':
-                escaped = True
-            elif character == quote:
-                quote = None
-            continue
-        if character in {"'", '"'}:
-            quote = character
-        elif character == "#" and (
-            index == 0 or value[index - 1].isspace()
-        ):
-            return value[:index]
-    return value
-
-
-def _strip_yaml_scalar(value: str) -> str:
-    value = _strip_yaml_comment(value).strip()
-    if len(value) >= 2 and value.startswith('"') and value.endswith('"'):
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError:
-            return value[1:-1]
-        return parsed if isinstance(parsed, str) else str(parsed)
-    if len(value) >= 2 and value.startswith("'") and value.endswith("'"):
-        return value[1:-1].replace("''", "'")
-    return value
-
-
-def _split_flow_collection(value: str) -> list[str]:
-    value = value.strip()
-    if (
-        len(value) < 2
-        or (value[0], value[-1]) not in {("{", "}"), ("[", "]")}
-    ):
-        return []
-
-    items: list[str] = []
-    start = 1
-    depth = 0
-    quote: str | None = None
-    escaped = False
-    for index, character in enumerate(value[1:-1], start=1):
-        if quote is not None:
-            if escaped:
-                escaped = False
-            elif character == "\\" and quote == '"':
-                escaped = True
-            elif character == quote:
-                quote = None
-            continue
-        if character in {"'", '"'}:
-            quote = character
-        elif character in "[{":
-            depth += 1
-        elif character in "]}":
-            depth -= 1
-        elif character == "," and depth == 0:
-            items.append(value[start:index].strip())
-            start = index + 1
-    final = value[start:-1].strip()
-    if final:
-        items.append(final)
-    return items
-
-
-def _split_flow_mapping_item(item: str) -> tuple[str, str] | None:
-    depth = 0
-    quote: str | None = None
-    escaped = False
-    for index, character in enumerate(item):
-        if quote is not None:
-            if escaped:
-                escaped = False
-            elif character == "\\" and quote == '"':
-                escaped = True
-            elif character == quote:
-                quote = None
-            continue
-        if character in {"'", '"'}:
-            quote = character
-        elif character in "[{":
-            depth += 1
-        elif character in "]}":
-            depth -= 1
-        elif character == ":" and depth == 0:
-            key = _strip_yaml_scalar(item[:index])
-            if key:
-                return key, item[index + 1 :].strip()
-            return None
-    return None
-
-
-def _flow_mapping_entries(value: str) -> list[tuple[str, str]]:
-    if not value.strip().startswith("{"):
-        return []
-    return [
-        entry
-        for item in _split_flow_collection(value)
-        if (entry := _split_flow_mapping_item(item)) is not None
-    ]
-
-
-def _flow_value_scalar_items(
-    value: str, path: tuple[str, ...]
-) -> ScalarItems:
-    value = value.strip()
-    if value.startswith("{") and value.endswith("}"):
-        return [
-            item
-            for key, nested_value in _flow_mapping_entries(value)
-            for item in _flow_value_scalar_items(
-                nested_value, path + (key,)
-            )
-        ]
-    if value.startswith("[") and value.endswith("]"):
-        return [
-            item
-            for nested_value in _split_flow_collection(value)
-            for item in _flow_value_scalar_items(nested_value, path)
-        ]
-    return [(path, _strip_yaml_scalar(value))] if value else []
-
-
-def _resolve_yaml_scalar_aliases(
-    scalar_items: ScalarItems,
-) -> ScalarItems:
-    anchors: dict[str, str] = {}
-    anchor_pattern = re.compile(
-        r"^&(?P<name>[A-Za-z0-9_-]+)\s+(?P<value>.+)$"
-    )
-    resolved: ScalarItems = []
-    for path, value in scalar_items:
-        stripped = value.strip()
-        anchor_match = anchor_pattern.match(stripped)
-        alias_match = re.fullmatch(
-            r"\*(?P<name>[A-Za-z0-9_-]+)", stripped
-        )
-        if anchor_match is not None:
-            value = _strip_yaml_scalar(anchor_match.group("value"))
-            anchors[anchor_match.group("name")] = value
-        elif alias_match is not None:
-            value = anchors.get(alias_match.group("name"), value)
-        resolved.append((path, value))
-    return resolved
-
-
-def _flow_mapping_fields(value: str) -> dict[str, str]:
-    return {
-        key: _strip_yaml_scalar(field_value)
-        for key, field_value in _flow_mapping_entries(value)
-    }
-
-
-def _yaml_mapping_sequence(
-    document: str, target_path: tuple[str, ...]
-) -> list[dict[str, str]]:
-    try:
-        parsed = json.loads(document)
-    except json.JSONDecodeError:
-        parsed = None
-
-    if isinstance(parsed, dict):
-        value: object = parsed
-        for part in target_path:
-            if not isinstance(value, dict) or part not in value:
-                return []
-            value = value[part]
-        if not isinstance(value, list):
-            return []
-        return [
-            {str(key): str(item) for key, item in entry.items()}
-            for entry in value
-            if isinstance(entry, dict)
-        ]
-
-    lines = document.splitlines()
-    stack: list[tuple[int, str]] = []
-    for index, raw_line in enumerate(lines):
-        match = re.match(
-            r"^(?P<indent>[ ]*)(?P<key>[^:#][^:]*):(?P<value>.*)$",
-            raw_line,
-        )
-        if match is None:
-            continue
-        indent = len(match.group("indent"))
-        while stack and indent <= stack[-1][0]:
-            stack.pop()
-        key = match.group("key").strip().strip("'\"")
-        path = tuple(item[1] for item in stack) + (key,)
-        inline_value = _strip_yaml_comment(
-            match.group("value")
-        ).strip()
-        if path != target_path:
-            if not inline_value:
-                stack.append((indent, key))
-            continue
-
-        if inline_value:
-            return [
-                _flow_mapping_fields(mapping)
-                for mapping in re.findall(r"\{[^{}]*\}", inline_value)
-            ]
-
-        entries: list[dict[str, str]] = []
-        current: dict[str, str] | None = None
-        item_indent: int | None = None
-        field_indent: int | None = None
-        for candidate in lines[index + 1 :]:
-            if not candidate.strip() or candidate.lstrip().startswith("#"):
-                continue
-            candidate_indent = len(candidate) - len(candidate.lstrip(" "))
-            item_match = re.match(
-                r"^[ ]*-[ ]*(?P<value>.*?)[ ]*$", candidate
-            )
-            if candidate_indent < indent or (
-                candidate_indent == indent and item_match is None
-            ):
-                break
-            if item_match is not None and (
-                item_indent is None or candidate_indent == item_indent
-            ):
-                if current is not None:
-                    entries.append(current)
-                current = {}
-                item_indent = candidate_indent
-                field_indent = None
-                item_value = item_match.group("value")
-                if item_value.startswith("{"):
-                    current.update(_flow_mapping_fields(item_value))
-                else:
-                    field_match = re.match(
-                        r"(?P<field>[^:#][^:]*):(?P<value>.*)$",
-                        item_value,
-                    )
-                    if field_match is not None:
-                        current[
-                            field_match.group("field").strip().strip("'\"")
-                        ] = _strip_yaml_scalar(field_match.group("value"))
-                continue
-            if current is None or item_indent is None:
-                return []
-            if item_match is not None:
-                continue
-            field_match = re.match(
-                r"^[ ]*(?P<field>[^:#][^:]*):(?P<value>.*)$",
-                candidate,
-            )
-            if field_match is None or candidate_indent <= item_indent:
-                return []
-            if field_indent is None:
-                field_indent = candidate_indent
-            if candidate_indent != field_indent:
-                continue
-            current[
-                field_match.group("field").strip().strip("'\"")
-            ] = _strip_yaml_scalar(field_match.group("value"))
-        if current is not None:
-            entries.append(current)
-        return entries
-    return []
-
-
-def _yaml_sequence_values(
-    document: str, target_path: tuple[str, ...]
-) -> list[str]:
-    try:
-        parsed = json.loads(document)
-    except json.JSONDecodeError:
-        parsed = None
-
-    if isinstance(parsed, dict):
-        value: object = parsed
-        for part in target_path:
-            if not isinstance(value, dict) or part not in value:
-                return []
-            value = value[part]
-        if not isinstance(value, list):
-            return []
-        return [item for item in value if isinstance(item, str)]
-
-    lines = document.splitlines()
-    stack: list[tuple[int, str]] = []
-    for index, raw_line in enumerate(lines):
-        match = re.match(
-            r"^(?P<indent>[ ]*)(?P<key>[^:#][^:]*):(?P<value>.*)$",
-            raw_line,
-        )
-        if match is None:
-            continue
-        indent = len(match.group("indent"))
-        while stack and indent <= stack[-1][0]:
-            stack.pop()
-        key = match.group("key").strip().strip("'\"")
-        path = tuple(item[1] for item in stack) + (key,)
-        inline_value = _strip_yaml_comment(
-            match.group("value")
-        ).strip()
-        if path != target_path:
-            if not inline_value:
-                stack.append((indent, key))
-            continue
-
-        if inline_value:
-            inline_match = re.fullmatch(
-                r"\[(?P<values>.*)\](?:\s+#.*)?", inline_value
-            )
-            if inline_match is None:
-                return []
-            values = [
-                _strip_yaml_scalar(item)
-                for item in inline_match.group("values").split(",")
-            ]
-            return values if values and all(values) else []
-
-        values: list[str] = []
-        for candidate in lines[index + 1 :]:
-            if not candidate.strip() or candidate.lstrip().startswith("#"):
-                continue
-            candidate_indent = len(candidate) - len(candidate.lstrip(" "))
-            item_match = re.match(r"^[ ]*-[ ]*(?P<value>.+?)\s*$", candidate)
-            if candidate_indent < indent or (
-                candidate_indent == indent and item_match is None
-            ):
-                break
-            if item_match is None:
-                return []
-            values.append(_strip_yaml_scalar(item_match.group("value")))
-        return values
-    return []
-
-
-def _yaml_sequence_blocks(
-    document: str, target_path: tuple[str, ...]
-) -> list[str]:
-    try:
-        parsed = json.loads(document)
-    except json.JSONDecodeError:
-        parsed = None
-    if isinstance(parsed, dict):
-        value: object = parsed
-        for part in target_path:
-            if not isinstance(value, dict) or part not in value:
-                return []
-            value = value[part]
-        return [
-            json.dumps(item)
-            for item in value
-            if isinstance(item, dict)
-        ] if isinstance(value, list) else []
-
-    lines = document.splitlines()
-    stack: list[tuple[int, str]] = []
-    target_index: int | None = None
-    target_indent = 0
-    for index, raw_line in enumerate(lines):
-        match = re.match(
-            r"^(?P<indent>[ ]*)(?P<key>[^:#][^:]*):(?P<value>.*)$",
-            raw_line,
-        )
-        if match is None:
-            continue
-        indent = len(match.group("indent"))
-        while stack and indent <= stack[-1][0]:
-            stack.pop()
-        key = match.group("key").strip().strip("'\"")
-        path = tuple(item[1] for item in stack) + (key,)
-        inline_value = _strip_yaml_comment(
-            match.group("value")
-        ).strip()
-        if path == target_path:
-            if inline_value:
-                return []
-            target_index = index
-            target_indent = indent
-            break
-        if not inline_value:
-            stack.append((indent, key))
-    if target_index is None:
-        return []
-
-    blocks: list[list[str]] = []
-    current: list[str] | None = None
-    item_indent: int | None = None
-    for raw_line in lines[target_index + 1 :]:
-        if not raw_line.strip():
-            if current is not None:
-                current.append("")
-            continue
-        indent = len(raw_line) - len(raw_line.lstrip(" "))
-        item_match = re.match(r"^[ ]*-[ ]*", raw_line)
-        if indent < target_indent or (
-            indent == target_indent and item_match is None
-        ):
-            break
-        if (
-            item_match is not None
-            and (item_indent is None or indent == item_indent)
-        ):
-            if current is not None:
-                blocks.append(current)
-            item_indent = indent
-            current = [raw_line[item_indent:]]
-            continue
-        if current is not None and item_indent is not None:
-            current.append(raw_line[min(len(raw_line), item_indent) :])
-    if current is not None:
-        blocks.append(current)
-    return ["\n".join(block) for block in blocks]
-
-
-def _yaml_string_mapping(document: str, field: str) -> dict[str, str]:
-    lines = document.splitlines()
-    entries: dict[str, str] = {}
-    for index, raw_line in enumerate(lines):
-        field_match = re.match(
-            rf"^{re.escape(field)}:[ ]*(?P<value>.*)$", raw_line
-        )
-        if field_match is None:
-            continue
-        inline_value = field_match.group("value").strip()
-        if inline_value and not inline_value.startswith("#"):
-            return {
-                key: _strip_yaml_scalar(value)
-                for key, value in _flow_mapping_entries(inline_value)
-            }
-        cursor = index + 1
-        while cursor < len(lines):
-            candidate = lines[cursor]
-            if not candidate.strip() or candidate.lstrip().startswith("#"):
-                cursor += 1
-                continue
-            indent = len(candidate) - len(candidate.lstrip(" "))
-            if indent == 0:
-                break
-            item_match = re.match(
-                r"^(?P<indent>[ ]*)(?P<key>[^:#][^:]*):(?P<value>.*)$",
-                candidate,
-            )
-            if item_match is None:
-                cursor += 1
-                continue
-            key_indent = len(item_match.group("indent"))
-            key = item_match.group("key").strip().strip("'\"")
-            raw_value = item_match.group("value").strip()
-            if raw_value.startswith(("|", ">")):
-                block_lines: list[str] = []
-                cursor += 1
-                while cursor < len(lines):
-                    block_line = lines[cursor]
-                    block_indent = len(block_line) - len(
-                        block_line.lstrip(" ")
-                    )
-                    if block_line.strip() and block_indent <= key_indent:
-                        break
-                    block_lines.append(
-                        block_line[min(len(block_line), key_indent + 2) :]
-                    )
-                    cursor += 1
-                entries[key] = "\n".join(block_lines)
-                continue
-            entries[key] = _strip_yaml_scalar(raw_value)
-            cursor += 1
-        break
-    return entries
-
-
-def _yaml_generator_entries(
-    document: str, field: str
-) -> list[dict[str, object]]:
-    try:
-        parsed = json.loads(document)
-    except json.JSONDecodeError:
-        parsed = None
-    if isinstance(parsed, dict):
-        entries = parsed.get(field)
-        return [
-            {str(key): value for key, value in entry.items()}
-            for entry in entries
-            if isinstance(entry, dict)
-        ] if isinstance(entries, list) else []
-
-    lines = document.splitlines()
-    field_index = next(
-        (
-            index
-            for index, line in enumerate(lines)
-            if re.match(rf"^{re.escape(field)}:[ ]*(?:#.*)?$", line)
-        ),
-        None,
-    )
-    if field_index is None:
-        return []
-
-    entries: list[dict[str, object]] = []
-    current: dict[str, object] | None = None
-    item_indent: int | None = None
-    active_list: str | None = None
-    active_list_indent: int | None = None
-    for line in lines[field_index + 1 :]:
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        indent = len(line) - len(line.lstrip(" "))
-        sequence_match = re.match(
-            r"^[ ]*-[ ]*(?P<value>.*?)[ ]*$", line
-        )
-        is_outer_item = (
-            sequence_match is not None
-            and (item_indent is None or indent == item_indent)
-        )
-        if indent == 0 and not is_outer_item:
-            break
-        if is_outer_item:
-            if current is not None:
-                entries.append(current)
-            current = {}
-            item_indent = indent
-            active_list = None
-            active_list_indent = None
-            value = sequence_match.group("value")
-            field_match = re.match(
-                r"(?P<field>[^:#][^:]*):(?P<value>.*)$", value
-            )
-            if field_match is not None:
-                current[field_match.group("field").strip()] = (
-                    _strip_yaml_scalar(field_match.group("value"))
-                )
-            continue
-        if current is None or item_indent is None:
-            return []
-        if (
-            sequence_match is not None
-            and active_list is not None
-            and active_list_indent is not None
-            and indent >= active_list_indent
-        ):
-            values = current.setdefault(active_list, [])
-            if isinstance(values, list):
-                values.append(
-                    _strip_yaml_scalar(sequence_match.group("value"))
-                )
-            continue
-        mapping_match = re.match(
-            r"^[ ]*(?P<field>[^:#][^:]*):(?P<value>.*)$", line
-        )
-        if mapping_match is None or indent <= item_indent:
-            return []
-        key = mapping_match.group("field").strip()
-        value = mapping_match.group("value").strip()
-        if key in {"envs", "files", "literals"}:
-            active_list = key
-            active_list_indent = indent
-            current[key] = (
-                [
-                    _strip_yaml_scalar(item)
-                    for item in value.strip("[]").split(",")
-                    if item.strip()
-                ]
-                if value
-                else []
-            )
-        else:
-            active_list = None
-            active_list_indent = None
-            current[key] = _strip_yaml_scalar(value)
-    if current is not None:
-        entries.append(current)
-    return entries
-
-
-def _read_scoped_text_file(
-    source_root: Path, relative_path: str
-) -> str | None:
-    candidate = (source_root / relative_path).resolve()
-    if (
-        candidate != source_root
-        and not candidate.is_relative_to(source_root)
-    ) or not candidate.is_file():
-        return None
-    return candidate.read_text(encoding="utf-8")
-
-
-def _dotenv_data(document: str) -> dict[str, str]:
-    data: dict[str, str] = {}
-    for raw_line in document.splitlines():
-        line = raw_line.removesuffix("\r")
-        if not line or line.startswith("#"):
-            continue
-        if "=" not in line:
-            continue
-        key, value = line.split("=", maxsplit=1)
-        if key:
-            data[key] = value
-    return data
-
-
-def _generated_values_resources(
-    path: Path,
-    document: str,
-    deploy_root: Path,
-    charts_root: Path,
-) -> list[ManifestResource]:
-    scalars = dict(_document_scalars(document))
-    is_kustomization_file = path.name in KUSTOMIZATION_FILENAMES
-    if (
-        scalars.get(("kind",)) != "Kustomization"
-        and not is_kustomization_file
-    ):
-        return []
-    if (
-        scalars.get(
-            ("generatorOptions", "disableNameSuffixHash"), "false"
-        ).casefold()
-        != "true"
-    ):
-        return []
-
-    namespace = scalars.get(
-        ("namespace",),
-        _effective_kustomize_namespace(path, deploy_root, charts_root),
-    )
-    prefix, suffix = _effective_kustomize_name_parts(
-        path, deploy_root, charts_root
-    )
-    source_root = path.parent.resolve()
-    generated: list[ManifestResource] = []
-    for field, kind in (
-        ("configMapGenerator", "ConfigMap"),
-        ("secretGenerator", "Secret"),
-    ):
-        for entry in _yaml_generator_entries(document, field):
-            raw_name = entry.get("name")
-            if not isinstance(raw_name, str) or not raw_name:
-                continue
-            data: dict[str, str] = {}
-            for literal in entry.get("literals", []):
-                if not isinstance(literal, str) or "=" not in literal:
-                    continue
-                key, value = literal.split("=", maxsplit=1)
-                data[key] = value
-            for file_entry in entry.get("files", []):
-                if not isinstance(file_entry, str):
-                    continue
-                if "=" in file_entry:
-                    key, relative_path = file_entry.split("=", maxsplit=1)
-                else:
-                    relative_path = file_entry
-                    key = Path(relative_path).name
-                file_content = _read_scoped_text_file(
-                    source_root, relative_path
-                )
-                if file_content is None:
-                    continue
-                data[key] = file_content
-            env_files = entry.get("envs", [])
-            if isinstance(env_files, str):
-                env_files = [env_files]
-            elif not isinstance(env_files, list):
-                env_files = []
-            legacy_env = entry.get("env")
-            if isinstance(legacy_env, str) and legacy_env:
-                env_files = [*env_files, legacy_env]
-            for env_file in env_files:
-                if not isinstance(env_file, str):
-                    continue
-                env_content = _read_scoped_text_file(
-                    source_root, env_file
-                )
-                if env_content is not None:
-                    data.update(_dotenv_data(env_content))
-            serialized_data = (
-                {
-                    key: base64.b64encode(value.encode("utf-8")).decode(
-                        "ascii"
-                    )
-                    for key, value in data.items()
-                }
-                if kind == "Secret"
-                else data
-            )
-            generated_document = json.dumps(
-                {
-                    "apiVersion": "v1",
-                    "kind": kind,
-                    "metadata": {
-                        "name": f"{prefix}{raw_name}{suffix}",
-                        "namespace": namespace,
-                    },
-                    "data": serialized_data,
-                }
-            )
-            generated.append(
-                ManifestResource(
-                    path,
-                    generated_document,
-                    _document_scalars(generated_document),
-                    namespace,
-                )
-            )
-    return generated
-
-
-def _manifest_item_documents(document: str) -> list[str]:
-    try:
-        parsed = json.loads(document)
-    except json.JSONDecodeError:
-        parsed = None
-    if isinstance(parsed, dict):
-        if parsed.get("kind") != "List":
-            return [document]
-        items = parsed.get("items")
-        if not isinstance(items, list):
-            return []
-        return [
-            json.dumps(item)
-            for item in items
-            if isinstance(item, dict)
-        ]
-
-    if dict(_document_scalars(document)).get(("kind",)) != "List":
-        return [document]
-    lines = document.splitlines()
-    items_index = next(
-        (
-            index
-            for index, line in enumerate(lines)
-            if re.match(r"^items:[ ]*(?:#.*)?$", line)
-        ),
-        None,
-    )
-    if items_index is None:
-        return []
-
-    item_documents: list[list[str]] = []
-    item_indent: int | None = None
-    current: list[str] | None = None
-    for line in lines[items_index + 1 :]:
-        if not line.strip() or line.lstrip().startswith("#"):
-            if current is not None:
-                current.append("")
-            continue
-        indent = len(line) - len(line.lstrip(" "))
-        sequence_match = re.match(r"^(?P<indent>[ ]*)-[ ]*(?P<value>.*)$", line)
-        if sequence_match is not None and (
-            item_indent is None or indent == item_indent
-        ):
-            if current is not None:
-                item_documents.append(current)
-            item_indent = indent
-            current = [sequence_match.group("value")]
-            continue
-        if current is None or item_indent is None or indent <= item_indent:
-            break
-        current.append(line[min(len(line), item_indent + 2) :])
-    if current is not None:
-        item_documents.append(current)
-    return ["\n".join(lines).strip() + "\n" for lines in item_documents]
-
-
-def _effective_kustomize_namespace(
-    path: Path, deploy_root: Path, charts_root: Path
-) -> str:
-    roots = (deploy_root.resolve(), charts_root.resolve())
-    current = path.parent.resolve()
-    while any(current == root or current.is_relative_to(root) for root in roots):
-        for filename in KUSTOMIZATION_FILENAMES:
-            kustomization = current / filename
-            if not kustomization.is_file():
-                continue
-            namespace = dict(
-                _document_scalars(kustomization.read_text(encoding="utf-8"))
-            ).get(("namespace",))
-            if namespace:
-                return namespace
-        if current in roots:
-            break
-        current = current.parent
-    return "default"
-
-
-def _effective_kustomize_name_parts(
-    path: Path, deploy_root: Path, charts_root: Path
-) -> tuple[str, str]:
-    roots = (deploy_root.resolve(), charts_root.resolve())
-    current = path.parent.resolve()
-    prefixes: list[str] = []
-    suffixes: list[str] = []
-    while any(current == root or current.is_relative_to(root) for root in roots):
-        for filename in KUSTOMIZATION_FILENAMES:
-            kustomization = current / filename
-            if not kustomization.is_file():
-                continue
-            scalars = dict(
-                _document_scalars(kustomization.read_text(encoding="utf-8"))
-            )
-            prefix = scalars.get(("namePrefix",))
-            suffix = scalars.get(("nameSuffix",))
-            if prefix:
-                prefixes.append(prefix)
-            if suffix:
-                suffixes.append(suffix)
-            break
-        if current in roots:
-            break
-        current = current.parent
-    return "".join(reversed(prefixes)), "".join(suffixes)
-
-
 def _has_polaris_identity(value: str | None) -> bool:
-    return value == "polaris" or bool(value and re.fullmatch(r"polaris[-_][a-z0-9_-]+", value))
-
-
-def _has_iceberg_bootstrap_identity(value: str | None) -> bool:
-    if not value:
-        return False
-    identity_tokens = set(re.findall(r"[a-z0-9]+", value.casefold()))
-    return {"iceberg", "bootstrap"} <= identity_tokens
-
-
-def _path_starts_with(path: tuple[str, ...], prefix: tuple[str, ...]) -> bool:
-    return path[: len(prefix)] == prefix
-
-
-def _resource_key(
-    scalar_items: ScalarItems,
-    effective_namespace: str,
-) -> tuple[str, str, str] | None:
-    scalars = dict(scalar_items)
-    kind = scalars.get(("kind",))
-    name = scalars.get(("metadata", "name"))
-    if not kind or not name:
-        return None
-    return (
-        kind,
-        scalars.get(("metadata", "namespace"), effective_namespace),
-        name,
+    return value == "polaris" or bool(
+        value
+        and re.fullmatch(r"polaris[-_][a-z0-9_-]+", value)
     )
 
 
-def _resource_keys(
-    resource: ManifestResource,
-) -> set[tuple[str, str, str]]:
-    raw_key = _resource_key(resource.scalar_items, resource.namespace)
-    if raw_key is None:
-        return set()
-    kind, namespace, name = raw_key
-    return {
-        raw_key,
-        (
-            kind,
-            namespace,
-            f"{resource.name_prefix}{name}{resource.name_suffix}",
-        ),
-    }
-
-
-def _helm_values_from_references(
+def _is_polaris_workload(
     document: str,
-) -> list[HelmValuesReference]:
-    references = []
-    for entry in _yaml_mapping_sequence(document, ("spec", "valuesFrom")):
-        name = entry.get("name")
-        kind = entry.get("kind", "ConfigMap")
-        if name and kind in HELM_VALUES_SOURCE_KINDS:
-            references.append(
-                HelmValuesReference(
-                    kind,
-                    name,
-                    entry.get("valuesKey", "values.yaml"),
-                    entry.get("targetPath"),
-                )
-            )
-    return references
-
-
-def _resource_has_bootstrap_identity(
-    scalar_items: ScalarItems,
+    admitted_images: set[str],
 ) -> bool:
-    return any(_has_iceberg_bootstrap_identity(value) for _, value in scalar_items)
-
-
-def _values_source_data(document: str, kind: str) -> dict[str, str]:
-    try:
-        parsed = json.loads(document)
-    except json.JSONDecodeError:
-        parsed = None
-
-    if isinstance(parsed, dict):
-        raw_data = parsed.get("data", {})
-        string_data = parsed.get("stringData", {})
-        encoded_data = (
-            {
-                str(key): value
-                for key, value in raw_data.items()
-                if isinstance(value, str)
-            }
-            if isinstance(raw_data, dict)
-            else {}
-        )
-        plain_data = (
-            {
-                str(key): value
-                for key, value in string_data.items()
-                if isinstance(value, str)
-            }
-            if isinstance(string_data, dict)
-            else {}
-        )
-    else:
-        encoded_data = _yaml_string_mapping(document, "data")
-        plain_data = _yaml_string_mapping(document, "stringData")
-
-    if kind == "ConfigMap":
-        return encoded_data
-    decoded = {}
-    for key, value in encoded_data.items():
-        try:
-            decoded[key] = base64.b64decode(
-                "".join(value.split()), validate=True
-            ).decode("utf-8")
-        except (binascii.Error, UnicodeDecodeError, ValueError):
-            continue
-    decoded.update(plain_data)
-    return decoded
-
-
-def _values_source_has_bootstrap_identity(
-    resource: ManifestResource,
-    values_key: str = "values.yaml",
-) -> bool:
-    kind = dict(resource.scalar_items).get(("kind",), "")
-    value = _values_source_data(resource.document, kind).get(values_key)
-    return _has_iceberg_bootstrap_identity(value)
-
-
-def _values_source_items(
-    resource: ManifestResource,
-    reference: HelmValuesReference,
-) -> ScalarItems:
-    kind = dict(resource.scalar_items).get(("kind",), "")
-    value = _values_source_data(resource.document, kind).get(
-        reference.values_key
-    )
-    if value is None:
-        return []
-    prefix = _split_helm_target_path(reference.target_path)
-    items = _document_scalars(value)
-    if prefix and not items:
-        return [(prefix, value)]
-    return [
-        (prefix + path, scalar)
-        for path, scalar in items
-    ]
-
-
-def _split_helm_target_path(value: str | None) -> tuple[str, ...]:
-    if not value:
-        return ()
-    parts: list[str] = []
-    current: list[str] = []
-    escaped = False
-    for character in value:
-        if escaped:
-            current.append(character)
-            escaped = False
-        elif character == "\\":
-            escaped = True
-        elif character == ".":
-            if current:
-                parts.append("".join(current))
-                current = []
-        else:
-            current.append(character)
-    if escaped:
-        current.append("\\")
-    if current:
-        parts.append("".join(current))
-    return tuple(parts)
-
-
-def _flow_mapping_field(
-    scalar_items: list[tuple[tuple[str, ...], str]],
-    mapping_path: tuple[str, ...],
-    field: str,
-) -> str | None:
-    pattern = re.compile(
-        rf"(?:^|[,{{])\s*{re.escape(field)}\s*:\s*(?P<value>[^,}}\s]+)"
-    )
-    for path, value in scalar_items:
-        if path != mapping_path:
-            continue
-        match = pattern.search(value)
-        if match is not None:
-            return match.group("value").strip("'\"")
-    return None
-
-
-def _helm_value_identity_path(path: tuple[str, ...]) -> bool:
-    if not path:
-        return False
-    field = path[-1].casefold()
-    if field in HELM_VALUE_IDENTITY_FIELDS:
-        return True
-    if field in HELM_VALUE_IMAGE_FIELDS:
-        return len(path) > 1 and path[-2].casefold() in {
-            "image",
-            "images",
-        }
-    return (
-        field == "name"
-        and len(path) > 1
-        and path[-2].casefold() in HELM_VALUE_IDENTITY_NAME_PARENTS
-    )
-
-
-def _effective_helm_release_name(release: ManifestResource) -> str | None:
-    scalars = dict(release.scalar_items)
-    explicit_name = _reference_field(
-        release.scalar_items, ("spec",), "releaseName"
-    )
-    if explicit_name:
-        return explicit_name
-
-    resource_name = scalars.get(
-        ("metadata", "name")
-    ) or _flow_mapping_field(
-        release.scalar_items, ("metadata",), "name"
-    )
-    if not resource_name:
-        return None
-    transformed_name = (
-        f"{release.name_prefix}{resource_name}{release.name_suffix}"
-    )
-    target_namespace = _reference_field(
-        release.scalar_items, ("spec",), "targetNamespace"
-    )
-    return (
-        f"{target_namespace}-{transformed_name}"
-        if target_namespace
-        else transformed_name
-    )
-
-
-def _scoped_resources(
-    resources: Mapping[
-        tuple[str, str, str],
-        Sequence[ManifestResource],
-    ],
-    kind: str,
-    namespace: str,
-    name: str,
-    release_path: Path,
-) -> Sequence[ManifestResource]:
-    candidates = resources.get((kind, namespace, name), ())
-    local = [
-        resource
-        for resource in candidates
-        if resource.path.parent.resolve() == release_path.parent.resolve()
-    ]
-    if local:
-        return local
-    if len(candidates) == 1:
-        return (candidates[0],)
-    return ()
-
-
-def _reference_field(
-    scalar_items: ScalarItems,
-    mapping_path: tuple[str, ...],
-    field: str,
-) -> str | None:
-    scalars = dict(scalar_items)
-    return scalars.get(mapping_path + (field,)) or _flow_mapping_field(
-        scalar_items, mapping_path, field
-    )
-
-
-def _git_origin_url(root: Path = ROOT) -> str | None:
-    git_path = root / ".git"
-    if git_path.is_file():
-        marker = git_path.read_text(encoding="utf-8").strip()
-        if not marker.startswith("gitdir:"):
-            return None
-        git_directory = (
-            root / marker.removeprefix("gitdir:").strip()
-        ).resolve()
-    elif git_path.is_dir():
-        git_directory = git_path.resolve()
-    else:
-        return None
-
-    common_directory = git_directory
-    common_marker = git_directory / "commondir"
-    if common_marker.is_file():
-        common_directory = (
-            git_directory
-            / common_marker.read_text(encoding="utf-8").strip()
-        ).resolve()
-    config_path = common_directory / "config"
-    if not config_path.is_file():
-        return None
-
-    in_origin = False
-    for raw_line in config_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if line.startswith("[") and line.endswith("]"):
-            in_origin = line.casefold() == '[remote "origin"]'
-            continue
-        if in_origin:
-            match = re.match(r"url\s*=\s*(?P<url>.+)", line)
-            if match is not None:
-                return match.group("url").strip()
-    return None
-
-
-def _repository_url_identity(url: str) -> str:
-    normalized = url.strip().removesuffix("/").removesuffix(".git")
-    scp_match = re.match(
-        r"(?:[^@]+@)?(?P<host>[^:]+):(?P<path>.+)", normalized
-    )
-    if scp_match is not None and "://" not in normalized:
-        normalized = (
-            f"{scp_match.group('host')}/{scp_match.group('path')}"
-        )
-    else:
-        normalized = re.sub(
-            r"^[a-z][a-z0-9+.-]*://", "", normalized, flags=re.I
-        )
-        normalized = normalized.rsplit("@", maxsplit=1)[-1]
-    return normalized.casefold()
-
-
-def _git_repository_source_is_local(
-    resources: Mapping[
-        tuple[str, str, str],
-        Sequence[ManifestResource],
-    ],
-    namespace: str,
-    name: str,
-    release_path: Path,
-) -> bool:
-    origin_url = _git_origin_url()
-    if not origin_url:
-        return False
-    origin_identity = _repository_url_identity(origin_url)
-    return any(
-        _repository_url_identity(source_url) == origin_identity
-        for source in _scoped_resources(
-            resources,
-            "GitRepository",
-            namespace,
-            name,
-            release_path,
-        )
-        for source_url in (
-            _reference_field(source.scalar_items, ("spec",), "url"),
-        )
-        if source_url
-    )
-
-
-def _chart_resource_has_bootstrap_identity(
-    resource: ManifestResource,
-    resources: Mapping[
-        tuple[str, str, str],
-        Sequence[ManifestResource],
-    ],
-) -> bool:
-    if _resource_has_bootstrap_identity(resource.scalar_items):
-        return True
-    if dict(resource.scalar_items).get(("kind",)) != "HelmChart":
-        return False
-
-    source_ref_path = ("spec", "sourceRef")
-    source_name = _reference_field(
-        resource.scalar_items, source_ref_path, "name"
-    )
-    source_kind = _reference_field(
-        resource.scalar_items, source_ref_path, "kind"
-    )
-    source_namespace = (
-        _reference_field(
-            resource.scalar_items, source_ref_path, "namespace"
-        )
-        or resource.namespace
-    )
-    if (
-        not source_name
-        or source_kind not in HELM_CHART_SOURCE_KINDS
-    ):
-        return False
-    return any(
-        _resource_has_bootstrap_identity(source.scalar_items)
-        for source in _scoped_resources(
-            resources,
-            source_kind,
-            source_namespace,
-            source_name,
-            resource.path,
-        )
-    )
-
-
-def _local_chart_value_items(
-    chart_reference: str | None,
-    charts_root: Path,
-    release_document: str,
-    allow_local_chart_values: bool,
-) -> ScalarItems:
-    if (
-        not allow_local_chart_values
-        or not chart_reference
-        or "://" in chart_reference
-        or "{{" in chart_reference
-        or "}}" in chart_reference
-    ):
-        return []
-
-    reference = Path(chart_reference)
-    source_root = charts_root.parent.resolve()
-    candidates: list[Path] = []
-    if reference.is_absolute():
-        candidates.append(reference)
-    else:
-        parts = tuple(part for part in reference.parts if part not in {"", "."})
-        if parts and parts[0] == charts_root.name:
-            candidates.append(charts_root.joinpath(*parts[1:]))
-        candidates.extend(
-            (
-                source_root / reference,
-                charts_root / reference,
-            )
-        )
-
-    for candidate in candidates:
-        candidate = candidate.resolve()
-        if (
-            candidate != source_root
-            and not candidate.is_relative_to(source_root)
-        ):
-            continue
-        if not candidate.is_dir():
-            continue
-
-        values_files_path = (
-            ("spec", "valuesFiles")
-            if dict(_document_scalars(release_document)).get(("kind",))
-            == "HelmChart"
-            else ("spec", "chart", "spec", "valuesFiles")
-        )
-        declared_values_files = _yaml_sequence_values(
-            release_document, values_files_path
-        )
-        if declared_values_files:
-            values_paths = [
-                (source_root / values_file).resolve()
-                for values_file in declared_values_files
-            ]
-            values_paths = [
-                values_path
-                for values_path in values_paths
-                if values_path == source_root
-                or values_path.is_relative_to(source_root)
-            ]
-        else:
-            values_paths = [candidate / "values.yaml"]
-
-        items: ScalarItems = []
-        for values_path in values_paths:
-            if not values_path.is_file():
-                continue
-            items.extend(
-                _document_scalars(values_path.read_text(encoding="utf-8"))
-            )
-        return items
-    return []
-
-
-def _merged_helm_values_have_bootstrap_identity(
-    release: ManifestResource,
-    resources: Mapping[
-        tuple[str, str, str],
-        Sequence[ManifestResource],
-    ],
-    charts_root: Path,
-    release_namespace: str,
-    chart_reference: str | None,
-    allow_local_chart_values: bool,
-    chart_values_document: str | None = None,
-) -> bool:
-    merged: dict[tuple[str, ...], str] = dict(
-        _local_chart_value_items(
-            chart_reference,
-            charts_root,
-            chart_values_document or release.document,
-            allow_local_chart_values,
-        )
-    )
-    for reference in _helm_values_from_references(release.document):
-        for resource in _scoped_resources(
-            resources,
-            reference.kind,
-            release_namespace,
-            reference.name,
-            release.path,
-        ):
-            merged.update(_values_source_items(resource, reference))
-
-    merged.update(
-        {
-            path[2:]: value
-            for path, value in release.scalar_items
-            if _path_starts_with(path, ("spec", "values")) and len(path) > 2
-        }
-    )
-    return any(
-        _helm_value_identity_path(path)
-        and _has_iceberg_bootstrap_identity(value)
-        for path, value in merged.items()
-    )
-
-
-def _helm_release_has_bootstrap_identity(
-    release: ManifestResource,
-    resources: Mapping[
-        tuple[str, str, str],
-        Sequence[ManifestResource],
-    ],
-    charts_root: Path,
-) -> bool:
-    scalar_items = release.scalar_items
-    scalars = dict(scalar_items)
-    if _has_iceberg_bootstrap_identity(
-        _effective_helm_release_name(release)
-    ):
-        return True
-    if any(
-        (
-            path in HELM_RELEASE_IDENTITY_PATHS
-            or path
-            == (
-                "spec",
-                "commonMetadata",
-                "labels",
-                "app.kubernetes.io/name",
-            )
-            or _path_starts_with(path, ("spec", "postRenderers"))
-        )
-        and _has_iceberg_bootstrap_identity(value)
-        for path, value in scalar_items
-    ):
-        return True
-    if _has_iceberg_bootstrap_identity(
-        _flow_mapping_field(
-            scalar_items,
-            ("spec", "commonMetadata", "labels"),
-            "app.kubernetes.io/name",
-        )
-        or _flow_mapping_field(
-            scalar_items,
-            ("spec", "commonMetadata"),
-            "app.kubernetes.io/name",
-        )
-    ):
-        return True
-
-    release_namespace = scalars.get(
-        ("metadata", "namespace"), release.namespace
-    )
-    chart_ref_name = scalars.get(
-        ("spec", "chartRef", "name")
-    ) or _flow_mapping_field(
-        scalar_items, ("spec", "chartRef"), "name"
-    )
-    if chart_ref_name:
-        chart_ref_kind = (
-            scalars.get(("spec", "chartRef", "kind"))
-            or _flow_mapping_field(
-                scalar_items, ("spec", "chartRef"), "kind"
-            )
-            or "OCIRepository"
-        )
-        chart_ref_namespace = (
-            scalars.get(("spec", "chartRef", "namespace"))
-            or _flow_mapping_field(
-                scalar_items, ("spec", "chartRef"), "namespace"
-            )
-            or release_namespace
-        )
-        if chart_ref_kind in HELM_CHART_REF_KINDS:
-            chart_resources = _scoped_resources(
-                resources,
-                chart_ref_kind,
-                chart_ref_namespace,
-                chart_ref_name,
-                release.path,
-            )
-            if any(
-                _chart_resource_has_bootstrap_identity(resource, resources)
-                for resource in chart_resources
-            ):
-                return True
-            for chart_resource in chart_resources:
-                if (
-                    dict(chart_resource.scalar_items).get(("kind",))
-                    != "HelmChart"
-                ):
-                    continue
-                chart_reference = _reference_field(
-                    chart_resource.scalar_items, ("spec",), "chart"
-                )
-                chart_source_kind = _reference_field(
-                    chart_resource.scalar_items,
-                    ("spec", "sourceRef"),
-                    "kind",
-                )
-                chart_source_name = _reference_field(
-                    chart_resource.scalar_items,
-                    ("spec", "sourceRef"),
-                    "name",
-                )
-                chart_source_namespace = (
-                    _reference_field(
-                        chart_resource.scalar_items,
-                        ("spec", "sourceRef"),
-                        "namespace",
-                    )
-                    or chart_resource.namespace
-                )
-                allow_local_chart_values = chart_source_kind is None or (
-                    chart_source_kind == "GitRepository"
-                    and chart_source_name is not None
-                    and _git_repository_source_is_local(
-                        resources,
-                        chart_source_namespace,
-                        chart_source_name,
-                        chart_resource.path,
-                    )
-                )
-                if _merged_helm_values_have_bootstrap_identity(
-                    release,
-                    resources,
-                    charts_root,
-                    release_namespace,
-                    chart_reference,
-                    allow_local_chart_values,
-                    chart_resource.document,
-                ):
-                    return True
-
-    chart_source_ref_path = ("spec", "chart", "spec", "sourceRef")
-    chart_source_name = _reference_field(
-        scalar_items, chart_source_ref_path, "name"
-    )
-    chart_source_kind: str | None = None
-    allow_local_chart_values = chart_source_name is None
-    if chart_source_name:
-        chart_source_kind = (
-            _reference_field(scalar_items, chart_source_ref_path, "kind")
-            or "HelmRepository"
-        )
-        chart_source_namespace = (
-            _reference_field(
-                scalar_items, chart_source_ref_path, "namespace"
-            )
-            or release_namespace
-        )
-        allow_local_chart_values = (
-            chart_source_kind == "GitRepository"
-            and _git_repository_source_is_local(
-                resources,
-                chart_source_namespace,
-                chart_source_name,
-                release.path,
-            )
-        )
-        if chart_source_kind in HELM_CHART_SOURCE_KINDS and any(
-            _resource_has_bootstrap_identity(resource.scalar_items)
-            for resource in _scoped_resources(
-                resources,
-                chart_source_kind,
-                chart_source_namespace,
-                chart_source_name,
-                release.path,
-            )
-        ):
-            return True
-
-    chart_reference = scalars.get(
-        ("spec", "chart", "spec", "chart")
-    ) or _flow_mapping_field(
-        scalar_items, ("spec", "chart", "spec"), "chart"
-    )
-    return _merged_helm_values_have_bootstrap_identity(
-        release,
-        resources,
-        charts_root,
-        release_namespace,
-        chart_reference,
-        allow_local_chart_values,
-    )
-
-
-def _is_polaris_workload(document: str, admitted_images: set[str]) -> bool:
     scalar_items = _document_scalars(document)
     scalars = dict(scalar_items)
     container_images = {
@@ -1670,7 +113,8 @@ def _is_polaris_workload(document: str, admitted_images: set[str]) -> bool:
 
 
 def _component_image_references(
-    ledger: Mapping[str, Sequence[Mapping[str, str]]], component: str
+    ledger: Mapping[str, Sequence[Mapping[str, str]]],
+    component: str,
 ) -> set[str]:
     return {
         entry["reference"]
@@ -1679,21 +123,13 @@ def _component_image_references(
     }
 
 
-def _admitted_polaris_image_references() -> set[str]:
-    ledger = json.loads(RESIDENT_IMAGES.read_text(encoding="utf-8"))
-    return _component_image_references(ledger, POLARIS_COMPONENT)
-
-
 def _deployment_manifest_paths(
-    deploy_root: Path = DEPLOY_ROOT, charts_root: Path = CHARTS_ROOT
+    deploy_root: Path = DEPLOY_ROOT,
+    charts_root: Path = CHARTS_ROOT,
 ) -> Iterator[Path]:
     for path in deploy_root.rglob("*"):
-        if path.is_file() and (
-            path.suffix in DEPLOYMENT_SUFFIXES
-            or path.name in KUSTOMIZATION_FILENAMES
-        ):
+        if path.is_file() and path.suffix in DEPLOYMENT_SUFFIXES:
             yield path
-
     for path in charts_root.rglob("*"):
         relative_parts = path.relative_to(charts_root).parts
         if (
@@ -1711,757 +147,15 @@ def _display_path(path: Path) -> Path:
         return path
 
 
-def _is_flux_kustomization(resource: ManifestResource) -> bool:
-    scalars = dict(resource.scalar_items)
-    return (
-        scalars.get(("kind",)) == "Kustomization"
-        and scalars.get(("apiVersion",), "").startswith(
-            "kustomize.toolkit.fluxcd.io/"
-        )
-    )
-
-
-def _flux_kustomization_source_is_local(
-    resource: ManifestResource,
-    resources: Mapping[
-        tuple[str, str, str],
-        Sequence[ManifestResource],
-    ],
-) -> bool:
-    source_ref_path = ("spec", "sourceRef")
-    source_name = _reference_field(
-        resource.scalar_items, source_ref_path, "name"
-    )
-    if not source_name:
-        return True
-    source_kind = (
-        _reference_field(
-            resource.scalar_items, source_ref_path, "kind"
-        )
-        or "GitRepository"
-    )
-    if source_kind != "GitRepository":
-        return False
-    source_namespace = (
-        _reference_field(
-            resource.scalar_items, source_ref_path, "namespace"
-        )
-        or resource.namespace
-    )
-    return _git_repository_source_is_local(
-        resources,
-        source_namespace,
-        source_name,
-        resource.path,
-    )
-
-
-def _flux_kustomization_target_root(
-    resource: ManifestResource, source_root: Path
-) -> Path | None:
-    target_path = _reference_field(
-        resource.scalar_items, ("spec",), "path"
-    ) or "."
-    reference = Path(target_path)
-    if reference.is_absolute():
-        return None
-    target_root = (source_root / reference).resolve()
-    if (
-        target_root != source_root
-        and not target_root.is_relative_to(source_root)
-    ):
-        return None
-    return target_root
-
-
-def _applicable_flux_kustomizations(
-    resource: ManifestResource,
-    kustomizations: Sequence[ManifestResource],
-    source_root: Path,
-) -> list[ManifestResource]:
-    resource_path = resource.path.resolve()
-    applicable = []
-    for kustomization in kustomizations:
-        target_root = _flux_kustomization_target_root(
-            kustomization, source_root
-        )
-        if target_root is not None and (
-            resource_path == target_root
-            or resource_path.is_relative_to(target_root)
-        ):
-            applicable.append(kustomization)
-    return applicable
-
-
-def _resource_identity_names(resource: ManifestResource) -> set[str]:
-    scalars = dict(resource.scalar_items)
-    name = scalars.get(
-        ("metadata", "name")
-    ) or _flow_mapping_field(
-        resource.scalar_items, ("metadata",), "name"
-    )
-    if not name:
-        return set()
-    return {
-        name,
-        f"{resource.name_prefix}{name}{resource.name_suffix}",
-    }
-
-
-def _kustomize_target_name_matches(
-    pattern: str, resource: ManifestResource
-) -> bool:
-    for name in _resource_identity_names(resource):
-        try:
-            if re.fullmatch(pattern, name):
-                return True
-        except re.error:
-            return pattern == name
-    return False
-
-
-def _metadata_mapping_values(
-    resource: ManifestResource, field: str
-) -> dict[str, str]:
-    prefix = ("metadata", field)
-    values = {
-        path[-1]: value
-        for path, value in resource.scalar_items
-        if len(path) == 3 and path[:2] == prefix
-    }
-    scalars = dict(resource.scalar_items)
-    inline = scalars.get(prefix)
-    if inline:
-        values.update(_flow_mapping_fields(inline))
-    return values
-
-
-def _selector_matches(
-    selector: str, values: Mapping[str, str]
-) -> bool:
-    requirements = re.split(r",(?![^()]*\))", selector)
-    for raw_requirement in requirements:
-        requirement = raw_requirement.strip()
-        if not requirement:
-            continue
-        set_match = re.fullmatch(
-            r"(?P<key>[^\s!=,]+)\s+"
-            r"(?P<operator>in|notin)\s*"
-            r"\((?P<values>[^)]*)\)",
-            requirement,
-            flags=re.IGNORECASE,
-        )
-        if set_match is not None:
-            key = set_match.group("key")
-            candidates = {
-                item.strip()
-                for item in set_match.group("values").split(",")
-                if item.strip()
-            }
-            present = key in values and values[key] in candidates
-            if (
-                set_match.group("operator").casefold() == "in"
-                and not present
-            ) or (
-                set_match.group("operator").casefold() == "notin"
-                and present
-            ):
-                return False
-            continue
-        comparison_match = re.fullmatch(
-            r"(?P<key>[^!=\s]+)\s*"
-            r"(?P<operator>==|=|!=)\s*"
-            r"(?P<value>.*)",
-            requirement,
-        )
-        if comparison_match is not None:
-            key = comparison_match.group("key")
-            expected = comparison_match.group("value").strip()
-            actual = values.get(key)
-            if comparison_match.group("operator") == "!=":
-                if actual == expected:
-                    return False
-            elif actual != expected:
-                return False
-            continue
-        if requirement.startswith("!"):
-            if requirement[1:] in values:
-                return False
-        elif requirement not in values:
-            return False
-    return True
-
-
-def _flux_patch_parts(
-    patch_document: str,
-) -> tuple[dict[str, str], str, bool]:
-    try:
-        parsed = json.loads(patch_document)
-    except json.JSONDecodeError:
-        parsed = None
-    if isinstance(parsed, dict):
-        target = parsed.get("target")
-        patch = parsed.get("patch")
-        return (
-            {
-                str(key): str(value)
-                for key, value in target.items()
-            }
-            if isinstance(target, dict)
-            else {},
-            patch if isinstance(patch, str) else "",
-            isinstance(target, dict),
-        )
-
-    normalized = re.sub(r"^-[ ]*", "  ", patch_document, count=1)
-    target_match = re.search(
-        r"(?ms)^[ ]{2}target:[ ]*(?P<inline>\{[^\n]*\})?[ ]*\n?"
-        r"(?P<body>(?:[ ]{4,}.*(?:\n|$))*)",
-        normalized,
-    )
-    target_fields = (
-        _flow_mapping_fields(target_match.group("inline") or "")
-        if target_match is not None
-        else {}
-    )
-    target_body = (
-        target_match.group("body") if target_match is not None else ""
-    )
-    for field in (
-        "annotationSelector",
-        "group",
-        "kind",
-        "labelSelector",
-        "name",
-        "namespace",
-        "version",
-    ):
-        match = re.search(
-            rf"(?m)^[ ]+{field}:[ ]*(?P<value>.+?)\s*$",
-            target_body,
-        )
-        if match is not None:
-            target_fields[field] = _strip_yaml_scalar(
-                match.group("value")
-            )
-
-    patch_match = re.search(
-        r"(?ms)^[ ]{2}patch:[ ]*(?P<patch>.*)$", normalized
-    )
-    if patch_match is None:
-        return target_fields, "", target_match is not None
-    patch = patch_match.group("patch")
-    patch_lines = patch.splitlines()
-    if patch_lines and re.fullmatch(
-        r"[|>][+-]?[1-9]?", patch_lines[0].strip()
-    ):
-        patch_lines = patch_lines[1:]
-        non_empty_indents = [
-            len(line) - len(line.lstrip(" "))
-            for line in patch_lines
-            if line.strip()
-        ]
-        if non_empty_indents:
-            indent = min(non_empty_indents)
-            patch = "\n".join(
-                line[indent:] if line.strip() else ""
-                for line in patch_lines
-            )
-        else:
-            patch = ""
-    else:
-        patch = _strip_yaml_scalar(patch)
-    return target_fields, patch, target_match is not None
-
-
-def _flux_patch_target_matches(
-    target_fields: Mapping[str, str],
-    resource: ManifestResource,
-) -> bool:
-    scalars = dict(resource.scalar_items)
-    resource_kind = scalars.get(("kind",), "")
-    if (
-        target_fields.get("kind")
-        and target_fields["kind"] != resource_kind
-    ):
-        return False
-    if target_fields.get("name") and not _kustomize_target_name_matches(
-        target_fields["name"], resource
-    ):
-        return False
-
-    api_version = scalars.get(("apiVersion",), "")
-    if "/" in api_version:
-        resource_group, resource_version = api_version.split("/", 1)
-    else:
-        resource_group, resource_version = "", api_version
-    if (
-        target_fields.get("group")
-        and target_fields["group"] != resource_group
-    ) or (
-        target_fields.get("version")
-        and target_fields["version"] != resource_version
-    ):
-        return False
-
-    namespace = scalars.get(
-        ("metadata", "namespace"), resource.namespace
-    )
-    if (
-        target_fields.get("namespace")
-        and target_fields["namespace"] != namespace
-    ):
-        return False
-    if target_fields.get("labelSelector") and not _selector_matches(
-        target_fields["labelSelector"],
-        _metadata_mapping_values(resource, "labels"),
-    ):
-        return False
-    return not target_fields.get(
-        "annotationSelector"
-    ) or _selector_matches(
-        target_fields["annotationSelector"],
-        _metadata_mapping_values(resource, "annotations"),
-    )
-
-
-def _yaml_json_patch_operations(
-    patch: str,
-) -> list[dict[str, object]]:
-    try:
-        parsed = json.loads(patch)
-    except json.JSONDecodeError:
-        parsed = None
-    if isinstance(parsed, list):
-        return [
-            entry
-            for entry in parsed
-            if isinstance(entry, dict)
-        ]
-
-    wrapped = "items:\n" + "\n".join(
-        f"  {line}" for line in patch.splitlines()
-    )
-    operations: list[dict[str, object]] = []
-    for block in _yaml_sequence_blocks(wrapped, ("items",)):
-        normalized = re.sub(r"^-[ ]*", "", block, count=1)
-        if normalized.startswith("{") and normalized.endswith("}"):
-            fields: dict[str, object] = _flow_mapping_fields(
-                normalized
-            )
-        else:
-            fields = {
-                path[-1]: value
-                for path, value in _document_scalars(normalized)
-                if len(path) == 1
-            }
-        if "op" in fields and "path" in fields:
-            operations.append(fields)
-    return operations
-
-
-def _json_patch_identity_key(
-    path: str,
-) -> tuple[str, ...] | None:
-    parts = tuple(
-        part.replace("~1", "/").replace("~0", "~")
-        for part in path.strip("/").split("/")
-        if part
-    )
-    if parts in {
-        ("metadata", "name"),
-        ("metadata", "labels", "app.kubernetes.io/name"),
-    }:
-        return parts
-    for root in BOOTSTRAP_CONTAINER_ROOT_PATHS:
-        if (
-            len(parts) == len(root) + 2
-            and parts[: len(root)] == root
-            and parts[len(root)].isdigit()
-            and parts[-1].casefold() in {"image", "name"}
-        ):
-            return parts
-    return None
-
-
-def _applicable_flux_patch_payloads(
-    kustomization: ManifestResource,
-    resource: ManifestResource,
-) -> list[str]:
-    resource_kind = dict(resource.scalar_items).get(("kind",))
-    payloads: list[str] = []
-    for patch_document in _yaml_sequence_blocks(
-        kustomization.document, ("spec", "patches")
-    ):
-        target_fields, patch, has_explicit_target = _flux_patch_parts(
-            patch_document
-        )
-        if not patch:
-            continue
-        patch_scalars = _document_scalars(patch)
-        patch_scalar_map = dict(patch_scalars)
-        if not has_explicit_target:
-            patch_kind = patch_scalar_map.get(("kind",))
-            if patch_kind and patch_kind != resource_kind:
-                continue
-            patch_name = patch_scalar_map.get(("metadata", "name"))
-            if patch_name and not _kustomize_target_name_matches(
-                patch_name, resource
-            ):
-                continue
-        elif not _flux_patch_target_matches(target_fields, resource):
-            continue
-        payloads.append(patch)
-    return payloads
-
-
-def _resource_identity_state(
-    resource: ManifestResource,
-) -> IdentityState:
-    state: IdentityState = {}
-    scalars = dict(resource.scalar_items)
-    name = scalars.get(
-        ("metadata", "name")
-    ) or _flow_mapping_field(
-        resource.scalar_items, ("metadata",), "name"
-    )
-    if name:
-        state[("metadata", "name")] = (
-            f"{resource.name_prefix}{name}{resource.name_suffix}"
-        )
-
-    label = scalars.get(
-        ("metadata", "labels", "app.kubernetes.io/name")
-    ) or _flow_mapping_field(
-        resource.scalar_items,
-        ("metadata", "labels"),
-        "app.kubernetes.io/name",
-    )
-    if label:
-        state[
-            ("metadata", "labels", "app.kubernetes.io/name")
-        ] = label
-
-    for root in BOOTSTRAP_CONTAINER_ROOT_PATHS:
-        entries = _yaml_mapping_sequence(resource.document, root)
-        if entries:
-            for index, entry in enumerate(entries):
-                for field in ("name", "image"):
-                    value = entry.get(field)
-                    if value:
-                        state[root + (str(index), field)] = value
-            continue
-
-        field_indexes = {"name": 0, "image": 0}
-        for path, value in resource.scalar_items:
-            if path[:-1] != root:
-                continue
-            field = path[-1].lstrip("{").casefold()
-            if field not in field_indexes:
-                continue
-            index = field_indexes[field]
-            state[root + (str(index), field)] = value
-            field_indexes[field] += 1
-    return state
-
-
-def _identity_container_key(
-    root: tuple[str, ...],
-    index: str,
-    field: str,
-) -> tuple[str, ...]:
-    return root + (index, field)
-
-
-def _next_identity_container_index(
-    state: Mapping[tuple[str, ...], str],
-    root: tuple[str, ...],
-) -> str:
-    indexes = [
-        int(key[len(root)])
-        for key in state
-        if (
-            len(key) == len(root) + 2
-            and key[: len(root)] == root
-            and key[len(root)].isdigit()
-        )
-    ]
-    return str(max(indexes, default=-1) + 1)
-
-
-def _strategic_patch_container_entries(
-    state: IdentityState,
-    patch: str,
-) -> None:
-    for root in BOOTSTRAP_CONTAINER_ROOT_PATHS:
-        for entry in _yaml_mapping_sequence(patch, root):
-            name = entry.get("name")
-            directive = entry.get("$patch", "").casefold()
-            if not name and directive in {"delete", "replace"}:
-                for key in tuple(state):
-                    if (
-                        len(key) == len(root) + 2
-                        and key[: len(root)] == root
-                    ):
-                        state.pop(key)
-                continue
-            if not name:
-                continue
-            indexes = {
-                key[len(root)]
-                for key, value in state.items()
-                if (
-                    len(key) == len(root) + 2
-                    and key[: len(root)] == root
-                    and key[-1] == "name"
-                    and value == name
-                )
-            }
-            if not indexes:
-                indexes = {_next_identity_container_index(state, root)}
-            if directive == "delete":
-                for index in indexes:
-                    for field in ("name", "image"):
-                        state.pop(
-                            _identity_container_key(
-                                root, index, field
-                            ),
-                            None,
-                        )
-                continue
-            for index in indexes:
-                state[
-                    _identity_container_key(
-                        root, index, "name"
-                    )
-                ] = name
-                image = entry.get("image")
-                if image:
-                    state[
-                        _identity_container_key(
-                            root, index, "image"
-                        )
-                    ] = image
-
-
-def _apply_json_identity_patch(
-    state: IdentityState,
-    operation: Mapping[str, object],
-) -> None:
-    operation_name = str(operation.get("op", "")).casefold()
-    path = operation.get("path")
-    if not isinstance(path, str):
-        return
-    key = _json_patch_identity_key(path)
-    if key is not None:
-        if operation_name == "remove":
-            state.pop(key, None)
-        elif operation_name in {"add", "replace"}:
-            value = operation.get("value")
-            if isinstance(value, str):
-                state[key] = value
-        return
-
-    parts = tuple(
-        part.replace("~1", "/").replace("~0", "~")
-        for part in path.strip("/").split("/")
-        if part
-    )
-    label_key = (
-        "metadata",
-        "labels",
-        "app.kubernetes.io/name",
-    )
-    if parts == ("metadata", "labels"):
-        if operation_name in {"remove", "replace"}:
-            state.pop(label_key, None)
-        value = operation.get("value")
-        if (
-            operation_name in {"add", "replace"}
-            and isinstance(value, dict)
-            and isinstance(
-                value.get("app.kubernetes.io/name"), str
-            )
-        ):
-            state[label_key] = value["app.kubernetes.io/name"]
-        return
-
-    for root in BOOTSTRAP_CONTAINER_ROOT_PATHS:
-        if (
-            len(parts) == len(root) + 1
-            and parts[: len(root)] == root
-            and (parts[-1].isdigit() or parts[-1] == "-")
-        ):
-            index = (
-                _next_identity_container_index(state, root)
-                if parts[-1] == "-"
-                else parts[-1]
-            )
-            if operation_name in {"remove", "replace"}:
-                for field in ("name", "image"):
-                    state.pop(root + (index, field), None)
-            value = operation.get("value")
-            if operation_name in {"add", "replace"} and isinstance(
-                value, dict
-            ):
-                for field in ("name", "image"):
-                    field_value = value.get(field)
-                    if isinstance(field_value, str):
-                        state[root + (index, field)] = field_value
-            return
-
-
-def _apply_flux_identity_patches(
-    state: IdentityState,
-    kustomization: ManifestResource,
-    resource: ManifestResource,
-) -> tuple[IdentityState, bool]:
-    effective = dict(state)
-    for patch in _applicable_flux_patch_payloads(
-        kustomization, resource
-    ):
-        operations = _yaml_json_patch_operations(patch)
-        if operations:
-            for operation in operations:
-                _apply_json_identity_patch(effective, operation)
-            continue
-
-        patch_scalars = _document_scalars(patch)
-        scalar_map = dict(patch_scalars)
-        patch_directive = scalar_map.get(("$patch",), "").casefold()
-        if patch_directive == "delete":
-            return {}, True
-        if patch_directive == "replace":
-            effective = {
-                key: value
-                for key, value in effective.items()
-                if key == ("metadata", "name")
-            }
-
-        label_key = (
-            "metadata",
-            "labels",
-            "app.kubernetes.io/name",
-        )
-        label = scalar_map.get(label_key)
-        if label is not None:
-            if label.casefold() in {"null", "~"}:
-                effective.pop(label_key, None)
-            else:
-                effective[label_key] = label
-        _strategic_patch_container_entries(effective, patch)
-    return effective, False
-
-
-def _image_reference_name(reference: str) -> str:
-    name = reference.split("@", maxsplit=1)[0]
-    final_slash = name.rfind("/")
-    final_colon = name.rfind(":")
-    if final_colon > final_slash:
-        name = name[:final_colon]
-    return name
-
-
-def _image_reference_suffix(reference: str) -> str:
-    if "@" in reference:
-        return f"@{reference.split('@', maxsplit=1)[1]}"
-    final_slash = reference.rfind("/")
-    final_colon = reference.rfind(":")
-    return reference[final_colon:] if final_colon > final_slash else ""
-
-
-def _image_reference_matches(rule: str, current: str) -> bool:
-    if "@" in rule:
-        return current == rule
-    final_slash = rule.rfind("/")
-    if rule.rfind(":") > final_slash:
-        return current == rule
-    return _image_reference_name(current) == rule
-
-
-def _rewrite_image_reference(
-    current_image: str, entry: Mapping[str, str]
-) -> str:
-    current_name = _image_reference_name(current_image)
-    effective_image = entry.get("newName", current_name)
-    if entry.get("digest"):
-        return f"{effective_image}@{entry['digest']}"
-    if entry.get("newTag"):
-        return f"{effective_image}:{entry['newTag']}"
-    return f"{effective_image}{_image_reference_suffix(current_image)}"
-
-
-def _apply_flux_image_transforms(
-    state: IdentityState,
-    kustomization: ManifestResource,
-) -> IdentityState:
-    effective = dict(state)
-    for entry in _yaml_mapping_sequence(
-        kustomization.document, ("spec", "images")
-    ):
-        original_name = entry.get("name")
-        if not original_name:
-            continue
-        for key, current_image in tuple(effective.items()):
-            if not any(
-                len(key) == len(root) + 2
-                and key[: len(root)] == root
-                and key[-1] == "image"
-                for root in BOOTSTRAP_CONTAINER_ROOT_PATHS
-            ):
-                continue
-            if not _image_reference_matches(
-                original_name, current_image
-            ):
-                continue
-            effective[key] = _rewrite_image_reference(
-                current_image, entry
-            )
-    return effective
-
-
-def _apply_flux_common_metadata(
-    state: IdentityState, kustomization: ManifestResource
-) -> IdentityState:
-    effective = dict(state)
-    common_label = dict(kustomization.scalar_items).get(
-        (
-            "spec",
-            "commonMetadata",
-            "labels",
-            "app.kubernetes.io/name",
-        )
-    )
-    if common_label:
-        effective[
-            ("metadata", "labels", "app.kubernetes.io/name")
-        ] = common_label
-    return effective
-
-
-def _effective_flux_workload_identity_values(
-    resource: ManifestResource,
-    kustomizations: Sequence[ManifestResource],
-    source_root: Path,
+def _admitted_polaris_image_references(
+    resident_images: Path = RESIDENT_IMAGES,
 ) -> set[str]:
-    base_state = _resource_identity_state(resource)
-    applicable = _applicable_flux_kustomizations(
-        resource, kustomizations, source_root
-    )
-    if not applicable:
-        return set(base_state.values())
-
-    effective_values: set[str] = set()
-    for kustomization in applicable:
-        state, deleted = _apply_flux_identity_patches(
-            base_state, kustomization, resource
-        )
-        if deleted:
-            continue
-        state = _apply_flux_image_transforms(state, kustomization)
-        state = _apply_flux_common_metadata(state, kustomization)
-        effective_values.update(state.values())
-    return effective_values
+    payload = json.loads(resident_images.read_text(encoding="utf-8"))
+    return {
+        str(image["reference"])
+        for image in payload.get("images", [])
+        if image.get("component") == "polaris" and image.get("reference")
+    }
 
 
 def _polaris_workload_manifests(
@@ -2469,2499 +163,3347 @@ def _polaris_workload_manifests(
     charts_root: Path = CHARTS_ROOT,
     admitted_images: set[str] | None = None,
 ) -> list[Path]:
-    workloads = []
-    if admitted_images is None:
-        admitted_images = _admitted_polaris_image_references()
-    for path in _deployment_manifest_paths(deploy_root, charts_root):
-        documents = re.split(r"(?m)^---[ \t]*(?:#.*)?$", path.read_text(encoding="utf-8"))
-        if any(_is_polaris_workload(document, admitted_images) for document in documents):
-            workloads.append(_display_path(path))
-    return workloads
+    return polaris_workload_manifests(
+        deploy_root,
+        charts_root,
+        (
+            _admitted_polaris_image_references()
+            if admitted_images is None
+            else admitted_images
+        ),
+    )
 
 
 def _iceberg_bootstrap_manifests(
     deploy_root: Path = DEPLOY_ROOT,
     charts_root: Path = CHARTS_ROOT,
+    repository_context: RepositoryContext | None = None,
 ) -> list[Path]:
-    manifest_resources: list[ManifestResource] = []
-    resources: dict[
-        tuple[str, str, str],
-        list[ManifestResource],
-    ] = {}
-    for path in _deployment_manifest_paths(deploy_root, charts_root):
-        effective_namespace = _effective_kustomize_namespace(
-            path, deploy_root, charts_root
-        )
-        name_prefix, name_suffix = _effective_kustomize_name_parts(
-            path, deploy_root, charts_root
-        )
-        documents = re.split(
-            r"(?m)^---[ \t]*(?:#.*)?$", path.read_text(encoding="utf-8")
-        )
-        for document in documents:
-            for generated_resource in _generated_values_resources(
-                path, document, deploy_root, charts_root
-            ):
-                manifest_resources.append(generated_resource)
-                for resource_key in _resource_keys(generated_resource):
-                    resources.setdefault(resource_key, []).append(
-                        generated_resource
-                    )
-            for resource_document in _manifest_item_documents(document):
-                scalar_items = _document_scalars(resource_document)
-                resource = ManifestResource(
-                    path,
-                    resource_document,
-                    scalar_items,
-                    effective_namespace,
-                    name_prefix,
-                    name_suffix,
-                )
-                manifest_resources.append(resource)
-                for resource_key in _resource_keys(resource):
-                    resources.setdefault(resource_key, []).append(resource)
-
-    flux_kustomizations = [
-        resource
-        for resource in manifest_resources
-        if _is_flux_kustomization(resource)
-        and _flux_kustomization_source_is_local(resource, resources)
-    ]
-    source_root = charts_root.parent.resolve()
-    manifests: set[Path] = set()
-    for resource in manifest_resources:
-        scalars = dict(resource.scalar_items)
-        kind = scalars.get(("kind",))
-        identity_values = (
-            _effective_flux_workload_identity_values(
-                resource,
-                flux_kustomizations,
-                source_root,
-            )
-            if kind in BOOTSTRAP_KINDS
-            else set()
-        )
-        is_bootstrap = kind in BOOTSTRAP_KINDS and any(
-            _has_iceberg_bootstrap_identity(value)
-            for value in identity_values
-        )
-        if kind == "HelmRelease":
-            is_bootstrap = _helm_release_has_bootstrap_identity(
-                resource, resources, charts_root
-            )
-        if is_bootstrap:
-            manifests.add(_display_path(resource.path))
-    return sorted(manifests, key=str)
+    del charts_root  # Charts are rendered only through repository-local HelmRelease.
+    context = repository_context or default_repository_context(
+        ROOT,
+        deploy_root,
+    )
+    return iceberg_bootstrap_manifests(deploy_root, context)
 
 
-class PolarisWorkloadDetectionTests(unittest.TestCase):
-    def test_accepts_exact_polaris_workload_names(self) -> None:
-        image = "registry.example/polaris@sha256:" + "a" * 64
-        for kind, identity in (
-            ("Deployment", "  name: polaris"),
-            ("StatefulSet", "  labels:\n    app.kubernetes.io/name: polaris"),
-        ):
-            with self.subTest(kind=kind, identity=identity):
-                manifest = (
-                    f"apiVersion: apps/v1\nkind: {kind}\nmetadata:\n{identity}\n"
-                    "spec:\n"
-                    "  template:\n"
-                    "    spec:\n"
-                    "      containers:\n"
-                    "        - name: polaris\n"
-                    f"          image: {image}\n"
-                )
-                self.assertTrue(_is_polaris_workload(manifest, {image}))
+class RepositoryFixture(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name).resolve()
+        self.deploy_root = self.root / "deploy"
+        self.charts_root = self.root / "charts"
+        self.deploy_root.mkdir()
+        self.charts_root.mkdir()
 
-    def test_accepts_image_as_first_container_field(self) -> None:
-        image = "registry.example/polaris@sha256:" + "a" * 64
-        manifest = (
-            "apiVersion: apps/v1\n"
-            "kind: Deployment\n"
-            "metadata:\n"
-            "  name: polaris\n"
-            "spec:\n"
-            "  template:\n"
-            "    spec:\n"
-            "      containers:\n"
-            f"        - image: {image}\n"
-            "          name: polaris\n"
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def write(self, relative: str, text: str) -> Path:
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            textwrap.dedent(text).strip() + "\n",
+            encoding="utf-8",
         )
-        self.assertTrue(_is_polaris_workload(manifest, {image}))
+        return path
 
-    def test_accepts_quoted_image_keys(self) -> None:
-        image = "registry.example/polaris@sha256:" + "a" * 64
-        for quoted_key in ('"image"', "'image'"):
-            with self.subTest(quoted_key=quoted_key):
-                manifest = (
-                    "apiVersion: apps/v1\n"
-                    "kind: Deployment\n"
-                    "metadata:\n"
-                    "  name: polaris\n"
-                    "spec:\n"
-                    "  template:\n"
-                    "    spec:\n"
-                    "      containers:\n"
-                    "        - name: polaris\n"
-                    f"          {quoted_key}: {image}\n"
-                )
-                self.assertTrue(_is_polaris_workload(manifest, {image}))
+    def write_json(self, relative: str, value: Mapping[str, Any]) -> Path:
+        def normalize(item: Any) -> Any:
+            if isinstance(item, str) and "\n" in item:
+                return textwrap.dedent(item).strip() + "\n"
+            if isinstance(item, dict):
+                return {key: normalize(child) for key, child in item.items()}
+            if isinstance(item, list):
+                return [normalize(child) for child in item]
+            return item
 
-    def test_accepts_indentless_container_sequence(self) -> None:
-        image = "registry.example/polaris@sha256:" + "a" * 64
-        manifest = (
-            "apiVersion: apps/v1\n"
-            "kind: Deployment\n"
-            "metadata:\n"
-            "  name: polaris\n"
-            "spec:\n"
-            "  template:\n"
-            "    spec:\n"
-            "      containers:\n"
-            f"      - image: {image}\n"
-            "        name: polaris\n"
+        return self.write(
+            relative,
+            json.dumps(normalize(value), indent=2, sort_keys=True),
         )
-        self.assertTrue(_is_polaris_workload(manifest, {image}))
 
-    def test_scans_deploy_and_helm_template_manifest_suffixes(self) -> None:
-        image = "registry.example/polaris@sha256:" + "a" * 64
-        yaml_manifest = (
-            "apiVersion: apps/v1\n"
-            "kind: Deployment\n"
-            "metadata:\n"
-            "  name: polaris\n"
-            "spec:\n"
-            "  template:\n"
-            "    spec:\n"
-            "      containers:\n"
-            f"      - 'image': {image}\n"
+    def context(self, *urls: str) -> RepositoryContext:
+        return RepositoryContext.create(
+            self.root,
+            urls or (LOCAL_GIT_URL,),
         )
-        json_manifest = json.dumps(
+
+    def detect(self, context: RepositoryContext | None = None) -> list[Path]:
+        return _iceberg_bootstrap_manifests(
+            self.deploy_root,
+            self.charts_root,
+            context or self.context(),
+        )
+
+    def job(
+        self,
+        relative: str,
+        *,
+        name: str = "catalog-maintenance",
+        image: str = "registry.example/catalog-maintenance:stable",
+        container_name: str = "runner",
+        label: str = "catalog-maintenance",
+        kind: str = "Job",
+        init_image: str | None = None,
+    ) -> Path:
+        containers = [
+            {
+                "name": container_name,
+                "image": image,
+            }
+        ]
+        pod_spec: dict[str, Any] = {
+            "restartPolicy": "Never",
+            "containers": containers,
+        }
+        if init_image is not None:
+            pod_spec["initContainers"] = [
+                {"name": "initializer", "image": init_image}
+            ]
+        template = {"spec": pod_spec}
+        spec: dict[str, Any]
+        if kind == "CronJob":
+            spec = {
+                "schedule": "0 * * * *",
+                "jobTemplate": {"spec": {"template": template}},
+            }
+        else:
+            spec = {"template": template}
+        return self.write_json(
+            relative,
+            {
+                "apiVersion": "batch/v1",
+                "kind": kind,
+                "metadata": {"name": name, "labels": {"role": label}},
+                "spec": spec,
+            },
+        )
+
+    def local_source(
+        self,
+        *,
+        url: str = LOCAL_GIT_URL,
+        name: str = "source",
+        namespace: str = "flux-system",
+        relative: str = "deploy/control/source.yaml",
+    ) -> Path:
+        return self.write_json(
+            relative,
+            {
+                "apiVersion": "source.toolkit.fluxcd.io/v1",
+                "kind": "GitRepository",
+                "metadata": {"name": name, "namespace": namespace},
+                "spec": {
+                    "interval": "1m",
+                    "url": url,
+                    "ref": {"branch": "main"},
+                },
+            },
+        )
+
+    def flux(
+        self,
+        path: str,
+        *,
+        name: str = "app",
+        namespace: str = "flux-system",
+        source_name: str = "source",
+        spec: Mapping[str, Any] | None = None,
+        relative: str = "deploy/control/flux.yaml",
+    ) -> Path:
+        value: dict[str, Any] = {
+            "interval": "1m",
+            "path": path,
+            "prune": True,
+            "sourceRef": {
+                "kind": "GitRepository",
+                "name": source_name,
+            },
+        }
+        value.update(spec or {})
+        return self.write_json(
+            relative,
+            {
+                "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+                "kind": "Kustomization",
+                "metadata": {"name": name, "namespace": namespace},
+                "spec": value,
+            },
+        )
+
+    def kustomization(
+        self,
+        relative_directory: str,
+        **fields: Any,
+    ) -> Path:
+        value = {
+            "apiVersion": "kustomize.config.k8s.io/v1beta1",
+            "kind": "Kustomization",
+            **fields,
+        }
+        return self.write_json(
+            f"{relative_directory}/kustomization.yaml",
+            value,
+        )
+
+    def chart(
+        self,
+        name: str = "catalog-job",
+        *,
+        values: Mapping[str, Any] | None = None,
+        template: str | None = None,
+        extra_values: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> Path:
+        chart_root = self.charts_root / name
+        self.write(
+            f"charts/{name}/Chart.yaml",
+            f"""
+            apiVersion: v2
+            name: {name}
+            version: 0.1.0
+            """,
+        )
+        defaults = {
+            "job": {"name": "catalog-maintenance", "label": "catalog-maintenance"},
+            "container": {"name": "runner"},
+            "image": {
+                "repository": "registry.example/catalog-maintenance",
+                "tag": "stable",
+            },
+        }
+        if values:
+            for key, value in values.items():
+                defaults[key] = value
+        self.write_json(f"charts/{name}/values.yaml", defaults)
+        self.write(
+            f"charts/{name}/templates/job.yaml",
+            template
+            or """
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: {{ .Values.job.name | quote }}
+              labels:
+                role: {{ .Values.job.label | quote }}
+            spec:
+              template:
+                spec:
+                  restartPolicy: Never
+                  containers:
+                    - name: {{ .Values.container.name | quote }}
+                      image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+            """,
+        )
+        for filename, content in (extra_values or {}).items():
+            self.write_json(f"charts/{name}/{filename}", content)
+        return chart_root
+
+    def helm_release(
+        self,
+        chart: str = "./charts/catalog-job",
+        *,
+        values: Mapping[str, Any] | None = None,
+        values_from: list[Mapping[str, Any]] | None = None,
+        post_renderers: list[Mapping[str, Any]] | None = None,
+        common_metadata: Mapping[str, Any] | None = None,
+        suspend: bool = False,
+        name: str = "catalog-job",
+        relative: str = "deploy/releases/catalog-job.yaml",
+        chart_fields: Mapping[str, Any] | None = None,
+        chart_ref: Mapping[str, Any] | None = None,
+        spec_fields: Mapping[str, Any] | None = None,
+    ) -> Path:
+        spec: dict[str, Any] = {"interval": "1m"}
+        if chart_ref is None:
+            chart_spec = {
+                "chart": chart,
+                "reconcileStrategy": "Revision",
+                "sourceRef": {
+                    "kind": "GitRepository",
+                    "name": "source",
+                    "namespace": "flux-system",
+                },
+            }
+            chart_spec.update(chart_fields or {})
+            spec["chart"] = {"spec": chart_spec}
+        else:
+            spec["chartRef"] = dict(chart_ref)
+        if values is not None:
+            spec["values"] = dict(values)
+        if values_from is not None:
+            spec["valuesFrom"] = [
+                {"kind": "ConfigMap", **dict(value)}
+                for value in values_from
+            ]
+        if post_renderers is not None:
+            spec["postRenderers"] = [dict(value) for value in post_renderers]
+        if common_metadata is not None:
+            spec["commonMetadata"] = dict(common_metadata)
+        if suspend:
+            spec["suspend"] = True
+        spec.update(spec_fields or {})
+        return self.write_json(
+            relative,
+            {
+                "apiVersion": "helm.toolkit.fluxcd.io/v2",
+                "kind": "HelmRelease",
+                "metadata": {"name": name, "namespace": "flux-system"},
+                "spec": spec,
+            },
+        )
+
+
+class PolarisWorkloadDetectionTests(RepositoryFixture):
+    IMAGE = "registry.example/polaris@sha256:" + "a" * 64
+
+    def workload(
+        self,
+        relative: str,
+        *,
+        kind: str = "Deployment",
+        name: str = "polaris",
+        image: str | None = None,
+    ) -> Path:
+        return self.write_json(
+            relative,
             {
                 "apiVersion": "apps/v1",
-                "kind": "StatefulSet",
+                "kind": kind,
+                "metadata": {"name": name},
+                "spec": {
+                    "selector": {"matchLabels": {"app": name}},
+                    "template": {
+                        "metadata": {"labels": {"app": name}},
+                        "spec": {
+                            "containers": [
+                                {
+                                    "name": name,
+                                    "image": image or self.IMAGE,
+                                }
+                            ]
+                        },
+                    },
+                },
+            },
+        )
+
+    def test_accepts_only_admitted_polaris_workloads(self) -> None:
+        admitted = self.workload("deploy/polaris.yaml")
+        self.workload(
+            "deploy/unadmitted.yaml",
+            image="registry.example/polaris:mutable",
+        )
+        self.workload(
+            "deploy/wrong-component.yaml",
+            name="catalog-api",
+        )
+        self.assertEqual(
+            [admitted.resolve()],
+            _polaris_workload_manifests(
+                self.deploy_root,
+                self.charts_root,
+                {self.IMAGE},
+            ),
+        )
+
+    def test_accepts_deployment_and_statefulset(self) -> None:
+        expected = {
+            self.workload("deploy/deployment.yaml").resolve(),
+            self.workload(
+                "deploy/statefulset.yaml",
+                kind="StatefulSet",
+            ).resolve(),
+        }
+        self.assertEqual(
+            expected,
+            set(
+                _polaris_workload_manifests(
+                    self.deploy_root,
+                    self.charts_root,
+                    {self.IMAGE},
+                )
+            ),
+        )
+
+    def test_rejects_non_workload_resource(self) -> None:
+        self.write_json(
+            "deploy/polaris.yaml",
+            {
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
                 "metadata": {"name": "polaris"},
+                "data": {"image": self.IMAGE},
+            },
+        )
+        self.assertEqual(
+            [],
+            _polaris_workload_manifests(
+                self.deploy_root,
+                self.charts_root,
+                {self.IMAGE},
+            ),
+        )
+
+    def test_reads_static_chart_template_without_scanning_values(self) -> None:
+        template = self.workload(
+            "charts/polaris/templates/deployment.yaml"
+        )
+        self.write(
+            "charts/polaris/values.yaml",
+            f"unrelated: {self.IMAGE}",
+        )
+        self.assertEqual(
+            [template.resolve()],
+            _polaris_workload_manifests(
+                self.deploy_root,
+                self.charts_root,
+                {self.IMAGE},
+            ),
+        )
+
+
+class RawBootstrapIdentityTests(RepositoryFixture):
+    def test_detects_only_final_job_and_cronjob_identity_fields(self) -> None:
+        cases = (
+            ("name", {"name": "iceberg-table-bootstrap"}),
+            ("label", {"label": "iceberg-table-bootstrap"}),
+            (
+                "container-name",
+                {"container_name": "iceberg-table-bootstrap"},
+            ),
+            (
+                "image",
+                {"image": "registry.example/iceberg-table:bootstrap"},
+            ),
+            (
+                "init-image",
+                {"init_image": "registry.example/iceberg-table:bootstrap"},
+            ),
+        )
+        expected: set[Path] = set()
+        for kind in ("Job", "CronJob"):
+            for label, fields in cases:
+                expected.add(
+                    self.job(
+                        f"deploy/{kind.lower()}-{label}.yaml",
+                        kind=kind,
+                        **fields,
+                    ).resolve()
+                )
+        self.assertEqual(expected, set(self.detect()))
+
+    def test_ignores_non_identity_nested_values(self) -> None:
+        self.write_json(
+            "deploy/job.yaml",
+            {
+                "apiVersion": "batch/v1",
+                "kind": "Job",
+                "metadata": {
+                    "name": "maintenance",
+                    "annotations": {
+                        "note": "iceberg-table-bootstrap",
+                    },
+                },
                 "spec": {
                     "template": {
-                        "spec": {"containers": [{"image": image}]}
+                        "spec": {
+                            "restartPolicy": "Never",
+                            "containers": [
+                                {
+                                    "name": "runner",
+                                    "image": "registry.example/runner:stable",
+                                    "env": [
+                                        {
+                                            "name": "NOTE",
+                                            "value": "iceberg-table-bootstrap",
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    }
+                },
+            },
+        )
+        self.assertEqual([], self.detect())
+
+    def test_unwraps_list_and_parses_flow_style_and_aliases(self) -> None:
+        listed = self.write_json(
+            "deploy/list.json",
+            {
+                "apiVersion": "v1",
+                "kind": "List",
+                "items": [
+                    {
+                        "apiVersion": "batch/v1",
+                        "kind": "Job",
+                        "metadata": {"name": "iceberg-table-bootstrap"},
+                        "spec": {
+                            "template": {
+                                "spec": {
+                                    "restartPolicy": "Never",
+                                    "containers": [
+                                        {
+                                            "name": "runner",
+                                            "image": "registry.example/runner:stable",
+                                        }
+                                    ],
+                                }
+                            }
+                        },
+                    }
+                ],
+            },
+        )
+        aliased = self.write(
+            "deploy/alias.yaml",
+            """
+            apiVersion: batch/v1
+            kind: Job
+            metadata: &identity {name: iceberg-table-bootstrap}
+            spec:
+              template:
+                metadata: *identity
+                spec: {restartPolicy: Never, containers: [{name: runner, image: registry.example/runner:stable}]}
+            """,
+        )
+        self.assertEqual(
+            {listed.resolve(), aliased.resolve()},
+            set(self.detect()),
+        )
+
+    def test_ignores_jobs_without_combined_identity(self) -> None:
+        self.job(
+            "deploy/iceberg-only.yaml",
+            name="iceberg-maintenance",
+        )
+        self.job(
+            "deploy/bootstrap-only.yaml",
+            image="registry.example/bootstrap:stable",
+        )
+        self.assertEqual([], self.detect())
+
+    def test_wrong_api_version_fails_closed(self) -> None:
+        self.write_json(
+            "deploy/bad-version.yaml",
+            {
+                "apiVersion": "batch/v999",
+                "kind": "Job",
+                "metadata": {"name": "iceberg-table-bootstrap"},
+                "spec": {
+                    "template": {
+                        "spec": {
+                            "restartPolicy": "Never",
+                            "containers": [
+                                {
+                                    "name": "runner",
+                                    "image": "registry.example/runner:stable",
+                                }
+                            ],
+                        }
+                    }
+                },
+            },
+        )
+        with self.assertRaises(RenderError):
+            self.detect()
+
+
+class FluxKustomizeRenderingTests(RepositoryFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        self.local_source()
+
+    def test_plain_kustomization_patch_is_part_of_final_state(self) -> None:
+        self.job("deploy/app/job.yaml")
+        self.kustomization(
+            "deploy/app",
+            resources=["job.yaml"],
+            patches=[
+                {
+                    "target": {"kind": "Job"},
+                    "patch": """
+                    - op: replace
+                      path: /metadata/name
+                      value: iceberg-table-bootstrap
+                    """,
+                }
+            ],
+        )
+        flux = self.flux("./deploy/app")
+        self.assertEqual([flux.resolve()], self.detect())
+
+    def test_flux_plan_named_kustomization_yaml_is_not_skipped(self) -> None:
+        self.job(
+            "deploy/app/job.yaml",
+            name="iceberg-table-bootstrap",
+        )
+        self.kustomization("deploy/app", resources=["job.yaml"])
+        flux = self.flux(
+            "./deploy/app",
+            relative="deploy/control/kustomization.yaml",
+        )
+        self.assertEqual([flux.resolve()], self.detect())
+
+    def test_flux_source_reference_accepts_only_the_exact_api_version(self) -> None:
+        self.job("deploy/app/job.yaml")
+        self.kustomization("deploy/app", resources=["job.yaml"])
+        self.flux(
+            "./deploy/app",
+            spec={
+                "sourceRef": {
+                    "apiVersion": "source.toolkit.fluxcd.io/v1",
+                    "kind": "GitRepository",
+                    "name": "source",
+                }
+            },
+        )
+        self.assertEqual([], self.detect())
+        self.flux(
+            "./deploy/app",
+            spec={
+                "sourceRef": {
+                    "apiVersion": "source.toolkit.fluxcd.io/v1beta2",
+                    "kind": "GitRepository",
+                    "name": "source",
+                }
+            },
+        )
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_flux_repository_path_must_be_relative(self) -> None:
+        self.job("deploy/app/job.yaml")
+        self.kustomization("deploy/app", resources=["job.yaml"])
+        self.flux(str(self.root / "deploy/app"))
+        with self.assertRaises(RenderError):
+            self.detect()
+        self.flux("./deploy/app", spec={"path": 7})
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_native_kustomize_references_must_be_relative(self) -> None:
+        job = self.job("deploy/app/job.yaml")
+        self.kustomization("deploy/app", resources=[str(job)])
+        self.flux("./deploy/app")
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_ignore_missing_components_only_skips_local_absence(self) -> None:
+        self.job("deploy/app/job.yaml")
+        self.kustomization("deploy/app", resources=["job.yaml"])
+        self.flux(
+            "./deploy/app",
+            spec={
+                "components": ["missing-component"],
+                "ignoreMissingComponents": True,
+            },
+        )
+        self.assertEqual([], self.detect())
+        self.flux(
+            "./deploy/app",
+            spec={
+                "components": ["missing-component"],
+                "ignoreMissingComponents": False,
+            },
+        )
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_reachable_flux_plans_cannot_share_one_target_path(self) -> None:
+        self.job("deploy/app/job.yaml")
+        self.kustomization("deploy/app", resources=["job.yaml"])
+        self.flux(
+            "./deploy/app",
+            name="first",
+            relative="deploy/control/first.yaml",
+        )
+        self.flux(
+            "./deploy/app",
+            name="second",
+            relative="deploy/control/second.yaml",
+        )
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_unlisted_flux_plans_do_not_create_target_conflicts(self) -> None:
+        self.write_json(
+            "deploy/root/selected.yaml",
+            {
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "metadata": {"name": "selected"},
+            },
+        )
+        for name in ("first", "second"):
+            self.flux(
+                "./deploy/app",
+                name=name,
+                relative=f"deploy/root/{name}.yaml",
+            )
+        self.kustomization("deploy/root", resources=["selected.yaml"])
+        self.flux(
+            "./deploy/root",
+            name="parent",
+            relative="deploy/control/parent.yaml",
+        )
+        self.assertEqual([], self.detect())
+
+    def test_disconnected_flux_cycle_cannot_hide_behind_a_valid_root(self) -> None:
+        self.write_json(
+            "deploy/app/configmap.yaml",
+            {
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "metadata": {"name": "selected"},
+            },
+        )
+        self.kustomization("deploy/app", resources=["configmap.yaml"])
+        self.flux(
+            "./deploy/app",
+            name="root",
+            relative="deploy/control/root.yaml",
+        )
+        for name in ("cycle-b", "cycle-c"):
+            self.flux(
+                "./deploy/cycle",
+                name=name,
+                relative=f"deploy/cycle/{name}.yaml",
+            )
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_resource_list_excludes_unreferenced_workload_from_flux_transform(self) -> None:
+        self.job("deploy/app/unlisted-job.yaml")
+        self.write_json(
+            "deploy/app/configmap.yaml",
+            {
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "metadata": {"name": "selected"},
+            },
+        )
+        self.kustomization(
+            "deploy/app",
+            resources=["configmap.yaml"],
+        )
+        self.flux(
+            "./deploy/app",
+            spec={
+                "commonMetadata": {
+                    "labels": {"role": "iceberg-table-bootstrap"}
+                }
+            },
+        )
+        self.assertEqual([], self.detect())
+
+    def test_suspended_kustomization_does_not_reconcile(self) -> None:
+        self.job("deploy/app/job.yaml")
+        self.kustomization("deploy/app", resources=["job.yaml"])
+        self.flux(
+            "./deploy/app",
+            spec={
+                "suspend": True,
+                "commonMetadata": {
+                    "labels": {"role": "iceberg-table-bootstrap"}
+                },
+            },
+        )
+        self.assertEqual([], self.detect())
+
+    def test_suspended_child_does_not_validate_its_source_artifact(self) -> None:
+        self.job(
+            "deploy/app/job.yaml",
+            name="iceberg-table-bootstrap",
+        )
+        self.kustomization("deploy/app", resources=["job.yaml"])
+        self.write_json(
+            "deploy/root/child-source.yaml",
+            {
+                "apiVersion": "source.toolkit.fluxcd.io/v1",
+                "kind": "GitRepository",
+                "metadata": {
+                    "name": "child-source",
+                    "namespace": "flux-system",
+                },
+                "spec": {
+                    "interval": "1m",
+                    "url": LOCAL_GIT_URL,
+                    "ref": {"branch": "main"},
+                    "ignore": "/*",
+                },
+            },
+        )
+        self.flux(
+            "./deploy/app",
+            name="child",
+            source_name="child-source",
+            spec={"suspend": True},
+            relative="deploy/root/child.yaml",
+        )
+        self.kustomization(
+            "deploy/root",
+            resources=["child-source.yaml", "child.yaml"],
+        )
+        self.flux(
+            "./deploy/root",
+            name="parent",
+            relative="deploy/control/parent.yaml",
+        )
+        self.assertEqual([], self.detect())
+
+    def test_no_kustomization_uses_flux_autogeneration(self) -> None:
+        self.job("deploy/app/nested/job.yaml")
+        flux = self.flux(
+            "./deploy/app",
+            spec={
+                "commonMetadata": {
+                    "labels": {"role": "iceberg-table-bootstrap"}
+                }
+            },
+        )
+        self.assertEqual([flux.resolve()], self.detect())
+
+    def test_flow_style_flux_patch_is_applied(self) -> None:
+        self.job("deploy/app/job.yaml")
+        self.kustomization("deploy/app", resources=["job.yaml"])
+        flux = self.write(
+            "deploy/control/flux.yaml",
+            """
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata: {name: app, namespace: flux-system}
+            spec:
+              interval: 1m
+              path: ./deploy/app
+              sourceRef: {kind: GitRepository, name: source}
+              patches: [{target: {kind: Job}, patch: '[{"op":"replace","path":"/metadata/name","value":"iceberg-table-bootstrap"}]'}]
+            """,
+        )
+        self.assertEqual([flux.resolve()], self.detect())
+
+    def test_mapping_valued_json_patch_is_preserved(self) -> None:
+        self.job("deploy/app/job.yaml")
+        self.kustomization("deploy/app", resources=["job.yaml"])
+        flux = self.flux(
+            "./deploy/app",
+            spec={
+                "patches": [
+                    {
+                        "target": {"kind": "Job"},
+                        "patch": """
+                        - op: add
+                          path: /metadata/labels
+                          value:
+                            role: iceberg-table-bootstrap
+                        """,
+                    }
+                ]
+            },
+        )
+        self.assertEqual([flux.resolve()], self.detect())
+
+    def test_whole_container_array_replacement_is_preserved(self) -> None:
+        self.job("deploy/app/job.yaml")
+        self.kustomization("deploy/app", resources=["job.yaml"])
+        flux = self.flux(
+            "./deploy/app",
+            spec={
+                "patches": [
+                    {
+                        "target": {"kind": "Job"},
+                        "patch": """
+                        - op: replace
+                          path: /spec/template/spec/containers
+                          value:
+                            - name: iceberg-table-bootstrap
+                              image: registry.example/runner:stable
+                        """,
+                    }
+                ]
+            },
+        )
+        self.assertEqual([flux.resolve()], self.detect())
+
+    def test_array_remove_and_replace_uses_shifted_final_state(self) -> None:
+        self.write_json(
+            "deploy/app/job.yaml",
+            {
+                "apiVersion": "batch/v1",
+                "kind": "Job",
+                "metadata": {"name": "maintenance"},
+                "spec": {
+                    "template": {
+                        "spec": {
+                            "restartPolicy": "Never",
+                            "containers": [
+                                {
+                                    "name": "safe",
+                                    "image": "registry.example/safe:stable",
+                                },
+                                {
+                                    "name": "iceberg-table-bootstrap",
+                                    "image": "registry.example/bootstrap:stable",
+                                },
+                            ],
+                        }
+                    }
+                },
+            },
+        )
+        self.kustomization("deploy/app", resources=["job.yaml"])
+        self.flux(
+            "./deploy/app",
+            spec={
+                "patches": [
+                    {
+                        "target": {"kind": "Job"},
+                        "patch": """
+                        - op: remove
+                          path: /spec/template/spec/containers/0
+                        - op: replace
+                          path: /spec/template/spec/containers/0
+                          value:
+                            name: safe
+                            image: registry.example/safe:stable
+                        """,
+                    }
+                ]
+            },
+        )
+        self.assertEqual([], self.detect())
+
+    def test_plain_then_flux_patch_uses_only_final_state(self) -> None:
+        self.job("deploy/app/job.yaml")
+        self.kustomization(
+            "deploy/app",
+            resources=["job.yaml"],
+            patches=[
+                {
+                    "target": {"kind": "Job"},
+                    "patch": """
+                    - op: replace
+                      path: /metadata/name
+                      value: iceberg-table-bootstrap
+                    """,
+                }
+            ],
+        )
+        self.flux(
+            "./deploy/app",
+            spec={
+                "patches": [
+                    {
+                        "target": {"kind": "Job"},
+                        "patch": """
+                        - op: replace
+                          path: /metadata/name
+                          value: catalog-maintenance
+                        """,
+                    }
+                ]
+            },
+        )
+        self.assertEqual([], self.detect())
+
+    def test_native_name_transform_and_flux_patch_share_one_build(self) -> None:
+        self.job("deploy/app/job.yaml", name="maintenance")
+        self.kustomization(
+            "deploy/app",
+            resources=["job.yaml"],
+            namePrefix="catalog-",
+        )
+        flux = self.flux(
+            "./deploy/app",
+            spec={
+                "patches": [
+                    {
+                        "target": {"kind": "Job", "name": "maintenance"},
+                        "patch": """
+                        - op: replace
+                          path: /spec/template/spec/containers/0/image
+                          value: registry.example/iceberg-table:bootstrap
+                        """,
+                    }
+                ]
+            },
+        )
+        self.assertEqual([flux.resolve()], self.detect())
+
+    def test_recursive_parent_uses_patched_child_reconciliation(self) -> None:
+        self.job("deploy/app/job.yaml")
+        self.kustomization("deploy/app", resources=["job.yaml"])
+        self.flux(
+            "./deploy/app",
+            name="child",
+            relative="deploy/root/child.yaml",
+        )
+        self.kustomization(
+            "deploy/root",
+            resources=["child.yaml"],
+        )
+        parent = self.flux(
+            "./deploy/root",
+            name="parent",
+            relative="deploy/control/parent.yaml",
+            spec={
+                "patches": [
+                    {
+                        "target": {
+                            "group": "kustomize.toolkit.fluxcd.io",
+                            "kind": "Kustomization",
+                            "name": "child",
+                        },
+                        "patch": """
+                        - op: add
+                          path: /spec/commonMetadata
+                          value:
+                            labels:
+                              role: iceberg-table-bootstrap
+                        """,
+                    }
+                ]
+            },
+        )
+        self.assertEqual([parent.resolve()], self.detect())
+
+    def test_recursive_parent_does_not_build_suspended_child(self) -> None:
+        self.job(
+            "deploy/app/job.yaml",
+            name="iceberg-table-bootstrap",
+        )
+        self.kustomization("deploy/app", resources=["job.yaml"])
+        self.flux(
+            "./deploy/app",
+            name="child",
+            relative="deploy/root/child.yaml",
+            spec={"suspend": True},
+        )
+        self.kustomization(
+            "deploy/root",
+            resources=["child.yaml"],
+        )
+        self.flux(
+            "./deploy/root",
+            name="parent",
+            relative="deploy/control/parent.yaml",
+        )
+        self.assertEqual([], self.detect())
+
+    def test_image_rewrites_are_mutations_not_additional_tokens(self) -> None:
+        cases = (
+            (
+                "away",
+                "registry.example/iceberg-table:bootstrap",
+                {
+                    "name": "registry.example/iceberg-table",
+                    "newName": "registry.example/catalog-maintenance",
+                    "newTag": "stable",
+                },
+                False,
+            ),
+            (
+                "toward",
+                "registry.example/catalog-maintenance:stable",
+                {
+                    "name": "registry.example/catalog-maintenance",
+                    "newName": "registry.example/iceberg-table",
+                    "newTag": "bootstrap",
+                },
+                True,
+            ),
+        )
+        for label, original, image_rule, expected in cases:
+            with self.subTest(label=label):
+                directory = f"deploy/{label}"
+                self.job(f"{directory}/job.yaml", image=original)
+                self.kustomization(directory, resources=["job.yaml"])
+                self.flux(
+                    f"./{directory}",
+                    name=label,
+                    relative=f"deploy/control/{label}.yaml",
+                    spec={"images": [image_rule]},
+                )
+        detected = {path.name for path in self.detect()}
+        self.assertNotIn("away.yaml", detected)
+        self.assertIn("toward.yaml", detected)
+
+    def test_name_and_common_metadata_transform_final_identity(self) -> None:
+        self.job("deploy/app/job.yaml")
+        self.kustomization("deploy/app", resources=["job.yaml"])
+        flux = self.flux(
+            "./deploy/app",
+            spec={
+                "namePrefix": "iceberg-",
+                "nameSuffix": "-bootstrap",
+                "commonMetadata": {
+                    "labels": {"role": "catalog-maintenance"}
+                },
+            },
+        )
+        self.assertEqual([flux.resolve()], self.detect())
+
+    def test_unmatched_and_non_identity_patches_do_not_detect(self) -> None:
+        self.job("deploy/app/job.yaml")
+        self.kustomization("deploy/app", resources=["job.yaml"])
+        self.flux(
+            "./deploy/app",
+            spec={
+                "patches": [
+                    {
+                        "target": {"kind": "Deployment"},
+                        "patch": """
+                        - op: add
+                          path: /metadata/labels/role
+                          value: iceberg-table-bootstrap
+                        """,
+                    },
+                    {
+                        "target": {"kind": "Job"},
+                        "patch": """
+                        - op: add
+                          path: /metadata/annotations/note
+                          value: iceberg-table-bootstrap
+                        """,
+                    },
+                ]
+            },
+        )
+        self.assertEqual([], self.detect())
+
+    def test_repository_path_escape_fails_closed(self) -> None:
+        self.flux("../../outside")
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_cluster_dependent_flux_inputs_fail_closed(self) -> None:
+        self.job("deploy/app/job.yaml")
+        self.kustomization("deploy/app", resources=["job.yaml"])
+        self.flux(
+            "./deploy/app",
+            spec={
+                "decryption": {
+                    "provider": "sops",
+                    "secretRef": {"name": "sops-key"},
+                }
+            },
+        )
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_json_patch_array_and_null_operations_use_final_state(self) -> None:
+        null_directory = "deploy/null"
+        self.job(
+            f"{null_directory}/job.yaml",
+            label="iceberg-table-bootstrap",
+        )
+        self.kustomization(null_directory, resources=["job.yaml"])
+        self.flux(
+            f"./{null_directory}",
+            name="null",
+            relative="deploy/control/null.yaml",
+            spec={
+                "patches": [
+                    {
+                        "target": {"kind": "Job"},
+                        "patch": """
+                        - op: replace
+                          path: /metadata/labels/role
+                          value: null
+                        """,
+                    }
+                ]
+            },
+        )
+
+        append_directory = "deploy/append"
+        self.job(f"{append_directory}/job.yaml")
+        self.kustomization(append_directory, resources=["job.yaml"])
+        appended = self.flux(
+            f"./{append_directory}",
+            name="append",
+            relative="deploy/control/append.yaml",
+            spec={
+                "patches": [
+                    {
+                        "target": {"kind": "Job"},
+                        "patch": """
+                        - op: add
+                          path: /spec/template/spec/containers/-
+                          value:
+                            name: iceberg-table-bootstrap
+                            image: registry.example/runner:stable
+                        """,
+                    }
+                ]
+            },
+        )
+
+        remove_directory = "deploy/remove"
+        self.job(
+            f"{remove_directory}/job.yaml",
+            container_name="iceberg-table-bootstrap",
+        )
+        self.kustomization(remove_directory, resources=["job.yaml"])
+        self.flux(
+            f"./{remove_directory}",
+            name="remove",
+            relative="deploy/control/remove.yaml",
+            spec={
+                "patches": [
+                    {
+                        "target": {"kind": "Job"},
+                        "patch": """
+                        - op: remove
+                          path: /spec/template/spec/containers/0
+                        - op: add
+                          path: /spec/template/spec/containers/-
+                          value:
+                            name: runner
+                            image: registry.example/runner:stable
+                        """,
+                    }
+                ]
+            },
+        )
+        self.assertEqual([appended.resolve()], self.detect())
+
+    def test_external_flux_source_fails_closed(self) -> None:
+        self.local_source(url="ssh://git@github.com/example/external")
+        self.flux("./deploy/app")
+        with self.assertRaises(RenderError):
+            self.detect(self.context(LOCAL_GIT_URL))
+
+    def test_unreachable_child_source_is_not_resolved_from_raw_files(self) -> None:
+        self.job(
+            "deploy/app/job.yaml",
+            name="iceberg-table-bootstrap",
+        )
+        self.kustomization("deploy/app", resources=["job.yaml"])
+        self.local_source(
+            name="child-source",
+            relative="deploy/root/unlisted-source.yaml",
+        )
+        self.flux(
+            "./deploy/app",
+            name="child",
+            source_name="child-source",
+            relative="deploy/root/child.yaml",
+        )
+        self.kustomization("deploy/root", resources=["child.yaml"])
+        self.flux(
+            "./deploy/root",
+            name="parent",
+            relative="deploy/control/parent.yaml",
+        )
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_wrong_api_group_cannot_impersonate_flux_source(self) -> None:
+        self.write_json(
+            "deploy/control/fake-source.yaml",
+            {
+                "apiVersion": "example.com/v1",
+                "kind": "GitRepository",
+                "metadata": {
+                    "name": "fake",
+                    "namespace": "flux-system",
+                },
+                "spec": {"url": LOCAL_GIT_URL},
+            },
+        )
+        self.flux("./deploy/app", source_name="fake")
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_local_source_artifact_contract_fails_closed(self) -> None:
+        cases = (
+            ("ignore", {"ignore": ""}),
+            ("include", {"include": [{"fromPath": "deploy"}]}),
+            ("submodules", {"recurseSubmodules": True}),
+            ("sparse", {"sparseCheckout": [{"path": "deploy"}]}),
+            (
+                "verify",
+                {
+                    "verify": {
+                        "mode": "HEAD",
+                        "secretRef": {"name": "git-signing-keys"},
+                    }
+                },
+            ),
+            ("suspended", {"suspend": True}),
+            ("tag", {"ref": {"tag": "v1.0.0"}}),
+            ("other-branch", {"ref": {"branch": "other"}}),
+        )
+        self.job("deploy/app/job.yaml")
+        self.kustomization("deploy/app", resources=["job.yaml"])
+        self.flux("./deploy/app")
+        for label, source_fields in cases:
+            with self.subTest(label=label):
+                self.write_json(
+                    "deploy/control/source.yaml",
+                    {
+                        "apiVersion": "source.toolkit.fluxcd.io/v1",
+                        "kind": "GitRepository",
+                        "metadata": {
+                            "name": "source",
+                            "namespace": "flux-system",
+                        },
+                        "spec": {
+                            "interval": "1m",
+                            "url": LOCAL_GIT_URL,
+                            "ref": {"branch": "main"},
+                            **source_fields,
+                        },
+                    },
+                )
+                with self.assertRaises(RenderError):
+                    self.detect()
+        self.local_source()
+        self.write_json(
+            "deploy/control/source.yaml",
+            {
+                "apiVersion": "source.toolkit.fluxcd.io/v1",
+                "kind": "GitRepository",
+                "metadata": {
+                    "name": "source",
+                    "namespace": "flux-system",
+                },
+                "spec": {
+                    "interval": "1m",
+                    "url": LOCAL_GIT_URL,
+                    "ref": {"branch": "main"},
+                },
+            },
+        )
+        self.assertEqual([], self.detect())
+        for filename, content in (
+            (".sourceignore", "deploy/**"),
+            (".gitmodules", "[submodule \"dependency\"]"),
+        ):
+            with self.subTest(filename=filename):
+                path = self.write(filename, content)
+                with self.assertRaises(RenderError):
+                    self.detect()
+                path.unlink()
+
+    def test_unlisted_external_flux_object_is_outside_resource_graph(self) -> None:
+        self.write_json(
+            "deploy/root/selected.yaml",
+            {
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "metadata": {"name": "selected"},
+            },
+        )
+        self.kustomization(
+            "deploy/root",
+            resources=["selected.yaml"],
+        )
+        self.local_source(
+            url="ssh://git@github.com/example/external",
+            name="external",
+            relative="deploy/root/external-source.yaml",
+        )
+        self.flux(
+            "./deploy/app",
+            name="unlisted",
+            source_name="external",
+            relative="deploy/root/unlisted.yaml",
+        )
+        self.flux(
+            "./deploy/root",
+            name="parent",
+            relative="deploy/control/parent.yaml",
+        )
+        self.assertEqual([], self.detect(self.context(LOCAL_GIT_URL)))
+
+    def test_remote_native_kustomize_inputs_fail_before_build(self) -> None:
+        (self.root / "deploy/app/github.com/example/base").mkdir(
+            parents=True,
+        )
+        self.kustomization(
+            "deploy/app",
+            resources=["github.com/example/base"],
+        )
+        self.flux("./deploy/app")
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_remote_validator_and_generator_graphs_fail_before_build(self) -> None:
+        self.kustomization(
+            "deploy/app",
+            validators=["https://github.com/example/policy.yaml"],
+        )
+        self.flux("./deploy/app")
+        with self.assertRaises(RenderError):
+            self.detect()
+
+        self.kustomization(
+            "deploy/app",
+            replacements=[
+                {
+                    "path": (
+                        "http://127.0.0.1:65535/replacement.yaml"
+                    )
+                }
+            ],
+        )
+        with self.assertRaises(RenderError):
+            self.detect()
+
+        self.kustomization(
+            "deploy/app",
+            generators=["generator"],
+        )
+        self.kustomization(
+            "deploy/app/generator",
+            resources=["github.com/example/generator"],
+        )
+        (self.root / "deploy/app/generator/github.com/example/generator").mkdir(
+            parents=True,
+        )
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_flux_component_graph_cannot_hide_remote_resources(self) -> None:
+        self.job("deploy/app/job.yaml")
+        self.kustomization("deploy/app", resources=["job.yaml"])
+        self.write_json(
+            "deploy/component/kustomization.yaml",
+            {
+                "apiVersion": "kustomize.config.k8s.io/v1alpha1",
+                "kind": "Component",
+                "resources": ["github.com/example/component"],
+            },
+        )
+        (self.root / "deploy/component/github.com/example/component").mkdir(
+            parents=True,
+        )
+        self.flux(
+            "./deploy/app",
+            spec={"components": ["../component"]},
+        )
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_kustomize_file_plugin_cannot_fetch_nested_remote_input(self) -> None:
+        hits: list[str] = []
+
+        class PatchHandler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                hits.append(self.path)
+                content = textwrap.dedent(
+                    """
+                    apiVersion: batch/v1
+                    kind: Job
+                    metadata:
+                      name: catalog-maintenance
+                      labels:
+                        role: iceberg-table-bootstrap
+                    """
+                ).lstrip().encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/yaml")
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+
+            def log_message(self, _format: str, *args: object) -> None:
+                del args
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), PatchHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = server.server_address[1]
+            self.job("deploy/app/job.yaml")
+            self.write(
+                "deploy/app/transformer.yaml",
+                f"""
+                apiVersion: builtin
+                kind: PatchTransformer
+                metadata:
+                  name: remote
+                path: http://127.0.0.1:{port}/patch.yaml
+                target:
+                  kind: Job
+                """,
+            )
+            self.kustomization(
+                "deploy/app",
+                resources=["job.yaml"],
+                transformers=["transformer.yaml"],
+            )
+            self.flux("./deploy/app")
+            with self.assertRaises(RenderError):
+                self.detect()
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+        self.assertEqual([], hits)
+
+    def test_native_kustomization_symlink_cannot_escape_source_root(self) -> None:
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        outside_path = Path(outside.name) / "kustomization.yaml"
+        outside_path.write_text(
+            """
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: [job.yaml]
+""".lstrip(),
+            encoding="utf-8",
+        )
+        self.job("deploy/app/job.yaml")
+        (self.root / "deploy/app/kustomization.yaml").symlink_to(outside_path)
+        self.flux("./deploy/app")
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_manifest_symlink_cannot_escape_scan_root(self) -> None:
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        outside_path = Path(outside.name) / "job.yaml"
+        outside_path.write_text(
+            """
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: iceberg-table-bootstrap
+""".lstrip(),
+            encoding="utf-8",
+        )
+        (self.root / "deploy/escaped.yaml").symlink_to(outside_path)
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_invalid_native_kustomization_fails_closed(self) -> None:
+        self.job("deploy/app/job.yaml")
+        self.write(
+            "deploy/app/kustomization.yaml",
+            """
+            apiVersion: kustomize.config.k8s.io/v1beta1
+            kind: Kustomization
+            resources: [missing.yaml]
+            """,
+        )
+        self.flux("./deploy/app")
+        with self.assertRaises(RenderError):
+            self.detect()
+
+
+class HelmRenderingTests(RepositoryFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        self.local_source()
+        self.chart()
+
+    def test_generated_values_flow_through_reachable_flux_state(self) -> None:
+        self.write(
+            "deploy/app/bootstrap.env",
+            "jobName=iceberg-table-bootstrap",
+        )
+        self.helm_release(
+            relative="deploy/app/release.yaml",
+            values_from=[
+                {
+                    "name": "generated",
+                    "valuesKey": "jobName",
+                    "targetPath": "job.name",
+                }
+            ],
+        )
+        self.kustomization(
+            "deploy/app",
+            resources=["release.yaml"],
+            configMapGenerator=[
+                {"name": "generated", "envs": ["bootstrap.env"]}
+            ],
+            generatorOptions={"disableNameSuffixHash": True},
+        )
+        flux = self.flux(
+            "./deploy/app",
+            spec={"targetNamespace": "flux-system"},
+        )
+        self.assertEqual([flux.resolve()], self.detect())
+
+    def test_parent_name_transform_changes_helm_release_identity(self) -> None:
+        self.chart(
+            template="""
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: {{ .Release.Name }}
+            spec:
+              template:
+                spec:
+                  restartPolicy: Never
+                  containers:
+                    - name: runner
+                      image: registry.example/runner:stable
+            """,
+        )
+        self.helm_release(
+            relative="deploy/app/release.yaml",
+            name="catalog-maintenance",
+        )
+        self.kustomization("deploy/app", resources=["release.yaml"])
+        flux = self.flux(
+            "./deploy/app",
+            spec={
+                "namePrefix": "iceberg-",
+                "nameSuffix": "-bootstrap",
+            },
+        )
+        self.assertEqual([flux.resolve()], self.detect())
+
+    def test_repository_local_chart_can_live_outside_charts_directory(self) -> None:
+        chart = self.root / "charts/catalog-job"
+        outside = self.root / "platform/job-chart"
+        outside.parent.mkdir()
+        chart.rename(outside)
+        self.write_json(
+            "platform/job-chart/values.yaml",
+            {
+                "job": {
+                    "name": "iceberg-table-bootstrap",
+                    "label": "catalog-maintenance",
+                },
+                "container": {"name": "runner"},
+                "image": {
+                    "repository": "registry.example/catalog-maintenance",
+                    "tag": "stable",
+                },
+            },
+        )
+        release = self.helm_release(chart="./platform/job-chart")
+        self.assertEqual([release.resolve()], self.detect())
+
+    def test_split_repository_and_tag_are_rendered_as_one_image(self) -> None:
+        release = self.helm_release(
+            values={
+                "image": {
+                    "repository": "registry.example/iceberg-table",
+                    "tag": "bootstrap",
+                }
+            }
+        )
+        self.assertEqual([release.resolve()], self.detect())
+
+    def test_chart_and_source_url_tokens_are_not_workload_identity(self) -> None:
+        token_url = "ssh://git@github.com/example/iceberg-bootstrap-platform"
+        self.local_source(url=token_url)
+        self.helm_release(chart="./charts/catalog-job")
+        self.assertEqual([], self.detect(self.context(token_url)))
+
+    def test_helm_controller_origin_labels_are_final_identity(self) -> None:
+        release = self.helm_release(
+            name="iceberg-table-bootstrap",
+            relative="deploy/releases/origin.yaml",
+        )
+        self.assertEqual([release.resolve()], self.detect())
+
+    def test_helm_origin_labels_override_common_metadata_collision(self) -> None:
+        release = self.helm_release(
+            name="iceberg-table-bootstrap",
+            relative="deploy/releases/origin.yaml",
+            common_metadata={
+                "labels": {
+                    "helm.toolkit.fluxcd.io/name": "catalog-maintenance"
+                }
+            },
+        )
+        self.assertEqual([release.resolve()], self.detect())
+
+    def test_explicit_context_is_independent_of_checkout_origin(self) -> None:
+        self.write(
+            ".git/config",
+            """
+            [remote "origin"]
+                url = ssh://git@github.com/example/unrelated-fork
+            """,
+        )
+        self.helm_release(
+            values={
+                "job": {
+                    "name": "iceberg-table-bootstrap",
+                    "label": "catalog-maintenance",
+                }
+            }
+        )
+        self.assertTrue(self.detect(self.context(LOCAL_GIT_URL)))
+
+    def test_external_source_does_not_read_same_named_local_chart(self) -> None:
+        self.local_source(url="ssh://git@github.com/example/external")
+        self.helm_release(
+            values={
+                "job": {
+                    "name": "iceberg-table-bootstrap",
+                    "label": "catalog-maintenance",
+                }
+            }
+        )
+        with self.assertRaises(RenderError):
+            self.detect(self.context(LOCAL_GIT_URL))
+
+    def test_inline_values_override_chart_defaults(self) -> None:
+        self.chart(
+            values={
+                "job": {
+                    "name": "iceberg-table-bootstrap",
+                    "label": "iceberg-table-bootstrap",
+                }
+            }
+        )
+        self.helm_release(
+            values={
+                "job": {
+                    "name": "catalog-maintenance",
+                    "label": "catalog-maintenance",
+                }
+            }
+        )
+        self.assertEqual([], self.detect())
+
+    def test_values_from_and_inline_values_combine_before_render(self) -> None:
+        self.write_json(
+            "deploy/releases/image-values.yaml",
+            {
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "metadata": {
+                    "name": "image-values",
+                    "namespace": "flux-system",
+                },
+                "data": {
+                    "values.yaml": """
+                    image:
+                      repository: registry.example/iceberg-table
+                    """
+                },
+            },
+        )
+        release = self.helm_release(
+            values={"image": {"tag": "bootstrap"}},
+            values_from=[{"name": "image-values"}],
+        )
+        self.assertEqual([release.resolve()], self.detect())
+
+    def test_target_path_overrides_inline_values_in_final_merge(self) -> None:
+        self.write_json(
+            "deploy/releases/tag.yaml",
+            {
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "metadata": {"name": "tag", "namespace": "flux-system"},
+                "data": {"value.yaml": "bootstrap"},
+            },
+        )
+        release = self.helm_release(
+            values={
+                "image": {
+                    "repository": "registry.example/iceberg-table",
+                    "tag": "stable",
+                }
+            },
+            values_from=[
+                {
+                    "name": "tag",
+                    "valuesKey": "value.yaml",
+                    "targetPath": "image.tag",
+                }
+            ],
+        )
+        self.assertEqual([release.resolve()], self.detect())
+
+    def test_later_values_sources_and_inline_values_remove_prior_identity(self) -> None:
+        self.write_json(
+            "deploy/releases/bootstrap.yaml",
+            {
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "metadata": {
+                    "name": "bootstrap",
+                    "namespace": "flux-system",
+                },
+                "data": {
+                    "values.yaml": """
+                    job:
+                      name: iceberg-table-bootstrap
+                    """
+                },
+            },
+        )
+        self.write_json(
+            "deploy/releases/generic.yaml",
+            {
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "metadata": {
+                    "name": "generic",
+                    "namespace": "flux-system",
+                },
+                "data": {
+                    "values.yaml": """
+                    job:
+                      name: catalog-maintenance
+                    """
+                },
+            },
+        )
+        self.helm_release(
+            name="later-source",
+            relative="deploy/releases/later-source.yaml",
+            values_from=[
+                {"name": "bootstrap"},
+                {"name": "generic"},
+            ],
+        )
+        self.helm_release(
+            name="inline",
+            relative="deploy/releases/inline.yaml",
+            values_from=[{"name": "bootstrap"}],
+            values={
+                "job": {
+                    "name": "catalog-maintenance",
+                    "label": "catalog-maintenance",
+                }
+            },
+        )
+        self.assertEqual([], self.detect())
+
+    def test_target_path_uses_helm_strvals_and_literal_semantics(self) -> None:
+        self.write_json(
+            "deploy/releases/repository.yaml",
+            {
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "metadata": {
+                    "name": "repository",
+                    "namespace": "flux-system",
+                },
+                "data": {
+                    "value.yaml": (
+                        "registry.example/iceberg-table,side=bootstrap"
+                    )
+                },
+            },
+        )
+        self.helm_release(
+            name="parsed",
+            relative="deploy/releases/parsed.yaml",
+            values_from=[
+                {
+                    "name": "repository",
+                    "valuesKey": "value.yaml",
+                    "targetPath": "image.repository",
+                }
+            ],
+        )
+        literal = self.helm_release(
+            name="literal",
+            relative="deploy/releases/literal.yaml",
+            values_from=[
+                {
+                    "name": "repository",
+                    "valuesKey": "value.yaml",
+                    "targetPath": "image.repository",
+                    "literal": True,
+                }
+            ],
+        )
+        self.assertEqual([literal.resolve()], self.detect())
+
+    def test_quoted_target_path_value_remains_a_string(self) -> None:
+        self.chart(
+            values={"flag": True},
+            template="""
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: catalog-maintenance
+              labels:
+                role: {{ ternary "iceberg-table-bootstrap" "catalog-maintenance" (kindIs "string" .Values.flag) | quote }}
+            spec:
+              template:
+                spec:
+                  restartPolicy: Never
+                  containers:
+                    - name: runner
+                      image: registry.example/runner:stable
+            """,
+        )
+        for name, value in (
+            ("quoted", "'false'"),
+            ("unquoted", "false"),
+        ):
+            self.write_json(
+                f"deploy/releases/{name}-value.yaml",
+                {
+                    "apiVersion": "v1",
+                    "kind": "ConfigMap",
+                    "metadata": {
+                        "name": f"{name}-value",
+                        "namespace": "flux-system",
+                    },
+                    "data": {"value.yaml": value},
+                },
+            )
+            self.helm_release(
+                name=name,
+                relative=f"deploy/releases/{name}.yaml",
+                values_from=[
+                    {
+                        "name": f"{name}-value",
+                        "valuesKey": "value.yaml",
+                        "targetPath": "flag",
+                    }
+                ],
+            )
+        self.assertEqual(
+            [(self.root / "deploy/releases/quoted.yaml").resolve()],
+            self.detect(),
+        )
+
+    def test_target_path_applies_after_inline_values(self) -> None:
+        self.write_json(
+            "deploy/releases/name.yaml",
+            {
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "metadata": {
+                    "name": "name",
+                    "namespace": "flux-system",
+                },
+                "data": {"value.yaml": "catalog-maintenance"},
+            },
+        )
+        self.helm_release(
+            values={
+                "job": {
+                    "name": "iceberg-table-bootstrap",
+                    "label": "catalog-maintenance",
+                }
+            },
+            values_from=[
+                {
+                    "name": "name",
+                    "valuesKey": "value.yaml",
+                    "targetPath": "job.name",
+                }
+            ],
+        )
+        self.assertEqual([], self.detect())
+
+    def test_secret_values_are_decoded_before_render(self) -> None:
+        encoded = base64.b64encode(
+            b"job:\n  name: iceberg-table-bootstrap\n"
+        ).decode("ascii")
+        self.write_json(
+            "deploy/releases/secret.yaml",
+            {
+                "apiVersion": "v1",
+                "kind": "Secret",
+                "metadata": {
+                    "name": "release-values",
+                    "namespace": "flux-system",
+                },
+                "data": {"values.yaml": encoded},
+            },
+        )
+        release = self.helm_release(
+            values_from=[
+                {"kind": "Secret", "name": "release-values"}
+            ]
+        )
+        self.assertEqual([release.resolve()], self.detect())
+
+    def test_wrapped_secret_data_and_string_data_are_supported(self) -> None:
+        encoded = base64.b64encode(
+            b"job:\n  name: iceberg-table-bootstrap\n"
+        ).decode("ascii")
+        wrapped = "\n".join(
+            encoded[offset : offset + 16]
+            for offset in range(0, len(encoded), 16)
+        )
+        self.write_json(
+            "deploy/releases/wrapped-secret.yaml",
+            {
+                "apiVersion": "v1",
+                "kind": "Secret",
+                "metadata": {
+                    "name": "wrapped",
+                    "namespace": "flux-system",
+                },
+                "data": {"values.yaml": wrapped},
+            },
+        )
+        wrapped_release = self.helm_release(
+            values_from=[{"kind": "Secret", "name": "wrapped"}],
+            name="wrapped",
+            relative="deploy/releases/wrapped.yaml",
+        )
+        self.write_json(
+            "deploy/releases/string-secret.yaml",
+            {
+                "apiVersion": "v1",
+                "kind": "Secret",
+                "metadata": {
+                    "name": "string",
+                    "namespace": "flux-system",
+                },
+                "stringData": {
+                    "values.yaml": """
+                    job:
+                      name: iceberg-table-bootstrap
+                    """
+                },
+            },
+        )
+        string_release = self.helm_release(
+            values_from=[{"kind": "Secret", "name": "string"}],
+            name="string",
+            relative="deploy/releases/string.yaml",
+        )
+        self.assertEqual(
+            {wrapped_release.resolve(), string_release.resolve()},
+            set(self.detect()),
+        )
+
+    def test_selected_values_files_are_rendered_and_sidecars_are_ignored(self) -> None:
+        self.chart(
+            extra_values={
+                "bootstrap.yaml": {
+                    "job": {
+                        "name": "iceberg-table-bootstrap",
+                        "label": "catalog-maintenance",
+                    },
+                    "container": {"name": "runner"},
+                    "image": {
+                        "repository": "registry.example/catalog-maintenance",
+                        "tag": "stable",
+                    },
+                },
+                "unselected.yaml": {
+                    "job": {
+                        "name": "iceberg-unselected-bootstrap",
+                        "label": "catalog-maintenance",
                     }
                 },
             }
         )
-
-        with tempfile.TemporaryDirectory() as directory:
-            fixture_root = Path(directory)
-            deploy_root = fixture_root / "deploy"
-            charts_root = fixture_root / "charts"
-            deploy_manifest = deploy_root / "polaris.json"
-            chart_manifest = charts_root / "polaris" / "templates" / "deployment.yml"
-            ignored_chart_file = charts_root / "polaris" / "values.yaml"
-            for path, content in (
-                (deploy_manifest, json_manifest),
-                (chart_manifest, yaml_manifest),
-                (ignored_chart_file, yaml_manifest),
-            ):
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(content, encoding="utf-8")
-
-            workloads = _polaris_workload_manifests(
-                deploy_root, charts_root, admitted_images={image}
-            )
-
-        self.assertEqual({deploy_manifest, chart_manifest}, set(workloads))
-
-    def test_admits_only_polaris_component_images(self) -> None:
-        polaris_image = "registry.example/polaris@sha256:" + "a" * 64
-        seaweedfs_image = "registry.example/seaweedfs@sha256:" + "b" * 64
-        ledger = {
-            "images": (
-                {"component": "seaweedfs", "reference": seaweedfs_image},
-                {"component": POLARIS_COMPONENT, "reference": polaris_image},
-            )
-        }
-
-        self.assertEqual(
-            {polaris_image},
-            _component_image_references(ledger, POLARIS_COMPONENT),
-        )
-
-    def test_rejects_non_workload_polaris_resources(self) -> None:
-        image = "registry.example/polaris@sha256:" + "a" * 64
-        for kind in ("ConfigMap", "Service", "Kustomization"):
-            with self.subTest(kind=kind):
-                manifest = (
-                    f"apiVersion: v1\nkind: {kind}\nmetadata:\n"
-                    "  name: polaris-config\n"
-                    "  labels:\n"
-                    "    app.kubernetes.io/name: polaris\n"
-                )
-                self.assertFalse(_is_polaris_workload(manifest, {image}))
-
-    def test_rejects_workload_without_admitted_image(self) -> None:
-        manifest = (
-            "apiVersion: apps/v1\n"
-            "kind: Deployment\n"
-            "metadata:\n"
-            "  name: polaris\n"
-            "spec:\n"
-            "  template:\n"
-            "    spec:\n"
-            "      containers:\n"
-            "        - name: polaris\n"
-            "          image: registry.example/polaris:latest\n"
-        )
-        self.assertFalse(_is_polaris_workload(manifest, set()))
-
-
-class IcebergBootstrapDetectionTests(unittest.TestCase):
-    def test_detects_bootstrap_job_without_flagging_storage_configuration(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "storage.yaml").write_text(
-                "apiVersion: apps/v1\n"
-                "kind: StatefulSet\n"
-                "metadata:\n"
-                "  name: seaweedfs\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: seaweedfs\n"
-                "          args:\n"
-                "            - -s3.port.iceberg=0\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "bootstrap.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: iceberg-table-bootstrap\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: bootstrap\n"
-                "          image: registry.example/bootstrap@sha256:" + "a" * 64 + "\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "bootstrap.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_scans_every_job_and_cronjob_container_identity(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: iceberg-table-bootstrap\n"
-                "          image: registry.example/bootstrap@sha256:" + "a" * 64 + "\n"
-                "        - name: sidecar\n"
-                "          image: registry.example/sidecar@sha256:" + "b" * 64 + "\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "cronjob.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: CronJob\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  jobTemplate:\n"
-                "    spec:\n"
-                "      template:\n"
-                "        spec:\n"
-                "          containers:\n"
-                "            - name: iceberg-table-bootstrap\n"
-                "              image: registry.example/bootstrap@sha256:"
-                + "c" * 64
-                + "\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "cronjob.yaml", deploy_root / "job.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_detects_bootstrap_helmrelease_chart_identity(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  chart:\n"
-                "    spec:\n"
-                "      chart: charts/iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_detects_bootstrap_identity_in_helm_template_helper(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            template_root = charts_root / "catalog" / "templates"
-            template_root.mkdir(parents=True)
-            (template_root / "job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                '  name: {{ include "iceberg-table-bootstrap.fullname" . }}\n'
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: bootstrap\n"
-                "          image: registry.example/bootstrap@sha256:"
-                + "a" * 64
-                + "\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [template_root / "job.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_detects_bootstrap_image_and_flow_style_container_identities(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "image-job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: bootstrap\n"
-                "          image: registry.example/iceberg-table-bootstrap@sha256:"
-                + "b" * 64
-                + "\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "flow-cronjob.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: CronJob\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  jobTemplate:\n"
-                "    spec:\n"
-                "      template:\n"
-                "        spec:\n"
-                "          containers: [{name: iceberg-table-bootstrap, "
-                "image: registry.example/bootstrap@sha256:"
-                + "c" * 64
-                + "}]\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [
-                    deploy_root / "flow-cronjob.yaml",
-                    deploy_root / "image-job.yaml",
-                ],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_resolves_bootstrap_helmrelease_chart_ref_target(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "source.yaml").write_text(
-                "apiVersion: source.toolkit.fluxcd.io/v1\n"
-                "kind: OCIRepository\n"
-                "metadata:\n"
-                "  name: catalog-chart\n"
-                "spec:\n"
-                "  url: oci://registry.example/iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  chartRef: {kind: OCIRepository, name: catalog-chart}\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_detects_helmrelease_values_and_values_from_overrides(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "values.yaml").write_text(
-                "apiVersion: v1\n"
-                "kind: ConfigMap\n"
-                "metadata:\n"
-                "  name: catalog-values\n"
-                "data:\n"
-                "  values.yaml: |\n"
-                "    containerName: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "direct-release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  values:\n"
-                "    fullnameOverride: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "referenced-release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  valuesFrom: [{kind: ConfigMap, name: catalog-values}]\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [
-                    deploy_root / "direct-release.yaml",
-                    deploy_root / "referenced-release.yaml",
-                ],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_ignores_nested_container_names_with_bootstrap_tokens(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "worker.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: catalog-worker\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: worker\n"
-                "          image: registry.example/worker@sha256:" + "a" * 64 + "\n"
-                "          env:\n"
-                "            - name: ICEBERG_TABLE_BOOTSTRAP_DISABLED\n"
-                "              value: 'true'\n"
-                "          ports:\n"
-                "            - name: iceberg-table-bootstrap-metrics\n"
-                "              containerPort: 8080\n"
-                "          volumeMounts:\n"
-                "            - name: iceberg-table-bootstrap-config\n"
-                "              mountPath: /config\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_decodes_bootstrap_values_from_secret_data(self) -> None:
-        encoded_values = base64.b64encode(
-            b"fullnameOverride: iceberg-table-bootstrap\n"
-        ).decode("ascii")
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "values.yaml").write_text(
-                "apiVersion: v1\n"
-                "kind: Secret\n"
-                "metadata:\n"
-                "  name: catalog-values\n"
-                "data:\n"
-                f"  values.yaml: {encoded_values}\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  valuesFrom: [{kind: Secret, name: catalog-values}]\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_honors_values_from_kind_for_same_name_sources(self) -> None:
-        benign_values = base64.b64encode(
-            b"fullnameOverride: catalog-worker\n"
-        ).decode("ascii")
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "values.yaml").write_text(
-                "apiVersion: v1\n"
-                "kind: ConfigMap\n"
-                "metadata:\n"
-                "  name: catalog-values\n"
-                "data:\n"
-                "  values.yaml: |\n"
-                "    fullnameOverride: iceberg-table-bootstrap\n"
-                "---\n"
-                "apiVersion: v1\n"
-                "kind: Secret\n"
-                "metadata:\n"
-                "  name: catalog-values\n"
-                "data:\n"
-                f"  values.yaml: {benign_values}\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  valuesFrom:\n"
-                "    - kind: Secret\n"
-                "      name: catalog-values\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_resolves_bootstrap_spec_chart_source_ref_target(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "source.yaml").write_text(
-                "apiVersion: source.toolkit.fluxcd.io/v1\n"
-                "kind: GitRepository\n"
-                "metadata:\n"
-                "  name: catalog-source\n"
-                "spec:\n"
-                "  url: https://github.example/iceberg-table-bootstrap.git\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  chart:\n"
-                "    spec:\n"
-                "      chart: ./charts/catalog-task\n"
-                "      sourceRef:\n"
-                "        kind: GitRepository\n"
-                "        name: catalog-source\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_detects_bootstrap_defaults_in_local_chart_values(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            chart_root = charts_root / "catalog-task"
-            deploy_root.mkdir()
-            (chart_root / "templates").mkdir(parents=True)
-            (chart_root / "values.yaml").write_text(
-                "fullnameOverride: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-            (chart_root / "templates" / "job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: {{ .Values.fullnameOverride }}\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: worker\n"
-                "          image: registry.example/worker@sha256:" + "b" * 64 + "\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  chart:\n"
-                "    spec:\n"
-                "      chart: ./charts/catalog-task\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_preserves_name_first_values_from_kind(self) -> None:
-        release = (
-            "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-            "kind: HelmRelease\n"
-            "metadata:\n"
-            "  name: catalog-task\n"
-            "spec:\n"
-            "  valuesFrom:\n"
-            "    - name: catalog-values\n"
-            "      kind: Secret\n"
-        )
-
-        self.assertEqual(
-            [
-                HelmValuesReference(
-                    "Secret", "catalog-values", "values.yaml", None
-                )
-            ],
-            _helm_values_from_references(release),
-        )
-
-    def test_decodes_line_wrapped_secret_data(self) -> None:
-        encoded_values = base64.b64encode(
-            b"fullnameOverride: iceberg-table-bootstrap\n"
-        ).decode("ascii")
-        midpoint = len(encoded_values) // 2
-        secret = (
-            "apiVersion: v1\n"
-            "kind: Secret\n"
-            "metadata:\n"
-            "  name: catalog-values\n"
-            "data:\n"
-            "  values.yaml: |\n"
-            f"    {encoded_values[:midpoint]}\n"
-            f"    {encoded_values[midpoint:]}\n"
-        )
-        resource = ManifestResource(
-            Path("secret.yaml"),
-            secret,
-            _document_scalars(secret),
-            "default",
-        )
-
-        self.assertTrue(_values_source_has_bootstrap_identity(resource))
-
-    def test_resolves_values_from_with_kustomize_namespace(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "kustomization.yaml").write_text(
-                "apiVersion: kustomize.config.k8s.io/v1beta1\n"
-                "kind: Kustomization\n"
-                "namespace: shirokuma-lake\n"
-                "resources:\n"
-                "  - values.yaml\n"
-                "  - release.yaml\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "values.yaml").write_text(
-                "apiVersion: v1\n"
-                "kind: ConfigMap\n"
-                "metadata:\n"
-                "  name: catalog-values\n"
-                "data:\n"
-                "  values.yaml: |\n"
-                "    fullnameOverride: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  valuesFrom:\n"
-                "    - kind: ConfigMap\n"
-                "      name: catalog-values\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_detects_flow_mapping_container_list_item(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - {name: iceberg-table-bootstrap, "
-                "image: registry.example/bootstrap@sha256:"
-                + "a" * 64
-                + "}\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "flow-job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  annotations: {bootstrap-name: &flow-bootstrap "
-                "iceberg-table-bootstrap}\n"
-                "  name: *flow-bootstrap\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: worker\n"
-                "          image: registry.example/worker:v1\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [
-                    deploy_root / "flow-job.yaml",
-                    deploy_root / "job.yaml",
-                ],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_follows_helmchart_source_ref_from_chart_ref_release(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "source.yaml").write_text(
-                "apiVersion: source.toolkit.fluxcd.io/v1\n"
-                "kind: GitRepository\n"
-                "metadata:\n"
-                "  name: catalog-source\n"
-                "spec:\n"
-                "  url: https://github.example/iceberg-table-bootstrap.git\n"
-                "---\n"
-                "apiVersion: source.toolkit.fluxcd.io/v1\n"
-                "kind: HelmChart\n"
-                "metadata:\n"
-                "  name: catalog-chart\n"
-                "spec:\n"
-                "  chart: ./charts/catalog-task\n"
-                "  sourceRef:\n"
-                "    kind: GitRepository\n"
-                "    name: catalog-source\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  chartRef:\n"
-                "    kind: HelmChart\n"
-                "    name: catalog-chart\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_scans_helmrelease_selected_local_values_files(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            chart_root = charts_root / "catalog-task"
-            deploy_root.mkdir()
-            chart_root.mkdir(parents=True)
-            (chart_root / "values.yaml").write_text(
-                "fullnameOverride: catalog-task\n",
-                encoding="utf-8",
-            )
-            (chart_root / "bootstrap-values.yaml").write_text(
-                "fullnameOverride: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  chart:\n"
-                "    spec:\n"
-                "      chart: ./charts/catalog-task\n"
-                "      valuesFiles:\n"
-                "        - ./charts/catalog-task/bootstrap-values.yaml\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_unwraps_bootstrap_job_from_kubernetes_list(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "list.yaml").write_text(
-                "apiVersion: v1\n"
-                "kind: List\n"
-                "items:\n"
-                "  - apiVersion: batch/v1\n"
-                "    kind: Job\n"
-                "    metadata:\n"
-                "      name: iceberg-table-bootstrap\n"
-                "    spec:\n"
-                "      template:\n"
-                "        spec:\n"
-                "          containers:\n"
-                "            - name: bootstrap\n"
-                "              image: registry.example/bootstrap@sha256:"
-                + "b" * 64
-                + "\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "list.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_detects_bootstrap_identity_in_helm_post_renderer_patch(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  postRenderers:\n"
-                "    - kustomize:\n"
-                "        patches:\n"
-                "          - target:\n"
-                "              kind: Job\n"
-                "            patch: |\n"
-                "              - op: replace\n"
-                "                path: /metadata/name\n"
-                "                value: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_honors_values_key_for_values_from_reference(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "values.yaml").write_text(
-                "apiVersion: v1\n"
-                "kind: ConfigMap\n"
-                "metadata:\n"
-                "  name: catalog-values\n"
-                "data:\n"
-                "  safe.yaml: |\n"
-                "    fullnameOverride: catalog-task\n"
-                "  bootstrap.yaml: |\n"
-                "    fullnameOverride: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "safe-release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: safe-catalog\n"
-                "spec:\n"
-                "  valuesFrom:\n"
-                "    - kind: ConfigMap\n"
-                "      name: catalog-values\n"
-                "      valuesKey: safe.yaml\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "bootstrap-release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: bootstrap-catalog\n"
-                "spec:\n"
-                "  valuesFrom:\n"
-                "    - kind: ConfigMap\n"
-                "      name: catalog-values\n"
-                "      valuesKey: bootstrap.yaml\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "bootstrap-release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_inline_values_override_bootstrap_chart_default(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            chart_root = charts_root / "catalog-task"
-            deploy_root.mkdir()
-            chart_root.mkdir(parents=True)
-            (chart_root / "values.yaml").write_text(
-                "fullnameOverride: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  chart:\n"
-                "    spec:\n"
-                "      chart: ./charts/catalog-task\n"
-                "  values:\n"
-                "    fullnameOverride: catalog-task\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_applies_kustomize_name_prefix_and_suffix(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "kustomization.yaml").write_text(
-                "apiVersion: kustomize.config.k8s.io/v1beta1\n"
-                "kind: Kustomization\n"
-                "namePrefix: iceberg-\n"
-                "nameSuffix: -bootstrap\n"
-                "resources:\n"
-                "  - job.yaml\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: table\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: worker\n"
-                "          image: registry.example/worker@sha256:"
-                + "c" * 64
-                + "\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "job.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_detects_helmrelease_common_metadata_label(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  commonMetadata:\n"
-                "    labels:\n"
-                "      app.kubernetes.io/name: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_indexes_kustomize_generated_values_source(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "kustomization.yaml").write_text(
-                "apiVersion: kustomize.config.k8s.io/v1beta1\n"
-                "kind: Kustomization\n"
-                "resources:\n"
-                "  - release.yaml\n"
-                "configMapGenerator:\n"
-                "- name: catalog-values\n"
-                "  literals:\n"
-                "  - values.yaml=fullnameOverride: "
-                "iceberg-table-bootstrap\n"
-                "generatorOptions:\n"
-                "  disableNameSuffixHash: true\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  valuesFrom:\n"
-                "    - kind: ConfigMap\n"
-                "      name: catalog-values\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_detects_flow_style_metadata_label_identity(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "  labels: {app.kubernetes.io/name: "
-                "iceberg-table-bootstrap}\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: worker\n"
-                "          image: registry.example/worker@sha256:"
-                + "d" * 64
-                + "\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "job.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_detects_flow_style_inline_helm_values(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  values: {fullnameOverride: "
-                "iceberg-table-bootstrap}\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_reads_flow_style_values_source_data(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "values.yaml").write_text(
-                "apiVersion: v1\n"
-                "kind: ConfigMap\n"
-                "metadata:\n"
-                "  name: catalog-values\n"
-                'data: {values.yaml: "fullnameOverride: '
-                'iceberg-table-bootstrap"}\n',
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  valuesFrom:\n"
-                "    - kind: ConfigMap\n"
-                "      name: catalog-values\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_indexes_flow_style_resource_metadata_names(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "values.yaml").write_text(
-                "apiVersion: v1\n"
-                "kind: ConfigMap\n"
-                "metadata: {name: catalog-values}\n"
-                "data:\n"
-                "  values.yaml: |\n"
-                "    fullnameOverride: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  valuesFrom:\n"
-                "    - kind: ConfigMap\n"
-                "      name: catalog-values\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_ignores_unselected_values_yml_chart_sidecar(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            chart_root = charts_root / "catalog-task"
-            deploy_root.mkdir()
-            chart_root.mkdir(parents=True)
-            (chart_root / "values.yaml").write_text(
-                "fullnameOverride: catalog-task\n",
-                encoding="utf-8",
-            )
-            (chart_root / "values.yml").write_text(
-                "fullnameOverride: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  chart:\n"
-                "    spec:\n"
-                "      chart: ./charts/catalog-task\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_does_not_read_local_defaults_for_remote_chart_source(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            chart_root = charts_root / "catalog-task"
-            deploy_root.mkdir()
-            chart_root.mkdir(parents=True)
-            (chart_root / "values.yaml").write_text(
-                "fullnameOverride: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "source.yaml").write_text(
-                "apiVersion: source.toolkit.fluxcd.io/v1\n"
-                "kind: HelmRepository\n"
-                "metadata:\n"
-                "  name: external-charts\n"
-                "spec:\n"
-                "  url: https://charts.example.invalid\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  chart:\n"
-                "    spec:\n"
-                "      chart: catalog-task\n"
-                "      sourceRef:\n"
-                "        kind: HelmRepository\n"
-                "        name: external-charts\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_uses_transformed_helmrelease_name_as_default_release_name(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "kustomization.yaml").write_text(
-                "apiVersion: kustomize.config.k8s.io/v1beta1\n"
-                "kind: Kustomization\n"
-                "namePrefix: iceberg-\n"
-                "nameSuffix: -bootstrap\n"
-                "resources:\n"
-                "  - release.yaml\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: table\n"
-                "spec:\n"
-                "  chart:\n"
-                "    spec:\n"
-                "      chart: catalog-task\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_indexes_kustomize_transformed_source_names(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "kustomization.yaml").write_text(
-                "apiVersion: kustomize.config.k8s.io/v1beta1\n"
-                "kind: Kustomization\n"
-                "namePrefix: tenant-\n"
-                "nameSuffix: -v1\n"
-                "resources:\n"
-                "  - values.yaml\n"
-                "  - release.yaml\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "values.yaml").write_text(
-                "apiVersion: v1\n"
-                "kind: ConfigMap\n"
-                "metadata:\n"
-                "  name: catalog-values\n"
-                "data:\n"
-                "  values.yaml: |\n"
-                "    fullnameOverride: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  valuesFrom:\n"
-                "    - kind: ConfigMap\n"
-                "      name: tenant-catalog-values-v1\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_uses_explicit_release_name_instead_of_object_metadata(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "named-release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: iceberg-table-bootstrap\n"
-                "spec:\n"
-                "  releaseName: catalog-task\n"
-                "  chart:\n"
-                "    spec:\n"
-                "      chart: catalog-task\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "labelled-release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "  labels:\n"
-                "    app.kubernetes.io/name: iceberg-table-bootstrap\n"
-                "spec:\n"
-                "  releaseName: catalog-task\n"
-                "  chart:\n"
-                "    spec:\n"
-                "      chart: catalog-task\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_reads_values_from_after_comment_only_mapping_key(self) -> None:
-        self.assertEqual(
-            "'iceberg # bootstrap'",
-            _strip_yaml_comment("'iceberg # bootstrap'"),
-        )
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "values.yaml").write_text(
-                "apiVersion: v1\n"
-                "kind: ConfigMap\n"
-                "metadata:\n"
-                "  name: catalog-values\n"
-                "data:\n"
-                "  values.yaml: |\n"
-                "    fullnameOverride: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec: # release configuration\n"
-                "  valuesFrom: # merged values\n"
-                "    - kind: ConfigMap\n"
-                "      name: catalog-values\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_ignores_non_identity_helm_values(self) -> None:
-        for identity_path in (
-            ("image", "repository"),
-            ("image", "tag"),
-            ("job", "name"),
-        ):
-            with self.subTest(identity_path=identity_path):
-                self.assertTrue(_helm_value_identity_path(identity_path))
-        for configuration_path in (
-            ("database", "tag"),
-            ("source", "repository"),
-            ("env", "name"),
-        ):
-            with self.subTest(configuration_path=configuration_path):
-                self.assertFalse(
-                    _helm_value_identity_path(configuration_path)
-                )
-
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  values:\n"
-                "    env:\n"
-                "      - name: ICEBERG_TABLE_BOOTSTRAP_DISABLED\n"
-                "        value: 'true'\n"
-                "    featureGate: iceberg-table-bootstrap-disabled\n"
-                "    database:\n"
-                "      tag: iceberg-table-bootstrap-disabled\n"
-                "    source:\n"
-                "      repository: iceberg-table-bootstrap-examples\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_reads_selected_helmchart_values_from_chart_ref(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            chart_root = charts_root / "catalog-task"
-            deploy_root.mkdir()
-            chart_root.mkdir(parents=True)
-            (chart_root / "values.yaml").write_text(
-                "fullnameOverride: catalog-task\n",
-                encoding="utf-8",
-            )
-            (chart_root / "bootstrap-values.yaml").write_text(
-                "fullnameOverride: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "source.yaml").write_text(
-                "apiVersion: source.toolkit.fluxcd.io/v1\n"
-                "kind: GitRepository\n"
-                "metadata:\n"
-                "  name: catalog-source\n"
-                "spec:\n"
-                "  url: "
-                "https://github.com/TommyKammy/Shirokuma.git\n"
-                "---\n"
-                "apiVersion: source.toolkit.fluxcd.io/v1\n"
-                "kind: HelmChart\n"
-                "metadata:\n"
-                "  name: catalog-chart\n"
-                "spec:\n"
-                "  chart: ./charts/catalog-task\n"
-                "  valuesFiles:\n"
-                "    - ./charts/catalog-task/bootstrap-values.yaml\n"
-                "  sourceRef:\n"
-                "    kind: GitRepository\n"
-                "    name: catalog-source\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  chartRef:\n"
-                "    kind: HelmChart\n"
-                "    name: catalog-chart\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_indexes_kindless_kustomization_generators(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "kustomization.yaml").write_text(
-                "resources:\n"
-                "  - release.yaml\n"
-                "configMapGenerator:\n"
-                "- name: catalog-values\n"
-                "  literals:\n"
-                "  - values.yaml=fullnameOverride: "
-                "iceberg-table-bootstrap\n"
-                "generatorOptions:\n"
-                "  disableNameSuffixHash: true\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  valuesFrom:\n"
-                "    - kind: ConfigMap\n"
-                "      name: catalog-values\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_loads_kustomize_env_generator_inputs(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "config.env").write_text(
-                "values.yaml=fullnameOverride: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "secret.env").write_text(
-                "values.yaml=fullnameOverride: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "kustomization.yaml").write_text(
-                "apiVersion: kustomize.config.k8s.io/v1beta1\n"
-                "kind: Kustomization\n"
-                "resources:\n"
-                "  - config-release.yaml\n"
-                "  - secret-release.yaml\n"
-                "configMapGenerator:\n"
-                "- name: config-values\n"
-                "  envs:\n"
-                "  - config.env\n"
-                "secretGenerator:\n"
-                "- name: secret-values\n"
-                "  env: secret.env\n"
-                "generatorOptions:\n"
-                "  disableNameSuffixHash: true\n",
-                encoding="utf-8",
-            )
-            for filename, kind, name in (
-                ("config-release.yaml", "ConfigMap", "config-values"),
-                ("secret-release.yaml", "Secret", "secret-values"),
-            ):
-                (deploy_root / filename).write_text(
-                    "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                    "kind: HelmRelease\n"
-                    "metadata:\n"
-                    f"  name: {name}-release\n"
-                    "spec:\n"
-                    "  valuesFrom:\n"
-                    f"    - kind: {kind}\n"
-                    f"      name: {name}\n",
-                    encoding="utf-8",
-                )
-
-            self.assertEqual(
-                [
-                    deploy_root / "config-release.yaml",
-                    deploy_root / "secret-release.yaml",
-                ],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_preserves_kustomize_env_file_values_verbatim(self) -> None:
-        self.assertEqual(
-            {
-                "values.yaml": (
-                    '"fullnameOverride: iceberg-table-bootstrap"'
-                ),
-                "export values.yaml": (
-                    "fullnameOverride: iceberg-table-bootstrap"
-                ),
+        selected = self.helm_release(
+            chart_fields={
+                "valuesFiles": ["./charts/catalog-job/bootstrap.yaml"]
             },
-            _dotenv_data(
-                'values.yaml="fullnameOverride: '
-                'iceberg-table-bootstrap"\n'
-                "export values.yaml=fullnameOverride: "
-                "iceberg-table-bootstrap\n"
+            relative="deploy/releases/selected.yaml",
+            name="selected",
+        )
+        self.assertEqual([selected.resolve()], self.detect())
+
+    def test_direct_chart_source_reference_uses_exact_api_version(self) -> None:
+        source_ref = {
+            "apiVersion": "source.toolkit.fluxcd.io/v1",
+            "kind": "GitRepository",
+            "name": "source",
+            "namespace": "flux-system",
+        }
+        self.helm_release(chart_fields={"sourceRef": source_ref})
+        self.assertEqual([], self.detect())
+        self.helm_release(
+            chart_fields={
+                "sourceRef": {
+                    **source_ref,
+                    "apiVersion": "source.toolkit.fluxcd.io/v1beta2",
+                }
+            }
+        )
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_helm_chart_and_values_paths_must_be_relative(self) -> None:
+        self.helm_release(chart=str(self.root / "charts/catalog-job"))
+        with self.assertRaises(RenderError):
+            self.detect()
+        self.helm_release(
+            chart_fields={
+                "valuesFiles": [
+                    str(self.root / "charts/catalog-job/values.yaml")
+                ]
+            },
+        )
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_helm_fields_follow_crd_types_and_enum_casing(self) -> None:
+        cases = (
+            {"chart_fields": {"reconcileStrategy": "revision"}},
+            {"spec_fields": {"postRenderStrategy": "Combined"}},
+            {"spec_fields": {"releaseName": 7}},
+            {"spec_fields": {"targetNamespace": 7}},
+        )
+        for fields in cases:
+            with self.subTest(fields=fields):
+                self.helm_release(**fields)
+                with self.assertRaises(RenderError):
+                    self.detect()
+
+    def test_chart_ref_resolves_local_helmchart_provenance(self) -> None:
+        self.write_json(
+            "deploy/releases/chart.yaml",
+            {
+                "apiVersion": "source.toolkit.fluxcd.io/v1",
+                "kind": "HelmChart",
+                "metadata": {
+                    "name": "catalog-chart",
+                    "namespace": "flux-system",
+                },
+                "spec": {
+                    "chart": "./charts/catalog-job",
+                    "reconcileStrategy": "Revision",
+                    "sourceRef": {
+                        "apiVersion": "source.toolkit.fluxcd.io/v1",
+                        "kind": "GitRepository",
+                        "name": "source",
+                    },
+                },
+            },
+        )
+        release = self.helm_release(
+            chart_ref={
+                "apiVersion": "source.toolkit.fluxcd.io/v1",
+                "kind": "HelmChart",
+                "name": "catalog-chart",
+            },
+            values={
+                "job": {
+                    "name": "iceberg-table-bootstrap",
+                    "label": "catalog-maintenance",
+                }
+            },
+        )
+        self.assertEqual([release.resolve()], self.detect())
+
+    def test_helmchart_source_reference_rejects_invalid_shape(self) -> None:
+        cases = (
+            {
+                "apiVersion": "source.toolkit.fluxcd.io/v1beta2",
+                "kind": "GitRepository",
+                "name": "source",
+            },
+            {
+                "apiVersion": "source.toolkit.fluxcd.io/v1",
+                "kind": "GitRepository",
+                "name": "source",
+                "namespace": "flux-system",
+            },
+        )
+        for source_ref in cases:
+            with self.subTest(source_ref=source_ref):
+                self.write_json(
+                    "deploy/releases/chart.yaml",
+                    {
+                        "apiVersion": "source.toolkit.fluxcd.io/v1",
+                        "kind": "HelmChart",
+                        "metadata": {
+                            "name": "catalog-chart",
+                            "namespace": "flux-system",
+                        },
+                        "spec": {
+                            "chart": "./charts/catalog-job",
+                            "reconcileStrategy": "Revision",
+                            "sourceRef": source_ref,
+                        },
+                    },
+                )
+                self.helm_release(
+                    chart_ref={
+                        "kind": "HelmChart",
+                        "name": "catalog-chart",
+                    },
+                )
+                with self.assertRaises(RenderError):
+                    self.detect()
+
+    def test_chart_ref_honors_ignore_missing_values_files(self) -> None:
+        self.chart(
+            values={"job": {"name": "iceberg-table-bootstrap"}},
+            template="""
+            {{- $job := default dict .Values.job }}
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: {{ default "catalog-maintenance" $job.name | quote }}
+            spec:
+              template:
+                spec:
+                  restartPolicy: Never
+                  containers:
+                    - name: runner
+                      image: registry.example/runner:stable
+            """,
+        )
+        self.write_json(
+            "deploy/releases/chart.yaml",
+            {
+                "apiVersion": "source.toolkit.fluxcd.io/v1",
+                "kind": "HelmChart",
+                "metadata": {
+                    "name": "catalog-chart",
+                    "namespace": "flux-system",
+                },
+                "spec": {
+                    "chart": "./charts/catalog-job",
+                    "reconcileStrategy": "Revision",
+                    "ignoreMissingValuesFiles": True,
+                    "valuesFiles": ["missing.yaml"],
+                    "sourceRef": {
+                        "kind": "GitRepository",
+                        "name": "source",
+                    },
+                },
+            },
+        )
+        self.helm_release(
+            chart_ref={
+                "kind": "HelmChart",
+                "name": "catalog-chart",
+            }
+        )
+        self.assertEqual([], self.detect())
+
+    def test_chart_ref_requires_a_live_revision_artifact(self) -> None:
+        self.helm_release(
+            chart_ref={
+                "kind": "HelmChart",
+                "name": "catalog-chart",
+            }
+        )
+        for label, contract in (
+            (
+                "suspended",
+                {"reconcileStrategy": "Revision", "suspend": True},
+            ),
+            (
+                "chart-version",
+                {"reconcileStrategy": "ChartVersion"},
+            ),
+        ):
+            with self.subTest(label=label):
+                self.write_json(
+                    "deploy/releases/chart.yaml",
+                    {
+                        "apiVersion": "source.toolkit.fluxcd.io/v1",
+                        "kind": "HelmChart",
+                        "metadata": {
+                            "name": "catalog-chart",
+                            "namespace": "flux-system",
+                        },
+                        "spec": {
+                            "chart": "./charts/catalog-job",
+                            "sourceRef": {
+                                "kind": "GitRepository",
+                                "name": "source",
+                            },
+                            **contract,
+                        },
+                    },
+                )
+                with self.assertRaises(RenderError):
+                    self.detect()
+
+    def test_post_renderer_mapping_patch_mutates_final_job(self) -> None:
+        release = self.helm_release(
+            post_renderers=[
+                {
+                    "kustomize": {
+                        "patches": [
+                            {
+                                "target": {"kind": "Job"},
+                                "patch": """
+                                - op: add
+                                  path: /metadata/labels
+                                  value:
+                                    role: iceberg-table-bootstrap
+                                """,
+                            }
+                        ]
+                    }
+                }
+            ]
+        )
+        self.assertEqual([release.resolve()], self.detect())
+
+    def test_post_renderer_rejects_fields_outside_flux_api(self) -> None:
+        self.helm_release(
+            post_renderers=[
+                {
+                    "kustomize": {
+                        "namePrefix": "iceberg-",
+                        "nameSuffix": "-bootstrap",
+                    }
+                }
+            ]
+        )
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_post_renderer_non_identity_patch_is_not_a_token_scan(self) -> None:
+        self.helm_release(
+            post_renderers=[
+                {
+                    "kustomize": {
+                        "patches": [
+                            {
+                                "target": {"kind": "Job"},
+                                "patch": """
+                                - op: add
+                                  path: /metadata/annotations/note
+                                  value: iceberg-table-bootstrap
+                                """,
+                            }
+                        ]
+                    }
+                }
+            ]
+        )
+        self.assertEqual([], self.detect())
+
+    def test_post_renderer_target_must_match_rendered_workload(self) -> None:
+        self.helm_release(
+            post_renderers=[
+                {
+                    "kustomize": {
+                        "patches": [
+                            {
+                                "target": {"kind": "ConfigMap"},
+                                "patch": """
+                                - op: add
+                                  path: /metadata/annotations/note
+                                  value: iceberg-table-bootstrap
+                                """,
+                            }
+                        ]
+                    }
+                }
+            ]
+        )
+        self.assertEqual([], self.detect())
+
+    def test_post_renderer_cannot_fetch_a_patch_path(self) -> None:
+        hits: list[str] = []
+
+        class PatchHandler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                hits.append(self.path)
+                content = textwrap.dedent(
+                    """
+                    apiVersion: batch/v1
+                    kind: Job
+                    metadata:
+                      name: catalog-maintenance
+                      labels:
+                        role: iceberg-table-bootstrap
+                    """
+                ).lstrip().encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/yaml")
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+
+            def log_message(self, _format: str, *args: object) -> None:
+                del args
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), PatchHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = server.server_address[1]
+            self.helm_release(
+                post_renderers=[
+                    {
+                        "kustomize": {
+                            "patches": [
+                                {
+                                    "path": (
+                                        f"http://127.0.0.1:{port}/patch.yaml"
+                                    ),
+                                    "target": {"kind": "Job"},
+                                }
+                            ]
+                        }
+                    }
+                ]
+            )
+            with self.assertRaises(RenderError):
+                self.detect()
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+        self.assertEqual([], hits)
+
+    def test_post_renderer_fields_match_the_flux_api(self) -> None:
+        invalid_renderers = (
+            {
+                "kustomize": {
+                    "patches": [
+                        {
+                            "patch": "{}",
+                            "target": {"kind": "Job", "path": "patch.yaml"},
+                        }
+                    ]
+                }
+            },
+            {
+                "kustomize": {
+                    "images": [
+                        {
+                            "name": "registry.example/catalog-maintenance",
+                            "newTag": 1,
+                        }
+                    ]
+                }
+            },
+        )
+        for renderer in invalid_renderers:
+            with self.subTest(renderer=renderer):
+                self.helm_release(post_renderers=[renderer])
+                with self.assertRaises(RenderError):
+                    self.detect()
+
+    def test_post_renderer_image_rewrites_use_final_value(self) -> None:
+        self.helm_release(
+            values={
+                "image": {
+                    "repository": "registry.example/iceberg-table",
+                    "tag": "bootstrap",
+                }
+            },
+            post_renderers=[
+                {
+                    "kustomize": {
+                        "images": [
+                            {
+                                "name": "registry.example/iceberg-table",
+                                "newName": "registry.example/catalog-maintenance",
+                                "newTag": "stable",
+                            }
+                        ]
+                    }
+                }
+            ],
+            name="away",
+            relative="deploy/releases/away.yaml",
+        )
+        toward = self.helm_release(
+            post_renderers=[
+                {
+                    "kustomize": {
+                        "images": [
+                            {
+                                "name": "registry.example/catalog-maintenance",
+                                "newName": "registry.example/iceberg-table",
+                                "newTag": "bootstrap",
+                            }
+                        ]
+                    }
+                }
+            ],
+            name="toward",
+            relative="deploy/releases/toward.yaml",
+        )
+        self.assertEqual([toward.resolve()], self.detect())
+
+    def test_common_metadata_applies_after_post_renderers(self) -> None:
+        release = self.helm_release(
+            post_renderers=[
+                {
+                    "kustomize": {
+                        "patches": [
+                            {
+                                "target": {"kind": "Job"},
+                                "patch": """
+                                - op: add
+                                  path: /metadata/labels/role
+                                  value: catalog-maintenance
+                                """,
+                            }
+                        ]
+                    }
+                }
+            ],
+            common_metadata={
+                "labels": {"role": "iceberg-table-bootstrap"}
+            },
+        )
+        self.assertEqual([release.resolve()], self.detect())
+
+    def test_suspended_helm_release_does_not_render(self) -> None:
+        self.helm_release(
+            values={
+                "job": {
+                    "name": "iceberg-table-bootstrap",
+                    "label": "catalog-maintenance",
+                }
+            },
+            suspend=True,
+        )
+        self.assertEqual([], self.detect())
+
+    def test_unused_values_and_template_helpers_are_not_identity(self) -> None:
+        self.write(
+            "charts/catalog-job/templates/_helpers.tpl",
+            """
+            {{- define "unused.identity" -}}
+            iceberg-table-bootstrap
+            {{- end -}}
+            """,
+        )
+        self.helm_release(
+            values={"unrelated": "iceberg-table-bootstrap"}
+        )
+        self.assertEqual([], self.detect())
+
+    def test_helm_test_hook_is_not_part_of_reconciled_workload(self) -> None:
+        self.write(
+            "charts/catalog-job/templates/test.yaml",
+            """
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: iceberg-table-bootstrap
+              annotations:
+                helm.sh/hook: test
+            spec:
+              template:
+                spec:
+                  restartPolicy: Never
+                  containers:
+                    - name: runner
+                      image: registry.example/runner:stable
+            """,
+        )
+        self.helm_release()
+        self.assertEqual([], self.detect())
+
+    def test_non_reconcile_hooks_do_not_count_as_current_workloads(self) -> None:
+        self.write(
+            "charts/catalog-job/templates/job.yaml",
+            """
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: iceberg-table-bootstrap
+              annotations:
+                helm.sh/hook: pre-delete,post-rollback
+            spec:
+              template:
+                spec:
+                  restartPolicy: Never
+                  containers:
+                    - name: runner
+                      image: registry.example/runner:stable
+            """,
+        )
+        self.helm_release()
+        self.assertEqual([], self.detect())
+
+    def test_bootstrap_install_hook_fails_closed_without_release_history(self) -> None:
+        self.write(
+            "charts/catalog-job/templates/job.yaml",
+            """
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: iceberg-table-bootstrap
+              annotations:
+                helm.sh/hook: pre-install
+            spec:
+              template:
+                spec:
+                  restartPolicy: Never
+                  containers:
+                    - name: runner
+                      image: registry.example/runner:stable
+            """,
+        )
+        self.helm_release()
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_disabled_install_hook_is_not_reconciled(self) -> None:
+        self.write(
+            "charts/catalog-job/templates/job.yaml",
+            """
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: iceberg-table-bootstrap
+              annotations:
+                helm.sh/hook: pre-install
+            spec:
+              template:
+                spec:
+                  restartPolicy: Never
+                  containers:
+                    - name: runner
+                      image: registry.example/runner:stable
+            """,
+        )
+        self.helm_release(
+            spec_fields={"install": {"disableHooks": True}},
+        )
+        self.assertEqual([], self.detect())
+
+    def test_enabled_helm_test_hook_is_part_of_controller_lifecycle(self) -> None:
+        self.write(
+            "charts/catalog-job/templates/job.yaml",
+            """
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: iceberg-table-bootstrap
+              annotations:
+                helm.sh/hook: test
+            spec:
+              template:
+                spec:
+                  restartPolicy: Never
+                  containers:
+                    - name: runner
+                      image: registry.example/runner:stable
+            """,
+        )
+        release = self.helm_release(
+            spec_fields={"test": {"enable": True}},
+        )
+        self.assertEqual([release.resolve()], self.detect())
+
+    def test_helm_test_filters_follow_exclude_then_include_order(self) -> None:
+        self.write(
+            "charts/catalog-job/templates/job.yaml",
+            """
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: iceberg-table-bootstrap
+              annotations:
+                helm.sh/hook: test
+            spec:
+              template:
+                spec:
+                  restartPolicy: Never
+                  containers:
+                    - name: runner
+                      image: registry.example/runner:stable
+            """,
+        )
+        cases = (
+            (
+                "excluded",
+                [{"name": "iceberg-table-bootstrap", "exclude": True}],
+                False,
+            ),
+            (
+                "not-included",
+                [{"name": "another-test"}],
+                False,
+            ),
+            (
+                "included",
+                [{"name": "iceberg-table-bootstrap"}],
+                True,
+            ),
+            (
+                "exclude-wins",
+                [
+                    {"name": "iceberg-table-bootstrap"},
+                    {
+                        "name": "iceberg-table-bootstrap",
+                        "exclude": True,
+                    },
+                ],
+                False,
             ),
         )
+        for label, filters, expected in cases:
+            with self.subTest(label=label):
+                release = self.helm_release(
+                    spec_fields={
+                        "test": {"enable": True, "filters": filters}
+                    },
+                )
+                actual = self.detect()
+                self.assertEqual(
+                    [release.resolve()] if expected else [],
+                    actual,
+                )
 
-    def test_reads_git_source_chart_outside_charts_root(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            chart_root = deploy_root / "catalog-task"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            chart_root.mkdir()
-            (chart_root / "values.yaml").write_text(
-                "fullnameOverride: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-            source_path = deploy_root / "source.yaml"
-            source_document = (
-                "apiVersion: source.toolkit.fluxcd.io/v1\n"
-                "kind: GitRepository\n"
-                "metadata:\n"
-                "  name: catalog-source\n"
-                "spec:\n"
-                "  url: "
-                "https://github.com/TommyKammy/Shirokuma.git\n"
-            )
-            source_path.write_text(
-                source_document,
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  chart:\n"
-                "    spec:\n"
-                "      chart: ./deploy/catalog-task\n"
-                "      sourceRef:\n"
-                "        kind: GitRepository\n"
-                "        name: catalog-source\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-            source_path.write_text(
-                source_document.replace(
-                    "github.com/TommyKammy/Shirokuma",
-                    "github.example/external/catalog",
-                ),
-                encoding="utf-8",
-            )
-            self.assertEqual(
-                [],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_applies_flux_kustomization_common_metadata(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            app_root = deploy_root / "apps"
-            app_root.mkdir(parents=True)
-            charts_root.mkdir()
-            (app_root / "job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: worker\n"
-                "          image: registry.example/worker:v1\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "outside-job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: worker\n"
-                "          image: registry.example/worker:v1\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "flux.yaml").write_text(
-                "apiVersion: kustomize.toolkit.fluxcd.io/v1\n"
-                "kind: Kustomization\n"
-                "metadata:\n"
-                "  name: catalog\n"
-                "spec:\n"
-                "  path: ./deploy/apps\n"
-                "  commonMetadata:\n"
-                "    labels:\n"
-                "      app.kubernetes.io/name: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [app_root / "job.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_scopes_flux_transforms_to_local_git_source(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            app_root = deploy_root / "apps"
-            app_root.mkdir(parents=True)
-            charts_root.mkdir()
-            (app_root / "job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: worker\n"
-                "          image: registry.example/worker:v1\n",
-                encoding="utf-8",
-            )
-            source_path = deploy_root / "source.yaml"
-            source_document = (
-                "apiVersion: source.toolkit.fluxcd.io/v1\n"
-                "kind: GitRepository\n"
-                "metadata:\n"
-                "  name: catalog-source\n"
-                "spec:\n"
-                "  url: https://github.example/external/catalog.git\n"
-            )
-            source_path.write_text(source_document, encoding="utf-8")
-            (deploy_root / "flux.yaml").write_text(
-                "apiVersion: kustomize.toolkit.fluxcd.io/v1\n"
-                "kind: Kustomization\n"
-                "metadata:\n"
-                "  name: catalog\n"
-                "spec:\n"
-                "  sourceRef:\n"
-                "    kind: GitRepository\n"
-                "    name: catalog-source\n"
-                "  path: ./deploy/apps\n"
-                "  commonMetadata:\n"
-                "    labels:\n"
-                "      app.kubernetes.io/name: "
-                "iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-            source_path.write_text(
-                source_document.replace(
-                    "github.example/external/catalog",
-                    "github.com/TommyKammy/Shirokuma",
-                ),
-                encoding="utf-8",
-            )
-            self.assertEqual(
-                [app_root / "job.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_flux_common_metadata_overrides_existing_label(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            app_root = deploy_root / "apps"
-            app_root.mkdir(parents=True)
-            charts_root.mkdir()
-            (app_root / "job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "  labels:\n"
-                "    app.kubernetes.io/name: iceberg-table-bootstrap\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: worker\n"
-                "          image: registry.example/worker:v1\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "flux.yaml").write_text(
-                "apiVersion: kustomize.toolkit.fluxcd.io/v1\n"
-                "kind: Kustomization\n"
-                "metadata:\n"
-                "  name: catalog\n"
-                "spec:\n"
-                "  path: ./deploy/apps\n"
-                "  commonMetadata:\n"
-                "    labels:\n"
-                "      app.kubernetes.io/name: catalog-task\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_applies_flux_kustomization_job_patches(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            app_root = deploy_root / "apps"
-            app_root.mkdir(parents=True)
-            charts_root.mkdir()
-            (app_root / "job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: worker\n"
-                "          image: registry.example/worker:v1\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "flux.yaml").write_text(
-                "apiVersion: kustomize.toolkit.fluxcd.io/v1\n"
-                "kind: Kustomization\n"
-                "metadata:\n"
-                "  name: catalog\n"
-                "spec:\n"
-                "  path: ./deploy/apps\n"
-                "  patches:\n"
-                "  - target:\n"
-                "      kind: Job\n"
-                "    patch: |\n"
-                "      - op: replace\n"
-                "        path: /metadata/name\n"
-                "        value: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [app_root / "job.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_applies_flux_strategic_merge_identity_patch(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            app_root = deploy_root / "apps"
-            app_root.mkdir(parents=True)
-            charts_root.mkdir()
-            (app_root / "job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "  labels:\n"
-                "    role: catalog\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: worker\n"
-                "          image: registry.example/worker:v1\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "flux.yaml").write_text(
-                "apiVersion: kustomize.toolkit.fluxcd.io/v1\n"
-                "kind: Kustomization\n"
-                "metadata:\n"
-                "  name: catalog\n"
-                "spec:\n"
-                "  path: ./deploy/apps\n"
-                "  patches:\n"
-                "    - target:\n"
-                "        kind: Job\n"
-                "        labelSelector: role=catalog\n"
-                "      patch: |\n"
-                "        metadata:\n"
-                "          labels:\n"
-                "            app.kubernetes.io/name: "
-                "iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [app_root / "job.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_ignores_non_identity_and_unmatched_flux_patches(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            app_root = deploy_root / "apps"
-            app_root.mkdir(parents=True)
-            charts_root.mkdir()
-            (app_root / "job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "  labels:\n"
-                "    role: catalog\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: worker\n"
-                "          image: registry.example/worker:v1\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "flux.yaml").write_text(
-                "apiVersion: kustomize.toolkit.fluxcd.io/v1\n"
-                "kind: Kustomization\n"
-                "metadata:\n"
-                "  name: catalog\n"
-                "spec:\n"
-                "  path: ./deploy/apps\n"
-                "  patches:\n"
-                "    - target:\n"
-                "        kind: Job\n"
-                "        name: another-job\n"
-                "      patch: |\n"
-                "        - op: replace\n"
-                "          path: /metadata/name\n"
-                "          value: iceberg-table-bootstrap\n"
-                "    - target:\n"
-                "        kind: Job\n"
-                "        labelSelector: role=another\n"
-                "      patch: |\n"
-                "        metadata:\n"
-                "          labels:\n"
-                "            app.kubernetes.io/name: "
-                "iceberg-table-bootstrap\n"
-                "    - target:\n"
-                "        kind: Job\n"
-                "        name: catalog-task\n"
-                "      patch: |\n"
-                "        - op: test\n"
-                "          path: /spec/template/spec/containers/0/"
-                "env/0/value\n"
-                "          value: iceberg-table-bootstrap\n"
-                "    - target:\n"
-                "        kind: Job\n"
-                "        name: catalog-task\n"
-                "      patch: |\n"
-                "        metadata:\n"
-                "          name: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-
-            self.assertEqual(
-                [],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
-
-    def test_flux_identity_uses_final_rendered_state(self) -> None:
-        scenarios = (
-            (
-                "name-replaced",
-                "iceberg-table-bootstrap",
-                "  patches:\n"
-                "    - target:\n"
-                "        kind: Job\n"
-                "        name: iceberg-table-bootstrap\n"
-                "      patch: |\n"
-                "        - op: replace\n"
-                "          path: /metadata/name\n"
-                "          value: catalog-task\n",
-            ),
-            (
-                "image-rewritten",
-                "catalog-task",
-                "  patches:\n"
-                "    - target:\n"
-                "        kind: Job\n"
-                "      patch: |\n"
-                "        - op: replace\n"
-                "          path: /spec/template/spec/containers/0/image\n"
-                "          value: registry.example/"
-                "iceberg-table-bootstrap:v1\n"
-                "  images:\n"
-                "    - name: registry.example/"
-                "iceberg-table-bootstrap\n"
-                "      newName: registry.example/catalog-task\n"
-                "      newTag: v1\n",
-            ),
-            (
-                "label-overridden",
-                "catalog-task",
-                "  patches:\n"
-                "    - target:\n"
-                "        kind: Job\n"
-                "      patch: |\n"
-                "        metadata:\n"
-                "          labels:\n"
-                "            app.kubernetes.io/name: "
-                "iceberg-table-bootstrap\n"
-                "  commonMetadata:\n"
-                "    labels:\n"
-                "      app.kubernetes.io/name: catalog-task\n",
-            ),
-            (
-                "resource-deleted",
-                "catalog-task",
-                "  patches:\n"
-                "    - target:\n"
-                "        kind: Job\n"
-                "      patch: |\n"
-                "        $patch: delete\n"
-                "        metadata:\n"
-                "          labels:\n"
-                "            app.kubernetes.io/name: "
-                "iceberg-table-bootstrap\n",
-            ),
+    def test_helm_test_filter_shape_fails_closed(self) -> None:
+        cases = (
+            "not-a-list",
+            [{}],
+            [{"name": "test", "exclude": "true"}],
+            [{"name": "test", "unknown": True}],
         )
-        for scenario, job_name, transforms in scenarios:
-            with self.subTest(scenario=scenario):
-                with tempfile.TemporaryDirectory() as temporary_directory:
-                    root = Path(temporary_directory)
-                    deploy_root = root / "deploy"
-                    charts_root = root / "charts"
-                    app_root = deploy_root / "apps"
-                    app_root.mkdir(parents=True)
-                    charts_root.mkdir()
-                    (app_root / "job.yaml").write_text(
-                        "apiVersion: batch/v1\n"
-                        "kind: Job\n"
-                        "metadata:\n"
-                        f"  name: {job_name}\n"
-                        "spec:\n"
-                        "  template:\n"
-                        "    spec:\n"
-                        "      containers:\n"
-                        "        - name: worker\n"
-                        "          image: registry.example/worker:v1\n",
-                        encoding="utf-8",
-                    )
-                    (deploy_root / "flux.yaml").write_text(
-                        "apiVersion: "
-                        "kustomize.toolkit.fluxcd.io/v1\n"
-                        "kind: Kustomization\n"
-                        "metadata:\n"
-                        "  name: catalog\n"
-                        "spec:\n"
-                        "  path: ./deploy/apps\n"
-                        f"{transforms}",
-                        encoding="utf-8",
-                    )
+        for filters in cases:
+            with self.subTest(filters=filters):
+                self.helm_release(
+                    spec_fields={
+                        "test": {"enable": True, "filters": filters}
+                    },
+                )
+                with self.assertRaises(RenderError):
+                    self.detect()
 
-                    self.assertEqual(
-                        [],
-                        _iceberg_bootstrap_manifests(
-                            deploy_root, charts_root
-                        ),
-                    )
+    def test_upgrade_preserve_values_fails_without_release_history(self) -> None:
+        self.helm_release(
+            spec_fields={"upgrade": {"preserveValues": True}},
+        )
+        with self.assertRaises(RenderError):
+            self.detect()
 
-    def test_flux_strategic_merge_replaces_container_list(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            app_root = deploy_root / "apps"
-            app_root.mkdir(parents=True)
-            charts_root.mkdir()
-            (app_root / "job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: iceberg-table-bootstrap\n"
-                "          image: registry.example/"
-                "iceberg-table-bootstrap:v1\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "flux.yaml").write_text(
-                "apiVersion: kustomize.toolkit.fluxcd.io/v1\n"
-                "kind: Kustomization\n"
-                "metadata:\n"
-                "  name: catalog\n"
-                "spec:\n"
-                "  path: ./deploy/apps\n"
-                "  patches:\n"
-                "    - target:\n"
-                "        kind: Job\n"
-                "      patch: |\n"
-                "        spec:\n"
-                "          template:\n"
-                "            spec:\n"
-                "              containers:\n"
-                "                - $patch: replace\n"
-                "                - name: worker\n"
-                "                  image: registry.example/worker:v1\n",
-                encoding="utf-8",
-            )
+    def test_non_combined_post_render_strategy_fails_closed(self) -> None:
+        self.helm_release(
+            spec_fields={"postRenderStrategy": "nohooks"},
+        )
+        with self.assertRaises(RenderError):
+            self.detect()
 
-            self.assertEqual(
-                [],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
+    def test_escaped_target_path_components_are_preserved(self) -> None:
+        self.write_json(
+            "deploy/releases/label.yaml",
+            {
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "metadata": {"name": "label", "namespace": "flux-system"},
+                "data": {"value.yaml": "iceberg-table-bootstrap"},
+            },
+        )
+        template = """
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: catalog-maintenance
+          labels:
+            role: {{ index .Values.labels "app.kubernetes.io/name" | quote }}
+        spec:
+          template:
+            spec:
+              restartPolicy: Never
+              containers:
+                - name: runner
+                  image: registry.example/runner:stable
+        """
+        self.chart(
+            values={
+                "labels": {
+                    "app.kubernetes.io/name": "catalog-maintenance"
+                }
+            },
+            template=template,
+        )
+        release = self.helm_release(
+            values_from=[
+                {
+                    "name": "label",
+                    "valuesKey": "value.yaml",
+                    "targetPath": r"labels.app\.kubernetes\.io/name",
+                }
+            ]
+        )
+        self.assertEqual([release.resolve()], self.detect())
 
-    def test_applies_flux_kustomization_image_rewrites(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            app_root = deploy_root / "apps"
-            app_root.mkdir(parents=True)
-            charts_root.mkdir()
-            (app_root / "job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: worker\n"
-                "          image: registry.example/catalog-task:v1\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "flux.yaml").write_text(
-                "apiVersion: kustomize.toolkit.fluxcd.io/v1\n"
-                "kind: Kustomization\n"
-                "metadata:\n"
-                "  name: catalog\n"
-                "spec:\n"
-                "  path: ./deploy/apps\n"
-                "  images:\n"
-                "  - name: registry.example/catalog-task\n"
-                "    newName: registry.example/iceberg-table-bootstrap\n"
-                "    newTag: v1\n",
-                encoding="utf-8",
-            )
+    def test_literal_target_preserves_path_escapes_and_metacharacters(self) -> None:
+        literal_value = r"a,b=[c]\d"
+        self.write_json(
+            "deploy/releases/literal-config.yaml",
+            {
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "metadata": {
+                    "name": "literal-config",
+                    "namespace": "flux-system",
+                },
+                "data": {"value.yaml": literal_value},
+            },
+        )
+        self.chart(
+            values={
+                "externalConfig": {
+                    "application.yml": {"content": "generic"}
+                }
+            },
+            template=f"""
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: catalog-maintenance
+              labels:
+                role: {{{{ ternary "iceberg-table-bootstrap" "catalog-maintenance" (eq (index .Values.externalConfig "application.yml" "content") {json.dumps(literal_value)}) | quote }}}}
+            spec:
+              template:
+                spec:
+                  restartPolicy: Never
+                  containers:
+                    - name: runner
+                      image: registry.example/runner:stable
+            """,
+        )
+        release = self.helm_release(
+            values_from=[
+                {
+                    "name": "literal-config",
+                    "valuesKey": "value.yaml",
+                    "targetPath": r"externalConfig.application\.yml.content",
+                    "literal": True,
+                }
+            ]
+        )
+        self.assertEqual([release.resolve()], self.detect())
 
-            self.assertEqual(
-                [app_root / "job.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
+    def test_wrong_api_group_cannot_supply_helm_values(self) -> None:
+        self.write_json(
+            "deploy/releases/fake-values.yaml",
+            {
+                "apiVersion": "example.com/v1",
+                "kind": "ConfigMap",
+                "metadata": {
+                    "name": "fake-values",
+                    "namespace": "flux-system",
+                },
+                "data": {
+                    "values.yaml": """
+                    job:
+                      name: iceberg-table-bootstrap
+                    """
+                },
+            },
+        )
+        self.helm_release(values_from=[{"name": "fake-values"}])
+        with self.assertRaises(RenderError):
+            self.detect()
 
-    def test_flux_image_rule_does_not_suffix_match_repository(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            app_root = deploy_root / "apps"
-            app_root.mkdir(parents=True)
-            charts_root.mkdir()
-            (app_root / "job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: worker\n"
-                "          image: "
-                "registry.example/team/catalog-task:v1\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "flux.yaml").write_text(
-                "apiVersion: kustomize.toolkit.fluxcd.io/v1\n"
-                "kind: Kustomization\n"
-                "metadata:\n"
-                "  name: catalog\n"
-                "spec:\n"
-                "  path: ./deploy/apps\n"
-                "  images:\n"
-                "    - name: catalog-task\n"
-                "      newName: "
-                "registry.example/iceberg-table-bootstrap\n"
-                "      newTag: v1\n",
-                encoding="utf-8",
-            )
+    def test_values_reference_cannot_escape_release_namespace(self) -> None:
+        self.write_json(
+            "deploy/releases/other-values.yaml",
+            {
+                "apiVersion": "v1",
+                "kind": "ConfigMap",
+                "metadata": {
+                    "name": "other-values",
+                    "namespace": "other",
+                },
+                "data": {
+                    "values.yaml": """
+                    job:
+                      name: iceberg-table-bootstrap
+                    """
+                },
+            },
+        )
+        self.helm_release(
+            values_from=[
+                {
+                    "name": "other-values",
+                    "namespace": "other",
+                }
+            ]
+        )
+        with self.assertRaises(RenderError):
+            self.detect()
 
-            self.assertEqual(
-                [],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
+    def test_values_reference_requires_a_typed_kind(self) -> None:
+        for label, reference in (
+            ("missing", {"name": "values"}),
+            ("unknown", {"kind": "Example", "name": "values"}),
+        ):
+            with self.subTest(label=label):
+                self.helm_release(
+                    spec_fields={"valuesFrom": [reference]},
+                )
+                with self.assertRaises(RenderError):
+                    self.detect()
 
-    def test_flux_image_rewrite_replaces_original_image(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            app_root = deploy_root / "apps"
-            app_root.mkdir(parents=True)
-            charts_root.mkdir()
-            (app_root / "job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: worker\n"
-                "          image: "
-                "registry.example/iceberg-table-bootstrap:v1\n",
-                encoding="utf-8",
+    def test_conflicting_values_resources_fail_closed(self) -> None:
+        for filename, name in (
+            ("first", "catalog-maintenance"),
+            ("second", "iceberg-table-bootstrap"),
+        ):
+            self.write_json(
+                f"deploy/releases/{filename}.yaml",
+                {
+                    "apiVersion": "v1",
+                    "kind": "ConfigMap",
+                    "metadata": {
+                        "name": "values",
+                        "namespace": "flux-system",
+                    },
+                    "data": {
+                        "values.yaml": f"job:\n  name: {name}\n"
+                    },
+                },
             )
-            (deploy_root / "flux.yaml").write_text(
-                "apiVersion: kustomize.toolkit.fluxcd.io/v1\n"
-                "kind: Kustomization\n"
-                "metadata:\n"
-                "  name: catalog\n"
-                "spec:\n"
-                "  path: ./deploy/apps\n"
-                "  images:\n"
-                "    - name: "
-                "registry.example/iceberg-table-bootstrap\n"
-                "      newName: registry.example/catalog-task\n"
-                "      newTag: v2\n",
-                encoding="utf-8",
-            )
+        self.helm_release(
+            values_from=[{"name": "values"}],
+        )
+        with self.assertRaises(RenderError):
+            self.detect()
 
-            self.assertEqual(
-                [],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
+    def test_git_url_non_default_port_is_part_of_source_identity(self) -> None:
+        source_url = "ssh://git@example.com:2222/platform/shirokuma.git"
+        other_port = "ssh://git@example.com:2223/platform/shirokuma.git"
+        self.local_source(url=source_url)
+        self.helm_release()
+        with self.assertRaises(RenderError):
+            self.detect(self.context(other_port))
 
-    def test_flux_image_digest_ignores_new_tag(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            app_root = deploy_root / "apps"
-            app_root.mkdir(parents=True)
-            charts_root.mkdir()
-            (app_root / "job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: worker\n"
-                "          image: registry.example/catalog-task:v1\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "flux.yaml").write_text(
-                "apiVersion: kustomize.toolkit.fluxcd.io/v1\n"
-                "kind: Kustomization\n"
-                "metadata:\n"
-                "  name: catalog\n"
-                "spec:\n"
-                "  path: ./deploy/apps\n"
-                "  images:\n"
-                "    - name: registry.example/catalog-task\n"
-                "      newName: registry.example/catalog-task\n"
-                "      newTag: iceberg-table-bootstrap\n"
-                "      digest: sha256:deadbeef\n",
-                encoding="utf-8",
-            )
+    def test_repository_context_authorizes_url_branch_pairs(self) -> None:
+        first = "ssh://git@example.com/platform/first.git"
+        second = "ssh://git@example.com/platform/second.git"
+        context = RepositoryContext.create(
+            self.root,
+            (first, second),
+            ("main", "release"),
+        )
+        self.write_json(
+            "deploy/control/source.yaml",
+            {
+                "apiVersion": "source.toolkit.fluxcd.io/v1",
+                "kind": "GitRepository",
+                "metadata": {
+                    "name": "source",
+                    "namespace": "flux-system",
+                },
+                "spec": {
+                    "interval": "1m",
+                    "url": first,
+                    "ref": {"branch": "release"},
+                },
+            },
+        )
+        self.helm_release()
+        with self.assertRaises(RenderError):
+            self.detect(context)
+        self.write_json(
+            "deploy/control/source.yaml",
+            {
+                "apiVersion": "source.toolkit.fluxcd.io/v1",
+                "kind": "GitRepository",
+                "metadata": {
+                    "name": "source",
+                    "namespace": "flux-system",
+                },
+                "spec": {
+                    "interval": "1m",
+                    "url": second,
+                    "ref": {"branch": "release"},
+                },
+            },
+        )
+        self.assertEqual([], self.detect(context))
 
-            self.assertEqual(
-                [],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
+    def test_helm_chart_symlink_cannot_escape_source_root(self) -> None:
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        outside_template = Path(outside.name) / "job.yaml"
+        outside_template.write_text(
+            """
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: iceberg-table-bootstrap
+""".lstrip(),
+            encoding="utf-8",
+        )
+        template = self.root / "charts/catalog-job/templates/job.yaml"
+        template.unlink()
+        template.symlink_to(outside_template)
+        self.helm_release()
+        with self.assertRaises(RenderError):
+            self.detect()
 
-    def test_preserves_escaped_helm_target_path_components(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "values.yaml").write_text(
-                "apiVersion: v1\n"
-                "kind: ConfigMap\n"
-                "metadata:\n"
-                "  name: catalog-values\n"
-                "data:\n"
-                "  identity: iceberg-table-bootstrap\n",
-                encoding="utf-8",
-            )
-            (deploy_root / "release.yaml").write_text(
-                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
-                "kind: HelmRelease\n"
-                "metadata:\n"
-                "  name: catalog-task\n"
-                "spec:\n"
-                "  valuesFrom:\n"
-                "    - kind: ConfigMap\n"
-                "      name: catalog-values\n"
-                "      valuesKey: identity\n"
-                '      targetPath: "metadata.labels.'
-                'app\\\\.kubernetes\\\\.io/name"\n',
-                encoding="utf-8",
-            )
+    def test_cluster_dependent_helm_templates_fail_closed(self) -> None:
+        cases = {
+            "lookup": (
+                '{{- if not (lookup "v1" "ConfigMap" "default" "state") }}'
+            ),
+            "capabilities": (
+                "{{- if .Capabilities.APIVersions }}"
+            ),
+            "release-history": (
+                "{{- if .Release.IsUpgrade }}"
+            ),
+            "dynamic-template": (
+                '{{- if (tpl "{{ lookup }}" .) }}'
+            ),
+            "indirect-capabilities": (
+                '{{- $caps := index . "Capabilities" }}'
+                "{{- if $caps.APIVersions }}"
+            ),
+            "random": (
+                '{{- if eq (randNumeric 1) "0" }}'
+            ),
+            "random-int": (
+                "{{- if eq (randInt 0 2) 0 }}"
+            ),
+            "dynamic-capabilities-root": (
+                '{{- $capKey := printf "%s%s" "Capabil" "ities" }}'
+                "{{- $caps := index . $capKey }}"
+                '{{- if $caps.APIVersions.Has "iceberg.example/v1" }}'
+            ),
+            "dynamic-release-root": (
+                '{{- $releaseKey := printf "%s%s" "Rel" "ease" }}'
+                "{{- $release := index . $releaseKey }}"
+                "{{- if $release.IsUpgrade }}"
+            ),
+            "serialized-root-context": (
+                "{{- $context := toJson . }}"
+                '{{- if contains "iceberg.example/v1" $context }}'
+            ),
+            "serialized-release-context": (
+                "{{- $release := toJson .Release }}"
+                r'{{- if contains "\"IsUpgrade\":true" $release }}'
+            ),
+            "quoted-closing-delimiter": (
+                '{{- if and (printf "}}") '
+                '(lookup "v1" "ConfigMap" "default" "gate") }}'
+            ),
+            "quoted-comment-delimiters": (
+                '{{- if and (printf "/*") '
+                '(lookup "v1" "ConfigMap" "default" "gate") '
+                '(printf "*/") }}'
+            ),
+        }
+        for label, expression in cases.items():
+            with self.subTest(label=label):
+                self.write(
+                    "charts/catalog-job/templates/job.yaml",
+                    f"""
+                    {expression}
+                    apiVersion: batch/v1
+                    kind: Job
+                    metadata:
+                      name: catalog-maintenance
+                    {{"{{"}}- end {{"}}"}}
+                    """,
+                )
+                self.helm_release()
+                with self.assertRaises(RenderError):
+                    self.detect()
 
-            self.assertEqual(
-                [deploy_root / "release.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
+    def test_nonhermetic_helm_function_families_fail_closed(self) -> None:
+        expressions = {
+            "elapsed-time": (
+                '{{ ago (toDate "2006-01-02" "2020-01-01") }}'
+            ),
+            "duration-round": (
+                '{{ durationRound (toDate "2006-01-02" "2020-01-01") }}'
+            ),
+            "date-zone": (
+                '{{ dateInZone "2006" '
+                '(toDate "2006-01-02" "2020-01-01") "UTC" }}'
+            ),
+            "certificate-with-key": (
+                '{{ genCAWithKey "ca" 1 "private-key" }}'
+            ),
+        }
+        for label, expression in expressions.items():
+            with self.subTest(label=label):
+                self.write(
+                    "charts/catalog-job/templates/runtime.conf",
+                    expression,
+                )
+                self.helm_release()
+                with self.assertRaises(RenderError):
+                    self.detect()
 
-    def test_resolves_yaml_scalar_aliases_for_job_identity(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "job.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  annotations:\n"
-                "    bootstrap-name: &bootstrap "
-                "iceberg-table-bootstrap\n"
-                "  name: *bootstrap\n"
-                "  labels:\n"
-                "    alias-reset: &bootstrap catalog-task\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: worker\n"
-                "          image: registry.example/worker:v1\n",
-                encoding="utf-8",
-            )
+    def test_function_like_values_and_literals_remain_deterministic(self) -> None:
+        self.chart(
+            values={
+                "date": "catalog-maintenance",
+                "lookup": "ordinary-value",
+                "keys": "ordinary-keys",
+            },
+            template="""
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: catalog-maintenance
+              labels:
+                role: {{ .Values.date | quote }}
+              annotations:
+                lookup: {{ .Values.lookup | quote }}
+                keys: {{ .Values.keys | quote }}
+                note: {{ ".Capabilities" | quote }}
+            spec:
+              template:
+                spec:
+                  restartPolicy: Never
+                  containers:
+                    - name: runner
+                      image: registry.example/runner:stable
+            """,
+        )
+        self.helm_release()
+        self.assertEqual([], self.detect())
 
-            self.assertEqual(
-                [deploy_root / "job.yaml"],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
-            )
+    def test_chart_kube_version_constraint_fails_closed(self) -> None:
+        self.helm_release()
+        for label, metadata in (
+            (
+                "block",
+                """
+                apiVersion: v2
+                name: catalog-job
+                version: 0.1.0
+                kubeVersion: ">= 1.30.0"
+                """,
+            ),
+            (
+                "flow",
+                """
+                {"apiVersion":"v2","name":"catalog-job","version":"0.1.0","kubeVersion":">= 1.30.0"}
+                """,
+            ),
+        ):
+            with self.subTest(label=label):
+                self.write(
+                    "charts/catalog-job/Chart.yaml",
+                    metadata,
+                )
+                with self.assertRaises(RenderError):
+                    self.detect()
 
-    def test_ignores_non_bootstrap_iceberg_jobs(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = Path(temporary_directory)
-            deploy_root = root / "deploy"
-            charts_root = root / "charts"
-            deploy_root.mkdir()
-            charts_root.mkdir()
-            (deploy_root / "catalog-smoke.yaml").write_text(
-                "apiVersion: batch/v1\n"
-                "kind: Job\n"
-                "metadata:\n"
-                "  name: iceberg-catalog-smoke\n"
-                "spec:\n"
-                "  template:\n"
-                "    spec:\n"
-                "      containers:\n"
-                "        - name: iceberg-maintenance\n"
-                "          image: registry.example/maintenance@sha256:" + "d" * 64 + "\n",
-                encoding="utf-8",
-            )
+    def test_helm_values_schema_cannot_fetch_remote_references(self) -> None:
+        hits: list[str] = []
 
-            self.assertEqual(
-                [],
-                _iceberg_bootstrap_manifests(deploy_root, charts_root),
+        class SchemaHandler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                hits.append(self.path)
+                content = b'{"type":"object"}'
+                self.send_response(200)
+                self.send_header("Content-Type", "application/schema+json")
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+
+            def log_message(self, _format: str, *args: object) -> None:
+                del args
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), SchemaHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = server.server_address[1]
+            self.write_json(
+                "charts/catalog-job/values.schema.json",
+                {"$ref": f"http://127.0.0.1:{port}/schema.json"},
             )
+            self.helm_release()
+            with self.assertRaises(RenderError):
+                self.detect()
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+        self.assertEqual([], hits)
+
+    def test_helm_values_schema_identifiers_must_be_fragment_local(self) -> None:
+        for field in ("$id", "id"):
+            with self.subTest(field=field):
+                self.write_json(
+                    "charts/catalog-job/values.schema.json",
+                    {
+                        field: "https://schemas.example/catalog.json",
+                        "type": "object",
+                    },
+                )
+                self.helm_release()
+                with self.assertRaises(RenderError):
+                    self.detect()
+
+    def test_cluster_dependency_in_arbitrary_template_extension_fails_closed(self) -> None:
+        self.write(
+            "charts/catalog-job/templates/runtime.conf",
+            '{{ lookup "v1" "ConfigMap" "default" "state" }}',
+        )
+        self.helm_release()
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_helmignore_excludes_unloaded_dynamic_templates(self) -> None:
+        self.write(
+            "charts/catalog-job/.helmignore",
+            "templates/ignored.yaml",
+        )
+        self.write(
+            "charts/catalog-job/templates/ignored.yaml",
+            """
+            {{- if .Capabilities.APIVersions }}
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: iceberg-table-bootstrap
+            {{- end }}
+            """,
+        )
+        self.helm_release()
+        self.assertEqual([], self.detect())
+
+    def test_packaged_helm_dependency_fails_closed(self) -> None:
+        self.write(
+            "charts/catalog-job/charts/dependency.tgz",
+            "not-a-real-archive",
+        )
+        self.helm_release()
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_active_controller_rendered_by_helm_fails_closed(self) -> None:
+        controller_templates = {
+            "kustomization": """
+                apiVersion: kustomize.toolkit.fluxcd.io/v1
+                kind: Kustomization
+                metadata:
+                  name: nested
+                spec:
+                  interval: 1m
+                  path: ./deploy/app
+                  sourceRef:
+                    kind: GitRepository
+                    name: source
+            """,
+            "helm-release": """
+                apiVersion: helm.toolkit.fluxcd.io/v2
+                kind: HelmRelease
+                metadata:
+                  name: nested
+                spec:
+                  interval: 1m
+                  chart:
+                    spec:
+                      chart: ./charts/catalog-job
+                      sourceRef:
+                        kind: GitRepository
+                        name: source
+            """,
+            "hook-kustomization": """
+                apiVersion: kustomize.toolkit.fluxcd.io/v1
+                kind: Kustomization
+                metadata:
+                  name: nested
+                  annotations:
+                    helm.sh/hook: pre-install
+                spec:
+                  interval: 1m
+                  path: ./deploy/app
+                  sourceRef:
+                    kind: GitRepository
+                    name: source
+            """,
+        }
+        for label, template in controller_templates.items():
+            with self.subTest(label=label):
+                self.chart(template=template)
+                self.helm_release()
+                with self.assertRaises(RenderError):
+                    self.detect()
+
+    def test_suspended_controller_rendered_by_helm_is_inert(self) -> None:
+        self.chart(
+            template="""
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: nested
+            spec:
+              interval: 1m
+              suspend: true
+              path: ./deploy/app
+              sourceRef:
+                kind: GitRepository
+                name: source
+            """,
+        )
+        self.helm_release()
+        self.assertEqual([], self.detect())
+
+    def test_disabled_controller_hook_rendered_by_helm_is_inert(self) -> None:
+        self.chart(
+            template="""
+            apiVersion: kustomize.toolkit.fluxcd.io/v1
+            kind: Kustomization
+            metadata:
+              name: nested
+              annotations:
+                helm.sh/hook: pre-install
+            spec:
+              interval: 1m
+              path: ./deploy/app
+              sourceRef:
+                kind: GitRepository
+                name: source
+            """,
+        )
+        self.helm_release(
+            spec_fields={"install": {"disableHooks": True}},
+        )
+        self.assertEqual([], self.detect())
+
+    def test_missing_required_values_source_fails_closed(self) -> None:
+        self.helm_release(values_from=[{"name": "missing"}])
+        with self.assertRaises(RenderError):
+            self.detect()
+
+    def test_optional_values_source_only_ignores_a_missing_object(self) -> None:
+        self.helm_release(
+            values_from=[{"name": "missing", "optional": True}],
+        )
+        self.assertEqual([], self.detect())
+
+        for kind, payload in (
+            ("ConfigMap", {"data": {"other": "value"}}),
+            (
+                "Secret",
+                {
+                    "data": {
+                        "other": base64.b64encode(b"value").decode()
+                    }
+                },
+            ),
+        ):
+            with self.subTest(kind=kind):
+                name = f"existing-{kind.lower()}"
+                self.write_json(
+                    f"deploy/releases/{name}.yaml",
+                    {
+                        "apiVersion": "v1",
+                        "kind": kind,
+                        "metadata": {
+                            "name": name,
+                            "namespace": "flux-system",
+                        },
+                        **payload,
+                    },
+                )
+                self.helm_release(
+                    values_from=[
+                        {
+                            "kind": kind,
+                            "name": name,
+                            "valuesKey": "wanted.yaml",
+                            "optional": True,
+                        }
+                    ],
+                )
+                with self.assertRaises(RenderError):
+                    self.detect()
 
 
 class IcebergTableBootstrapPrerequisiteTests(unittest.TestCase):
