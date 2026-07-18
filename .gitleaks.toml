@@ -68,6 +68,16 @@ paths = [
 ]
 
 [[allowlists]]
+description = "Public Apache Polaris 1.6.0 release-signing key fingerprint"
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^F2EEEB06110BEE1397EC74CBB8960FF52D9B1312$''']
+targetRules = ["generic-api-key"]
+paths = [
+  '''^scripts/verify_polaris_trusted_image\.py$''',
+]
+
+[[allowlists]]
 description = "Public SeaweedFS 4.39 source commit in retained Trivy evidence"
 condition = "AND"
 regexTarget = "secret"
