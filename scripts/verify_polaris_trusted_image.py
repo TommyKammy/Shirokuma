@@ -1577,6 +1577,18 @@ def _audit_retained_pending_evidence(root: Path) -> None:
             continue
         suffix = path.suffix.lower()
         if suffix in RETAINED_EVIDENCE_DOCUMENT_SUFFIXES:
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError) as error:
+                _fail(
+                    "FORBIDDEN_PATH",
+                    f"cannot inspect retained evidence {relative}: {error}",
+                )
+            _expect(
+                not _is_pending_evidence_identity([text]),
+                "FORBIDDEN_PATH",
+                f"pending catalog evidence cannot be retained: {relative}",
+            )
             continue
         _expect(
             suffix in RETAINED_EVIDENCE_JSON_SUFFIXES,
@@ -2166,10 +2178,16 @@ def _secret_block_scalar_header(
     return None
 
 
-def _yaml_scalar_value(value: str) -> str | None:
+def _yaml_scalar_value(
+    value: str,
+    aliases: Mapping[str, str] | None = None,
+) -> str | None:
     candidate = _strip_yaml_node_properties(value.strip())
     if not candidate:
         return None
+    alias = re.fullmatch(r"\*([A-Za-z0-9_-]+)\s*,?", candidate)
+    if alias is not None:
+        return (aliases or {}).get(alias.group(1))
     if candidate[0] in {"'", '"'}:
         parsed = _quoted_yaml_scalar(candidate, 0)
         if parsed is None:
@@ -2180,6 +2198,35 @@ def _yaml_scalar_value(value: str) -> str | None:
         return scalar
     match = re.fullmatch(r"([A-Za-z0-9_-]+)\s*,?", candidate)
     return match.group(1) if match is not None else None
+
+
+def _yaml_alias_name(value: str) -> str | None:
+    candidate = _strip_yaml_node_properties(value.strip())
+    alias = re.fullmatch(r"\*([A-Za-z0-9_-]+)\s*,?", candidate)
+    return alias.group(1) if alias is not None else None
+
+
+def _anchored_yaml_scalar(
+    value: str,
+    aliases: Mapping[str, str],
+) -> tuple[str, str] | None:
+    candidate = value.strip()
+    anchor_name: str | None = None
+    while True:
+        node_property = re.match(
+            r"(?P<property>![^\s]+|&[^\s]+)(?:\s+|$)",
+            candidate,
+        )
+        if node_property is None:
+            break
+        property_value = node_property.group("property")
+        if property_value.startswith("&"):
+            anchor_name = property_value[1:]
+        candidate = candidate[node_property.end() :].lstrip()
+    if anchor_name is None:
+        return None
+    scalar = _yaml_scalar_value(candidate, aliases)
+    return (anchor_name, scalar) if scalar is not None else None
 
 
 def _is_secret_kind(value: Any) -> bool:
@@ -2226,16 +2273,29 @@ def _has_parsed_secret_manifest(text: str) -> bool:
         return _json_has_secret_manifest(document)
 
     lines = [_yaml_code_line(line) for line in inspected.splitlines()]
+    aliases: dict[str, str] = {}
     for index, line in enumerate(lines):
+        if line.strip() in {"---", "..."}:
+            aliases = {}
+            continue
         document_base_indent = _yaml_document_base_indent(lines, index)
         entry = _yaml_mapping_entry(line)
-        if (
+        scoped_kind = (
             entry is not None
             and entry[0].casefold() == "kind"
             and (entry[3] or entry[2] == document_base_indent)
-            and _is_secret_kind(_yaml_scalar_value(entry[1]))
-        ):
-            return True
+        )
+        if scoped_kind and entry is not None:
+            kind_value = _yaml_scalar_value(entry[1], aliases)
+            if _is_secret_kind(kind_value) or (
+                _yaml_alias_name(entry[1]) is not None
+                and kind_value is None
+            ):
+                return True
+        if entry is not None:
+            anchored = _anchored_yaml_scalar(entry[1], aliases)
+            if anchored is not None:
+                aliases[anchored[0]] = anchored[1]
 
         explicit = _explicit_yaml_key_entry(line)
         if (
@@ -2253,7 +2313,11 @@ def _has_parsed_secret_manifest(text: str) -> bool:
             stripped = value_line.lstrip(" \t")
             if not stripped.startswith(":"):
                 break
-            if _is_secret_kind(_yaml_scalar_value(stripped[1:])):
+            kind_value = _yaml_scalar_value(stripped[1:], aliases)
+            if _is_secret_kind(kind_value) or (
+                _yaml_alias_name(stripped[1:]) is not None
+                and kind_value is None
+            ):
                 return True
             break
     return False

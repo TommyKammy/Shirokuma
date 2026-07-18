@@ -497,6 +497,33 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             "unsupported retained evidence format",
         )
 
+    def test_pending_markdown_evidence_fails_closed(self) -> None:
+        root = self._fixture()
+        evidence = root / "security/evidence/misc/receipt.md"
+        evidence.parent.mkdir(parents=True, exist_ok=True)
+        evidence.write_text(
+            "# Release receipt\n\n"
+            "Subject: "
+            "ghcr.io/tommykammy/shirokuma-polaris@sha256:"
+            + "e" * 64
+            + "\n",
+            encoding="utf-8",
+        )
+        self._assert_code(root, "FORBIDDEN_PATH", "receipt.md")
+
+    def test_unrelated_markdown_evidence_is_allowed(self) -> None:
+        root = self._fixture()
+        evidence = root / "security/evidence/misc/receipt.md"
+        evidence.parent.mkdir(parents=True, exist_ok=True)
+        evidence.write_text(
+            "# Release receipt\n\n"
+            "Subject: registry.example/unrelated-controller@sha256:"
+            + "f" * 64
+            + "\n",
+            encoding="utf-8",
+        )
+        verifier.audit(root)
+
     def test_unrelated_retained_evidence_subjects_are_allowed(self) -> None:
         root = self._fixture()
         evidence = root / "security/evidence/unrelated-v1/supply-chain.json"
@@ -943,6 +970,24 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 '{"apiVersion":"v1","k\\u0069nd":"Secret",'
                 '"metadata":{"name":"settings"}}\n'
             ),
+            "aliased-kind.yaml": (
+                "apiVersion: v1\n"
+                "secret_kind: &k Secret\n"
+                "kind: *k\n"
+                "metadata:\n"
+                "  name: settings\n"
+                "stringData:\n"
+                "  username: example\n"
+                "  password: example\n"
+            ),
+            "flow-aliased-kind.yaml": (
+                "apiVersion: v1\n"
+                "metadata:\n"
+                "  name: settings\n"
+                "  labels: {type: &k Secret}\n"
+                "kind: *k\n"
+                "stringData: {password: example}\n"
+            ),
         }
         for filename, content in cases.items():
             with self.subTest(filename=filename):
@@ -1071,6 +1116,13 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 "data:\n"
                 "  kind: >-\n"
                 "    Secret\n"
+            ),
+            "aliased-configmap.yaml": (
+                "apiVersion: v1\n"
+                "kind_name: &k ConfigMap\n"
+                "kind: *k\n"
+                "metadata:\n"
+                "  name: settings\n"
             ),
         }
         for filename, content in cases.items():
