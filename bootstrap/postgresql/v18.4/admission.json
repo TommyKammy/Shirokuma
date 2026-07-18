@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "component": "postgresql",
+  "version": "18.4",
+  "platform": "linux/arm64",
+  "admission": "blocked",
+  "state": "candidate_evidence_pending",
+  "source": "https://github.com/chainguard-images/images/tree/main/images/postgres",
+  "candidate": {
+    "index_reference": "cgr.dev/chainguard/postgres@sha256:3dc629a917612f1630c6f8e7a17f23a42cbd5917b9b3080972b70b1583daff34",
+    "arm64_reference": "cgr.dev/chainguard/postgres@sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+    "attestation_manifest_digest": "sha256:8f5098343c0fc68d434174753d2ba6cefa9c1c037f5185f52b5cf5fbb4ba559b",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "identity": "https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main",
+    "workflow_commit": "704e38b436bc40bc9a9d669c05f0d6694bec298b",
+    "transparency_log_index": 2181460214,
+    "availability_preflight_required": true
+  },
+  "observation": {
+    "observed_at": "2026-07-18",
+    "signature": "verified-but-not-retained",
+    "arm64_index_membership": "verified-but-not-retained",
+    "slsa_provenance": "verified-but-not-retained",
+    "upstream_spdx": "verified-but-not-retained",
+    "upstream_spdx_package_count": 257,
+    "trivy_version": "0.72.0",
+    "vulnerability_db_updated_at": "2026-07-18T07:19:07.874814014Z",
+    "high": 0,
+    "critical": 0,
+    "authoritative_for_admission": false
+  },
+  "evidence_contract": {
+    "paths": {
+      "index_manifest": "bootstrap/postgresql/v18.4/evidence/index-manifest.json",
+      "arm64_manifest": "bootstrap/postgresql/v18.4/evidence/arm64-manifest.json",
+      "signature_bundle": "bootstrap/postgresql/v18.4/evidence/cosign-signature-bundle.json",
+      "attestation_bundles": "bootstrap/postgresql/v18.4/evidence/attestation-bundles.jsonl",
+      "cyclonedx_sbom": "bootstrap/postgresql/v18.4/evidence/postgresql-18.4-arm64.cdx.json",
+      "trivy_report": "bootstrap/postgresql/v18.4/evidence/trivy.json",
+      "verification": "bootstrap/postgresql/v18.4/evidence/cryptographic-verification.json"
+    },
+    "signature": {
+      "issuer": "https://token.actions.githubusercontent.com",
+      "identity": "https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main",
+      "transparency_log_index": 2181460214
+    },
+    "provenance": {
+      "predicate_type": "https://slsa.dev/provenance/v1",
+      "subject_reference": "cgr.dev/chainguard/postgres@sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+      "builder": "https://github.com/chainguard-dev/terraform-provider-apko",
+      "build_type": "https://apko.dev/slsa-build-type@v1",
+      "revision": "704e38b436bc40bc9a9d669c05f0d6694bec298b"
+    },
+    "upstream_sbom": {
+      "predicate_type": "https://spdx.dev/Document",
+      "subject_reference": "cgr.dev/chainguard/postgres@sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+      "package_count": 257
+    },
+    "independent_sbom": {
+      "format": "CycloneDX 1.7",
+      "generator": "syft 1.46.0"
+    },
+    "vulnerability_scan": {
+      "scanner": "trivy 0.72.0",
+      "severity": [
+        "HIGH",
+        "CRITICAL"
+      ],
+      "maximum_high": 0,
+      "maximum_critical": 0,
+      "fresh_database_required": true
+    },
+    "cryptographic_reverification": {
+      "cosign": "3.1.1",
+      "offline_retained_bundle_verification": true
+    }
+  },
+  "resident_ledger": {
+    "permitted": false,
+    "atomic_with": "polaris"
+  },
+  "runtime_manifests": {
+    "permitted": false
+  },
+  "next_action": "retain-and-reverify-evidence-after-polaris-main-publication"
+}

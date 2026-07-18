@@ -146,6 +146,37 @@ input. The admitted image is still compiled only from the reviewed retained
 archive with networking disabled. A future fully offline provenance audit would
 also need a reviewed module-proxy artifact; until then, proxy or checksum-database
 unavailability blocks regeneration instead of weakening it.
+
+Polaris 1.6.0 uses a separate fail-closed Gradle checkpoint. The static contract
+pins the ASF source archive and SHA-512, the retained ASF release-signing key,
+the release tag, commit, and tree, plus Java 21 and Gradle 9.6.0 requirements.
+The signed upstream source archive does not contain `gradle-wrapper.jar`,
+dependency lock files, or Gradle dependency-verification metadata. It is
+therefore not a closed build input by itself. While the contract state is
+`dependency_closure_pending`, the Containerfile, write-capable publication
+workflow, release evidence, resident-image entries, and runtime manifests must
+remain absent. A later reviewed phase must retain and authenticate every Gradle
+plugin and dependency needed by the server build, prove a clean offline repeat,
+and bind that immutable input set to the Containerfile and main-only workflow
+before image publication is enabled.
+
+A 2026-07-18 workstation feasibility audit completed the two server tasks in a
+clean source extraction with Docker networking disabled and Gradle `--offline`.
+The reduced dependency seed still contained 5,014 files and 825,947,131 raw
+bytes; deterministic compression produced 619,659,126 bytes, above GitHub's
+normal single-file limit. This observation is not build admission evidence.
+The next phase must publish the reviewed seed as a signed immutable OCI artifact,
+retain its per-file SHA-256 descriptor, and pin the OCI manifest digest and blob
+hash in Git. The image build must pull that exact artifact without registry
+credentials, verify it before extraction, and keep Gradle network-disabled.
+
+The selected Chainguard PostgreSQL 18.4 index and linux/arm64 manifest remain a
+candidate, not an admission. Signature, index membership, provenance, upstream
+SBOM, independent CycloneDX SBOM, and zero High/Critical scan evidence must be
+retained and reverified. Polaris and PostgreSQL are admitted atomically in an
+evidence-only review after a successful main publication; neither component may
+appear alone in the resident-image ledger or in runtime manifests.
+
 Trusted builds must also set BuildKit `no-cache` and must not import or export a
 shared GitHub Actions cache. Reusing a mutable layer that is absent from the
 contract and release evidence violates the closed-world claim even when the

@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "component": "polaris",
+  "version": "1.6.0",
+  "source_release": {
+    "archive_url": "https://downloads.apache.org/polaris/1.6.0/apache-polaris-1.6.0.tar.gz",
+    "signature_url": "https://downloads.apache.org/polaris/1.6.0/apache-polaris-1.6.0.tar.gz.asc",
+    "checksum_url": "https://downloads.apache.org/polaris/1.6.0/apache-polaris-1.6.0.tar.gz.sha512",
+    "archive_sha512": "d69b1a91e16e210a78dec327fc4725983b114fbec5d86d078a3827f35fe7dd5df3e4b12d18965e5a72eace65ad224aa007004ed61c66f9abb2efafc44ceac95b",
+    "signature_sha256": "2338e1c2385874e9bf5cf513b4d27732b1cd59e943e1662e62fa995d915e6481",
+    "signing_key": {
+      "path": "bootstrap/polaris/v1.6.0/apache-polaris-release-signing-key.asc",
+      "sha256": "1c72a1534f69e91ffd379c8f1c15c7de1630b919ace45ac896d8b862de26aaa1",
+      "fingerprint": "F2EEEB06110BEE1397EC74CBB8960FF52D9B1312",
+      "key_id": "B8960FF52D9B1312",
+      "uid": "Apache Polaris Automated Release Signing <private@polaris.apache.org>"
+    }
+  },
+  "git_release": {
+    "repository": "https://github.com/apache/polaris",
+    "tag": "apache-polaris-1.6.0",
+    "tag_object": "8e82f4760aabe9fdc142710b504fe042ff8171d4",
+    "commit": "dd306009d81a0e15adafe9dcd7d1c6d04d326f34",
+    "tree": "1ad42f42aaebfa767b66a37f522a6c8d6693d841"
+  },
+  "upstream_build_inputs": {
+    "java_version": "21",
+    "gradle_version": "9.6.0",
+    "gradle_distribution_url": "https://services.gradle.org/distributions/gradle-9.6.0-all.zip",
+    "gradle_distribution_sha256": "87a2216cc1f9122192d4e0fe905ffdf1b4c72cff797e9f733b174e157cadd396",
+    "wrapper_jar_present": false,
+    "dependency_lockfiles_present": false,
+    "dependency_verification_metadata_present": false,
+    "server_tasks": [
+      ":polaris-server:assemble",
+      ":polaris-server:quarkusAppPartsBuild"
+    ]
+  },
+  "selected_base_candidates": {
+    "builder_index": "docker.io/library/gradle@sha256:ecbf526b4d3c247b4cc61e9850eae2addd5f73a7c849bf026000442808f54b56",
+    "builder_arm64_manifest": "docker.io/library/gradle@sha256:cc583fa5245267fe0e1546c9989e8575473a37336ad9894dc0684a99fea1fb03",
+    "runtime_index": "registry.access.redhat.com/ubi9/openjdk-21-runtime@sha256:8e4169812e4598113c3d61fbea6c21c1c8e49b5a38c5cd17be6befe9eec4afc8",
+    "runtime_arm64_manifest": "registry.access.redhat.com/ubi9/openjdk-21-runtime@sha256:76903aaf7aef43c1572674ac745de54e6c9877796127ac498959697afbc84dd5"
+  },
+  "assessment": {
+    "state": "dependency_closure_pending",
+    "source_signature": "observed_verified_not_retained",
+    "source_checksum": "observed_verified_not_retained",
+    "authoritative_for_build": false,
+    "closed_build_input": false,
+    "reason": "The signed source omits gradle-wrapper.jar, dependency lockfiles, and dependency-verification metadata."
+  }
+}
