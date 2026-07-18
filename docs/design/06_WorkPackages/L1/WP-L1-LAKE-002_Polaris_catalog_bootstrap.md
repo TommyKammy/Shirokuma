@@ -4,8 +4,8 @@ doc_id: "WP-L1-LAKE-002"
 title: "WP-L1-LAKE-002 Polaris catalog bootstrap"
 status: in-progress
 created: 2026-07-05
-updated: 2026-07-16
-version: "0.6"
+updated: 2026-07-18
+version: "0.8"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -22,6 +22,10 @@ PolarisとPostgreSQLを起動し、Iceberg catalogを構成する。
 object-storage dependencyは完了済みです。最初のcheckpointでは未認証upstream
 Polaris imageをfail-closedで拒否し、source-buildとsigned PostgreSQL candidateの
 admission境界をADR-0021へ固定します。
+
+Issue #61はPR #69のconditional close文により実装途中で自動Closeされたため、
+2026-07-18にreopenしました。reopen後のIssue #61をruntime acceptanceのliveな
+境界とし、以下の全工程が完了するまでOpenを維持します。
 
 ## Dependencies
 
@@ -71,6 +75,20 @@ admission境界をADR-0021へ固定します。
 - `docs/design/04_Development/049_Supply_Chain_Security.md`
 - `docs/design/10_Research/106_ARM64_Container_Image_Compatibility.md`
 
+## Current implementation phase
+
+- 現在の実装範囲はruntime-disabledなstatic source/candidate contractです。
+- 2026-07-18の非admissionな実機監査では、5,014 files / 825,947,131 raw
+  bytesのGradle seedでnetwork-none offline buildが成功しました。圧縮後も
+  619,659,126 bytesのため、次段ではsigned immutable OCI artifactとして保持し、
+  per-file descriptorとmanifest digestをGitで固定します。
+- 続く工程はGradle dependency closure、main-only Polaris publication、
+  evidence-onlyのatomic Polaris/PostgreSQL admissionです。
+- admission後もcredentials、runtime/Flux Ready、catalog API smoke、
+  backup/restore acceptanceが未完了です。
+- 現在のPRは`Refs #61`を使用し、`Closes #61`を使用しません。Issue #61は
+  上記runtime acceptance chainの完了までCloseしません。
+
 ## GitHub Tracking
 
 - Epic: [#24](https://github.com/TommyKammy/Shirokuma/issues/24)
@@ -78,11 +96,16 @@ admission境界をADR-0021へ固定します。
 - PR: [#52](https://github.com/TommyKammy/Shirokuma/pull/52) (merged)
 - Runtime follow-up Epic: [#60](https://github.com/TommyKammy/Shirokuma/issues/60)
 - Runtime follow-up Issue: [#61](https://github.com/TommyKammy/Shirokuma/issues/61)
-- GitHub depends on: `#26` (closed 2026-07-16 JST)
-- Execution order: `3 of 10`
-- Queue: #27 closed after the supply-chain selection checkpoint. Runtime scope
-  is now executable as #61: trusted Polaris build/publication, PostgreSQL
-  admission, Flux workloads, Ready evidence, and catalog smoke.
+  (reopened 2026-07-18; runtime acceptance完了までOpen)
+- Runtime phase-1 Draft PR:
+  [#71](https://github.com/TommyKammy/Shirokuma/pull/71) (`Refs #61`)
+- Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
+- Execution order: `1 of 8`
+- Queue: #61のruntime-disabledなstatic source/candidate contractはDraft PR #71で
+  review中です。
+  Gradle dependency closure、main-only Polaris publication、evidence-onlyの
+  atomic Polaris/PostgreSQL admission、runtime/Flux/API smoke/backup-restoreを
+  順に完了するまで、後続#62はblockedを維持します。
 
 ## Definition of Done
 

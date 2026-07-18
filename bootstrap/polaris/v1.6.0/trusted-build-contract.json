@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "component": "polaris",
+  "version": "1.6.0",
+  "platform": "linux/arm64",
+  "contract_state": "dependency_closure_pending",
+  "source_record": "bootstrap/polaris/v1.6.0/source.json",
+  "image": {
+    "repository": "ghcr.io/tommykammy/shirokuma-polaris",
+    "trusted_tag": "1.6.0-arm64",
+    "trusted_tag_role": "non_authoritative_pointer"
+  },
+  "build": {
+    "enabled": false,
+    "containerfile": "bootstrap/polaris/v1.6.0/Containerfile",
+    "dependency_snapshot": {
+      "descriptor": "bootstrap/polaris/v1.6.0/gradle-dependency-inputs.json",
+      "artifact_repository": "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies",
+      "artifact_reference": null,
+      "transport": "oci-artifact",
+      "generation_workflow": ".github/workflows/polaris-gradle-dependencies.yml"
+    },
+    "network_policy_after_closure": "offline",
+    "cache_policy": "no-shared-cache",
+    "tasks": [
+      ":polaris-server:assemble",
+      ":polaris-server:quarkusAppPartsBuild"
+    ]
+  },
+  "publication": {
+    "enabled": false,
+    "workflow": ".github/workflows/polaris-arm64.yml",
+    "allowed_refs": [
+      "refs/heads/main"
+    ],
+    "lifecycle": "quarantine-verify-promote-evidence-only-admission"
+  },
+  "runtime": {
+    "enabled": false,
+    "admission_record": "bootstrap/polaris/v1.6.0/admission.json",
+    "atomic_peer": "bootstrap/postgresql/v18.4/admission.json"
+  },
+  "required_before_build_enablement": [
+    "publish a main-generated immutable Gradle dependency snapshot as an OCI artifact",
+    "retain and review a per-file SHA-256 descriptor for every Gradle plugin and dependency",
+    "prove a clean network-none offline server build using only the digest-pinned snapshot",
+    "pin the reviewed Containerfile and every build or release tool",
+    "add a main-only two-job publication workflow with no shared cache"
+  ],
+  "required_before_runtime_enablement": [
+    "publish the Polaris image from refs/heads/main",
+    "retain and cryptographically reverify signature, transparency, SLSA, CycloneDX, Trivy, and runtime-smoke evidence",
+    "admit Polaris and PostgreSQL atomically in an evidence-only pull request"
+  ],
+  "next_action": "publish-and-review-gradle-dependency-snapshot"
+}

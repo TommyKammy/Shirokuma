@@ -1464,6 +1464,14 @@ class SupplyChainSecurityTests(unittest.TestCase):
         )
         self.assertEqual(
             allowlist_paths(
+                "Public Apache Polaris 1.6.0 release-signing key fingerprint",
+                r"^F2EEEB06110BEE1397EC74CBB8960FF52D9B1312$",
+                "generic-api-key",
+            ),
+            {r"^scripts/verify_polaris_trusted_image\.py$"},
+        )
+        self.assertEqual(
+            allowlist_paths(
                 "Public SeaweedFS 4.39 source commit in retained Trivy evidence",
                 r"^db42bb49757b459551607939807017d7a9d5a94a$",
             ),
