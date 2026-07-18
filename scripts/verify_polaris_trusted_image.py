@@ -9,6 +9,7 @@ import binascii
 import hashlib
 import json
 import re
+import subprocess
 import sys
 import unicodedata
 from pathlib import Path
@@ -138,6 +139,57 @@ PENDING_WORKFLOW_INVENTORY = {
         "717c0fad0d108b271777ea2f61a69682fb57c2d8947b387c81276f095dd8176c"
     ),
 }
+PENDING_SCRIPT_FILE_INVENTORY = {
+    "scripts/bound_evidence.py": (
+        "a80bff20847cdf3410f2d1846e8511188a7bb4fd72a87503167cc8ec13285b72"
+    ),
+    "scripts/colima_baseline.sh": (
+        "a28b2d328b4731ff1457acae7517bc38a9c04a88071caff5520d9570affa17c1"
+    ),
+    "scripts/object_storage_backup.py": (
+        "f6f6624f6bb58ac77e05b3a447ea03f75e5d71c1da79af57719d2122f0216452"
+    ),
+    "scripts/object_storage_s3.py": (
+        "4b7318016c85276886aa3769a0cbf06c166004109e08fb81279cad718c0db872"
+    ),
+    "scripts/object_storage_smoke.sh": (
+        "4bba287743ddde6cd74b9d3f4f2c528ed6ca86e34e0a508bfc8135f901af5c3f"
+    ),
+    "scripts/package_go_vendor.py": (
+        "ff2da02c6f1927522ed0852beb0f6373f38c4bbaf0ac6597d9acefe1402ffec4"
+    ),
+    "scripts/preflight_supervisor_issues.py": (
+        "fcd3f9ea30a8448ef53c1e37874f187cc5598f43f7c82fd24b11896ecfa9ac64"
+    ),
+    "scripts/verify_design_context.py": (
+        "114590d9cc6e13d8d6006ef3549ea344227dab6a69aac14ed7521b1fc6866835"
+    ),
+    "scripts/verify_gitops_image_admission.py": (
+        "48d35babd03c9283758d7fa7c0a14fde12d4908244fff8f0fd18e80631e62b1a"
+    ),
+    "scripts/verify_gitops_teardown.py": (
+        "346624c428cdaff12dd58acec5e39acc7fefb569c273386336baffa24478d5af"
+    ),
+    "scripts/verify_policy_exceptions.py": (
+        "6c15a5dd0d79029d941cbebf29bc32163a5788bb8d5e095dd9cceede6d84b862"
+    ),
+    "scripts/verify_repository_skeleton.py": (
+        "b6bbbd383c74b190872bdcf144ede8126d8da5dbeb03e291027aaf276c62c955"
+    ),
+    "scripts/verify_supply_chain.py": (
+        "480facf04d483314a930d91ca5ff7c238829bb5665af05e3351f816b17e504ed"
+    ),
+    "scripts/verify_trivyignore.py": (
+        "75cee002d5749c0ec91629edb905c27362bee5c0813b0cbefcb59f161734f445"
+    ),
+    "scripts/verify_trusted_image.py": (
+        "cc569a5ee10400ad657f7648ccc2c14e8fd21691adfdc9e155212b16dc0afba0"
+    ),
+}
+PENDING_SCRIPT_SELF = "scripts/verify_polaris_trusted_image.py"
+PENDING_SCRIPT_PATHS = set(PENDING_SCRIPT_FILE_INVENTORY) | {
+    PENDING_SCRIPT_SELF
+}
 POLARIS_BLOCKERS = [
     "Gradle dependency closure is not retained or independently reproducible.",
     "The main-only Polaris publication has not run.",
@@ -261,10 +313,33 @@ RUNTIME_CATALOG_MARKER = re.compile(
     re.IGNORECASE,
 )
 RUNTIME_OPENTOFU_RESOURCE = re.compile(
-    r'^[ \t]*resource[ \t\r\n]+"'
-    r'((?:\\.|[^"\\\r\n])*)"[ \t\r\n]+"'
-    r'[^"\r\n]+"[ \t\r\n]*\{',
+    r'^[ \t]*resource[ \t\r\n]+'
+    r'(?:"(?P<quoted_type>(?:\\.|[^"\\\r\n])*)"'
+    r'|(?P<bare_type>[^"{}\s]+))'
+    r'[ \t\r\n]+(?:"(?:\\.|[^"\\\r\n])*"|[^"{}\s]+)'
+    r'[ \t\r\n]*\{',
     re.IGNORECASE | re.MULTILINE,
+)
+RUNTIME_OPENTOFU_GENERIC_MANIFEST_RESOURCE = re.compile(
+    r"(?:kubernetes|kubectl)_manifest[a-z0-9_-]*",
+    re.IGNORECASE,
+)
+RETAINED_EVIDENCE_OCI_REFERENCE = re.compile(
+    r"(?<![a-z0-9:+./-])"
+    r"(?:(?:docker|oci)://)?"
+    r"(?:"
+    r"(?:localhost(?::[0-9]+)?"
+    r"|[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]+)?)"
+    r"/(?:[a-z0-9._-]+/)*[a-z0-9._-]+"
+    r"|[a-z0-9]+(?:[._-][a-z0-9]+)*"
+    r")"
+    r"(?:"
+    r"(?::[a-z0-9_][a-z0-9_.-]{0,127})?"
+    r"@sha256:[0-9a-f]{64}"
+    r"|:[a-z0-9_][a-z0-9_.-]{0,127}"
+    r")"
+    r"(?![a-z0-9_.@/-])",
+    re.IGNORECASE,
 )
 
 
@@ -1201,7 +1276,10 @@ def _audit_pending_files(root: Path) -> None:
             }:
                 continue
             _expect(
-                not workflow.is_symlink(),
+                _is_regular_file_without_symlink_components(
+                    root,
+                    workflow.relative_to(root),
+                ),
                 "FORBIDDEN_PATH",
                 f"workflow symlink is forbidden: {workflow.relative_to(root)}",
             )
@@ -1230,6 +1308,67 @@ def _audit_pending_files(root: Path) -> None:
         f"expected {sorted(PENDING_WORKFLOW_INVENTORY)}, "
         f"found {sorted(workflow_inventory)}",
     )
+    scripts_root = root / "scripts"
+    _expect(
+        scripts_root.is_dir() and not scripts_root.is_symlink(),
+        "FORBIDDEN_PATH",
+        "invalid scripts root while Polaris dependency closure is pending",
+    )
+    pycache = scripts_root / "__pycache__"
+    if pycache.exists():
+        _expect(
+            pycache.is_dir() and not pycache.is_symlink(),
+            "FORBIDDEN_PATH",
+            "invalid scripts/__pycache__ while Polaris dependency closure is "
+            "pending",
+        )
+        for cached in pycache.rglob("*"):
+            _expect(
+                cached.is_file()
+                and not cached.is_symlink()
+                and cached.suffix == ".pyc",
+                "FORBIDDEN_PATH",
+                "invalid scripts/__pycache__ entry while Polaris dependency "
+                f"closure is pending: {cached.relative_to(root)}",
+            )
+    script_inventory: dict[str, str] = {}
+    for script in scripts_root.iterdir():
+        if script.name == "__pycache__":
+            continue
+        relative_script = script.relative_to(root).as_posix()
+        _expect(
+            _is_regular_file_without_symlink_components(
+                root,
+                script.relative_to(root),
+            ),
+            "FORBIDDEN_PATH",
+            "scripts inventory must contain only regular files while Polaris "
+            f"dependency closure is pending: {relative_script}",
+        )
+        script_inventory[relative_script] = _sha256(script)
+    _expect(
+        set(script_inventory) == PENDING_SCRIPT_PATHS,
+        "FORBIDDEN_PATH",
+        "scripts inventory changed while Polaris dependency closure is pending; "
+        f"expected {sorted(PENDING_SCRIPT_PATHS)}, "
+        f"found {sorted(script_inventory)}",
+    )
+    tracked_script_paths = _git_tracked_script_paths(root)
+    _expect(
+        tracked_script_paths is None
+        or tracked_script_paths == PENDING_SCRIPT_PATHS,
+        "FORBIDDEN_PATH",
+        "tracked scripts inventory changed while Polaris dependency closure is "
+        f"pending; expected {sorted(PENDING_SCRIPT_PATHS)}, "
+        f"found {sorted(tracked_script_paths or set())}",
+    )
+    for relative, expected_sha256 in PENDING_SCRIPT_FILE_INVENTORY.items():
+        _expect(
+            script_inventory[relative] == expected_sha256,
+            "FORBIDDEN_PATH",
+            "script changed while Polaris dependency closure is pending: "
+            f"{relative}",
+        )
     for evidence_root in (POLARIS_EVIDENCE, POSTGRES_EVIDENCE):
         directory = root / evidence_root
         _expect(
@@ -1268,6 +1407,39 @@ def _iter_string_values(value: Any) -> Iterable[str]:
     elif isinstance(value, list):
         for nested in value:
             yield from _iter_string_values(nested)
+
+
+def _is_regular_file_without_symlink_components(
+    root: Path,
+    relative: Path,
+) -> bool:
+    candidate = root
+    for part in relative.parts:
+        candidate /= part
+        if candidate.is_symlink():
+            return False
+    return candidate.is_file()
+
+
+def _git_tracked_script_paths(root: Path) -> set[str] | None:
+    if not (root / ".git").exists():
+        return None
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z", "--", "scripts"],
+            check=True,
+            capture_output=True,
+        )
+        return {
+            value.decode("utf-8")
+            for value in completed.stdout.split(b"\0")
+            if value
+        }
+    except (OSError, subprocess.CalledProcessError, UnicodeError) as error:
+        _fail(
+            "FORBIDDEN_PATH",
+            f"cannot inspect tracked scripts inventory: {error}",
+        )
 
 
 def _mapping_field(value: Mapping[str, Any], name: str) -> Any:
@@ -1543,6 +1715,25 @@ def _is_pending_evidence_identity(values: Iterable[str]) -> bool:
     return False
 
 
+def _is_pending_evidence_reference(value: str) -> bool:
+    if any(
+        _contains_bounded_marker(value, marker)
+        for marker in PENDING_IMAGE_REFERENCE_MARKERS
+    ):
+        return True
+    for match in RETAINED_EVIDENCE_OCI_REFERENCE.finditer(value):
+        if any(
+            _is_segmented_identity(
+                token,
+                PENDING_EVIDENCE_PATH_TOKENS,
+                PENDING_EVIDENCE_CONTEXT_WORDS,
+            )
+            for token in _path_identity_tokens(match.group(0))
+        ):
+            return True
+    return False
+
+
 def _audit_retained_pending_evidence(root: Path) -> None:
     directory = root / RETAINED_EVIDENCE_ROOT
     if not directory.exists():
@@ -1624,6 +1815,10 @@ def _audit_retained_pending_evidence(root: Path) -> None:
             not any(
                 _is_pending_evidence_identity(
                     _retained_evidence_subject_values(document)
+                )
+                or any(
+                    _is_pending_evidence_reference(value)
+                    for value in _iter_string_values(document)
                 )
                 for document in expanded_documents
             ),
@@ -1854,7 +2049,14 @@ def _decode_hcl_label(relative: str, raw: str) -> str:
     return decoded
 
 
-def _has_opentofu_secret_resource(relative: str, text: str) -> bool:
+def _is_blocked_opentofu_resource_type(value: str) -> bool:
+    return bool(
+        re.fullmatch(r"kubernetes_secret[a-z0-9_-]*", value, re.IGNORECASE)
+        or RUNTIME_OPENTOFU_GENERIC_MANIFEST_RESOURCE.fullmatch(value)
+    )
+
+
+def _has_blocked_opentofu_resource(relative: str, text: str) -> bool:
     lowered = relative.lower()
     if lowered.endswith((".tf.json", ".tofu.json")):
         try:
@@ -1870,19 +2072,21 @@ def _has_opentofu_secret_resource(relative: str, text: str) -> bool:
         if not isinstance(resources, dict):
             return False
         return any(
-            re.fullmatch(r"kubernetes_secret[a-z0-9_-]*", str(resource_type), re.I)
+            _is_blocked_opentofu_resource_type(str(resource_type))
             for resource_type in resources
         )
     if lowered.endswith((".tf", ".tofu")):
         inspected = _mask_hcl_non_code(relative, text.removeprefix("\ufeff"))
-        return any(
-            re.fullmatch(
-                r"kubernetes_secret[a-z0-9_-]*",
-                _decode_hcl_label(relative, match.group(1)),
-                re.I,
+        for match in RUNTIME_OPENTOFU_RESOURCE.finditer(inspected):
+            quoted_type = match.group("quoted_type")
+            resource_type = (
+                _decode_hcl_label(relative, quoted_type)
+                if quoted_type is not None
+                else match.group("bare_type")
             )
-            for match in RUNTIME_OPENTOFU_RESOURCE.finditer(inspected)
-        )
+            if _is_blocked_opentofu_resource_type(resource_type):
+                return True
+        return False
     return False
 
 
@@ -2452,9 +2656,9 @@ def _audit_runtime_absence(root: Path) -> None:
                 "RUNTIME_BLOCK",
                 f"cannot inspect runtime-root file as UTF-8 text: {path}: {error}",
             )
-        unapproved_opentofu_secret = (
+        unapproved_opentofu_resource = (
             relative.startswith("opentofu/")
-            and _has_opentofu_secret_resource(relative, text)
+            and _has_blocked_opentofu_resource(relative, text)
             and APPROVED_OPENTOFU_SECRET_FILES.get(relative) != _sha256(path)
         )
         if (
@@ -2463,7 +2667,7 @@ def _audit_runtime_absence(root: Path) -> None:
             or _has_secret_generator(text)
             or RUNTIME_POSTGRES_CREDENTIAL.search(text)
             or _has_unapproved_catalog_marker(relative, text)
-            or unapproved_opentofu_secret
+            or unapproved_opentofu_resource
         ):
             matches.append(relative)
     _expect(

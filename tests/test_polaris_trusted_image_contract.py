@@ -4,6 +4,7 @@ import base64
 import importlib.util
 import json
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -38,10 +39,15 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             Path("bootstrap/polaris/v1.6.0"),
             Path("bootstrap/postgresql/v18.4"),
             Path(".github/workflows"),
+            Path("scripts"),
         ):
             destination = directory / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(ROOT / relative, destination)
+            shutil.copytree(
+                ROOT / relative,
+                destination,
+                ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+            )
         ledger = directory / verifier.RESIDENT_LEDGER
         ledger.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / verifier.RESIDENT_LEDGER, ledger)
@@ -200,6 +206,75 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             encoding="utf-8",
         )
         self._assert_code(root, "FORBIDDEN_PATH", "workflow inventory changed")
+
+    def test_privileged_workflow_executable_drift_is_forbidden_while_pending(
+        self,
+    ) -> None:
+        for relative in (
+            "scripts/package_go_vendor.py",
+            "scripts/verify_trusted_image.py",
+        ):
+            with self.subTest(relative=relative):
+                root = self._fixture()
+                executable = root / relative
+                executable.write_text(
+                    executable.read_text(encoding="utf-8") + "\n",
+                    encoding="utf-8",
+                )
+                self._assert_code(root, "FORBIDDEN_PATH", relative)
+
+    def test_privileged_workflow_executable_parent_symlink_is_forbidden(
+        self,
+    ) -> None:
+        root = self._fixture()
+        scripts = root / "scripts"
+        target = root / "trusted-scripts"
+        scripts.rename(target)
+        scripts.symlink_to(target.name, target_is_directory=True)
+        self._assert_code(root, "FORBIDDEN_PATH", "invalid scripts root")
+
+    def test_scripts_import_shadow_additions_are_forbidden(self) -> None:
+        cases = {
+            "scripts/argparse.py": "raise RuntimeError('shadowed')\n",
+            "scripts/argparse.pyc": "not bytecode\n",
+            "scripts/argparse/__init__.py": "raise RuntimeError('shadowed')\n",
+        }
+        for relative, content in cases.items():
+            with self.subTest(relative=relative):
+                root = self._fixture()
+                shadow = root / relative
+                shadow.parent.mkdir(parents=True, exist_ok=True)
+                shadow.write_text(content, encoding="utf-8")
+                self._assert_code(root, "FORBIDDEN_PATH", "scripts inventory")
+
+    def test_tracked_scripts_pycache_is_forbidden(self) -> None:
+        root = self._fixture()
+        subprocess.run(
+            ["git", "init", "--quiet"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "add", "."],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        )
+        cached = root / "scripts/__pycache__/argparse.cpython-313.pyc"
+        cached.parent.mkdir(parents=True)
+        cached.write_bytes(b"malicious unchecked bytecode")
+        subprocess.run(
+            ["git", "add", "--force", str(cached.relative_to(root))],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        )
+        self._assert_code(
+            root,
+            "FORBIDDEN_PATH",
+            "tracked scripts inventory changed",
+        )
 
     def test_alternate_containerfile_name_is_forbidden_while_pending(
         self,
@@ -457,6 +532,89 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         evidence.parent.mkdir(parents=True, exist_ok=True)
         evidence.write_text(json.dumps(bundle) + "\n", encoding="utf-8")
         self._assert_code(root, "FORBIDDEN_PATH", "attestation.json")
+
+    def test_pending_oci_reference_in_arbitrary_json_value_fails_closed(
+        self,
+    ) -> None:
+        root = self._fixture()
+        evidence = root / "security/evidence/misc/receipt.json"
+        evidence.parent.mkdir(parents=True, exist_ok=True)
+        evidence.write_text(
+            json.dumps(
+                {
+                    "annotations": {
+                        "org.opencontainers.image.ref.name": (
+                            "ghcr.io/tommykammy/shirokuma-polaris@sha256:"
+                            + "d" * 64
+                        )
+                    }
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        self._assert_code(root, "FORBIDDEN_PATH", "receipt.json")
+
+    def test_generic_pending_oci_reference_in_arbitrary_json_value_fails_closed(
+        self,
+    ) -> None:
+        for reference in (
+            "registry.example/iceberg-rest@sha256:" + "e" * 64,
+            "registry.example/iceberg-rest:v1@sha256:" + "e" * 64,
+            "polaris@sha256:" + "e" * 64,
+            "ghcr.io/acme/polaris:1.6.0",
+            "docker.io/library/postgres:18",
+        ):
+            with self.subTest(reference=reference):
+                root = self._fixture()
+                evidence = root / "security/evidence/misc/receipt.json"
+                evidence.parent.mkdir(parents=True, exist_ok=True)
+                evidence.write_text(
+                    json.dumps({"metadata": {"arbitrary": reference}}) + "\n",
+                    encoding="utf-8",
+                )
+                self._assert_code(root, "FORBIDDEN_PATH", "receipt.json")
+
+    def test_unrelated_oci_reference_in_arbitrary_json_value_is_allowed(
+        self,
+    ) -> None:
+        root = self._fixture()
+        evidence = root / "security/evidence/misc/receipt.json"
+        evidence.parent.mkdir(parents=True, exist_ok=True)
+        evidence.write_text(
+            json.dumps(
+                {
+                    "annotations": {
+                        "org.opencontainers.image.ref.name": (
+                            "registry.example/unrelated-controller:v1@sha256:"
+                            + "f" * 64
+                        )
+                    }
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        verifier.audit(root)
+
+    def test_unrelated_oci_reference_with_pending_prose_is_allowed(self) -> None:
+        root = self._fixture()
+        evidence = root / "security/evidence/misc/receipt.json"
+        evidence.parent.mkdir(parents=True, exist_ok=True)
+        evidence.write_text(
+            json.dumps(
+                {
+                    "note": (
+                        "Polaris compatibility metadata for "
+                        "ghcr.io/acme/unrelated-controller@sha256:"
+                        + "a" * 64
+                    )
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        verifier.audit(root)
 
     def test_unrelated_dsse_subject_is_allowed(self) -> None:
         root = self._fixture()
@@ -1381,6 +1539,65 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             "db-bom.tf": (
                 "\ufeffresource \"kubernetes_secret_v1\" \"db\" {}\n"
             ),
+            "db-unquoted.tf": (
+                "resource kubernetes_secret_v1 db {}\n"
+            ),
+        }
+        for filename, content in cases.items():
+            with self.subTest(filename=filename):
+                root = self._fixture()
+                manifest = root / "opentofu/dev" / filename
+                manifest.parent.mkdir(parents=True)
+                manifest.write_text(content, encoding="utf-8")
+                self._assert_code(root, "RUNTIME_BLOCK", filename)
+
+    def test_encoded_generic_opentofu_manifests_fail_closed(self) -> None:
+        encoded_secret = base64.b64encode(
+            json.dumps(
+                {
+                    "apiVersion": "v1",
+                    "kind": "Secret",
+                    "metadata": {"name": "db"},
+                }
+            ).encode("utf-8")
+        ).decode("ascii")
+        cases = {
+            "generic.tf": (
+                'resource "kubernetes_manifest" "encoded" {\n'
+                f'  manifest = jsondecode(base64decode("{encoded_secret}"))\n'
+                "}\n"
+            ),
+            "generic-unquoted.tf": (
+                "resource kubernetes_manifest encoded {\n"
+                f'  manifest = jsondecode(base64decode("{encoded_secret}"))\n'
+                "}\n"
+            ),
+            "generic-unquoted-unicode-name.tf": (
+                "resource kubernetes_manifest 証跡 {\n"
+                f'  manifest = jsondecode(base64decode("{encoded_secret}"))\n'
+                "}\n"
+            ),
+            "generic.tf.json": json.dumps(
+                {
+                    "resource": {
+                        "kubernetes_manifest": {
+                            "encoded": {
+                                "manifest": (
+                                    "${jsondecode(base64decode("
+                                    f'"{encoded_secret}"'
+                                    "))}"
+                                )
+                            }
+                        }
+                    }
+                }
+            )
+            + "\n",
+            "kubectl.tf": (
+                'resource "kubectl_manifest" "encoded" {\n'
+                f'  yaml_body = base64decode("{encoded_secret}")\n'
+                "}\n"
+            ),
         }
         for filename, content in cases.items():
             with self.subTest(filename=filename):
@@ -1431,6 +1648,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 "locals {\n"
                 "  note = <<EOT\n"
                 'resource "kubernetes_secret_v1" "db" {}\n'
+                'resource "kubernetes_manifest" "encoded" {}\n'
                 "EOT\n"
                 "}\n"
             ),
