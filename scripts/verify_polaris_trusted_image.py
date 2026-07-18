@@ -13,7 +13,7 @@ import subprocess
 import sys
 import unicodedata
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 
 POLARIS_SOURCE = Path("bootstrap/polaris/v1.6.0/source.json")
@@ -190,6 +190,7 @@ PENDING_SCRIPT_SELF = "scripts/verify_polaris_trusted_image.py"
 PENDING_SCRIPT_PATHS = set(PENDING_SCRIPT_FILE_INVENTORY) | {
     PENDING_SCRIPT_SELF
 }
+PENDING_CHART_PATHS = {"AGENTS.md", "README.md"}
 POLARIS_BLOCKERS = [
     "Gradle dependency closure is not retained or independently reproducible.",
     "The main-only Polaris publication has not run.",
@@ -268,6 +269,77 @@ APPROVED_OPENTOFU_SECRET_FILES = {
         "94f2c064b972cf412fde7bae1049006a9a01cebe95993fff2daec4a525fa8524"
     ),
 }
+PENDING_RUNTIME_FILE_INVENTORY = {
+    "charts/AGENTS.md": (
+        "ea89f9be52c63608f6e4029a0559ceeee2631cf40d48d53c82694182840757f7"
+    ),
+    "charts/README.md": (
+        "89926b09c2e3253cd20b1515eff66396d47355fbbfa7c4b4ae5981bd4b750e29"
+    ),
+    "deploy/README.md": (
+        "e5fe9c28019256e460c8f79904e7523a33ca3836a4feda503ed96153e1a74125"
+    ),
+    "deploy/gitops/clusters/local-lite/dev.yaml": (
+        "c1c872b4cb148482106960ad978a12a566d6454b18498735f0c9cb768e798a54"
+    ),
+    "deploy/gitops/clusters/local-lite/flux-system/gotk-components.yaml": (
+        "ed307189fd1f9e49819a50843bb6f3c9257fe6d4d8359d1950b38207c26c3854"
+    ),
+    "deploy/gitops/clusters/local-lite/flux-system/gotk-sync.yaml": (
+        "b1083278d11f3512e06e4fcb7d5c048ad25e8b365f498721b4d8cad4365f1a47"
+    ),
+    "deploy/gitops/clusters/local-lite/flux-system/kustomization.yaml": (
+        "6ae842182f60f07621c519666238612bcdc7f5a235adcc5fc3b9998eea53534a"
+    ),
+    "deploy/gitops/clusters/local-lite/object-storage.yaml": (
+        "cc487647bb872a4f0b3b4649957d16912d6716eab429e03b70d19280e5589979"
+    ),
+    "deploy/gitops/dev/kustomization.yaml": (
+        "58e0f98487664eb6104fc266808d361f35e248fa5eca186e3670792c2fee75b3"
+    ),
+    "deploy/gitops/dev/smoke-configmap.yaml": (
+        "f17f662c0f6fc7d804ced0346146a29fd1fa6685e4699c92d9a0c5d4990d66f4"
+    ),
+    "deploy/gitops/object-storage/contract-configmap.yaml": (
+        "c233ec0915b40b3e01f16e5d995f048e1e2e8dcdc6fbdf87f6b56da5c2240c18"
+    ),
+    "deploy/gitops/object-storage/kustomization.yaml": (
+        "e5bafeec039a50fe0e3a47dc192d7fbcf11cd787cab09d5699a117a67a2d0c5d"
+    ),
+    "deploy/gitops/object-storage/networkpolicy.yaml": (
+        "50be544fffce9c6e049699d47836186fa9a672e5e782bfb4b7cd5c871657e1ba"
+    ),
+    "deploy/gitops/object-storage/service.yaml": (
+        "94d1401bfbbcbcc0bc8d8832b7a35f2d9dbfde49e1a4aa456dba34a52dad9c52"
+    ),
+    "deploy/gitops/object-storage/statefulset.yaml": (
+        "55f7e30e45ee100bd031ef02b1ebe0d59220fb29525969f7e67d7ebb1c3dc4cc"
+    ),
+    "opentofu/README.md": (
+        "4cf3f54f0a970b99f15e0b2ec242415bd850de45313a0c96d20c7a4cfcc50f53"
+    ),
+    "opentofu/dev/.terraform.lock.hcl": (
+        "155179caa6064e3ab72e2939371410e02e42d8f0b622ba36db1d627770471fa0"
+    ),
+    "opentofu/dev/bootstrap-images.json": (
+        "f00a249a6c0d48ba0017923e0a5f68bd7eb9e76467aa0aa91019411fc4576903"
+    ),
+    "opentofu/dev/main.tf": (
+        "d6b737d466a70ac7f547a8ca381d3efcde6bff2644d5e7803a15c57b6e709bfd"
+    ),
+    "opentofu/dev/object-storage.tf": (
+        "94f2c064b972cf412fde7bae1049006a9a01cebe95993fff2daec4a525fa8524"
+    ),
+    "opentofu/dev/outputs.tf": (
+        "d8a3a96f45f1ef571f7f2e7d6d2ccb2d4b161a0ccdd9861902a3064e93d95d01"
+    ),
+    "opentofu/dev/variables.tf": (
+        "7546eb24b1c52cdb6d92bd304af99c5e3eec26c2718dc6dfd3c095adecb2b1c4"
+    ),
+    "opentofu/dev/versions.tf": (
+        "cdc92d2859ade98aed3b8fbc910da8e12e5f8a800943a4d7ba016911bbd18296"
+    ),
+}
 PATH_CAMEL_BOUNDARY = re.compile(
     r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])"
 )
@@ -317,6 +389,12 @@ RUNTIME_OPENTOFU_RESOURCE = re.compile(
     r'(?:"(?P<quoted_type>(?:\\.|[^"\\\r\n])*)"'
     r'|(?P<bare_type>[^"{}\s]+))'
     r'[ \t\r\n]+(?:"(?:\\.|[^"\\\r\n])*"|[^"{}\s]+)'
+    r'[ \t\r\n]*\{',
+    re.IGNORECASE | re.MULTILINE,
+)
+RUNTIME_OPENTOFU_PROVISIONER = re.compile(
+    r'^[ \t]*provisioner[ \t\r\n]+'
+    r'(?:"(?:\\.|[^"\\\r\n])*"|[^"{}\s]+)'
     r'[ \t\r\n]*\{',
     re.IGNORECASE | re.MULTILINE,
 )
@@ -1369,6 +1447,24 @@ def _audit_pending_files(root: Path) -> None:
             "script changed while Polaris dependency closure is pending: "
             f"{relative}",
         )
+    charts_root = root / "charts"
+    if charts_root.exists():
+        _expect(
+            charts_root.is_dir() and not charts_root.is_symlink(),
+            "FORBIDDEN_PATH",
+            "invalid charts root while Polaris dependency closure is pending",
+        )
+        for candidate in charts_root.rglob("*"):
+            relative_chart = candidate.relative_to(charts_root).as_posix()
+            _expect(
+                candidate.is_file()
+                and not candidate.is_symlink()
+                and relative_chart in PENDING_CHART_PATHS,
+                "FORBIDDEN_PATH",
+                "Helm chart sources must remain absent while "
+                "Polaris/PostgreSQL admission is pending: "
+                f"{candidate.relative_to(root)}",
+            )
     for evidence_root in (POLARIS_EVIDENCE, POSTGRES_EVIDENCE):
         directory = root / evidence_root
         _expect(
@@ -1421,12 +1517,18 @@ def _is_regular_file_without_symlink_components(
     return candidate.is_file()
 
 
-def _git_tracked_script_paths(root: Path) -> set[str] | None:
+def _git_tracked_paths(
+    root: Path,
+    pathspecs: tuple[str, ...] = (),
+) -> set[str] | None:
     if not (root / ".git").exists():
         return None
     try:
+        command = ["git", "-C", str(root), "ls-files", "-z"]
+        if pathspecs:
+            command.extend(("--", *pathspecs))
         completed = subprocess.run(
-            ["git", "-C", str(root), "ls-files", "-z", "--", "scripts"],
+            command,
             check=True,
             capture_output=True,
         )
@@ -1438,8 +1540,12 @@ def _git_tracked_script_paths(root: Path) -> set[str] | None:
     except (OSError, subprocess.CalledProcessError, UnicodeError) as error:
         _fail(
             "FORBIDDEN_PATH",
-            f"cannot inspect tracked scripts inventory: {error}",
+            f"cannot inspect tracked repository paths: {error}",
         )
+
+
+def _git_tracked_script_paths(root: Path) -> set[str] | None:
+    return _git_tracked_paths(root, ("scripts",))
 
 
 def _mapping_field(value: Mapping[str, Any], name: str) -> Any:
@@ -1887,6 +1993,41 @@ def _runtime_files(root: Path) -> Iterable[Path]:
                 yield path
 
 
+def _audit_pending_runtime_inventory(root: Path) -> None:
+    tracked = _git_tracked_paths(root, ("deploy", "charts", "opentofu"))
+    if tracked is None:
+        return
+
+    for relative_root in RUNTIME_ROOTS:
+        directory = root / relative_root
+        _expect(
+            directory.is_dir() and not directory.is_symlink(),
+            "RUNTIME_BLOCK",
+            f"invalid pending runtime root: {relative_root}",
+        )
+
+    expected_paths = set(PENDING_RUNTIME_FILE_INVENTORY)
+    _expect(
+        tracked == expected_paths,
+        "RUNTIME_BLOCK",
+        "tracked runtime inventory changed while Polaris/PostgreSQL admission "
+        f"is pending; expected {sorted(expected_paths)}, "
+        f"found {sorted(tracked)}",
+    )
+    for relative, expected_sha256 in PENDING_RUNTIME_FILE_INVENTORY.items():
+        runtime_file = root / relative
+        _expect(
+            _is_regular_file_without_symlink_components(
+                root,
+                Path(relative),
+            )
+            and _sha256(runtime_file) == expected_sha256,
+            "RUNTIME_BLOCK",
+            "runtime file changed while Polaris/PostgreSQL admission is "
+            f"pending: {relative}",
+        )
+
+
 def _hcl_heredoc_end(relative: str, text: str, start: int) -> int | None:
     opener = re.match(
         r"<<(-?)([^\s]+)[ \t]*\r?\n",
@@ -2053,6 +2194,7 @@ def _is_blocked_opentofu_resource_type(value: str) -> bool:
     return bool(
         re.fullmatch(r"kubernetes_secret[a-z0-9_-]*", value, re.IGNORECASE)
         or RUNTIME_OPENTOFU_GENERIC_MANIFEST_RESOURCE.fullmatch(value)
+        or re.fullmatch(r"helm_release[a-z0-9_-]*", value, re.IGNORECASE)
     )
 
 
@@ -2071,12 +2213,24 @@ def _has_blocked_opentofu_resource(relative: str, text: str) -> bool:
         resources = document.get("resource")
         if not isinstance(resources, dict):
             return False
-        return any(
+        if any(
             _is_blocked_opentofu_resource_type(str(resource_type))
             for resource_type in resources
+        ):
+            return True
+        return any(
+            isinstance(resource_instances, Mapping)
+            and any(
+                isinstance(resource_body, Mapping)
+                and "provisioner" in resource_body
+                for resource_body in resource_instances.values()
+            )
+            for resource_instances in resources.values()
         )
     if lowered.endswith((".tf", ".tofu")):
         inspected = _mask_hcl_non_code(relative, text.removeprefix("\ufeff"))
+        if RUNTIME_OPENTOFU_PROVISIONER.search(inspected):
+            return True
         for match in RUNTIME_OPENTOFU_RESOURCE.finditer(inspected):
             quoted_type = match.group("quoted_type")
             resource_type = (
@@ -2132,6 +2286,130 @@ def _yaml_code_line(line: str) -> str:
             return line[:index]
         index += 1
     return line
+
+
+def _yaml_lines_outside_block_scalars(text: str) -> list[str]:
+    code_lines = [_yaml_code_line(line) for line in text.splitlines()]
+    inspected: list[str] = []
+    block_indent: int | None = None
+    for line in code_lines:
+        stripped = line.lstrip(" \t")
+        indent = len(line) - len(stripped)
+        if block_indent is not None:
+            if not stripped or indent > block_indent:
+                inspected.append("")
+                continue
+            block_indent = None
+
+        inspected.append(line)
+        value: str | None = None
+        value_indent = indent
+        entry = _yaml_mapping_entry(line)
+        if entry is not None:
+            value = entry[1]
+            value_indent = entry[2]
+        else:
+            candidate = stripped
+            if candidate.startswith("-") and (
+                len(candidate) == 1 or candidate[1].isspace()
+            ):
+                candidate = candidate[1:].lstrip(" \t")
+            if candidate.startswith(":"):
+                candidate = candidate[1:].lstrip(" \t")
+            value = candidate.strip()
+        if value and RUNTIME_BLOCK_SCALAR_VALUE.fullmatch(value):
+            block_indent = value_indent
+    return inspected
+
+
+def _yaml_merge_key_entry(line: str) -> bool:
+    candidate = line.lstrip(" \t")
+    if candidate.startswith("-") and (
+        len(candidate) == 1 or candidate[1].isspace()
+    ):
+        candidate = candidate[1:].lstrip(" \t")
+    candidate = _strip_yaml_node_properties(candidate)
+    if not candidate:
+        return False
+    if candidate[0] in {"'", '"'}:
+        parsed = _quoted_yaml_scalar(candidate, 0)
+        if parsed is None:
+            return False
+        key, end = parsed
+    elif candidate.startswith("<<"):
+        key = "<<"
+        end = 2
+    else:
+        return False
+    return key == "<<" and candidate[end:].lstrip(" \t").startswith(":")
+
+
+def _explicit_yaml_merge_key(line: str) -> bool:
+    candidate = line.lstrip(" \t")
+    if candidate.startswith("-") and (
+        len(candidate) == 1 or candidate[1].isspace()
+    ):
+        candidate = candidate[1:].lstrip(" \t")
+    if not candidate.startswith("?"):
+        return False
+    candidate = _strip_yaml_node_properties(candidate[1:].strip())
+    if not candidate:
+        return False
+    if candidate[0] in {"'", '"'}:
+        parsed = _quoted_yaml_scalar(candidate, 0)
+        return (
+            parsed is not None
+            and parsed[0] == "<<"
+            and not candidate[parsed[1] :].strip()
+        )
+    return candidate == "<<"
+
+
+def _flow_mapping_has_yaml_merge_key(document: str) -> bool:
+    index = 0
+    mapping_depth = 0
+    while index < len(document):
+        character = document[index]
+        if character in {"'", '"'}:
+            parsed = _quoted_yaml_scalar(document, index)
+            if parsed is None:
+                return False
+            value, index = parsed
+            if (
+                mapping_depth > 0
+                and value == "<<"
+                and document[index:].lstrip(" \t\r\n").startswith(":")
+            ):
+                return True
+            continue
+        if character == "{":
+            mapping_depth += 1
+            index += 1
+            continue
+        if character == "}":
+            mapping_depth = max(0, mapping_depth - 1)
+            index += 1
+            continue
+        if (
+            mapping_depth > 0
+            and document.startswith("<<", index)
+            and document[index + 2 :].lstrip(" \t\r\n").startswith(":")
+        ):
+            return True
+        index += 1
+    return False
+
+
+def _has_yaml_merge_key(text: str) -> bool:
+    lines = _yaml_lines_outside_block_scalars(text.removeprefix("\ufeff"))
+    return (
+        any(
+            _yaml_merge_key_entry(line)
+            or _explicit_yaml_merge_key(line)
+            for line in lines
+        )
+        or _flow_mapping_has_yaml_merge_key("\n".join(lines))
+    )
 
 
 def _has_secret_block_scalar(text: str) -> bool:
@@ -2439,9 +2717,18 @@ def _is_secret_kind(value: Any) -> bool:
     )
 
 
-def _json_has_secret_manifest(value: Any) -> bool:
+def _is_helm_release_kind(value: Any) -> bool:
+    return isinstance(value, str) and value.casefold() == "helmrelease"
+
+
+def _json_has_manifest_kind(
+    value: Any,
+    predicate: Callable[[Any], bool],
+) -> bool:
     if isinstance(value, list):
-        return any(_json_has_secret_manifest(nested) for nested in value)
+        return any(
+            _json_has_manifest_kind(nested, predicate) for nested in value
+        )
     if not isinstance(value, Mapping):
         return False
     kind = next(
@@ -2452,7 +2739,7 @@ def _json_has_secret_manifest(value: Any) -> bool:
         ),
         None,
     )
-    if _is_secret_kind(kind):
+    if predicate(kind):
         return True
     items = next(
         (
@@ -2463,18 +2750,21 @@ def _json_has_secret_manifest(value: Any) -> bool:
         None,
     )
     return isinstance(items, list) and any(
-        _json_has_secret_manifest(nested) for nested in items
+        _json_has_manifest_kind(nested, predicate) for nested in items
     )
 
 
-def _has_parsed_secret_manifest(text: str) -> bool:
+def _has_parsed_manifest_kind(
+    text: str,
+    predicate: Callable[[Any], bool],
+) -> bool:
     inspected = text.removeprefix("\ufeff")
     try:
         document = json.loads(inspected)
     except (json.JSONDecodeError, ValueError):
         pass
     else:
-        return _json_has_secret_manifest(document)
+        return _json_has_manifest_kind(document, predicate)
 
     lines = [_yaml_code_line(line) for line in inspected.splitlines()]
     aliases: dict[str, str] = {}
@@ -2491,7 +2781,7 @@ def _has_parsed_secret_manifest(text: str) -> bool:
         )
         if scoped_kind and entry is not None:
             kind_value = _yaml_scalar_value(entry[1], aliases)
-            if _is_secret_kind(kind_value) or (
+            if predicate(kind_value) or (
                 _yaml_alias_name(entry[1]) is not None
                 and kind_value is None
             ):
@@ -2518,13 +2808,21 @@ def _has_parsed_secret_manifest(text: str) -> bool:
             if not stripped.startswith(":"):
                 break
             kind_value = _yaml_scalar_value(stripped[1:], aliases)
-            if _is_secret_kind(kind_value) or (
+            if predicate(kind_value) or (
                 _yaml_alias_name(stripped[1:]) is not None
                 and kind_value is None
             ):
                 return True
             break
     return False
+
+
+def _has_parsed_secret_manifest(text: str) -> bool:
+    return _has_parsed_manifest_kind(text, _is_secret_kind)
+
+
+def _has_helm_release_manifest(text: str) -> bool:
+    return _has_parsed_manifest_kind(text, _is_helm_release_kind)
 
 
 def _root_mapping_has_secret_generator(value: Any) -> bool:
@@ -2661,10 +2959,16 @@ def _audit_runtime_absence(root: Path) -> None:
             and _has_blocked_opentofu_resource(relative, text)
             and APPROVED_OPENTOFU_SECRET_FILES.get(relative) != _sha256(path)
         )
+        is_runtime_yaml = path.suffix.lower() in {".yaml", ".yml"}
+        is_runtime_document = is_runtime_yaml or path.suffix.lower() == ".json"
         if (
             RUNTIME_IDENTITY.search(text)
             or _has_secret_manifest(text)
             or _has_secret_generator(text)
+            or (is_runtime_yaml and _has_yaml_merge_key(text))
+            or (
+                is_runtime_document and _has_helm_release_manifest(text)
+            )
             or RUNTIME_POSTGRES_CREDENTIAL.search(text)
             or _has_unapproved_catalog_marker(relative, text)
             or unapproved_opentofu_resource
@@ -2687,6 +2991,7 @@ def audit(root: Path) -> None:
     _audit_pending_files(root)
     _audit_retained_pending_evidence(root)
     _audit_ledger(root)
+    _audit_pending_runtime_inventory(root)
     _audit_runtime_absence(root)
 
 

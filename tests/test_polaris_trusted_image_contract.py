@@ -276,6 +276,58 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             "tracked scripts inventory changed",
         )
 
+    def test_tracked_runtime_inventory_is_closed_world(self) -> None:
+        root = self._fixture()
+        for relative in verifier.PENDING_RUNTIME_FILE_INVENTORY:
+            source = ROOT / relative
+            destination = root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+        subprocess.run(
+            ["git", "init", "--quiet"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "add", "."],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        )
+        verifier.audit(root)
+
+        with self.subTest(case="tracked-mutation"):
+            runtime_file = root / "deploy/gitops/dev/smoke-configmap.yaml"
+            runtime_file.write_text(
+                runtime_file.read_text(encoding="utf-8") + "\n",
+                encoding="utf-8",
+            )
+            self._assert_code(
+                root,
+                "RUNTIME_BLOCK",
+                str(runtime_file.relative_to(root)),
+            )
+
+        shutil.copy2(
+            ROOT / "deploy/gitops/dev/smoke-configmap.yaml",
+            runtime_file,
+        )
+        with self.subTest(case="tracked-addition"):
+            addition = root / "deploy/gitops/dev/neutral.yaml"
+            addition.write_text("kind: ConfigMap\n", encoding="utf-8")
+            subprocess.run(
+                ["git", "add", str(addition.relative_to(root))],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            self._assert_code(
+                root,
+                "RUNTIME_BLOCK",
+                "tracked runtime inventory changed",
+            )
+
     def test_alternate_containerfile_name_is_forbidden_while_pending(
         self,
     ) -> None:
@@ -1402,6 +1454,128 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 manifest.write_text(content, encoding="utf-8")
                 verifier.audit(root)
 
+    def test_yaml_merge_keys_fail_closed_in_runtime_documents(self) -> None:
+        cases = {
+            "block-direct.yaml": (
+                "apiVersion: kustomize.config.k8s.io/v1beta1\n"
+                "kind: Kustomization\n"
+                "<<: &generated\n"
+                "  secretGenerator:\n"
+                "    - name: database\n"
+                "      literals: [username=example, password=example]\n"
+            ),
+            "flow.yaml": (
+                "{<<: &generated {secretGenerator: []}, "
+                "configMapGenerator: []}\n"
+            ),
+            "sequence.yaml": (
+                "<<: [&first {configMapGenerator: []}, "
+                "&second {secretGenerator: []}]\n"
+            ),
+            "tagged.yaml": (
+                "!!merge <<: &generated {secretGenerator: []}\n"
+            ),
+            "explicit.yaml": (
+                "? !!merge <<\n"
+                ": &generated {secretGenerator: []}\n"
+            ),
+            "quoted.yaml": (
+                '"<<": &generated {secretGenerator: []}\n'
+            ),
+        }
+        for filename, content in cases.items():
+            with self.subTest(filename=filename):
+                root = self._fixture()
+                manifest = root / "deploy/gitops/lakehouse" / filename
+                manifest.parent.mkdir(parents=True)
+                manifest.write_text(content, encoding="utf-8")
+                self._assert_code(root, "RUNTIME_BLOCK", filename)
+
+    def test_yaml_merge_key_examples_in_data_are_allowed(self) -> None:
+        root = self._fixture()
+        manifest = root / "deploy/gitops/lakehouse/settings.yaml"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(
+            "apiVersion: v1\n"
+            "kind: ConfigMap\n"
+            "# <<: *example\n"
+            "metadata:\n"
+            '  annotations: {example: \"<<: *example\"}\n'
+            "data:\n"
+            '  inline: \"<<: *example\"\n'
+            "  prose: merge <<: *example\n"
+            "  literal: |-\n"
+            "    <<: *example\n",
+            encoding="utf-8",
+        )
+        verifier.audit(root)
+
+    def test_pending_local_helm_chart_sources_fail_closed(self) -> None:
+        root = self._fixture()
+        chart = root / "charts/neutral"
+        templates = chart / "templates"
+        templates.mkdir(parents=True)
+        (chart / "Chart.yaml").write_text(
+            "apiVersion: v2\nname: neutral\nversion: 0.1.0\n",
+            encoding="utf-8",
+        )
+        (chart / "values.yaml").write_text(
+            "target: ConfigMap\n",
+            encoding="utf-8",
+        )
+        (templates / "runtime.yaml").write_text(
+            "apiVersion: v1\nkind: {{ .Values.target }}\n",
+            encoding="utf-8",
+        )
+        self._assert_code(root, "FORBIDDEN_PATH", "Helm chart sources")
+
+    def test_helm_release_runtime_manifests_fail_closed(self) -> None:
+        cases = {
+            "release.yaml": (
+                "apiVersion: helm.toolkit.fluxcd.io/v2\n"
+                "kind: HelmRelease\n"
+                "metadata:\n"
+                "  name: neutral\n"
+                "spec:\n"
+                "  values:\n"
+                "    target: &target Secret\n"
+                "    kind: *target\n"
+            ),
+            "release.json": json.dumps(
+                {
+                    "apiVersion": "helm.toolkit.fluxcd.io/v2",
+                    "kind": "HelmRelease",
+                    "metadata": {"name": "neutral"},
+                    "spec": {"suspend": True},
+                }
+            )
+            + "\n",
+        }
+        for filename, content in cases.items():
+            with self.subTest(filename=filename):
+                root = self._fixture()
+                manifest = root / "deploy/gitops/lakehouse" / filename
+                manifest.parent.mkdir(parents=True)
+                manifest.write_text(content, encoding="utf-8")
+                self._assert_code(root, "RUNTIME_BLOCK", filename)
+
+    def test_nested_helm_release_schema_name_is_allowed(self) -> None:
+        root = self._fixture()
+        manifest = root / "deploy/gitops/lakehouse/crd.yaml"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(
+            "apiVersion: apiextensions.k8s.io/v1\n"
+            "kind: CustomResourceDefinition\n"
+            "metadata:\n"
+            "  name: examples.example.test\n"
+            "spec:\n"
+            "  names:\n"
+            "    kind: HelmRelease\n"
+            "    plural: examples\n",
+            encoding="utf-8",
+        )
+        verifier.audit(root)
+
     def test_postgres_environment_string_forms_fail_closed(self) -> None:
         cases = {
             "yaml-list": (
@@ -1598,6 +1772,81 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 f'  yaml_body = base64decode("{encoded_secret}")\n'
                 "}\n"
             ),
+            "helm-release.tf": (
+                'resource "helm_release" "encoded" {\n'
+                '  name = "neutral"\n'
+                '  chart = "./neutral"\n'
+                f'  values = [base64decode("{encoded_secret}")]\n'
+                "}\n"
+            ),
+        }
+        for filename, content in cases.items():
+            with self.subTest(filename=filename):
+                root = self._fixture()
+                manifest = root / "opentofu/dev" / filename
+                manifest.parent.mkdir(parents=True)
+                manifest.write_text(content, encoding="utf-8")
+                self._assert_code(root, "RUNTIME_BLOCK", filename)
+
+    def test_opentofu_provisioners_fail_closed(self) -> None:
+        encoded_command = base64.b64encode(
+            b"kubectl apply -f neutral-secret.yaml"
+        ).decode("ascii")
+        cases = {
+            "terraform-data.tf": (
+                'resource "terraform_data" "apply" {\n'
+                '  provisioner "local-exec" {\n'
+                f'    command = base64decode("{encoded_command}")\n'
+                "  }\n"
+                "}\n"
+            ),
+            "null-resource.tf": (
+                'resource "null_resource" "apply" {\n'
+                '  provisioner "remote-exec" {\n'
+                '    inline = ["true"]\n'
+                "  }\n"
+                '  provisioner "file" {\n'
+                '    source = "neutral"\n'
+                '    destination = "/tmp/neutral"\n'
+                "  }\n"
+                "}\n"
+            ),
+            "unquoted.tofu": (
+                "resource terraform_data apply {\n"
+                "  provisioner local-exec {\n"
+                '    command = "true"\n'
+                "  }\n"
+                "}\n"
+            ),
+            "terraform-data.tf.json": json.dumps(
+                {
+                    "resource": {
+                        "terraform_data": {
+                            "apply": {
+                                "provisioner": [
+                                    {
+                                        "local-exec": {
+                                            "command": (
+                                                "${base64decode("
+                                                f'"{encoded_command}"'
+                                                ")}"
+                                            )
+                                        }
+                                    },
+                                    {"remote-exec": {"inline": ["true"]}},
+                                    {
+                                        "file": {
+                                            "source": "neutral",
+                                            "destination": "/tmp/neutral",
+                                        }
+                                    },
+                                ]
+                            }
+                        }
+                    }
+                }
+            )
+            + "\n",
         }
         for filename, content in cases.items():
             with self.subTest(filename=filename):
@@ -1649,6 +1898,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 "  note = <<EOT\n"
                 'resource "kubernetes_secret_v1" "db" {}\n'
                 'resource "kubernetes_manifest" "encoded" {}\n'
+                'provisioner "local-exec" {}\n'
                 "EOT\n"
                 "}\n"
             ),
@@ -1665,6 +1915,34 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 '  end = "${format("%s", "*/")}"\n'
                 "}\n"
             ),
+            "provisioner-comments.tf": (
+                '# provisioner "local-exec" {}\n'
+                '// provisioner "remote-exec" {}\n'
+                '/* provisioner "file" {} */\n'
+            ),
+            "provisioner-attribute.tf": (
+                "locals {\n"
+                '  provisioner = "local-exec"\n'
+                "}\n"
+            ),
+            "provisioner-metadata.tf.json": json.dumps(
+                {
+                    "resource": {
+                        "terraform_data": {
+                            "metadata": {
+                                "input": {
+                                    "metadata": {
+                                        "annotations": {
+                                            "provisioner": "documentation"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            )
+            + "\n",
         }
         for filename, content in cases.items():
             with self.subTest(filename=filename):
