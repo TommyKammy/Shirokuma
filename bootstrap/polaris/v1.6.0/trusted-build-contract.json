@@ -1,11 +1,11 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "component": "polaris",
   "version": "1.6.0",
   "platform": "linux/arm64",
   "lifecycle": {
-    "state": "dependency_snapshot_review_pending",
-    "next_state": "image_publication_pending"
+    "state": "image_publication_pending",
+    "next_state": "image_evidence_review_pending"
   },
   "source": {
     "record": "bootstrap/polaris/v1.6.0/source.json",
@@ -66,7 +66,13 @@
     ]
   },
   "dependency_snapshot": {
-    "state": "review_pending",
+    "state": "approved_for_image_build",
+    "admitted": false,
+    "review_checkpoint": {
+      "merge_commit": "b12593f27ae4e6ec8b64865f9b6b0bbf114ec654",
+      "reviewed_contract_sha256": "db27ec5ebf627ef1772c898614d5f206a2a3affc67007ee29221c525ab8fd3d6",
+      "reviewed_admission_sha256": "78deb90ab1aaede0ff384e2240d52d877678916af038b7dedf802f62da893369"
+    },
     "artifact_repository": "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies",
     "artifact_reference": "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies@sha256:fa889d2c0a6e6dc48816d79680a366e21040be333ab6007b88e4ca4dbf6e59d6",
     "artifact_type": "application/vnd.shirokuma.polaris.gradle-dependencies.v1",
@@ -174,12 +180,75 @@
     }
   },
   "image_publication": {
-    "state": "blocked_dependency_review",
-    "enabled": false,
+    "state": "pending_main_publication",
+    "enabled": true,
     "repository": "ghcr.io/tommykammy/shirokuma-polaris",
     "trusted_tag": "1.6.0-arm64",
-    "containerfile": null,
-    "workflow": null
+    "containerfile": {
+      "path": "bootstrap/polaris/v1.6.0/Containerfile",
+      "sha256": "e2aea29a93ac4369fc558c2161966fa48e3061238cc41ae849788f8e8e4cfea8"
+    },
+    "source_overlay": {
+      "path": "bootstrap/polaris/v1.6.0/patches/0001-shirokuma-bounded-runtime.patch",
+      "sha256": "c5739a49baac0d08e6cf71a4dabd06141618f9474702e6c24fd1bb7f22571f48",
+      "state": "approved_bounded_runtime",
+      "applied_after_source_verification": true,
+      "preimages": {
+        "runtime/server/build.gradle.kts": "6394f787e0b0a48a7a916824306c3e4fe54556c7f639aeb47330a63111e05f16",
+        "runtime/service/build.gradle.kts": "c5f351b2444d37efcbd99b4ad850456b33894257390ccf5ece595002c33f548b"
+      },
+      "postimages": {
+        "runtime/server/build.gradle.kts": "597b456dec2ac138d40f78fdf27ad84248d83242465ff25c78d3d8a06f37675b",
+        "runtime/service/build.gradle.kts": "f497e81fdb2d34e4fff2ef1b4f8f97c974afca1080d097e5c40fc149f7a6ec95"
+      },
+      "excluded_capabilities": [
+        "hadoop-file-io",
+        "hadoop-federation",
+        "ranger-authorization"
+      ],
+      "retained_capabilities": [
+        "native-polaris-catalog",
+        "opa-authorization",
+        "postgresql-persistence",
+        "s3-storage"
+      ],
+      "forbidden_runtime_jar_markers": [
+        "hadoop",
+        "ranger",
+        "jetty-http"
+      ]
+    },
+    "runtime_base": {
+      "index": "docker.io/library/amazoncorretto@sha256:d3a3476c19cbe37b2e3e46a2116ff197ab37c7072baad55ee0ad07f3b97e8d02",
+      "arm64_manifest": "docker.io/library/amazoncorretto@sha256:ba1fe4a3fd4c6b70360183fccd1f0a168c3ea6f73709e8f81945cb9087431ff2",
+      "distribution": "Amazon Corretto",
+      "java_version": "21.0.11",
+      "user": "10000:10001"
+    },
+    "vulnerability_gate": {
+      "scanner": "trivy",
+      "version": "0.72.0",
+      "scanners": "vuln",
+      "severity": "HIGH,CRITICAL",
+      "ignore_unfixed": false,
+      "vulnerability_types": "os,library",
+      "maximum_high": 0,
+      "maximum_critical": 0
+    },
+    "publication_boundary": {
+      "repository": "TommyKammy/Shirokuma",
+      "ref": "refs/heads/main",
+      "workflow_sha_equals_source_sha": true,
+      "quarantine_before_promotion": true,
+      "anonymous_exact_digest_verification": true,
+      "credential_fallback_permitted": false,
+      "release_evidence_committed": false,
+      "admission_permitted": false
+    },
+    "workflow": {
+      "path": ".github/workflows/polaris-arm64.yml",
+      "sha256": "7fc0579877c1c16e82ffbd53c38f7a9b061079984cf8857976e4c1457e223ab0"
+    }
   },
   "runtime": {
     "state": "blocked_atomic_admission",

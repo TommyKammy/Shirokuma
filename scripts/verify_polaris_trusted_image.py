@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed audit for the Polaris dependency-evidence review checkpoint."""
+"""Fail-closed audit for the Polaris image-publication checkpoint."""
 
 from __future__ import annotations
 
@@ -21,6 +21,12 @@ from typing import Any, Callable, Iterable, Mapping, Optional
 POLARIS_SOURCE = Path("bootstrap/polaris/v1.6.0/source.json")
 POLARIS_CONTRACT = Path("bootstrap/polaris/v1.6.0/trusted-build-contract.json")
 POLARIS_ADMISSION = Path("bootstrap/polaris/v1.6.0/admission.json")
+POLARIS_CONTAINERFILE = Path("bootstrap/polaris/v1.6.0/Containerfile")
+POLARIS_SOURCE_OVERLAY = Path(
+    "bootstrap/polaris/v1.6.0/patches/"
+    "0001-shirokuma-bounded-runtime.patch"
+)
+POLARIS_IMAGE_WORKFLOW = Path(".github/workflows/polaris-arm64.yml")
 POLARIS_KEY = Path(
     "bootstrap/polaris/v1.6.0/apache-polaris-release-signing-key.asc"
 )
@@ -55,6 +61,9 @@ POLARIS_KEY_SHA256 = (
     "1c72a1534f69e91ffd379c8f1c15c7de1630b919ace45ac896d8b862de26aaa1"
 )
 POLARIS_KEY_FINGERPRINT = "F2EEEB06110BEE1397EC74CBB8960FF52D9B1312"
+POLARIS_KEY_FINGERPRINT_GROUPED = (
+    "F2EE EB06 110B EE13 97EC 74CB B896 0FF5 2D9B 1312"
+)
 POLARIS_KEY_UID = (
     "Apache Polaris Automated Release Signing <private@polaris.apache.org>"
 )
@@ -64,8 +73,15 @@ POLARIS_SOURCE_SHA256 = (
     "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb"
 )
 POLARIS_CONTRACT_SHA256 = (
+    "3c59923597be69a4a42562161a84ffa1cdfe77ebacaba2ebb7b2b58ac6f38989"
+)
+REVIEWED_POLARIS_CONTRACT_SHA256 = (
     "db27ec5ebf627ef1772c898614d5f206a2a3affc67007ee29221c525ab8fd3d6"
 )
+REVIEWED_POLARIS_ADMISSION_SHA256 = (
+    "78deb90ab1aaede0ff384e2240d52d877678916af038b7dedf802f62da893369"
+)
+POLARIS_DEPENDENCY_REVIEW_MERGE = "b12593f27ae4e6ec8b64865f9b6b0bbf114ec654"
 GRADLE_DISTRIBUTION_SHA256 = (
     "87a2216cc1f9122192d4e0fe905ffdf1b4c72cff797e9f733b174e157cadd396"
 )
@@ -85,6 +101,39 @@ RUNTIME_ARM64 = (
     "registry.access.redhat.com/ubi9/openjdk-21-runtime@sha256:"
     "76903aaf7aef43c1572674ac745de54e6c9877796127ac498959697afbc84dd5"
 )
+IMAGE_RUNTIME_INDEX = (
+    "docker.io/library/amazoncorretto@sha256:"
+    "d3a3476c19cbe37b2e3e46a2116ff197ab37c7072baad55ee0ad07f3b97e8d02"
+)
+IMAGE_RUNTIME_ARM64 = (
+    "docker.io/library/amazoncorretto@sha256:"
+    "ba1fe4a3fd4c6b70360183fccd1f0a168c3ea6f73709e8f81945cb9087431ff2"
+)
+POLARIS_CONTAINERFILE_SHA256 = (
+    "e2aea29a93ac4369fc558c2161966fa48e3061238cc41ae849788f8e8e4cfea8"
+)
+POLARIS_SOURCE_OVERLAY_SHA256 = (
+    "c5739a49baac0d08e6cf71a4dabd06141618f9474702e6c24fd1bb7f22571f48"
+)
+POLARIS_IMAGE_WORKFLOW_SHA256 = (
+    "7fc0579877c1c16e82ffbd53c38f7a9b061079984cf8857976e4c1457e223ab0"
+)
+POLARIS_OVERLAY_PREIMAGES = {
+    "runtime/server/build.gradle.kts": (
+        "6394f787e0b0a48a7a916824306c3e4fe54556c7f639aeb47330a63111e05f16"
+    ),
+    "runtime/service/build.gradle.kts": (
+        "c5f351b2444d37efcbd99b4ad850456b33894257390ccf5ece595002c33f548b"
+    ),
+}
+POLARIS_OVERLAY_POSTIMAGES = {
+    "runtime/server/build.gradle.kts": (
+        "597b456dec2ac138d40f78fdf27ad84248d83242465ff25c78d3d8a06f37675b"
+    ),
+    "runtime/service/build.gradle.kts": (
+        "f497e81fdb2d34e4fff2ef1b4f8f97c974afca1080d097e5c40fc149f7a6ec95"
+    ),
+}
 POSTGRES_INDEX = (
     "cgr.dev/chainguard/postgres@sha256:"
     "3dc629a917612f1630c6f8e7a17f23a42cbd5917b9b3080972b70b1583daff34"
@@ -98,10 +147,8 @@ POSTGRES_ATTESTATION = (
 )
 
 FORBIDDEN_PENDING_PATHS = (
-    Path("bootstrap/polaris/v1.6.0/Containerfile"),
     Path("bootstrap/polaris/v1.6.0/gradle-dependency-inputs.json"),
     Path("bootstrap/polaris/v1.6.0/release-evidence.json"),
-    Path(".github/workflows/polaris-arm64.yml"),
 )
 POLARIS_DEPENDENCY_WORKFLOW = Path(
     ".github/workflows/polaris-gradle-dependencies.yml"
@@ -202,6 +249,7 @@ POLARIS_SOURCE_ARCHIVE_VALIDATOR_SHA256 = (
     "00ac3ec84bd9ff48914e0429f517eabbfc9380410740c2e626608bc036f8ebb9"
 )
 POLARIS_ALLOWED_PATHS = {
+    "Containerfile",
     "admission.json",
     "apache-polaris-release-signing-key.asc",
     "evidence",
@@ -211,6 +259,8 @@ POLARIS_ALLOWED_PATHS = {
         for filename in POLARIS_DEPENDENCY_EVIDENCE_RECORDS
     },
     "source.json",
+    "patches",
+    "patches/0001-shirokuma-bounded-runtime.patch",
     "trusted-build-contract.json",
 }
 POSTGRES_ALLOWED_PATHS = {
@@ -255,6 +305,7 @@ REVIEW_PENDING_WORKFLOW_INVENTORY = {
     ".github/workflows/security.yml": (
         "717c0fad0d108b271777ea2f61a69682fb57c2d8947b387c81276f095dd8176c"
     ),
+    ".github/workflows/polaris-arm64.yml": POLARIS_IMAGE_WORKFLOW_SHA256,
 }
 PENDING_SCRIPT_FILE_INVENTORY = {
     "scripts/bound_evidence.py": (
@@ -315,8 +366,9 @@ PENDING_SCRIPT_PATHS = set(PENDING_SCRIPT_FILE_INVENTORY) | {
 }
 PENDING_CHART_PATHS = {"AGENTS.md", "README.md"}
 POLARIS_BLOCKING_CONTROLS = [
-    {"id": "POLARIS-DEP-SNAPSHOT-REVIEW", "state": "pending"},
-    {"id": "POLARIS-MAIN-PUBLICATION", "state": "satisfied"},
+    {"id": "POLARIS-DEP-SNAPSHOT-PUBLICATION", "state": "satisfied"},
+    {"id": "POLARIS-DEP-SNAPSHOT-REVIEW", "state": "satisfied"},
+    {"id": "POLARIS-IMAGE-MAIN-PUBLICATION", "state": "pending"},
     {"id": "POLARIS-IMAGE-EVIDENCE-REVIEW", "state": "pending"},
     {"id": "POLARIS-POSTGRES-ATOMIC-ADMISSION", "state": "pending"},
 ]
@@ -926,6 +978,226 @@ def _audit_source(root: Path) -> Mapping[str, Any]:
     return source
 
 
+def _read_publication_text(root: Path, relative: Path) -> str:
+    _expect(
+        _is_regular_file_without_symlink_components(root, relative),
+        "PUBLICATION_POLICY",
+        f"{relative} must be a regular file without symlink components",
+    )
+    try:
+        return (root / relative).read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        _fail(
+            "PUBLICATION_POLICY",
+            f"cannot read {relative} as UTF-8: {error}",
+        )
+
+
+def _audit_image_publication_files(root: Path) -> None:
+    expected_hashes = {
+        POLARIS_CONTAINERFILE: POLARIS_CONTAINERFILE_SHA256,
+        POLARIS_SOURCE_OVERLAY: POLARIS_SOURCE_OVERLAY_SHA256,
+        POLARIS_IMAGE_WORKFLOW: POLARIS_IMAGE_WORKFLOW_SHA256,
+    }
+    for relative, expected_sha256 in expected_hashes.items():
+        _expect(
+            _is_regular_file_without_symlink_components(root, relative)
+            and _sha256(root / relative) == expected_sha256,
+            "PUBLICATION_POLICY",
+            f"{relative} differs from the reviewed publication policy",
+        )
+
+    containerfile = _read_publication_text(root, POLARIS_CONTAINERFILE)
+    expected_from = f"FROM {IMAGE_RUNTIME_ARM64}"
+    _expect(
+        containerfile.count(expected_from) == 1,
+        "PUBLICATION_POLICY",
+        "Containerfile must use the exact Corretto arm64 manifest once",
+    )
+    _expect(
+        "USER 10000:10001" in containerfile
+        and 'ENTRYPOINT ["/usr/bin/java"]' in containerfile
+        and 'CMD ["-jar", "/deployments/quarkus-run.jar"]' in containerfile
+        and "EXPOSE 8181 8182" in containerfile
+        and "WORKDIR /deployments" in containerfile,
+        "PUBLICATION_POLICY",
+        "Containerfile runtime identity, ports, or command changed",
+    )
+    expected_copies = {
+        "COPY --chown=10000:10001 build/quarkus-app/lib/ /deployments/lib/",
+        "COPY --chown=10000:10001 build/quarkus-app/*.jar /deployments/",
+        "COPY --chown=10000:10001 build/quarkus-app/app/ /deployments/app/",
+        (
+            "COPY --chown=10000:10001 build/quarkus-app/quarkus/ "
+            "/deployments/quarkus/"
+        ),
+        (
+            "COPY --chown=10000:10001 distribution/LICENSE "
+            "/deployments/LICENSE"
+        ),
+        (
+            "COPY --chown=10000:10001 distribution/NOTICE "
+            "/deployments/NOTICE"
+        ),
+    }
+    actual_copies = {
+        line.strip()
+        for line in containerfile.splitlines()
+        if line.lstrip().startswith("COPY ")
+    }
+    _expect(
+        actual_copies == expected_copies,
+        "PUBLICATION_POLICY",
+        "Containerfile COPY closure changed",
+    )
+    directives = [
+        line.lstrip().split(maxsplit=1)[0].upper()
+        for line in containerfile.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    _expect(
+        not ({"RUN", "ADD", "HEALTHCHECK"} & set(directives))
+        and directives.count("FROM") == 1
+        and directives.count("USER") == 1,
+        "PUBLICATION_POLICY",
+        "Containerfile gained a mutable build step or runtime identity",
+    )
+
+    overlay = _read_publication_text(root, POLARIS_SOURCE_OVERLAY)
+    _expect(
+        overlay.count("diff --git ") == 2
+        and overlay.count(
+            '-  runtimeOnly(project(":polaris-extensions-federation-hadoop"))'
+        )
+        == 1
+        and overlay.count(
+            '-  runtimeOnly(project(":polaris-extensions-auth-ranger"))'
+        )
+        == 1
+        and overlay.count("-  implementation(libs.hadoop.client.api)") == 1
+        and overlay.count("-  implementation(libs.hadoop.client.runtime)")
+        == 1
+        and "GIT binary patch" not in overlay
+        and "../" not in overlay,
+        "PUBLICATION_POLICY",
+        "bounded runtime overlay scope changed",
+    )
+
+    workflow = _read_publication_text(root, POLARIS_IMAGE_WORKFLOW)
+    required_markers = (
+        "runs-on: ubuntu-24.04-arm",
+        "github.repository == 'TommyKammy/Shirokuma'",
+        "github.ref == 'refs/heads/main'",
+        'test "${GITHUB_SHA}" = "${GITHUB_WORKFLOW_SHA}"',
+        "cancel-in-progress: false",
+        "persist-credentials: false",
+        f"DEPENDENCY_REF: {POLARIS_DEPENDENCY_REFERENCE}",
+        f"BUILDER_IMAGE: {BUILDER_ARM64}",
+        f"RUNTIME_BASE: {IMAGE_RUNTIME_ARM64}",
+        f"RUNTIME_PATCH_SHA256: {POLARIS_SOURCE_OVERLAY_SHA256}",
+        f"CONTAINERFILE_SHA256: {POLARIS_CONTAINERFILE_SHA256}",
+        (
+            "SOURCE_SIGNING_KEY_FINGERPRINT: "
+            f"{POLARIS_KEY_FINGERPRINT_GROUPED}"
+        ),
+        (
+            'export SOURCE_SIGNING_KEY_FINGERPRINT="'
+            '${SOURCE_SIGNING_KEY_FINGERPRINT// /}"'
+        ),
+        "--dependency-verification strict",
+        "--no-build-cache",
+        "--no-configuration-cache",
+        "--rerun-tasks",
+        "--network none",
+        "network: none",
+        "no-cache: true",
+        "scanners: vuln",
+        "severity: HIGH,CRITICAL",
+        "ignore-unfixed: false",
+        "vuln-type: os,library",
+        "exit-code: 1",
+        "--read-only",
+        "--cap-drop ALL",
+        "--security-opt no-new-privileges",
+        '"admitted": False',
+        "retention-days: 30",
+        '"forbidden_component_terms": ["hadoop", "ranger", "jetty-http"]',
+    )
+    missing = [marker for marker in required_markers if marker not in workflow]
+    _expect(
+        not missing,
+        "PUBLICATION_POLICY",
+        f"workflow is missing required controls: {missing}",
+    )
+    forbidden_markers = (
+        "pull_request:",
+        "pull_request_target:",
+        "workflow_call:",
+        "contents: write",
+        "issues: write",
+        "pull-requests: write",
+        "--disable-path-validation",
+        "continue-on-error:",
+        "cache-from:",
+        "cache-to:",
+        "ignore-unfixed: true",
+        f"SOURCE_SIGNING_KEY_FINGERPRINT: {POLARIS_KEY_FINGERPRINT}",
+    )
+    present = [marker for marker in forbidden_markers if marker in workflow]
+    _expect(
+        not present,
+        "PUBLICATION_POLICY",
+        f"workflow contains forbidden controls: {present}",
+    )
+    jobs_text = workflow.split("\njobs:\n", maxsplit=1)
+    _expect(
+        len(jobs_text) == 2
+        and re.findall(
+            r"^  ([a-z][a-z0-9_-]*):\s*$",
+            jobs_text[1],
+            flags=re.MULTILINE,
+        )
+        == ["prepare", "verify", "promote"],
+        "PUBLICATION_POLICY",
+        "workflow job closure changed",
+    )
+    action_refs = re.findall(
+        r"^\s+-?\s*uses:\s*([^\s#]+)",
+        workflow,
+        flags=re.MULTILINE,
+    )
+    _expect(
+        bool(action_refs)
+        and all(
+            re.fullmatch(
+                r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}",
+                reference,
+            )
+            is not None
+            for reference in action_refs
+        ),
+        "PUBLICATION_POLICY",
+        "every external Action must be pinned to a full commit SHA",
+    )
+    ordered_markers = (
+        "Anonymously fetch and verify the exact reviewed dependency snapshot",
+        "Fetch and authenticate the signed ASF source release",
+        "Build Polaris from retained dependencies with network disabled",
+        "Log in to GHCR for the run-scoped quarantine push",
+        "Scan the exact digest and block High or Critical findings",
+        "Keyless-sign and verify the exact scanned image",
+        "Reverify the public digest, signature, and provenance before promotion",
+        "Promote the fully verified digest to the non-authoritative trusted tag",
+    )
+    positions = [workflow.find(marker) for marker in ordered_markers]
+    _expect(
+        all(position >= 0 for position in positions)
+        and positions == sorted(positions),
+        "PUBLICATION_POLICY",
+        "workflow verification and credential boundaries changed order",
+    )
+
+
 def _audit_contract(root: Path) -> Mapping[str, Any]:
     contract = _load_json(root, POLARIS_CONTRACT, "CONTRACT_STATE")
     _expect_keysets(
@@ -945,6 +1217,8 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
             ("lifecycle",): {"state", "next_state"},
             ("dependency_snapshot",): {
                 "state",
+                "admitted",
+                "review_checkpoint",
                 "artifact_repository",
                 "artifact_reference",
                 "artifact_type",
@@ -961,6 +1235,11 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "visibility_bootstrap",
                 "tools",
                 "offline_proof",
+            },
+            ("dependency_snapshot", "review_checkpoint"): {
+                "merge_commit",
+                "reviewed_contract_sha256",
+                "reviewed_admission_sha256",
             },
             ("dependency_snapshot", "descriptor"): {
                 "path",
@@ -1060,8 +1339,58 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "repository",
                 "trusted_tag",
                 "containerfile",
+                "source_overlay",
+                "runtime_base",
+                "vulnerability_gate",
+                "publication_boundary",
                 "workflow",
             },
+            ("image_publication", "containerfile"): {"path", "sha256"},
+            ("image_publication", "source_overlay"): {
+                "path",
+                "sha256",
+                "state",
+                "applied_after_source_verification",
+                "preimages",
+                "postimages",
+                "excluded_capabilities",
+                "retained_capabilities",
+                "forbidden_runtime_jar_markers",
+            },
+            ("image_publication", "source_overlay", "preimages"): set(
+                POLARIS_OVERLAY_PREIMAGES
+            ),
+            ("image_publication", "source_overlay", "postimages"): set(
+                POLARIS_OVERLAY_POSTIMAGES
+            ),
+            ("image_publication", "runtime_base"): {
+                "index",
+                "arm64_manifest",
+                "distribution",
+                "java_version",
+                "user",
+            },
+            ("image_publication", "vulnerability_gate"): {
+                "scanner",
+                "version",
+                "scanners",
+                "severity",
+                "ignore_unfixed",
+                "vulnerability_types",
+                "maximum_high",
+                "maximum_critical",
+            },
+            ("image_publication", "publication_boundary"): {
+                "repository",
+                "ref",
+                "workflow_sha_equals_source_sha",
+                "quarantine_before_promotion",
+                "anonymous_exact_digest_verification",
+                "credential_fallback_permitted",
+                "release_evidence_committed",
+                "admission_permitted",
+            },
+            ("image_publication", "workflow"): {"path", "sha256"},
             ("runtime",): {
                 "state",
                 "enabled",
@@ -1074,12 +1403,12 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
     _expect_fields(
         contract,
         {
-            ("schema_version",): 3,
+            ("schema_version",): 4,
             ("component",): "polaris",
             ("version",): POLARIS_VERSION,
             ("platform",): "linux/arm64",
-            ("lifecycle", "state"): "dependency_snapshot_review_pending",
-            ("lifecycle", "next_state"): "image_publication_pending",
+            ("lifecycle", "state"): "image_publication_pending",
+            ("lifecycle", "next_state"): "image_evidence_review_pending",
             ("source", "record"): POLARIS_SOURCE.as_posix(),
             ("source", "record_sha256"): POLARIS_SOURCE_SHA256,
             ("source", "archive_sha512"): POLARIS_ARCHIVE_SHA512,
@@ -1089,7 +1418,23 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
             ("source", "builder_arm64_manifest"): BUILDER_ARM64,
             ("source", "java_major"): 21,
             ("source", "gradle_version"): "9.6.0",
-            ("dependency_snapshot", "state"): "review_pending",
+            ("dependency_snapshot", "state"): "approved_for_image_build",
+            ("dependency_snapshot", "admitted"): False,
+            (
+                "dependency_snapshot",
+                "review_checkpoint",
+                "merge_commit",
+            ): POLARIS_DEPENDENCY_REVIEW_MERGE,
+            (
+                "dependency_snapshot",
+                "review_checkpoint",
+                "reviewed_contract_sha256",
+            ): REVIEWED_POLARIS_CONTRACT_SHA256,
+            (
+                "dependency_snapshot",
+                "review_checkpoint",
+                "reviewed_admission_sha256",
+            ): REVIEWED_POLARIS_ADMISSION_SHA256,
             (
                 "dependency_snapshot",
                 "artifact_repository",
@@ -1437,15 +1782,192 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "offline_proof",
                 "configuration_cache",
             ): False,
-            ("image_publication", "state"): "blocked_dependency_review",
-            ("image_publication", "enabled"): False,
+            ("image_publication", "state"): "pending_main_publication",
+            ("image_publication", "enabled"): True,
             (
                 "image_publication",
                 "repository",
             ): "ghcr.io/tommykammy/shirokuma-polaris",
             ("image_publication", "trusted_tag"): "1.6.0-arm64",
-            ("image_publication", "containerfile"): None,
-            ("image_publication", "workflow"): None,
+            (
+                "image_publication",
+                "containerfile",
+                "path",
+            ): POLARIS_CONTAINERFILE.as_posix(),
+            (
+                "image_publication",
+                "containerfile",
+                "sha256",
+            ): POLARIS_CONTAINERFILE_SHA256,
+            (
+                "image_publication",
+                "source_overlay",
+                "path",
+            ): POLARIS_SOURCE_OVERLAY.as_posix(),
+            (
+                "image_publication",
+                "source_overlay",
+                "sha256",
+            ): POLARIS_SOURCE_OVERLAY_SHA256,
+            (
+                "image_publication",
+                "source_overlay",
+                "state",
+            ): "approved_bounded_runtime",
+            (
+                "image_publication",
+                "source_overlay",
+                "applied_after_source_verification",
+            ): True,
+            (
+                "image_publication",
+                "source_overlay",
+                "preimages",
+            ): POLARIS_OVERLAY_PREIMAGES,
+            (
+                "image_publication",
+                "source_overlay",
+                "postimages",
+            ): POLARIS_OVERLAY_POSTIMAGES,
+            (
+                "image_publication",
+                "source_overlay",
+                "excluded_capabilities",
+            ): [
+                "hadoop-file-io",
+                "hadoop-federation",
+                "ranger-authorization",
+            ],
+            (
+                "image_publication",
+                "source_overlay",
+                "retained_capabilities",
+            ): [
+                "native-polaris-catalog",
+                "opa-authorization",
+                "postgresql-persistence",
+                "s3-storage",
+            ],
+            (
+                "image_publication",
+                "source_overlay",
+                "forbidden_runtime_jar_markers",
+            ): ["hadoop", "ranger", "jetty-http"],
+            (
+                "image_publication",
+                "runtime_base",
+                "index",
+            ): IMAGE_RUNTIME_INDEX,
+            (
+                "image_publication",
+                "runtime_base",
+                "arm64_manifest",
+            ): IMAGE_RUNTIME_ARM64,
+            (
+                "image_publication",
+                "runtime_base",
+                "distribution",
+            ): "Amazon Corretto",
+            (
+                "image_publication",
+                "runtime_base",
+                "java_version",
+            ): "21.0.11",
+            (
+                "image_publication",
+                "runtime_base",
+                "user",
+            ): "10000:10001",
+            (
+                "image_publication",
+                "vulnerability_gate",
+                "scanner",
+            ): "trivy",
+            (
+                "image_publication",
+                "vulnerability_gate",
+                "version",
+            ): "0.72.0",
+            (
+                "image_publication",
+                "vulnerability_gate",
+                "scanners",
+            ): "vuln",
+            (
+                "image_publication",
+                "vulnerability_gate",
+                "severity",
+            ): "HIGH,CRITICAL",
+            (
+                "image_publication",
+                "vulnerability_gate",
+                "ignore_unfixed",
+            ): False,
+            (
+                "image_publication",
+                "vulnerability_gate",
+                "vulnerability_types",
+            ): "os,library",
+            (
+                "image_publication",
+                "vulnerability_gate",
+                "maximum_high",
+            ): 0,
+            (
+                "image_publication",
+                "vulnerability_gate",
+                "maximum_critical",
+            ): 0,
+            (
+                "image_publication",
+                "publication_boundary",
+                "repository",
+            ): "TommyKammy/Shirokuma",
+            (
+                "image_publication",
+                "publication_boundary",
+                "ref",
+            ): "refs/heads/main",
+            (
+                "image_publication",
+                "publication_boundary",
+                "workflow_sha_equals_source_sha",
+            ): True,
+            (
+                "image_publication",
+                "publication_boundary",
+                "quarantine_before_promotion",
+            ): True,
+            (
+                "image_publication",
+                "publication_boundary",
+                "anonymous_exact_digest_verification",
+            ): True,
+            (
+                "image_publication",
+                "publication_boundary",
+                "credential_fallback_permitted",
+            ): False,
+            (
+                "image_publication",
+                "publication_boundary",
+                "release_evidence_committed",
+            ): False,
+            (
+                "image_publication",
+                "publication_boundary",
+                "admission_permitted",
+            ): False,
+            (
+                "image_publication",
+                "workflow",
+                "path",
+            ): POLARIS_IMAGE_WORKFLOW.as_posix(),
+            (
+                "image_publication",
+                "workflow",
+                "sha256",
+            ): POLARIS_IMAGE_WORKFLOW_SHA256,
             ("runtime", "state"): "blocked_atomic_admission",
             ("runtime", "enabled"): False,
             ("runtime", "admission_record"): POLARIS_ADMISSION.as_posix(),
@@ -1490,6 +2012,7 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
         "CONTRACT_STATE",
         "the one-shot dependency publisher must be retired",
     )
+    _audit_image_publication_files(root)
     return contract
 
 
@@ -1512,6 +2035,7 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
                 "dependency_snapshot",
                 "upstream_image_assessment",
                 "planned_candidate",
+                "image_publication",
                 "resident_ledger",
                 "runtime_manifests",
                 "blocking_controls",
@@ -1519,13 +2043,20 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
             },
             ("dependency_snapshot",): {
                 "state",
+                "admitted",
                 "repository",
                 "reference",
                 "publication_evidence",
+                "review_checkpoint",
             },
             ("dependency_snapshot", "publication_evidence"): {
                 "path",
                 "sha256",
+            },
+            ("dependency_snapshot", "review_checkpoint"): {
+                "merge_commit",
+                "reviewed_contract_sha256",
+                "reviewed_admission_sha256",
             },
             ("upstream_image_assessment",): {
                 "reference",
@@ -1537,6 +2068,13 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
                 "reference",
                 "release_evidence",
             },
+            ("image_publication",): {
+                "state",
+                "enabled",
+                "admitted",
+                "containerfile",
+                "workflow",
+            },
             ("resident_ledger",): {"permitted", "atomic_with"},
             ("runtime_manifests",): {"permitted", "forbidden_roots"},
         },
@@ -1545,12 +2083,12 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
     _expect_fields(
         admission,
         {
-            ("schema_version",): 3,
+            ("schema_version",): 4,
             ("component",): "polaris",
             ("version",): POLARIS_VERSION,
             ("platform",): "linux/arm64",
             ("admission",): "blocked",
-            ("state",): "dependency_snapshot_review_pending",
+            ("state",): "image_publication_pending",
             ("source_record",): POLARIS_SOURCE.as_posix(),
             ("source_record_sha256",): POLARIS_SOURCE_SHA256,
             ("build_contract",): POLARIS_CONTRACT.as_posix(),
@@ -1558,7 +2096,11 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
             (
                 "dependency_snapshot",
                 "state",
-            ): "review_pending",
+            ): "approved_for_image_build",
+            (
+                "dependency_snapshot",
+                "admitted",
+            ): False,
             (
                 "dependency_snapshot",
                 "repository",
@@ -1577,6 +2119,21 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
                 "publication_evidence",
                 "sha256",
             ): POLARIS_DEPENDENCY_PUBLICATION_SHA256,
+            (
+                "dependency_snapshot",
+                "review_checkpoint",
+                "merge_commit",
+            ): POLARIS_DEPENDENCY_REVIEW_MERGE,
+            (
+                "dependency_snapshot",
+                "review_checkpoint",
+                "reviewed_contract_sha256",
+            ): REVIEWED_POLARIS_CONTRACT_SHA256,
+            (
+                "dependency_snapshot",
+                "review_checkpoint",
+                "reviewed_admission_sha256",
+            ): REVIEWED_POLARIS_ADMISSION_SHA256,
             ("upstream_image_assessment", "admission"): "rejected",
             (
                 "upstream_image_assessment",
@@ -1588,6 +2145,20 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
             ): "ghcr.io/tommykammy/shirokuma-polaris",
             ("planned_candidate", "reference"): None,
             ("planned_candidate", "release_evidence"): None,
+            (
+                "image_publication",
+                "state",
+            ): "pending_main_publication",
+            ("image_publication", "enabled"): True,
+            ("image_publication", "admitted"): False,
+            (
+                "image_publication",
+                "containerfile",
+            ): POLARIS_CONTAINERFILE.as_posix(),
+            (
+                "image_publication",
+                "workflow",
+            ): POLARIS_IMAGE_WORKFLOW.as_posix(),
             ("resident_ledger", "permitted"): False,
             ("resident_ledger", "atomic_with"): "postgresql",
             ("runtime_manifests", "permitted"): False,
@@ -1597,14 +2168,14 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
             ): ["deploy", "charts", "opentofu"],
             (
                 "next_action",
-            ): "review-and-merge-gradle-dependency-snapshot-evidence",
+            ): "merge-image-publication-policy-and-run-main-publisher",
         },
         "POLARIS_ADMISSION",
     )
     _expect(
         admission.get("blocking_controls") == POLARIS_BLOCKING_CONTROLS,
         "POLARIS_ADMISSION",
-        "all four blocking control states must remain explicit",
+        "all five blocking control states must remain explicit",
     )
     _expect(
         _sha256(root / POLARIS_SOURCE) == POLARIS_SOURCE_SHA256,
@@ -2719,7 +3290,7 @@ def _audit_pending_files(root: Path) -> None:
         _expect(
             not (root / relative).exists(),
             "FORBIDDEN_PATH",
-            f"{relative} must remain absent while dependency closure is pending",
+            f"{relative} must remain absent before image evidence review",
         )
     bootstrap_root = root / "bootstrap"
     _expect(
@@ -2800,27 +3371,10 @@ def _audit_pending_files(root: Path) -> None:
             )
             relative_workflow = workflow.relative_to(root).as_posix()
             workflow_inventory[relative_workflow] = _sha256(workflow)
-            try:
-                content = workflow.read_text(encoding="utf-8")
-            except (OSError, UnicodeError) as error:
-                _fail(
-                    "FORBIDDEN_PATH",
-                    f"cannot inspect workflow {workflow.relative_to(root)}: {error}",
-                )
-            normalized = content.lower()
-            _expect(
-                "polaris" not in normalized
-                and "shirokuma-polaris" not in normalized
-                and "bootstrap/polaris" not in normalized,
-                "FORBIDDEN_PATH",
-                "a Polaris workflow is forbidden while dependency evidence "
-                f"review is pending: {workflow.relative_to(root)}",
-            )
     _expect(
         workflow_inventory == REVIEW_PENDING_WORKFLOW_INVENTORY,
         "FORBIDDEN_PATH",
-        "workflow inventory changed while dependency evidence review is "
-        "pending; "
+        "workflow inventory changed while image publication is pending; "
         f"expected {sorted(REVIEW_PENDING_WORKFLOW_INVENTORY)}, "
         f"found {sorted(workflow_inventory)}",
     )
@@ -4468,9 +5022,9 @@ def main(argv: list[str] | None = None) -> int:
         print(str(error), file=sys.stderr)
         return 1
     print(
-        "polaris-trusted-image: dependency publication evidence is "
-        "review-pending and fail-closed; image and runtime remain "
-        "non-authoritative"
+        "polaris-trusted-image: dependency snapshot is approved for the "
+        "main-only image publisher; image evidence, admission, and runtime "
+        "remain fail-closed"
     )
     return 0
 

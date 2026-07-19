@@ -1,0 +1,35 @@
+diff --git a/runtime/server/build.gradle.kts b/runtime/server/build.gradle.kts
+index 31fe466..511026f 100644
+--- a/runtime/server/build.gradle.kts
++++ b/runtime/server/build.gradle.kts
+@@ -38,9 +38,9 @@ dependencies {
+   runtimeOnly("org.postgresql:postgresql")
+   runtimeOnly(project(":polaris-relational-jdbc"))
+   runtimeOnly("io.quarkus:quarkus-jdbc-postgresql")
+-  runtimeOnly(project(":polaris-extensions-federation-hadoop"))
++  // Shirokuma uses the native Polaris catalog with S3 storage and OPA authorization.
++  // Hadoop federation and Ranger are outside this bounded local-lite runtime profile.
+   runtimeOnly(project(":polaris-extensions-auth-opa"))
+-  runtimeOnly(project(":polaris-extensions-auth-ranger"))
+-
++
+   val nonRestCatalogs = providers.gradleProperty("NonRESTCatalogs").orNull
+   if (nonRestCatalogs?.contains("HIVE") == true) {
+diff --git a/runtime/service/build.gradle.kts b/runtime/service/build.gradle.kts
+index 209ca4c..9c95c1d 100644
+--- a/runtime/service/build.gradle.kts
++++ b/runtime/service/build.gradle.kts
+@@ -76,9 +76,8 @@ dependencies {
+   implementation(libs.guava)
+   implementation(libs.slf4j.api)
+-
++
+-  implementation(libs.hadoop.client.api)
+-  implementation(libs.hadoop.client.runtime)
+-
++  // HadoopFileIO is outside the Shirokuma S3-only runtime profile. Avoid loading
++  // Hadoop's shaded client runtime when that optional storage type is unavailable.
+   implementation(libs.auth0.jwt)
+-
++
+   implementation(libs.smallrye.common.annotation)
