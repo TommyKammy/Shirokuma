@@ -62,7 +62,7 @@ POLARIS_SOURCE_SHA256 = (
     "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb"
 )
 POLARIS_CONTRACT_SHA256 = (
-    "52d277528ffa996a5f9f81645089ef67a99c73f99d5b097d9bb6fbd93aa82325"
+    "59d8b1cb246e5c4a75ab36bdf0b800d11c481e0df960be1442a157f54b3f842d"
 )
 GRADLE_DISTRIBUTION_SHA256 = (
     "87a2216cc1f9122192d4e0fe905ffdf1b4c72cff797e9f733b174e157cadd396"
@@ -111,7 +111,7 @@ POLARIS_DEPENDENCY_PACKAGER = Path(
     "scripts/package_polaris_gradle_dependencies.py"
 )
 POLARIS_DEPENDENCY_PACKAGER_SHA256 = (
-    "09a3569d5a9f8c9cdfedc4eaab3282b98c7f1df46daeeb6df190e9ca8c90cfff"
+    "a4ac646faf1dc09aa802f6905cfc68ee9e5941931410c20073540deded6c613b"
 )
 POLARIS_SOURCE_ARCHIVE_VALIDATOR = Path(
     "scripts/validate_polaris_source_archive.py"
@@ -1387,6 +1387,7 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "descriptor",
                 "verification_metadata",
                 "cache_roots",
+                "module_cache_identity",
                 "limits",
                 "archive",
                 "descriptor_media_type",
@@ -1396,6 +1397,12 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "visibility_bootstrap",
                 "tools",
                 "offline_proof",
+            },
+            ("dependency_snapshot", "module_cache_identity"): {
+                "algorithm",
+                "encoding",
+                "bound_to_artifact_bytes",
+                "authentication",
             },
             ("dependency_snapshot", "limits"): {
                 "maximum_files",
@@ -1739,6 +1746,26 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "caches/modules-2/files-2.1",
                 "caches/modules-2/metadata-2.107",
             ],
+            (
+                "dependency_snapshot",
+                "module_cache_identity",
+                "algorithm",
+            ): "sha1",
+            (
+                "dependency_snapshot",
+                "module_cache_identity",
+                "encoding",
+            ): "lowercase-hex-leading-zeroes-stripped",
+            (
+                "dependency_snapshot",
+                "module_cache_identity",
+                "bound_to_artifact_bytes",
+            ): True,
+            (
+                "dependency_snapshot",
+                "module_cache_identity",
+                "authentication",
+            ): "gradle-verification-metadata-sha256",
             (
                 "dependency_snapshot",
                 "limits",

@@ -44,6 +44,7 @@ ALLOWED_ROOTS = (
     PurePosixPath("caches/modules-2/metadata-2.107"),
 )
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+GRADLE_CACHE_SHA1_RE = re.compile(r"^[1-9a-f][0-9a-f]{0,39}$")
 DYNAMIC_VERSION_RE = re.compile(
     r"(?:snapshot|latest|release|[\[\]\(\),+]|\.\*)",
     re.IGNORECASE,
@@ -91,6 +92,23 @@ def _sha256_stream(
         if max_bytes is not None and size > max_bytes:
             _fail(f"file exceeds the {max_bytes}-byte verification limit")
     return digest.hexdigest(), size
+
+
+def _sha256_sha1_stream(
+    stream: BinaryIO,
+    *,
+    max_bytes: int | None = None,
+) -> tuple[str, str, int]:
+    sha256_digest = hashlib.sha256()
+    sha1_digest = hashlib.sha1(usedforsecurity=False)
+    size = 0
+    while chunk := stream.read(1024 * 1024):
+        sha256_digest.update(chunk)
+        sha1_digest.update(chunk)
+        size += len(chunk)
+        if max_bytes is not None and size > max_bytes:
+            _fail(f"file exceeds the {max_bytes}-byte verification limit")
+    return sha256_digest.hexdigest(), sha1_digest.hexdigest(), size
 
 
 def _open_flags(*, directory: bool = False) -> int:
@@ -246,16 +264,19 @@ def _open_cache_regular(
                 os.close(descriptor)
 
 
-def _sha256_cache_file(
+def _cache_file_hashes(
     cache_root: Path,
     relative: PurePosixPath,
-) -> tuple[str, int]:
+) -> tuple[str, str, int]:
     with _open_cache_regular(
         cache_root,
         relative,
         max_bytes=MAX_TOTAL_FILE_BYTES,
     ) as (stream, _):
-        return _sha256_stream(stream, max_bytes=MAX_TOTAL_FILE_BYTES)
+        return _sha256_sha1_stream(
+            stream,
+            max_bytes=MAX_TOTAL_FILE_BYTES,
+        )
 
 
 def _reject_duplicate_pairs(
@@ -511,9 +532,18 @@ def _parse_verification_metadata(
     return records
 
 
-def _coordinate_for_file(
+def _canonical_gradle_cache_sha1(sha1_digest: str) -> str:
+    if not re.fullmatch(r"[0-9a-f]{40}", sha1_digest):
+        _fail("computed Gradle cache SHA-1 is not canonical")
+    identity = sha1_digest.lstrip("0")
+    if not identity:
+        _fail("computed Gradle cache SHA-1 has no nonzero digits")
+    return identity
+
+
+def _module_cache_entry(
     relative: PurePosixPath,
-) -> tuple[str, str, str, str] | None:
+) -> tuple[tuple[str, str, str, str], str] | None:
     files_root = ALLOWED_ROOTS[0]
     if files_root not in relative.parents:
         return None
@@ -525,7 +555,7 @@ def _coordinate_for_file(
         not group
         or not module
         or not version
-        or not re.fullmatch(r"[0-9a-f]{40,64}", cache_digest)
+        or not GRADLE_CACHE_SHA1_RE.fullmatch(cache_digest)
     ):
         _fail(f"invalid Gradle module cache identity: {relative}")
     if DYNAMIC_VERSION_RE.search(version):
@@ -533,7 +563,14 @@ def _coordinate_for_file(
             "dynamic Gradle dependency version is forbidden in cache: "
             f"{group}:{module}:{version}"
         )
-    return group, module, version, artifact
+    return (group, module, version, artifact), cache_digest
+
+
+def _coordinate_for_file(
+    relative: PurePosixPath,
+) -> tuple[str, str, str, str] | None:
+    entry = _module_cache_entry(relative)
+    return None if entry is None else entry[0]
 
 
 def _file_records(
@@ -555,7 +592,8 @@ def _file_records(
                 f"{normalized_relative}"
             )
         observed_path_identities.add(identity)
-        digest, size = _sha256_cache_file(
+        module_entry = _module_cache_entry(relative)
+        digest, sha1_digest, size = _cache_file_hashes(
             cache_root,
             normalized_relative,
         )
@@ -564,7 +602,16 @@ def _file_records(
             _fail(
                 "Gradle dependency snapshot exceeds the uncompressed size limit"
             )
-        coordinate = _coordinate_for_file(relative)
+        coordinate = None if module_entry is None else module_entry[0]
+        if (
+            module_entry is not None
+            and module_entry[1]
+            != _canonical_gradle_cache_sha1(sha1_digest)
+        ):
+            _fail(
+                "Gradle cache identity differs from artifact SHA-1: "
+                f"{relative}"
+            )
         record: dict[str, Any] = {
             "path": relative.as_posix(),
             "size": size,
@@ -1343,7 +1390,7 @@ def _verify_archive_inventory(
                     if file_stream is None:
                         _fail(f"cannot read archive member: {name}")
                     with file_stream:
-                        digest, size = _sha256_stream(
+                        digest, sha1_digest, size = _sha256_sha1_stream(
                             file_stream,
                             max_bytes=int(record["size"]),
                         )
@@ -1354,6 +1401,18 @@ def _verify_archive_inventory(
                         _fail(
                             "archive member hash differs from descriptor: "
                             f"{name}"
+                        )
+                    module_entry = _module_cache_entry(
+                        PurePosixPath(name)
+                    )
+                    if (
+                        module_entry is not None
+                        and module_entry[1]
+                        != _canonical_gradle_cache_sha1(sha1_digest)
+                    ):
+                        _fail(
+                            "archive Gradle cache identity differs from "
+                            f"artifact SHA-1: {name}"
                         )
     except SnapshotError:
         raise

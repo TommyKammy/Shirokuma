@@ -734,6 +734,21 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         self._rewrite_json(root, verifier.POLARIS_CONTRACT, mutate)
         self._assert_code(root, "CONTRACT_STATE", "no_shared_cache")
 
+    def test_module_cache_identity_contract_drift_fails_closed(self) -> None:
+        root = self._fixture()
+
+        def mutate(value: dict[str, object]) -> None:
+            value["dependency_snapshot"]["module_cache_identity"][  # type: ignore[index]
+                "encoding"
+            ] = "fixed-width-lowercase-hex"
+
+        self._rewrite_json(root, verifier.POLARIS_CONTRACT, mutate)
+        self._assert_code(
+            root,
+            "CONTRACT_STATE",
+            "module_cache_identity.encoding",
+        )
+
     def test_publication_workflow_is_forbidden_while_pending(self) -> None:
         root = self._fixture()
         workflow = root / ".github/workflows/polaris-arm64.yml"
