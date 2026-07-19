@@ -133,14 +133,18 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         key.symlink_to(replacement.name)
         self._assert_code(root, "KEY", "symlink")
 
-    def test_build_enablement_before_dependency_closure_fails_closed(self) -> None:
+    def test_image_enablement_before_snapshot_review_fails_closed(self) -> None:
         root = self._fixture()
 
         def mutate(value: dict[str, object]) -> None:
-            value["build"]["enabled"] = True  # type: ignore[index]
+            value["image_publication"]["enabled"] = True  # type: ignore[index]
 
         self._rewrite_json(root, verifier.POLARIS_CONTRACT, mutate)
-        self._assert_code(root, "CONTRACT_STATE", "build.enabled")
+        self._assert_code(
+            root,
+            "CONTRACT_STATE",
+            "image_publication.enabled",
+        )
 
     def test_extra_publication_contract_is_rejected(self) -> None:
         root = self._fixture()
@@ -151,14 +155,14 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         self._rewrite_json(root, verifier.POLARIS_CONTRACT, mutate)
         self._assert_code(root, "CONTRACT_STATE", "<root> keys")
 
-    def test_empty_build_requirements_are_rejected(self) -> None:
+    def test_shared_cache_enablement_is_rejected(self) -> None:
         root = self._fixture()
 
         def mutate(value: dict[str, object]) -> None:
-            value["required_before_build_enablement"] = []
+            value["dependency_snapshot"]["workflow"]["no_shared_cache"] = False  # type: ignore[index]
 
         self._rewrite_json(root, verifier.POLARIS_CONTRACT, mutate)
-        self._assert_code(root, "CONTRACT_STATE", "build enablement requirements")
+        self._assert_code(root, "CONTRACT_STATE", "no_shared_cache")
 
     def test_publication_workflow_is_forbidden_while_pending(self) -> None:
         root = self._fixture()
@@ -207,6 +211,197 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         )
         self._assert_code(root, "FORBIDDEN_PATH", "workflow inventory changed")
 
+    def test_dependency_workflow_byte_drift_fails_closed(self) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
+        workflow.write_text(
+            workflow.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        self._assert_code(
+            root,
+            "CONTRACT_STATE",
+            "dependency workflow bytes",
+        )
+
+    def test_dependency_workflow_step_order_is_semantically_closed(self) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
+        text = workflow.read_text(encoding="utf-8")
+        first = "      - name: Install checksum-pinned ORAS"
+        second = "      - name: Install pinned Cosign"
+        workflow.write_text(
+            text.replace(first, "      - name: temporary-step", 1)
+            .replace(second, first, 1)
+            .replace("      - name: temporary-step", second, 1),
+            encoding="utf-8",
+        )
+        contract = json.loads(
+            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
+        )
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_dependency_workflow_semantics(root, contract)
+        self.assertIn("ordered step inventory", raised.exception.detail)
+
+    def test_dependency_workflow_action_contract_cannot_self_rebind(
+        self,
+    ) -> None:
+        root = self._fixture()
+        contract = json.loads(
+            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
+        )
+        contract["dependency_snapshot"]["workflow"]["action_uses"][0] = (  # type: ignore[index]
+            "resolve|Check out the reviewed dependency policy|"
+            "actions/checkout@" + "0" * 40
+        )
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_dependency_workflow_semantics(root, contract)
+        self.assertIn("Action pins", raised.exception.detail)
+
+    def test_dependency_workflow_unnamed_step_is_rejected(self) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
+        workflow.write_text(
+            workflow.read_text(encoding="utf-8").replace(
+                "    steps:\n"
+                "      - name: Check out the reviewed dependency policy",
+                "    steps:\n"
+                "      - run: echo unnamed-step\n"
+                "      - name: Check out the reviewed dependency policy",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        contract = json.loads(
+            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
+        )
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_dependency_workflow_semantics(root, contract)
+        self.assertIn("unnamed or extra step entry", raised.exception.detail)
+
+    def test_dependency_workflow_extra_trigger_is_rejected(self) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
+        workflow.write_text(
+            workflow.read_text(encoding="utf-8").replace(
+                "  workflow_dispatch:\n",
+                "  workflow_dispatch:\n"
+                "  schedule:\n"
+                "    - cron: '0 0 * * *'\n",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        contract = json.loads(
+            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
+        )
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_dependency_workflow_semantics(root, contract)
+        self.assertIn("trigger topology", raised.exception.detail)
+
+    def test_dependency_workflow_created_date_cannot_include_commit_diff(
+        self,
+    ) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
+        workflow.write_text(
+            workflow.read_text(encoding="utf-8").replace(
+                'git show -s --no-show-signature --format=%cI "${GITHUB_SHA}"',
+                'git show --no-show-signature --format=%cI "${GITHUB_SHA}"',
+                1,
+            ),
+            encoding="utf-8",
+        )
+        contract = json.loads(
+            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
+        )
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_dependency_workflow_semantics(root, contract)
+        self.assertIn(
+            "required publication semantic",
+            raised.exception.detail,
+        )
+
+    def test_read_only_verifier_cannot_receive_implicit_write_token(
+        self,
+    ) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
+        workflow.write_text(
+            workflow.read_text(encoding="utf-8").replace(
+                "    timeout-minutes: 30\n"
+                "    permissions:\n"
+                "      contents: read\n"
+                "    outputs:",
+                "    timeout-minutes: 30\n"
+                "    env:\n"
+                "      GH_TOKEN: ${{ github.token }}\n"
+                "    permissions:\n"
+                "      contents: read\n"
+                "    outputs:",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        contract = json.loads(
+            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
+        )
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_dependency_workflow_semantics(root, contract)
+        self.assertIn("write credentials", raised.exception.detail)
+
+    def test_dependency_packager_byte_drift_fails_closed(self) -> None:
+        root = self._fixture()
+        packager = root / verifier.POLARIS_DEPENDENCY_PACKAGER
+        packager.write_text(
+            packager.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        self._assert_code(
+            root,
+            "CONTRACT_STATE",
+            "dependency packager bytes",
+        )
+
+    def test_snapshot_lifecycle_cannot_skip_evidence_review(self) -> None:
+        root = self._fixture()
+
+        def mutate(value: dict[str, object]) -> None:
+            value["lifecycle"]["state"] = "pending_main_publication"  # type: ignore[index]
+
+        self._rewrite_json(root, verifier.POLARIS_CONTRACT, mutate)
+        self._assert_code(root, "CONTRACT_STATE", "lifecycle.state")
+
+    def test_snapshot_reference_cannot_be_admitted_before_main_run(self) -> None:
+        root = self._fixture()
+
+        def mutate(value: dict[str, object]) -> None:
+            value["dependency_snapshot"]["artifact_reference"] = (  # type: ignore[index]
+                "ghcr.io/tommykammy/"
+                "shirokuma-polaris-gradle-dependencies@sha256:"
+                + "0" * 64
+            )
+
+        self._rewrite_json(root, verifier.POLARIS_CONTRACT, mutate)
+        self._assert_code(
+            root,
+            "CONTRACT_STATE",
+            "artifact_reference",
+        )
+
+    def test_dependency_descriptor_is_forbidden_before_main_run(self) -> None:
+        root = self._fixture()
+        descriptor = (
+            root
+            / "bootstrap/polaris/v1.6.0/gradle-dependency-inputs.json"
+        )
+        descriptor.write_text("{}\n", encoding="utf-8")
+        self._assert_code(
+            root,
+            "FORBIDDEN_PATH",
+            "gradle-dependency-inputs.json",
+        )
+
     def test_privileged_workflow_executable_drift_is_forbidden_while_pending(
         self,
     ) -> None:
@@ -231,7 +426,11 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         target = root / "trusted-scripts"
         scripts.rename(target)
         scripts.symlink_to(target.name, target_is_directory=True)
-        self._assert_code(root, "FORBIDDEN_PATH", "invalid scripts root")
+        self._assert_code(
+            root,
+            "CONTRACT_STATE",
+            "dependency packager bytes",
+        )
 
     def test_scripts_import_shadow_additions_are_forbidden(self) -> None:
         cases = {
@@ -805,14 +1004,14 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         self._rewrite_json(root, verifier.POLARIS_ADMISSION, mutate)
         self._assert_code(root, "POLARIS_ADMISSION", "runtime_manifests.permitted")
 
-    def test_empty_polaris_blockers_are_rejected(self) -> None:
+    def test_polaris_blocking_control_cannot_self_approve(self) -> None:
         root = self._fixture()
 
         def mutate(value: dict[str, object]) -> None:
-            value["blockers"] = ["", "", "", ""]
+            value["blocking_controls"][0]["state"] = "approved"  # type: ignore[index]
 
         self._rewrite_json(root, verifier.POLARIS_ADMISSION, mutate)
-        self._assert_code(root, "POLARIS_ADMISSION", "blockers")
+        self._assert_code(root, "POLARIS_ADMISSION", "blocking control")
 
     def test_source_record_byte_drift_breaks_admission_binding(self) -> None:
         root = self._fixture()

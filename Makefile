@@ -69,6 +69,7 @@ verify-object-storage-profile:
 	@$(PYTHON) scripts/verify_trusted_image.py audit --root .
 
 verify-polaris-build-contract:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_package_polaris_gradle_dependencies.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_polaris_trusted_image_contract.py'
 	@$(PYTHON) scripts/verify_polaris_trusted_image.py audit --root .
 
