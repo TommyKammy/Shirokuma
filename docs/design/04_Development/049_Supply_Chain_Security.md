@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-19
-version: "0.9"
+version: "1.0"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -233,20 +233,27 @@ The publication workflow and packager are byte-pinned by the schema-v2 contract.
 ORAS layer arguments must be canonical relative paths resolved from the bounded
 candidate root. Absolute workspace paths and `--disable-path-validation` are
 forbidden; violations must fail before registry upload.
+With the pinned Cosign v3.1.1, `cosign sign --bundle` must generate and retain
+the signature bundle, while registry-backed `cosign verify` must verify the
+exact digest reference, certificate identity, and issuer without passing
+`--bundle`. The bundle and registry verification output remain separate,
+hash-bound evidence records; neither may be dropped or substituted.
 The generated descriptor, verification metadata, manifest, signature,
 provenance, and offline-build record remain non-authoritative until a separate
 evidence-only pull request binds their exact main-run digests in Git. Failure of
 the anonymous pull keeps the dependency snapshot blocked; a registry credential
 must not be added as a fallback.
 
-GHCR creates the first package as private. Therefore the first main run may
-finish the immutable push, keyless signature, and provenance, then fail
-intentionally at the anonymous-pull gate. That failed attempt is never admitted.
-The repository owner must review the package and make it public (a public
-package must be treated as an irreversible disclosure), then rerun the workflow.
-Only a rerun whose exact digest is retrievable with an empty registry config may
-produce review-pending evidence. The evidence-only pull request must also delete
-this publisher while advancing the lifecycle to
+GHCR creates a package as private by default. If the package remains private,
+the first main run may finish the immutable push, keyless signature, and
+provenance, then fail intentionally at the anonymous-pull gate. That failed
+attempt is never admitted. The repository owner must review the package and make
+it public (a public package must be treated as an irreversible disclosure), then
+rerun the workflow. If the exact digest is already anonymously retrievable with
+an empty registry config, no visibility mutation is required. Only an attempt
+that passes that anonymous retrieval may produce review-pending evidence. The
+evidence-only pull request must also delete this publisher while advancing the
+lifecycle to
 `dependency_snapshot_review_pending`; if the lifecycle file changes before
 deletion, the workflow's first read-only gate skips all build and publication
 steps instead of creating another dependency artifact.

@@ -62,7 +62,7 @@ POLARIS_SOURCE_SHA256 = (
     "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb"
 )
 POLARIS_CONTRACT_SHA256 = (
-    "255dab3f052572baf9d32ec4cbb7b0512b11b862384eb44104dbd21f6ffa53e6"
+    "8198847d075797eaa183472523c29f6b132e9c3bfb9170ee98c9882ca3dad0c2"
 )
 GRADLE_DISTRIBUTION_SHA256 = (
     "87a2216cc1f9122192d4e0fe905ffdf1b4c72cff797e9f733b174e157cadd396"
@@ -105,7 +105,7 @@ POLARIS_DEPENDENCY_WORKFLOW = Path(
     ".github/workflows/polaris-gradle-dependencies.yml"
 )
 POLARIS_DEPENDENCY_WORKFLOW_SHA256 = (
-    "2a594cb49e8a2be4154395a6c30836f8ffc7fafd933cac41ad04574353af91d3"
+    "d6eabefcc9dc9be8225e0d93ba7c25c0b65646fd83957b3a7f8a15f36c7e3528"
 )
 POLARIS_DEPENDENCY_PACKAGER = Path(
     "scripts/package_polaris_gradle_dependencies.py"
@@ -1352,6 +1352,84 @@ def _audit_dependency_workflow_semantics(
         and text.count("oras push") == 1,
         "CONTRACT_STATE",
         "ORAS publication must use the exact candidate-scoped relative push",
+    )
+    signing_step = _workflow_step_block(
+        text,
+        "Keyless-sign the exact OCI manifest",
+    )
+    retained_bundle_signing = "\n".join(
+        [
+            "          cosign sign --yes \\",
+            (
+                '            --bundle "${candidate_dir}/'
+                'cosign-signature-bundle.json" \\'
+            ),
+            '            "${PUBLISHED_REFERENCE}"',
+        ]
+    )
+    registry_reference_verification = "\n".join(
+        [
+            "          cosign verify \\",
+            "            --certificate-identity \\",
+            (
+                '              "https://github.com/${GITHUB_REPOSITORY}/'
+                ".github/workflows/polaris-gradle-dependencies.yml@"
+                '${GITHUB_REF}" \\'
+            ),
+            "            --certificate-oidc-issuer \\",
+            '              "https://token.actions.githubusercontent.com" \\',
+            '            "${PUBLISHED_REFERENCE}" \\',
+            '            > "${candidate_dir}/cosign-verify.json"',
+        ]
+    )
+    _expect(
+        signing_step.count(retained_bundle_signing) == 1
+        and signing_step.count("cosign sign") == 1,
+        "CONTRACT_STATE",
+        "Cosign signing must retain exactly one signature bundle",
+    )
+    _expect(
+        signing_step.count(registry_reference_verification) == 1
+        and signing_step.count("cosign verify") == 1
+        and signing_step.count("--bundle") == 1,
+        "CONTRACT_STATE",
+        "Cosign registry verification must use the exact signed reference "
+        "without a bundle flag",
+    )
+    publication_record_step = _workflow_step_block(
+        text,
+        "Record the review-pending publication",
+    )
+    retained_cosign_record = "\n".join(
+        [
+            '              "cosign_bundle": file_record(',
+            '                  "cosign-signature-bundle.json"',
+            "              ),",
+            (
+                '              "cosign_verification": '
+                'file_record("cosign-verify.json"),'
+            ),
+        ]
+    )
+    publication_retention_step = _workflow_step_block(
+        text,
+        "Retain review-pending publication evidence",
+    )
+    _expect(
+        publication_record_step.count(retained_cosign_record) == 1
+        and publication_retention_step.count(
+            "${{ runner.temp }}/polaris-gradle-candidate/"
+            "cosign-signature-bundle.json"
+        )
+        == 1
+        and publication_retention_step.count(
+            "${{ runner.temp }}/polaris-gradle-candidate/"
+            "cosign-verify.json"
+        )
+        == 1,
+        "CONTRACT_STATE",
+        "Cosign bundle and registry verification must remain hash-bound "
+        "and retained",
     )
     _expect(
         publish_steps.index("Keyless-sign the exact OCI manifest")

@@ -926,6 +926,144 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             raised.exception.detail,
         )
 
+    def test_dependency_workflow_registry_verify_rejects_bundle_flag(
+        self,
+    ) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
+        workflow.write_text(
+            workflow.read_text(encoding="utf-8").replace(
+                "          cosign verify \\\n"
+                "            --certificate-identity \\\n",
+                "          cosign verify \\\n"
+                "            --bundle "
+                '"${candidate_dir}/cosign-signature-bundle.json" \\\n'
+                "            --certificate-identity \\\n",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        contract = json.loads(
+            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
+        )
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_dependency_workflow_semantics(root, contract)
+        self.assertIn(
+            "without a bundle flag",
+            raised.exception.detail,
+        )
+
+    def test_dependency_workflow_signing_must_retain_bundle(self) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
+        workflow.write_text(
+            workflow.read_text(encoding="utf-8").replace(
+                "          cosign sign --yes \\\n"
+                "            --bundle "
+                '"${candidate_dir}/cosign-signature-bundle.json" \\\n',
+                "          cosign sign --yes \\\n",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        contract = json.loads(
+            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
+        )
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_dependency_workflow_semantics(root, contract)
+        self.assertIn(
+            "signature bundle",
+            raised.exception.detail,
+        )
+
+    def test_dependency_workflow_registry_verify_bindings_are_closed(
+        self,
+    ) -> None:
+        mutations = (
+            (
+                (
+                    "https://github.com/${GITHUB_REPOSITORY}/.github/"
+                    "workflows/polaris-gradle-dependencies.yml@${GITHUB_REF}"
+                ),
+                (
+                    "https://github.com/${GITHUB_REPOSITORY}/.github/"
+                    "workflows/other.yml@${GITHUB_REF}"
+                ),
+            ),
+            (
+                "https://token.actions.githubusercontent.com",
+                "https://oauth2.sigstore.dev/auth",
+            ),
+            (
+                "          cosign verify \\\n"
+                "            --certificate-identity \\\n"
+                "              \"https://github.com/${GITHUB_REPOSITORY}/"
+                ".github/workflows/polaris-gradle-dependencies.yml@"
+                "${GITHUB_REF}\" \\\n"
+                "            --certificate-oidc-issuer \\\n"
+                "              \"https://token.actions.githubusercontent.com\" "
+                "\\\n"
+                "            \"${PUBLISHED_REFERENCE}\" \\\n",
+                "          cosign verify \\\n"
+                "            --certificate-identity \\\n"
+                "              \"https://github.com/${GITHUB_REPOSITORY}/"
+                ".github/workflows/polaris-gradle-dependencies.yml@"
+                "${GITHUB_REF}\" \\\n"
+                "            --certificate-oidc-issuer \\\n"
+                "              \"https://token.actions.githubusercontent.com\" "
+                "\\\n"
+                "            \"${PUBLISHED_TAG}\" \\\n",
+            ),
+        )
+        for original, replacement in mutations:
+            with self.subTest(replacement=replacement):
+                root = self._fixture()
+                workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
+                text = workflow.read_text(encoding="utf-8")
+                self.assertIn(original, text)
+                workflow.write_text(
+                    text.replace(original, replacement, 1),
+                    encoding="utf-8",
+                )
+                contract = json.loads(
+                    (root / verifier.POLARIS_CONTRACT).read_text(
+                        encoding="utf-8"
+                    )
+                )
+                with self.assertRaises(verifier.ContractError) as raised:
+                    verifier._audit_dependency_workflow_semantics(
+                        root,
+                        contract,
+                    )
+                self.assertIn(
+                    "exact signed reference",
+                    raised.exception.detail,
+                )
+
+    def test_dependency_workflow_cosign_evidence_must_be_retained(
+        self,
+    ) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
+        workflow.write_text(
+            workflow.read_text(encoding="utf-8").replace(
+                "            ${{ runner.temp }}/polaris-gradle-candidate/"
+                "cosign-signature-bundle.json\n",
+                "",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        contract = json.loads(
+            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
+        )
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_dependency_workflow_semantics(root, contract)
+        self.assertIn(
+            "hash-bound and retained",
+            raised.exception.detail,
+        )
+
     def test_dependency_workflow_action_contract_cannot_self_rebind(
         self,
     ) -> None:

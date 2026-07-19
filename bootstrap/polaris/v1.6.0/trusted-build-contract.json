@@ -113,7 +113,7 @@
     },
     "workflow": {
       "path": ".github/workflows/polaris-gradle-dependencies.yml",
-      "sha256": "2a594cb49e8a2be4154395a6c30836f8ffc7fafd933cac41ad04574353af91d3",
+      "sha256": "d6eabefcc9dc9be8225e0d93ba7c25c0b65646fd83957b3a7f8a15f36c7e3528",
       "runner": "ubuntu-24.04-arm",
       "allowed_events": [
         "push",
