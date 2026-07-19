@@ -775,6 +775,27 @@ class PolarisGradleDependencySnapshotTests(unittest.TestCase):
             ),
         )
 
+    def test_projection_boolean_counter_is_rejected(self) -> None:
+        _, verification, archive, descriptor = self._create()
+
+        def mutate(value: dict[str, object]) -> None:
+            value["projection"][  # type: ignore[index]
+                "excluded_module_file_count"
+            ] = False
+            value["projection"][  # type: ignore[index]
+                "excluded_module_file_bytes"
+            ] = False
+
+        self._rewrite_descriptor(descriptor, mutate)
+        self._assert_snapshot_error(
+            "nonnegative integers",
+            lambda: packager.verify_snapshot(
+                descriptor,
+                verification,
+                archive,
+            ),
+        )
+
     def test_archive_rebound_to_wrong_cache_identity_is_rejected(
         self,
     ) -> None:

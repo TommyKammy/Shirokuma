@@ -1061,7 +1061,7 @@ def _validate_descriptor(
         "descriptor.projection",
     )
     if any(
-        not isinstance(projection.get(field), int)
+        type(projection.get(field)) is not int
         or int(projection[field]) < 0
         for field in projection
     ):

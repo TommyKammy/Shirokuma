@@ -109,7 +109,7 @@
     "verification_metadata_media_type": "application/vnd.gradle.dependency-verification.v1+xml",
     "packager": {
       "path": "scripts/package_polaris_gradle_dependencies.py",
-      "sha256": "2d56d1c59c75ab38d04b157a8d05177f2fafe8a5d061a186beee12235a638281"
+      "sha256": "fbbe803c7d1e52be02ba81f26f6f35fb0d6824fbe59cf3ab579e87c5488723ab"
     },
     "workflow": {
       "path": ".github/workflows/polaris-gradle-dependencies.yml",
