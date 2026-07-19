@@ -1380,6 +1380,7 @@ def _audit_dependency_workflow_semantics(
             '              "https://token.actions.githubusercontent.com" \\',
             '            "${PUBLISHED_REFERENCE}" \\',
             '            > "${candidate_dir}/cosign-verify.json"',
+            "",
         ]
     )
     _expect(
@@ -1395,6 +1396,49 @@ def _audit_dependency_workflow_semantics(
         "CONTRACT_STATE",
         "Cosign registry verification must use the exact signed reference "
         "without a bundle flag",
+    )
+    canonical_signing_step = "\n".join(
+        [
+            "      - name: Keyless-sign the exact OCI manifest",
+            "        env:",
+            "          GHCR_TOKEN: ${{ github.token }}",
+            "        shell: bash",
+            "        run: |",
+            "          set -euo pipefail",
+            (
+                '          candidate_dir="${RUNNER_TEMP}/'
+                'polaris-gradle-candidate"'
+            ),
+            '          echo "${GHCR_TOKEN}" \\',
+            (
+                "            | oras login ghcr.io --username "
+                '"${GITHUB_ACTOR}" --password-stdin'
+            ),
+            "          cosign sign --yes \\",
+            (
+                '            --bundle "${candidate_dir}/'
+                'cosign-signature-bundle.json" \\'
+            ),
+            '            "${PUBLISHED_REFERENCE}"',
+            "          cosign verify \\",
+            "            --certificate-identity \\",
+            (
+                '              "https://github.com/${GITHUB_REPOSITORY}/'
+                ".github/workflows/polaris-gradle-dependencies.yml@"
+                '${GITHUB_REF}" \\'
+            ),
+            "            --certificate-oidc-issuer \\",
+            '              "https://token.actions.githubusercontent.com" \\',
+            '            "${PUBLISHED_REFERENCE}" \\',
+            '            > "${candidate_dir}/cosign-verify.json"',
+            "",
+        ]
+    )
+    _expect(
+        signing_step == canonical_signing_step,
+        "CONTRACT_STATE",
+        "Cosign signing and registry verification step must remain "
+        "closed-world",
     )
     publication_record_step = _workflow_step_block(
         text,

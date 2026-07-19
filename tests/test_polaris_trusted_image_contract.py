@@ -1064,6 +1064,69 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             raised.exception.detail,
         )
 
+    def test_dependency_workflow_signing_step_cannot_rebind_exact_reference(
+        self,
+    ) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
+        text = workflow.read_text(encoding="utf-8")
+        signing_start = text.index(
+            "      - name: Keyless-sign the exact OCI manifest"
+        )
+        original = (
+            '          candidate_dir="${RUNNER_TEMP}/'
+            'polaris-gradle-candidate"\n'
+        )
+        mutation_at = text.index(original, signing_start)
+        workflow.write_text(
+            text[:mutation_at]
+            + original
+            + '          PUBLISHED_REFERENCE="${PUBLISHED_TAG}"\n'
+            + text[mutation_at + len(original) :],
+            encoding="utf-8",
+        )
+        contract = json.loads(
+            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
+        )
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_dependency_workflow_semantics(root, contract)
+        self.assertIn(
+            "closed-world",
+            raised.exception.detail,
+        )
+
+    def test_dependency_workflow_signing_step_cannot_wrap_cosign(
+        self,
+    ) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
+        text = workflow.read_text(encoding="utf-8")
+        signing_start = text.index(
+            "      - name: Keyless-sign the exact OCI manifest"
+        )
+        original = '          echo "${GHCR_TOKEN}" \\\n'
+        mutation_at = text.index(original, signing_start)
+        workflow.write_text(
+            text[:mutation_at]
+            + "          cosign() {\n"
+            + '            command cosign "$@"\n'
+            + '            command cosign ver"ify" --bun"dle" '
+            + '"${candidate_dir}/cosign-signature-bundle.json" '
+            + '"${PUBLISHED_REFERENCE}"\n'
+            + "          }\n"
+            + text[mutation_at:],
+            encoding="utf-8",
+        )
+        contract = json.loads(
+            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
+        )
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_dependency_workflow_semantics(root, contract)
+        self.assertIn(
+            "closed-world",
+            raised.exception.detail,
+        )
+
     def test_dependency_workflow_action_contract_cannot_self_rebind(
         self,
     ) -> None:
