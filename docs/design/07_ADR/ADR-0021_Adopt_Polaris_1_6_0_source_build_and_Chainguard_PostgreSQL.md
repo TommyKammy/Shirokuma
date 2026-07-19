@@ -4,8 +4,8 @@ doc_id: "ADR-0021"
 title: "Adopt a source-built Polaris 1.6.0 and signed PostgreSQL metadata store"
 status: proposed
 created: 2026-07-16
-updated: 2026-07-16
-version: "0.1"
+updated: 2026-07-20
+version: "0.2"
 area: "architecture"
 tags: [shirokuma, adr, polaris, postgresql, arm64, supply-chain]
 ---
@@ -24,6 +24,18 @@ Apache publishes a PGP-signed Polaris 1.6.0 source release and SHA-512 checksum.
 The release tag resolves to commit
 `dd306009d81a0e15adafe9dcd7d1c6d04d326f34`. Upstream documents the Java 21
 Gradle container build path.
+
+PR #78 independently reviewed the exact Gradle dependency snapshot and merged
+as `b12593f27ae4e6ec8b64865f9b6b0bbf114ec654`. Publication may now advance to
+the separate image checkpoint, but the snapshot and any future image remain
+non-admitted until their own review boundaries complete.
+
+The UBI 9 Java 21 runtime candidate recorded during the initial source
+assessment no longer meets the zero High/Critical image gate: a 2026-07-20
+Trivy 0.72.0 feasibility scan reported 21 High findings. The unmodified Polaris
+server added another six High findings through Hadoop 3.5.0 and Ranger runtime
+dependencies. Apache Polaris has no newer release and Hadoop 3.5.0 has no
+replacement release that removes its shaded vulnerable components.
 
 The Chainguard PostgreSQL image is a viable metadata-store candidate. On
 2026-07-16 the resolved index
@@ -45,6 +57,20 @@ themselves. Durable evidence and repository verification remain authoritative.
   and SHA-512 before building, publish only an immutable linux/arm64 digest, and
   retain signature, transparency, provenance, CycloneDX SBOM, Trivy scan, and
   runtime-smoke evidence.
+- Use Amazon Corretto 21.0.11 from the Docker Official Image as the Polaris
+  runtime base, pinned to index
+  `sha256:d3a3476c19cbe37b2e3e46a2116ff197ab37c7072baad55ee0ad07f3b97e8d02`
+  and linux/arm64 manifest
+  `sha256:ba1fe4a3fd4c6b70360183fccd1f0a168c3ea6f73709e8f81945cb9087431ff2`.
+  The main publisher must repeat the zero High/Critical scan; the workstation
+  observation is not admission evidence.
+- Build a bounded Shirokuma downstream distribution by applying one
+  hash-pinned overlay only after pristine ASF source verification. The overlay
+  removes HadoopFileIO, Hadoop external-catalog federation, and Ranger
+  authorization runtime edges while retaining the native Polaris catalog, OPA,
+  PostgreSQL persistence, and S3 storage profile. Preimage/postimage hashes,
+  absence of Hadoop/Ranger/Jetty HTTP jars and SBOM components, and exact patch
+  bytes are mandatory. No vulnerability exception is used.
 - Use the digest-pinned Chainguard PostgreSQL candidate only after its signature,
   arm64 manifest, provenance/SBOM, and zero High/Critical scan evidence are
   retained and independently reverified by the resident-image gate.
@@ -66,6 +92,12 @@ a local signature. PostgreSQL can use an independently signed upstream image,
 but its currently resolved digest must not be inferred from the mutable
 `latest` pointer after this observation.
 
+The Polaris artifact is a disclosed Shirokuma downstream distribution rather
+than byte-equivalent upstream server output. Hadoop external-catalog federation,
+HadoopFileIO, and Ranger authorization are unavailable in this bounded
+local-lite profile. Reintroducing any of them requires a new dependency
+closure, vulnerability review, contract update, and evidence-only review.
+
 WP-L1-LAKE-002 remains incomplete until both exact digests enter
 `security/resident-images.json`, the catalog Kustomization depends on
 `shirokuma-object-storage`, and live Ready plus catalog create/list/read evidence
@@ -75,6 +107,8 @@ is recorded.
 
 The source-build checkpoint must pass:
 
+    make test-polaris-build-contract
+    make verify-polaris-build-contract
     python3 -m unittest -v tests.test_arm64_compatibility_matrix
     python3 scripts/verify_design_context.py
     make verify-security

@@ -702,7 +702,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             verification_target,
         )
 
-    def test_review_pending_contract_binds_exact_main_publication(self) -> None:
+    def test_image_publication_contract_binds_reviewed_dependency(self) -> None:
         contract = json.loads(
             (ROOT / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
         )
@@ -710,10 +710,21 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             (ROOT / verifier.POLARIS_ADMISSION).read_text(encoding="utf-8")
         )
 
-        self.assertEqual(3, contract["schema_version"])
+        self.assertEqual(4, contract["schema_version"])
         self.assertEqual(
-            "dependency_snapshot_review_pending",
+            "image_publication_pending",
             contract["lifecycle"]["state"],
+        )
+        self.assertEqual(
+            "approved_for_image_build",
+            contract["dependency_snapshot"]["state"],
+        )
+        self.assertIs(False, contract["dependency_snapshot"]["admitted"])
+        self.assertEqual(
+            verifier.POLARIS_DEPENDENCY_REVIEW_MERGE,
+            contract["dependency_snapshot"]["review_checkpoint"][
+                "merge_commit"
+            ],
         )
         self.assertEqual(
             verifier.POLARIS_DEPENDENCY_REFERENCE,
@@ -731,7 +742,11 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             ]
         )
         self.assertNotIn("workflow", contract["dependency_snapshot"])
-        self.assertEqual(3, admission["schema_version"])
+        self.assertEqual(
+            verifier.POLARIS_IMAGE_WORKFLOW_SHA256,
+            contract["image_publication"]["workflow"]["sha256"],
+        )
+        self.assertEqual(4, admission["schema_version"])
         self.assertEqual(
             verifier.POLARIS_DEPENDENCY_REFERENCE,
             admission["dependency_snapshot"]["reference"],
@@ -739,6 +754,10 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         self.assertEqual(
             "satisfied",
             admission["blocking_controls"][1]["state"],
+        )
+        self.assertEqual(
+            "pending",
+            admission["blocking_controls"][2]["state"],
         )
 
     def test_dependency_publisher_reintroduction_fails_closed(self) -> None:
@@ -1103,11 +1122,11 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         key.symlink_to(replacement.name)
         self._assert_code(root, "KEY", "symlink")
 
-    def test_image_enablement_before_snapshot_review_fails_closed(self) -> None:
+    def test_image_publication_cannot_be_disabled_after_review(self) -> None:
         root = self._fixture()
 
         def mutate(value: dict[str, object]) -> None:
-            value["image_publication"]["enabled"] = True  # type: ignore[index]
+            value["image_publication"]["enabled"] = False  # type: ignore[index]
 
         self._rewrite_json(root, verifier.POLARIS_CONTRACT, mutate)
         self._assert_code(
@@ -1203,6 +1222,35 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 "latest",
                 "image_publication.trusted_tag",
             ),
+            (
+                "runtime-base",
+                ("image_publication", "runtime_base", "arm64_manifest"),
+                verifier.RUNTIME_ARM64,
+                "image_publication.runtime_base.arm64_manifest",
+            ),
+            (
+                "overlay-postimage",
+                (
+                    "image_publication",
+                    "source_overlay",
+                    "postimages",
+                    "runtime/service/build.gradle.kts",
+                ),
+                "0" * 64,
+                "image_publication.source_overlay.postimages",
+            ),
+            (
+                "vulnerability-threshold",
+                ("image_publication", "vulnerability_gate", "maximum_high"),
+                1,
+                "image_publication.vulnerability_gate.maximum_high",
+            ),
+            (
+                "publication-ref",
+                ("image_publication", "publication_boundary", "ref"),
+                "refs/heads/feature",
+                "image_publication.publication_boundary.ref",
+            ),
         )
         for label, path, replacement, detail in cases:
             with self.subTest(label=label):
@@ -1219,12 +1267,158 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 self._rewrite_json(root, verifier.POLARIS_CONTRACT, mutate)
                 self._assert_code(root, "CONTRACT_STATE", detail)
 
-    def test_publication_workflow_is_forbidden_while_pending(self) -> None:
+    def test_publication_workflow_byte_drift_fails_closed(self) -> None:
         root = self._fixture()
         workflow = root / ".github/workflows/polaris-arm64.yml"
         workflow.parent.mkdir(parents=True, exist_ok=True)
         workflow.write_text("name: forbidden\n", encoding="utf-8")
-        self._assert_code(root, "FORBIDDEN_PATH", "polaris-arm64.yml")
+        self._assert_code(
+            root,
+            "PUBLICATION_POLICY",
+            "polaris-arm64.yml differs",
+        )
+
+    def test_containerfile_byte_drift_fails_closed(self) -> None:
+        root = self._fixture()
+        containerfile = root / verifier.POLARIS_CONTAINERFILE
+        containerfile.write_text(
+            containerfile.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        self._assert_code(
+            root,
+            "PUBLICATION_POLICY",
+            "Containerfile differs",
+        )
+
+    def test_bounded_runtime_overlay_byte_drift_fails_closed(self) -> None:
+        root = self._fixture()
+        overlay = root / verifier.POLARIS_SOURCE_OVERLAY
+        overlay.write_text(
+            overlay.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        self._assert_code(
+            root,
+            "PUBLICATION_POLICY",
+            "bounded-runtime.patch differs",
+        )
+
+    def test_workflow_semantics_remain_closed_when_hashes_are_rebound(
+        self,
+    ) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+        workflow.write_text(
+            workflow.read_text(encoding="utf-8").replace(
+                "          network: none\n",
+                "          network: host\n",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        workflow_sha256 = verifier._sha256(workflow)
+
+        def bind_workflow(value: dict[str, object]) -> None:
+            value["image_publication"]["workflow"][  # type: ignore[index]
+                "sha256"
+            ] = workflow_sha256
+
+        self._rewrite_json(root, verifier.POLARIS_CONTRACT, bind_workflow)
+        contract_sha256 = verifier._sha256(root / verifier.POLARIS_CONTRACT)
+
+        def bind_contract(value: dict[str, object]) -> None:
+            value["build_contract_sha256"] = contract_sha256
+
+        self._rewrite_json(root, verifier.POLARIS_ADMISSION, bind_contract)
+        inventory = dict(verifier.REVIEW_PENDING_WORKFLOW_INVENTORY)
+        inventory[verifier.POLARIS_IMAGE_WORKFLOW.as_posix()] = (
+            workflow_sha256
+        )
+        with mock.patch.object(
+            verifier,
+            "POLARIS_IMAGE_WORKFLOW_SHA256",
+            workflow_sha256,
+        ):
+            with mock.patch.object(
+                verifier,
+                "POLARIS_CONTRACT_SHA256",
+                contract_sha256,
+            ):
+                with mock.patch.object(
+                    verifier,
+                    "REVIEW_PENDING_WORKFLOW_INVENTORY",
+                    inventory,
+                ):
+                    self._assert_code(
+                        root,
+                        "PUBLICATION_POLICY",
+                        "missing required controls",
+                    )
+
+    def test_public_fingerprint_remains_gitleaks_safe_when_hash_is_rebound(
+        self,
+    ) -> None:
+        grouped_assignment = (
+            "SOURCE_SIGNING_KEY_FINGERPRINT: "
+            f"{verifier.POLARIS_KEY_FINGERPRINT_GROUPED}"
+        )
+        canonical_assignment = (
+            "SOURCE_SIGNING_KEY_FINGERPRINT: "
+            f"{verifier.POLARIS_KEY_FINGERPRINT}"
+        )
+        normalization = (
+            'export SOURCE_SIGNING_KEY_FINGERPRINT="'
+            '${SOURCE_SIGNING_KEY_FINGERPRINT// /}"'
+        )
+        cases = (
+            (
+                "canonical-assignment",
+                grouped_assignment,
+                canonical_assignment,
+                verifier.POLARIS_KEY_FINGERPRINT_GROUPED,
+            ),
+            (
+                "missing-normalization",
+                normalization,
+                'echo "fingerprint normalization removed"',
+                normalization,
+            ),
+        )
+        for label, before, after, detail in cases:
+            with self.subTest(label=label):
+                root = self._fixture()
+                workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+                workflow_text = workflow.read_text(encoding="utf-8")
+                self.assertIn(before, workflow_text)
+                workflow.write_text(
+                    workflow_text.replace(before, after, 1),
+                    encoding="utf-8",
+                )
+                workflow_sha256 = verifier._sha256(workflow)
+                with mock.patch.object(
+                    verifier,
+                    "POLARIS_IMAGE_WORKFLOW_SHA256",
+                    workflow_sha256,
+                ):
+                    with self.assertRaises(verifier.ContractError) as raised:
+                        verifier._audit_image_publication_files(root)
+                self.assertEqual("PUBLICATION_POLICY", raised.exception.code)
+                self.assertIn("missing required controls", raised.exception.detail)
+                self.assertIn(detail, raised.exception.detail)
+
+    def test_image_admission_cannot_skip_evidence_review(self) -> None:
+        root = self._fixture()
+
+        def mutate(value: dict[str, object]) -> None:
+            value["image_publication"]["admitted"] = True  # type: ignore[index]
+
+        self._rewrite_json(root, verifier.POLARIS_ADMISSION, mutate)
+        self._assert_code(
+            root,
+            "POLARIS_ADMISSION",
+            "image_publication.admitted",
+        )
 
     def test_alternate_publication_workflow_is_forbidden_while_pending(
         self,

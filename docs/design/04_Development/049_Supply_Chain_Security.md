@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-07-19
-version: "1.2"
+updated: 2026-07-20
+version: "1.3"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -156,9 +156,11 @@ therefore not a closed build input by itself.
 
 Reviewed main run `29689013375` from commit
 `4692bab4282dfde2c8d4082e6d706dee9ce79324` completed the one-shot dependency
-publication. The schema-v3 contract and admission record are now in
-`dependency_snapshot_review_pending`, with the dependency snapshot itself in
-`review_pending`. They bind the exact public OCI reference
+publication. PR #78 merged the evidence-only review as
+`b12593f27ae4e6ec8b64865f9b6b0bbf114ec654`. The schema-v4 contract and
+admission record are now in `image_publication_pending`; the dependency snapshot
+is `approved_for_image_build` but remains `admitted=false`. They bind the exact
+public OCI reference
 `ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies@sha256:fa889d2c0a6e6dc48816d79680a366e21040be333ab6007b88e4ca4dbf6e59d6`
 and the retained publication record. The publication remains non-admitted even
 though anonymous exact-digest retrieval succeeded.
@@ -180,12 +182,42 @@ cryptographic-command boundary so the unit suite needs no host Cosign binary;
 explicit `verify-cosign` prerequisite that requires Cosign v3.1.1 before either
 unmocked retained-evidence audit runs. No production skip flag exists.
 
-At this checkpoint Polaris image publication remains
-`blocked_dependency_review` with publication disabled and no Containerfile or
-workflow. Polaris image release evidence, resident-image entries, and runtime
-manifests remain forbidden, and overall admission remains blocked. After this
-evidence-only review merges, a separately reviewed change may advance to
-`image_publication_pending` and introduce the main-only Polaris image publisher.
+The image-publication checkpoint adds only the hash-bound
+`bootstrap/polaris/v1.6.0/Containerfile`, the bounded downstream source overlay,
+and `.github/workflows/polaris-arm64.yml`. The workflow is limited to
+`TommyKammy/Shirokuma` on `refs/heads/main`, requires
+`GITHUB_WORKFLOW_SHA == GITHUB_SHA`, authenticates the ASF source and exact
+dependency OCI before registry credentials exist, performs a fresh
+network-none strict offline Gradle build, and publishes to a run-scoped
+quarantine tag before exact-digest verification and non-authoritative tag
+promotion. PR, reusable-workflow, credential-fallback, and cache-backed build
+paths are forbidden.
+
+The UBI 9 Java 21 candidate retained in `source.json` remains a historical,
+non-authoritative assessment candidate: a 2026-07-20 Trivy 0.72.0 feasibility
+scan found 21 High findings. The selected runtime base is instead the Docker
+Official Image for Amazon Corretto 21.0.11, fixed by index
+`sha256:d3a3476c19cbe37b2e3e46a2116ff197ab37c7072baad55ee0ad07f3b97e8d02`
+and linux/arm64 manifest
+`sha256:ba1fe4a3fd4c6b70360183fccd1f0a168c3ea6f73709e8f81945cb9087431ff2`.
+The feasibility scan found High=0/Critical=0; the main publisher must repeat
+the authoritative `os,library` scan with `ignore-unfixed=false`.
+
+The unmodified Polaris server also carried six High findings through Hadoop
+3.5.0 and Ranger runtime dependencies. Shirokuma does not use Hadoop external
+catalog federation, HadoopFileIO, or Ranger authorization in the bounded
+SeaweedFS S3/OPA profile. The reviewed overlay therefore removes exactly those
+runtime edges after pristine source authentication and binds both affected
+Gradle files by preimage and postimage SHA-256. The workflow rejects Hadoop,
+Ranger, and Jetty HTTP jars or SBOM components and does not use a vulnerability
+exception. A local fresh network-none build, Java 21 check, High=0/Critical=0
+scan, and non-root read-only readiness smoke passed; only the main run may
+produce reviewable publication evidence.
+
+Polaris image release evidence, resident-image entries, and runtime manifests
+remain absent and forbidden at this checkpoint. Overall admission stays
+blocked. A successful main publication must be followed by a separate
+image-evidence-only review, then atomic Polaris/PostgreSQL admission.
 
 Within `caches/modules-2/files-2.1`, the checksum directory follows Gradle
 9.6's canonical artifact-store rule: SHA-1 is lowercase hexadecimal with every
