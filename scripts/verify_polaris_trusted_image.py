@@ -28,6 +28,20 @@ POSTGRES_EVIDENCE = Path("bootstrap/postgresql/v18.4/evidence")
 RESIDENT_LEDGER = Path("security/resident-images.json")
 
 POLARIS_VERSION = "1.6.0"
+POLARIS_SOURCE_ARCHIVE_ROOT = f"apache-polaris-{POLARIS_VERSION}"
+POLARIS_SOURCE_ARCHIVE_MAXIMUM_BYTES = 67_108_864
+POLARIS_SOURCE_ARCHIVE_MAXIMUM_DECOMPRESSED_BYTES = 536_870_912
+POLARIS_SOURCE_ARCHIVE_MAXIMUM_RAW_HEADERS = 20_000
+POLARIS_SOURCE_ARCHIVE_MAXIMUM_TAR_CONTROL_BYTES = 4_096
+POLARIS_SOURCE_ARCHIVE_MAXIMUM_MEMBERS = 10_000
+POLARIS_SOURCE_ARCHIVE_MAXIMUM_MEMBER_BYTES = 67_108_864
+POLARIS_SOURCE_ARCHIVE_MAXIMUM_TOTAL_FILE_BYTES = 268_435_456
+POLARIS_SOURCE_ARCHIVE_MAXIMUM_PATH_BYTES = 1_024
+POLARIS_SOURCE_ARCHIVE_MAXIMUM_PATH_COMPONENT_BYTES = 255
+POLARIS_SOURCE_ARCHIVE_MAXIMUM_PATH_COMPONENTS = 64
+POLARIS_SOURCE_ARCHIVE_MAXIMUM_LINK_BYTES = 1_024
+POLARIS_SOURCE_ARCHIVE_MAXIMUM_PAX_BYTES = 4_096
+POLARIS_SOURCE_ARCHIVE_ALLOWED_PAX_HEADERS = {"comment", "linkpath"}
 POLARIS_ARCHIVE_SHA512 = (
     "d69b1a91e16e210a78dec327fc4725983b114fbec5d86d078a3827f35fe7dd5"
     "df3e4b12d18965e5a72eace65ad224aa007004ed61c66f9abb2efafc44ceac95b"
@@ -48,7 +62,7 @@ POLARIS_SOURCE_SHA256 = (
     "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb"
 )
 POLARIS_CONTRACT_SHA256 = (
-    "4eaaff9dcbd07c7cd4e7400079b7463c6b4f9dc6895c6d6a2ba45eab59243835"
+    "52d277528ffa996a5f9f81645089ef67a99c73f99d5b097d9bb6fbd93aa82325"
 )
 GRADLE_DISTRIBUTION_SHA256 = (
     "87a2216cc1f9122192d4e0fe905ffdf1b4c72cff797e9f733b174e157cadd396"
@@ -91,13 +105,19 @@ POLARIS_DEPENDENCY_WORKFLOW = Path(
     ".github/workflows/polaris-gradle-dependencies.yml"
 )
 POLARIS_DEPENDENCY_WORKFLOW_SHA256 = (
-    "aa9c63b62e35dae33f1f275be3801dcaa078e42131e8e6bec6e6313ac45c5fdf"
+    "255459419f1ead69d5fc3e99813d5d59644e3031a8f70d209c90c7165583571e"
 )
 POLARIS_DEPENDENCY_PACKAGER = Path(
     "scripts/package_polaris_gradle_dependencies.py"
 )
 POLARIS_DEPENDENCY_PACKAGER_SHA256 = (
     "09a3569d5a9f8c9cdfedc4eaab3282b98c7f1df46daeeb6df190e9ca8c90cfff"
+)
+POLARIS_SOURCE_ARCHIVE_VALIDATOR = Path(
+    "scripts/validate_polaris_source_archive.py"
+)
+POLARIS_SOURCE_ARCHIVE_VALIDATOR_SHA256 = (
+    "00ac3ec84bd9ff48914e0429f517eabbfc9380410740c2e626608bc036f8ebb9"
 )
 POLARIS_ALLOWED_PATHS = {
     "admission.json",
@@ -171,6 +191,9 @@ PENDING_SCRIPT_FILE_INVENTORY = {
     ),
     "scripts/package_polaris_gradle_dependencies.py": (
         POLARIS_DEPENDENCY_PACKAGER_SHA256
+    ),
+    "scripts/validate_polaris_source_archive.py": (
+        POLARIS_SOURCE_ARCHIVE_VALIDATOR_SHA256
     ),
     "scripts/package_go_vendor.py": (
         "ff2da02c6f1927522ed0852beb0f6373f38c4bbaf0ac6597d9acefe1402ffec4"
@@ -341,6 +364,7 @@ POLARIS_DEPENDENCY_WORKFLOW_PUSH_PATHS = [
     "bootstrap/polaris/v1.6.0/admission.json",
     "bootstrap/polaris/v1.6.0/apache-polaris-release-signing-key.asc",
     "scripts/package_polaris_gradle_dependencies.py",
+    "scripts/validate_polaris_source_archive.py",
     "scripts/verify_polaris_trusted_image.py",
     "tests/test_package_polaris_gradle_dependencies.py",
     "tests/test_polaris_trusted_image_contract.py",
@@ -914,6 +938,18 @@ def _audit_source(root: Path) -> Mapping[str, Any]:
     return source
 
 
+def _workflow_step_block(text: str, name: str) -> str:
+    marker = f"      - name: {name}\n"
+    _expect(
+        text.count(marker) == 1,
+        "CONTRACT_STATE",
+        f"dependency workflow step is missing or duplicated: {name}",
+    )
+    start = text.index(marker)
+    end = text.find("\n      - name: ", start + len(marker))
+    return text[start:] if end == -1 else text[start:end]
+
+
 def _audit_dependency_workflow_semantics(
     root: Path,
     contract: Mapping[str, Any],
@@ -1180,6 +1216,83 @@ def _audit_dependency_workflow_semantics(
         "CONTRACT_STATE",
         "dependency workflow lost a required publication semantic",
     )
+    authentication_step = _workflow_step_block(
+        text,
+        "Fetch and authenticate the ASF source release",
+    )
+    _expect(
+        "\n".join(
+            [
+                "          python3 scripts/validate_polaris_source_archive.py \\",
+                (
+                    "            --archive "
+                    '"${source_dir}/apache-polaris-1.6.0.tar.gz"'
+                ),
+            ]
+        )
+        in authentication_step,
+        "CONTRACT_STATE",
+        "source authentication step lost the pinned archive validator",
+    )
+    online_step = _workflow_step_block(
+        text,
+        "Resolve dependencies and generate strict verification metadata",
+    )
+    _expect(
+        "\n".join(
+            [
+                '          test ! -e "${online_source}"',
+                '          test ! -L "${online_source}"',
+                (
+                    '          install -d -m 0700 "${online_source}" '
+                    '"${gradle_home}"'
+                ),
+                (
+                    '          tar --extract --gzip --file "${source_archive}" \\'
+                ),
+                (
+                    '            --directory "${online_source}" '
+                    "--strip-components 1 \\"
+                ),
+                "            --no-same-owner --no-same-permissions",
+            ]
+        )
+        in online_step,
+        "CONTRACT_STATE",
+        "online source extraction lost fresh-directory hardening",
+    )
+    offline_step = _workflow_step_block(
+        text,
+        "Prove a fresh network-none offline server build",
+    )
+    _expect(
+        "\n".join(
+            [
+                '          test ! -e "${offline_source}"',
+                '          test ! -L "${offline_source}"',
+                '          install -d -m 0700 "${offline_source}"',
+            ]
+        )
+        in offline_step
+        and "\n".join(
+            [
+                "          tar --extract --gzip \\",
+                "            --file \\",
+                (
+                    '              "${RUNNER_TEMP}/polaris-source/'
+                    'apache-polaris-1.6.0.tar.gz" \\'
+                ),
+                (
+                    '            --directory "${offline_source}" '
+                    "--strip-components 1 \\"
+                ),
+                "            --no-same-owner --no-same-permissions",
+            ]
+        )
+        in offline_step,
+        "CONTRACT_STATE",
+        "offline source extraction lost fresh-directory hardening",
+    )
     verify_start = text.index("  verify:")
     publish_start = text.index("  publish:")
     verify_text = text[verify_start:publish_start]
@@ -1223,6 +1336,8 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "record",
                 "record_sha256",
                 "archive_sha512",
+                "archive_member_policy",
+                "archive_validator",
                 "git_commit",
                 "git_tree",
                 "builder_index",
@@ -1231,6 +1346,39 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "gradle_version",
                 "tasks",
             },
+            ("source", "archive_member_policy"): {
+                "root",
+                "strip_components",
+                "allowed_member_types",
+                "path_charset",
+                "tar_size_encoding",
+                "hidden_name_records_permitted",
+                "solaris_pax_records_permitted",
+                "explicit_directory_parents_required",
+                "symlink_target_policy",
+                "symlink_chains_permitted",
+                "symlink_cycles_permitted",
+                "members_below_symlink_paths_permitted",
+                "duplicate_paths_permitted",
+                "hardlinks_permitted",
+                "special_files_permitted",
+                "maximum_archive_bytes",
+                "maximum_decompressed_bytes",
+                "maximum_raw_headers",
+                "maximum_tar_control_bytes",
+                "maximum_members",
+                "maximum_member_bytes",
+                "maximum_total_regular_file_bytes",
+                "maximum_path_bytes",
+                "maximum_path_component_bytes",
+                "maximum_path_components",
+                "maximum_link_bytes",
+                "maximum_pax_bytes_per_member",
+                "allowed_pax_headers",
+                "pax_record_encoding",
+                "pax_comment_policy",
+            },
+            ("source", "archive_validator"): {"path", "sha256"},
             ("dependency_snapshot",): {
                 "state",
                 "artifact_repository",
@@ -1402,6 +1550,170 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
             ("source", "record"): POLARIS_SOURCE.as_posix(),
             ("source", "record_sha256"): POLARIS_SOURCE_SHA256,
             ("source", "archive_sha512"): POLARIS_ARCHIVE_SHA512,
+            (
+                "source",
+                "archive_member_policy",
+                "root",
+            ): POLARIS_SOURCE_ARCHIVE_ROOT,
+            (
+                "source",
+                "archive_member_policy",
+                "strip_components",
+            ): 1,
+            (
+                "source",
+                "archive_member_policy",
+                "allowed_member_types",
+            ): [
+                "regular-file",
+                "directory",
+                "relative-symlink",
+            ],
+            (
+                "source",
+                "archive_member_policy",
+                "path_charset",
+            ): "printable-ascii-posix",
+            (
+                "source",
+                "archive_member_policy",
+                "tar_size_encoding",
+            ): "canonical-octal",
+            (
+                "source",
+                "archive_member_policy",
+                "hidden_name_records_permitted",
+            ): False,
+            (
+                "source",
+                "archive_member_policy",
+                "solaris_pax_records_permitted",
+            ): False,
+            (
+                "source",
+                "archive_member_policy",
+                "explicit_directory_parents_required",
+            ): True,
+            (
+                "source",
+                "archive_member_policy",
+                "symlink_target_policy",
+            ): "existing-in-root-member-before-and-after-strip",
+            (
+                "source",
+                "archive_member_policy",
+                "symlink_chains_permitted",
+            ): True,
+            (
+                "source",
+                "archive_member_policy",
+                "symlink_cycles_permitted",
+            ): False,
+            (
+                "source",
+                "archive_member_policy",
+                "members_below_symlink_paths_permitted",
+            ): False,
+            (
+                "source",
+                "archive_member_policy",
+                "duplicate_paths_permitted",
+            ): False,
+            (
+                "source",
+                "archive_member_policy",
+                "hardlinks_permitted",
+            ): False,
+            (
+                "source",
+                "archive_member_policy",
+                "special_files_permitted",
+            ): False,
+            (
+                "source",
+                "archive_member_policy",
+                "maximum_archive_bytes",
+            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_BYTES,
+            (
+                "source",
+                "archive_member_policy",
+                "maximum_decompressed_bytes",
+            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_DECOMPRESSED_BYTES,
+            (
+                "source",
+                "archive_member_policy",
+                "maximum_raw_headers",
+            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_RAW_HEADERS,
+            (
+                "source",
+                "archive_member_policy",
+                "maximum_tar_control_bytes",
+            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_TAR_CONTROL_BYTES,
+            (
+                "source",
+                "archive_member_policy",
+                "maximum_members",
+            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_MEMBERS,
+            (
+                "source",
+                "archive_member_policy",
+                "maximum_member_bytes",
+            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_MEMBER_BYTES,
+            (
+                "source",
+                "archive_member_policy",
+                "maximum_total_regular_file_bytes",
+            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_TOTAL_FILE_BYTES,
+            (
+                "source",
+                "archive_member_policy",
+                "maximum_path_bytes",
+            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_PATH_BYTES,
+            (
+                "source",
+                "archive_member_policy",
+                "maximum_path_component_bytes",
+            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_PATH_COMPONENT_BYTES,
+            (
+                "source",
+                "archive_member_policy",
+                "maximum_path_components",
+            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_PATH_COMPONENTS,
+            (
+                "source",
+                "archive_member_policy",
+                "maximum_link_bytes",
+            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_LINK_BYTES,
+            (
+                "source",
+                "archive_member_policy",
+                "maximum_pax_bytes_per_member",
+            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_PAX_BYTES,
+            (
+                "source",
+                "archive_member_policy",
+                "allowed_pax_headers",
+            ): sorted(POLARIS_SOURCE_ARCHIVE_ALLOWED_PAX_HEADERS),
+            (
+                "source",
+                "archive_member_policy",
+                "pax_record_encoding",
+            ): "strict-length-prefixed-lines",
+            (
+                "source",
+                "archive_member_policy",
+                "pax_comment_policy",
+            ): "if-present-equals-pinned-git-commit",
+            (
+                "source",
+                "archive_validator",
+                "path",
+            ): POLARIS_SOURCE_ARCHIVE_VALIDATOR.as_posix(),
+            (
+                "source",
+                "archive_validator",
+                "sha256",
+            ): POLARIS_SOURCE_ARCHIVE_VALIDATOR_SHA256,
             ("source", "git_commit"): POLARIS_COMMIT,
             ("source", "git_tree"): POLARIS_TREE,
             ("source", "builder_index"): BUILDER_INDEX,
@@ -1760,6 +2072,16 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
         == POLARIS_SERVER_TASKS,
         "CONTRACT_STATE",
         "offline proof task closure changed",
+    )
+    _expect(
+        _is_regular_file_without_symlink_components(
+            root,
+            POLARIS_SOURCE_ARCHIVE_VALIDATOR,
+        )
+        and _sha256(root / POLARIS_SOURCE_ARCHIVE_VALIDATOR)
+        == POLARIS_SOURCE_ARCHIVE_VALIDATOR_SHA256,
+        "CONTRACT_STATE",
+        "source archive validator bytes differ from the reviewed contract",
     )
     _expect(
         _is_regular_file_without_symlink_components(
