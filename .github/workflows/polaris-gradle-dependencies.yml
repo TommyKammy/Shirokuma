@@ -776,7 +776,6 @@ jobs:
             --bundle "${candidate_dir}/cosign-signature-bundle.json" \
             "${PUBLISHED_REFERENCE}"
           cosign verify \
-            --bundle "${candidate_dir}/cosign-signature-bundle.json" \
             --certificate-identity \
               "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/polaris-gradle-dependencies.yml@${GITHUB_REF}" \
             --certificate-oidc-issuer \
