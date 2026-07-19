@@ -1,35 +1,33 @@
-# Polaris 1.6.0 evidence checkpoint
+# Polaris 1.6.0 dependency snapshot evidence checkpoint
 
-No release evidence is admitted at this checkpoint.
+Run `29689013375` from reviewed main commit
+`4692bab4282dfde2c8d4082e6d706dee9ce79324` produced the non-admitted
+dependency snapshot retained here for evidence-only review. The exact public
+reference is
+`ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies@sha256:fa889d2c0a6e6dc48816d79680a366e21040be333ab6007b88e4ca4dbf6e59d6`.
+`publication.json` records `admitted=false`, `anonymous_pull=true`, and
+`state=dependency_snapshot_review_pending`.
 
-The signed ASF source and retained release-signing key are pinned in
-`../source.json`, but the source archive is not yet a closed Gradle build input.
-The workstation PGP and SHA-512 observations are not authoritative for a build:
-this checkpoint retains neither the archive nor its detached signature, and the
-repository audit does not claim to cryptographically reverify either one.
-Do not add a Containerfile, Polaris image-publication workflow, image digest,
-resident-ledger entry, or runtime manifest until the reviewed dependency closure
-and clean offline repeat exist. The sole write-capable path is the contract-pinned
-`polaris-gradle-dependencies.yml` input publisher. It may publish only a
-run-scoped, non-admitted dependency OCI artifact from `refs/heads/main`; it does
-not authorize the Polaris image or runtime. Candidate verification is isolated
-in a `contents: read` job. The write-capable job may inject a registry token only
-after binding the downloaded bytes to that job's SHA-256 outputs.
+This checkpoint retains and hash-binds the per-file descriptor, Gradle
+verification metadata, raw OCI manifest and layer digests, keyless signature
+bundle and registry verification, SLSA verification, toolchain record, and
+fresh network-none strict offline-build result. The 701,323,251-byte dependency
+archive is intentionally not stored in Git. Its
+`sha256:18933bfb895c267302f1ee1c80cfb9712eac736ffcefade48dac53f79e8e3bc0`
+identity and size are cross-bound by the retained descriptor, OCI manifest, and
+publication record.
+Both retained Sigstore reverifications constrain the GitHub workflow
+repository, ref, trigger, and exact publisher workflow SHA
+`4692bab4282dfde2c8d4082e6d706dee9ce79324`; path identity on mutable `main`
+alone is insufficient.
 
-After that dependency workflow succeeds, a separate evidence-only pull request
-must retain and reverify its per-file descriptor, Gradle verification metadata,
-raw OCI manifest and layer digests, keyless signature, SLSA verification,
-toolchain record, anonymous exact-digest retrieval, and fresh network-none
-offline-build result. Until that review merges, the dependency artifact
-reference remains null and the Polaris Containerfile and image workflow remain
-forbidden. GHCR's first private-package run may stop at the anonymous-pull gate
-after signing and attestation; that attempt is not evidence. The owner must
-explicitly make the package public and rerun without adding a credential
-fallback. The evidence-only pull request must delete the dependency publisher
-as it advances the lifecycle to `dependency_snapshot_review_pending`.
+The reviewed publisher is retired in the same change that advances the
+dependency lifecycle. No remaining workflow may republish or replace this
+snapshot. This checkpoint does not authorize a Polaris image, resident-ledger
+entry, credentials, deployment, or runtime manifest.
 
-After a later main-only image publication, another evidence-only pull request
-must retain
-and reverify the immutable image manifest, keyless signature and transparency
-material, SLSA provenance, CycloneDX SBOM and attestation, Trivy report and
-attestation, toolchain record, and non-root read-only runtime smoke.
+After this evidence-only review merges, the next permitted step is a separate
+main-only Polaris image publication. Image admission still requires its own
+evidence-only review, including the immutable image manifest, keyless signature,
+SLSA provenance, CycloneDX SBOM, Trivy result, pinned toolchain, and non-root
+read-only runtime smoke. Polaris and PostgreSQL admission must remain atomic.

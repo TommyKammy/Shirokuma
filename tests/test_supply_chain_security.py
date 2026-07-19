@@ -924,7 +924,11 @@ class SupplyChainSecurityTests(unittest.TestCase):
 
     def test_verify_security_runs_canonical_trusted_image_audit(self) -> None:
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
-        verify_security = makefile.split("verify-security:\n", 1)[1].split("\n\n", 1)[0]
+        verify_security = makefile.split(
+            "verify-security: verify-cosign\n",
+            1,
+        )[1].split("\n\n", 1)[0]
+        self.assertIn("verify-security: verify-cosign", makefile)
         self.assertIn(
             "scripts/verify_trusted_image.py audit --root .",
             verify_security,
@@ -1469,9 +1473,17 @@ class SupplyChainSecurityTests(unittest.TestCase):
                 "generic-api-key",
             ),
             {
-                r"^\.github/workflows/polaris-gradle-dependencies\.yml$",
                 r"^bootstrap/polaris/v1\.6\.0/trusted-build-contract\.json$",
                 r"^scripts/verify_polaris_trusted_image\.py$",
+            },
+        )
+        self.assertEqual(
+            allowlist_paths(
+                "Public 40-hex Gradle SHA-1 package hashes in retained Apache Polaris 1.6.0 descriptor",
+                r"^[0-9a-f]{40}$",
+            ),
+            {
+                r"^bootstrap/polaris/v1\.6\.0/evidence/gradle-dependency-inputs\.json$",
             },
         )
         self.assertEqual(
@@ -1485,6 +1497,7 @@ class SupplyChainSecurityTests(unittest.TestCase):
         self.assertNotIn(r"^opentofu/dev/.*$", config)
         self.assertNotIn(r"^tests/.*$", config)
         self.assertNotIn(r"^security/evidence/seaweedfs-v4\.39/.*$", config)
+        self.assertNotIn(r"^bootstrap/polaris/v1\.6\.0/evidence/.*$", config)
 
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         for path in (
@@ -1496,6 +1509,25 @@ class SupplyChainSecurityTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn(path, makefile)
         self.assertNotIn("bootstrap/seaweedfs/v4.39/evidence/*.json", makefile)
+
+        newline_check = makefile.split("check-newlines:", 1)[1].split(
+            "\ncheck-trailing-whitespace:", 1
+        )[0]
+        polaris_newline_exception_lines = [
+            line.strip().removesuffix("\\").strip()
+            for line in newline_check.splitlines()
+            if "bootstrap/polaris/v1.6.0/evidence/" in line
+        ]
+        self.assertEqual(
+            polaris_newline_exception_lines,
+            [
+                "bootstrap/polaris/v1.6.0/evidence/cosign-signature-bundle.json"
+                "|bootstrap/polaris/v1.6.0/evidence/oci-manifest.json) continue ;;"
+            ],
+        )
+        self.assertNotIn(
+            "bootstrap/polaris/v1.6.0/evidence/*.json", newline_check
+        )
 
 
 if __name__ == "__main__":

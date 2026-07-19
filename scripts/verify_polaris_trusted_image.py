@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed audit for the Polaris dependency-publication checkpoint."""
+"""Fail-closed audit for the Polaris dependency-evidence review checkpoint."""
 
 from __future__ import annotations
 
@@ -7,13 +7,15 @@ import argparse
 import base64
 import binascii
 import hashlib
+import importlib.util
 import json
 import re
 import subprocess
 import sys
+import tempfile
 import unicodedata
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping, Optional
 
 
 POLARIS_SOURCE = Path("bootstrap/polaris/v1.6.0/source.json")
@@ -62,7 +64,7 @@ POLARIS_SOURCE_SHA256 = (
     "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb"
 )
 POLARIS_CONTRACT_SHA256 = (
-    "8198847d075797eaa183472523c29f6b132e9c3bfb9170ee98c9882ca3dad0c2"
+    "db27ec5ebf627ef1772c898614d5f206a2a3affc67007ee29221c525ab8fd3d6"
 )
 GRADLE_DISTRIBUTION_SHA256 = (
     "87a2216cc1f9122192d4e0fe905ffdf1b4c72cff797e9f733b174e157cadd396"
@@ -107,6 +109,86 @@ POLARIS_DEPENDENCY_WORKFLOW = Path(
 POLARIS_DEPENDENCY_WORKFLOW_SHA256 = (
     "d6eabefcc9dc9be8225e0d93ba7c25c0b65646fd83957b3a7f8a15f36c7e3528"
 )
+POLARIS_DEPENDENCY_REFERENCE = (
+    "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies@sha256:"
+    "fa889d2c0a6e6dc48816d79680a366e21040be333ab6007b88e4ca4dbf6e59d6"
+)
+POLARIS_DEPENDENCY_MANIFEST_SHA256 = (
+    "fa889d2c0a6e6dc48816d79680a366e21040be333ab6007b88e4ca4dbf6e59d6"
+)
+POLARIS_DEPENDENCY_ARCHIVE_SHA256 = (
+    "18933bfb895c267302f1ee1c80cfb9712eac736ffcefade48dac53f79e8e3bc0"
+)
+POLARIS_DEPENDENCY_ARCHIVE_SIZE = 701_323_251
+POLARIS_DEPENDENCY_PUBLICATION_SHA256 = (
+    "1a9ec88b09b49b12ab5131bff739dedfbfa7d2e50fd46448e8169c6452cd3d41"
+)
+POLARIS_DEPENDENCY_PUBLICATION_SIZE = 2_211
+POLARIS_DEPENDENCY_SOURCE_SHA = "4692bab4282dfde2c8d4082e6d706dee9ce79324"
+POLARIS_DEPENDENCY_RUN_ID = "29689013375"
+POLARIS_DEPENDENCY_RUN_ATTEMPT = "1"
+POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY = "TommyKammy/Shirokuma"
+POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY_URL = (
+    "https://github.com/TommyKammy/Shirokuma"
+)
+POLARIS_DEPENDENCY_PUBLISHER_REF = "refs/heads/main"
+POLARIS_DEPENDENCY_PUBLISHER_WORKFLOW_SHA = POLARIS_DEPENDENCY_SOURCE_SHA
+POLARIS_DEPENDENCY_PUBLISHER_TRIGGER = "push"
+POLARIS_DEPENDENCY_PUBLISHER_IDENTITY = (
+    "https://github.com/TommyKammy/Shirokuma/.github/workflows/"
+    "polaris-gradle-dependencies.yml@refs/heads/main"
+)
+POLARIS_DEPENDENCY_PUBLISHER_ISSUER = (
+    "https://token.actions.githubusercontent.com"
+)
+POLARIS_DEPENDENCY_PUBLICATION_ARTIFACT = {
+    "id": 8_443_110_667,
+    "name": "polaris-gradle-publication-29689013375-1",
+    "sha256": (
+        "d2618dfdfbce2b645adcab392f6509c05f5b74263f3815f8cce2e2b4b4f89345"
+    ),
+    "size": 579_565,
+    "run_id": POLARIS_DEPENDENCY_RUN_ID,
+    "run_attempt": POLARIS_DEPENDENCY_RUN_ATTEMPT,
+}
+POLARIS_DEPENDENCY_EVIDENCE_RECORDS = {
+    "cosign-signature-bundle.json": (
+        "36db1df6a0b67e26948a6b87c872f53e6784bfe45438c7d5a2ccb1221b99e753",
+        11_127,
+    ),
+    "cosign-verify.json": (
+        "11320bfdaa0d292ba1a8354fc9ca83895df1033e2772b3d21e48faabee0e45db",
+        349,
+    ),
+    "gradle-dependency-inputs.json": (
+        "3bab7b055d29be1bc59f2fe605960f49bbceee2639ad68086822c62ee8533841",
+        2_172_595,
+    ),
+    "oci-manifest.json": (
+        POLARIS_DEPENDENCY_MANIFEST_SHA256,
+        1_077,
+    ),
+    "offline-build.json": (
+        "e1741bbb304c983a0ad7ff1de1c3fb05867eeb3ef836443f3c24b07d4458fe0b",
+        593,
+    ),
+    "publication.json": (
+        POLARIS_DEPENDENCY_PUBLICATION_SHA256,
+        POLARIS_DEPENDENCY_PUBLICATION_SIZE,
+    ),
+    "slsa-verify.json": (
+        "9caba9a6c0a6359abaf57892819f22cdb57b13fa489faf0b73875235f827472b",
+        14_193,
+    ),
+    "toolchain.json": (
+        "45854f6533d0960f94087c132d5d0fdfe6d37443afd42a1f329e24ae852a0319",
+        617,
+    ),
+    "verification-metadata.xml": (
+        "b8b1fa91bc9d98eaf676dbab76c5452411fcdf6b11a8c9959c131799c71deaf2",
+        879_926,
+    ),
+}
 POLARIS_DEPENDENCY_PACKAGER = Path(
     "scripts/package_polaris_gradle_dependencies.py"
 )
@@ -124,6 +206,10 @@ POLARIS_ALLOWED_PATHS = {
     "apache-polaris-release-signing-key.asc",
     "evidence",
     "evidence/README.md",
+    *{
+        f"evidence/{filename}"
+        for filename in POLARIS_DEPENDENCY_EVIDENCE_RECORDS
+    },
     "source.json",
     "trusted-build-contract.json",
 }
@@ -159,12 +245,9 @@ PENDING_BOOTSTRAP_ARTIFACT_MARKERS = {
     "signature",
     "source",
 }
-PENDING_WORKFLOW_INVENTORY = {
+REVIEW_PENDING_WORKFLOW_INVENTORY = {
     ".github/workflows/ci.yml": (
         "36666a76c07b428adda5fe71e4bd21643d05e66f56043dcef514101add63dd72"
-    ),
-    ".github/workflows/polaris-gradle-dependencies.yml": (
-        POLARIS_DEPENDENCY_WORKFLOW_SHA256
     ),
     ".github/workflows/seaweedfs-arm64.yml": (
         "f097273d79c9595d42be816152ff1aabc862faf2667cb0648434280ce8b8ac06"
@@ -233,7 +316,7 @@ PENDING_SCRIPT_PATHS = set(PENDING_SCRIPT_FILE_INVENTORY) | {
 PENDING_CHART_PATHS = {"AGENTS.md", "README.md"}
 POLARIS_BLOCKING_CONTROLS = [
     {"id": "POLARIS-DEP-SNAPSHOT-REVIEW", "state": "pending"},
-    {"id": "POLARIS-MAIN-PUBLICATION", "state": "pending"},
+    {"id": "POLARIS-MAIN-PUBLICATION", "state": "satisfied"},
     {"id": "POLARIS-IMAGE-EVIDENCE-REVIEW", "state": "pending"},
     {"id": "POLARIS-POSTGRES-ATOMIC-ADMISSION", "state": "pending"},
 ]
@@ -241,150 +324,17 @@ POLARIS_SERVER_TASKS = [
     ":polaris-server:assemble",
     ":polaris-server:quarkusAppPartsBuild",
 ]
-POLARIS_DEPENDENCY_WORKFLOW_STEPS = {
-    "resolve": [
-        "Check out the reviewed dependency policy",
-        "Check the dependency publication lifecycle",
-        "Validate the publication-pending contract",
-        "Fetch and authenticate the ASF source release",
-        "Resolve dependencies and generate strict verification metadata",
-        "Package the canonical dependency snapshot",
-        "Prove a fresh network-none offline server build",
-        "Record the dependency resolver toolchain",
-        "Retain the verified candidate for publication",
-    ],
-    "verify": [
-        "Check out the reviewed verification policy",
-        "Download the exact candidate into the read-only verifier",
-        "Reverify the publication candidate without write credentials",
-    ],
-    "publish": [
-        "Check out the reviewed publication policy",
-        "Download the exact read-only-verified candidate",
-        "Bind candidate bytes to the read-only verification",
-        "Install checksum-pinned ORAS",
-        "Install pinned Cosign",
-        "Publish the run-scoped immutable OCI artifact",
-        "Bind the raw OCI manifest to both artifact layers",
-        "Keyless-sign the exact OCI manifest",
-        "Publish SLSA provenance for the exact OCI manifest",
-        "Prove anonymous exact-digest retrieval",
-        "Verify the exact workflow provenance",
-        "Record the review-pending publication",
-        "Retain review-pending publication evidence",
-        "Remove registry credentials",
-    ],
-}
-POLARIS_DEPENDENCY_WORKFLOW_ACTIONS = [
-    (
-        "resolve|Check out the reviewed dependency policy|"
-        "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10"
-    ),
-    (
-        "resolve|Retain the verified candidate for publication|"
-        "actions/upload-artifact@"
-        "ea165f8d65b6e75b540449e92b4886f43607fa02"
-    ),
-    (
-        "verify|Check out the reviewed verification policy|"
-        "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10"
-    ),
-    (
-        "verify|Download the exact candidate into the read-only verifier|"
-        "actions/download-artifact@"
-        "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
-    ),
-    (
-        "publish|Check out the reviewed publication policy|"
-        "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10"
-    ),
-    (
-        "publish|Download the exact read-only-verified candidate|"
-        "actions/download-artifact@"
-        "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
-    ),
-    (
-        "publish|Install pinned Cosign|sigstore/cosign-installer@"
-        "6f9f17788090df1f26f669e9d70d6ae9567deba6"
-    ),
-    (
-        "publish|Publish SLSA provenance for the exact OCI manifest|"
-        "actions/attest-build-provenance@"
-        "977bb373ede98d70efdf65b84cb5f73e068dcc2a"
-    ),
-    (
-        "publish|Retain review-pending publication evidence|"
-        "actions/upload-artifact@"
-        "ea165f8d65b6e75b540449e92b4886f43607fa02"
-    ),
-]
-POLARIS_DEPENDENCY_WORKFLOW_ENVIRONMENT = {
-    "SOURCE_ARCHIVE_URL": (
-        "https://downloads.apache.org/polaris/1.6.0/"
-        "apache-polaris-1.6.0.tar.gz"
-    ),
-    "SOURCE_SIGNATURE_URL": (
-        "https://downloads.apache.org/polaris/1.6.0/"
-        "apache-polaris-1.6.0.tar.gz.asc"
-    ),
-    "SOURCE_CHECKSUM_URL": (
-        "https://downloads.apache.org/polaris/1.6.0/"
-        "apache-polaris-1.6.0.tar.gz.sha512"
-    ),
-    "SOURCE_ARCHIVE_SHA512": POLARIS_ARCHIVE_SHA512,
-    "SOURCE_SIGNATURE_SHA256": POLARIS_SIGNATURE_SHA256,
-    "SOURCE_SIGNING_KEY_FINGERPRINT": POLARIS_KEY_FINGERPRINT,
-    "BUILDER_IMAGE": BUILDER_ARM64,
-    "ARTIFACT_REPOSITORY": (
-        "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies"
-    ),
-    "ARTIFACT_TYPE": (
-        "application/vnd.shirokuma.polaris.gradle-dependencies.v1"
-    ),
-    "DESCRIPTOR_MEDIA_TYPE": (
-        "application/vnd.shirokuma.gradle-dependency-descriptor.v1+json"
-    ),
-    "ARCHIVE_MEDIA_TYPE": (
-        "application/vnd.shirokuma.gradle-cache.v1.tar+gzip"
-    ),
-    "ORAS_VERSION": "1.3.3",
-    "ORAS_URL": (
-        "https://github.com/oras-project/oras/releases/download/v1.3.3/"
-        "oras_1.3.3_linux_arm64.tar.gz"
-    ),
-    "ORAS_ARCHIVE_SHA256": (
-        "ac7156f93a21e903f7ad606c792f3560f17e0cd0e36365634701b1e7cc4e4eca"
-    ),
-    "COSIGN_VERSION": "v3.1.1",
-}
-POLARIS_DEPENDENCY_WORKFLOW_PUSH_PATHS = [
-    ".github/workflows/polaris-gradle-dependencies.yml",
-    "bootstrap/polaris/v1.6.0/source.json",
-    "bootstrap/polaris/v1.6.0/trusted-build-contract.json",
-    "bootstrap/polaris/v1.6.0/admission.json",
-    "bootstrap/polaris/v1.6.0/apache-polaris-release-signing-key.asc",
-    "scripts/package_polaris_gradle_dependencies.py",
-    "scripts/validate_polaris_source_archive.py",
-    "scripts/verify_polaris_trusted_image.py",
-    "tests/test_package_polaris_gradle_dependencies.py",
-    "tests/test_polaris_trusted_image_contract.py",
-]
-POLARIS_DEPENDENCY_WORKFLOW_PERMISSIONS = {
-    "resolve": {"contents": "read"},
-    "verify": {"contents": "read"},
-    "publish": {
-        "attestations": "write",
-        "contents": "read",
-        "id-token": "write",
-        "packages": "write",
-    },
-}
 RUNTIME_ROOTS = (Path("deploy"), Path("charts"), Path("opentofu"))
 RUNTIME_GENERATED_DIRS = {".terraform"}
 RETAINED_EVIDENCE_ROOT = Path("security/evidence")
 RETAINED_EVIDENCE_JSON_SUFFIXES = {".json", ".jsonl"}
 RETAINED_EVIDENCE_DOCUMENT_SUFFIXES = {".md"}
 MAX_DSSE_PAYLOAD_BYTES = 16 * 1024 * 1024
+_VERIFIED_DEPENDENCY_CRYPTOGRAPHIC_BINDINGS: set[
+    tuple[str, ...]
+] = set()
+_VALIDATED_DEPENDENCY_DESCRIPTOR_BINDINGS: set[tuple[str, str]] = set()
+_POLARIS_DEPENDENCY_PACKAGER_MODULE: Any | None = None
 RUNTIME_IDENTITY = re.compile(r"(?:polaris|postgres(?:ql)?)", re.IGNORECASE)
 CATALOG_IDENTITY_MARKERS = ("catalog", "iceberg", "metastore")
 CATALOG_PATH_CONTEXT_WORDS = {
@@ -633,6 +583,22 @@ def _load_json(root: Path, relative: Path, code: str) -> Mapping[str, Any]:
     return value
 
 
+def _load_json_value(root: Path, relative: Path, code: str) -> Any:
+    path = root / relative
+    _expect(
+        _is_regular_file_without_symlink_components(root, relative),
+        code,
+        f"evidence must be a real regular file: {relative}",
+    )
+    try:
+        return json.loads(
+            path.read_text(encoding="utf-8"),
+            object_pairs_hook=_reject_duplicate_pairs,
+        )
+    except (OSError, UnicodeError, ValueError) as error:
+        _fail(code, f"cannot read {relative}: {error}")
+
+
 def _nested(value: Mapping[str, Any], *path: str) -> Any:
     current: Any = value
     for key in path:
@@ -686,6 +652,28 @@ def _sha256(path: Path) -> str:
     except OSError as error:
         _fail("KEY", f"cannot read {path}: {error}")
     return digest.hexdigest()
+
+
+def _sha256_and_size(
+    root: Path,
+    relative: Path,
+    code: str,
+) -> tuple[str, int]:
+    _expect(
+        _is_regular_file_without_symlink_components(root, relative),
+        code,
+        f"evidence must be a real regular file: {relative}",
+    )
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        with (root / relative).open("rb") as handle:
+            for block in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(block)
+                size += len(block)
+    except OSError as error:
+        _fail(code, f"cannot read {relative}: {error}")
+    return digest.hexdigest(), size
 
 
 def _decode_ascii_armor(text: str) -> bytes:
@@ -938,554 +926,6 @@ def _audit_source(root: Path) -> Mapping[str, Any]:
     return source
 
 
-def _workflow_step_block(text: str, name: str) -> str:
-    marker = f"      - name: {name}\n"
-    _expect(
-        text.count(marker) == 1,
-        "CONTRACT_STATE",
-        f"dependency workflow step is missing or duplicated: {name}",
-    )
-    start = text.index(marker)
-    end = text.find("\n      - name: ", start + len(marker))
-    return text[start:] if end == -1 else text[start:end]
-
-
-def _audit_dependency_workflow_semantics(
-    root: Path,
-    contract: Mapping[str, Any],
-) -> None:
-    workflow_contract = _nested(contract, "dependency_snapshot", "workflow")
-    _expect(
-        _nested(workflow_contract, "step_order")
-        == POLARIS_DEPENDENCY_WORKFLOW_STEPS,
-        "CONTRACT_STATE",
-        "dependency workflow step order differs from the semantic contract",
-    )
-    _expect(
-        _nested(workflow_contract, "action_uses")
-        == POLARIS_DEPENDENCY_WORKFLOW_ACTIONS,
-        "CONTRACT_STATE",
-        "dependency workflow Action pins differ from the semantic contract",
-    )
-    _expect(
-        _nested(workflow_contract, "environment")
-        == POLARIS_DEPENDENCY_WORKFLOW_ENVIRONMENT,
-        "CONTRACT_STATE",
-        "dependency workflow environment differs from the semantic contract",
-    )
-    _expect(
-        _nested(workflow_contract, "permissions")
-        == POLARIS_DEPENDENCY_WORKFLOW_PERMISSIONS,
-        "CONTRACT_STATE",
-        "dependency workflow permissions differ from the semantic contract",
-    )
-    _expect(
-        _nested(workflow_contract, "push_paths")
-        == POLARIS_DEPENDENCY_WORKFLOW_PUSH_PATHS,
-        "CONTRACT_STATE",
-        "dependency workflow push paths differ from the semantic contract",
-    )
-    workflow_path = root / POLARIS_DEPENDENCY_WORKFLOW
-    try:
-        text = workflow_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeError) as error:
-        _fail(
-            "CONTRACT_STATE",
-            f"cannot read dependency workflow semantics: {error}",
-        )
-
-    jobs: list[str] = []
-    steps: dict[str, list[str]] = {}
-    step_entry_counts: dict[str, int] = {}
-    unnamed_steps: list[str] = []
-    actions: list[str] = []
-    environment: dict[str, str] = {}
-    runners: dict[str, str] = {}
-    permissions: dict[str, dict[str, str]] = {}
-    in_environment = False
-    in_jobs = False
-    in_steps = False
-    permission_job: str | None = None
-    current_job: str | None = None
-    current_step: str | None = None
-    for line in text.splitlines():
-        if line == "env:":
-            in_environment = True
-            continue
-        if line == "jobs:":
-            in_environment = False
-            in_jobs = True
-            continue
-        if in_environment:
-            matched_environment = re.fullmatch(
-                r"  ([A-Z][A-Z0-9_]+): (.+)",
-                line,
-            )
-            if matched_environment:
-                environment[matched_environment.group(1)] = (
-                    matched_environment.group(2)
-                )
-            continue
-        if not in_jobs:
-            continue
-        matched_job = re.fullmatch(r"  ([a-z][a-z0-9_-]*):", line)
-        if matched_job:
-            current_job = matched_job.group(1)
-            current_step = None
-            permission_job = None
-            in_steps = False
-            jobs.append(current_job)
-            steps[current_job] = []
-            step_entry_counts[current_job] = 0
-            permissions[current_job] = {}
-            continue
-        if current_job is None:
-            continue
-        matched_runner = re.fullmatch(r"    runs-on: (.+)", line)
-        if matched_runner:
-            runners[current_job] = matched_runner.group(1)
-        if line == "    permissions:":
-            permission_job = current_job
-            continue
-        if line == "    steps:":
-            in_steps = True
-            current_step = None
-            permission_job = None
-            continue
-        if permission_job is not None:
-            matched_permission = re.fullmatch(
-                r"      ([a-z-]+): (read|write|none)",
-                line,
-            )
-            if matched_permission:
-                permissions[permission_job][matched_permission.group(1)] = (
-                    matched_permission.group(2)
-                )
-                continue
-            if line and not line.startswith("      "):
-                permission_job = None
-        matched_step_entry = (
-            re.fullmatch(r"      - (.+)", line) if in_steps else None
-        )
-        if matched_step_entry:
-            step_entry_counts[current_job] += 1
-            matched_step = re.fullmatch(
-                r"name: (.+)",
-                matched_step_entry.group(1),
-            )
-            if matched_step is None:
-                current_step = None
-                unnamed_steps.append(
-                    f"{current_job}:{matched_step_entry.group(1)}"
-                )
-                continue
-            current_step = matched_step.group(1)
-            steps[current_job].append(current_step)
-            continue
-        matched_action = re.fullmatch(r"        uses: ([^ ]+)(?: .*)?", line)
-        if matched_action and current_step is not None:
-            actions.append(
-                f"{current_job}|{current_step}|{matched_action.group(1)}"
-            )
-
-    _expect(
-        jobs == ["resolve", "verify", "publish"],
-        "CONTRACT_STATE",
-        "dependency workflow job order changed",
-    )
-    _expect(
-        steps == POLARIS_DEPENDENCY_WORKFLOW_STEPS,
-        "CONTRACT_STATE",
-        "dependency workflow ordered step inventory changed",
-    )
-    _expect(
-        not unnamed_steps
-        and step_entry_counts
-        == {
-            job: len(expected_steps)
-            for job, expected_steps in POLARIS_DEPENDENCY_WORKFLOW_STEPS.items()
-        },
-        "CONTRACT_STATE",
-        "dependency workflow contains an unnamed or extra step entry",
-    )
-    _expect(
-        actions == POLARIS_DEPENDENCY_WORKFLOW_ACTIONS
-        and all(
-            re.fullmatch(r".+@[0-9a-f]{40}", action.rsplit("|", 1)[1])
-            for action in actions
-        ),
-        "CONTRACT_STATE",
-        "dependency workflow Action pin inventory changed",
-    )
-    _expect(
-        environment == POLARIS_DEPENDENCY_WORKFLOW_ENVIRONMENT,
-        "CONTRACT_STATE",
-        "dependency workflow top-level environment changed",
-    )
-    _expect(
-        runners
-        == {
-            "resolve": "ubuntu-24.04-arm",
-            "verify": "ubuntu-24.04-arm",
-            "publish": "ubuntu-24.04-arm",
-        }
-        and permissions == POLARIS_DEPENDENCY_WORKFLOW_PERMISSIONS,
-        "CONTRACT_STATE",
-        "dependency workflow runner or job permissions changed",
-    )
-    _expect(
-        "permissions:\n  contents: read\n\nconcurrency:" in text,
-        "CONTRACT_STATE",
-        "dependency workflow top-level permissions changed",
-    )
-    expected_trigger = "\n".join(
-        [
-            "on:",
-            "  push:",
-            "    branches:",
-            "      - main",
-            "    paths:",
-            *[
-                f"      - {path}"
-                for path in POLARIS_DEPENDENCY_WORKFLOW_PUSH_PATHS
-            ],
-            "  workflow_dispatch:",
-        ]
-    )
-    try:
-        trigger_start = text.index("on:\n")
-        trigger_end = text.index("\npermissions:\n", trigger_start)
-    except ValueError:
-        _fail(
-            "CONTRACT_STATE",
-            "dependency workflow trigger topology changed",
-        )
-    _expect(
-        text[trigger_start:trigger_end].rstrip() == expected_trigger,
-        "CONTRACT_STATE",
-        "dependency workflow trigger topology changed",
-    )
-    forbidden_markers = (
-        "pull_request:",
-        "pull_request_target:",
-        "actions/cache@",
-        "persist-credentials: true",
-        "cache-from:",
-        "cache-to:",
-        "--network host",
-        "--dependency-verification off",
-    )
-    _expect(
-        not any(marker in text for marker in forbidden_markers),
-        "CONTRACT_STATE",
-        "dependency workflow enabled a forbidden trigger, cache, or bypass",
-    )
-    required_markers = (
-        "dependency_snapshot_publication_pending)",
-        "dependency_snapshot_review_pending)",
-        'echo "active=false" >> "${GITHUB_OUTPUT}"',
-        "--write-verification-metadata sha256",
-        "--network none",
-        "--offline",
-        "--dependency-verification strict",
-        "expected_offline_keys = {",
-        '"descriptor_sha256": descriptor_sha256',
-        '"archive_sha256": archive_sha256',
-        '"verification_metadata_sha256": metadata_sha256',
-        'toolchain["gradle"] != "9.6.0"',
-        'toolchain["builder_image"] != os.environ["BUILDER_IMAGE"]',
-        "needs.verify.outputs.descriptor_sha256",
-        "cannot prove that the run-scoped OCI tag is absent",
-        'git show -s --no-show-signature --format=%cI "${GITHUB_SHA}"',
-        '"org.opencontainers.image.created=${created}"',
-        '"PUBLISHED_CREATED=${created}"',
-        "set(config) != {\"mediaType\", \"digest\", \"size\", \"data\"}",
-        'manifest["annotations"]',
-        "cosign sign --yes",
-        "actions/attest-build-provenance@",
-        "oras logout ghcr.io",
-        "--registry-config \"${anonymous_config}\"",
-        "gh attestation verify",
-        '"offline_build": file_record("offline-build.json")',
-        '"toolchain": file_record("toolchain.json")',
-        '"verification_metadata": file_record(',
-        '"created": os.environ["PUBLISHED_CREATED"]',
-    )
-    _expect(
-        all(marker in text for marker in required_markers),
-        "CONTRACT_STATE",
-        "dependency workflow lost a required publication semantic",
-    )
-    authentication_step = _workflow_step_block(
-        text,
-        "Fetch and authenticate the ASF source release",
-    )
-    _expect(
-        "\n".join(
-            [
-                "          python3 scripts/validate_polaris_source_archive.py \\",
-                (
-                    "            --archive "
-                    '"${source_dir}/apache-polaris-1.6.0.tar.gz"'
-                ),
-            ]
-        )
-        in authentication_step,
-        "CONTRACT_STATE",
-        "source authentication step lost the pinned archive validator",
-    )
-    online_step = _workflow_step_block(
-        text,
-        "Resolve dependencies and generate strict verification metadata",
-    )
-    _expect(
-        "\n".join(
-            [
-                '          test ! -e "${online_source}"',
-                '          test ! -L "${online_source}"',
-                (
-                    '          install -d -m 0700 "${online_source}" '
-                    '"${gradle_home}"'
-                ),
-                (
-                    '          tar --extract --gzip --file "${source_archive}" \\'
-                ),
-                (
-                    '            --directory "${online_source}" '
-                    "--strip-components 1 \\"
-                ),
-                "            --no-same-owner --no-same-permissions",
-            ]
-        )
-        in online_step,
-        "CONTRACT_STATE",
-        "online source extraction lost fresh-directory hardening",
-    )
-    offline_step = _workflow_step_block(
-        text,
-        "Prove a fresh network-none offline server build",
-    )
-    _expect(
-        "\n".join(
-            [
-                '          test ! -e "${offline_source}"',
-                '          test ! -L "${offline_source}"',
-                '          install -d -m 0700 "${offline_source}"',
-            ]
-        )
-        in offline_step
-        and "\n".join(
-            [
-                "          tar --extract --gzip \\",
-                "            --file \\",
-                (
-                    '              "${RUNNER_TEMP}/polaris-source/'
-                    'apache-polaris-1.6.0.tar.gz" \\'
-                ),
-                (
-                    '            --directory "${offline_source}" '
-                    "--strip-components 1 \\"
-                ),
-                "            --no-same-owner --no-same-permissions",
-            ]
-        )
-        in offline_step,
-        "CONTRACT_STATE",
-        "offline source extraction lost fresh-directory hardening",
-    )
-    verify_start = text.index("  verify:")
-    publish_start = text.index("  publish:")
-    verify_text = text[verify_start:publish_start]
-    _expect(
-        "github.token" not in verify_text
-        and "packages: write" not in verify_text
-        and "id-token: write" not in verify_text,
-        "CONTRACT_STATE",
-        "read-only candidate verification gained write credentials",
-    )
-    publish_steps = POLARIS_DEPENDENCY_WORKFLOW_STEPS["publish"]
-    publish_step = _workflow_step_block(
-        text,
-        "Publish the run-scoped immutable OCI artifact",
-    )
-    relative_oras_push = "\n".join(
-        [
-            "          (",
-            '            cd "${candidate_dir}"',
-            "            oras push \\",
-            "              --image-spec v1.1 \\",
-            '              --artifact-type "${ARTIFACT_TYPE}" \\',
-            "              --annotation \\",
-            (
-                '                "org.opencontainers.image.source='
-                'https://github.com/${GITHUB_REPOSITORY}" \\'
-            ),
-            (
-                '              --annotation "org.opencontainers.image.revision='
-                '${GITHUB_SHA}" \\'
-            ),
-            (
-                '              --annotation "org.opencontainers.image.created='
-                '${created}" \\'
-            ),
-            '              --export-manifest "oci-manifest.json" \\',
-            '              "${tag}" \\',
-            (
-                '              "gradle-dependency-inputs.json:'
-                '${DESCRIPTOR_MEDIA_TYPE}" \\'
-            ),
-            (
-                '              "polaris-gradle-dependencies-1.6.0.tar.gz:'
-                '${ARCHIVE_MEDIA_TYPE}"'
-            ),
-            "          )",
-        ]
-    )
-    _expect(
-        "--disable-path-validation" not in publish_step,
-        "CONTRACT_STATE",
-        "ORAS path validation cannot be disabled",
-    )
-    _expect(
-        publish_step.count(relative_oras_push) == 1
-        and publish_step.count("oras push") == 1
-        and text.count("oras push") == 1,
-        "CONTRACT_STATE",
-        "ORAS publication must use the exact candidate-scoped relative push",
-    )
-    signing_step = _workflow_step_block(
-        text,
-        "Keyless-sign the exact OCI manifest",
-    )
-    retained_bundle_signing = "\n".join(
-        [
-            "          cosign sign --yes \\",
-            (
-                '            --bundle "${candidate_dir}/'
-                'cosign-signature-bundle.json" \\'
-            ),
-            '            "${PUBLISHED_REFERENCE}"',
-        ]
-    )
-    registry_reference_verification = "\n".join(
-        [
-            "          cosign verify \\",
-            "            --certificate-identity \\",
-            (
-                '              "https://github.com/${GITHUB_REPOSITORY}/'
-                ".github/workflows/polaris-gradle-dependencies.yml@"
-                '${GITHUB_REF}" \\'
-            ),
-            "            --certificate-oidc-issuer \\",
-            '              "https://token.actions.githubusercontent.com" \\',
-            '            "${PUBLISHED_REFERENCE}" \\',
-            '            > "${candidate_dir}/cosign-verify.json"',
-            "",
-        ]
-    )
-    _expect(
-        signing_step.count(retained_bundle_signing) == 1
-        and signing_step.count("cosign sign") == 1,
-        "CONTRACT_STATE",
-        "Cosign signing must retain exactly one signature bundle",
-    )
-    _expect(
-        signing_step.count(registry_reference_verification) == 1
-        and signing_step.count("cosign verify") == 1
-        and signing_step.count("--bundle") == 1,
-        "CONTRACT_STATE",
-        "Cosign registry verification must use the exact signed reference "
-        "without a bundle flag",
-    )
-    canonical_signing_step = "\n".join(
-        [
-            "      - name: Keyless-sign the exact OCI manifest",
-            "        env:",
-            "          GHCR_TOKEN: ${{ github.token }}",
-            "        shell: bash",
-            "        run: |",
-            "          set -euo pipefail",
-            (
-                '          candidate_dir="${RUNNER_TEMP}/'
-                'polaris-gradle-candidate"'
-            ),
-            '          echo "${GHCR_TOKEN}" \\',
-            (
-                "            | oras login ghcr.io --username "
-                '"${GITHUB_ACTOR}" --password-stdin'
-            ),
-            "          cosign sign --yes \\",
-            (
-                '            --bundle "${candidate_dir}/'
-                'cosign-signature-bundle.json" \\'
-            ),
-            '            "${PUBLISHED_REFERENCE}"',
-            "          cosign verify \\",
-            "            --certificate-identity \\",
-            (
-                '              "https://github.com/${GITHUB_REPOSITORY}/'
-                ".github/workflows/polaris-gradle-dependencies.yml@"
-                '${GITHUB_REF}" \\'
-            ),
-            "            --certificate-oidc-issuer \\",
-            '              "https://token.actions.githubusercontent.com" \\',
-            '            "${PUBLISHED_REFERENCE}" \\',
-            '            > "${candidate_dir}/cosign-verify.json"',
-            "",
-        ]
-    )
-    _expect(
-        signing_step == canonical_signing_step,
-        "CONTRACT_STATE",
-        "Cosign signing and registry verification step must remain "
-        "closed-world",
-    )
-    publication_record_step = _workflow_step_block(
-        text,
-        "Record the review-pending publication",
-    )
-    retained_cosign_record = "\n".join(
-        [
-            '              "cosign_bundle": file_record(',
-            '                  "cosign-signature-bundle.json"',
-            "              ),",
-            (
-                '              "cosign_verification": '
-                'file_record("cosign-verify.json"),'
-            ),
-        ]
-    )
-    publication_retention_step = _workflow_step_block(
-        text,
-        "Retain review-pending publication evidence",
-    )
-    _expect(
-        publication_record_step.count(retained_cosign_record) == 1
-        and publication_retention_step.count(
-            "${{ runner.temp }}/polaris-gradle-candidate/"
-            "cosign-signature-bundle.json"
-        )
-        == 1
-        and publication_retention_step.count(
-            "${{ runner.temp }}/polaris-gradle-candidate/"
-            "cosign-verify.json"
-        )
-        == 1,
-        "CONTRACT_STATE",
-        "Cosign bundle and registry verification must remain hash-bound "
-        "and retained",
-    )
-    _expect(
-        publish_steps.index("Keyless-sign the exact OCI manifest")
-        < publish_steps.index(
-            "Publish SLSA provenance for the exact OCI manifest"
-        )
-        < publish_steps.index("Prove anonymous exact-digest retrieval"),
-        "CONTRACT_STATE",
-        "publication must be signed and attested before anonymous exposure",
-    )
-
-
 def _audit_contract(root: Path) -> Mapping[str, Any]:
     contract = _load_json(root, POLARIS_CONTRACT, "CONTRACT_STATE")
     _expect_keysets(
@@ -1503,53 +943,6 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "runtime",
             },
             ("lifecycle",): {"state", "next_state"},
-            ("source",): {
-                "record",
-                "record_sha256",
-                "archive_sha512",
-                "archive_member_policy",
-                "archive_validator",
-                "git_commit",
-                "git_tree",
-                "builder_index",
-                "builder_arm64_manifest",
-                "java_major",
-                "gradle_version",
-                "tasks",
-            },
-            ("source", "archive_member_policy"): {
-                "root",
-                "strip_components",
-                "allowed_member_types",
-                "path_charset",
-                "tar_size_encoding",
-                "hidden_name_records_permitted",
-                "solaris_pax_records_permitted",
-                "explicit_directory_parents_required",
-                "symlink_target_policy",
-                "symlink_chains_permitted",
-                "symlink_cycles_permitted",
-                "members_below_symlink_paths_permitted",
-                "duplicate_paths_permitted",
-                "hardlinks_permitted",
-                "special_files_permitted",
-                "maximum_archive_bytes",
-                "maximum_decompressed_bytes",
-                "maximum_raw_headers",
-                "maximum_tar_control_bytes",
-                "maximum_members",
-                "maximum_member_bytes",
-                "maximum_total_regular_file_bytes",
-                "maximum_path_bytes",
-                "maximum_path_component_bytes",
-                "maximum_path_components",
-                "maximum_link_bytes",
-                "maximum_pax_bytes_per_member",
-                "allowed_pax_headers",
-                "pax_record_encoding",
-                "pax_comment_policy",
-            },
-            ("source", "archive_validator"): {"path", "sha256"},
             ("dependency_snapshot",): {
                 "state",
                 "artifact_repository",
@@ -1564,10 +957,20 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "descriptor_media_type",
                 "verification_metadata_media_type",
                 "packager",
-                "workflow",
+                "publication",
                 "visibility_bootstrap",
                 "tools",
                 "offline_proof",
+            },
+            ("dependency_snapshot", "descriptor"): {
+                "path",
+                "sha256",
+                "size",
+            },
+            ("dependency_snapshot", "verification_metadata"): {
+                "path",
+                "sha256",
+                "size",
             },
             ("dependency_snapshot", "module_cache_identity"): {
                 "algorithm",
@@ -1599,77 +1002,34 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "directory_mode",
             },
             ("dependency_snapshot", "packager"): {"path", "sha256"},
-            ("dependency_snapshot", "workflow"): {
+            ("dependency_snapshot", "publication"): {
+                "record",
+                "actions_artifact",
+                "publisher",
+            },
+            ("dependency_snapshot", "publication", "record"): {
                 "path",
                 "sha256",
-                "runner",
-                "allowed_events",
-                "allowed_refs",
-                "push_paths",
-                "job_order",
-                "permissions",
-                "step_order",
-                "action_uses",
-                "environment",
-                "lifecycle_gate",
-                "credential_boundary",
-                "created_annotation",
-                "no_shared_cache",
-                "run_scoped_tag",
+                "size",
             },
-            ("dependency_snapshot", "workflow", "permissions"): {
-                "resolve",
-                "verify",
-                "publish",
+            ("dependency_snapshot", "publication", "actions_artifact"): {
+                "id",
+                "name",
+                "sha256",
+                "size",
+                "run_id",
+                "run_attempt",
             },
-            (
-                "dependency_snapshot",
-                "workflow",
-                "permissions",
-                "resolve",
-            ): {"contents"},
-            (
-                "dependency_snapshot",
-                "workflow",
-                "permissions",
-                "verify",
-            ): {"contents"},
-            (
-                "dependency_snapshot",
-                "workflow",
-                "permissions",
-                "publish",
-            ): {"attestations", "contents", "id-token", "packages"},
-            ("dependency_snapshot", "workflow", "step_order"): {
-                "resolve",
-                "verify",
-                "publish",
+            ("dependency_snapshot", "publication", "publisher"): {
+                "path",
+                "sha256",
+                "repository",
+                "ref",
+                "source_sha",
+                "workflow_sha",
+                "event",
+                "retired",
             },
-            ("dependency_snapshot", "workflow", "environment"): set(
-                POLARIS_DEPENDENCY_WORKFLOW_ENVIRONMENT
-            ),
-            ("dependency_snapshot", "workflow", "lifecycle_gate"): {
-                "active_state",
-                "skip_state",
-                "retire_in_evidence_review_pr",
-            },
-            ("dependency_snapshot", "workflow", "credential_boundary"): {
-                "candidate_verification_job",
-                "candidate_verification_permissions",
-                "publish_byte_binding_step",
-                "registry_login_step",
-            },
-            (
-                "dependency_snapshot",
-                "workflow",
-                "credential_boundary",
-                "candidate_verification_permissions",
-            ): {"contents"},
-            (
-                "dependency_snapshot",
-                "workflow",
-                "created_annotation",
-            ): {"key", "value_source"},
             ("dependency_snapshot", "visibility_bootstrap"): {
                 "required_visibility",
                 "sign_and_attest_before_anonymous_pull",
@@ -1714,203 +1074,34 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
     _expect_fields(
         contract,
         {
-            ("schema_version",): 2,
+            ("schema_version",): 3,
             ("component",): "polaris",
             ("version",): POLARIS_VERSION,
             ("platform",): "linux/arm64",
-            (
-                "lifecycle",
-                "state",
-            ): "dependency_snapshot_publication_pending",
-            (
-                "lifecycle",
-                "next_state",
-            ): "dependency_snapshot_review_pending",
+            ("lifecycle", "state"): "dependency_snapshot_review_pending",
+            ("lifecycle", "next_state"): "image_publication_pending",
             ("source", "record"): POLARIS_SOURCE.as_posix(),
             ("source", "record_sha256"): POLARIS_SOURCE_SHA256,
             ("source", "archive_sha512"): POLARIS_ARCHIVE_SHA512,
-            (
-                "source",
-                "archive_member_policy",
-                "root",
-            ): POLARIS_SOURCE_ARCHIVE_ROOT,
-            (
-                "source",
-                "archive_member_policy",
-                "strip_components",
-            ): 1,
-            (
-                "source",
-                "archive_member_policy",
-                "allowed_member_types",
-            ): [
-                "regular-file",
-                "directory",
-                "relative-symlink",
-            ],
-            (
-                "source",
-                "archive_member_policy",
-                "path_charset",
-            ): "printable-ascii-posix",
-            (
-                "source",
-                "archive_member_policy",
-                "tar_size_encoding",
-            ): "canonical-octal",
-            (
-                "source",
-                "archive_member_policy",
-                "hidden_name_records_permitted",
-            ): False,
-            (
-                "source",
-                "archive_member_policy",
-                "solaris_pax_records_permitted",
-            ): False,
-            (
-                "source",
-                "archive_member_policy",
-                "explicit_directory_parents_required",
-            ): True,
-            (
-                "source",
-                "archive_member_policy",
-                "symlink_target_policy",
-            ): "existing-in-root-member-before-and-after-strip",
-            (
-                "source",
-                "archive_member_policy",
-                "symlink_chains_permitted",
-            ): True,
-            (
-                "source",
-                "archive_member_policy",
-                "symlink_cycles_permitted",
-            ): False,
-            (
-                "source",
-                "archive_member_policy",
-                "members_below_symlink_paths_permitted",
-            ): False,
-            (
-                "source",
-                "archive_member_policy",
-                "duplicate_paths_permitted",
-            ): False,
-            (
-                "source",
-                "archive_member_policy",
-                "hardlinks_permitted",
-            ): False,
-            (
-                "source",
-                "archive_member_policy",
-                "special_files_permitted",
-            ): False,
-            (
-                "source",
-                "archive_member_policy",
-                "maximum_archive_bytes",
-            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_BYTES,
-            (
-                "source",
-                "archive_member_policy",
-                "maximum_decompressed_bytes",
-            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_DECOMPRESSED_BYTES,
-            (
-                "source",
-                "archive_member_policy",
-                "maximum_raw_headers",
-            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_RAW_HEADERS,
-            (
-                "source",
-                "archive_member_policy",
-                "maximum_tar_control_bytes",
-            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_TAR_CONTROL_BYTES,
-            (
-                "source",
-                "archive_member_policy",
-                "maximum_members",
-            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_MEMBERS,
-            (
-                "source",
-                "archive_member_policy",
-                "maximum_member_bytes",
-            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_MEMBER_BYTES,
-            (
-                "source",
-                "archive_member_policy",
-                "maximum_total_regular_file_bytes",
-            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_TOTAL_FILE_BYTES,
-            (
-                "source",
-                "archive_member_policy",
-                "maximum_path_bytes",
-            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_PATH_BYTES,
-            (
-                "source",
-                "archive_member_policy",
-                "maximum_path_component_bytes",
-            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_PATH_COMPONENT_BYTES,
-            (
-                "source",
-                "archive_member_policy",
-                "maximum_path_components",
-            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_PATH_COMPONENTS,
-            (
-                "source",
-                "archive_member_policy",
-                "maximum_link_bytes",
-            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_LINK_BYTES,
-            (
-                "source",
-                "archive_member_policy",
-                "maximum_pax_bytes_per_member",
-            ): POLARIS_SOURCE_ARCHIVE_MAXIMUM_PAX_BYTES,
-            (
-                "source",
-                "archive_member_policy",
-                "allowed_pax_headers",
-            ): sorted(POLARIS_SOURCE_ARCHIVE_ALLOWED_PAX_HEADERS),
-            (
-                "source",
-                "archive_member_policy",
-                "pax_record_encoding",
-            ): "strict-length-prefixed-lines",
-            (
-                "source",
-                "archive_member_policy",
-                "pax_comment_policy",
-            ): "if-present-equals-pinned-git-commit",
-            (
-                "source",
-                "archive_validator",
-                "path",
-            ): POLARIS_SOURCE_ARCHIVE_VALIDATOR.as_posix(),
-            (
-                "source",
-                "archive_validator",
-                "sha256",
-            ): POLARIS_SOURCE_ARCHIVE_VALIDATOR_SHA256,
             ("source", "git_commit"): POLARIS_COMMIT,
             ("source", "git_tree"): POLARIS_TREE,
             ("source", "builder_index"): BUILDER_INDEX,
             ("source", "builder_arm64_manifest"): BUILDER_ARM64,
             ("source", "java_major"): 21,
             ("source", "gradle_version"): "9.6.0",
-            ("dependency_snapshot", "state"): "publication_pending",
+            ("dependency_snapshot", "state"): "review_pending",
             (
                 "dependency_snapshot",
                 "artifact_repository",
             ): "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies",
-            ("dependency_snapshot", "artifact_reference"): None,
+            (
+                "dependency_snapshot",
+                "artifact_reference",
+            ): POLARIS_DEPENDENCY_REFERENCE,
             (
                 "dependency_snapshot",
                 "artifact_type",
             ): "application/vnd.shirokuma.polaris.gradle-dependencies.v1",
-            ("dependency_snapshot", "descriptor"): None,
-            ("dependency_snapshot", "verification_metadata"): None,
             (
                 "dependency_snapshot",
                 "cache_roots",
@@ -1998,25 +1189,96 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "archive",
                 "filename",
             ): "polaris-gradle-dependencies-1.6.0.tar.gz",
-            ("dependency_snapshot", "archive", "format"): "pax+gzip",
+            (
+                "dependency_snapshot",
+                "archive",
+                "format",
+            ): "pax+gzip",
             (
                 "dependency_snapshot",
                 "archive",
                 "media_type",
             ): "application/vnd.shirokuma.gradle-cache.v1.tar+gzip",
-            ("dependency_snapshot", "archive", "mtime"): 0,
-            ("dependency_snapshot", "archive", "uid"): 0,
-            ("dependency_snapshot", "archive", "gid"): 0,
-            ("dependency_snapshot", "archive", "file_mode"): "0644",
-            ("dependency_snapshot", "archive", "directory_mode"): "0755",
+            (
+                "dependency_snapshot",
+                "archive",
+                "mtime",
+            ): 0,
+            (
+                "dependency_snapshot",
+                "archive",
+                "uid",
+            ): 0,
+            (
+                "dependency_snapshot",
+                "archive",
+                "gid",
+            ): 0,
+            (
+                "dependency_snapshot",
+                "archive",
+                "file_mode",
+            ): "0644",
+            (
+                "dependency_snapshot",
+                "archive",
+                "directory_mode",
+            ): "0755",
             (
                 "dependency_snapshot",
                 "descriptor_media_type",
-            ): "application/vnd.shirokuma.gradle-dependency-descriptor.v1+json",
+            ): (
+                "application/vnd.shirokuma."
+                "gradle-dependency-descriptor.v1+json"
+            ),
             (
                 "dependency_snapshot",
                 "verification_metadata_media_type",
             ): "application/vnd.gradle.dependency-verification.v1+xml",
+            (
+                "dependency_snapshot",
+                "descriptor",
+                "path",
+            ): (
+                "bootstrap/polaris/v1.6.0/evidence/"
+                "gradle-dependency-inputs.json"
+            ),
+            (
+                "dependency_snapshot",
+                "descriptor",
+                "sha256",
+            ): POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+                "gradle-dependency-inputs.json"
+            ][0],
+            (
+                "dependency_snapshot",
+                "descriptor",
+                "size",
+            ): POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+                "gradle-dependency-inputs.json"
+            ][1],
+            (
+                "dependency_snapshot",
+                "verification_metadata",
+                "path",
+            ): (
+                "bootstrap/polaris/v1.6.0/evidence/"
+                "verification-metadata.xml"
+            ),
+            (
+                "dependency_snapshot",
+                "verification_metadata",
+                "sha256",
+            ): POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+                "verification-metadata.xml"
+            ][0],
+            (
+                "dependency_snapshot",
+                "verification_metadata",
+                "size",
+            ): POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+                "verification-metadata.xml"
+            ][1],
             (
                 "dependency_snapshot",
                 "packager",
@@ -2029,146 +1291,75 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
             ): POLARIS_DEPENDENCY_PACKAGER_SHA256,
             (
                 "dependency_snapshot",
-                "workflow",
+                "publication",
+                "record",
+                "path",
+            ): "bootstrap/polaris/v1.6.0/evidence/publication.json",
+            (
+                "dependency_snapshot",
+                "publication",
+                "record",
+                "sha256",
+            ): POLARIS_DEPENDENCY_PUBLICATION_SHA256,
+            (
+                "dependency_snapshot",
+                "publication",
+                "record",
+                "size",
+            ): POLARIS_DEPENDENCY_PUBLICATION_SIZE,
+            (
+                "dependency_snapshot",
+                "publication",
+                "actions_artifact",
+            ): POLARIS_DEPENDENCY_PUBLICATION_ARTIFACT,
+            (
+                "dependency_snapshot",
+                "publication",
+                "publisher",
                 "path",
             ): POLARIS_DEPENDENCY_WORKFLOW.as_posix(),
             (
                 "dependency_snapshot",
-                "workflow",
+                "publication",
+                "publisher",
                 "sha256",
             ): POLARIS_DEPENDENCY_WORKFLOW_SHA256,
             (
                 "dependency_snapshot",
-                "workflow",
-                "runner",
-            ): "ubuntu-24.04-arm",
+                "publication",
+                "publisher",
+                "repository",
+            ): POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY,
             (
                 "dependency_snapshot",
-                "workflow",
-                "allowed_events",
-            ): ["push", "workflow_dispatch"],
+                "publication",
+                "publisher",
+                "ref",
+            ): POLARIS_DEPENDENCY_PUBLISHER_REF,
             (
                 "dependency_snapshot",
-                "workflow",
-                "allowed_refs",
-            ): ["refs/heads/main"],
+                "publication",
+                "publisher",
+                "source_sha",
+            ): POLARIS_DEPENDENCY_SOURCE_SHA,
             (
                 "dependency_snapshot",
-                "workflow",
-                "push_paths",
-            ): POLARIS_DEPENDENCY_WORKFLOW_PUSH_PATHS,
+                "publication",
+                "publisher",
+                "workflow_sha",
+            ): POLARIS_DEPENDENCY_SOURCE_SHA,
             (
                 "dependency_snapshot",
-                "workflow",
-                "job_order",
-            ): ["resolve", "verify", "publish"],
+                "publication",
+                "publisher",
+                "event",
+            ): POLARIS_DEPENDENCY_PUBLISHER_TRIGGER,
             (
                 "dependency_snapshot",
-                "workflow",
-                "permissions",
-                "resolve",
-                "contents",
-            ): "read",
-            (
-                "dependency_snapshot",
-                "workflow",
-                "permissions",
-                "verify",
-                "contents",
-            ): "read",
-            (
-                "dependency_snapshot",
-                "workflow",
-                "permissions",
-                "publish",
-                "attestations",
-            ): "write",
-            (
-                "dependency_snapshot",
-                "workflow",
-                "permissions",
-                "publish",
-                "contents",
-            ): "read",
-            (
-                "dependency_snapshot",
-                "workflow",
-                "permissions",
-                "publish",
-                "id-token",
-            ): "write",
-            (
-                "dependency_snapshot",
-                "workflow",
-                "permissions",
-                "publish",
-                "packages",
-            ): "write",
-            (
-                "dependency_snapshot",
-                "workflow",
-                "no_shared_cache",
+                "publication",
+                "publisher",
+                "retired",
             ): True,
-            (
-                "dependency_snapshot",
-                "workflow",
-                "run_scoped_tag",
-            ): "1.6.0-${github.run_id}-${github.run_attempt}",
-            (
-                "dependency_snapshot",
-                "workflow",
-                "lifecycle_gate",
-                "active_state",
-            ): "dependency_snapshot_publication_pending",
-            (
-                "dependency_snapshot",
-                "workflow",
-                "lifecycle_gate",
-                "skip_state",
-            ): "dependency_snapshot_review_pending",
-            (
-                "dependency_snapshot",
-                "workflow",
-                "lifecycle_gate",
-                "retire_in_evidence_review_pr",
-            ): True,
-            (
-                "dependency_snapshot",
-                "workflow",
-                "credential_boundary",
-                "candidate_verification_job",
-            ): "verify",
-            (
-                "dependency_snapshot",
-                "workflow",
-                "credential_boundary",
-                "candidate_verification_permissions",
-                "contents",
-            ): "read",
-            (
-                "dependency_snapshot",
-                "workflow",
-                "credential_boundary",
-                "publish_byte_binding_step",
-            ): "Bind candidate bytes to the read-only verification",
-            (
-                "dependency_snapshot",
-                "workflow",
-                "credential_boundary",
-                "registry_login_step",
-            ): "Publish the run-scoped immutable OCI artifact",
-            (
-                "dependency_snapshot",
-                "workflow",
-                "created_annotation",
-                "key",
-            ): "org.opencontainers.image.created",
-            (
-                "dependency_snapshot",
-                "workflow",
-                "created_annotation",
-                "value_source",
-            ): "git-committer-date-of-github-sha",
             (
                 "dependency_snapshot",
                 "visibility_bootstrap",
@@ -2200,7 +1391,9 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "tools",
                 "oras",
                 "linux_arm64_archive_sha256",
-            ): "ac7156f93a21e903f7ad606c792f3560f17e0cd0e36365634701b1e7cc4e4eca",
+            ): (
+                "ac7156f93a21e903f7ad606c792f3560f17e0cd0e36365634701b1e7cc4e4eca"
+            ),
             (
                 "dependency_snapshot",
                 "tools",
@@ -2212,16 +1405,13 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "tools",
                 "cosign",
                 "issuer",
-            ): "https://token.actions.githubusercontent.com",
+            ): POLARIS_DEPENDENCY_PUBLISHER_ISSUER,
             (
                 "dependency_snapshot",
                 "tools",
                 "cosign",
                 "identity",
-            ): (
-                "https://github.com/TommyKammy/Shirokuma/.github/workflows/"
-                "polaris-gradle-dependencies.yml@refs/heads/main"
-            ),
+            ): POLARIS_DEPENDENCY_PUBLISHER_IDENTITY,
             (
                 "dependency_snapshot",
                 "offline_proof",
@@ -2247,10 +1437,7 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "offline_proof",
                 "configuration_cache",
             ): False,
-            (
-                "image_publication",
-                "state",
-            ): "blocked_dependency_snapshot",
+            ("image_publication", "state"): "blocked_dependency_review",
             ("image_publication", "enabled"): False,
             (
                 "image_publication",
@@ -2267,15 +1454,16 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
         "CONTRACT_STATE",
     )
     _expect(
-        _nested(contract, "source", "tasks") == POLARIS_SERVER_TASKS,
-        "CONTRACT_STATE",
-        "source task closure changed",
-    )
-    _expect(
-        _nested(contract, "dependency_snapshot", "offline_proof", "tasks")
+        _nested(contract, "source", "tasks") == POLARIS_SERVER_TASKS
+        and _nested(
+            contract,
+            "dependency_snapshot",
+            "offline_proof",
+            "tasks",
+        )
         == POLARIS_SERVER_TASKS,
         "CONTRACT_STATE",
-        "offline proof task closure changed",
+        "source and offline task closures changed",
     )
     _expect(
         _is_regular_file_without_symlink_components(
@@ -2298,16 +1486,10 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
         "dependency packager bytes differ from the reviewed contract",
     )
     _expect(
-        _is_regular_file_without_symlink_components(
-            root,
-            POLARIS_DEPENDENCY_WORKFLOW,
-        )
-        and _sha256(root / POLARIS_DEPENDENCY_WORKFLOW)
-        == POLARIS_DEPENDENCY_WORKFLOW_SHA256,
+        not (root / POLARIS_DEPENDENCY_WORKFLOW).exists(),
         "CONTRACT_STATE",
-        "dependency workflow bytes differ from the reviewed contract",
+        "the one-shot dependency publisher must be retired",
     )
-    _audit_dependency_workflow_semantics(root, contract)
     return contract
 
 
@@ -2341,6 +1523,10 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
                 "reference",
                 "publication_evidence",
             },
+            ("dependency_snapshot", "publication_evidence"): {
+                "path",
+                "sha256",
+            },
             ("upstream_image_assessment",): {
                 "reference",
                 "admission",
@@ -2359,12 +1545,12 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
     _expect_fields(
         admission,
         {
-            ("schema_version",): 2,
+            ("schema_version",): 3,
             ("component",): "polaris",
             ("version",): POLARIS_VERSION,
             ("platform",): "linux/arm64",
             ("admission",): "blocked",
-            ("state",): "dependency_snapshot_publication_pending",
+            ("state",): "dependency_snapshot_review_pending",
             ("source_record",): POLARIS_SOURCE.as_posix(),
             ("source_record_sha256",): POLARIS_SOURCE_SHA256,
             ("build_contract",): POLARIS_CONTRACT.as_posix(),
@@ -2372,13 +1558,25 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
             (
                 "dependency_snapshot",
                 "state",
-            ): "publication_pending",
+            ): "review_pending",
             (
                 "dependency_snapshot",
                 "repository",
             ): "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies",
-            ("dependency_snapshot", "reference"): None,
-            ("dependency_snapshot", "publication_evidence"): None,
+            (
+                "dependency_snapshot",
+                "reference",
+            ): POLARIS_DEPENDENCY_REFERENCE,
+            (
+                "dependency_snapshot",
+                "publication_evidence",
+                "path",
+            ): "bootstrap/polaris/v1.6.0/evidence/publication.json",
+            (
+                "dependency_snapshot",
+                "publication_evidence",
+                "sha256",
+            ): POLARIS_DEPENDENCY_PUBLICATION_SHA256,
             ("upstream_image_assessment", "admission"): "rejected",
             (
                 "upstream_image_assessment",
@@ -2399,7 +1597,7 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
             ): ["deploy", "charts", "opentofu"],
             (
                 "next_action",
-            ): "merge-run-and-review-gradle-dependency-snapshot",
+            ): "review-and-merge-gradle-dependency-snapshot-evidence",
         },
         "POLARIS_ADMISSION",
     )
@@ -2419,6 +1617,810 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
         "build contract bytes do not match the admitted SHA-256",
     )
     return admission
+
+
+def _audit_dependency_evidence_file(
+    root: Path,
+    filename: str,
+) -> None:
+    expected_sha256, expected_size = POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+        filename
+    ]
+    relative = POLARIS_EVIDENCE / filename
+    actual_sha256, actual_size = _sha256_and_size(
+        root,
+        relative,
+        "DEPENDENCY_EVIDENCE",
+    )
+    _expect(
+        (actual_sha256, actual_size) == (expected_sha256, expected_size),
+        "DEPENDENCY_EVIDENCE",
+        f"{relative} differs from the retained publication evidence",
+    )
+
+
+def _dependency_packager_module(root: Path) -> Any:
+    global _POLARIS_DEPENDENCY_PACKAGER_MODULE
+    if _POLARIS_DEPENDENCY_PACKAGER_MODULE is not None:
+        return _POLARIS_DEPENDENCY_PACKAGER_MODULE
+    path = root / POLARIS_DEPENDENCY_PACKAGER
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "_polaris_dependency_packager_for_evidence",
+            path,
+        )
+        if spec is None or spec.loader is None:
+            _fail(
+                "DEPENDENCY_EVIDENCE",
+                "cannot load the reviewed dependency packager",
+            )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    except (OSError, ImportError, AttributeError) as error:
+        _fail(
+            "DEPENDENCY_EVIDENCE",
+            f"cannot load the reviewed dependency packager: {error}",
+        )
+    _POLARIS_DEPENDENCY_PACKAGER_MODULE = module
+    return module
+
+
+def _audit_dependency_descriptor(
+    root: Path,
+    publication: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    descriptor_path = POLARIS_EVIDENCE / "gradle-dependency-inputs.json"
+    metadata_path = POLARIS_EVIDENCE / "verification-metadata.xml"
+    descriptor = _load_json_value(
+        root,
+        descriptor_path,
+        "DEPENDENCY_EVIDENCE",
+    )
+    _expect(
+        isinstance(descriptor, Mapping),
+        "DEPENDENCY_EVIDENCE",
+        f"{descriptor_path} must be a JSON object",
+    )
+    descriptor_binding = (
+        POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+            "gradle-dependency-inputs.json"
+        ][0],
+        POLARIS_DEPENDENCY_EVIDENCE_RECORDS["verification-metadata.xml"][0],
+    )
+    if descriptor_binding not in _VALIDATED_DEPENDENCY_DESCRIPTOR_BINDINGS:
+        module = _dependency_packager_module(root)
+        validator = getattr(module, "_validate_descriptor", None)
+        _expect(
+            callable(validator),
+            "DEPENDENCY_EVIDENCE",
+            "reviewed dependency packager lacks descriptor validation",
+        )
+        try:
+            validator(descriptor, root / metadata_path)
+        except Exception as error:
+            _fail(
+                "DEPENDENCY_EVIDENCE",
+                f"dependency descriptor validation failed: {error}",
+            )
+        _VALIDATED_DEPENDENCY_DESCRIPTOR_BINDINGS.add(descriptor_binding)
+
+    archive = _nested(descriptor, "archive")
+    metadata = _nested(descriptor, "verification_metadata")
+    _expect(
+        isinstance(archive, Mapping) and isinstance(metadata, Mapping),
+        "DEPENDENCY_EVIDENCE",
+        "dependency descriptor archive and metadata records must be objects",
+    )
+    _expect(
+        dict(archive)
+        == {
+            "filename": "polaris-gradle-dependencies-1.6.0.tar.gz",
+            "media_type": (
+                "application/vnd.shirokuma.gradle-cache.v1.tar+gzip"
+            ),
+            "sha256": POLARIS_DEPENDENCY_ARCHIVE_SHA256,
+            "size": POLARIS_DEPENDENCY_ARCHIVE_SIZE,
+        },
+        "DEPENDENCY_EVIDENCE",
+        "dependency descriptor archive binding changed",
+    )
+    _expect(
+        dict(metadata)
+        == {
+            "filename": "verification-metadata.xml",
+            "media_type": (
+                "application/vnd.gradle.dependency-verification.v1+xml"
+            ),
+            "mode": "strict",
+            "sha256": POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+                "verification-metadata.xml"
+            ][0],
+            "size": POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+                "verification-metadata.xml"
+            ][1],
+        },
+        "DEPENDENCY_EVIDENCE",
+        "dependency descriptor verification-metadata binding changed",
+    )
+    _expect(
+        _nested(publication, "descriptor", "sha256")
+        == POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+            "gradle-dependency-inputs.json"
+        ][0]
+        and _nested(publication, "verification_metadata", "sha256")
+        == metadata["sha256"]
+        and _nested(publication, "archive", "sha256") == archive["sha256"],
+        "DEPENDENCY_EVIDENCE",
+        "publication and descriptor dependency bindings differ",
+    )
+    return descriptor
+
+
+def _audit_dependency_oci_manifest(
+    root: Path,
+    publication: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    relative = POLARIS_EVIDENCE / "oci-manifest.json"
+    manifest = _load_json_value(root, relative, "DEPENDENCY_EVIDENCE")
+    _expect(
+        isinstance(manifest, Mapping),
+        "DEPENDENCY_EVIDENCE",
+        f"{relative} must be a JSON object",
+    )
+    _expect_keysets(
+        manifest,
+        {
+            (): {
+                "schemaVersion",
+                "mediaType",
+                "artifactType",
+                "config",
+                "layers",
+                "annotations",
+            },
+            ("config",): {"mediaType", "digest", "size", "data"},
+            ("annotations",): {
+                "org.opencontainers.image.created",
+                "org.opencontainers.image.revision",
+                "org.opencontainers.image.source",
+            },
+        },
+        "DEPENDENCY_EVIDENCE",
+    )
+    _expect_fields(
+        manifest,
+        {
+            ("schemaVersion",): 2,
+            ("mediaType",): "application/vnd.oci.image.manifest.v1+json",
+            (
+                "artifactType",
+            ): "application/vnd.shirokuma.polaris.gradle-dependencies.v1",
+            ("config", "mediaType"): "application/vnd.oci.empty.v1+json",
+            (
+                "config",
+                "digest",
+            ): "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            ("config", "size"): 2,
+            ("config", "data"): "e30=",
+            (
+                "annotations",
+                "org.opencontainers.image.created",
+            ): "2026-07-19T22:30:37+09:00",
+            (
+                "annotations",
+                "org.opencontainers.image.revision",
+            ): POLARIS_DEPENDENCY_SOURCE_SHA,
+            (
+                "annotations",
+                "org.opencontainers.image.source",
+            ): POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY_URL,
+        },
+        "DEPENDENCY_EVIDENCE",
+    )
+    layers = manifest.get("layers")
+    _expect(
+        layers
+        == [
+            {
+                "mediaType": (
+                    "application/vnd.shirokuma."
+                    "gradle-dependency-descriptor.v1+json"
+                ),
+                "digest": (
+                    "sha256:"
+                    + POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+                        "gradle-dependency-inputs.json"
+                    ][0]
+                ),
+                "size": POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+                    "gradle-dependency-inputs.json"
+                ][1],
+                "annotations": {
+                    "org.opencontainers.image.title": (
+                        "gradle-dependency-inputs.json"
+                    )
+                },
+            },
+            {
+                "mediaType": (
+                    "application/vnd.shirokuma.gradle-cache.v1.tar+gzip"
+                ),
+                "digest": "sha256:" + POLARIS_DEPENDENCY_ARCHIVE_SHA256,
+                "size": POLARIS_DEPENDENCY_ARCHIVE_SIZE,
+                "annotations": {
+                    "org.opencontainers.image.title": (
+                        "polaris-gradle-dependencies-1.6.0.tar.gz"
+                    )
+                },
+            },
+        ],
+        "DEPENDENCY_EVIDENCE",
+        "OCI descriptor/archive layer order or binding changed",
+    )
+    _expect(
+        _nested(publication, "manifest", "sha256")
+        == POLARIS_DEPENDENCY_MANIFEST_SHA256
+        and publication.get("reference") == POLARIS_DEPENDENCY_REFERENCE,
+        "DEPENDENCY_EVIDENCE",
+        "publication reference does not bind the raw OCI manifest",
+    )
+    return manifest
+
+
+def _run_cosign(root: Path, arguments: list[str], purpose: str) -> None:
+    try:
+        result = subprocess.run(
+            ["cosign", *arguments],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        _fail(
+            "DEPENDENCY_EVIDENCE",
+            f"cannot run Cosign for {purpose}: {error}",
+        )
+    _expect(
+        result.returncode == 0,
+        "DEPENDENCY_EVIDENCE",
+        f"Cosign {purpose} failed: "
+        f"{(result.stderr or result.stdout).strip()[-1000:]}",
+    )
+
+
+DependencyCryptoVerifier = Callable[
+    [Path, Path, Path, Mapping[str, Any]],
+    None,
+]
+
+
+def _reverify_dependency_sigstore_cryptographically(
+    root: Path,
+    manifest: Path,
+    cosign_bundle: Path,
+    nested_bundle: Mapping[str, Any],
+) -> None:
+    binding = (
+        POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+            "cosign-signature-bundle.json"
+        ][0],
+        POLARIS_DEPENDENCY_EVIDENCE_RECORDS["slsa-verify.json"][0],
+        POLARIS_DEPENDENCY_MANIFEST_SHA256,
+        POLARIS_DEPENDENCY_PUBLISHER_IDENTITY,
+        POLARIS_DEPENDENCY_PUBLISHER_ISSUER,
+        POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY,
+        POLARIS_DEPENDENCY_PUBLISHER_REF,
+        POLARIS_DEPENDENCY_PUBLISHER_WORKFLOW_SHA,
+        POLARIS_DEPENDENCY_PUBLISHER_TRIGGER,
+    )
+    if binding in _VERIFIED_DEPENDENCY_CRYPTOGRAPHIC_BINDINGS:
+        return
+    try:
+        version = subprocess.run(
+            ["cosign", "version"],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        _fail("DEPENDENCY_EVIDENCE", f"cannot inspect Cosign: {error}")
+    _expect(
+        version.returncode == 0
+        and re.search(r"(?m)^GitVersion:\s+v3\.1\.1\s*$", version.stdout)
+        is not None,
+        "DEPENDENCY_EVIDENCE",
+        "Cosign 3.1.1 is required for retained bundle reverification",
+    )
+    _run_cosign(
+        root,
+        [
+            "verify-blob",
+            "--bundle",
+            cosign_bundle.as_posix(),
+            "--certificate-identity",
+            POLARIS_DEPENDENCY_PUBLISHER_IDENTITY,
+            "--certificate-oidc-issuer",
+            POLARIS_DEPENDENCY_PUBLISHER_ISSUER,
+            "--certificate-github-workflow-repository",
+            POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY,
+            "--certificate-github-workflow-ref",
+            POLARIS_DEPENDENCY_PUBLISHER_REF,
+            "--certificate-github-workflow-sha",
+            POLARIS_DEPENDENCY_PUBLISHER_WORKFLOW_SHA,
+            "--certificate-github-workflow-trigger",
+            POLARIS_DEPENDENCY_PUBLISHER_TRIGGER,
+            manifest.as_posix(),
+        ],
+        "signature-bundle verification",
+    )
+    with tempfile.TemporaryDirectory(
+        prefix="polaris-slsa-bundle-"
+    ) as directory:
+        bundle_path = Path(directory) / "bundle.json"
+        try:
+            bundle_path.write_text(
+                json.dumps(nested_bundle, separators=(",", ":")),
+                encoding="utf-8",
+            )
+        except OSError as error:
+            _fail(
+                "DEPENDENCY_EVIDENCE",
+                f"cannot stage retained SLSA bundle: {error}",
+            )
+        _run_cosign(
+            root,
+            [
+                "verify-blob-attestation",
+                "--bundle",
+                bundle_path.as_posix(),
+                "--type",
+                "slsaprovenance1",
+                "--certificate-identity",
+                POLARIS_DEPENDENCY_PUBLISHER_IDENTITY,
+                "--certificate-oidc-issuer",
+                POLARIS_DEPENDENCY_PUBLISHER_ISSUER,
+                "--certificate-github-workflow-repository",
+                POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY,
+                "--certificate-github-workflow-ref",
+                POLARIS_DEPENDENCY_PUBLISHER_REF,
+                "--certificate-github-workflow-sha",
+                POLARIS_DEPENDENCY_PUBLISHER_WORKFLOW_SHA,
+                "--certificate-github-workflow-trigger",
+                POLARIS_DEPENDENCY_PUBLISHER_TRIGGER,
+                manifest.as_posix(),
+            ],
+            "SLSA-bundle verification",
+        )
+    _VERIFIED_DEPENDENCY_CRYPTOGRAPHIC_BINDINGS.add(binding)
+
+
+def _audit_dependency_sigstore(
+    root: Path,
+    slsa_document: Any,
+    dependency_crypto_verifier: DependencyCryptoVerifier,
+) -> None:
+    manifest = POLARIS_EVIDENCE / "oci-manifest.json"
+    cosign_bundle = POLARIS_EVIDENCE / "cosign-signature-bundle.json"
+    _expect(
+        isinstance(slsa_document, list)
+        and len(slsa_document) == 1
+        and isinstance(slsa_document[0], Mapping)
+        and isinstance(
+            _nested(slsa_document[0], "attestation", "bundle"),
+            Mapping,
+        ),
+        "DEPENDENCY_EVIDENCE",
+        "SLSA verification must retain exactly one Sigstore bundle",
+    )
+    nested_bundle = _nested(
+        slsa_document[0],
+        "attestation",
+        "bundle",
+    )
+    dependency_crypto_verifier(
+        root,
+        manifest,
+        cosign_bundle,
+        nested_bundle,
+    )
+
+
+def _audit_dependency_slsa(root: Path) -> Any:
+    relative = POLARIS_EVIDENCE / "slsa-verify.json"
+    document = _load_json_value(root, relative, "DEPENDENCY_EVIDENCE")
+    _expect(
+        isinstance(document, list)
+        and len(document) == 1
+        and isinstance(document[0], Mapping),
+        "DEPENDENCY_EVIDENCE",
+        "SLSA verification must contain exactly one result",
+    )
+    result = document[0]
+    _expect(
+        set(result) == {"attestation", "verificationResult"}
+        and isinstance(result["attestation"], Mapping)
+        and isinstance(result["verificationResult"], Mapping),
+        "DEPENDENCY_EVIDENCE",
+        "SLSA verification result structure changed",
+    )
+    statement = _nested(result, "verificationResult", "statement")
+    bundle = _nested(result, "attestation", "bundle")
+    _expect(
+        isinstance(statement, Mapping) and isinstance(bundle, Mapping),
+        "DEPENDENCY_EVIDENCE",
+        "SLSA statement or Sigstore bundle is missing",
+    )
+    _expect(
+        statement.get("_type") == "https://in-toto.io/Statement/v1"
+        and statement.get("predicateType")
+        == "https://slsa.dev/provenance/v1"
+        and statement.get("subject")
+        == [
+            {
+                "name": (
+                    "ghcr.io/tommykammy/"
+                    "shirokuma-polaris-gradle-dependencies"
+                ),
+                "digest": {
+                    "sha256": POLARIS_DEPENDENCY_MANIFEST_SHA256
+                },
+            }
+        ],
+        "DEPENDENCY_EVIDENCE",
+        "SLSA subject does not bind the exact dependency manifest",
+    )
+    expected_predicate = {
+        "buildDefinition": {
+            "buildType": "https://actions.github.io/buildtypes/workflow/v1",
+            "externalParameters": {
+                "workflow": {
+                    "path": ".github/workflows/polaris-gradle-dependencies.yml",
+                    "ref": POLARIS_DEPENDENCY_PUBLISHER_REF,
+                    "repository": (
+                        POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY_URL
+                    ),
+                }
+            },
+            "internalParameters": {
+                "github": {
+                    "event_name": POLARIS_DEPENDENCY_PUBLISHER_TRIGGER,
+                    "repository_id": "1289807958",
+                    "repository_owner_id": "257892020",
+                    "runner_environment": "github-hosted",
+                }
+            },
+            "resolvedDependencies": [
+                {
+                    "digest": {
+                        "gitCommit": POLARIS_DEPENDENCY_SOURCE_SHA
+                    },
+                    "uri": (
+                        "git+https://github.com/TommyKammy/Shirokuma"
+                        "@refs/heads/main"
+                    ),
+                }
+            ],
+        },
+        "runDetails": {
+            "builder": {"id": POLARIS_DEPENDENCY_PUBLISHER_IDENTITY},
+            "metadata": {
+                "invocationId": (
+                    "https://github.com/TommyKammy/Shirokuma/actions/runs/"
+                    f"{POLARIS_DEPENDENCY_RUN_ID}/attempts/"
+                    f"{POLARIS_DEPENDENCY_RUN_ATTEMPT}"
+                )
+            },
+        },
+    }
+    _expect(
+        statement.get("predicate") == expected_predicate,
+        "DEPENDENCY_EVIDENCE",
+        "SLSA workflow provenance differs from the reviewed main run",
+    )
+    envelope = _nested(bundle, "dsseEnvelope")
+    _expect(
+        isinstance(envelope, Mapping),
+        "DEPENDENCY_EVIDENCE",
+        "SLSA Sigstore bundle lacks a DSSE envelope",
+    )
+    decoded = _decoded_dsse_payload(
+        envelope,
+        relative.as_posix(),
+    )
+    _expect(
+        decoded == statement,
+        "DEPENDENCY_EVIDENCE",
+        "SLSA DSSE payload differs from the verified statement",
+    )
+    return document
+
+
+def _audit_dependency_publication_evidence(
+    root: Path,
+    contract: Mapping[str, Any],
+    dependency_crypto_verifier: DependencyCryptoVerifier,
+) -> None:
+    directory = root / POLARIS_EVIDENCE
+    _expect(
+        directory.is_dir() and not directory.is_symlink(),
+        "DEPENDENCY_EVIDENCE",
+        "dependency evidence root must be a real directory",
+    )
+    actual = {
+        path.relative_to(directory).as_posix()
+        for path in directory.rglob("*")
+        if path.is_file() or path.is_symlink()
+    }
+    expected = {"README.md", *POLARIS_DEPENDENCY_EVIDENCE_RECORDS}
+    _expect(
+        actual == expected,
+        "DEPENDENCY_EVIDENCE",
+        "dependency evidence inventory must be closed; "
+        f"expected {sorted(expected)}, found {sorted(actual)}",
+    )
+    for filename in expected:
+        relative = POLARIS_EVIDENCE / filename
+        _expect(
+            _is_regular_file_without_symlink_components(root, relative),
+            "DEPENDENCY_EVIDENCE",
+            f"dependency evidence must be a real regular file: {relative}",
+        )
+    for filename in POLARIS_DEPENDENCY_EVIDENCE_RECORDS:
+        _audit_dependency_evidence_file(root, filename)
+
+    publication = _load_json_value(
+        root,
+        POLARIS_EVIDENCE / "publication.json",
+        "DEPENDENCY_EVIDENCE",
+    )
+    _expect(
+        isinstance(publication, Mapping),
+        "DEPENDENCY_EVIDENCE",
+        "publication evidence must be a JSON object",
+    )
+    record_fields = {
+        "archive",
+        "cosign_bundle",
+        "cosign_verification",
+        "descriptor",
+        "manifest",
+        "offline_build",
+        "slsa_verification",
+        "toolchain",
+        "verification_metadata",
+    }
+    _expect_keysets(
+        publication,
+        {
+            (): {
+                "admitted",
+                "anonymous_pull",
+                "archive",
+                "cosign_bundle",
+                "cosign_verification",
+                "created",
+                "descriptor",
+                "manifest",
+                "offline_build",
+                "reference",
+                "schema_version",
+                "slsa_verification",
+                "state",
+                "tag",
+                "toolchain",
+                "verification_metadata",
+                "workflow",
+            },
+            **{
+                (field,): {"filename", "sha256", "size"}
+                for field in record_fields
+            },
+            ("workflow",): {
+                "event",
+                "ref",
+                "repository",
+                "run_attempt",
+                "run_id",
+                "source_sha",
+                "workflow_sha",
+            },
+        },
+        "DEPENDENCY_EVIDENCE",
+    )
+    _expect_fields(
+        publication,
+        {
+            ("schema_version",): 1,
+            ("state",): "dependency_snapshot_review_pending",
+            ("admitted",): False,
+            ("anonymous_pull",): True,
+            ("created",): "2026-07-19T22:30:37+09:00",
+            ("reference",): POLARIS_DEPENDENCY_REFERENCE,
+            (
+                "tag",
+            ): (
+                "ghcr.io/tommykammy/"
+                "shirokuma-polaris-gradle-dependencies:"
+                "1.6.0-29689013375-1"
+            ),
+            ("workflow", "event"): POLARIS_DEPENDENCY_PUBLISHER_TRIGGER,
+            ("workflow", "ref"): POLARIS_DEPENDENCY_PUBLISHER_REF,
+            (
+                "workflow",
+                "repository",
+            ): POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY,
+            ("workflow", "run_attempt"): POLARIS_DEPENDENCY_RUN_ATTEMPT,
+            ("workflow", "run_id"): POLARIS_DEPENDENCY_RUN_ID,
+            ("workflow", "source_sha"): POLARIS_DEPENDENCY_SOURCE_SHA,
+            ("workflow", "workflow_sha"): POLARIS_DEPENDENCY_SOURCE_SHA,
+        },
+        "DEPENDENCY_EVIDENCE",
+    )
+    publication_records = {
+        "cosign_bundle": "cosign-signature-bundle.json",
+        "cosign_verification": "cosign-verify.json",
+        "descriptor": "gradle-dependency-inputs.json",
+        "manifest": "oci-manifest.json",
+        "offline_build": "offline-build.json",
+        "slsa_verification": "slsa-verify.json",
+        "toolchain": "toolchain.json",
+        "verification_metadata": "verification-metadata.xml",
+    }
+    for field, filename in publication_records.items():
+        expected_sha256, expected_size = (
+            POLARIS_DEPENDENCY_EVIDENCE_RECORDS[filename]
+        )
+        _expect(
+            publication[field]
+            == {
+                "filename": filename,
+                "sha256": expected_sha256,
+                "size": expected_size,
+            },
+            "DEPENDENCY_EVIDENCE",
+            f"publication {field} record differs from retained bytes",
+        )
+    _expect(
+        publication["archive"]
+        == {
+            "filename": "polaris-gradle-dependencies-1.6.0.tar.gz",
+            "sha256": POLARIS_DEPENDENCY_ARCHIVE_SHA256,
+            "size": POLARIS_DEPENDENCY_ARCHIVE_SIZE,
+        },
+        "DEPENDENCY_EVIDENCE",
+        "publication archive record changed",
+    )
+    _expect(
+        _nested(
+            contract,
+            "dependency_snapshot",
+            "publication",
+            "record",
+            "sha256",
+        )
+        == POLARIS_DEPENDENCY_PUBLICATION_SHA256
+        and _nested(
+            contract,
+            "dependency_snapshot",
+            "artifact_reference",
+        )
+        == publication["reference"],
+        "DEPENDENCY_EVIDENCE",
+        "contract and retained publication evidence differ",
+    )
+
+    _audit_dependency_descriptor(root, publication)
+    _audit_dependency_oci_manifest(root, publication)
+
+    offline = _load_json_value(
+        root,
+        POLARIS_EVIDENCE / "offline-build.json",
+        "DEPENDENCY_EVIDENCE",
+    )
+    _expect(
+        offline
+        == {
+            "archive_sha256": POLARIS_DEPENDENCY_ARCHIVE_SHA256,
+            "build_cache": False,
+            "configuration_cache": False,
+            "dependency_verification": "strict",
+            "descriptor_sha256": POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+                "gradle-dependency-inputs.json"
+            ][0],
+            "gradle_offline": True,
+            "network": "none",
+            "platform": "linux/arm64",
+            "result": "passed",
+            "schema_version": 1,
+            "tasks": POLARIS_SERVER_TASKS,
+            "verification_metadata_sha256": (
+                POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+                    "verification-metadata.xml"
+                ][0]
+            ),
+        },
+        "DEPENDENCY_EVIDENCE",
+        "offline build proof is not the reviewed closed build",
+    )
+    toolchain = _load_json_value(
+        root,
+        POLARIS_EVIDENCE / "toolchain.json",
+        "DEPENDENCY_EVIDENCE",
+    )
+    _expect(
+        isinstance(toolchain, Mapping)
+        and set(toolchain)
+        == {
+            "builder_image",
+            "curl",
+            "docker",
+            "gpg",
+            "gradle",
+            "java",
+            "platform",
+            "python",
+            "runner",
+            "schema_version",
+            "tar",
+        },
+        "DEPENDENCY_EVIDENCE",
+        "dependency resolver toolchain record structure changed",
+    )
+    _expect_fields(
+        toolchain,
+        {
+            ("schema_version",): 1,
+            ("builder_image",): BUILDER_ARM64,
+            ("runner",): "ubuntu-24.04-arm",
+            ("platform",): (
+                "Linux-6.17.0-1020-azure-aarch64-with-glibc2.39"
+            ),
+            ("gradle",): "9.6.0",
+            ("java",): "21.0.11",
+            ("python",): "3.12.3",
+            ("docker",): "28.0.4",
+            ("tar",): "tar (GNU tar) 1.35",
+            ("gpg",): "gpg (GnuPG) 2.4.4",
+        },
+        "DEPENDENCY_EVIDENCE",
+    )
+    registry_verification = _load_json_value(
+        root,
+        POLARIS_EVIDENCE / "cosign-verify.json",
+        "DEPENDENCY_EVIDENCE",
+    )
+    _expect(
+        registry_verification
+        == [
+            {
+                "critical": {
+                    "identity": {
+                        "docker-reference": POLARIS_DEPENDENCY_REFERENCE
+                    },
+                    "image": {
+                        "docker-manifest-digest": (
+                            "sha256:"
+                            + POLARIS_DEPENDENCY_MANIFEST_SHA256
+                        )
+                    },
+                    "type": "https://sigstore.dev/cosign/sign/v1",
+                },
+                "optional": {},
+            }
+        ],
+        "DEPENDENCY_EVIDENCE",
+        "retained registry verification does not bind the exact reference",
+    )
+    slsa_document = _audit_dependency_slsa(root)
+    _audit_dependency_sigstore(
+        root,
+        slsa_document,
+        dependency_crypto_verifier,
+    )
 
 
 def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
@@ -2806,20 +2808,20 @@ def _audit_pending_files(root: Path) -> None:
                     f"cannot inspect workflow {workflow.relative_to(root)}: {error}",
                 )
             normalized = content.lower()
-            if relative_workflow != POLARIS_DEPENDENCY_WORKFLOW.as_posix():
-                _expect(
-                    "polaris" not in normalized
-                    and "shirokuma-polaris" not in normalized
-                    and "bootstrap/polaris" not in normalized,
-                    "FORBIDDEN_PATH",
-                    "unreviewed Polaris workflow is forbidden while snapshot "
-                    f"publication is pending: {workflow.relative_to(root)}",
-                )
+            _expect(
+                "polaris" not in normalized
+                and "shirokuma-polaris" not in normalized
+                and "bootstrap/polaris" not in normalized,
+                "FORBIDDEN_PATH",
+                "a Polaris workflow is forbidden while dependency evidence "
+                f"review is pending: {workflow.relative_to(root)}",
+            )
     _expect(
-        workflow_inventory == PENDING_WORKFLOW_INVENTORY,
+        workflow_inventory == REVIEW_PENDING_WORKFLOW_INVENTORY,
         "FORBIDDEN_PATH",
-        "workflow inventory changed while snapshot publication is pending; "
-        f"expected {sorted(PENDING_WORKFLOW_INVENTORY)}, "
+        "workflow inventory changed while dependency evidence review is "
+        "pending; "
+        f"expected {sorted(REVIEW_PENDING_WORKFLOW_INVENTORY)}, "
         f"found {sorted(workflow_inventory)}",
     )
     scripts_root = root / "scripts"
@@ -2918,10 +2920,16 @@ def _audit_pending_files(root: Path) -> None:
             for path in directory.rglob("*")
             if path.is_file()
         )
+        expected_retained = (
+            sorted({"README.md", *POLARIS_DEPENDENCY_EVIDENCE_RECORDS})
+            if evidence_root == POLARIS_EVIDENCE
+            else ["README.md"]
+        )
         _expect(
-            retained == ["README.md"],
+            retained == expected_retained,
             "FORBIDDEN_PATH",
-            f"{evidence_root} may contain only README.md while admission is blocked",
+            f"{evidence_root} must contain exactly {expected_retained} "
+            "while admission is blocked",
         )
         _expect(
             not (directory / "README.md").is_symlink(),
@@ -4418,11 +4426,24 @@ def _audit_runtime_absence(root: Path) -> None:
     )
 
 
-def audit(root: Path) -> None:
+def audit(
+    root: Path,
+    *,
+    dependency_crypto_verifier: Optional[DependencyCryptoVerifier] = None,
+) -> None:
     root = root.resolve()
+    if dependency_crypto_verifier is None:
+        dependency_crypto_verifier = (
+            _reverify_dependency_sigstore_cryptographically
+        )
     _audit_source(root)
-    _audit_contract(root)
+    contract = _audit_contract(root)
     _audit_polaris_admission(root)
+    _audit_dependency_publication_evidence(
+        root,
+        contract,
+        dependency_crypto_verifier,
+    )
     _audit_postgres_admission(root)
     _audit_pending_files(root)
     _audit_retained_pending_evidence(root)
@@ -4447,8 +4468,9 @@ def main(argv: list[str] | None = None) -> int:
         print(str(error), file=sys.stderr)
         return 1
     print(
-        "polaris-trusted-image: dependency publication contract is "
-        "fail-closed; snapshot, image, and runtime remain non-authoritative"
+        "polaris-trusted-image: dependency publication evidence is "
+        "review-pending and fail-closed; image and runtime remain "
+        "non-authoritative"
     )
     return 0
 

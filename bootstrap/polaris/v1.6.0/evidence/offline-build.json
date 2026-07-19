@@ -1,0 +1,17 @@
+{
+  "archive_sha256": "18933bfb895c267302f1ee1c80cfb9712eac736ffcefade48dac53f79e8e3bc0",
+  "build_cache": false,
+  "configuration_cache": false,
+  "dependency_verification": "strict",
+  "descriptor_sha256": "3bab7b055d29be1bc59f2fe605960f49bbceee2639ad68086822c62ee8533841",
+  "gradle_offline": true,
+  "network": "none",
+  "platform": "linux/arm64",
+  "result": "passed",
+  "schema_version": 1,
+  "tasks": [
+    ":polaris-server:assemble",
+    ":polaris-server:quarkusAppPartsBuild"
+  ],
+  "verification_metadata_sha256": "b8b1fa91bc9d98eaf676dbab76c5452411fcdf6b11a8c9959c131799c71deaf2"
+}

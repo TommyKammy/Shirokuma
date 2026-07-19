@@ -1,19 +1,22 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "component": "polaris",
   "version": "1.6.0",
   "platform": "linux/arm64",
   "admission": "blocked",
-  "state": "dependency_snapshot_publication_pending",
+  "state": "dependency_snapshot_review_pending",
   "source_record": "bootstrap/polaris/v1.6.0/source.json",
   "source_record_sha256": "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb",
   "build_contract": "bootstrap/polaris/v1.6.0/trusted-build-contract.json",
-  "build_contract_sha256": "8198847d075797eaa183472523c29f6b132e9c3bfb9170ee98c9882ca3dad0c2",
+  "build_contract_sha256": "db27ec5ebf627ef1772c898614d5f206a2a3affc67007ee29221c525ab8fd3d6",
   "dependency_snapshot": {
-    "state": "publication_pending",
+    "state": "review_pending",
     "repository": "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies",
-    "reference": null,
-    "publication_evidence": null
+    "reference": "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies@sha256:fa889d2c0a6e6dc48816d79680a366e21040be333ab6007b88e4ca4dbf6e59d6",
+    "publication_evidence": {
+      "path": "bootstrap/polaris/v1.6.0/evidence/publication.json",
+      "sha256": "1a9ec88b09b49b12ab5131bff739dedfbfa7d2e50fd46448e8169c6452cd3d41"
+    }
   },
   "upstream_image_assessment": {
     "reference": "apache/polaris@sha256:9738b2052dea20aabf0cd42521424ff963fee41b0ee888fef9f512efb256602a",
@@ -44,7 +47,7 @@
     },
     {
       "id": "POLARIS-MAIN-PUBLICATION",
-      "state": "pending"
+      "state": "satisfied"
     },
     {
       "id": "POLARIS-IMAGE-EVIDENCE-REVIEW",
@@ -55,5 +58,5 @@
       "state": "pending"
     }
   ],
-  "next_action": "merge-run-and-review-gradle-dependency-snapshot"
+  "next_action": "review-and-merge-gradle-dependency-snapshot-evidence"
 }

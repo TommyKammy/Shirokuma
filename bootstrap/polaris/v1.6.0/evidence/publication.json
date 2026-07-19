@@ -1,0 +1,63 @@
+{
+  "admitted": false,
+  "anonymous_pull": true,
+  "archive": {
+    "filename": "polaris-gradle-dependencies-1.6.0.tar.gz",
+    "sha256": "18933bfb895c267302f1ee1c80cfb9712eac736ffcefade48dac53f79e8e3bc0",
+    "size": 701323251
+  },
+  "cosign_bundle": {
+    "filename": "cosign-signature-bundle.json",
+    "sha256": "36db1df6a0b67e26948a6b87c872f53e6784bfe45438c7d5a2ccb1221b99e753",
+    "size": 11127
+  },
+  "cosign_verification": {
+    "filename": "cosign-verify.json",
+    "sha256": "11320bfdaa0d292ba1a8354fc9ca83895df1033e2772b3d21e48faabee0e45db",
+    "size": 349
+  },
+  "created": "2026-07-19T22:30:37+09:00",
+  "descriptor": {
+    "filename": "gradle-dependency-inputs.json",
+    "sha256": "3bab7b055d29be1bc59f2fe605960f49bbceee2639ad68086822c62ee8533841",
+    "size": 2172595
+  },
+  "manifest": {
+    "filename": "oci-manifest.json",
+    "sha256": "fa889d2c0a6e6dc48816d79680a366e21040be333ab6007b88e4ca4dbf6e59d6",
+    "size": 1077
+  },
+  "offline_build": {
+    "filename": "offline-build.json",
+    "sha256": "e1741bbb304c983a0ad7ff1de1c3fb05867eeb3ef836443f3c24b07d4458fe0b",
+    "size": 593
+  },
+  "reference": "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies@sha256:fa889d2c0a6e6dc48816d79680a366e21040be333ab6007b88e4ca4dbf6e59d6",
+  "schema_version": 1,
+  "slsa_verification": {
+    "filename": "slsa-verify.json",
+    "sha256": "9caba9a6c0a6359abaf57892819f22cdb57b13fa489faf0b73875235f827472b",
+    "size": 14193
+  },
+  "state": "dependency_snapshot_review_pending",
+  "tag": "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies:1.6.0-29689013375-1",
+  "toolchain": {
+    "filename": "toolchain.json",
+    "sha256": "45854f6533d0960f94087c132d5d0fdfe6d37443afd42a1f329e24ae852a0319",
+    "size": 617
+  },
+  "verification_metadata": {
+    "filename": "verification-metadata.xml",
+    "sha256": "b8b1fa91bc9d98eaf676dbab76c5452411fcdf6b11a8c9959c131799c71deaf2",
+    "size": 879926
+  },
+  "workflow": {
+    "event": "push",
+    "ref": "refs/heads/main",
+    "repository": "TommyKammy/Shirokuma",
+    "run_attempt": "1",
+    "run_id": "29689013375",
+    "source_sha": "4692bab4282dfde2c8d4082e6d706dee9ce79324",
+    "workflow_sha": "4692bab4282dfde2c8d4082e6d706dee9ce79324"
+  }
+}

@@ -43,6 +43,19 @@ source_archive_validator = _load_module(
 
 
 class PolarisTrustedImageContractTests(unittest.TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.dependency_crypto_verifier = mock.create_autospec(
+            verifier._reverify_dependency_sigstore_cryptographically,
+            spec_set=True,
+        )
+
+    def _audit(self, root: Path) -> None:
+        verifier.audit(
+            root,
+            dependency_crypto_verifier=self.dependency_crypto_verifier,
+        )
+
     def _source_archive(
         self,
         entries: list[tuple[str, str, bytes | str | None]],
@@ -644,16 +657,403 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         detail: str | None = None,
     ) -> None:
         with self.assertRaises(verifier.ContractError) as raised:
-            verifier.audit(root)
+            self._audit(root)
         self.assertEqual(code, raised.exception.code)
         if detail is not None:
             self.assertIn(detail, raised.exception.detail)
 
-    def test_repository_pending_contract_is_fail_closed_and_valid(self) -> None:
-        verifier.audit(ROOT)
+    def test_repository_review_pending_contract_is_fail_closed_and_valid(
+        self,
+    ) -> None:
+        self._audit(ROOT)
+        self.dependency_crypto_verifier.assert_called_once()
 
-    def test_minimal_pending_fixture_is_valid(self) -> None:
-        verifier.audit(self._fixture())
+    def test_minimal_review_pending_fixture_is_valid(self) -> None:
+        self._audit(self._fixture())
+
+    def test_makefile_separates_unit_and_real_crypto_verification(
+        self,
+    ) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        unit_target = makefile.split(
+            "\ntest-polaris-build-contract:\n",
+            1,
+        )[1].split("\n\n", 1)[0]
+        cosign_target = makefile.split(
+            "\nverify-cosign:\n",
+            1,
+        )[1].split("\n\n", 1)[0]
+        verification_target = makefile.split(
+            (
+                "\nverify-polaris-build-contract: "
+                "test-polaris-build-contract verify-cosign\n"
+            ),
+            1,
+        )[1].split("\n\n", 1)[0]
+
+        self.assertIn("test_package_polaris_gradle_dependencies.py", unit_target)
+        self.assertIn("test_polaris_trusted_image_contract.py", unit_target)
+        self.assertNotIn("COSIGN", unit_target)
+        self.assertIn("COSIGN_VERSION ?= v3.1.1", makefile)
+        self.assertIn("command -v $(COSIGN)", cosign_target)
+        self.assertIn("$(COSIGN) version", cosign_target)
+        self.assertIn(
+            "scripts/verify_polaris_trusted_image.py audit --root .",
+            verification_target,
+        )
+
+    def test_review_pending_contract_binds_exact_main_publication(self) -> None:
+        contract = json.loads(
+            (ROOT / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
+        )
+        admission = json.loads(
+            (ROOT / verifier.POLARIS_ADMISSION).read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(3, contract["schema_version"])
+        self.assertEqual(
+            "dependency_snapshot_review_pending",
+            contract["lifecycle"]["state"],
+        )
+        self.assertEqual(
+            verifier.POLARIS_DEPENDENCY_REFERENCE,
+            contract["dependency_snapshot"]["artifact_reference"],
+        )
+        self.assertEqual(
+            verifier.POLARIS_DEPENDENCY_RUN_ID,
+            contract["dependency_snapshot"]["publication"][
+                "actions_artifact"
+            ]["run_id"],
+        )
+        self.assertTrue(
+            contract["dependency_snapshot"]["publication"]["publisher"][
+                "retired"
+            ]
+        )
+        self.assertNotIn("workflow", contract["dependency_snapshot"])
+        self.assertEqual(3, admission["schema_version"])
+        self.assertEqual(
+            verifier.POLARIS_DEPENDENCY_REFERENCE,
+            admission["dependency_snapshot"]["reference"],
+        )
+        self.assertEqual(
+            "satisfied",
+            admission["blocking_controls"][1]["state"],
+        )
+
+    def test_dependency_publisher_reintroduction_fails_closed(self) -> None:
+        root = self._fixture()
+        publisher = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
+        publisher.write_text(
+            "name: forbidden publisher\n"
+            "permissions:\n"
+            "  packages: write\n",
+            encoding="utf-8",
+        )
+
+        self._assert_code(
+            root,
+            "CONTRACT_STATE",
+            "one-shot dependency publisher must be retired",
+        )
+
+    def test_missing_dependency_evidence_fails_closed(self) -> None:
+        root = self._fixture()
+        (root / verifier.POLARIS_EVIDENCE / "offline-build.json").unlink()
+
+        self._assert_code(
+            root,
+            "DEPENDENCY_EVIDENCE",
+            "inventory must be closed",
+        )
+
+    def test_symlinked_dependency_evidence_fails_closed(self) -> None:
+        root = self._fixture()
+        evidence = root / verifier.POLARIS_EVIDENCE / "toolchain.json"
+        evidence.unlink()
+        evidence.symlink_to("offline-build.json")
+
+        self._assert_code(
+            root,
+            "DEPENDENCY_EVIDENCE",
+            "real regular file",
+        )
+
+    def test_dependency_evidence_byte_drift_fails_closed(self) -> None:
+        root = self._fixture()
+        evidence = root / verifier.POLARIS_EVIDENCE / "offline-build.json"
+        evidence.write_bytes(evidence.read_bytes() + b"\n")
+
+        self._assert_code(
+            root,
+            "DEPENDENCY_EVIDENCE",
+            "differs from the retained publication evidence",
+        )
+
+    def test_publication_artifact_metadata_drift_fails_closed(self) -> None:
+        root = self._fixture()
+
+        def mutate(value: dict[str, object]) -> None:
+            value["dependency_snapshot"]["publication"][  # type: ignore[index]
+                "actions_artifact"
+            ]["id"] = 1  # type: ignore[index]
+
+        self._rewrite_json(root, verifier.POLARIS_CONTRACT, mutate)
+        self._assert_code(
+            root,
+            "CONTRACT_STATE",
+            "publication.actions_artifact",
+        )
+
+    def test_oci_manifest_layer_order_is_semantically_closed(self) -> None:
+        root = self._fixture()
+        manifest_path = (
+            root / verifier.POLARIS_EVIDENCE / "oci-manifest.json"
+        )
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["layers"].reverse()
+        manifest_path.write_text(
+            json.dumps(manifest, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        publication = json.loads(
+            (
+                root / verifier.POLARIS_EVIDENCE / "publication.json"
+            ).read_text(encoding="utf-8")
+        )
+
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_dependency_oci_manifest(root, publication)
+        self.assertEqual("DEPENDENCY_EVIDENCE", raised.exception.code)
+        self.assertIn("layer order", raised.exception.detail)
+
+    def test_slsa_dsse_payload_must_equal_verified_statement(self) -> None:
+        root = self._fixture()
+        slsa_path = root / verifier.POLARIS_EVIDENCE / "slsa-verify.json"
+        slsa = json.loads(slsa_path.read_text(encoding="utf-8"))
+        envelope = slsa[0]["attestation"]["bundle"]["dsseEnvelope"]
+        payload = json.loads(base64.b64decode(envelope["payload"]))
+        payload["predicate"]["runDetails"]["metadata"]["invocationId"] = (
+            "https://github.com/TommyKammy/Shirokuma/actions/runs/1/"
+            "attempts/1"
+        )
+        envelope["payload"] = base64.b64encode(
+            json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        ).decode("ascii")
+        slsa_path.write_text(json.dumps(slsa), encoding="utf-8")
+
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_dependency_slsa(root)
+        self.assertEqual("DEPENDENCY_EVIDENCE", raised.exception.code)
+        self.assertIn("DSSE payload differs", raised.exception.detail)
+
+    def test_invalid_sigstore_bundle_does_not_reach_crypto_boundary(
+        self,
+    ) -> None:
+        root = self._fixture()
+        slsa_document = [
+            {
+                "attestation": {
+                    "bundle": [],
+                },
+            }
+        ]
+
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_dependency_sigstore(
+                root,
+                slsa_document,
+                self.dependency_crypto_verifier,
+            )
+        self.assertEqual("DEPENDENCY_EVIDENCE", raised.exception.code)
+        self.assertIn(
+            "exactly one Sigstore bundle",
+            raised.exception.detail,
+        )
+        self.dependency_crypto_verifier.assert_not_called()
+
+    def test_default_audit_uses_real_crypto_boundary(self) -> None:
+        with mock.patch.object(
+            verifier,
+            "_reverify_dependency_sigstore_cryptographically",
+            autospec=True,
+        ) as default_crypto_verifier:
+            verifier.audit(ROOT)
+        default_crypto_verifier.assert_called_once()
+
+    def test_cosign_verification_failure_is_fail_closed(self) -> None:
+        root = self._fixture()
+        arguments = [
+            "verify-blob",
+            "--bundle",
+            (
+                verifier.POLARIS_EVIDENCE
+                / "cosign-signature-bundle.json"
+            ).as_posix(),
+            "--certificate-identity",
+            verifier.POLARIS_DEPENDENCY_PUBLISHER_IDENTITY,
+            "--certificate-oidc-issuer",
+            verifier.POLARIS_DEPENDENCY_PUBLISHER_ISSUER,
+            "--certificate-github-workflow-repository",
+            verifier.POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY,
+            "--certificate-github-workflow-ref",
+            verifier.POLARIS_DEPENDENCY_PUBLISHER_REF,
+            "--certificate-github-workflow-sha",
+            verifier.POLARIS_DEPENDENCY_PUBLISHER_WORKFLOW_SHA,
+            "--certificate-github-workflow-trigger",
+            verifier.POLARIS_DEPENDENCY_PUBLISHER_TRIGGER,
+            (verifier.POLARIS_EVIDENCE / "oci-manifest.json").as_posix(),
+        ]
+        failed = subprocess.CompletedProcess(
+            ["cosign", *arguments],
+            1,
+            stdout="",
+            stderr="invalid signature",
+        )
+
+        with mock.patch.object(
+            verifier.subprocess,
+            "run",
+            return_value=failed,
+        ) as run:
+            with self.assertRaises(verifier.ContractError) as raised:
+                verifier._run_cosign(
+                    root,
+                    arguments,
+                    "signature-bundle verification",
+                )
+        self.assertEqual("DEPENDENCY_EVIDENCE", raised.exception.code)
+        self.assertIn("signature-bundle verification", raised.exception.detail)
+        self.assertIn("invalid signature", raised.exception.detail)
+        run.assert_called_once_with(
+            ["cosign", *arguments],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=60,
+        )
+
+    def test_crypto_reverification_pins_exact_publisher_commit(
+        self,
+    ) -> None:
+        root = self._fixture()
+        slsa_document = json.loads(
+            (
+                root
+                / verifier.POLARIS_EVIDENCE
+                / "slsa-verify.json"
+            ).read_text(encoding="utf-8")
+        )
+        nested_bundle = slsa_document[0]["attestation"]["bundle"]
+        verifier._VERIFIED_DEPENDENCY_CRYPTOGRAPHIC_BINDINGS.clear()
+        self.addCleanup(
+            verifier._VERIFIED_DEPENDENCY_CRYPTOGRAPHIC_BINDINGS.clear
+        )
+
+        def complete(
+            command: list[str],
+            **_: object,
+        ) -> subprocess.CompletedProcess[str]:
+            stdout = (
+                "GitVersion: v3.1.1\n"
+                if command == ["cosign", "version"]
+                else ""
+            )
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=stdout,
+                stderr="",
+            )
+
+        with mock.patch.object(
+            verifier.subprocess,
+            "run",
+            side_effect=complete,
+        ) as run:
+            verifier._reverify_dependency_sigstore_cryptographically(
+                root,
+                verifier.POLARIS_EVIDENCE / "oci-manifest.json",
+                (
+                    verifier.POLARIS_EVIDENCE
+                    / "cosign-signature-bundle.json"
+                ),
+                nested_bundle,
+            )
+
+        self.assertEqual(3, run.call_count)
+        self.assertEqual(
+            {
+                (
+                    verifier.POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+                        "cosign-signature-bundle.json"
+                    ][0],
+                    verifier.POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+                        "slsa-verify.json"
+                    ][0],
+                    verifier.POLARIS_DEPENDENCY_MANIFEST_SHA256,
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_IDENTITY,
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_ISSUER,
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY,
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_REF,
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_WORKFLOW_SHA,
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_TRIGGER,
+                )
+            },
+            verifier._VERIFIED_DEPENDENCY_CRYPTOGRAPHIC_BINDINGS,
+        )
+        for call in run.call_args_list[1:]:
+            command = call.args[0]
+            constraints = {
+                "--certificate-github-workflow-repository": (
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY
+                ),
+                "--certificate-github-workflow-ref": (
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_REF
+                ),
+                "--certificate-github-workflow-sha": (
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_WORKFLOW_SHA
+                ),
+                "--certificate-github-workflow-trigger": (
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_TRIGGER
+                ),
+            }
+            for flag, expected in constraints.items():
+                self.assertEqual(1, command.count(flag))
+                self.assertEqual(
+                    expected,
+                    command[command.index(flag) + 1],
+                )
+
+    def test_missing_cosign_is_fail_closed(self) -> None:
+        root = self._fixture()
+        slsa_document = json.loads(
+            (
+                root
+                / verifier.POLARIS_EVIDENCE
+                / "slsa-verify.json"
+            ).read_text(encoding="utf-8")
+        )
+        nested_bundle = slsa_document[0]["attestation"]["bundle"]
+
+        with mock.patch.object(
+            verifier.subprocess,
+            "run",
+            side_effect=FileNotFoundError("cosign"),
+        ):
+            with self.assertRaises(verifier.ContractError) as raised:
+                verifier._reverify_dependency_sigstore_cryptographically(
+                    root,
+                    verifier.POLARIS_EVIDENCE / "oci-manifest.json",
+                    (
+                        verifier.POLARIS_EVIDENCE
+                        / "cosign-signature-bundle.json"
+                    ),
+                    nested_bundle,
+                )
+        self.assertEqual("DEPENDENCY_EVIDENCE", raised.exception.code)
+        self.assertIn("cannot inspect Cosign", raised.exception.detail)
 
     def test_source_pin_mutation_fails_closed(self) -> None:
         root = self._fixture()
@@ -725,15 +1125,6 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         self._rewrite_json(root, verifier.POLARIS_CONTRACT, mutate)
         self._assert_code(root, "CONTRACT_STATE", "<root> keys")
 
-    def test_shared_cache_enablement_is_rejected(self) -> None:
-        root = self._fixture()
-
-        def mutate(value: dict[str, object]) -> None:
-            value["dependency_snapshot"]["workflow"]["no_shared_cache"] = False  # type: ignore[index]
-
-        self._rewrite_json(root, verifier.POLARIS_CONTRACT, mutate)
-        self._assert_code(root, "CONTRACT_STATE", "no_shared_cache")
-
     def test_module_cache_identity_contract_drift_fails_closed(self) -> None:
         root = self._fixture()
 
@@ -763,6 +1154,70 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             "CONTRACT_STATE",
             "module_cache_identity.retention",
         )
+
+    def test_review_pending_policy_values_are_semantically_closed(self) -> None:
+        cases = (
+            (
+                "limit",
+                ("dependency_snapshot", "limits", "maximum_files"),
+                9_999,
+                "dependency_snapshot.limits.maximum_files",
+            ),
+            (
+                "archive",
+                ("dependency_snapshot", "archive", "format"),
+                "tar",
+                "dependency_snapshot.archive.format",
+            ),
+            (
+                "descriptor-media-type",
+                ("dependency_snapshot", "descriptor_media_type"),
+                "application/json",
+                "dependency_snapshot.descriptor_media_type",
+            ),
+            (
+                "visibility",
+                (
+                    "dependency_snapshot",
+                    "visibility_bootstrap",
+                    "required_visibility",
+                ),
+                "private",
+                "dependency_snapshot.visibility_bootstrap.required_visibility",
+            ),
+            (
+                "oras",
+                ("dependency_snapshot", "tools", "oras", "version"),
+                "9.9.9",
+                "dependency_snapshot.tools.oras.version",
+            ),
+            (
+                "image-repository",
+                ("image_publication", "repository"),
+                "ghcr.io/tommykammy/alternate-polaris",
+                "image_publication.repository",
+            ),
+            (
+                "image-tag",
+                ("image_publication", "trusted_tag"),
+                "latest",
+                "image_publication.trusted_tag",
+            ),
+        )
+        for label, path, replacement, detail in cases:
+            with self.subTest(label=label):
+                root = self._fixture()
+
+                def mutate(value: dict[str, object]) -> None:
+                    current: object = value
+                    for key in path[:-1]:
+                        self.assertIsInstance(current, dict)
+                        current = current[key]  # type: ignore[index]
+                    self.assertIsInstance(current, dict)
+                    current[path[-1]] = replacement  # type: ignore[index]
+
+                self._rewrite_json(root, verifier.POLARIS_CONTRACT, mutate)
+                self._assert_code(root, "CONTRACT_STATE", detail)
 
     def test_publication_workflow_is_forbidden_while_pending(self) -> None:
         root = self._fixture()
@@ -811,497 +1266,6 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         )
         self._assert_code(root, "FORBIDDEN_PATH", "workflow inventory changed")
 
-    def test_dependency_workflow_byte_drift_fails_closed(self) -> None:
-        root = self._fixture()
-        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
-        workflow.write_text(
-            workflow.read_text(encoding="utf-8") + "\n",
-            encoding="utf-8",
-        )
-        self._assert_code(
-            root,
-            "CONTRACT_STATE",
-            "dependency workflow bytes",
-        )
-
-    def test_dependency_workflow_step_order_is_semantically_closed(self) -> None:
-        root = self._fixture()
-        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
-        text = workflow.read_text(encoding="utf-8")
-        first = "      - name: Install checksum-pinned ORAS"
-        second = "      - name: Install pinned Cosign"
-        workflow.write_text(
-            text.replace(first, "      - name: temporary-step", 1)
-            .replace(second, first, 1)
-            .replace("      - name: temporary-step", second, 1),
-            encoding="utf-8",
-        )
-        contract = json.loads(
-            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
-        )
-        with self.assertRaises(verifier.ContractError) as raised:
-            verifier._audit_dependency_workflow_semantics(root, contract)
-        self.assertIn("ordered step inventory", raised.exception.detail)
-
-    def test_dependency_workflow_oras_layers_must_be_relative(self) -> None:
-        for layer_path in (
-            "${candidate_dir}/gradle-dependency-inputs.json",
-            "$PWD/gradle-dependency-inputs.json",
-            "$(pwd)/gradle-dependency-inputs.json",
-            "../gradle-dependency-inputs.json",
-            "/tmp/gradle-dependency-inputs.json",
-        ):
-            with self.subTest(layer_path=layer_path):
-                root = self._fixture()
-                workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
-                workflow.write_text(
-                    workflow.read_text(encoding="utf-8").replace(
-                        "gradle-dependency-inputs.json:"
-                        "${DESCRIPTOR_MEDIA_TYPE}",
-                        f"{layer_path}:${{DESCRIPTOR_MEDIA_TYPE}}",
-                        1,
-                    ),
-                    encoding="utf-8",
-                )
-                contract = json.loads(
-                    (root / verifier.POLARIS_CONTRACT).read_text(
-                        encoding="utf-8"
-                    )
-                )
-                with self.assertRaises(verifier.ContractError) as raised:
-                    verifier._audit_dependency_workflow_semantics(
-                        root,
-                        contract,
-                    )
-                self.assertIn(
-                    "exact candidate-scoped relative push",
-                    raised.exception.detail,
-                )
-
-    def test_dependency_workflow_cannot_hide_a_second_oras_push(self) -> None:
-        root = self._fixture()
-        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
-        workflow.write_text(
-            workflow.read_text(encoding="utf-8").replace(
-                "          )\n"
-                "          digest=$(oras resolve \"${tag}\")",
-                "          )\n"
-                "          oras push \"${tag}\" /tmp/unreviewed\n"
-                "          digest=$(oras resolve \"${tag}\")",
-                1,
-            ),
-            encoding="utf-8",
-        )
-        contract = json.loads(
-            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
-        )
-        with self.assertRaises(verifier.ContractError) as raised:
-            verifier._audit_dependency_workflow_semantics(root, contract)
-        self.assertIn(
-            "exact candidate-scoped relative push",
-            raised.exception.detail,
-        )
-
-    def test_dependency_workflow_cannot_disable_oras_path_validation(
-        self,
-    ) -> None:
-        root = self._fixture()
-        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
-        workflow.write_text(
-            workflow.read_text(encoding="utf-8").replace(
-                "              --image-spec v1.1 \\\n",
-                "              --disable-path-validation \\\n"
-                "              --image-spec v1.1 \\\n",
-                1,
-            ),
-            encoding="utf-8",
-        )
-        contract = json.loads(
-            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
-        )
-        with self.assertRaises(verifier.ContractError) as raised:
-            verifier._audit_dependency_workflow_semantics(root, contract)
-        self.assertIn(
-            "path validation cannot be disabled",
-            raised.exception.detail,
-        )
-
-    def test_dependency_workflow_registry_verify_rejects_bundle_flag(
-        self,
-    ) -> None:
-        root = self._fixture()
-        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
-        workflow.write_text(
-            workflow.read_text(encoding="utf-8").replace(
-                "          cosign verify \\\n"
-                "            --certificate-identity \\\n",
-                "          cosign verify \\\n"
-                "            --bundle "
-                '"${candidate_dir}/cosign-signature-bundle.json" \\\n'
-                "            --certificate-identity \\\n",
-                1,
-            ),
-            encoding="utf-8",
-        )
-        contract = json.loads(
-            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
-        )
-        with self.assertRaises(verifier.ContractError) as raised:
-            verifier._audit_dependency_workflow_semantics(root, contract)
-        self.assertIn(
-            "without a bundle flag",
-            raised.exception.detail,
-        )
-
-    def test_dependency_workflow_signing_must_retain_bundle(self) -> None:
-        root = self._fixture()
-        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
-        workflow.write_text(
-            workflow.read_text(encoding="utf-8").replace(
-                "          cosign sign --yes \\\n"
-                "            --bundle "
-                '"${candidate_dir}/cosign-signature-bundle.json" \\\n',
-                "          cosign sign --yes \\\n",
-                1,
-            ),
-            encoding="utf-8",
-        )
-        contract = json.loads(
-            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
-        )
-        with self.assertRaises(verifier.ContractError) as raised:
-            verifier._audit_dependency_workflow_semantics(root, contract)
-        self.assertIn(
-            "signature bundle",
-            raised.exception.detail,
-        )
-
-    def test_dependency_workflow_registry_verify_bindings_are_closed(
-        self,
-    ) -> None:
-        mutations = (
-            (
-                (
-                    "https://github.com/${GITHUB_REPOSITORY}/.github/"
-                    "workflows/polaris-gradle-dependencies.yml@${GITHUB_REF}"
-                ),
-                (
-                    "https://github.com/${GITHUB_REPOSITORY}/.github/"
-                    "workflows/other.yml@${GITHUB_REF}"
-                ),
-            ),
-            (
-                "https://token.actions.githubusercontent.com",
-                "https://oauth2.sigstore.dev/auth",
-            ),
-            (
-                "          cosign verify \\\n"
-                "            --certificate-identity \\\n"
-                "              \"https://github.com/${GITHUB_REPOSITORY}/"
-                ".github/workflows/polaris-gradle-dependencies.yml@"
-                "${GITHUB_REF}\" \\\n"
-                "            --certificate-oidc-issuer \\\n"
-                "              \"https://token.actions.githubusercontent.com\" "
-                "\\\n"
-                "            \"${PUBLISHED_REFERENCE}\" \\\n",
-                "          cosign verify \\\n"
-                "            --certificate-identity \\\n"
-                "              \"https://github.com/${GITHUB_REPOSITORY}/"
-                ".github/workflows/polaris-gradle-dependencies.yml@"
-                "${GITHUB_REF}\" \\\n"
-                "            --certificate-oidc-issuer \\\n"
-                "              \"https://token.actions.githubusercontent.com\" "
-                "\\\n"
-                "            \"${PUBLISHED_TAG}\" \\\n",
-            ),
-        )
-        for original, replacement in mutations:
-            with self.subTest(replacement=replacement):
-                root = self._fixture()
-                workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
-                text = workflow.read_text(encoding="utf-8")
-                self.assertIn(original, text)
-                workflow.write_text(
-                    text.replace(original, replacement, 1),
-                    encoding="utf-8",
-                )
-                contract = json.loads(
-                    (root / verifier.POLARIS_CONTRACT).read_text(
-                        encoding="utf-8"
-                    )
-                )
-                with self.assertRaises(verifier.ContractError) as raised:
-                    verifier._audit_dependency_workflow_semantics(
-                        root,
-                        contract,
-                    )
-                self.assertIn(
-                    "exact signed reference",
-                    raised.exception.detail,
-                )
-
-    def test_dependency_workflow_cosign_evidence_must_be_retained(
-        self,
-    ) -> None:
-        root = self._fixture()
-        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
-        workflow.write_text(
-            workflow.read_text(encoding="utf-8").replace(
-                "            ${{ runner.temp }}/polaris-gradle-candidate/"
-                "cosign-signature-bundle.json\n",
-                "",
-                1,
-            ),
-            encoding="utf-8",
-        )
-        contract = json.loads(
-            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
-        )
-        with self.assertRaises(verifier.ContractError) as raised:
-            verifier._audit_dependency_workflow_semantics(root, contract)
-        self.assertIn(
-            "hash-bound and retained",
-            raised.exception.detail,
-        )
-
-    def test_dependency_workflow_signing_step_cannot_rebind_exact_reference(
-        self,
-    ) -> None:
-        root = self._fixture()
-        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
-        text = workflow.read_text(encoding="utf-8")
-        signing_start = text.index(
-            "      - name: Keyless-sign the exact OCI manifest"
-        )
-        original = (
-            '          candidate_dir="${RUNNER_TEMP}/'
-            'polaris-gradle-candidate"\n'
-        )
-        mutation_at = text.index(original, signing_start)
-        workflow.write_text(
-            text[:mutation_at]
-            + original
-            + '          PUBLISHED_REFERENCE="${PUBLISHED_TAG}"\n'
-            + text[mutation_at + len(original) :],
-            encoding="utf-8",
-        )
-        contract = json.loads(
-            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
-        )
-        with self.assertRaises(verifier.ContractError) as raised:
-            verifier._audit_dependency_workflow_semantics(root, contract)
-        self.assertIn(
-            "closed-world",
-            raised.exception.detail,
-        )
-
-    def test_dependency_workflow_signing_step_cannot_wrap_cosign(
-        self,
-    ) -> None:
-        root = self._fixture()
-        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
-        text = workflow.read_text(encoding="utf-8")
-        signing_start = text.index(
-            "      - name: Keyless-sign the exact OCI manifest"
-        )
-        original = '          echo "${GHCR_TOKEN}" \\\n'
-        mutation_at = text.index(original, signing_start)
-        workflow.write_text(
-            text[:mutation_at]
-            + "          cosign() {\n"
-            + '            command cosign "$@"\n'
-            + '            command cosign ver"ify" --bun"dle" '
-            + '"${candidate_dir}/cosign-signature-bundle.json" '
-            + '"${PUBLISHED_REFERENCE}"\n'
-            + "          }\n"
-            + text[mutation_at:],
-            encoding="utf-8",
-        )
-        contract = json.loads(
-            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
-        )
-        with self.assertRaises(verifier.ContractError) as raised:
-            verifier._audit_dependency_workflow_semantics(root, contract)
-        self.assertIn(
-            "closed-world",
-            raised.exception.detail,
-        )
-
-    def test_dependency_workflow_action_contract_cannot_self_rebind(
-        self,
-    ) -> None:
-        root = self._fixture()
-        contract = json.loads(
-            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
-        )
-        contract["dependency_snapshot"]["workflow"]["action_uses"][0] = (  # type: ignore[index]
-            "resolve|Check out the reviewed dependency policy|"
-            "actions/checkout@" + "0" * 40
-        )
-        with self.assertRaises(verifier.ContractError) as raised:
-            verifier._audit_dependency_workflow_semantics(root, contract)
-        self.assertIn("Action pins", raised.exception.detail)
-
-    def test_dependency_workflow_unnamed_step_is_rejected(self) -> None:
-        root = self._fixture()
-        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
-        workflow.write_text(
-            workflow.read_text(encoding="utf-8").replace(
-                "    steps:\n"
-                "      - name: Check out the reviewed dependency policy",
-                "    steps:\n"
-                "      - run: echo unnamed-step\n"
-                "      - name: Check out the reviewed dependency policy",
-                1,
-            ),
-            encoding="utf-8",
-        )
-        contract = json.loads(
-            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
-        )
-        with self.assertRaises(verifier.ContractError) as raised:
-            verifier._audit_dependency_workflow_semantics(root, contract)
-        self.assertIn("unnamed or extra step entry", raised.exception.detail)
-
-    def test_dependency_workflow_extra_trigger_is_rejected(self) -> None:
-        root = self._fixture()
-        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
-        workflow.write_text(
-            workflow.read_text(encoding="utf-8").replace(
-                "  workflow_dispatch:\n",
-                "  workflow_dispatch:\n"
-                "  schedule:\n"
-                "    - cron: '0 0 * * *'\n",
-                1,
-            ),
-            encoding="utf-8",
-        )
-        contract = json.loads(
-            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
-        )
-        with self.assertRaises(verifier.ContractError) as raised:
-            verifier._audit_dependency_workflow_semantics(root, contract)
-        self.assertIn("trigger topology", raised.exception.detail)
-
-    def test_dependency_workflow_created_date_cannot_include_commit_diff(
-        self,
-    ) -> None:
-        root = self._fixture()
-        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
-        workflow.write_text(
-            workflow.read_text(encoding="utf-8").replace(
-                'git show -s --no-show-signature --format=%cI "${GITHUB_SHA}"',
-                'git show --no-show-signature --format=%cI "${GITHUB_SHA}"',
-                1,
-            ),
-            encoding="utf-8",
-        )
-        contract = json.loads(
-            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
-        )
-        with self.assertRaises(verifier.ContractError) as raised:
-            verifier._audit_dependency_workflow_semantics(root, contract)
-        self.assertIn(
-            "required publication semantic",
-            raised.exception.detail,
-        )
-
-    def test_dependency_workflow_cannot_skip_source_archive_validation(
-        self,
-    ) -> None:
-        root = self._fixture()
-        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
-        workflow.write_text(
-            workflow.read_text(encoding="utf-8").replace(
-                "          python3 scripts/validate_polaris_source_archive.py \\\n",
-                "          python3 scripts/verify_polaris_trusted_image.py \\\n",
-                1,
-            ),
-            encoding="utf-8",
-        )
-        contract = json.loads(
-            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
-        )
-        with self.assertRaises(verifier.ContractError) as raised:
-            verifier._audit_dependency_workflow_semantics(root, contract)
-        self.assertIn(
-            "source authentication step lost",
-            raised.exception.detail,
-        )
-
-    def test_each_source_extraction_retains_scoped_hardening(self) -> None:
-        cases = (
-            (
-                "online",
-                (
-                    '            --directory "${online_source}" '
-                    "--strip-components 1 \\\n"
-                    "            --no-same-owner --no-same-permissions"
-                ),
-                '            --directory "${online_source}"',
-                "online source extraction",
-            ),
-            (
-                "offline",
-                (
-                    '            --directory "${offline_source}" '
-                    "--strip-components 1 \\\n"
-                    "            --no-same-owner --no-same-permissions"
-                ),
-                '            --directory "${offline_source}"',
-                "offline source extraction",
-            ),
-        )
-        for case, original, replacement, detail in cases:
-            with self.subTest(case=case):
-                root = self._fixture()
-                workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
-                text = workflow.read_text(encoding="utf-8")
-                self.assertIn(original, text)
-                workflow.write_text(
-                    text.replace(original, replacement, 1),
-                    encoding="utf-8",
-                )
-                contract = json.loads(
-                    (root / verifier.POLARIS_CONTRACT).read_text(
-                        encoding="utf-8"
-                    )
-                )
-                with self.assertRaises(verifier.ContractError) as raised:
-                    verifier._audit_dependency_workflow_semantics(
-                        root,
-                        contract,
-                    )
-                self.assertIn(detail, raised.exception.detail)
-
-    def test_read_only_verifier_cannot_receive_implicit_write_token(
-        self,
-    ) -> None:
-        root = self._fixture()
-        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
-        workflow.write_text(
-            workflow.read_text(encoding="utf-8").replace(
-                "    timeout-minutes: 30\n"
-                "    permissions:\n"
-                "      contents: read\n"
-                "    outputs:",
-                "    timeout-minutes: 30\n"
-                "    env:\n"
-                "      GH_TOKEN: ${{ github.token }}\n"
-                "    permissions:\n"
-                "      contents: read\n"
-                "    outputs:",
-                1,
-            ),
-            encoding="utf-8",
-        )
-        contract = json.loads(
-            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
-        )
-        with self.assertRaises(verifier.ContractError) as raised:
-            verifier._audit_dependency_workflow_semantics(root, contract)
-        self.assertIn("write credentials", raised.exception.detail)
-
     def test_dependency_packager_byte_drift_fails_closed(self) -> None:
         root = self._fixture()
         packager = root / verifier.POLARIS_DEPENDENCY_PACKAGER
@@ -1337,7 +1301,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         self._rewrite_json(root, verifier.POLARIS_CONTRACT, mutate)
         self._assert_code(root, "CONTRACT_STATE", "lifecycle.state")
 
-    def test_snapshot_reference_cannot_be_admitted_before_main_run(self) -> None:
+    def test_snapshot_reference_cannot_drift_after_main_run(self) -> None:
         root = self._fixture()
 
         def mutate(value: dict[str, object]) -> None:
@@ -1459,7 +1423,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             check=True,
             capture_output=True,
         )
-        verifier.audit(root)
+        self._audit(root)
 
         with self.subTest(case="tracked-mutation"):
             runtime_file = root / "deploy/gitops/dev/smoke-configmap.yaml"
@@ -1588,13 +1552,19 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             document = root / relative
             document.parent.mkdir(parents=True, exist_ok=True)
             document.write_text(content, encoding="utf-8")
-        verifier.audit(root)
+        self._audit(root)
 
-    def test_release_evidence_is_forbidden_while_pending(self) -> None:
+    def test_extra_dependency_evidence_is_forbidden_while_review_pending(
+        self,
+    ) -> None:
         root = self._fixture()
         evidence = root / "bootstrap/polaris/v1.6.0/evidence/claim.json"
         evidence.write_text("{}\n", encoding="utf-8")
-        self._assert_code(root, "FORBIDDEN_PATH", "evidence/claim.json")
+        self._assert_code(
+            root,
+            "DEPENDENCY_EVIDENCE",
+            "inventory must be closed",
+        )
 
     def test_pending_retained_evidence_paths_fail_closed(self) -> None:
         cases = (
@@ -1811,7 +1781,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             + "\n",
             encoding="utf-8",
         )
-        verifier.audit(root)
+        self._audit(root)
 
     def test_unrelated_oci_reference_with_pending_prose_is_allowed(self) -> None:
         root = self._fixture()
@@ -1830,7 +1800,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             + "\n",
             encoding="utf-8",
         )
-        verifier.audit(root)
+        self._audit(root)
 
     def test_unrelated_dsse_subject_is_allowed(self) -> None:
         root = self._fixture()
@@ -1855,7 +1825,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         evidence = root / "security/evidence/unrelated-v1/attestation.json"
         evidence.parent.mkdir(parents=True, exist_ok=True)
         evidence.write_text(json.dumps(envelope) + "\n", encoding="utf-8")
-        verifier.audit(root)
+        self._audit(root)
 
     def test_unknown_retained_evidence_format_fails_closed(self) -> None:
         root = self._fixture()
@@ -1896,7 +1866,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             + "\n",
             encoding="utf-8",
         )
-        verifier.audit(root)
+        self._audit(root)
 
     def test_unrelated_retained_evidence_subjects_are_allowed(self) -> None:
         root = self._fixture()
@@ -1923,7 +1893,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             + "\n",
             encoding="utf-8",
         )
-        verifier.audit(root)
+        self._audit(root)
 
     def test_unrelated_retained_evidence_subject_substrings_are_allowed(
         self,
@@ -1958,7 +1928,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                     + "\n",
                     encoding="utf-8",
                 )
-                verifier.audit(root)
+                self._audit(root)
 
     def test_polaris_runtime_enablement_fails_closed(self) -> None:
         root = self._fixture()
@@ -2237,7 +2207,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                     "  name: neutral\n",
                     encoding="utf-8",
                 )
-                verifier.audit(root)
+                self._audit(root)
 
     def test_alternate_suffix_content_identity_fails_closed(self) -> None:
         root = self._fixture()
@@ -2505,7 +2475,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 manifest = root / "deploy/gitops/lakehouse" / filename
                 manifest.parent.mkdir(parents=True)
                 manifest.write_text(content, encoding="utf-8")
-                verifier.audit(root)
+                self._audit(root)
 
     def test_kustomize_secret_generators_fail_closed(self) -> None:
         cases = {
@@ -2616,7 +2586,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 )
                 manifest.parent.mkdir(parents=True)
                 manifest.write_text(content, encoding="utf-8")
-                verifier.audit(root)
+                self._audit(root)
 
     def test_yaml_merge_keys_fail_closed_in_runtime_documents(self) -> None:
         cases = {
@@ -2672,7 +2642,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             "    <<: *example\n",
             encoding="utf-8",
         )
-        verifier.audit(root)
+        self._audit(root)
 
     def test_pending_local_helm_chart_sources_fail_closed(self) -> None:
         root = self._fixture()
@@ -2738,7 +2708,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             "    plural: examples\n",
             encoding="utf-8",
         )
-        verifier.audit(root)
+        self._audit(root)
 
     def test_postgres_environment_string_forms_fail_closed(self) -> None:
         cases = {
@@ -3026,7 +2996,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         destination = root / relative
         destination.parent.mkdir(parents=True)
         shutil.copy2(ROOT / relative, destination)
-        verifier.audit(root)
+        self._audit(root)
 
         destination.write_text(
             destination.read_text(encoding="utf-8") + "\n",
@@ -3042,7 +3012,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             'resource "kubernetes_namespace_v1" "lakehouse" {}\n',
             encoding="utf-8",
         )
-        verifier.audit(root)
+        self._audit(root)
 
     def test_opentofu_secret_examples_in_non_code_are_ignored(self) -> None:
         cases = {
@@ -3114,7 +3084,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 manifest = root / "opentofu/dev" / filename
                 manifest.parent.mkdir(parents=True)
                 manifest.write_text(content, encoding="utf-8")
-                verifier.audit(root)
+                self._audit(root)
 
     def test_disabled_iceberg_flag_is_not_a_catalog_identity_field(self) -> None:
         root = self._fixture()
@@ -3122,7 +3092,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         destination = root / relative
         destination.parent.mkdir(parents=True)
         shutil.copy2(ROOT / relative, destination)
-        verifier.audit(root)
+        self._audit(root)
 
     def test_disabled_iceberg_flag_exception_is_exactly_bounded(self) -> None:
         approved_line = "            - -s3.port.iceberg=0"
@@ -3156,7 +3126,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             "documentation: PGHOST is configured externally\n",
             encoding="utf-8",
         )
-        verifier.audit(root)
+        self._audit(root)
 
 
 if __name__ == "__main__":

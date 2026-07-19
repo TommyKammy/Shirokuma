@@ -8,19 +8,25 @@ FLUX ?= flux
 FLUX_VERSION ?= v2.9.2
 KYVERNO ?= kyverno
 KYVERNO_VERSION ?= v1.18.2
+COSIGN ?= cosign
+COSIGN_VERSION ?= v3.1.1
 GITHUB_OWNER ?= TommyKammy
 FLUX_GITHUB_REPOSITORY ?= Shirokuma
 FLUX_GITHUB_PRIVATE ?= false
 FLUX_BOOTSTRAP_BRANCH ?= flux/bootstrap-local-lite
 FLUX_PATH ?= deploy/gitops/clusters/local-lite
 
-.PHONY: prepare verify verify-security verify-policy verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-image-admission verify-gitops-teardown verify-kyverno-bootstrap verify-object-storage-profile verify-polaris-build-contract verify-polaris-runtime verify-iceberg-table-bootstrap verify-trino-bootstrap verify-dataops-bootstrap verify-superset-bootstrap verify-tpch-benchmark verify-metadata-bootstrap verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go supervisor-preflight colima-start colima-status tofu-init tofu-fmt tofu-validate flux-version-check gitops-bootstrap gitops-status gitops-reconcile gitops-teardown check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
+.PHONY: prepare verify verify-cosign verify-security verify-policy verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-image-admission verify-gitops-teardown verify-kyverno-bootstrap verify-object-storage-profile test-polaris-build-contract verify-polaris-build-contract verify-polaris-runtime verify-iceberg-table-bootstrap verify-trino-bootstrap verify-dataops-bootstrap verify-superset-bootstrap verify-tpch-benchmark verify-metadata-bootstrap verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go supervisor-preflight colima-start colima-status tofu-init tofu-fmt tofu-validate flux-version-check gitops-bootstrap gitops-status gitops-reconcile gitops-teardown check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
 
 verify: check-required-files verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-teardown verify-kyverno-bootstrap verify-object-storage-profile verify-polaris-runtime verify-iceberg-table-bootstrap verify-trino-bootstrap verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go verify-security verify-policy check-newlines check-trailing-whitespace check-no-secret-filenames
 
 prepare: verify-design-context
 
-verify-security:
+verify-cosign:
+	@command -v $(COSIGN) >/dev/null || { echo "cosign $(COSIGN_VERSION) is required for retained evidence verification"; exit 1; }
+	@test "$$($(COSIGN) version | awk '/^GitVersion:/ {print $$2}')" = "$(COSIGN_VERSION)" || { echo "cosign $(COSIGN_VERSION) is required for retained evidence verification"; exit 1; }
+
+verify-security: verify-cosign
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_supply_chain_security.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_trivyignore.py'
 	@$(PYTHON) scripts/verify_trivyignore.py
@@ -68,9 +74,11 @@ verify-object-storage-profile:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_trusted_image_contract.py'
 	@$(PYTHON) scripts/verify_trusted_image.py audit --root .
 
-verify-polaris-build-contract:
+test-polaris-build-contract:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_package_polaris_gradle_dependencies.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_polaris_trusted_image_contract.py'
+
+verify-polaris-build-contract: test-polaris-build-contract verify-cosign
 	@$(PYTHON) scripts/verify_polaris_trusted_image.py audit --root .
 
 verify-polaris-runtime: verify-polaris-build-contract
@@ -206,6 +214,7 @@ check-newlines:
 		case "$$file" in \
 			*.png|*.jpg|*.jpeg|*.gif|*.ico|*.pdf|*.zip|*.gz|*.tgz|*.xz|*.jar|*.war) continue ;; \
 			bootstrap/seaweedfs/v4.39/evidence/cosign-signature-bundle.json|bootstrap/seaweedfs/v4.39/evidence/image-manifest.json|bootstrap/seaweedfs/v4.39/evidence/sbom-attestation-bundle.json|bootstrap/seaweedfs/v4.39/evidence/trivy-attestation-bundle.json) continue ;; \
+			bootstrap/polaris/v1.6.0/evidence/cosign-signature-bundle.json|bootstrap/polaris/v1.6.0/evidence/oci-manifest.json) continue ;; \
 		esac; \
 		if [ -s "$$file" ] && [ "$$(tail -c 1 "$$file" | wc -l | tr -d ' ')" = "0" ]; then \
 			echo "missing final newline: $$file"; \
