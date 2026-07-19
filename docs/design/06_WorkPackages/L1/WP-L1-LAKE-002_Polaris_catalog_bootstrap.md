@@ -215,7 +215,8 @@ Openを維持します。
   を生成しました。続くverify job最初のauditはjob-localな`cosign`未導入を
   fail-closedで検出しました。container image build、GHCR push、image digest、
   signing、promotionは実行されていません。
-- 修復PR #<repair-pr>は、prepare/verify/promoteの各jobを
+- 修復PR [#81](https://github.com/TommyKammy/Shirokuma/pull/81)は、
+  prepare/verify/promoteの各jobを
   Cosign非依存のstatic publication bootstrap audit、full commit SHA固定の
   Cosign installer、完全なcryptographic auditの順へ固定します。各jobに
   installerが厳密に1個だけ存在し、write-capableなartifact取得やcredential発行が
@@ -226,7 +227,8 @@ Openを維持します。
   `slsa-bundles.jsonl`、`sbom-attestation-bundle.json`、
   `trivy-attestation-bundle.json`を保持しておらず、後続のevidence-only reviewで
   SBOM/TrivyをOIDC identityへ独立に再結合できないことが判明しました。
-  修復PR #<repair-pr>では5証拠をclosed required setへ追加し、registry/Rekorの
+  修復PR [#81](https://github.com/TommyKammy/Shirokuma/pull/81)では5証拠を
+  closed required setへ追加し、registry/Rekorの
   exact照合、current-run SLSA bundle、SBOM/Trivy predicateの暗号検証を行い、
   promotion credentialの発行前とlive registry照合時に再検証します。
 - one-shot publication時はGHCR packageのprivate defaultによりanonymous pullで
@@ -239,7 +241,8 @@ Openを維持します。
 - 2026-07-18の非admissionな実機監査では、5,014 files / 825,947,131 raw
   bytesのGradle seedでnetwork-none offline buildが成功しました。圧縮後も
   619,659,126 bytesのため、artifact本体をGitへ置きません。
-- 続く工程は修復PR #<repair-pr>のreview/merge、新しいmain-only Polaris image
+- 続く工程は修復PR [#81](https://github.com/TommyKammy/Shirokuma/pull/81)の
+  review/merge、新しいmain-only Polaris image
   publication、image evidence review、atomic Polaris/PostgreSQL admissionです。
 - admission後もcredentials、runtime/Flux Ready、catalog API smoke、
   backup/restore acceptanceが未完了です。
@@ -281,7 +284,8 @@ Openを維持します。
 - Prepare Cosign bootstrap repair PR:
   [#80](https://github.com/TommyKammy/Shirokuma/pull/80)
   (merged as `7baa1388637b1b727a70d342d863ef8cf92bd83d`, `Refs #61`)
-- All-job Cosign bootstrap repair PR: #<repair-pr> (`Refs #61`, number pending)
+- All-job Cosign bootstrap repair PR:
+  [#81](https://github.com/TommyKammy/Shirokuma/pull/81) (`Refs #61`)
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
 - Execution order: `1 of 8`
 - Queue: all-job Cosign bootstrap repair review/merge、新しいmain-only Polaris
