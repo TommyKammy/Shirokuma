@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-19
-version: "1.1"
+version: "1.2"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -170,6 +170,10 @@ the descriptor, Gradle verification metadata, raw OCI manifest, publication
 record, Cosign signature bundle, registry verification, SLSA verification,
 offline-build proof, and toolchain record. It also revalidates their archive,
 manifest, source-run, keyless identity, provenance, and offline-build bindings.
+Both retained Sigstore checks constrain the workflow repository, ref, trigger,
+and exact publisher workflow SHA
+`4692bab4282dfde2c8d4082e6d706dee9ce79324`; the mutable `main` workflow
+identity alone is not sufficient.
 `make test-polaris-build-contract` injects a mock only at the external
 cryptographic-command boundary so the unit suite needs no host Cosign binary;
 `make verify-polaris-build-contract` requires Cosign v3.1.1 explicitly and runs

@@ -16,6 +16,10 @@ archive is intentionally not stored in Git. Its
 `sha256:18933bfb895c267302f1ee1c80cfb9712eac736ffcefade48dac53f79e8e3bc0`
 identity and size are cross-bound by the retained descriptor, OCI manifest, and
 publication record.
+Both retained Sigstore reverifications constrain the GitHub workflow
+repository, ref, trigger, and exact publisher workflow SHA
+`4692bab4282dfde2c8d4082e6d706dee9ce79324`; path identity on mutable `main`
+alone is insufficient.
 
 The reviewed publisher is retired in the same change that advances the
 dependency lifecycle. No remaining workflow may republish or replace this

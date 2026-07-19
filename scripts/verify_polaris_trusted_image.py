@@ -127,6 +127,13 @@ POLARIS_DEPENDENCY_PUBLICATION_SIZE = 2_211
 POLARIS_DEPENDENCY_SOURCE_SHA = "4692bab4282dfde2c8d4082e6d706dee9ce79324"
 POLARIS_DEPENDENCY_RUN_ID = "29689013375"
 POLARIS_DEPENDENCY_RUN_ATTEMPT = "1"
+POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY = "TommyKammy/Shirokuma"
+POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY_URL = (
+    "https://github.com/TommyKammy/Shirokuma"
+)
+POLARIS_DEPENDENCY_PUBLISHER_REF = "refs/heads/main"
+POLARIS_DEPENDENCY_PUBLISHER_WORKFLOW_SHA = POLARIS_DEPENDENCY_SOURCE_SHA
+POLARIS_DEPENDENCY_PUBLISHER_TRIGGER = "push"
 POLARIS_DEPENDENCY_PUBLISHER_IDENTITY = (
     "https://github.com/TommyKammy/Shirokuma/.github/workflows/"
     "polaris-gradle-dependencies.yml@refs/heads/main"
@@ -324,7 +331,7 @@ RETAINED_EVIDENCE_JSON_SUFFIXES = {".json", ".jsonl"}
 RETAINED_EVIDENCE_DOCUMENT_SUFFIXES = {".md"}
 MAX_DSSE_PAYLOAD_BYTES = 16 * 1024 * 1024
 _VERIFIED_DEPENDENCY_CRYPTOGRAPHIC_BINDINGS: set[
-    tuple[str, str, str]
+    tuple[str, ...]
 ] = set()
 _VALIDATED_DEPENDENCY_DESCRIPTOR_BINDINGS: set[tuple[str, str]] = set()
 _POLARIS_DEPENDENCY_PACKAGER_MODULE: Any | None = None
@@ -1322,13 +1329,13 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "publication",
                 "publisher",
                 "repository",
-            ): "TommyKammy/Shirokuma",
+            ): POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY,
             (
                 "dependency_snapshot",
                 "publication",
                 "publisher",
                 "ref",
-            ): "refs/heads/main",
+            ): POLARIS_DEPENDENCY_PUBLISHER_REF,
             (
                 "dependency_snapshot",
                 "publication",
@@ -1346,7 +1353,7 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "publication",
                 "publisher",
                 "event",
-            ): "push",
+            ): POLARIS_DEPENDENCY_PUBLISHER_TRIGGER,
             (
                 "dependency_snapshot",
                 "publication",
@@ -1806,7 +1813,7 @@ def _audit_dependency_oci_manifest(
             (
                 "annotations",
                 "org.opencontainers.image.source",
-            ): "https://github.com/TommyKammy/Shirokuma",
+            ): POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY_URL,
         },
         "DEPENDENCY_EVIDENCE",
     )
@@ -1901,6 +1908,12 @@ def _reverify_dependency_sigstore_cryptographically(
         ][0],
         POLARIS_DEPENDENCY_EVIDENCE_RECORDS["slsa-verify.json"][0],
         POLARIS_DEPENDENCY_MANIFEST_SHA256,
+        POLARIS_DEPENDENCY_PUBLISHER_IDENTITY,
+        POLARIS_DEPENDENCY_PUBLISHER_ISSUER,
+        POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY,
+        POLARIS_DEPENDENCY_PUBLISHER_REF,
+        POLARIS_DEPENDENCY_PUBLISHER_WORKFLOW_SHA,
+        POLARIS_DEPENDENCY_PUBLISHER_TRIGGER,
     )
     if binding in _VERIFIED_DEPENDENCY_CRYPTOGRAPHIC_BINDINGS:
         return
@@ -1932,6 +1945,14 @@ def _reverify_dependency_sigstore_cryptographically(
             POLARIS_DEPENDENCY_PUBLISHER_IDENTITY,
             "--certificate-oidc-issuer",
             POLARIS_DEPENDENCY_PUBLISHER_ISSUER,
+            "--certificate-github-workflow-repository",
+            POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY,
+            "--certificate-github-workflow-ref",
+            POLARIS_DEPENDENCY_PUBLISHER_REF,
+            "--certificate-github-workflow-sha",
+            POLARIS_DEPENDENCY_PUBLISHER_WORKFLOW_SHA,
+            "--certificate-github-workflow-trigger",
+            POLARIS_DEPENDENCY_PUBLISHER_TRIGGER,
             manifest.as_posix(),
         ],
         "signature-bundle verification",
@@ -1962,6 +1983,14 @@ def _reverify_dependency_sigstore_cryptographically(
                 POLARIS_DEPENDENCY_PUBLISHER_IDENTITY,
                 "--certificate-oidc-issuer",
                 POLARIS_DEPENDENCY_PUBLISHER_ISSUER,
+                "--certificate-github-workflow-repository",
+                POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY,
+                "--certificate-github-workflow-ref",
+                POLARIS_DEPENDENCY_PUBLISHER_REF,
+                "--certificate-github-workflow-sha",
+                POLARIS_DEPENDENCY_PUBLISHER_WORKFLOW_SHA,
+                "--certificate-github-workflow-trigger",
+                POLARIS_DEPENDENCY_PUBLISHER_TRIGGER,
                 manifest.as_posix(),
             ],
             "SLSA-bundle verification",
@@ -2050,13 +2079,15 @@ def _audit_dependency_slsa(root: Path) -> Any:
             "externalParameters": {
                 "workflow": {
                     "path": ".github/workflows/polaris-gradle-dependencies.yml",
-                    "ref": "refs/heads/main",
-                    "repository": "https://github.com/TommyKammy/Shirokuma",
+                    "ref": POLARIS_DEPENDENCY_PUBLISHER_REF,
+                    "repository": (
+                        POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY_URL
+                    ),
                 }
             },
             "internalParameters": {
                 "github": {
-                    "event_name": "push",
+                    "event_name": POLARIS_DEPENDENCY_PUBLISHER_TRIGGER,
                     "repository_id": "1289807958",
                     "repository_owner_id": "257892020",
                     "runner_environment": "github-hosted",
@@ -2216,9 +2247,12 @@ def _audit_dependency_publication_evidence(
                 "shirokuma-polaris-gradle-dependencies:"
                 "1.6.0-29689013375-1"
             ),
-            ("workflow", "event"): "push",
-            ("workflow", "ref"): "refs/heads/main",
-            ("workflow", "repository"): "TommyKammy/Shirokuma",
+            ("workflow", "event"): POLARIS_DEPENDENCY_PUBLISHER_TRIGGER,
+            ("workflow", "ref"): POLARIS_DEPENDENCY_PUBLISHER_REF,
+            (
+                "workflow",
+                "repository",
+            ): POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY,
             ("workflow", "run_attempt"): POLARIS_DEPENDENCY_RUN_ATTEMPT,
             ("workflow", "run_id"): POLARIS_DEPENDENCY_RUN_ID,
             ("workflow", "source_sha"): POLARIS_DEPENDENCY_SOURCE_SHA,

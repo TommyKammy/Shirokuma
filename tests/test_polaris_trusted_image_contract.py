@@ -890,6 +890,14 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             verifier.POLARIS_DEPENDENCY_PUBLISHER_IDENTITY,
             "--certificate-oidc-issuer",
             verifier.POLARIS_DEPENDENCY_PUBLISHER_ISSUER,
+            "--certificate-github-workflow-repository",
+            verifier.POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY,
+            "--certificate-github-workflow-ref",
+            verifier.POLARIS_DEPENDENCY_PUBLISHER_REF,
+            "--certificate-github-workflow-sha",
+            verifier.POLARIS_DEPENDENCY_PUBLISHER_WORKFLOW_SHA,
+            "--certificate-github-workflow-trigger",
+            verifier.POLARIS_DEPENDENCY_PUBLISHER_TRIGGER,
             (verifier.POLARIS_EVIDENCE / "oci-manifest.json").as_posix(),
         ]
         failed = subprocess.CompletedProcess(
@@ -921,6 +929,98 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             check=False,
             timeout=60,
         )
+
+    def test_crypto_reverification_pins_exact_publisher_commit(
+        self,
+    ) -> None:
+        root = self._fixture()
+        slsa_document = json.loads(
+            (
+                root
+                / verifier.POLARIS_EVIDENCE
+                / "slsa-verify.json"
+            ).read_text(encoding="utf-8")
+        )
+        nested_bundle = slsa_document[0]["attestation"]["bundle"]
+        verifier._VERIFIED_DEPENDENCY_CRYPTOGRAPHIC_BINDINGS.clear()
+        self.addCleanup(
+            verifier._VERIFIED_DEPENDENCY_CRYPTOGRAPHIC_BINDINGS.clear
+        )
+
+        def complete(
+            command: list[str],
+            **_: object,
+        ) -> subprocess.CompletedProcess[str]:
+            stdout = (
+                "GitVersion: v3.1.1\n"
+                if command == ["cosign", "version"]
+                else ""
+            )
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=stdout,
+                stderr="",
+            )
+
+        with mock.patch.object(
+            verifier.subprocess,
+            "run",
+            side_effect=complete,
+        ) as run:
+            verifier._reverify_dependency_sigstore_cryptographically(
+                root,
+                verifier.POLARIS_EVIDENCE / "oci-manifest.json",
+                (
+                    verifier.POLARIS_EVIDENCE
+                    / "cosign-signature-bundle.json"
+                ),
+                nested_bundle,
+            )
+
+        self.assertEqual(3, run.call_count)
+        self.assertEqual(
+            {
+                (
+                    verifier.POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+                        "cosign-signature-bundle.json"
+                    ][0],
+                    verifier.POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+                        "slsa-verify.json"
+                    ][0],
+                    verifier.POLARIS_DEPENDENCY_MANIFEST_SHA256,
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_IDENTITY,
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_ISSUER,
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY,
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_REF,
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_WORKFLOW_SHA,
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_TRIGGER,
+                )
+            },
+            verifier._VERIFIED_DEPENDENCY_CRYPTOGRAPHIC_BINDINGS,
+        )
+        for call in run.call_args_list[1:]:
+            command = call.args[0]
+            constraints = {
+                "--certificate-github-workflow-repository": (
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_REPOSITORY
+                ),
+                "--certificate-github-workflow-ref": (
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_REF
+                ),
+                "--certificate-github-workflow-sha": (
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_WORKFLOW_SHA
+                ),
+                "--certificate-github-workflow-trigger": (
+                    verifier.POLARIS_DEPENDENCY_PUBLISHER_TRIGGER
+                ),
+            }
+            for flag, expected in constraints.items():
+                self.assertEqual(1, command.count(flag))
+                self.assertEqual(
+                    expected,
+                    command[command.index(flag) + 1],
+                )
 
     def test_missing_cosign_is_fail_closed(self) -> None:
         root = self._fixture()
