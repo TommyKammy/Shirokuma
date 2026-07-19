@@ -62,7 +62,7 @@ POLARIS_SOURCE_SHA256 = (
     "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb"
 )
 POLARIS_CONTRACT_SHA256 = (
-    "59d8b1cb246e5c4a75ab36bdf0b800d11c481e0df960be1442a157f54b3f842d"
+    "ed21aad8b6af3fc1777628106a0312638568a7639a0e1192e8932fa79c5dcc88"
 )
 GRADLE_DISTRIBUTION_SHA256 = (
     "87a2216cc1f9122192d4e0fe905ffdf1b4c72cff797e9f733b174e157cadd396"
@@ -111,7 +111,7 @@ POLARIS_DEPENDENCY_PACKAGER = Path(
     "scripts/package_polaris_gradle_dependencies.py"
 )
 POLARIS_DEPENDENCY_PACKAGER_SHA256 = (
-    "a4ac646faf1dc09aa802f6905cfc68ee9e5941931410c20073540deded6c613b"
+    "2d56d1c59c75ab38d04b157a8d05177f2fafe8a5d061a186beee12235a638281"
 )
 POLARIS_SOURCE_ARCHIVE_VALIDATOR = Path(
     "scripts/validate_polaris_source_archive.py"
@@ -1403,6 +1403,7 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "encoding",
                 "bound_to_artifact_bytes",
                 "authentication",
+                "retention",
             },
             ("dependency_snapshot", "limits"): {
                 "maximum_files",
@@ -1766,6 +1767,11 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "module_cache_identity",
                 "authentication",
             ): "gradle-verification-metadata-sha256",
+            (
+                "dependency_snapshot",
+                "module_cache_identity",
+                "retention",
+            ): "verification-metadata-sha256-closure",
             (
                 "dependency_snapshot",
                 "limits",

@@ -186,6 +186,21 @@ in strict Gradle verification metadata. Padded leading-zero aliases, arbitrary
 digest directories, uppercase or nonhexadecimal values, and identities longer
 than the 40-digit SHA-1 representation fail closed.
 
+The observed `files-2.1` tree is a candidate cache, not the retained allowlist.
+Repository probing can leave canonical cache files that were not consumed by
+the resolved graph and therefore are absent from the generated verification
+metadata. The packager retains only the GAV, filename, and SHA-256 closure
+declared by that metadata and omits other canonical residues from both the
+descriptor and archive. A verification record without exactly one retained
+checksum match, a noncanonical cache identity, or a duplicate retained
+coordinate still fails closed. Scan limits apply before projection, and the
+descriptor records scanned, retained, and excluded counts and byte totals with
+closed arithmetic. The deterministic dependency tar permits only its canonical
+long-path PAX record: an exact file path or the exact directory path with its
+POSIX trailing slash. The subsequent fresh network-none build proves that this
+reduced cache plus the reviewed `metadata-2.107` root is sufficient for the
+exact offline server build.
+
 Before either source extraction, a standalone validator whose path and SHA-256
 are pinned by the contract parses the authenticated archive without writing
 files and checks the bounded member policy. Only regular files, explicit
