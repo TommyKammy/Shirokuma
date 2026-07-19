@@ -153,12 +153,27 @@ the release tag, commit, and tree, plus Java 21 and Gradle 9.6.0 requirements.
 The signed upstream source archive does not contain `gradle-wrapper.jar`,
 dependency lock files, or Gradle dependency-verification metadata. It is
 therefore not a closed build input by itself. While the contract state is
-`dependency_closure_pending`, the Containerfile, write-capable publication
-workflow, release evidence, resident-image entries, and runtime manifests must
-remain absent. A later reviewed phase must retain and authenticate every Gradle
-plugin and dependency needed by the server build, prove a clean offline repeat,
-and bind that immutable input set to the Containerfile and main-only workflow
-before image publication is enabled.
+`dependency_snapshot_publication_pending`, the Polaris Containerfile, Polaris
+image-publication workflow, release evidence, resident-image entries, and
+runtime manifests must remain absent. The only write-capable Polaris path
+permitted at this checkpoint is
+`.github/workflows/polaris-gradle-dependencies.yml`. Its first job has
+`contents: read` only, generates SHA-256 dependency-verification metadata,
+packages the two reviewed Gradle cache roots into a canonical archive, and
+proves both server tasks in a fresh container with Docker networking disabled,
+Gradle offline mode, strict dependency verification, and both build caches
+disabled. A separate second job also has `contents: read` only. It verifies the
+closed candidate inventory, descriptor, verification metadata, offline proof,
+and observed Gradle/Java/builder toolchain, then exports only their SHA-256
+bindings. The third job has `packages: write` and `id-token: write`; before an
+explicit registry token is injected or a registry login occurs, it rebinds
+every downloaded candidate byte to the read-only job's outputs. It publishes a
+run-scoped OCI artifact, signs and attests the exact manifest, then requires
+anonymous exact-digest retrieval and retains the complete verification set for
+evidence-only review. The schema-v2 contract and repository verifier close the
+job/step order, every Action SHA, permissions, source and tool environment,
+lifecycle gate, offline semantics, and write-credential boundary in addition
+to byte-pinning the workflow.
 
 A 2026-07-18 workstation feasibility audit completed the two server tasks in a
 clean source extraction with Docker networking disabled and Gradle `--offline`.
@@ -169,6 +184,24 @@ The next phase must publish the reviewed seed as a signed immutable OCI artifact
 retain its per-file SHA-256 descriptor, and pin the OCI manifest digest and blob
 hash in Git. The image build must pull that exact artifact without registry
 credentials, verify it before extraction, and keep Gradle network-disabled.
+The publication workflow and packager are byte-pinned by the schema-v2 contract.
+The generated descriptor, verification metadata, manifest, signature,
+provenance, and offline-build record remain non-authoritative until a separate
+evidence-only pull request binds their exact main-run digests in Git. Failure of
+the anonymous pull keeps the dependency snapshot blocked; a registry credential
+must not be added as a fallback.
+
+GHCR creates the first package as private. Therefore the first main run may
+finish the immutable push, keyless signature, and provenance, then fail
+intentionally at the anonymous-pull gate. That failed attempt is never admitted.
+The repository owner must review the package and make it public (a public
+package must be treated as an irreversible disclosure), then rerun the workflow.
+Only a rerun whose exact digest is retrievable with an empty registry config may
+produce review-pending evidence. The evidence-only pull request must also delete
+this publisher while advancing the lifecycle to
+`dependency_snapshot_review_pending`; if the lifecycle file changes before
+deletion, the workflow's first read-only gate skips all build and publication
+steps instead of creating another dependency artifact.
 
 The selected Chainguard PostgreSQL 18.4 index and linux/arm64 manifest remain a
 candidate, not an admission. Signature, index membership, provenance, upstream

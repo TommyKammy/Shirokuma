@@ -1,14 +1,20 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "component": "polaris",
   "version": "1.6.0",
   "platform": "linux/arm64",
   "admission": "blocked",
-  "state": "dependency_closure_pending",
+  "state": "dependency_snapshot_publication_pending",
   "source_record": "bootstrap/polaris/v1.6.0/source.json",
   "source_record_sha256": "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb",
   "build_contract": "bootstrap/polaris/v1.6.0/trusted-build-contract.json",
-  "build_contract_sha256": "edb6bbc472c6498c64b6740769b15b3b05d58eb830c2301438a19e932817cf8b",
+  "build_contract_sha256": "4eaaff9dcbd07c7cd4e7400079b7463c6b4f9dc6895c6d6a2ba45eab59243835",
+  "dependency_snapshot": {
+    "state": "publication_pending",
+    "repository": "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies",
+    "reference": null,
+    "publication_evidence": null
+  },
   "upstream_image_assessment": {
     "reference": "apache/polaris@sha256:9738b2052dea20aabf0cd42521424ff963fee41b0ee888fef9f512efb256602a",
     "admission": "rejected",
@@ -31,11 +37,23 @@
       "opentofu"
     ]
   },
-  "blockers": [
-    "Gradle dependency closure is not retained or independently reproducible.",
-    "The main-only Polaris publication has not run.",
-    "Polaris release evidence has not passed an evidence-only review.",
-    "PostgreSQL has not been atomically admitted with Polaris."
+  "blocking_controls": [
+    {
+      "id": "POLARIS-DEP-SNAPSHOT-REVIEW",
+      "state": "pending"
+    },
+    {
+      "id": "POLARIS-MAIN-PUBLICATION",
+      "state": "pending"
+    },
+    {
+      "id": "POLARIS-IMAGE-EVIDENCE-REVIEW",
+      "state": "pending"
+    },
+    {
+      "id": "POLARIS-POSTGRES-ATOMIC-ADMISSION",
+      "state": "pending"
+    }
   ],
-  "next_action": "publish-and-review-gradle-snapshot-before-image-publication"
+  "next_action": "merge-run-and-review-gradle-dependency-snapshot"
 }

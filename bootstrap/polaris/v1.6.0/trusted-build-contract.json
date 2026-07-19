@@ -1,56 +1,230 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "component": "polaris",
   "version": "1.6.0",
   "platform": "linux/arm64",
-  "contract_state": "dependency_closure_pending",
-  "source_record": "bootstrap/polaris/v1.6.0/source.json",
-  "image": {
-    "repository": "ghcr.io/tommykammy/shirokuma-polaris",
-    "trusted_tag": "1.6.0-arm64",
-    "trusted_tag_role": "non_authoritative_pointer"
+  "lifecycle": {
+    "state": "dependency_snapshot_publication_pending",
+    "next_state": "dependency_snapshot_review_pending"
   },
-  "build": {
-    "enabled": false,
-    "containerfile": "bootstrap/polaris/v1.6.0/Containerfile",
-    "dependency_snapshot": {
-      "descriptor": "bootstrap/polaris/v1.6.0/gradle-dependency-inputs.json",
-      "artifact_repository": "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies",
-      "artifact_reference": null,
-      "transport": "oci-artifact",
-      "generation_workflow": ".github/workflows/polaris-gradle-dependencies.yml"
-    },
-    "network_policy_after_closure": "offline",
-    "cache_policy": "no-shared-cache",
+  "source": {
+    "record": "bootstrap/polaris/v1.6.0/source.json",
+    "record_sha256": "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb",
+    "archive_sha512": "d69b1a91e16e210a78dec327fc4725983b114fbec5d86d078a3827f35fe7dd5df3e4b12d18965e5a72eace65ad224aa007004ed61c66f9abb2efafc44ceac95b",
+    "git_commit": "dd306009d81a0e15adafe9dcd7d1c6d04d326f34",
+    "git_tree": "1ad42f42aaebfa767b66a37f522a6c8d6693d841",
+    "builder_index": "docker.io/library/gradle@sha256:ecbf526b4d3c247b4cc61e9850eae2addd5f73a7c849bf026000442808f54b56",
+    "builder_arm64_manifest": "docker.io/library/gradle@sha256:cc583fa5245267fe0e1546c9989e8575473a37336ad9894dc0684a99fea1fb03",
+    "java_major": 21,
+    "gradle_version": "9.6.0",
     "tasks": [
       ":polaris-server:assemble",
       ":polaris-server:quarkusAppPartsBuild"
     ]
   },
-  "publication": {
-    "enabled": false,
-    "workflow": ".github/workflows/polaris-arm64.yml",
-    "allowed_refs": [
-      "refs/heads/main"
+  "dependency_snapshot": {
+    "state": "publication_pending",
+    "artifact_repository": "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies",
+    "artifact_reference": null,
+    "artifact_type": "application/vnd.shirokuma.polaris.gradle-dependencies.v1",
+    "descriptor": null,
+    "verification_metadata": null,
+    "cache_roots": [
+      "caches/modules-2/files-2.1",
+      "caches/modules-2/metadata-2.107"
     ],
-    "lifecycle": "quarantine-verify-promote-evidence-only-admission"
+    "limits": {
+      "maximum_files": 10000,
+      "maximum_total_file_bytes": 2147483648,
+      "maximum_archive_bytes": 1073741824,
+      "maximum_descriptor_bytes": 67108864,
+      "maximum_verification_metadata_bytes": 67108864,
+      "maximum_directories": 100000,
+      "maximum_path_bytes": 1024,
+      "maximum_path_component_bytes": 255,
+      "maximum_path_components": 32,
+      "maximum_tar_control_bytes_per_member": 4096
+    },
+    "archive": {
+      "filename": "polaris-gradle-dependencies-1.6.0.tar.gz",
+      "format": "pax+gzip",
+      "media_type": "application/vnd.shirokuma.gradle-cache.v1.tar+gzip",
+      "mtime": 0,
+      "uid": 0,
+      "gid": 0,
+      "file_mode": "0644",
+      "directory_mode": "0755"
+    },
+    "descriptor_media_type": "application/vnd.shirokuma.gradle-dependency-descriptor.v1+json",
+    "verification_metadata_media_type": "application/vnd.gradle.dependency-verification.v1+xml",
+    "packager": {
+      "path": "scripts/package_polaris_gradle_dependencies.py",
+      "sha256": "09a3569d5a9f8c9cdfedc4eaab3282b98c7f1df46daeeb6df190e9ca8c90cfff"
+    },
+    "workflow": {
+      "path": ".github/workflows/polaris-gradle-dependencies.yml",
+      "sha256": "aa9c63b62e35dae33f1f275be3801dcaa078e42131e8e6bec6e6313ac45c5fdf",
+      "runner": "ubuntu-24.04-arm",
+      "allowed_events": [
+        "push",
+        "workflow_dispatch"
+      ],
+      "allowed_refs": [
+        "refs/heads/main"
+      ],
+      "push_paths": [
+        ".github/workflows/polaris-gradle-dependencies.yml",
+        "bootstrap/polaris/v1.6.0/source.json",
+        "bootstrap/polaris/v1.6.0/trusted-build-contract.json",
+        "bootstrap/polaris/v1.6.0/admission.json",
+        "bootstrap/polaris/v1.6.0/apache-polaris-release-signing-key.asc",
+        "scripts/package_polaris_gradle_dependencies.py",
+        "scripts/verify_polaris_trusted_image.py",
+        "tests/test_package_polaris_gradle_dependencies.py",
+        "tests/test_polaris_trusted_image_contract.py"
+      ],
+      "job_order": [
+        "resolve",
+        "verify",
+        "publish"
+      ],
+      "permissions": {
+        "resolve": {
+          "contents": "read"
+        },
+        "verify": {
+          "contents": "read"
+        },
+        "publish": {
+          "attestations": "write",
+          "contents": "read",
+          "id-token": "write",
+          "packages": "write"
+        }
+      },
+      "step_order": {
+        "resolve": [
+          "Check out the reviewed dependency policy",
+          "Check the dependency publication lifecycle",
+          "Validate the publication-pending contract",
+          "Fetch and authenticate the ASF source release",
+          "Resolve dependencies and generate strict verification metadata",
+          "Package the canonical dependency snapshot",
+          "Prove a fresh network-none offline server build",
+          "Record the dependency resolver toolchain",
+          "Retain the verified candidate for publication"
+        ],
+        "verify": [
+          "Check out the reviewed verification policy",
+          "Download the exact candidate into the read-only verifier",
+          "Reverify the publication candidate without write credentials"
+        ],
+        "publish": [
+          "Check out the reviewed publication policy",
+          "Download the exact read-only-verified candidate",
+          "Bind candidate bytes to the read-only verification",
+          "Install checksum-pinned ORAS",
+          "Install pinned Cosign",
+          "Publish the run-scoped immutable OCI artifact",
+          "Bind the raw OCI manifest to both artifact layers",
+          "Keyless-sign the exact OCI manifest",
+          "Publish SLSA provenance for the exact OCI manifest",
+          "Prove anonymous exact-digest retrieval",
+          "Verify the exact workflow provenance",
+          "Record the review-pending publication",
+          "Retain review-pending publication evidence",
+          "Remove registry credentials"
+        ]
+      },
+      "action_uses": [
+        "resolve|Check out the reviewed dependency policy|actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10",
+        "resolve|Retain the verified candidate for publication|actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+        "verify|Check out the reviewed verification policy|actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10",
+        "verify|Download the exact candidate into the read-only verifier|actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+        "publish|Check out the reviewed publication policy|actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10",
+        "publish|Download the exact read-only-verified candidate|actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+        "publish|Install pinned Cosign|sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6",
+        "publish|Publish SLSA provenance for the exact OCI manifest|actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a",
+        "publish|Retain review-pending publication evidence|actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+      ],
+      "environment": {
+        "SOURCE_ARCHIVE_URL": "https://downloads.apache.org/polaris/1.6.0/apache-polaris-1.6.0.tar.gz",
+        "SOURCE_SIGNATURE_URL": "https://downloads.apache.org/polaris/1.6.0/apache-polaris-1.6.0.tar.gz.asc",
+        "SOURCE_CHECKSUM_URL": "https://downloads.apache.org/polaris/1.6.0/apache-polaris-1.6.0.tar.gz.sha512",
+        "SOURCE_ARCHIVE_SHA512": "d69b1a91e16e210a78dec327fc4725983b114fbec5d86d078a3827f35fe7dd5df3e4b12d18965e5a72eace65ad224aa007004ed61c66f9abb2efafc44ceac95b",
+        "SOURCE_SIGNATURE_SHA256": "2338e1c2385874e9bf5cf513b4d27732b1cd59e943e1662e62fa995d915e6481",
+        "SOURCE_SIGNING_KEY_FINGERPRINT": "F2EEEB06110BEE1397EC74CBB8960FF52D9B1312",
+        "BUILDER_IMAGE": "docker.io/library/gradle@sha256:cc583fa5245267fe0e1546c9989e8575473a37336ad9894dc0684a99fea1fb03",
+        "ARTIFACT_REPOSITORY": "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies",
+        "ARTIFACT_TYPE": "application/vnd.shirokuma.polaris.gradle-dependencies.v1",
+        "DESCRIPTOR_MEDIA_TYPE": "application/vnd.shirokuma.gradle-dependency-descriptor.v1+json",
+        "ARCHIVE_MEDIA_TYPE": "application/vnd.shirokuma.gradle-cache.v1.tar+gzip",
+        "ORAS_VERSION": "1.3.3",
+        "ORAS_URL": "https://github.com/oras-project/oras/releases/download/v1.3.3/oras_1.3.3_linux_arm64.tar.gz",
+        "ORAS_ARCHIVE_SHA256": "ac7156f93a21e903f7ad606c792f3560f17e0cd0e36365634701b1e7cc4e4eca",
+        "COSIGN_VERSION": "v3.1.1"
+      },
+      "lifecycle_gate": {
+        "active_state": "dependency_snapshot_publication_pending",
+        "skip_state": "dependency_snapshot_review_pending",
+        "retire_in_evidence_review_pr": true
+      },
+      "credential_boundary": {
+        "candidate_verification_job": "verify",
+        "candidate_verification_permissions": {
+          "contents": "read"
+        },
+        "publish_byte_binding_step": "Bind candidate bytes to the read-only verification",
+        "registry_login_step": "Publish the run-scoped immutable OCI artifact"
+      },
+      "created_annotation": {
+        "key": "org.opencontainers.image.created",
+        "value_source": "git-committer-date-of-github-sha"
+      },
+      "no_shared_cache": true,
+      "run_scoped_tag": "1.6.0-${github.run_id}-${github.run_attempt}"
+    },
+    "visibility_bootstrap": {
+      "required_visibility": "public",
+      "sign_and_attest_before_anonymous_pull": true,
+      "owner_action_on_first_private_run": "set-package-public-and-rerun",
+      "failed_attempt_admitted": false
+    },
+    "tools": {
+      "oras": {
+        "version": "1.3.3",
+        "linux_arm64_archive_sha256": "ac7156f93a21e903f7ad606c792f3560f17e0cd0e36365634701b1e7cc4e4eca"
+      },
+      "cosign": {
+        "version": "3.1.1",
+        "issuer": "https://token.actions.githubusercontent.com",
+        "identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/polaris-gradle-dependencies.yml@refs/heads/main"
+      }
+    },
+    "offline_proof": {
+      "container_network": "none",
+      "gradle_offline": true,
+      "dependency_verification": "strict",
+      "build_cache": false,
+      "configuration_cache": false,
+      "tasks": [
+        ":polaris-server:assemble",
+        ":polaris-server:quarkusAppPartsBuild"
+      ]
+    }
+  },
+  "image_publication": {
+    "state": "blocked_dependency_snapshot",
+    "enabled": false,
+    "repository": "ghcr.io/tommykammy/shirokuma-polaris",
+    "trusted_tag": "1.6.0-arm64",
+    "containerfile": null,
+    "workflow": null
   },
   "runtime": {
+    "state": "blocked_atomic_admission",
     "enabled": false,
     "admission_record": "bootstrap/polaris/v1.6.0/admission.json",
     "atomic_peer": "bootstrap/postgresql/v18.4/admission.json"
-  },
-  "required_before_build_enablement": [
-    "publish a main-generated immutable Gradle dependency snapshot as an OCI artifact",
-    "retain and review a per-file SHA-256 descriptor for every Gradle plugin and dependency",
-    "prove a clean network-none offline server build using only the digest-pinned snapshot",
-    "pin the reviewed Containerfile and every build or release tool",
-    "add a main-only two-job publication workflow with no shared cache"
-  ],
-  "required_before_runtime_enablement": [
-    "publish the Polaris image from refs/heads/main",
-    "retain and cryptographically reverify signature, transparency, SLSA, CycloneDX, Trivy, and runtime-smoke evidence",
-    "admit Polaris and PostgreSQL atomically in an evidence-only pull request"
-  ],
-  "next_action": "publish-and-review-gradle-dependency-snapshot"
+  }
 }
