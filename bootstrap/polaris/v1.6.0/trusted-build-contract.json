@@ -76,6 +76,12 @@
       "caches/modules-2/files-2.1",
       "caches/modules-2/metadata-2.107"
     ],
+    "module_cache_identity": {
+      "algorithm": "sha1",
+      "encoding": "lowercase-hex-leading-zeroes-stripped",
+      "bound_to_artifact_bytes": true,
+      "authentication": "gradle-verification-metadata-sha256"
+    },
     "limits": {
       "maximum_files": 10000,
       "maximum_total_file_bytes": 2147483648,
@@ -102,7 +108,7 @@
     "verification_metadata_media_type": "application/vnd.gradle.dependency-verification.v1+xml",
     "packager": {
       "path": "scripts/package_polaris_gradle_dependencies.py",
-      "sha256": "09a3569d5a9f8c9cdfedc4eaab3282b98c7f1df46daeeb6df190e9ca8c90cfff"
+      "sha256": "a4ac646faf1dc09aa802f6905cfc68ee9e5941931410c20073540deded6c613b"
     },
     "workflow": {
       "path": ".github/workflows/polaris-gradle-dependencies.yml",

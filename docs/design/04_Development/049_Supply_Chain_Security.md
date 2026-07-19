@@ -175,6 +175,17 @@ job/step order, every Action SHA, permissions, source and tool environment,
 lifecycle gate, offline semantics, and write-credential boundary in addition
 to byte-pinning the workflow.
 
+Within `caches/modules-2/files-2.1`, the checksum directory follows Gradle
+9.6's canonical artifact-store rule: SHA-1 is lowercase hexadecimal with every
+leading zero digit removed. The packager computes that layout identity and the
+authoritative SHA-256 from the same safely opened file stream, requires the
+canonical SHA-1 identity to match the observed directory, and repeats that
+binding while verifying the archive. SHA-1 is used only to reproduce Gradle's
+cache layout; dependency trust continues to require the exact SHA-256 recorded
+in strict Gradle verification metadata. Padded leading-zero aliases, arbitrary
+digest directories, uppercase or nonhexadecimal values, and identities longer
+than the 40-digit SHA-1 representation fail closed.
+
 Before either source extraction, a standalone validator whose path and SHA-256
 are pinned by the contract parses the authenticated archive without writing
 files and checks the bounded member policy. Only regular files, explicit

@@ -36,19 +36,33 @@ packager = _load_packager()
 
 
 class PolarisGradleDependencySnapshotTests(unittest.TestCase):
-    def _fixture(self) -> tuple[Path, Path, Path, Path]:
+    MODULE_CONTENT = b"authenticated-module\n"
+    MODULE_CACHE_IDENTITY = hashlib.sha1(
+        MODULE_CONTENT,
+        usedforsecurity=False,
+    ).hexdigest().lstrip("0")
+
+    def _fixture(
+        self,
+        *,
+        module_content: bytes = MODULE_CONTENT,
+    ) -> tuple[Path, Path, Path, Path]:
         root = Path(tempfile.mkdtemp(prefix="polaris-gradle-snapshot-"))
         self.addCleanup(shutil.rmtree, root)
         cache = root / "gradle-home"
+        module_cache_identity = hashlib.sha1(
+            module_content,
+            usedforsecurity=False,
+        ).hexdigest().lstrip("0")
         module = (
             cache
             / "caches/modules-2/files-2.1"
             / "org.example/demo/1.2.3"
-            / ("a" * 40)
+            / module_cache_identity
             / "demo-1.2.3.jar"
         )
         module.parent.mkdir(parents=True)
-        module.write_bytes(b"authenticated-module\n")
+        module.write_bytes(module_content)
         metadata_cache = (
             cache
             / "caches/modules-2/metadata-2.107"
@@ -127,9 +141,55 @@ class PolarisGradleDependencySnapshotTests(unittest.TestCase):
                 extraction
                 / "caches/modules-2/files-2.1"
                 / "org.example/demo/1.2.3"
-                / ("a" * 40)
+                / self.MODULE_CACHE_IDENTITY
                 / "demo-1.2.3.jar"
             ).read_bytes(),
+        )
+
+    def test_leading_zero_sha1_cache_identity_is_accepted(self) -> None:
+        cases = (
+            (b"gradle-leading-zero-38\n", 39),
+            (b"gradle-leading-zero-43\n", 38),
+        )
+        for module_content, expected_length in cases:
+            with self.subTest(expected_length=expected_length):
+                cache_identity = hashlib.sha1(
+                    module_content,
+                    usedforsecurity=False,
+                ).hexdigest().lstrip("0")
+                self.assertEqual(expected_length, len(cache_identity))
+                cache, verification, archive, descriptor = self._fixture(
+                    module_content=module_content,
+                )
+
+                packager.create_snapshot(
+                    cache,
+                    verification,
+                    archive,
+                    descriptor,
+                )
+                value = packager.verify_snapshot(
+                    descriptor,
+                    verification,
+                    archive,
+                )
+                module_record = next(
+                    record
+                    for record in value["files"]
+                    if record["kind"] == "module-artifact"
+                )
+
+                self.assertEqual(
+                    cache_identity,
+                    Path(module_record["path"]).parts[-2],
+                )
+
+    def test_aopalliance_sha1_matches_gradle_cache_identity(self) -> None:
+        full_sha1 = "0235ba8b489512805ac13a8f9ea77a1ca5ebe3e8"
+
+        self.assertEqual(
+            "235ba8b489512805ac13a8f9ea77a1ca5ebe3e8",
+            packager._canonical_gradle_cache_sha1(full_sha1),
         )
 
     def test_archive_is_deterministic_across_mtime_and_mode_drift(self) -> None:
@@ -275,10 +335,38 @@ class PolarisGradleDependencySnapshotTests(unittest.TestCase):
             ),
         )
 
-    def test_multiple_cache_variants_for_one_artifact_are_rejected(
+    def test_module_cache_identity_must_match_artifact_sha1(
         self,
     ) -> None:
-        cache, verification, archive, descriptor = self._fixture()
+        for cache_identity in ("b" * 39, "b" * 40):
+            with self.subTest(cache_identity=cache_identity):
+                cache, verification, archive, descriptor = self._fixture()
+                original = next(
+                    (
+                        cache
+                        / "caches/modules-2/files-2.1"
+                        / "org.example/demo/1.2.3"
+                    ).rglob("demo-1.2.3.jar")
+                )
+                original.parent.rename(
+                    original.parents[1] / cache_identity
+                )
+
+                self._assert_snapshot_error(
+                    "cache identity differs from artifact SHA-1",
+                    lambda: packager.create_snapshot(
+                        cache,
+                        verification,
+                        archive,
+                        descriptor,
+                    ),
+                )
+
+    def test_padded_leading_zero_sha1_alias_is_rejected(self) -> None:
+        module_content = b"gradle-leading-zero-38\n"
+        cache, verification, archive, descriptor = self._fixture(
+            module_content=module_content,
+        )
         original = next(
             (
                 cache
@@ -286,16 +374,12 @@ class PolarisGradleDependencySnapshotTests(unittest.TestCase):
                 / "org.example/demo/1.2.3"
             ).rglob("demo-1.2.3.jar")
         )
-        duplicate = (
-            original.parents[1]
-            / ("b" * 40)
-            / original.name
+        original.parent.rename(
+            original.parents[1] / ("0" + original.parent.name)
         )
-        duplicate.parent.mkdir()
-        duplicate.write_bytes(original.read_bytes())
 
         self._assert_snapshot_error(
-            "multiple Gradle cache files",
+            "invalid Gradle module cache identity",
             lambda: packager.create_snapshot(
                 cache,
                 verification,
@@ -303,6 +387,37 @@ class PolarisGradleDependencySnapshotTests(unittest.TestCase):
                 descriptor,
             ),
         )
+
+    def test_noncanonical_module_cache_identity_is_rejected(self) -> None:
+        for cache_identity in (
+            "0" + ("a" * 39),
+            "0" * 40,
+            "a" * 41,
+            "a" * 64,
+            "A" * 40,
+            "g" * 40,
+        ):
+            with self.subTest(cache_identity=cache_identity):
+                cache, verification, archive, descriptor = self._fixture()
+                original = next(
+                    (
+                        cache
+                        / "caches/modules-2/files-2.1"
+                        / "org.example/demo/1.2.3"
+                    ).rglob("demo-1.2.3.jar")
+                )
+                destination = original.parents[1] / cache_identity
+                original.parent.rename(destination)
+
+                self._assert_snapshot_error(
+                    "invalid Gradle module cache identity",
+                    lambda: packager.create_snapshot(
+                        cache,
+                        verification,
+                        archive,
+                        descriptor,
+                    ),
+                )
 
     def test_transient_gradle_lock_is_rejected(self) -> None:
         cache, verification, archive, descriptor = self._fixture()
@@ -364,7 +479,7 @@ class PolarisGradleDependencySnapshotTests(unittest.TestCase):
             mock.patch.object(packager, "MAX_TOTAL_FILE_BYTES", 1),
             mock.patch.object(
                 packager,
-                "_sha256_cache_file",
+                "_cache_file_hashes",
                 side_effect=AssertionError("hashing must not start"),
             ),
         ):
@@ -401,6 +516,53 @@ class PolarisGradleDependencySnapshotTests(unittest.TestCase):
 
         self._assert_snapshot_error(
             "archive differs",
+            lambda: packager.verify_snapshot(
+                descriptor,
+                verification,
+                archive,
+            ),
+        )
+
+    def test_archive_rebound_to_wrong_cache_identity_is_rejected(
+        self,
+    ) -> None:
+        cache, verification, archive, descriptor = self._create()
+        value = json.loads(descriptor.read_text(encoding="utf-8"))
+        module_record = next(
+            record
+            for record in value["files"]
+            if record["kind"] == "module-artifact"
+        )
+        original = cache / module_record["path"]
+        wrong_identity = "b" * 40
+        original.parent.rename(original.parents[1] / wrong_identity)
+        module_record["path"] = module_record["path"].replace(
+            self.MODULE_CACHE_IDENTITY,
+            wrong_identity,
+        )
+        value["files"].sort(key=lambda record: record["path"])
+        value["directory_count"] = len(
+            packager._directory_names(value["files"])
+        )
+
+        packager._write_archive(
+            cache,
+            verification,
+            value["files"],
+            archive,
+        )
+        archive_bytes = archive.read_bytes()
+        value["archive"]["sha256"] = hashlib.sha256(
+            archive_bytes
+        ).hexdigest()
+        value["archive"]["size"] = len(archive_bytes)
+        descriptor.write_text(
+            json.dumps(value, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        self._assert_snapshot_error(
+            "archive Gradle cache identity differs from artifact SHA-1",
             lambda: packager.verify_snapshot(
                 descriptor,
                 verification,
@@ -549,7 +711,7 @@ class PolarisGradleDependencySnapshotTests(unittest.TestCase):
         )
         duplicate = dict(module)
         duplicate["path"] = duplicate["path"].replace(
-            "a" * 40,
+            self.MODULE_CACHE_IDENTITY,
             "b" * 40,
         )
         value["files"].append(duplicate)
