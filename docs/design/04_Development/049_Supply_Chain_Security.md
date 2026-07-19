@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-07-16
-version: "0.8"
+updated: 2026-07-19
+version: "0.9"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -230,6 +230,9 @@ retain its per-file SHA-256 descriptor, and pin the OCI manifest digest and blob
 hash in Git. The image build must pull that exact artifact without registry
 credentials, verify it before extraction, and keep Gradle network-disabled.
 The publication workflow and packager are byte-pinned by the schema-v2 contract.
+ORAS layer arguments must be canonical relative paths resolved from the bounded
+candidate root. Absolute workspace paths and `--disable-path-validation` are
+forbidden; violations must fail before registry upload.
 The generated descriptor, verification metadata, manifest, signature,
 provenance, and offline-build record remain non-authoritative until a separate
 evidence-only pull request binds their exact main-run digests in Git. Failure of

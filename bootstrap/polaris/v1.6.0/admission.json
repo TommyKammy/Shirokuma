@@ -8,7 +8,7 @@
   "source_record": "bootstrap/polaris/v1.6.0/source.json",
   "source_record_sha256": "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb",
   "build_contract": "bootstrap/polaris/v1.6.0/trusted-build-contract.json",
-  "build_contract_sha256": "f98595b3f1148298e3bf1e3c39b3d3fc3cd1a21fdde237e00fb17f4cceae4630",
+  "build_contract_sha256": "255dab3f052572baf9d32ec4cbb7b0512b11b862384eb44104dbd21f6ffa53e6",
   "dependency_snapshot": {
     "state": "publication_pending",
     "repository": "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies",
