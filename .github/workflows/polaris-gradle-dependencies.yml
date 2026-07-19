@@ -11,6 +11,7 @@ on:
       - bootstrap/polaris/v1.6.0/admission.json
       - bootstrap/polaris/v1.6.0/apache-polaris-release-signing-key.asc
       - scripts/package_polaris_gradle_dependencies.py
+      - scripts/validate_polaris_source_archive.py
       - scripts/verify_polaris_trusted_image.py
       - tests/test_package_polaris_gradle_dependencies.py
       - tests/test_polaris_trusted_image_contract.py
@@ -124,32 +125,8 @@ jobs:
           gpg --batch --verify \
             "${source_dir}/apache-polaris-1.6.0.tar.gz.asc" \
             "${source_dir}/apache-polaris-1.6.0.tar.gz"
-          python3 - "${source_dir}/apache-polaris-1.6.0.tar.gz" <<'PY'
-          import sys
-          import tarfile
-          from pathlib import PurePosixPath
-
-          archive = sys.argv[1]
-          expected_root = "apache-polaris-1.6.0"
-          with tarfile.open(archive, mode="r:gz") as bundle:
-              members = bundle.getmembers()
-          if not members:
-              raise SystemExit("Polaris source archive is empty")
-          for member in members:
-              path = PurePosixPath(member.name)
-              if (
-                  path.is_absolute()
-                  or not path.parts
-                  or path.parts[0] != expected_root
-                  or any(part in {"", ".", ".."} for part in path.parts)
-                  or member.issym()
-                  or member.islnk()
-                  or not (member.isfile() or member.isdir())
-              ):
-                  raise SystemExit(
-                      f"unsafe Polaris source archive member: {member.name}"
-                  )
-          PY
+          python3 scripts/validate_polaris_source_archive.py \
+            --archive "${source_dir}/apache-polaris-1.6.0.tar.gz"
 
       - name: Resolve dependencies and generate strict verification metadata
         if: steps.lifecycle.outputs.active == 'true'
@@ -159,9 +136,12 @@ jobs:
           source_archive="${RUNNER_TEMP}/polaris-source/apache-polaris-1.6.0.tar.gz"
           online_source="${RUNNER_TEMP}/polaris-online"
           gradle_home="${RUNNER_TEMP}/gradle-home"
-          mkdir -p "${online_source}" "${gradle_home}"
+          test ! -e "${online_source}"
+          test ! -L "${online_source}"
+          install -d -m 0700 "${online_source}" "${gradle_home}"
           tar --extract --gzip --file "${source_archive}" \
-            --directory "${online_source}" --strip-components 1
+            --directory "${online_source}" --strip-components 1 \
+            --no-same-owner --no-same-permissions
           docker run --rm \
             --platform linux/arm64 \
             --user "$(id -u):$(id -g)" \
@@ -239,7 +219,9 @@ jobs:
           candidate_dir="${RUNNER_TEMP}/polaris-gradle-candidate"
           offline_home="${RUNNER_TEMP}/gradle-home-offline"
           offline_source="${RUNNER_TEMP}/polaris-offline"
-          mkdir -p "${offline_source}"
+          test ! -e "${offline_source}"
+          test ! -L "${offline_source}"
+          install -d -m 0700 "${offline_source}"
           python3 scripts/package_polaris_gradle_dependencies.py verify \
             --descriptor \
               "${candidate_dir}/gradle-dependency-inputs.json" \
@@ -253,7 +235,8 @@ jobs:
           tar --extract --gzip \
             --file \
               "${RUNNER_TEMP}/polaris-source/apache-polaris-1.6.0.tar.gz" \
-            --directory "${offline_source}" --strip-components 1
+            --directory "${offline_source}" --strip-components 1 \
+            --no-same-owner --no-same-permissions
           install -m 0644 \
             "${offline_home}/verification-metadata.xml" \
             "${offline_source}/gradle/verification-metadata.xml"

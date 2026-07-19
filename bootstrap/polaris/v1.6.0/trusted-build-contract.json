@@ -11,6 +11,49 @@
     "record": "bootstrap/polaris/v1.6.0/source.json",
     "record_sha256": "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb",
     "archive_sha512": "d69b1a91e16e210a78dec327fc4725983b114fbec5d86d078a3827f35fe7dd5df3e4b12d18965e5a72eace65ad224aa007004ed61c66f9abb2efafc44ceac95b",
+    "archive_member_policy": {
+      "root": "apache-polaris-1.6.0",
+      "strip_components": 1,
+      "allowed_member_types": [
+        "regular-file",
+        "directory",
+        "relative-symlink"
+      ],
+      "path_charset": "printable-ascii-posix",
+      "tar_size_encoding": "canonical-octal",
+      "hidden_name_records_permitted": false,
+      "solaris_pax_records_permitted": false,
+      "explicit_directory_parents_required": true,
+      "symlink_target_policy": "existing-in-root-member-before-and-after-strip",
+      "symlink_chains_permitted": true,
+      "symlink_cycles_permitted": false,
+      "members_below_symlink_paths_permitted": false,
+      "duplicate_paths_permitted": false,
+      "hardlinks_permitted": false,
+      "special_files_permitted": false,
+      "maximum_archive_bytes": 67108864,
+      "maximum_decompressed_bytes": 536870912,
+      "maximum_raw_headers": 20000,
+      "maximum_tar_control_bytes": 4096,
+      "maximum_members": 10000,
+      "maximum_member_bytes": 67108864,
+      "maximum_total_regular_file_bytes": 268435456,
+      "maximum_path_bytes": 1024,
+      "maximum_path_component_bytes": 255,
+      "maximum_path_components": 64,
+      "maximum_link_bytes": 1024,
+      "maximum_pax_bytes_per_member": 4096,
+      "allowed_pax_headers": [
+        "comment",
+        "linkpath"
+      ],
+      "pax_record_encoding": "strict-length-prefixed-lines",
+      "pax_comment_policy": "if-present-equals-pinned-git-commit"
+    },
+    "archive_validator": {
+      "path": "scripts/validate_polaris_source_archive.py",
+      "sha256": "00ac3ec84bd9ff48914e0429f517eabbfc9380410740c2e626608bc036f8ebb9"
+    },
     "git_commit": "dd306009d81a0e15adafe9dcd7d1c6d04d326f34",
     "git_tree": "1ad42f42aaebfa767b66a37f522a6c8d6693d841",
     "builder_index": "docker.io/library/gradle@sha256:ecbf526b4d3c247b4cc61e9850eae2addd5f73a7c849bf026000442808f54b56",
@@ -63,7 +106,7 @@
     },
     "workflow": {
       "path": ".github/workflows/polaris-gradle-dependencies.yml",
-      "sha256": "aa9c63b62e35dae33f1f275be3801dcaa078e42131e8e6bec6e6313ac45c5fdf",
+      "sha256": "255459419f1ead69d5fc3e99813d5d59644e3031a8f70d209c90c7165583571e",
       "runner": "ubuntu-24.04-arm",
       "allowed_events": [
         "push",
@@ -79,6 +122,7 @@
         "bootstrap/polaris/v1.6.0/admission.json",
         "bootstrap/polaris/v1.6.0/apache-polaris-release-signing-key.asc",
         "scripts/package_polaris_gradle_dependencies.py",
+        "scripts/validate_polaris_source_archive.py",
         "scripts/verify_polaris_trusted_image.py",
         "tests/test_package_polaris_gradle_dependencies.py",
         "tests/test_polaris_trusted_image_contract.py"

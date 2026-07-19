@@ -175,6 +175,25 @@ job/step order, every Action SHA, permissions, source and tool environment,
 lifecycle gate, offline semantics, and write-credential boundary in addition
 to byte-pinning the workflow.
 
+Before either source extraction, a standalone validator whose path and SHA-256
+are pinned by the contract parses the authenticated archive without writing
+files and checks the bounded member policy. Only regular files, explicit
+directories, and relative symbolic links are admitted; paths must be printable
+canonical POSIX paths under the single release root. Compressed and decompressed
+size, raw tar headers and control records, logical member count, individual and
+total regular-file size, path and component length, path depth, link length, and
+PAX metadata are capped before extraction; each length-prefixed PAX payload must
+also be consumed exactly with no trailing data. Duplicate paths, hidden GNU
+name records, Solaris PAX records, implicit or non-directory parents, hard
+links, special files, unknown PAX headers, and members below a symbolic-link
+path fail closed. Every
+symbolic-link target must name an existing archive member, remain under the
+release root both before and after `--strip-components 1`, and resolve without a
+cycle. Each extraction is separately bound to a fresh directory with owner and
+permission restoration disabled. This admits the eight authenticated in-root
+links in the ASF Polaris 1.6.0 release without turning source extraction into a
+general symbolic-link bypass.
+
 A 2026-07-18 workstation feasibility audit completed the two server tasks in a
 clean source extraction with Docker networking disabled and Gradle `--offline`.
 The reduced dependency seed still contained 5,014 files and 825,947,131 raw

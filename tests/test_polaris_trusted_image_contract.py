@@ -2,36 +2,134 @@ from __future__ import annotations
 
 import base64
 import importlib.util
+import io
 import json
 import shutil
 import subprocess
+import sys
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
 from types import ModuleType
 from typing import Callable
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
 VERIFIER_PATH = ROOT / "scripts/verify_polaris_trusted_image.py"
+SOURCE_ARCHIVE_VALIDATOR_PATH = (
+    ROOT / "scripts/validate_polaris_source_archive.py"
+)
 
 
-def _load_verifier() -> ModuleType:
+def _load_module(name: str, path: Path) -> ModuleType:
     spec = importlib.util.spec_from_file_location(
-        "verify_polaris_trusted_image",
-        VERIFIER_PATH,
+        name,
+        path,
     )
     if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot load {VERIFIER_PATH}")
+        raise RuntimeError(f"cannot load {path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-verifier = _load_verifier()
+verifier = _load_module("verify_polaris_trusted_image", VERIFIER_PATH)
+source_archive_validator = _load_module(
+    "validate_polaris_source_archive",
+    SOURCE_ARCHIVE_VALIDATOR_PATH,
+)
 
 
 class PolarisTrustedImageContractTests(unittest.TestCase):
+    def _source_archive(
+        self,
+        entries: list[tuple[str, str, bytes | str | None]],
+        *,
+        archive_format: int = tarfile.PAX_FORMAT,
+    ) -> Path:
+        directory = Path(tempfile.mkdtemp(prefix="polaris-source-archive-"))
+        self.addCleanup(shutil.rmtree, directory)
+        archive = directory / "apache-polaris-1.6.0.tar.gz"
+        with tarfile.open(
+            archive,
+            mode="w:gz",
+            format=archive_format,
+        ) as bundle:
+            for name, kind, payload in entries:
+                member = tarfile.TarInfo(name)
+                member.mtime = 0
+                member.uid = 0
+                member.gid = 0
+                if kind == "file":
+                    data = payload if isinstance(payload, bytes) else b""
+                    member.type = tarfile.REGTYPE
+                    member.mode = 0o644
+                    member.size = len(data)
+                    bundle.addfile(member, io.BytesIO(data))
+                elif kind == "directory":
+                    member.type = tarfile.DIRTYPE
+                    member.mode = 0o755
+                    bundle.addfile(member)
+                elif kind == "symlink":
+                    member.type = tarfile.SYMTYPE
+                    member.mode = 0o777
+                    member.linkname = str(payload)
+                    bundle.addfile(member)
+                elif kind == "hardlink":
+                    member.type = tarfile.LNKTYPE
+                    member.linkname = str(payload)
+                    bundle.addfile(member)
+                elif kind == "fifo":
+                    member.type = tarfile.FIFOTYPE
+                    bundle.addfile(member)
+                elif kind == "pax-file":
+                    member.type = tarfile.REGTYPE
+                    member.mode = 0o644
+                    member.pax_headers = {"unexpected": str(payload)}
+                    bundle.addfile(member)
+                elif kind == "pax-comment-file":
+                    data = payload if isinstance(payload, bytes) else b""
+                    member.type = tarfile.REGTYPE
+                    member.mode = 0o644
+                    member.size = len(data)
+                    member.pax_headers = {
+                        "comment": source_archive_validator.POLARIS_COMMIT
+                    }
+                    bundle.addfile(member, io.BytesIO(data))
+                elif kind == "solaris-pax":
+                    data = payload if isinstance(payload, bytes) else b""
+                    member.type = tarfile.SOLARIS_XHDTYPE
+                    member.size = len(data)
+                    bundle.addfile(member, io.BytesIO(data))
+                elif kind == "raw-pax":
+                    data = payload if isinstance(payload, bytes) else b""
+                    member.type = tarfile.XHDTYPE
+                    member.size = len(data)
+                    bundle.addfile(member, io.BytesIO(data))
+                else:
+                    raise ValueError(f"unknown fixture member kind: {kind}")
+        return archive
+
+    @staticmethod
+    def _valid_source_archive_entries(
+    ) -> list[tuple[str, str, bytes | str | None]]:
+        root = source_archive_validator.POLARIS_SOURCE_ARCHIVE_ROOT
+        return [
+            (root, "directory", None),
+            (f"{root}/target.txt", "file", b"authenticated\n"),
+            (f"{root}/nested", "directory", None),
+            (f"{root}/docs", "symlink", "guides/"),
+            (f"{root}/guides", "directory", None),
+            (f"{root}/nested/target-link", "symlink", "../target.txt"),
+            (f"{root}/nested/chain", "symlink", "target-link"),
+            (f"{root}/a", "directory", None),
+            (f"{root}/a/b", "directory", None),
+            (f"{root}/a/b/c", "directory", None),
+            (f"{root}/a/b/c/deep-link", "symlink", "../../../target.txt"),
+        ]
+
     def _fixture(self) -> Path:
         directory = Path(tempfile.mkdtemp(prefix="polaris-contract-"))
         self.addCleanup(shutil.rmtree, directory)
@@ -52,6 +150,478 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         ledger.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / verifier.RESIDENT_LEDGER, ledger)
         return directory
+
+    def test_authenticated_in_root_source_symlinks_are_accepted(self) -> None:
+        archive = self._source_archive(self._valid_source_archive_entries())
+
+        self.assertEqual(
+            (11, 4),
+            source_archive_validator.validate_source_archive(archive),
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SOURCE_ARCHIVE_VALIDATOR_PATH),
+                "--archive",
+                str(archive),
+            ],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("11 authenticated members", result.stdout)
+        self.assertIn("4 in-root relative symlinks", result.stdout)
+
+    def test_source_symlink_escape_and_missing_target_fail_closed(
+        self,
+    ) -> None:
+        root = source_archive_validator.POLARIS_SOURCE_ARCHIVE_ROOT
+        cases = {
+            "absolute": "/etc/passwd",
+            "escape": "../../outside",
+            "missing": "missing",
+            "strip-components-escape": "../apache-polaris-1.6.0/target.txt",
+        }
+        for case, target in cases.items():
+            with self.subTest(case=case):
+                entries = [
+                    (root, "directory", None),
+                    (f"{root}/target.txt", "file", b"authenticated\n"),
+                    (f"{root}/link", "symlink", target),
+                ]
+                archive = self._source_archive(entries)
+                with self.assertRaises(
+                    source_archive_validator.ContractError
+                ) as raised:
+                    source_archive_validator.validate_source_archive(archive)
+                self.assertEqual("SOURCE_ARCHIVE", raised.exception.code)
+                self.assertRegex(
+                    raised.exception.detail,
+                    "escape|missing|non-canonical",
+                )
+
+    def test_source_symlink_cycles_fail_closed(self) -> None:
+        root = source_archive_validator.POLARIS_SOURCE_ARCHIVE_ROOT
+        archive = self._source_archive(
+            [
+                (root, "directory", None),
+                (f"{root}/a", "symlink", "b"),
+                (f"{root}/b", "symlink", "a"),
+            ]
+        )
+
+        with self.assertRaises(
+            source_archive_validator.ContractError
+        ) as raised:
+            source_archive_validator.validate_source_archive(archive)
+        self.assertEqual("SOURCE_ARCHIVE", raised.exception.code)
+        self.assertIn("cycle", raised.exception.detail)
+
+    def test_source_member_below_symlink_fails_closed(self) -> None:
+        root = source_archive_validator.POLARIS_SOURCE_ARCHIVE_ROOT
+        archive = self._source_archive(
+            [
+                (root, "directory", None),
+                (f"{root}/target", "directory", None),
+                (f"{root}/alias", "symlink", "target"),
+                (f"{root}/alias/payload", "file", b"write-through"),
+            ]
+        )
+
+        with self.assertRaises(
+            source_archive_validator.ContractError
+        ) as raised:
+            source_archive_validator.validate_source_archive(archive)
+        self.assertEqual("SOURCE_ARCHIVE", raised.exception.code)
+        self.assertIn("missing or non-directory parent", raised.exception.detail)
+
+    def test_missing_and_regular_source_parents_fail_closed(self) -> None:
+        root = source_archive_validator.POLARIS_SOURCE_ARCHIVE_ROOT
+        cases = {
+            "missing": [
+                (root, "directory", None),
+                (f"{root}/parent/child", "file", b"implicit-parent"),
+            ],
+            "regular": [
+                (root, "directory", None),
+                (f"{root}/parent", "file", b"not-a-directory"),
+                (f"{root}/parent/child", "file", b"write-through"),
+            ],
+        }
+        for case, entries in cases.items():
+            with self.subTest(case=case):
+                archive = self._source_archive(entries)
+                with self.assertRaises(
+                    source_archive_validator.ContractError
+                ) as raised:
+                    source_archive_validator.validate_source_archive(archive)
+                self.assertEqual("SOURCE_ARCHIVE", raised.exception.code)
+                self.assertIn(
+                    "missing or non-directory parent",
+                    raised.exception.detail,
+                )
+
+    def test_source_directory_symlink_must_target_directory(self) -> None:
+        root = source_archive_validator.POLARIS_SOURCE_ARCHIVE_ROOT
+        archive = self._source_archive(
+            [
+                (root, "directory", None),
+                (f"{root}/target", "file", b"regular-file"),
+                (f"{root}/link", "symlink", "target/"),
+            ]
+        )
+
+        with self.assertRaises(
+            source_archive_validator.ContractError
+        ) as raised:
+            source_archive_validator.validate_source_archive(archive)
+        self.assertEqual("SOURCE_ARCHIVE", raised.exception.code)
+        self.assertIn("targets a non-directory", raised.exception.detail)
+
+    def test_duplicate_and_noncanonical_source_members_fail_closed(
+        self,
+    ) -> None:
+        root = source_archive_validator.POLARIS_SOURCE_ARCHIVE_ROOT
+        cases = {
+            "duplicate": [
+                (root, "directory", None),
+                (f"{root}/same", "file", b"first"),
+                (f"{root}/same", "file", b"second"),
+            ],
+            "traversal": [
+                (root, "directory", None),
+                (f"{root}/../outside", "file", b"escape"),
+            ],
+            "backslash": [
+                (root, "directory", None),
+                (f"{root}\\outside", "file", b"ambiguous"),
+            ],
+        }
+        for case, entries in cases.items():
+            with self.subTest(case=case):
+                archive = self._source_archive(entries)
+                with self.assertRaises(
+                    source_archive_validator.ContractError
+                ) as raised:
+                    source_archive_validator.validate_source_archive(archive)
+                self.assertEqual("SOURCE_ARCHIVE", raised.exception.code)
+                self.assertRegex(
+                    raised.exception.detail,
+                    "duplicate|non-canonical",
+                )
+
+    def test_nonportable_source_paths_and_link_targets_fail_closed(
+        self,
+    ) -> None:
+        root = source_archive_validator.POLARIS_SOURCE_ARCHIVE_ROOT
+        cases = {
+            "unicode-path": [
+                (root, "directory", None),
+                (f"{root}/café", "file", b"ambiguous"),
+            ],
+            "normalized-link": [
+                (root, "directory", None),
+                (f"{root}/target", "file", b"target"),
+                (f"{root}/link", "symlink", "sub/../target"),
+            ],
+        }
+        for case, entries in cases.items():
+            with self.subTest(case=case):
+                archive = self._source_archive(entries)
+                with self.assertRaises(
+                    source_archive_validator.ContractError
+                ) as raised:
+                    source_archive_validator.validate_source_archive(archive)
+                self.assertEqual("SOURCE_ARCHIVE", raised.exception.code)
+                self.assertRegex(
+                    raised.exception.detail,
+                    "non-portable|non-canonical",
+                )
+
+    def test_hardlinks_and_special_source_members_fail_closed(self) -> None:
+        root = source_archive_validator.POLARIS_SOURCE_ARCHIVE_ROOT
+        for kind, payload in (
+            ("hardlink", f"{root}/target"),
+            ("fifo", None),
+        ):
+            with self.subTest(kind=kind):
+                archive = self._source_archive(
+                    [
+                        (root, "directory", None),
+                        (f"{root}/target", "file", b"target"),
+                        (f"{root}/forbidden", kind, payload),
+                    ]
+                )
+                with self.assertRaises(
+                    source_archive_validator.ContractError
+                ) as raised:
+                    source_archive_validator.validate_source_archive(archive)
+                self.assertEqual("SOURCE_ARCHIVE", raised.exception.code)
+                self.assertIn(
+                    "forbidden Polaris source archive member type",
+                    raised.exception.detail,
+                )
+
+    def test_unknown_source_pax_headers_fail_closed(self) -> None:
+        root = source_archive_validator.POLARIS_SOURCE_ARCHIVE_ROOT
+        archive = self._source_archive(
+            [
+                (root, "directory", None),
+                (f"{root}/payload", "pax-file", "not-reviewed"),
+            ]
+        )
+
+        with self.assertRaises(
+            source_archive_validator.ContractError
+        ) as raised:
+            source_archive_validator.validate_source_archive(archive)
+        self.assertEqual("SOURCE_ARCHIVE", raised.exception.code)
+        self.assertIn("forbidden Polaris source PAX header", raised.exception.detail)
+
+    def test_source_archive_numeric_limits_fail_closed(self) -> None:
+        root = source_archive_validator.POLARIS_SOURCE_ARCHIVE_ROOT
+        payload = b"authenticated\n"
+        archive = self._source_archive(
+            [
+                (root, "directory", None),
+                (f"{root}/target", "file", payload),
+            ]
+        )
+        cases = (
+            (
+                "compressed-size",
+                "POLARIS_SOURCE_ARCHIVE_MAXIMUM_BYTES",
+                archive.stat().st_size - 1,
+                "compressed-size limit",
+            ),
+            (
+                "decompressed-size",
+                "POLARIS_SOURCE_ARCHIVE_MAXIMUM_DECOMPRESSED_BYTES",
+                1_024,
+                "decompressed-size limit",
+            ),
+            (
+                "raw-headers",
+                "POLARIS_SOURCE_ARCHIVE_MAXIMUM_RAW_HEADERS",
+                1,
+                "raw-header limit",
+            ),
+            (
+                "members",
+                "POLARIS_SOURCE_ARCHIVE_MAXIMUM_MEMBERS",
+                1,
+                "member-count limit",
+            ),
+            (
+                "member-bytes",
+                "POLARIS_SOURCE_ARCHIVE_MAXIMUM_MEMBER_BYTES",
+                len(payload) - 1,
+                "raw member payload",
+            ),
+            (
+                "total-file-bytes",
+                "POLARIS_SOURCE_ARCHIVE_MAXIMUM_TOTAL_FILE_BYTES",
+                len(payload) - 1,
+                "total file-size limit",
+            ),
+        )
+        for case, constant, limit, detail in cases:
+            with self.subTest(case=case):
+                with mock.patch.object(
+                    source_archive_validator,
+                    constant,
+                    limit,
+                ):
+                    with self.assertRaises(
+                        source_archive_validator.ContractError
+                    ) as raised:
+                        source_archive_validator.validate_source_archive(
+                            archive
+                        )
+                self.assertEqual("SOURCE_ARCHIVE", raised.exception.code)
+                self.assertIn(detail, raised.exception.detail)
+
+    def test_source_archive_path_and_link_limits_fail_closed(self) -> None:
+        root = source_archive_validator.POLARIS_SOURCE_ARCHIVE_ROOT
+        member_path = f"{root}/target"
+        path_cases = (
+            (
+                "path-bytes",
+                "POLARIS_SOURCE_ARCHIVE_MAXIMUM_PATH_BYTES",
+                len(root),
+                "non-portable",
+            ),
+            (
+                "path-components",
+                "POLARIS_SOURCE_ARCHIVE_MAXIMUM_PATH_COMPONENTS",
+                1,
+                "non-canonical",
+            ),
+        )
+        for case, constant, limit, detail in path_cases:
+            with self.subTest(case=case):
+                with mock.patch.object(
+                    source_archive_validator,
+                    constant,
+                    limit,
+                ):
+                    with self.assertRaises(
+                        source_archive_validator.ContractError
+                    ) as raised:
+                        source_archive_validator._source_archive_member_path(
+                            member_path
+                        )
+                self.assertIn(detail, raised.exception.detail)
+
+        with self.assertRaises(
+            source_archive_validator.ContractError
+        ) as raised:
+            source_archive_validator._source_archive_member_path(
+                f"{root}/{'a' * 256}"
+            )
+        self.assertIn("non-canonical", raised.exception.detail)
+
+        link_archive = self._source_archive(
+            [
+                (root, "directory", None),
+                (f"{root}/target", "file", b"target"),
+                (f"{root}/link", "symlink", "target"),
+            ]
+        )
+        with mock.patch.object(
+            source_archive_validator,
+            "POLARIS_SOURCE_ARCHIVE_MAXIMUM_LINK_BYTES",
+            3,
+        ):
+            with self.assertRaises(
+                source_archive_validator.ContractError
+            ) as raised:
+                source_archive_validator.validate_source_archive(link_archive)
+        self.assertIn("non-portable", raised.exception.detail)
+
+        long_link_archive = self._source_archive(
+            [
+                (root, "directory", None),
+                (f"{root}/link", "symlink", "a" * 256),
+            ]
+        )
+        with self.assertRaises(
+            source_archive_validator.ContractError
+        ) as raised:
+            source_archive_validator.validate_source_archive(long_link_archive)
+        self.assertIn("non-canonical", raised.exception.detail)
+
+    def test_source_archive_control_and_pax_limits_fail_closed(self) -> None:
+        root = source_archive_validator.POLARIS_SOURCE_ARCHIVE_ROOT
+        pax_archive = self._source_archive(
+            [
+                (root, "directory", None),
+                (f"{root}/payload", "pax-comment-file", b"payload"),
+            ]
+        )
+        with mock.patch.object(
+            source_archive_validator,
+            "POLARIS_SOURCE_ARCHIVE_MAXIMUM_TAR_CONTROL_BYTES",
+            8,
+        ):
+            with self.assertRaises(
+                source_archive_validator.ContractError
+            ) as raised:
+                source_archive_validator.validate_source_archive(pax_archive)
+        self.assertIn("raw member payload", raised.exception.detail)
+
+        with mock.patch.object(
+            source_archive_validator,
+            "POLARIS_SOURCE_ARCHIVE_MAXIMUM_PAX_BYTES",
+            8,
+        ):
+            with self.assertRaises(
+                source_archive_validator.ContractError
+            ) as raised:
+                source_archive_validator.validate_source_archive(pax_archive)
+        self.assertIn("PAX header", raised.exception.detail)
+
+        oversized_control = self._source_archive(
+            [
+                (root, "directory", None),
+                (f"{root}/payload", "pax-file", "x" * 5_000),
+            ]
+        )
+        with self.assertRaises(
+            source_archive_validator.ContractError
+        ) as raised:
+            source_archive_validator.validate_source_archive(oversized_control)
+        self.assertIn("raw member payload", raised.exception.detail)
+
+    def test_hidden_gnu_long_name_record_fails_closed(self) -> None:
+        root = source_archive_validator.POLARIS_SOURCE_ARCHIVE_ROOT
+        archive = self._source_archive(
+            [
+                (root, "directory", None),
+                (f"{root}/{'a' * 256}", "file", b"unextractable"),
+            ],
+            archive_format=tarfile.GNU_FORMAT,
+        )
+
+        with self.assertRaises(
+            source_archive_validator.ContractError
+        ) as raised:
+            source_archive_validator.validate_source_archive(archive)
+        self.assertIn("hidden GNU name record", raised.exception.detail)
+
+    def test_solaris_pax_control_record_fails_closed(self) -> None:
+        root = source_archive_validator.POLARIS_SOURCE_ARCHIVE_ROOT
+        archive = self._source_archive(
+            [
+                (root, "directory", None),
+                (
+                    f"{root}/PaxHeaders/payload",
+                    "solaris-pax",
+                    b"x" * 5_000,
+                ),
+                (f"{root}/payload", "file", b"payload"),
+            ]
+        )
+
+        with self.assertRaises(
+            source_archive_validator.ContractError
+        ) as raised:
+            source_archive_validator.validate_source_archive(archive)
+        self.assertIn("unsupported Solaris PAX record", raised.exception.detail)
+
+    def test_lowercase_pax_trailing_data_fails_closed(self) -> None:
+        root = source_archive_validator.POLARIS_SOURCE_ARCHIVE_ROOT
+        entry = (
+            b"comment="
+            + source_archive_validator.POLARIS_COMMIT.encode("ascii")
+            + b"\n"
+        )
+        record_length = len(entry) + 3
+        while True:
+            record = str(record_length).encode("ascii") + b" " + entry
+            if len(record) == record_length:
+                break
+            record_length = len(record)
+        archive = self._source_archive(
+            [
+                (root, "directory", None),
+                (
+                    f"{root}/PaxHeaders/payload",
+                    "raw-pax",
+                    record + b"\0",
+                ),
+                (f"{root}/payload", "file", b"payload"),
+            ]
+        )
+
+        with self.assertRaises(
+            source_archive_validator.ContractError
+        ) as raised:
+            source_archive_validator.validate_source_archive(archive)
+        self.assertIn("malformed PAX control record", raised.exception.detail)
 
     def _rewrite_json(
         self,
@@ -322,6 +892,74 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             raised.exception.detail,
         )
 
+    def test_dependency_workflow_cannot_skip_source_archive_validation(
+        self,
+    ) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
+        workflow.write_text(
+            workflow.read_text(encoding="utf-8").replace(
+                "          python3 scripts/validate_polaris_source_archive.py \\\n",
+                "          python3 scripts/verify_polaris_trusted_image.py \\\n",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        contract = json.loads(
+            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
+        )
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_dependency_workflow_semantics(root, contract)
+        self.assertIn(
+            "source authentication step lost",
+            raised.exception.detail,
+        )
+
+    def test_each_source_extraction_retains_scoped_hardening(self) -> None:
+        cases = (
+            (
+                "online",
+                (
+                    '            --directory "${online_source}" '
+                    "--strip-components 1 \\\n"
+                    "            --no-same-owner --no-same-permissions"
+                ),
+                '            --directory "${online_source}"',
+                "online source extraction",
+            ),
+            (
+                "offline",
+                (
+                    '            --directory "${offline_source}" '
+                    "--strip-components 1 \\\n"
+                    "            --no-same-owner --no-same-permissions"
+                ),
+                '            --directory "${offline_source}"',
+                "offline source extraction",
+            ),
+        )
+        for case, original, replacement, detail in cases:
+            with self.subTest(case=case):
+                root = self._fixture()
+                workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
+                text = workflow.read_text(encoding="utf-8")
+                self.assertIn(original, text)
+                workflow.write_text(
+                    text.replace(original, replacement, 1),
+                    encoding="utf-8",
+                )
+                contract = json.loads(
+                    (root / verifier.POLARIS_CONTRACT).read_text(
+                        encoding="utf-8"
+                    )
+                )
+                with self.assertRaises(verifier.ContractError) as raised:
+                    verifier._audit_dependency_workflow_semantics(
+                        root,
+                        contract,
+                    )
+                self.assertIn(detail, raised.exception.detail)
+
     def test_read_only_verifier_cannot_receive_implicit_write_token(
         self,
     ) -> None:
@@ -361,6 +999,19 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             root,
             "CONTRACT_STATE",
             "dependency packager bytes",
+        )
+
+    def test_source_archive_validator_byte_drift_fails_closed(self) -> None:
+        root = self._fixture()
+        validator = root / verifier.POLARIS_SOURCE_ARCHIVE_VALIDATOR
+        validator.write_text(
+            validator.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        self._assert_code(
+            root,
+            "CONTRACT_STATE",
+            "source archive validator bytes",
         )
 
     def test_snapshot_lifecycle_cannot_skip_evidence_review(self) -> None:
@@ -429,7 +1080,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         self._assert_code(
             root,
             "CONTRACT_STATE",
-            "dependency packager bytes",
+            "source archive validator bytes",
         )
 
     def test_scripts_import_shadow_additions_are_forbidden(self) -> None:
