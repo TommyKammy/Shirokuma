@@ -74,6 +74,8 @@ regexTarget = "secret"
 regexes = ['''^F2EEEB06110BEE1397EC74CBB8960FF52D9B1312$''']
 targetRules = ["generic-api-key"]
 paths = [
+  '''^\.github/workflows/polaris-gradle-dependencies\.yml$''',
+  '''^bootstrap/polaris/v1\.6\.0/trusted-build-contract\.json$''',
   '''^scripts/verify_polaris_trusted_image\.py$''',
 ]
 

@@ -1468,7 +1468,11 @@ class SupplyChainSecurityTests(unittest.TestCase):
                 r"^F2EEEB06110BEE1397EC74CBB8960FF52D9B1312$",
                 "generic-api-key",
             ),
-            {r"^scripts/verify_polaris_trusted_image\.py$"},
+            {
+                r"^\.github/workflows/polaris-gradle-dependencies\.yml$",
+                r"^bootstrap/polaris/v1\.6\.0/trusted-build-contract\.json$",
+                r"^scripts/verify_polaris_trusted_image\.py$",
+            },
         )
         self.assertEqual(
             allowlist_paths(
