@@ -69,6 +69,8 @@ env:
   SYFT_VERSION: v1.46.0
   TRIVY_VERSION: v0.72.0
   COSIGN_VERSION: v3.1.1
+  REKOR_URL: https://rekor.sigstore.dev
+  REKOR_MAJOR_API_VERSION: "1"
 
 jobs:
   prepare:
@@ -126,13 +128,20 @@ jobs:
               ;;
           esac
 
+      - name: Validate the static publication bootstrap policy
+        if: steps.lifecycle.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_polaris_trusted_image.py audit-publication-bootstrap --root .
+
       - name: Install pinned Cosign for dependency evidence revalidation
         if: steps.lifecycle.outputs.active == 'true'
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: v3.1.1
 
-      - name: Validate the image-publication-pending contract
+      - name: Complete the cryptographic image-publication-pending audit
         if: steps.lifecycle.outputs.active == 'true'
         shell: bash
         run: |
@@ -607,7 +616,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Rebind the write-capable job to the exact reviewed workflow
+      - name: Rebind the write-capable job to the static publication policy
         shell: bash
         run: |
           set -euo pipefail
@@ -617,6 +626,17 @@ jobs:
             "TommyKammy/Shirokuma/.github/workflows/polaris-arm64.yml@refs/heads/main"
           test "${GITHUB_SHA}" = "${GITHUB_WORKFLOW_SHA}"
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          python3 scripts/verify_polaris_trusted_image.py audit-publication-bootstrap --root .
+
+      - name: Install pinned Cosign before write-capable policy revalidation
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.1
+
+      - name: Complete the write-capable cryptographic policy audit
+        shell: bash
+        run: |
+          set -euo pipefail
           python3 scripts/verify_polaris_trusted_image.py audit --root .
 
       - name: Download the exact read-only-verified image build input
@@ -1192,11 +1212,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install pinned Cosign after all image gates pass
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-        with:
-          cosign-release: v3.1.1
-
       - name: Keyless-sign and verify the exact scanned image
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
@@ -1231,18 +1246,211 @@ jobs:
               --certificate-github-workflow-ref "${GITHUB_REF}" \
               --certificate-github-workflow-sha "${GITHUB_WORKFLOW_SHA}" \
               --certificate-github-workflow-trigger "${GITHUB_EVENT_NAME}" \
-              --output json "${IMAGE}@${DIGEST}" > cosign-verify.json.tmp
+              --output json "${IMAGE}@${DIGEST}" > cosign-payloads.json.tmp \
+              && cosign download signature "${IMAGE}@${DIGEST}" \
+                > registry-signature-bundles.jsonl.tmp \
+              && test -s registry-signature-bundles.jsonl.tmp
             then
-              mv cosign-verify.json.tmp cosign-verify.json
+              mv cosign-payloads.json.tmp cosign-payloads.json
+              mv registry-signature-bundles.jsonl.tmp \
+                registry-signature-bundles.jsonl
               break
             fi
-            rm -f cosign-verify.json.tmp
+            rm -f cosign-payloads.json.tmp registry-signature-bundles.jsonl.tmp
             if [ "${registry_attempt}" -eq 6 ]; then
               echo "registry signature was not visible after bounded retries" >&2
               exit 1
             fi
             sleep "$((registry_attempt * 2))"
           done
+
+          rekor_index=$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          bundle = json.loads(
+              Path("cosign-signature-bundle.json").read_text(encoding="utf-8")
+          )
+          entries = bundle["verificationMaterial"]["tlogEntries"]
+          if len(entries) != 1:
+              raise SystemExit("exactly one Rekor entry is required")
+          print(entries[0]["logIndex"])
+          PY
+          )
+          curl --fail --location \
+            --proto '=https' --tlsv1.2 \
+            --retry 5 --retry-all-errors \
+            --output rekor-entry.json \
+            "${REKOR_URL}/api/v1/log/entries?logIndex=${rekor_index}"
+
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          bundle = json.loads(
+              Path("cosign-signature-bundle.json").read_text(encoding="utf-8")
+          )
+          payloads = json.loads(
+              Path("cosign-payloads.json").read_text(encoding="utf-8")
+          )
+          registry_bundles = [
+              json.loads(line)
+              for line in Path("registry-signature-bundles.jsonl")
+              .read_text(encoding="utf-8")
+              .splitlines()
+              if line.strip()
+          ]
+          rekor = json.loads(Path("rekor-entry.json").read_text(encoding="utf-8"))
+          bundle_media_type = "application/vnd.dev.sigstore.bundle.v0.3+json"
+          if bundle.get("mediaType") != bundle_media_type:
+              raise SystemExit("unexpected Sigstore bundle format")
+          for candidate in registry_bundles:
+              if "Base64Signature" in candidate or "Payload" in candidate:
+                  raise SystemExit(
+                      "Cosign v3.1.1 contract rejects legacy signature records"
+                  )
+              if candidate.get("mediaType") != bundle_media_type:
+                  raise SystemExit("registry signature is not a Sigstore v0.3 bundle")
+              if "dsseEnvelope" not in candidate or "messageSignature" in candidate:
+                  raise SystemExit("registry signature is not the required DSSE bundle")
+              candidate_statement = json.loads(
+                  base64.b64decode(
+                      candidate["dsseEnvelope"]["payload"], validate=True
+                  )
+              )
+              if candidate_statement.get("predicateType") != (
+                  "https://sigstore.dev/cosign/sign/v1"
+              ):
+                  raise SystemExit("registry bundle has an unexpected predicate type")
+          material = bundle["verificationMaterial"]
+          if not material.get("certificate", {}).get("rawBytes"):
+              raise SystemExit("bundle certificate is missing")
+          statement = json.loads(
+              base64.b64decode(
+                  bundle["dsseEnvelope"]["payload"], validate=True
+              )
+          )
+          subjects = statement.get("subject", [])
+          expected_digest = os.environ["DIGEST"].removeprefix("sha256:")
+          if not (
+              statement.get("predicateType") == "https://sigstore.dev/cosign/sign/v1"
+              and len(subjects) == 1
+              and subjects[0].get("digest") == {"sha256": expected_digest}
+              and subjects[0].get("name", "") == ""
+              and subjects[0].get("annotations", {}) == {}
+          ):
+              raise SystemExit("bundle subject is not the exact image digest")
+          entries = material.get("tlogEntries", [])
+          if len(entries) != 1:
+              raise SystemExit("exactly one bundle tlog entry is required")
+          entry = entries[0]
+          proof = entry.get("inclusionProof", {})
+          if not (
+              entry.get("canonicalizedBody")
+              and entry.get("inclusionPromise", {}).get("signedEntryTimestamp")
+              and proof.get("checkpoint")
+              and proof.get("rootHash")
+              and proof.get("treeSize")
+              and isinstance(proof.get("hashes"), list)
+          ):
+              raise SystemExit("incomplete Rekor inclusion evidence")
+          if not isinstance(rekor, dict) or len(rekor) != 1:
+              raise SystemExit("expected one Rekor API entry")
+          uuid, api_entry = next(iter(rekor.items()))
+          log_id_hex = base64.b64decode(
+              entry["logId"]["keyId"], validate=True
+          ).hex()
+          stable_pairs = (
+              (str(api_entry.get("logIndex")), str(entry["logIndex"])),
+              (str(api_entry.get("integratedTime")), str(entry["integratedTime"])),
+              (api_entry.get("logID"), log_id_hex),
+              (api_entry.get("body"), entry["canonicalizedBody"]),
+          )
+          if any(left != right for left, right in stable_pairs):
+              raise SystemExit("Rekor API entry does not match the signed bundle")
+          if not isinstance(payloads, list) or not payloads:
+              raise SystemExit("registry verification returned no payloads")
+          expected_reference = f"{os.environ['IMAGE']}@{os.environ['DIGEST']}"
+          for payload in payloads:
+              critical = payload.get("critical", payload.get("Critical", {}))
+              image = critical.get("image", critical.get("Image", {}))
+              identity = critical.get("identity", critical.get("Identity", {}))
+              payload_digest = image.get(
+                  "docker-manifest-digest",
+                  image.get("Docker-manifest-digest"),
+              )
+              payload_reference = identity.get(
+                  "docker-reference",
+                  identity.get("Docker-reference"),
+              )
+              if (
+                  payload_digest != os.environ["DIGEST"]
+                  or payload_reference != expected_reference
+              ):
+                  raise SystemExit(
+                      "registry verification payload reference or digest mismatch"
+                  )
+          registry_bundle_matches = sum(
+              candidate == bundle for candidate in registry_bundles
+          )
+          if registry_bundle_matches != 1:
+              raise SystemExit("registry does not contain exactly the retained bundle")
+          Path("registry-signature-bundles.jsonl").write_text(
+              json.dumps(bundle, separators=(",", ":")) + "\n",
+              encoding="utf-8",
+          )
+          bundle_sha256 = hashlib.sha256(
+              Path("cosign-signature-bundle.json").read_bytes()
+          ).hexdigest()
+
+          record = {
+              "schema_version": 1,
+              "reference": expected_reference,
+              "certificate_constraints": {
+                  "issuer": "https://token.actions.githubusercontent.com",
+                  "identity": (
+                      f"https://github.com/{os.environ['GITHUB_REPOSITORY']}"
+                      f"/.github/workflows/polaris-arm64.yml@{os.environ['GITHUB_REF']}"
+                  ),
+                  "github_workflow_name": os.environ["GITHUB_WORKFLOW"],
+                  "github_workflow_repository": os.environ["GITHUB_REPOSITORY"],
+                  "github_workflow_ref": os.environ["GITHUB_REF"],
+                  "github_workflow_sha": os.environ["GITHUB_WORKFLOW_SHA"],
+                  "github_workflow_trigger": os.environ["GITHUB_EVENT_NAME"],
+              },
+              "detached_bundle_verified": True,
+              "registry_signature_verified": True,
+              "registry_bundle": {
+                  "file": "registry-signature-bundles.jsonl",
+                  "exact_matches": registry_bundle_matches,
+                  "bundle_sha256": bundle_sha256,
+              },
+              "transparency_log": {
+                  "base_url": os.environ["REKOR_URL"],
+                  "major_api_version": int(os.environ["REKOR_MAJOR_API_VERSION"]),
+                  "entry_lookup": (
+                      f"/api/v1/log/entries?logIndex={entry['logIndex']}"
+                  ),
+              },
+              "verified_payloads": payloads,
+              "rekor_entries": [
+                  {
+                      "uuid": uuid,
+                      "log_index": str(entry["logIndex"]),
+                      "integrated_time": str(entry["integratedTime"]),
+                      "log_id": entry["logId"]["keyId"],
+                      "log_id_hex": log_id_hex,
+                  }
+              ],
+          }
+          Path("cosign-verify.json").write_text(
+              json.dumps(record, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+          rm cosign-payloads.json
 
       - name: Mirror GHCR credentials for provenance publication
         shell: bash
@@ -1298,15 +1506,139 @@ jobs:
             --source-ref "${GITHUB_REF}" \
             --format json > slsa-verify.json
           python3 - <<'PY'
+          import base64
+          import hashlib
           import json
+          import os
           from pathlib import Path
 
           records = json.loads(
               Path("slsa-verify.json").read_text(encoding="utf-8")
           )
-          if not isinstance(records, list) or not records:
-              raise SystemExit("no matching SLSA provenance was verified")
+          expected_digest = os.environ["DIGEST"].removeprefix("sha256:")
+          repository = os.environ["GITHUB_REPOSITORY"]
+          repository_url = f"https://github.com/{repository}"
+          workflow_path = ".github/workflows/polaris-arm64.yml"
+          identity = f"{repository_url}/{workflow_path}@{os.environ['GITHUB_REF']}"
+          invocation = (
+              f"{repository_url}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+              f"/attempts/{os.environ['GITHUB_RUN_ATTEMPT']}"
+          )
+          matches = []
+          bundles = []
+          for record in records:
+              certificate = record["verificationResult"]["signature"]["certificate"]
+              bundle = record["attestation"]["bundle"]
+              statement = json.loads(
+                  base64.b64decode(
+                      bundle["dsseEnvelope"]["payload"], validate=True
+                  )
+              )
+              predicate = statement.get("predicate", {})
+              definition = predicate.get("buildDefinition", {})
+              workflow = definition.get("externalParameters", {}).get("workflow", {})
+              details = predicate.get("runDetails", {})
+              conditions = (
+                  statement.get("_type") == "https://in-toto.io/Statement/v1",
+                  statement.get("predicateType")
+                  == "https://slsa.dev/provenance/v1",
+                  definition.get("buildType")
+                  == "https://actions.github.io/buildtypes/workflow/v1",
+                  certificate.get("issuer")
+                  == "https://token.actions.githubusercontent.com",
+                  certificate.get("subjectAlternativeName") == identity,
+                  certificate.get("githubWorkflowName")
+                  == os.environ["GITHUB_WORKFLOW"],
+                  certificate.get("githubWorkflowRepository") == repository,
+                  certificate.get("githubWorkflowRef")
+                  == os.environ["GITHUB_REF"],
+                  certificate.get("githubWorkflowSHA")
+                  == os.environ["GITHUB_WORKFLOW_SHA"],
+                  certificate.get("githubWorkflowTrigger")
+                  == os.environ["GITHUB_EVENT_NAME"],
+                  certificate.get("buildTrigger")
+                  == os.environ["GITHUB_EVENT_NAME"],
+                  certificate.get("runnerEnvironment") == "github-hosted",
+                  certificate.get("buildSignerURI") == identity,
+                  certificate.get("buildSignerDigest")
+                  == os.environ["GITHUB_WORKFLOW_SHA"],
+                  certificate.get("buildConfigURI") == identity,
+                  certificate.get("buildConfigDigest")
+                  == os.environ["GITHUB_WORKFLOW_SHA"],
+                  certificate.get("sourceRepositoryURI") == repository_url,
+                  certificate.get("sourceRepositoryDigest")
+                  == os.environ["GITHUB_SHA"],
+                  certificate.get("sourceRepositoryRef")
+                  == os.environ["GITHUB_REF"],
+                  certificate.get("runInvocationURI") == invocation,
+                  workflow.get("repository") == repository_url,
+                  workflow.get("path") == workflow_path,
+                  workflow.get("ref") == os.environ["GITHUB_REF"],
+                  details.get("builder", {}).get("id") == identity,
+                  details.get("metadata", {}).get("invocationId") == invocation,
+                  any(
+                      subject.get("name") == os.environ["IMAGE"]
+                      and subject.get("digest", {}).get("sha256")
+                      == expected_digest
+                      for subject in statement.get("subject", [])
+                  ),
+              )
+              if all(conditions):
+                  matches.append(record)
+                  bundles.append(bundle)
+          if not matches:
+              raise SystemExit("no SLSA provenance matches the workflow invocation")
+          Path("slsa-verify.json").write_text(
+              json.dumps(matches, indent=2) + "\n", encoding="utf-8"
+          )
+          Path("slsa-bundles.jsonl").write_text(
+              "".join(
+                  json.dumps(bundle, separators=(",", ":")) + "\n"
+                  for bundle in bundles
+              ),
+              encoding="utf-8",
+          )
           PY
+
+      - name: Keyless-attest the retained Polaris SBOM and scan
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          verify_attestation_bundle() {
+            local bundle="$1"
+            local predicate_type="$2"
+            cosign verify-blob-attestation \
+              --bundle "${bundle}" \
+              --type "${predicate_type}" \
+              --certificate-identity \
+                "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/polaris-arm64.yml@${GITHUB_REF}" \
+              --certificate-oidc-issuer \
+                "https://token.actions.githubusercontent.com" \
+              --certificate-github-workflow-name "${GITHUB_WORKFLOW}" \
+              --certificate-github-workflow-ref "${GITHUB_REF}" \
+              --certificate-github-workflow-repository "${GITHUB_REPOSITORY}" \
+              --certificate-github-workflow-sha "${GITHUB_WORKFLOW_SHA}" \
+              --certificate-github-workflow-trigger "${GITHUB_EVENT_NAME}" \
+              --digest "${DIGEST#sha256:}" \
+              --digestAlg sha256
+          }
+
+          cosign attest --yes \
+            --bundle sbom-attestation-bundle.json \
+            --type cyclonedx \
+            --predicate polaris-1.6.0-arm64.cdx.json "${IMAGE}@${DIGEST}"
+          verify_attestation_bundle \
+            sbom-attestation-bundle.json cyclonedx
+
+          cosign attest --yes \
+            --bundle trivy-attestation-bundle.json \
+            --type https://shirokuma.dev/attestations/trivy/v1 \
+            --predicate trivy.json "${IMAGE}@${DIGEST}"
+          verify_attestation_bundle \
+            trivy-attestation-bundle.json \
+            https://shirokuma.dev/attestations/trivy/v1
 
       - name: Record and retain the non-admitted image candidate
         env:
@@ -1332,13 +1664,18 @@ jobs:
             image-config.json \
             image-manifest.json \
             polaris-1.6.0-arm64.cdx.json \
+            registry-signature-bundles.jsonl \
+            rekor-entry.json \
             runtime-container-inspect.json \
             runtime-base-java-version.txt \
             runtime-base-manifest.json \
             runtime-smoke.json \
+            sbom-attestation-bundle.json \
             sbom-policy.json \
+            slsa-bundles.jsonl \
             slsa-verify.json \
             toolchain.json \
+            trivy-attestation-bundle.json \
             trivy-version.json \
             trivy.json \
             "${evidence_dir}/"
@@ -1443,7 +1780,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Rebind promotion to the exact reviewed workflow
+      - name: Rebind promotion to the static publication policy
         shell: bash
         run: |
           set -euo pipefail
@@ -1453,6 +1790,17 @@ jobs:
             "TommyKammy/Shirokuma/.github/workflows/polaris-arm64.yml@refs/heads/main"
           test "${GITHUB_SHA}" = "${GITHUB_WORKFLOW_SHA}"
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          python3 scripts/verify_polaris_trusted_image.py audit-publication-bootstrap --root .
+
+      - name: Install pinned Cosign before promotion policy revalidation
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.1
+
+      - name: Complete the promotion cryptographic policy audit
+        shell: bash
+        run: |
+          set -euo pipefail
           python3 scripts/verify_polaris_trusted_image.py audit --root .
 
       - name: Download retained candidate evidence
@@ -1472,7 +1820,77 @@ jobs:
             cd candidate-evidence
             sha256sum --check --strict evidence.sha256
           )
+          for retained in \
+            anonymous-image-manifest.json \
+            cosign-signature-bundle.json \
+            cosign-verify.json \
+            image-manifest.json \
+            polaris-1.6.0-arm64.cdx.json \
+            registry-signature-bundles.jsonl \
+            rekor-entry.json \
+            sbom-attestation-bundle.json \
+            slsa-bundles.jsonl \
+            slsa-verify.json \
+            trivy-attestation-bundle.json \
+            trivy.json
+          do
+            test -s "candidate-evidence/${retained}"
+          done
+
+          test "$(
+            cosign version | awk '$1 == "GitVersion:" {print $2; exit}'
+          )" = "${COSIGN_VERSION}"
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/polaris-arm64.yml@${GITHUB_REF}"
+          cosign verify-blob \
+            --bundle candidate-evidence/cosign-signature-bundle.json \
+            --certificate-oidc-issuer \
+              "https://token.actions.githubusercontent.com" \
+            --certificate-identity "${identity}" \
+            --certificate-github-workflow-name "${GITHUB_WORKFLOW}" \
+            --certificate-github-workflow-repository "${GITHUB_REPOSITORY}" \
+            --certificate-github-workflow-ref "${GITHUB_REF}" \
+            --certificate-github-workflow-sha "${GITHUB_WORKFLOW_SHA}" \
+            --certificate-github-workflow-trigger "${GITHUB_EVENT_NAME}" \
+            candidate-evidence/image-manifest.json
+
+          verify_attestation_bundle() {
+            local bundle="$1"
+            local predicate_type="$2"
+            cosign verify-blob-attestation \
+              --bundle "${bundle}" \
+              --type "${predicate_type}" \
+              --certificate-identity "${identity}" \
+              --certificate-oidc-issuer \
+                "https://token.actions.githubusercontent.com" \
+              --certificate-github-workflow-name "${GITHUB_WORKFLOW}" \
+              --certificate-github-workflow-ref "${GITHUB_REF}" \
+              --certificate-github-workflow-repository "${GITHUB_REPOSITORY}" \
+              --certificate-github-workflow-sha "${GITHUB_WORKFLOW_SHA}" \
+              --certificate-github-workflow-trigger "${GITHUB_EVENT_NAME}" \
+              --digest "${DIGEST#sha256:}" \
+              --digestAlg sha256
+          }
+          verify_attestation_bundle \
+            candidate-evidence/sbom-attestation-bundle.json cyclonedx
+          verify_attestation_bundle \
+            candidate-evidence/trivy-attestation-bundle.json \
+            https://shirokuma.dev/attestations/trivy/v1
+
+          slsa_bundle_count=0
+          while IFS= read -r slsa_bundle; do
+            test -n "${slsa_bundle}"
+            slsa_bundle_count=$((slsa_bundle_count + 1))
+            slsa_bundle_path="${RUNNER_TEMP}/polaris-slsa-${slsa_bundle_count}.json"
+            printf '%s\n' "${slsa_bundle}" > "${slsa_bundle_path}"
+            verify_attestation_bundle \
+              "${slsa_bundle_path}" https://slsa.dev/provenance/v1
+            rm -f "${slsa_bundle_path}"
+          done < candidate-evidence/slsa-bundles.jsonl
+          test "${slsa_bundle_count}" -gt 0
+
           python3 - <<'PY'
+          import base64
+          import hashlib
           import json
           import os
           from pathlib import Path
@@ -1509,13 +1927,223 @@ jobs:
           }.items():
               if workflow.get(key) != value:
                   raise SystemExit(f"candidate workflow mismatch for {key}")
+
+          bundle_media_type = "application/vnd.dev.sigstore.bundle.v0.3+json"
+          signature_bundle = json.loads(
+              Path("candidate-evidence/cosign-signature-bundle.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          registry_bundles = [
+              json.loads(line)
+              for line in Path(
+                  "candidate-evidence/registry-signature-bundles.jsonl"
+              ).read_text(encoding="utf-8").splitlines()
+              if line.strip()
+          ]
+          if signature_bundle.get("mediaType") != bundle_media_type:
+              raise SystemExit("retained signature bundle is not Sigstore v0.3")
+          if registry_bundles != [signature_bundle]:
+              raise SystemExit(
+                  "retained registry signatures do not equal the detached bundle"
+              )
+          signature_record = json.loads(
+              Path("candidate-evidence/cosign-verify.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          expected_identity = (
+              f"https://github.com/{os.environ['GITHUB_REPOSITORY']}"
+              f"/.github/workflows/polaris-arm64.yml@{os.environ['GITHUB_REF']}"
+          )
+          expected_reference = f"{os.environ['IMAGE']}@{os.environ['DIGEST']}"
+          expected_constraints = {
+              "issuer": "https://token.actions.githubusercontent.com",
+              "identity": expected_identity,
+              "github_workflow_name": os.environ["GITHUB_WORKFLOW"],
+              "github_workflow_repository": os.environ["GITHUB_REPOSITORY"],
+              "github_workflow_ref": os.environ["GITHUB_REF"],
+              "github_workflow_sha": os.environ["GITHUB_WORKFLOW_SHA"],
+              "github_workflow_trigger": os.environ["GITHUB_EVENT_NAME"],
+          }
+          expected_bundle_record = {
+              "file": "registry-signature-bundles.jsonl",
+              "exact_matches": 1,
+              "bundle_sha256": hashlib.sha256(
+                  Path(
+                      "candidate-evidence/cosign-signature-bundle.json"
+                  ).read_bytes()
+              ).hexdigest(),
+          }
+          if not (
+              signature_record.get("schema_version") == 1
+              and signature_record.get("reference") == expected_reference
+              and signature_record.get("certificate_constraints")
+              == expected_constraints
+              and signature_record.get("detached_bundle_verified") is True
+              and signature_record.get("registry_signature_verified") is True
+              and signature_record.get("registry_bundle")
+              == expected_bundle_record
+          ):
+              raise SystemExit("retained signature verification record mismatch")
+          material = signature_bundle.get("verificationMaterial", {})
+          entries = material.get("tlogEntries", [])
+          if len(entries) != 1:
+              raise SystemExit("retained signature must have one Rekor entry")
+          entry = entries[0]
+          proof = entry.get("inclusionProof", {})
+          if not (
+              material.get("certificate", {}).get("rawBytes")
+              and entry.get("canonicalizedBody")
+              and entry.get("inclusionPromise", {}).get("signedEntryTimestamp")
+              and proof.get("checkpoint")
+              and proof.get("rootHash")
+              and proof.get("treeSize")
+              and isinstance(proof.get("hashes"), list)
+          ):
+              raise SystemExit("retained signature has incomplete inclusion evidence")
+          rekor = json.loads(
+              Path("candidate-evidence/rekor-entry.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          if not isinstance(rekor, dict) or len(rekor) != 1:
+              raise SystemExit("retained Rekor response must contain one entry")
+          _, api_entry = next(iter(rekor.items()))
+          log_id_hex = base64.b64decode(
+              entry["logId"]["keyId"], validate=True
+          ).hex()
+          if any(
+              left != right
+              for left, right in (
+                  (str(api_entry.get("logIndex")), str(entry["logIndex"])),
+                  (
+                      str(api_entry.get("integratedTime")),
+                      str(entry["integratedTime"]),
+                  ),
+                  (api_entry.get("logID"), log_id_hex),
+                  (api_entry.get("body"), entry["canonicalizedBody"]),
+              )
+          ):
+              raise SystemExit("retained Rekor response does not match the bundle")
+          expected_transparency = {
+              "base_url": os.environ["REKOR_URL"],
+              "major_api_version": int(os.environ["REKOR_MAJOR_API_VERSION"]),
+              "entry_lookup": (
+                  f"/api/v1/log/entries?logIndex={entry['logIndex']}"
+              ),
+          }
+          if signature_record.get("transparency_log") != expected_transparency:
+              raise SystemExit("retained transparency-log contract mismatch")
+
+          digest = os.environ["DIGEST"].removeprefix("sha256:")
+          repository = os.environ["IMAGE"]
+          for bundle_name, predicate_name, predicate_type in (
+              (
+                  "sbom-attestation-bundle.json",
+                  "polaris-1.6.0-arm64.cdx.json",
+                  "https://cyclonedx.org/bom",
+              ),
+              (
+                  "trivy-attestation-bundle.json",
+                  "trivy.json",
+                  "https://shirokuma.dev/attestations/trivy/v1",
+              ),
+          ):
+              bundle = json.loads(
+                  Path(f"candidate-evidence/{bundle_name}").read_text(
+                      encoding="utf-8"
+                  )
+              )
+              if bundle.get("mediaType") != bundle_media_type:
+                  raise SystemExit(f"{bundle_name} is not a Sigstore v0.3 bundle")
+              statement = json.loads(
+                  base64.b64decode(
+                      bundle["dsseEnvelope"]["payload"], validate=True
+                  )
+              )
+              predicate = json.loads(
+                  Path(f"candidate-evidence/{predicate_name}").read_text(
+                      encoding="utf-8"
+                  )
+              )
+              if not (
+                  statement.get("_type") == "https://in-toto.io/Statement/v0.1"
+                  and statement.get("predicateType") == predicate_type
+                  and statement.get("subject")
+                  == [{"name": repository, "digest": {"sha256": digest}}]
+                  and statement.get("predicate") == predicate
+              ):
+                  raise SystemExit(
+                      f"{bundle_name} does not bind the exact retained predicate"
+                  )
+
+          slsa_records = json.loads(
+              Path("candidate-evidence/slsa-verify.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          slsa_bundles = [
+              json.loads(line)
+              for line in Path(
+                  "candidate-evidence/slsa-bundles.jsonl"
+              ).read_text(encoding="utf-8").splitlines()
+              if line.strip()
+          ]
+          retained_from_records = [
+              item["attestation"]["bundle"] for item in slsa_records
+          ]
+          if not slsa_bundles or slsa_bundles != retained_from_records:
+              raise SystemExit(
+                  "retained SLSA bundles do not match verified provenance records"
+              )
+          workflow_path = ".github/workflows/polaris-arm64.yml"
+          repository_url = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}"
+          invocation = (
+              f"{repository_url}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+              f"/attempts/{os.environ['GITHUB_RUN_ATTEMPT']}"
+          )
+          for bundle in slsa_bundles:
+              if bundle.get("mediaType") != bundle_media_type:
+                  raise SystemExit("retained SLSA bundle is not Sigstore v0.3")
+              statement = json.loads(
+                  base64.b64decode(
+                      bundle["dsseEnvelope"]["payload"], validate=True
+                  )
+              )
+              predicate = statement.get("predicate", {})
+              definition = predicate.get("buildDefinition", {})
+              external_workflow = (
+                  definition.get("externalParameters", {}).get("workflow", {})
+              )
+              details = predicate.get("runDetails", {})
+              if not (
+                  statement.get("_type") == "https://in-toto.io/Statement/v1"
+                  and statement.get("predicateType")
+                  == "https://slsa.dev/provenance/v1"
+                  and definition.get("buildType")
+                  == "https://actions.github.io/buildtypes/workflow/v1"
+                  and external_workflow.get("repository") == repository_url
+                  and external_workflow.get("path") == workflow_path
+                  and external_workflow.get("ref") == os.environ["GITHUB_REF"]
+                  and details.get("metadata", {}).get("invocationId")
+                  == invocation
+                  and any(
+                      subject.get("name") == repository
+                      and subject.get("digest", {}).get("sha256") == digest
+                      for subject in statement.get("subject", [])
+                  )
+              ):
+                  raise SystemExit(
+                      "retained SLSA bundle does not match the exact invocation"
+                  )
           PY
           echo "${DIGEST#sha256:}  candidate-evidence/image-manifest.json" \
             | sha256sum --check --strict
           cmp candidate-evidence/image-manifest.json \
             candidate-evidence/anonymous-image-manifest.json
 
-      - name: Install pinned Crane and Cosign without registry credentials
+      - name: Install pinned Crane without registry credentials
         shell: bash
         run: |
           set -euo pipefail
@@ -1535,11 +2163,6 @@ jobs:
           echo "${tool_dir}" >> "${GITHUB_PATH}"
           test "$("${tool_dir}/crane.bin" version)" = "${CRANE_VERSION#v}"
 
-      - name: Install pinned Cosign for anonymous signature revalidation
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-        with:
-          cosign-release: v3.1.1
-
       - name: Reverify the public digest, signature, and provenance before promotion
         env:
           DIGEST: ${{ needs.verify.outputs.digest }}
@@ -1547,6 +2170,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test -z "${DOCKER_AUTH_CONFIG:-}"
           crane.bin manifest "${IMAGE}@${DIGEST}" > promotion-manifest.json
           echo "${DIGEST#sha256:}  promotion-manifest.json" \
             | sha256sum --check --strict
@@ -1565,6 +2189,31 @@ jobs:
             --certificate-github-workflow-sha "${GITHUB_WORKFLOW_SHA}" \
             --certificate-github-workflow-trigger "${GITHUB_EVENT_NAME}" \
             --output json "${IMAGE}@${DIGEST}" > promotion-cosign-verify.json
+          cosign download signature "${IMAGE}@${DIGEST}" \
+            > promotion-registry-signature-bundles.jsonl
+          test -s promotion-registry-signature-bundles.jsonl
+
+          rekor_index=$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          bundle = json.loads(
+              Path("candidate-evidence/cosign-signature-bundle.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          entries = bundle["verificationMaterial"]["tlogEntries"]
+          if len(entries) != 1:
+              raise SystemExit("exactly one retained Rekor entry is required")
+          print(entries[0]["logIndex"])
+          PY
+          )
+          curl --fail --location \
+            --proto '=https' --tlsv1.2 \
+            --retry 5 --retry-all-errors \
+            --output promotion-rekor-entry.json \
+            "${REKOR_URL}/api/v1/log/entries?logIndex=${rekor_index}"
+
           gh attestation verify "oci://${IMAGE}@${DIGEST}" \
             --repo "${GITHUB_REPOSITORY}" \
             --predicate-type "https://slsa.dev/provenance/v1" \
@@ -1576,6 +2225,81 @@ jobs:
             --format json > promotion-slsa-verify.json
           test -s promotion-cosign-verify.json
           test -s promotion-slsa-verify.json
+          python3 - <<'PY'
+          import json
+          import os
+          from collections import Counter
+          from pathlib import Path
+
+          retained_bundle = json.loads(
+              Path("candidate-evidence/cosign-signature-bundle.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          live_registry_bundles = [
+              json.loads(line)
+              for line in Path(
+                  "promotion-registry-signature-bundles.jsonl"
+              ).read_text(encoding="utf-8").splitlines()
+              if line.strip()
+          ]
+          if sum(item == retained_bundle for item in live_registry_bundles) != 1:
+              raise SystemExit(
+                  "live registry does not contain exactly one retained signature bundle"
+              )
+          retained_rekor = json.loads(
+              Path("candidate-evidence/rekor-entry.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          live_rekor = json.loads(
+              Path("promotion-rekor-entry.json").read_text(encoding="utf-8")
+          )
+          if live_rekor != retained_rekor:
+              raise SystemExit("live Rekor entry differs from retained evidence")
+
+          payloads = json.loads(
+              Path("promotion-cosign-verify.json").read_text(encoding="utf-8")
+          )
+          if not isinstance(payloads, list) or not payloads:
+              raise SystemExit("live registry signature verification is empty")
+          reference = f"{os.environ['IMAGE']}@{os.environ['DIGEST']}"
+          for payload in payloads:
+              critical = payload.get("critical", payload.get("Critical", {}))
+              image = critical.get("image", critical.get("Image", {}))
+              identity = critical.get("identity", critical.get("Identity", {}))
+              if image.get(
+                  "docker-manifest-digest",
+                  image.get("Docker-manifest-digest"),
+              ) != os.environ["DIGEST"]:
+                  raise SystemExit("live signature payload digest mismatch")
+              if identity.get(
+                  "docker-reference",
+                  identity.get("Docker-reference"),
+              ) != reference:
+                  raise SystemExit("live signature payload reference mismatch")
+
+          retained_slsa = [
+              json.loads(line)
+              for line in Path(
+                  "candidate-evidence/slsa-bundles.jsonl"
+              ).read_text(encoding="utf-8").splitlines()
+              if line.strip()
+          ]
+          live_records = json.loads(
+              Path("promotion-slsa-verify.json").read_text(encoding="utf-8")
+          )
+          live_slsa = [record["attestation"]["bundle"] for record in live_records]
+          canonical = lambda item: json.dumps(
+              item, separators=(",", ":"), sort_keys=True
+          )
+          if Counter(map(canonical, live_slsa)) != Counter(
+              map(canonical, retained_slsa)
+          ):
+              raise SystemExit(
+                  "live exact-workflow SLSA bundles differ from retained evidence"
+              )
+          PY
 
       - name: Log in to GHCR for trusted-tag promotion
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3

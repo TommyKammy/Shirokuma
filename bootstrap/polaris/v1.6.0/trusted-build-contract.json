@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "component": "polaris",
   "version": "1.6.0",
   "platform": "linux/arm64",
@@ -247,8 +247,78 @@
     },
     "workflow": {
       "path": ".github/workflows/polaris-arm64.yml",
-      "sha256": "b3b7f58e9c38637f39f8c2bd800ca8cb8ff479b3f2236aa95b99894a6470373f"
+      "sha256": "337c3ac1c6090dc51621bc2f8c36e4c0bda90295224316598d87293e9767849e"
     }
+  },
+  "transparency_log": {
+    "base_url": "https://rekor.sigstore.dev",
+    "major_api_version": 1,
+    "entry_lookup_path": "/api/v1/log/entries?logIndex={log_index}"
+  },
+  "toolchain": {
+    "cosign": {
+      "version": "v3.1.1",
+      "bundle_media_type": "application/vnd.dev.sigstore.bundle.v0.3+json",
+      "predicate_type": "https://sigstore.dev/cosign/sign/v1",
+      "registry_download_format": "sigstore-bundle-v0.3-jsonl",
+      "legacy_signature_records_permitted": false,
+      "detached_bundle_role": "bind-image-digest-to-raw-oci-manifest",
+      "authoritative_image_verification": "cosign verify IMAGE@DIGEST",
+      "attestation_predicates": {
+        "sbom": {
+          "artifact": "sbom-attestation-bundle.json",
+          "cli_type": "cyclonedx",
+          "predicate_type": "https://cyclonedx.org/bom"
+        },
+        "vulnerability_scan": {
+          "artifact": "trivy-attestation-bundle.json",
+          "cli_type": "https://shirokuma.dev/attestations/trivy/v1",
+          "predicate_type": "https://shirokuma.dev/attestations/trivy/v1"
+        }
+      }
+    }
+  },
+  "evidence": {
+    "directory": "candidate-evidence",
+    "candidate_required": [
+      "anonymous-image-manifest.json",
+      "builder-metadata.json",
+      "build-context.sha256",
+      "build-input.json",
+      "dependency-input.json",
+      "offline-build.json",
+      "source-authentication.json",
+      "cosign-signature-bundle.json",
+      "cosign-verify.json",
+      "health-ready.json",
+      "image-config.json",
+      "image-manifest.json",
+      "polaris-1.6.0-arm64.cdx.json",
+      "registry-signature-bundles.jsonl",
+      "rekor-entry.json",
+      "runtime-container-inspect.json",
+      "runtime-base-java-version.txt",
+      "runtime-base-manifest.json",
+      "runtime-smoke.json",
+      "runtime-smoke.log",
+      "sbom-attestation-bundle.json",
+      "sbom-policy.json",
+      "slsa-bundles.jsonl",
+      "slsa-verify.json",
+      "toolchain.json",
+      "trivy-attestation-bundle.json",
+      "trivy-version.json",
+      "trivy.json"
+    ],
+    "promotion_required": [
+      "promotion-cosign-verify.json",
+      "promotion-slsa-verify.json",
+      "publication.json",
+      "trusted-tag-manifest.json"
+    ],
+    "actions_artifact_role": "retained mirror only",
+    "candidate_retention_days": 30,
+    "final_retention_days": 30
   },
   "runtime": {
     "state": "blocked_atomic_admission",

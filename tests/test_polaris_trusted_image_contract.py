@@ -705,11 +705,101 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 ):
                     self._assert_code(root, code, detail)
 
+    def _assert_rebound_contract_code(
+        self,
+        root: Path,
+        code: str,
+        detail: str,
+    ) -> None:
+        workflow_sha256 = verifier._sha256(
+            root / verifier.POLARIS_IMAGE_WORKFLOW
+        )
+
+        def bind_workflow(value: dict[str, object]) -> None:
+            value["image_publication"]["workflow"][  # type: ignore[index]
+                "sha256"
+            ] = workflow_sha256
+
+        self._rewrite_json(root, verifier.POLARIS_CONTRACT, bind_workflow)
+        contract_sha256 = verifier._sha256(root / verifier.POLARIS_CONTRACT)
+
+        def bind_contract(value: dict[str, object]) -> None:
+            value["build_contract_sha256"] = contract_sha256
+
+        self._rewrite_json(root, verifier.POLARIS_ADMISSION, bind_contract)
+        inventory = dict(verifier.REVIEW_PENDING_WORKFLOW_INVENTORY)
+        inventory[verifier.POLARIS_IMAGE_WORKFLOW.as_posix()] = workflow_sha256
+        with mock.patch.object(
+            verifier,
+            "POLARIS_IMAGE_WORKFLOW_SHA256",
+            workflow_sha256,
+        ):
+            with mock.patch.object(
+                verifier,
+                "POLARIS_CONTRACT_SHA256",
+                contract_sha256,
+            ):
+                with mock.patch.object(
+                    verifier,
+                    "REVIEW_PENDING_WORKFLOW_INVENTORY",
+                    inventory,
+                ):
+                    self._assert_code(root, code, detail)
+
     def test_repository_review_pending_contract_is_fail_closed_and_valid(
         self,
     ) -> None:
         self._audit(ROOT)
         self.dependency_crypto_verifier.assert_called_once()
+
+    def test_static_publication_bootstrap_never_invokes_external_crypto(
+        self,
+    ) -> None:
+        with mock.patch.object(
+            verifier,
+            "_reverify_dependency_sigstore_cryptographically",
+            side_effect=AssertionError("static policy invoked external crypto"),
+        ) as crypto:
+            verifier.audit_publication_bootstrap(ROOT)
+        crypto.assert_not_called()
+
+    def test_static_publication_bootstrap_cli_is_distinct_from_full_audit(
+        self,
+    ) -> None:
+        stdout = io.StringIO()
+        with mock.patch.object(
+            verifier,
+            "audit_publication_bootstrap",
+        ) as bootstrap:
+            with mock.patch.object(verifier, "audit") as full_audit:
+                with mock.patch.object(verifier.sys, "stdout", stdout):
+                    result = verifier.main(
+                        [
+                            "audit-publication-bootstrap",
+                            "--root",
+                            str(ROOT),
+                        ]
+                    )
+        self.assertEqual(0, result)
+        bootstrap.assert_called_once_with(ROOT)
+        full_audit.assert_not_called()
+        self.assertIn(
+            "cryptographic evidence remains unverified",
+            stdout.getvalue(),
+        )
+
+    def test_full_audit_cli_does_not_substitute_static_bootstrap(self) -> None:
+        stdout = io.StringIO()
+        with mock.patch.object(
+            verifier,
+            "audit_publication_bootstrap",
+        ) as bootstrap:
+            with mock.patch.object(verifier, "audit") as full_audit:
+                with mock.patch.object(verifier.sys, "stdout", stdout):
+                    result = verifier.main(["audit", "--root", str(ROOT)])
+        self.assertEqual(0, result)
+        full_audit.assert_called_once_with(ROOT)
+        bootstrap.assert_not_called()
 
     def test_minimal_review_pending_fixture_is_valid(self) -> None:
         self._audit(self._fixture())
@@ -753,7 +843,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             (ROOT / verifier.POLARIS_ADMISSION).read_text(encoding="utf-8")
         )
 
-        self.assertEqual(4, contract["schema_version"])
+        self.assertEqual(5, contract["schema_version"])
         self.assertEqual(
             "image_publication_pending",
             contract["lifecycle"]["state"],
@@ -789,6 +879,24 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             verifier.POLARIS_IMAGE_WORKFLOW_SHA256,
             contract["image_publication"]["workflow"]["sha256"],
         )
+        self.assertEqual(
+            verifier.POLARIS_CANDIDATE_EVIDENCE_REQUIRED,
+            contract["evidence"]["candidate_required"],
+        )
+        self.assertEqual(
+            verifier.POLARIS_PROMOTION_EVIDENCE_REQUIRED,
+            contract["evidence"]["promotion_required"],
+        )
+        self.assertIs(
+            False,
+            contract["toolchain"]["cosign"][
+                "legacy_signature_records_permitted"
+            ],
+        )
+        self.assertEqual(
+            "application/vnd.dev.sigstore.bundle.v0.3+json",
+            contract["toolchain"]["cosign"]["bundle_media_type"],
+        )
         self.assertEqual(4, admission["schema_version"])
         self.assertEqual(
             verifier.POLARIS_DEPENDENCY_REFERENCE,
@@ -801,6 +909,51 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         self.assertEqual(
             "pending",
             admission["blocking_controls"][2]["state"],
+        )
+
+    def test_candidate_evidence_exact_set_drift_fails_closed(self) -> None:
+        root = self._fixture()
+
+        def mutate(value: dict[str, object]) -> None:
+            evidence = value["evidence"]  # type: ignore[index]
+            evidence["candidate_required"] = [  # type: ignore[index]
+                *verifier.POLARIS_CANDIDATE_EVIDENCE_REQUIRED,
+                "unreviewed-evidence.json",
+            ]
+
+        self._rewrite_json(root, verifier.POLARIS_CONTRACT, mutate)
+        self._assert_rebound_contract_code(
+            root,
+            "CONTRACT_STATE",
+            "evidence.candidate_required must be",
+        )
+
+    def test_cosign_toolchain_extra_control_fails_closed(self) -> None:
+        root = self._fixture()
+
+        def mutate(value: dict[str, object]) -> None:
+            cosign = value["toolchain"]["cosign"]  # type: ignore[index]
+            cosign["verification_bypass"] = True  # type: ignore[index]
+
+        self._rewrite_json(root, verifier.POLARIS_CONTRACT, mutate)
+        self._assert_rebound_contract_code(
+            root,
+            "CONTRACT_STATE",
+            "toolchain.cosign keys must be",
+        )
+
+    def test_cosign_legacy_signature_records_remain_forbidden(self) -> None:
+        root = self._fixture()
+
+        def mutate(value: dict[str, object]) -> None:
+            cosign = value["toolchain"]["cosign"]  # type: ignore[index]
+            cosign["legacy_signature_records_permitted"] = True  # type: ignore[index]
+
+        self._rewrite_json(root, verifier.POLARIS_CONTRACT, mutate)
+        self._assert_rebound_contract_code(
+            root,
+            "CONTRACT_STATE",
+            "toolchain.cosign.legacy_signature_records_permitted must be False",
         )
 
     def test_dependency_publisher_reintroduction_fails_closed(self) -> None:
@@ -1366,24 +1519,33 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             "missing required controls",
         )
 
-    def test_prepare_cosign_bootstrap_remains_required_when_hashes_are_rebound(
+    def test_each_job_cosign_bootstrap_remains_required_when_hashes_are_rebound(
         self,
     ) -> None:
-        root = self._fixture()
-        workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
-        workflow.write_text(
-            workflow.read_text(encoding="utf-8").replace(
-                "Install pinned Cosign for dependency evidence revalidation",
-                "Install untrusted dependency verification tooling",
-                1,
-            ),
-            encoding="utf-8",
+        bootstrap_names = (
+            "Install pinned Cosign for dependency evidence revalidation",
+            "Install pinned Cosign before write-capable policy revalidation",
+            "Install pinned Cosign before promotion policy revalidation",
         )
-        self._assert_rebound_workflow_code(
-            root,
-            "PUBLICATION_POLICY",
-            "missing required controls",
-        )
+        for bootstrap_name in bootstrap_names:
+            with self.subTest(bootstrap_name=bootstrap_name):
+                root = self._fixture()
+                workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+                workflow_text = workflow.read_text(encoding="utf-8")
+                self.assertEqual(1, workflow_text.count(bootstrap_name))
+                workflow.write_text(
+                    workflow_text.replace(
+                        bootstrap_name,
+                        "Install untrusted policy verification tooling",
+                        1,
+                    ),
+                    encoding="utf-8",
+                )
+                self._assert_rebound_workflow_code(
+                    root,
+                    "PUBLICATION_POLICY",
+                    "missing required controls",
+                )
 
     def test_prepare_cosign_bootstrap_precedes_audit_when_hashes_are_rebound(
         self,
@@ -1416,7 +1578,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         self._assert_rebound_workflow_code(
             root,
             "PUBLICATION_POLICY",
-            "changed order",
+            "job-local static audit, Cosign bootstrap, or full audit changed order",
         )
 
     def test_prepare_cosign_bootstrap_cannot_be_duplicated_when_hashes_rebound(
@@ -1450,7 +1612,430 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         self._assert_rebound_workflow_code(
             root,
             "PUBLICATION_POLICY",
-            "exactly one lifecycle-gated Cosign bootstrap",
+            "each job must contain exactly one policy-scoped Cosign bootstrap",
+        )
+
+    def test_downstream_cosign_bootstraps_precede_job_audits_when_rebound(
+        self,
+    ) -> None:
+        cases = (
+            (
+                "verify",
+                (
+                    "      - name: Install pinned Cosign before write-capable "
+                    "policy revalidation\n"
+                    "        uses: sigstore/cosign-installer@"
+                    "6f9f17788090df1f26f669e9d70d6ae9567deba6 "
+                    "# v4.1.2\n"
+                    "        with:\n"
+                    "          cosign-release: v3.1.1\n\n"
+                ),
+                (
+                    "      - name: Download the exact read-only-verified "
+                    "image build input\n"
+                ),
+            ),
+            (
+                "promote",
+                (
+                    "      - name: Install pinned Cosign before promotion "
+                    "policy revalidation\n"
+                    "        uses: sigstore/cosign-installer@"
+                    "6f9f17788090df1f26f669e9d70d6ae9567deba6 "
+                    "# v4.1.2\n"
+                    "        with:\n"
+                    "          cosign-release: v3.1.1\n\n"
+                ),
+                "      - name: Download retained candidate evidence\n",
+            ),
+        )
+        for job_name, bootstrap, following_step in cases:
+            with self.subTest(job_name=job_name):
+                root = self._fixture()
+                workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+                workflow_text = workflow.read_text(encoding="utf-8")
+                self.assertEqual(1, workflow_text.count(bootstrap))
+                self.assertEqual(1, workflow_text.count(following_step))
+                workflow.write_text(
+                    workflow_text.replace(bootstrap, "", 1).replace(
+                        following_step,
+                        bootstrap + following_step,
+                        1,
+                    ),
+                    encoding="utf-8",
+                )
+                self._assert_rebound_workflow_code(
+                    root,
+                    "PUBLICATION_POLICY",
+                    (
+                        "job-local static audit, Cosign bootstrap, or full "
+                        "audit changed order"
+                    ),
+                )
+
+    def test_downstream_cosign_bootstraps_cannot_be_duplicated_when_rebound(
+        self,
+    ) -> None:
+        cases = (
+            (
+                "verify",
+                (
+                    "      - name: Install pinned Cosign before write-capable "
+                    "policy revalidation\n"
+                    "        uses: sigstore/cosign-installer@"
+                    "6f9f17788090df1f26f669e9d70d6ae9567deba6 "
+                    "# v4.1.2\n"
+                    "        with:\n"
+                    "          cosign-release: v3.1.1\n\n"
+                ),
+                (
+                    "      - name: Download the exact read-only-verified "
+                    "image build input\n"
+                ),
+            ),
+            (
+                "promote",
+                (
+                    "      - name: Install pinned Cosign before promotion "
+                    "policy revalidation\n"
+                    "        uses: sigstore/cosign-installer@"
+                    "6f9f17788090df1f26f669e9d70d6ae9567deba6 "
+                    "# v4.1.2\n"
+                    "        with:\n"
+                    "          cosign-release: v3.1.1\n\n"
+                ),
+                "      - name: Download retained candidate evidence\n",
+            ),
+        )
+        for job_name, bootstrap, following_step in cases:
+            with self.subTest(job_name=job_name):
+                root = self._fixture()
+                workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+                workflow_text = workflow.read_text(encoding="utf-8")
+                self.assertEqual(1, workflow_text.count(bootstrap))
+                self.assertEqual(1, workflow_text.count(following_step))
+                workflow.write_text(
+                    workflow_text.replace(
+                        following_step,
+                        bootstrap + following_step,
+                        1,
+                    ),
+                    encoding="utf-8",
+                )
+                self._assert_rebound_workflow_code(
+                    root,
+                    "PUBLICATION_POLICY",
+                    "each job must contain exactly one policy-scoped "
+                    "Cosign bootstrap",
+                )
+
+    def test_alternate_cosign_action_is_rejected_when_hashes_are_rebound(
+        self,
+    ) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+        canonical = (
+            "      - name: Install pinned Cosign before write-capable "
+            "policy revalidation\n"
+            "        uses: sigstore/cosign-installer@"
+            "6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2\n"
+            "        with:\n"
+            "          cosign-release: v3.1.1\n\n"
+        )
+        alternate = (
+            "      - name: Alternate pinned Cosign install\n"
+            "        uses: sigstore/cosign-installer@"
+            "6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2\n"
+            "        with:\n"
+            "          cosign-release: v3.1.0\n\n"
+        )
+        workflow_text = workflow.read_text(encoding="utf-8")
+        self.assertEqual(1, workflow_text.count(canonical))
+        workflow.write_text(
+            workflow_text.replace(canonical, alternate + canonical, 1),
+            encoding="utf-8",
+        )
+        self._assert_rebound_workflow_code(
+            root,
+            "PUBLICATION_POLICY",
+            "each job must contain exactly one policy-scoped Cosign bootstrap",
+        )
+
+    def test_each_job_requires_static_and_full_audits_when_hashes_rebound(
+        self,
+    ) -> None:
+        static_command = (
+            "python3 scripts/verify_polaris_trusted_image.py "
+            "audit-publication-bootstrap --root ."
+        )
+        cases = (
+            "Validate the static publication bootstrap policy",
+            "Rebind the write-capable job to the static publication policy",
+            "Rebind promotion to the static publication policy",
+        )
+        for step_name in cases:
+            with self.subTest(step_name=step_name):
+                root = self._fixture()
+                workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+                workflow_text = workflow.read_text(encoding="utf-8")
+                before, after = workflow_text.split(step_name, maxsplit=1)
+                self.assertIn(static_command, after)
+                workflow.write_text(
+                    before
+                    + step_name
+                    + after.replace(
+                        static_command,
+                        "printf '%s\\n' 'static audit removed'",
+                        1,
+                    ),
+                    encoding="utf-8",
+                )
+                self._assert_rebound_workflow_code(
+                    root,
+                    "PUBLICATION_POLICY",
+                    "each job must contain one static and one full "
+                    "cryptographic audit",
+                )
+
+    def test_static_audit_cannot_move_after_cosign_when_hashes_rebound(
+        self,
+    ) -> None:
+        static_command = (
+            "python3 scripts/verify_polaris_trusted_image.py "
+            "audit-publication-bootstrap --root ."
+        )
+        full_command = (
+            "python3 scripts/verify_polaris_trusted_image.py audit --root ."
+        )
+        cases = (
+            "Validate the static publication bootstrap policy",
+            "Rebind the write-capable job to the static publication policy",
+            "Rebind promotion to the static publication policy",
+        )
+        for step_name in cases:
+            with self.subTest(step_name=step_name):
+                root = self._fixture()
+                workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+                workflow_text = workflow.read_text(encoding="utf-8")
+                before, after = workflow_text.split(step_name, maxsplit=1)
+                self.assertIn(static_command, after)
+                self.assertIn(full_command, after)
+                after = after.replace(static_command, "__STATIC_AUDIT__", 1)
+                after = after.replace(full_command, static_command, 1)
+                after = after.replace("__STATIC_AUDIT__", full_command, 1)
+                workflow.write_text(
+                    before + step_name + after,
+                    encoding="utf-8",
+                )
+                self._assert_rebound_workflow_code(
+                    root,
+                    "PUBLICATION_POLICY",
+                    (
+                        "job-local static audit, Cosign bootstrap, or full "
+                        "audit changed order"
+                    ),
+                )
+
+    def test_malformed_job_split_fails_with_contract_error(self) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+        workflow.write_text(
+            workflow.read_text(encoding="utf-8").replace(
+                "\n  verify:\n",
+                "\n  verify-renamed:\n",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        self._assert_rebound_workflow_code(
+            root,
+            "PUBLICATION_POLICY",
+            "workflow job closure changed",
+        )
+
+    def test_candidate_attestation_capture_is_semantic_when_hashes_rebound(
+        self,
+    ) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+        workflow_text = workflow.read_text(encoding="utf-8")
+        self.assertEqual(2, workflow_text.count("cosign attest --yes"))
+        workflow.write_text(
+            workflow_text.replace(
+                "cosign attest --yes",
+                "cosign attest --no",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        self._assert_rebound_workflow_code(
+            root,
+            "PUBLICATION_POLICY",
+            "candidate signature, Rekor, SLSA, or attestation evidence changed",
+        )
+
+    def test_candidate_evidence_copy_closure_is_exact_when_hashes_rebound(
+        self,
+    ) -> None:
+        for artifact in (
+            "registry-signature-bundles.jsonl",
+            "rekor-entry.json",
+            "slsa-bundles.jsonl",
+            "sbom-attestation-bundle.json",
+            "trivy-attestation-bundle.json",
+        ):
+            with self.subTest(artifact=artifact):
+                root = self._fixture()
+                workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+                workflow_text = workflow.read_text(encoding="utf-8")
+                before, candidate = workflow_text.split(
+                    '          evidence_dir="${RUNNER_TEMP}/'
+                    'polaris-image-candidate"\n',
+                    maxsplit=1,
+                )
+                candidate_copy, after = candidate.split(
+                    "          test -s runtime-smoke.log\n",
+                    maxsplit=1,
+                )
+                copy_line = f"            {artifact} \\\n"
+                self.assertEqual(1, candidate_copy.count(copy_line))
+                workflow.write_text(
+                    before
+                    + '          evidence_dir="${RUNNER_TEMP}/'
+                    'polaris-image-candidate"\n'
+                    + candidate_copy.replace(copy_line, "", 1)
+                    + "          test -s runtime-smoke.log\n"
+                    + after,
+                    encoding="utf-8",
+                )
+                self._assert_rebound_workflow_code(
+                    root,
+                    "PUBLICATION_POLICY",
+                    "candidate evidence copy closure changed",
+                )
+
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+        workflow_text = workflow.read_text(encoding="utf-8")
+        before, candidate = workflow_text.split(
+            '          evidence_dir="${RUNNER_TEMP}/'
+            'polaris-image-candidate"\n',
+            maxsplit=1,
+        )
+        candidate_copy, after = candidate.split(
+            "          test -s runtime-smoke.log\n",
+            maxsplit=1,
+        )
+        destination = '            "${evidence_dir}/"\n'
+        self.assertEqual(1, candidate_copy.count(destination))
+        workflow.write_text(
+            before
+            + '          evidence_dir="${RUNNER_TEMP}/'
+            'polaris-image-candidate"\n'
+            + candidate_copy.replace(
+                destination,
+                "            unexpected-evidence.json \\\n" + destination,
+                1,
+            )
+            + "          test -s runtime-smoke.log\n"
+            + after,
+            encoding="utf-8",
+        )
+        self._assert_rebound_workflow_code(
+            root,
+            "PUBLICATION_POLICY",
+            "candidate evidence copy closure changed",
+        )
+
+    def test_promotion_evidence_copy_closure_is_exact_when_hashes_rebound(
+        self,
+    ) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+        workflow_text = workflow.read_text(encoding="utf-8")
+        copy_line = (
+            "          cp promotion-cosign-verify.json candidate-evidence/\n"
+        )
+        self.assertEqual(1, workflow_text.count(copy_line))
+        workflow.write_text(
+            workflow_text.replace(copy_line, "", 1),
+            encoding="utf-8",
+        )
+        self._assert_rebound_workflow_code(
+            root,
+            "PUBLICATION_POLICY",
+            "promotion evidence copy closure changed",
+        )
+
+    def test_candidate_crypto_bindings_cannot_be_weakened_when_hashes_rebound(
+        self,
+    ) -> None:
+        cases = (
+            (
+                "if registry_bundle_matches != 1:",
+                "if registry_bundle_matches < 1:",
+            ),
+            (
+                'certificate.get("runInvocationURI") == invocation,',
+                'certificate.get("runInvocationURI") is not None,',
+            ),
+        )
+        for original, replacement in cases:
+            with self.subTest(original=original):
+                root = self._fixture()
+                workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+                workflow_text = workflow.read_text(encoding="utf-8")
+                self.assertEqual(1, workflow_text.count(original))
+                workflow.write_text(
+                    workflow_text.replace(original, replacement, 1),
+                    encoding="utf-8",
+                )
+                self._assert_rebound_workflow_code(
+                    root,
+                    "PUBLICATION_POLICY",
+                    "candidate cryptographic evidence binding changed",
+                )
+
+    def test_promotion_crypto_bindings_cannot_be_weakened_when_hashes_rebound(
+        self,
+    ) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+        workflow_text = workflow.read_text(encoding="utf-8")
+        original = 'and statement.get("predicate") == predicate'
+        self.assertEqual(1, workflow_text.count(original))
+        workflow.write_text(
+            workflow_text.replace(original, "and predicate is not None", 1),
+            encoding="utf-8",
+        )
+        self._assert_rebound_workflow_code(
+            root,
+            "PUBLICATION_POLICY",
+            "promotion cryptographic evidence binding changed",
+        )
+
+    def test_promotion_attestation_revalidation_precedes_credentials(
+        self,
+    ) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+        workflow_text = workflow.read_text(encoding="utf-8")
+        before, promote = workflow_text.split("\n  promote:\n", maxsplit=1)
+        self.assertEqual(1, promote.count("cosign verify-blob-attestation"))
+        workflow.write_text(
+            before
+            + "\n  promote:\n"
+            + promote.replace(
+                "cosign verify-blob-attestation",
+                "cosign verify-attestation",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        self._assert_rebound_workflow_code(
+            root,
+            "PUBLICATION_POLICY",
+            "credential-free candidate evidence revalidation changed",
         )
 
     def test_public_fingerprint_remains_gitleaks_safe_when_hash_is_rebound(
