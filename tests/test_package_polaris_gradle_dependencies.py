@@ -215,6 +215,34 @@ class PolarisGradleDependencySnapshotTests(unittest.TestCase):
             json.loads(second_descriptor.read_text(encoding="utf-8"))["files"],
         )
 
+    def test_long_directory_pax_path_round_trip(self) -> None:
+        cache, verification, archive, descriptor = self._fixture()
+        long_metadata = (
+            cache
+            / "caches/modules-2/metadata-2.107/descriptors"
+            / ("long-" + "a" * 80)
+            / "descriptor.bin"
+        )
+        long_metadata.parent.mkdir(parents=True)
+        long_metadata.write_bytes(b"long metadata cache path\n")
+
+        packager.create_snapshot(
+            cache,
+            verification,
+            archive,
+            descriptor,
+        )
+        value = packager.verify_snapshot(
+            descriptor,
+            verification,
+            archive,
+        )
+
+        self.assertIn(
+            long_metadata.relative_to(cache).as_posix(),
+            {record["path"] for record in value["files"]},
+        )
+
     def test_module_hash_must_be_authenticated_by_gradle_metadata(self) -> None:
         cache, verification, archive, descriptor = self._fixture()
         verification.write_text(
@@ -226,7 +254,7 @@ class PolarisGradleDependencySnapshotTests(unittest.TestCase):
         )
 
         self._assert_snapshot_error(
-            "does not authenticate",
+            "unretained artifacts",
             lambda: packager.create_snapshot(
                 cache,
                 verification,
@@ -234,6 +262,214 @@ class PolarisGradleDependencySnapshotTests(unittest.TestCase):
                 descriptor,
             ),
         )
+
+    def test_unverified_module_cache_residue_is_excluded(self) -> None:
+        cache, verification, archive, descriptor = self._fixture()
+        residue_content = b"unused repository probe metadata\n"
+        residue_identity = hashlib.sha1(
+            residue_content,
+            usedforsecurity=False,
+        ).hexdigest().lstrip("0")
+        residue_relative = (
+            Path("caches/modules-2/files-2.1")
+            / "com.auth0/java-jwt/4.5.2"
+            / residue_identity
+            / "java-jwt-4.5.2.pom"
+        )
+        residue = cache / residue_relative
+        residue.parent.mkdir(parents=True)
+        residue.write_bytes(residue_content)
+
+        packager.create_snapshot(
+            cache,
+            verification,
+            archive,
+            descriptor,
+        )
+        value = packager.verify_snapshot(
+            descriptor,
+            verification,
+            archive,
+            archive.parent / "extracted",
+        )
+
+        retained_paths = {record["path"] for record in value["files"]}
+        self.assertNotIn(residue_relative.as_posix(), retained_paths)
+        self.assertEqual(
+            {
+                "scanned_file_count": 3,
+                "scanned_total_file_bytes": (
+                    len(self.MODULE_CONTENT)
+                    + len(b"gradle-metadata-cache\n")
+                    + len(residue_content)
+                ),
+                "retained_file_count": 2,
+                "retained_total_file_bytes": (
+                    len(self.MODULE_CONTENT)
+                    + len(b"gradle-metadata-cache\n")
+                ),
+                "excluded_module_file_count": 1,
+                "excluded_module_file_bytes": len(residue_content),
+            },
+            value["projection"],
+        )
+        self.assertFalse(
+            (archive.parent / "extracted" / residue_relative).exists()
+        )
+        with tarfile.open(archive, mode="r:gz") as snapshot:
+            self.assertNotIn(residue_relative.as_posix(), snapshot.getnames())
+
+    def test_unverified_residue_exclusion_is_extension_independent(self) -> None:
+        cache, verification, archive, descriptor = self._fixture()
+        residue_paths: list[Path] = []
+        for index, suffix in enumerate((".pom", ".module", ".jar", ".zip")):
+            content = f"unused-{suffix}-{index}\n".encode()
+            identity = hashlib.sha1(
+                content,
+                usedforsecurity=False,
+            ).hexdigest().lstrip("0")
+            relative = (
+                Path("caches/modules-2/files-2.1")
+                / f"org.unused/module-{index}/1.0.0"
+                / identity
+                / f"module-{index}-1.0.0{suffix}"
+            )
+            path = cache / relative
+            path.parent.mkdir(parents=True)
+            path.write_bytes(content)
+            residue_paths.append(relative)
+
+        value = packager.create_snapshot(
+            cache,
+            verification,
+            archive,
+            descriptor,
+        )
+
+        retained_paths = {record["path"] for record in value["files"]}
+        self.assertTrue(
+            all(path.as_posix() not in retained_paths for path in residue_paths)
+        )
+        self.assertEqual(4, value["projection"]["excluded_module_file_count"])
+
+    def test_wrong_variant_is_excluded_when_verified_variant_exists(self) -> None:
+        cache, verification, archive, descriptor = self._fixture()
+        wrong_content = b"alternate repository variant\n"
+        wrong_identity = hashlib.sha1(
+            wrong_content,
+            usedforsecurity=False,
+        ).hexdigest().lstrip("0")
+        wrong_relative = (
+            Path("caches/modules-2/files-2.1")
+            / "org.example/demo/1.2.3"
+            / wrong_identity
+            / "demo-1.2.3.jar"
+        )
+        wrong = cache / wrong_relative
+        wrong.parent.mkdir(parents=True)
+        wrong.write_bytes(wrong_content)
+
+        value = packager.create_snapshot(
+            cache,
+            verification,
+            archive,
+            descriptor,
+        )
+
+        retained_paths = {record["path"] for record in value["files"]}
+        self.assertNotIn(wrong_relative.as_posix(), retained_paths)
+        self.assertEqual(1, value["projection"]["excluded_module_file_count"])
+        self.assertEqual(
+            1,
+            len(
+                [
+                    record
+                    for record in value["files"]
+                    if record["kind"] == "module-artifact"
+                ]
+            ),
+        )
+
+    def test_surplus_does_not_change_canonical_archive(self) -> None:
+        cache, verification, archive, descriptor = self._fixture()
+        packager.create_snapshot(cache, verification, archive, descriptor)
+        original_archive = archive.read_bytes()
+        residue_content = b"unused repository probe metadata\n"
+        residue_identity = hashlib.sha1(
+            residue_content,
+            usedforsecurity=False,
+        ).hexdigest().lstrip("0")
+        residue = (
+            cache
+            / "caches/modules-2/files-2.1"
+            / "com.auth0/java-jwt/4.5.2"
+            / residue_identity
+            / "java-jwt-4.5.2.pom"
+        )
+        residue.parent.mkdir(parents=True)
+        residue.write_bytes(residue_content)
+
+        second_archive = archive.with_name("second.tar.gz")
+        second_descriptor = descriptor.with_name("second.json")
+        value = packager.create_snapshot(
+            cache,
+            verification,
+            second_archive,
+            second_descriptor,
+        )
+
+        self.assertEqual(original_archive, second_archive.read_bytes())
+        self.assertEqual(1, value["projection"]["excluded_module_file_count"])
+
+    def test_unverified_residue_still_needs_canonical_identity(self) -> None:
+        cache, verification, archive, descriptor = self._fixture()
+        residue = (
+            cache
+            / "caches/modules-2/files-2.1"
+            / "com.auth0/java-jwt/4.5.2"
+            / ("1" * 40)
+            / "java-jwt-4.5.2.pom"
+        )
+        residue.parent.mkdir(parents=True)
+        residue.write_bytes(b"unused repository probe metadata\n")
+
+        self._assert_snapshot_error(
+            "cache identity differs from artifact SHA-1",
+            lambda: packager.create_snapshot(
+                cache,
+                verification,
+                archive,
+                descriptor,
+            ),
+        )
+
+    def test_unverified_residue_counts_toward_file_limit(self) -> None:
+        cache, verification, archive, descriptor = self._fixture()
+        residue_content = b"unused repository probe metadata\n"
+        residue_identity = hashlib.sha1(
+            residue_content,
+            usedforsecurity=False,
+        ).hexdigest().lstrip("0")
+        residue = (
+            cache
+            / "caches/modules-2/files-2.1"
+            / "com.auth0/java-jwt/4.5.2"
+            / residue_identity
+            / "java-jwt-4.5.2.pom"
+        )
+        residue.parent.mkdir(parents=True)
+        residue.write_bytes(residue_content)
+
+        with mock.patch.object(packager, "MAX_FILES", 2):
+            self._assert_snapshot_error(
+                "exceeds 2 files",
+                lambda: packager.create_snapshot(
+                    cache,
+                    verification,
+                    archive,
+                    descriptor,
+                ),
+            )
 
     def test_unretained_verification_artifact_is_rejected(self) -> None:
         cache, verification, archive, descriptor = self._fixture()
@@ -523,6 +759,43 @@ class PolarisGradleDependencySnapshotTests(unittest.TestCase):
             ),
         )
 
+    def test_projection_counter_tamper_is_rejected(self) -> None:
+        _, verification, archive, descriptor = self._create()
+
+        def mutate(value: dict[str, object]) -> None:
+            value["projection"]["excluded_module_file_count"] = 1  # type: ignore[index]
+
+        self._rewrite_descriptor(descriptor, mutate)
+        self._assert_snapshot_error(
+            "count or size summary",
+            lambda: packager.verify_snapshot(
+                descriptor,
+                verification,
+                archive,
+            ),
+        )
+
+    def test_projection_boolean_counter_is_rejected(self) -> None:
+        _, verification, archive, descriptor = self._create()
+
+        def mutate(value: dict[str, object]) -> None:
+            value["projection"][  # type: ignore[index]
+                "excluded_module_file_count"
+            ] = False
+            value["projection"][  # type: ignore[index]
+                "excluded_module_file_bytes"
+            ] = False
+
+        self._rewrite_descriptor(descriptor, mutate)
+        self._assert_snapshot_error(
+            "nonnegative integers",
+            lambda: packager.verify_snapshot(
+                descriptor,
+                verification,
+                archive,
+            ),
+        )
+
     def test_archive_rebound_to_wrong_cache_identity_is_rejected(
         self,
     ) -> None:
@@ -721,6 +994,14 @@ class PolarisGradleDependencySnapshotTests(unittest.TestCase):
             packager._directory_names(value["files"])
         )
         value["total_file_bytes"] += duplicate["size"]
+        value["projection"]["scanned_file_count"] = len(value["files"])
+        value["projection"]["retained_file_count"] = len(value["files"])
+        value["projection"]["scanned_total_file_bytes"] = value[
+            "total_file_bytes"
+        ]
+        value["projection"]["retained_total_file_bytes"] = value[
+            "total_file_bytes"
+        ]
 
         self._assert_snapshot_error(
             "multiple descriptor records",

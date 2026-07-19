@@ -749,6 +749,21 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             "module_cache_identity.encoding",
         )
 
+    def test_module_cache_retention_contract_drift_fails_closed(self) -> None:
+        root = self._fixture()
+
+        def mutate(value: dict[str, object]) -> None:
+            value["dependency_snapshot"]["module_cache_identity"][  # type: ignore[index]
+                "retention"
+            ] = "all-observed-cache-files"
+
+        self._rewrite_json(root, verifier.POLARIS_CONTRACT, mutate)
+        self._assert_code(
+            root,
+            "CONTRACT_STATE",
+            "module_cache_identity.retention",
+        )
+
     def test_publication_workflow_is_forbidden_while_pending(self) -> None:
         root = self._fixture()
         workflow = root / ".github/workflows/polaris-arm64.yml"

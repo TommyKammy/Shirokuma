@@ -577,11 +577,14 @@ def _file_records(
     cache_root: Path,
     files: Iterable[Path],
     verification: Mapping[tuple[str, str, str, str], set[str]],
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
     records: list[dict[str, Any]] = []
     observed_coordinates: set[tuple[str, str, str, str]] = set()
     observed_path_identities: set[str] = set()
-    total_size = 0
+    scanned_file_count = 0
+    scanned_total_file_bytes = 0
+    excluded_module_file_count = 0
+    excluded_module_file_bytes = 0
     for path in files:
         relative = PurePosixPath(path.relative_to(cache_root).as_posix())
         normalized_relative = _safe_relative(relative.as_posix())
@@ -597,8 +600,9 @@ def _file_records(
             cache_root,
             normalized_relative,
         )
-        total_size += size
-        if total_size > MAX_TOTAL_FILE_BYTES:
+        scanned_file_count += 1
+        scanned_total_file_bytes += size
+        if scanned_total_file_bytes > MAX_TOTAL_FILE_BYTES:
             _fail(
                 "Gradle dependency snapshot exceeds the uncompressed size limit"
             )
@@ -620,11 +624,13 @@ def _file_records(
         }
         if coordinate is not None:
             allowed = verification.get(coordinate)
+            # Gradle's files-2.1 store is a superset of the artifacts used by
+            # the resolved graph. Repository probes can leave canonical files
+            # that are intentionally absent from verification metadata.
             if allowed is None or digest not in allowed:
-                _fail(
-                    "Gradle verification metadata does not authenticate "
-                    f"{relative}"
-                )
+                excluded_module_file_count += 1
+                excluded_module_file_bytes += size
+                continue
             if coordinate in observed_coordinates:
                 _fail(
                     "multiple Gradle cache files map to one verified artifact: "
@@ -647,7 +653,17 @@ def _file_records(
             "Gradle verification metadata contains unretained artifacts: "
             f"{unbound[:5]}"
         )
-    return records
+    projection = {
+        "scanned_file_count": scanned_file_count,
+        "scanned_total_file_bytes": scanned_total_file_bytes,
+        "retained_file_count": len(records),
+        "retained_total_file_bytes": sum(
+            int(record["size"]) for record in records
+        ),
+        "excluded_module_file_count": excluded_module_file_count,
+        "excluded_module_file_bytes": excluded_module_file_bytes,
+    }
+    return records, projection
 
 
 def _directory_names(records: Iterable[Mapping[str, Any]]) -> list[str]:
@@ -868,7 +884,7 @@ def create_snapshot(
     cache_root = cache_root.resolve(strict=True)
     verification_metadata = verification_metadata.resolve(strict=True)
     verification = _parse_verification_metadata(verification_metadata)
-    records = _file_records(
+    records, projection = _file_records(
         cache_root,
         _regular_files(cache_root),
         verification,
@@ -894,6 +910,7 @@ def create_snapshot(
         "file_count": len(records),
         "directory_count": len(directories),
         "total_file_bytes": sum(int(record["size"]) for record in records),
+        "projection": projection,
         "archive": {
             "filename": ARCHIVE_FILENAME,
             "media_type": ARCHIVE_MEDIA_TYPE,
@@ -990,6 +1007,7 @@ def _validate_descriptor(
             "file_count",
             "directory_count",
             "total_file_bytes",
+            "projection",
             "archive",
             "verification_metadata",
             "files",
@@ -1010,8 +1028,16 @@ def _validate_descriptor(
             _fail(f"descriptor {field} differs from the closed contract")
     archive = descriptor.get("archive")
     metadata = descriptor.get("verification_metadata")
-    if not isinstance(archive, Mapping) or not isinstance(metadata, Mapping):
-        _fail("descriptor archive and verification_metadata must be objects")
+    projection = descriptor.get("projection")
+    if (
+        not isinstance(archive, Mapping)
+        or not isinstance(metadata, Mapping)
+        or not isinstance(projection, Mapping)
+    ):
+        _fail(
+            "descriptor archive, verification_metadata, and projection "
+            "must be objects"
+        )
     _expect_keys(
         archive,
         {"filename", "media_type", "sha256", "size"},
@@ -1022,6 +1048,24 @@ def _validate_descriptor(
         {"filename", "media_type", "sha256", "size", "mode"},
         "descriptor.verification_metadata",
     )
+    _expect_keys(
+        projection,
+        {
+            "scanned_file_count",
+            "scanned_total_file_bytes",
+            "retained_file_count",
+            "retained_total_file_bytes",
+            "excluded_module_file_count",
+            "excluded_module_file_bytes",
+        },
+        "descriptor.projection",
+    )
+    if any(
+        type(projection.get(field)) is not int
+        or int(projection[field]) < 0
+        for field in projection
+    ):
+        _fail("descriptor projection counters must be nonnegative integers")
     if (
         archive.get("filename") != ARCHIVE_FILENAME
         or archive.get("media_type") != ARCHIVE_MEDIA_TYPE
@@ -1127,6 +1171,15 @@ def _validate_descriptor(
         or descriptor.get("file_count") != len(files)
         or descriptor.get("directory_count") != len(_directory_names(files))
         or descriptor.get("total_file_bytes") != total_size
+        or projection.get("retained_file_count") != len(files)
+        or projection.get("retained_total_file_bytes") != total_size
+        or projection.get("scanned_file_count")
+        != len(files) + projection.get("excluded_module_file_count")
+        or projection.get("scanned_total_file_bytes")
+        != total_size + projection.get("excluded_module_file_bytes")
+        or int(projection["scanned_file_count"]) > MAX_FILES
+        or int(projection["scanned_total_file_bytes"])
+        > MAX_TOTAL_FILE_BYTES
     ):
         _fail("descriptor count or size summary differs from file records")
 
@@ -1362,9 +1415,12 @@ def _verify_archive_inventory(
                         )
                     if member.uname or member.gname:
                         _fail(f"noncanonical archive owner name: {name}")
+                    expected_pax_path = (
+                        f"{name}/" if member.isdir() else name
+                    )
                     if member.pax_headers and (
                         set(member.pax_headers) != {"path"}
-                        or member.pax_headers["path"] != name
+                        or member.pax_headers["path"] != expected_pax_path
                     ):
                         _fail(f"noncanonical PAX metadata: {name}")
                     if member.isdir():
@@ -1758,7 +1814,9 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(
                 "polaris-gradle-snapshot: created "
-                f"files={len(value['files'])} "
+                f"scanned={value['projection']['scanned_file_count']} "
+                f"retained={value['projection']['retained_file_count']} "
+                f"excluded={value['projection']['excluded_module_file_count']} "
                 f"archive_sha256={value['archive']['sha256']}"
             )
         else:
