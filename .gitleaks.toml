@@ -74,9 +74,18 @@ regexTarget = "secret"
 regexes = ['''^F2EEEB06110BEE1397EC74CBB8960FF52D9B1312$''']
 targetRules = ["generic-api-key"]
 paths = [
-  '''^\.github/workflows/polaris-gradle-dependencies\.yml$''',
   '''^bootstrap/polaris/v1\.6\.0/trusted-build-contract\.json$''',
   '''^scripts/verify_polaris_trusted_image\.py$''',
+]
+
+[[allowlists]]
+description = "Public 40-hex Gradle SHA-1 package hashes in retained Apache Polaris 1.6.0 descriptor"
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^[0-9a-f]{40}$''']
+targetRules = ["sourcegraph-access-token"]
+paths = [
+  '''^bootstrap/polaris/v1\.6\.0/evidence/gradle-dependency-inputs\.json$''',
 ]
 
 [[allowlists]]
