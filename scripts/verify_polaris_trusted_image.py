@@ -62,7 +62,7 @@ POLARIS_SOURCE_SHA256 = (
     "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb"
 )
 POLARIS_CONTRACT_SHA256 = (
-    "f98595b3f1148298e3bf1e3c39b3d3fc3cd1a21fdde237e00fb17f4cceae4630"
+    "255dab3f052572baf9d32ec4cbb7b0512b11b862384eb44104dbd21f6ffa53e6"
 )
 GRADLE_DISTRIBUTION_SHA256 = (
     "87a2216cc1f9122192d4e0fe905ffdf1b4c72cff797e9f733b174e157cadd396"
@@ -105,7 +105,7 @@ POLARIS_DEPENDENCY_WORKFLOW = Path(
     ".github/workflows/polaris-gradle-dependencies.yml"
 )
 POLARIS_DEPENDENCY_WORKFLOW_SHA256 = (
-    "255459419f1ead69d5fc3e99813d5d59644e3031a8f70d209c90c7165583571e"
+    "2a594cb49e8a2be4154395a6c30836f8ffc7fafd933cac41ad04574353af91d3"
 )
 POLARIS_DEPENDENCY_PACKAGER = Path(
     "scripts/package_polaris_gradle_dependencies.py"
@@ -1304,6 +1304,55 @@ def _audit_dependency_workflow_semantics(
         "read-only candidate verification gained write credentials",
     )
     publish_steps = POLARIS_DEPENDENCY_WORKFLOW_STEPS["publish"]
+    publish_step = _workflow_step_block(
+        text,
+        "Publish the run-scoped immutable OCI artifact",
+    )
+    relative_oras_push = "\n".join(
+        [
+            "          (",
+            '            cd "${candidate_dir}"',
+            "            oras push \\",
+            "              --image-spec v1.1 \\",
+            '              --artifact-type "${ARTIFACT_TYPE}" \\',
+            "              --annotation \\",
+            (
+                '                "org.opencontainers.image.source='
+                'https://github.com/${GITHUB_REPOSITORY}" \\'
+            ),
+            (
+                '              --annotation "org.opencontainers.image.revision='
+                '${GITHUB_SHA}" \\'
+            ),
+            (
+                '              --annotation "org.opencontainers.image.created='
+                '${created}" \\'
+            ),
+            '              --export-manifest "oci-manifest.json" \\',
+            '              "${tag}" \\',
+            (
+                '              "gradle-dependency-inputs.json:'
+                '${DESCRIPTOR_MEDIA_TYPE}" \\'
+            ),
+            (
+                '              "polaris-gradle-dependencies-1.6.0.tar.gz:'
+                '${ARCHIVE_MEDIA_TYPE}"'
+            ),
+            "          )",
+        ]
+    )
+    _expect(
+        "--disable-path-validation" not in publish_step,
+        "CONTRACT_STATE",
+        "ORAS path validation cannot be disabled",
+    )
+    _expect(
+        publish_step.count(relative_oras_push) == 1
+        and publish_step.count("oras push") == 1
+        and text.count("oras push") == 1,
+        "CONTRACT_STATE",
+        "ORAS publication must use the exact candidate-scoped relative push",
+    )
     _expect(
         publish_steps.index("Keyless-sign the exact OCI manifest")
         < publish_steps.index(

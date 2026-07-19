@@ -843,6 +843,89 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             verifier._audit_dependency_workflow_semantics(root, contract)
         self.assertIn("ordered step inventory", raised.exception.detail)
 
+    def test_dependency_workflow_oras_layers_must_be_relative(self) -> None:
+        for layer_path in (
+            "${candidate_dir}/gradle-dependency-inputs.json",
+            "$PWD/gradle-dependency-inputs.json",
+            "$(pwd)/gradle-dependency-inputs.json",
+            "../gradle-dependency-inputs.json",
+            "/tmp/gradle-dependency-inputs.json",
+        ):
+            with self.subTest(layer_path=layer_path):
+                root = self._fixture()
+                workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
+                workflow.write_text(
+                    workflow.read_text(encoding="utf-8").replace(
+                        "gradle-dependency-inputs.json:"
+                        "${DESCRIPTOR_MEDIA_TYPE}",
+                        f"{layer_path}:${{DESCRIPTOR_MEDIA_TYPE}}",
+                        1,
+                    ),
+                    encoding="utf-8",
+                )
+                contract = json.loads(
+                    (root / verifier.POLARIS_CONTRACT).read_text(
+                        encoding="utf-8"
+                    )
+                )
+                with self.assertRaises(verifier.ContractError) as raised:
+                    verifier._audit_dependency_workflow_semantics(
+                        root,
+                        contract,
+                    )
+                self.assertIn(
+                    "exact candidate-scoped relative push",
+                    raised.exception.detail,
+                )
+
+    def test_dependency_workflow_cannot_hide_a_second_oras_push(self) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
+        workflow.write_text(
+            workflow.read_text(encoding="utf-8").replace(
+                "          )\n"
+                "          digest=$(oras resolve \"${tag}\")",
+                "          )\n"
+                "          oras push \"${tag}\" /tmp/unreviewed\n"
+                "          digest=$(oras resolve \"${tag}\")",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        contract = json.loads(
+            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
+        )
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_dependency_workflow_semantics(root, contract)
+        self.assertIn(
+            "exact candidate-scoped relative push",
+            raised.exception.detail,
+        )
+
+    def test_dependency_workflow_cannot_disable_oras_path_validation(
+        self,
+    ) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_DEPENDENCY_WORKFLOW
+        workflow.write_text(
+            workflow.read_text(encoding="utf-8").replace(
+                "              --image-spec v1.1 \\\n",
+                "              --disable-path-validation \\\n"
+                "              --image-spec v1.1 \\\n",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        contract = json.loads(
+            (root / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
+        )
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_dependency_workflow_semantics(root, contract)
+        self.assertIn(
+            "path validation cannot be disabled",
+            raised.exception.detail,
+        )
+
     def test_dependency_workflow_action_contract_cannot_self_rebind(
         self,
     ) -> None:

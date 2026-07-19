@@ -633,17 +633,20 @@ jobs:
             printf '%s\n' "${resolve_error}" >&2
             exit 1
           fi
-          oras push \
-            --image-spec v1.1 \
-            --artifact-type "${ARTIFACT_TYPE}" \
-            --annotation \
-              "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
-            --annotation "org.opencontainers.image.revision=${GITHUB_SHA}" \
-            --annotation "org.opencontainers.image.created=${created}" \
-            --export-manifest "${candidate_dir}/oci-manifest.json" \
-            "${tag}" \
-            "${candidate_dir}/gradle-dependency-inputs.json:${DESCRIPTOR_MEDIA_TYPE}" \
-            "${candidate_dir}/polaris-gradle-dependencies-1.6.0.tar.gz:${ARCHIVE_MEDIA_TYPE}"
+          (
+            cd "${candidate_dir}"
+            oras push \
+              --image-spec v1.1 \
+              --artifact-type "${ARTIFACT_TYPE}" \
+              --annotation \
+                "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+              --annotation "org.opencontainers.image.revision=${GITHUB_SHA}" \
+              --annotation "org.opencontainers.image.created=${created}" \
+              --export-manifest "oci-manifest.json" \
+              "${tag}" \
+              "gradle-dependency-inputs.json:${DESCRIPTOR_MEDIA_TYPE}" \
+              "polaris-gradle-dependencies-1.6.0.tar.gz:${ARCHIVE_MEDIA_TYPE}"
+          )
           digest=$(oras resolve "${tag}")
           case "${digest}" in
             sha256:????????????????????????????????????????????????????????????????)
