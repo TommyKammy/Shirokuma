@@ -8,7 +8,7 @@
   "source_record": "bootstrap/polaris/v1.6.0/source.json",
   "source_record_sha256": "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb",
   "build_contract": "bootstrap/polaris/v1.6.0/trusted-build-contract.json",
-  "build_contract_sha256": "3c59923597be69a4a42562161a84ffa1cdfe77ebacaba2ebb7b2b58ac6f38989",
+  "build_contract_sha256": "15a297316bda73a42cedf04e4233bb7dd5e04ab3577d9da7ad6dc92183c9d671",
   "dependency_snapshot": {
     "state": "approved_for_image_build",
     "admitted": false,
