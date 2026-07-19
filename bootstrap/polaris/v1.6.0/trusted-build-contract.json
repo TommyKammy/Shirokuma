@@ -247,7 +247,7 @@
     },
     "workflow": {
       "path": ".github/workflows/polaris-arm64.yml",
-      "sha256": "7fc0579877c1c16e82ffbd53c38f7a9b061079984cf8857976e4c1457e223ab0"
+      "sha256": "b3b7f58e9c38637f39f8c2bd800ca8cb8ff479b3f2236aa95b99894a6470373f"
     }
   },
   "runtime": {

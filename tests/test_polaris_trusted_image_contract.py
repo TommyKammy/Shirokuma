@@ -662,6 +662,49 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         if detail is not None:
             self.assertIn(detail, raised.exception.detail)
 
+    def _assert_rebound_workflow_code(
+        self,
+        root: Path,
+        code: str,
+        detail: str,
+    ) -> None:
+        workflow_sha256 = verifier._sha256(
+            root / verifier.POLARIS_IMAGE_WORKFLOW
+        )
+
+        def bind_workflow(value: dict[str, object]) -> None:
+            value["image_publication"]["workflow"][  # type: ignore[index]
+                "sha256"
+            ] = workflow_sha256
+
+        self._rewrite_json(root, verifier.POLARIS_CONTRACT, bind_workflow)
+        contract_sha256 = verifier._sha256(root / verifier.POLARIS_CONTRACT)
+
+        def bind_contract(value: dict[str, object]) -> None:
+            value["build_contract_sha256"] = contract_sha256
+
+        self._rewrite_json(root, verifier.POLARIS_ADMISSION, bind_contract)
+        inventory = dict(verifier.REVIEW_PENDING_WORKFLOW_INVENTORY)
+        inventory[verifier.POLARIS_IMAGE_WORKFLOW.as_posix()] = (
+            workflow_sha256
+        )
+        with mock.patch.object(
+            verifier,
+            "POLARIS_IMAGE_WORKFLOW_SHA256",
+            workflow_sha256,
+        ):
+            with mock.patch.object(
+                verifier,
+                "POLARIS_CONTRACT_SHA256",
+                contract_sha256,
+            ):
+                with mock.patch.object(
+                    verifier,
+                    "REVIEW_PENDING_WORKFLOW_INVENTORY",
+                    inventory,
+                ):
+                    self._assert_code(root, code, detail)
+
     def test_repository_review_pending_contract_is_fail_closed_and_valid(
         self,
     ) -> None:
@@ -1317,44 +1360,98 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        workflow_sha256 = verifier._sha256(workflow)
-
-        def bind_workflow(value: dict[str, object]) -> None:
-            value["image_publication"]["workflow"][  # type: ignore[index]
-                "sha256"
-            ] = workflow_sha256
-
-        self._rewrite_json(root, verifier.POLARIS_CONTRACT, bind_workflow)
-        contract_sha256 = verifier._sha256(root / verifier.POLARIS_CONTRACT)
-
-        def bind_contract(value: dict[str, object]) -> None:
-            value["build_contract_sha256"] = contract_sha256
-
-        self._rewrite_json(root, verifier.POLARIS_ADMISSION, bind_contract)
-        inventory = dict(verifier.REVIEW_PENDING_WORKFLOW_INVENTORY)
-        inventory[verifier.POLARIS_IMAGE_WORKFLOW.as_posix()] = (
-            workflow_sha256
+        self._assert_rebound_workflow_code(
+            root,
+            "PUBLICATION_POLICY",
+            "missing required controls",
         )
-        with mock.patch.object(
-            verifier,
-            "POLARIS_IMAGE_WORKFLOW_SHA256",
-            workflow_sha256,
-        ):
-            with mock.patch.object(
-                verifier,
-                "POLARIS_CONTRACT_SHA256",
-                contract_sha256,
-            ):
-                with mock.patch.object(
-                    verifier,
-                    "REVIEW_PENDING_WORKFLOW_INVENTORY",
-                    inventory,
-                ):
-                    self._assert_code(
-                        root,
-                        "PUBLICATION_POLICY",
-                        "missing required controls",
-                    )
+
+    def test_prepare_cosign_bootstrap_remains_required_when_hashes_are_rebound(
+        self,
+    ) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+        workflow.write_text(
+            workflow.read_text(encoding="utf-8").replace(
+                "Install pinned Cosign for dependency evidence revalidation",
+                "Install untrusted dependency verification tooling",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        self._assert_rebound_workflow_code(
+            root,
+            "PUBLICATION_POLICY",
+            "missing required controls",
+        )
+
+    def test_prepare_cosign_bootstrap_precedes_audit_when_hashes_are_rebound(
+        self,
+    ) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+        bootstrap = (
+            "      - name: Install pinned Cosign for dependency evidence "
+            "revalidation\n"
+            "        if: steps.lifecycle.outputs.active == 'true'\n"
+            "        uses: sigstore/cosign-installer@"
+            "6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2\n"
+            "        with:\n"
+            "          cosign-release: v3.1.1\n\n"
+        )
+        oras = (
+            "      - name: Install checksum-pinned ORAS without credentials\n"
+        )
+        workflow_text = workflow.read_text(encoding="utf-8")
+        self.assertEqual(1, workflow_text.count(bootstrap))
+        self.assertEqual(1, workflow_text.count(oras))
+        workflow.write_text(
+            workflow_text.replace(bootstrap, "", 1).replace(
+                oras,
+                bootstrap + oras,
+                1,
+            ),
+            encoding="utf-8",
+        )
+        self._assert_rebound_workflow_code(
+            root,
+            "PUBLICATION_POLICY",
+            "changed order",
+        )
+
+    def test_prepare_cosign_bootstrap_cannot_be_duplicated_when_hashes_rebound(
+        self,
+    ) -> None:
+        root = self._fixture()
+        workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+        bootstrap = (
+            "      - name: Install pinned Cosign for dependency evidence "
+            "revalidation\n"
+            "        if: steps.lifecycle.outputs.active == 'true'\n"
+            "        uses: sigstore/cosign-installer@"
+            "6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2\n"
+            "        with:\n"
+            "          cosign-release: v3.1.1\n\n"
+        )
+        oras = (
+            "      - name: Install checksum-pinned ORAS without credentials\n"
+        )
+        workflow_text = workflow.read_text(encoding="utf-8")
+        self.assertEqual(1, workflow_text.count(bootstrap))
+        self.assertEqual(1, workflow_text.count(oras))
+        workflow.write_text(
+            workflow_text.replace(
+                oras,
+                bootstrap + oras,
+                1,
+            ),
+            encoding="utf-8",
+        )
+        self._assert_rebound_workflow_code(
+            root,
+            "PUBLICATION_POLICY",
+            "exactly one lifecycle-gated Cosign bootstrap",
+        )
 
     def test_public_fingerprint_remains_gitleaks_safe_when_hash_is_rebound(
         self,

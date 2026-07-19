@@ -126,6 +126,12 @@ jobs:
               ;;
           esac
 
+      - name: Install pinned Cosign for dependency evidence revalidation
+        if: steps.lifecycle.outputs.active == 'true'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.1
+
       - name: Validate the image-publication-pending contract
         if: steps.lifecycle.outputs.active == 'true'
         shell: bash

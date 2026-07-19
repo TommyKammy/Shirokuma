@@ -73,7 +73,7 @@ POLARIS_SOURCE_SHA256 = (
     "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb"
 )
 POLARIS_CONTRACT_SHA256 = (
-    "3c59923597be69a4a42562161a84ffa1cdfe77ebacaba2ebb7b2b58ac6f38989"
+    "15a297316bda73a42cedf04e4233bb7dd5e04ab3577d9da7ad6dc92183c9d671"
 )
 REVIEWED_POLARIS_CONTRACT_SHA256 = (
     "db27ec5ebf627ef1772c898614d5f206a2a3affc67007ee29221c525ab8fd3d6"
@@ -116,7 +116,7 @@ POLARIS_SOURCE_OVERLAY_SHA256 = (
     "c5739a49baac0d08e6cf71a4dabd06141618f9474702e6c24fd1bb7f22571f48"
 )
 POLARIS_IMAGE_WORKFLOW_SHA256 = (
-    "7fc0579877c1c16e82ffbd53c38f7a9b061079984cf8857976e4c1457e223ab0"
+    "b3b7f58e9c38637f39f8c2bd800ca8cb8ff479b3f2236aa95b99894a6470373f"
 )
 POLARIS_OVERLAY_PREIMAGES = {
     "runtime/server/build.gradle.kts": (
@@ -1084,6 +1084,15 @@ def _audit_image_publication_files(root: Path) -> None:
     )
 
     workflow = _read_publication_text(root, POLARIS_IMAGE_WORKFLOW)
+    prepare_cosign_bootstrap = (
+        "      - name: Install pinned Cosign for dependency evidence "
+        "revalidation\n"
+        "        if: steps.lifecycle.outputs.active == 'true'\n"
+        "        uses: sigstore/cosign-installer@"
+        "6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2\n"
+        "        with:\n"
+        "          cosign-release: v3.1.1"
+    )
     required_markers = (
         "runs-on: ubuntu-24.04-arm",
         "github.repository == 'TommyKammy/Shirokuma'",
@@ -1122,6 +1131,7 @@ def _audit_image_publication_files(root: Path) -> None:
         '"admitted": False',
         "retention-days: 30",
         '"forbidden_component_terms": ["hadoop", "ranger", "jetty-http"]',
+        prepare_cosign_bootstrap,
     )
     missing = [marker for marker in required_markers if marker not in workflow]
     _expect(
@@ -1161,6 +1171,13 @@ def _audit_image_publication_files(root: Path) -> None:
         "PUBLICATION_POLICY",
         "workflow job closure changed",
     )
+    prepare_job = jobs_text[1].split("\n  verify:\n", maxsplit=1)
+    _expect(
+        len(prepare_job) == 2
+        and prepare_job[0].count(prepare_cosign_bootstrap) == 1,
+        "PUBLICATION_POLICY",
+        "prepare must contain exactly one lifecycle-gated Cosign bootstrap",
+    )
     action_refs = re.findall(
         r"^\s+-?\s*uses:\s*([^\s#]+)",
         workflow,
@@ -1180,6 +1197,9 @@ def _audit_image_publication_files(root: Path) -> None:
         "every external Action must be pinned to a full commit SHA",
     )
     ordered_markers = (
+        "Bind the run to reviewed main and check publication lifecycle",
+        "Install pinned Cosign for dependency evidence revalidation",
+        "Validate the image-publication-pending contract",
         "Anonymously fetch and verify the exact reviewed dependency snapshot",
         "Fetch and authenticate the signed ASF source release",
         "Build Polaris from retained dependencies with network disabled",
