@@ -162,7 +162,10 @@ class TrivyIgnoreContractTests(unittest.TestCase):
 
     def test_verify_security_runs_contract_tests_and_validator(self) -> None:
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
-        verify_security = makefile.split("verify-security:\n", 1)[1].split("\n\n", 1)[0]
+        verify_security = makefile.split(
+            "verify-security: verify-cosign\n",
+            1,
+        )[1].split("\n\n", 1)[0]
         self.assertIn("test_trivyignore.py", verify_security)
         self.assertIn("scripts/verify_trivyignore.py", verify_security)
 

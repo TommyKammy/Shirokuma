@@ -176,8 +176,9 @@ and exact publisher workflow SHA
 identity alone is not sufficient.
 `make test-polaris-build-contract` injects a mock only at the external
 cryptographic-command boundary so the unit suite needs no host Cosign binary;
-`make verify-polaris-build-contract` requires Cosign v3.1.1 explicitly and runs
-the unmocked CLI audit. No production skip flag exists.
+`make verify-polaris-build-contract` and `make verify-security` share an
+explicit `verify-cosign` prerequisite that requires Cosign v3.1.1 before either
+unmocked retained-evidence audit runs. No production skip flag exists.
 
 At this checkpoint Polaris image publication remains
 `blocked_dependency_review` with publication disabled and no Containerfile or

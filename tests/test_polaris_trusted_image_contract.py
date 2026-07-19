@@ -679,10 +679,14 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             "\ntest-polaris-build-contract:\n",
             1,
         )[1].split("\n\n", 1)[0]
+        cosign_target = makefile.split(
+            "\nverify-cosign:\n",
+            1,
+        )[1].split("\n\n", 1)[0]
         verification_target = makefile.split(
             (
                 "\nverify-polaris-build-contract: "
-                "test-polaris-build-contract\n"
+                "test-polaris-build-contract verify-cosign\n"
             ),
             1,
         )[1].split("\n\n", 1)[0]
@@ -691,8 +695,8 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         self.assertIn("test_polaris_trusted_image_contract.py", unit_target)
         self.assertNotIn("COSIGN", unit_target)
         self.assertIn("COSIGN_VERSION ?= v3.1.1", makefile)
-        self.assertIn("command -v $(COSIGN)", verification_target)
-        self.assertIn("$(COSIGN) version", verification_target)
+        self.assertIn("command -v $(COSIGN)", cosign_target)
+        self.assertIn("$(COSIGN) version", cosign_target)
         self.assertIn(
             "scripts/verify_polaris_trusted_image.py audit --root .",
             verification_target,
