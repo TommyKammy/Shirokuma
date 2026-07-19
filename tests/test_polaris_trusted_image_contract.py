@@ -43,6 +43,19 @@ source_archive_validator = _load_module(
 
 
 class PolarisTrustedImageContractTests(unittest.TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.dependency_crypto_verifier = mock.create_autospec(
+            verifier._reverify_dependency_sigstore_cryptographically,
+            spec_set=True,
+        )
+
+    def _audit(self, root: Path) -> None:
+        verifier.audit(
+            root,
+            dependency_crypto_verifier=self.dependency_crypto_verifier,
+        )
+
     def _source_archive(
         self,
         entries: list[tuple[str, str, bytes | str | None]],
@@ -644,7 +657,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         detail: str | None = None,
     ) -> None:
         with self.assertRaises(verifier.ContractError) as raised:
-            verifier.audit(root)
+            self._audit(root)
         self.assertEqual(code, raised.exception.code)
         if detail is not None:
             self.assertIn(detail, raised.exception.detail)
@@ -652,10 +665,38 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
     def test_repository_review_pending_contract_is_fail_closed_and_valid(
         self,
     ) -> None:
-        verifier.audit(ROOT)
+        self._audit(ROOT)
+        self.dependency_crypto_verifier.assert_called_once()
 
     def test_minimal_review_pending_fixture_is_valid(self) -> None:
-        verifier.audit(self._fixture())
+        self._audit(self._fixture())
+
+    def test_makefile_separates_unit_and_real_crypto_verification(
+        self,
+    ) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        unit_target = makefile.split(
+            "\ntest-polaris-build-contract:\n",
+            1,
+        )[1].split("\n\n", 1)[0]
+        verification_target = makefile.split(
+            (
+                "\nverify-polaris-build-contract: "
+                "test-polaris-build-contract\n"
+            ),
+            1,
+        )[1].split("\n\n", 1)[0]
+
+        self.assertIn("test_package_polaris_gradle_dependencies.py", unit_target)
+        self.assertIn("test_polaris_trusted_image_contract.py", unit_target)
+        self.assertNotIn("COSIGN", unit_target)
+        self.assertIn("COSIGN_VERSION ?= v3.1.1", makefile)
+        self.assertIn("command -v $(COSIGN)", verification_target)
+        self.assertIn("$(COSIGN) version", verification_target)
+        self.assertIn(
+            "scripts/verify_polaris_trusted_image.py audit --root .",
+            verification_target,
+        )
 
     def test_review_pending_contract_binds_exact_main_publication(self) -> None:
         contract = json.loads(
@@ -802,42 +843,113 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         self.assertEqual("DEPENDENCY_EVIDENCE", raised.exception.code)
         self.assertIn("DSSE payload differs", raised.exception.detail)
 
-    def test_cosign_signature_mutation_fails_cryptographically(self) -> None:
+    def test_invalid_sigstore_bundle_does_not_reach_crypto_boundary(
+        self,
+    ) -> None:
         root = self._fixture()
-        bundle_path = (
-            root
-            / verifier.POLARIS_EVIDENCE
-            / "cosign-signature-bundle.json"
-        )
-        bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
-        signature = bundle["dsseEnvelope"]["signatures"][0]["sig"]
-        bundle["dsseEnvelope"]["signatures"][0]["sig"] = (
-            ("A" if signature[0] != "A" else "B") + signature[1:]
-        )
-        bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
+        slsa_document = [
+            {
+                "attestation": {
+                    "bundle": [],
+                },
+            }
+        ]
 
         with self.assertRaises(verifier.ContractError) as raised:
-            verifier._run_cosign(
+            verifier._audit_dependency_sigstore(
                 root,
-                [
-                    "verify-blob",
-                    "--bundle",
+                slsa_document,
+                self.dependency_crypto_verifier,
+            )
+        self.assertEqual("DEPENDENCY_EVIDENCE", raised.exception.code)
+        self.assertIn(
+            "exactly one Sigstore bundle",
+            raised.exception.detail,
+        )
+        self.dependency_crypto_verifier.assert_not_called()
+
+    def test_default_audit_uses_real_crypto_boundary(self) -> None:
+        with mock.patch.object(
+            verifier,
+            "_reverify_dependency_sigstore_cryptographically",
+            autospec=True,
+        ) as default_crypto_verifier:
+            verifier.audit(ROOT)
+        default_crypto_verifier.assert_called_once()
+
+    def test_cosign_verification_failure_is_fail_closed(self) -> None:
+        root = self._fixture()
+        arguments = [
+            "verify-blob",
+            "--bundle",
+            (
+                verifier.POLARIS_EVIDENCE
+                / "cosign-signature-bundle.json"
+            ).as_posix(),
+            "--certificate-identity",
+            verifier.POLARIS_DEPENDENCY_PUBLISHER_IDENTITY,
+            "--certificate-oidc-issuer",
+            verifier.POLARIS_DEPENDENCY_PUBLISHER_ISSUER,
+            (verifier.POLARIS_EVIDENCE / "oci-manifest.json").as_posix(),
+        ]
+        failed = subprocess.CompletedProcess(
+            ["cosign", *arguments],
+            1,
+            stdout="",
+            stderr="invalid signature",
+        )
+
+        with mock.patch.object(
+            verifier.subprocess,
+            "run",
+            return_value=failed,
+        ) as run:
+            with self.assertRaises(verifier.ContractError) as raised:
+                verifier._run_cosign(
+                    root,
+                    arguments,
+                    "signature-bundle verification",
+                )
+        self.assertEqual("DEPENDENCY_EVIDENCE", raised.exception.code)
+        self.assertIn("signature-bundle verification", raised.exception.detail)
+        self.assertIn("invalid signature", raised.exception.detail)
+        run.assert_called_once_with(
+            ["cosign", *arguments],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=60,
+        )
+
+    def test_missing_cosign_is_fail_closed(self) -> None:
+        root = self._fixture()
+        slsa_document = json.loads(
+            (
+                root
+                / verifier.POLARIS_EVIDENCE
+                / "slsa-verify.json"
+            ).read_text(encoding="utf-8")
+        )
+        nested_bundle = slsa_document[0]["attestation"]["bundle"]
+
+        with mock.patch.object(
+            verifier.subprocess,
+            "run",
+            side_effect=FileNotFoundError("cosign"),
+        ):
+            with self.assertRaises(verifier.ContractError) as raised:
+                verifier._reverify_dependency_sigstore_cryptographically(
+                    root,
+                    verifier.POLARIS_EVIDENCE / "oci-manifest.json",
                     (
                         verifier.POLARIS_EVIDENCE
                         / "cosign-signature-bundle.json"
-                    ).as_posix(),
-                    "--certificate-identity",
-                    verifier.POLARIS_DEPENDENCY_PUBLISHER_IDENTITY,
-                    "--certificate-oidc-issuer",
-                    verifier.POLARIS_DEPENDENCY_PUBLISHER_ISSUER,
-                    (
-                        verifier.POLARIS_EVIDENCE / "oci-manifest.json"
-                    ).as_posix(),
-                ],
-                "mutated-signature test",
-            )
+                    ),
+                    nested_bundle,
+                )
         self.assertEqual("DEPENDENCY_EVIDENCE", raised.exception.code)
-        self.assertIn("mutated-signature", raised.exception.detail)
+        self.assertIn("cannot inspect Cosign", raised.exception.detail)
 
     def test_source_pin_mutation_fails_closed(self) -> None:
         root = self._fixture()
@@ -1207,7 +1319,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             check=True,
             capture_output=True,
         )
-        verifier.audit(root)
+        self._audit(root)
 
         with self.subTest(case="tracked-mutation"):
             runtime_file = root / "deploy/gitops/dev/smoke-configmap.yaml"
@@ -1336,7 +1448,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             document = root / relative
             document.parent.mkdir(parents=True, exist_ok=True)
             document.write_text(content, encoding="utf-8")
-        verifier.audit(root)
+        self._audit(root)
 
     def test_extra_dependency_evidence_is_forbidden_while_review_pending(
         self,
@@ -1565,7 +1677,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             + "\n",
             encoding="utf-8",
         )
-        verifier.audit(root)
+        self._audit(root)
 
     def test_unrelated_oci_reference_with_pending_prose_is_allowed(self) -> None:
         root = self._fixture()
@@ -1584,7 +1696,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             + "\n",
             encoding="utf-8",
         )
-        verifier.audit(root)
+        self._audit(root)
 
     def test_unrelated_dsse_subject_is_allowed(self) -> None:
         root = self._fixture()
@@ -1609,7 +1721,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         evidence = root / "security/evidence/unrelated-v1/attestation.json"
         evidence.parent.mkdir(parents=True, exist_ok=True)
         evidence.write_text(json.dumps(envelope) + "\n", encoding="utf-8")
-        verifier.audit(root)
+        self._audit(root)
 
     def test_unknown_retained_evidence_format_fails_closed(self) -> None:
         root = self._fixture()
@@ -1650,7 +1762,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             + "\n",
             encoding="utf-8",
         )
-        verifier.audit(root)
+        self._audit(root)
 
     def test_unrelated_retained_evidence_subjects_are_allowed(self) -> None:
         root = self._fixture()
@@ -1677,7 +1789,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             + "\n",
             encoding="utf-8",
         )
-        verifier.audit(root)
+        self._audit(root)
 
     def test_unrelated_retained_evidence_subject_substrings_are_allowed(
         self,
@@ -1712,7 +1824,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                     + "\n",
                     encoding="utf-8",
                 )
-                verifier.audit(root)
+                self._audit(root)
 
     def test_polaris_runtime_enablement_fails_closed(self) -> None:
         root = self._fixture()
@@ -1991,7 +2103,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                     "  name: neutral\n",
                     encoding="utf-8",
                 )
-                verifier.audit(root)
+                self._audit(root)
 
     def test_alternate_suffix_content_identity_fails_closed(self) -> None:
         root = self._fixture()
@@ -2259,7 +2371,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 manifest = root / "deploy/gitops/lakehouse" / filename
                 manifest.parent.mkdir(parents=True)
                 manifest.write_text(content, encoding="utf-8")
-                verifier.audit(root)
+                self._audit(root)
 
     def test_kustomize_secret_generators_fail_closed(self) -> None:
         cases = {
@@ -2370,7 +2482,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 )
                 manifest.parent.mkdir(parents=True)
                 manifest.write_text(content, encoding="utf-8")
-                verifier.audit(root)
+                self._audit(root)
 
     def test_yaml_merge_keys_fail_closed_in_runtime_documents(self) -> None:
         cases = {
@@ -2426,7 +2538,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             "    <<: *example\n",
             encoding="utf-8",
         )
-        verifier.audit(root)
+        self._audit(root)
 
     def test_pending_local_helm_chart_sources_fail_closed(self) -> None:
         root = self._fixture()
@@ -2492,7 +2604,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             "    plural: examples\n",
             encoding="utf-8",
         )
-        verifier.audit(root)
+        self._audit(root)
 
     def test_postgres_environment_string_forms_fail_closed(self) -> None:
         cases = {
@@ -2780,7 +2892,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         destination = root / relative
         destination.parent.mkdir(parents=True)
         shutil.copy2(ROOT / relative, destination)
-        verifier.audit(root)
+        self._audit(root)
 
         destination.write_text(
             destination.read_text(encoding="utf-8") + "\n",
@@ -2796,7 +2908,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             'resource "kubernetes_namespace_v1" "lakehouse" {}\n',
             encoding="utf-8",
         )
-        verifier.audit(root)
+        self._audit(root)
 
     def test_opentofu_secret_examples_in_non_code_are_ignored(self) -> None:
         cases = {
@@ -2868,7 +2980,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 manifest = root / "opentofu/dev" / filename
                 manifest.parent.mkdir(parents=True)
                 manifest.write_text(content, encoding="utf-8")
-                verifier.audit(root)
+                self._audit(root)
 
     def test_disabled_iceberg_flag_is_not_a_catalog_identity_field(self) -> None:
         root = self._fixture()
@@ -2876,7 +2988,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         destination = root / relative
         destination.parent.mkdir(parents=True)
         shutil.copy2(ROOT / relative, destination)
-        verifier.audit(root)
+        self._audit(root)
 
     def test_disabled_iceberg_flag_exception_is_exactly_bounded(self) -> None:
         approved_line = "            - -s3.port.iceberg=0"
@@ -2910,7 +3022,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             "documentation: PGHOST is configured externally\n",
             encoding="utf-8",
         )
-        verifier.audit(root)
+        self._audit(root)
 
 
 if __name__ == "__main__":

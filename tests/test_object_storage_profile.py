@@ -184,10 +184,14 @@ class ObjectStorageProfileContractTests(unittest.TestCase):
 
         ci = ci_path.read_text(encoding="utf-8")
         makefile = makefile_path.read_text(encoding="utf-8")
+        object_storage_target = makefile.split(
+            "verify-object-storage-profile:",
+            1,
+        )[1].split("\n\n", 1)[0]
         self.assertIn("cosign-release: v3.1.1", ci)
         self.assertIn("scripts/verify_trusted_image.py audit --root .", makefile)
-        self.assertNotIn("command -v $(COSIGN)", makefile)
-        self.assertNotIn("COSIGN_VERSION", makefile)
+        self.assertNotIn("command -v $(COSIGN)", object_storage_target)
+        self.assertNotIn("COSIGN_VERSION", object_storage_target)
         self.assertIn("scripts/package_go_vendor.py reproduce", ci)
         self.assertIn("go-version: 1.25.12", ci)
         self.assertIn("actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16", ci)

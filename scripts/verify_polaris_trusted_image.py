@@ -15,7 +15,7 @@ import sys
 import tempfile
 import unicodedata
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping, Optional
 
 
 POLARIS_SOURCE = Path("bootstrap/polaris/v1.6.0/source.json")
@@ -1883,12 +1883,18 @@ def _run_cosign(root: Path, arguments: list[str], purpose: str) -> None:
     )
 
 
-def _audit_dependency_sigstore(
+DependencyCryptoVerifier = Callable[
+    [Path, Path, Path, Mapping[str, Any]],
+    None,
+]
+
+
+def _reverify_dependency_sigstore_cryptographically(
     root: Path,
-    slsa_document: Any,
+    manifest: Path,
+    cosign_bundle: Path,
+    nested_bundle: Mapping[str, Any],
 ) -> None:
-    manifest = POLARIS_EVIDENCE / "oci-manifest.json"
-    cosign_bundle = POLARIS_EVIDENCE / "cosign-signature-bundle.json"
     binding = (
         POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
             "cosign-signature-bundle.json"
@@ -1930,22 +1936,6 @@ def _audit_dependency_sigstore(
         ],
         "signature-bundle verification",
     )
-    _expect(
-        isinstance(slsa_document, list)
-        and len(slsa_document) == 1
-        and isinstance(slsa_document[0], Mapping)
-        and isinstance(
-            _nested(slsa_document[0], "attestation", "bundle"),
-            Mapping,
-        ),
-        "DEPENDENCY_EVIDENCE",
-        "SLSA verification must retain exactly one Sigstore bundle",
-    )
-    nested_bundle = _nested(
-        slsa_document[0],
-        "attestation",
-        "bundle",
-    )
     with tempfile.TemporaryDirectory(
         prefix="polaris-slsa-bundle-"
     ) as directory:
@@ -1977,6 +1967,37 @@ def _audit_dependency_sigstore(
             "SLSA-bundle verification",
         )
     _VERIFIED_DEPENDENCY_CRYPTOGRAPHIC_BINDINGS.add(binding)
+
+
+def _audit_dependency_sigstore(
+    root: Path,
+    slsa_document: Any,
+    dependency_crypto_verifier: DependencyCryptoVerifier,
+) -> None:
+    manifest = POLARIS_EVIDENCE / "oci-manifest.json"
+    cosign_bundle = POLARIS_EVIDENCE / "cosign-signature-bundle.json"
+    _expect(
+        isinstance(slsa_document, list)
+        and len(slsa_document) == 1
+        and isinstance(slsa_document[0], Mapping)
+        and isinstance(
+            _nested(slsa_document[0], "attestation", "bundle"),
+            Mapping,
+        ),
+        "DEPENDENCY_EVIDENCE",
+        "SLSA verification must retain exactly one Sigstore bundle",
+    )
+    nested_bundle = _nested(
+        slsa_document[0],
+        "attestation",
+        "bundle",
+    )
+    dependency_crypto_verifier(
+        root,
+        manifest,
+        cosign_bundle,
+        nested_bundle,
+    )
 
 
 def _audit_dependency_slsa(root: Path) -> Any:
@@ -2090,6 +2111,7 @@ def _audit_dependency_slsa(root: Path) -> Any:
 def _audit_dependency_publication_evidence(
     root: Path,
     contract: Mapping[str, Any],
+    dependency_crypto_verifier: DependencyCryptoVerifier,
 ) -> None:
     directory = root / POLARIS_EVIDENCE
     _expect(
@@ -2360,7 +2382,11 @@ def _audit_dependency_publication_evidence(
         "retained registry verification does not bind the exact reference",
     )
     slsa_document = _audit_dependency_slsa(root)
-    _audit_dependency_sigstore(root, slsa_document)
+    _audit_dependency_sigstore(
+        root,
+        slsa_document,
+        dependency_crypto_verifier,
+    )
 
 
 def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
@@ -4366,12 +4392,24 @@ def _audit_runtime_absence(root: Path) -> None:
     )
 
 
-def audit(root: Path) -> None:
+def audit(
+    root: Path,
+    *,
+    dependency_crypto_verifier: Optional[DependencyCryptoVerifier] = None,
+) -> None:
     root = root.resolve()
+    if dependency_crypto_verifier is None:
+        dependency_crypto_verifier = (
+            _reverify_dependency_sigstore_cryptographically
+        )
     _audit_source(root)
     contract = _audit_contract(root)
     _audit_polaris_admission(root)
-    _audit_dependency_publication_evidence(root, contract)
+    _audit_dependency_publication_evidence(
+        root,
+        contract,
+        dependency_crypto_verifier,
+    )
     _audit_postgres_admission(root)
     _audit_pending_files(root)
     _audit_retained_pending_evidence(root)

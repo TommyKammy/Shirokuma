@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-19
-version: "1.0"
+version: "1.1"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -152,28 +152,35 @@ pins the ASF source archive and SHA-512, the retained ASF release-signing key,
 the release tag, commit, and tree, plus Java 21 and Gradle 9.6.0 requirements.
 The signed upstream source archive does not contain `gradle-wrapper.jar`,
 dependency lock files, or Gradle dependency-verification metadata. It is
-therefore not a closed build input by itself. While the contract state is
-`dependency_snapshot_publication_pending`, the Polaris Containerfile, Polaris
-image-publication workflow, release evidence, resident-image entries, and
-runtime manifests must remain absent. The only write-capable Polaris path
-permitted at this checkpoint is
-`.github/workflows/polaris-gradle-dependencies.yml`. Its first job has
-`contents: read` only, generates SHA-256 dependency-verification metadata,
-packages the two reviewed Gradle cache roots into a canonical archive, and
-proves both server tasks in a fresh container with Docker networking disabled,
-Gradle offline mode, strict dependency verification, and both build caches
-disabled. A separate second job also has `contents: read` only. It verifies the
-closed candidate inventory, descriptor, verification metadata, offline proof,
-and observed Gradle/Java/builder toolchain, then exports only their SHA-256
-bindings. The third job has `packages: write` and `id-token: write`; before an
-explicit registry token is injected or a registry login occurs, it rebinds
-every downloaded candidate byte to the read-only job's outputs. It publishes a
-run-scoped OCI artifact, signs and attests the exact manifest, then requires
-anonymous exact-digest retrieval and retains the complete verification set for
-evidence-only review. The schema-v2 contract and repository verifier close the
-job/step order, every Action SHA, permissions, source and tool environment,
-lifecycle gate, offline semantics, and write-credential boundary in addition
-to byte-pinning the workflow.
+therefore not a closed build input by itself.
+
+Reviewed main run `29689013375` from commit
+`4692bab4282dfde2c8d4082e6d706dee9ce79324` completed the one-shot dependency
+publication. The schema-v3 contract and admission record are now in
+`dependency_snapshot_review_pending`, with the dependency snapshot itself in
+`review_pending`. They bind the exact public OCI reference
+`ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies@sha256:fa889d2c0a6e6dc48816d79680a366e21040be333ab6007b88e4ca4dbf6e59d6`
+and the retained publication record. The publication remains non-admitted even
+though anonymous exact-digest retrieval succeeded.
+
+The one-shot publisher is retired. The repository verifier requires
+`.github/workflows/polaris-gradle-dependencies.yml` to remain absent and the
+historical publisher record to declare `retired=true`. It hash- and size-binds
+the descriptor, Gradle verification metadata, raw OCI manifest, publication
+record, Cosign signature bundle, registry verification, SLSA verification,
+offline-build proof, and toolchain record. It also revalidates their archive,
+manifest, source-run, keyless identity, provenance, and offline-build bindings.
+`make test-polaris-build-contract` injects a mock only at the external
+cryptographic-command boundary so the unit suite needs no host Cosign binary;
+`make verify-polaris-build-contract` requires Cosign v3.1.1 explicitly and runs
+the unmocked CLI audit. No production skip flag exists.
+
+At this checkpoint Polaris image publication remains
+`blocked_dependency_review` with publication disabled and no Containerfile or
+workflow. Polaris image release evidence, resident-image entries, and runtime
+manifests remain forbidden, and overall admission remains blocked. After this
+evidence-only review merges, a separately reviewed change may advance to
+`image_publication_pending` and introduce the main-only Polaris image publisher.
 
 Within `caches/modules-2/files-2.1`, the checksum directory follows Gradle
 9.6's canonical artifact-store rule: SHA-1 is lowercase hexadecimal with every
@@ -225,38 +232,43 @@ clean source extraction with Docker networking disabled and Gradle `--offline`.
 The reduced dependency seed still contained 5,014 files and 825,947,131 raw
 bytes; deterministic compression produced 619,659,126 bytes, above GitHub's
 normal single-file limit. This observation is not build admission evidence.
-The next phase must publish the reviewed seed as a signed immutable OCI artifact,
-retain its per-file SHA-256 descriptor, and pin the OCI manifest digest and blob
-hash in Git. The image build must pull that exact artifact without registry
+
+Main run `29689013375` subsequently produced the reviewed 5,412-file canonical
+archive, 701,323,251 bytes with
+SHA-256 `18933bfb895c267302f1ee1c80cfb9712eac736ffcefade48dac53f79e8e3bc0`,
+and retained it in the signed immutable OCI artifact rather than Git. The exact
+nine-file evidence set records the descriptor, verification metadata, raw
+manifest, publication, signature, registry verification, SLSA verification,
+offline-build proof, and toolchain. Anonymous exact-digest retrieval, the
+network-disabled strict offline build, Cosign verification, and SLSA
+verification all succeeded. The schema-v3 contract binds these records and the
+retired publisher's historical bytes; that provenance record is not authority
+to restore or rerun the publisher.
+
+The next image build must pull the exact dependency reference without registry
 credentials, verify it before extraction, and keep Gradle network-disabled.
-The publication workflow and packager are byte-pinned by the schema-v2 contract.
-ORAS layer arguments must be canonical relative paths resolved from the bounded
-candidate root. Absolute workspace paths and `--disable-path-validation` are
-forbidden; violations must fail before registry upload.
+ORAS layer paths remain canonical and relative to the bounded candidate root;
+absolute workspace paths and `--disable-path-validation` remain forbidden.
 With the pinned Cosign v3.1.1, `cosign sign --bundle` must generate and retain
 the signature bundle, while registry-backed `cosign verify` must verify the
 exact digest reference, certificate identity, and issuer without passing
 `--bundle`. The bundle and registry verification output remain separate,
 hash-bound evidence records; neither may be dropped or substituted.
-The generated descriptor, verification metadata, manifest, signature,
-provenance, and offline-build record remain non-authoritative until a separate
-evidence-only pull request binds their exact main-run digests in Git. Failure of
-the anonymous pull keeps the dependency snapshot blocked; a registry credential
-must not be added as a fallback.
+This evidence-only review binds the retained descriptor, verification metadata,
+manifest, signature, provenance, and offline-build record to their exact
+main-run digests in Git. Merge authorizes only that immutable dependency input
+for the next image-publication phase; it does not admit a Polaris image or
+runtime. Loss of anonymous retrieval keeps image publication blocked, and a
+registry credential must not be added as a fallback.
 
-GHCR creates a package as private by default. If the package remains private,
-the first main run may finish the immutable push, keyless signature, and
-provenance, then fail intentionally at the anonymous-pull gate. That failed
-attempt is never admitted. The repository owner must review the package and make
-it public (a public package must be treated as an irreversible disclosure), then
-rerun the workflow. If the exact digest is already anonymously retrievable with
-an empty registry config, no visibility mutation is required. Only an attempt
-that passes that anonymous retrieval may produce review-pending evidence. The
-evidence-only pull request must also delete this publisher while advancing the
-lifecycle to
-`dependency_snapshot_review_pending`; if the lifecycle file changes before
-deletion, the workflow's first read-only gate skips all build and publication
-steps instead of creating another dependency artifact.
+GHCR packages are private by default, so anonymous exact-digest retrieval is a
+mandatory fail-closed gate before evidence may become review-pending. The
+retained reference from run `29689013375` is already anonymously retrievable;
+no visibility mutation or credential fallback is permitted. Any future loss of
+anonymous retrieval blocks image publication. Reintroducing the deleted
+dependency publisher is also forbidden: changing the dependency artifact
+requires a new explicit publication lifecycle and contract review rather than a
+rerun of the historical workflow.
 
 The selected Chainguard PostgreSQL 18.4 index and linux/arm64 manifest remain a
 candidate, not an admission. Signature, index membership, provenance, upstream
