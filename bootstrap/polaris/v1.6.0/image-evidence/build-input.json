@@ -1,0 +1,13 @@
+{
+  "admitted": false,
+  "context_archive_sha256": "6fd0f56f254a026ef39ea8bef111a9fa1485805773faa9de3f297b283f3c1f42",
+  "context_manifest_sha256": "a2e4b991a317155f67aa7e79b084a8649d769e9c819a55962329cadff55ff137",
+  "ref": "refs/heads/main",
+  "repository": "TommyKammy/Shirokuma",
+  "run_attempt": "1",
+  "run_id": "29711984394",
+  "schema_version": 1,
+  "source_sha": "706575ba3f21987033a29b6d21367981e9c54e3e",
+  "state": "image_publication_pending",
+  "workflow_sha": "706575ba3f21987033a29b6d21367981e9c54e3e"
+}

@@ -1,0 +1,254 @@
+{
+  "schema_version": 1,
+  "component": "polaris",
+  "version": "1.6.0",
+  "platform": "linux/arm64",
+  "state": "approved_for_atomic_admission",
+  "admitted": false,
+  "reference": "ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+  "digest": "sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+  "trusted_tag": "ghcr.io/tommykammy/shirokuma-polaris:1.6.0-arm64",
+  "trusted_tag_role": "non_authoritative_pointer",
+  "publisher_checkpoint": {
+    "repository": "TommyKammy/Shirokuma",
+    "workflow": ".github/workflows/polaris-arm64.yml",
+    "workflow_file_sha256": "50e0a0407cd65accdd573cf85637d7ccec97774aeecf569d8b5c9acc6b502b5d",
+    "ref": "refs/heads/main",
+    "event": "push",
+    "source_sha": "706575ba3f21987033a29b6d21367981e9c54e3e",
+    "workflow_sha": "706575ba3f21987033a29b6d21367981e9c54e3e",
+    "run_id": "29711984394",
+    "run_attempt": "1",
+    "build_contract": {
+      "path": "bootstrap/polaris/v1.6.0/trusted-build-contract.json",
+      "sha256": "8625191c6a186880d7ec7a596667b047881170e987527c5987a5ee87285b83f8"
+    },
+    "admission": {
+      "path": "bootstrap/polaris/v1.6.0/admission.json",
+      "sha256": "9e45b73b94d6b988e368826a532537f5965467d614116c8fee88f30ea4e01b2d"
+    },
+    "retired": true
+  },
+  "source": {
+    "record": "bootstrap/polaris/v1.6.0/source.json",
+    "record_sha256": "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb",
+    "archive_sha512": "d69b1a91e16e210a78dec327fc4725983b114fbec5d86d078a3827f35fe7dd5df3e4b12d18965e5a72eace65ad224aa007004ed61c66f9abb2efafc44ceac95b",
+    "commit": "dd306009d81a0e15adafe9dcd7d1c6d04d326f34",
+    "tree": "1ad42f42aaebfa767b66a37f522a6c8d6693d841"
+  },
+  "build_inputs": {
+    "containerfile": {
+      "path": "bootstrap/polaris/v1.6.0/Containerfile",
+      "sha256": "e2aea29a93ac4369fc558c2161966fa48e3061238cc41ae849788f8e8e4cfea8"
+    },
+    "bounded_runtime_patch": {
+      "path": "bootstrap/polaris/v1.6.0/patches/0001-shirokuma-bounded-runtime.patch",
+      "sha256": "c5739a49baac0d08e6cf71a4dabd06141618f9474702e6c24fd1bb7f22571f48"
+    },
+    "dependency_reference": "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies@sha256:fa889d2c0a6e6dc48816d79680a366e21040be333ab6007b88e4ca4dbf6e59d6",
+    "runtime_base": "docker.io/library/amazoncorretto@sha256:ba1fe4a3fd4c6b70360183fccd1f0a168c3ea6f73709e8f81945cb9087431ff2"
+  },
+  "publication": {
+    "record": "bootstrap/polaris/v1.6.0/image-evidence/publication.json",
+    "record_sha256": "b620e2d752a93e9d0cf1a945e6ee820c0229eddb6033e2dc104086a40299d37c",
+    "created": "2026-07-20T02:15:01.596807+00:00",
+    "promotion_completed_at": "2026-07-20T02:15:45.689352+00:00",
+    "anonymous_pull": true,
+    "promotion_anonymous_verification": true,
+    "slsa_provenance": "https://github.com/TommyKammy/Shirokuma/attestations/36078805"
+  },
+  "vulnerabilities": {
+    "high": 0,
+    "critical": 0
+  },
+  "sbom": {
+    "format": "CycloneDX",
+    "spec_version": "1.7",
+    "component_count": 6731,
+    "forbidden_component_terms": [
+      "hadoop",
+      "ranger",
+      "jetty-http"
+    ],
+    "matching_component_count": 0
+  },
+  "runtime_smoke": {
+    "result": "passed",
+    "user": "10000:10001",
+    "read_only_rootfs": true,
+    "capabilities_dropped": "ALL",
+    "no_new_privileges": true,
+    "readiness_endpoint": "/q/health/ready",
+    "readiness_status": "UP",
+    "raw_log_retained": false,
+    "sanitized_log_retained": false
+  },
+  "actions_artifacts": {
+    "build_input": {
+      "id": "8449152758",
+      "name": "polaris-1.6.0-arm64-build-input-29711984394-1",
+      "sha256": "41a10eb6eeb46691d28c74262b3698baf14a7d9b31b0c960e4844b541ef2b657",
+      "size": 148344354,
+      "retention_days": 7
+    },
+    "candidate": {
+      "id": "8449174814",
+      "name": "polaris-1.6.0-arm64-candidate-29711984394-1",
+      "sha256": "73097c25794a8e58b46bad453236065cce39f38eece3c2647044d5cd910f98de",
+      "size": 1754984,
+      "retention_days": 30
+    },
+    "final": {
+      "id": "8449181390",
+      "name": "polaris-image-publication-29711984394-1",
+      "sha256": "97c413927e024ff5687350b75ee172a5a890e5423292ce9c6942fd1663d3121e",
+      "size": 1764175,
+      "retention_days": 30
+    }
+  },
+  "evidence": {
+    "directory": "bootstrap/polaris/v1.6.0/image-evidence",
+    "self_manifest": {
+      "path": "bootstrap/polaris/v1.6.0/image-evidence/evidence.sha256",
+      "sha256": "5aac29c01f28f410a6e564b87cd2748eeef1204341a8373934491d29b21564d7",
+      "size": 2910,
+      "entries": 32
+    },
+    "records": {
+      "anonymous-image-manifest.json": {
+        "sha256": "db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+        "size": 2005
+      },
+      "build-context.sha256": {
+        "sha256": "a2e4b991a317155f67aa7e79b084a8649d769e9c819a55962329cadff55ff137",
+        "size": 64130
+      },
+      "build-input.json": {
+        "sha256": "baf8cbf9b872093e2e1f1b71c047de5b8358df039b25bd53be5bb9f60fd3e507",
+        "size": 519
+      },
+      "builder-metadata.json": {
+        "sha256": "1efc598a6aa9e477107bb930e0702d679bee7e78249d9e2f9c2508d0419d9fb3",
+        "size": 551
+      },
+      "cosign-signature-bundle.json": {
+        "sha256": "f2d75f0812df81eb62dfc5c8ebd8fbe4b38da7cb003a85643a6aebf289c9a280",
+        "size": 10779
+      },
+      "cosign-verify.json": {
+        "sha256": "c9c6de9b5706d33d384e7943b04bb988ce94f075af29e7dae5bf00e937fb09be",
+        "size": 1898
+      },
+      "dependency-input.json": {
+        "sha256": "59bd659f99c5c367b6ced56c8cc8fcc3531c5876d753264fbf1eaef52be2ac37",
+        "size": 591
+      },
+      "health-ready.json": {
+        "sha256": "cb816a65b5e2549ebefd4a6182fe59e6dae76e75a8c6637a1918cdbcdae21672",
+        "size": 252
+      },
+      "image-config.json": {
+        "sha256": "e1eb489608dd0882f9ef7d3bbccda7293fb4c47d031db80012bd0fe0ee1461c4",
+        "size": 6473
+      },
+      "image-manifest.json": {
+        "sha256": "db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+        "size": 2005
+      },
+      "offline-build.json": {
+        "sha256": "1dac69d1407d506d2ade1dd236e8878d5c54d1b57af8103a3bc1d170ab23ad1b",
+        "size": 1322
+      },
+      "polaris-1.6.0-arm64.cdx.json": {
+        "sha256": "b724a92c7d686bdc5a931aa455ee5d3d66e650e371ed602804116adade12bc30",
+        "size": 3356395
+      },
+      "promotion-cosign-verify.json": {
+        "sha256": "e178dae1306d63428af3bf402f3c00698a34134d81f7b1c6186f2b6d4e5ca0e4",
+        "size": 1300
+      },
+      "promotion-slsa-verify.json": {
+        "sha256": "43cbb59d65e8d0fd710b334de0f75983d72442e4cb145b85be9294d4747fd74c",
+        "size": 13808
+      },
+      "publication.json": {
+        "sha256": "b620e2d752a93e9d0cf1a945e6ee820c0229eddb6033e2dc104086a40299d37c",
+        "size": 2057
+      },
+      "registry-signature-bundles.jsonl": {
+        "sha256": "5b69014a8fcbddad508b7a94e7774db18910034fce3cea897c3d96c30926b704",
+        "size": 10750
+      },
+      "rekor-entry.json": {
+        "sha256": "bcf58e262fe2c625d34239d430862473210197635579781a683336049671d581",
+        "size": 7184
+      },
+      "runtime-base-java-version.txt": {
+        "sha256": "598a74e9f6eeae9f47cae096066f9affc23b9c5252e15b90f72bcc98d15838a2",
+        "size": 205
+      },
+      "runtime-base-manifest.json": {
+        "sha256": "ba1fe4a3fd4c6b70360183fccd1f0a168c3ea6f73709e8f81945cb9087431ff2",
+        "size": 1378
+      },
+      "runtime-container-inspect.json": {
+        "sha256": "1ccf6f8b674a3207e42f1c474606d2de50369b3ea65baf0b9204e260b41dfbd6",
+        "size": 599
+      },
+      "runtime-smoke-log-policy.json": {
+        "sha256": "a1c4f5f82e98f89612c28c21c7d691d5c4de4a1264b08443a2640b362e661a43",
+        "size": 590
+      },
+      "runtime-smoke.json": {
+        "sha256": "0fa4a49e71f0e916534b596ca0d7fc539bd83ccd4ccc60ccf003574b63dee0f5",
+        "size": 574
+      },
+      "sbom-attestation-bundle.json": {
+        "sha256": "a57aea4031d3d9811c7c548170e01426082576fb4756df5de222d6bada1be6c8",
+        "size": 4588407
+      },
+      "sbom-policy.json": {
+        "sha256": "cfd9f51ceed82839406dc90545e08bddd1f8a7d9f4b73f502cad0ee8fbb4442e",
+        "size": 160
+      },
+      "slsa-bundles.jsonl": {
+        "sha256": "a91940301c6adb2a9f38b3e6208d146df0da055e932d03e7216c45ffa79977e8",
+        "size": 10897
+      },
+      "slsa-verify.json": {
+        "sha256": "02d71bcf0e2ce6ccf76fbf1560329e0b25af3d394193bf60cc072a5904c1de8b",
+        "size": 15982
+      },
+      "source-authentication.json": {
+        "sha256": "c4162421604e2000a3e7361ae96a8ef804709cb20a44798272438db942274bd0",
+        "size": 658
+      },
+      "toolchain.json": {
+        "sha256": "c2e7933cedf975b539e1680494c57c01034d2373c96c503d9e19e2e4fba47f25",
+        "size": 976
+      },
+      "trivy-attestation-bundle.json": {
+        "sha256": "2a143f48424890b47d394b054923306ee8acf5730200eaaa8f4cac521d27d90a",
+        "size": 958543
+      },
+      "trivy-version.json": {
+        "sha256": "fab5fb867c600d96b94b1625df22ace55e515bd00c6a69fca14c2fd49ca89923",
+        "size": 499
+      },
+      "trivy.json": {
+        "sha256": "1ee7994db68a5ad999fc1604b8e0902add3f492b97c12c88f6c3fbbf3a3f098e",
+        "size": 940759
+      },
+      "trusted-tag-manifest.json": {
+        "sha256": "db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+        "size": 2005
+      }
+    }
+  },
+  "next_boundary": {
+    "state": "atomic_admission_pending",
+    "atomic_peer": "bootstrap/postgresql/v18.4/admission.json",
+    "resident_ledger_permitted": false,
+    "runtime_permitted": false
+  }
+}

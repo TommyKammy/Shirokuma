@@ -5,7 +5,7 @@ title: "WP-L1-LAKE-002 Polaris catalog bootstrap"
 status: in-progress
 created: 2026-07-05
 updated: 2026-07-20
-version: "1.13"
+version: "1.14"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -248,17 +248,48 @@ Openを維持します。
   確認済みです。調査用に展開したローカルcopyも削除済みです。このrunの
   candidate digestおよびevidenceは再利用しません。
 - 先行するpublisher repair
-  [#82](https://github.com/TommyKammy/Shirokuma/pull/82)では、Rekor照合を
+  [#82](https://github.com/TommyKammy/Shirokuma/pull/82)はmerge SHA
+  `706575ba3f21987033a29b6d21367981e9c54e3e`としてmainへ反映され、Rekor照合を
   `UUID`、`body`、
   `integratedTime`、`logID`、top-level `logIndex`のimmutable identityへ
-  限定し、tree-localなproof `logIndex`も3入力間で束縛します。proof indexは
+  限定し、tree-localなproof `logIndex`も3入力間で束縛しました。proof indexは
   entry `logIndex`とは別座標としてtree boundsを個別に構造検証し、
   再取得ごとに変わり得る`signedEntryTimestamp`は
-  cross-response identityに含めません。
+  cross-response identityに含めませんでした。
   runtime raw logとraw container inspectはrunner tempだけに置いてcleanupし、
   retained evidenceはsecret scan済みlog policyとhardening controlのallowlist
-  projectionだけにします。candidate retentionとpromotionの双方でclosed set、
+  projectionだけにしました。candidate retentionとpromotionの双方でclosed set、
   禁止ファイル、schema、hash、credential markerを再検証します。
+- PR #82 merge後のmain run
+  [29711984394](https://github.com/TommyKammy/Shirokuma/actions/runs/29711984394)
+  attempt 1はprepare/verify/promoteの全jobに成功しました。reviewed source/workflow
+  SHAは`706575ba3f21987033a29b6d21367981e9c54e3e`で、公開したimmutable refは
+  `ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e`
+  です。`ghcr.io/tommykammy/shirokuma-polaris:1.6.0-arm64`は同じdigestを指す
+  non-authoritative pointerです。
+- runはbuild-input artifact
+  `polaris-1.6.0-arm64-build-input-29711984394-1`（ID `8449152758`、
+  148,344,354 bytes、Actions SHA-256
+  `41a10eb6eeb46691d28c74262b3698baf14a7d9b31b0c960e4844b541ef2b657`）、
+  candidate artifact `polaris-1.6.0-arm64-candidate-29711984394-1`
+  （ID `8449174814`、1,754,984 bytes、Actions SHA-256
+  `73097c25794a8e58b46bad453236065cce39f38eece3c2647044d5cd910f98de`）、
+  final artifact `polaris-image-publication-29711984394-1`
+  （ID `8449181390`、1,764,175 bytes、Actions SHA-256
+  `97c413927e024ff5687350b75ee172a5a890e5423292ce9c6942fd1663d3121e`）
+  を生成しました。
+- final artifactは33 files / 10,007,161 bytesで、32-entry
+  `evidence.sha256`が全件一致しました。SBOM policyはHadoop/Ranger/Jetty HTTP
+  component 0件、TrivyはHigh=0/Critical=0、non-root/read-only smokeはpassedです。
+  raw smoke logとraw container inspectは含まず、sanitized log policyとallowlist
+  projectionだけを保持します。`publication.json`は
+  `state=image_evidence_review_pending`、`promoted=true`、`admitted=false`を
+  記録します。
+- 本evidence-only reviewはfinal 33 filesを
+  `bootstrap/polaris/v1.6.0/image-evidence/`へ固定し、publisherをretireします。
+  post-review stateは`atomic_admission_pending`、Polaris imageは
+  `approved_for_atomic_admission`です。これは単独admissionではなく、
+  resident ledger、runtime/Flux manifest、credentialsを一切許可しません。
 - one-shot publication時はGHCR packageのprivate defaultによりanonymous pullで
   fail-closedになり得ました。今回のpackageはpackage pageと空registry config
   によるmanifest/config/two-layer取得およびsignature verifyでPublicと確認済み
@@ -269,8 +300,8 @@ Openを維持します。
 - 2026-07-18の非admissionな実機監査では、5,014 files / 825,947,131 raw
   bytesのGradle seedでnetwork-none offline buildが成功しました。圧縮後も
   619,659,126 bytesのため、artifact本体をGitへ置きません。
-- 続く工程はpublisher repairのreview/merge、新しいmain-only Polaris image
-  publication、image evidence review、atomic Polaris/PostgreSQL admissionです。
+- 続く工程はPostgreSQL exact image evidenceの固定と、Polaris/PostgreSQLの
+  atomic admissionです。
 - admission後もcredentials、runtime/Flux Ready、catalog API smoke、
   backup/restore acceptanceが未完了です。
 - PR #74以降の本文はIssue参照を`Refs #61`だけに限定します。否定文であっても
@@ -315,11 +346,12 @@ Openを維持します。
   [#81](https://github.com/TommyKammy/Shirokuma/pull/81)
   (merged as `e30c01935bbe02c70b82cf3d27fcb056910a3860`, `Refs #61`)
 - Rekor/runtime evidence publisher repair:
-  [#82](https://github.com/TommyKammy/Shirokuma/pull/82) (Open, `Refs #61`)
+  [#82](https://github.com/TommyKammy/Shirokuma/pull/82)
+  (merged as `706575ba3f21987033a29b6d21367981e9c54e3e`, `Refs #61`)
+- Polaris image evidence-only review: this PR (`Refs #61`)
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
 - Execution order: `1 of 8`
-- Queue: publisher repair review/merge、新しいmain-only Polaris
-  image publication、image evidence-only review、atomic Polaris/PostgreSQL admission、
+- Queue: PostgreSQL evidence、atomic Polaris/PostgreSQL admission、
   runtime/Flux/API smoke/backup-restoreを順に完了するまで、Issue #61はOpen、
   後続#62はdependency-blockedを維持します。
 

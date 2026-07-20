@@ -1369,7 +1369,26 @@ class SupplyChainSecurityTests(unittest.TestCase):
             "persist-credentials: false",
             "sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2",
             "cosign-release: v3.1.1",
-            "gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3",
+            'GITLEAKS_VERSION: "8.30.1"',
+            "GITLEAKS_ARCHIVE_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb",
+            "https://github.com/gitleaks/gitleaks/releases/download/",
+            "sha256sum --check --strict -",
+            'range_base="$(git merge-base "${SCAN_BASE}" "${SCAN_HEAD}")"',
+            'log_opts="-m ${range_base}..${SCAN_HEAD}"',
+            'log_opts="-m ${SCAN_BASE}..${SCAN_HEAD}"',
+            'log_opts="-m ${SCAN_HEAD}"',
+            "Push base is unavailable; scanning full HEAD history",
+            "gitleaks git",
+            "--exit-code=2",
+            "--log-level=info",
+            '"--log-opts=${log_opts}"',
+            "--redact",
+            "--report-format=sarif",
+            "--report-path=results.sarif",
+            "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4",
+            "if: ${{ !cancelled() && hashFiles('results.sarif') != '' }}",
+            "name: gitleaks-results.sarif",
+            "retention-days: 30",
             "aquasecurity/trivy-action@",
             "anchore/sbom-action@",
             "severity: HIGH,CRITICAL",
@@ -1380,6 +1399,11 @@ class SupplyChainSecurityTests(unittest.TestCase):
         ):
             with self.subTest(required=required):
                 self.assertIn(required, workflow)
+
+        self.assertNotIn("gitleaks/gitleaks-action@", workflow)
+        self.assertNotIn("--log-level=debug", workflow)
+        self.assertNotIn("--no-merges", workflow)
+        self.assertNotIn("--first-parent", workflow)
 
         documentation = SECURITY_DOC.read_text(encoding="utf-8")
         for required in (
@@ -1394,6 +1418,62 @@ class SupplyChainSecurityTests(unittest.TestCase):
         ):
             with self.subTest(required=required):
                 self.assertIn(required, documentation)
+
+    def test_gitleaks_ranges_cover_merge_commits_and_resolution_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = Path(directory)
+
+            def git(*args: str) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    ["git", "-C", str(repository), *args],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+
+            subprocess.run(
+                ["git", "init", "-q", "-b", "main", str(repository)],
+                check=True,
+            )
+            git("config", "user.name", "Shirokuma Test")
+            git("config", "user.email", "shirokuma@example.invalid")
+            (repository / "base.txt").write_text("base\n", encoding="utf-8")
+            git("add", "base.txt")
+            git("commit", "-q", "-m", "base")
+            base = git("rev-parse", "HEAD").stdout.strip()
+
+            git("checkout", "-q", "-b", "feature")
+            (repository / "feature.txt").write_text("feature\n", encoding="utf-8")
+            git("add", "feature.txt")
+            git("commit", "-q", "-m", "feature")
+            feature = git("rev-parse", "HEAD").stdout.strip()
+
+            git("checkout", "-q", "main")
+            git("merge", "-q", "--no-ff", "--no-commit", "feature")
+            merge_only_marker = "merge-resolution-only-secret-marker"
+            (repository / "merge-resolution.txt").write_text(
+                merge_only_marker + "\n",
+                encoding="utf-8",
+            )
+            git("add", "merge-resolution.txt")
+            git("commit", "-q", "-m", "merge feature")
+            head = git("rev-parse", "HEAD").stdout.strip()
+
+            push_range = set(git("rev-list", f"{base}..{head}").stdout.splitlines())
+            filtered_range = git(
+                "rev-list",
+                "--no-merges",
+                "--first-parent",
+                f"{base}..{head}",
+            ).stdout.splitlines()
+            plain_patch = git("log", "-p", "-U0", f"{base}..{head}").stdout
+            merge_patch = git("log", "-p", "-U0", "-m", f"{base}..{head}").stdout
+
+        self.assertIn(feature, push_range)
+        self.assertIn(head, push_range)
+        self.assertEqual(filtered_range, [])
+        self.assertNotIn(merge_only_marker, plain_patch)
+        self.assertIn(merge_only_marker, merge_patch)
 
     def test_retained_evidence_policy_exceptions_are_exact_path_only(self) -> None:
         config = GITLEAKS_CONFIG.read_text(encoding="utf-8")
@@ -1473,6 +1553,7 @@ class SupplyChainSecurityTests(unittest.TestCase):
                 "generic-api-key",
             ),
             {
+                r"^bootstrap/polaris/v1\.6\.0/image-evidence/source-authentication\.json$",
                 r"^bootstrap/polaris/v1\.6\.0/trusted-build-contract\.json$",
                 r"^scripts/verify_polaris_trusted_image\.py$",
             },

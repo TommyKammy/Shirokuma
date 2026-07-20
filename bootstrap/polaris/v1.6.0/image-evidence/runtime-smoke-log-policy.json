@@ -1,0 +1,20 @@
+{
+  "forbidden_pattern_classes": [
+    "authorization_header",
+    "bootstrap_credential_assignment",
+    "credential_assignment",
+    "generated_root_credential",
+    "unredacted_root_credential"
+  ],
+  "raw_log_retained": false,
+  "redacted_fields": [
+    "polaris_root_principal_credentials"
+  ],
+  "redaction_count": 1,
+  "result": "passed",
+  "sanitized_log_retained": false,
+  "sanitized_log_sha256": "112e521bff03c17538043c924111c64639cc8177061c104658992aacc8a75b9a",
+  "sanitized_log_size": 7394,
+  "schema_version": 1,
+  "source": "docker logs for the exact smoke-tested digest"
+}

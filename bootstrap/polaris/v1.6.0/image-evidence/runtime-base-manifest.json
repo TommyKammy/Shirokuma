@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.oci.image.manifest.v1+json",
+  "config": {
+    "mediaType": "application/vnd.oci.image.config.v1+json",
+    "digest": "sha256:4e4a7272cdbb0609a67ed206d6d10e8979b6df3f32bfb7547b5ed2d5dbba0bb7",
+    "size": 2478
+  },
+  "layers": [
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:6e12116aae4fd69e40f0f0c465aeb7f71b0d7db5d37e40fced028a576a31ca9e",
+      "size": 53449232
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:7fd43a5284bb06b86bc9bfef12bc8ead6abac5ea0478bfbbcd24ed69ba05b325",
+      "size": 88489966
+    }
+  ],
+  "annotations": {
+    "com.docker.official-images.bashbrew.arch": "arm64v8",
+    "org.opencontainers.image.base.digest": "sha256:86be5939c3c864a76c80d01a648c0f6b349d698f252921e10e7ae094df35d123",
+    "org.opencontainers.image.base.name": "amazonlinux:2023",
+    "org.opencontainers.image.created": "2026-07-18T00:12:23Z",
+    "org.opencontainers.image.revision": "b8045df4f76b173c45f9499ca5aa5a82c591a993",
+    "org.opencontainers.image.source": "https://github.com/corretto/corretto-docker.git#b8045df4f76b173c45f9499ca5aa5a82c591a993:21/headless/al2023",
+    "org.opencontainers.image.url": "https://hub.docker.com/_/amazoncorretto",
+    "org.opencontainers.image.version": "21-al2023-headless"
+  }
+}
