@@ -5,7 +5,7 @@ title: "Adopt a source-built Polaris 1.6.0 and signed PostgreSQL metadata store"
 status: accepted
 created: 2026-07-16
 updated: 2026-07-20
-version: "0.6"
+version: "0.7"
 area: "architecture"
 tags: [shirokuma, adr, polaris, postgresql, arm64, supply-chain]
 ---
@@ -56,6 +56,16 @@ evidence manifest, High=0/Critical=0 scan, and non-root read-only smoke. These
 results establish the exact Polaris candidate; they still do not authorize a
 resident image or runtime.
 
+The admitted repository image is intentionally server-only: its closed build
+tasks are `:polaris-server:assemble` and
+`:polaris-server:quarkusAppPartsBuild`. Relational JDBC bootstrap requires the
+separate Polaris Admin Tool application before the server can use the database.
+The reviewed dependency snapshot does not contain the Admin Tool's direct
+`io.quarkus:quarkus-picocli` dependency, so it cannot establish an offline
+Admin build. Upstream's Admin Tool graph also includes NoSQL and MongoDB modules
+unconditionally; a dependency-input checkpoint must disclose that broader
+surface rather than claim a relational-only runtime.
+
 ## Decision
 
 - Reject the upstream Polaris 1.6.0 OCI image for resident use.
@@ -85,6 +95,30 @@ resident image or runtime.
   may introduce a closed, runtime-disabled build contract. Only a successful
   `refs/heads/main` publication followed by an evidence-only review may approve
   the Polaris digest.
+- Treat the Polaris Admin Tool as a separate, mandatory companion artifact.
+  First publish a self-contained Admin dependency snapshot from the reviewed
+  server snapshot as an immutable parent seed. The new checkpoint must verify
+  the parent exact reference, descriptor, cache layer, retained verification
+  metadata, and review merge before adding dependencies.
+- Bind the Admin tasks `:polaris-admin:assemble` and
+  `:polaris-admin:quarkusAppPartsBuild` and repeat both existing server tasks as
+  regressions. A fresh Gradle home with networking disabled, offline mode, and
+  strict dependency verification is required before the new snapshot can enter
+  evidence review.
+- Keep the Admin snapshot non-admitted, the Admin image publisher disabled, and
+  all runtime, Flux, and credential resources forbidden at this checkpoint.
+  The upstream NoSQL/MongoDB dependency surface is `review_required`; a later
+  image-publication decision must retain SBOM and vulnerability evidence and
+  must not infer relational-only scope from this build-input publication.
+- Treat one-shot as publisher-lifecycle retirement, not as a single workflow
+  attempt. Each attempt has an immutable run-scoped tag. If the new GHCR
+  package is initially private, signing and provenance publication happen
+  first and anonymous retrieval must fail closed; the owner may make the exact
+  package public and rerun before evidence review. Failed attempts are never
+  admitted, and authenticated retrieval is not a fallback.
+- Run the static publication contract audit before the lifecycle gate and
+  require the observed Gradle and Java versions to equal the pinned toolchain
+  before retaining candidate evidence.
 - Retain the reviewed final publication set under
   `bootstrap/polaris/v1.6.0/image-evidence/`, mark the exact digest
   `approved_for_atomic_admission`, advance the lifecycle to
@@ -151,12 +185,26 @@ live Ready plus catalog create/list/read and backup/restore evidence is
 recorded. Runtime manifests and credentials remain blocked, and Issue #61
 remains Open through runtime acceptance.
 
+The Admin build-input prerequisite adds two review boundaries before runtime:
+the main-only dependency publication and its evidence-only review, followed by
+a separate Admin image publication/admission lifecycle. The historical server
+dependency publisher stays retired; it is not rerun or mutated. Its reviewed
+OCI digest is only the immutable parent for a new, independently signed
+superset. A failed Admin build must leave the parent and the admitted
+Polaris/PostgreSQL pair unchanged.
+
+The later runtime activation must use the Admin Tool's credential-file input
+from an externally provisioned Secret. Credentials in command arguments,
+generated credentials printed to logs, or server-side relational
+auto-bootstrap do not satisfy this decision.
+
 ## Verification
 
 The source-build checkpoint must pass:
 
     make test-polaris-build-contract
     make verify-polaris-build-contract
+    make verify-polaris-admin-build-inputs-contract
     python3 -m unittest -v tests.test_arm64_compatibility_matrix
     python3 scripts/verify_design_context.py
     make verify-security

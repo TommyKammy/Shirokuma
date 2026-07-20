@@ -29,6 +29,15 @@ POLARIS_RELEASE_EVIDENCE = Path(
 POLARIS_ATOMIC_ADMISSION = Path(
     "bootstrap/polaris/v1.6.0/atomic-admission.json"
 )
+POLARIS_ADMIN_BUILD_INPUTS_CONTRACT = Path(
+    "bootstrap/polaris/v1.6.0/admin-build-inputs-contract.json"
+)
+POLARIS_ADMIN_BUILD_INPUTS_WORKFLOW = Path(
+    ".github/workflows/polaris-admin-build-inputs.yml"
+)
+POLARIS_ADMIN_BUILD_INPUTS_VERIFIER = Path(
+    "scripts/verify_polaris_admin_build_inputs.py"
+)
 POLARIS_CONTAINERFILE = Path("bootstrap/polaris/v1.6.0/Containerfile")
 POLARIS_SOURCE_OVERLAY = Path(
     "bootstrap/polaris/v1.6.0/patches/"
@@ -90,6 +99,15 @@ POLARIS_SOURCE_SHA256 = (
 )
 POLARIS_CONTRACT_SHA256 = (
     "cacd353f81996f5b04965fb3213cdecb3ebfbdc648ebbb3a8a90609412fa59ac"
+)
+POLARIS_ADMIN_BUILD_INPUTS_CONTRACT_SHA256 = (
+    "34606e7a8eeac273ca4d55f911459679120aa9ac2cb4d7b5c07119e27f2ad675"
+)
+POLARIS_ADMIN_BUILD_INPUTS_WORKFLOW_SHA256 = (
+    "d4f4b71c993b797c89080c4877ba29a4a1c588c3f84884dacddcb00045057c63"
+)
+POLARIS_ADMIN_BUILD_INPUTS_VERIFIER_SHA256 = (
+    "e1e4f2e7931af4401e5d89c4928ce8ee9682b4a092b851d27358be2299a0420e"
 )
 REVIEWED_POLARIS_CONTRACT_SHA256 = (
     "db27ec5ebf627ef1772c898614d5f206a2a3affc67007ee29221c525ab8fd3d6"
@@ -480,6 +498,7 @@ POLARIS_SOURCE_ARCHIVE_VALIDATOR_SHA256 = (
 )
 POLARIS_ALLOWED_PATHS = {
     "Containerfile",
+    "admin-build-inputs-contract.json",
     "admission.json",
     "atomic-admission.json",
     "apache-polaris-release-signing-key.asc",
@@ -542,6 +561,9 @@ REVIEW_PENDING_WORKFLOW_INVENTORY = {
     ".github/workflows/ci.yml": (
         "36666a76c07b428adda5fe71e4bd21643d05e66f56043dcef514101add63dd72"
     ),
+    ".github/workflows/polaris-admin-build-inputs.yml": (
+        POLARIS_ADMIN_BUILD_INPUTS_WORKFLOW_SHA256
+    ),
     ".github/workflows/seaweedfs-arm64.yml": (
         "f097273d79c9595d42be816152ff1aabc862faf2667cb0648434280ce8b8ac06"
     ),
@@ -588,6 +610,9 @@ PENDING_SCRIPT_FILE_INVENTORY = {
     ),
     "scripts/verify_policy_exceptions.py": (
         "6c15a5dd0d79029d941cbebf29bc32163a5788bb8d5e095dd9cceede6d84b862"
+    ),
+    "scripts/verify_polaris_admin_build_inputs.py": (
+        POLARIS_ADMIN_BUILD_INPUTS_VERIFIER_SHA256
     ),
     "scripts/verify_repository_skeleton.py": (
         "b6bbbd383c74b190872bdcf144ede8126d8da5dbeb03e291027aaf276c62c955"

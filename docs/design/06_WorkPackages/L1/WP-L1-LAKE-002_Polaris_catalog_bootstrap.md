@@ -5,7 +5,7 @@ title: "WP-L1-LAKE-002 Polaris catalog bootstrap"
 status: in-progress
 created: 2026-07-05
 updated: 2026-07-20
-version: "1.17"
+version: "1.18"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -324,9 +324,36 @@ Openを維持します。
   `security/evidence/polaris-v1.6.0-postgresql-v18.4/`へ一体で束縛しました。
   PolarisとPostgreSQLは`security/resident-images.json`へ同時追加され、片側だけの
   resident recordはfail-closedになります。
-- atomic resident-image admissionは完了しましたが、credentials、
-  runtime/Flux manifest、live Ready、catalog API smoke、backup/restore
-  acceptanceは引き続きblockedです。次はruntime acceptanceを実施します。
+- atomic resident-image admissionはPR #85としてmerge SHA
+  `51fb24ebc83eb9b0b7f100a30bbc2761141a0553`へ反映され、main Supply-chain
+  run `29736240085`とCI run `29736240089`はsuccessしました。ただし、admit済み
+  Polaris digestは`:polaris-server:assemble`と
+  `:polaris-server:quarkusAppPartsBuild`だけから作られたserver-only artifactです。
+- Polaris 1.6.0のrelational JDBC schema、realm、root credentialを初期化するには
+  別Quarkus applicationのPolaris Admin Toolが必要です。review済みdependency
+  snapshotはserver taskのclosureであり、Admin Toolの直接依存
+  `io.quarkus:quarkus-picocli`を含まないため、そのままoffline buildへ流用しません。
+- 次の002H checkpointはreview済みOCI snapshot
+  `ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies@sha256:fa889d2c0a6e6dc48816d79680a366e21040be333ab6007b88e4ca4dbf6e59d6`
+  をimmutable parent seedとして再検証し、Admin Tool不足分を加えた自己完結superset
+  snapshotを、evidence reviewで必ず退役する限定publisherから発行する契約に
+  限定します。
+  `:polaris-admin:assemble`と`:polaris-admin:quarkusAppPartsBuild`に加えて既存
+  server taskをregression buildし、fresh network-none/offline/strict buildを
+  必須とします。Admin image publication、resident admission、credentials、
+  runtime/Flux manifestはまだ認可しません。
+- one-shotはworkflow実行回数ではなくpublisher lifecycleの退役を意味します。
+  各attemptは`run_id` / `run_attempt`固有のimmutable tagを使います。新規GHCR
+  packageがprivate defaultで初回anonymous pullに失敗した場合、署名・provenance
+  済みのexact packageをownerがPublicへ変更してevidence review前にrerunする
+  ことだけを許可します。失敗attemptはadmitせず、registry credential fallbackは
+  禁止します。static contract auditはlifecycle判定より前に常時実行し、Gradle
+  9.6.0とJava 21の実測一致もcandidate保持前に必須とします。
+- upstream Admin Toolはrelational JDBCだけでなくNoSQL/MongoDB moduleも
+  build graphへ無条件に含めます。002Hはこのsurfaceを`review_required`として
+  明示し、relational-only imageやruntime適合を主張しません。main publication後の
+  evidence-only reviewと、別のAdmin image publication/admission checkpointを
+  通過してからruntime activationへ進みます。
 - PR #74以降の本文はIssue参照を`Refs #61`だけに限定します。否定文であっても
   closing keywordとIssue番号を組み合わせません。Issue #61は上記runtime
   acceptance chainの完了までOpenを維持します。
@@ -374,12 +401,22 @@ Openを維持します。
 - Polaris image evidence-only review:
   [#83](https://github.com/TommyKammy/Shirokuma/pull/83)
   (merged as `11fca8a4ad180a8d862bc5f93aec3729fca7e5ee`, `Refs #61`)
-- PostgreSQL evidence-only review: completed checkpoint (`Refs #61`)
-- Polaris/PostgreSQL atomic admission: completed checkpoint (`Refs #61`)
+- PostgreSQL evidence-only review:
+  [#84](https://github.com/TommyKammy/Shirokuma/pull/84)
+  (merged as `e075ce5a4095fd21a626f0feb9c7d37bef6cb0f6`, `Refs #61`)
+- Polaris/PostgreSQL atomic admission:
+  [#85](https://github.com/TommyKammy/Shirokuma/pull/85)
+  (merged as `51fb24ebc83eb9b0b7f100a30bbc2761141a0553`, `Refs #61`)
+- Polaris Admin build-input checkpoint:
+  [#86](https://github.com/TommyKammy/Shirokuma/pull/86)
+  (Draft; trusted dependency-superset publication contract、Admin image、
+  resident admission、runtime activationはnon-scope、`Refs #61`)
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
-- Execution order: `2 of 8`
-- Queue: runtime/Flux/API smoke/backup-restoreを完了するまで、Issue #61は
-  Open、後続#62はdependency-blockedを維持します。
+- Execution order: `1 of 8`
+- Queue: Admin build-input main publication、evidence-only review、Admin image
+  publication/admission、credential-safe Flux activation、API smoke、
+  backup/restoreを順に完了するまで、Issue #61はOpen、後続#62は
+  dependency-blockedを維持します。
 
 ## Definition of Done
 

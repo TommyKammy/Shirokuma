@@ -2129,6 +2129,8 @@ class SupplyChainSecurityTests(unittest.TestCase):
                 "generic-api-key",
             ),
             {
+                r"^\.github/workflows/polaris-admin-build-inputs\.yml$",
+                r"^bootstrap/polaris/v1\.6\.0/admin-build-inputs-contract\.json$",
                 r"^bootstrap/polaris/v1\.6\.0/image-evidence/source-authentication\.json$",
                 r"^bootstrap/polaris/v1\.6\.0/trusted-build-contract\.json$",
                 r"^scripts/verify_polaris_trusted_image\.py$",
