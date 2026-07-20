@@ -905,6 +905,10 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
     required_toolchain_lines = {
         'docker pull --quiet --platform linux/arm64 "${BUILDER_IMAGE}" \\',
         "--format '{{.Os}}/{{.Architecture}}' \\",
+        "builder_gradle_output=$(",
+        'awk \'/^Gradle / {print $2}\' <<< "${builder_gradle_output}"',
+        "builder_java_output=$(",
+        '<<< "${builder_java_output}"',
         'test "${builder_platform}" = "${EXPECTED_BUILDER_PLATFORM}"',
         'test "${builder_gradle}" = "${EXPECTED_GRADLE_VERSION}"',
         'test "${builder_java_major}" = "${EXPECTED_JAVA_MAJOR}"',
@@ -924,7 +928,9 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
         == 1
         and workflow.count("  EXPECTED_GRADLE_VERSION: 9.6.0") == 1
-        and workflow.count('  EXPECTED_JAVA_MAJOR: "21"') == 1,
+        and workflow.count('  EXPECTED_JAVA_MAJOR: "21"') == 1
+        and 'gradle --version \\\n              | awk' not in workflow
+        and 'java -version 2>&1 \\\n              | awk' not in workflow,
         "WORKFLOW_BUILDER_TOOLCHAIN",
         "exact builder platform, Gradle, and Java must be gated before resolution",
     )

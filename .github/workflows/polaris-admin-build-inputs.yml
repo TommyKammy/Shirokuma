@@ -235,15 +235,20 @@ jobs:
               --format '{{.Os}}/{{.Architecture}}' \
               "${BUILDER_IMAGE}"
           )
-          builder_gradle=$(
+          builder_gradle_output=$(
             docker run --rm --platform linux/arm64 \
-              "${BUILDER_IMAGE}" gradle --version \
-              | awk '/^Gradle / {print $2; exit}'
+              "${BUILDER_IMAGE}" gradle --version
+          )
+          builder_gradle=$(
+            awk '/^Gradle / {print $2}' <<< "${builder_gradle_output}"
+          )
+          builder_java_output=$(
+            docker run --rm --platform linux/arm64 \
+              "${BUILDER_IMAGE}" java -version 2>&1
           )
           builder_java=$(
-            docker run --rm --platform linux/arm64 \
-              "${BUILDER_IMAGE}" java -version 2>&1 \
-              | awk -F'"' '/version/ {print $2; exit}'
+            awk -F'"' 'NR == 1 && /version/ {print $2}' \
+              <<< "${builder_java_output}"
           )
           builder_java_major="${builder_java%%.*}"
           test "${builder_platform}" = "${EXPECTED_BUILDER_PLATFORM}"

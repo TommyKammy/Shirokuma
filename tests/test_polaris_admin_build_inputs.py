@@ -376,6 +376,28 @@ class PolarisAdminBuildInputsTests(unittest.TestCase):
         path.write_text(workflow, encoding="utf-8")
         self._assert_code(root, "WORKFLOW_BUILDER_TOOLCHAIN")
 
+    def test_builder_version_parsing_cannot_break_the_docker_pipeline(self) -> None:
+        root = self._copy_root()
+        path = root / verifier.WORKFLOW_PATH
+        workflow = path.read_text(encoding="utf-8").replace(
+            '          builder_gradle_output=$(\n'
+            '            docker run --rm --platform linux/arm64 \\\n'
+            '              "${BUILDER_IMAGE}" gradle --version\n'
+            "          )\n"
+            "          builder_gradle=$(\n"
+            "            awk '/^Gradle / {print $2}' "
+            '<<< "${builder_gradle_output}"\n'
+            "          )",
+            "          builder_gradle=$(\n"
+            "            docker run --rm --platform linux/arm64 \\\n"
+            '              "${BUILDER_IMAGE}" gradle --version \\\n'
+            "              | awk '/^Gradle / {print $2; exit}'\n"
+            "          )",
+            1,
+        )
+        path.write_text(workflow, encoding="utf-8")
+        self._assert_code(root, "WORKFLOW_BUILDER_TOOLCHAIN")
+
     def test_builder_observation_is_retained_in_evidence(self) -> None:
         root = self._copy_root()
         path = root / verifier.WORKFLOW_PATH
