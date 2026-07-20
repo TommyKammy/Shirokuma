@@ -1,11 +1,15 @@
 {
-  "schema_version": 6,
+  "schema_version": 7,
   "component": "polaris",
   "version": "1.6.0",
   "platform": "linux/arm64",
   "lifecycle": {
-    "state": "atomic_admission_pending",
-    "next_state": "runtime_acceptance_pending"
+    "state": "runtime_acceptance_pending",
+    "next_state": "runtime_accepted"
+  },
+  "atomic_admission_receipt": {
+    "path": "bootstrap/polaris/v1.6.0/atomic-admission.json",
+    "sha256": "cc7ff13fb87bec48537e5944d4820c26fd81c0b5bd215095da8df2ecfff5d4d3"
   },
   "source": {
     "record": "bootstrap/polaris/v1.6.0/source.json",
@@ -180,7 +184,7 @@
     }
   },
   "image_publication": {
-    "state": "approved_for_atomic_admission",
+    "state": "admitted",
     "enabled": false,
     "repository": "ghcr.io/tommykammy/shirokuma-polaris",
     "trusted_tag": "1.6.0-arm64",
@@ -188,7 +192,7 @@
     "digest": "sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
     "release_evidence": {
       "path": "bootstrap/polaris/v1.6.0/release-evidence.json",
-      "sha256": "ead3a652f8b48d5a4643dbc124b57b8faeb722d851d6aa733f91c40db531e5f8"
+      "sha256": "2e3ca5a8245669ccc818f2a22a8be16e901a9b7b73b5eb71237e8c6affdd6f69"
     },
     "containerfile": {
       "path": "bootstrap/polaris/v1.6.0/Containerfile",
@@ -249,7 +253,7 @@
       "anonymous_exact_digest_verification": true,
       "credential_fallback_permitted": false,
       "release_evidence_committed": true,
-      "admission_permitted": false
+      "admission_permitted": true
     },
     "workflow": {
       "path": ".github/workflows/polaris-arm64.yml",
@@ -340,7 +344,7 @@
     "final_retention_days": 30
   },
   "runtime": {
-    "state": "blocked_atomic_admission",
+    "state": "blocked_runtime_acceptance",
     "enabled": false,
     "admission_record": "bootstrap/polaris/v1.6.0/admission.json",
     "atomic_peer": "bootstrap/postgresql/v18.4/admission.json"

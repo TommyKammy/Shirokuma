@@ -10,7 +10,11 @@ import unittest
 from datetime import date, timedelta
 from pathlib import Path
 
-from scripts.verify_supply_chain import deployed_image_references
+from scripts.verify_supply_chain import (
+    PolicyError,
+    check_supply_chain_evidence,
+    deployed_image_references,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -145,6 +149,118 @@ class SupplyChainSecurityTests(unittest.TestCase):
             shutil.copy2(ROOT / relative, destination)
         subprocess.run(["git", "init", "-q", str(root)], check=True)
         return manifest.resolve()
+
+    @staticmethod
+    def write_atomic_pair_fixture(root: Path) -> Path:
+        paths = (
+            "bootstrap/polaris/v1.6.0/admission.json",
+            "bootstrap/polaris/v1.6.0/atomic-admission.json",
+            "bootstrap/polaris/v1.6.0/release-evidence.json",
+            "bootstrap/polaris/v1.6.0/image-evidence/publication.json",
+            "bootstrap/postgresql/v18.4/evidence/cryptographic-verification.json",
+            "bootstrap/postgresql/v18.4/evidence/index-signature.sigstore.json",
+            "bootstrap/postgresql/v18.4/evidence/arm64-signature.sigstore.json",
+            "bootstrap/postgresql/v18.4/evidence/slsa-provenance.sigstore.json",
+            "bootstrap/postgresql/v18.4/evidence/spdx-sbom.sigstore.json",
+            "bootstrap/postgresql/v18.4/evidence/postgresql-18.4-arm64.cdx.json",
+            (
+                "security/evidence/polaris-v1.6.0-postgresql-v18.4/"
+                "anonymous-preflight.json"
+            ),
+            (
+                "security/evidence/polaris-v1.6.0-postgresql-v18.4/"
+                "evidence.sha256"
+            ),
+            (
+                "security/evidence/polaris-v1.6.0-postgresql-v18.4/"
+                "polaris-1.6.0-arm64.cdx.json"
+            ),
+            (
+                "security/evidence/polaris-v1.6.0-postgresql-v18.4/"
+                "polaris-trivy.json"
+            ),
+            (
+                "security/evidence/polaris-v1.6.0-postgresql-v18.4/"
+                "postgresql-18.4-arm64.cdx.json"
+            ),
+            (
+                "security/evidence/polaris-v1.6.0-postgresql-v18.4/"
+                "postgresql-trivy-sbom.json"
+            ),
+            (
+                "security/evidence/polaris-v1.6.0-postgresql-v18.4/"
+                "postgresql-trivy.json"
+            ),
+            (
+                "security/evidence/polaris-v1.6.0-postgresql-v18.4/"
+                "trivy-version.json"
+            ),
+            (
+                "security/evidence/polaris-v1.6.0-postgresql-v18.4/"
+                "supply-chain.json"
+            ),
+        )
+        for relative in paths:
+            destination = root / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / relative, destination)
+        return (
+            root
+            / "security/evidence/polaris-v1.6.0-postgresql-v18.4/"
+            "supply-chain.json"
+        )
+
+    @staticmethod
+    def atomic_pair_images() -> list[dict[str, object]]:
+        images = json.loads(POLICY.read_text(encoding="utf-8"))["images"]
+        return [
+            image
+            for image in images
+            if image["component"] in {"polaris", "postgresql"}
+        ]
+
+    @classmethod
+    def write_atomic_pair_manifest(
+        cls,
+        root: Path,
+        images: list[dict[str, object]] | None = None,
+    ) -> Path:
+        cls.write_atomic_pair_fixture(root)
+        manifest = root / "security/resident-images.json"
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "images": cls.atomic_pair_images() if images is None else images,
+                }
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(["git", "init", "-q", str(root)], check=True)
+        return manifest
+
+    @staticmethod
+    def check_atomic_pair_component(root: Path, component: str) -> None:
+        image = next(
+            image
+            for image in json.loads(POLICY.read_text(encoding="utf-8"))["images"]
+            if image["component"] == component
+        )
+        security = root / "security"
+        check_supply_chain_evidence(
+            security / image["supply_chain_artifact"],
+            repository=root,
+            component=component,
+            reference=image["reference"],
+            version=image["version"],
+            source=image["source"],
+            sbom_path=security / image["sbom_artifact"],
+            scan_path=security / image["scan_artifact"],
+            sbom_generator=image["sbom_generator"],
+            scanner_version=image["scanner_version"],
+            vulnerability_db_updated_at=image["vulnerability_db_updated_at"],
+        )
 
     @staticmethod
     def valid_exception(
@@ -755,6 +871,466 @@ class SupplyChainSecurityTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("signed index repository does not match", result.stderr)
+
+    def test_committed_atomic_pair_is_accepted_in_local_lab_profile(self) -> None:
+        result = self.run_checker(
+            "check-images",
+            "--manifest",
+            str(POLICY),
+            "--repo",
+            str(ROOT),
+            "--profile",
+            "local-lab",
+            "--exceptions",
+            str(EXCEPTIONS),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_atomic_pair_supply_chain_evidence_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_atomic_pair_fixture(root)
+            self.check_atomic_pair_component(root, "polaris")
+            self.check_atomic_pair_component(root, "postgresql")
+
+    def test_atomic_receipt_requires_pair_even_when_both_entries_are_removed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = self.write_atomic_pair_manifest(root, [])
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--repo",
+                str(root),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "requires exactly one Polaris and one PostgreSQL entry",
+            result.stderr,
+        )
+
+    def test_atomic_ledger_rejects_missing_polaris_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            postgresql = self.atomic_pair_images()[1]
+            manifest = self.write_atomic_pair_manifest(root, [postgresql])
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--repo",
+                str(root),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "requires exactly one Polaris and one PostgreSQL entry",
+            result.stderr,
+        )
+
+    def test_atomic_ledger_rejects_missing_postgresql_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            polaris = self.atomic_pair_images()[0]
+            manifest = self.write_atomic_pair_manifest(root, [polaris])
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--repo",
+                str(root),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "requires exactly one Polaris and one PostgreSQL entry",
+            result.stderr,
+        )
+
+    def test_atomic_entry_requires_pair_even_without_canonical_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            polaris = self.atomic_pair_images()[0]
+            manifest = self.write_atomic_pair_manifest(root, [polaris])
+            (
+                root / "bootstrap/polaris/v1.6.0/atomic-admission.json"
+            ).unlink()
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--repo",
+                str(root),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "requires exactly one Polaris and one PostgreSQL entry",
+            result.stderr,
+        )
+
+    def test_atomic_ledger_rejects_duplicate_pair_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            images = self.atomic_pair_images()
+            manifest = self.write_atomic_pair_manifest(
+                root,
+                [images[0], images[1], dict(images[0])],
+            )
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--repo",
+                str(root),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "requires exactly one Polaris and one PostgreSQL entry",
+            result.stderr,
+        )
+
+    def test_atomic_ledger_rejects_split_supply_chain_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            images = self.atomic_pair_images()
+            images[1]["supply_chain_artifact"] = (
+                "evidence/polaris-v1.6.0-postgresql-v18.4/split.json"
+            )
+            manifest = self.write_atomic_pair_manifest(root, images)
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--repo",
+                str(root),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must share the canonical supply-chain artifact", result.stderr)
+
+    def test_atomic_ledger_rejects_unknown_entry_field(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            images = self.atomic_pair_images()
+            images[0]["unreviewed_extension"] = True
+            manifest = self.write_atomic_pair_manifest(root, images)
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--repo",
+                str(root),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "atomic resident ledger entry must contain exactly",
+            result.stderr,
+        )
+
+    def test_atomic_ledger_rejects_noncanonical_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            images = self.atomic_pair_images()
+            images[0]["source"] = "https://example.invalid/polaris"
+            manifest = self.write_atomic_pair_manifest(root, images)
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--repo",
+                str(root),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("identities do not match the canonical exact pair", result.stderr)
+
+    def test_atomic_supply_chain_unknown_field_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence_path = self.write_atomic_pair_fixture(root)
+            evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+            evidence["unreviewed_extension"] = True
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+            with self.assertRaisesRegex(PolicyError, "contains unsupported fields"):
+                self.check_atomic_pair_component(root, "polaris")
+
+    def test_reviewed_publication_admission_must_not_bind_mutable_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence_path = self.write_atomic_pair_fixture(root)
+            evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+            evidence["images"][0]["reviewed_repository_publication"]["admission"][
+                "sha256"
+            ] = "a" * 64
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                PolicyError,
+                "canonical without a byte hash",
+            ):
+                self.check_atomic_pair_component(root, "polaris")
+
+    def test_reviewed_publication_release_path_and_hash_are_canonical(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence_path = self.write_atomic_pair_fixture(root)
+            canonical = root / "bootstrap/polaris/v1.6.0/release-evidence.json"
+            substitute = root / "bootstrap/polaris/v1.6.0/release-evidence-copy.json"
+            shutil.copy2(canonical, substitute)
+            evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+            binding = evidence["images"][0]["reviewed_repository_publication"][
+                "release_evidence"
+            ]
+            binding["path"] = (
+                "bootstrap/polaris/v1.6.0/release-evidence-copy.json"
+            )
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+            with self.assertRaisesRegex(PolicyError, "path is not canonical"):
+                self.check_atomic_pair_component(root, "polaris")
+
+    def test_reviewed_publication_admission_rejects_unknown_top_level_field(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_atomic_pair_fixture(root)
+            admission_path = root / "bootstrap/polaris/v1.6.0/admission.json"
+            admission = json.loads(admission_path.read_text(encoding="utf-8"))
+            admission["unreviewed_extension"] = True
+            admission_path.write_text(json.dumps(admission), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                PolicyError,
+                "reviewed Polaris admission must contain exactly",
+            ):
+                self.check_atomic_pair_component(root, "polaris")
+
+    def test_reviewed_publication_admission_rejects_unknown_nested_field(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_atomic_pair_fixture(root)
+            admission_path = root / "bootstrap/polaris/v1.6.0/admission.json"
+            admission = json.loads(admission_path.read_text(encoding="utf-8"))
+            admission["dependency_snapshot"]["unreviewed_extension"] = True
+            admission_path.write_text(json.dumps(admission), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                PolicyError,
+                "admission dependency_snapshot must contain exactly",
+            ):
+                self.check_atomic_pair_component(root, "polaris")
+
+    def test_reviewed_publication_planned_repository_is_canonical(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_atomic_pair_fixture(root)
+            admission_path = root / "bootstrap/polaris/v1.6.0/admission.json"
+            admission = json.loads(admission_path.read_text(encoding="utf-8"))
+            admission["planned_candidate"]["repository"] = (
+                "ghcr.io/example/unreviewed-polaris"
+            )
+            admission_path.write_text(json.dumps(admission), encoding="utf-8")
+
+            with self.assertRaisesRegex(PolicyError, "planned candidate is not canonical"):
+                self.check_atomic_pair_component(root, "polaris")
+
+    def test_reviewed_publication_planned_reference_is_canonical(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_atomic_pair_fixture(root)
+            admission_path = root / "bootstrap/polaris/v1.6.0/admission.json"
+            admission = json.loads(admission_path.read_text(encoding="utf-8"))
+            admission["planned_candidate"]["reference"] = (
+                "ghcr.io/tommykammy/shirokuma-polaris@sha256:" + "a" * 64
+            )
+            admission_path.write_text(json.dumps(admission), encoding="utf-8")
+
+            with self.assertRaisesRegex(PolicyError, "planned candidate is not canonical"):
+                self.check_atomic_pair_component(root, "polaris")
+
+    def test_reviewed_publication_image_publication_must_remain_disabled(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_atomic_pair_fixture(root)
+            admission_path = root / "bootstrap/polaris/v1.6.0/admission.json"
+            admission = json.loads(admission_path.read_text(encoding="utf-8"))
+            admission["image_publication"]["enabled"] = True
+            admission_path.write_text(json.dumps(admission), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                PolicyError,
+                "image publication is not admitted",
+            ):
+                self.check_atomic_pair_component(root, "polaris")
+
+    def test_reviewed_publication_image_publication_must_remain_admitted(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_atomic_pair_fixture(root)
+            admission_path = root / "bootstrap/polaris/v1.6.0/admission.json"
+            admission = json.loads(admission_path.read_text(encoding="utf-8"))
+            admission["image_publication"]["admitted"] = False
+            admission_path.write_text(json.dumps(admission), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                PolicyError,
+                "image publication is not admitted",
+            ):
+                self.check_atomic_pair_component(root, "polaris")
+
+    def test_reviewed_publication_runtime_manifests_must_remain_forbidden(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_atomic_pair_fixture(root)
+            admission_path = root / "bootstrap/polaris/v1.6.0/admission.json"
+            admission = json.loads(admission_path.read_text(encoding="utf-8"))
+            admission["runtime_manifests"]["permitted"] = True
+            admission_path.write_text(json.dumps(admission), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                PolicyError,
+                "runtime manifests must remain canonically forbidden",
+            ):
+                self.check_atomic_pair_component(root, "polaris")
+
+    def test_reviewed_publication_runtime_forbidden_roots_are_canonical(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_atomic_pair_fixture(root)
+            admission_path = root / "bootstrap/polaris/v1.6.0/admission.json"
+            admission = json.loads(admission_path.read_text(encoding="utf-8"))
+            admission["runtime_manifests"]["forbidden_roots"] = [
+                "deploy",
+                "charts",
+            ]
+            admission_path.write_text(json.dumps(admission), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                PolicyError,
+                "runtime manifests must remain canonically forbidden",
+            ):
+                self.check_atomic_pair_component(root, "polaris")
+
+    def test_atomic_receipt_hash_drift_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_atomic_pair_fixture(root)
+            receipt = root / "bootstrap/polaris/v1.6.0/atomic-admission.json"
+            receipt.write_bytes(receipt.read_bytes() + b"\n")
+
+            with self.assertRaisesRegex(PolicyError, "atomic_admission_receipt hash mismatch"):
+                self.check_atomic_pair_component(root, "polaris")
+
+    def test_atomic_receipt_cannot_admit_only_one_half_of_pair(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence_path = self.write_atomic_pair_fixture(root)
+            receipt_path = root / "bootstrap/polaris/v1.6.0/atomic-admission.json"
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["components"] = [receipt["components"][0]]
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+            evidence["atomic_admission_receipt"]["sha256"] = hashlib.sha256(
+                receipt_path.read_bytes()
+            ).hexdigest()
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                PolicyError,
+                "receipt components do not match the exact pair",
+            ):
+                self.check_atomic_pair_component(root, "polaris")
+
+    def test_primary_manifest_cannot_include_supply_chain_or_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence_path = self.write_atomic_pair_fixture(root)
+            manifest_path = (
+                root
+                / "security/evidence/polaris-v1.6.0-postgresql-v18.4/"
+                "evidence.sha256"
+            )
+            supply_chain_sha256 = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+            manifest_path.write_text(
+                manifest_path.read_text(encoding="utf-8")
+                + f"{supply_chain_sha256}  supply-chain.json\n",
+                encoding="utf-8",
+            )
+            receipt_path = root / "bootstrap/polaris/v1.6.0/atomic-admission.json"
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            manifest_binding = receipt["primary_evidence_manifest"]
+            manifest_binding["sha256"] = hashlib.sha256(
+                manifest_path.read_bytes()
+            ).hexdigest()
+            manifest_binding["size"] = manifest_path.stat().st_size
+            manifest_binding["entries"] = 8
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+            evidence["atomic_admission_receipt"]["sha256"] = hashlib.sha256(
+                receipt_path.read_bytes()
+            ).hexdigest()
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                PolicyError,
+                "does not contain the canonical exact set",
+            ):
+                self.check_atomic_pair_component(root, "polaris")
+
+    def test_postgresql_retained_provenance_hash_drift_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_atomic_pair_fixture(root)
+            provenance = (
+                root
+                / "bootstrap/postgresql/v18.4/evidence/"
+                "slsa-provenance.sigstore.json"
+            )
+            provenance.write_bytes(provenance.read_bytes() + b"\n")
+
+            with self.assertRaisesRegex(
+                PolicyError,
+                "retained_evidence.provenance hash mismatch",
+            ):
+                self.check_atomic_pair_component(root, "postgresql")
+
+    def test_postgresql_signed_index_digest_is_canonical(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence_path = self.write_atomic_pair_fixture(root)
+            evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+            evidence["images"][1]["signature"]["signed_index"] = (
+                "cgr.dev/chainguard/postgres@sha256:" + "a" * 64
+            )
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+            with self.assertRaisesRegex(PolicyError, "canonical index"):
+                self.check_atomic_pair_component(root, "postgresql")
 
     def test_repository_source_build_evidence_is_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

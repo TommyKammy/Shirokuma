@@ -162,6 +162,10 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         for relative in (
             Path("bootstrap/polaris/v1.6.0"),
             Path("bootstrap/postgresql/v18.4"),
+            Path(
+                "security/evidence/"
+                "polaris-v1.6.0-postgresql-v18.4"
+            ),
             Path(".github/workflows"),
             Path("scripts"),
         ):
@@ -675,6 +679,128 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         if detail is not None:
             self.assertIn(detail, raised.exception.detail)
 
+    def _assert_atomic_receipt_code(
+        self,
+        root: Path,
+        detail: str,
+    ) -> None:
+        receipt_sha256 = verifier._sha256(
+            root / verifier.POLARIS_ATOMIC_ADMISSION
+        )
+        with mock.patch.object(
+            verifier,
+            "POLARIS_ATOMIC_ADMISSION_SHA256",
+            receipt_sha256,
+        ):
+            with self.assertRaises(verifier.ContractError) as raised:
+                verifier._audit_atomic_admission(root)
+        self.assertEqual("ATOMIC_ADMISSION", raised.exception.code)
+        self.assertIn(detail, raised.exception.detail)
+
+    def _rebind_atomic_evidence(
+        self,
+        root: Path,
+    ) -> tuple[dict[str, str], str, int, str]:
+        directory = root / verifier.ATOMIC_EVIDENCE
+        hashes = {
+            name: verifier._sha256(directory / name)
+            for name in verifier.ATOMIC_EVIDENCE_PRIMARY
+        }
+        manifest = directory / "evidence.sha256"
+        manifest.write_text(
+            "".join(
+                f"{hashes[name]}  {name}\n"
+                for name in sorted(hashes)
+            ),
+            encoding="utf-8",
+        )
+        manifest_sha256 = verifier._sha256(manifest)
+        manifest_size = manifest.stat().st_size
+        trivy_version = json.loads(
+            (directory / "trivy-version.json").read_text(encoding="utf-8")
+        )
+
+        def bind_receipt(value: dict[str, object]) -> None:
+            value["primary_evidence_manifest"]["sha256"] = (  # type: ignore[index]
+                manifest_sha256
+            )
+            value["primary_evidence_manifest"]["size"] = (  # type: ignore[index]
+                manifest_size
+            )
+            value["primary_evidence_manifest"]["entries"] = len(  # type: ignore[index]
+                hashes
+            )
+            value["preflight"]["sha256"] = hashes[  # type: ignore[index]
+                "anonymous-preflight.json"
+            ]
+            value["vulnerability_database"]["sha256"] = hashes[  # type: ignore[index]
+                "trivy-version.json"
+            ]
+            value["vulnerability_database"]["updated_at"] = (  # type: ignore[index]
+                trivy_version["VulnerabilityDB"]["UpdatedAt"]
+            )
+            scans = value["scans"]  # type: ignore[index]
+            scans["polaris"]["sbom"]["sha256"] = hashes[  # type: ignore[index]
+                "polaris-1.6.0-arm64.cdx.json"
+            ]
+            scans["polaris"]["vulnerability_scan"]["sha256"] = (  # type: ignore[index]
+                hashes["polaris-trivy.json"]
+            )
+            scans["postgresql"]["sbom"]["sha256"] = hashes[  # type: ignore[index]
+                "postgresql-18.4-arm64.cdx.json"
+            ]
+            scans["postgresql"]["image_scan"]["sha256"] = (  # type: ignore[index]
+                hashes["postgresql-trivy.json"]
+            )
+            scans["postgresql"]["sbom_scan"]["sha256"] = (  # type: ignore[index]
+                hashes["postgresql-trivy-sbom.json"]
+            )
+
+        self._rewrite_json(
+            root,
+            verifier.POLARIS_ATOMIC_ADMISSION,
+            bind_receipt,
+        )
+        receipt_sha256 = verifier._sha256(
+            root / verifier.POLARIS_ATOMIC_ADMISSION
+        )
+        return hashes, manifest_sha256, manifest_size, receipt_sha256
+
+    def _assert_rebound_atomic_evidence_code(
+        self,
+        root: Path,
+        detail: str,
+    ) -> None:
+        hashes, manifest_sha256, manifest_size, receipt_sha256 = (
+            self._rebind_atomic_evidence(root)
+        )
+        with mock.patch.object(
+            verifier,
+            "ATOMIC_EVIDENCE_PRIMARY",
+            hashes,
+        ):
+            with mock.patch.object(
+                verifier,
+                "ATOMIC_EVIDENCE_MANIFEST_SHA256",
+                manifest_sha256,
+            ):
+                with mock.patch.object(
+                    verifier,
+                    "ATOMIC_EVIDENCE_MANIFEST_SIZE",
+                    manifest_size,
+                ):
+                    with mock.patch.object(
+                        verifier,
+                        "POLARIS_ATOMIC_ADMISSION_SHA256",
+                        receipt_sha256,
+                    ):
+                        with self.assertRaises(
+                            verifier.ContractError
+                        ) as raised:
+                            verifier._audit_atomic_admission(root)
+        self.assertEqual("ATOMIC_ADMISSION", raised.exception.code)
+        self.assertIn(detail, raised.exception.detail)
+
     def _rebind_postgres_evidence(
         self,
         root: Path,
@@ -916,6 +1042,221 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
     def test_minimal_review_pending_fixture_is_valid(self) -> None:
         self._audit(self._fixture())
 
+    def test_atomic_admission_receipt_is_shared_by_all_live_records(
+        self,
+    ) -> None:
+        expected = {
+            "path": verifier.POLARIS_ATOMIC_ADMISSION.as_posix(),
+            "sha256": verifier.POLARIS_ATOMIC_ADMISSION_SHA256,
+        }
+        for relative in (
+            verifier.POLARIS_CONTRACT,
+            verifier.POLARIS_ADMISSION,
+            verifier.POLARIS_RELEASE_EVIDENCE,
+            verifier.POSTGRES_ADMISSION,
+        ):
+            with self.subTest(relative=relative):
+                record = json.loads(
+                    (ROOT / relative).read_text(encoding="utf-8")
+                )
+                self.assertEqual(
+                    expected,
+                    record["atomic_admission_receipt"],
+                )
+
+    def test_atomic_admission_receipt_byte_drift_fails_closed(self) -> None:
+        root = self._fixture()
+        receipt = root / verifier.POLARIS_ATOMIC_ADMISSION
+        receipt.write_text(
+            receipt.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        self._assert_code(
+            root,
+            "ATOMIC_ADMISSION",
+            "receipt differs from the admitted checkpoint",
+        )
+
+    def test_atomic_receipt_manifest_binding_is_exact(self) -> None:
+        cases = (
+            (
+                "path",
+                lambda value: value["primary_evidence_manifest"].__setitem__(  # type: ignore[union-attr]
+                    "path",
+                    "security/evidence/unreviewed/evidence.sha256",
+                ),
+            ),
+            (
+                "sha256",
+                lambda value: value["primary_evidence_manifest"].__setitem__(  # type: ignore[union-attr]
+                    "sha256",
+                    "0" * 64,
+                ),
+            ),
+            (
+                "entries",
+                lambda value: value["primary_evidence_manifest"].__setitem__(  # type: ignore[union-attr]
+                    "entries",
+                    6,
+                ),
+            ),
+        )
+        for label, mutate in cases:
+            with self.subTest(label=label):
+                root = self._fixture()
+                self._rewrite_json(
+                    root,
+                    verifier.POLARIS_ATOMIC_ADMISSION,
+                    mutate,
+                )
+                self._assert_atomic_receipt_code(
+                    root,
+                    "receipt schema or values changed",
+                )
+
+    def test_atomic_evidence_directory_is_closed_world(self) -> None:
+        root = self._fixture()
+        (root / verifier.ATOMIC_EVIDENCE / "unreviewed.json").write_text(
+            "{}\n",
+            encoding="utf-8",
+        )
+        self._assert_code(
+            root,
+            "ATOMIC_ADMISSION",
+            "exact 9-file closure",
+        )
+
+    def test_atomic_database_age_is_measured_at_decision(self) -> None:
+        root = self._fixture()
+
+        def mutate(value: dict[str, object]) -> None:
+            value["VulnerabilityDB"]["UpdatedAt"] = (  # type: ignore[index]
+                "2026-07-19T08:00:00Z"
+            )
+
+        self._rewrite_json(
+            root,
+            verifier.ATOMIC_EVIDENCE / "trivy-version.json",
+            mutate,
+        )
+        self._assert_rebound_atomic_evidence_code(
+            root,
+            "no more than 24 hours old at decision_at",
+        )
+
+    def test_atomic_postgres_null_vulnerabilities_fails_closed(
+        self,
+    ) -> None:
+        root = self._fixture()
+
+        def mutate(value: dict[str, object]) -> None:
+            value["Results"][0]["Vulnerabilities"] = None  # type: ignore[index]
+
+        self._rewrite_json(
+            root,
+            verifier.ATOMIC_EVIDENCE / "postgresql-trivy.json",
+            mutate,
+        )
+        self._assert_rebound_atomic_evidence_code(
+            root,
+            "Vulnerabilities must be an array when present",
+        )
+
+    def test_atomic_postgres_dual_scope_is_exact(self) -> None:
+        root = self._fixture()
+
+        def mutate(value: dict[str, object]) -> None:
+            value["Results"][1]["Packages"].pop()  # type: ignore[index]
+
+        self._rewrite_json(
+            root,
+            verifier.ATOMIC_EVIDENCE / "postgresql-trivy-sbom.json",
+            mutate,
+        )
+        self._assert_rebound_atomic_evidence_code(
+            root,
+            "changed scope or package count",
+        )
+
+    def test_atomic_postgres_purl_bomref_partition_is_exact(self) -> None:
+        for field, replacement in (
+            ("PURL", "pkg:golang/example.invalid/rebound@v0.1.0"),
+            ("BOMRef", "pkg:golang/example.invalid/rebound@v0.1.0"),
+        ):
+            with self.subTest(field=field):
+                root = self._fixture()
+
+                def mutate(value: dict[str, object]) -> None:
+                    value["Results"][1]["Packages"][0]["Identifier"][field] = (  # type: ignore[index]
+                        replacement
+                    )
+
+                self._rewrite_json(
+                    root,
+                    (
+                        verifier.ATOMIC_EVIDENCE
+                        / "postgresql-trivy-sbom.json"
+                    ),
+                    mutate,
+                )
+                self._assert_rebound_atomic_evidence_code(
+                    root,
+                    "PURL and BOMRef",
+                )
+
+    def test_atomic_postgres_reference_case_and_swaps_fail_closed(
+        self,
+    ) -> None:
+        for label in ("case-drift", "purl-swap", "bomref-swap"):
+            with self.subTest(label=label):
+                root = self._fixture()
+
+                def mutate(value: dict[str, object]) -> None:
+                    packages = value["Results"][0]["Packages"]  # type: ignore[index]
+                    if label == "case-drift":
+                        package = next(  # type: ignore[call-overload]
+                            item
+                            for item in packages
+                            if "/libllvm-19@" in item["Identifier"]["PURL"]
+                        )
+                        package["Identifier"]["PURL"] = package[
+                            "Identifier"
+                        ]["PURL"].replace("/libllvm-19@", "/libLLVM-19@")
+                    else:
+                        field = "PURL" if label == "purl-swap" else "BOMRef"
+                        first = packages[0]["Identifier"]  # type: ignore[index]
+                        second = packages[1]["Identifier"]  # type: ignore[index]
+                        first[field], second[field] = second[field], first[field]
+
+                self._rewrite_json(
+                    root,
+                    (
+                        verifier.ATOMIC_EVIDENCE
+                        / "postgresql-trivy-sbom.json"
+                    ),
+                    mutate,
+                )
+                self._assert_rebound_atomic_evidence_code(
+                    root,
+                    "PURL and BOMRef",
+                )
+
+    def test_atomic_anonymous_preflight_is_exact(self) -> None:
+        root = self._fixture()
+
+        def mutate(value: dict[str, object]) -> None:
+            value["entries"][2]["anonymous"] = False  # type: ignore[index]
+
+        self._rewrite_json(
+            root,
+            verifier.ATOMIC_EVIDENCE / "anonymous-preflight.json",
+            mutate,
+        )
+        self._assert_rebound_atomic_evidence_code(
+            root,
+            "anonymous exact-digest preflight changed",
+        )
+
     def test_release_evidence_hash_chain_is_exact(self) -> None:
         contract = json.loads(
             (ROOT / verifier.POLARIS_CONTRACT).read_text(encoding="utf-8")
@@ -991,7 +1332,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 "admitted-bool",
                 ("admitted",),
                 0,
-                "admitted must be False",
+                "admitted must be True",
             ),
             (
                 "retired-bool",
@@ -1003,7 +1344,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 "ledger-permitted-bool",
                 ("next_boundary", "resident_ledger_permitted"),
                 0,
-                "next_boundary.resident_ledger_permitted must be False",
+                "next_boundary.resident_ledger_permitted must be True",
             ),
             (
                 "runtime-permitted-bool",
@@ -1654,15 +1995,18 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual("atomic_admission_pending", admission["state"])
-        self.assertEqual("blocked", admission["admission"])
+        self.assertEqual("runtime_acceptance_pending", admission["state"])
+        self.assertEqual("approved", admission["admission"])
         self.assertFalse(admission["image_publication"]["enabled"])
-        self.assertFalse(admission["image_publication"]["admitted"])
-        self.assertFalse(admission["resident_ledger"]["permitted"])
+        self.assertTrue(admission["image_publication"]["admitted"])
+        self.assertTrue(admission["resident_ledger"]["permitted"])
         self.assertFalse(admission["runtime_manifests"]["permitted"])
-        self.assertEqual("blocked_atomic_admission", contract["runtime"]["state"])
+        self.assertEqual(
+            "blocked_runtime_acceptance",
+            contract["runtime"]["state"],
+        )
         self.assertFalse(contract["runtime"]["enabled"])
-        self.assertFalse(
+        self.assertTrue(
             release["next_boundary"]["resident_ledger_permitted"]
         )
         self.assertFalse(release["next_boundary"]["runtime_permitted"])
@@ -1706,9 +2050,9 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             (ROOT / verifier.POLARIS_ADMISSION).read_text(encoding="utf-8")
         )
 
-        self.assertEqual(6, contract["schema_version"])
+        self.assertEqual(7, contract["schema_version"])
         self.assertEqual(
-            "atomic_admission_pending",
+            "runtime_acceptance_pending",
             contract["lifecycle"]["state"],
         )
         self.assertEqual(
@@ -1773,8 +2117,8 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             "application/vnd.dev.sigstore.bundle.v0.3+json",
             contract["toolchain"]["cosign"]["bundle_media_type"],
         )
-        self.assertEqual(5, admission["schema_version"])
-        self.assertEqual("atomic_admission_pending", admission["state"])
+        self.assertEqual(6, admission["schema_version"])
+        self.assertEqual("runtime_acceptance_pending", admission["state"])
         self.assertEqual(
             verifier.POLARIS_DEPENDENCY_REFERENCE,
             admission["dependency_snapshot"]["reference"],
@@ -1788,7 +2132,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             admission["blocking_controls"][2]["state"],
         )
         self.assertEqual(
-            "pending",
+            "satisfied",
             admission["blocking_controls"][4]["state"],
         )
 
@@ -2546,7 +2890,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         root = self._fixture()
 
         def mutate(value: dict[str, object]) -> None:
-            value["image_publication"]["admitted"] = True  # type: ignore[index]
+            value["image_publication"]["admitted"] = False  # type: ignore[index]
 
         self._rewrite_json(root, verifier.POLARIS_ADMISSION, mutate)
         self._assert_code(
@@ -3322,8 +3666,8 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         self.assertEqual(60, scan["library_component_count"])
         self.assertEqual(60, scan["covered_library_component_count"])
         self.assertIn("sbom:lang-pkgs/gobinary", scan["scan_scopes"])
-        self.assertEqual("blocked", admission["admission"])
-        self.assertFalse(admission["resident_ledger"]["permitted"])
+        self.assertEqual("approved", admission["admission"])
+        self.assertTrue(admission["resident_ledger"]["permitted"])
         self.assertFalse(admission["runtime_manifests"]["permitted"])
 
     def test_postgresql_evidence_contract_mutation_fails_closed(self) -> None:

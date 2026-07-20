@@ -5,7 +5,7 @@ title: "Adopt a source-built Polaris 1.6.0 and signed PostgreSQL metadata store"
 status: accepted
 created: 2026-07-16
 updated: 2026-07-20
-version: "0.5"
+version: "0.6"
 area: "architecture"
 tags: [shirokuma, adr, polaris, postgresql, arm64, supply-chain]
 ---
@@ -90,8 +90,16 @@ resident image or runtime.
   `approved_for_atomic_admission`, advance the lifecycle to
   `atomic_admission_pending`, and retire the write-capable publisher. The
   mutable `1.6.0-arm64` tag is only a non-authoritative pointer.
-- Do not add Polaris, PostgreSQL, catalog bootstrap, or credential manifests
-  while either image is pending. Missing evidence fails closed.
+- Admit the exact Polaris and PostgreSQL digests only as one atomic pair after
+  anonymous exact-reference preflight and fresh PostgreSQL exact-image plus
+  CycloneDX-input scans. Each vulnerability database must be no more than 24
+  hours old, all 56 Wolfi and four Go libraries must remain covered, and both
+  reports must remain High=0/Critical=0.
+- Add both exact records to `security/resident-images.json` in the same change.
+  A missing peer, stale scan, incomplete coverage, or mismatched digest fails
+  closed.
+- Resident-image admission does not authorize catalog bootstrap, runtime/Flux,
+  or credential manifests. Those remain blocked until runtime acceptance.
 - Keep PostgreSQL credentials and the SeaweedFS application credentials in the
   approved external Secret path. No placeholder or sample credential satisfies
   readiness.
@@ -110,33 +118,37 @@ HadoopFileIO, and Ranger authorization are unavailable in this bounded
 local-lite profile. Reintroducing any of them requires a new dependency
 closure, vulnerability review, contract update, and evidence-only review.
 
-The PostgreSQL evidence-only checkpoint retains the exact Chainguard 18.4 index
-and linux/arm64 manifests under `bootstrap/postgresql/v18.4/evidence/`. The
+The PostgreSQL evidence-only checkpoint retained the exact Chainguard 18.4
+index and linux/arm64 manifests under
+`bootstrap/postgresql/v18.4/evidence/`. The
 closed checksum set includes separate index and arm64 message-signature bundles,
 the raw attestation manifest and SLSA/SPDX DSSE envelopes, standard Sigstore
 bundle v0.3 records, a retained Sigstore TrustedRoot, an independent CycloneDX
 SBOM, an exact-image Trivy report, and a CycloneDX-input Trivy report that
 covers all 56 Wolfi and four Go libraries. Both scans report zero High and zero
 Critical findings. Cosign 3.1.1 verifies all four retained bundles without
-registry access or TUF retrieval. The reviewed state is
-`approved_for_atomic_admission` while `admission=blocked`; this checkpoint does
-not modify the resident-image ledger, Flux/runtime resources, or credentials.
-The retained scans authorize this evidence review only. Atomic admission
-requires new exact-image and CycloneDX-input scans of the same arm64 digest.
-Each vulnerability database must be no more than 24 hours old, and together
-they must reprove complete 56 Wolfi plus four Go library coverage at zero
-High/Critical, in addition to anonymous exact-digest availability preflight.
+registry access or TUF retrieval. That checkpoint authorized evidence review
+only and left resident admission, Flux/runtime resources, and credentials
+blocked.
 
-WP-L1-LAKE-002 remains incomplete until both exact digests enter
-`security/resident-images.json`, the catalog Kustomization depends on
-`shirokuma-object-storage`, and live Ready plus catalog create/list/read evidence
-is recorded.
+The subsequent atomic-admission checkpoint repeated anonymous availability
+preflight for the exact Polaris and PostgreSQL references and rescanned the same
+PostgreSQL arm64 digest in both exact-image and CycloneDX-input scopes. Each
+vulnerability database was no more than 24 hours old, complete 56 Wolfi plus
+four Go library coverage was retained, and both reports remained
+High=0/Critical=0. The CycloneDX-input report also retains one UNKNOWN finding:
+`CVE-2026-39824` in `golang.org/x/sys` `v0.1.0`, fixed in `0.44.0`. The
+decision receipt records `unknown=1`; the finding does not fail the
+High/Critical gate and remains a runtime-acceptance monitoring item. The
+preflight, fresh reports, reviewed evidence, and exact pair are bound under
+`security/evidence/polaris-v1.6.0-postgresql-v18.4/`.
 
-The retained Polaris image and PostgreSQL image are each approved only as one
-half of a future atomic admission. Their evidence-only checkpoints leave
-admission, resident-ledger permission, runtime manifests, and credentials
-blocked. The combined Polaris/PostgreSQL atomic admission review, including the
-fresh PostgreSQL dual-scope scans, is the next permitted change. Issue #61
+Both exact digests now enter `security/resident-images.json` in one atomic
+change. This closes only the resident-image admission boundary. WP-L1-LAKE-002
+remains incomplete until the catalog Kustomization depends on
+`shirokuma-object-storage`, credential-safe runtime resources reconcile, and
+live Ready plus catalog create/list/read and backup/restore evidence is
+recorded. Runtime manifests and credentials remain blocked, and Issue #61
 remains Open through runtime acceptance.
 
 ## Verification
@@ -151,22 +163,22 @@ The source-build checkpoint must pass:
 
 The evidence-only checkpoint must pass the repository trusted-image verifier
 using pinned Cosign against every retained bundle and the exact main workflow
-identity. The later atomic admission checkpoint must additionally bind the
-reviewed PostgreSQL evidence, <=24-hour zero High/Critical exact-image and
+identity. The atomic admission checkpoint additionally binds the reviewed
+PostgreSQL evidence, <=24-hour zero High/Critical exact-image and
 CycloneDX-input rescans that close all 60 libraries, both exact digests, and the
-resident-image record in one change. The later runtime checkpoint owns
-`make verify`,
-`make verify-gitops-bootstrap`, and live `make gitops-status` evidence.
+resident-image records in one change. Runtime remains a separate checkpoint
+that owns `make verify`, `make verify-gitops-bootstrap`, and live
+`make gitops-status` evidence.
 
 ## Rollback
 
-Before atomic admission, revert the evidence checkpoint, withdraw
-`approved_for_atomic_admission`, and keep the retired publisher and runtime
-manifests absent; no cluster or metadata state exists to recover. After
-admission, remove or revoke the affected digest and evidence, keep runtime
-manifests blocked, and rebuild only from the accepted source or re-resolved
-signed PostgreSQL image. After deployment, take the documented PostgreSQL
-backup before reverting Flux resources.
+Before runtime deployment, roll back admission by removing both resident-image
+records and reverting their atomic evidence and admission state in one change;
+never leave one half admitted. Keep the retired publisher and runtime manifests
+absent, so no cluster or metadata state needs recovery. If either digest or
+evidence becomes invalid, revoke the pair and rebuild only from the accepted
+source or a re-resolved signed PostgreSQL image. After deployment, take the
+documented PostgreSQL backup before reverting Flux resources.
 
 ## Related
 
