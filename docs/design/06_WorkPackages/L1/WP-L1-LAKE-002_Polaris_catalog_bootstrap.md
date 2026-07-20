@@ -5,7 +5,7 @@ title: "WP-L1-LAKE-002 Polaris catalog bootstrap"
 status: in-progress
 created: 2026-07-05
 updated: 2026-07-20
-version: "1.12"
+version: "1.13"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -231,6 +231,32 @@ Openを維持します。
   closed required setへ追加し、registry/Rekorの
   exact照合、current-run SLSA bundle、SBOM/Trivy predicateの暗号検証を行い、
   promotion credentialの発行前とlive registry照合時に再検証します。
+- PR [#81](https://github.com/TommyKammy/Shirokuma/pull/81)は
+  `e30c01935bbe02c70b82cf3d27fcb056910a3860`としてmerge済みです。続くmain
+  run `29709853932`ではprepareとverifyが成功し、credential発行前のbuild-input
+  artifact `polaris-1.6.0-arm64-build-input-29709853932-1`
+  （artifact ID `8448793363`、148,343,785 bytes、Actions SHA-256
+  `3b9892a2f26e2de33864f9054952ff80d43bf920335b29140f5ad073fa5ee8d4`）
+  とcandidate artifactを生成しました。promotionは、成長するRekor logの
+  inclusion proof/checkpointを含むREST response全体をretained responseと
+  比較したため、`live Rekor entry differs from retained evidence`として
+  fail-closedになりました。trusted tagは更新されず、final publication
+  artifact、release evidence、admissionは存在しません。
+- failed candidateの`runtime-smoke.log`には、in-memory smokeで自動生成された
+  Polaris root credentialが1件平文で含まれていました。candidate全体を不採用とし、
+  artifact ID `8448803363`を2026-07-20に削除し、runのartifact一覧から消えたことを
+  確認済みです。調査用に展開したローカルcopyも削除済みです。このrunの
+  candidate digestおよびevidenceは再利用しません。
+- 先行するpublisher repairでは、Rekor照合を`UUID`、`body`、
+  `integratedTime`、`logID`、top-level `logIndex`のimmutable identityへ
+  限定し、tree-localなproof `logIndex`も3入力間で束縛します。proof indexは
+  entry `logIndex`とは別座標としてtree boundsを個別に構造検証し、
+  再取得ごとに変わり得る`signedEntryTimestamp`は
+  cross-response identityに含めません。
+  runtime raw logとraw container inspectはrunner tempだけに置いてcleanupし、
+  retained evidenceはsecret scan済みlog policyとhardening controlのallowlist
+  projectionだけにします。candidate retentionとpromotionの双方でclosed set、
+  禁止ファイル、schema、hash、credential markerを再検証します。
 - one-shot publication時はGHCR packageのprivate defaultによりanonymous pullで
   fail-closedになり得ました。今回のpackageはpackage pageと空registry config
   によるmanifest/config/two-layer取得およびsignature verifyでPublicと確認済み
@@ -241,8 +267,7 @@ Openを維持します。
 - 2026-07-18の非admissionな実機監査では、5,014 files / 825,947,131 raw
   bytesのGradle seedでnetwork-none offline buildが成功しました。圧縮後も
   619,659,126 bytesのため、artifact本体をGitへ置きません。
-- 続く工程は修復PR [#81](https://github.com/TommyKammy/Shirokuma/pull/81)の
-  review/merge、新しいmain-only Polaris image
+- 続く工程はpublisher repairのreview/merge、新しいmain-only Polaris image
   publication、image evidence review、atomic Polaris/PostgreSQL admissionです。
 - admission後もcredentials、runtime/Flux Ready、catalog API smoke、
   backup/restore acceptanceが未完了です。
@@ -285,10 +310,12 @@ Openを維持します。
   [#80](https://github.com/TommyKammy/Shirokuma/pull/80)
   (merged as `7baa1388637b1b727a70d342d863ef8cf92bd83d`, `Refs #61`)
 - All-job Cosign bootstrap repair PR:
-  [#81](https://github.com/TommyKammy/Shirokuma/pull/81) (`Refs #61`)
+  [#81](https://github.com/TommyKammy/Shirokuma/pull/81)
+  (merged as `e30c01935bbe02c70b82cf3d27fcb056910a3860`, `Refs #61`)
+- Rekor/runtime evidence publisher repair: this change (`Refs #61`)
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
 - Execution order: `1 of 8`
-- Queue: all-job Cosign bootstrap repair review/merge、新しいmain-only Polaris
+- Queue: publisher repair review/merge、新しいmain-only Polaris
   image publication、image evidence-only review、atomic Polaris/PostgreSQL admission、
   runtime/Flux/API smoke/backup-restoreを順に完了するまで、Issue #61はOpen、
   後続#62はdependency-blockedを維持します。

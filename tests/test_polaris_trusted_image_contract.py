@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import base64
 import importlib.util
 import io
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from types import ModuleType
@@ -1880,6 +1882,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         for artifact in (
             "registry-signature-bundles.jsonl",
             "rekor-entry.json",
+            "runtime-smoke-log-policy.json",
             "slsa-bundles.jsonl",
             "sbom-attestation-bundle.json",
             "trivy-attestation-bundle.json",
@@ -1894,7 +1897,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                     maxsplit=1,
                 )
                 candidate_copy, after = candidate.split(
-                    "          test -s runtime-smoke.log\n",
+                    '          EVIDENCE_DIR="${evidence_dir}" python3 - <<\'PY\'\n',
                     maxsplit=1,
                 )
                 copy_line = f"            {artifact} \\\n"
@@ -1904,7 +1907,8 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                     + '          evidence_dir="${RUNNER_TEMP}/'
                     'polaris-image-candidate"\n'
                     + candidate_copy.replace(copy_line, "", 1)
-                    + "          test -s runtime-smoke.log\n"
+                    + '          EVIDENCE_DIR="${evidence_dir}" '
+                    + "python3 - <<'PY'\n"
                     + after,
                     encoding="utf-8",
                 )
@@ -1923,7 +1927,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             maxsplit=1,
         )
         candidate_copy, after = candidate.split(
-            "          test -s runtime-smoke.log\n",
+            '          EVIDENCE_DIR="${evidence_dir}" python3 - <<\'PY\'\n',
             maxsplit=1,
         )
         destination = '            "${evidence_dir}/"\n'
@@ -1937,7 +1941,8 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 "            unexpected-evidence.json \\\n" + destination,
                 1,
             )
-            + "          test -s runtime-smoke.log\n"
+            + '          EVIDENCE_DIR="${evidence_dir}" '
+            + "python3 - <<'PY'\n"
             + after,
             encoding="utf-8",
         )
@@ -1999,20 +2004,256 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
     def test_promotion_crypto_bindings_cannot_be_weakened_when_hashes_rebound(
         self,
     ) -> None:
-        root = self._fixture()
-        workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
-        workflow_text = workflow.read_text(encoding="utf-8")
-        original = 'and statement.get("predicate") == predicate'
-        self.assertEqual(1, workflow_text.count(original))
-        workflow.write_text(
-            workflow_text.replace(original, "and predicate is not None", 1),
-            encoding="utf-8",
+        cases = (
+            (
+                'and statement.get("predicate") == predicate',
+                "and predicate is not None",
+            ),
+            (
+                "and proof_log_index < tree_size",
+                "and proof_log_index >= 0",
+            ),
+            (
+                "if live_identity != retained_identity:",
+                "if False:",
+            ),
+            (
+                "retained_identity[field] != value",
+                "False",
+            ),
         )
-        self._assert_rebound_workflow_code(
-            root,
-            "PUBLICATION_POLICY",
-            "promotion cryptographic evidence binding changed",
+        for original, replacement in cases:
+            with self.subTest(original=original):
+                root = self._fixture()
+                workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+                workflow_text = workflow.read_text(encoding="utf-8")
+                self.assertEqual(1, workflow_text.count(original))
+                workflow.write_text(
+                    workflow_text.replace(original, replacement, 1),
+                    encoding="utf-8",
+                )
+                self._assert_rebound_workflow_code(
+                    root,
+                    "PUBLICATION_POLICY",
+                    "promotion cryptographic evidence binding changed",
+                )
+
+    def test_promotion_rekor_revalidation_compares_only_immutable_identity(
+        self,
+    ) -> None:
+        workflow = (ROOT / verifier.POLARIS_IMAGE_WORKFLOW).read_text(
+            encoding="utf-8"
         )
+        _, promote = workflow.split("\n  promote:\n", maxsplit=1)
+        self.assertNotIn("if live_rekor != retained_rekor:", promote)
+        self.assertNotIn("proof_log_index == log_index", promote)
+        for marker in (
+            "def rekor_identity(response, label):",
+            'verification.get("signedEntryTimestamp")',
+            "and proof_log_index < tree_size",
+            '"proofLogIndex": proof_log_index,',
+            'bundle_entry["inclusionProof"]["logIndex"]',
+            "if live_identity != retained_identity:",
+            "expected_rekor_identity = {",
+            "retained_identity[field] != value",
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, promote)
+        identity_result = promote.split("return {", maxsplit=1)[1].split(
+            "\n              }", maxsplit=1
+        )[0]
+        expected_identity = promote.split(
+            "expected_rekor_identity = {", maxsplit=1
+        )[1].split("\n          }", maxsplit=1)[0]
+        self.assertNotIn("signedEntryTimestamp", identity_result)
+        self.assertNotIn("signedEntryTimestamp", expected_identity)
+
+    def test_promotion_rekor_identity_accepts_sharded_proof_coordinates(
+        self,
+    ) -> None:
+        workflow = (ROOT / verifier.POLARIS_IMAGE_WORKFLOW).read_text(
+            encoding="utf-8"
+        )
+        _, promote = workflow.split("\n  promote:\n", maxsplit=1)
+        marker = "          def rekor_identity(response, label):"
+        function_offset = promote.index(marker)
+        heredoc_start = promote.rfind(
+            "          python3 - <<'PY'\n",
+            0,
+            function_offset,
+        )
+        self.assertGreaterEqual(heredoc_start, 0)
+        heredoc_start += len("          python3 - <<'PY'\n")
+        heredoc_end = promote.index("\n          PY", function_offset)
+        program = textwrap.dedent(promote[heredoc_start:heredoc_end])
+        tree = ast.parse(program)
+        function = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "rekor_identity"
+        )
+        namespace: dict[str, object] = {}
+        exec(
+            compile(
+                ast.Module(body=[function], type_ignores=[]),
+                "<promotion-rekor-identity>",
+                "exec",
+            ),
+            namespace,
+        )
+        identity = namespace["rekor_identity"]
+        self.assertTrue(callable(identity))
+
+        entry_id = "108e9186e8c5677a" + ("a" * 64)
+
+        def response(
+            signed_entry_timestamp: str,
+            tree_size: int,
+            checkpoint: str,
+            root_hash: str,
+        ) -> dict[str, object]:
+            return {
+                entry_id: {
+                    "body": "Ym9keQ==",
+                    "integratedTime": 1784508524,
+                    "logID": "c0d23d6ad406973f",
+                    "logIndex": 2204587743,
+                    "verification": {
+                        "signedEntryTimestamp": signed_entry_timestamp,
+                        "inclusionProof": {
+                            "checkpoint": checkpoint,
+                            "rootHash": root_hash,
+                            "hashes": ["b" * 64],
+                            "logIndex": 2082683481,
+                            "treeSize": tree_size,
+                        },
+                    },
+                }
+            }
+
+        retained = identity(
+            response("retained-set", 2082729220, "retained-checkpoint", "c" * 64),
+            "retained",
+        )
+        live = identity(
+            response("live-set", 2082729244, "live-checkpoint", "d" * 64),
+            "live",
+        )
+        self.assertEqual(retained, live)
+        self.assertEqual(
+            {
+                "uuid": entry_id,
+                "body": "Ym9keQ==",
+                "integratedTime": 1784508524,
+                "logID": "c0d23d6ad406973f",
+                "logIndex": 2204587743,
+                "proofLogIndex": 2082683481,
+            },
+            retained,
+        )
+        self.assertNotEqual(
+            retained["logIndex"],
+            retained["proofLogIndex"],
+        )
+
+    def test_runtime_evidence_projects_inspect_and_retains_no_log(
+        self,
+    ) -> None:
+        workflow = (ROOT / verifier.POLARIS_IMAGE_WORKFLOW).read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(1, workflow.count('"runtime-smoke.log",'))
+        self.assertNotIn('Path("runtime-smoke.log")', workflow)
+        self.assertNotIn("cp runtime-smoke.log", workflow)
+        self.assertNotIn(
+            "runtime-smoke.log",
+            verifier.POLARIS_CANDIDATE_EVIDENCE_REQUIRED,
+        )
+        self.assertIn(
+            "runtime-smoke-log-policy.json",
+            verifier.POLARIS_CANDIDATE_EVIDENCE_REQUIRED,
+        )
+        for marker in (
+            'raw_runtime_log="${RUNNER_TEMP}/polaris-runtime-smoke.raw.log"',
+            'raw_runtime_inspect="${RUNNER_TEMP}/'
+            'polaris-runtime-container-inspect.raw.json"',
+            'rm -f "${raw_runtime_log}" "${raw_runtime_inspect}"',
+            '"raw_log_retained": False',
+            '"sanitized_log_retained": False',
+            'Path("runtime-container-inspect.json")',
+            'Path("runtime-smoke-log-policy.json")',
+        ):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, workflow)
+
+    def test_runtime_evidence_scrubbing_cannot_be_weakened_when_rebound(
+        self,
+    ) -> None:
+        cases = (
+            ("if redactions != 1:", "if redactions < 1:"),
+            ('"raw_log_retained": False', '"raw_log_retained": True'),
+            (
+                'rm -f "${raw_runtime_log}" "${raw_runtime_inspect}"',
+                'echo "raw evidence retained"',
+            ),
+            (
+                '"generated_root_credential": (',
+                '"ignored_root_credential": (',
+            ),
+        )
+        for original, replacement in cases:
+            with self.subTest(original=original):
+                root = self._fixture()
+                workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+                workflow_text = workflow.read_text(encoding="utf-8")
+                self.assertEqual(1, workflow_text.count(original))
+                workflow.write_text(
+                    workflow_text.replace(original, replacement, 1),
+                    encoding="utf-8",
+                )
+                self._assert_rebound_workflow_code(
+                    root,
+                    "PUBLICATION_POLICY",
+                    "runtime evidence projection or credential scrubbing changed",
+                )
+
+    def test_promotion_runtime_evidence_revalidation_cannot_be_weakened(
+        self,
+    ) -> None:
+        cases = (
+            (
+                'not isinstance(runtime_log_policy["redaction_count"], bool)',
+                'isinstance(runtime_log_policy["redaction_count"], bool)',
+            ),
+            (
+                'runtime_log_policy["raw_log_retained"] is False',
+                'runtime_log_policy["raw_log_retained"] is not None',
+            ),
+            (
+                'and runtime_inspect["read_only_rootfs"] is True',
+                'and runtime_inspect["read_only_rootfs"] is not None',
+            ),
+            (
+                'runtime_summary.get("runtime_inspect_sha256")',
+                'runtime_summary.get("unbound_inspect")',
+            ),
+        )
+        for original, replacement in cases:
+            with self.subTest(original=original):
+                root = self._fixture()
+                workflow = root / verifier.POLARIS_IMAGE_WORKFLOW
+                workflow_text = workflow.read_text(encoding="utf-8")
+                self.assertEqual(1, workflow_text.count(original))
+                workflow.write_text(
+                    workflow_text.replace(original, replacement, 1),
+                    encoding="utf-8",
+                )
+                self._assert_rebound_workflow_code(
+                    root,
+                    "PUBLICATION_POLICY",
+                    "promotion runtime evidence revalidation changed",
+                )
 
     def test_promotion_attestation_revalidation_precedes_credentials(
         self,

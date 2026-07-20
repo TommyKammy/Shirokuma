@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-20
-version: "1.3"
+version: "1.4"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -100,6 +100,26 @@ SHA (`GITHUB_WORKFLOW_SHA`) and source SHA (`GITHUB_SHA`) are recorded and
 verified as separate identities. The current contract explicitly selects the
 Rekor v1 public API; a Rekor v2 migration must change the endpoint, identity
 schema, validator, and fixtures together.
+Rekor v1 REST responses are not retained as an immutable whole: the inclusion
+proof and checkpoint can evolve as the transparency log grows. Promotion
+therefore compares only the immutable entry identity (`UUID`, `body`,
+`integratedTime`, `logID`, and top-level `logIndex`) across the retained
+response, the fresh public response, and the signed Sigstore bundle. The
+tree-local inclusion-proof `logIndex` is also bound across all three inputs.
+Each retained and fresh response must still carry a structurally valid
+inclusion proof whose own index is within its tree bounds. The proof index is
+not the same coordinate as the top-level entry index, and a newly returned
+`signedEntryTimestamp` is not a cross-response identity. The signed bundle is
+cryptographically verified separately. Whole-response equality is not an
+admissible promotion control.
+Runtime smoke output and raw container inspection remain run-private temporary
+data and are deleted by cleanup; neither is publication evidence. The retained
+smoke-log policy records the sanitized-content hash and size, the exact
+redaction count, the forbidden credential classes, and that no raw or sanitized
+log was retained. The retained container inspection is an allowlist projection
+of the image reference, process identity, and hardening controls. Candidate
+retention and promotion both reject raw logs, raw inspection data, unexpected
+files or keys, credential-shaped output, and projection drift.
 The pending static-audit lifecycle does not require a local Cosign binary,
 because no admitted bundles exist yet. Once admission becomes `approved`, the
 repository verifier fails closed unless the exact contract-pinned Cosign is
