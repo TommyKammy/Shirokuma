@@ -1369,7 +1369,22 @@ class SupplyChainSecurityTests(unittest.TestCase):
             "persist-credentials: false",
             "sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2",
             "cosign-release: v3.1.1",
-            "gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3",
+            'GITLEAKS_VERSION: "8.30.1"',
+            "GITLEAKS_ARCHIVE_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb",
+            "https://github.com/gitleaks/gitleaks/releases/download/",
+            "sha256sum --check --strict -",
+            'range_base="$(git merge-base "${SCAN_BASE}" "${SCAN_HEAD}")"',
+            "gitleaks git",
+            "--exit-code=2",
+            "--log-level=info",
+            '"--log-opts=${log_opts}"',
+            "--redact",
+            "--report-format=sarif",
+            "--report-path=results.sarif",
+            "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4",
+            "if: ${{ !cancelled() && hashFiles('results.sarif') != '' }}",
+            "name: gitleaks-results.sarif",
+            "retention-days: 30",
             "aquasecurity/trivy-action@",
             "anchore/sbom-action@",
             "severity: HIGH,CRITICAL",
@@ -1380,6 +1395,9 @@ class SupplyChainSecurityTests(unittest.TestCase):
         ):
             with self.subTest(required=required):
                 self.assertIn(required, workflow)
+
+        self.assertNotIn("gitleaks/gitleaks-action@", workflow)
+        self.assertNotIn("--log-level=debug", workflow)
 
         documentation = SECURITY_DOC.read_text(encoding="utf-8")
         for required in (

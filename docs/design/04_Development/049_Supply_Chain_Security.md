@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-20
-version: "1.5"
+version: "1.6"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -34,8 +34,13 @@ AI Coding Agentは、善意で悪性コードを実行するリスクがあり�
 `make verify-security` is the deterministic local entry point and is also part of
 `make verify`. It rejects secret-like tracked filenames and contents, validates
 the resident image evidence ledger, and runs focused unsafe-input fixtures. The
-pull request workflow adds full-history gitleaks scanning plus Trivy filesystem
-scanning for dependencies, secrets, and misconfiguration. Any High or Critical
+pull request workflow adds commit-range Gitleaks scanning over a complete
+checkout plus Trivy filesystem scanning for dependencies, secrets, and
+misconfiguration. Gitleaks v8.30.1 is downloaded from its immutable release URL,
+verified against the committed archive SHA-256, executed at `info` log level,
+and retains its redacted SARIF report for 30 days. This keeps secret coverage
+over large retained evidence without allowing scanner debug output to amplify
+multi-megabyte single-line records in the Actions log. Any High or Critical
 finding is blocking; a separate non-blocking all-severity Trivy pass keeps lower
 severities visible in the workflow log for follow-up. Scanner
 errors, malformed reports, unavailable feeds, and missing prerequisite evidence
