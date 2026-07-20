@@ -357,8 +357,9 @@ while network proxies are denied. The SLSA certificate uses workflow commit
 certificates use `704e38b436bc40bc9a9d669c05f0d6694bec298b`. These role-specific
 claims must not be collapsed into one global workflow revision.
 
-Polaris and PostgreSQL are admitted atomically in the next evidence-only
-review. The retained Trivy report authorizes this evidence review only; it is
+Polaris and PostgreSQL are admitted atomically in the next focused
+atomic-admission review. The retained Trivy report authorizes this evidence
+review only; it is
 not an indefinitely reusable admission result. Before atomic admission,
 anonymous exact-digest availability is preflighted again and PostgreSQL is
 rescanned at the same arm64 digest in both exact-image and CycloneDX-input
