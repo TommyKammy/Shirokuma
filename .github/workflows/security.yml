@@ -79,13 +79,15 @@ jobs:
           if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
             git cat-file -e "${SCAN_BASE}^{commit}"
             range_base="$(git merge-base "${SCAN_BASE}" "${SCAN_HEAD}")"
-            log_opts="--no-merges --first-parent ${range_base}..${SCAN_HEAD}"
+            log_opts="-m ${range_base}..${SCAN_HEAD}"
           elif [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
             if [[ "${SCAN_BASE}" == "${zero_sha}" ]]; then
-              log_opts="--no-merges --first-parent ${SCAN_HEAD}"
+              log_opts="-m ${SCAN_HEAD}"
+            elif git cat-file -e "${SCAN_BASE}^{commit}" 2>/dev/null; then
+              log_opts="-m ${SCAN_BASE}..${SCAN_HEAD}"
             else
-              git cat-file -e "${SCAN_BASE}^{commit}"
-              log_opts="--no-merges --first-parent ${SCAN_BASE}..${SCAN_HEAD}"
+              echo "::warning::Push base is unavailable; scanning full HEAD history"
+              log_opts="-m ${SCAN_HEAD}"
             fi
           else
             echo "Unsupported Gitleaks event: ${GITHUB_EVENT_NAME}" >&2

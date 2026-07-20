@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-20
-version: "1.6"
+version: "1.7"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -40,7 +40,14 @@ misconfiguration. Gitleaks v8.30.1 is downloaded from its immutable release URL,
 verified against the committed archive SHA-256, executed at `info` log level,
 and retains its redacted SARIF report for 30 days. This keeps secret coverage
 over large retained evidence without allowing scanner debug output to amplify
-multi-megabyte single-line records in the Actions log. Any High or Critical
+multi-megabyte single-line records in the Actions log. Pull requests scan the
+complete merge-base-to-head reachability difference, and protected-branch pushes
+scan the complete before-to-head reachability difference. Neither range uses
+first-parent or no-merge filters, so merge commits and their second-parent PR
+history remain covered. Git `-m` emits separate merge patches so changes created
+only during merge resolution are scanned as well. If a force-push leaves the
+previous tip unavailable locally, the push gate scans the complete reachable
+HEAD history instead of silently dropping coverage. Any High or Critical
 finding is blocking; a separate non-blocking all-severity Trivy pass keeps lower
 severities visible in the workflow log for follow-up. Scanner
 errors, malformed reports, unavailable feeds, and missing prerequisite evidence

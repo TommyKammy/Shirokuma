@@ -1374,6 +1374,10 @@ class SupplyChainSecurityTests(unittest.TestCase):
             "https://github.com/gitleaks/gitleaks/releases/download/",
             "sha256sum --check --strict -",
             'range_base="$(git merge-base "${SCAN_BASE}" "${SCAN_HEAD}")"',
+            'log_opts="-m ${range_base}..${SCAN_HEAD}"',
+            'log_opts="-m ${SCAN_BASE}..${SCAN_HEAD}"',
+            'log_opts="-m ${SCAN_HEAD}"',
+            "Push base is unavailable; scanning full HEAD history",
             "gitleaks git",
             "--exit-code=2",
             "--log-level=info",
@@ -1398,6 +1402,8 @@ class SupplyChainSecurityTests(unittest.TestCase):
 
         self.assertNotIn("gitleaks/gitleaks-action@", workflow)
         self.assertNotIn("--log-level=debug", workflow)
+        self.assertNotIn("--no-merges", workflow)
+        self.assertNotIn("--first-parent", workflow)
 
         documentation = SECURITY_DOC.read_text(encoding="utf-8")
         for required in (
@@ -1412,6 +1418,62 @@ class SupplyChainSecurityTests(unittest.TestCase):
         ):
             with self.subTest(required=required):
                 self.assertIn(required, documentation)
+
+    def test_gitleaks_ranges_cover_merge_commits_and_resolution_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = Path(directory)
+
+            def git(*args: str) -> subprocess.CompletedProcess[str]:
+                return subprocess.run(
+                    ["git", "-C", str(repository), *args],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+
+            subprocess.run(
+                ["git", "init", "-q", "-b", "main", str(repository)],
+                check=True,
+            )
+            git("config", "user.name", "Shirokuma Test")
+            git("config", "user.email", "shirokuma@example.invalid")
+            (repository / "base.txt").write_text("base\n", encoding="utf-8")
+            git("add", "base.txt")
+            git("commit", "-q", "-m", "base")
+            base = git("rev-parse", "HEAD").stdout.strip()
+
+            git("checkout", "-q", "-b", "feature")
+            (repository / "feature.txt").write_text("feature\n", encoding="utf-8")
+            git("add", "feature.txt")
+            git("commit", "-q", "-m", "feature")
+            feature = git("rev-parse", "HEAD").stdout.strip()
+
+            git("checkout", "-q", "main")
+            git("merge", "-q", "--no-ff", "--no-commit", "feature")
+            merge_only_marker = "merge-resolution-only-secret-marker"
+            (repository / "merge-resolution.txt").write_text(
+                merge_only_marker + "\n",
+                encoding="utf-8",
+            )
+            git("add", "merge-resolution.txt")
+            git("commit", "-q", "-m", "merge feature")
+            head = git("rev-parse", "HEAD").stdout.strip()
+
+            push_range = set(git("rev-list", f"{base}..{head}").stdout.splitlines())
+            filtered_range = git(
+                "rev-list",
+                "--no-merges",
+                "--first-parent",
+                f"{base}..{head}",
+            ).stdout.splitlines()
+            plain_patch = git("log", "-p", "-U0", f"{base}..{head}").stdout
+            merge_patch = git("log", "-p", "-U0", "-m", f"{base}..{head}").stdout
+
+        self.assertIn(feature, push_range)
+        self.assertIn(head, push_range)
+        self.assertEqual(filtered_range, [])
+        self.assertNotIn(merge_only_marker, plain_patch)
+        self.assertIn(merge_only_marker, merge_patch)
 
     def test_retained_evidence_policy_exceptions_are_exact_path_only(self) -> None:
         config = GITLEAKS_CONFIG.read_text(encoding="utf-8")
