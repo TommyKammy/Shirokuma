@@ -1,64 +1,97 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "component": "postgresql",
   "version": "18.4",
   "platform": "linux/arm64",
   "admission": "blocked",
-  "state": "candidate_evidence_pending",
+  "state": "approved_for_atomic_admission",
   "source": "https://github.com/chainguard-images/images/tree/main/images/postgres",
   "candidate": {
     "index_reference": "cgr.dev/chainguard/postgres@sha256:3dc629a917612f1630c6f8e7a17f23a42cbd5917b9b3080972b70b1583daff34",
     "arm64_reference": "cgr.dev/chainguard/postgres@sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
     "attestation_manifest_digest": "sha256:8f5098343c0fc68d434174753d2ba6cefa9c1c037f5185f52b5cf5fbb4ba559b",
-    "issuer": "https://token.actions.githubusercontent.com",
-    "identity": "https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main",
-    "workflow_commit": "704e38b436bc40bc9a9d669c05f0d6694bec298b",
-    "transparency_log_index": 2181460214,
     "availability_preflight_required": true
   },
   "observation": {
-    "observed_at": "2026-07-18",
-    "signature": "verified-but-not-retained",
-    "arm64_index_membership": "verified-but-not-retained",
-    "slsa_provenance": "verified-but-not-retained",
-    "upstream_spdx": "verified-but-not-retained",
+    "observed_at": "2026-07-20",
+    "signature": "retained-and-offline-reverified",
+    "arm64_index_membership": "retained-and-reverified",
+    "slsa_provenance": "retained-and-offline-reverified",
+    "upstream_spdx": "retained-and-offline-reverified",
     "upstream_spdx_package_count": 257,
     "trivy_version": "0.72.0",
-    "vulnerability_db_updated_at": "2026-07-18T07:19:07.874814014Z",
+    "vulnerability_db_updated_at": "2026-07-20T01:09:07.303099965Z",
+    "sbom_vulnerability_db_updated_at": "2026-07-19T18:43:16.060990559Z",
+    "scanned_library_components": 60,
     "high": 0,
     "critical": 0,
-    "authoritative_for_admission": false
+    "authoritative_for_atomic_admission": false
   },
   "evidence_contract": {
+    "self_manifest": {
+      "path": "bootstrap/postgresql/v18.4/evidence/evidence.sha256",
+      "sha256": "c84a126acc195e8349d21a0c1d33f20c4b78e8550082b6d579fd384ad2b6c1a8",
+      "size": 1675
+    },
     "paths": {
       "index_manifest": "bootstrap/postgresql/v18.4/evidence/index-manifest.json",
       "arm64_manifest": "bootstrap/postgresql/v18.4/evidence/arm64-manifest.json",
-      "signature_bundle": "bootstrap/postgresql/v18.4/evidence/cosign-signature-bundle.json",
-      "attestation_bundles": "bootstrap/postgresql/v18.4/evidence/attestation-bundles.jsonl",
+      "attestation_manifest": "bootstrap/postgresql/v18.4/evidence/attestation-manifest.json",
+      "index_signature_payload": "bootstrap/postgresql/v18.4/evidence/index-signature-payload.json",
+      "index_signature_bundle": "bootstrap/postgresql/v18.4/evidence/index-signature.sigstore.json",
+      "arm64_signature_payload": "bootstrap/postgresql/v18.4/evidence/arm64-signature-payload.json",
+      "arm64_signature_bundle": "bootstrap/postgresql/v18.4/evidence/arm64-signature.sigstore.json",
+      "slsa_envelope": "bootstrap/postgresql/v18.4/evidence/slsa-attestation-envelope.json",
+      "slsa_bundle": "bootstrap/postgresql/v18.4/evidence/slsa-provenance.sigstore.json",
+      "spdx_envelope": "bootstrap/postgresql/v18.4/evidence/spdx-attestation-envelope.json",
+      "spdx_bundle": "bootstrap/postgresql/v18.4/evidence/spdx-sbom.sigstore.json",
+      "trusted_root": "bootstrap/postgresql/v18.4/evidence/trusted-root.json",
       "cyclonedx_sbom": "bootstrap/postgresql/v18.4/evidence/postgresql-18.4-arm64.cdx.json",
       "trivy_report": "bootstrap/postgresql/v18.4/evidence/trivy.json",
+      "trivy_version": "bootstrap/postgresql/v18.4/evidence/trivy-version.json",
+      "trivy_sbom_report": "bootstrap/postgresql/v18.4/evidence/trivy-sbom.json",
+      "trivy_sbom_version": "bootstrap/postgresql/v18.4/evidence/trivy-sbom-version.json",
       "verification": "bootstrap/postgresql/v18.4/evidence/cryptographic-verification.json"
     },
-    "signature": {
+    "publisher": {
       "issuer": "https://token.actions.githubusercontent.com",
       "identity": "https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main",
-      "transparency_log_index": 2181460214
+      "workflow_name": ".github/workflows/release.yaml",
+      "workflow_repository": "chainguard-images/images",
+      "workflow_ref": "refs/heads/main",
+      "workflow_trigger": "push"
+    },
+    "signatures": {
+      "index": {
+        "workflow_commit": "704e38b436bc40bc9a9d669c05f0d6694bec298b",
+        "transparency_log_index": 2181460214
+      },
+      "arm64": {
+        "workflow_commit": "704e38b436bc40bc9a9d669c05f0d6694bec298b",
+        "transparency_log_index": 2181460469
+      }
     },
     "provenance": {
       "predicate_type": "https://slsa.dev/provenance/v1",
       "subject_reference": "cgr.dev/chainguard/postgres@sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
       "builder": "https://github.com/chainguard-dev/terraform-provider-apko",
       "build_type": "https://apko.dev/slsa-build-type@v1",
-      "revision": "704e38b436bc40bc9a9d669c05f0d6694bec298b"
+      "invocation_id": "cgr.dev/chainguard/postgres@sha256:3dc629a917612f1630c6f8e7a17f23a42cbd5917b9b3080972b70b1583daff34",
+      "workflow_commit": "1d360e5f7f3b749f0b1e55b3f75d3eb8db4e7004",
+      "transparency_log_index": 2177108005
     },
     "upstream_sbom": {
       "predicate_type": "https://spdx.dev/Document",
       "subject_reference": "cgr.dev/chainguard/postgres@sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
-      "package_count": 257
+      "spdx_version": "SPDX-2.3",
+      "package_count": 257,
+      "workflow_commit": "704e38b436bc40bc9a9d669c05f0d6694bec298b",
+      "transparency_log_index": 2181460833
     },
     "independent_sbom": {
       "format": "CycloneDX 1.7",
-      "generator": "syft 1.46.0"
+      "generator": "syft 1.46.0",
+      "component_count": 4725
     },
     "vulnerability_scan": {
       "scanner": "trivy 0.72.0",
@@ -66,12 +99,23 @@
         "HIGH",
         "CRITICAL"
       ],
+      "scan_scopes": [
+        "image:os-pkgs/wolfi",
+        "sbom:os-pkgs/wolfi",
+        "sbom:lang-pkgs/gobinary"
+      ],
+      "library_component_count": 60,
+      "covered_library_component_count": 60,
       "maximum_high": 0,
       "maximum_critical": 0,
-      "fresh_database_required": true
+      "image_database_updated_at": "2026-07-20T01:09:07.303099965Z",
+      "sbom_database_updated_at": "2026-07-19T18:43:16.060990559Z",
+      "rescan_required_at_atomic_admission": true,
+      "maximum_age_hours_at_atomic_admission": 24
     },
     "cryptographic_reverification": {
       "cosign": "3.1.1",
+      "trusted_root_media_type": "application/vnd.dev.sigstore.trustedroot+json;version=0.1",
       "offline_retained_bundle_verification": true
     }
   },
@@ -82,5 +126,5 @@
   "runtime_manifests": {
     "permitted": false
   },
-  "next_action": "retain-and-reverify-evidence-after-polaris-main-publication"
+  "next_action": "preflight-and-admit-with-polaris-atomically"
 }

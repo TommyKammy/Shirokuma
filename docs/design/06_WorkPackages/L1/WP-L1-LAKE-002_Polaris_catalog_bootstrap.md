@@ -5,7 +5,7 @@ title: "WP-L1-LAKE-002 Polaris catalog bootstrap"
 status: in-progress
 created: 2026-07-05
 updated: 2026-07-20
-version: "1.14"
+version: "1.16"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -300,8 +300,18 @@ Openを維持します。
 - 2026-07-18の非admissionな実機監査では、5,014 files / 825,947,131 raw
   bytesのGradle seedでnetwork-none offline buildが成功しました。圧縮後も
   619,659,126 bytesのため、artifact本体をGitへ置きません。
-- 続く工程はPostgreSQL exact image evidenceの固定と、Polaris/PostgreSQLの
-  atomic admissionです。
+- PostgreSQL evidence-only checkpointでは、exact index/arm64/attestation
+  manifest、index/arm64署名、SLSA/SPDX、TrustedRoot、CycloneDX、fresh Trivyを
+  18-file checksum closureへ固定しました。image scanに加えてCycloneDX入力scanが
+  Wolfi 56 + Go 4の全library componentを閉じます。Cosign 3.1.1は空HOME/Docker
+  configとdeny proxyの下で4 bundleをoffline再検証し、High=0/Critical=0です。
+  `state=approved_for_atomic_admission`ですが`admission=blocked`を維持し、
+  resident ledger、runtime/Flux manifest、credentialsは変更しません。保持scanは
+  このevidence review専用です。atomic admission時には同じarm64 digestの
+  exact-image/CycloneDX-input両scopeを各database age 24時間以内で再scanし、
+  Wolfi 56 + Go 4の完全coverageを再確認します。
+- 続く工程はanonymous availability preflightを含むPolaris/PostgreSQLの
+  atomic admissionとfresh PostgreSQL dual-scope scanです。
 - admission後もcredentials、runtime/Flux Ready、catalog API smoke、
   backup/restore acceptanceが未完了です。
 - PR #74以降の本文はIssue参照を`Refs #61`だけに限定します。否定文であっても
@@ -315,7 +325,7 @@ Openを維持します。
 - PR: [#52](https://github.com/TommyKammy/Shirokuma/pull/52) (merged)
 - Runtime follow-up Epic: [#60](https://github.com/TommyKammy/Shirokuma/issues/60)
 - Runtime follow-up Issue: [#61](https://github.com/TommyKammy/Shirokuma/issues/61)
-  (reopened again 2026-07-19; runtime acceptance完了までOpen)
+  (reopened again 2026-07-20; runtime acceptance完了までOpen)
 - Runtime phase-1 Draft PR:
   [#71](https://github.com/TommyKammy/Shirokuma/pull/71) (merged, `Refs #61`)
 - Runtime phase-2 PR:
@@ -348,12 +358,15 @@ Openを維持します。
 - Rekor/runtime evidence publisher repair:
   [#82](https://github.com/TommyKammy/Shirokuma/pull/82)
   (merged as `706575ba3f21987033a29b6d21367981e9c54e3e`, `Refs #61`)
-- Polaris image evidence-only review: this PR (`Refs #61`)
+- Polaris image evidence-only review:
+  [#83](https://github.com/TommyKammy/Shirokuma/pull/83)
+  (merged as `11fca8a4ad180a8d862bc5f93aec3729fca7e5ee`, `Refs #61`)
+- PostgreSQL evidence-only review: this PR (`Refs #61`)
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
-- Execution order: `1 of 8`
-- Queue: PostgreSQL evidence、atomic Polaris/PostgreSQL admission、
-  runtime/Flux/API smoke/backup-restoreを順に完了するまで、Issue #61はOpen、
-  後続#62はdependency-blockedを維持します。
+- Execution order: `2 of 8`
+- Queue: atomic Polaris/PostgreSQL admission、runtime/Flux/API
+  smoke/backup-restoreを順に完了するまで、Issue #61はOpen、後続#62は
+  dependency-blockedを維持します。
 
 ## Definition of Done
 

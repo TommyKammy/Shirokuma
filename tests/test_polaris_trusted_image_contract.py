@@ -56,12 +56,17 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             verifier._reverify_image_sigstore_cryptographically,
             spec_set=True,
         )
+        self.postgres_crypto_verifier = mock.create_autospec(
+            verifier._reverify_postgres_sigstore_cryptographically,
+            spec_set=True,
+        )
 
     def _audit(self, root: Path) -> None:
         verifier.audit(
             root,
             dependency_crypto_verifier=self.dependency_crypto_verifier,
             image_crypto_verifier=self.image_crypto_verifier,
+            postgres_crypto_verifier=self.postgres_crypto_verifier,
         )
 
     def _source_archive(
@@ -670,6 +675,51 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         if detail is not None:
             self.assertIn(detail, raised.exception.detail)
 
+    def _rebind_postgres_evidence(
+        self,
+        root: Path,
+    ) -> tuple[str, int]:
+        directory = root / verifier.POSTGRES_EVIDENCE
+        manifest = directory / "evidence.sha256"
+        manifest.write_text(
+            "".join(
+                f"{verifier._sha256(directory / name)}  ./{name}\n"
+                for name in sorted(verifier.POSTGRES_EVIDENCE_REQUIRED)
+            ),
+            encoding="utf-8",
+        )
+        manifest_sha256 = verifier._sha256(manifest)
+        manifest_size = manifest.stat().st_size
+
+        def bind_manifest(value: dict[str, object]) -> None:
+            self_manifest = value["evidence_contract"][  # type: ignore[index]
+                "self_manifest"
+            ]
+            self_manifest["sha256"] = manifest_sha256  # type: ignore[index]
+            self_manifest["size"] = manifest_size  # type: ignore[index]
+
+        self._rewrite_json(root, verifier.POSTGRES_ADMISSION, bind_manifest)
+        return manifest_sha256, manifest_size
+
+    def _assert_rebound_postgres_code(
+        self,
+        root: Path,
+        code: str,
+        detail: str,
+    ) -> None:
+        manifest_sha256, manifest_size = self._rebind_postgres_evidence(root)
+        with mock.patch.object(
+            verifier,
+            "POSTGRES_EVIDENCE_MANIFEST_SHA256",
+            manifest_sha256,
+        ):
+            with mock.patch.object(
+                verifier,
+                "POSTGRES_EVIDENCE_MANIFEST_SIZE",
+                manifest_size,
+            ):
+                self._assert_code(root, code, detail)
+
     def _assert_rebound_contract_code(
         self,
         root: Path,
@@ -812,6 +862,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         self._audit(ROOT)
         self.dependency_crypto_verifier.assert_called_once()
         self.image_crypto_verifier.assert_called_once()
+        self.postgres_crypto_verifier.assert_called_once_with(ROOT.resolve())
 
     def test_static_publication_bootstrap_never_invokes_external_crypto(
         self,
@@ -1917,7 +1968,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         )
         self.dependency_crypto_verifier.assert_not_called()
 
-    def test_default_audit_uses_both_real_crypto_boundaries(self) -> None:
+    def test_default_audit_uses_all_three_real_crypto_boundaries(self) -> None:
         with mock.patch.object(
             verifier,
             "_reverify_dependency_sigstore_cryptographically",
@@ -1928,9 +1979,15 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 "_reverify_image_sigstore_cryptographically",
                 autospec=True,
             ) as image_crypto_verifier:
-                verifier.audit(ROOT)
+                with mock.patch.object(
+                    verifier,
+                    "_reverify_postgres_sigstore_cryptographically",
+                    autospec=True,
+                ) as postgres_crypto_verifier:
+                    verifier.audit(ROOT)
         dependency_crypto_verifier.assert_called_once()
         image_crypto_verifier.assert_called_once()
+        postgres_crypto_verifier.assert_called_once_with(ROOT.resolve())
 
     def test_each_image_cosign_verification_failure_is_fail_closed(
         self,
@@ -3249,16 +3306,546 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         self._rewrite_json(root, verifier.POSTGRES_ADMISSION, mutate)
         self._assert_code(root, "POSTGRES_ADMISSION", "arm64_reference")
 
+    def test_postgresql_atomic_admission_requires_a_fresh_rescan(
+        self,
+    ) -> None:
+        admission = json.loads(
+            (ROOT / verifier.POSTGRES_ADMISSION).read_text(encoding="utf-8")
+        )
+        scan = admission["evidence_contract"]["vulnerability_scan"]
+
+        self.assertFalse(
+            admission["observation"]["authoritative_for_atomic_admission"]
+        )
+        self.assertTrue(scan["rescan_required_at_atomic_admission"])
+        self.assertEqual(24, scan["maximum_age_hours_at_atomic_admission"])
+        self.assertEqual(60, scan["library_component_count"])
+        self.assertEqual(60, scan["covered_library_component_count"])
+        self.assertIn("sbom:lang-pkgs/gobinary", scan["scan_scopes"])
+        self.assertEqual("blocked", admission["admission"])
+        self.assertFalse(admission["resident_ledger"]["permitted"])
+        self.assertFalse(admission["runtime_manifests"]["permitted"])
+
     def test_postgresql_evidence_contract_mutation_fails_closed(self) -> None:
         root = self._fixture()
 
         def mutate(value: dict[str, object]) -> None:
-            value["evidence_contract"]["paths"]["signature_bundle"] = (  # type: ignore[index]
+            value["evidence_contract"]["paths"]["index_signature_bundle"] = (  # type: ignore[index]
                 "bootstrap/postgresql/v18.4/evidence/self-asserted.json"
             )
 
         self._rewrite_json(root, verifier.POSTGRES_ADMISSION, mutate)
-        self._assert_code(root, "POSTGRES_ADMISSION", "signature_bundle")
+        self._assert_code(
+            root,
+            "POSTGRES_ADMISSION",
+            "index_signature_bundle",
+        )
+
+    def test_postgresql_evidence_inventory_is_closed(self) -> None:
+        root = self._fixture()
+        unexpected = root / verifier.POSTGRES_EVIDENCE / "self-asserted.json"
+        unexpected.write_text("{}\n", encoding="utf-8")
+        self._assert_code(
+            root,
+            "POSTGRES_EVIDENCE",
+            "inventory must be closed",
+        )
+
+    def test_postgresql_evidence_byte_drift_fails_closed(self) -> None:
+        root = self._fixture()
+        bundle = (
+            root
+            / verifier.POSTGRES_EVIDENCE
+            / "index-signature.sigstore.json"
+        )
+        bundle.write_text(
+            bundle.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        self._assert_code(
+            root,
+            "POSTGRES_EVIDENCE",
+            "differs from the PostgreSQL self-manifest",
+        )
+
+    def test_postgresql_standard_bundle_mutation_fails_after_rebind(
+        self,
+    ) -> None:
+        root = self._fixture()
+        relative = (
+            verifier.POSTGRES_EVIDENCE
+            / "index-signature.sigstore.json"
+        )
+
+        def mutate(value: dict[str, object]) -> None:
+            value["mediaType"] = (
+                "application/vnd.dev.sigstore.bundle+json;version=0.2"
+            )
+
+        self._rewrite_json(root, relative, mutate)
+        self._assert_rebound_postgres_code(
+            root,
+            "POSTGRES_EVIDENCE",
+            "standard Sigstore v0.3 bundle",
+        )
+
+    def test_postgresql_index_arm64_binding_fails_after_review_rebind(
+        self,
+    ) -> None:
+        root = self._fixture()
+        path = (
+            root
+            / verifier.POSTGRES_EVIDENCE
+            / "index-manifest.json"
+        )
+        index = json.loads(path.read_text(encoding="utf-8"))
+        arm64 = next(
+            descriptor
+            for descriptor in index["manifests"]
+            if descriptor["platform"]
+            == {"architecture": "arm64", "os": "linux"}
+        )
+        arm64["digest"] = "sha256:" + "0" * 64
+        path.write_text(
+            json.dumps(index, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        self.assertEqual(1_015, path.stat().st_size)
+        rebound_index = (
+            "cgr.dev/chainguard/postgres@sha256:"
+            + verifier._sha256(path)
+        )
+        with mock.patch.object(verifier, "POSTGRES_INDEX", rebound_index):
+            with self.assertRaises(verifier.ContractError) as raised:
+                verifier._audit_postgres_manifests(root)
+        self.assertEqual("POSTGRES_EVIDENCE", raised.exception.code)
+        self.assertIn(
+            "does not bind the retained arm64 manifest",
+            raised.exception.detail,
+        )
+
+    def test_postgresql_slsa_subject_mutation_fails_closed(self) -> None:
+        raw = json.loads(
+            (
+                ROOT
+                / verifier.POSTGRES_EVIDENCE
+                / "slsa-attestation-envelope.json"
+            ).read_text(encoding="utf-8")
+        )
+        slsa = json.loads(base64.b64decode(raw["payload"]))
+        spdx_raw = json.loads(
+            (
+                ROOT
+                / verifier.POSTGRES_EVIDENCE
+                / "spdx-attestation-envelope.json"
+            ).read_text(encoding="utf-8")
+        )
+        spdx = json.loads(base64.b64decode(spdx_raw["payload"]))
+        slsa["subject"][0]["digest"]["sha256"] = "0" * 64
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_postgres_statements(slsa, spdx)
+        self.assertEqual("POSTGRES_EVIDENCE", raised.exception.code)
+        self.assertIn("SLSA v1 semantics", raised.exception.detail)
+
+    def test_postgresql_cyclonedx_component_count_mutation_fails_closed(
+        self,
+    ) -> None:
+        root = self._fixture()
+        relative = (
+            verifier.POSTGRES_EVIDENCE
+            / "postgresql-18.4-arm64.cdx.json"
+        )
+
+        def mutate(value: dict[str, object]) -> None:
+            value["components"].pop()  # type: ignore[union-attr]
+
+        self._rewrite_json(root, relative, mutate)
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_postgres_sbom_and_scan(root)
+        self.assertEqual("POSTGRES_EVIDENCE", raised.exception.code)
+        self.assertIn("CycloneDX contract", raised.exception.detail)
+
+    def test_postgresql_cyclonedx_null_component_fails_after_rebind(
+        self,
+    ) -> None:
+        root = self._fixture()
+        relative = (
+            verifier.POSTGRES_EVIDENCE
+            / "postgresql-18.4-arm64.cdx.json"
+        )
+
+        def mutate(value: dict[str, object]) -> None:
+            value["components"][0] = None  # type: ignore[index]
+
+        self._rewrite_json(root, relative, mutate)
+        self._assert_rebound_postgres_code(
+            root,
+            "POSTGRES_EVIDENCE",
+            "must be an object",
+        )
+
+    def test_postgresql_trivy_image_id_fails_after_rebind(self) -> None:
+        root = self._fixture()
+        relative = verifier.POSTGRES_EVIDENCE / "trivy.json"
+
+        def mutate(value: dict[str, object]) -> None:
+            value["Metadata"]["ImageID"] = "sha256:" + "0" * 64  # type: ignore[index]
+
+        self._rewrite_json(root, relative, mutate)
+        self._assert_rebound_postgres_code(
+            root,
+            "POSTGRES_EVIDENCE",
+            "does not bind the OCI image",
+        )
+
+    def test_postgresql_trivy_empty_scope_fails_after_rebind(self) -> None:
+        root = self._fixture()
+        relative = verifier.POSTGRES_EVIDENCE / "trivy.json"
+
+        def mutate(value: dict[str, object]) -> None:
+            value["Results"] = [{}]
+
+        self._rewrite_json(root, relative, mutate)
+        self._assert_rebound_postgres_code(
+            root,
+            "POSTGRES_EVIDENCE",
+            "does not bind the exact scan scope",
+        )
+
+    def test_postgresql_trivy_package_substitution_fails_after_rebind(
+        self,
+    ) -> None:
+        root = self._fixture()
+        relative = verifier.POSTGRES_EVIDENCE / "trivy.json"
+
+        def mutate(value: dict[str, object]) -> None:
+            package = value["Results"][0]["Packages"][0]  # type: ignore[index]
+            package["Name"] = "github.com/moby/sys/user"
+            package["Version"] = "v0.1.0"
+            package["ID"] = "github.com/moby/sys/user@v0.1.0"
+
+        self._rewrite_json(root, relative, mutate)
+        self._assert_rebound_postgres_code(
+            root,
+            "POSTGRES_EVIDENCE",
+            "exact APK SBOM partition",
+        )
+
+    def test_postgresql_trivy_null_vulnerabilities_fails_after_rebind(
+        self,
+    ) -> None:
+        root = self._fixture()
+        relative = verifier.POSTGRES_EVIDENCE / "trivy.json"
+
+        def mutate(value: dict[str, object]) -> None:
+            value["Results"][0]["Vulnerabilities"] = None  # type: ignore[index]
+
+        self._rewrite_json(root, relative, mutate)
+        self._assert_rebound_postgres_code(
+            root,
+            "POSTGRES_EVIDENCE",
+            "Vulnerabilities must be a list",
+        )
+
+    def test_postgresql_trivy_non_string_layer_fails_after_rebind(
+        self,
+    ) -> None:
+        root = self._fixture()
+        relative = verifier.POSTGRES_EVIDENCE / "trivy.json"
+
+        def mutate(value: dict[str, object]) -> None:
+            value["Results"][0]["Packages"][0]["Layer"]["Digest"] = []  # type: ignore[index]
+
+        self._rewrite_json(root, relative, mutate)
+        self._assert_rebound_postgres_code(
+            root,
+            "POSTGRES_EVIDENCE",
+            "has an incomplete or unbound identity",
+        )
+
+    def test_postgresql_trivy_non_string_metadata_layer_fails_after_rebind(
+        self,
+    ) -> None:
+        root = self._fixture()
+        relative = verifier.POSTGRES_EVIDENCE / "trivy.json"
+
+        def mutate(value: dict[str, object]) -> None:
+            metadata = value["Metadata"]  # type: ignore[index]
+            metadata["Layers"][0]["DiffID"] = []  # type: ignore[index]
+            metadata["DiffIDs"][0] = []  # type: ignore[index]
+            metadata["ImageConfig"]["rootfs"]["diff_ids"][0] = []  # type: ignore[index]
+
+        self._rewrite_json(root, relative, mutate)
+        self._assert_rebound_postgres_code(
+            root,
+            "POSTGRES_EVIDENCE",
+            "does not bind the OCI image",
+        )
+
+    def test_postgresql_trivy_sbom_library_gap_fails_after_rebind(
+        self,
+    ) -> None:
+        root = self._fixture()
+        relative = verifier.POSTGRES_EVIDENCE / "trivy-sbom.json"
+
+        def mutate(value: dict[str, object]) -> None:
+            packages = value["Results"][1]["Packages"]  # type: ignore[index]
+            packages[0] = packages[1]
+
+        self._rewrite_json(root, relative, mutate)
+        self._assert_rebound_postgres_code(
+            root,
+            "POSTGRES_EVIDENCE",
+            "is not bound to one SBOM library",
+        )
+
+    def test_postgresql_trivy_coordinated_scope_swap_fails_after_rebind(
+        self,
+    ) -> None:
+        root = self._fixture()
+        sbom_relative = verifier.POSTGRES_EVIDENCE / "trivy-sbom.json"
+
+        def swap_scopes(value: dict[str, object]) -> None:
+            os_packages = value["Results"][0]["Packages"]  # type: ignore[index]
+            go_packages = value["Results"][1]["Packages"]  # type: ignore[index]
+            os_package = os_packages[0]
+            go_package = go_packages[0]
+            go_package["Arch"] = "aarch64"
+            os_packages[0] = go_package
+            go_packages[0] = os_package
+
+        self._rewrite_json(root, sbom_relative, swap_scopes)
+        image_relative = verifier.POSTGRES_EVIDENCE / "trivy.json"
+
+        def substitute_image_package(value: dict[str, object]) -> None:
+            package = value["Results"][0]["Packages"][0]  # type: ignore[index]
+            package["Name"] = "github.com/moby/sys/user"
+            package["Version"] = "v0.1.0"
+            package["ID"] = "github.com/moby/sys/user@v0.1.0"
+
+        self._rewrite_json(root, image_relative, substitute_image_package)
+        self._assert_rebound_postgres_code(
+            root,
+            "POSTGRES_EVIDENCE",
+            "exact APK SBOM partition",
+        )
+
+    def test_postgresql_trivy_sbom_non_string_bom_ref_fails_after_rebind(
+        self,
+    ) -> None:
+        root = self._fixture()
+        relative = verifier.POSTGRES_EVIDENCE / "trivy-sbom.json"
+
+        def mutate(value: dict[str, object]) -> None:
+            value["Results"][1]["Packages"][0]["Identifier"]["BOMRef"] = []  # type: ignore[index]
+
+        self._rewrite_json(root, relative, mutate)
+        self._assert_rebound_postgres_code(
+            root,
+            "POSTGRES_EVIDENCE",
+            "is not bound to one SBOM library",
+        )
+
+    def test_postgresql_trivy_high_finding_mutation_fails_closed(self) -> None:
+        root = self._fixture()
+        relative = verifier.POSTGRES_EVIDENCE / "trivy.json"
+
+        def mutate(value: dict[str, object]) -> None:
+            value["Results"][0]["Vulnerabilities"] = [  # type: ignore[index]
+                {
+                    "VulnerabilityID": "CVE-2099-0001",
+                    "PkgName": "postgresql-18",
+                    "InstalledVersion": "18.4-r6",
+                    "Severity": "HIGH",
+                }
+            ]
+
+        self._rewrite_json(root, relative, mutate)
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_postgres_sbom_and_scan(root)
+        self.assertEqual("POSTGRES_EVIDENCE", raised.exception.code)
+        self.assertIn("High/Critical threshold", raised.exception.detail)
+
+    def test_postgresql_trivy_malformed_severity_fails_after_rebind(
+        self,
+    ) -> None:
+        root = self._fixture()
+        relative = verifier.POSTGRES_EVIDENCE / "trivy.json"
+
+        def mutate(value: dict[str, object]) -> None:
+            value["Results"][0]["Vulnerabilities"] = [  # type: ignore[index]
+                {
+                    "VulnerabilityID": "CVE-2099-0002",
+                    "PkgName": "postgresql-18",
+                    "InstalledVersion": "18.4-r6",
+                    "Severity": "critical",
+                }
+            ]
+
+        self._rewrite_json(root, relative, mutate)
+        self._assert_rebound_postgres_code(
+            root,
+            "POSTGRES_EVIDENCE",
+            "malformed finding",
+        )
+
+    def test_postgresql_trivy_non_string_severity_fails_after_rebind(
+        self,
+    ) -> None:
+        root = self._fixture()
+        relative = verifier.POSTGRES_EVIDENCE / "trivy.json"
+
+        def mutate(value: dict[str, object]) -> None:
+            value["Results"][0]["Vulnerabilities"] = [  # type: ignore[index]
+                {
+                    "VulnerabilityID": "CVE-2099-0003",
+                    "PkgName": "postgresql-18",
+                    "InstalledVersion": "18.4-r6",
+                    "Severity": [],
+                }
+            ]
+
+        self._rewrite_json(root, relative, mutate)
+        self._assert_rebound_postgres_code(
+            root,
+            "POSTGRES_EVIDENCE",
+            "malformed finding",
+        )
+
+    def test_postgresql_trivy_sbom_non_string_severity_fails_after_rebind(
+        self,
+    ) -> None:
+        root = self._fixture()
+        relative = verifier.POSTGRES_EVIDENCE / "trivy-sbom.json"
+
+        def mutate(value: dict[str, object]) -> None:
+            value["Results"][1]["Vulnerabilities"] = [  # type: ignore[index]
+                {
+                    "VulnerabilityID": "CVE-2099-0004",
+                    "PkgName": "stdlib",
+                    "InstalledVersion": "1.26.5",
+                    "Severity": [],
+                }
+            ]
+
+        self._rewrite_json(root, relative, mutate)
+        self._assert_rebound_postgres_code(
+            root,
+            "POSTGRES_EVIDENCE",
+            "malformed finding",
+        )
+
+    def test_postgresql_trusted_root_scalar_fails_after_rebind(
+        self,
+    ) -> None:
+        root = self._fixture()
+        relative = verifier.POSTGRES_EVIDENCE / "trusted-root.json"
+
+        def mutate(value: dict[str, object]) -> None:
+            value["tlogs"] = 1
+
+        self._rewrite_json(root, relative, mutate)
+        self._assert_rebound_postgres_code(
+            root,
+            "POSTGRES_EVIDENCE",
+            "trusted root changed",
+        )
+
+    def test_postgresql_crypto_uses_trusted_root_without_registry(
+        self,
+    ) -> None:
+        version = subprocess.CompletedProcess(
+            ["cosign", "version"],
+            0,
+            stdout="GitVersion:    v3.1.1\n",
+            stderr="",
+        )
+        with mock.patch.object(
+            verifier.subprocess,
+            "run",
+            return_value=version,
+        ):
+            with mock.patch.object(
+                verifier,
+                "_run_cosign",
+                autospec=True,
+            ) as run_cosign:
+                verifier._reverify_postgres_sigstore_cryptographically(ROOT)
+        self.assertEqual(4, run_cosign.call_count)
+        for call in run_cosign.call_args_list:
+            arguments = call.args[1]
+            self.assertIn("--trusted-root", arguments)
+            self.assertFalse(
+                any(
+                    value.startswith("cgr.dev/")
+                    for value in arguments
+                )
+            )
+            self.assertEqual(
+                "http://127.0.0.1:9",
+                call.kwargs["env"]["HTTPS_PROXY"],
+            )
+            environment = call.kwargs["env"]
+            temporary_roots = {
+                Path(environment[name]).parent
+                for name in (
+                    "HOME",
+                    "DOCKER_CONFIG",
+                    "XDG_CACHE_HOME",
+                    "XDG_CONFIG_HOME",
+                    "XDG_DATA_HOME",
+                    "TMPDIR",
+                )
+            }
+            self.assertEqual(1, len(temporary_roots))
+            self.assertFalse(
+                any(
+                    name.startswith(("COSIGN_", "SIGSTORE_"))
+                    for name in environment
+                )
+            )
+        commands = [call.args[1] for call in run_cosign.call_args_list]
+        self.assertEqual(
+            ["verify-blob", "verify-blob", "verify-blob-attestation",
+             "verify-blob-attestation"],
+            [command[0] for command in commands],
+        )
+        self.assertIn(
+            verifier.POSTGRES_SLSA_WORKFLOW_SHA,
+            commands[2],
+        )
+        self.assertIn(
+            verifier.POSTGRES_RELEASE_WORKFLOW_SHA,
+            commands[3],
+        )
+        self.assertIn(verifier.POSTGRES_SLSA_PREDICATE, commands[2])
+        self.assertIn(verifier.POSTGRES_SPDX_PREDICATE, commands[3])
+
+    def test_postgresql_cosign_failure_is_fail_closed(self) -> None:
+        version = subprocess.CompletedProcess(
+            ["cosign", "version"],
+            0,
+            stdout="GitVersion:    v3.1.1\n",
+            stderr="",
+        )
+        failed = subprocess.CompletedProcess(
+            ["cosign", "verify-blob"],
+            1,
+            stdout="",
+            stderr="offline verification failed",
+        )
+        with mock.patch.object(
+            verifier.subprocess,
+            "run",
+            side_effect=[version, failed],
+        ):
+            with self.assertRaises(verifier.ContractError) as raised:
+                verifier._reverify_postgres_sigstore_cryptographically(ROOT)
+        self.assertEqual("POSTGRES_EVIDENCE", raised.exception.code)
+        self.assertIn(
+            "offline PostgreSQL index signature verification failed",
+            raised.exception.detail,
+        )
 
     def test_partial_resident_ledger_admission_fails_closed(self) -> None:
         root = self._fixture()
