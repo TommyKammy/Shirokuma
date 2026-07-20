@@ -247,7 +247,9 @@ Openを維持します。
   artifact ID `8448803363`を2026-07-20に削除し、runのartifact一覧から消えたことを
   確認済みです。調査用に展開したローカルcopyも削除済みです。このrunの
   candidate digestおよびevidenceは再利用しません。
-- 先行するpublisher repairでは、Rekor照合を`UUID`、`body`、
+- 先行するpublisher repair
+  [#82](https://github.com/TommyKammy/Shirokuma/pull/82)では、Rekor照合を
+  `UUID`、`body`、
   `integratedTime`、`logID`、top-level `logIndex`のimmutable identityへ
   限定し、tree-localなproof `logIndex`も3入力間で束縛します。proof indexは
   entry `logIndex`とは別座標としてtree boundsを個別に構造検証し、
@@ -312,7 +314,8 @@ Openを維持します。
 - All-job Cosign bootstrap repair PR:
   [#81](https://github.com/TommyKammy/Shirokuma/pull/81)
   (merged as `e30c01935bbe02c70b82cf3d27fcb056910a3860`, `Refs #61`)
-- Rekor/runtime evidence publisher repair: this change (`Refs #61`)
+- Rekor/runtime evidence publisher repair:
+  [#82](https://github.com/TommyKammy/Shirokuma/pull/82) (Open, `Refs #61`)
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
 - Execution order: `1 of 8`
 - Queue: publisher repair review/merge、新しいmain-only Polaris
