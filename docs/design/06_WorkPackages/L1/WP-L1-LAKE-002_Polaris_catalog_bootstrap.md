@@ -407,8 +407,10 @@ Openを維持します。
 - Polaris/PostgreSQL atomic admission:
   [#85](https://github.com/TommyKammy/Shirokuma/pull/85)
   (merged as `51fb24ebc83eb9b0b7f100a30bbc2761141a0553`, `Refs #61`)
-- Polaris Admin build-input checkpoint: publication contract in progress;
-  Admin image、resident admission、runtime activationはnon-scope (`Refs #61`)
+- Polaris Admin build-input checkpoint:
+  [#86](https://github.com/TommyKammy/Shirokuma/pull/86)
+  (Draft; trusted dependency-superset publication contract、Admin image、
+  resident admission、runtime activationはnon-scope、`Refs #61`)
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
 - Execution order: `1 of 8`
 - Queue: Admin build-input main publication、evidence-only review、Admin image
