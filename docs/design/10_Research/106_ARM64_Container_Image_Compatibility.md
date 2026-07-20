@@ -4,8 +4,8 @@ doc_id: "RES-106"
 title: "ARM64 Container Image Compatibility"
 status: draft
 created: 2026-07-05
-updated: 2026-07-20
-version: "0.15"
+updated: 2026-07-21
+version: "0.16"
 area: "research"
 tags: [shirokuma, arm64, apple-silicon]
 ---
@@ -228,6 +228,32 @@ exact Polaris image `approved_for_atomic_admission`. This is not resident
 admission: exact PostgreSQL evidence is reviewed separately, while the atomic
 two-image review, fresh PostgreSQL dual-scope scans, credentials, Flux
 resources, and live catalog acceptance remain pending. Issue #61 remains Open.
+
+### WP-L1-LAKE-002 Polaris Admin dependency publication recheck
+
+The separately required Polaris Admin dependency superset was rechecked on
+2026-07-21 after PR #86 merged as
+`619d52e0b1db5241867d7775cc8714a30b1a6f38`. Main run `29781460117`, attempt
+`1`, completed the fresh network-disabled offline Admin/server regression
+build, signature and provenance verification, publication, and anonymous
+exact-digest retrieval for
+`ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18`.
+
+Actions artifact `polaris-admin-publication-29781460117-1` (artifact ID
+`8477021002`, Actions digest
+`sha256:d1d33b14467a58b93796568667ab68ad3f61a12f9f9c3af439bbd6361adee621`,
+582,463 bytes) contains only the 12 retained evidence records and does not
+contain the dependency archive. The 701,437,153-byte
+`polaris-gradle-dependencies-1.6.0.tar.gz` came from one-day candidate artifact
+`polaris-admin-candidate-29781460117-1` (artifact ID `8476975401`) and is the
+second OCI layer. Independent anonymous exact-digest retrieval verified SHA-256
+`e771fe2ec6b2d0f6940b1247a512eb5cbc78dd0f36e7be247975f2c5fa36fc4d`, size,
+and gzip structure. The current evidence-only checkpoint retains 12 files under
+`bootstrap/polaris/v1.6.0/admin-build-inputs-evidence/`, records schema-v2 state
+`admin_dependency_snapshot_review_pending`, and retires the write-capable
+publisher. Its next state is `admin_image_publication_pending`; Admin image
+publication/admission, runtime, Flux, and credential gates remain false. The
+Admin snapshot is not a resident image admission, and Issue #61 remains Open.
 
 ## GitOps candidate evidence
 

@@ -32,8 +32,8 @@ POLARIS_ATOMIC_ADMISSION = Path(
 POLARIS_ADMIN_BUILD_INPUTS_CONTRACT = Path(
     "bootstrap/polaris/v1.6.0/admin-build-inputs-contract.json"
 )
-POLARIS_ADMIN_BUILD_INPUTS_WORKFLOW = Path(
-    ".github/workflows/polaris-admin-build-inputs.yml"
+POLARIS_ADMIN_BUILD_INPUTS_EVIDENCE = Path(
+    "bootstrap/polaris/v1.6.0/admin-build-inputs-evidence"
 )
 POLARIS_ADMIN_BUILD_INPUTS_VERIFIER = Path(
     "scripts/verify_polaris_admin_build_inputs.py"
@@ -101,13 +101,10 @@ POLARIS_CONTRACT_SHA256 = (
     "cacd353f81996f5b04965fb3213cdecb3ebfbdc648ebbb3a8a90609412fa59ac"
 )
 POLARIS_ADMIN_BUILD_INPUTS_CONTRACT_SHA256 = (
-    "34606e7a8eeac273ca4d55f911459679120aa9ac2cb4d7b5c07119e27f2ad675"
-)
-POLARIS_ADMIN_BUILD_INPUTS_WORKFLOW_SHA256 = (
-    "d4f4b71c993b797c89080c4877ba29a4a1c588c3f84884dacddcb00045057c63"
+    "26f5259642007aa11a4676ccee918bd5b1e55f8eb5c0025f92a12f1d8ccb37db"
 )
 POLARIS_ADMIN_BUILD_INPUTS_VERIFIER_SHA256 = (
-    "e1e4f2e7931af4401e5d89c4928ce8ee9682b4a092b851d27358be2299a0420e"
+    "ef1fad340179e61f7d1291d9e3fd44c793c4761af4b094a0b232ea663c7f41c9"
 )
 REVIEWED_POLARIS_CONTRACT_SHA256 = (
     "db27ec5ebf627ef1772c898614d5f206a2a3affc67007ee29221c525ab8fd3d6"
@@ -484,6 +481,56 @@ POLARIS_DEPENDENCY_EVIDENCE_RECORDS = {
         879_926,
     ),
 }
+POLARIS_ADMIN_BUILD_INPUTS_EVIDENCE_RECORDS = {
+    "candidate.sha256": (
+        "172f71f466d9b1b009359c7069541154fb00a72d568415a43597c4593c9000b5",
+        547,
+    ),
+    "cosign-signature-bundle.json": (
+        "f96675ee16fbbdc478e3d5febc5bab1953f7d70c68a26b7b79afb1ebb3c7811d",
+        11_143,
+    ),
+    "cosign-verify.json": (
+        "84a3debbf0f6c3eace8eca839b0577bfc2f5896852872db69b143b80566c3f79",
+        355,
+    ),
+    "evidence.sha256": (
+        "026c4d82e9031532323ccb3c31ea83939010982cfcf373644cdcf064e2613409",
+        953,
+    ),
+    "gradle-dependency-inputs.json": (
+        "798802722e730174caa581cbffd4f82e5dd4a43aee92201df26f14db4ab005bc",
+        2_175_793,
+    ),
+    "oci-manifest.json": (
+        "7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18",
+        1_083,
+    ),
+    "offline-build.json": (
+        "12c027f726e62213605fe094a9b4328bcb3351148bdd90a71e5e38c2b766fa68",
+        725,
+    ),
+    "publication.json": (
+        "a6453655a183528904bde4e295306ae1cdc92abe67f29479a82ee093975ed9bc",
+        3_676,
+    ),
+    "slsa-verify.json": (
+        "687dea8a3ea7d86c5316d32235e7e5a372c6b38861505a887c6fe318966c0741",
+        14_334,
+    ),
+    "superset-proof.json": (
+        "afc26c4c6fb48ea423ed4b057a167c2768fe6104a0f88f65533b768877cb80f9",
+        413,
+    ),
+    "toolchain.json": (
+        "6a482b37d97d46df1b9c71fd041473aa57f30d1c5325104ac6fb8f3074f74d7f",
+        709,
+    ),
+    "verification-metadata.xml": (
+        "171ccaf781d4ae63375b332205d25653ebcd29471e9e9c0cfba1b978144065b8",
+        881_256,
+    ),
+}
 POLARIS_DEPENDENCY_PACKAGER = Path(
     "scripts/package_polaris_gradle_dependencies.py"
 )
@@ -499,6 +546,11 @@ POLARIS_SOURCE_ARCHIVE_VALIDATOR_SHA256 = (
 POLARIS_ALLOWED_PATHS = {
     "Containerfile",
     "admin-build-inputs-contract.json",
+    "admin-build-inputs-evidence",
+    *{
+        f"admin-build-inputs-evidence/{filename}"
+        for filename in POLARIS_ADMIN_BUILD_INPUTS_EVIDENCE_RECORDS
+    },
     "admission.json",
     "atomic-admission.json",
     "apache-polaris-release-signing-key.asc",
@@ -560,9 +612,6 @@ PENDING_BOOTSTRAP_ARTIFACT_MARKERS = {
 REVIEW_PENDING_WORKFLOW_INVENTORY = {
     ".github/workflows/ci.yml": (
         "36666a76c07b428adda5fe71e4bd21643d05e66f56043dcef514101add63dd72"
-    ),
-    ".github/workflows/polaris-admin-build-inputs.yml": (
-        POLARIS_ADMIN_BUILD_INPUTS_WORKFLOW_SHA256
     ),
     ".github/workflows/seaweedfs-arm64.yml": (
         "f097273d79c9595d42be816152ff1aabc862faf2667cb0648434280ce8b8ac06"
@@ -2620,6 +2669,51 @@ def _audit_dependency_evidence_file(
         "DEPENDENCY_EVIDENCE",
         f"{relative} differs from the retained publication evidence",
     )
+
+
+def _audit_admin_build_inputs_retained_evidence(root: Path) -> None:
+    contract_sha256, _ = _sha256_and_size(
+        root,
+        POLARIS_ADMIN_BUILD_INPUTS_CONTRACT,
+        "ADMIN_DEPENDENCY_EVIDENCE",
+    )
+    _expect(
+        contract_sha256 == POLARIS_ADMIN_BUILD_INPUTS_CONTRACT_SHA256,
+        "ADMIN_DEPENDENCY_EVIDENCE",
+        "admin build-input contract differs from the reviewed evidence state",
+    )
+
+    directory = root / POLARIS_ADMIN_BUILD_INPUTS_EVIDENCE
+    _expect(
+        directory.is_dir() and not directory.is_symlink(),
+        "ADMIN_DEPENDENCY_EVIDENCE",
+        "admin build-input evidence root must be a real directory",
+    )
+    actual = {
+        path.relative_to(directory).as_posix()
+        for path in directory.rglob("*")
+        if path.is_file() or path.is_symlink()
+    }
+    expected = set(POLARIS_ADMIN_BUILD_INPUTS_EVIDENCE_RECORDS)
+    _expect(
+        actual == expected,
+        "ADMIN_DEPENDENCY_EVIDENCE",
+        "admin build-input evidence inventory must be closed; "
+        f"expected {sorted(expected)}, found {sorted(actual)}",
+    )
+    retained_records = POLARIS_ADMIN_BUILD_INPUTS_EVIDENCE_RECORDS
+    for filename, retained in retained_records.items():
+        relative = POLARIS_ADMIN_BUILD_INPUTS_EVIDENCE / filename
+        observed = _sha256_and_size(
+            root,
+            relative,
+            "ADMIN_DEPENDENCY_EVIDENCE",
+        )
+        _expect(
+            observed == retained,
+            "ADMIN_DEPENDENCY_EVIDENCE",
+            f"{relative} differs from the retained publication evidence",
+        )
 
 
 def _dependency_packager_module(root: Path) -> Any:
@@ -10055,6 +10149,7 @@ def audit(
     _audit_source(root)
     contract = _audit_contract(root)
     _audit_polaris_admission(root)
+    _audit_admin_build_inputs_retained_evidence(root)
     _audit_dependency_publication_evidence(
         root,
         contract,
@@ -10103,9 +10198,10 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     print(
-        "polaris-trusted-image: atomic Polaris/PostgreSQL admission passes; "
-        "fresh dual-scope evidence, exact-digest preflight, and resident "
-        "ledger are bound; runtime remains fail-closed pending acceptance"
+        "polaris-trusted-image: atomic Polaris/PostgreSQL admission and "
+        "retained Polaris Admin build-input evidence pass; fresh dual-scope "
+        "evidence, exact-digest preflight, and resident ledger are bound; "
+        "runtime remains fail-closed pending acceptance"
     )
     return 0
 
