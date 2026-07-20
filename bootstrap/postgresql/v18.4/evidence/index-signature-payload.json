@@ -1,0 +1,1 @@
+{"critical":{"identity":{"docker-reference":"cgr.dev/chainguard/postgres"},"image":{"docker-manifest-digest":"sha256:3dc629a917612f1630c6f8e7a17f23a42cbd5917b9b3080972b70b1583daff34"},"type":"cosign container image signature"},"optional":null}

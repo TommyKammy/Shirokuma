@@ -9,6 +9,7 @@ import binascii
 import hashlib
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -237,6 +238,105 @@ POSTGRES_ARM64 = (
 POSTGRES_ATTESTATION = (
     "sha256:8f5098343c0fc68d434174753d2ba6cefa9c1c037f5185f52b5cf5fbb4ba559b"
 )
+POSTGRES_PUBLISHER_IDENTITY = (
+    "https://github.com/chainguard-images/images/"
+    ".github/workflows/release.yaml@refs/heads/main"
+)
+POSTGRES_PUBLISHER_ISSUER = "https://token.actions.githubusercontent.com"
+POSTGRES_PUBLISHER_WORKFLOW_NAME = ".github/workflows/release.yaml"
+POSTGRES_PUBLISHER_REPOSITORY = "chainguard-images/images"
+POSTGRES_PUBLISHER_REF = "refs/heads/main"
+POSTGRES_PUBLISHER_TRIGGER = "push"
+POSTGRES_RELEASE_WORKFLOW_SHA = "704e38b436bc40bc9a9d669c05f0d6694bec298b"
+POSTGRES_SLSA_WORKFLOW_SHA = "1d360e5f7f3b749f0b1e55b3f75d3eb8db4e7004"
+POSTGRES_SLSA_PREDICATE = "https://slsa.dev/provenance/v1"
+POSTGRES_SPDX_PREDICATE = "https://spdx.dev/Document"
+POSTGRES_SLSA_BUILDER = (
+    "https://github.com/chainguard-dev/terraform-provider-apko"
+)
+POSTGRES_SLSA_BUILD_TYPE = "https://apko.dev/slsa-build-type@v1"
+POSTGRES_BUNDLE_MEDIA_TYPE = (
+    "application/vnd.dev.sigstore.bundle+json;version=0.3"
+)
+POSTGRES_TRUSTED_ROOT_MEDIA_TYPE = (
+    "application/vnd.dev.sigstore.trustedroot+json;version=0.1"
+)
+POSTGRES_EVIDENCE_MANIFEST_SHA256 = (
+    "c84a126acc195e8349d21a0c1d33f20c4b78e8550082b6d579fd384ad2b6c1a8"
+)
+POSTGRES_EVIDENCE_MANIFEST_SIZE = 1_675
+POSTGRES_EVIDENCE_REQUIRED = frozenset(
+    {
+        "arm64-manifest.json",
+        "arm64-signature-payload.json",
+        "arm64-signature.sigstore.json",
+        "attestation-manifest.json",
+        "cryptographic-verification.json",
+        "index-manifest.json",
+        "index-signature-payload.json",
+        "index-signature.sigstore.json",
+        "postgresql-18.4-arm64.cdx.json",
+        "slsa-attestation-envelope.json",
+        "slsa-provenance.sigstore.json",
+        "spdx-attestation-envelope.json",
+        "spdx-sbom.sigstore.json",
+        "trivy-sbom-version.json",
+        "trivy-sbom.json",
+        "trivy-version.json",
+        "trivy.json",
+        "trusted-root.json",
+    }
+)
+POSTGRES_ATTESTATION_LAYERS = {
+    "slsa": {
+        "predicate_type": POSTGRES_SLSA_PREDICATE,
+        "digest": (
+            "sha256:"
+            "e2fbc51efecdec309574b931d17d1b0d1bc75eabd2df1e0c7c7e2d37c826e12a"
+        ),
+        "size": 2_964,
+        "envelope": "slsa-attestation-envelope.json",
+        "bundle": "slsa-provenance.sigstore.json",
+        "workflow_sha": POSTGRES_SLSA_WORKFLOW_SHA,
+        "log_index": 2_177_108_005,
+        "integrated_time": 1_784_157_617,
+    },
+    "spdx": {
+        "predicate_type": POSTGRES_SPDX_PREDICATE,
+        "digest": (
+            "sha256:"
+            "1030922e6384023135ea10cf4a58237c3eb1a32af14ee0db1719b355873fcbb4"
+        ),
+        "size": 295_772,
+        "envelope": "spdx-attestation-envelope.json",
+        "bundle": "spdx-sbom.sigstore.json",
+        "workflow_sha": POSTGRES_RELEASE_WORKFLOW_SHA,
+        "log_index": 2_181_460_833,
+        "integrated_time": 1_784_189_281,
+    },
+}
+POSTGRES_SIGNATURES = {
+    "index": {
+        "reference": POSTGRES_INDEX,
+        "digest": POSTGRES_INDEX.removeprefix(
+            "cgr.dev/chainguard/postgres@"
+        ),
+        "payload": "index-signature-payload.json",
+        "bundle": "index-signature.sigstore.json",
+        "log_index": 2_181_460_214,
+        "integrated_time": 1_784_189_273,
+    },
+    "arm64": {
+        "reference": POSTGRES_ARM64,
+        "digest": POSTGRES_ARM64.removeprefix(
+            "cgr.dev/chainguard/postgres@"
+        ),
+        "payload": "arm64-signature-payload.json",
+        "bundle": "arm64-signature.sigstore.json",
+        "log_index": 2_181_460_469,
+        "integrated_time": 1_784_189_276,
+    },
+}
 
 FORBIDDEN_PENDING_PATHS = (
     Path("bootstrap/polaris/v1.6.0/gradle-dependency-inputs.json"),
@@ -365,6 +465,11 @@ POSTGRES_ALLOWED_PATHS = {
     "admission.json",
     "evidence",
     "evidence/README.md",
+    "evidence/evidence.sha256",
+    *{
+        f"evidence/{filename}"
+        for filename in POSTGRES_EVIDENCE_REQUIRED
+    },
 }
 POLARIS_PENDING_PATHS = {"v1.6.0"} | {
     f"v1.6.0/{relative}" for relative in POLARIS_ALLOWED_PATHS
@@ -2666,15 +2771,21 @@ def _run_cosign(
     purpose: str,
     *,
     code: str = "DEPENDENCY_EVIDENCE",
+    env: Optional[Mapping[str, str]] = None,
 ) -> None:
     try:
+        run_options: dict[str, Any] = {
+            "cwd": root,
+            "text": True,
+            "capture_output": True,
+            "check": False,
+            "timeout": 60,
+        }
+        if env is not None:
+            run_options["env"] = dict(env)
         result = subprocess.run(
             ["cosign", *arguments],
-            cwd=root,
-            text=True,
-            capture_output=True,
-            check=False,
-            timeout=60,
+            **run_options,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         _fail(
@@ -5123,10 +5234,6 @@ def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
                 "index_reference",
                 "arm64_reference",
                 "attestation_manifest_digest",
-                "issuer",
-                "identity",
-                "workflow_commit",
-                "transparency_log_index",
                 "availability_preflight_required",
             },
             ("observation",): {
@@ -5138,31 +5245,63 @@ def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
                 "upstream_spdx_package_count",
                 "trivy_version",
                 "vulnerability_db_updated_at",
+                "sbom_vulnerability_db_updated_at",
+                "scanned_library_components",
                 "high",
                 "critical",
-                "authoritative_for_admission",
+                "authoritative_for_atomic_admission",
             },
             ("evidence_contract",): {
+                "self_manifest",
                 "paths",
-                "signature",
+                "publisher",
+                "signatures",
                 "provenance",
                 "upstream_sbom",
                 "independent_sbom",
                 "vulnerability_scan",
                 "cryptographic_reverification",
             },
+            ("evidence_contract", "self_manifest"): {
+                "path",
+                "sha256",
+                "size",
+            },
             ("evidence_contract", "paths"): {
                 "index_manifest",
                 "arm64_manifest",
-                "signature_bundle",
-                "attestation_bundles",
+                "attestation_manifest",
+                "index_signature_payload",
+                "index_signature_bundle",
+                "arm64_signature_payload",
+                "arm64_signature_bundle",
+                "slsa_envelope",
+                "slsa_bundle",
+                "spdx_envelope",
+                "spdx_bundle",
+                "trusted_root",
                 "cyclonedx_sbom",
                 "trivy_report",
+                "trivy_version",
+                "trivy_sbom_report",
+                "trivy_sbom_version",
                 "verification",
             },
-            ("evidence_contract", "signature"): {
+            ("evidence_contract", "publisher"): {
                 "issuer",
                 "identity",
+                "workflow_name",
+                "workflow_repository",
+                "workflow_ref",
+                "workflow_trigger",
+            },
+            ("evidence_contract", "signatures"): {"index", "arm64"},
+            ("evidence_contract", "signatures", "index"): {
+                "workflow_commit",
+                "transparency_log_index",
+            },
+            ("evidence_contract", "signatures", "arm64"): {
+                "workflow_commit",
                 "transparency_log_index",
             },
             ("evidence_contract", "provenance"): {
@@ -5170,23 +5309,39 @@ def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
                 "subject_reference",
                 "builder",
                 "build_type",
-                "revision",
+                "invocation_id",
+                "workflow_commit",
+                "transparency_log_index",
             },
             ("evidence_contract", "upstream_sbom"): {
                 "predicate_type",
                 "subject_reference",
+                "spdx_version",
                 "package_count",
+                "workflow_commit",
+                "transparency_log_index",
             },
-            ("evidence_contract", "independent_sbom"): {"format", "generator"},
+            ("evidence_contract", "independent_sbom"): {
+                "format",
+                "generator",
+                "component_count",
+            },
             ("evidence_contract", "vulnerability_scan"): {
                 "scanner",
                 "severity",
+                "scan_scopes",
+                "library_component_count",
+                "covered_library_component_count",
                 "maximum_high",
                 "maximum_critical",
-                "fresh_database_required",
+                "image_database_updated_at",
+                "sbom_database_updated_at",
+                "rescan_required_at_atomic_admission",
+                "maximum_age_hours_at_atomic_admission",
             },
             ("evidence_contract", "cryptographic_reverification"): {
                 "cosign",
+                "trusted_root_media_type",
                 "offline_retained_bundle_verification",
             },
             ("resident_ledger",): {"permitted", "atomic_with"},
@@ -5197,12 +5352,12 @@ def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
     _expect_fields(
         admission,
         {
-            ("schema_version",): 1,
+            ("schema_version",): 2,
             ("component",): "postgresql",
             ("version",): "18.4",
             ("platform",): "linux/arm64",
             ("admission",): "blocked",
-            ("state",): "candidate_evidence_pending",
+            ("state",): "approved_for_atomic_admission",
             (
                 "source",
             ): "https://github.com/chainguard-images/images/tree/main/images/postgres",
@@ -5212,37 +5367,56 @@ def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
                 "candidate",
                 "attestation_manifest_digest",
             ): POSTGRES_ATTESTATION,
-            (
-                "candidate",
-                "issuer",
-            ): "https://token.actions.githubusercontent.com",
-            (
-                "candidate",
-                "identity",
-            ): "https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main",
-            (
-                "candidate",
-                "workflow_commit",
-            ): "704e38b436bc40bc9a9d669c05f0d6694bec298b",
-            ("candidate", "transparency_log_index"): 2181460214,
             ("candidate", "availability_preflight_required"): True,
-            ("observation", "observed_at"): "2026-07-18",
-            ("observation", "signature"): "verified-but-not-retained",
+            ("observation", "observed_at"): "2026-07-20",
+            (
+                "observation",
+                "signature",
+            ): "retained-and-offline-reverified",
             (
                 "observation",
                 "arm64_index_membership",
-            ): "verified-but-not-retained",
-            ("observation", "slsa_provenance"): "verified-but-not-retained",
-            ("observation", "upstream_spdx"): "verified-but-not-retained",
+            ): "retained-and-reverified",
+            (
+                "observation",
+                "slsa_provenance",
+            ): "retained-and-offline-reverified",
+            (
+                "observation",
+                "upstream_spdx",
+            ): "retained-and-offline-reverified",
             ("observation", "upstream_spdx_package_count"): 257,
             ("observation", "trivy_version"): "0.72.0",
             (
                 "observation",
                 "vulnerability_db_updated_at",
-            ): "2026-07-18T07:19:07.874814014Z",
-            ("observation", "authoritative_for_admission"): False,
+            ): "2026-07-20T01:09:07.303099965Z",
+            (
+                "observation",
+                "sbom_vulnerability_db_updated_at",
+            ): "2026-07-19T18:43:16.060990559Z",
+            ("observation", "scanned_library_components"): 60,
+            (
+                "observation",
+                "authoritative_for_atomic_admission",
+            ): False,
             ("observation", "high"): 0,
             ("observation", "critical"): 0,
+            (
+                "evidence_contract",
+                "self_manifest",
+                "path",
+            ): "bootstrap/postgresql/v18.4/evidence/evidence.sha256",
+            (
+                "evidence_contract",
+                "self_manifest",
+                "sha256",
+            ): POSTGRES_EVIDENCE_MANIFEST_SHA256,
+            (
+                "evidence_contract",
+                "self_manifest",
+                "size",
+            ): POSTGRES_EVIDENCE_MANIFEST_SIZE,
             (
                 "evidence_contract",
                 "paths",
@@ -5256,13 +5430,53 @@ def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
             (
                 "evidence_contract",
                 "paths",
-                "signature_bundle",
-            ): "bootstrap/postgresql/v18.4/evidence/cosign-signature-bundle.json",
+                "attestation_manifest",
+            ): "bootstrap/postgresql/v18.4/evidence/attestation-manifest.json",
             (
                 "evidence_contract",
                 "paths",
-                "attestation_bundles",
-            ): "bootstrap/postgresql/v18.4/evidence/attestation-bundles.jsonl",
+                "index_signature_payload",
+            ): "bootstrap/postgresql/v18.4/evidence/index-signature-payload.json",
+            (
+                "evidence_contract",
+                "paths",
+                "index_signature_bundle",
+            ): "bootstrap/postgresql/v18.4/evidence/index-signature.sigstore.json",
+            (
+                "evidence_contract",
+                "paths",
+                "arm64_signature_payload",
+            ): "bootstrap/postgresql/v18.4/evidence/arm64-signature-payload.json",
+            (
+                "evidence_contract",
+                "paths",
+                "arm64_signature_bundle",
+            ): "bootstrap/postgresql/v18.4/evidence/arm64-signature.sigstore.json",
+            (
+                "evidence_contract",
+                "paths",
+                "slsa_envelope",
+            ): "bootstrap/postgresql/v18.4/evidence/slsa-attestation-envelope.json",
+            (
+                "evidence_contract",
+                "paths",
+                "slsa_bundle",
+            ): "bootstrap/postgresql/v18.4/evidence/slsa-provenance.sigstore.json",
+            (
+                "evidence_contract",
+                "paths",
+                "spdx_envelope",
+            ): "bootstrap/postgresql/v18.4/evidence/spdx-attestation-envelope.json",
+            (
+                "evidence_contract",
+                "paths",
+                "spdx_bundle",
+            ): "bootstrap/postgresql/v18.4/evidence/spdx-sbom.sigstore.json",
+            (
+                "evidence_contract",
+                "paths",
+                "trusted_root",
+            ): "bootstrap/postgresql/v18.4/evidence/trusted-root.json",
             (
                 "evidence_contract",
                 "paths",
@@ -5276,28 +5490,82 @@ def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
             (
                 "evidence_contract",
                 "paths",
+                "trivy_version",
+            ): "bootstrap/postgresql/v18.4/evidence/trivy-version.json",
+            (
+                "evidence_contract",
+                "paths",
+                "trivy_sbom_report",
+            ): "bootstrap/postgresql/v18.4/evidence/trivy-sbom.json",
+            (
+                "evidence_contract",
+                "paths",
+                "trivy_sbom_version",
+            ): "bootstrap/postgresql/v18.4/evidence/trivy-sbom-version.json",
+            (
+                "evidence_contract",
+                "paths",
                 "verification",
             ): "bootstrap/postgresql/v18.4/evidence/cryptographic-verification.json",
             (
                 "evidence_contract",
-                "signature",
+                "publisher",
                 "issuer",
-            ): "https://token.actions.githubusercontent.com",
+            ): POSTGRES_PUBLISHER_ISSUER,
             (
                 "evidence_contract",
-                "signature",
+                "publisher",
                 "identity",
-            ): "https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main",
+            ): POSTGRES_PUBLISHER_IDENTITY,
             (
                 "evidence_contract",
-                "signature",
+                "publisher",
+                "workflow_name",
+            ): POSTGRES_PUBLISHER_WORKFLOW_NAME,
+            (
+                "evidence_contract",
+                "publisher",
+                "workflow_repository",
+            ): POSTGRES_PUBLISHER_REPOSITORY,
+            (
+                "evidence_contract",
+                "publisher",
+                "workflow_ref",
+            ): POSTGRES_PUBLISHER_REF,
+            (
+                "evidence_contract",
+                "publisher",
+                "workflow_trigger",
+            ): POSTGRES_PUBLISHER_TRIGGER,
+            (
+                "evidence_contract",
+                "signatures",
+                "index",
+                "workflow_commit",
+            ): POSTGRES_RELEASE_WORKFLOW_SHA,
+            (
+                "evidence_contract",
+                "signatures",
+                "index",
                 "transparency_log_index",
-            ): 2181460214,
+            ): 2_181_460_214,
+            (
+                "evidence_contract",
+                "signatures",
+                "arm64",
+                "workflow_commit",
+            ): POSTGRES_RELEASE_WORKFLOW_SHA,
+            (
+                "evidence_contract",
+                "signatures",
+                "arm64",
+                "transparency_log_index",
+            ): 2_181_460_469,
             (
                 "evidence_contract",
                 "provenance",
                 "predicate_type",
-            ): "https://slsa.dev/provenance/v1",
+            ): POSTGRES_SLSA_PREDICATE,
             (
                 "evidence_contract",
                 "provenance",
@@ -5307,22 +5575,32 @@ def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
                 "evidence_contract",
                 "provenance",
                 "builder",
-            ): "https://github.com/chainguard-dev/terraform-provider-apko",
+            ): POSTGRES_SLSA_BUILDER,
             (
                 "evidence_contract",
                 "provenance",
                 "build_type",
-            ): "https://apko.dev/slsa-build-type@v1",
+            ): POSTGRES_SLSA_BUILD_TYPE,
             (
                 "evidence_contract",
                 "provenance",
-                "revision",
-            ): "704e38b436bc40bc9a9d669c05f0d6694bec298b",
+                "invocation_id",
+            ): POSTGRES_INDEX,
+            (
+                "evidence_contract",
+                "provenance",
+                "workflow_commit",
+            ): POSTGRES_SLSA_WORKFLOW_SHA,
+            (
+                "evidence_contract",
+                "provenance",
+                "transparency_log_index",
+            ): 2_177_108_005,
             (
                 "evidence_contract",
                 "upstream_sbom",
                 "predicate_type",
-            ): "https://spdx.dev/Document",
+            ): POSTGRES_SPDX_PREDICATE,
             (
                 "evidence_contract",
                 "upstream_sbom",
@@ -5331,8 +5609,23 @@ def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
             (
                 "evidence_contract",
                 "upstream_sbom",
+                "spdx_version",
+            ): "SPDX-2.3",
+            (
+                "evidence_contract",
+                "upstream_sbom",
                 "package_count",
             ): 257,
+            (
+                "evidence_contract",
+                "upstream_sbom",
+                "workflow_commit",
+            ): POSTGRES_RELEASE_WORKFLOW_SHA,
+            (
+                "evidence_contract",
+                "upstream_sbom",
+                "transparency_log_index",
+            ): 2_181_460_833,
             (
                 "evidence_contract",
                 "independent_sbom",
@@ -5343,6 +5636,11 @@ def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
                 "independent_sbom",
                 "generator",
             ): "syft 1.46.0",
+            (
+                "evidence_contract",
+                "independent_sbom",
+                "component_count",
+            ): 4_725,
             (
                 "evidence_contract",
                 "vulnerability_scan",
@@ -5356,6 +5654,25 @@ def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
             (
                 "evidence_contract",
                 "vulnerability_scan",
+                "scan_scopes",
+            ): [
+                "image:os-pkgs/wolfi",
+                "sbom:os-pkgs/wolfi",
+                "sbom:lang-pkgs/gobinary",
+            ],
+            (
+                "evidence_contract",
+                "vulnerability_scan",
+                "library_component_count",
+            ): 60,
+            (
+                "evidence_contract",
+                "vulnerability_scan",
+                "covered_library_component_count",
+            ): 60,
+            (
+                "evidence_contract",
+                "vulnerability_scan",
                 "maximum_high",
             ): 0,
             (
@@ -5366,13 +5683,33 @@ def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
             (
                 "evidence_contract",
                 "vulnerability_scan",
-                "fresh_database_required",
+                "image_database_updated_at",
+            ): "2026-07-20T01:09:07.303099965Z",
+            (
+                "evidence_contract",
+                "vulnerability_scan",
+                "sbom_database_updated_at",
+            ): "2026-07-19T18:43:16.060990559Z",
+            (
+                "evidence_contract",
+                "vulnerability_scan",
+                "rescan_required_at_atomic_admission",
             ): True,
+            (
+                "evidence_contract",
+                "vulnerability_scan",
+                "maximum_age_hours_at_atomic_admission",
+            ): 24,
             (
                 "evidence_contract",
                 "cryptographic_reverification",
                 "cosign",
             ): "3.1.1",
+            (
+                "evidence_contract",
+                "cryptographic_reverification",
+                "trusted_root_media_type",
+            ): POSTGRES_TRUSTED_ROOT_MEDIA_TYPE,
             (
                 "evidence_contract",
                 "cryptographic_reverification",
@@ -5383,11 +5720,1626 @@ def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
             ("runtime_manifests", "permitted"): False,
             (
                 "next_action",
-            ): "retain-and-reverify-evidence-after-polaris-main-publication",
+            ): "preflight-and-admit-with-polaris-atomically",
         },
         "POSTGRES_ADMISSION",
     )
     return admission
+
+
+PostgresCryptoVerifier = Callable[[Path], None]
+
+
+def _audit_postgres_evidence_inventory(
+    root: Path,
+    admission: Mapping[str, Any],
+) -> None:
+    code = "POSTGRES_EVIDENCE"
+    directory = root / POSTGRES_EVIDENCE
+    _expect(
+        directory.is_dir() and not directory.is_symlink(),
+        code,
+        "retained PostgreSQL evidence directory is invalid",
+    )
+    actual_names: set[str] = set()
+    for path in directory.iterdir():
+        _expect(
+            path.is_file() and not path.is_symlink(),
+            code,
+            f"retained PostgreSQL evidence must be a regular file: {path.name}",
+        )
+        actual_names.add(path.name)
+    _expect(
+        actual_names
+        == POSTGRES_EVIDENCE_REQUIRED | {"README.md", "evidence.sha256"},
+        code,
+        "retained PostgreSQL evidence inventory must be closed",
+    )
+
+    manifest_relative = POSTGRES_EVIDENCE / "evidence.sha256"
+    manifest_hash, manifest_size = _sha256_and_size(
+        root,
+        manifest_relative,
+        code,
+    )
+    _expect(
+        (manifest_hash, manifest_size)
+        == (
+            POSTGRES_EVIDENCE_MANIFEST_SHA256,
+            POSTGRES_EVIDENCE_MANIFEST_SIZE,
+        )
+        == (
+            _nested(
+                admission,
+                "evidence_contract",
+                "self_manifest",
+                "sha256",
+            ),
+            _nested(
+                admission,
+                "evidence_contract",
+                "self_manifest",
+                "size",
+            ),
+        ),
+        code,
+        "PostgreSQL self-manifest differs from the reviewed evidence",
+    )
+    try:
+        lines = (root / manifest_relative).read_text(
+            encoding="utf-8"
+        ).splitlines()
+    except (OSError, UnicodeError) as error:
+        _fail(code, f"cannot read PostgreSQL self-manifest: {error}")
+    parsed: dict[str, str] = {}
+    ordered_names: list[str] = []
+    for line in lines:
+        match = re.fullmatch(r"([0-9a-f]{64})  \./([A-Za-z0-9._-]+)", line)
+        _expect(
+            match is not None,
+            code,
+            "PostgreSQL self-manifest contains a noncanonical record",
+        )
+        assert match is not None
+        name = match.group(2)
+        _expect(
+            name not in parsed,
+            code,
+            f"PostgreSQL self-manifest duplicates {name}",
+        )
+        parsed[name] = match.group(1)
+        ordered_names.append(name)
+    _expect(
+        set(parsed) == POSTGRES_EVIDENCE_REQUIRED
+        and ordered_names == sorted(ordered_names),
+        code,
+        "PostgreSQL self-manifest does not close the exact payload inventory",
+    )
+    for name, wanted in parsed.items():
+        actual, size = _sha256_and_size(
+            root,
+            POSTGRES_EVIDENCE / name,
+            code,
+        )
+        _expect(
+            actual == wanted and size > 0,
+            code,
+            f"{name} differs from the PostgreSQL self-manifest",
+        )
+
+
+def _decode_postgres_base64(value: Any, purpose: str) -> bytes:
+    _expect(
+        isinstance(value, str) and bool(value),
+        "POSTGRES_EVIDENCE",
+        f"{purpose} must be nonempty base64",
+    )
+    try:
+        return base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError) as error:
+        _fail("POSTGRES_EVIDENCE", f"invalid {purpose}: {error}")
+
+
+def _audit_postgres_bundle_material(
+    bundle: Mapping[str, Any],
+    *,
+    kind: str,
+    log_index: int,
+    integrated_time: int,
+) -> None:
+    code = "POSTGRES_EVIDENCE"
+    material = bundle.get("verificationMaterial")
+    _expect(
+        isinstance(material, Mapping)
+        and set(material) == {"certificate", "tlogEntries"},
+        code,
+        "Sigstore bundle verification material is not closed",
+    )
+    certificate = material.get("certificate")
+    _expect(
+        isinstance(certificate, Mapping)
+        and set(certificate) == {"rawBytes"},
+        code,
+        "Sigstore bundle must retain one leaf certificate",
+    )
+    _expect(
+        bool(_decode_postgres_base64(certificate.get("rawBytes"), "certificate")),
+        code,
+        "Sigstore certificate cannot be empty",
+    )
+    entries = material.get("tlogEntries")
+    _expect(
+        isinstance(entries, list)
+        and len(entries) == 1
+        and isinstance(entries[0], Mapping),
+        code,
+        "Sigstore bundle must retain exactly one transparency-log entry",
+    )
+    entry = entries[0]
+    _expect(
+        entry.get("logIndex") == str(log_index)
+        and entry.get("integratedTime") == str(integrated_time)
+        and entry.get("kindVersion")
+        == {"kind": kind, "version": "0.0.1"},
+        code,
+        "Sigstore transparency-log role binding changed",
+    )
+    _decode_postgres_base64(
+        entry.get("canonicalizedBody"),
+        "Rekor canonicalized body",
+    )
+    promise = entry.get("inclusionPromise")
+    proof = entry.get("inclusionProof")
+    _expect(
+        isinstance(promise, Mapping)
+        and set(promise) == {"signedEntryTimestamp"}
+        and isinstance(proof, Mapping)
+        and set(proof)
+        == {"checkpoint", "hashes", "logIndex", "rootHash", "treeSize"},
+        code,
+        "Sigstore transparency-log proof is incomplete",
+    )
+    _decode_postgres_base64(
+        promise.get("signedEntryTimestamp"),
+        "Rekor signed entry timestamp",
+    )
+    _expect(
+        isinstance(proof.get("checkpoint"), Mapping)
+        and isinstance(proof["checkpoint"].get("envelope"), str)
+        and bool(proof["checkpoint"]["envelope"])
+        and isinstance(proof.get("hashes"), list)
+        and bool(proof["hashes"]),
+        code,
+        "Sigstore inclusion proof is incomplete",
+    )
+
+
+def _audit_postgres_signature_bundle(
+    root: Path,
+    role: str,
+    record: Mapping[str, Any],
+) -> None:
+    code = "POSTGRES_EVIDENCE"
+    payload_relative = POSTGRES_EVIDENCE / str(record["payload"])
+    bundle_relative = POSTGRES_EVIDENCE / str(record["bundle"])
+    payload = _load_json(root, payload_relative, code)
+    _expect_keysets(
+        payload,
+        {
+            (): {"critical", "optional"},
+            ("critical",): {"identity", "image", "type"},
+            ("critical", "identity"): {"docker-reference"},
+            ("critical", "image"): {"docker-manifest-digest"},
+        },
+        code,
+    )
+    _expect_fields(
+        payload,
+        {
+            (
+                "critical",
+                "identity",
+                "docker-reference",
+            ): "cgr.dev/chainguard/postgres",
+            (
+                "critical",
+                "image",
+                "docker-manifest-digest",
+            ): record["digest"],
+            (
+                "critical",
+                "type",
+            ): "cosign container image signature",
+            ("optional",): None,
+        },
+        code,
+    )
+    bundle = _load_json(root, bundle_relative, code)
+    _expect(
+        set(bundle)
+        == {"mediaType", "messageSignature", "verificationMaterial"}
+        and bundle.get("mediaType") == POSTGRES_BUNDLE_MEDIA_TYPE,
+        code,
+        f"{role} signature must use a standard Sigstore v0.3 bundle",
+    )
+    signature = bundle.get("messageSignature")
+    _expect(
+        isinstance(signature, Mapping)
+        and set(signature) == {"messageDigest", "signature"}
+        and isinstance(signature.get("messageDigest"), Mapping)
+        and set(signature["messageDigest"]) == {"algorithm", "digest"}
+        and signature["messageDigest"].get("algorithm") == "SHA2_256",
+        code,
+        f"{role} message signature structure changed",
+    )
+    try:
+        payload_bytes = (root / payload_relative).read_bytes()
+    except OSError as error:
+        _fail(code, f"cannot read {payload_relative}: {error}")
+    wanted_digest = base64.b64encode(
+        hashlib.sha256(payload_bytes).digest()
+    ).decode("ascii")
+    _expect(
+        signature["messageDigest"].get("digest") == wanted_digest,
+        code,
+        f"{role} bundle does not bind the retained signature payload",
+    )
+    _decode_postgres_base64(
+        signature.get("signature"),
+        f"{role} signature",
+    )
+    _audit_postgres_bundle_material(
+        bundle,
+        kind="hashedrekord",
+        log_index=int(record["log_index"]),
+        integrated_time=int(record["integrated_time"]),
+    )
+
+
+def _decode_postgres_dsse_statement(
+    root: Path,
+    role: str,
+    descriptor: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    code = "POSTGRES_EVIDENCE"
+    envelope_relative = POSTGRES_EVIDENCE / str(descriptor["envelope"])
+    envelope = _load_json(root, envelope_relative, code)
+    _expect(
+        set(envelope) == {"payloadType", "payload", "signatures"}
+        and envelope.get("payloadType") == "application/vnd.in-toto+json",
+        code,
+        f"{role} DSSE envelope structure changed",
+    )
+    signatures = envelope.get("signatures")
+    _expect(
+        isinstance(signatures, list)
+        and len(signatures) == 1
+        and isinstance(signatures[0], Mapping)
+        and set(signatures[0]) == {"keyid", "sig"}
+        and signatures[0].get("keyid") == "",
+        code,
+        f"{role} DSSE envelope must contain one signature",
+    )
+    _decode_postgres_base64(signatures[0].get("sig"), f"{role} DSSE signature")
+    decoded = _decode_postgres_base64(
+        envelope.get("payload"),
+        f"{role} DSSE payload",
+    )
+    try:
+        statement = json.loads(
+            decoded.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_pairs,
+        )
+    except (UnicodeError, ValueError) as error:
+        _fail(code, f"cannot decode {role} DSSE statement: {error}")
+    _expect(
+        isinstance(statement, Mapping),
+        code,
+        f"{role} DSSE statement must be an object",
+    )
+
+    bundle = _load_json(
+        root,
+        POSTGRES_EVIDENCE / str(descriptor["bundle"]),
+        code,
+    )
+    _expect(
+        set(bundle) == {"mediaType", "dsseEnvelope", "verificationMaterial"}
+        and bundle.get("mediaType") == POSTGRES_BUNDLE_MEDIA_TYPE,
+        code,
+        f"{role} attestation must use a standard Sigstore v0.3 bundle",
+    )
+    bundled_envelope = bundle.get("dsseEnvelope")
+    _expect(
+        isinstance(bundled_envelope, Mapping)
+        and bundled_envelope.get("payloadType") == envelope["payloadType"]
+        and bundled_envelope.get("payload") == envelope["payload"]
+        and bundled_envelope.get("signatures")
+        == [{"sig": signatures[0]["sig"]}],
+        code,
+        f"{role} bundle does not bind the retained DSSE envelope",
+    )
+    _audit_postgres_bundle_material(
+        bundle,
+        kind="dsse",
+        log_index=int(descriptor["log_index"]),
+        integrated_time=int(descriptor["integrated_time"]),
+    )
+    return statement
+
+
+def _audit_postgres_manifests(
+    root: Path,
+) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
+    code = "POSTGRES_EVIDENCE"
+    index_digest, index_size = _sha256_and_size(
+        root,
+        POSTGRES_EVIDENCE / "index-manifest.json",
+        code,
+    )
+    arm64_digest, arm64_size = _sha256_and_size(
+        root,
+        POSTGRES_EVIDENCE / "arm64-manifest.json",
+        code,
+    )
+    attestation_digest, attestation_size = _sha256_and_size(
+        root,
+        POSTGRES_EVIDENCE / "attestation-manifest.json",
+        code,
+    )
+    _expect(
+        (
+            index_digest,
+            index_size,
+            arm64_digest,
+            arm64_size,
+            attestation_digest,
+            attestation_size,
+        )
+        == (
+            POSTGRES_INDEX.rsplit("@sha256:", 1)[1],
+            1_015,
+            POSTGRES_ARM64.rsplit("@sha256:", 1)[1],
+            2_510,
+            POSTGRES_ATTESTATION.removeprefix("sha256:"),
+            29_968,
+        ),
+        code,
+        "retained raw PostgreSQL manifest bytes changed",
+    )
+    index = _load_json(
+        root,
+        POSTGRES_EVIDENCE / "index-manifest.json",
+        code,
+    )
+    _expect(
+        index.get("schemaVersion") == 2
+        and index.get("mediaType")
+        == "application/vnd.oci.image.index.v1+json"
+        and isinstance(index.get("manifests"), list)
+        and len(index["manifests"]) == 2,
+        code,
+        "PostgreSQL index structure changed",
+    )
+    descriptors = {
+        (
+            _nested(item, "platform", "os"),
+            _nested(item, "platform", "architecture"),
+        ): item
+        for item in index["manifests"]
+        if isinstance(item, Mapping)
+    }
+    _expect(
+        set(descriptors) == {("linux", "amd64"), ("linux", "arm64")},
+        code,
+        "PostgreSQL index must contain exactly linux/amd64 and linux/arm64",
+    )
+    arm64_descriptor = descriptors[("linux", "arm64")]
+    _expect(
+        arm64_descriptor.get("mediaType")
+        == "application/vnd.oci.image.manifest.v1+json"
+        and arm64_descriptor.get("digest")
+        == POSTGRES_ARM64.rsplit("@", 1)[1]
+        and arm64_descriptor.get("size") == arm64_size,
+        code,
+        "PostgreSQL index does not bind the retained arm64 manifest",
+    )
+    arm64 = _load_json(
+        root,
+        POSTGRES_EVIDENCE / "arm64-manifest.json",
+        code,
+    )
+    _expect(
+        arm64.get("schemaVersion") == 2
+        and arm64.get("mediaType")
+        == "application/vnd.oci.image.manifest.v1+json"
+        and isinstance(arm64.get("config"), Mapping)
+        and isinstance(arm64.get("layers"), list)
+        and bool(arm64["layers"]),
+        code,
+        "retained PostgreSQL arm64 manifest structure changed",
+    )
+
+    attestation = _load_json(
+        root,
+        POSTGRES_EVIDENCE / "attestation-manifest.json",
+        code,
+    )
+    _expect(
+        attestation.get("schemaVersion") == 2
+        and attestation.get("mediaType")
+        == "application/vnd.oci.image.manifest.v1+json"
+        and isinstance(attestation.get("layers"), list),
+        code,
+        "PostgreSQL attestation manifest structure changed",
+    )
+    statements: dict[str, Mapping[str, Any]] = {}
+    for role, wanted in POSTGRES_ATTESTATION_LAYERS.items():
+        matches = [
+            layer
+            for layer in attestation["layers"]
+            if isinstance(layer, Mapping)
+            and _nested(layer, "annotations", "predicateType")
+            == wanted["predicate_type"]
+        ]
+        _expect(
+            len(matches) == 1,
+            code,
+            f"attestation manifest must contain one {role} layer",
+        )
+        layer = matches[0]
+        _expect(
+            layer.get("mediaType")
+            == "application/vnd.dsse.envelope.v1+json"
+            and layer.get("digest") == wanted["digest"]
+            and layer.get("size") == wanted["size"],
+            code,
+            f"{role} attestation descriptor changed",
+        )
+        envelope_hash, envelope_size = _sha256_and_size(
+            root,
+            POSTGRES_EVIDENCE / str(wanted["envelope"]),
+            code,
+        )
+        _expect(
+            (
+                f"sha256:{envelope_hash}",
+                envelope_size,
+            )
+            == (wanted["digest"], wanted["size"]),
+            code,
+            f"{role} descriptor does not bind the retained envelope bytes",
+        )
+        statements[role] = _decode_postgres_dsse_statement(
+            root,
+            role,
+            wanted,
+        )
+    return statements["slsa"], statements["spdx"]
+
+
+def _audit_postgres_statements(
+    slsa: Mapping[str, Any],
+    spdx: Mapping[str, Any],
+) -> None:
+    code = "POSTGRES_EVIDENCE"
+    expected_subject = [
+        {
+            "name": "cgr.dev/chainguard/postgres",
+            "digest": {
+                "sha256": POSTGRES_ARM64.rsplit("@sha256:", 1)[1],
+            },
+        }
+    ]
+    _expect(
+        slsa.get("_type") == "https://in-toto.io/Statement/v0.1"
+        and slsa.get("subject") == expected_subject
+        and slsa.get("predicateType") == POSTGRES_SLSA_PREDICATE
+        and _nested(
+            slsa,
+            "predicate",
+            "runDetails",
+            "builder",
+            "id",
+        )
+        == POSTGRES_SLSA_BUILDER
+        and _nested(
+            slsa,
+            "predicate",
+            "buildDefinition",
+            "buildType",
+        )
+        == POSTGRES_SLSA_BUILD_TYPE
+        and _nested(
+            slsa,
+            "predicate",
+            "runDetails",
+            "metadata",
+            "invocationId",
+        )
+        == POSTGRES_INDEX,
+        code,
+        "retained PostgreSQL SLSA v1 semantics changed",
+    )
+    packages = _nested(spdx, "predicate", "packages")
+    _expect(
+        spdx.get("_type") == "https://in-toto.io/Statement/v0.1"
+        and spdx.get("subject") == expected_subject
+        and spdx.get("predicateType") == POSTGRES_SPDX_PREDICATE
+        and _nested(spdx, "predicate", "spdxVersion") == "SPDX-2.3"
+        and isinstance(packages, list)
+        and len(packages) == 257,
+        code,
+        "retained PostgreSQL SPDX semantics changed",
+    )
+
+
+def _audit_postgres_sbom_and_scan(
+    root: Path,
+) -> tuple[
+    Mapping[str, Any],
+    Mapping[str, Any],
+    Mapping[str, Any],
+]:
+    code = "POSTGRES_EVIDENCE"
+    cyclone = _load_json(
+        root,
+        POSTGRES_EVIDENCE / "postgresql-18.4-arm64.cdx.json",
+        code,
+    )
+    tools = _nested(cyclone, "metadata", "tools", "components")
+    root_component = _nested(cyclone, "metadata", "component")
+    components = cyclone.get("components")
+    _expect(
+        cyclone.get("bomFormat") == "CycloneDX"
+        and cyclone.get("specVersion") == "1.7"
+        and cyclone.get("version") == 1
+        and tools
+        == [
+            {
+                "type": "application",
+                "author": "anchore",
+                "name": "syft",
+                "version": "1.46.0",
+            }
+        ]
+        and isinstance(root_component, Mapping)
+        and set(root_component) == {"bom-ref", "type", "name", "version"}
+        and isinstance(root_component.get("bom-ref"), str)
+        and re.fullmatch(r"[0-9a-f]{16}", root_component["bom-ref"])
+        is not None
+        and root_component.get("type") == "container"
+        and root_component.get("name") == "cgr.dev/chainguard/postgres"
+        and root_component.get("version")
+        == POSTGRES_ARM64.rsplit("@", 1)[1]
+        and isinstance(components, list)
+        and len(components) == 4_725,
+        code,
+        "retained PostgreSQL CycloneDX contract changed",
+    )
+    component_references: set[str] = set()
+    component_type_counts = {
+        "file": 0,
+        "library": 0,
+        "operating-system": 0,
+    }
+    library_identities: set[tuple[str, str]] = set()
+    library_components_by_reference: dict[
+        str,
+        tuple[str, str, str],
+    ] = {}
+    library_references_by_scan_class: dict[str, set[str]] = {
+        "os-pkgs": set(),
+        "lang-pkgs": set(),
+    }
+    for index, component in enumerate(components):
+        _expect(
+            isinstance(component, Mapping),
+            code,
+            f"CycloneDX components[{index}] must be an object",
+        )
+        component_type = component.get("type")
+        component_name = component.get("name")
+        component_reference = component.get("bom-ref")
+        _expect(
+            isinstance(component_type, str)
+            and component_type in component_type_counts
+            and isinstance(component_name, str)
+            and bool(component_name.strip())
+            and isinstance(component_reference, str)
+            and bool(component_reference.strip())
+            and component_reference not in component_references,
+            code,
+            "CycloneDX component identity is incomplete or duplicated",
+        )
+        component_references.add(component_reference)
+        component_type_counts[component_type] += 1
+        if component_type == "library":
+            component_version = component.get("version")
+            component_purl = component.get("purl")
+            _expect(
+                isinstance(component_version, str)
+                and bool(component_version.strip())
+                and isinstance(component_purl, str)
+                and (
+                    component_purl.startswith("pkg:apk/wolfi/")
+                    or component_purl.startswith("pkg:golang/")
+                ),
+                code,
+                "CycloneDX library identity is incomplete",
+            )
+            identity = (component_name, component_version)
+            _expect(
+                identity not in library_identities,
+                code,
+                "CycloneDX library identity is duplicated",
+            )
+            library_identities.add(identity)
+            library_components_by_reference[component_reference] = (
+                component_name,
+                component_version,
+                component_purl,
+            )
+            scan_class = (
+                "os-pkgs"
+                if component_purl.startswith("pkg:apk/wolfi/")
+                else "lang-pkgs"
+            )
+            library_references_by_scan_class[scan_class].add(
+                component_reference
+            )
+        elif component_type == "operating-system":
+            _expect(
+                component_name == "wolfi"
+                and component.get("version") == "20230201",
+                code,
+                "CycloneDX operating-system identity changed",
+            )
+        else:
+            hashes = component.get("hashes")
+            hash_values = (
+                {
+                    item["alg"]: item["content"]
+                    for item in hashes
+                    if isinstance(item, Mapping)
+                    and isinstance(item.get("alg"), str)
+                    and isinstance(item.get("content"), str)
+                }
+                if isinstance(hashes, list)
+                else {}
+            )
+            _expect(
+                component_name.startswith("/")
+                and isinstance(hashes, list)
+                and len(hashes) == 2
+                and set(hash_values) == {"SHA-1", "SHA-256"}
+                and re.fullmatch(r"[0-9a-f]{40}", hash_values["SHA-1"])
+                is not None
+                and re.fullmatch(r"[0-9a-f]{64}", hash_values["SHA-256"])
+                is not None,
+                code,
+                "CycloneDX file identity or hashes are incomplete",
+            )
+    _expect(
+        component_type_counts
+        == {
+            "file": 4_664,
+            "library": 60,
+            "operating-system": 1,
+        }
+        and ("postgresql-18", "18.4-r6") in library_identities,
+        code,
+        "CycloneDX component type distribution changed",
+    )
+    _expect(
+        {
+            scan_class: len(references)
+            for scan_class, references in
+            library_references_by_scan_class.items()
+        }
+        == {"os-pkgs": 56, "lang-pkgs": 4},
+        code,
+        "CycloneDX library ecosystem distribution changed",
+    )
+    apk_library_identities = {
+        (
+            library_components_by_reference[reference][0],
+            library_components_by_reference[reference][1],
+        )
+        for reference in library_references_by_scan_class["os-pkgs"]
+    }
+
+    trivy = _load_json(
+        root,
+        POSTGRES_EVIDENCE / "trivy.json",
+        code,
+    )
+    arm_manifest = _load_json(
+        root,
+        POSTGRES_EVIDENCE / "arm64-manifest.json",
+        code,
+    )
+    arm_layers = arm_manifest.get("layers")
+    metadata = trivy.get("Metadata")
+    trivy_layers = (
+        metadata.get("Layers") if isinstance(metadata, Mapping) else None
+    )
+    diff_ids = (
+        metadata.get("DiffIDs") if isinstance(metadata, Mapping) else None
+    )
+    results = trivy.get("Results")
+    _expect(
+        set(trivy)
+        == {
+            "SchemaVersion",
+            "Trivy",
+            "ReportID",
+            "CreatedAt",
+            "ArtifactID",
+            "ArtifactName",
+            "ArtifactType",
+            "Metadata",
+            "Results",
+        }
+        and trivy.get("SchemaVersion") == 2
+        and trivy.get("Trivy") == {"Version": "0.72.0"}
+        and trivy.get("ArtifactName") == POSTGRES_ARM64
+        and trivy.get("ArtifactType") == "container_image"
+        and isinstance(results, list)
+        and [
+            (
+                result.get("Target"),
+                result.get("Class"),
+                result.get("Type"),
+                (
+                    len(result["Packages"])
+                    if isinstance(result.get("Packages"), list)
+                    else None
+                ),
+            )
+            for result in results
+            if isinstance(result, Mapping)
+        ]
+        == [
+            (
+                f"{POSTGRES_ARM64} (wolfi 20230201)",
+                "os-pkgs",
+                "wolfi",
+                56,
+            )
+        ],
+        code,
+        "retained PostgreSQL Trivy report does not bind the exact scan scope",
+    )
+    _expect(
+        isinstance(metadata, Mapping)
+        and metadata.get("Reference") == POSTGRES_ARM64
+        and metadata.get("RepoDigests") == [POSTGRES_ARM64]
+        and metadata.get("ImageID")
+        == _nested(arm_manifest, "config", "digest")
+        and metadata.get("OS")
+        == {"Family": "wolfi", "Name": "20230201"}
+        and _nested(metadata, "ImageConfig", "architecture") == "arm64"
+        and _nested(metadata, "ImageConfig", "os") == "linux"
+        and isinstance(diff_ids, list)
+        and _nested(metadata, "ImageConfig", "rootfs", "diff_ids")
+        == diff_ids
+        and isinstance(arm_layers, list)
+        and isinstance(trivy_layers, list)
+        and len(arm_layers) == len(diff_ids) == len(trivy_layers)
+        and all(
+            isinstance(arm_layer, Mapping)
+            and isinstance(trivy_layer, Mapping)
+            and isinstance(arm_layer.get("digest"), str)
+            and re.fullmatch(r"sha256:[0-9a-f]{64}", arm_layer["digest"])
+            is not None
+            and isinstance(trivy_layer.get("Digest"), str)
+            and isinstance(trivy_layer.get("DiffID"), str)
+            and isinstance(diff_id, str)
+            and re.fullmatch(r"sha256:[0-9a-f]{64}", trivy_layer["Digest"])
+            is not None
+            and re.fullmatch(r"sha256:[0-9a-f]{64}", trivy_layer["DiffID"])
+            is not None
+            and re.fullmatch(r"sha256:[0-9a-f]{64}", diff_id)
+            is not None
+            and trivy_layer.get("Digest") == arm_layer.get("digest")
+            and trivy_layer.get("DiffID") == diff_id
+            and type(trivy_layer.get("Size")) is int
+            and trivy_layer["Size"] > 0
+            for arm_layer, trivy_layer, diff_id in zip(
+                arm_layers,
+                trivy_layers,
+                diff_ids,
+            )
+        ),
+        code,
+        "retained PostgreSQL Trivy metadata does not bind the OCI image",
+    )
+    vulnerabilities: list[Mapping[str, Any]] = []
+    scanned_package_identities: set[tuple[str, str]] = set()
+    scanned_package_uids: set[str] = set()
+    scanned_package_purls: set[str] = set()
+    valid_layer_pairs = {
+        (layer["Digest"], layer["DiffID"])
+        for layer in trivy_layers
+    }
+    for index, result in enumerate(results):
+        _expect(
+            isinstance(result, Mapping),
+            code,
+            f"Trivy Results[{index}] must be an object",
+        )
+        packages = result.get("Packages")
+        _expect(
+            isinstance(packages, list) and bool(packages),
+            code,
+            f"Trivy Results[{index}].Packages must be non-empty",
+        )
+        for package_index, package in enumerate(packages):
+            identifier = (
+                package.get("Identifier")
+                if isinstance(package, Mapping)
+                else None
+            )
+            layer = (
+                package.get("Layer")
+                if isinstance(package, Mapping)
+                else None
+            )
+            layer_digest = (
+                layer.get("Digest") if isinstance(layer, Mapping) else None
+            )
+            layer_diff_id = (
+                layer.get("DiffID") if isinstance(layer, Mapping) else None
+            )
+            _expect(
+                isinstance(package, Mapping)
+                and isinstance(package.get("Name"), str)
+                and bool(package["Name"].strip())
+                and isinstance(package.get("Version"), str)
+                and bool(package["Version"].strip())
+                and package.get("ID")
+                == f"{package['Name']}@{package['Version']}"
+                and package.get("Arch") == "aarch64"
+                and package.get("AnalyzedBy") == "apk"
+                and isinstance(identifier, Mapping)
+                and isinstance(identifier.get("PURL"), str)
+                and bool(identifier["PURL"].strip())
+                and identifier["PURL"].startswith("pkg:apk/wolfi/")
+                and isinstance(identifier.get("UID"), str)
+                and bool(identifier["UID"].strip())
+                and isinstance(layer, Mapping)
+                and isinstance(layer_digest, str)
+                and isinstance(layer_diff_id, str)
+                and (layer_digest, layer_diff_id) in valid_layer_pairs,
+                code,
+                (
+                    f"Trivy Results[{index}].Packages[{package_index}] "
+                    "has an incomplete or unbound identity"
+                ),
+            )
+            package_identity = (package["Name"], package["Version"])
+            _expect(
+                package_identity in apk_library_identities
+                and package_identity not in scanned_package_identities
+                and identifier["UID"] not in scanned_package_uids
+                and identifier["PURL"] not in scanned_package_purls,
+                code,
+                (
+                    "Trivy image package inventory is duplicated or absent "
+                    "from the exact APK SBOM partition"
+                ),
+            )
+            scanned_package_identities.add(package_identity)
+            scanned_package_uids.add(identifier["UID"])
+            scanned_package_purls.add(identifier["PURL"])
+        findings = (
+            result["Vulnerabilities"]
+            if "Vulnerabilities" in result
+            else []
+        )
+        _expect(
+            isinstance(findings, list),
+            code,
+            f"Trivy Results[{index}].Vulnerabilities must be a list",
+        )
+        for finding in findings:
+            _expect(
+                isinstance(finding, Mapping)
+                and isinstance(finding.get("VulnerabilityID"), str)
+                and bool(finding["VulnerabilityID"].strip())
+                and isinstance(finding.get("PkgName"), str)
+                and bool(finding["PkgName"].strip())
+                and isinstance(finding.get("InstalledVersion"), str)
+                and bool(finding["InstalledVersion"].strip())
+                and isinstance(finding.get("Severity"), str)
+                and finding["Severity"] in {"HIGH", "CRITICAL"},
+                code,
+                f"Trivy Results[{index}] contains a malformed finding",
+            )
+            vulnerabilities.append(finding)
+    _expect(
+        scanned_package_identities == apk_library_identities,
+        code,
+        "Trivy image scan does not close the exact APK library inventory",
+    )
+
+    trivy_sbom = _load_json(
+        root,
+        POSTGRES_EVIDENCE / "trivy-sbom.json",
+        code,
+    )
+    trivy_sbom_results = trivy_sbom.get("Results")
+    sbom_path = (
+        "bootstrap/postgresql/v18.4/evidence/"
+        "postgresql-18.4-arm64.cdx.json"
+    )
+    _expect(
+        set(trivy_sbom)
+        == {
+            "SchemaVersion",
+            "Trivy",
+            "ReportID",
+            "CreatedAt",
+            "ArtifactName",
+            "ArtifactType",
+            "Metadata",
+            "Results",
+        }
+        and trivy_sbom.get("SchemaVersion") == 2
+        and trivy_sbom.get("Trivy") == {"Version": "0.72.0"}
+        and trivy_sbom.get("ArtifactName") == sbom_path
+        and trivy_sbom.get("ArtifactType") == "cyclonedx"
+        and trivy_sbom.get("Metadata")
+        == {"OS": {"Family": "wolfi", "Name": "20230201"}}
+        and isinstance(trivy_sbom_results, list)
+        and [
+            (
+                result.get("Target"),
+                result.get("Class"),
+                result.get("Type"),
+                (
+                    len(result["Packages"])
+                    if isinstance(result.get("Packages"), list)
+                    else None
+                ),
+            )
+            for result in trivy_sbom_results
+            if isinstance(result, Mapping)
+        ]
+        == [
+            (
+                f"{sbom_path} (wolfi 20230201)",
+                "os-pkgs",
+                "wolfi",
+                56,
+            ),
+            ("", "lang-pkgs", "gobinary", 4),
+        ],
+        code,
+        "retained PostgreSQL Trivy SBOM scan scopes changed",
+    )
+    sbom_scanned_references: set[str] = set()
+    sbom_scanned_uids: set[str] = set()
+    sbom_scanned_purls: set[str] = set()
+    sbom_os_identities: set[tuple[str, str]] = set()
+    sbom_scanned_references_by_class: dict[str, set[str]] = {
+        "os-pkgs": set(),
+        "lang-pkgs": set(),
+    }
+    for result_index, result in enumerate(trivy_sbom_results):
+        _expect(
+            isinstance(result, Mapping),
+            code,
+            f"Trivy SBOM Results[{result_index}] must be an object",
+        )
+        packages = result.get("Packages")
+        _expect(
+            isinstance(packages, list) and bool(packages),
+            code,
+            f"Trivy SBOM Results[{result_index}].Packages must be non-empty",
+        )
+        for package_index, package in enumerate(packages):
+            identifier = (
+                package.get("Identifier")
+                if isinstance(package, Mapping)
+                else None
+            )
+            component_reference = (
+                identifier.get("BOMRef")
+                if isinstance(identifier, Mapping)
+                else None
+            )
+            expected_identity = (
+                library_components_by_reference.get(component_reference)
+                if isinstance(component_reference, str)
+                else None
+            )
+            expected_version = (
+                expected_identity[1].removeprefix("go")
+                if expected_identity is not None
+                and expected_identity[0] == "stdlib"
+                else (
+                    expected_identity[1]
+                    if expected_identity is not None
+                    else None
+                )
+            )
+            expected_package_id = (
+                f"stdlib@v{expected_version}"
+                if expected_identity is not None
+                and expected_identity[0] == "stdlib"
+                else (
+                    f"{expected_identity[0]}@{expected_version}"
+                    if expected_identity is not None
+                    else None
+                )
+            )
+            _expect(
+                isinstance(package, Mapping)
+                and isinstance(identifier, Mapping)
+                and isinstance(component_reference, str)
+                and component_reference
+                not in sbom_scanned_references
+                and expected_identity is not None
+                and package.get("Name") == expected_identity[0]
+                and package.get("Version") == expected_version
+                and package.get("ID") == expected_package_id
+                and isinstance(identifier.get("PURL"), str)
+                and bool(identifier["PURL"].strip())
+                and identifier["PURL"].casefold()
+                == expected_identity[2].casefold()
+                and identifier["PURL"] not in sbom_scanned_purls
+                and isinstance(identifier.get("UID"), str)
+                and bool(identifier["UID"].strip())
+                and identifier["UID"] not in sbom_scanned_uids
+                and (
+                    result.get("Class") != "os-pkgs"
+                    or package.get("Arch") == "aarch64"
+                ),
+                code,
+                (
+                    f"Trivy SBOM Results[{result_index}].Packages"
+                    f"[{package_index}] is not bound to one SBOM library"
+                ),
+            )
+            sbom_scanned_references.add(component_reference)
+            sbom_scanned_uids.add(identifier["UID"])
+            sbom_scanned_purls.add(identifier["PURL"])
+            result_class = result.get("Class")
+            _expect(
+                isinstance(result_class, str)
+                and result_class in sbom_scanned_references_by_class
+                and component_reference
+                in library_references_by_scan_class[result_class],
+                code,
+                "Trivy SBOM package is assigned to the wrong scan scope",
+            )
+            sbom_scanned_references_by_class[result_class].add(
+                component_reference
+            )
+            if result.get("Class") == "os-pkgs":
+                sbom_os_identities.add(
+                    (package["Name"], package["Version"])
+                )
+        findings = (
+            result["Vulnerabilities"]
+            if "Vulnerabilities" in result
+            else []
+        )
+        _expect(
+            isinstance(findings, list),
+            code,
+            (
+                f"Trivy SBOM Results[{result_index}].Vulnerabilities "
+                "must be a list"
+            ),
+        )
+        for finding in findings:
+            _expect(
+                isinstance(finding, Mapping)
+                and isinstance(finding.get("VulnerabilityID"), str)
+                and bool(finding["VulnerabilityID"].strip())
+                and isinstance(finding.get("PkgName"), str)
+                and bool(finding["PkgName"].strip())
+                and isinstance(finding.get("InstalledVersion"), str)
+                and bool(finding["InstalledVersion"].strip())
+                and isinstance(finding.get("Severity"), str)
+                and finding["Severity"] in {"HIGH", "CRITICAL"},
+                code,
+                (
+                    f"Trivy SBOM Results[{result_index}] contains "
+                    "a malformed finding"
+                ),
+            )
+            vulnerabilities.append(finding)
+    _expect(
+        sbom_scanned_references
+        == set(library_components_by_reference)
+        and sbom_scanned_references_by_class
+        == library_references_by_scan_class
+        and sbom_os_identities
+        == scanned_package_identities
+        == apk_library_identities,
+        code,
+        "Trivy scans do not close the exact CycloneDX library inventory",
+    )
+
+    high = sum(item.get("Severity") == "HIGH" for item in vulnerabilities)
+    critical = sum(
+        item.get("Severity") == "CRITICAL" for item in vulnerabilities
+    )
+    _expect(
+        high == 0 and critical == 0,
+        code,
+        "retained PostgreSQL scan exceeds the High/Critical threshold",
+    )
+    trivy_version = _load_json(
+        root,
+        POSTGRES_EVIDENCE / "trivy-version.json",
+        code,
+    )
+    _expect(
+        set(trivy_version) == {"Version", "VulnerabilityDB"}
+        and trivy_version.get("Version") == "0.72.0"
+        and isinstance(trivy_version.get("VulnerabilityDB"), Mapping)
+        and set(trivy_version["VulnerabilityDB"])
+        == {"Version", "NextUpdate", "UpdatedAt", "DownloadedAt"}
+        and trivy_version["VulnerabilityDB"].get("Version") == 2
+        and trivy_version["VulnerabilityDB"].get("UpdatedAt")
+        == "2026-07-20T01:09:07.303099965Z",
+        code,
+        "retained PostgreSQL Trivy database metadata changed",
+    )
+    trivy_sbom_version = _load_json(
+        root,
+        POSTGRES_EVIDENCE / "trivy-sbom-version.json",
+        code,
+    )
+    _expect(
+        set(trivy_sbom_version) == {"Version", "VulnerabilityDB"}
+        and trivy_sbom_version.get("Version") == "0.72.0"
+        and isinstance(
+            trivy_sbom_version.get("VulnerabilityDB"),
+            Mapping,
+        )
+        and set(trivy_sbom_version["VulnerabilityDB"])
+        == {"Version", "NextUpdate", "UpdatedAt", "DownloadedAt"}
+        and trivy_sbom_version["VulnerabilityDB"].get("Version") == 2
+        and trivy_sbom_version["VulnerabilityDB"].get("UpdatedAt")
+        == "2026-07-19T18:43:16.060990559Z",
+        code,
+        "retained PostgreSQL Trivy SBOM database metadata changed",
+    )
+    return cyclone, trivy_version, trivy_sbom_version
+
+
+def _audit_postgres_summary_and_root(
+    root: Path,
+    cyclone: Mapping[str, Any],
+    trivy_version: Mapping[str, Any],
+    trivy_sbom_version: Mapping[str, Any],
+) -> None:
+    code = "POSTGRES_EVIDENCE"
+    trusted_root = _load_json(
+        root,
+        POSTGRES_EVIDENCE / "trusted-root.json",
+        code,
+    )
+    tlogs = trusted_root.get("tlogs")
+    certificate_authorities = trusted_root.get("certificateAuthorities")
+    ctlogs = trusted_root.get("ctlogs")
+    timestamp_authorities = trusted_root.get("timestampAuthorities")
+    _expect(
+        set(trusted_root)
+        == {
+            "mediaType",
+            "tlogs",
+            "certificateAuthorities",
+            "ctlogs",
+            "timestampAuthorities",
+        }
+        and trusted_root.get("mediaType")
+        == POSTGRES_TRUSTED_ROOT_MEDIA_TYPE
+        and isinstance(tlogs, list)
+        and len(tlogs) == 2
+        and isinstance(certificate_authorities, list)
+        and len(certificate_authorities) == 2
+        and isinstance(ctlogs, list)
+        and len(ctlogs) == 2
+        and isinstance(timestamp_authorities, list)
+        and len(timestamp_authorities) == 1,
+        code,
+        "retained Sigstore trusted root changed",
+    )
+    summary = _load_json(
+        root,
+        POSTGRES_EVIDENCE / "cryptographic-verification.json",
+        code,
+    )
+    _expect_keysets(
+        summary,
+        {
+            (): {
+                "schema_version",
+                "collected_at",
+                "network_boundary",
+                "tools",
+                "candidate",
+                "publisher",
+                "signatures",
+                "attestations",
+                "slsa",
+                "spdx",
+                "cyclonedx",
+                "trivy",
+                "trusted_root",
+            },
+            ("network_boundary",): {
+                "registry_authentication",
+                "trusted_root_collection",
+                "retained_bundle_reverification",
+                "offline_home_write_count",
+            },
+            ("tools",): {"cosign", "crane", "syft", "trivy"},
+            ("signatures",): {"index", "arm64"},
+            ("attestations",): {"slsa", "spdx"},
+            ("trivy",): {
+                "scanner_version",
+                "library_component_count",
+                "image_scan",
+                "sbom_scan",
+            },
+            ("trivy", "image_scan"): {
+                "schema_version",
+                "artifact_name",
+                "artifact_type",
+                "database_updated_at",
+                "scope",
+                "package_count",
+                "high",
+                "critical",
+            },
+            ("trivy", "sbom_scan"): {
+                "schema_version",
+                "artifact_name",
+                "artifact_type",
+                "database_updated_at",
+                "os_package_count",
+                "gobinary_package_count",
+                "library_coverage_count",
+                "high",
+                "critical",
+            },
+        },
+        code,
+    )
+    _expect_fields(
+        summary,
+        {
+            ("schema_version",): 1,
+            ("collected_at",): "2026-07-20T07:31:20Z",
+            (
+                "network_boundary",
+                "registry_authentication",
+            ): "anonymous-empty-docker-config",
+            (
+                "network_boundary",
+                "trusted_root_collection",
+            ): "online-sigstore-tuf",
+            (
+                "network_boundary",
+                "retained_bundle_reverification",
+            ): "offline-denied-proxy",
+            ("network_boundary", "offline_home_write_count"): 0,
+            ("tools", "cosign"): "3.1.1",
+            ("tools", "crane"): "0.21.7",
+            ("tools", "syft"): "1.46.0",
+            ("tools", "trivy"): "0.72.0",
+            ("candidate", "index_reference"): POSTGRES_INDEX,
+            (
+                "candidate",
+                "index_manifest",
+                "sha256",
+            ): POSTGRES_INDEX.rsplit("@sha256:", 1)[1],
+            ("candidate", "index_manifest", "size"): 1_015,
+            ("candidate", "arm64_reference"): POSTGRES_ARM64,
+            (
+                "candidate",
+                "arm64_manifest",
+                "sha256",
+            ): POSTGRES_ARM64.rsplit("@sha256:", 1)[1],
+            ("candidate", "arm64_manifest", "size"): 2_510,
+            (
+                "candidate",
+                "attestation_manifest_digest",
+            ): POSTGRES_ATTESTATION,
+            (
+                "candidate",
+                "attestation_manifest",
+                "sha256",
+            ): POSTGRES_ATTESTATION.removeprefix("sha256:"),
+            ("candidate", "attestation_manifest", "size"): 29_968,
+            (
+                "candidate",
+                "index_platforms",
+            ): ["linux/amd64", "linux/arm64"],
+            ("publisher", "identity"): POSTGRES_PUBLISHER_IDENTITY,
+            ("publisher", "issuer"): POSTGRES_PUBLISHER_ISSUER,
+            (
+                "publisher",
+                "workflow_name",
+            ): POSTGRES_PUBLISHER_WORKFLOW_NAME,
+            (
+                "publisher",
+                "workflow_repository",
+            ): POSTGRES_PUBLISHER_REPOSITORY,
+            ("publisher", "workflow_ref"): POSTGRES_PUBLISHER_REF,
+            (
+                "publisher",
+                "workflow_trigger",
+            ): POSTGRES_PUBLISHER_TRIGGER,
+            (
+                "signatures",
+                "index",
+                "workflow_sha",
+            ): POSTGRES_RELEASE_WORKFLOW_SHA,
+            ("signatures", "index", "rekor_log_index"): 2_181_460_214,
+            (
+                "signatures",
+                "index",
+                "rekor_integrated_time",
+            ): 1_784_189_273,
+            (
+                "signatures",
+                "arm64",
+                "workflow_sha",
+            ): POSTGRES_RELEASE_WORKFLOW_SHA,
+            ("signatures", "arm64", "rekor_log_index"): 2_181_460_469,
+            (
+                "signatures",
+                "arm64",
+                "rekor_integrated_time",
+            ): 1_784_189_276,
+            (
+                "attestations",
+                "slsa",
+                "workflow_sha",
+            ): POSTGRES_SLSA_WORKFLOW_SHA,
+            ("attestations", "slsa", "rekor_log_index"): 2_177_108_005,
+            (
+                "attestations",
+                "slsa",
+                "rekor_integrated_time",
+            ): 1_784_157_617,
+            (
+                "attestations",
+                "spdx",
+                "workflow_sha",
+            ): POSTGRES_RELEASE_WORKFLOW_SHA,
+            ("attestations", "spdx", "rekor_log_index"): 2_181_460_833,
+            (
+                "attestations",
+                "spdx",
+                "rekor_integrated_time",
+            ): 1_784_189_281,
+            ("slsa", "subject_reference"): POSTGRES_ARM64,
+            ("slsa", "builder"): POSTGRES_SLSA_BUILDER,
+            ("slsa", "build_type"): POSTGRES_SLSA_BUILD_TYPE,
+            ("slsa", "invocation_id"): POSTGRES_INDEX,
+            ("spdx", "subject_reference"): POSTGRES_ARM64,
+            ("spdx", "spdx_version"): "SPDX-2.3",
+            ("spdx", "package_count"): 257,
+            ("cyclonedx", "bom_format"): "CycloneDX",
+            ("cyclonedx", "spec_version"): "1.7",
+            ("cyclonedx", "version"): 1,
+            ("cyclonedx", "generator"): "syft 1.46.0",
+            ("cyclonedx", "component_reference"): POSTGRES_ARM64,
+            (
+                "cyclonedx",
+                "component_count",
+            ): len(cyclone.get("components", [])),
+            ("trivy", "scanner_version"): "0.72.0",
+            ("trivy", "library_component_count"): 60,
+            ("trivy", "image_scan", "schema_version"): 2,
+            ("trivy", "image_scan", "artifact_name"): POSTGRES_ARM64,
+            ("trivy", "image_scan", "artifact_type"): "container_image",
+            (
+                "trivy",
+                "image_scan",
+                "database_updated_at",
+            ): _nested(trivy_version, "VulnerabilityDB", "UpdatedAt"),
+            ("trivy", "image_scan", "scope"): "os-pkgs/wolfi",
+            ("trivy", "image_scan", "package_count"): 56,
+            ("trivy", "image_scan", "high"): 0,
+            ("trivy", "image_scan", "critical"): 0,
+            ("trivy", "sbom_scan", "schema_version"): 2,
+            (
+                "trivy",
+                "sbom_scan",
+                "artifact_name",
+            ): (
+                "bootstrap/postgresql/v18.4/evidence/"
+                "postgresql-18.4-arm64.cdx.json"
+            ),
+            ("trivy", "sbom_scan", "artifact_type"): "cyclonedx",
+            (
+                "trivy",
+                "sbom_scan",
+                "database_updated_at",
+            ): _nested(
+                trivy_sbom_version,
+                "VulnerabilityDB",
+                "UpdatedAt",
+            ),
+            ("trivy", "sbom_scan", "os_package_count"): 56,
+            ("trivy", "sbom_scan", "gobinary_package_count"): 4,
+            ("trivy", "sbom_scan", "library_coverage_count"): 60,
+            ("trivy", "sbom_scan", "high"): 0,
+            ("trivy", "sbom_scan", "critical"): 0,
+            (
+                "trusted_root",
+                "media_type",
+            ): POSTGRES_TRUSTED_ROOT_MEDIA_TYPE,
+            ("trusted_root", "tlog_count"): 2,
+            ("trusted_root", "certificate_authority_count"): 2,
+            ("trusted_root", "ctlog_count"): 2,
+            ("trusted_root", "timestamp_authority_count"): 1,
+        },
+        code,
+    )
+
+
+def _reverify_postgres_sigstore_cryptographically(root: Path) -> None:
+    code = "POSTGRES_EVIDENCE"
+    try:
+        version = subprocess.run(
+            ["cosign", "version"],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        _fail(code, f"cannot inspect Cosign: {error}")
+    _expect(
+        version.returncode == 0
+        and re.search(r"(?m)^GitVersion:\s+v3\.1\.1\s*$", version.stdout)
+        is not None,
+        code,
+        "Cosign 3.1.1 is required for PostgreSQL bundle reverification",
+    )
+    common = [
+        "--trusted-root",
+        (POSTGRES_EVIDENCE / "trusted-root.json").as_posix(),
+        "--certificate-identity",
+        POSTGRES_PUBLISHER_IDENTITY,
+        "--certificate-oidc-issuer",
+        POSTGRES_PUBLISHER_ISSUER,
+        "--certificate-github-workflow-name",
+        POSTGRES_PUBLISHER_WORKFLOW_NAME,
+        "--certificate-github-workflow-repository",
+        POSTGRES_PUBLISHER_REPOSITORY,
+        "--certificate-github-workflow-ref",
+        POSTGRES_PUBLISHER_REF,
+        "--certificate-github-workflow-trigger",
+        POSTGRES_PUBLISHER_TRIGGER,
+    ]
+    with tempfile.TemporaryDirectory(
+        prefix="shirokuma-postgres-offline-"
+    ) as directory:
+        temporary_root = Path(directory)
+        home = temporary_root / "home"
+        docker = temporary_root / "docker"
+        xdg_cache = temporary_root / "xdg-cache"
+        xdg_config = temporary_root / "xdg-config"
+        xdg_data = temporary_root / "xdg-data"
+        temporary_files = temporary_root / "tmp"
+        for location in (
+            home,
+            docker,
+            xdg_cache,
+            xdg_config,
+            xdg_data,
+            temporary_files,
+        ):
+            location.mkdir()
+        offline_env = {
+            "PATH": os.environ.get("PATH", os.defpath),
+            "HOME": str(home),
+            "DOCKER_CONFIG": str(docker),
+            "XDG_CACHE_HOME": str(xdg_cache),
+            "XDG_CONFIG_HOME": str(xdg_config),
+            "XDG_DATA_HOME": str(xdg_data),
+            "TMPDIR": str(temporary_files),
+            "HTTP_PROXY": "http://127.0.0.1:9",
+            "HTTPS_PROXY": "http://127.0.0.1:9",
+            "ALL_PROXY": "http://127.0.0.1:9",
+            "http_proxy": "http://127.0.0.1:9",
+            "https_proxy": "http://127.0.0.1:9",
+            "all_proxy": "http://127.0.0.1:9",
+            "NO_PROXY": "",
+            "no_proxy": "",
+        }
+        for role, record in POSTGRES_SIGNATURES.items():
+            _run_cosign(
+                root,
+                [
+                    "verify-blob",
+                    "--timeout",
+                    "20s",
+                    "--bundle",
+                    (
+                        POSTGRES_EVIDENCE / str(record["bundle"])
+                    ).as_posix(),
+                    *common,
+                    "--certificate-github-workflow-sha",
+                    POSTGRES_RELEASE_WORKFLOW_SHA,
+                    (
+                        POSTGRES_EVIDENCE / str(record["payload"])
+                    ).as_posix(),
+                ],
+                f"offline PostgreSQL {role} signature verification",
+                code=code,
+                env=offline_env,
+            )
+        for role, record in POSTGRES_ATTESTATION_LAYERS.items():
+            _run_cosign(
+                root,
+                [
+                    "verify-blob-attestation",
+                    "--timeout",
+                    "20s",
+                    "--bundle",
+                    (
+                        POSTGRES_EVIDENCE / str(record["bundle"])
+                    ).as_posix(),
+                    "--type",
+                    str(record["predicate_type"]),
+                    *common,
+                    "--certificate-github-workflow-sha",
+                    str(record["workflow_sha"]),
+                    (
+                        POSTGRES_EVIDENCE / "arm64-manifest.json"
+                    ).as_posix(),
+                ],
+                f"offline PostgreSQL {role} attestation verification",
+                code=code,
+                env=offline_env,
+            )
+        written = [
+            path
+            for path in temporary_root.rglob("*")
+            if path.is_file()
+        ]
+        _expect(
+            not written,
+            code,
+            "offline PostgreSQL verification wrote unexpected state",
+        )
+
+
+def _audit_postgres_evidence(
+    root: Path,
+    admission: Mapping[str, Any],
+    postgres_crypto_verifier: PostgresCryptoVerifier,
+) -> None:
+    _audit_postgres_evidence_inventory(root, admission)
+    for role, record in POSTGRES_SIGNATURES.items():
+        _audit_postgres_signature_bundle(root, role, record)
+    slsa, spdx = _audit_postgres_manifests(root)
+    _audit_postgres_statements(slsa, spdx)
+    cyclone, trivy_version, trivy_sbom_version = (
+        _audit_postgres_sbom_and_scan(root)
+    )
+    _audit_postgres_summary_and_root(
+        root,
+        cyclone,
+        trivy_version,
+        trivy_sbom_version,
+    )
+    postgres_crypto_verifier(root)
 
 
 def _audit_pending_files(root: Path) -> None:
@@ -5582,7 +7534,13 @@ def _audit_pending_files(root: Path) -> None:
         expected_retained = (
             sorted({"README.md", *POLARIS_DEPENDENCY_EVIDENCE_RECORDS})
             if evidence_root == POLARIS_EVIDENCE
-            else ["README.md"]
+            else sorted(
+                {
+                    "README.md",
+                    "evidence.sha256",
+                    *POSTGRES_EVIDENCE_REQUIRED,
+                }
+            )
         )
         _expect(
             retained == expected_retained,
@@ -7099,6 +9057,7 @@ def audit(
     *,
     dependency_crypto_verifier: Optional[DependencyCryptoVerifier] = None,
     image_crypto_verifier: Optional[ImageCryptoVerifier] = None,
+    postgres_crypto_verifier: Optional[PostgresCryptoVerifier] = None,
 ) -> None:
     root = root.resolve()
     if dependency_crypto_verifier is None:
@@ -7107,6 +9066,10 @@ def audit(
         )
     if image_crypto_verifier is None:
         image_crypto_verifier = _reverify_image_sigstore_cryptographically
+    if postgres_crypto_verifier is None:
+        postgres_crypto_verifier = (
+            _reverify_postgres_sigstore_cryptographically
+        )
     _audit_source(root)
     contract = _audit_contract(root)
     _audit_polaris_admission(root)
@@ -7116,7 +9079,12 @@ def audit(
         dependency_crypto_verifier,
     )
     _audit_image_publication_evidence(root, image_crypto_verifier)
-    _audit_postgres_admission(root)
+    postgres_admission = _audit_postgres_admission(root)
+    _audit_postgres_evidence(
+        root,
+        postgres_admission,
+        postgres_crypto_verifier,
+    )
     _audit_pending_files(root)
     _audit_retained_pending_evidence(root)
     _audit_ledger(root)
@@ -7152,8 +9120,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     print(
-        "polaris-trusted-image: retained image evidence is approved for "
-        "atomic Polaris/PostgreSQL admission; admission and runtime remain "
+        "polaris-trusted-image: evidence checkpoint passes; atomic "
+        "Polaris/PostgreSQL admission still requires fresh dual-scope "
+        "PostgreSQL scans and exact-digest preflight; runtime remains "
         "fail-closed"
     )
     return 0

@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-20
-version: "1.7"
+version: "1.9"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -251,8 +251,9 @@ Polaris image release evidence is retained at
 retired. This checkpoint advances the contract to `atomic_admission_pending`
 and marks only the exact image digest as `approved_for_atomic_admission`.
 Overall admission remains blocked: no Polaris resident-image entry or runtime
-manifest is permitted until the exact PostgreSQL evidence is reviewed and the
-two components pass atomic admission together.
+manifest is permitted. The exact PostgreSQL evidence is now reviewed, but both
+components must still pass one atomic admission change with fresh exact-image
+and CycloneDX-input scans plus exact-digest availability preflight.
 
 Within `caches/modules-2/files-2.1`, the checksum directory follows Gradle
 9.6's canonical artifact-store rule: SHA-1 is lowercase hexadecimal with every
@@ -342,12 +343,30 @@ dependency publisher is also forbidden: changing the dependency artifact
 requires a new explicit publication lifecycle and contract review rather than a
 rerun of the historical workflow.
 
-The selected Chainguard PostgreSQL 18.4 index and linux/arm64 manifest remain a
-candidate, not an admission. Signature, index membership, provenance, upstream
-SBOM, independent CycloneDX SBOM, and zero High/Critical scan evidence must be
-retained and reverified. Polaris and PostgreSQL are admitted atomically in an
-evidence-only review after a successful main publication; neither component may
-appear alone in the resident-image ledger or in runtime manifests.
+The selected Chainguard PostgreSQL 18.4 index and linux/arm64 manifest are
+`approved_for_atomic_admission`, but remain blocked from resident admission.
+The retained closed set binds the raw index, arm64 and attestation manifests,
+role-separated index/arm64 Sigstore bundles, SLSA v1 and SPDX 2.3 DSSE
+envelopes and bundles, a Syft 1.46.0 CycloneDX 1.7 SBOM, and a fresh Trivy
+0.72.0 exact-image report. A second Trivy report consumes that CycloneDX SBOM
+and closes all 56 Wolfi plus four Go library components; both report
+High=0/Critical=0. A retained Sigstore TrustedRoot lets Cosign
+3.1.1 reverify all four bundles with an empty HOME and Docker configuration
+while network proxies are denied. The SLSA certificate uses workflow commit
+`1d360e5f7f3b749f0b1e55b3f75d3eb8db4e7004`; the index, arm64 and SPDX
+certificates use `704e38b436bc40bc9a9d669c05f0d6694bec298b`. These role-specific
+claims must not be collapsed into one global workflow revision.
+
+Polaris and PostgreSQL are admitted atomically in the next evidence-only
+review. The retained Trivy report authorizes this evidence review only; it is
+not an indefinitely reusable admission result. Before atomic admission,
+anonymous exact-digest availability is preflighted again and PostgreSQL is
+rescanned at the same arm64 digest in both exact-image and CycloneDX-input
+scopes. Each database must be no more than 24 hours old, and the combined result
+must still cover all 56 Wolfi plus four Go libraries at zero High/Critical.
+Neither component may appear alone in the resident-image ledger or in runtime
+manifests, and this evidence checkpoint does not authorize credentials or a
+cluster mutation.
 
 Trusted builds must also set BuildKit `no-cache` and must not import or export a
 shared GitHub Actions cache. Reusing a mutable layer that is absent from the

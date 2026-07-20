@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "collected_at": "2026-07-20T07:31:20Z",
+  "network_boundary": {
+    "registry_authentication": "anonymous-empty-docker-config",
+    "trusted_root_collection": "online-sigstore-tuf",
+    "retained_bundle_reverification": "offline-denied-proxy",
+    "offline_home_write_count": 0
+  },
+  "tools": {
+    "cosign": "3.1.1",
+    "crane": "0.21.7",
+    "syft": "1.46.0",
+    "trivy": "0.72.0"
+  },
+  "candidate": {
+    "index_reference": "cgr.dev/chainguard/postgres@sha256:3dc629a917612f1630c6f8e7a17f23a42cbd5917b9b3080972b70b1583daff34",
+    "index_manifest": {
+      "sha256": "3dc629a917612f1630c6f8e7a17f23a42cbd5917b9b3080972b70b1583daff34",
+      "size": 1015
+    },
+    "arm64_reference": "cgr.dev/chainguard/postgres@sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+    "arm64_manifest": {
+      "sha256": "c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+      "size": 2510
+    },
+    "attestation_manifest_digest": "sha256:8f5098343c0fc68d434174753d2ba6cefa9c1c037f5185f52b5cf5fbb4ba559b",
+    "attestation_manifest": {
+      "sha256": "8f5098343c0fc68d434174753d2ba6cefa9c1c037f5185f52b5cf5fbb4ba559b",
+      "size": 29968
+    },
+    "index_platforms": [
+      "linux/amd64",
+      "linux/arm64"
+    ]
+  },
+  "publisher": {
+    "identity": "https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "workflow_name": ".github/workflows/release.yaml",
+    "workflow_repository": "chainguard-images/images",
+    "workflow_ref": "refs/heads/main",
+    "workflow_trigger": "push"
+  },
+  "signatures": {
+    "index": {
+      "payload": "index-signature-payload.json",
+      "bundle": "index-signature.sigstore.json",
+      "workflow_sha": "704e38b436bc40bc9a9d669c05f0d6694bec298b",
+      "rekor_log_index": 2181460214,
+      "rekor_integrated_time": 1784189273,
+      "bundle_media_type": "application/vnd.dev.sigstore.bundle+json;version=0.3"
+    },
+    "arm64": {
+      "payload": "arm64-signature-payload.json",
+      "bundle": "arm64-signature.sigstore.json",
+      "workflow_sha": "704e38b436bc40bc9a9d669c05f0d6694bec298b",
+      "rekor_log_index": 2181460469,
+      "rekor_integrated_time": 1784189276,
+      "bundle_media_type": "application/vnd.dev.sigstore.bundle+json;version=0.3"
+    }
+  },
+  "attestations": {
+    "slsa": {
+      "predicate_type": "https://slsa.dev/provenance/v1",
+      "envelope": "slsa-attestation-envelope.json",
+      "envelope_digest": "sha256:e2fbc51efecdec309574b931d17d1b0d1bc75eabd2df1e0c7c7e2d37c826e12a",
+      "envelope_size": 2964,
+      "bundle": "slsa-provenance.sigstore.json",
+      "workflow_sha": "1d360e5f7f3b749f0b1e55b3f75d3eb8db4e7004",
+      "rekor_log_index": 2177108005,
+      "rekor_integrated_time": 1784157617,
+      "bundle_media_type": "application/vnd.dev.sigstore.bundle+json;version=0.3"
+    },
+    "spdx": {
+      "predicate_type": "https://spdx.dev/Document",
+      "envelope": "spdx-attestation-envelope.json",
+      "envelope_digest": "sha256:1030922e6384023135ea10cf4a58237c3eb1a32af14ee0db1719b355873fcbb4",
+      "envelope_size": 295772,
+      "bundle": "spdx-sbom.sigstore.json",
+      "workflow_sha": "704e38b436bc40bc9a9d669c05f0d6694bec298b",
+      "rekor_log_index": 2181460833,
+      "rekor_integrated_time": 1784189281,
+      "bundle_media_type": "application/vnd.dev.sigstore.bundle+json;version=0.3"
+    }
+  },
+  "slsa": {
+    "subject_reference": "cgr.dev/chainguard/postgres@sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+    "builder": "https://github.com/chainguard-dev/terraform-provider-apko",
+    "build_type": "https://apko.dev/slsa-build-type@v1",
+    "invocation_id": "cgr.dev/chainguard/postgres@sha256:3dc629a917612f1630c6f8e7a17f23a42cbd5917b9b3080972b70b1583daff34"
+  },
+  "spdx": {
+    "subject_reference": "cgr.dev/chainguard/postgres@sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+    "spdx_version": "SPDX-2.3",
+    "package_count": 257
+  },
+  "cyclonedx": {
+    "bom_format": "CycloneDX",
+    "spec_version": "1.7",
+    "version": 1,
+    "generator": "syft 1.46.0",
+    "component_reference": "cgr.dev/chainguard/postgres@sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+    "component_count": 4725
+  },
+  "trivy": {
+    "scanner_version": "0.72.0",
+    "library_component_count": 60,
+    "image_scan": {
+      "schema_version": 2,
+      "artifact_name": "cgr.dev/chainguard/postgres@sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+      "artifact_type": "container_image",
+      "database_updated_at": "2026-07-20T01:09:07.303099965Z",
+      "scope": "os-pkgs/wolfi",
+      "package_count": 56,
+      "high": 0,
+      "critical": 0
+    },
+    "sbom_scan": {
+      "schema_version": 2,
+      "artifact_name": "bootstrap/postgresql/v18.4/evidence/postgresql-18.4-arm64.cdx.json",
+      "artifact_type": "cyclonedx",
+      "database_updated_at": "2026-07-19T18:43:16.060990559Z",
+      "os_package_count": 56,
+      "gobinary_package_count": 4,
+      "library_coverage_count": 60,
+      "high": 0,
+      "critical": 0
+    }
+  },
+  "trusted_root": {
+    "media_type": "application/vnd.dev.sigstore.trustedroot+json;version=0.1",
+    "tlog_count": 2,
+    "certificate_authority_count": 2,
+    "ctlog_count": 2,
+    "timestamp_authority_count": 1
+  }
+}
