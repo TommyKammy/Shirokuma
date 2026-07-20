@@ -1,0 +1,98 @@
+{
+  "admin_dependency_surface": {
+    "relational_only": false,
+    "review_state": "review_required",
+    "unconditional_external_dependencies": [
+      "io.quarkus:quarkus-mongodb-client"
+    ],
+    "unconditional_project_dependencies": [
+      ":polaris-persistence-nosql-api",
+      ":polaris-persistence-nosql-maintenance-api",
+      ":polaris-persistence-nosql-metastore",
+      ":polaris-persistence-nosql-cdi-quarkus",
+      ":polaris-persistence-nosql-cdi-quarkus-distcache",
+      ":polaris-persistence-nosql-maintenance-impl",
+      ":polaris-persistence-nosql-metastore-maintenance"
+    ]
+  },
+  "artifact_reference": "ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18",
+  "artifact_repository": "ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies",
+  "artifact_type": "application/vnd.shirokuma.polaris-admin.gradle-dependencies.v1",
+  "created": "2026-07-21T06:46:09+09:00",
+  "downstream_gates": {
+    "admin_image_admitted": false,
+    "admin_image_publication_enabled": false,
+    "admin_runtime_enabled": false,
+    "credential_material_permitted": false,
+    "gitops_resources_enabled": false
+  },
+  "event": "push",
+  "files": [
+    {
+      "filename": "gradle-dependency-inputs.json",
+      "sha256": "798802722e730174caa581cbffd4f82e5dd4a43aee92201df26f14db4ab005bc",
+      "size": 2175793
+    },
+    {
+      "filename": "polaris-gradle-dependencies-1.6.0.tar.gz",
+      "sha256": "e771fe2ec6b2d0f6940b1247a512eb5cbc78dd0f36e7be247975f2c5fa36fc4d",
+      "size": 701437153
+    },
+    {
+      "filename": "verification-metadata.xml",
+      "sha256": "171ccaf781d4ae63375b332205d25653ebcd29471e9e9c0cfba1b978144065b8",
+      "size": 881256
+    },
+    {
+      "filename": "offline-build.json",
+      "sha256": "12c027f726e62213605fe094a9b4328bcb3351148bdd90a71e5e38c2b766fa68",
+      "size": 725
+    },
+    {
+      "filename": "superset-proof.json",
+      "sha256": "afc26c4c6fb48ea423ed4b057a167c2768fe6104a0f88f65533b768877cb80f9",
+      "size": 413
+    },
+    {
+      "filename": "toolchain.json",
+      "sha256": "6a482b37d97d46df1b9c71fd041473aa57f30d1c5325104ac6fb8f3074f74d7f",
+      "size": 709
+    },
+    {
+      "filename": "oci-manifest.json",
+      "sha256": "7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18",
+      "size": 1083
+    },
+    {
+      "filename": "cosign-signature-bundle.json",
+      "sha256": "f96675ee16fbbdc478e3d5febc5bab1953f7d70c68a26b7b79afb1ebb3c7811d",
+      "size": 11143
+    },
+    {
+      "filename": "cosign-verify.json",
+      "sha256": "84a3debbf0f6c3eace8eca839b0577bfc2f5896852872db69b143b80566c3f79",
+      "size": 355
+    },
+    {
+      "filename": "slsa-verify.json",
+      "sha256": "687dea8a3ea7d86c5316d32235e7e5a372c6b38861505a887c6fe318966c0741",
+      "size": 14334
+    }
+  ],
+  "parent_artifact_reference": "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies@sha256:fa889d2c0a6e6dc48816d79680a366e21040be333ab6007b88e4ca4dbf6e59d6",
+  "parent_descriptor_sha256": "3bab7b055d29be1bc59f2fe605960f49bbceee2639ad68086822c62ee8533841",
+  "ref": "refs/heads/main",
+  "run_attempt": "1",
+  "run_id": "29781460117",
+  "schema_version": 1,
+  "source_admin_build_preimage_sha256": "6e3aabc2090cda72c03608053f41899792a6c62bec382ed18d6b02703574fde9",
+  "source_sha": "619d52e0b1db5241867d7775cc8714a30b1a6f38",
+  "state": "admin_dependency_snapshot_review_pending",
+  "tasks": [
+    ":polaris-admin:assemble",
+    ":polaris-admin:quarkusAppPartsBuild",
+    ":polaris-server:assemble",
+    ":polaris-server:quarkusAppPartsBuild"
+  ],
+  "workflow_sha": "619d52e0b1db5241867d7775cc8714a30b1a6f38"
+}

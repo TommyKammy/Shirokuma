@@ -2129,10 +2129,10 @@ class SupplyChainSecurityTests(unittest.TestCase):
                 "generic-api-key",
             ),
             {
-                r"^\.github/workflows/polaris-admin-build-inputs\.yml$",
                 r"^bootstrap/polaris/v1\.6\.0/admin-build-inputs-contract\.json$",
                 r"^bootstrap/polaris/v1\.6\.0/image-evidence/source-authentication\.json$",
                 r"^bootstrap/polaris/v1\.6\.0/trusted-build-contract\.json$",
+                r"^scripts/verify_polaris_admin_build_inputs\.py$",
                 r"^scripts/verify_polaris_trusted_image\.py$",
             },
         )
@@ -2142,6 +2142,7 @@ class SupplyChainSecurityTests(unittest.TestCase):
                 r"^[0-9a-f]{40}$",
             ),
             {
+                r"^bootstrap/polaris/v1\.6\.0/admin-build-inputs-evidence/gradle-dependency-inputs\.json$",
                 r"^bootstrap/polaris/v1\.6\.0/evidence/gradle-dependency-inputs\.json$",
             },
         )
@@ -2156,6 +2157,10 @@ class SupplyChainSecurityTests(unittest.TestCase):
         self.assertNotIn(r"^opentofu/dev/.*$", config)
         self.assertNotIn(r"^tests/.*$", config)
         self.assertNotIn(r"^security/evidence/seaweedfs-v4\.39/.*$", config)
+        self.assertNotIn(
+            r"^bootstrap/polaris/v1\.6\.0/admin-build-inputs-evidence/.*$",
+            config,
+        )
         self.assertNotIn(r"^bootstrap/polaris/v1\.6\.0/evidence/.*$", config)
 
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")

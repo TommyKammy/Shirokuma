@@ -2930,6 +2930,20 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         )
         self._assert_code(root, "FORBIDDEN_PATH", "workflow inventory changed")
 
+    def test_retired_admin_build_inputs_publisher_cannot_be_restored(
+        self,
+    ) -> None:
+        root = self._fixture()
+        workflow = root / ".github/workflows/polaris-admin-build-inputs.yml"
+        self.assertFalse(workflow.exists())
+        workflow.write_text(
+            "name: stale admin build-input publisher\n"
+            "permissions:\n"
+            "  packages: write\n",
+            encoding="utf-8",
+        )
+        self._assert_code(root, "FORBIDDEN_PATH", "workflow inventory changed")
+
     def test_existing_workflow_byte_drift_is_forbidden_while_pending(self) -> None:
         root = self._fixture()
         workflow = root / ".github/workflows/ci.yml"
@@ -3237,6 +3251,54 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             root,
             "DEPENDENCY_EVIDENCE",
             "inventory must be closed",
+        )
+
+    def test_extra_admin_build_inputs_evidence_is_forbidden(self) -> None:
+        root = self._fixture()
+        evidence = (
+            root
+            / verifier.POLARIS_ADMIN_BUILD_INPUTS_EVIDENCE
+            / "claim.json"
+        )
+        evidence.write_text("{}\n", encoding="utf-8")
+        self._assert_code(
+            root,
+            "ADMIN_DEPENDENCY_EVIDENCE",
+            "inventory must be closed",
+        )
+
+    def test_admin_build_inputs_evidence_byte_drift_fails_closed(self) -> None:
+        for filename in ("publication.json", "evidence.sha256"):
+            with self.subTest(filename=filename):
+                root = self._fixture()
+                evidence = (
+                    root / verifier.POLARIS_ADMIN_BUILD_INPUTS_EVIDENCE / filename
+                )
+                evidence.write_bytes(evidence.read_bytes() + b"\n")
+                self._assert_code(
+                    root,
+                    "ADMIN_DEPENDENCY_EVIDENCE",
+                    "differs from the retained publication evidence",
+                )
+
+    def test_admin_build_inputs_contract_byte_drift_fails_closed(self) -> None:
+        root = self._fixture()
+        contract = root / verifier.POLARIS_ADMIN_BUILD_INPUTS_CONTRACT
+        contract.write_bytes(contract.read_bytes() + b"\n")
+        self._assert_code(
+            root,
+            "ADMIN_DEPENDENCY_EVIDENCE",
+            "contract differs from the reviewed evidence state",
+        )
+
+    def test_admin_build_inputs_verifier_byte_drift_fails_closed(self) -> None:
+        root = self._fixture()
+        admin_verifier = root / verifier.POLARIS_ADMIN_BUILD_INPUTS_VERIFIER
+        admin_verifier.write_bytes(admin_verifier.read_bytes() + b"\n")
+        self._assert_code(
+            root,
+            "FORBIDDEN_PATH",
+            verifier.POLARIS_ADMIN_BUILD_INPUTS_VERIFIER.as_posix(),
         )
 
     def test_pending_retained_evidence_paths_fail_closed(self) -> None:

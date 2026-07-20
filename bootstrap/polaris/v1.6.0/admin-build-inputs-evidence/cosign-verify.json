@@ -1,0 +1,2 @@
+
+[{"critical":{"identity":{"docker-reference":"ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18"},"image":{"docker-manifest-digest":"sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18"},"type":"https://sigstore.dev/cosign/sign/v1"},"optional":{}}]

@@ -4,8 +4,8 @@ doc_id: "WP-L1-LAKE-002"
 title: "WP-L1-LAKE-002 Polaris catalog bootstrap"
 status: in-progress
 created: 2026-07-05
-updated: 2026-07-20
-version: "1.18"
+updated: 2026-07-21
+version: "1.19"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -333,15 +333,14 @@ Openを維持します。
   別Quarkus applicationのPolaris Admin Toolが必要です。review済みdependency
   snapshotはserver taskのclosureであり、Admin Toolの直接依存
   `io.quarkus:quarkus-picocli`を含まないため、そのままoffline buildへ流用しません。
-- 次の002H checkpointはreview済みOCI snapshot
+- PR #86はreview済みOCI snapshot
   `ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies@sha256:fa889d2c0a6e6dc48816d79680a366e21040be333ab6007b88e4ca4dbf6e59d6`
   をimmutable parent seedとして再検証し、Admin Tool不足分を加えた自己完結superset
-  snapshotを、evidence reviewで必ず退役する限定publisherから発行する契約に
-  限定します。
+  snapshotだけを発行できる限定publisher contractとして、merge SHA
+  `619d52e0b1db5241867d7775cc8714a30b1a6f38`でmainへ反映済みです。
   `:polaris-admin:assemble`と`:polaris-admin:quarkusAppPartsBuild`に加えて既存
   server taskをregression buildし、fresh network-none/offline/strict buildを
-  必須とします。Admin image publication、resident admission、credentials、
-  runtime/Flux manifestはまだ認可しません。
+  必須としました。
 - one-shotはworkflow実行回数ではなくpublisher lifecycleの退役を意味します。
   各attemptは`run_id` / `run_attempt`固有のimmutable tagを使います。新規GHCR
   packageがprivate defaultで初回anonymous pullに失敗した場合、署名・provenance
@@ -349,11 +348,31 @@ Openを維持します。
   ことだけを許可します。失敗attemptはadmitせず、registry credential fallbackは
   禁止します。static contract auditはlifecycle判定より前に常時実行し、Gradle
   9.6.0とJava 21の実測一致もcandidate保持前に必須とします。
+- PR #86 merge後のmain run `29781460117`、attempt `1`は、Admin/server taskの
+  fresh offline build、署名・provenance検証、およびanonymous exact-digest取得を
+  完了し、公開OCI
+  `ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18`
+  を確定しました。Actions artifact
+  `polaris-admin-publication-29781460117-1`（artifact ID `8477021002`、Actions
+  digest `sha256:d1d33b14467a58b93796568667ab68ad3f61a12f9f9c3af439bbd6361adee621`、
+  582,463 bytes）は12 retained evidence recordsだけのfinite-retention搬送
+  コピーであり、dependency archiveは含みません。701,437,153-byteの
+  `polaris-gradle-dependencies-1.6.0.tar.gz`は1-day candidate artifact
+  `polaris-admin-candidate-29781460117-1`（artifact ID `8476975401`）由来で、
+  OCI第2 layerとして公開されました。独立したanonymous exact-digest pullで
+  SHA-256 `e771fe2ec6b2d0f6940b1247a512eb5cbc78dd0f36e7be247975f2c5fa36fc4d`、
+  size、gzip構造を再検証済みです。
+- 現在のevidence-only review checkpointは12ファイルを
+  `bootstrap/polaris/v1.6.0/admin-build-inputs-evidence/`へ保持し、schema-v2
+  contractを`admin_dependency_snapshot_review_pending`、次状態を
+  `admin_image_publication_pending`へ固定します。このcheckpointでsole
+  write-capable publisherは退役・削除されます。Admin image publication/admission、
+  runtime、Flux、credentialのdownstream gateはすべて`false`です。
 - upstream Admin Toolはrelational JDBCだけでなくNoSQL/MongoDB moduleも
   build graphへ無条件に含めます。002Hはこのsurfaceを`review_required`として
-  明示し、relational-only imageやruntime適合を主張しません。main publication後の
-  evidence-only reviewと、別のAdmin image publication/admission checkpointを
-  通過してからruntime activationへ進みます。
+  明示し、relational-only imageやruntime適合を主張しません。現在のevidence-only
+  review完了後、別のAdmin image publication/admission checkpointを通過してから
+  runtime activationへ進みます。
 - PR #74以降の本文はIssue参照を`Refs #61`だけに限定します。否定文であっても
   closing keywordとIssue番号を組み合わせません。Issue #61は上記runtime
   acceptance chainの完了までOpenを維持します。
@@ -409,12 +428,20 @@ Openを維持します。
   (merged as `51fb24ebc83eb9b0b7f100a30bbc2761141a0553`, `Refs #61`)
 - Polaris Admin build-input checkpoint:
   [#86](https://github.com/TommyKammy/Shirokuma/pull/86)
-  (Draft; trusted dependency-superset publication contract、Admin image、
-  resident admission、runtime activationはnon-scope、`Refs #61`)
+  (merged as `619d52e0b1db5241867d7775cc8714a30b1a6f38`; trusted
+  dependency-superset publication contract、Admin image、resident admission、
+  runtime activationはnon-scope、`Refs #61`)
+- Polaris Admin build-input main publication:
+  [run `29781460117`](https://github.com/TommyKammy/Shirokuma/actions/runs/29781460117)
+  (attempt `1` success、public exact digestと12 retained filesを確定)
+- Polaris Admin dependency evidence-only review:
+  [#87](https://github.com/TommyKammy/Shirokuma/pull/87)
+  (Draft; `admin_dependency_snapshot_review_pending`、publisherを退役し、次状態を
+  `admin_image_publication_pending`へ固定、`Refs #61`)
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
 - Execution order: `1 of 8`
-- Queue: Admin build-input main publication、evidence-only review、Admin image
-  publication/admission、credential-safe Flux activation、API smoke、
+- Queue: evidence-only review、Admin image publication/admission、
+  credential-safe Flux activation、API smoke、
   backup/restoreを順に完了するまで、Issue #61はOpen、後続#62は
   dependency-blockedを維持します。
 

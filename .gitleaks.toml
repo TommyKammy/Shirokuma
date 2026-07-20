@@ -74,10 +74,10 @@ regexTarget = "secret"
 regexes = ['''^F2EEEB06110BEE1397EC74CBB8960FF52D9B1312$''']
 targetRules = ["generic-api-key"]
 paths = [
-  '''^\.github/workflows/polaris-admin-build-inputs\.yml$''',
   '''^bootstrap/polaris/v1\.6\.0/admin-build-inputs-contract\.json$''',
   '''^bootstrap/polaris/v1\.6\.0/image-evidence/source-authentication\.json$''',
   '''^bootstrap/polaris/v1\.6\.0/trusted-build-contract\.json$''',
+  '''^scripts/verify_polaris_admin_build_inputs\.py$''',
   '''^scripts/verify_polaris_trusted_image\.py$''',
 ]
 
@@ -89,6 +89,7 @@ regexes = ['''^[0-9a-f]{40}$''']
 targetRules = ["sourcegraph-access-token"]
 paths = [
   '''^bootstrap/polaris/v1\.6\.0/evidence/gradle-dependency-inputs\.json$''',
+  '''^bootstrap/polaris/v1\.6\.0/admin-build-inputs-evidence/gradle-dependency-inputs\.json$''',
 ]
 
 [[allowlists]]

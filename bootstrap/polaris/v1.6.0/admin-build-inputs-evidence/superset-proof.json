@@ -1,0 +1,18 @@
+{
+  "candidate_module_artifact_count": 3268,
+  "match_fields": [
+    "path",
+    "sha256",
+    "size",
+    "kind",
+    "group",
+    "module",
+    "version",
+    "artifact"
+  ],
+  "parent_descriptor_sha256": "3bab7b055d29be1bc59f2fe605960f49bbceee2639ad68086822c62ee8533841",
+  "parent_module_artifact_count": 3263,
+  "relationship": "exact-module-artifact-superset",
+  "result": "passed",
+  "schema_version": 1
+}

@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""Fail-closed static audit for the Polaris Admin build-input publisher."""
+"""Fail-closed audit for the reviewed Polaris Admin build-input evidence."""
 
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
+import importlib.util
 import json
 import re
+import subprocess
 import sys
-from collections import Counter
+import tempfile
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 
 CONTRACT_PATH = Path(
@@ -23,6 +26,9 @@ PARENT_DESCRIPTOR_PATH = Path(
 PARENT_VERIFICATION_PATH = Path(
     "bootstrap/polaris/v1.6.0/evidence/verification-metadata.xml"
 )
+EVIDENCE_PATH = Path(
+    "bootstrap/polaris/v1.6.0/admin-build-inputs-evidence"
+)
 WORKFLOW_PATH = Path(".github/workflows/polaris-admin-build-inputs.yml")
 LEGACY_WORKFLOW_PATH = Path(".github/workflows/polaris-gradle-dependencies.yml")
 PACKAGER_PATH = Path("scripts/package_polaris_gradle_dependencies.py")
@@ -30,18 +36,7 @@ SOURCE_VALIDATOR_PATH = Path("scripts/validate_polaris_source_archive.py")
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
-OCI_REFERENCE_RE = re.compile(
-    r"^ghcr\.io/tommykammy/"
-    r"shirokuma-polaris-gradle-dependencies@sha256:[0-9a-f]{64}$"
-)
-REMOTE_ACTION_RE = re.compile(
-    r"^\s*(?:-\s+)?uses:\s+([^\s@]+)@([0-9a-f]{40})(?:\s+#.*)?$"
-)
-USES_LINE_RE = re.compile(r"^\s*(?:-\s+)?uses:")
-JOB_RE = re.compile(r"^  ([A-Za-z_][A-Za-z0-9_-]*):\s*$")
-STEP_RE = re.compile(r"^      - name:\s+(.+?)\s*$")
-STEP_ITEM_RE = re.compile(r"^      -(?:\s+.*)?$")
-NESTED_STEP_NAME_RE = re.compile(r"^        name:\s+(.+?)\s*$")
+CHECKSUM_LINE_RE = re.compile(r"^([0-9a-f]{64})  ([^\s].*)$")
 
 EXPECTED_SOURCE_SHA256 = (
     "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb"
@@ -64,12 +59,6 @@ EXPECTED_SOURCE_VALIDATOR_SHA256 = (
 EXPECTED_ADMIN_BUILD_SHA256 = (
     "6e3aabc2090cda72c03608053f41899792a6c62bec382ed18d6b02703574fde9"
 )
-EXPECTED_OFFLINE_STEP_SHA256 = (
-    "e39f094499144d0619452efa6b3ea722842e3ca5ae07af406c53090048481916"
-)
-EXPECTED_TRUST_GATE_STEP_SHA256 = (
-    "712ee8e6e9bd628babd01c01792543b42187b815376b9031bbfaec3ed8e5b086"
-)
 EXPECTED_BUILDER_PLATFORM = "linux/arm64"
 EXPECTED_GRADLE_VERSION = "9.6.0"
 EXPECTED_JAVA_MAJOR = 21
@@ -77,6 +66,50 @@ EXPECTED_PARENT_REFERENCE = (
     "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies@"
     "sha256:fa889d2c0a6e6dc48816d79680a366e21040be333ab6007b88e4ca4dbf6e59d6"
 )
+EXPECTED_ARTIFACT_REPOSITORY = (
+    "ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies"
+)
+EXPECTED_MANIFEST_SHA256 = (
+    "7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18"
+)
+EXPECTED_ARTIFACT_REFERENCE = (
+    f"{EXPECTED_ARTIFACT_REPOSITORY}@sha256:{EXPECTED_MANIFEST_SHA256}"
+)
+EXPECTED_ARCHIVE_SHA256 = (
+    "e771fe2ec6b2d0f6940b1247a512eb5cbc78dd0f36e7be247975f2c5fa36fc4d"
+)
+EXPECTED_ARCHIVE_SIZE = 701_437_153
+EXPECTED_DESCRIPTOR_SHA256 = (
+    "798802722e730174caa581cbffd4f82e5dd4a43aee92201df26f14db4ab005bc"
+)
+EXPECTED_DESCRIPTOR_SIZE = 2_175_793
+EXPECTED_VERIFICATION_SHA256 = (
+    "171ccaf781d4ae63375b332205d25653ebcd29471e9e9c0cfba1b978144065b8"
+)
+EXPECTED_VERIFICATION_SIZE = 881_256
+EXPECTED_PUBLICATION_SHA256 = (
+    "a6453655a183528904bde4e295306ae1cdc92abe67f29479a82ee093975ed9bc"
+)
+EXPECTED_PUBLICATION_SIZE = 3_676
+EXPECTED_EVIDENCE_MANIFEST_SHA256 = (
+    "026c4d82e9031532323ccb3c31ea83939010982cfcf373644cdcf064e2613409"
+)
+EXPECTED_EVIDENCE_MANIFEST_SIZE = 953
+EXPECTED_SOURCE_SHA = "619d52e0b1db5241867d7775cc8714a30b1a6f38"
+EXPECTED_RUN_ID = "29781460117"
+EXPECTED_RUN_ATTEMPT = "1"
+EXPECTED_REPOSITORY = "TommyKammy/Shirokuma"
+EXPECTED_REPOSITORY_URL = "https://github.com/TommyKammy/Shirokuma"
+EXPECTED_REF = "refs/heads/main"
+EXPECTED_EVENT = "push"
+EXPECTED_WORKFLOW_IDENTITY = (
+    "https://github.com/TommyKammy/Shirokuma/.github/workflows/"
+    "polaris-admin-build-inputs.yml@refs/heads/main"
+)
+EXPECTED_ISSUER = "https://token.actions.githubusercontent.com"
+EXPECTED_CREATED = "2026-07-21T06:46:09+09:00"
+EXPECTED_REVIEWED_AT = "2026-07-20T22:27:20Z"
+
 EXPECTED_TASKS = [
     ":polaris-admin:assemble",
     ":polaris-admin:quarkusAppPartsBuild",
@@ -93,32 +126,110 @@ EXPECTED_NOSQL_PROJECTS = [
     ":polaris-persistence-nosql-metastore-maintenance",
 ]
 EXPECTED_NOSQL_SOURCES = [
-    (
-        "runtime/admin/src/main/java/org/apache/polaris/admintool/nosql/"
-        "BaseNoSqlCommand.java",
-        "8ed348be717debb68aa62ddeaee28f65c6c0c22c",
-    ),
-    (
-        "runtime/admin/src/main/java/org/apache/polaris/admintool/nosql/"
-        "NoSqlCommand.java",
-        "639cbbfedabaf8963f7a699d9496e1bd0ab3dcb5",
-    ),
-    (
-        "runtime/admin/src/main/java/org/apache/polaris/admintool/nosql/"
-        "maintenance/BaseNoSqlMaintenanceCommand.java",
-        "39ab3bfc95f44dd5bd6b81ee54ce1fff290f34f3",
-    ),
-    (
-        "runtime/admin/src/main/java/org/apache/polaris/admintool/nosql/"
-        "maintenance/NoSqlMaintenanceInfoCommand.java",
-        "03d6c92aeb9de83c16b29ca6850a058b94c9a19a",
-    ),
-    (
-        "runtime/admin/src/main/java/org/apache/polaris/admintool/nosql/"
-        "maintenance/NoSqlMaintenanceRunCommand.java",
-        "6e415a1adf8f09434f9ef3a16d3d2d9f47cea032",
-    ),
+    {
+        "path": (
+            "runtime/admin/src/main/java/org/apache/polaris/admintool/nosql/"
+            "BaseNoSqlCommand.java"
+        ),
+        "git_blob": "8ed348be717debb68aa62ddeaee28f65c6c0c22c",
+    },
+    {
+        "path": (
+            "runtime/admin/src/main/java/org/apache/polaris/admintool/nosql/"
+            "NoSqlCommand.java"
+        ),
+        "git_blob": "639cbbfedabaf8963f7a699d9496e1bd0ab3dcb5",
+    },
+    {
+        "path": (
+            "runtime/admin/src/main/java/org/apache/polaris/admintool/nosql/"
+            "maintenance/BaseNoSqlMaintenanceCommand.java"
+        ),
+        "git_blob": "39ab3bfc95f44dd5bd6b81ee54ce1fff290f34f3",
+    },
+    {
+        "path": (
+            "runtime/admin/src/main/java/org/apache/polaris/admintool/nosql/"
+            "maintenance/NoSqlMaintenanceInfoCommand.java"
+        ),
+        "git_blob": "03d6c92aeb9de83c16b29ca6850a058b94c9a19a",
+    },
+    {
+        "path": (
+            "runtime/admin/src/main/java/org/apache/polaris/admintool/nosql/"
+            "maintenance/NoSqlMaintenanceRunCommand.java"
+        ),
+        "git_blob": "6e415a1adf8f09434f9ef3a16d3d2d9f47cea032",
+    },
 ]
+SUPERSET_FIELDS = (
+    "path",
+    "sha256",
+    "size",
+    "kind",
+    "group",
+    "module",
+    "version",
+    "artifact",
+)
+
+EVIDENCE_RECORDS = {
+    "candidate.sha256": (
+        "172f71f466d9b1b009359c7069541154fb00a72d568415a43597c4593c9000b5",
+        547,
+    ),
+    "cosign-signature-bundle.json": (
+        "f96675ee16fbbdc478e3d5febc5bab1953f7d70c68a26b7b79afb1ebb3c7811d",
+        11_143,
+    ),
+    "cosign-verify.json": (
+        "84a3debbf0f6c3eace8eca839b0577bfc2f5896852872db69b143b80566c3f79",
+        355,
+    ),
+    "gradle-dependency-inputs.json": (
+        EXPECTED_DESCRIPTOR_SHA256,
+        EXPECTED_DESCRIPTOR_SIZE,
+    ),
+    "oci-manifest.json": (EXPECTED_MANIFEST_SHA256, 1_083),
+    "offline-build.json": (
+        "12c027f726e62213605fe094a9b4328bcb3351148bdd90a71e5e38c2b766fa68",
+        725,
+    ),
+    "publication.json": (
+        EXPECTED_PUBLICATION_SHA256,
+        EXPECTED_PUBLICATION_SIZE,
+    ),
+    "slsa-verify.json": (
+        "687dea8a3ea7d86c5316d32235e7e5a372c6b38861505a887c6fe318966c0741",
+        14_334,
+    ),
+    "superset-proof.json": (
+        "afc26c4c6fb48ea423ed4b057a167c2768fe6104a0f88f65533b768877cb80f9",
+        413,
+    ),
+    "toolchain.json": (
+        "6a482b37d97d46df1b9c71fd041473aa57f30d1c5325104ac6fb8f3074f74d7f",
+        709,
+    ),
+    "verification-metadata.xml": (
+        EXPECTED_VERIFICATION_SHA256,
+        EXPECTED_VERIFICATION_SIZE,
+    ),
+}
+EVIDENCE_MANIFEST_RECORD = (
+    EXPECTED_EVIDENCE_MANIFEST_SHA256,
+    EXPECTED_EVIDENCE_MANIFEST_SIZE,
+)
+EXPECTED_ARTIFACT_METADATA = {
+    "id": 8_477_021_002,
+    "name": "polaris-admin-publication-29781460117-1",
+    "sha256": (
+        "d1d33b14467a58b93796568667ab68ad3f61a12f9f9c3af439bbd6361adee621"
+    ),
+    "size": 582_463,
+    "run_id": EXPECTED_RUN_ID,
+    "run_attempt": EXPECTED_RUN_ATTEMPT,
+}
 
 
 class ContractError(RuntimeError):
@@ -140,11 +251,12 @@ def _expect(condition: bool, code: str, detail: str) -> None:
 
 
 def _expect_keys(
-    value: Mapping[str, Any],
+    value: Any,
     expected: set[str],
     code: str,
     location: str,
 ) -> None:
+    _expect(isinstance(value, Mapping), code, f"{location} must be an object")
     actual = set(value)
     _expect(
         actual == expected,
@@ -152,25 +264,6 @@ def _expect_keys(
         f"{location} keys differ: expected={sorted(expected)!r} "
         f"actual={sorted(actual)!r}",
     )
-
-
-def _load_json(path: Path, *, maximum_bytes: int = 8 * 1024 * 1024) -> Any:
-    try:
-        size = path.stat().st_size
-    except OSError as error:
-        _fail("FILE_READ", f"cannot stat {path}: {error}")
-    _expect(
-        size <= maximum_bytes,
-        "FILE_SIZE",
-        f"{path} exceeds {maximum_bytes} bytes",
-    )
-    try:
-        return json.loads(
-            path.read_text(encoding="utf-8"),
-            object_pairs_hook=_reject_duplicate_pairs,
-        )
-    except (OSError, UnicodeError, ValueError) as error:
-        _fail("JSON_INVALID", f"cannot load {path}: {error}")
 
 
 def _reject_duplicate_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -182,109 +275,91 @@ def _reject_duplicate_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return value
 
 
-def _sha256(path: Path) -> str:
+def _load_json(path: Path, *, maximum_bytes: int = 8 * 1024 * 1024) -> Any:
+    try:
+        size = path.stat().st_size
+    except OSError as error:
+        _fail("FILE_READ", f"cannot stat {path}: {error}")
+    _expect(size <= maximum_bytes, "FILE_SIZE", f"{path} exceeds {maximum_bytes} bytes")
+    try:
+        return json.loads(
+            path.read_text(encoding="utf-8"),
+            object_pairs_hook=_reject_duplicate_pairs,
+        )
+    except (OSError, UnicodeError, ValueError) as error:
+        _fail("JSON_INVALID", f"cannot load {path}: {error}")
+
+
+def _sha256_and_size(path: Path) -> tuple[str, int]:
     digest = hashlib.sha256()
+    size = 0
     try:
         with path.open("rb") as stream:
             while chunk := stream.read(1024 * 1024):
                 digest.update(chunk)
+                size += len(chunk)
     except OSError as error:
         _fail("FILE_READ", f"cannot hash {path}: {error}")
-    return digest.hexdigest()
+    return digest.hexdigest(), size
 
 
-def _require_hash(
+def _require_file(
     root: Path,
     relative: Path,
-    expected: str,
+    expected_sha256: str,
+    expected_size: int,
     code: str,
 ) -> None:
+    actual = _sha256_and_size(root / relative)
     _expect(
-        SHA256_RE.fullmatch(expected) is not None,
+        actual == (expected_sha256, expected_size),
         code,
-        f"invalid expected SHA-256 for {relative}",
-    )
-    actual = _sha256(root / relative)
-    _expect(
-        actual == expected,
-        code,
-        f"{relative} sha256={actual}, expected={expected}",
+        f"{relative} sha256/size={actual!r}, "
+        f"expected={(expected_sha256, expected_size)!r}",
     )
 
 
-def _workflow_jobs_and_steps(
-    workflow: str,
-) -> tuple[
-    list[str],
-    dict[str, list[str]],
-    dict[str, tuple[int, int]],
-    dict[str, dict[str, tuple[int, int]]],
-]:
-    lines = workflow.splitlines()
+def _is_regular_without_symlink(root: Path, relative: Path) -> bool:
+    current = root
     try:
-        jobs_start = lines.index("jobs:")
-    except ValueError:
-        _fail("WORKFLOW_JOBS", "jobs block is absent")
-    jobs: list[str] = []
-    starts: dict[str, int] = {}
-    step_item_starts: dict[str, list[int]] = {}
-    current: str | None = None
-    for index in range(jobs_start + 1, len(lines)):
-        job_match = JOB_RE.fullmatch(lines[index])
-        if job_match is not None:
-            current = job_match.group(1)
-            jobs.append(current)
-            starts[current] = index
-            step_item_starts[current] = []
-            continue
-        if STEP_ITEM_RE.fullmatch(lines[index]) is not None:
-            _expect(
-                current is not None,
-                "WORKFLOW_STEP_ITEM",
-                f"step item appears outside a job at line {index + 1}",
-            )
-            step_item_starts[current].append(index)
-    spans: dict[str, tuple[int, int]] = {}
-    for index, job in enumerate(jobs):
-        end = starts[jobs[index + 1]] if index + 1 < len(jobs) else len(lines)
-        spans[job] = (starts[job], end)
-    steps: dict[str, list[str]] = {}
-    step_spans: dict[str, dict[str, tuple[int, int]]] = {}
-    for job in jobs:
-        item_starts = step_item_starts[job]
-        job_steps: list[str] = []
-        job_step_spans: dict[str, tuple[int, int]] = {}
-        for index, start in enumerate(item_starts):
-            end = (
-                item_starts[index + 1]
-                if index + 1 < len(item_starts)
-                else spans[job][1]
-            )
-            names: list[str] = []
-            direct_name = STEP_RE.fullmatch(lines[start])
-            if direct_name is not None:
-                names.append(direct_name.group(1))
-            names.extend(
-                match.group(1)
-                for line in lines[start + 1 : end]
-                if (match := NESTED_STEP_NAME_RE.fullmatch(line)) is not None
-            )
-            _expect(
-                len(names) == 1,
-                "WORKFLOW_STEP_NAME",
-                f"step item at line {start + 1} must have exactly one name",
-            )
-            name = names[0]
-            _expect(
-                name not in job_step_spans,
-                "WORKFLOW_STEP_NAME",
-                f"duplicate step name in {job}: {name}",
-            )
-            job_steps.append(name)
-            job_step_spans[name] = (start, end)
-        steps[job] = job_steps
-        step_spans[job] = job_step_spans
-    return jobs, steps, spans, step_spans
+        for part in relative.parts:
+            current = current / part
+            if current.is_symlink():
+                return False
+        return current.is_file()
+    except OSError:
+        return False
+
+
+def _module_records(descriptor: Mapping[str, Any]) -> set[tuple[Any, ...]]:
+    records = descriptor.get("files")
+    _expect(isinstance(records, list), "DESCRIPTOR", "descriptor files must be a list")
+    values = [
+        tuple(record.get(field) for field in SUPERSET_FIELDS)
+        for record in records
+        if isinstance(record, Mapping) and record.get("kind") == "module-artifact"
+    ]
+    _expect(
+        len(values) == len(set(values)),
+        "DESCRIPTOR",
+        "module-artifact records must be unique",
+    )
+    return set(values)
+
+
+def _packager_module(root: Path) -> Any:
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "_polaris_admin_packager_for_evidence",
+            root / PACKAGER_PATH,
+        )
+        if spec is None or spec.loader is None:
+            _fail("DESCRIPTOR", "cannot load the reviewed dependency packager")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except (OSError, ImportError, AttributeError) as error:
+        _fail("DESCRIPTOR", f"cannot load the reviewed dependency packager: {error}")
 
 
 def _validate_contract(root: Path, contract: Mapping[str, Any]) -> None:
@@ -300,37 +375,27 @@ def _validate_contract(root: Path, contract: Mapping[str, Any]) -> None:
             "parent_snapshot",
             "admin_dependency_surface",
             "candidate_snapshot",
-            "publication_policy",
             "downstream_gates",
         },
         "CONTRACT_SCHEMA",
         "root",
     )
     _expect(
-        contract["schema_version"] == 1
+        contract["schema_version"] == 2
         and contract["component"] == "polaris-admin-build-inputs"
         and contract["version"] == "1.6.0"
-        and contract["platform"] == "linux/arm64",
+        and contract["platform"] == EXPECTED_BUILDER_PLATFORM,
         "CONTRACT_IDENTITY",
-        "component, version, or platform changed",
-    )
-
-    lifecycle = contract["lifecycle"]
-    _expect_keys(
-        lifecycle,
-        {"state", "next_state", "retire_in_evidence_review_pr"},
-        "LIFECYCLE_SCHEMA",
-        "lifecycle",
+        "component, version, platform, or schema changed",
     )
     _expect(
-        lifecycle
+        contract["lifecycle"]
         == {
-            "state": "admin_dependency_snapshot_publication_pending",
-            "next_state": "admin_dependency_snapshot_review_pending",
-            "retire_in_evidence_review_pr": True,
+            "state": "admin_dependency_snapshot_review_pending",
+            "next_state": "admin_image_publication_pending",
         },
         "LIFECYCLE_STATE",
-        repr(lifecycle),
+        repr(contract["lifecycle"]),
     )
 
     source = contract["source"]
@@ -355,91 +420,67 @@ def _validate_contract(root: Path, contract: Mapping[str, Any]) -> None:
         "source",
     )
     _expect(
-        source["record"] == SOURCE_PATH.as_posix()
-        and source["record_sha256"] == EXPECTED_SOURCE_SHA256
-        and source["archive_sha512"]
-        == (
-            "d69b1a91e16e210a78dec327fc4725983b114fbec5d86d078a3827f35fe7dd"
-            "5df3e4b12d18965e5a72eace65ad224aa007004ed61c66f9abb2efafc44ceac95b"
-        )
-        and source["signature_sha256"]
-        == "2338e1c2385874e9bf5cf513b4d27732b1cd59e943e1662e62fa995d915e6481"
-        and source["signing_key_fingerprint"]
-        == "F2EEEB06110BEE1397EC74CBB8960FF52D9B1312"
-        and source["git_commit"]
-        == "dd306009d81a0e15adafe9dcd7d1c6d04d326f34"
-        and source["git_tree"] == "1ad42f42aaebfa767b66a37f522a6c8d6693d841"
-        and source["builder_index"]
-        == (
-            "docker.io/library/gradle@"
-            "sha256:ecbf526b4d3c247b4cc61e9850eae2addd5f73a7c849bf026000442808f54b56"
-        )
-        and source["builder_arm64_manifest"]
-        == (
-            "docker.io/library/gradle@"
-            "sha256:cc583fa5245267fe0e1546c9989e8575473a37336ad9894dc0684a99fea1fb03"
-        )
-        and source["java_major"] == EXPECTED_JAVA_MAJOR
-        and source["gradle_version"] == EXPECTED_GRADLE_VERSION
-        and source["tasks"] == EXPECTED_TASKS,
-        "SOURCE_CONTRACT",
-        "source pins or task closure changed",
-    )
-    preimage = source["admin_build_preimage"]
-    _expect(
-        preimage
+        source
         == {
-            "path": "runtime/admin/build.gradle.kts",
-            "git_blob": "94bf1dfd2b1039f1ca23d5dd7437429c11db66dd",
-            "sha256": EXPECTED_ADMIN_BUILD_SHA256,
-            "size": 4149,
+            "record": SOURCE_PATH.as_posix(),
+            "record_sha256": EXPECTED_SOURCE_SHA256,
+            "archive_sha512": (
+                "d69b1a91e16e210a78dec327fc4725983b114fbec5d86d078a3827f35fe7dd"
+                "5df3e4b12d18965e5a72eace65ad224aa007004ed61c66f9abb2efafc44ceac95b"
+            ),
+            "signature_sha256": (
+                "2338e1c2385874e9bf5cf513b4d27732b1cd59e943e1662e62fa995d915e6481"
+            ),
+            "signing_key_fingerprint": "F2EEEB06110BEE1397EC74CBB8960FF52D9B1312",
+            "git_commit": "dd306009d81a0e15adafe9dcd7d1c6d04d326f34",
+            "git_tree": "1ad42f42aaebfa767b66a37f522a6c8d6693d841",
+            "builder_index": (
+                "docker.io/library/gradle@sha256:"
+                "ecbf526b4d3c247b4cc61e9850eae2addd5f73a7c849bf026000442808f54b56"
+            ),
+            "builder_arm64_manifest": (
+                "docker.io/library/gradle@sha256:"
+                "cc583fa5245267fe0e1546c9989e8575473a37336ad9894dc0684a99fea1fb03"
+            ),
+            "java_major": EXPECTED_JAVA_MAJOR,
+            "gradle_version": EXPECTED_GRADLE_VERSION,
+            "tasks": EXPECTED_TASKS,
+            "admin_build_preimage": {
+                "path": "runtime/admin/build.gradle.kts",
+                "git_blob": "94bf1dfd2b1039f1ca23d5dd7437429c11db66dd",
+                "sha256": EXPECTED_ADMIN_BUILD_SHA256,
+                "size": 4_149,
+            },
         },
-        "ADMIN_BUILD_PREIMAGE",
-        repr(preimage),
+        "SOURCE_CONTRACT",
+        "source pins, build preimage, or task closure changed",
     )
 
     parent = contract["parent_snapshot"]
-    _expect_keys(
-        parent,
-        {
-            "use",
-            "review_checkpoint",
-            "artifact_reference",
-            "descriptor",
-            "cache_layer",
-            "verification_metadata",
-            "required_relationship",
-        },
-        "PARENT_SCHEMA",
-        "parent_snapshot",
-    )
     _expect(
-        parent["use"] == "reviewed_seed_only"
-        and parent["review_checkpoint"]
+        parent
         == {
-            "merge_commit": "b12593f27ae4e6ec8b64865f9b6b0bbf114ec654"
-        }
-        and parent["artifact_reference"] == EXPECTED_PARENT_REFERENCE
-        and OCI_REFERENCE_RE.fullmatch(parent["artifact_reference"]) is not None
-        and parent["descriptor"]
-        == {
-            "path": PARENT_DESCRIPTOR_PATH.as_posix(),
-            "sha256": EXPECTED_PARENT_DESCRIPTOR_SHA256,
-        }
-        and parent["cache_layer"]
-        == {
-            "filename": "polaris-gradle-dependencies-1.6.0.tar.gz",
-            "sha256": EXPECTED_PARENT_ARCHIVE_SHA256,
-        }
-        and parent["verification_metadata"]
-        == {
-            "path": PARENT_VERIFICATION_PATH.as_posix(),
-            "sha256": EXPECTED_PARENT_VERIFICATION_SHA256,
-        }
-        and parent["required_relationship"]
-        == "exact-module-artifact-superset",
+            "use": "reviewed_seed_only",
+            "review_checkpoint": {
+                "merge_commit": "b12593f27ae4e6ec8b64865f9b6b0bbf114ec654"
+            },
+            "artifact_reference": EXPECTED_PARENT_REFERENCE,
+            "descriptor": {
+                "path": PARENT_DESCRIPTOR_PATH.as_posix(),
+                "sha256": EXPECTED_PARENT_DESCRIPTOR_SHA256,
+            },
+            "cache_layer": {
+                "filename": "polaris-gradle-dependencies-1.6.0.tar.gz",
+                "sha256": EXPECTED_PARENT_ARCHIVE_SHA256,
+            },
+            "verification_metadata": {
+                "path": PARENT_VERIFICATION_PATH.as_posix(),
+                "sha256": EXPECTED_PARENT_VERIFICATION_SHA256,
+            },
+            "required_relationship": "exact-module-artifact-superset",
+        },
         "PARENT_SNAPSHOT",
-        "reviewed parent identity or relationship changed",
+        "reviewed parent identity or required relationship changed",
     )
 
     surface = contract["admin_dependency_surface"]
@@ -463,15 +504,7 @@ def _validate_contract(root: Path, contract: Mapping[str, Any]) -> None:
         and surface["unconditional_project_dependencies"] == EXPECTED_NOSQL_PROJECTS
         and surface["unconditional_external_dependencies"]
         == ["io.quarkus:quarkus-mongodb-client"]
-        and [
-            (record.get("path"), record.get("git_blob"))
-            for record in surface["main_source_records"]
-        ]
-        == EXPECTED_NOSQL_SOURCES
-        and all(
-            set(record) == {"path", "git_blob"}
-            for record in surface["main_source_records"]
-        )
+        and surface["main_source_records"] == EXPECTED_NOSQL_SOURCES
         and all(
             SHA1_RE.fullmatch(record["git_blob"]) is not None
             for record in surface["main_source_records"]
@@ -490,69 +523,72 @@ def _validate_contract(root: Path, contract: Mapping[str, Any]) -> None:
             "artifact_type",
             "descriptor_media_type",
             "archive_media_type",
-            "archive_filename",
-            "descriptor_filename",
-            "verification_metadata_filename",
+            "archive",
+            "descriptor",
+            "verification_metadata",
             "packager",
             "source_archive_validator",
             "superset_proof",
             "offline_proof",
+            "retained_evidence",
+            "publication",
+            "review",
+            "visibility_bootstrap",
+            "tools",
         },
         "CANDIDATE_SCHEMA",
         "candidate_snapshot",
     )
     _expect(
-        candidate["state"] == "publication_pending"
-        and candidate["artifact_repository"]
-        == "ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies"
-        and candidate["artifact_reference"] is None
+        candidate["state"] == "review_pending"
+        and candidate["artifact_repository"] == EXPECTED_ARTIFACT_REPOSITORY
+        and candidate["artifact_reference"] == EXPECTED_ARTIFACT_REFERENCE
         and candidate["artifact_type"]
         == "application/vnd.shirokuma.polaris-admin.gradle-dependencies.v1"
         and candidate["descriptor_media_type"]
         == "application/vnd.shirokuma.gradle-dependency-descriptor.v1+json"
         and candidate["archive_media_type"]
         == "application/vnd.shirokuma.gradle-cache.v1.tar+gzip"
-        and candidate["archive_filename"]
-        == "polaris-gradle-dependencies-1.6.0.tar.gz"
-        and candidate["descriptor_filename"] == "gradle-dependency-inputs.json"
-        and candidate["verification_metadata_filename"]
-        == "verification-metadata.xml"
-        and candidate["packager"]
+        and candidate["archive"]
         == {
-            "path": PACKAGER_PATH.as_posix(),
-            "sha256": EXPECTED_PACKAGER_SHA256,
+            "filename": "polaris-gradle-dependencies-1.6.0.tar.gz",
+            "sha256": EXPECTED_ARCHIVE_SHA256,
+            "size": EXPECTED_ARCHIVE_SIZE,
         }
+        and candidate["descriptor"]
+        == {
+            "path": (EVIDENCE_PATH / "gradle-dependency-inputs.json").as_posix(),
+            "sha256": EXPECTED_DESCRIPTOR_SHA256,
+            "size": EXPECTED_DESCRIPTOR_SIZE,
+        }
+        and candidate["verification_metadata"]
+        == {
+            "path": (EVIDENCE_PATH / "verification-metadata.xml").as_posix(),
+            "sha256": EXPECTED_VERIFICATION_SHA256,
+            "size": EXPECTED_VERIFICATION_SIZE,
+        }
+        and candidate["packager"]
+        == {"path": PACKAGER_PATH.as_posix(), "sha256": EXPECTED_PACKAGER_SHA256}
         and candidate["source_archive_validator"]
         == {
             "path": SOURCE_VALIDATOR_PATH.as_posix(),
             "sha256": EXPECTED_SOURCE_VALIDATOR_SHA256,
         },
         "CANDIDATE_SNAPSHOT",
-        "candidate identity or trusted tool pin changed",
+        "reviewed candidate identity, bytes, or trusted tool pin changed",
     )
-    superset = candidate["superset_proof"]
     _expect(
-        superset
+        candidate["superset_proof"]
         == {
             "scope": "parent-module-artifact-records",
-            "match_fields": [
-                "path",
-                "sha256",
-                "size",
-                "kind",
-                "group",
-                "module",
-                "version",
-                "artifact",
-            ],
+            "match_fields": list(SUPERSET_FIELDS),
             "result": "required",
         },
         "SUPERSET_POLICY",
-        repr(superset),
+        repr(candidate["superset_proof"]),
     )
-    offline = candidate["offline_proof"]
     _expect(
-        offline
+        candidate["offline_proof"]
         == {
             "fresh_source_tree": True,
             "fresh_gradle_home": True,
@@ -564,7 +600,123 @@ def _validate_contract(root: Path, contract: Mapping[str, Any]) -> None:
             "tasks": EXPECTED_TASKS,
         },
         "OFFLINE_POLICY",
-        repr(offline),
+        repr(candidate["offline_proof"]),
+    )
+    _expect(
+        candidate["retained_evidence"]
+        == {
+            "directory": EVIDENCE_PATH.as_posix(),
+            "file_count": 12,
+            "checksum_manifest": {
+                "path": (EVIDENCE_PATH / "evidence.sha256").as_posix(),
+                "sha256": EXPECTED_EVIDENCE_MANIFEST_SHA256,
+                "size": EXPECTED_EVIDENCE_MANIFEST_SIZE,
+            },
+        },
+        "RETAINED_EVIDENCE_CONTRACT",
+        "retained evidence directory or self-manifest binding changed",
+    )
+    publication = candidate["publication"]
+    _expect(
+        publication
+        == {
+            "record": {
+                "path": (EVIDENCE_PATH / "publication.json").as_posix(),
+                "sha256": EXPECTED_PUBLICATION_SHA256,
+                "size": EXPECTED_PUBLICATION_SIZE,
+            },
+            "actions_artifact": EXPECTED_ARTIFACT_METADATA,
+            "publisher": {
+                "path": WORKFLOW_PATH.as_posix(),
+                "sha256": (
+                    "d4f4b71c993b797c89080c4877ba29a4a1c588c3f84884dacddcb00045057c63"
+                ),
+                "repository": EXPECTED_REPOSITORY,
+                "ref": EXPECTED_REF,
+                "source_sha": EXPECTED_SOURCE_SHA,
+                "workflow_sha": EXPECTED_SOURCE_SHA,
+                "event": EXPECTED_EVENT,
+                "retired": True,
+            },
+        },
+        "PUBLICATION_CONTRACT",
+        "publication record, GitHub artifact, or retired publisher binding changed",
+    )
+    _expect(
+        candidate["review"]
+        == {
+            "state": "locally_verified",
+            "review_kind": "automated_local_evidence_verification",
+            "reviewer": "codex-local-evidence-verifier",
+            "reviewed_at": EXPECTED_REVIEWED_AT,
+            "human_approval": False,
+            "anonymous_retrieval": {
+                "artifact_reference": EXPECTED_ARTIFACT_REFERENCE,
+                "digest": f"sha256:{EXPECTED_MANIFEST_SHA256}",
+                "user_credentials": False,
+                "oras_pull": {
+                    "version": "1.3.3",
+                    "registry_config": {
+                        "kind": "temporary-json-file",
+                        "initial_contents": "{}",
+                    },
+                    "manifest_retrieved": True,
+                    "descriptor_retrieved": True,
+                    "archive_started": True,
+                    "archive_completed": False,
+                    "error": "HTTP/2 PROTOCOL_ERROR",
+                },
+                "archive_resume": {
+                    "method": (
+                        "anonymous-ghcr-pull-bearer-token-http1.1-range"
+                    ),
+                    "user_credentials": False,
+                    "result": "passed",
+                },
+                "descriptor": {
+                    "filename": "gradle-dependency-inputs.json",
+                    "sha256": EXPECTED_DESCRIPTOR_SHA256,
+                    "size": EXPECTED_DESCRIPTOR_SIZE,
+                    "cmp_with_retained_evidence": "passed",
+                },
+                "archive": {
+                    "filename": "polaris-gradle-dependencies-1.6.0.tar.gz",
+                    "sha256": EXPECTED_ARCHIVE_SHA256,
+                    "size": EXPECTED_ARCHIVE_SIZE,
+                    "gzip_test": "passed",
+                },
+                "result": "passed",
+            },
+        },
+        "REVIEW_RECEIPT",
+        "independent anonymous retrieval receipt is absent or not exact-digest-bound",
+    )
+    _expect(
+        candidate["visibility_bootstrap"]
+        == {
+            "required_visibility": "public",
+            "sign_and_attest_before_anonymous_pull": True,
+            "owner_action_on_first_private_run": "set-package-public-and-rerun",
+            "failed_attempt_admitted": False,
+            "user_credential_fallback": False,
+            "anonymous_registry_v2_bearer_challenge_permitted": True,
+        }
+        and candidate["tools"]
+        == {
+            "oras": {
+                "version": "1.3.3",
+                "linux_arm64_archive_sha256": (
+                    "ac7156f93a21e903f7ad606c792f3560f17e0cd0e36365634701b1e7cc4e4eca"
+                ),
+            },
+            "cosign": {
+                "version": "3.1.1",
+                "issuer": EXPECTED_ISSUER,
+                "identity": EXPECTED_WORKFLOW_IDENTITY,
+            },
+        },
+        "REVIEW_TOOLCHAIN",
+        "visibility bootstrap or retained review toolchain changed",
     )
 
     gates = contract["downstream_gates"]
@@ -592,109 +744,45 @@ def _validate_contract(root: Path, contract: Mapping[str, Any]) -> None:
                 "credential_material_permitted",
             )
         )
-        and "review" in gates["next_checkpoint"]
+        and "published full admin dependency snapshot" in gates["next_checkpoint"]
         and "NoSQL/Mongo" in gates["next_checkpoint"],
         "DOWNSTREAM_GATE",
         "admin image, admission, runtime, GitOps, and credentials must stay disabled",
     )
 
-    publication = contract["publication_policy"]
-    _expect_keys(
-        publication,
-        {
-            "workflow",
-            "candidate_attempt_policy",
-            "visibility_bootstrap",
-            "oras",
-            "cosign",
-            "legacy_workflow",
-        },
-        "PUBLICATION_SCHEMA",
-        "publication_policy",
-    )
-    attempt_policy = publication["candidate_attempt_policy"]
-    _expect(
-        attempt_policy
-        == {
-            "tag_template": "1.6.0-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}",
-            "immutable_run_id_run_attempt_tag": True,
-            "retries_permitted_only_before_retirement": True,
-            "failed_attempt_admitted": False,
-        },
-        "CANDIDATE_ATTEMPT_POLICY",
-        repr(attempt_policy),
-    )
-    visibility = publication["visibility_bootstrap"]
-    _expect(
-        visibility
-        == {
-            "required_visibility": "public",
-            "sign_and_attest_before_anonymous_pull": True,
-            "owner_action_on_first_private_run": (
-                "set-package-public-and-rerun"
-            ),
-            "failed_attempt_admitted": False,
-            "authenticated_fallback": False,
-        },
-        "VISIBILITY_BOOTSTRAP",
-        repr(visibility),
-    )
-    _expect(
-        publication["oras"]
-        == {
-            "version": "1.3.3",
-            "linux_arm64_url": (
-                "https://github.com/oras-project/oras/releases/download/"
-                "v1.3.3/oras_1.3.3_linux_arm64.tar.gz"
-            ),
-            "linux_arm64_sha256": (
-                "ac7156f93a21e903f7ad606c792f3560f17e0cd0e36365634701b1e7cc4e4eca"
-            ),
-        }
-        and publication["cosign"] == {"version": "v3.1.1"}
-        and publication["legacy_workflow"]
-        == {
-            "path": LEGACY_WORKFLOW_PATH.as_posix(),
-            "must_be_absent": True,
-        },
-        "PUBLICATION_TOOLCHAIN",
-        "publisher toolchain or legacy-workflow guard changed",
-    )
-
-    _require_hash(root, SOURCE_PATH, EXPECTED_SOURCE_SHA256, "SOURCE_HASH")
-    _require_hash(
+    _require_file(root, SOURCE_PATH, EXPECTED_SOURCE_SHA256, 2_798, "SOURCE_HASH")
+    _require_file(
         root,
         PARENT_DESCRIPTOR_PATH,
         EXPECTED_PARENT_DESCRIPTOR_SHA256,
+        2_172_595,
         "PARENT_DESCRIPTOR_HASH",
     )
-    _require_hash(
+    _require_file(
         root,
         PARENT_VERIFICATION_PATH,
         EXPECTED_PARENT_VERIFICATION_SHA256,
+        879_926,
         "PARENT_VERIFICATION_HASH",
     )
-    _require_hash(
+    _require_file(
         root,
         PACKAGER_PATH,
         EXPECTED_PACKAGER_SHA256,
+        69_958,
         "PACKAGER_HASH",
     )
-    _require_hash(
+    _require_file(
         root,
         SOURCE_VALIDATOR_PATH,
         EXPECTED_SOURCE_VALIDATOR_SHA256,
+        20_634,
         "SOURCE_VALIDATOR_HASH",
     )
-    parent_descriptor = _load_json(root / PARENT_DESCRIPTOR_PATH)
     _expect(
-        parent_descriptor.get("archive", {}).get("sha256")
-        == EXPECTED_PARENT_ARCHIVE_SHA256
-        and parent_descriptor.get("verification_metadata", {}).get("sha256")
-        == EXPECTED_PARENT_VERIFICATION_SHA256
-        and parent_descriptor.get("platform") == "linux/arm64",
-        "PARENT_DESCRIPTOR",
-        "committed parent descriptor does not bind the reviewed cache layer",
+        not (root / WORKFLOW_PATH).exists(),
+        "PUBLISHER_PRESENT",
+        f"one-shot publisher must be retired: {WORKFLOW_PATH}",
     )
     _expect(
         not (root / LEGACY_WORKFLOW_PATH).exists(),
@@ -703,528 +791,752 @@ def _validate_contract(root: Path, contract: Mapping[str, Any]) -> None:
     )
 
 
-def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
-    workflow_record = contract["publication_policy"]["workflow"]
-    _expect_keys(
-        workflow_record,
-        {
-            "path",
-            "runner",
-            "allowed_events",
-            "publication_event",
-            "publication_ref",
-            "workflow_sha_equals_source_sha",
-            "privileged_job",
-            "first_privileged_step",
-            "allowed_jobs",
-            "allowed_steps",
-            "allowed_actions",
-            "action_counts",
+def _parse_checksum_manifest(path: Path, code: str) -> dict[str, str]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as error:
+        _fail(code, f"cannot read checksum manifest {path}: {error}")
+    records: dict[str, str] = {}
+    for line in lines:
+        match = CHECKSUM_LINE_RE.fullmatch(line)
+        _expect(match is not None, code, f"invalid checksum line: {line!r}")
+        digest, filename = match.groups()
+        _expect(
+            filename not in records
+            and Path(filename).name == filename
+            and filename not in {".", ".."},
+            code,
+            f"unsafe or duplicate checksum filename: {filename!r}",
+        )
+        records[filename] = digest
+    return records
+
+
+def _audit_evidence_inventory(root: Path) -> None:
+    directory = root / EVIDENCE_PATH
+    _expect(
+        directory.is_dir() and not directory.is_symlink(),
+        "EVIDENCE_INVENTORY",
+        "Admin dependency evidence root must be a real directory",
+    )
+    actual = {
+        path.relative_to(directory).as_posix()
+        for path in directory.rglob("*")
+        if path.is_file() or path.is_symlink()
+    }
+    expected = {"evidence.sha256", *EVIDENCE_RECORDS}
+    _expect(
+        actual == expected,
+        "EVIDENCE_INVENTORY",
+        f"exact 12-file inventory required; expected={sorted(expected)!r}, "
+        f"actual={sorted(actual)!r}",
+    )
+    for filename in expected:
+        relative = EVIDENCE_PATH / filename
+        _expect(
+            _is_regular_without_symlink(root, relative),
+            "EVIDENCE_INVENTORY",
+            f"evidence must be a real regular file: {relative}",
+        )
+    for filename, (digest, size) in EVIDENCE_RECORDS.items():
+        _require_file(root, EVIDENCE_PATH / filename, digest, size, "EVIDENCE_BYTES")
+    _require_file(
+        root,
+        EVIDENCE_PATH / "evidence.sha256",
+        *EVIDENCE_MANIFEST_RECORD,
+        "EVIDENCE_BYTES",
+    )
+    evidence_manifest = _parse_checksum_manifest(
+        directory / "evidence.sha256",
+        "EVIDENCE_MANIFEST",
+    )
+    _expect(
+        evidence_manifest
+        == {name: digest for name, (digest, _) in EVIDENCE_RECORDS.items()},
+        "EVIDENCE_MANIFEST",
+        "evidence.sha256 must bind each of the other 11 retained files exactly once",
+    )
+    candidate_manifest = _parse_checksum_manifest(
+        directory / "candidate.sha256",
+        "CANDIDATE_MANIFEST",
+    )
+    _expect(
+        candidate_manifest
+        == {
+            "gradle-dependency-inputs.json": EXPECTED_DESCRIPTOR_SHA256,
+            "offline-build.json": EVIDENCE_RECORDS["offline-build.json"][0],
+            "polaris-gradle-dependencies-1.6.0.tar.gz": EXPECTED_ARCHIVE_SHA256,
+            "superset-proof.json": EVIDENCE_RECORDS["superset-proof.json"][0],
+            "toolchain.json": EVIDENCE_RECORDS["toolchain.json"][0],
+            "verification-metadata.xml": EXPECTED_VERIFICATION_SHA256,
         },
-        "WORKFLOW_SCHEMA",
-        "publication_policy.workflow",
-    )
-    _expect(
-        workflow_record["path"] == WORKFLOW_PATH.as_posix()
-        and workflow_record["runner"] == "ubuntu-24.04-arm"
-        and workflow_record["allowed_events"] == ["pull_request", "push"]
-        and workflow_record["publication_event"] == "push"
-        and workflow_record["publication_ref"] == "refs/heads/main"
-        and workflow_record["workflow_sha_equals_source_sha"] is True
-        and workflow_record["privileged_job"] == "publish"
-        and workflow_record["first_privileged_step"]
-        == "Enforce the main-source trust boundary"
-        and workflow_record["allowed_jobs"] == ["validate", "publish"],
-        "WORKFLOW_POLICY",
-        "workflow identity, event, runner, or privileged boundary changed",
+        "CANDIDATE_MANIFEST",
+        "candidate checksum manifest differs from the read-only job output set",
     )
 
-    _expect(
-        "pull_request_target:" not in workflow
-        and "workflow_dispatch:" not in workflow
-        and workflow.count("  pull_request:") == 1
-        and workflow.count("  push:") == 1
-        and workflow.count("      - main") == 1,
-        "WORKFLOW_TRIGGER",
-        "only pull_request validation and main push publication are allowed",
+
+def _audit_descriptor(root: Path) -> Mapping[str, Any]:
+    descriptor = _load_json(
+        root / EVIDENCE_PATH / "gradle-dependency-inputs.json"
     )
-    workflow_lines = workflow.splitlines()
-    for dependency_path in (
-        PARENT_DESCRIPTOR_PATH,
-        PARENT_VERIFICATION_PATH,
-    ):
-        _expect(
-            workflow_lines.count(
-                f"      - {dependency_path.as_posix()}"
-            )
-            == 2,
-            "WORKFLOW_PATH_FILTER",
-            (
-                f"{dependency_path.as_posix()} must trigger both "
-                "pull-request validation and main publication"
+    _expect(
+        isinstance(descriptor, Mapping),
+        "DESCRIPTOR",
+        "descriptor must be an object",
+    )
+    validator = getattr(_packager_module(root), "_validate_descriptor", None)
+    _expect(
+        callable(validator),
+        "DESCRIPTOR",
+        "reviewed packager lacks descriptor validation",
+    )
+    try:
+        validator(descriptor, root / EVIDENCE_PATH / "verification-metadata.xml")
+    except Exception as error:
+        _fail("DESCRIPTOR", f"descriptor validation failed: {error}")
+    _expect(
+        descriptor.get("schema_version") == 1
+        and descriptor.get("component") == "polaris-gradle-dependencies"
+        and descriptor.get("polaris_version") == "1.6.0"
+        and descriptor.get("platform") == EXPECTED_BUILDER_PLATFORM
+        and descriptor.get("gradle_version") == EXPECTED_GRADLE_VERSION
+        and descriptor.get("source_archive_sha512")
+        == (
+            "d69b1a91e16e210a78dec327fc4725983b114fbec5d86d078a3827f35fe7dd"
+            "5df3e4b12d18965e5a72eace65ad224aa007004ed61c66f9abb2efafc44ceac95b"
+        )
+        and descriptor.get("archive")
+        == {
+            "filename": "polaris-gradle-dependencies-1.6.0.tar.gz",
+            "media_type": "application/vnd.shirokuma.gradle-cache.v1.tar+gzip",
+            "sha256": EXPECTED_ARCHIVE_SHA256,
+            "size": EXPECTED_ARCHIVE_SIZE,
+        }
+        and descriptor.get("verification_metadata")
+        == {
+            "filename": "verification-metadata.xml",
+            "media_type": "application/vnd.gradle.dependency-verification.v1+xml",
+            "mode": "strict",
+            "sha256": EXPECTED_VERIFICATION_SHA256,
+            "size": EXPECTED_VERIFICATION_SIZE,
+        },
+        "DESCRIPTOR",
+        "descriptor source, archive, or strict verification binding changed",
+    )
+    parent = _load_json(root / PARENT_DESCRIPTOR_PATH)
+    _expect(
+        isinstance(parent, Mapping),
+        "SUPERSET",
+        "parent descriptor must be an object",
+    )
+    parent_records = _module_records(parent)
+    candidate_records = _module_records(descriptor)
+    _expect(
+        len(parent_records) == 3_263
+        and len(candidate_records) == 3_268
+        and parent_records <= candidate_records,
+        "SUPERSET",
+        "candidate is not the exact parent module-artifact superset",
+    )
+    mongo_records = {
+        record
+        for record in candidate_records
+        if record[4] == "io.quarkus"
+        and record[5] == "quarkus-mongodb-client"
+        and record[6] == "3.36.3"
+        and record[7]
+        in {"quarkus-mongodb-client-3.36.3.jar", "quarkus-mongodb-client-3.36.3.pom"}
+    }
+    _expect(
+        len(mongo_records) == 2,
+        "ADMIN_SURFACE_EVIDENCE",
+        "descriptor does not retain the unconditional Quarkus MongoDB client surface",
+    )
+    proof = _load_json(root / EVIDENCE_PATH / "superset-proof.json")
+    _expect(
+        proof
+        == {
+            "candidate_module_artifact_count": len(candidate_records),
+            "match_fields": list(SUPERSET_FIELDS),
+            "parent_descriptor_sha256": EXPECTED_PARENT_DESCRIPTOR_SHA256,
+            "parent_module_artifact_count": len(parent_records),
+            "relationship": "exact-module-artifact-superset",
+            "result": "passed",
+            "schema_version": 1,
+        },
+        "SUPERSET",
+        "retained superset proof differs from the computed exact relationship",
+    )
+    return descriptor
+
+
+def _audit_oci_manifest(root: Path) -> Mapping[str, Any]:
+    manifest = _load_json(root / EVIDENCE_PATH / "oci-manifest.json")
+    _expect(isinstance(manifest, Mapping), "OCI_MANIFEST", "manifest must be an object")
+    _expect_keys(
+        manifest,
+        {
+            "schemaVersion",
+            "mediaType",
+            "artifactType",
+            "config",
+            "layers",
+            "annotations",
+        },
+        "OCI_MANIFEST",
+        "manifest",
+    )
+    _expect(
+        manifest["schemaVersion"] == 2
+        and manifest["mediaType"] == "application/vnd.oci.image.manifest.v1+json"
+        and manifest["artifactType"]
+        == "application/vnd.shirokuma.polaris-admin.gradle-dependencies.v1"
+        and manifest["config"]
+        == {
+            "mediaType": "application/vnd.oci.empty.v1+json",
+            "digest": (
+                "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f"
+                "61caaff8a"
             ),
-        )
-    _expect(
-        workflow_lines.count("permissions:") == 1
-        and workflow_lines.count("    permissions:") == 2
-        and workflow_lines.count("      contents: read") == 2
-        and workflow_lines.count("  contents: read") == 1
-        and workflow_lines.count("      packages: write") == 1
-        and workflow_lines.count("      id-token: write") == 1
-        and workflow_lines.count("      attestations: write") == 1
-        and "actions: write" not in workflow
-        and "contents: write" not in workflow,
-        "WORKFLOW_PERMISSIONS",
-        "read-only validation and minimal publication permissions are required",
+            "size": 2,
+            "data": "e30=",
+        }
+        and manifest["annotations"]
+        == {
+            "org.opencontainers.image.created": EXPECTED_CREATED,
+            "org.opencontainers.image.revision": EXPECTED_SOURCE_SHA,
+            "org.opencontainers.image.source": EXPECTED_REPOSITORY_URL,
+        },
+        "OCI_MANIFEST",
+        "OCI identity, config, or source annotations changed",
     )
     _expect(
-        "${{ secrets." not in workflow
-        and "pull_request_target" not in workflow
-        and "@main" not in workflow
-        and "@latest" not in workflow,
-        "WORKFLOW_UNTRUSTED_INPUT",
-        "workflow contains a secret or floating/untrusted reference",
-    )
-
-    jobs, steps, spans, step_spans = _workflow_jobs_and_steps(workflow)
-    _expect(
-        jobs == workflow_record["allowed_jobs"],
-        "WORKFLOW_JOB_CLOSED_WORLD",
-        repr(jobs),
-    )
-    _expect(
-        steps == workflow_record["allowed_steps"],
-        "WORKFLOW_STEP_CLOSED_WORLD",
-        repr(steps),
-    )
-    lines = workflow.splitlines()
-    static_audit_name = "Validate the publication-pending contract"
-    lifecycle_name = "Check the admin dependency publication lifecycle"
-    _expect(
-        steps["validate"][:3]
+        manifest["layers"]
         == [
-            "Check out the reviewed admin dependency policy",
-            static_audit_name,
-            lifecycle_name,
+            {
+                "mediaType": (
+                    "application/vnd.shirokuma."
+                    "gradle-dependency-descriptor.v1+json"
+                ),
+                "digest": f"sha256:{EXPECTED_DESCRIPTOR_SHA256}",
+                "size": EXPECTED_DESCRIPTOR_SIZE,
+                "annotations": {
+                    "org.opencontainers.image.title": (
+                        "gradle-dependency-inputs.json"
+                    )
+                },
+            },
+            {
+                "mediaType": "application/vnd.shirokuma.gradle-cache.v1.tar+gzip",
+                "digest": f"sha256:{EXPECTED_ARCHIVE_SHA256}",
+                "size": EXPECTED_ARCHIVE_SIZE,
+                "annotations": {
+                    "org.opencontainers.image.title": (
+                        "polaris-gradle-dependencies-1.6.0.tar.gz"
+                    )
+                },
+            },
         ],
-        "WORKFLOW_STATIC_AUDIT_ORDER",
-        repr(steps["validate"][:3]),
+        "OCI_MANIFEST",
+        "OCI descriptor/archive layer order, hash, or size changed",
     )
-    static_start, static_end = step_spans["validate"][static_audit_name]
-    static_lines = lines[static_start:static_end]
+    return manifest
+
+
+def _audit_publication(root: Path, contract: Mapping[str, Any]) -> Mapping[str, Any]:
+    publication = _load_json(root / EVIDENCE_PATH / "publication.json")
     _expect(
-        not any(line.startswith("        if:") for line in static_lines),
-        "WORKFLOW_STATIC_AUDIT_ORDER",
-        "static audit and tests must run before the lifecycle gate",
+        isinstance(publication, Mapping),
+        "PUBLICATION",
+        "publication must be an object",
     )
-    for heavy_step_name in steps["validate"][3:]:
-        heavy_start, heavy_end = step_spans["validate"][heavy_step_name]
-        heavy_lines = lines[heavy_start:heavy_end]
-        _expect(
-            heavy_lines.count(
-                "        if: steps.lifecycle.outputs.active == 'true'"
+    expected_files = [
+        {
+            "filename": "gradle-dependency-inputs.json",
+            "sha256": EXPECTED_DESCRIPTOR_SHA256,
+            "size": EXPECTED_DESCRIPTOR_SIZE,
+        },
+        {
+            "filename": "polaris-gradle-dependencies-1.6.0.tar.gz",
+            "sha256": EXPECTED_ARCHIVE_SHA256,
+            "size": EXPECTED_ARCHIVE_SIZE,
+        },
+        {
+            "filename": "verification-metadata.xml",
+            "sha256": EXPECTED_VERIFICATION_SHA256,
+            "size": EXPECTED_VERIFICATION_SIZE,
+        },
+        *[
+            {
+                "filename": name,
+                "sha256": EVIDENCE_RECORDS[name][0],
+                "size": EVIDENCE_RECORDS[name][1],
+            }
+            for name in (
+                "offline-build.json",
+                "superset-proof.json",
+                "toolchain.json",
+                "oci-manifest.json",
+                "cosign-signature-bundle.json",
+                "cosign-verify.json",
+                "slsa-verify.json",
             )
-            == 1,
-            "WORKFLOW_HEAVY_STEP_GATE",
-            heavy_step_name,
-        )
+        ],
+    ]
+    _expect_keys(
+        publication,
+        {
+            "schema_version",
+            "state",
+            "artifact_repository",
+            "artifact_reference",
+            "artifact_type",
+            "created",
+            "event",
+            "ref",
+            "run_id",
+            "run_attempt",
+            "source_sha",
+            "workflow_sha",
+            "parent_artifact_reference",
+            "parent_descriptor_sha256",
+            "source_admin_build_preimage_sha256",
+            "tasks",
+            "admin_dependency_surface",
+            "downstream_gates",
+            "files",
+        },
+        "PUBLICATION",
+        "publication",
+    )
+    _expect(
+        publication["schema_version"] == 1
+        and publication["state"] == "admin_dependency_snapshot_review_pending"
+        and publication["artifact_repository"] == EXPECTED_ARTIFACT_REPOSITORY
+        and publication["artifact_reference"] == EXPECTED_ARTIFACT_REFERENCE
+        and publication["artifact_type"]
+        == "application/vnd.shirokuma.polaris-admin.gradle-dependencies.v1"
+        and publication["created"] == EXPECTED_CREATED
+        and publication["event"] == EXPECTED_EVENT
+        and publication["ref"] == EXPECTED_REF
+        and publication["run_id"] == EXPECTED_RUN_ID
+        and publication["run_attempt"] == EXPECTED_RUN_ATTEMPT
+        and publication["source_sha"] == EXPECTED_SOURCE_SHA
+        and publication["workflow_sha"] == EXPECTED_SOURCE_SHA
+        and publication["parent_artifact_reference"] == EXPECTED_PARENT_REFERENCE
+        and publication["parent_descriptor_sha256"] == EXPECTED_PARENT_DESCRIPTOR_SHA256
+        and publication["source_admin_build_preimage_sha256"]
+        == EXPECTED_ADMIN_BUILD_SHA256
+        and publication["tasks"] == EXPECTED_TASKS
+        and publication["files"] == expected_files,
+        "PUBLICATION",
+        "publication identity, workflow SHA, task closure, or file bindings changed",
+    )
+    surface = publication["admin_dependency_surface"]
+    _expect(
+        surface
+        == {
+            "review_state": "review_required",
+            "relational_only": False,
+            "unconditional_project_dependencies": EXPECTED_NOSQL_PROJECTS,
+            "unconditional_external_dependencies": [
+                "io.quarkus:quarkus-mongodb-client"
+            ],
+        }
+        and surface == {
+            key: contract["admin_dependency_surface"][key]
+            for key in surface
+        },
+        "ADMIN_SURFACE_EVIDENCE",
+        "publication does not preserve the review-required NoSQL/Mongo surface",
+    )
+    _expect(
+        publication["downstream_gates"]
+        == {
+            "admin_image_publication_enabled": False,
+            "admin_image_admitted": False,
+            "admin_runtime_enabled": False,
+            "gitops_resources_enabled": False,
+            "credential_material_permitted": False,
+        },
+        "PUBLICATION_GATES",
+        "publication evidence enables an unreviewed downstream gate",
+    )
+    candidate = contract["candidate_snapshot"]
+    _expect(
+        candidate["artifact_reference"] == publication["artifact_reference"]
+        and candidate["publication"]["record"]
+        == {
+            "path": (EVIDENCE_PATH / "publication.json").as_posix(),
+            "sha256": EXPECTED_PUBLICATION_SHA256,
+            "size": EXPECTED_PUBLICATION_SIZE,
+        }
+        and candidate["review"]["anonymous_retrieval"]["artifact_reference"]
+        == publication["artifact_reference"]
+        and candidate["review"]["anonymous_retrieval"]["digest"]
+        == f"sha256:{EXPECTED_MANIFEST_SHA256}",
+        "PUBLICATION_BINDING",
+        "contract, independent review receipt, and retained publication differ",
+    )
+    return publication
 
-    publish_start, publish_end = spans["publish"]
-    first_step_name = steps["publish"][0] if steps["publish"] else None
-    _expect(
-        first_step_name == workflow_record["first_privileged_step"],
-        "PUBLISH_TRUST_GATE_ORDER",
-        "privileged job must start with the inline trust gate",
-    )
-    first_step_start, first_step_end = step_spans["publish"][first_step_name]
-    _expect(
-        first_step_start >= publish_start
-        and first_step_end <= publish_end
-        and not any(USES_LINE_RE.match(value) for value in lines[publish_start:first_step_start]),
-        "PUBLISH_TRUST_GATE_ORDER",
-        "no action may execute before the privileged inline trust gate",
-    )
-    trust_gate = "\n".join(lines[first_step_start:first_step_end])
-    _expect(
-        'test "${GITHUB_REPOSITORY}" = "TommyKammy/Shirokuma"' in trust_gate
-        and 'test "${GITHUB_EVENT_NAME}" = "push"' in trust_gate
-        and 'test "${GITHUB_REF}" = "refs/heads/main"' in trust_gate
-        and 'test "${GITHUB_SHA}" = "${GITHUB_WORKFLOW_SHA}"' in trust_gate
-        and "case \"${GITHUB_SHA}\" in" in trust_gate,
-        "WORKFLOW_TRUST_GATE",
-        "publisher does not bind repository, event, ref, source SHA, and workflow SHA",
-    )
-    _expect(
-        hashlib.sha256((trust_gate + "\n").encode("utf-8")).hexdigest()
-        == EXPECTED_TRUST_GATE_STEP_SHA256,
-        "WORKFLOW_TRUST_GATE_STEP",
-        "privileged trust-gate step differs from the reviewed exact command body",
-    )
-    publish_header = "\n".join(lines[publish_start:first_step_start])
-    _expect(
-        "github.repository == 'TommyKammy/Shirokuma'" in publish_header
-        and "github.event_name == 'push'" in publish_header
-        and "github.ref == 'refs/heads/main'" in publish_header
-        and "github.sha == github.workflow_sha" in publish_header
-        and "needs.validate.outputs.active == 'true'" in publish_header,
-        "WORKFLOW_PUBLISH_CONDITION",
-        "write-capable job is not main-only and source/workflow-SHA-bound",
-    )
-    digest_validation = (
-        'if ! [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then'
-    )
-    digest_export = 'echo "PUBLISHED_TAG=${tag}" >> "${GITHUB_ENV}"'
-    _expect(
-        workflow.count(digest_validation) == 1
-        and workflow.count(digest_export) == 1
-        and "sha256:????????" not in workflow
-        and workflow.index(digest_validation) < workflow.index(digest_export),
-        "WORKFLOW_DIGEST_VALIDATION",
-        "ORAS digest must be strictly validated before workflow-file export",
-    )
 
-    offline_step_name = (
-        "Prove a fresh network-none offline admin and server build"
-    )
-    offline_start, offline_end = step_spans["validate"][offline_step_name]
-    offline_step = "\n".join(lines[offline_start:offline_end]) + "\n"
+def _audit_offline_build(root: Path) -> None:
+    offline = _load_json(root / EVIDENCE_PATH / "offline-build.json")
     _expect(
-        hashlib.sha256(offline_step.encode("utf-8")).hexdigest()
-        == EXPECTED_OFFLINE_STEP_SHA256,
-        "WORKFLOW_OFFLINE_STEP",
-        "offline proof step differs from the reviewed exact command body",
-    )
-
-    toolchain_step_name = "Verify the exact builder toolchain"
-    toolchain_start, toolchain_end = step_spans["validate"][
-        toolchain_step_name
-    ]
-    toolchain_lines = {
-        line.strip() for line in lines[toolchain_start:toolchain_end]
-    }
-    required_toolchain_lines = {
-        'docker pull --quiet --platform linux/arm64 "${BUILDER_IMAGE}" \\',
-        "--format '{{.Os}}/{{.Architecture}}' \\",
-        "builder_gradle_output=$(",
-        'awk \'/^Gradle / {print $2}\' <<< "${builder_gradle_output}"',
-        "builder_java_output=$(",
-        '<<< "${builder_java_output}"',
-        'test "${builder_platform}" = "${EXPECTED_BUILDER_PLATFORM}"',
-        'test "${builder_gradle}" = "${EXPECTED_GRADLE_VERSION}"',
-        'test "${builder_java_major}" = "${EXPECTED_JAVA_MAJOR}"',
-        'echo "OBSERVED_BUILDER_PLATFORM=${builder_platform}"',
-        'echo "OBSERVED_BUILDER_GRADLE=${builder_gradle}"',
-        'echo "OBSERVED_BUILDER_JAVA=${builder_java}"',
-        'echo "OBSERVED_BUILDER_JAVA_MAJOR=${builder_java_major}"',
-    }
-    resolver_start, _ = step_spans["validate"][
-        "Resolve the admin superset with strict verification metadata"
-    ]
-    _expect(
-        required_toolchain_lines <= toolchain_lines
-        and toolchain_end <= resolver_start
-        and workflow.count(
-            "  EXPECTED_BUILDER_PLATFORM: linux/arm64"
-        )
-        == 1
-        and workflow.count("  EXPECTED_GRADLE_VERSION: 9.6.0") == 1
-        and workflow.count('  EXPECTED_JAVA_MAJOR: "21"') == 1
-        and 'gradle --version \\\n              | awk' not in workflow
-        and 'java -version 2>&1 \\\n              | awk' not in workflow,
-        "WORKFLOW_BUILDER_TOOLCHAIN",
-        "exact builder platform, Gradle, and Java must be gated before resolution",
-    )
-    evidence_start, evidence_end = step_spans["validate"][
-        "Record the dependency resolver evidence"
-    ]
-    evidence_block = "\n".join(lines[evidence_start:evidence_end])
-    _expect(
-        'os.environ["OBSERVED_BUILDER_PLATFORM"]' in evidence_block
-        and 'os.environ["OBSERVED_BUILDER_GRADLE"]' in evidence_block
-        and 'os.environ["OBSERVED_BUILDER_JAVA"]' in evidence_block
-        and 'os.environ["OBSERVED_BUILDER_JAVA_MAJOR"]' in evidence_block
-        and "docker run" not in evidence_block,
-        "WORKFLOW_BUILDER_EVIDENCE",
-        "toolchain evidence must preserve the pre-resolution observations",
-    )
-
-    upload_start, upload_end = step_spans["validate"][
-        "Retain the read-only-verified candidate"
-    ]
-    upload_block = "\n".join(lines[upload_start:upload_end])
-    download_start, download_end = step_spans["publish"][
-        "Download the exact read-only-verified candidate"
-    ]
-    download_block = "\n".join(lines[download_start:download_end])
-    _expect(
-        workflow.count(
-            "      candidate_artifact_name: "
-            "${{ steps.candidate.outputs.candidate_artifact_name }}"
-        )
-        == 1
-        and '"candidate_artifact_name": (' in evidence_block
-        and "os.environ['GITHUB_RUN_ID']" in evidence_block
-        and "os.environ['GITHUB_RUN_ATTEMPT']" in evidence_block
-        and (
-            "name: ${{ steps.candidate.outputs."
-            "candidate_artifact_name }}"
-        )
-        in upload_block
-        and (
-            "name: ${{ needs.validate.outputs."
-            "candidate_artifact_name }}"
-        )
-        in download_block,
-        "WORKFLOW_CANDIDATE_ARTIFACT_BINDING",
-        "publish must download the successful validate attempt artifact",
+        offline
+        == {
+            "archive_sha256": EXPECTED_ARCHIVE_SHA256,
+            "build_cache": False,
+            "configuration_cache": False,
+            "dependency_verification": "strict",
+            "descriptor_sha256": EXPECTED_DESCRIPTOR_SHA256,
+            "fresh_gradle_home": True,
+            "fresh_source_tree": True,
+            "gradle_offline": True,
+            "network": "none",
+            "platform": EXPECTED_BUILDER_PLATFORM,
+            "result": "passed",
+            "schema_version": 1,
+            "tasks": EXPECTED_TASKS,
+            "verification_metadata_sha256": EXPECTED_VERIFICATION_SHA256,
+        },
+        "OFFLINE_BUILD",
+        "offline build proof is not the reviewed fresh network-none closed build",
     )
 
-    push_start, push_end = step_spans["publish"][
-        "Publish the run-scoped immutable OCI artifact"
-    ]
-    push_block = "\n".join(lines[push_start:push_end])
+
+def _audit_toolchain(root: Path) -> None:
+    toolchain = _load_json(root / EVIDENCE_PATH / "toolchain.json")
     _expect(
-        (
-            'tag="${ARTIFACT_REPOSITORY}:1.6.0-'
-            '${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"'
-        )
-        in push_block
-        and "run-scoped OCI tag already exists; refusing overwrite"
-        in push_block,
-        "WORKFLOW_CANDIDATE_ATTEMPT",
-        "candidate tags must be immutable and scoped to run ID and attempt",
+        toolchain
+        == {
+            "builder_image": (
+                "docker.io/library/gradle@sha256:"
+                "cc583fa5245267fe0e1546c9989e8575473a37336ad9894dc0684a99fea1fb03"
+            ),
+            "builder_platform": EXPECTED_BUILDER_PLATFORM,
+            "curl": (
+                "curl 8.5.0 (aarch64-unknown-linux-gnu) libcurl/8.5.0 "
+                "OpenSSL/3.0.13 zlib/1.3 brotli/1.1.0 zstd/1.5.5 "
+                "libidn2/2.3.7 libpsl/0.21.2 (+libidn2/2.3.7) "
+                "libssh/0.10.6/openssl/zlib nghttp2/1.59.0 librtmp/2.3 "
+                "OpenLDAP/2.6.10"
+            ),
+            "docker": "28.0.4",
+            "gpg": "gpg (GnuPG) 2.4.4",
+            "gradle": EXPECTED_GRADLE_VERSION,
+            "java": "21.0.11",
+            "java_major": EXPECTED_JAVA_MAJOR,
+            "oras": "Version:        1.3.3",
+            "platform": "Linux-6.17.0-1020-azure-aarch64-with-glibc2.39",
+            "python": "3.12.3",
+            "runner": "ubuntu-24.04-arm",
+            "schema_version": 1,
+            "tar": "tar (GNU tar) 1.35",
+        },
+        "TOOLCHAIN",
+        "resolver toolchain differs from the pre-resolution observations",
     )
 
-    anonymous_start, anonymous_end = step_spans["publish"][
-        "Prove anonymous exact-digest retrieval"
-    ]
-    anonymous_block = "\n".join(lines[anonymous_start:anonymous_end])
-    sign_start, _ = step_spans["publish"][
-        "Keyless-sign the exact OCI manifest"
-    ]
-    attest_start, _ = step_spans["publish"][
-        "Publish SLSA provenance for the exact OCI manifest"
-    ]
-    publication_step_name = "Record the review-required publication"
-    publication_start, publication_end = step_spans["publish"][
-        publication_step_name
-    ]
+
+def _audit_cosign_verification(root: Path) -> None:
+    verification = _load_json(root / EVIDENCE_PATH / "cosign-verify.json")
     _expect(
-        sign_start < anonymous_start
-        and attest_start < anonymous_start
-        and anonymous_end <= publication_start
-        and "oras logout ghcr.io" in anonymous_block
-        and "printf '{}\\n' > \"${anonymous_config}\"" in anonymous_block
-        and '--registry-config "${anonymous_config}"' in anonymous_block
-        and "oras login" not in anonymous_block
-        and "GHCR_TOKEN" not in anonymous_block
-        and "github.token" not in anonymous_block,
-        "WORKFLOW_VISIBILITY_BOOTSTRAP",
-        "anonymous public retrieval must fail closed without credential fallback",
-    )
-    publication_lines = lines[publication_start:publication_end]
-    credential_gate = '              "credential_material_permitted": False,'
-    _expect(
-        publication_lines.count(credential_gate) == 1
-        and sum(
-            "credential_material_permitted" in line
-            for line in publication_lines
-        )
-        == 1,
-        "WORKFLOW_CREDENTIAL_GATE",
-        "publication evidence must carry the disabled credential gate exactly once",
+        verification
+        == [
+            {
+                "critical": {
+                    "identity": {"docker-reference": EXPECTED_ARTIFACT_REFERENCE},
+                    "image": {
+                        "docker-manifest-digest": (
+                            f"sha256:{EXPECTED_MANIFEST_SHA256}"
+                        )
+                    },
+                    "type": "https://sigstore.dev/cosign/sign/v1",
+                },
+                "optional": {},
+            }
+        ],
+        "COSIGN_EVIDENCE",
+        "registry verification does not bind the exact Admin artifact manifest",
     )
 
-    uses_lines = [
-        line for line in workflow.splitlines() if USES_LINE_RE.match(line)
-    ]
-    actual_actions: list[str] = []
-    for line in uses_lines:
-        match = REMOTE_ACTION_RE.fullmatch(line)
-        _expect(match is not None, "ACTION_NOT_SHA_PINNED", line.strip())
-        actual_actions.append(f"{match.group(1)}@{match.group(2)}")
-    _expect(
-        actual_actions == workflow_record["allowed_actions"],
-        "WORKFLOW_ACTION_CLOSED_WORLD",
-        repr(actual_actions),
-    )
-    action_counts = Counter(action.split("@", 1)[0] for action in actual_actions)
-    _expect(
-        dict(action_counts) == workflow_record["action_counts"],
-        "WORKFLOW_ACTION_COUNT",
-        repr(dict(action_counts)),
-    )
 
-    required_literals = [
-        EXPECTED_PARENT_REFERENCE,
-        EXPECTED_PARENT_DESCRIPTOR_SHA256,
-        EXPECTED_PARENT_ARCHIVE_SHA256,
-        EXPECTED_PARENT_VERIFICATION_SHA256,
-        EXPECTED_ADMIN_BUILD_SHA256,
-        "admin_dependency_snapshot_publication_pending",
-        "admin_dependency_snapshot_review_pending",
-        "exact-module-artifact-superset",
-        "--write-verification-metadata sha256",
-        "--network none",
-        "--offline",
-        "--dependency-verification strict",
-        "--no-build-cache",
-        "--no-configuration-cache",
-        "GITHUB_WORKFLOW_SHA",
-        "github.sha == github.workflow_sha",
-        "needs.validate.outputs.archive_sha256",
-        "needs.validate.outputs.descriptor_sha256",
-        "needs.validate.outputs.metadata_sha256",
-        "needs.validate.outputs.offline_sha256",
-        "needs.validate.outputs.superset_sha256",
-        "needs.validate.outputs.toolchain_sha256",
-        "downloaded candidate bytes differ from read-only job outputs",
-        "ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies",
-        "application/vnd.shirokuma.polaris-admin.gradle-dependencies.v1",
-        "review_required",
-        '"relational_only": False',
-        '"admin_image_publication_enabled": False',
-        '"admin_image_admitted": False',
-        '"admin_runtime_enabled": False',
-        '"gitops_resources_enabled": False',
-        '"credential_material_permitted": False',
-    ]
-    required_literals.extend(EXPECTED_TASKS)
-    required_literals.extend(EXPECTED_NOSQL_PROJECTS)
-    for literal in required_literals:
-        _expect(
-            literal in workflow,
-            "WORKFLOW_REQUIRED_LITERAL",
-            literal,
-        )
-    for task in EXPECTED_TASKS:
-        _expect(
-            workflow.count(task) >= 4,
-            "WORKFLOW_TASK_CLOSURE",
-            f"{task} occurs only {workflow.count(task)} times",
-        )
-    _expect(
-        workflow.count("Install checksum-pinned ORAS") == 2
-        and workflow.count("Install pinned Cosign") == 1
-        and workflow.count("sigstore/cosign-installer@") == 1,
-        "WORKFLOW_INSTALLER_COUNT",
-        "installer steps/actions must have an exact non-duplicated count",
+def _decode_dsse_payload(envelope: Mapping[str, Any]) -> Any:
+    _expect_keys(
+        envelope,
+        {"payload", "payloadType", "signatures"},
+        "SLSA_EVIDENCE",
+        "DSSE envelope",
     )
     _expect(
-        workflow.count('"${ORAS_URL}" --output "${archive}"') == 2
-        and workflow.count(
-            'tar --extract --gzip --file "${archive}" '
-        )
-        == 2
-        and workflow.count(
-            'test "$("${install_dir}/oras" version '
-        )
-        == 2,
-        "WORKFLOW_INSTALLER_COUNT",
-        "ORAS installer commands must occur exactly once per isolated job",
+        envelope["payloadType"] == "application/vnd.in-toto+json"
+        and isinstance(envelope["signatures"], list)
+        and len(envelope["signatures"]) == 1,
+        "SLSA_EVIDENCE",
+        "SLSA DSSE payload type or signature cardinality changed",
     )
-    cosign_start_marker = (
-        "      - name: Keyless-sign the exact OCI manifest"
-    )
-    cosign_end_marker = (
-        "      - name: Publish SLSA provenance for the exact OCI manifest"
-    )
+    try:
+        decoded = base64.b64decode(envelope["payload"], validate=True)
+        return json.loads(decoded, object_pairs_hook=_reject_duplicate_pairs)
+    except (TypeError, ValueError, UnicodeError, json.JSONDecodeError) as error:
+        _fail("SLSA_EVIDENCE", f"invalid SLSA DSSE payload: {error}")
+
+
+def _audit_slsa(root: Path) -> Mapping[str, Any]:
+    document = _load_json(root / EVIDENCE_PATH / "slsa-verify.json")
     _expect(
-        workflow.count(cosign_start_marker) == 1
-        and workflow.count(cosign_end_marker) == 1,
-        "WORKFLOW_COSIGN_BINDING",
-        "Cosign signing and provenance step boundaries changed",
+        isinstance(document, list)
+        and len(document) == 1
+        and isinstance(document[0], Mapping),
+        "SLSA_EVIDENCE",
+        "SLSA verification must contain exactly one result",
     )
-    cosign_block = workflow[
-        workflow.index(cosign_start_marker) : workflow.index(cosign_end_marker)
-    ]
-    cosign_lines = [line.strip() for line in cosign_block.splitlines()]
+    result = document[0]
+    _expect_keys(
+        result,
+        {"attestation", "verificationResult"},
+        "SLSA_EVIDENCE",
+        "result",
+    )
+    verification = result["verificationResult"]
     _expect(
-        sum(line.startswith("cosign sign ") for line in cosign_lines) == 1
-        and sum(
-            line.startswith("cosign verify-blob ")
-            for line in cosign_lines
-        )
-        == 1
-        and sum(
-            line.startswith("cosign verify ")
-            for line in cosign_lines
-        )
-        == 1
-        and cosign_block.count(
-            '--bundle "${candidate_dir}/cosign-signature-bundle.json"'
-        )
-        == 2
-        and cosign_block.count(
-            '"${candidate_dir}/oci-manifest.json"'
-        )
-        == 1,
-        "WORKFLOW_COSIGN_BINDING",
-        "detached Cosign bundle is not bound to the exact OCI manifest",
+        isinstance(verification, Mapping),
+        "SLSA_EVIDENCE",
+        "verificationResult missing",
     )
-    sign_index = next(
-        index
-        for index, line in enumerate(cosign_lines)
-        if line.startswith("cosign sign ")
-    )
-    blob_index = next(
-        index
-        for index, line in enumerate(cosign_lines)
-        if line.startswith("cosign verify-blob ")
-    )
-    registry_index = next(
-        index
-        for index, line in enumerate(cosign_lines)
-        if line.startswith("cosign verify ")
-    )
+    statement = verification.get("statement")
+    certificate = verification.get("signature", {}).get("certificate")
     _expect(
-        sign_index < blob_index < registry_index,
-        "WORKFLOW_COSIGN_BINDING",
-        "Cosign bundle and registry verification order changed",
+        isinstance(statement, Mapping) and isinstance(certificate, Mapping),
+        "SLSA_EVIDENCE",
+        "verified statement or certificate is missing",
     )
-    cosign_constraints = (
-        '--certificate-identity "${identity}"',
-        "--certificate-oidc-issuer",
-        '--certificate-github-workflow-name "${GITHUB_WORKFLOW}"',
-        (
-            '--certificate-github-workflow-repository '
-            '"${GITHUB_REPOSITORY}"'
+    expected_certificate = {
+        "buildConfigDigest": EXPECTED_SOURCE_SHA,
+        "buildConfigURI": EXPECTED_WORKFLOW_IDENTITY,
+        "buildSignerDigest": EXPECTED_SOURCE_SHA,
+        "buildSignerURI": EXPECTED_WORKFLOW_IDENTITY,
+        "buildTrigger": EXPECTED_EVENT,
+        "certificateIssuer": "CN=sigstore-intermediate,O=sigstore.dev",
+        "githubWorkflowName": "Polaris 1.6.0 Admin build-input snapshot",
+        "githubWorkflowRef": EXPECTED_REF,
+        "githubWorkflowRepository": EXPECTED_REPOSITORY,
+        "githubWorkflowSHA": EXPECTED_SOURCE_SHA,
+        "githubWorkflowTrigger": EXPECTED_EVENT,
+        "issuer": EXPECTED_ISSUER,
+        "runInvocationURI": (
+            f"{EXPECTED_REPOSITORY_URL}/actions/runs/{EXPECTED_RUN_ID}/attempts/"
+            f"{EXPECTED_RUN_ATTEMPT}"
         ),
-        '--certificate-github-workflow-ref "${GITHUB_REF}"',
-        '--certificate-github-workflow-sha "${GITHUB_WORKFLOW_SHA}"',
-        '--certificate-github-workflow-trigger "${GITHUB_EVENT_NAME}"',
+        "runnerEnvironment": "github-hosted",
+        "sourceRepositoryDigest": EXPECTED_SOURCE_SHA,
+        "sourceRepositoryIdentifier": "1289807958",
+        "sourceRepositoryOwnerIdentifier": "257892020",
+        "sourceRepositoryOwnerURI": "https://github.com/TommyKammy",
+        "sourceRepositoryRef": EXPECTED_REF,
+        "sourceRepositoryURI": EXPECTED_REPOSITORY_URL,
+        "sourceRepositoryVisibilityAtSigning": "public",
+        "subjectAlternativeName": EXPECTED_WORKFLOW_IDENTITY,
+    }
+    _expect(
+        certificate == expected_certificate,
+        "SLSA_EVIDENCE",
+        "SLSA certificate identity, repository, workflow SHA, or run changed",
+    )
+    expected_predicate = {
+        "buildDefinition": {
+            "buildType": "https://actions.github.io/buildtypes/workflow/v1",
+            "externalParameters": {
+                "workflow": {
+                    "path": WORKFLOW_PATH.as_posix(),
+                    "ref": EXPECTED_REF,
+                    "repository": EXPECTED_REPOSITORY_URL,
+                }
+            },
+            "internalParameters": {
+                "github": {
+                    "event_name": EXPECTED_EVENT,
+                    "repository_id": "1289807958",
+                    "repository_owner_id": "257892020",
+                    "runner_environment": "github-hosted",
+                }
+            },
+            "resolvedDependencies": [
+                {
+                    "digest": {"gitCommit": EXPECTED_SOURCE_SHA},
+                    "uri": f"git+{EXPECTED_REPOSITORY_URL}@{EXPECTED_REF}",
+                }
+            ],
+        },
+        "runDetails": {
+            "builder": {"id": EXPECTED_WORKFLOW_IDENTITY},
+            "metadata": {
+                "invocationId": (
+                    f"{EXPECTED_REPOSITORY_URL}/actions/runs/"
+                    f"{EXPECTED_RUN_ID}/attempts/"
+                    f"{EXPECTED_RUN_ATTEMPT}"
+                )
+            },
+        },
+    }
+    _expect(
+        statement
+        == {
+            "_type": "https://in-toto.io/Statement/v1",
+            "subject": [
+                {
+                    "name": EXPECTED_ARTIFACT_REPOSITORY,
+                    "digest": {"sha256": EXPECTED_MANIFEST_SHA256},
+                }
+            ],
+            "predicateType": "https://slsa.dev/provenance/v1",
+            "predicate": expected_predicate,
+        },
+        "SLSA_EVIDENCE",
+        "SLSA subject or workflow provenance differs from the reviewed main run",
+    )
+    bundle = (
+        result["attestation"].get("bundle")
+        if isinstance(result["attestation"], Mapping)
+        else None
     )
     _expect(
-        cosign_block.count(
-            'identity="https://github.com/${GITHUB_REPOSITORY}/'
-            ".github/workflows/polaris-admin-build-inputs.yml@"
-            '${GITHUB_REF}"'
+        isinstance(bundle, Mapping),
+        "SLSA_EVIDENCE",
+        "SLSA Sigstore bundle is missing",
+    )
+    envelope = bundle.get("dsseEnvelope")
+    _expect(
+        isinstance(envelope, Mapping),
+        "SLSA_EVIDENCE",
+        "SLSA DSSE envelope is missing",
+    )
+    _expect(
+        _decode_dsse_payload(envelope) == statement,
+        "SLSA_EVIDENCE",
+        "SLSA DSSE payload differs from the verified statement",
+    )
+    return bundle
+
+
+def _run_cosign(root: Path, arguments: list[str], purpose: str) -> None:
+    try:
+        result = subprocess.run(
+            ["cosign", *arguments],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=60,
         )
-        == 1
-        and all(
-            cosign_block.count(constraint) == 2
-            for constraint in cosign_constraints
-        )
-        and cosign_block.count("--output json") == 1,
-        "WORKFLOW_COSIGN_IDENTITY",
-        "Cosign verification is not bound to the exact workflow identity",
+    except (OSError, subprocess.TimeoutExpired) as error:
+        _fail("SIGSTORE_CRYPTO", f"cannot run Cosign for {purpose}: {error}")
+    _expect(
+        result.returncode == 0,
+        "SIGSTORE_CRYPTO",
+        f"Cosign {purpose} failed: {(result.stderr or result.stdout).strip()[-1000:]}",
     )
 
 
-def audit(root: Path) -> None:
+CryptoVerifier = Callable[[Path, Mapping[str, Any]], None]
+
+
+def _reverify_sigstore_cryptographically(
+    root: Path,
+    slsa_bundle: Mapping[str, Any],
+) -> None:
+    try:
+        version = subprocess.run(
+            ["cosign", "version"],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        _fail("SIGSTORE_CRYPTO", f"cannot inspect Cosign: {error}")
+    _expect(
+        version.returncode == 0
+        and re.search(r"(?m)^GitVersion:\s+v3\.1\.1\s*$", version.stdout) is not None,
+        "SIGSTORE_CRYPTO",
+        "Cosign 3.1.1 is required for retained bundle reverification",
+    )
+    manifest = EVIDENCE_PATH / "oci-manifest.json"
+    signature_bundle = EVIDENCE_PATH / "cosign-signature-bundle.json"
+    constraints = [
+        "--certificate-identity",
+        EXPECTED_WORKFLOW_IDENTITY,
+        "--certificate-oidc-issuer",
+        EXPECTED_ISSUER,
+        "--certificate-github-workflow-repository",
+        EXPECTED_REPOSITORY,
+        "--certificate-github-workflow-ref",
+        EXPECTED_REF,
+        "--certificate-github-workflow-sha",
+        EXPECTED_SOURCE_SHA,
+        "--certificate-github-workflow-trigger",
+        EXPECTED_EVENT,
+    ]
+    _run_cosign(
+        root,
+        [
+            "verify-blob",
+            "--bundle",
+            signature_bundle.as_posix(),
+            *constraints,
+            manifest.as_posix(),
+        ],
+        "signature-bundle verification",
+    )
+    with tempfile.TemporaryDirectory(prefix="polaris-admin-slsa-bundle-") as directory:
+        nested = Path(directory) / "bundle.json"
+        try:
+            nested.write_text(
+                json.dumps(slsa_bundle, separators=(",", ":")),
+                encoding="utf-8",
+            )
+        except OSError as error:
+            _fail("SIGSTORE_CRYPTO", f"cannot stage retained SLSA bundle: {error}")
+        _run_cosign(
+            root,
+            [
+                "verify-blob-attestation",
+                "--bundle",
+                nested.as_posix(),
+                "--type",
+                "slsaprovenance1",
+                *constraints,
+                manifest.as_posix(),
+            ],
+            "SLSA-bundle verification",
+        )
+
+
+def audit(
+    root: Path,
+    *,
+    crypto_verifier: CryptoVerifier | None = None,
+) -> None:
     root = root.resolve()
     contract = _load_json(root / CONTRACT_PATH)
     _expect(
-        isinstance(contract, dict),
+        isinstance(contract, Mapping),
         "CONTRACT_SCHEMA",
         "contract root must be an object",
     )
     _validate_contract(root, contract)
-    try:
-        workflow = (root / WORKFLOW_PATH).read_text(encoding="utf-8")
-    except (OSError, UnicodeError) as error:
-        _fail("WORKFLOW_READ", str(error))
-    _validate_workflow(contract, workflow)
+    _audit_evidence_inventory(root)
+    _audit_descriptor(root)
+    _audit_oci_manifest(root)
+    _audit_publication(root, contract)
+    _audit_offline_build(root)
+    _audit_toolchain(root)
+    _audit_cosign_verification(root)
+    slsa_bundle = _audit_slsa(root)
+    (crypto_verifier or _reverify_sigstore_cryptographically)(root, slsa_bundle)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -1243,8 +1555,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"polaris-admin-build-inputs: {error}", file=sys.stderr)
         return 1
     print(
-        "polaris-admin-build-inputs: publication-pending contract verified; "
-        "admin image/runtime remain disabled"
+        "polaris-admin-build-inputs: reviewed retained evidence verified; "
+        "one-shot publisher absent; admin image/runtime remain disabled"
     )
     return 0
 

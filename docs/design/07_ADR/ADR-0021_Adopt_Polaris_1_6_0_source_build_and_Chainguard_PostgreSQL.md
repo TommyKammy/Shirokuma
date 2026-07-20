@@ -4,8 +4,8 @@ doc_id: "ADR-0021"
 title: "Adopt a source-built Polaris 1.6.0 and signed PostgreSQL metadata store"
 status: accepted
 created: 2026-07-16
-updated: 2026-07-20
-version: "0.7"
+updated: 2026-07-21
+version: "0.8"
 area: "architecture"
 tags: [shirokuma, adr, polaris, postgresql, arm64, supply-chain]
 ---
@@ -193,6 +193,30 @@ OCI digest is only the immutable parent for a new, independently signed
 superset. A failed Admin build must leave the parent and the admitted
 Polaris/PostgreSQL pair unchanged.
 
+PR #86 fixed the Admin publication contract on main at
+`619d52e0b1db5241867d7775cc8714a30b1a6f38`. Main run `29781460117`, attempt
+`1`, successfully published and anonymously retrieved the exact public
+dependency superset
+`ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18`.
+Actions artifact `polaris-admin-publication-29781460117-1` (artifact ID
+`8477021002`, Actions digest
+`sha256:d1d33b14467a58b93796568667ab68ad3f61a12f9f9c3af439bbd6361adee621`,
+582,463 bytes) contains only the 12 retained evidence records; it does not
+contain the dependency archive. The 701,437,153-byte
+`polaris-gradle-dependencies-1.6.0.tar.gz` originated in one-day candidate
+artifact `polaris-admin-candidate-29781460117-1` (artifact ID `8476975401`) and
+is the second OCI layer. Independent anonymous exact-digest retrieval verified
+its SHA-256
+`e771fe2ec6b2d0f6940b1247a512eb5cbc78dd0f36e7be247975f2c5fa36fc4d`, size,
+and gzip structure before evidence review.
+
+That checkpoint retains 12 files, advances the schema-v2 lifecycle to
+`admin_dependency_snapshot_review_pending`, and names
+`admin_image_publication_pending` as the next state. It retires and removes the
+write-capable Admin dependency publisher. The snapshot remains non-admitted;
+Admin image publication/admission, runtime, Flux, and credential gates remain
+false, and Issue #61 remains Open.
+
 The later runtime activation must use the Admin Tool's credential-file input
 from an externally provisioned Secret. Credentials in command arguments,
 generated credentials printed to logs, or server-side relational
@@ -217,6 +241,11 @@ CycloneDX-input rescans that close all 60 libraries, both exact digests, and the
 resident-image records in one change. Runtime remains a separate checkpoint
 that owns `make verify`, `make verify-gitops-bootstrap`, and live
 `make gitops-status` evidence.
+
+For the Admin dependency snapshot, the evidence-only checkpoint additionally
+hash- and size-binds all 12 retained files, the main run and attempt, the exact
+public OCI digest, anonymous retrieval, the offline Admin/server regression
+build, and the schema-v2 publisher-retirement transition.
 
 ## Rollback
 

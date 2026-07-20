@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-07-20
-version: "1.11"
+updated: 2026-07-21
+version: "1.12"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -257,6 +257,31 @@ credentials are never an anonymous-pull fallback. Static contract tests run
 before the lifecycle gate on every invocation, and the observed Gradle and
 Java versions must match the pinned toolchain before candidate evidence is
 retained.
+
+PR #86 merged the reviewed publisher contract as
+`619d52e0b1db5241867d7775cc8714a30b1a6f38`. Main run `29781460117`, attempt
+`1`, completed the fresh offline Admin and server regression builds, published
+the exact public OCI artifact
+`ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18`,
+and proved anonymous exact-digest retrieval. Actions artifact
+`polaris-admin-publication-29781460117-1` (artifact ID `8477021002`, Actions
+digest `sha256:d1d33b14467a58b93796568667ab68ad3f61a12f9f9c3af439bbd6361adee621`,
+582,463 bytes) contains only the 12 retained evidence records; it never carried
+the dependency archive. The 701,437,153-byte
+`polaris-gradle-dependencies-1.6.0.tar.gz` came from one-day candidate artifact
+`polaris-admin-candidate-29781460117-1` (artifact ID `8476975401`) and became
+the second OCI layer. An independent anonymous exact-digest pull verified its
+SHA-256 `e771fe2ec6b2d0f6940b1247a512eb5cbc78dd0f36e7be247975f2c5fa36fc4d`,
+size, and gzip structure. The publication Actions artifact is a
+finite-retention evidence transport copy, not the durable review authority.
+
+The current evidence-only review checkpoint retains 12 hash-bound files under
+`bootstrap/polaris/v1.6.0/admin-build-inputs-evidence/`. Its schema-v2 contract
+records `admin_dependency_snapshot_review_pending` with next state
+`admin_image_publication_pending`. This checkpoint retires and removes the
+sole write-capable Admin dependency publisher. The Admin snapshot remains
+non-admitted, and Admin image publication/admission, runtime, Flux, and
+credential gates remain false. Issue #61 remains Open.
 
 The image-publication checkpoint adds only the hash-bound
 `bootstrap/polaris/v1.6.0/Containerfile`, the bounded downstream source overlay,
