@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-20
-version: "1.10"
+version: "1.11"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -213,6 +213,50 @@ cryptographic-command boundary so the unit suite needs no host Cosign binary;
 `make verify-polaris-build-contract` and `make verify-security` share an
 explicit `verify-cosign` prerequisite that requires Cosign v3.1.1 before either
 unmocked retained-evidence audit runs. No production skip flag exists.
+
+The Polaris Admin Tool uses a separate additive dependency lifecycle; the
+retired server dependency publisher is not restored. Its reviewed OCI
+snapshot
+`ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies@sha256:fa889d2c0a6e6dc48816d79680a366e21040be333ab6007b88e4ca4dbf6e59d6`
+is an immutable parent seed only. The Admin contract binds the parent's
+descriptor `sha256:3bab7b055d29be1bc59f2fe605960f49bbceee2639ad68086822c62ee8533841`,
+cache layer `sha256:18933bfb895c267302f1ee1c80cfb9712eac736ffcefade48dac53f79e8e3bc0`,
+verification metadata
+`sha256:b8b1fa91bc9d98eaf676dbab76c5452411fcdf6b11a8c9959c131799c71deaf2`,
+and review merge `b12593f27ae4e6ec8b64865f9b6b0bbf114ec654` before resolving a
+new self-contained superset.
+
+The superset must build `:polaris-admin:assemble` and
+`:polaris-admin:quarkusAppPartsBuild`, then repeat
+`:polaris-server:assemble` and `:polaris-server:quarkusAppPartsBuild`.
+Only a fresh network-none, offline, strict-verification build can become a
+review-pending build input. Parent-cache reuse without the new complete
+descriptor and verification metadata is insufficient. The upstream Admin
+graph's unconditional NoSQL/MongoDB modules remain an explicit
+`review_required` surface; this checkpoint neither publishes an image nor
+claims a relational-only runtime.
+
+Pull requests exercise only read-only contract validation. Package and OIDC
+permissions are available only to the `refs/heads/main` publisher, which must
+prove repository, event, ref, source SHA, and workflow SHA before any
+third-party action or explicit token reference. All actions are fixed to
+full-length commit SHAs and their exact count is closed by the verifier. The
+publisher may create only a run-scoped immutable OCI artifact and
+review-pending evidence. Admin image publication, resident-ledger changes,
+runtime manifests, Flux reconciliation, and credentials remain forbidden until
+their later reviewed checkpoints.
+
+The Admin dependency publisher is one-shot at the lifecycle level: every
+attempt uses an immutable `run_id` / `run_attempt` tag, and the evidence-review
+PR must retire the publisher. It is not limited to one execution attempt.
+Because a newly created GHCR package is private by default, the first signed
+and attested attempt may fail closed at the anonymous-pull gate. The only
+permitted recovery is for the owner to make that exact package public and
+rerun before evidence review; failed attempts are not admitted, and registry
+credentials are never an anonymous-pull fallback. Static contract tests run
+before the lifecycle gate on every invocation, and the observed Gradle and
+Java versions must match the pinned toolchain before candidate evidence is
+retained.
 
 The image-publication checkpoint adds only the hash-bound
 `bootstrap/polaris/v1.6.0/Containerfile`, the bounded downstream source overlay,
