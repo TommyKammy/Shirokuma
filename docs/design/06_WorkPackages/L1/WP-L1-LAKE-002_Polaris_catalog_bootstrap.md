@@ -5,7 +5,7 @@ title: "WP-L1-LAKE-002 Polaris catalog bootstrap"
 status: in-progress
 created: 2026-07-05
 updated: 2026-07-20
-version: "1.16"
+version: "1.17"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -58,7 +58,7 @@ Openを維持します。
 
 ## Acceptance Criteria
 
-- [ ] Polaris/PostgreSQL exact digests pass ARM64 and supply-chain admission.
+- [x] Polaris/PostgreSQL exact digests pass ARM64 and supply-chain admission.
 - [ ] Flux reports the catalog Kustomization and both workloads Ready=True.
 - [ ] Catalog create/list/read smoke passes against the approved S3 endpoint.
 - [ ] Credentials remain outside Git and policy checks pass.
@@ -310,10 +310,23 @@ Openを維持します。
   このevidence review専用です。atomic admission時には同じarm64 digestの
   exact-image/CycloneDX-input両scopeを各database age 24時間以内で再scanし、
   Wolfi 56 + Go 4の完全coverageを再確認します。
-- 続く工程はanonymous availability preflightを含むPolaris/PostgreSQLの
-  atomic admissionとfresh PostgreSQL dual-scope scanです。
-- admission後もcredentials、runtime/Flux Ready、catalog API smoke、
-  backup/restore acceptanceが未完了です。
+- atomic-admission checkpointは、空のDocker configurationでPolarisと
+  PostgreSQLのexact referenceをanonymous preflightし、同じPostgreSQL arm64
+  digestをexact-image/CycloneDX-inputの両scopeで再scanしました。各database ageは
+  24時間以内、Wolfi 56 + Go 4は完全coverage、両reportは
+  High=0/Critical=0です。
+- CycloneDX-input scanはseverity UNKNOWNの`CVE-2026-39824`
+  （`golang.org/x/sys` `v0.1.0`、fixed `0.44.0`）1件も隠さず保持します。
+  High/Critical gateは通過しますが、decision receiptは`unknown=1`を記録し、
+  runtime acceptanceで継続監視します。
+- reviewed evidence、anonymous preflight、fresh dual-scope scan、両exact
+  digestは
+  `security/evidence/polaris-v1.6.0-postgresql-v18.4/`へ一体で束縛しました。
+  PolarisとPostgreSQLは`security/resident-images.json`へ同時追加され、片側だけの
+  resident recordはfail-closedになります。
+- atomic resident-image admissionは完了しましたが、credentials、
+  runtime/Flux manifest、live Ready、catalog API smoke、backup/restore
+  acceptanceは引き続きblockedです。次はruntime acceptanceを実施します。
 - PR #74以降の本文はIssue参照を`Refs #61`だけに限定します。否定文であっても
   closing keywordとIssue番号を組み合わせません。Issue #61は上記runtime
   acceptance chainの完了までOpenを維持します。
@@ -361,12 +374,12 @@ Openを維持します。
 - Polaris image evidence-only review:
   [#83](https://github.com/TommyKammy/Shirokuma/pull/83)
   (merged as `11fca8a4ad180a8d862bc5f93aec3729fca7e5ee`, `Refs #61`)
-- PostgreSQL evidence-only review: this PR (`Refs #61`)
+- PostgreSQL evidence-only review: completed checkpoint (`Refs #61`)
+- Polaris/PostgreSQL atomic admission: completed checkpoint (`Refs #61`)
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
 - Execution order: `2 of 8`
-- Queue: atomic Polaris/PostgreSQL admission、runtime/Flux/API
-  smoke/backup-restoreを順に完了するまで、Issue #61はOpen、後続#62は
-  dependency-blockedを維持します。
+- Queue: runtime/Flux/API smoke/backup-restoreを完了するまで、Issue #61は
+  Open、後続#62はdependency-blockedを維持します。
 
 ## Definition of Done
 

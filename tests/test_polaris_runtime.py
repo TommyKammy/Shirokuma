@@ -37,20 +37,20 @@ class PolarisRuntimeAdmissionTests(unittest.TestCase):
             f"admission found: {sorted(admitted_components)}",
         )
 
+        runtime_manifests = sorted(
+            str(path.relative_to(ROOT))
+            for path in DEPLOY_ROOT.rglob("*")
+            if path.is_file()
+            and path.suffix in MANIFEST_SUFFIXES
+            and RUNTIME_IDENTITY.search(path.read_text(encoding="utf-8"))
+        )
+        self.assertEqual(
+            [],
+            runtime_manifests,
+            "Polaris and PostgreSQL runtime manifests must remain blocked "
+            "until the separate runtime-acceptance boundary is complete",
+        )
         if not entries:
-            runtime_manifests = sorted(
-                str(path.relative_to(ROOT))
-                for path in DEPLOY_ROOT.rglob("*")
-                if path.is_file()
-                and path.suffix in MANIFEST_SUFFIXES
-                and RUNTIME_IDENTITY.search(path.read_text(encoding="utf-8"))
-            )
-            self.assertEqual(
-                [],
-                runtime_manifests,
-                "Polaris and PostgreSQL runtime manifests must remain blocked "
-                "until both images are admitted",
-            )
             return
 
         for component, entry in entries.items():

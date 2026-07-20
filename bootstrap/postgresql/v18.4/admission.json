@@ -1,10 +1,10 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "component": "postgresql",
   "version": "18.4",
   "platform": "linux/arm64",
-  "admission": "blocked",
-  "state": "approved_for_atomic_admission",
+  "admission": "approved",
+  "state": "runtime_acceptance_pending",
   "source": "https://github.com/chainguard-images/images/tree/main/images/postgres",
   "candidate": {
     "index_reference": "cgr.dev/chainguard/postgres@sha256:3dc629a917612f1630c6f8e7a17f23a42cbd5917b9b3080972b70b1583daff34",
@@ -119,12 +119,16 @@
       "offline_retained_bundle_verification": true
     }
   },
+  "atomic_admission_receipt": {
+    "path": "bootstrap/polaris/v1.6.0/atomic-admission.json",
+    "sha256": "cc7ff13fb87bec48537e5944d4820c26fd81c0b5bd215095da8df2ecfff5d4d3"
+  },
   "resident_ledger": {
-    "permitted": false,
+    "permitted": true,
     "atomic_with": "polaris"
   },
   "runtime_manifests": {
     "permitted": false
   },
-  "next_action": "preflight-and-admit-with-polaris-atomically"
+  "next_action": "complete-runtime-acceptance"
 }

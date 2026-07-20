@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "atomic_admission_receipt": {
+    "path": "bootstrap/polaris/v1.6.0/atomic-admission.json",
+    "sha256": "cc7ff13fb87bec48537e5944d4820c26fd81c0b5bd215095da8df2ecfff5d4d3"
+  },
+  "images": [
+    {
+      "component": "polaris",
+      "version": "1.6.0",
+      "source": "https://github.com/apache/polaris",
+      "platform": "linux/arm64",
+      "reference": "ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+      "verified_at": "2026-07-20T09:15:43.853Z",
+      "evidence_mode": "reviewed_repository_publication",
+      "reviewed_repository_publication": {
+        "admission": {
+          "path": "bootstrap/polaris/v1.6.0/admission.json"
+        },
+        "release_evidence": {
+          "path": "bootstrap/polaris/v1.6.0/release-evidence.json",
+          "sha256": "2e3ca5a8245669ccc818f2a22a8be16e901a9b7b73b5eb71237e8c6affdd6f69"
+        },
+        "publication_evidence": {
+          "path": "bootstrap/polaris/v1.6.0/image-evidence/publication.json",
+          "sha256": "b620e2d752a93e9d0cf1a945e6ee820c0229eddb6033e2dc104086a40299d37c"
+        }
+      }
+    },
+    {
+      "component": "postgresql",
+      "version": "18.4",
+      "source": "https://github.com/chainguard-images/images/tree/main/images/postgres",
+      "platform": "linux/arm64",
+      "reference": "cgr.dev/chainguard/postgres@sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+      "verified_at": "2026-07-20T09:15:43.853Z",
+      "evidence_mode": "signed_oci_index",
+      "signature": {
+        "verified": true,
+        "signed_index": "cgr.dev/chainguard/postgres@sha256:3dc629a917612f1630c6f8e7a17f23a42cbd5917b9b3080972b70b1583daff34",
+        "arm64_in_signed_index": true,
+        "arm64_manifest_digest": "sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+        "issuer": "https://token.actions.githubusercontent.com",
+        "identity": "https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main",
+        "workflow_repository": "chainguard-images/images",
+        "workflow_ref": "refs/heads/main",
+        "commit": "704e38b436bc40bc9a9d669c05f0d6694bec298b",
+        "transparency_log_index": 2181460214
+      },
+      "provenance": {
+        "predicate_type": "https://slsa.dev/provenance/v1",
+        "subject_digest": "sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+        "source": "https://github.com/chainguard-images/images/tree/main/images/postgres",
+        "version": "18.4",
+        "revision": "1d360e5f7f3b749f0b1e55b3f75d3eb8db4e7004",
+        "builder": "https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main",
+        "attestation_manifest": "sha256:8f5098343c0fc68d434174753d2ba6cefa9c1c037f5185f52b5cf5fbb4ba559b"
+      },
+      "upstream_sbom": {
+        "predicate_type": "https://spdx.dev/Document",
+        "subject_digest": "sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+        "package_count": 257
+      },
+      "retained_evidence": {
+        "verification": {
+          "path": "bootstrap/postgresql/v18.4/evidence/cryptographic-verification.json",
+          "sha256": "0b920cce5f9a304986dbdb5aeec4445197f5e7de87ca46d70d55a8f0b2c8f81a"
+        },
+        "index_signature": {
+          "path": "bootstrap/postgresql/v18.4/evidence/index-signature.sigstore.json",
+          "sha256": "d6ed9528f9dc344561ae2d252ebdfb76675effe90e28ee59d2e7385c262e37f6"
+        },
+        "arm64_signature": {
+          "path": "bootstrap/postgresql/v18.4/evidence/arm64-signature.sigstore.json",
+          "sha256": "9ccdbc86b366064cfa9cb4c28448f4b58e64b6662c3be3cceca98351e6ba7cc7"
+        },
+        "provenance": {
+          "path": "bootstrap/postgresql/v18.4/evidence/slsa-provenance.sigstore.json",
+          "sha256": "7993af0f419ce5e066743ffc33a19f4b8cf6a7e166ba79d7a7c5567fa66342e6"
+        },
+        "spdx": {
+          "path": "bootstrap/postgresql/v18.4/evidence/spdx-sbom.sigstore.json",
+          "sha256": "74d3969113d71e977a3c7a5bc32cd1c4273c411e40d86a951529818a31d6638a"
+        },
+        "cyclonedx_sbom": {
+          "path": "bootstrap/postgresql/v18.4/evidence/postgresql-18.4-arm64.cdx.json",
+          "sha256": "f07cc69d805de9161cad8bec49153b3f8908ec78b4ee21a0655736f43ef32ed6"
+        }
+      }
+    }
+  ]
+}

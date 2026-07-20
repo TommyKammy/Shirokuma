@@ -1,0 +1,1294 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.72.0"
+  },
+  "ReportID": "019f7ece-cb8d-757a-bf31-5e1cff13635e",
+  "CreatedAt": "2026-07-20T18:15:09.581359+09:00",
+  "ArtifactName": "security/evidence/polaris-v1.6.0-postgresql-v18.4/postgresql-18.4-arm64.cdx.json",
+  "ArtifactType": "cyclonedx",
+  "Metadata": {
+    "OS": {
+      "Family": "wolfi",
+      "Name": "20230201"
+    }
+  },
+  "Results": [
+    {
+      "Target": "security/evidence/polaris-v1.6.0-postgresql-v18.4/postgresql-18.4-arm64.cdx.json (wolfi 20230201)",
+      "Class": "os-pkgs",
+      "Type": "wolfi",
+      "Packages": [
+        {
+          "ID": "bash@5.3-r12",
+          "Name": "bash",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/bash@5.3-r12?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "b204fdaa556d727b",
+            "BOMRef": "pkg:apk/wolfi/bash@5.3-r12?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=344339c0c9bfa430"
+          },
+          "Version": "5.3-r12",
+          "Arch": "aarch64",
+          "SrcName": "bash",
+          "SrcVersion": "5.3-r12",
+          "Licenses": [
+            "GPL-3.0-or-later"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "ncurses@6.6.20260711-r0",
+            "wolfi-baselayout@20230201-r29"
+          ]
+        },
+        {
+          "ID": "busybox@1.37.0-r61",
+          "Name": "busybox",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/busybox@1.37.0-r61?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "af862e00eaccdd78",
+            "BOMRef": "pkg:apk/wolfi/busybox@1.37.0-r61?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=5ca9f1c7684c7b65"
+          },
+          "Version": "1.37.0-r61",
+          "Arch": "aarch64",
+          "SrcName": "busybox",
+          "SrcVersion": "1.37.0-r61",
+          "Licenses": [
+            "GPL-2.0-only"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "libcrypt1@2.43-r11",
+            "wolfi-baselayout@20230201-r29"
+          ]
+        },
+        {
+          "ID": "ca-certificates-bundle@20260413-r0",
+          "Name": "ca-certificates-bundle",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/ca-certificates-bundle@20260413-r0?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=ca-certificates",
+            "UID": "916a3366677dba1e",
+            "BOMRef": "pkg:apk/wolfi/ca-certificates-bundle@20260413-r0?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=f4d09a04399d4d07\u0026upstream=ca-certificates"
+          },
+          "Version": "20260413-r0",
+          "Arch": "aarch64",
+          "SrcName": "ca-certificates-bundle",
+          "SrcVersion": "20260413-r0",
+          "Licenses": [
+            "MPL-2.0 AND MIT"
+          ],
+          "DependsOn": [
+            "wolfi-baselayout@20230201-r29"
+          ]
+        },
+        {
+          "ID": "cyrus-sasl-heimdal-libs@2.1.28-r52",
+          "Name": "cyrus-sasl-heimdal-libs",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/cyrus-sasl-heimdal-libs@2.1.28-r52?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=cyrus-sasl-heimdal",
+            "UID": "63cec645f083ad96",
+            "BOMRef": "pkg:apk/wolfi/cyrus-sasl-heimdal-libs@2.1.28-r52?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=fe981a353414b639\u0026upstream=cyrus-sasl-heimdal"
+          },
+          "Version": "2.1.28-r52",
+          "Arch": "aarch64",
+          "SrcName": "cyrus-sasl-heimdal-libs",
+          "SrcVersion": "2.1.28-r52",
+          "Licenses": [
+            "BSD-3-Clause"
+          ],
+          "DependsOn": [
+            "gdbm@1.26-r5",
+            "glibc@2.43-r11",
+            "heimdal-libs@7.8.0-r51",
+            "ld-linux@2.43-r11",
+            "libcrypto3@3.6.3-r3",
+            "sqlite-libs@3.53.3-r1"
+          ]
+        },
+        {
+          "ID": "ecpg-18@18.4-r6",
+          "Name": "ecpg-18",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/ecpg-18@18.4-r6?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=postgresql-18",
+            "UID": "1aa37403fd418365",
+            "BOMRef": "pkg:apk/wolfi/ecpg-18@18.4-r6?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=8a5330ecc6fbe474\u0026upstream=postgresql-18"
+          },
+          "Version": "18.4-r6",
+          "Arch": "aarch64",
+          "SrcName": "ecpg-18",
+          "SrcVersion": "18.4-r6",
+          "Licenses": [
+            "BSD-3-Clause"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11"
+          ]
+        },
+        {
+          "ID": "gdbm@1.26-r5",
+          "Name": "gdbm",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/gdbm@1.26-r5?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "5ee496bd2c6c2676",
+            "BOMRef": "pkg:apk/wolfi/gdbm@1.26-r5?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=2b5ee70c26c1e5c9"
+          },
+          "Version": "1.26-r5",
+          "Arch": "aarch64",
+          "SrcName": "gdbm",
+          "SrcVersion": "1.26-r5",
+          "Licenses": [
+            "GPL-3.0-or-later"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11"
+          ]
+        },
+        {
+          "ID": "glibc@2.43-r11",
+          "Name": "glibc",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/glibc@2.43-r11?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "de9a9740ef34c6a9",
+            "BOMRef": "pkg:apk/wolfi/glibc@2.43-r11?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=9b6f3f27e0277214"
+          },
+          "Version": "2.43-r11",
+          "Arch": "aarch64",
+          "SrcName": "glibc",
+          "SrcVersion": "2.43-r11",
+          "Licenses": [
+            "LGPL-2.1-or-later"
+          ],
+          "DependsOn": [
+            "glibc-locale-posix@2.43-r11",
+            "ld-linux@2.43-r11",
+            "libgcc@16.1.0-r4",
+            "wolfi-baselayout@20230201-r29"
+          ]
+        },
+        {
+          "ID": "glibc-locale-en@2.43-r11",
+          "Name": "glibc-locale-en",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/glibc-locale-en@2.43-r11?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=glibc",
+            "UID": "d4f2a29ce099cad",
+            "BOMRef": "pkg:apk/wolfi/glibc-locale-en@2.43-r11?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=9e35ac0de2ea2bcb\u0026upstream=glibc"
+          },
+          "Version": "2.43-r11",
+          "Arch": "aarch64",
+          "SrcName": "glibc-locale-en",
+          "SrcVersion": "2.43-r11",
+          "Licenses": [
+            "LGPL-2.1-or-later"
+          ],
+          "DependsOn": [
+            "wolfi-baselayout@20230201-r29"
+          ]
+        },
+        {
+          "ID": "glibc-locale-posix@2.43-r11",
+          "Name": "glibc-locale-posix",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/glibc-locale-posix@2.43-r11?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=glibc",
+            "UID": "bc8c0168cb699a90",
+            "BOMRef": "pkg:apk/wolfi/glibc-locale-posix@2.43-r11?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=6b42dc07f0f7b3df\u0026upstream=glibc"
+          },
+          "Version": "2.43-r11",
+          "Arch": "aarch64",
+          "SrcName": "glibc-locale-posix",
+          "SrcVersion": "2.43-r11",
+          "Licenses": [
+            "LGPL-2.1-or-later"
+          ],
+          "DependsOn": [
+            "wolfi-baselayout@20230201-r29"
+          ]
+        },
+        {
+          "ID": "gosu@1.19-r13",
+          "Name": "gosu",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/gosu@1.19-r13?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "d4cf71a0b4eef521",
+            "BOMRef": "pkg:apk/wolfi/gosu@1.19-r13?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=b01f39a190bac00f"
+          },
+          "Version": "1.19-r13",
+          "Arch": "aarch64",
+          "SrcName": "gosu",
+          "SrcVersion": "1.19-r13",
+          "Licenses": [
+            "Apache-2.0"
+          ]
+        },
+        {
+          "ID": "heimdal-libs@7.8.0-r51",
+          "Name": "heimdal-libs",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/heimdal-libs@7.8.0-r51?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=heimdal",
+            "UID": "c14533734af45f3b",
+            "BOMRef": "pkg:apk/wolfi/heimdal-libs@7.8.0-r51?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=40b274ee34b0012a\u0026upstream=heimdal"
+          },
+          "Version": "7.8.0-r51",
+          "Arch": "aarch64",
+          "SrcName": "heimdal-libs",
+          "SrcVersion": "7.8.0-r51",
+          "Licenses": [
+            "BSD-3-Clause"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "libcrypt1@2.43-r11",
+            "readline@8.3-r2",
+            "sqlite-libs@3.53.3-r1",
+            "wolfi-baselayout@20230201-r29"
+          ]
+        },
+        {
+          "ID": "icu78-data-full@78.3-r1",
+          "Name": "icu78-data-full",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/icu78-data-full@78.3-r1?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=icu",
+            "UID": "c131bea2bb9dff09",
+            "BOMRef": "pkg:apk/wolfi/icu78-data-full@78.3-r1?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=04bcab40bd15b9d5\u0026upstream=icu"
+          },
+          "Version": "78.3-r1",
+          "Arch": "aarch64",
+          "SrcName": "icu78-data-full",
+          "SrcVersion": "78.3-r1",
+          "Licenses": [
+            "MIT"
+          ]
+        },
+        {
+          "ID": "keyutils-libs@1.6.3-r38",
+          "Name": "keyutils-libs",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/keyutils-libs@1.6.3-r38?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=keyutils",
+            "UID": "a1e9c21cad03fd5c",
+            "BOMRef": "pkg:apk/wolfi/keyutils-libs@1.6.3-r38?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=2079da0062ab132a\u0026upstream=keyutils"
+          },
+          "Version": "1.6.3-r38",
+          "Arch": "aarch64",
+          "SrcName": "keyutils-libs",
+          "SrcVersion": "1.6.3-r38",
+          "Licenses": [
+            "GPL-2.0-or-later OR LGPL-2.0-or-later"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "wolfi-baselayout@20230201-r29"
+          ]
+        },
+        {
+          "ID": "krb5-conf@1.0-r9",
+          "Name": "krb5-conf",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/krb5-conf@1.0-r9?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "9c557f3732806640",
+            "BOMRef": "pkg:apk/wolfi/krb5-conf@1.0-r9?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=9f678015b21969cd"
+          },
+          "Version": "1.0-r9",
+          "Arch": "aarch64",
+          "SrcName": "krb5-conf",
+          "SrcVersion": "1.0-r9",
+          "Licenses": [
+            "MIT"
+          ]
+        },
+        {
+          "ID": "krb5-libs@1.22.2-r2",
+          "Name": "krb5-libs",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/krb5-libs@1.22.2-r2?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=krb5",
+            "UID": "beef22e9d35c2b2f",
+            "BOMRef": "pkg:apk/wolfi/krb5-libs@1.22.2-r2?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=2da49ec66789d779\u0026upstream=krb5"
+          },
+          "Version": "1.22.2-r2",
+          "Arch": "aarch64",
+          "SrcName": "krb5-libs",
+          "SrcVersion": "1.22.2-r2",
+          "Licenses": [
+            "MIT"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "keyutils-libs@1.6.3-r38",
+            "krb5-conf@1.0-r9",
+            "ld-linux@2.43-r11",
+            "libcom_err@1.47.4-r1",
+            "libcrypto3@3.6.3-r3",
+            "libssl3@3.6.3-r3",
+            "libverto@0.3.2-r7",
+            "wolfi-baselayout@20230201-r29"
+          ]
+        },
+        {
+          "ID": "ld-linux@2.43-r11",
+          "Name": "ld-linux",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/ld-linux@2.43-r11?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=glibc",
+            "UID": "4a861921e017d42f",
+            "BOMRef": "pkg:apk/wolfi/ld-linux@2.43-r11?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=5d5a3be6fce3fcf4\u0026upstream=glibc"
+          },
+          "Version": "2.43-r11",
+          "Arch": "aarch64",
+          "SrcName": "ld-linux",
+          "SrcVersion": "2.43-r11",
+          "Licenses": [
+            "LGPL-2.1-or-later"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "wolfi-baselayout@20230201-r29"
+          ]
+        },
+        {
+          "ID": "libLLVM-19@19.1.7-r27",
+          "Name": "libLLVM-19",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libllvm-19@19.1.7-r27?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=llvm-19",
+            "UID": "3895cb54f3b28d7a",
+            "BOMRef": "pkg:apk/wolfi/libllvm-19@19.1.7-r27?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=8ebe3ad27bb10373\u0026upstream=llvm-19"
+          },
+          "Version": "19.1.7-r27",
+          "Arch": "aarch64",
+          "SrcName": "libLLVM-19",
+          "SrcVersion": "19.1.7-r27",
+          "Licenses": [
+            "Apache-2.0"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "libffi@3.7.1-r0",
+            "libgcc@16.1.0-r4",
+            "libstdc++@16.1.0-r4",
+            "libxml2-16@2.15.3-r3",
+            "zlib@1.3.2-r3"
+          ]
+        },
+        {
+          "ID": "libcom_err@1.47.4-r1",
+          "Name": "libcom_err",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libcom_err@1.47.4-r1?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=e2fsprogs",
+            "UID": "35c73b8a86b1e53a",
+            "BOMRef": "pkg:apk/wolfi/libcom_err@1.47.4-r1?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=9b01781cc95bb2c5\u0026upstream=e2fsprogs"
+          },
+          "Version": "1.47.4-r1",
+          "Arch": "aarch64",
+          "SrcName": "libcom_err",
+          "SrcVersion": "1.47.4-r1",
+          "Licenses": [
+            "GPL-2.0-or-later AND LGPL-2.0-or-later AND BSD-3-Clause AND MIT"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "wolfi-baselayout@20230201-r29"
+          ]
+        },
+        {
+          "ID": "libcrypt1@2.43-r11",
+          "Name": "libcrypt1",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libcrypt1@2.43-r11?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=glibc",
+            "UID": "686cca6f0631abe1",
+            "BOMRef": "pkg:apk/wolfi/libcrypt1@2.43-r11?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=10526aa5fdf51bed\u0026upstream=glibc"
+          },
+          "Version": "2.43-r11",
+          "Arch": "aarch64",
+          "SrcName": "libcrypt1",
+          "SrcVersion": "2.43-r11",
+          "Licenses": [
+            "LGPL-2.1-or-later"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "libxcrypt@4.5.2-r3",
+            "wolfi-baselayout@20230201-r29"
+          ]
+        },
+        {
+          "ID": "libcrypto3@3.6.3-r3",
+          "Name": "libcrypto3",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libcrypto3@3.6.3-r3?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=openssl",
+            "UID": "268f95d7cb9a9aaf",
+            "BOMRef": "pkg:apk/wolfi/libcrypto3@3.6.3-r3?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=21c4761f51e1a93a\u0026upstream=openssl"
+          },
+          "Version": "3.6.3-r3",
+          "Arch": "aarch64",
+          "SrcName": "libcrypto3",
+          "SrcVersion": "3.6.3-r3",
+          "Licenses": [
+            "Apache-2.0"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11"
+          ]
+        },
+        {
+          "ID": "libedit@3.1-r17",
+          "Name": "libedit",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libedit@3.1-r17?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "283edf8818861c1a",
+            "BOMRef": "pkg:apk/wolfi/libedit@3.1-r17?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=dfec58a772b57f47"
+          },
+          "Version": "3.1-r17",
+          "Arch": "aarch64",
+          "SrcName": "libedit",
+          "SrcVersion": "3.1-r17",
+          "Licenses": [
+            "BSD-3-Clause"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "ncurses@6.6.20260711-r0"
+          ]
+        },
+        {
+          "ID": "libffi@3.7.1-r0",
+          "Name": "libffi",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libffi@3.7.1-r0?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "5cea3987d2558fed",
+            "BOMRef": "pkg:apk/wolfi/libffi@3.7.1-r0?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=f4e20c05c9497eae"
+          },
+          "Version": "3.7.1-r0",
+          "Arch": "aarch64",
+          "SrcName": "libffi",
+          "SrcVersion": "3.7.1-r0",
+          "Licenses": [
+            "MIT"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11"
+          ]
+        },
+        {
+          "ID": "libgcc@16.1.0-r4",
+          "Name": "libgcc",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libgcc@16.1.0-r4?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=gcc",
+            "UID": "ea0f8bd507780d2c",
+            "BOMRef": "pkg:apk/wolfi/libgcc@16.1.0-r4?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=1b72654cc8977911\u0026upstream=gcc"
+          },
+          "Version": "16.1.0-r4",
+          "Arch": "aarch64",
+          "SrcName": "libgcc",
+          "SrcVersion": "16.1.0-r4",
+          "Licenses": [
+            "GPL-3.0-or-later WITH GCC-exception-3.1"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11"
+          ]
+        },
+        {
+          "ID": "libicu78@78.3-r1",
+          "Name": "libicu78",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libicu78@78.3-r1?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=icu",
+            "UID": "84a6539bd79f66f6",
+            "BOMRef": "pkg:apk/wolfi/libicu78@78.3-r1?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=0c99d702abc92b1c\u0026upstream=icu"
+          },
+          "Version": "78.3-r1",
+          "Arch": "aarch64",
+          "SrcName": "libicu78",
+          "SrcVersion": "78.3-r1",
+          "Licenses": [
+            "MIT"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "icu78-data-full@78.3-r1",
+            "ld-linux@2.43-r11",
+            "libgcc@16.1.0-r4",
+            "libstdc++@16.1.0-r4"
+          ]
+        },
+        {
+          "ID": "libldap-2.6@2.6.13-r5",
+          "Name": "libldap-2.6",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libldap-2.6@2.6.13-r5?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=openldap-2.6",
+            "UID": "e6fb887c5160aba5",
+            "BOMRef": "pkg:apk/wolfi/libldap-2.6@2.6.13-r5?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=316f27e26ff19501\u0026upstream=openldap-2.6"
+          },
+          "Version": "2.6.13-r5",
+          "Arch": "aarch64",
+          "SrcName": "libldap-2.6",
+          "SrcVersion": "2.6.13-r5",
+          "Licenses": [
+            "OLDAP-2.8"
+          ],
+          "DependsOn": [
+            "cyrus-sasl-heimdal-libs@2.1.28-r52",
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "libcrypto3@3.6.3-r3",
+            "libssl3@3.6.3-r3",
+            "wolfi-baselayout@20230201-r29"
+          ]
+        },
+        {
+          "ID": "liblz4-1@1.10.0-r9",
+          "Name": "liblz4-1",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/liblz4-1@1.10.0-r9?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=lz4",
+            "UID": "1ac14a4f1cde8d58",
+            "BOMRef": "pkg:apk/wolfi/liblz4-1@1.10.0-r9?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=ae48be2922e643a2\u0026upstream=lz4"
+          },
+          "Version": "1.10.0-r9",
+          "Arch": "aarch64",
+          "SrcName": "liblz4-1",
+          "SrcVersion": "1.10.0-r9",
+          "Licenses": [
+            "BSD-2-Clause AND GPL-2.0-only"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11"
+          ]
+        },
+        {
+          "ID": "libpcre2-8-0@10.47-r0",
+          "Name": "libpcre2-8-0",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libpcre2-8-0@10.47-r0?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=pcre2",
+            "UID": "a7ba998d6d2ec747",
+            "BOMRef": "pkg:apk/wolfi/libpcre2-8-0@10.47-r0?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=45fda32267fa3e76\u0026upstream=pcre2"
+          },
+          "Version": "10.47-r0",
+          "Arch": "aarch64",
+          "SrcName": "libpcre2-8-0",
+          "SrcVersion": "10.47-r0",
+          "Licenses": [
+            "BSD-3-Clause"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11"
+          ]
+        },
+        {
+          "ID": "libpq-18@18.4-r6",
+          "Name": "libpq-18",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libpq-18@18.4-r6?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=postgresql-18",
+            "UID": "f2a1d1e78447f1a9",
+            "BOMRef": "pkg:apk/wolfi/libpq-18@18.4-r6?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=207e97dcd09761a0\u0026upstream=postgresql-18"
+          },
+          "Version": "18.4-r6",
+          "Arch": "aarch64",
+          "SrcName": "libpq-18",
+          "SrcVersion": "18.4-r6",
+          "Licenses": [
+            "BSD-3-Clause"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "krb5-libs@1.22.2-r2",
+            "ld-linux@2.43-r11",
+            "libcrypto3@3.6.3-r3",
+            "libldap-2.6@2.6.13-r5",
+            "libssl3@3.6.3-r3"
+          ]
+        },
+        {
+          "ID": "libselinux@3.11-r0",
+          "Name": "libselinux",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libselinux@3.11-r0?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "6ae5d45b71421e9d",
+            "BOMRef": "pkg:apk/wolfi/libselinux@3.11-r0?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=ff085f0aff5adfa1"
+          },
+          "Version": "3.11-r0",
+          "Arch": "aarch64",
+          "SrcName": "libselinux",
+          "SrcVersion": "3.11-r0",
+          "Licenses": [
+            "libselinux-1.0"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "libgcc@16.1.0-r4",
+            "libpcre2-8-0@10.47-r0",
+            "libsepol@3.11-r0",
+            "wolfi-baselayout@20230201-r29"
+          ]
+        },
+        {
+          "ID": "libsepol@3.11-r0",
+          "Name": "libsepol",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libsepol@3.11-r0?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "c2219eae6b30e492",
+            "BOMRef": "pkg:apk/wolfi/libsepol@3.11-r0?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=0dfbba064a14945c"
+          },
+          "Version": "3.11-r0",
+          "Arch": "aarch64",
+          "SrcName": "libsepol",
+          "SrcVersion": "3.11-r0",
+          "Licenses": [
+            "LGPL-2.1-only"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "wolfi-baselayout@20230201-r29"
+          ]
+        },
+        {
+          "ID": "libssl3@3.6.3-r3",
+          "Name": "libssl3",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libssl3@3.6.3-r3?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=openssl",
+            "UID": "ead07f8adc3649e",
+            "BOMRef": "pkg:apk/wolfi/libssl3@3.6.3-r3?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=b99e8c34ac2447c3\u0026upstream=openssl"
+          },
+          "Version": "3.6.3-r3",
+          "Arch": "aarch64",
+          "SrcName": "libssl3",
+          "SrcVersion": "3.6.3-r3",
+          "Licenses": [
+            "Apache-2.0"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "libcrypto3@3.6.3-r3"
+          ]
+        },
+        {
+          "ID": "libstdc++@16.1.0-r4",
+          "Name": "libstdc++",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libstdc%2B%2B@16.1.0-r4?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=gcc",
+            "UID": "3ccb74c2e23a38be",
+            "BOMRef": "pkg:apk/wolfi/libstdc%2B%2B@16.1.0-r4?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=6a9e706fb3b86405\u0026upstream=gcc"
+          },
+          "Version": "16.1.0-r4",
+          "Arch": "aarch64",
+          "SrcName": "libstdc++",
+          "SrcVersion": "16.1.0-r4",
+          "Licenses": [
+            "GPL-3.0-or-later WITH GCC-exception-3.1"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "libgcc@16.1.0-r4"
+          ]
+        },
+        {
+          "ID": "libuuid@2.42.2-r0",
+          "Name": "libuuid",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libuuid@2.42.2-r0?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=util-linux",
+            "UID": "667d6dc2b0ed3831",
+            "BOMRef": "pkg:apk/wolfi/libuuid@2.42.2-r0?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=81cb728a425c6ecd\u0026upstream=util-linux"
+          },
+          "Version": "2.42.2-r0",
+          "Arch": "aarch64",
+          "SrcName": "libuuid",
+          "SrcVersion": "2.42.2-r0",
+          "Licenses": [
+            "GPL-3.0-or-later AND GPL-2.0-or-later AND GPL-2.0-only AND GPL-1.0-only AND LGPL-2.1-or-later AND BSD-1-Clause AND BSD-2-Clause AND BSD-3-Clause AND BSD-4-Clause-UC AND MIT AND CC-PDDC"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "wolfi-baselayout@20230201-r29"
+          ]
+        },
+        {
+          "ID": "libverto@0.3.2-r7",
+          "Name": "libverto",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libverto@0.3.2-r7?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "176690ab610bc337",
+            "BOMRef": "pkg:apk/wolfi/libverto@0.3.2-r7?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=857770d1af29fd31"
+          },
+          "Version": "0.3.2-r7",
+          "Arch": "aarch64",
+          "SrcName": "libverto",
+          "SrcVersion": "0.3.2-r7",
+          "Licenses": [
+            "MIT"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11"
+          ]
+        },
+        {
+          "ID": "libxcrypt@4.5.2-r3",
+          "Name": "libxcrypt",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libxcrypt@4.5.2-r3?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "7a2669caa74e5961",
+            "BOMRef": "pkg:apk/wolfi/libxcrypt@4.5.2-r3?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=ce2b5e050779ef09"
+          },
+          "Version": "4.5.2-r3",
+          "Arch": "aarch64",
+          "SrcName": "libxcrypt",
+          "SrcVersion": "4.5.2-r3",
+          "Licenses": [
+            "GPL-2.0-or-later AND LGPL-2.1-or-later"
+          ]
+        },
+        {
+          "ID": "libxml2-16@2.15.3-r3",
+          "Name": "libxml2-16",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libxml2-16@2.15.3-r3?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=libxml2",
+            "UID": "b67465c2aeb49616",
+            "BOMRef": "pkg:apk/wolfi/libxml2-16@2.15.3-r3?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=9125e889c2e997ed\u0026upstream=libxml2"
+          },
+          "Version": "2.15.3-r3",
+          "Arch": "aarch64",
+          "SrcName": "libxml2-16",
+          "SrcVersion": "2.15.3-r3",
+          "Licenses": [
+            "MIT"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "zlib@1.3.2-r3"
+          ]
+        },
+        {
+          "ID": "libxslt@1.1.45-r3",
+          "Name": "libxslt",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libxslt@1.1.45-r3?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "afd9056662c8ce63",
+            "BOMRef": "pkg:apk/wolfi/libxslt@1.1.45-r3?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=a15c264f993f514e"
+          },
+          "Version": "1.1.45-r3",
+          "Arch": "aarch64",
+          "SrcName": "libxslt",
+          "SrcVersion": "1.1.45-r3",
+          "Licenses": [
+            "MIT"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "libxml2-16@2.15.3-r3"
+          ]
+        },
+        {
+          "ID": "libzstd1@1.5.7-r7",
+          "Name": "libzstd1",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/libzstd1@1.5.7-r7?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=zstd",
+            "UID": "834b40e0a845fe4d",
+            "BOMRef": "pkg:apk/wolfi/libzstd1@1.5.7-r7?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=fe01e5051ff5e6f7\u0026upstream=zstd"
+          },
+          "Version": "1.5.7-r7",
+          "Arch": "aarch64",
+          "SrcName": "libzstd1",
+          "SrcVersion": "1.5.7-r7",
+          "Licenses": [
+            "BSD-2-Clause AND GPL-2.0-only"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11"
+          ]
+        },
+        {
+          "ID": "linux-pam@1.7.2-r4",
+          "Name": "linux-pam",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/linux-pam@1.7.2-r4?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "83ba525cbc7bd027",
+            "BOMRef": "pkg:apk/wolfi/linux-pam@1.7.2-r4?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=009a1b590c9bb82d"
+          },
+          "Version": "1.7.2-r4",
+          "Arch": "aarch64",
+          "SrcName": "linux-pam",
+          "SrcVersion": "1.7.2-r4",
+          "Licenses": [
+            "BSD-3-Clause"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "libcrypt1@2.43-r11",
+            "libselinux@3.11-r0",
+            "wolfi-baselayout@20230201-r29"
+          ]
+        },
+        {
+          "ID": "ncurses@6.6.20260711-r0",
+          "Name": "ncurses",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/ncurses@6.6.20260711-r0?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "8eb391442921c113",
+            "BOMRef": "pkg:apk/wolfi/ncurses@6.6.20260711-r0?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=f82a624567250cdc"
+          },
+          "Version": "6.6.20260711-r0",
+          "Arch": "aarch64",
+          "SrcName": "ncurses",
+          "SrcVersion": "6.6.20260711-r0",
+          "Licenses": [
+            "MIT"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "ncurses-terminfo-base@6.6.20260711-r0"
+          ]
+        },
+        {
+          "ID": "ncurses-terminfo-base@6.6.20260711-r0",
+          "Name": "ncurses-terminfo-base",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/ncurses-terminfo-base@6.6.20260711-r0?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=ncurses",
+            "UID": "56903edab120cb91",
+            "BOMRef": "pkg:apk/wolfi/ncurses-terminfo-base@6.6.20260711-r0?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=6bada0c4314ec871\u0026upstream=ncurses"
+          },
+          "Version": "6.6.20260711-r0",
+          "Arch": "aarch64",
+          "SrcName": "ncurses-terminfo-base",
+          "SrcVersion": "6.6.20260711-r0",
+          "Licenses": [
+            "MIT"
+          ]
+        },
+        {
+          "ID": "pgaudit-18@18.0-r4",
+          "Name": "pgaudit-18",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/pgaudit-18@18.0-r4?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "1d74291723b5df3a",
+            "BOMRef": "pkg:apk/wolfi/pgaudit-18@18.0-r4?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=e5271004357247e2"
+          },
+          "Version": "18.0-r4",
+          "Arch": "aarch64",
+          "SrcName": "pgaudit-18",
+          "SrcVersion": "18.0-r4",
+          "Licenses": [
+            "BSD-3-Clause"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11"
+          ]
+        },
+        {
+          "ID": "posix-libc-utils@2.43-r11",
+          "Name": "posix-libc-utils",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/posix-libc-utils@2.43-r11?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=glibc",
+            "UID": "da7c7a6350a38635",
+            "BOMRef": "pkg:apk/wolfi/posix-libc-utils@2.43-r11?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=9ebc796de4368d8d\u0026upstream=glibc"
+          },
+          "Version": "2.43-r11",
+          "Arch": "aarch64",
+          "SrcName": "posix-libc-utils",
+          "SrcVersion": "2.43-r11",
+          "Licenses": [
+            "LGPL-2.1-or-later"
+          ],
+          "DependsOn": [
+            "bash@5.3-r12",
+            "glibc@2.43-r11",
+            "posix-libc-utils-bin@2.43-r11",
+            "wolfi-baselayout@20230201-r29"
+          ]
+        },
+        {
+          "ID": "posix-libc-utils-bin@2.43-r11",
+          "Name": "posix-libc-utils-bin",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/posix-libc-utils-bin@2.43-r11?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=glibc",
+            "UID": "a8780cb83fab0091",
+            "BOMRef": "pkg:apk/wolfi/posix-libc-utils-bin@2.43-r11?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=bc8d6dd78da89685\u0026upstream=glibc"
+          },
+          "Version": "2.43-r11",
+          "Arch": "aarch64",
+          "SrcName": "posix-libc-utils-bin",
+          "SrcVersion": "2.43-r11",
+          "Licenses": [
+            "LGPL-2.1-or-later"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "wolfi-baselayout@20230201-r29"
+          ]
+        },
+        {
+          "ID": "postgresql-18@18.4-r6",
+          "Name": "postgresql-18",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/postgresql-18@18.4-r6?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "dacfc6491149f55e",
+            "BOMRef": "pkg:apk/wolfi/postgresql-18@18.4-r6?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=dae084de8e1e0bd7"
+          },
+          "Version": "18.4-r6",
+          "Arch": "aarch64",
+          "SrcName": "postgresql-18",
+          "SrcVersion": "18.4-r6",
+          "Licenses": [
+            "BSD-3-Clause"
+          ],
+          "DependsOn": [
+            "ecpg-18@18.4-r6",
+            "postgresql-18-base@18.4-r6",
+            "tzdata@2026c-r0"
+          ]
+        },
+        {
+          "ID": "postgresql-18-base@18.4-r6",
+          "Name": "postgresql-18-base",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/postgresql-18-base@18.4-r6?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=postgresql-18",
+            "UID": "dcc6484c3de3e5c",
+            "BOMRef": "pkg:apk/wolfi/postgresql-18-base@18.4-r6?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=0caf8608c8a5c114\u0026upstream=postgresql-18"
+          },
+          "Version": "18.4-r6",
+          "Arch": "aarch64",
+          "SrcName": "postgresql-18-base",
+          "SrcVersion": "18.4-r6",
+          "Licenses": [
+            "BSD-3-Clause"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "krb5-libs@1.22.2-r2",
+            "ld-linux@2.43-r11",
+            "libcrypto3@3.6.3-r3",
+            "libgcc@16.1.0-r4",
+            "libicu78@78.3-r1",
+            "libldap-2.6@2.6.13-r5",
+            "libLLVM-19@19.1.7-r27",
+            "liblz4-1@1.10.0-r9",
+            "libpq-18@18.4-r6",
+            "libssl3@3.6.3-r3",
+            "libstdc++@16.1.0-r4",
+            "libxml2-16@2.15.3-r3",
+            "libzstd1@1.5.7-r7",
+            "linux-pam@1.7.2-r4",
+            "zlib@1.3.2-r3"
+          ]
+        },
+        {
+          "ID": "postgresql-18-client@18.4-r6",
+          "Name": "postgresql-18-client",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/postgresql-18-client@18.4-r6?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=postgresql-18",
+            "UID": "d28355d2d10cf561",
+            "BOMRef": "pkg:apk/wolfi/postgresql-18-client@18.4-r6?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=fb6ceace008fbee1\u0026upstream=postgresql-18"
+          },
+          "Version": "18.4-r6",
+          "Arch": "aarch64",
+          "SrcName": "postgresql-18-client",
+          "SrcVersion": "18.4-r6",
+          "Licenses": [
+            "BSD-3-Clause"
+          ],
+          "DependsOn": [
+            "postgresql-18-client-base@18.4-r6"
+          ]
+        },
+        {
+          "ID": "postgresql-18-client-base@18.4-r6",
+          "Name": "postgresql-18-client-base",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/postgresql-18-client-base@18.4-r6?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=postgresql-18",
+            "UID": "90198bc58a3b692f",
+            "BOMRef": "pkg:apk/wolfi/postgresql-18-client-base@18.4-r6?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=f0e0117569c089ad\u0026upstream=postgresql-18"
+          },
+          "Version": "18.4-r6",
+          "Arch": "aarch64",
+          "SrcName": "postgresql-18-client-base",
+          "SrcVersion": "18.4-r6",
+          "Licenses": [
+            "BSD-3-Clause"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "libcrypto3@3.6.3-r3",
+            "libedit@3.1-r17",
+            "liblz4-1@1.10.0-r9",
+            "libpq-18@18.4-r6",
+            "libzstd1@1.5.7-r7",
+            "zlib@1.3.2-r3"
+          ]
+        },
+        {
+          "ID": "postgresql-18-contrib@18.4-r6",
+          "Name": "postgresql-18-contrib",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/postgresql-18-contrib@18.4-r6?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=postgresql-18",
+            "UID": "3b6c9bfbeaa465c0",
+            "BOMRef": "pkg:apk/wolfi/postgresql-18-contrib@18.4-r6?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=697185d36fba2074\u0026upstream=postgresql-18"
+          },
+          "Version": "18.4-r6",
+          "Arch": "aarch64",
+          "SrcName": "postgresql-18-contrib",
+          "SrcVersion": "18.4-r6",
+          "Licenses": [
+            "BSD-3-Clause"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "libcrypto3@3.6.3-r3",
+            "libpq-18@18.4-r6",
+            "libuuid@2.42.2-r0",
+            "libxml2-16@2.15.3-r3",
+            "libxslt@1.1.45-r3",
+            "zlib@1.3.2-r3"
+          ]
+        },
+        {
+          "ID": "postgresql-18-oci-entrypoint@18.4-r6",
+          "Name": "postgresql-18-oci-entrypoint",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/postgresql-18-oci-entrypoint@18.4-r6?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=postgresql-18",
+            "UID": "165bc6c6c3ee0923",
+            "BOMRef": "pkg:apk/wolfi/postgresql-18-oci-entrypoint@18.4-r6?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=0cded910db743994\u0026upstream=postgresql-18"
+          },
+          "Version": "18.4-r6",
+          "Arch": "aarch64",
+          "SrcName": "postgresql-18-oci-entrypoint",
+          "SrcVersion": "18.4-r6",
+          "Licenses": [
+            "BSD-3-Clause"
+          ],
+          "DependsOn": [
+            "postgresql-18-oci-entrypoint-base@18.4-r6"
+          ]
+        },
+        {
+          "ID": "postgresql-18-oci-entrypoint-base@18.4-r6",
+          "Name": "postgresql-18-oci-entrypoint-base",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/postgresql-18-oci-entrypoint-base@18.4-r6?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=postgresql-18",
+            "UID": "738fec7fa27b92dc",
+            "BOMRef": "pkg:apk/wolfi/postgresql-18-oci-entrypoint-base@18.4-r6?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=a540a94337c2d0b8\u0026upstream=postgresql-18"
+          },
+          "Version": "18.4-r6",
+          "Arch": "aarch64",
+          "SrcName": "postgresql-18-oci-entrypoint-base",
+          "SrcVersion": "18.4-r6",
+          "Licenses": [
+            "BSD-3-Clause"
+          ],
+          "DependsOn": [
+            "bash@5.3-r12"
+          ]
+        },
+        {
+          "ID": "readline@8.3-r2",
+          "Name": "readline",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/readline@8.3-r2?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "b44288a6708ebe0a",
+            "BOMRef": "pkg:apk/wolfi/readline@8.3-r2?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=634af53964c23896"
+          },
+          "Version": "8.3-r2",
+          "Arch": "aarch64",
+          "SrcName": "readline",
+          "SrcVersion": "8.3-r2",
+          "Licenses": [
+            "GPL-3.0-or-later"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "ncurses@6.6.20260711-r0"
+          ]
+        },
+        {
+          "ID": "sqlite-libs@3.53.3-r1",
+          "Name": "sqlite-libs",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/sqlite-libs@3.53.3-r1?arch=aarch64\u0026distro=wolfi-20230201\u0026upstream=sqlite",
+            "UID": "7dae6d71f56bd430",
+            "BOMRef": "pkg:apk/wolfi/sqlite-libs@3.53.3-r1?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=67042475befba636\u0026upstream=sqlite"
+          },
+          "Version": "3.53.3-r1",
+          "Arch": "aarch64",
+          "SrcName": "sqlite-libs",
+          "SrcVersion": "3.53.3-r1",
+          "Licenses": [
+            "blessing"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11"
+          ]
+        },
+        {
+          "ID": "tzdata@2026c-r0",
+          "Name": "tzdata",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/tzdata@2026c-r0?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "3459ebc97f6ddbce",
+            "BOMRef": "pkg:apk/wolfi/tzdata@2026c-r0?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=42e3f8c451879902"
+          },
+          "Version": "2026c-r0",
+          "Arch": "aarch64",
+          "SrcName": "tzdata",
+          "SrcVersion": "2026c-r0",
+          "Licenses": [
+            "CC-PDDC"
+          ]
+        },
+        {
+          "ID": "wolfi-baselayout@20230201-r29",
+          "Name": "wolfi-baselayout",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/wolfi-baselayout@20230201-r29?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "57890874d3234288",
+            "BOMRef": "pkg:apk/wolfi/wolfi-baselayout@20230201-r29?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=b8de71fea9ddac6e"
+          },
+          "Version": "20230201-r29",
+          "Arch": "aarch64",
+          "SrcName": "wolfi-baselayout",
+          "SrcVersion": "20230201-r29",
+          "Licenses": [
+            "MIT"
+          ],
+          "DependsOn": [
+            "ca-certificates-bundle@20260413-r0"
+          ]
+        },
+        {
+          "ID": "zlib@1.3.2-r3",
+          "Name": "zlib",
+          "Identifier": {
+            "PURL": "pkg:apk/wolfi/zlib@1.3.2-r3?arch=aarch64\u0026distro=wolfi-20230201",
+            "UID": "2e26c7c76aea726f",
+            "BOMRef": "pkg:apk/wolfi/zlib@1.3.2-r3?arch=aarch64\u0026distro=wolfi-20230201\u0026package-id=4f2619af036f599d"
+          },
+          "Version": "1.3.2-r3",
+          "Arch": "aarch64",
+          "SrcName": "zlib",
+          "SrcVersion": "1.3.2-r3",
+          "Licenses": [
+            "MPL-2.0 AND MIT"
+          ],
+          "DependsOn": [
+            "glibc@2.43-r11",
+            "ld-linux@2.43-r11",
+            "wolfi-baselayout@20230201-r29"
+          ]
+        }
+      ]
+    },
+    {
+      "Target": "",
+      "Class": "lang-pkgs",
+      "Type": "gobinary",
+      "Packages": [
+        {
+          "ID": "github.com/moby/sys/user@v0.1.0",
+          "Name": "github.com/moby/sys/user",
+          "Identifier": {
+            "PURL": "pkg:golang/github.com/moby/sys/user@v0.1.0",
+            "UID": "db91a69536128b4e",
+            "BOMRef": "pkg:golang/github.com/moby/sys/user@v0.1.0?package-id=46d810cb12797af6"
+          },
+          "Version": "v0.1.0"
+        },
+        {
+          "ID": "github.com/tianon/gosu@v0.0.0-20250923190938-6456aaa0f3c8",
+          "Name": "github.com/tianon/gosu",
+          "Identifier": {
+            "PURL": "pkg:golang/github.com/tianon/gosu@v0.0.0-20250923190938-6456aaa0f3c8",
+            "UID": "f31bb6b98f1f1c3",
+            "BOMRef": "pkg:golang/github.com/tianon/gosu@v0.0.0-20250923190938-6456aaa0f3c8?package-id=0ee2266b55a1ad92"
+          },
+          "Version": "v0.0.0-20250923190938-6456aaa0f3c8",
+          "DependsOn": [
+            "github.com/moby/sys/user@v0.1.0",
+            "golang.org/x/sys@v0.1.0",
+            "stdlib@v1.26.5"
+          ]
+        },
+        {
+          "ID": "golang.org/x/sys@v0.1.0",
+          "Name": "golang.org/x/sys",
+          "Identifier": {
+            "PURL": "pkg:golang/golang.org/x/sys@v0.1.0",
+            "UID": "808a34369911fa84",
+            "BOMRef": "pkg:golang/golang.org/x/sys@v0.1.0?package-id=a8b790c74a753eab"
+          },
+          "Version": "v0.1.0"
+        },
+        {
+          "ID": "stdlib@v1.26.5",
+          "Name": "stdlib",
+          "Identifier": {
+            "PURL": "pkg:golang/stdlib@1.26.5",
+            "UID": "d3232cc60db263d6",
+            "BOMRef": "pkg:golang/stdlib@1.26.5?package-id=d63c0e0fa1a11df3"
+          },
+          "Version": "1.26.5",
+          "Licenses": [
+            "BSD-3-Clause"
+          ]
+        }
+      ],
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2026-39824",
+          "VendorIDs": [
+            "GO-2026-5024"
+          ],
+          "PkgID": "golang.org/x/sys@v0.1.0",
+          "PkgName": "golang.org/x/sys",
+          "PkgIdentifier": {
+            "PURL": "pkg:golang/golang.org/x/sys@v0.1.0",
+            "UID": "808a34369911fa84",
+            "BOMRef": "pkg:golang/golang.org/x/sys@v0.1.0?package-id=a8b790c74a753eab"
+          },
+          "InstalledVersion": "v0.1.0",
+          "FixedVersion": "0.44.0",
+          "Status": "fixed",
+          "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2026-39824",
+          "DataSource": {
+            "ID": "govulndb",
+            "Name": "The Go Vulnerability Database",
+            "URL": "https://pkg.go.dev/vuln/"
+          },
+          "Fingerprint": "sha256:b5eeda92fa99dc25258dfe1447f35bef50e9984b229b171e585b00e6bb8b0c1b",
+          "Title": "Invoking integer overflow in NewNTUnicodeString in golang.org/x/sys/windows",
+          "Description": "NewNTUnicodeString does not check for string length overflow. When provided with a string that overflows the maximum size of a NTUnicodeString (a 16-bit number of bytes), it returns a truncated string rather than an error.",
+          "Severity": "UNKNOWN",
+          "CweIDs": [
+            "CWE-190"
+          ],
+          "References": [
+            "https://go.dev/cl/770080",
+            "https://go.dev/issue/78916",
+            "https://groups.google.com/g/golang-announce/c/6MMI8Lj-Atg",
+            "https://pkg.go.dev/vuln/GO-2026-5024"
+          ],
+          "PublishedDate": "2026-05-22T20:16:33.057Z",
+          "LastModifiedDate": "2026-06-17T10:42:38.62Z"
+        }
+      ]
+    }
+  ]
+}

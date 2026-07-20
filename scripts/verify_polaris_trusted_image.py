@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import unicodedata
+from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable, Mapping, Optional
 
@@ -24,6 +25,9 @@ POLARIS_CONTRACT = Path("bootstrap/polaris/v1.6.0/trusted-build-contract.json")
 POLARIS_ADMISSION = Path("bootstrap/polaris/v1.6.0/admission.json")
 POLARIS_RELEASE_EVIDENCE = Path(
     "bootstrap/polaris/v1.6.0/release-evidence.json"
+)
+POLARIS_ATOMIC_ADMISSION = Path(
+    "bootstrap/polaris/v1.6.0/atomic-admission.json"
 )
 POLARIS_CONTAINERFILE = Path("bootstrap/polaris/v1.6.0/Containerfile")
 POLARIS_SOURCE_OVERLAY = Path(
@@ -41,6 +45,11 @@ POLARIS_IMAGE_EVIDENCE = Path(
 POSTGRES_ADMISSION = Path("bootstrap/postgresql/v18.4/admission.json")
 POSTGRES_EVIDENCE = Path("bootstrap/postgresql/v18.4/evidence")
 RESIDENT_LEDGER = Path("security/resident-images.json")
+ATOMIC_EVIDENCE = Path(
+    "security/evidence/polaris-v1.6.0-postgresql-v18.4"
+)
+ATOMIC_EVIDENCE_MANIFEST = ATOMIC_EVIDENCE / "evidence.sha256"
+ATOMIC_SUPPLY_CHAIN = ATOMIC_EVIDENCE / "supply-chain.json"
 
 POLARIS_VERSION = "1.6.0"
 POLARIS_SOURCE_ARCHIVE_ROOT = f"apache-polaris-{POLARIS_VERSION}"
@@ -80,7 +89,7 @@ POLARIS_SOURCE_SHA256 = (
     "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb"
 )
 POLARIS_CONTRACT_SHA256 = (
-    "e2d277bcd747fb7a880f83d4f18973696dc334c3c9bc6e2726bd8b305a64b664"
+    "cacd353f81996f5b04965fb3213cdecb3ebfbdc648ebbb3a8a90609412fa59ac"
 )
 REVIEWED_POLARIS_CONTRACT_SHA256 = (
     "db27ec5ebf627ef1772c898614d5f206a2a3affc67007ee29221c525ab8fd3d6"
@@ -126,8 +135,38 @@ POLARIS_IMAGE_WORKFLOW_SHA256 = (
     "50e0a0407cd65accdd573cf85637d7ccec97774aeecf569d8b5c9acc6b502b5d"
 )
 POLARIS_RELEASE_EVIDENCE_SHA256 = (
-    "ead3a652f8b48d5a4643dbc124b57b8faeb722d851d6aa733f91c40db531e5f8"
+    "2e3ca5a8245669ccc818f2a22a8be16e901a9b7b73b5eb71237e8c6affdd6f69"
 )
+POLARIS_ATOMIC_ADMISSION_SHA256 = (
+    "cc7ff13fb87bec48537e5944d4820c26fd81c0b5bd215095da8df2ecfff5d4d3"
+)
+ATOMIC_EVIDENCE_MANIFEST_SHA256 = (
+    "fbf7c8bd7540000ac038a6afe12cc01d7bd1364d30202e6a98b7e85867fbe1d8"
+)
+ATOMIC_EVIDENCE_MANIFEST_SIZE = 634
+ATOMIC_EVIDENCE_PRIMARY = {
+    "anonymous-preflight.json": (
+        "75cc42cb081bebcf7700c76a7c546b9ab0e8ac89202d7e8fef0ccc763f79fcec"
+    ),
+    "polaris-1.6.0-arm64.cdx.json": (
+        "b724a92c7d686bdc5a931aa455ee5d3d66e650e371ed602804116adade12bc30"
+    ),
+    "polaris-trivy.json": (
+        "1ee7994db68a5ad999fc1604b8e0902add3f492b97c12c88f6c3fbbf3a3f098e"
+    ),
+    "postgresql-18.4-arm64.cdx.json": (
+        "f07cc69d805de9161cad8bec49153b3f8908ec78b4ee21a0655736f43ef32ed6"
+    ),
+    "postgresql-trivy-sbom.json": (
+        "66fc88304a642c6522c49ff6b76e5ab313712fcdc4c19d838df13868f22f01ab"
+    ),
+    "postgresql-trivy.json": (
+        "280cb840d27662f9131f6f0907ff5939604fb22cd5257996fd0390ed96e5bf26"
+    ),
+    "trivy-version.json": (
+        "37a6fe2034f88374927f7303385457b2222fc73f0cff0f0bcc53a333fa9df298"
+    ),
+}
 POLARIS_IMAGE_DIGEST = (
     "sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e"
 )
@@ -442,6 +481,7 @@ POLARIS_SOURCE_ARCHIVE_VALIDATOR_SHA256 = (
 POLARIS_ALLOWED_PATHS = {
     "Containerfile",
     "admission.json",
+    "atomic-admission.json",
     "apache-polaris-release-signing-key.asc",
     "evidence",
     "evidence/README.md",
@@ -553,7 +593,7 @@ PENDING_SCRIPT_FILE_INVENTORY = {
         "b6bbbd383c74b190872bdcf144ede8126d8da5dbeb03e291027aaf276c62c955"
     ),
     "scripts/verify_supply_chain.py": (
-        "480facf04d483314a930d91ca5ff7c238829bb5665af05e3351f816b17e504ed"
+        "7164dee8ade7f00acdd936745c6976eb8d3dab4acd45050db6932270ea763ce9"
     ),
     "scripts/verify_trivyignore.py": (
         "75cee002d5749c0ec91629edb905c27362bee5c0813b0cbefcb59f161734f445"
@@ -572,7 +612,7 @@ POLARIS_BLOCKING_CONTROLS = [
     {"id": "POLARIS-DEP-SNAPSHOT-REVIEW", "state": "satisfied"},
     {"id": "POLARIS-IMAGE-MAIN-PUBLICATION", "state": "satisfied"},
     {"id": "POLARIS-IMAGE-EVIDENCE-REVIEW", "state": "satisfied"},
-    {"id": "POLARIS-POSTGRES-ATOMIC-ADMISSION", "state": "pending"},
+    {"id": "POLARIS-POSTGRES-ATOMIC-ADMISSION", "state": "satisfied"},
 ]
 POLARIS_SERVER_TASKS = [
     ":polaris-server:assemble",
@@ -1229,6 +1269,7 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "version",
                 "platform",
                 "lifecycle",
+                "atomic_admission_receipt",
                 "source",
                 "dependency_snapshot",
                 "image_publication",
@@ -1238,6 +1279,7 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "runtime",
             },
             ("lifecycle",): {"state", "next_state"},
+            ("atomic_admission_receipt",): {"path", "sha256"},
             ("dependency_snapshot",): {
                 "state",
                 "admitted",
@@ -1498,12 +1540,20 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
     _expect_fields(
         contract,
         {
-            ("schema_version",): 6,
+            ("schema_version",): 7,
             ("component",): "polaris",
             ("version",): POLARIS_VERSION,
             ("platform",): "linux/arm64",
-            ("lifecycle", "state"): "atomic_admission_pending",
-            ("lifecycle", "next_state"): "runtime_acceptance_pending",
+            ("lifecycle", "state"): "runtime_acceptance_pending",
+            ("lifecycle", "next_state"): "runtime_accepted",
+            (
+                "atomic_admission_receipt",
+                "path",
+            ): POLARIS_ATOMIC_ADMISSION.as_posix(),
+            (
+                "atomic_admission_receipt",
+                "sha256",
+            ): POLARIS_ATOMIC_ADMISSION_SHA256,
             ("source", "record"): POLARIS_SOURCE.as_posix(),
             ("source", "record_sha256"): POLARIS_SOURCE_SHA256,
             ("source", "archive_sha512"): POLARIS_ARCHIVE_SHA512,
@@ -1877,7 +1927,7 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "offline_proof",
                 "configuration_cache",
             ): False,
-            ("image_publication", "state"): "approved_for_atomic_admission",
+            ("image_publication", "state"): "admitted",
             ("image_publication", "enabled"): False,
             (
                 "image_publication",
@@ -2064,7 +2114,7 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "image_publication",
                 "publication_boundary",
                 "admission_permitted",
-            ): False,
+            ): True,
             (
                 "image_publication",
                 "workflow",
@@ -2226,7 +2276,7 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
             ("evidence", "self_manifest", "entries"): 32,
             ("evidence", "candidate_retention_days"): 30,
             ("evidence", "final_retention_days"): 30,
-            ("runtime", "state"): "blocked_atomic_admission",
+            ("runtime", "state"): "blocked_runtime_acceptance",
             ("runtime", "enabled"): False,
             ("runtime", "admission_record"): POLARIS_ADMISSION.as_posix(),
             ("runtime", "atomic_peer"): POSTGRES_ADMISSION.as_posix(),
@@ -2293,6 +2343,7 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
                 "dependency_snapshot",
                 "upstream_image_assessment",
                 "planned_candidate",
+                "atomic_admission_receipt",
                 "image_publication",
                 "resident_ledger",
                 "runtime_manifests",
@@ -2330,6 +2381,7 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
                 "path",
                 "sha256",
             },
+            ("atomic_admission_receipt",): {"path", "sha256"},
             ("image_publication",): {
                 "state",
                 "enabled",
@@ -2360,12 +2412,12 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
     _expect_fields(
         admission,
         {
-            ("schema_version",): 5,
+            ("schema_version",): 6,
             ("component",): "polaris",
             ("version",): POLARIS_VERSION,
             ("platform",): "linux/arm64",
-            ("admission",): "blocked",
-            ("state",): "atomic_admission_pending",
+            ("admission",): "approved",
+            ("state",): "runtime_acceptance_pending",
             ("source_record",): POLARIS_SOURCE.as_posix(),
             ("source_record_sha256",): POLARIS_SOURCE_SHA256,
             ("build_contract",): POLARIS_CONTRACT.as_posix(),
@@ -2432,11 +2484,19 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
                 "sha256",
             ): POLARIS_RELEASE_EVIDENCE_SHA256,
             (
+                "atomic_admission_receipt",
+                "path",
+            ): POLARIS_ATOMIC_ADMISSION.as_posix(),
+            (
+                "atomic_admission_receipt",
+                "sha256",
+            ): POLARIS_ATOMIC_ADMISSION_SHA256,
+            (
                 "image_publication",
                 "state",
-            ): "approved_for_atomic_admission",
+            ): "admitted",
             ("image_publication", "enabled"): False,
-            ("image_publication", "admitted"): False,
+            ("image_publication", "admitted"): True,
             (
                 "image_publication",
                 "reference",
@@ -2486,7 +2546,7 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
                 "workflow",
                 "retired",
             ): True,
-            ("resident_ledger", "permitted"): False,
+            ("resident_ledger", "permitted"): True,
             ("resident_ledger", "atomic_with"): "postgresql",
             ("runtime_manifests", "permitted"): False,
             (
@@ -2495,7 +2555,7 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
             ): ["deploy", "charts", "opentofu"],
             (
                 "next_action",
-            ): "atomically-admit-polaris-and-postgresql",
+            ): "complete-runtime-acceptance",
         },
         "POLARIS_ADMISSION",
     )
@@ -3496,6 +3556,7 @@ def _audit_image_release_record(
                 "digest",
                 "trusted_tag",
                 "trusted_tag_role",
+                "atomic_admission_receipt",
                 "publisher_checkpoint",
                 "source",
                 "build_inputs",
@@ -3507,6 +3568,7 @@ def _audit_image_release_record(
                 "evidence",
                 "next_boundary",
             },
+            ("atomic_admission_receipt",): {"path", "sha256"},
             ("publisher_checkpoint",): {
                 "repository",
                 "workflow",
@@ -3607,16 +3669,24 @@ def _audit_image_release_record(
     _expect_fields(
         release,
         {
-            ("schema_version",): 1,
+            ("schema_version",): 2,
             ("component",): "polaris",
             ("version",): POLARIS_VERSION,
             ("platform",): "linux/arm64",
-            ("state",): "approved_for_atomic_admission",
-            ("admitted",): False,
+            ("state",): "admitted",
+            ("admitted",): True,
             ("reference",): POLARIS_IMAGE_REFERENCE,
             ("digest",): POLARIS_IMAGE_DIGEST,
             ("trusted_tag",): POLARIS_IMAGE_TRUSTED_TAG,
             ("trusted_tag_role",): "non_authoritative_pointer",
+            (
+                "atomic_admission_receipt",
+                "path",
+            ): POLARIS_ATOMIC_ADMISSION.as_posix(),
+            (
+                "atomic_admission_receipt",
+                "sha256",
+            ): POLARIS_ATOMIC_ADMISSION_SHA256,
             (
                 "publisher_checkpoint",
                 "repository",
@@ -3759,12 +3829,12 @@ def _audit_image_release_record(
                 "size",
             ): POLARIS_IMAGE_EVIDENCE_MANIFEST_SIZE,
             ("evidence", "self_manifest", "entries"): 32,
-            ("next_boundary", "state"): "atomic_admission_pending",
+            ("next_boundary", "state"): "runtime_acceptance_pending",
             (
                 "next_boundary",
                 "atomic_peer",
             ): POSTGRES_ADMISSION.as_posix(),
-            ("next_boundary", "resident_ledger_permitted"): False,
+            ("next_boundary", "resident_ledger_permitted"): True,
             ("next_boundary", "runtime_permitted"): False,
         },
         "IMAGE_EVIDENCE",
@@ -5226,6 +5296,7 @@ def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
                 "candidate",
                 "observation",
                 "evidence_contract",
+                "atomic_admission_receipt",
                 "resident_ledger",
                 "runtime_manifests",
                 "next_action",
@@ -5344,6 +5415,7 @@ def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
                 "trusted_root_media_type",
                 "offline_retained_bundle_verification",
             },
+            ("atomic_admission_receipt",): {"path", "sha256"},
             ("resident_ledger",): {"permitted", "atomic_with"},
             ("runtime_manifests",): {"permitted"},
         },
@@ -5352,12 +5424,12 @@ def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
     _expect_fields(
         admission,
         {
-            ("schema_version",): 2,
+            ("schema_version",): 3,
             ("component",): "postgresql",
             ("version",): "18.4",
             ("platform",): "linux/arm64",
-            ("admission",): "blocked",
-            ("state",): "approved_for_atomic_admission",
+            ("admission",): "approved",
+            ("state",): "runtime_acceptance_pending",
             (
                 "source",
             ): "https://github.com/chainguard-images/images/tree/main/images/postgres",
@@ -5715,12 +5787,20 @@ def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
                 "cryptographic_reverification",
                 "offline_retained_bundle_verification",
             ): True,
-            ("resident_ledger", "permitted"): False,
+            (
+                "atomic_admission_receipt",
+                "path",
+            ): POLARIS_ATOMIC_ADMISSION.as_posix(),
+            (
+                "atomic_admission_receipt",
+                "sha256",
+            ): POLARIS_ATOMIC_ADMISSION_SHA256,
+            ("resident_ledger", "permitted"): True,
             ("resident_ledger", "atomic_with"): "polaris",
             ("runtime_manifests", "permitted"): False,
             (
                 "next_action",
-            ): "preflight-and-admit-with-polaris-atomically",
+            ): "complete-runtime-acceptance",
         },
         "POSTGRES_ADMISSION",
     )
@@ -7342,6 +7422,806 @@ def _audit_postgres_evidence(
     postgres_crypto_verifier(root)
 
 
+def _parse_atomic_utc_timestamp(value: Any, label: str) -> datetime:
+    match = (
+        re.fullmatch(
+            r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})"
+            r"(?:\.(\d{1,9}))?Z",
+            value,
+        )
+        if isinstance(value, str)
+        else None
+    )
+    _expect(
+        match is not None,
+        "ATOMIC_ADMISSION",
+        f"{label} must be a canonical UTC timestamp ending in Z",
+    )
+    assert match is not None
+    fraction = match.group(2)
+    normalized = match.group(1)
+    if fraction is not None:
+        normalized += "." + fraction[:6].ljust(6, "0")
+    try:
+        parsed = datetime.fromisoformat(normalized + "+00:00")
+    except ValueError as error:
+        _fail("ATOMIC_ADMISSION", f"{label} is not ISO-8601: {error}")
+    _expect(
+        parsed.tzinfo is not None and parsed.utcoffset() == timedelta(0),
+        "ATOMIC_ADMISSION",
+        f"{label} must be timezone-aware UTC",
+    )
+    return parsed
+
+
+def _atomic_package_identity(name: Any, version: Any) -> tuple[str, str]:
+    _expect(
+        isinstance(name, str)
+        and bool(name.strip())
+        and isinstance(version, str)
+        and bool(version.strip()),
+        "ATOMIC_ADMISSION",
+        "scanned package identity must contain non-empty name and version",
+    )
+    assert isinstance(name, str) and isinstance(version, str)
+    normalized_version = (
+        version[2:]
+        if name.casefold() == "stdlib" and version.startswith("go")
+        else version
+    )
+    return name.casefold(), normalized_version
+
+
+def _audit_atomic_sbom(
+    root: Path,
+    relative: Path,
+    *,
+    component_count: int,
+    collect_postgres_libraries: bool = False,
+) -> dict[str, set[tuple[str, str]]]:
+    sbom = _load_json(root, relative, "ATOMIC_ADMISSION")
+    components = sbom.get("components")
+    _expect(
+        sbom.get("bomFormat") == "CycloneDX"
+        and sbom.get("specVersion") == "1.7"
+        and isinstance(components, list)
+        and len(components) == component_count,
+        "ATOMIC_ADMISSION",
+        f"{relative} must retain the admitted CycloneDX component closure",
+    )
+    assert isinstance(components, list)
+    references: set[str] = set()
+    libraries: dict[str, set[tuple[str, str]]] = {
+        "os-pkgs": set(),
+        "lang-pkgs": set(),
+    }
+    for index, component in enumerate(components):
+        _expect(
+            isinstance(component, Mapping)
+            and isinstance(component.get("bom-ref"), str)
+            and bool(component["bom-ref"])
+            and component["bom-ref"] not in references,
+            "ATOMIC_ADMISSION",
+            f"{relative} components[{index}] has an invalid or duplicate bom-ref",
+        )
+        assert isinstance(component, Mapping)
+        references.add(component["bom-ref"])
+        if not collect_postgres_libraries or component.get("type") != "library":
+            continue
+        properties = component.get("properties")
+        _expect(
+            isinstance(properties, list),
+            "ATOMIC_ADMISSION",
+            f"{relative} library components[{index}] must retain properties",
+        )
+        assert isinstance(properties, list)
+        package_types = [
+            item.get("value")
+            for item in properties
+            if isinstance(item, Mapping)
+            and item.get("name") == "syft:package:type"
+        ]
+        _expect(
+            len(package_types) == 1
+            and package_types[0] in {"apk", "go-module"},
+            "ATOMIC_ADMISSION",
+            f"{relative} library components[{index}] has an unscoped package type",
+        )
+        scope = "os-pkgs" if package_types[0] == "apk" else "lang-pkgs"
+        identity = _atomic_package_identity(
+            component.get("name"),
+            component.get("version"),
+        )
+        _expect(
+            identity not in libraries[scope],
+            "ATOMIC_ADMISSION",
+            f"{relative} duplicates library identity {identity!r}",
+        )
+        libraries[scope].add(identity)
+    if collect_postgres_libraries:
+        _expect(
+            {scope: len(values) for scope, values in libraries.items()}
+            == {"os-pkgs": 56, "lang-pkgs": 4},
+            "ATOMIC_ADMISSION",
+            "PostgreSQL SBOM must close the exact 56 APK and 4 Go libraries",
+        )
+    return libraries
+
+
+def _audit_atomic_trivy(
+    root: Path,
+    relative: Path,
+    *,
+    artifact_name: str,
+    artifact_type: str,
+    scopes: list[tuple[str, str, int]],
+    expected_unknown: int,
+) -> dict[str, set[tuple[str, str]]]:
+    report = _load_json(root, relative, "ATOMIC_ADMISSION")
+    results = report.get("Results")
+    _expect(
+        report.get("ArtifactName") == artifact_name
+        and report.get("ArtifactType") == artifact_type
+        and isinstance(results, list)
+        and len(results) == len(scopes),
+        "ATOMIC_ADMISSION",
+        f"{relative} does not bind the admitted artifact and exact scan scopes",
+    )
+    assert isinstance(results, list)
+    scanned: dict[str, set[tuple[str, str]]] = {}
+    severity_counts = {
+        "UNKNOWN": 0,
+        "LOW": 0,
+        "MEDIUM": 0,
+        "HIGH": 0,
+        "CRITICAL": 0,
+    }
+    for index, (result, expected_scope) in enumerate(zip(results, scopes)):
+        result_class, result_type, package_count = expected_scope
+        _expect(
+            isinstance(result, Mapping)
+            and result.get("Class") == result_class
+            and result.get("Type") == result_type
+            and isinstance(result.get("Packages"), list)
+            and len(result["Packages"]) == package_count,
+            "ATOMIC_ADMISSION",
+            f"{relative} Results[{index}] changed scope or package count",
+        )
+        assert isinstance(result, Mapping)
+        packages = result["Packages"]
+        assert isinstance(packages, list)
+        identities: set[tuple[str, str]] = set()
+        package_records: set[tuple[str, str, str, str]] = set()
+        for package_index, package in enumerate(packages):
+            _expect(
+                isinstance(package, Mapping)
+                and isinstance(package.get("Identifier"), Mapping)
+                and isinstance(package["Identifier"].get("PURL"), str)
+                and bool(package["Identifier"]["PURL"].strip())
+                and isinstance(package["Identifier"].get("UID"), str)
+                and bool(package["Identifier"]["UID"].strip())
+                and (
+                    "BOMRef" not in package["Identifier"]
+                    or isinstance(package["Identifier"]["BOMRef"], str)
+                )
+                and (
+                    "FilePath" not in package
+                    or isinstance(package["FilePath"], str)
+                ),
+                "ATOMIC_ADMISSION",
+                f"{relative} Results[{index}].Packages[{package_index}] is unbound",
+            )
+            assert isinstance(package, Mapping)
+            identifier = package["Identifier"]
+            package_record = (
+                identifier["PURL"],
+                identifier["UID"],
+                str(identifier.get("BOMRef", "")),
+                str(package.get("FilePath", "")),
+            )
+            _expect(
+                package_record not in package_records,
+                "ATOMIC_ADMISSION",
+                f"{relative} Results[{index}] duplicates canonical package "
+                f"identity {package_record!r}",
+            )
+            package_records.add(package_record)
+            identity = _atomic_package_identity(
+                package.get("Name"),
+                package.get("Version"),
+            )
+            identities.add(identity)
+        scanned[result_class] = identities
+        vulnerabilities: Any
+        if "Vulnerabilities" not in result:
+            vulnerabilities = []
+        else:
+            vulnerabilities = result["Vulnerabilities"]
+            _expect(
+                isinstance(vulnerabilities, list),
+                "ATOMIC_ADMISSION",
+                f"{relative} Results[{index}].Vulnerabilities "
+                "must be an array when present",
+            )
+        assert isinstance(vulnerabilities, list)
+        for vulnerability_index, vulnerability in enumerate(vulnerabilities):
+            _expect(
+                isinstance(vulnerability, Mapping)
+                and isinstance(vulnerability.get("Severity"), str)
+                and vulnerability["Severity"] in severity_counts,
+                "ATOMIC_ADMISSION",
+                f"{relative} Results[{index}].Vulnerabilities"
+                f"[{vulnerability_index}] has invalid severity",
+            )
+            assert isinstance(vulnerability, Mapping)
+            severity_counts[vulnerability["Severity"]] += 1
+            vulnerability_identity = _atomic_package_identity(
+                vulnerability.get("PkgName"),
+                vulnerability.get("InstalledVersion"),
+            )
+            _expect(
+                vulnerability_identity in identities,
+                "ATOMIC_ADMISSION",
+                f"{relative} vulnerability is outside its exact package scope",
+            )
+    _expect(
+        severity_counts["HIGH"] == 0
+        and severity_counts["CRITICAL"] == 0
+        and severity_counts["UNKNOWN"] == expected_unknown,
+        "ATOMIC_ADMISSION",
+        f"{relative} violates the admitted High/Critical/Unknown finding counts",
+    )
+    return scanned
+
+
+def _audit_atomic_postgres_reference_partition(root: Path) -> None:
+    code = "ATOMIC_ADMISSION"
+
+    def canonical_component_purl(value: str, package_type: str) -> str:
+        base, separator, query = value.partition("?")
+        if package_type == "apk":
+            match = re.fullmatch(r"(pkg:apk/wolfi/)([^@]+)(@.+)", base)
+            _expect(
+                match is not None,
+                code,
+                "PostgreSQL APK component PURL is noncanonical",
+            )
+            assert match is not None
+            name_parts = re.split(r"(%[0-9A-Fa-f]{2})", match.group(2))
+            canonical_name = "".join(
+                part.upper() if part.startswith("%") else part.casefold()
+                for part in name_parts
+            )
+            base = match.group(1) + canonical_name + match.group(3)
+        parameters = [
+            parameter
+            for parameter in query.split("&")
+            if parameter and not parameter.startswith("package-id=")
+        ]
+        return base + (separator + "&".join(parameters) if parameters else "")
+
+    sbom = _load_json(
+        root,
+        ATOMIC_EVIDENCE / "postgresql-18.4-arm64.cdx.json",
+        code,
+    )
+    report = _load_json(
+        root,
+        ATOMIC_EVIDENCE / "postgresql-trivy-sbom.json",
+        code,
+    )
+    expected_references = {"os-pkgs": set(), "lang-pkgs": set()}
+    expected_purls = {"os-pkgs": set(), "lang-pkgs": set()}
+    components = sbom.get("components")
+    _expect(
+        isinstance(components, list),
+        code,
+        "PostgreSQL SBOM components must be an array",
+    )
+    assert isinstance(components, list)
+    for component in components:
+        if not isinstance(component, Mapping) or component.get("type") != "library":
+            continue
+        properties = component.get("properties")
+        _expect(
+            isinstance(properties, list),
+            code,
+            "PostgreSQL SBOM library properties must be an array",
+        )
+        assert isinstance(properties, list)
+        package_types = [
+            item.get("value")
+            for item in properties
+            if isinstance(item, Mapping)
+            and item.get("name") == "syft:package:type"
+        ]
+        _expect(
+            len(package_types) == 1
+            and package_types[0] in {"apk", "go-module"},
+            code,
+            "PostgreSQL SBOM library package type is not closed",
+        )
+        scope = "os-pkgs" if package_types[0] == "apk" else "lang-pkgs"
+        reference = component.get("bom-ref")
+        purl = component.get("purl")
+        _expect(
+            isinstance(reference, str)
+            and bool(reference)
+            and isinstance(purl, str)
+            and bool(purl),
+            code,
+            "PostgreSQL SBOM library must retain bom-ref and PURL",
+        )
+        _expect(
+            canonical_component_purl(purl, package_types[0])
+            == canonical_component_purl(reference, package_types[0]),
+            code,
+            "PostgreSQL SBOM component PURL does not canonically bind bom-ref",
+        )
+        expected_references[scope].add(reference)
+        expected_purls[scope].add(
+            canonical_component_purl(purl, package_types[0])
+        )
+
+    actual_references = {"os-pkgs": set(), "lang-pkgs": set()}
+    actual_purls = {"os-pkgs": set(), "lang-pkgs": set()}
+    results = report.get("Results")
+    _expect(
+        isinstance(results, list),
+        code,
+        "PostgreSQL SBOM scan results must be an array",
+    )
+    assert isinstance(results, list)
+    for result in results:
+        _expect(
+            isinstance(result, Mapping)
+            and result.get("Class") in actual_references
+            and isinstance(result.get("Packages"), list),
+            code,
+            "PostgreSQL SBOM scan scope is invalid",
+        )
+        assert isinstance(result, Mapping)
+        scope = result["Class"]
+        for package in result["Packages"]:
+            _expect(
+                isinstance(package, Mapping)
+                and isinstance(package.get("Identifier"), Mapping)
+                and isinstance(package["Identifier"].get("BOMRef"), str)
+                and bool(package["Identifier"]["BOMRef"])
+                and isinstance(package["Identifier"].get("PURL"), str)
+                and bool(package["Identifier"]["PURL"]),
+                code,
+                "PostgreSQL SBOM scan package lacks PURL/BOMRef",
+            )
+            identifier = package["Identifier"]
+            package_type = "apk" if scope == "os-pkgs" else "go-module"
+            _expect(
+                identifier["PURL"]
+                == canonical_component_purl(
+                    identifier["BOMRef"],
+                    package_type,
+                ),
+                code,
+                "PostgreSQL SBOM scan package PURL and BOMRef must bind "
+                "the same canonical component",
+            )
+            actual_references[scope].add(identifier["BOMRef"])
+            actual_purls[scope].add(identifier["PURL"])
+    _expect(
+        actual_references == expected_references
+        and actual_purls == expected_purls,
+        code,
+        "fresh PostgreSQL SBOM scan must preserve the exact PURL/BOMRef partition",
+    )
+
+    image_report = _load_json(
+        root,
+        ATOMIC_EVIDENCE / "postgresql-trivy.json",
+        code,
+    )
+    image_results = image_report.get("Results")
+    _expect(
+        isinstance(image_results, list) and len(image_results) == 1,
+        code,
+        "fresh PostgreSQL image scan must retain one exact OS scope",
+    )
+    assert isinstance(image_results, list)
+    image_purls: set[str] = set()
+    for package in image_results[0]["Packages"]:
+        purl = package["Identifier"]["PURL"]
+        _expect(
+            purl.startswith("pkg:apk/wolfi/") and purl not in image_purls,
+            code,
+            "fresh PostgreSQL image scan APK PURLs must be canonical and unique",
+        )
+        image_purls.add(purl)
+    _expect(
+        len(image_purls) == 56,
+        code,
+        "fresh PostgreSQL image scan must bind all 56 APK PURLs",
+    )
+
+
+def _audit_atomic_admission(root: Path) -> Mapping[str, Any]:
+    code = "ATOMIC_ADMISSION"
+    receipt_hash, _ = _sha256_and_size(
+        root,
+        POLARIS_ATOMIC_ADMISSION,
+        code,
+    )
+    _expect(
+        receipt_hash == POLARIS_ATOMIC_ADMISSION_SHA256,
+        code,
+        "atomic admission receipt differs from the admitted checkpoint",
+    )
+    receipt = _load_json(root, POLARIS_ATOMIC_ADMISSION, code)
+    receipt_database_updated_at = _nested(
+        receipt,
+        "vulnerability_database",
+        "updated_at",
+    )
+    expected_receipt = {
+        "schema_version": 1,
+        "admission": "approved",
+        "state": "admitted",
+        "decision_at": "2026-07-20T09:15:43.853Z",
+        "platform": "linux/arm64",
+        "components": [
+            {
+                "component": "polaris",
+                "version": POLARIS_VERSION,
+                "reference": POLARIS_IMAGE_REFERENCE,
+            },
+            {
+                "component": "postgresql",
+                "version": "18.4",
+                "reference": POSTGRES_ARM64,
+            },
+        ],
+        "primary_evidence_manifest": {
+            "path": ATOMIC_EVIDENCE_MANIFEST.as_posix(),
+            "sha256": ATOMIC_EVIDENCE_MANIFEST_SHA256,
+            "size": ATOMIC_EVIDENCE_MANIFEST_SIZE,
+            "entries": len(ATOMIC_EVIDENCE_PRIMARY),
+        },
+        "preflight": {
+            "path": (ATOMIC_EVIDENCE / "anonymous-preflight.json").as_posix(),
+            "sha256": ATOMIC_EVIDENCE_PRIMARY["anonymous-preflight.json"],
+            "preflighted_at": "2026-07-20T09:15:43.853Z",
+            "network_boundary": "anonymous-empty-docker-config",
+            "tool": {"name": "crane", "version": "0.21.7"},
+            "entries": 3,
+        },
+        "vulnerability_database": {
+            "path": (ATOMIC_EVIDENCE / "trivy-version.json").as_posix(),
+            "sha256": ATOMIC_EVIDENCE_PRIMARY["trivy-version.json"],
+            "updated_at": receipt_database_updated_at,
+            "maximum_age_hours_at_decision": 24,
+        },
+        "scans": {
+            "polaris": {
+                "sbom": {
+                    "path": (
+                        ATOMIC_EVIDENCE / "polaris-1.6.0-arm64.cdx.json"
+                    ).as_posix(),
+                    "sha256": ATOMIC_EVIDENCE_PRIMARY[
+                        "polaris-1.6.0-arm64.cdx.json"
+                    ],
+                    "format": "CycloneDX",
+                    "spec_version": "1.7",
+                    "component_count": 6_731,
+                },
+                "vulnerability_scan": {
+                    "path": (
+                        ATOMIC_EVIDENCE / "polaris-trivy.json"
+                    ).as_posix(),
+                    "sha256": ATOMIC_EVIDENCE_PRIMARY["polaris-trivy.json"],
+                    "artifact_reference": POLARIS_IMAGE_REFERENCE,
+                    "scopes": [
+                        {
+                            "class": "os-pkgs",
+                            "type": "amazon",
+                            "package_count": 133,
+                        },
+                        {
+                            "class": "lang-pkgs",
+                            "type": "jar",
+                            "package_count": 456,
+                        },
+                    ],
+                    "high": 0,
+                    "critical": 0,
+                },
+            },
+            "postgresql": {
+                "sbom": {
+                    "path": (
+                        ATOMIC_EVIDENCE / "postgresql-18.4-arm64.cdx.json"
+                    ).as_posix(),
+                    "sha256": ATOMIC_EVIDENCE_PRIMARY[
+                        "postgresql-18.4-arm64.cdx.json"
+                    ],
+                    "format": "CycloneDX",
+                    "spec_version": "1.7",
+                    "component_count": 4_725,
+                },
+                "image_scan": {
+                    "path": (
+                        ATOMIC_EVIDENCE / "postgresql-trivy.json"
+                    ).as_posix(),
+                    "sha256": ATOMIC_EVIDENCE_PRIMARY["postgresql-trivy.json"],
+                    "artifact_reference": POSTGRES_ARM64,
+                    "scopes": [
+                        {
+                            "class": "os-pkgs",
+                            "type": "wolfi",
+                            "package_count": 56,
+                        }
+                    ],
+                    "high": 0,
+                    "critical": 0,
+                },
+                "sbom_scan": {
+                    "path": (
+                        ATOMIC_EVIDENCE / "postgresql-trivy-sbom.json"
+                    ).as_posix(),
+                    "sha256": ATOMIC_EVIDENCE_PRIMARY[
+                        "postgresql-trivy-sbom.json"
+                    ],
+                    "artifact_path": (
+                        ATOMIC_EVIDENCE / "postgresql-18.4-arm64.cdx.json"
+                    ).as_posix(),
+                    "scopes": [
+                        {
+                            "class": "os-pkgs",
+                            "type": "wolfi",
+                            "package_count": 56,
+                        },
+                        {
+                            "class": "lang-pkgs",
+                            "type": "gobinary",
+                            "package_count": 4,
+                        },
+                    ],
+                    "unknown": 1,
+                    "high": 0,
+                    "critical": 0,
+                },
+            },
+        },
+        "runtime": {
+            "permitted": False,
+            "next_boundary": "runtime_acceptance_pending",
+        },
+    }
+    _expect(
+        _json_equal_type_sensitive(receipt, expected_receipt),
+        code,
+        "atomic admission receipt schema or values changed",
+    )
+
+    directory = root / ATOMIC_EVIDENCE
+    _expect(
+        directory.is_dir() and not directory.is_symlink(),
+        code,
+        "atomic admission evidence directory is invalid",
+    )
+    expected_names = (
+        set(ATOMIC_EVIDENCE_PRIMARY)
+        | {"evidence.sha256", "supply-chain.json"}
+    )
+    actual_names: set[str] = set()
+    for path in directory.iterdir():
+        _expect(
+            path.is_file() and not path.is_symlink(),
+            code,
+            f"atomic evidence must be a regular file: {path.name}",
+        )
+        actual_names.add(path.name)
+    _expect(
+        actual_names == expected_names,
+        code,
+        "atomic admission evidence directory must be the exact 9-file closure",
+    )
+    manifest_hash, manifest_size = _sha256_and_size(
+        root,
+        ATOMIC_EVIDENCE_MANIFEST,
+        code,
+    )
+    _expect(
+        (manifest_hash, manifest_size)
+        == (ATOMIC_EVIDENCE_MANIFEST_SHA256, ATOMIC_EVIDENCE_MANIFEST_SIZE),
+        code,
+        "atomic primary evidence manifest differs from the receipt",
+    )
+    try:
+        lines = (root / ATOMIC_EVIDENCE_MANIFEST).read_text(
+            encoding="utf-8"
+        ).splitlines()
+    except (OSError, UnicodeError) as error:
+        _fail(code, f"cannot read atomic evidence manifest: {error}")
+    parsed: dict[str, str] = {}
+    order: list[str] = []
+    for line in lines:
+        match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9._-]+)", line)
+        _expect(
+            match is not None,
+            code,
+            "atomic evidence manifest contains a noncanonical record",
+        )
+        assert match is not None
+        name = match.group(2)
+        _expect(
+            name not in parsed,
+            code,
+            f"atomic evidence manifest duplicates {name}",
+        )
+        parsed[name] = match.group(1)
+        order.append(name)
+    _expect(
+        parsed == ATOMIC_EVIDENCE_PRIMARY and order == sorted(order),
+        code,
+        "atomic evidence manifest must close the exact seven primary payloads",
+    )
+    for name, wanted_hash in parsed.items():
+        actual_hash, size = _sha256_and_size(
+            root,
+            ATOMIC_EVIDENCE / name,
+            code,
+        )
+        _expect(
+            actual_hash == wanted_hash and size > 0,
+            code,
+            f"{name} differs from the atomic primary evidence manifest",
+        )
+    _expect(
+        _is_regular_file_without_symlink_components(
+            root,
+            ATOMIC_SUPPLY_CHAIN,
+        )
+        and (root / ATOMIC_SUPPLY_CHAIN).stat().st_size > 0,
+        code,
+        "atomic supply-chain.json must be retained beside the primary manifest",
+    )
+
+    preflight = _load_json(
+        root,
+        ATOMIC_EVIDENCE / "anonymous-preflight.json",
+        code,
+    )
+    expected_preflight = {
+        "schema_version": 1,
+        "preflighted_at": receipt["decision_at"],
+        "network_boundary": "anonymous-empty-docker-config",
+        "tool": {"name": "crane", "version": "0.21.7"},
+        "entries": [
+            {
+                "component": "polaris",
+                "role": "runtime",
+                "reference": POLARIS_IMAGE_REFERENCE,
+                "manifest_sha256": POLARIS_IMAGE_DIGEST.removeprefix(
+                    "sha256:"
+                ),
+                "manifest_size": 2_005,
+                "anonymous": True,
+            },
+            {
+                "component": "postgresql",
+                "role": "index",
+                "reference": POSTGRES_INDEX,
+                "manifest_sha256": POSTGRES_INDEX.rsplit("sha256:", 1)[1],
+                "manifest_size": 1_015,
+                "anonymous": True,
+            },
+            {
+                "component": "postgresql",
+                "role": "runtime",
+                "reference": POSTGRES_ARM64,
+                "manifest_sha256": POSTGRES_ARM64.rsplit("sha256:", 1)[1],
+                "manifest_size": 2_510,
+                "anonymous": True,
+            },
+        ],
+    }
+    _expect(
+        _json_equal_type_sensitive(preflight, expected_preflight),
+        code,
+        "anonymous exact-digest preflight changed",
+    )
+
+    version = _load_json(
+        root,
+        ATOMIC_EVIDENCE / "trivy-version.json",
+        code,
+    )
+    database = version.get("VulnerabilityDB")
+    _expect(
+        set(version) == {"Version", "VulnerabilityDB"}
+        and version.get("Version") == "0.72.0"
+        and isinstance(database, Mapping)
+        and set(database)
+        == {"Version", "NextUpdate", "UpdatedAt", "DownloadedAt"}
+        and database.get("Version") == 2
+        and database.get("UpdatedAt")
+        == receipt["vulnerability_database"]["updated_at"],
+        code,
+        "fresh Trivy database metadata changed",
+    )
+    assert isinstance(database, Mapping)
+    decision_at = _parse_atomic_utc_timestamp(
+        receipt["decision_at"],
+        "decision_at",
+    )
+    database_updated_at = _parse_atomic_utc_timestamp(
+        database["UpdatedAt"],
+        "VulnerabilityDB.UpdatedAt",
+    )
+    database_age = decision_at - database_updated_at
+    _expect(
+        timedelta(0)
+        <= database_age
+        <= timedelta(
+            hours=receipt["vulnerability_database"][
+                "maximum_age_hours_at_decision"
+            ]
+        ),
+        code,
+        "Trivy database must be no more than 24 hours old at decision_at",
+    )
+
+    _audit_atomic_sbom(
+        root,
+        ATOMIC_EVIDENCE / "polaris-1.6.0-arm64.cdx.json",
+        component_count=6_731,
+    )
+    postgres_libraries = _audit_atomic_sbom(
+        root,
+        ATOMIC_EVIDENCE / "postgresql-18.4-arm64.cdx.json",
+        component_count=4_725,
+        collect_postgres_libraries=True,
+    )
+    _audit_atomic_trivy(
+        root,
+        ATOMIC_EVIDENCE / "polaris-trivy.json",
+        artifact_name=POLARIS_IMAGE_REFERENCE,
+        artifact_type="container_image",
+        scopes=[
+            ("os-pkgs", "amazon", 133),
+            ("lang-pkgs", "jar", 456),
+        ],
+        expected_unknown=0,
+    )
+    postgres_image_scan = _audit_atomic_trivy(
+        root,
+        ATOMIC_EVIDENCE / "postgresql-trivy.json",
+        artifact_name=POSTGRES_ARM64,
+        artifact_type="container_image",
+        scopes=[("os-pkgs", "wolfi", 56)],
+        expected_unknown=0,
+    )
+    postgres_sbom_scan = _audit_atomic_trivy(
+        root,
+        ATOMIC_EVIDENCE / "postgresql-trivy-sbom.json",
+        artifact_name=(
+            ATOMIC_EVIDENCE / "postgresql-18.4-arm64.cdx.json"
+        ).as_posix(),
+        artifact_type="cyclonedx",
+        scopes=[
+            ("os-pkgs", "wolfi", 56),
+            ("lang-pkgs", "gobinary", 4),
+        ],
+        expected_unknown=1,
+    )
+    _audit_atomic_postgres_reference_partition(root)
+    _expect(
+        postgres_image_scan == {"os-pkgs": postgres_libraries["os-pkgs"]}
+        and postgres_sbom_scan == postgres_libraries,
+        code,
+        "fresh PostgreSQL image and SBOM scans must close the exact dual scope",
+    )
+    return receipt
+
+
 def _audit_pending_files(root: Path) -> None:
     for relative in FORBIDDEN_PENDING_PATHS:
         _expect(
@@ -7911,6 +8791,9 @@ def _audit_retained_pending_evidence(root: Path) -> None:
         f"invalid retained evidence root: {RETAINED_EVIDENCE_ROOT}",
     )
     for path in directory.rglob("*"):
+        atomic_directory = root / ATOMIC_EVIDENCE
+        if path == atomic_directory or atomic_directory in path.parents:
+            continue
         relative = path.relative_to(root).as_posix()
         evidence_relative = path.relative_to(directory).as_posix()
         path_tokens = _path_identity_tokens(evidence_relative)
@@ -7995,9 +8878,11 @@ def _audit_retained_pending_evidence(root: Path) -> None:
 
 
 def _audit_ledger(root: Path) -> None:
-    ledger = _load_json(root, RESIDENT_LEDGER, "LEDGER_BLOCK")
+    code = "LEDGER_BLOCK"
+    ledger = _load_json(root, RESIDENT_LEDGER, code)
     images = ledger.get("images")
-    _expect(isinstance(images, list), "LEDGER_BLOCK", "ledger images must be a list")
+    _expect(isinstance(images, list), code, "ledger images must be a list")
+    assert isinstance(images, list)
     aliases = {
         "apachepolaris",
         "chainguardpostgres",
@@ -8005,22 +8890,23 @@ def _audit_ledger(root: Path) -> None:
         "postgres",
         "postgresql",
     }
-    blocked: list[str] = []
+    admitted: list[Mapping[str, Any]] = []
     for index, entry in enumerate(images):
         _expect(
-            isinstance(entry, dict),
-            "LEDGER_BLOCK",
+            isinstance(entry, Mapping),
+            code,
             f"ledger images[{index}] must be an object",
         )
+        assert isinstance(entry, Mapping)
         component = str(entry.get("component", ""))
-        normalized_component = re.sub(r"[^a-z0-9]", "", component.lower())
-        serialized = json.dumps(entry, sort_keys=True).lower()
+        normalized_component = re.sub(r"[^a-z0-9]", "", component.casefold())
+        serialized = json.dumps(entry, sort_keys=True).casefold()
         identity = " ".join(
             str(entry.get(field, ""))
             for field in ("component", "reference", "source")
-        ).lower()
+        ).casefold()
         catalog_identity = any(
-            marker in str(entry.get(field, "")).lower()
+            marker in str(entry.get(field, "")).casefold()
             for field in ("component", "reference", "source")
             for marker in CATALOG_IDENTITY_MARKERS
         )
@@ -8032,13 +8918,84 @@ def _audit_ledger(root: Path) -> None:
                 marker in serialized for marker in PENDING_IMAGE_REFERENCE_MARKERS
             )
         ):
-            blocked.append(component or "<unnamed>")
-    blocked.sort()
-    _expect(
-        not blocked,
-        "LEDGER_BLOCK",
-        f"pending catalog images cannot enter the resident ledger: {blocked}",
+            admitted.append(entry)
+    expected = [
+        {
+            "component": "polaris",
+            "version": POLARIS_VERSION,
+            "source": "https://github.com/apache/polaris",
+            "platform": "linux/arm64",
+            "reference": POLARIS_IMAGE_REFERENCE,
+            "sbom_artifact": (
+                "evidence/polaris-v1.6.0-postgresql-v18.4/"
+                "polaris-1.6.0-arm64.cdx.json"
+            ),
+            "scan_artifact": (
+                "evidence/polaris-v1.6.0-postgresql-v18.4/"
+                "polaris-trivy.json"
+            ),
+            "supply_chain_artifact": (
+                "evidence/polaris-v1.6.0-postgresql-v18.4/"
+                "supply-chain.json"
+            ),
+            "sbom_generator": "syft 1.46.0",
+            "scanner_version": "trivy 0.72.0",
+            "vulnerability_db_updated_at": (
+                "2026-07-19T18:43:16.060990559Z"
+            ),
+        },
+        {
+            "component": "postgresql",
+            "version": "18.4",
+            "source": (
+                "https://github.com/chainguard-images/images/"
+                "tree/main/images/postgres"
+            ),
+            "platform": "linux/arm64",
+            "reference": POSTGRES_ARM64,
+            "sbom_artifact": (
+                "evidence/polaris-v1.6.0-postgresql-v18.4/"
+                "postgresql-18.4-arm64.cdx.json"
+            ),
+            "scan_artifact": (
+                "evidence/polaris-v1.6.0-postgresql-v18.4/"
+                "postgresql-trivy.json"
+            ),
+            "supply_chain_artifact": (
+                "evidence/polaris-v1.6.0-postgresql-v18.4/"
+                "supply-chain.json"
+            ),
+            "sbom_generator": "syft 1.46.0",
+            "scanner_version": "trivy 0.72.0",
+            "vulnerability_db_updated_at": (
+                "2026-07-19T18:43:16.060990559Z"
+            ),
+        },
+    ]
+    observed_components = sorted(
+        str(entry.get("component", "<unnamed>")) for entry in admitted
     )
+    missing_components = sorted(
+        {"polaris", "postgresql"} - set(observed_components)
+    )
+    _expect(
+        _json_equal_type_sensitive(admitted, expected),
+        code,
+        "resident ledger must contain the exact atomic Polaris/PostgreSQL "
+        f"pair; missing {missing_components}, found {observed_components}",
+    )
+    for entry in admitted:
+        for field in (
+            "sbom_artifact",
+            "scan_artifact",
+            "supply_chain_artifact",
+        ):
+            relative = Path("security") / str(entry[field])
+            _expect(
+                _is_regular_file_without_symlink_components(root, relative),
+                code,
+                f"{entry['component']} {field} is not retained: {relative}",
+            )
 
 
 def _runtime_files(root: Path) -> Iterable[Path]:
@@ -9085,6 +10042,7 @@ def audit(
         postgres_admission,
         postgres_crypto_verifier,
     )
+    _audit_atomic_admission(root)
     _audit_pending_files(root)
     _audit_retained_pending_evidence(root)
     _audit_ledger(root)
@@ -9120,10 +10078,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     print(
-        "polaris-trusted-image: evidence checkpoint passes; atomic "
-        "Polaris/PostgreSQL admission still requires fresh dual-scope "
-        "PostgreSQL scans and exact-digest preflight; runtime remains "
-        "fail-closed"
+        "polaris-trusted-image: atomic Polaris/PostgreSQL admission passes; "
+        "fresh dual-scope evidence, exact-digest preflight, and resident "
+        "ledger are bound; runtime remains fail-closed pending acceptance"
     )
     return 0
 

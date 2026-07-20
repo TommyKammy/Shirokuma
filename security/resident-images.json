@@ -65,6 +65,32 @@
       "sbom_generator": "syft 1.46.0",
       "scanner_version": "trivy 0.72.0",
       "vulnerability_db_updated_at": "2026-07-15T07:37:19.83151832Z"
+    },
+    {
+      "component": "polaris",
+      "version": "1.6.0",
+      "source": "https://github.com/apache/polaris",
+      "platform": "linux/arm64",
+      "reference": "ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+      "sbom_artifact": "evidence/polaris-v1.6.0-postgresql-v18.4/polaris-1.6.0-arm64.cdx.json",
+      "scan_artifact": "evidence/polaris-v1.6.0-postgresql-v18.4/polaris-trivy.json",
+      "supply_chain_artifact": "evidence/polaris-v1.6.0-postgresql-v18.4/supply-chain.json",
+      "sbom_generator": "syft 1.46.0",
+      "scanner_version": "trivy 0.72.0",
+      "vulnerability_db_updated_at": "2026-07-19T18:43:16.060990559Z"
+    },
+    {
+      "component": "postgresql",
+      "version": "18.4",
+      "source": "https://github.com/chainguard-images/images/tree/main/images/postgres",
+      "platform": "linux/arm64",
+      "reference": "cgr.dev/chainguard/postgres@sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+      "sbom_artifact": "evidence/polaris-v1.6.0-postgresql-v18.4/postgresql-18.4-arm64.cdx.json",
+      "scan_artifact": "evidence/polaris-v1.6.0-postgresql-v18.4/postgresql-trivy.json",
+      "supply_chain_artifact": "evidence/polaris-v1.6.0-postgresql-v18.4/supply-chain.json",
+      "sbom_generator": "syft 1.46.0",
+      "scanner_version": "trivy 0.72.0",
+      "vulnerability_db_updated_at": "2026-07-19T18:43:16.060990559Z"
     }
   ]
 }

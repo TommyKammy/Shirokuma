@@ -52,7 +52,187 @@ SECRET_FILENAME = re.compile(
 MINIO_IDENTIFIER = re.compile(r"(^|[/:._-])minio([/:._-]|$)", re.IGNORECASE)
 SIGNED_INDEX_EVIDENCE_MODE = "signed_oci_index"
 REPOSITORY_SOURCE_BUILD_EVIDENCE_MODE = "repository_source_build"
+REVIEWED_REPOSITORY_PUBLICATION_EVIDENCE_MODE = (
+    "reviewed_repository_publication"
+)
 SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+ATOMIC_ADMISSION_RECEIPT_PATH = (
+    "bootstrap/polaris/v1.6.0/atomic-admission.json"
+)
+PRIMARY_EVIDENCE_MANIFEST_PATH = (
+    "security/evidence/polaris-v1.6.0-postgresql-v18.4/evidence.sha256"
+)
+CANONICAL_ATOMIC_COMPONENTS = {
+    (
+        "polaris",
+        "1.6.0",
+        "ghcr.io/tommykammy/shirokuma-polaris@"
+        "sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+    ),
+    (
+        "postgresql",
+        "18.4",
+        "cgr.dev/chainguard/postgres@"
+        "sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+    ),
+}
+ATOMIC_LEDGER_SUPPLY_CHAIN_ARTIFACT = (
+    "evidence/polaris-v1.6.0-postgresql-v18.4/supply-chain.json"
+)
+ATOMIC_LEDGER_ENTRY_FIELDS = {
+    "component",
+    "version",
+    "source",
+    "platform",
+    "reference",
+    "sbom_artifact",
+    "scan_artifact",
+    "supply_chain_artifact",
+    "sbom_generator",
+    "scanner_version",
+    "vulnerability_db_updated_at",
+}
+CANONICAL_ATOMIC_LEDGER_IDENTITIES = {
+    (
+        "polaris",
+        "1.6.0",
+        "https://github.com/apache/polaris",
+        "linux/arm64",
+        "ghcr.io/tommykammy/shirokuma-polaris@"
+        "sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+    ),
+    (
+        "postgresql",
+        "18.4",
+        "https://github.com/chainguard-images/images/tree/main/images/postgres",
+        "linux/arm64",
+        "cgr.dev/chainguard/postgres@"
+        "sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+    ),
+}
+CANONICAL_PRIMARY_EVIDENCE = {
+    "anonymous-preflight.json": (
+        "75cc42cb081bebcf7700c76a7c546b9ab0e8ac89202d7e8fef0ccc763f79fcec"
+    ),
+    "polaris-1.6.0-arm64.cdx.json": (
+        "b724a92c7d686bdc5a931aa455ee5d3d66e650e371ed602804116adade12bc30"
+    ),
+    "polaris-trivy.json": (
+        "1ee7994db68a5ad999fc1604b8e0902add3f492b97c12c88f6c3fbbf3a3f098e"
+    ),
+    "postgresql-18.4-arm64.cdx.json": (
+        "f07cc69d805de9161cad8bec49153b3f8908ec78b4ee21a0655736f43ef32ed6"
+    ),
+    "postgresql-trivy-sbom.json": (
+        "66fc88304a642c6522c49ff6b76e5ab313712fcdc4c19d838df13868f22f01ab"
+    ),
+    "postgresql-trivy.json": (
+        "280cb840d27662f9131f6f0907ff5939604fb22cd5257996fd0390ed96e5bf26"
+    ),
+    "trivy-version.json": (
+        "37a6fe2034f88374927f7303385457b2222fc73f0cff0f0bcc53a333fa9df298"
+    ),
+}
+CANONICAL_REVIEWED_REPOSITORY_PUBLICATIONS = {
+    ("polaris", "1.6.0"): {
+        "source": "https://github.com/apache/polaris",
+        "repository": "ghcr.io/tommykammy/shirokuma-polaris",
+        "reference": (
+            "ghcr.io/tommykammy/shirokuma-polaris@"
+            "sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e"
+        ),
+        "admission": "bootstrap/polaris/v1.6.0/admission.json",
+        "release_evidence": {
+            "path": "bootstrap/polaris/v1.6.0/release-evidence.json",
+            "sha256": (
+                "2e3ca5a8245669ccc818f2a22a8be16e901a9b7b73b5eb71237e8c6affdd6f69"
+            ),
+        },
+        "publication_evidence": {
+            "path": "bootstrap/polaris/v1.6.0/image-evidence/publication.json",
+            "sha256": (
+                "b620e2d752a93e9d0cf1a945e6ee820c0229eddb6033e2dc104086a40299d37c"
+            ),
+        },
+        "resident_sbom_sha256": (
+            "b724a92c7d686bdc5a931aa455ee5d3d66e650e371ed602804116adade12bc30"
+        ),
+        "resident_scan_sha256": (
+            "1ee7994db68a5ad999fc1604b8e0902add3f492b97c12c88f6c3fbbf3a3f098e"
+        ),
+    }
+}
+CANONICAL_SIGNED_INDEX_PUBLICATIONS = {
+    ("postgresql", "18.4"): {
+        "source": (
+            "https://github.com/chainguard-images/images/tree/main/images/postgres"
+        ),
+        "reference": (
+            "cgr.dev/chainguard/postgres@"
+            "sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8"
+        ),
+        "signed_index": (
+            "cgr.dev/chainguard/postgres@"
+            "sha256:3dc629a917612f1630c6f8e7a17f23a42cbd5917b9b3080972b70b1583daff34"
+        ),
+        "retained_evidence": {
+            "verification": {
+                "path": (
+                    "bootstrap/postgresql/v18.4/evidence/"
+                    "cryptographic-verification.json"
+                ),
+                "sha256": (
+                    "0b920cce5f9a304986dbdb5aeec4445197f5e7de87ca46d70d55a8f0b2c8f81a"
+                ),
+            },
+            "index_signature": {
+                "path": (
+                    "bootstrap/postgresql/v18.4/evidence/"
+                    "index-signature.sigstore.json"
+                ),
+                "sha256": (
+                    "d6ed9528f9dc344561ae2d252ebdfb76675effe90e28ee59d2e7385c262e37f6"
+                ),
+            },
+            "arm64_signature": {
+                "path": (
+                    "bootstrap/postgresql/v18.4/evidence/"
+                    "arm64-signature.sigstore.json"
+                ),
+                "sha256": (
+                    "9ccdbc86b366064cfa9cb4c28448f4b58e64b6662c3be3cceca98351e6ba7cc7"
+                ),
+            },
+            "provenance": {
+                "path": (
+                    "bootstrap/postgresql/v18.4/evidence/"
+                    "slsa-provenance.sigstore.json"
+                ),
+                "sha256": (
+                    "7993af0f419ce5e066743ffc33a19f4b8cf6a7e166ba79d7a7c5567fa66342e6"
+                ),
+            },
+            "spdx": {
+                "path": (
+                    "bootstrap/postgresql/v18.4/evidence/"
+                    "spdx-sbom.sigstore.json"
+                ),
+                "sha256": (
+                    "74d3969113d71e977a3c7a5bc32cd1c4273c411e40d86a951529818a31d6638a"
+                ),
+            },
+            "cyclonedx_sbom": {
+                "path": (
+                    "bootstrap/postgresql/v18.4/evidence/"
+                    "postgresql-18.4-arm64.cdx.json"
+                ),
+                "sha256": (
+                    "f07cc69d805de9161cad8bec49153b3f8908ec78b4ee21a0655736f43ef32ed6"
+                ),
+            },
+        },
+    }
+}
 CANONICAL_REPOSITORY_SOURCE_BUILDS = {
     ("seaweedfs", "4.39"): {
         "reference": (
@@ -329,23 +509,256 @@ def checked_repository_binding(
     repository: Path,
     binding: Any,
     field: str,
+    *,
+    purpose: str = "repository source-build",
 ) -> tuple[Path, str]:
     if not isinstance(binding, dict):
-        raise PolicyError(f"repository source-build evidence requires {field} binding")
+        raise PolicyError(f"{purpose} evidence requires {field} binding")
     value = binding.get("path")
     expected_sha256 = binding.get("sha256")
     if not isinstance(value, str) or not value.strip():
-        raise PolicyError(f"repository source-build {field}.path must be non-empty")
+        raise PolicyError(f"{purpose} {field}.path must be non-empty")
     if not isinstance(expected_sha256, str) or not SHA256_HEX.fullmatch(expected_sha256):
-        raise PolicyError(f"repository source-build {field}.sha256 must be lowercase SHA-256")
+        raise PolicyError(f"{purpose} {field}.sha256 must be lowercase SHA-256")
     path = repository_artifact_path(repository, value, f"{field}.path")
     observed_sha256 = file_sha256(path, field)
     if observed_sha256 != expected_sha256:
         raise PolicyError(
-            f"repository source-build {field} hash mismatch: "
+            f"{purpose} {field} hash mismatch: "
             f"expected {expected_sha256}, got {observed_sha256}"
         )
     return path, observed_sha256
+
+
+def checked_canonical_binding(
+    repository: Path,
+    binding: Any,
+    field: str,
+    canonical: dict[str, str],
+) -> tuple[Path, str]:
+    if not isinstance(binding, dict) or set(binding) != {"path", "sha256"}:
+        raise PolicyError(f"supply-chain {field} must contain only path and sha256")
+    path, observed_sha256 = checked_repository_binding(
+        repository,
+        binding,
+        field,
+        purpose="supply-chain",
+    )
+    if binding.get("path") != canonical["path"]:
+        raise PolicyError(f"supply-chain {field}.path is not canonical")
+    if binding.get("sha256") != canonical["sha256"]:
+        raise PolicyError(f"supply-chain {field}.sha256 is not canonical")
+    return path, observed_sha256
+
+
+def check_primary_evidence_manifest(path: Path, repository: Path) -> int:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError) as error:
+        raise PolicyError(f"cannot read primary evidence manifest: {error}") from error
+    entries: dict[str, str] = {}
+    for line in lines:
+        match = re.fullmatch(r"([0-9a-f]{64})  ([^/\s]+)", line)
+        if match is None:
+            raise PolicyError("primary evidence manifest contains a malformed entry")
+        digest, name = match.groups()
+        if name in entries:
+            raise PolicyError("primary evidence manifest contains a duplicate entry")
+        entries[name] = digest
+    if entries != CANONICAL_PRIMARY_EVIDENCE:
+        raise PolicyError("primary evidence manifest does not contain the canonical exact set")
+    for name, expected_sha256 in entries.items():
+        artifact = evidence_artifact_path(path, repository, name, "primary evidence")
+        if file_sha256(artifact, f"primary evidence {name}") != expected_sha256:
+            raise PolicyError(f"primary evidence {name} hash mismatch")
+    return len(entries)
+
+
+def check_atomic_admission_receipt(
+    evidence: dict[str, Any],
+    records: list[Any],
+    repository: Path,
+) -> dict[str, str]:
+    binding = evidence.get("atomic_admission_receipt")
+    if not isinstance(binding, dict) or set(binding) != {"path", "sha256"}:
+        raise PolicyError(
+            "supply-chain atomic_admission_receipt must contain only path and sha256"
+        )
+    receipt_path, receipt_sha256 = checked_repository_binding(
+        repository,
+        binding,
+        "atomic_admission_receipt",
+        purpose="supply-chain",
+    )
+    if binding.get("path") != ATOMIC_ADMISSION_RECEIPT_PATH:
+        raise PolicyError("atomic admission receipt path is not canonical")
+
+    identities: list[tuple[str, str, str]] = []
+    for record in records:
+        if not isinstance(record, dict):
+            raise PolicyError("atomic supply-chain evidence records must be objects")
+        identity = (
+            record.get("component"),
+            record.get("version"),
+            record.get("reference"),
+        )
+        if not all(isinstance(value, str) for value in identity):
+            raise PolicyError("atomic supply-chain evidence identities must be strings")
+        identities.append(identity)
+    if len(identities) != 2 or set(identities) != CANONICAL_ATOMIC_COMPONENTS:
+        raise PolicyError("atomic supply-chain evidence requires the canonical exact pair")
+
+    receipt = load_json(receipt_path)
+    if not isinstance(receipt, dict) or receipt.get("schema_version") != 1:
+        raise PolicyError("atomic admission receipt requires schema_version 1")
+    if receipt.get("admission") != "approved" or receipt.get("state") != "admitted":
+        raise PolicyError("atomic admission receipt must record an admitted approval")
+    if receipt.get("platform") != "linux/arm64":
+        raise PolicyError("atomic admission receipt platform must be linux/arm64")
+    components = receipt.get("components")
+    if not isinstance(components, list):
+        raise PolicyError("atomic admission receipt requires a components list")
+    receipt_identities: list[tuple[str, str, str]] = []
+    for value in components:
+        if not isinstance(value, dict):
+            raise PolicyError("atomic admission receipt components must be objects")
+        identity = (
+            value.get("component"),
+            value.get("version"),
+            value.get("reference"),
+        )
+        if not all(isinstance(field, str) for field in identity):
+            raise PolicyError("atomic admission receipt identities must be strings")
+        receipt_identities.append(identity)
+    if (
+        len(receipt_identities) != 2
+        or set(receipt_identities) != CANONICAL_ATOMIC_COMPONENTS
+    ):
+        raise PolicyError("atomic admission receipt components do not match the exact pair")
+
+    manifest_binding = receipt.get("primary_evidence_manifest")
+    if (
+        not isinstance(manifest_binding, dict)
+        or set(manifest_binding) != {"path", "sha256", "size", "entries"}
+    ):
+        raise PolicyError(
+            "primary evidence manifest binding requires path, sha256, size, and entries"
+        )
+    manifest_path, manifest_sha256 = checked_repository_binding(
+        repository,
+        manifest_binding,
+        "primary_evidence_manifest",
+        purpose="atomic admission receipt",
+    )
+    if manifest_binding.get("path") != PRIMARY_EVIDENCE_MANIFEST_PATH:
+        raise PolicyError("primary evidence manifest path is not canonical")
+    try:
+        manifest_size = manifest_path.stat().st_size
+    except OSError as error:
+        raise PolicyError(f"cannot stat primary evidence manifest: {error}") from error
+    if manifest_binding.get("size") != manifest_size:
+        raise PolicyError("primary evidence manifest size mismatch")
+    entry_count = check_primary_evidence_manifest(manifest_path, repository)
+    if manifest_binding.get("entries") != entry_count:
+        raise PolicyError("primary evidence manifest entry count mismatch")
+    if manifest_binding.get("sha256") != manifest_sha256:
+        raise PolicyError("primary evidence manifest hash mismatch")
+    return {"path": str(binding["path"]), "sha256": receipt_sha256}
+
+
+def require_exact_object_fields(
+    value: Any,
+    expected_fields: set[str],
+    field: str,
+) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != expected_fields:
+        raise PolicyError(
+            f"{field} must contain exactly: {', '.join(sorted(expected_fields))}"
+        )
+    return value
+
+
+def check_atomic_resident_ledger(
+    images: list[Any],
+    repository: Path,
+    manifest_path: Path,
+) -> None:
+    canonical_receipt = repository / ATOMIC_ADMISSION_RECEIPT_PATH
+    try:
+        manifest_path.resolve(strict=False).relative_to(
+            repository.resolve(strict=False)
+        )
+        manifest_is_repository_scoped = True
+    except ValueError:
+        manifest_is_repository_scoped = False
+    receipt_exists = manifest_is_repository_scoped and (
+        canonical_receipt.exists() or canonical_receipt.is_symlink()
+    )
+    canonical_components = {
+        identity[0] for identity in CANONICAL_ATOMIC_LEDGER_IDENTITIES
+    }
+    canonical_references = {
+        identity[4] for identity in CANONICAL_ATOMIC_LEDGER_IDENTITIES
+    }
+    atomic_entries: list[dict[str, Any]] = []
+    for image in images:
+        if not isinstance(image, dict):
+            continue
+        component = image.get("component")
+        reference = image.get("reference")
+        supply_chain_artifact = image.get("supply_chain_artifact")
+        if (
+            isinstance(component, str)
+            and component in canonical_components
+        ) or (
+            isinstance(reference, str)
+            and reference in canonical_references
+        ) or supply_chain_artifact == ATOMIC_LEDGER_SUPPLY_CHAIN_ARTIFACT:
+            atomic_entries.append(image)
+    if not receipt_exists and not atomic_entries:
+        return
+    if len(atomic_entries) != 2:
+        raise PolicyError(
+            "atomic resident ledger requires exactly one Polaris and one PostgreSQL entry"
+        )
+
+    identities: list[tuple[Any, Any, Any, Any, Any]] = []
+    supply_chain_artifacts: set[str] = set()
+    for entry in atomic_entries:
+        require_exact_object_fields(
+            entry,
+            ATOMIC_LEDGER_ENTRY_FIELDS,
+            "atomic resident ledger entry",
+        )
+        identity = (
+            entry.get("component"),
+            entry.get("version"),
+            entry.get("source"),
+            entry.get("platform"),
+            entry.get("reference"),
+        )
+        if not all(isinstance(value, str) for value in identity):
+            raise PolicyError(
+                "atomic resident ledger identities must contain only strings"
+            )
+        identities.append(identity)
+        supply_chain_artifact = entry.get("supply_chain_artifact")
+        if not isinstance(supply_chain_artifact, str):
+            raise PolicyError(
+                "atomic resident ledger supply-chain artifacts must be strings"
+            )
+        supply_chain_artifacts.add(supply_chain_artifact)
+    if (
+        len(set(identities)) != 2
+        or set(identities) != CANONICAL_ATOMIC_LEDGER_IDENTITIES
+    ):
+        raise PolicyError(
+            "atomic resident ledger identities do not match the canonical exact pair"
+        )
+    if supply_chain_artifacts != {ATOMIC_LEDGER_SUPPLY_CHAIN_ARTIFACT}:
+        raise PolicyError(
+            "atomic resident ledger entries must share the canonical supply-chain artifact"
+        )
 
 
 def check_sbom(sbom_path: Path) -> None:
@@ -361,9 +774,13 @@ def reference_digest(reference: str) -> str:
 def check_signed_index_supply_chain_record(
     record: dict[str, Any],
     *,
+    repository: Path,
+    component: str,
     reference: str,
     version: str,
     source: str,
+    sbom_path: Path,
+    sbom_generator: str,
 ) -> None:
     expected_digest = reference_digest(reference)
     signature = record.get("signature")
@@ -406,6 +823,412 @@ def check_signed_index_supply_chain_record(
         raise PolicyError("upstream SBOM attestation must use SPDX Document")
     if upstream_sbom.get("subject_digest") != expected_digest:
         raise PolicyError("upstream SBOM subject does not match the ledger digest")
+
+    canonical = CANONICAL_SIGNED_INDEX_PUBLICATIONS.get((component, version))
+    if canonical is None:
+        return
+    expected_record_fields = {
+        "component",
+        "version",
+        "source",
+        "platform",
+        "reference",
+        "verified_at",
+        "evidence_mode",
+        "signature",
+        "provenance",
+        "upstream_sbom",
+        "retained_evidence",
+    }
+    if set(record) != expected_record_fields:
+        raise PolicyError("signed-index publication contains unsupported fields")
+    if reference != canonical["reference"] or source != canonical["source"]:
+        raise PolicyError("signed-index publication does not match the canonical identity")
+    if signed_index != canonical["signed_index"]:
+        raise PolicyError("signed-index publication does not match the canonical index")
+
+    retained = record.get("retained_evidence")
+    canonical_retained = canonical["retained_evidence"]
+    if not isinstance(retained, dict) or set(retained) != set(canonical_retained):
+        raise PolicyError("signed-index publication requires the canonical retained evidence set")
+    retained_paths: dict[str, Path] = {}
+    for name, expected in canonical_retained.items():
+        retained_paths[name], _ = checked_canonical_binding(
+            repository,
+            retained.get(name),
+            f"retained_evidence.{name}",
+            expected,
+        )
+
+    verification = load_json(retained_paths["verification"])
+    if not isinstance(verification, dict) or verification.get("schema_version") != 1:
+        raise PolicyError("signed-index cryptographic verification requires schema_version 1")
+    candidate = verification.get("candidate")
+    if not isinstance(candidate, dict):
+        raise PolicyError("signed-index cryptographic verification requires a candidate")
+    if (
+        candidate.get("index_reference") != signed_index
+        or candidate.get("arm64_reference") != reference
+        or candidate.get("attestation_manifest_digest")
+        != provenance.get("attestation_manifest")
+        or candidate.get("index_platforms") != ["linux/amd64", "linux/arm64"]
+    ):
+        raise PolicyError("signed-index cryptographic candidate does not match the record")
+
+    publisher = verification.get("publisher")
+    if not isinstance(publisher, dict):
+        raise PolicyError("signed-index cryptographic verification requires a publisher")
+    for field in ("issuer", "identity", "workflow_repository", "workflow_ref"):
+        if publisher.get(field) != signature.get(field):
+            raise PolicyError(f"signed-index publisher {field} does not match the record")
+
+    signatures = verification.get("signatures")
+    index_signature = signatures.get("index") if isinstance(signatures, dict) else None
+    arm64_signature = signatures.get("arm64") if isinstance(signatures, dict) else None
+    if not isinstance(index_signature, dict) or not isinstance(arm64_signature, dict):
+        raise PolicyError("signed-index verification requires index and arm64 signatures")
+    if (
+        index_signature.get("bundle") != retained_paths["index_signature"].name
+        or arm64_signature.get("bundle") != retained_paths["arm64_signature"].name
+        or index_signature.get("workflow_sha") != signature.get("commit")
+        or arm64_signature.get("workflow_sha") != signature.get("commit")
+        or index_signature.get("rekor_log_index")
+        != signature.get("transparency_log_index")
+    ):
+        raise PolicyError("retained signatures do not match the signed-index record")
+
+    attestations = verification.get("attestations")
+    slsa = attestations.get("slsa") if isinstance(attestations, dict) else None
+    spdx = attestations.get("spdx") if isinstance(attestations, dict) else None
+    if not isinstance(slsa, dict) or not isinstance(spdx, dict):
+        raise PolicyError("signed-index verification requires SLSA and SPDX attestations")
+    if (
+        slsa.get("predicate_type") != provenance.get("predicate_type")
+        or slsa.get("bundle") != retained_paths["provenance"].name
+        or slsa.get("workflow_sha") != provenance.get("revision")
+    ):
+        raise PolicyError("retained SLSA provenance does not match the record")
+    if (
+        spdx.get("predicate_type") != upstream_sbom.get("predicate_type")
+        or spdx.get("bundle") != retained_paths["spdx"].name
+    ):
+        raise PolicyError("retained SPDX attestation does not match the record")
+    spdx_document = verification.get("spdx")
+    if (
+        not isinstance(spdx_document, dict)
+        or spdx_document.get("subject_reference") != reference
+        or spdx_document.get("package_count") != upstream_sbom.get("package_count")
+    ):
+        raise PolicyError("retained SPDX document does not match the record")
+    cyclonedx = verification.get("cyclonedx")
+    if (
+        not isinstance(cyclonedx, dict)
+        or cyclonedx.get("component_reference") != reference
+        or cyclonedx.get("generator") != sbom_generator
+        or file_sha256(sbom_path, "resident PostgreSQL SBOM")
+        != canonical_retained["cyclonedx_sbom"]["sha256"]
+    ):
+        raise PolicyError("retained CycloneDX SBOM does not match the ledger")
+
+
+def check_reviewed_repository_publication_record(
+    record: dict[str, Any],
+    *,
+    repository: Path,
+    component: str,
+    reference: str,
+    version: str,
+    source: str,
+    sbom_path: Path,
+    scan_path: Path,
+    atomic_receipt_binding: dict[str, str] | None,
+) -> None:
+    reviewed = record.get("reviewed_repository_publication")
+    if not isinstance(reviewed, dict):
+        raise PolicyError(
+            "reviewed_repository_publication mode requires publication evidence"
+        )
+    expected_record_fields = {
+        "component",
+        "version",
+        "source",
+        "platform",
+        "reference",
+        "verified_at",
+        "evidence_mode",
+        "reviewed_repository_publication",
+    }
+    if set(record) != expected_record_fields:
+        raise PolicyError("reviewed repository publication contains unsupported fields")
+    if set(reviewed) != {"admission", "release_evidence", "publication_evidence"}:
+        raise PolicyError(
+            "reviewed repository publication requires the canonical evidence fields"
+        )
+    canonical = CANONICAL_REVIEWED_REPOSITORY_PUBLICATIONS.get((component, version))
+    if canonical is None:
+        raise PolicyError(
+            f"reviewed_repository_publication mode is not approved for "
+            f"{component} {version}"
+        )
+    if reference != canonical["reference"] or source != canonical["source"]:
+        raise PolicyError("reviewed repository publication identity is not canonical")
+    if atomic_receipt_binding is None:
+        raise PolicyError("reviewed repository publication requires an atomic receipt")
+
+    admission_binding = reviewed.get("admission")
+    if (
+        not isinstance(admission_binding, dict)
+        or set(admission_binding) != {"path"}
+        or admission_binding.get("path") != canonical["admission"]
+    ):
+        raise PolicyError(
+            "reviewed repository publication admission path must be canonical "
+            "without a byte hash"
+        )
+    admission_path = repository_artifact_path(
+        repository,
+        admission_binding["path"],
+        "reviewed_repository_publication.admission.path",
+    )
+    release_path, _ = checked_canonical_binding(
+        repository,
+        reviewed.get("release_evidence"),
+        "reviewed_repository_publication.release_evidence",
+        canonical["release_evidence"],
+    )
+    publication_path, _ = checked_canonical_binding(
+        repository,
+        reviewed.get("publication_evidence"),
+        "reviewed_repository_publication.publication_evidence",
+        canonical["publication_evidence"],
+    )
+
+    admission = load_json(admission_path)
+    if not isinstance(admission, dict) or admission.get("schema_version") != 6:
+        raise PolicyError("reviewed Polaris admission requires schema_version 6")
+    require_exact_object_fields(
+        admission,
+        {
+            "schema_version",
+            "component",
+            "version",
+            "platform",
+            "admission",
+            "state",
+            "source_record",
+            "source_record_sha256",
+            "build_contract",
+            "build_contract_sha256",
+            "dependency_snapshot",
+            "upstream_image_assessment",
+            "planned_candidate",
+            "atomic_admission_receipt",
+            "image_publication",
+            "resident_ledger",
+            "runtime_manifests",
+            "blocking_controls",
+            "next_action",
+        },
+        "reviewed Polaris admission",
+    )
+    dependency_snapshot = require_exact_object_fields(
+        admission.get("dependency_snapshot"),
+        {
+            "state",
+            "admitted",
+            "repository",
+            "reference",
+            "publication_evidence",
+            "review_checkpoint",
+        },
+        "reviewed Polaris admission dependency_snapshot",
+    )
+    require_exact_object_fields(
+        dependency_snapshot.get("publication_evidence"),
+        {"path", "sha256"},
+        "reviewed Polaris admission dependency_snapshot.publication_evidence",
+    )
+    require_exact_object_fields(
+        dependency_snapshot.get("review_checkpoint"),
+        {
+            "merge_commit",
+            "reviewed_contract_sha256",
+            "reviewed_admission_sha256",
+        },
+        "reviewed Polaris admission dependency_snapshot.review_checkpoint",
+    )
+    require_exact_object_fields(
+        admission.get("upstream_image_assessment"),
+        {"reference", "admission", "reason"},
+        "reviewed Polaris admission upstream_image_assessment",
+    )
+    if (
+        admission.get("component") != component
+        or admission.get("version") != version
+        or admission.get("platform") != "linux/arm64"
+        or admission.get("admission") != "approved"
+        or admission.get("state") != "runtime_acceptance_pending"
+    ):
+        raise PolicyError("reviewed Polaris admission is not atomically admitted")
+    admission_receipt = require_exact_object_fields(
+        admission.get("atomic_admission_receipt"),
+        {"path", "sha256"},
+        "reviewed Polaris admission atomic_admission_receipt",
+    )
+    if admission_receipt != atomic_receipt_binding:
+        raise PolicyError("reviewed Polaris admission receipt does not match supply-chain")
+    resident_ledger = require_exact_object_fields(
+        admission.get("resident_ledger"),
+        {"permitted", "atomic_with"},
+        "reviewed Polaris admission resident_ledger",
+    )
+    if (
+        resident_ledger.get("permitted") is not True
+        or resident_ledger.get("atomic_with") != "postgresql"
+    ):
+        raise PolicyError("reviewed Polaris admission does not permit the atomic ledger pair")
+    image_publication = require_exact_object_fields(
+        admission.get("image_publication"),
+        {
+            "state",
+            "enabled",
+            "admitted",
+            "reference",
+            "digest",
+            "containerfile",
+            "release_evidence",
+            "workflow",
+        },
+        "reviewed Polaris admission image_publication",
+    )
+    require_exact_object_fields(
+        image_publication.get("release_evidence"),
+        {"path", "sha256"},
+        "reviewed Polaris admission image_publication.release_evidence",
+    )
+    require_exact_object_fields(
+        image_publication.get("workflow"),
+        {
+            "path",
+            "sha256",
+            "source_sha",
+            "run_id",
+            "run_attempt",
+            "retired",
+        },
+        "reviewed Polaris admission image_publication.workflow",
+    )
+    if (
+        image_publication.get("state") != "admitted"
+        or image_publication.get("enabled") is not False
+        or image_publication.get("admitted") is not True
+        or image_publication.get("reference") != reference
+        or image_publication.get("digest") != reference_digest(reference)
+        or image_publication.get("release_evidence")
+        != canonical["release_evidence"]
+    ):
+        raise PolicyError("reviewed Polaris image publication is not admitted")
+    planned_candidate = require_exact_object_fields(
+        admission.get("planned_candidate"),
+        {"repository", "reference", "release_evidence"},
+        "reviewed Polaris admission planned_candidate",
+    )
+    require_exact_object_fields(
+        planned_candidate.get("release_evidence"),
+        {"path", "sha256"},
+        "reviewed Polaris admission planned_candidate.release_evidence",
+    )
+    if (
+        planned_candidate.get("repository") != canonical["repository"]
+        or planned_candidate.get("reference") != reference
+        or planned_candidate.get("release_evidence")
+        != canonical["release_evidence"]
+    ):
+        raise PolicyError("reviewed Polaris planned candidate is not canonical")
+    runtime_manifests = require_exact_object_fields(
+        admission.get("runtime_manifests"),
+        {"permitted", "forbidden_roots"},
+        "reviewed Polaris admission runtime_manifests",
+    )
+    if (
+        runtime_manifests.get("permitted") is not False
+        or runtime_manifests.get("forbidden_roots")
+        != ["deploy", "charts", "opentofu"]
+    ):
+        raise PolicyError(
+            "reviewed Polaris runtime manifests must remain canonically forbidden"
+        )
+    blocking_controls = admission.get("blocking_controls")
+    if not isinstance(blocking_controls, list):
+        raise PolicyError("reviewed Polaris admission blocking_controls must be a list")
+    for control in blocking_controls:
+        require_exact_object_fields(
+            control,
+            {"id", "state"},
+            "reviewed Polaris admission blocking_controls entry",
+        )
+
+    release = load_json(release_path)
+    if (
+        not isinstance(release, dict)
+        or release.get("schema_version") != 2
+        or release.get("component") != component
+        or release.get("version") != version
+        or release.get("platform") != "linux/arm64"
+        or release.get("state") != "admitted"
+        or release.get("admitted") is not True
+        or release.get("reference") != reference
+        or release.get("digest") != reference_digest(reference)
+        or release.get("atomic_admission_receipt") != atomic_receipt_binding
+    ):
+        raise PolicyError("reviewed Polaris release evidence is not canonical")
+    publication = release.get("publication")
+    if (
+        not isinstance(publication, dict)
+        or publication.get("record") != canonical["publication_evidence"]["path"]
+        or publication.get("record_sha256")
+        != canonical["publication_evidence"]["sha256"]
+        or publication.get("anonymous_pull") is not True
+        or publication.get("promotion_anonymous_verification") is not True
+    ):
+        raise PolicyError("reviewed Polaris release publication binding is invalid")
+    vulnerabilities = release.get("vulnerabilities")
+    if (
+        not isinstance(vulnerabilities, dict)
+        or vulnerabilities.get("high") != 0
+        or vulnerabilities.get("critical") != 0
+    ):
+        raise PolicyError("reviewed Polaris release requires High=0 and Critical=0")
+    evidence = release.get("evidence")
+    release_records = evidence.get("records") if isinstance(evidence, dict) else None
+    if not isinstance(release_records, dict):
+        raise PolicyError("reviewed Polaris release requires evidence records")
+    if (
+        release_records.get("polaris-1.6.0-arm64.cdx.json", {}).get("sha256")
+        != canonical["resident_sbom_sha256"]
+        or release_records.get("trivy.json", {}).get("sha256")
+        != canonical["resident_scan_sha256"]
+        or file_sha256(sbom_path, "resident Polaris SBOM")
+        != canonical["resident_sbom_sha256"]
+        or file_sha256(scan_path, "resident Polaris scan")
+        != canonical["resident_scan_sha256"]
+    ):
+        raise PolicyError("reviewed Polaris resident evidence does not match the release")
+
+    publication_record = load_json(publication_path)
+    if (
+        not isinstance(publication_record, dict)
+        or publication_record.get("schema_version") != 1
+        or publication_record.get("component") != component
+        or publication_record.get("version") != version
+        or publication_record.get("platform") != "linux/arm64"
+        or publication_record.get("reference") != reference
+        or publication_record.get("promoted") is not True
+        or publication_record.get("anonymous_pull") is not True
+        or publication_record.get("promotion_anonymous_verification") is not True
+        or publication_record.get("admitted") is not False
+    ):
+        raise PolicyError("reviewed Polaris publication evidence is not canonical")
 
 
 def check_repository_source_build_record(
@@ -635,6 +1458,33 @@ def check_supply_chain_evidence(
     records = evidence.get("images")
     if not isinstance(records, list):
         raise PolicyError("supply-chain evidence requires an images list")
+    atomic_receipt_binding: dict[str, str] | None = None
+    atomic_modes = {
+        REVIEWED_REPOSITORY_PUBLICATION_EVIDENCE_MODE,
+    }
+    requires_atomic_receipt = any(
+        isinstance(candidate, dict)
+        and (
+            candidate.get("evidence_mode") in atomic_modes
+            or (
+                candidate.get("component") == "postgresql"
+                and candidate.get("version") == "18.4"
+            )
+        )
+        for candidate in records
+    )
+    if requires_atomic_receipt:
+        if set(evidence) != {
+            "schema_version",
+            "atomic_admission_receipt",
+            "images",
+        }:
+            raise PolicyError("atomic supply-chain evidence contains unsupported fields")
+        atomic_receipt_binding = check_atomic_admission_receipt(
+            evidence,
+            records,
+            repository,
+        )
     matches = [
         record
         for record in records
@@ -660,9 +1510,13 @@ def check_supply_chain_evidence(
     if mode == SIGNED_INDEX_EVIDENCE_MODE:
         check_signed_index_supply_chain_record(
             record,
+            repository=repository,
+            component=component,
             reference=reference,
             version=version,
             source=source,
+            sbom_path=sbom_path,
+            sbom_generator=sbom_generator,
         )
     elif mode == REPOSITORY_SOURCE_BUILD_EVIDENCE_MODE:
         check_repository_source_build_record(
@@ -677,6 +1531,18 @@ def check_supply_chain_evidence(
             sbom_generator=sbom_generator,
             scanner_version=scanner_version,
             vulnerability_db_updated_at=vulnerability_db_updated_at,
+        )
+    elif mode == REVIEWED_REPOSITORY_PUBLICATION_EVIDENCE_MODE:
+        check_reviewed_repository_publication_record(
+            record,
+            repository=repository,
+            component=component,
+            reference=reference,
+            version=version,
+            source=source,
+            sbom_path=sbom_path,
+            scan_path=scan_path,
+            atomic_receipt_binding=atomic_receipt_binding,
         )
     else:
         raise PolicyError(f"unsupported supply-chain evidence_mode {mode!r}")
@@ -981,6 +1847,11 @@ def check_images(
             expires_on = expires_on_value.strip() if isinstance(expires_on_value, str) else ""
             if expires_on and not is_future_iso_date(expires_on):
                 errors.append(f"{component}: expires_on must be a future YYYY-MM-DD date")
+
+    try:
+        check_atomic_resident_ledger(images, repository, manifest_path)
+    except PolicyError as error:
+        errors.append(str(error))
 
     lab_exceptions: dict[str, set[tuple[str, str, str]]] = {}
     if not errors and exceptions_path is not None:

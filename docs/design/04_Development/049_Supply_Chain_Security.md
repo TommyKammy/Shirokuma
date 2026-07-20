@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-20
-version: "1.9"
+version: "1.10"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -248,12 +248,12 @@ produce reviewable publication evidence.
 
 Polaris image release evidence is retained at
 `bootstrap/polaris/v1.6.0/image-evidence/` and the write-capable publisher is
-retired. This checkpoint advances the contract to `atomic_admission_pending`
-and marks only the exact image digest as `approved_for_atomic_admission`.
-Overall admission remains blocked: no Polaris resident-image entry or runtime
-manifest is permitted. The exact PostgreSQL evidence is now reviewed, but both
-components must still pass one atomic admission change with fresh exact-image
-and CycloneDX-input scans plus exact-digest availability preflight.
+retired. Its evidence-only checkpoint advanced the contract to
+`atomic_admission_pending` and marked only the exact image digest
+`approved_for_atomic_admission`. The later atomic-admission checkpoint now
+admits that digest only as one half of the exact Polaris/PostgreSQL pair. This
+resident-image decision does not permit runtime manifests, credentials, or a
+cluster mutation.
 
 Within `caches/modules-2/files-2.1`, the checksum directory follows Gradle
 9.6's canonical artifact-store rule: SHA-1 is lowercase hexadecimal with every
@@ -343,31 +343,39 @@ dependency publisher is also forbidden: changing the dependency artifact
 requires a new explicit publication lifecycle and contract review rather than a
 rerun of the historical workflow.
 
-The selected Chainguard PostgreSQL 18.4 index and linux/arm64 manifest are
-`approved_for_atomic_admission`, but remain blocked from resident admission.
-The retained closed set binds the raw index, arm64 and attestation manifests,
-role-separated index/arm64 Sigstore bundles, SLSA v1 and SPDX 2.3 DSSE
-envelopes and bundles, a Syft 1.46.0 CycloneDX 1.7 SBOM, and a fresh Trivy
-0.72.0 exact-image report. A second Trivy report consumes that CycloneDX SBOM
-and closes all 56 Wolfi plus four Go library components; both report
-High=0/Critical=0. A retained Sigstore TrustedRoot lets Cosign
-3.1.1 reverify all four bundles with an empty HOME and Docker configuration
-while network proxies are denied. The SLSA certificate uses workflow commit
-`1d360e5f7f3b749f0b1e55b3f75d3eb8db4e7004`; the index, arm64 and SPDX
-certificates use `704e38b436bc40bc9a9d669c05f0d6694bec298b`. These role-specific
-claims must not be collapsed into one global workflow revision.
+The selected Chainguard PostgreSQL 18.4 index and linux/arm64 manifest first
+entered an evidence-only state. That retained closed set binds the raw index,
+arm64 and attestation manifests, role-separated index/arm64 Sigstore bundles,
+SLSA v1 and SPDX 2.3 DSSE envelopes and bundles, a Syft 1.46.0 CycloneDX 1.7
+SBOM, and Trivy 0.72.0 exact-image and CycloneDX-input reports. The latter
+closes all 56 Wolfi plus four Go library components. A retained Sigstore
+TrustedRoot lets Cosign 3.1.1 reverify all four bundles with an empty HOME and
+Docker configuration while network proxies are denied. The SLSA certificate
+uses workflow commit `1d360e5f7f3b749f0b1e55b3f75d3eb8db4e7004`; the index,
+arm64 and SPDX certificates use
+`704e38b436bc40bc9a9d669c05f0d6694bec298b`. These role-specific claims must
+not be collapsed into one global workflow revision.
 
-Polaris and PostgreSQL are admitted atomically in the next focused
-atomic-admission review. The retained Trivy report authorizes this evidence
-review only; it is
-not an indefinitely reusable admission result. Before atomic admission,
-anonymous exact-digest availability is preflighted again and PostgreSQL is
-rescanned at the same arm64 digest in both exact-image and CycloneDX-input
-scopes. Each database must be no more than 24 hours old, and the combined result
-must still cover all 56 Wolfi plus four Go libraries at zero High/Critical.
-Neither component may appear alone in the resident-image ledger or in runtime
-manifests, and this evidence checkpoint does not authorize credentials or a
-cluster mutation.
+The atomic-admission checkpoint repeated anonymous availability preflight for
+the exact Polaris and PostgreSQL references and rescanned the same PostgreSQL
+arm64 digest in both exact-image and CycloneDX-input scopes. Each vulnerability
+database was no more than 24 hours old; both reports remained
+High=0/Critical=0 and retained complete 56 Wolfi plus four Go library coverage.
+The CycloneDX-input report also retains one UNKNOWN finding:
+`CVE-2026-39824` in `golang.org/x/sys` `v0.1.0`, fixed in `0.44.0`. The
+High/Critical gate still passes, but the decision receipt records `unknown=1`
+and requires runtime acceptance to monitor the finding.
+The checkpoint binds the preflight, fresh scans, reviewed evidence, and both
+exact digests under
+`security/evidence/polaris-v1.6.0-postgresql-v18.4/`. It adds the Polaris and
+PostgreSQL records to `security/resident-images.json` together; either record
+appearing alone fails closed.
+
+Atomic resident-image admission is complete, but runtime/Flux manifests and
+credentials remain blocked. The next boundary is runtime acceptance: the
+catalog Kustomization, credential-safe Secret path, live Ready conditions,
+catalog API smoke, and backup/restore evidence must pass before Issue #61 can
+complete.
 
 Trusted builds must also set BuildKit `no-cache` and must not import or export a
 shared GitHub Actions cache. Reusing a mutable layer that is absent from the

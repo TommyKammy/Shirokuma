@@ -1,14 +1,18 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "component": "polaris",
   "version": "1.6.0",
   "platform": "linux/arm64",
-  "state": "approved_for_atomic_admission",
-  "admitted": false,
+  "state": "admitted",
+  "admitted": true,
   "reference": "ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
   "digest": "sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
   "trusted_tag": "ghcr.io/tommykammy/shirokuma-polaris:1.6.0-arm64",
   "trusted_tag_role": "non_authoritative_pointer",
+  "atomic_admission_receipt": {
+    "path": "bootstrap/polaris/v1.6.0/atomic-admission.json",
+    "sha256": "cc7ff13fb87bec48537e5944d4820c26fd81c0b5bd215095da8df2ecfff5d4d3"
+  },
   "publisher_checkpoint": {
     "repository": "TommyKammy/Shirokuma",
     "workflow": ".github/workflows/polaris-arm64.yml",
@@ -246,9 +250,9 @@
     }
   },
   "next_boundary": {
-    "state": "atomic_admission_pending",
+    "state": "runtime_acceptance_pending",
     "atomic_peer": "bootstrap/postgresql/v18.4/admission.json",
-    "resident_ledger_permitted": false,
+    "resident_ledger_permitted": true,
     "runtime_permitted": false
   }
 }
