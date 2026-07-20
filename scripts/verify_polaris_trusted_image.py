@@ -73,7 +73,7 @@ POLARIS_SOURCE_SHA256 = (
     "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb"
 )
 POLARIS_CONTRACT_SHA256 = (
-    "15a297316bda73a42cedf04e4233bb7dd5e04ab3577d9da7ad6dc92183c9d671"
+    "7696c70a4d46217ebc955bcff1c4cb4ca2c94da557a4d0aafc38c68c0a8a05a6"
 )
 REVIEWED_POLARIS_CONTRACT_SHA256 = (
     "db27ec5ebf627ef1772c898614d5f206a2a3affc67007ee29221c525ab8fd3d6"
@@ -116,8 +116,44 @@ POLARIS_SOURCE_OVERLAY_SHA256 = (
     "c5739a49baac0d08e6cf71a4dabd06141618f9474702e6c24fd1bb7f22571f48"
 )
 POLARIS_IMAGE_WORKFLOW_SHA256 = (
-    "b3b7f58e9c38637f39f8c2bd800ca8cb8ff479b3f2236aa95b99894a6470373f"
+    "337c3ac1c6090dc51621bc2f8c36e4c0bda90295224316598d87293e9767849e"
 )
+POLARIS_CANDIDATE_EVIDENCE_REQUIRED = [
+    "anonymous-image-manifest.json",
+    "builder-metadata.json",
+    "build-context.sha256",
+    "build-input.json",
+    "dependency-input.json",
+    "offline-build.json",
+    "source-authentication.json",
+    "cosign-signature-bundle.json",
+    "cosign-verify.json",
+    "health-ready.json",
+    "image-config.json",
+    "image-manifest.json",
+    "polaris-1.6.0-arm64.cdx.json",
+    "registry-signature-bundles.jsonl",
+    "rekor-entry.json",
+    "runtime-container-inspect.json",
+    "runtime-base-java-version.txt",
+    "runtime-base-manifest.json",
+    "runtime-smoke.json",
+    "runtime-smoke.log",
+    "sbom-attestation-bundle.json",
+    "sbom-policy.json",
+    "slsa-bundles.jsonl",
+    "slsa-verify.json",
+    "toolchain.json",
+    "trivy-attestation-bundle.json",
+    "trivy-version.json",
+    "trivy.json",
+]
+POLARIS_PROMOTION_EVIDENCE_REQUIRED = [
+    "promotion-cosign-verify.json",
+    "promotion-slsa-verify.json",
+    "publication.json",
+    "trusted-tag-manifest.json",
+]
 POLARIS_OVERLAY_PREIMAGES = {
     "runtime/server/build.gradle.kts": (
         "6394f787e0b0a48a7a916824306c3e4fe54556c7f639aeb47330a63111e05f16"
@@ -1093,6 +1129,22 @@ def _audit_image_publication_files(root: Path) -> None:
         "        with:\n"
         "          cosign-release: v3.1.1"
     )
+    verify_cosign_bootstrap = (
+        "      - name: Install pinned Cosign before write-capable policy "
+        "revalidation\n"
+        "        uses: sigstore/cosign-installer@"
+        "6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2\n"
+        "        with:\n"
+        "          cosign-release: v3.1.1"
+    )
+    promote_cosign_bootstrap = (
+        "      - name: Install pinned Cosign before promotion policy "
+        "revalidation\n"
+        "        uses: sigstore/cosign-installer@"
+        "6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2\n"
+        "        with:\n"
+        "          cosign-release: v3.1.1"
+    )
     required_markers = (
         "runs-on: ubuntu-24.04-arm",
         "github.repository == 'TommyKammy/Shirokuma'",
@@ -1105,6 +1157,12 @@ def _audit_image_publication_files(root: Path) -> None:
         f"RUNTIME_BASE: {IMAGE_RUNTIME_ARM64}",
         f"RUNTIME_PATCH_SHA256: {POLARIS_SOURCE_OVERLAY_SHA256}",
         f"CONTAINERFILE_SHA256: {POLARIS_CONTAINERFILE_SHA256}",
+        "REKOR_URL: https://rekor.sigstore.dev",
+        'REKOR_MAJOR_API_VERSION: "1"',
+        (
+            '"${REKOR_URL}/api/v1/log/entries?'
+            'logIndex=${rekor_index}"'
+        ),
         (
             "SOURCE_SIGNING_KEY_FINGERPRINT: "
             f"{POLARIS_KEY_FINGERPRINT_GROUPED}"
@@ -1132,6 +1190,36 @@ def _audit_image_publication_files(root: Path) -> None:
         "retention-days: 30",
         '"forbidden_component_terms": ["hadoop", "ranger", "jetty-http"]',
         prepare_cosign_bootstrap,
+        verify_cosign_bootstrap,
+        promote_cosign_bootstrap,
+        "Validate the static publication bootstrap policy",
+        "Rebind the write-capable job to the static publication policy",
+        "Rebind promotion to the static publication policy",
+        "Complete the cryptographic image-publication-pending audit",
+        "Complete the write-capable cryptographic policy audit",
+        "Complete the promotion cryptographic policy audit",
+        (
+            "python3 scripts/verify_polaris_trusted_image.py "
+            "audit-publication-bootstrap --root ."
+        ),
+        "python3 scripts/verify_polaris_trusted_image.py audit --root .",
+        "cosign download signature",
+        "registry-signature-bundles.jsonl",
+        "rekor-entry.json",
+        "slsa-bundles.jsonl",
+        'bundle = record["attestation"]["bundle"]',
+        'bundle_media_type = "application/vnd.dev.sigstore.bundle.v0.3+json"',
+        '"https://sigstore.dev/cosign/sign/v1"',
+        "cosign attest --yes",
+        "--bundle sbom-attestation-bundle.json",
+        "--type cyclonedx",
+        "--predicate polaris-1.6.0-arm64.cdx.json",
+        "sbom-attestation-bundle.json",
+        "--bundle trivy-attestation-bundle.json",
+        "--type https://shirokuma.dev/attestations/trivy/v1",
+        "--predicate trivy.json",
+        "trivy-attestation-bundle.json",
+        "cosign verify-blob-attestation",
     )
     missing = [marker for marker in required_markers if marker not in workflow]
     _expect(
@@ -1161,22 +1249,270 @@ def _audit_image_publication_files(root: Path) -> None:
     )
     jobs_text = workflow.split("\njobs:\n", maxsplit=1)
     _expect(
-        len(jobs_text) == 2
-        and re.findall(
+        len(jobs_text) == 2,
+        "PUBLICATION_POLICY",
+        "workflow job closure changed",
+    )
+    jobs = jobs_text[1]
+    _expect(
+        re.findall(
             r"^  ([a-z][a-z0-9_-]*):\s*$",
-            jobs_text[1],
+            jobs,
             flags=re.MULTILINE,
         )
         == ["prepare", "verify", "promote"],
         "PUBLICATION_POLICY",
         "workflow job closure changed",
     )
-    prepare_job = jobs_text[1].split("\n  verify:\n", maxsplit=1)
+    prepare_job = jobs.split("\n  verify:\n", maxsplit=1)
     _expect(
-        len(prepare_job) == 2
-        and prepare_job[0].count(prepare_cosign_bootstrap) == 1,
+        len(prepare_job) == 2,
         "PUBLICATION_POLICY",
-        "prepare must contain exactly one lifecycle-gated Cosign bootstrap",
+        "workflow job closure changed",
+    )
+    verify_job = prepare_job[1].split("\n  promote:\n", maxsplit=1)
+    _expect(
+        len(verify_job) == 2,
+        "PUBLICATION_POLICY",
+        "workflow job closure changed",
+    )
+    job_sections = {
+        "prepare": prepare_job[0],
+        "verify": verify_job[0],
+        "promote": verify_job[1],
+    }
+    cosign_action_pattern = re.compile(
+        r"^\s+-?\s*uses:\s+sigstore/cosign-installer@[^\s#]+",
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+    expected_cosign_blocks = {
+        "prepare": prepare_cosign_bootstrap,
+        "verify": verify_cosign_bootstrap,
+        "promote": promote_cosign_bootstrap,
+    }
+    _expect(
+        all(
+            job.count(expected_cosign_blocks[name]) == 1
+            and len(cosign_action_pattern.findall(job)) == 1
+            for name, job in job_sections.items()
+        ),
+        "PUBLICATION_POLICY",
+        "each job must contain exactly one policy-scoped Cosign bootstrap",
+    )
+    static_audit = (
+        "python3 scripts/verify_polaris_trusted_image.py "
+        "audit-publication-bootstrap --root ."
+    )
+    cryptographic_audit = (
+        "python3 scripts/verify_polaris_trusted_image.py audit --root ."
+    )
+    _expect(
+        all(
+            job.count(static_audit) == 1
+            and job.count(cryptographic_audit) == 1
+            for job in job_sections.values()
+        ),
+        "PUBLICATION_POLICY",
+        "each job must contain one static and one full cryptographic audit",
+    )
+    job_orders = (
+        (
+            job_sections["prepare"],
+            (
+                "Bind the run to reviewed main and check publication lifecycle",
+                "Validate the static publication bootstrap policy",
+                static_audit,
+                "Install pinned Cosign for dependency evidence revalidation",
+                "Complete the cryptographic image-publication-pending audit",
+                cryptographic_audit,
+            ),
+        ),
+        (
+            job_sections["verify"],
+            (
+                "Rebind the write-capable job to the static publication policy",
+                static_audit,
+                "Install pinned Cosign before write-capable policy revalidation",
+                "Complete the write-capable cryptographic policy audit",
+                cryptographic_audit,
+                "Download the exact read-only-verified image build input",
+            ),
+        ),
+        (
+            job_sections["promote"],
+            (
+                "Rebind promotion to the static publication policy",
+                static_audit,
+                "Install pinned Cosign before promotion policy revalidation",
+                "Complete the promotion cryptographic policy audit",
+                cryptographic_audit,
+                "Download retained candidate evidence",
+            ),
+        ),
+    )
+    _expect(
+        all(
+            (positions := [job.find(marker) for marker in markers])
+            and all(position >= 0 for position in positions)
+            and positions == sorted(positions)
+            for job, markers in job_orders
+        ),
+        "PUBLICATION_POLICY",
+        "job-local static audit, Cosign bootstrap, or full audit changed order",
+    )
+    candidate_copy_pattern = re.compile(
+        r"^          cp \\\n"
+        r"(?P<sources>(?:^            [^\n]+ \\\n)+)"
+        r'^            "\$\{evidence_dir\}/"$',
+        flags=re.MULTILINE,
+    )
+    candidate_copy_matches = list(
+        candidate_copy_pattern.finditer(job_sections["verify"])
+    )
+    candidate_copy_sources = (
+        [
+            Path(line.strip().removesuffix(" \\")).name
+            for line in candidate_copy_matches[0]
+            .group("sources")
+            .splitlines()
+        ]
+        if len(candidate_copy_matches) == 1
+        else []
+    )
+    expected_candidate_copy_sources = [
+        artifact
+        for artifact in POLARIS_CANDIDATE_EVIDENCE_REQUIRED
+        if artifact != "runtime-smoke.log"
+    ]
+    _expect(
+        len(candidate_copy_matches) == 1
+        and candidate_copy_sources == expected_candidate_copy_sources
+        and job_sections["verify"].count(
+            'cp runtime-smoke.log "${evidence_dir}/"'
+        )
+        == 1
+        and job_sections["verify"].count('"${evidence_dir}/"') == 2,
+        "PUBLICATION_POLICY",
+        "candidate evidence copy closure changed",
+    )
+    promotion_copy_sources = re.findall(
+        r"^          cp ([A-Za-z0-9._-]+) candidate-evidence/$",
+        job_sections["promote"],
+        flags=re.MULTILINE,
+    )
+    _expect(
+        promotion_copy_sources
+        == [
+            artifact
+            for artifact in POLARIS_PROMOTION_EVIDENCE_REQUIRED
+            if artifact != "publication.json"
+        ]
+        and job_sections["verify"].count(
+            '(root / "publication.json").write_text('
+        )
+        == 1
+        and job_sections["promote"].count(
+            'path = root / "publication.json"'
+        )
+        == 1,
+        "PUBLICATION_POLICY",
+        "promotion evidence copy closure changed",
+    )
+    verify_evidence_order = (
+        "Keyless-sign and verify the exact scanned image",
+        "cosign download signature",
+        "registry-signature-bundles.jsonl",
+        "rekor-entry.json",
+        "Verify SLSA provenance from this exact workflow",
+        "slsa-bundles.jsonl",
+        "Keyless-attest the retained Polaris SBOM and scan",
+        "sbom-attestation-bundle.json",
+        "trivy-attestation-bundle.json",
+        "Record and retain the non-admitted image candidate",
+    )
+    verify_evidence_positions = [
+        job_sections["verify"].find(marker) for marker in verify_evidence_order
+    ]
+    _expect(
+        all(position >= 0 for position in verify_evidence_positions)
+        and verify_evidence_positions == sorted(verify_evidence_positions)
+        and job_sections["verify"].count("cosign download signature") == 1
+        and job_sections["verify"].count("cosign attest --yes") == 2
+        and job_sections["verify"].count("cosign verify-blob-attestation") == 1
+        and job_sections["verify"].count(
+            "--bundle sbom-attestation-bundle.json"
+        )
+        == 1
+        and job_sections["verify"].count(
+            "--bundle trivy-attestation-bundle.json"
+        )
+        == 1
+        and all(
+            artifact in job_sections["verify"]
+            for artifact in POLARIS_CANDIDATE_EVIDENCE_REQUIRED
+        ),
+        "PUBLICATION_POLICY",
+        "candidate signature, Rekor, SLSA, or attestation evidence changed",
+    )
+    verify_crypto_markers = (
+        "if registry_bundle_matches != 1:",
+        'proof.get("checkpoint")',
+        '(api_entry.get("body"), entry["canonicalizedBody"])',
+        'certificate.get("githubWorkflowSHA")',
+        'certificate.get("runInvocationURI") == invocation',
+        'Path("slsa-bundles.jsonl").write_text(',
+    )
+    _expect(
+        all(
+            marker in job_sections["verify"]
+            for marker in verify_crypto_markers
+        ),
+        "PUBLICATION_POLICY",
+        "candidate cryptographic evidence binding changed",
+    )
+    promotion_evidence_order = (
+        "Revalidate candidate evidence before promotion credentials exist",
+        "cosign verify-blob-attestation",
+        "Reverify the public digest, signature, and provenance before promotion",
+        "Log in to GHCR for trusted-tag promotion",
+        "Promote the fully verified digest to the non-authoritative trusted tag",
+    )
+    promotion_evidence_positions = [
+        job_sections["promote"].find(marker)
+        for marker in promotion_evidence_order
+    ]
+    _expect(
+        all(position >= 0 for position in promotion_evidence_positions)
+        and promotion_evidence_positions == sorted(promotion_evidence_positions)
+        and (
+            "candidate-evidence/sbom-attestation-bundle.json cyclonedx"
+            in job_sections["promote"]
+        )
+        and (
+            "candidate-evidence/trivy-attestation-bundle.json"
+            in job_sections["promote"]
+        )
+        and all(
+            artifact in job_sections["promote"]
+            for artifact in POLARIS_PROMOTION_EVIDENCE_REQUIRED
+        ),
+        "PUBLICATION_POLICY",
+        "credential-free candidate evidence revalidation changed",
+    )
+    promotion_crypto_markers = (
+        "if registry_bundles != [signature_bundle]:",
+        'and statement.get("predicate") == predicate',
+        "if not slsa_bundles or slsa_bundles != retained_from_records:",
+        "if live_rekor != retained_rekor:",
+        "Counter(map(canonical, live_slsa)) != Counter(",
+    )
+    _expect(
+        all(
+            marker in job_sections["promote"]
+            for marker in promotion_crypto_markers
+        ),
+        "PUBLICATION_POLICY",
+        "promotion cryptographic evidence binding changed",
     )
     action_refs = re.findall(
         r"^\s+-?\s*uses:\s*([^\s#]+)",
@@ -1198,14 +1534,21 @@ def _audit_image_publication_files(root: Path) -> None:
     )
     ordered_markers = (
         "Bind the run to reviewed main and check publication lifecycle",
+        "Validate the static publication bootstrap policy",
         "Install pinned Cosign for dependency evidence revalidation",
-        "Validate the image-publication-pending contract",
+        "Complete the cryptographic image-publication-pending audit",
         "Anonymously fetch and verify the exact reviewed dependency snapshot",
         "Fetch and authenticate the signed ASF source release",
         "Build Polaris from retained dependencies with network disabled",
+        "Rebind the write-capable job to the static publication policy",
+        "Install pinned Cosign before write-capable policy revalidation",
+        "Complete the write-capable cryptographic policy audit",
         "Log in to GHCR for the run-scoped quarantine push",
         "Scan the exact digest and block High or Critical findings",
         "Keyless-sign and verify the exact scanned image",
+        "Rebind promotion to the static publication policy",
+        "Install pinned Cosign before promotion policy revalidation",
+        "Complete the promotion cryptographic policy audit",
         "Reverify the public digest, signature, and provenance before promotion",
         "Promote the fully verified digest to the non-authoritative trusted tag",
     )
@@ -1232,6 +1575,9 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "source",
                 "dependency_snapshot",
                 "image_publication",
+                "transparency_log",
+                "toolchain",
+                "evidence",
                 "runtime",
             },
             ("lifecycle",): {"state", "next_state"},
@@ -1411,6 +1757,54 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "admission_permitted",
             },
             ("image_publication", "workflow"): {"path", "sha256"},
+            ("transparency_log",): {
+                "base_url",
+                "major_api_version",
+                "entry_lookup_path",
+            },
+            ("toolchain",): {"cosign"},
+            ("toolchain", "cosign"): {
+                "version",
+                "bundle_media_type",
+                "predicate_type",
+                "registry_download_format",
+                "legacy_signature_records_permitted",
+                "detached_bundle_role",
+                "authoritative_image_verification",
+                "attestation_predicates",
+            },
+            ("toolchain", "cosign", "attestation_predicates"): {
+                "sbom",
+                "vulnerability_scan",
+            },
+            (
+                "toolchain",
+                "cosign",
+                "attestation_predicates",
+                "sbom",
+            ): {
+                "artifact",
+                "cli_type",
+                "predicate_type",
+            },
+            (
+                "toolchain",
+                "cosign",
+                "attestation_predicates",
+                "vulnerability_scan",
+            ): {
+                "artifact",
+                "cli_type",
+                "predicate_type",
+            },
+            ("evidence",): {
+                "directory",
+                "candidate_required",
+                "promotion_required",
+                "actions_artifact_role",
+                "candidate_retention_days",
+                "final_retention_days",
+            },
             ("runtime",): {
                 "state",
                 "enabled",
@@ -1423,7 +1817,7 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
     _expect_fields(
         contract,
         {
-            ("schema_version",): 4,
+            ("schema_version",): 5,
             ("component",): "polaris",
             ("version",): POLARIS_VERSION,
             ("platform",): "linux/arm64",
@@ -1988,6 +2382,103 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "workflow",
                 "sha256",
             ): POLARIS_IMAGE_WORKFLOW_SHA256,
+            (
+                "transparency_log",
+                "base_url",
+            ): "https://rekor.sigstore.dev",
+            ("transparency_log", "major_api_version"): 1,
+            (
+                "transparency_log",
+                "entry_lookup_path",
+            ): "/api/v1/log/entries?logIndex={log_index}",
+            ("toolchain", "cosign", "version"): "v3.1.1",
+            (
+                "toolchain",
+                "cosign",
+                "bundle_media_type",
+            ): "application/vnd.dev.sigstore.bundle.v0.3+json",
+            (
+                "toolchain",
+                "cosign",
+                "predicate_type",
+            ): "https://sigstore.dev/cosign/sign/v1",
+            (
+                "toolchain",
+                "cosign",
+                "registry_download_format",
+            ): "sigstore-bundle-v0.3-jsonl",
+            (
+                "toolchain",
+                "cosign",
+                "legacy_signature_records_permitted",
+            ): False,
+            (
+                "toolchain",
+                "cosign",
+                "detached_bundle_role",
+            ): "bind-image-digest-to-raw-oci-manifest",
+            (
+                "toolchain",
+                "cosign",
+                "authoritative_image_verification",
+            ): "cosign verify IMAGE@DIGEST",
+            (
+                "toolchain",
+                "cosign",
+                "attestation_predicates",
+                "sbom",
+                "artifact",
+            ): "sbom-attestation-bundle.json",
+            (
+                "toolchain",
+                "cosign",
+                "attestation_predicates",
+                "sbom",
+                "cli_type",
+            ): "cyclonedx",
+            (
+                "toolchain",
+                "cosign",
+                "attestation_predicates",
+                "sbom",
+                "predicate_type",
+            ): "https://cyclonedx.org/bom",
+            (
+                "toolchain",
+                "cosign",
+                "attestation_predicates",
+                "vulnerability_scan",
+                "artifact",
+            ): "trivy-attestation-bundle.json",
+            (
+                "toolchain",
+                "cosign",
+                "attestation_predicates",
+                "vulnerability_scan",
+                "cli_type",
+            ): "https://shirokuma.dev/attestations/trivy/v1",
+            (
+                "toolchain",
+                "cosign",
+                "attestation_predicates",
+                "vulnerability_scan",
+                "predicate_type",
+            ): "https://shirokuma.dev/attestations/trivy/v1",
+            ("evidence", "directory"): "candidate-evidence",
+            (
+                "evidence",
+                "candidate_required",
+            ): POLARIS_CANDIDATE_EVIDENCE_REQUIRED,
+            (
+                "evidence",
+                "promotion_required",
+            ): POLARIS_PROMOTION_EVIDENCE_REQUIRED,
+            (
+                "evidence",
+                "actions_artifact_role",
+            ): "retained mirror only",
+            ("evidence", "candidate_retention_days"): 30,
+            ("evidence", "final_retention_days"): 30,
             ("runtime", "state"): "blocked_atomic_admission",
             ("runtime", "enabled"): False,
             ("runtime", "admission_record"): POLARIS_ADMISSION.as_posix(),
@@ -5000,6 +5491,15 @@ def _audit_runtime_absence(root: Path) -> None:
     )
 
 
+def audit_publication_bootstrap(root: Path) -> None:
+    """Validate immutable publication policy before third-party tooling runs."""
+
+    root = root.resolve()
+    _audit_source(root)
+    _audit_contract(root)
+    _audit_polaris_admission(root)
+
+
 def audit(
     root: Path,
     *,
@@ -5031,16 +5531,27 @@ def _parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     audit_parser = subparsers.add_parser("audit")
     audit_parser.add_argument("--root", type=Path, default=Path("."))
+    bootstrap_parser = subparsers.add_parser("audit-publication-bootstrap")
+    bootstrap_parser.add_argument("--root", type=Path, default=Path("."))
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        audit(args.root)
+        if args.command == "audit-publication-bootstrap":
+            audit_publication_bootstrap(args.root)
+        else:
+            audit(args.root)
     except ContractError as error:
         print(str(error), file=sys.stderr)
         return 1
+    if args.command == "audit-publication-bootstrap":
+        print(
+            "polaris-trusted-image: static publication policy is bound; "
+            "cryptographic evidence remains unverified"
+        )
+        return 0
     print(
         "polaris-trusted-image: dependency snapshot is approved for the "
         "main-only image publisher; image evidence, admission, and runtime "
