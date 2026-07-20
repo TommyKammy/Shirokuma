@@ -436,8 +436,7 @@ Openを維持します。
   (attempt `1` success、public exact digestと12 retained filesを確定)
 - Polaris Admin dependency evidence-only review:
   [#87](https://github.com/TommyKammy/Shirokuma/pull/87)
-  (Draft、head `4e3282617b3334b6ef5bfdeedb35b6bccb11e2fd`;
-  `admin_dependency_snapshot_review_pending`、publisherを退役し、次状態を
+  (Draft; `admin_dependency_snapshot_review_pending`、publisherを退役し、次状態を
   `admin_image_publication_pending`へ固定、`Refs #61`)
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
 - Execution order: `1 of 8`
