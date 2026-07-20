@@ -73,7 +73,7 @@ POLARIS_SOURCE_SHA256 = (
     "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb"
 )
 POLARIS_CONTRACT_SHA256 = (
-    "7696c70a4d46217ebc955bcff1c4cb4ca2c94da557a4d0aafc38c68c0a8a05a6"
+    "8625191c6a186880d7ec7a596667b047881170e987527c5987a5ee87285b83f8"
 )
 REVIEWED_POLARIS_CONTRACT_SHA256 = (
     "db27ec5ebf627ef1772c898614d5f206a2a3affc67007ee29221c525ab8fd3d6"
@@ -116,7 +116,7 @@ POLARIS_SOURCE_OVERLAY_SHA256 = (
     "c5739a49baac0d08e6cf71a4dabd06141618f9474702e6c24fd1bb7f22571f48"
 )
 POLARIS_IMAGE_WORKFLOW_SHA256 = (
-    "337c3ac1c6090dc51621bc2f8c36e4c0bda90295224316598d87293e9767849e"
+    "50e0a0407cd65accdd573cf85637d7ccec97774aeecf569d8b5c9acc6b502b5d"
 )
 POLARIS_CANDIDATE_EVIDENCE_REQUIRED = [
     "anonymous-image-manifest.json",
@@ -138,7 +138,7 @@ POLARIS_CANDIDATE_EVIDENCE_REQUIRED = [
     "runtime-base-java-version.txt",
     "runtime-base-manifest.json",
     "runtime-smoke.json",
-    "runtime-smoke.log",
+    "runtime-smoke-log-policy.json",
     "sbom-attestation-bundle.json",
     "sbom-policy.json",
     "slsa-bundles.jsonl",
@@ -1379,21 +1379,67 @@ def _audit_image_publication_files(root: Path) -> None:
         if len(candidate_copy_matches) == 1
         else []
     )
-    expected_candidate_copy_sources = [
-        artifact
-        for artifact in POLARIS_CANDIDATE_EVIDENCE_REQUIRED
-        if artifact != "runtime-smoke.log"
-    ]
+    expected_candidate_copy_sources = POLARIS_CANDIDATE_EVIDENCE_REQUIRED
     _expect(
         len(candidate_copy_matches) == 1
         and candidate_copy_sources == expected_candidate_copy_sources
-        and job_sections["verify"].count(
-            'cp runtime-smoke.log "${evidence_dir}/"'
-        )
-        == 1
-        and job_sections["verify"].count('"${evidence_dir}/"') == 2,
+        and job_sections["verify"].count('"${evidence_dir}/"') == 1
+        and "runtime-smoke.log" not in job_sections["verify"],
         "PUBLICATION_POLICY",
         "candidate evidence copy closure changed",
+    )
+    runtime_evidence_markers = (
+        'raw_runtime_log="${RUNNER_TEMP}/polaris-runtime-smoke.raw.log"',
+        (
+            'raw_runtime_inspect="${RUNNER_TEMP}/'
+            'polaris-runtime-container-inspect.raw.json"'
+        ),
+        'rm -f "${raw_runtime_log}" "${raw_runtime_inspect}"',
+        'docker inspect "${container_name}" > "${raw_runtime_inspect}"',
+        'credential_line = re.compile(',
+        '"generated_root_credential": (',
+        '"unredacted_root_credential": (',
+        '"bootstrap_credential_assignment": (',
+        '"authorization_header": (',
+        '"credential_assignment": (',
+        "if redactions != 1:",
+        "if leaked:",
+        '"raw_log_retained": False',
+        '"sanitized_log_retained": False',
+        '"sanitized_log_sha256": hashlib.sha256(',
+        'Path("runtime-container-inspect.json")',
+        'Path("runtime-smoke-log-policy.json")',
+    )
+    _expect(
+        all(
+            marker in job_sections["verify"]
+            for marker in runtime_evidence_markers
+        ),
+        "PUBLICATION_POLICY",
+        "runtime evidence projection or credential scrubbing changed",
+    )
+    promotion_runtime_evidence_markers = (
+        "for forbidden_runtime_artifact in (",
+        '"runtime-smoke.log",',
+        '"polaris-runtime-smoke.raw.log",',
+        '"polaris-runtime-container-inspect.raw.json",',
+        '"candidate-evidence/runtime-smoke-log-policy.json"',
+        'runtime_log_policy["raw_log_retained"] is False',
+        'runtime_log_policy["sanitized_log_retained"] is False',
+        'not isinstance(runtime_log_policy["redaction_count"], bool)',
+        'and runtime_inspect["reference"] == expected["reference"]',
+        'and runtime_inspect["read_only_rootfs"] is True',
+        'and runtime_inspect["security_options"][0].startswith(',
+        'runtime_summary.get("runtime_inspect_sha256")',
+        "hashlib.sha256(runtime_inspect_path.read_bytes()).hexdigest()",
+    )
+    _expect(
+        all(
+            marker in job_sections["promote"]
+            for marker in promotion_runtime_evidence_markers
+        ),
+        "PUBLICATION_POLICY",
+        "promotion runtime evidence revalidation changed",
     )
     promotion_copy_sources = re.findall(
         r"^          cp ([A-Za-z0-9._-]+) candidate-evidence/$",
@@ -1503,14 +1549,25 @@ def _audit_image_publication_files(root: Path) -> None:
         "if registry_bundles != [signature_bundle]:",
         'and statement.get("predicate") == predicate',
         "if not slsa_bundles or slsa_bundles != retained_from_records:",
-        "if live_rekor != retained_rekor:",
+        "def rekor_identity(response, label):",
+        "and proof_log_index < tree_size",
+        '"proofLogIndex": proof_log_index,',
+        'bundle_entry["inclusionProof"]["logIndex"]',
+        "if live_identity != retained_identity:",
+        "expected_rekor_identity = {",
+        "retained_identity[field] != value",
         "Counter(map(canonical, live_slsa)) != Counter(",
     )
     _expect(
         all(
             marker in job_sections["promote"]
             for marker in promotion_crypto_markers
-        ),
+        )
+        and "proof_log_index == log_index" not in job_sections["promote"]
+        and '"signedEntryTimestamp": verification['
+        not in job_sections["promote"]
+        and '"signedEntryTimestamp": bundle_entry['
+        not in job_sections["promote"],
         "PUBLICATION_POLICY",
         "promotion cryptographic evidence binding changed",
     )

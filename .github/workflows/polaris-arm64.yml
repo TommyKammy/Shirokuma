@@ -945,8 +945,10 @@ jobs:
         run: |
           set -euo pipefail
           container_name="polaris-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          raw_runtime_log="${RUNNER_TEMP}/polaris-runtime-smoke.raw.log"
+          raw_runtime_inspect="${RUNNER_TEMP}/polaris-runtime-container-inspect.raw.json"
           cleanup() {
-            docker logs "${container_name}" > runtime-smoke.log 2>&1 || true
+            rm -f "${raw_runtime_log}" "${raw_runtime_inspect}"
             docker rm --force "${container_name}" >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
@@ -988,9 +990,9 @@ jobs:
             fi
             sleep 2
           done
-          docker inspect "${container_name}" > runtime-container-inspect.json
+          docker inspect "${container_name}" > "${raw_runtime_inspect}"
 
-          python3 - <<'PY'
+          RAW_RUNTIME_INSPECT="${raw_runtime_inspect}" python3 - <<'PY'
           import hashlib
           import json
           import os
@@ -999,8 +1001,8 @@ jobs:
           health = json.loads(Path("health-ready.json").read_text(encoding="utf-8"))
           if health.get("status") != "UP":
               raise SystemExit("Polaris readiness status is not UP")
-          inspect_path = Path("runtime-container-inspect.json")
-          containers = json.loads(inspect_path.read_text(encoding="utf-8"))
+          raw_inspect_path = Path(os.environ["RAW_RUNTIME_INSPECT"])
+          containers = json.loads(raw_inspect_path.read_text(encoding="utf-8"))
           if len(containers) != 1:
               raise SystemExit("runtime inspect must contain one container")
           container = containers[0]
@@ -1032,6 +1034,24 @@ jobs:
               "no-new-privileges"
           ):
               raise SystemExit("no-new-privileges is not effective")
+          retained_inspect = {
+              "schema_version": 1,
+              "reference": f"{os.environ['IMAGE']}@{os.environ['DIGEST']}",
+              "user": config["User"],
+              "path": container["Path"],
+              "args": container["Args"],
+              "read_only_rootfs": host["ReadonlyRootfs"],
+              "tmpfs": {"/tmp": sorted(expected_tmpfs)},
+              "capabilities_dropped": host["CapDrop"],
+              "pids_limit": host["PidsLimit"],
+              "memory_bytes": host["Memory"],
+              "security_options": security_options,
+          }
+          retained_inspect_path = Path("runtime-container-inspect.json")
+          retained_inspect_path.write_text(
+              json.dumps(retained_inspect, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
           record = {
               "schema_version": 1,
               "result": "passed",
@@ -1045,7 +1065,7 @@ jobs:
               "readiness_endpoint": "/q/health/ready",
               "readiness_status": "UP",
               "runtime_inspect_sha256": hashlib.sha256(
-                  inspect_path.read_bytes()
+                  retained_inspect_path.read_bytes()
               ).hexdigest(),
           }
           Path("runtime-smoke.json").write_text(
@@ -1053,6 +1073,79 @@ jobs:
               encoding="utf-8",
           )
           PY
+
+          docker logs "${container_name}" > "${raw_runtime_log}" 2>&1
+          RAW_RUNTIME_LOG="${raw_runtime_log}" python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          raw_path = Path(os.environ["RAW_RUNTIME_LOG"])
+          raw = raw_path.read_text(encoding="utf-8")
+          credential_line = re.compile(
+              r"(?m)^(realm:\s+\S+\s+root principal credentials:)\s+\S+\s*$"
+          )
+          sanitized, redactions = credential_line.subn(
+              r"\1 <REDACTED>",
+              raw,
+          )
+          if redactions != 1:
+              raise SystemExit(
+                  "runtime log must contain exactly one redactable root "
+                  "credential line"
+              )
+          forbidden = {
+              "generated_root_credential": (
+                  r"(?i)\b[0-9a-f]{16}:[0-9a-f]{32}\b"
+              ),
+              "unredacted_root_credential": (
+                  r"(?m)^realm:\s+\S+\s+root principal credentials:\s+"
+                  r"(?!<REDACTED>\s*$)\S+\s*$"
+              ),
+              "bootstrap_credential_assignment": (
+                  r"(?i)\b(?:POLARIS_BOOTSTRAP_CREDENTIALS|"
+                  r"polaris\.bootstrap\.credentials)\s*[:=]\s*\S+"
+              ),
+              "authorization_header": (
+                  r"(?i)\bAuthorization\s*:\s*(?:Bearer|Basic)\s+\S+"
+              ),
+              "credential_assignment": (
+                  r"(?i)\b(?:password|access[_-]?token|refresh[_-]?token)"
+                  r"\s*[:=]\s*\S+"
+              ),
+          }
+          leaked = [
+              name
+              for name, pattern in forbidden.items()
+              if re.search(pattern, sanitized)
+          ]
+          if leaked:
+              raise SystemExit(
+                  f"sanitized runtime log retains credential patterns: {leaked}"
+              )
+          sanitized_bytes = sanitized.encode("utf-8")
+          policy = {
+              "schema_version": 1,
+              "source": "docker logs for the exact smoke-tested digest",
+              "redaction_count": redactions,
+              "redacted_fields": ["polaris_root_principal_credentials"],
+              "forbidden_pattern_classes": sorted(forbidden),
+              "raw_log_retained": False,
+              "sanitized_log_retained": False,
+              "sanitized_log_sha256": hashlib.sha256(
+                  sanitized_bytes
+              ).hexdigest(),
+              "sanitized_log_size": len(sanitized_bytes),
+              "result": "passed",
+          }
+          Path("runtime-smoke-log-policy.json").write_text(
+              json.dumps(policy, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+          rm -f "${raw_runtime_log}"
 
       - name: Generate CycloneDX SBOM for the exact digest
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
@@ -1670,6 +1763,7 @@ jobs:
             runtime-base-java-version.txt \
             runtime-base-manifest.json \
             runtime-smoke.json \
+            runtime-smoke-log-policy.json \
             sbom-attestation-bundle.json \
             sbom-policy.json \
             slsa-bundles.jsonl \
@@ -1679,10 +1773,9 @@ jobs:
             trivy-version.json \
             trivy.json \
             "${evidence_dir}/"
-          test -s runtime-smoke.log
-          cp runtime-smoke.log "${evidence_dir}/"
 
           EVIDENCE_DIR="${evidence_dir}" python3 - <<'PY'
+          import hashlib
           import json
           import os
           from datetime import datetime, timezone
@@ -1713,6 +1806,17 @@ jobs:
               "bounded_runtime_patch_sha256": os.environ[
                   "RUNTIME_PATCH_SHA256"
               ],
+              "build_contract_sha256": hashlib.sha256(
+                  Path(
+                      "bootstrap/polaris/v1.6.0/"
+                      "trusted-build-contract.json"
+                  ).read_bytes()
+              ).hexdigest(),
+              "admission_sha256": hashlib.sha256(
+                  Path(
+                      "bootstrap/polaris/v1.6.0/admission.json"
+                  ).read_bytes()
+              ).hexdigest(),
               "input_artifact_digest": os.environ["INPUT_ARTIFACT_DIGEST"],
               "slsa_provenance": os.environ["PROVENANCE_URL"],
               "created": datetime.now(timezone.utc).isoformat(),
@@ -1893,6 +1997,7 @@ jobs:
           import hashlib
           import json
           import os
+          import re
           from pathlib import Path
 
           record = json.loads(
@@ -1912,6 +2017,17 @@ jobs:
               "source_commit": os.environ["SOURCE_COMMIT"],
               "dependency_reference": os.environ["DEPENDENCY_REF"],
               "runtime_base": os.environ["RUNTIME_BASE"],
+              "build_contract_sha256": hashlib.sha256(
+                  Path(
+                      "bootstrap/polaris/v1.6.0/"
+                      "trusted-build-contract.json"
+                  ).read_bytes()
+              ).hexdigest(),
+              "admission_sha256": hashlib.sha256(
+                  Path(
+                      "bootstrap/polaris/v1.6.0/admission.json"
+                  ).read_bytes()
+              ).hexdigest(),
           }
           for key, value in expected.items():
               if record.get(key) != value:
@@ -1927,6 +2043,137 @@ jobs:
           }.items():
               if workflow.get(key) != value:
                   raise SystemExit(f"candidate workflow mismatch for {key}")
+
+          for forbidden_runtime_artifact in (
+              "runtime-smoke.log",
+              "polaris-runtime-smoke.raw.log",
+              "polaris-runtime-container-inspect.raw.json",
+          ):
+              if Path(
+                  f"candidate-evidence/{forbidden_runtime_artifact}"
+              ).exists():
+                  raise SystemExit(
+                      "candidate evidence retains a raw runtime artifact"
+                  )
+          runtime_log_policy = json.loads(
+              Path(
+                  "candidate-evidence/runtime-smoke-log-policy.json"
+              ).read_text(encoding="utf-8")
+          )
+          forbidden_pattern_classes = [
+              "authorization_header",
+              "bootstrap_credential_assignment",
+              "credential_assignment",
+              "generated_root_credential",
+              "unredacted_root_credential",
+          ]
+          if not (
+              set(runtime_log_policy)
+              == {
+                  "schema_version",
+                  "source",
+                  "redaction_count",
+                  "redacted_fields",
+                  "forbidden_pattern_classes",
+                  "raw_log_retained",
+                  "sanitized_log_retained",
+                  "sanitized_log_sha256",
+                  "sanitized_log_size",
+                  "result",
+              }
+              and isinstance(runtime_log_policy["schema_version"], int)
+              and not isinstance(runtime_log_policy["schema_version"], bool)
+              and runtime_log_policy["schema_version"] == 1
+              and runtime_log_policy["source"]
+              == "docker logs for the exact smoke-tested digest"
+              and isinstance(runtime_log_policy["redaction_count"], int)
+              and not isinstance(runtime_log_policy["redaction_count"], bool)
+              and runtime_log_policy["redaction_count"] == 1
+              and runtime_log_policy["redacted_fields"]
+              == ["polaris_root_principal_credentials"]
+              and runtime_log_policy["forbidden_pattern_classes"]
+              == forbidden_pattern_classes
+              and runtime_log_policy["raw_log_retained"] is False
+              and runtime_log_policy["sanitized_log_retained"] is False
+              and re.fullmatch(
+                  r"[0-9a-f]{64}",
+                  runtime_log_policy["sanitized_log_sha256"],
+              )
+              and isinstance(runtime_log_policy["sanitized_log_size"], int)
+              and not isinstance(
+                  runtime_log_policy["sanitized_log_size"], bool
+              )
+              and runtime_log_policy["sanitized_log_size"] > 0
+              and runtime_log_policy["result"] == "passed"
+          ):
+              raise SystemExit("runtime log scrubbing evidence is invalid")
+          runtime_inspect_path = Path(
+              "candidate-evidence/runtime-container-inspect.json"
+          )
+          runtime_inspect = json.loads(
+              runtime_inspect_path.read_text(encoding="utf-8")
+          )
+          expected_tmpfs = sorted(
+              {
+                  "rw",
+                  "nosuid",
+                  "nodev",
+                  "size=64m",
+                  "uid=10000",
+                  "gid=10001",
+                  "mode=1777",
+              }
+          )
+          if not (
+              set(runtime_inspect)
+              == {
+                  "schema_version",
+                  "reference",
+                  "user",
+                  "path",
+                  "args",
+                  "read_only_rootfs",
+                  "tmpfs",
+                  "capabilities_dropped",
+                  "pids_limit",
+                  "memory_bytes",
+                  "security_options",
+              }
+              and runtime_inspect["schema_version"] == 1
+              and runtime_inspect["reference"] == expected["reference"]
+              and runtime_inspect["user"] == "10000:10001"
+              and runtime_inspect["path"] == "/usr/bin/java"
+              and runtime_inspect["args"]
+              == ["-jar", "/deployments/quarkus-run.jar"]
+              and runtime_inspect["read_only_rootfs"] is True
+              and runtime_inspect["tmpfs"] == {"/tmp": expected_tmpfs}
+              and runtime_inspect["capabilities_dropped"] == ["ALL"]
+              and runtime_inspect["pids_limit"] == 512
+              and runtime_inspect["memory_bytes"] == 1610612736
+              and len(runtime_inspect["security_options"]) == 1
+              and runtime_inspect["security_options"][0].startswith(
+                  "no-new-privileges"
+              )
+          ):
+              raise SystemExit("retained runtime inspect projection is invalid")
+          runtime_summary = json.loads(
+              Path(
+                  "candidate-evidence/runtime-smoke.json"
+              ).read_text(encoding="utf-8")
+          )
+          if not (
+              runtime_summary.get("schema_version") == 1
+              and runtime_summary.get("result") == "passed"
+              and runtime_summary.get("reference") == expected["reference"]
+              and runtime_summary.get("user") == "10000:10001"
+              and runtime_summary.get("read_only_rootfs") is True
+              and runtime_summary.get("capabilities_dropped") == "ALL"
+              and runtime_summary.get("no_new_privileges") is True
+              and runtime_summary.get("readiness_status") == "UP"
+              and runtime_summary.get("runtime_inspect_sha256")
+              == hashlib.sha256(runtime_inspect_path.read_bytes()).hexdigest()
+          ):
+              raise SystemExit("retained runtime smoke evidence is invalid")
 
           bundle_media_type = "application/vnd.dev.sigstore.bundle.v0.3+json"
           signature_bundle = json.loads(
@@ -2226,6 +2473,7 @@ jobs:
           test -s promotion-cosign-verify.json
           test -s promotion-slsa-verify.json
           python3 - <<'PY'
+          import base64
           import json
           import os
           from collections import Counter
@@ -2255,8 +2503,89 @@ jobs:
           live_rekor = json.loads(
               Path("promotion-rekor-entry.json").read_text(encoding="utf-8")
           )
-          if live_rekor != retained_rekor:
-              raise SystemExit("live Rekor entry differs from retained evidence")
+
+          def rekor_identity(response, label):
+              if not isinstance(response, dict) or len(response) != 1:
+                  raise SystemExit(f"{label} Rekor response must contain one entry")
+              uuid, entry = next(iter(response.items()))
+              if not isinstance(uuid, str) or not uuid or not isinstance(entry, dict):
+                  raise SystemExit(f"{label} Rekor entry identity is invalid")
+              verification = entry.get("verification", {})
+              proof = verification.get("inclusionProof", {})
+
+              def decimal(value, field):
+                  if (
+                      isinstance(value, bool)
+                      or not isinstance(value, (int, str))
+                      or not str(value).isdigit()
+                  ):
+                      raise SystemExit(
+                          f"{label} Rekor {field} must be a non-negative integer"
+                      )
+                  return int(value)
+
+              log_index = decimal(entry.get("logIndex"), "logIndex")
+              proof_log_index = decimal(proof.get("logIndex"), "proof logIndex")
+              tree_size = decimal(proof.get("treeSize"), "proof treeSize")
+              if not (
+                  isinstance(entry.get("body"), str)
+                  and entry["body"]
+                  and isinstance(entry.get("logID"), str)
+                  and entry["logID"]
+                  and isinstance(
+                      verification.get("signedEntryTimestamp"), str
+                  )
+                  and verification["signedEntryTimestamp"]
+                  and isinstance(proof.get("checkpoint"), str)
+                  and proof["checkpoint"]
+                  and isinstance(proof.get("rootHash"), str)
+                  and proof["rootHash"]
+                  and isinstance(proof.get("hashes"), list)
+                  and all(
+                      isinstance(item, str) and item
+                      for item in proof["hashes"]
+                  )
+                  and proof_log_index < tree_size
+              ):
+                  raise SystemExit(
+                      f"{label} Rekor response has incomplete inclusion evidence"
+                  )
+              return {
+                  "uuid": uuid,
+                  "body": entry["body"],
+                  "integratedTime": decimal(
+                      entry.get("integratedTime"), "integratedTime"
+                  ),
+                  "logID": entry["logID"],
+                  "logIndex": log_index,
+                  "proofLogIndex": proof_log_index,
+              }
+
+          retained_identity = rekor_identity(retained_rekor, "retained")
+          live_identity = rekor_identity(live_rekor, "live")
+          if live_identity != retained_identity:
+              raise SystemExit(
+                  "live Rekor immutable identity differs from retained evidence"
+              )
+          bundle_entry = retained_bundle["verificationMaterial"]["tlogEntries"][0]
+          expected_rekor_identity = {
+              "body": bundle_entry["canonicalizedBody"],
+              "integratedTime": int(bundle_entry["integratedTime"]),
+              "logID": base64.b64decode(
+                  bundle_entry["logId"]["keyId"], validate=True
+                  ).hex(),
+                  "logIndex": int(bundle_entry["logIndex"]),
+                  "proofLogIndex": int(
+                      bundle_entry["inclusionProof"]["logIndex"]
+                  ),
+              }
+          if any(
+              retained_identity[field] != value
+              for field, value in expected_rekor_identity.items()
+          ):
+              raise SystemExit(
+                  "retained Rekor immutable identity differs from the signed bundle"
+              )
 
           payloads = json.loads(
               Path("promotion-cosign-verify.json").read_text(encoding="utf-8")
