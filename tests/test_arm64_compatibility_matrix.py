@@ -108,7 +108,10 @@ class Arm64CompatibilityMatrixTests(unittest.TestCase):
         self.assertIn("rejected", row["Image or build path"])
         self.assertIn("repository build", row["Image or build path"])
         self.assertIn("runtime remains blocked", row["v0.2 decision"])
-        self.assertIn("main publication", row["Fallback owner / risk / replacement"])
+        self.assertIn(
+            "admit only the exact reviewed Polaris/PostgreSQL pair",
+            row["Fallback owner / risk / replacement"],
+        )
 
     def test_postgresql_candidate_evidence_remains_fail_closed(self) -> None:
         row = self.rows["PostgreSQL"]

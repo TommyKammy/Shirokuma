@@ -1,0 +1,30 @@
+{
+  "bounded_runtime_patch": {
+    "forbidden_runtime_jars": [
+      "hadoop",
+      "ranger",
+      "jetty-http"
+    ],
+    "path": "bootstrap/polaris/v1.6.0/patches/0001-shirokuma-bounded-runtime.patch",
+    "server_build_postimage_sha256": "597b456dec2ac138d40f78fdf27ad84248d83242465ff25c78d3d8a06f37675b",
+    "server_build_preimage_sha256": "6394f787e0b0a48a7a916824306c3e4fe54556c7f639aeb47330a63111e05f16",
+    "service_build_postimage_sha256": "f497e81fdb2d34e4fff2ef1b4f8f97c974afca1080d097e5c40fc149f7a6ec95",
+    "service_build_preimage_sha256": "c5f351b2444d37efcbd99b4ad850456b33894257390ccf5ece595002c33f548b",
+    "sha256": "c5739a49baac0d08e6cf71a4dabd06141618f9474702e6c24fd1bb7f22571f48"
+  },
+  "build_cache": false,
+  "builder_image": "docker.io/library/gradle@sha256:cc583fa5245267fe0e1546c9989e8575473a37336ad9894dc0684a99fea1fb03",
+  "configuration_cache": false,
+  "dependency_reference": "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies@sha256:fa889d2c0a6e6dc48816d79680a366e21040be333ab6007b88e4ca4dbf6e59d6",
+  "dependency_verification": "strict",
+  "gradle_offline": true,
+  "network": "none",
+  "platform": "linux/arm64",
+  "rerun_tasks": true,
+  "result": "passed",
+  "schema_version": 1,
+  "tasks": [
+    ":polaris-server:assemble",
+    ":polaris-server:quarkusAppPartsBuild"
+  ]
+}

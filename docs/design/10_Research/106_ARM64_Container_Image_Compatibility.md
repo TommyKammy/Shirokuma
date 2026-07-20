@@ -4,15 +4,15 @@ doc_id: "RES-106"
 title: "ARM64 Container Image Compatibility"
 status: draft
 created: 2026-07-05
-updated: 2026-07-16
-version: "0.10"
+updated: 2026-07-20
+version: "0.11"
 area: "research"
 tags: [shirokuma, arm64, apple-silicon]
 ---
 
 # ARM64 Container Image Compatibility
 
-Verification date: 2026-07-16. Primary target: Colima Linux/arm64 on Mac Studio M3 Ultra.
+Verification date: 2026-07-20. Primary target: Colima Linux/arm64 on Mac Studio M3 Ultra.
 
 ## L0 platform baseline
 
@@ -61,7 +61,7 @@ pass the repository SBOM and vulnerability gate.
 | Component | Upstream release | Image or build path | linux/arm64 evidence | License | Signature / provenance | v0.2 decision | Fallback owner / risk / replacement | Primary sources |
 |---|---|---|---|---|---|---|---|---|
 | Trino | `482` (2026-06-25) | `trinodb/trino:482@sha256:90b35b7c603eaa1f889bf03981a62b75f998ee6c0f851d9f4e341b49a57022b6` | Registry index lists `linux/arm64` with amd64 and ppc64le. | Apache-2.0 | No OCI attestation entry was present in the tag index and no trusted image signer is documented; resident admission remains blocked. | mainline resident candidate for WP-L1-QUERY-001; the later WP owns admission. | Owner: WP-L1-QUERY-001. Risk: image authenticity is not anchored to a trusted signer. Replace: build from the signed/immutable release tag and retain SBOM plus scan only if the upstream image cannot pass admission; otherwise keep blocked. | [release](https://github.com/trinodb/trino/releases/tag/482), [image tags](https://hub.docker.com/r/trinodb/trino/tags?name=482), [license](https://github.com/trinodb/trino/blob/482/LICENSE) |
-| Apache Polaris | `1.6.0` (2026-07-09) | upstream `apache/polaris:1.6.0@sha256:9738b2052dea20aabf0cd42521424ff963fee41b0ee888fef9f512efb256602a` rejected; ADR-0021 selects a repository build from source commit `dd306009d81a0e15adafe9dcd7d1c6d04d326f34` | The rejected index contains `linux/arm64`; the accepted repository build must independently prove a native arm64 manifest. | Apache-2.0 | ASF source releases have PGP/SHA-512 verification; the upstream OCI signer is untrusted. ADR-0021 requires a main-only keyless-signed source build with SLSA, SBOM, scan, and runtime evidence before admission. | mainline resident source-build candidate for WP-L1-LAKE-002; runtime remains blocked pending retained evidence. | Owner: WP-L1-LAKE-002. Risk: branch-built or upstream attachment evidence could create a self-approval path. Replace: admit only the independently reviewed main publication, or keep the catalog blocked. | [release](https://github.com/apache/polaris/releases/tag/apache-polaris-1.6.0), [downloads and KEYS](https://polaris.apache.org/downloads/), [build docs](https://github.com/apache/polaris/blob/apache-polaris-1.6.0/README.md#building-and-running) |
+| Apache Polaris | `1.6.0` (2026-07-09) | upstream `apache/polaris:1.6.0@sha256:9738b2052dea20aabf0cd42521424ff963fee41b0ee888fef9f512efb256602a` rejected; reviewed repository build `ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e` from source commit `dd306009d81a0e15adafe9dcd7d1c6d04d326f34` | Main run `29711984394` proved the exact image manifest is native `linux/arm64`; the mutable `1.6.0-arm64` tag is only a non-authoritative pointer. | Apache-2.0 | ASF PGP/SHA-512, exact source overlay, keyless signature/Rekor, current-run SLSA, CycloneDX plus attestation, Trivy High=0/Critical=0 plus attestation, and hardened smoke are retained under `bootstrap/polaris/v1.6.0/image-evidence/`. | mainline — image `approved_for_atomic_admission`; publisher retired; runtime remains blocked pending PostgreSQL evidence and atomic review. | Owner: WP-L1-LAKE-002. Risk: admitting Polaris alone would violate the metadata-store boundary. Replace: admit only the exact reviewed Polaris/PostgreSQL pair, or keep the catalog blocked. | [release](https://github.com/apache/polaris/releases/tag/apache-polaris-1.6.0), [downloads and KEYS](https://polaris.apache.org/downloads/), [publication run](https://github.com/TommyKammy/Shirokuma/actions/runs/29711984394) |
 | PostgreSQL | `18.4` (observed 2026-07-16) | `cgr.dev/chainguard/postgres@sha256:3dc629a917612f1630c6f8e7a17f23a42cbd5917b9b3080972b70b1583daff34` | The resolved index contains `linux/arm64` child manifest `sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8`. | PostgreSQL | Cosign matched the `chainguard-images/images` main-branch release workflow and GitHub Actions OIDC issuer; a focused Trivy 0.72.0 scan reported High=0 and Critical=0. Retained provenance and SBOM admission evidence is still required. | mainline resident metadata-store candidate for WP-L1-LAKE-002; runtime remains blocked pending retained admission evidence. | Owner: WP-L1-LAKE-002. Risk: mutable re-resolution or unretained candidate evidence could bypass the resident gate. Replace: re-resolve an independently signed digest and retain arm64, provenance, SBOM, and zero High/Critical scan evidence, or keep the catalog blocked. | [image overview](https://images.chainguard.dev/directory/image/postgres/overview), [build definition](https://github.com/chainguard-images/images/tree/main/images/postgres), [license](https://www.postgresql.org/about/licence/) |
 | OpenMetadata | `1.13.1` (2026-06-27) | `openmetadata/server:1.13.1@sha256:eaa318584c52d4a492a2c56c95818b5564c6ea28b2e9695ac532c856b2c61bc9` | Registry index lists `linux/arm64`. | Apache-2.0 | OCI attestation entries are present, but trusted image signer identity is not established; resident admission remains blocked. | mainline resident candidate for WP-L1-META-001. | Owner: WP-L1-META-001. Risk: image attestations are not yet bound to a trusted publisher and dependency images remain separate gates. Replace: build from the immutable release tag only after reproducible provenance, SBOM, and scan evidence exists; otherwise keep blocked. | [release](https://github.com/open-metadata/OpenMetadata/releases/tag/1.13.1-release), [image tags](https://hub.docker.com/r/openmetadata/server/tags?name=1.13.1), [license](https://github.com/open-metadata/OpenMetadata/blob/1.13.1-release/LICENSE) |
 | SeaweedFS | `4.39` (2026-07-10) | `chrislusf/seaweedfs:4.39@sha256:c7d6c721b30ae711db766bbbfd40192776e263d4e51e22f57baef7bef93c12c6` | Registry index lists `linux/arm64`, arm/v7, amd64, and 386. | Apache-2.0 | No OCI attestation entry was present in the tag index and no trusted image signer is documented; resident admission remains blocked. | mainline primary object-store candidate for WP-L1-LAKE-001. | Owner: WP-L1-LAKE-001. Risk: unsigned registry delivery and storage correctness are admission blockers. Replace: build from release `4.39` at its immutable tag and retain provenance, SBOM, scan, export, and disk-impact evidence if the upstream image fails; MinIO remains a separately approved experiment-only fallback. | [release](https://github.com/seaweedfs/seaweedfs/releases/tag/4.39), [image tags](https://hub.docker.com/r/chrislusf/seaweedfs/tags?name=4.39), [license](https://github.com/seaweedfs/seaweedfs/blob/4.39/LICENSE) |
@@ -191,6 +191,32 @@ set from final artifact `seaweedfs-4.39-arm64-29418029340-1` is retained under
 reverifies that set. Runtime permission remains false: parent Issue #26 may add
 runtime records only after the source-build supply-chain record makes its
 proposed resident-ledger entry pass `check-images`.
+
+### WP-L1-LAKE-002 Polaris publication recheck
+
+Polaris `1.6.0` was rechecked on 2026-07-20 after the reviewed publisher repair
+merged as `706575ba3f21987033a29b6d21367981e9c54e3e`. Main run
+`29711984394`, attempt `1`, completed the native arm64 build, exact-digest
+runtime checks, signing, provenance, attestation, anonymous retrieval, and
+trusted-tag promotion for
+`ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e`.
+
+Final artifact `polaris-image-publication-29711984394-1` (artifact ID
+`8449181390`, Actions digest
+`sha256:97c413927e024ff5687350b75ee172a5a890e5423292ce9c6942fd1663d3121e`)
+contained 33 files / 10,007,161 bytes. Its 32-entry evidence manifest passed
+without mismatch, the SBOM contained no Hadoop, Ranger, or Jetty HTTP
+component, Trivy reported High=0/Critical=0, and the non-root read-only smoke
+passed. Raw smoke logs and raw container inspection are excluded; the retained
+set uses a secret-scanned log policy and an allowlist hardening projection.
+
+The reviewed set is fixed under
+`bootstrap/polaris/v1.6.0/image-evidence/`, and the write-capable publisher is
+retired. The machine-readable state is `atomic_admission_pending`, with the
+exact Polaris image `approved_for_atomic_admission`. This is not resident
+admission: PostgreSQL exact evidence, the atomic two-image review, credentials,
+Flux resources, and live catalog acceptance remain pending. Issue #61 remains
+Open.
 
 ## GitOps candidate evidence
 

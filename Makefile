@@ -215,6 +215,7 @@ check-newlines:
 			*.png|*.jpg|*.jpeg|*.gif|*.ico|*.pdf|*.zip|*.gz|*.tgz|*.xz|*.jar|*.war) continue ;; \
 			bootstrap/seaweedfs/v4.39/evidence/cosign-signature-bundle.json|bootstrap/seaweedfs/v4.39/evidence/image-manifest.json|bootstrap/seaweedfs/v4.39/evidence/sbom-attestation-bundle.json|bootstrap/seaweedfs/v4.39/evidence/trivy-attestation-bundle.json) continue ;; \
 			bootstrap/polaris/v1.6.0/evidence/cosign-signature-bundle.json|bootstrap/polaris/v1.6.0/evidence/oci-manifest.json) continue ;; \
+			bootstrap/polaris/v1.6.0/image-evidence/anonymous-image-manifest.json|bootstrap/polaris/v1.6.0/image-evidence/cosign-signature-bundle.json|bootstrap/polaris/v1.6.0/image-evidence/health-ready.json|bootstrap/polaris/v1.6.0/image-evidence/image-config.json|bootstrap/polaris/v1.6.0/image-evidence/image-manifest.json|bootstrap/polaris/v1.6.0/image-evidence/runtime-base-manifest.json|bootstrap/polaris/v1.6.0/image-evidence/sbom-attestation-bundle.json|bootstrap/polaris/v1.6.0/image-evidence/trivy-attestation-bundle.json|bootstrap/polaris/v1.6.0/image-evidence/trusted-tag-manifest.json) continue ;; \
 		esac; \
 		if [ -s "$$file" ] && [ "$$(tail -c 1 "$$file" | wc -l | tr -d ' ')" = "0" ]; then \
 			echo "missing final newline: $$file"; \

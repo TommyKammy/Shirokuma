@@ -14,13 +14,16 @@ import subprocess
 import sys
 import tempfile
 import unicodedata
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable, Mapping, Optional
 
 
 POLARIS_SOURCE = Path("bootstrap/polaris/v1.6.0/source.json")
 POLARIS_CONTRACT = Path("bootstrap/polaris/v1.6.0/trusted-build-contract.json")
 POLARIS_ADMISSION = Path("bootstrap/polaris/v1.6.0/admission.json")
+POLARIS_RELEASE_EVIDENCE = Path(
+    "bootstrap/polaris/v1.6.0/release-evidence.json"
+)
 POLARIS_CONTAINERFILE = Path("bootstrap/polaris/v1.6.0/Containerfile")
 POLARIS_SOURCE_OVERLAY = Path(
     "bootstrap/polaris/v1.6.0/patches/"
@@ -31,6 +34,9 @@ POLARIS_KEY = Path(
     "bootstrap/polaris/v1.6.0/apache-polaris-release-signing-key.asc"
 )
 POLARIS_EVIDENCE = Path("bootstrap/polaris/v1.6.0/evidence")
+POLARIS_IMAGE_EVIDENCE = Path(
+    "bootstrap/polaris/v1.6.0/image-evidence"
+)
 POSTGRES_ADMISSION = Path("bootstrap/postgresql/v18.4/admission.json")
 POSTGRES_EVIDENCE = Path("bootstrap/postgresql/v18.4/evidence")
 RESIDENT_LEDGER = Path("security/resident-images.json")
@@ -73,7 +79,7 @@ POLARIS_SOURCE_SHA256 = (
     "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb"
 )
 POLARIS_CONTRACT_SHA256 = (
-    "8625191c6a186880d7ec7a596667b047881170e987527c5987a5ee87285b83f8"
+    "e2d277bcd747fb7a880f83d4f18973696dc334c3c9bc6e2726bd8b305a64b664"
 )
 REVIEWED_POLARIS_CONTRACT_SHA256 = (
     "db27ec5ebf627ef1772c898614d5f206a2a3affc67007ee29221c525ab8fd3d6"
@@ -118,6 +124,52 @@ POLARIS_SOURCE_OVERLAY_SHA256 = (
 POLARIS_IMAGE_WORKFLOW_SHA256 = (
     "50e0a0407cd65accdd573cf85637d7ccec97774aeecf569d8b5c9acc6b502b5d"
 )
+POLARIS_RELEASE_EVIDENCE_SHA256 = (
+    "ead3a652f8b48d5a4643dbc124b57b8faeb722d851d6aa733f91c40db531e5f8"
+)
+POLARIS_IMAGE_DIGEST = (
+    "sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e"
+)
+POLARIS_IMAGE_REFERENCE = (
+    "ghcr.io/tommykammy/shirokuma-polaris@" + POLARIS_IMAGE_DIGEST
+)
+POLARIS_IMAGE_TRUSTED_TAG = (
+    "ghcr.io/tommykammy/shirokuma-polaris:1.6.0-arm64"
+)
+POLARIS_IMAGE_PUBLISHER_SOURCE_SHA = (
+    "706575ba3f21987033a29b6d21367981e9c54e3e"
+)
+POLARIS_IMAGE_PUBLISHER_RUN_ID = "29711984394"
+POLARIS_IMAGE_PUBLISHER_RUN_ATTEMPT = "1"
+POLARIS_IMAGE_CANDIDATE_TAG = (
+    "ghcr.io/tommykammy/shirokuma-polaris:"
+    "1.6.0-29711984394-1"
+)
+POLARIS_IMAGE_CREATED = "2026-07-20T02:15:01.596807+00:00"
+POLARIS_IMAGE_PROMOTION_COMPLETED_AT = "2026-07-20T02:15:45.689352+00:00"
+POLARIS_IMAGE_SLSA_PROVENANCE = (
+    "https://github.com/TommyKammy/Shirokuma/attestations/36078805"
+)
+POLARIS_IMAGE_PUBLISHER_IDENTITY = (
+    "https://github.com/TommyKammy/Shirokuma/"
+    ".github/workflows/polaris-arm64.yml@refs/heads/main"
+)
+POLARIS_IMAGE_PUBLISHER_ISSUER = (
+    "https://token.actions.githubusercontent.com"
+)
+POLARIS_IMAGE_PUBLISHER_REPOSITORY = "TommyKammy/Shirokuma"
+POLARIS_IMAGE_PUBLISHER_REF = "refs/heads/main"
+POLARIS_IMAGE_PUBLISHER_TRIGGER = "push"
+POLARIS_IMAGE_PUBLISHER_CONTRACT_SHA256 = (
+    "8625191c6a186880d7ec7a596667b047881170e987527c5987a5ee87285b83f8"
+)
+POLARIS_IMAGE_PUBLISHER_ADMISSION_SHA256 = (
+    "9e45b73b94d6b988e368826a532537f5965467d614116c8fee88f30ea4e01b2d"
+)
+POLARIS_IMAGE_EVIDENCE_MANIFEST_SHA256 = (
+    "5aac29c01f28f410a6e564b87cd2748eeef1204341a8373934491d29b21564d7"
+)
+POLARIS_IMAGE_EVIDENCE_MANIFEST_SIZE = 2_910
 POLARIS_CANDIDATE_EVIDENCE_REQUIRED = [
     "anonymous-image-manifest.json",
     "builder-metadata.json",
@@ -154,6 +206,10 @@ POLARIS_PROMOTION_EVIDENCE_REQUIRED = [
     "publication.json",
     "trusted-tag-manifest.json",
 ]
+POLARIS_IMAGE_EVIDENCE_REQUIRED = frozenset(
+    POLARIS_CANDIDATE_EVIDENCE_REQUIRED
+    + POLARIS_PROMOTION_EVIDENCE_REQUIRED
+)
 POLARIS_OVERLAY_PREIMAGES = {
     "runtime/server/build.gradle.kts": (
         "6394f787e0b0a48a7a916824306c3e4fe54556c7f639aeb47330a63111e05f16"
@@ -184,7 +240,6 @@ POSTGRES_ATTESTATION = (
 
 FORBIDDEN_PENDING_PATHS = (
     Path("bootstrap/polaris/v1.6.0/gradle-dependency-inputs.json"),
-    Path("bootstrap/polaris/v1.6.0/release-evidence.json"),
 )
 POLARIS_DEPENDENCY_WORKFLOW = Path(
     ".github/workflows/polaris-gradle-dependencies.yml"
@@ -294,6 +349,13 @@ POLARIS_ALLOWED_PATHS = {
         f"evidence/{filename}"
         for filename in POLARIS_DEPENDENCY_EVIDENCE_RECORDS
     },
+    "image-evidence",
+    "image-evidence/evidence.sha256",
+    *{
+        f"image-evidence/{filename}"
+        for filename in POLARIS_IMAGE_EVIDENCE_REQUIRED
+    },
+    "release-evidence.json",
     "source.json",
     "patches",
     "patches/0001-shirokuma-bounded-runtime.patch",
@@ -341,7 +403,6 @@ REVIEW_PENDING_WORKFLOW_INVENTORY = {
     ".github/workflows/security.yml": (
         "717c0fad0d108b271777ea2f61a69682fb57c2d8947b387c81276f095dd8176c"
     ),
-    ".github/workflows/polaris-arm64.yml": POLARIS_IMAGE_WORKFLOW_SHA256,
 }
 PENDING_SCRIPT_FILE_INVENTORY = {
     "scripts/bound_evidence.py": (
@@ -404,8 +465,8 @@ PENDING_CHART_PATHS = {"AGENTS.md", "README.md"}
 POLARIS_BLOCKING_CONTROLS = [
     {"id": "POLARIS-DEP-SNAPSHOT-PUBLICATION", "state": "satisfied"},
     {"id": "POLARIS-DEP-SNAPSHOT-REVIEW", "state": "satisfied"},
-    {"id": "POLARIS-IMAGE-MAIN-PUBLICATION", "state": "pending"},
-    {"id": "POLARIS-IMAGE-EVIDENCE-REVIEW", "state": "pending"},
+    {"id": "POLARIS-IMAGE-MAIN-PUBLICATION", "state": "satisfied"},
+    {"id": "POLARIS-IMAGE-EVIDENCE-REVIEW", "state": "satisfied"},
     {"id": "POLARIS-POSTGRES-ATOMIC-ADMISSION", "state": "pending"},
 ]
 POLARIS_SERVER_TASKS = [
@@ -696,6 +757,24 @@ def _nested(value: Mapping[str, Any], *path: str) -> Any:
     return current
 
 
+def _json_equal_type_sensitive(actual: Any, wanted: Any) -> bool:
+    if isinstance(wanted, bool):
+        return actual is wanted
+    if type(actual) is not type(wanted):
+        return False
+    if isinstance(wanted, dict):
+        return set(actual) == set(wanted) and all(
+            _json_equal_type_sensitive(actual[key], value)
+            for key, value in wanted.items()
+        )
+    if isinstance(wanted, list):
+        return len(actual) == len(wanted) and all(
+            _json_equal_type_sensitive(actual_item, wanted_item)
+            for actual_item, wanted_item in zip(actual, wanted)
+        )
+    return actual == wanted
+
+
 def _expect_fields(
     value: Mapping[str, Any],
     expected: Mapping[tuple[str, ...], Any],
@@ -704,7 +783,7 @@ def _expect_fields(
     for path, wanted in expected.items():
         actual = _nested(value, *path)
         _expect(
-            actual == wanted,
+            _json_equal_type_sensitive(actual, wanted),
             code,
             f"{'.'.join(path)} must be {wanted!r}, found {actual!r}",
         )
@@ -1014,26 +1093,10 @@ def _audit_source(root: Path) -> Mapping[str, Any]:
     return source
 
 
-def _read_publication_text(root: Path, relative: Path) -> str:
-    _expect(
-        _is_regular_file_without_symlink_components(root, relative),
-        "PUBLICATION_POLICY",
-        f"{relative} must be a regular file without symlink components",
-    )
-    try:
-        return (root / relative).read_text(encoding="utf-8")
-    except (OSError, UnicodeError) as error:
-        _fail(
-            "PUBLICATION_POLICY",
-            f"cannot read {relative} as UTF-8: {error}",
-        )
-
-
 def _audit_image_publication_files(root: Path) -> None:
     expected_hashes = {
         POLARIS_CONTAINERFILE: POLARIS_CONTAINERFILE_SHA256,
         POLARIS_SOURCE_OVERLAY: POLARIS_SOURCE_OVERLAY_SHA256,
-        POLARIS_IMAGE_WORKFLOW: POLARIS_IMAGE_WORKFLOW_SHA256,
     }
     for relative, expected_sha256 in expected_hashes.items():
         _expect(
@@ -1043,578 +1106,10 @@ def _audit_image_publication_files(root: Path) -> None:
             f"{relative} differs from the reviewed publication policy",
         )
 
-    containerfile = _read_publication_text(root, POLARIS_CONTAINERFILE)
-    expected_from = f"FROM {IMAGE_RUNTIME_ARM64}"
     _expect(
-        containerfile.count(expected_from) == 1,
+        not (root / POLARIS_IMAGE_WORKFLOW).exists(),
         "PUBLICATION_POLICY",
-        "Containerfile must use the exact Corretto arm64 manifest once",
-    )
-    _expect(
-        "USER 10000:10001" in containerfile
-        and 'ENTRYPOINT ["/usr/bin/java"]' in containerfile
-        and 'CMD ["-jar", "/deployments/quarkus-run.jar"]' in containerfile
-        and "EXPOSE 8181 8182" in containerfile
-        and "WORKDIR /deployments" in containerfile,
-        "PUBLICATION_POLICY",
-        "Containerfile runtime identity, ports, or command changed",
-    )
-    expected_copies = {
-        "COPY --chown=10000:10001 build/quarkus-app/lib/ /deployments/lib/",
-        "COPY --chown=10000:10001 build/quarkus-app/*.jar /deployments/",
-        "COPY --chown=10000:10001 build/quarkus-app/app/ /deployments/app/",
-        (
-            "COPY --chown=10000:10001 build/quarkus-app/quarkus/ "
-            "/deployments/quarkus/"
-        ),
-        (
-            "COPY --chown=10000:10001 distribution/LICENSE "
-            "/deployments/LICENSE"
-        ),
-        (
-            "COPY --chown=10000:10001 distribution/NOTICE "
-            "/deployments/NOTICE"
-        ),
-    }
-    actual_copies = {
-        line.strip()
-        for line in containerfile.splitlines()
-        if line.lstrip().startswith("COPY ")
-    }
-    _expect(
-        actual_copies == expected_copies,
-        "PUBLICATION_POLICY",
-        "Containerfile COPY closure changed",
-    )
-    directives = [
-        line.lstrip().split(maxsplit=1)[0].upper()
-        for line in containerfile.splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    ]
-    _expect(
-        not ({"RUN", "ADD", "HEALTHCHECK"} & set(directives))
-        and directives.count("FROM") == 1
-        and directives.count("USER") == 1,
-        "PUBLICATION_POLICY",
-        "Containerfile gained a mutable build step or runtime identity",
-    )
-
-    overlay = _read_publication_text(root, POLARIS_SOURCE_OVERLAY)
-    _expect(
-        overlay.count("diff --git ") == 2
-        and overlay.count(
-            '-  runtimeOnly(project(":polaris-extensions-federation-hadoop"))'
-        )
-        == 1
-        and overlay.count(
-            '-  runtimeOnly(project(":polaris-extensions-auth-ranger"))'
-        )
-        == 1
-        and overlay.count("-  implementation(libs.hadoop.client.api)") == 1
-        and overlay.count("-  implementation(libs.hadoop.client.runtime)")
-        == 1
-        and "GIT binary patch" not in overlay
-        and "../" not in overlay,
-        "PUBLICATION_POLICY",
-        "bounded runtime overlay scope changed",
-    )
-
-    workflow = _read_publication_text(root, POLARIS_IMAGE_WORKFLOW)
-    prepare_cosign_bootstrap = (
-        "      - name: Install pinned Cosign for dependency evidence "
-        "revalidation\n"
-        "        if: steps.lifecycle.outputs.active == 'true'\n"
-        "        uses: sigstore/cosign-installer@"
-        "6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2\n"
-        "        with:\n"
-        "          cosign-release: v3.1.1"
-    )
-    verify_cosign_bootstrap = (
-        "      - name: Install pinned Cosign before write-capable policy "
-        "revalidation\n"
-        "        uses: sigstore/cosign-installer@"
-        "6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2\n"
-        "        with:\n"
-        "          cosign-release: v3.1.1"
-    )
-    promote_cosign_bootstrap = (
-        "      - name: Install pinned Cosign before promotion policy "
-        "revalidation\n"
-        "        uses: sigstore/cosign-installer@"
-        "6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2\n"
-        "        with:\n"
-        "          cosign-release: v3.1.1"
-    )
-    required_markers = (
-        "runs-on: ubuntu-24.04-arm",
-        "github.repository == 'TommyKammy/Shirokuma'",
-        "github.ref == 'refs/heads/main'",
-        'test "${GITHUB_SHA}" = "${GITHUB_WORKFLOW_SHA}"',
-        "cancel-in-progress: false",
-        "persist-credentials: false",
-        f"DEPENDENCY_REF: {POLARIS_DEPENDENCY_REFERENCE}",
-        f"BUILDER_IMAGE: {BUILDER_ARM64}",
-        f"RUNTIME_BASE: {IMAGE_RUNTIME_ARM64}",
-        f"RUNTIME_PATCH_SHA256: {POLARIS_SOURCE_OVERLAY_SHA256}",
-        f"CONTAINERFILE_SHA256: {POLARIS_CONTAINERFILE_SHA256}",
-        "REKOR_URL: https://rekor.sigstore.dev",
-        'REKOR_MAJOR_API_VERSION: "1"',
-        (
-            '"${REKOR_URL}/api/v1/log/entries?'
-            'logIndex=${rekor_index}"'
-        ),
-        (
-            "SOURCE_SIGNING_KEY_FINGERPRINT: "
-            f"{POLARIS_KEY_FINGERPRINT_GROUPED}"
-        ),
-        (
-            'export SOURCE_SIGNING_KEY_FINGERPRINT="'
-            '${SOURCE_SIGNING_KEY_FINGERPRINT// /}"'
-        ),
-        "--dependency-verification strict",
-        "--no-build-cache",
-        "--no-configuration-cache",
-        "--rerun-tasks",
-        "--network none",
-        "network: none",
-        "no-cache: true",
-        "scanners: vuln",
-        "severity: HIGH,CRITICAL",
-        "ignore-unfixed: false",
-        "vuln-type: os,library",
-        "exit-code: 1",
-        "--read-only",
-        "--cap-drop ALL",
-        "--security-opt no-new-privileges",
-        '"admitted": False',
-        "retention-days: 30",
-        '"forbidden_component_terms": ["hadoop", "ranger", "jetty-http"]',
-        prepare_cosign_bootstrap,
-        verify_cosign_bootstrap,
-        promote_cosign_bootstrap,
-        "Validate the static publication bootstrap policy",
-        "Rebind the write-capable job to the static publication policy",
-        "Rebind promotion to the static publication policy",
-        "Complete the cryptographic image-publication-pending audit",
-        "Complete the write-capable cryptographic policy audit",
-        "Complete the promotion cryptographic policy audit",
-        (
-            "python3 scripts/verify_polaris_trusted_image.py "
-            "audit-publication-bootstrap --root ."
-        ),
-        "python3 scripts/verify_polaris_trusted_image.py audit --root .",
-        "cosign download signature",
-        "registry-signature-bundles.jsonl",
-        "rekor-entry.json",
-        "slsa-bundles.jsonl",
-        'bundle = record["attestation"]["bundle"]',
-        'bundle_media_type = "application/vnd.dev.sigstore.bundle.v0.3+json"',
-        '"https://sigstore.dev/cosign/sign/v1"',
-        "cosign attest --yes",
-        "--bundle sbom-attestation-bundle.json",
-        "--type cyclonedx",
-        "--predicate polaris-1.6.0-arm64.cdx.json",
-        "sbom-attestation-bundle.json",
-        "--bundle trivy-attestation-bundle.json",
-        "--type https://shirokuma.dev/attestations/trivy/v1",
-        "--predicate trivy.json",
-        "trivy-attestation-bundle.json",
-        "cosign verify-blob-attestation",
-    )
-    missing = [marker for marker in required_markers if marker not in workflow]
-    _expect(
-        not missing,
-        "PUBLICATION_POLICY",
-        f"workflow is missing required controls: {missing}",
-    )
-    forbidden_markers = (
-        "pull_request:",
-        "pull_request_target:",
-        "workflow_call:",
-        "contents: write",
-        "issues: write",
-        "pull-requests: write",
-        "--disable-path-validation",
-        "continue-on-error:",
-        "cache-from:",
-        "cache-to:",
-        "ignore-unfixed: true",
-        f"SOURCE_SIGNING_KEY_FINGERPRINT: {POLARIS_KEY_FINGERPRINT}",
-    )
-    present = [marker for marker in forbidden_markers if marker in workflow]
-    _expect(
-        not present,
-        "PUBLICATION_POLICY",
-        f"workflow contains forbidden controls: {present}",
-    )
-    jobs_text = workflow.split("\njobs:\n", maxsplit=1)
-    _expect(
-        len(jobs_text) == 2,
-        "PUBLICATION_POLICY",
-        "workflow job closure changed",
-    )
-    jobs = jobs_text[1]
-    _expect(
-        re.findall(
-            r"^  ([a-z][a-z0-9_-]*):\s*$",
-            jobs,
-            flags=re.MULTILINE,
-        )
-        == ["prepare", "verify", "promote"],
-        "PUBLICATION_POLICY",
-        "workflow job closure changed",
-    )
-    prepare_job = jobs.split("\n  verify:\n", maxsplit=1)
-    _expect(
-        len(prepare_job) == 2,
-        "PUBLICATION_POLICY",
-        "workflow job closure changed",
-    )
-    verify_job = prepare_job[1].split("\n  promote:\n", maxsplit=1)
-    _expect(
-        len(verify_job) == 2,
-        "PUBLICATION_POLICY",
-        "workflow job closure changed",
-    )
-    job_sections = {
-        "prepare": prepare_job[0],
-        "verify": verify_job[0],
-        "promote": verify_job[1],
-    }
-    cosign_action_pattern = re.compile(
-        r"^\s+-?\s*uses:\s+sigstore/cosign-installer@[^\s#]+",
-        flags=re.IGNORECASE | re.MULTILINE,
-    )
-    expected_cosign_blocks = {
-        "prepare": prepare_cosign_bootstrap,
-        "verify": verify_cosign_bootstrap,
-        "promote": promote_cosign_bootstrap,
-    }
-    _expect(
-        all(
-            job.count(expected_cosign_blocks[name]) == 1
-            and len(cosign_action_pattern.findall(job)) == 1
-            for name, job in job_sections.items()
-        ),
-        "PUBLICATION_POLICY",
-        "each job must contain exactly one policy-scoped Cosign bootstrap",
-    )
-    static_audit = (
-        "python3 scripts/verify_polaris_trusted_image.py "
-        "audit-publication-bootstrap --root ."
-    )
-    cryptographic_audit = (
-        "python3 scripts/verify_polaris_trusted_image.py audit --root ."
-    )
-    _expect(
-        all(
-            job.count(static_audit) == 1
-            and job.count(cryptographic_audit) == 1
-            for job in job_sections.values()
-        ),
-        "PUBLICATION_POLICY",
-        "each job must contain one static and one full cryptographic audit",
-    )
-    job_orders = (
-        (
-            job_sections["prepare"],
-            (
-                "Bind the run to reviewed main and check publication lifecycle",
-                "Validate the static publication bootstrap policy",
-                static_audit,
-                "Install pinned Cosign for dependency evidence revalidation",
-                "Complete the cryptographic image-publication-pending audit",
-                cryptographic_audit,
-            ),
-        ),
-        (
-            job_sections["verify"],
-            (
-                "Rebind the write-capable job to the static publication policy",
-                static_audit,
-                "Install pinned Cosign before write-capable policy revalidation",
-                "Complete the write-capable cryptographic policy audit",
-                cryptographic_audit,
-                "Download the exact read-only-verified image build input",
-            ),
-        ),
-        (
-            job_sections["promote"],
-            (
-                "Rebind promotion to the static publication policy",
-                static_audit,
-                "Install pinned Cosign before promotion policy revalidation",
-                "Complete the promotion cryptographic policy audit",
-                cryptographic_audit,
-                "Download retained candidate evidence",
-            ),
-        ),
-    )
-    _expect(
-        all(
-            (positions := [job.find(marker) for marker in markers])
-            and all(position >= 0 for position in positions)
-            and positions == sorted(positions)
-            for job, markers in job_orders
-        ),
-        "PUBLICATION_POLICY",
-        "job-local static audit, Cosign bootstrap, or full audit changed order",
-    )
-    candidate_copy_pattern = re.compile(
-        r"^          cp \\\n"
-        r"(?P<sources>(?:^            [^\n]+ \\\n)+)"
-        r'^            "\$\{evidence_dir\}/"$',
-        flags=re.MULTILINE,
-    )
-    candidate_copy_matches = list(
-        candidate_copy_pattern.finditer(job_sections["verify"])
-    )
-    candidate_copy_sources = (
-        [
-            Path(line.strip().removesuffix(" \\")).name
-            for line in candidate_copy_matches[0]
-            .group("sources")
-            .splitlines()
-        ]
-        if len(candidate_copy_matches) == 1
-        else []
-    )
-    expected_candidate_copy_sources = POLARIS_CANDIDATE_EVIDENCE_REQUIRED
-    _expect(
-        len(candidate_copy_matches) == 1
-        and candidate_copy_sources == expected_candidate_copy_sources
-        and job_sections["verify"].count('"${evidence_dir}/"') == 1
-        and "runtime-smoke.log" not in job_sections["verify"],
-        "PUBLICATION_POLICY",
-        "candidate evidence copy closure changed",
-    )
-    runtime_evidence_markers = (
-        'raw_runtime_log="${RUNNER_TEMP}/polaris-runtime-smoke.raw.log"',
-        (
-            'raw_runtime_inspect="${RUNNER_TEMP}/'
-            'polaris-runtime-container-inspect.raw.json"'
-        ),
-        'rm -f "${raw_runtime_log}" "${raw_runtime_inspect}"',
-        'docker inspect "${container_name}" > "${raw_runtime_inspect}"',
-        'credential_line = re.compile(',
-        '"generated_root_credential": (',
-        '"unredacted_root_credential": (',
-        '"bootstrap_credential_assignment": (',
-        '"authorization_header": (',
-        '"credential_assignment": (',
-        "if redactions != 1:",
-        "if leaked:",
-        '"raw_log_retained": False',
-        '"sanitized_log_retained": False',
-        '"sanitized_log_sha256": hashlib.sha256(',
-        'Path("runtime-container-inspect.json")',
-        'Path("runtime-smoke-log-policy.json")',
-    )
-    _expect(
-        all(
-            marker in job_sections["verify"]
-            for marker in runtime_evidence_markers
-        ),
-        "PUBLICATION_POLICY",
-        "runtime evidence projection or credential scrubbing changed",
-    )
-    promotion_runtime_evidence_markers = (
-        "for forbidden_runtime_artifact in (",
-        '"runtime-smoke.log",',
-        '"polaris-runtime-smoke.raw.log",',
-        '"polaris-runtime-container-inspect.raw.json",',
-        '"candidate-evidence/runtime-smoke-log-policy.json"',
-        'runtime_log_policy["raw_log_retained"] is False',
-        'runtime_log_policy["sanitized_log_retained"] is False',
-        'not isinstance(runtime_log_policy["redaction_count"], bool)',
-        'and runtime_inspect["reference"] == expected["reference"]',
-        'and runtime_inspect["read_only_rootfs"] is True',
-        'and runtime_inspect["security_options"][0].startswith(',
-        'runtime_summary.get("runtime_inspect_sha256")',
-        "hashlib.sha256(runtime_inspect_path.read_bytes()).hexdigest()",
-    )
-    _expect(
-        all(
-            marker in job_sections["promote"]
-            for marker in promotion_runtime_evidence_markers
-        ),
-        "PUBLICATION_POLICY",
-        "promotion runtime evidence revalidation changed",
-    )
-    promotion_copy_sources = re.findall(
-        r"^          cp ([A-Za-z0-9._-]+) candidate-evidence/$",
-        job_sections["promote"],
-        flags=re.MULTILINE,
-    )
-    _expect(
-        promotion_copy_sources
-        == [
-            artifact
-            for artifact in POLARIS_PROMOTION_EVIDENCE_REQUIRED
-            if artifact != "publication.json"
-        ]
-        and job_sections["verify"].count(
-            '(root / "publication.json").write_text('
-        )
-        == 1
-        and job_sections["promote"].count(
-            'path = root / "publication.json"'
-        )
-        == 1,
-        "PUBLICATION_POLICY",
-        "promotion evidence copy closure changed",
-    )
-    verify_evidence_order = (
-        "Keyless-sign and verify the exact scanned image",
-        "cosign download signature",
-        "registry-signature-bundles.jsonl",
-        "rekor-entry.json",
-        "Verify SLSA provenance from this exact workflow",
-        "slsa-bundles.jsonl",
-        "Keyless-attest the retained Polaris SBOM and scan",
-        "sbom-attestation-bundle.json",
-        "trivy-attestation-bundle.json",
-        "Record and retain the non-admitted image candidate",
-    )
-    verify_evidence_positions = [
-        job_sections["verify"].find(marker) for marker in verify_evidence_order
-    ]
-    _expect(
-        all(position >= 0 for position in verify_evidence_positions)
-        and verify_evidence_positions == sorted(verify_evidence_positions)
-        and job_sections["verify"].count("cosign download signature") == 1
-        and job_sections["verify"].count("cosign attest --yes") == 2
-        and job_sections["verify"].count("cosign verify-blob-attestation") == 1
-        and job_sections["verify"].count(
-            "--bundle sbom-attestation-bundle.json"
-        )
-        == 1
-        and job_sections["verify"].count(
-            "--bundle trivy-attestation-bundle.json"
-        )
-        == 1
-        and all(
-            artifact in job_sections["verify"]
-            for artifact in POLARIS_CANDIDATE_EVIDENCE_REQUIRED
-        ),
-        "PUBLICATION_POLICY",
-        "candidate signature, Rekor, SLSA, or attestation evidence changed",
-    )
-    verify_crypto_markers = (
-        "if registry_bundle_matches != 1:",
-        'proof.get("checkpoint")',
-        '(api_entry.get("body"), entry["canonicalizedBody"])',
-        'certificate.get("githubWorkflowSHA")',
-        'certificate.get("runInvocationURI") == invocation',
-        'Path("slsa-bundles.jsonl").write_text(',
-    )
-    _expect(
-        all(
-            marker in job_sections["verify"]
-            for marker in verify_crypto_markers
-        ),
-        "PUBLICATION_POLICY",
-        "candidate cryptographic evidence binding changed",
-    )
-    promotion_evidence_order = (
-        "Revalidate candidate evidence before promotion credentials exist",
-        "cosign verify-blob-attestation",
-        "Reverify the public digest, signature, and provenance before promotion",
-        "Log in to GHCR for trusted-tag promotion",
-        "Promote the fully verified digest to the non-authoritative trusted tag",
-    )
-    promotion_evidence_positions = [
-        job_sections["promote"].find(marker)
-        for marker in promotion_evidence_order
-    ]
-    _expect(
-        all(position >= 0 for position in promotion_evidence_positions)
-        and promotion_evidence_positions == sorted(promotion_evidence_positions)
-        and (
-            "candidate-evidence/sbom-attestation-bundle.json cyclonedx"
-            in job_sections["promote"]
-        )
-        and (
-            "candidate-evidence/trivy-attestation-bundle.json"
-            in job_sections["promote"]
-        )
-        and all(
-            artifact in job_sections["promote"]
-            for artifact in POLARIS_PROMOTION_EVIDENCE_REQUIRED
-        ),
-        "PUBLICATION_POLICY",
-        "credential-free candidate evidence revalidation changed",
-    )
-    promotion_crypto_markers = (
-        "if registry_bundles != [signature_bundle]:",
-        'and statement.get("predicate") == predicate',
-        "if not slsa_bundles or slsa_bundles != retained_from_records:",
-        "def rekor_identity(response, label):",
-        "and proof_log_index < tree_size",
-        '"proofLogIndex": proof_log_index,',
-        'bundle_entry["inclusionProof"]["logIndex"]',
-        "if live_identity != retained_identity:",
-        "expected_rekor_identity = {",
-        "retained_identity[field] != value",
-        "Counter(map(canonical, live_slsa)) != Counter(",
-    )
-    _expect(
-        all(
-            marker in job_sections["promote"]
-            for marker in promotion_crypto_markers
-        )
-        and "proof_log_index == log_index" not in job_sections["promote"]
-        and '"signedEntryTimestamp": verification['
-        not in job_sections["promote"]
-        and '"signedEntryTimestamp": bundle_entry['
-        not in job_sections["promote"],
-        "PUBLICATION_POLICY",
-        "promotion cryptographic evidence binding changed",
-    )
-    action_refs = re.findall(
-        r"^\s+-?\s*uses:\s*([^\s#]+)",
-        workflow,
-        flags=re.MULTILINE,
-    )
-    _expect(
-        bool(action_refs)
-        and all(
-            re.fullmatch(
-                r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}",
-                reference,
-            )
-            is not None
-            for reference in action_refs
-        ),
-        "PUBLICATION_POLICY",
-        "every external Action must be pinned to a full commit SHA",
-    )
-    ordered_markers = (
-        "Bind the run to reviewed main and check publication lifecycle",
-        "Validate the static publication bootstrap policy",
-        "Install pinned Cosign for dependency evidence revalidation",
-        "Complete the cryptographic image-publication-pending audit",
-        "Anonymously fetch and verify the exact reviewed dependency snapshot",
-        "Fetch and authenticate the signed ASF source release",
-        "Build Polaris from retained dependencies with network disabled",
-        "Rebind the write-capable job to the static publication policy",
-        "Install pinned Cosign before write-capable policy revalidation",
-        "Complete the write-capable cryptographic policy audit",
-        "Log in to GHCR for the run-scoped quarantine push",
-        "Scan the exact digest and block High or Critical findings",
-        "Keyless-sign and verify the exact scanned image",
-        "Rebind promotion to the static publication policy",
-        "Install pinned Cosign before promotion policy revalidation",
-        "Complete the promotion cryptographic policy audit",
-        "Reverify the public digest, signature, and provenance before promotion",
-        "Promote the fully verified digest to the non-authoritative trusted tag",
-    )
-    positions = [workflow.find(marker) for marker in ordered_markers]
-    _expect(
-        all(position >= 0 for position in positions)
-        and positions == sorted(positions),
-        "PUBLICATION_POLICY",
-        "workflow verification and credential boundaries changed order",
+        "the one-shot Polaris image publisher must remain retired",
     )
 
 
@@ -1761,12 +1256,19 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "enabled",
                 "repository",
                 "trusted_tag",
+                "reference",
+                "digest",
+                "release_evidence",
                 "containerfile",
                 "source_overlay",
                 "runtime_base",
                 "vulnerability_gate",
                 "publication_boundary",
                 "workflow",
+            },
+            ("image_publication", "release_evidence"): {
+                "path",
+                "sha256",
             },
             ("image_publication", "containerfile"): {"path", "sha256"},
             ("image_publication", "source_overlay"): {
@@ -1813,7 +1315,18 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "release_evidence_committed",
                 "admission_permitted",
             },
-            ("image_publication", "workflow"): {"path", "sha256"},
+            ("image_publication", "workflow"): {
+                "path",
+                "sha256",
+                "repository",
+                "ref",
+                "event",
+                "source_sha",
+                "workflow_sha",
+                "run_id",
+                "run_attempt",
+                "retired",
+            },
             ("transparency_log",): {
                 "base_url",
                 "major_api_version",
@@ -1858,9 +1371,15 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "directory",
                 "candidate_required",
                 "promotion_required",
+                "self_manifest",
                 "actions_artifact_role",
                 "candidate_retention_days",
                 "final_retention_days",
+            },
+            ("evidence", "self_manifest"): {
+                "path",
+                "sha256",
+                "entries",
             },
             ("runtime",): {
                 "state",
@@ -1874,12 +1393,12 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
     _expect_fields(
         contract,
         {
-            ("schema_version",): 5,
+            ("schema_version",): 6,
             ("component",): "polaris",
             ("version",): POLARIS_VERSION,
             ("platform",): "linux/arm64",
-            ("lifecycle", "state"): "image_publication_pending",
-            ("lifecycle", "next_state"): "image_evidence_review_pending",
+            ("lifecycle", "state"): "atomic_admission_pending",
+            ("lifecycle", "next_state"): "runtime_acceptance_pending",
             ("source", "record"): POLARIS_SOURCE.as_posix(),
             ("source", "record_sha256"): POLARIS_SOURCE_SHA256,
             ("source", "archive_sha512"): POLARIS_ARCHIVE_SHA512,
@@ -2253,13 +1772,25 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "offline_proof",
                 "configuration_cache",
             ): False,
-            ("image_publication", "state"): "pending_main_publication",
-            ("image_publication", "enabled"): True,
+            ("image_publication", "state"): "approved_for_atomic_admission",
+            ("image_publication", "enabled"): False,
             (
                 "image_publication",
                 "repository",
             ): "ghcr.io/tommykammy/shirokuma-polaris",
             ("image_publication", "trusted_tag"): "1.6.0-arm64",
+            ("image_publication", "reference"): POLARIS_IMAGE_REFERENCE,
+            ("image_publication", "digest"): POLARIS_IMAGE_DIGEST,
+            (
+                "image_publication",
+                "release_evidence",
+                "path",
+            ): POLARIS_RELEASE_EVIDENCE.as_posix(),
+            (
+                "image_publication",
+                "release_evidence",
+                "sha256",
+            ): POLARIS_RELEASE_EVIDENCE_SHA256,
             (
                 "image_publication",
                 "containerfile",
@@ -2423,7 +1954,7 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "image_publication",
                 "publication_boundary",
                 "release_evidence_committed",
-            ): False,
+            ): True,
             (
                 "image_publication",
                 "publication_boundary",
@@ -2439,6 +1970,46 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "workflow",
                 "sha256",
             ): POLARIS_IMAGE_WORKFLOW_SHA256,
+            (
+                "image_publication",
+                "workflow",
+                "repository",
+            ): POLARIS_IMAGE_PUBLISHER_REPOSITORY,
+            (
+                "image_publication",
+                "workflow",
+                "ref",
+            ): POLARIS_IMAGE_PUBLISHER_REF,
+            (
+                "image_publication",
+                "workflow",
+                "event",
+            ): POLARIS_IMAGE_PUBLISHER_TRIGGER,
+            (
+                "image_publication",
+                "workflow",
+                "source_sha",
+            ): POLARIS_IMAGE_PUBLISHER_SOURCE_SHA,
+            (
+                "image_publication",
+                "workflow",
+                "workflow_sha",
+            ): POLARIS_IMAGE_PUBLISHER_SOURCE_SHA,
+            (
+                "image_publication",
+                "workflow",
+                "run_id",
+            ): POLARIS_IMAGE_PUBLISHER_RUN_ID,
+            (
+                "image_publication",
+                "workflow",
+                "run_attempt",
+            ): POLARIS_IMAGE_PUBLISHER_RUN_ATTEMPT,
+            (
+                "image_publication",
+                "workflow",
+                "retired",
+            ): True,
             (
                 "transparency_log",
                 "base_url",
@@ -2521,7 +2092,10 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "vulnerability_scan",
                 "predicate_type",
             ): "https://shirokuma.dev/attestations/trivy/v1",
-            ("evidence", "directory"): "candidate-evidence",
+            (
+                "evidence",
+                "directory",
+            ): POLARIS_IMAGE_EVIDENCE.as_posix(),
             (
                 "evidence",
                 "candidate_required",
@@ -2534,6 +2108,17 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
                 "evidence",
                 "actions_artifact_role",
             ): "retained mirror only",
+            (
+                "evidence",
+                "self_manifest",
+                "path",
+            ): (POLARIS_IMAGE_EVIDENCE / "evidence.sha256").as_posix(),
+            (
+                "evidence",
+                "self_manifest",
+                "sha256",
+            ): POLARIS_IMAGE_EVIDENCE_MANIFEST_SHA256,
+            ("evidence", "self_manifest", "entries"): 32,
             ("evidence", "candidate_retention_days"): 30,
             ("evidence", "final_retention_days"): 30,
             ("runtime", "state"): "blocked_atomic_admission",
@@ -2636,12 +2221,31 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
                 "reference",
                 "release_evidence",
             },
+            ("planned_candidate", "release_evidence"): {
+                "path",
+                "sha256",
+            },
             ("image_publication",): {
                 "state",
                 "enabled",
                 "admitted",
+                "reference",
+                "digest",
                 "containerfile",
+                "release_evidence",
                 "workflow",
+            },
+            ("image_publication", "release_evidence"): {
+                "path",
+                "sha256",
+            },
+            ("image_publication", "workflow"): {
+                "path",
+                "sha256",
+                "source_sha",
+                "run_id",
+                "run_attempt",
+                "retired",
             },
             ("resident_ledger",): {"permitted", "atomic_with"},
             ("runtime_manifests",): {"permitted", "forbidden_roots"},
@@ -2651,12 +2255,12 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
     _expect_fields(
         admission,
         {
-            ("schema_version",): 4,
+            ("schema_version",): 5,
             ("component",): "polaris",
             ("version",): POLARIS_VERSION,
             ("platform",): "linux/arm64",
             ("admission",): "blocked",
-            ("state",): "image_publication_pending",
+            ("state",): "atomic_admission_pending",
             ("source_record",): POLARIS_SOURCE.as_posix(),
             ("source_record_sha256",): POLARIS_SOURCE_SHA256,
             ("build_contract",): POLARIS_CONTRACT.as_posix(),
@@ -2711,22 +2315,72 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
                 "planned_candidate",
                 "repository",
             ): "ghcr.io/tommykammy/shirokuma-polaris",
-            ("planned_candidate", "reference"): None,
-            ("planned_candidate", "release_evidence"): None,
+            ("planned_candidate", "reference"): POLARIS_IMAGE_REFERENCE,
+            (
+                "planned_candidate",
+                "release_evidence",
+                "path",
+            ): POLARIS_RELEASE_EVIDENCE.as_posix(),
+            (
+                "planned_candidate",
+                "release_evidence",
+                "sha256",
+            ): POLARIS_RELEASE_EVIDENCE_SHA256,
             (
                 "image_publication",
                 "state",
-            ): "pending_main_publication",
-            ("image_publication", "enabled"): True,
+            ): "approved_for_atomic_admission",
+            ("image_publication", "enabled"): False,
             ("image_publication", "admitted"): False,
+            (
+                "image_publication",
+                "reference",
+            ): POLARIS_IMAGE_REFERENCE,
+            ("image_publication", "digest"): POLARIS_IMAGE_DIGEST,
             (
                 "image_publication",
                 "containerfile",
             ): POLARIS_CONTAINERFILE.as_posix(),
             (
                 "image_publication",
+                "release_evidence",
+                "path",
+            ): POLARIS_RELEASE_EVIDENCE.as_posix(),
+            (
+                "image_publication",
+                "release_evidence",
+                "sha256",
+            ): POLARIS_RELEASE_EVIDENCE_SHA256,
+            (
+                "image_publication",
                 "workflow",
+                "path",
             ): POLARIS_IMAGE_WORKFLOW.as_posix(),
+            (
+                "image_publication",
+                "workflow",
+                "sha256",
+            ): POLARIS_IMAGE_WORKFLOW_SHA256,
+            (
+                "image_publication",
+                "workflow",
+                "source_sha",
+            ): POLARIS_IMAGE_PUBLISHER_SOURCE_SHA,
+            (
+                "image_publication",
+                "workflow",
+                "run_id",
+            ): POLARIS_IMAGE_PUBLISHER_RUN_ID,
+            (
+                "image_publication",
+                "workflow",
+                "run_attempt",
+            ): POLARIS_IMAGE_PUBLISHER_RUN_ATTEMPT,
+            (
+                "image_publication",
+                "workflow",
+                "retired",
+            ): True,
             ("resident_ledger", "permitted"): False,
             ("resident_ledger", "atomic_with"): "postgresql",
             ("runtime_manifests", "permitted"): False,
@@ -2736,7 +2390,7 @@ def _audit_polaris_admission(root: Path) -> Mapping[str, Any]:
             ): ["deploy", "charts", "opentofu"],
             (
                 "next_action",
-            ): "merge-image-publication-policy-and-run-main-publisher",
+            ): "atomically-admit-polaris-and-postgresql",
         },
         "POLARIS_ADMISSION",
     )
@@ -3006,7 +2660,13 @@ def _audit_dependency_oci_manifest(
     return manifest
 
 
-def _run_cosign(root: Path, arguments: list[str], purpose: str) -> None:
+def _run_cosign(
+    root: Path,
+    arguments: list[str],
+    purpose: str,
+    *,
+    code: str = "DEPENDENCY_EVIDENCE",
+) -> None:
     try:
         result = subprocess.run(
             ["cosign", *arguments],
@@ -3018,12 +2678,12 @@ def _run_cosign(root: Path, arguments: list[str], purpose: str) -> None:
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         _fail(
-            "DEPENDENCY_EVIDENCE",
+            code,
             f"cannot run Cosign for {purpose}: {error}",
         )
     _expect(
         result.returncode == 0,
-        "DEPENDENCY_EVIDENCE",
+        code,
         f"Cosign {purpose} failed: "
         f"{(result.stderr or result.stdout).strip()[-1000:]}",
     )
@@ -3560,6 +3220,1883 @@ def _audit_dependency_publication_evidence(
         slsa_document,
         dependency_crypto_verifier,
     )
+
+
+ImageCryptoVerifier = Callable[[Path, Mapping[str, Any]], None]
+
+
+def _load_jsonl(
+    root: Path,
+    relative: Path,
+    code: str,
+) -> list[Mapping[str, Any]]:
+    _expect(
+        _is_regular_file_without_symlink_components(root, relative),
+        code,
+        f"evidence must be a real regular file: {relative}",
+    )
+    try:
+        lines = (root / relative).read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as error:
+        _fail(code, f"cannot read {relative}: {error}")
+    _expect(bool(lines), code, f"{relative} must not be empty")
+    records: list[Mapping[str, Any]] = []
+    for index, line in enumerate(lines, start=1):
+        _expect(bool(line), code, f"{relative}:{index} must not be blank")
+        try:
+            value = json.loads(
+                line,
+                object_pairs_hook=_reject_duplicate_pairs,
+            )
+        except ValueError as error:
+            _fail(code, f"cannot read {relative}:{index}: {error}")
+        _expect(
+            isinstance(value, Mapping),
+            code,
+            f"{relative}:{index} must be a JSON object",
+        )
+        records.append(value)
+    return records
+
+
+def _decode_image_dsse_statement(
+    bundle: Mapping[str, Any],
+    name: str,
+) -> Mapping[str, Any]:
+    _expect(
+        bundle.get("mediaType")
+        == "application/vnd.dev.sigstore.bundle.v0.3+json",
+        "IMAGE_EVIDENCE",
+        f"{name} uses an unexpected Sigstore bundle media type",
+    )
+    material = bundle.get("verificationMaterial")
+    _expect(
+        isinstance(material, Mapping)
+        and isinstance(material.get("certificate"), Mapping)
+        and isinstance(material.get("tlogEntries"), list)
+        and len(material["tlogEntries"]) == 1,
+        "IMAGE_EVIDENCE",
+        f"{name} lacks the retained certificate or transparency entry",
+    )
+    envelope = bundle.get("dsseEnvelope")
+    _expect(
+        isinstance(envelope, Mapping)
+        and envelope.get("payloadType") == "application/vnd.in-toto+json"
+        and isinstance(envelope.get("signatures"), list)
+        and len(envelope["signatures"]) == 1,
+        "IMAGE_EVIDENCE",
+        f"{name} lacks the exact DSSE envelope",
+    )
+    encoded = envelope.get("payload")
+    _expect(
+        isinstance(encoded, str),
+        "IMAGE_EVIDENCE",
+        f"{name} DSSE payload is missing",
+    )
+    try:
+        payload = base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error) as error:
+        _fail("IMAGE_EVIDENCE", f"{name} DSSE payload is invalid: {error}")
+    _expect(
+        len(payload) <= MAX_DSSE_PAYLOAD_BYTES,
+        "IMAGE_EVIDENCE",
+        f"{name} DSSE payload exceeds the reviewed bound",
+    )
+    try:
+        statement = json.loads(
+            payload,
+            object_pairs_hook=_reject_duplicate_pairs,
+        )
+    except ValueError as error:
+        _fail("IMAGE_EVIDENCE", f"{name} DSSE statement is invalid: {error}")
+    _expect(
+        isinstance(statement, Mapping),
+        "IMAGE_EVIDENCE",
+        f"{name} DSSE statement must be an object",
+    )
+    return statement
+
+
+def _expect_image_statement(
+    statement: Mapping[str, Any],
+    predicate_type: str,
+    name: str,
+) -> None:
+    if predicate_type == "https://sigstore.dev/cosign/sign/v1":
+        expected_subject = [
+            {
+                "digest": {
+                    "sha256": POLARIS_IMAGE_DIGEST.removeprefix("sha256:")
+                },
+                "annotations": {},
+            }
+        ]
+    else:
+        expected_subject = [
+            {
+                "name": "ghcr.io/tommykammy/shirokuma-polaris",
+                "digest": {
+                    "sha256": POLARIS_IMAGE_DIGEST.removeprefix("sha256:")
+                },
+            }
+        ]
+    _expect(
+        statement.get("_type")
+        in {
+            "https://in-toto.io/Statement/v0.1",
+            "https://in-toto.io/Statement/v1",
+        }
+        and statement.get("predicateType") == predicate_type
+        and statement.get("subject") == expected_subject,
+        "IMAGE_EVIDENCE",
+        f"{name} does not bind the exact Polaris image and predicate",
+    )
+
+
+def _audit_image_release_record(
+    root: Path,
+) -> Mapping[str, Any]:
+    actual_sha256, _ = _sha256_and_size(
+        root,
+        POLARIS_RELEASE_EVIDENCE,
+        "IMAGE_EVIDENCE",
+    )
+    _expect(
+        actual_sha256 == POLARIS_RELEASE_EVIDENCE_SHA256,
+        "IMAGE_EVIDENCE",
+        "release-evidence.json differs from the reviewed checkpoint",
+    )
+    release = _load_json(
+        root,
+        POLARIS_RELEASE_EVIDENCE,
+        "IMAGE_EVIDENCE",
+    )
+    _expect_keysets(
+        release,
+        {
+            (): {
+                "schema_version",
+                "component",
+                "version",
+                "platform",
+                "state",
+                "admitted",
+                "reference",
+                "digest",
+                "trusted_tag",
+                "trusted_tag_role",
+                "publisher_checkpoint",
+                "source",
+                "build_inputs",
+                "publication",
+                "vulnerabilities",
+                "sbom",
+                "runtime_smoke",
+                "actions_artifacts",
+                "evidence",
+                "next_boundary",
+            },
+            ("publisher_checkpoint",): {
+                "repository",
+                "workflow",
+                "workflow_file_sha256",
+                "ref",
+                "event",
+                "source_sha",
+                "workflow_sha",
+                "run_id",
+                "run_attempt",
+                "build_contract",
+                "admission",
+                "retired",
+            },
+            ("publisher_checkpoint", "build_contract"): {"path", "sha256"},
+            ("publisher_checkpoint", "admission"): {"path", "sha256"},
+            ("source",): {
+                "record",
+                "record_sha256",
+                "archive_sha512",
+                "commit",
+                "tree",
+            },
+            ("build_inputs",): {
+                "containerfile",
+                "bounded_runtime_patch",
+                "dependency_reference",
+                "runtime_base",
+            },
+            ("build_inputs", "containerfile"): {"path", "sha256"},
+            ("build_inputs", "bounded_runtime_patch"): {"path", "sha256"},
+            ("publication",): {
+                "record",
+                "record_sha256",
+                "created",
+                "promotion_completed_at",
+                "anonymous_pull",
+                "promotion_anonymous_verification",
+                "slsa_provenance",
+            },
+            ("vulnerabilities",): {"high", "critical"},
+            ("sbom",): {
+                "format",
+                "spec_version",
+                "component_count",
+                "forbidden_component_terms",
+                "matching_component_count",
+            },
+            ("runtime_smoke",): {
+                "result",
+                "user",
+                "read_only_rootfs",
+                "capabilities_dropped",
+                "no_new_privileges",
+                "readiness_endpoint",
+                "readiness_status",
+                "raw_log_retained",
+                "sanitized_log_retained",
+            },
+            ("actions_artifacts",): {"build_input", "candidate", "final"},
+            ("actions_artifacts", "build_input"): {
+                "id",
+                "name",
+                "sha256",
+                "size",
+                "retention_days",
+            },
+            ("actions_artifacts", "candidate"): {
+                "id",
+                "name",
+                "sha256",
+                "size",
+                "retention_days",
+            },
+            ("actions_artifacts", "final"): {
+                "id",
+                "name",
+                "sha256",
+                "size",
+                "retention_days",
+            },
+            ("evidence",): {"directory", "self_manifest", "records"},
+            ("evidence", "self_manifest"): {
+                "path",
+                "sha256",
+                "size",
+                "entries",
+            },
+            ("next_boundary",): {
+                "state",
+                "atomic_peer",
+                "resident_ledger_permitted",
+                "runtime_permitted",
+            },
+        },
+        "IMAGE_EVIDENCE",
+    )
+    _expect_fields(
+        release,
+        {
+            ("schema_version",): 1,
+            ("component",): "polaris",
+            ("version",): POLARIS_VERSION,
+            ("platform",): "linux/arm64",
+            ("state",): "approved_for_atomic_admission",
+            ("admitted",): False,
+            ("reference",): POLARIS_IMAGE_REFERENCE,
+            ("digest",): POLARIS_IMAGE_DIGEST,
+            ("trusted_tag",): POLARIS_IMAGE_TRUSTED_TAG,
+            ("trusted_tag_role",): "non_authoritative_pointer",
+            (
+                "publisher_checkpoint",
+                "repository",
+            ): POLARIS_IMAGE_PUBLISHER_REPOSITORY,
+            (
+                "publisher_checkpoint",
+                "workflow",
+            ): POLARIS_IMAGE_WORKFLOW.as_posix(),
+            (
+                "publisher_checkpoint",
+                "workflow_file_sha256",
+            ): POLARIS_IMAGE_WORKFLOW_SHA256,
+            (
+                "publisher_checkpoint",
+                "ref",
+            ): POLARIS_IMAGE_PUBLISHER_REF,
+            (
+                "publisher_checkpoint",
+                "event",
+            ): POLARIS_IMAGE_PUBLISHER_TRIGGER,
+            (
+                "publisher_checkpoint",
+                "source_sha",
+            ): POLARIS_IMAGE_PUBLISHER_SOURCE_SHA,
+            (
+                "publisher_checkpoint",
+                "workflow_sha",
+            ): POLARIS_IMAGE_PUBLISHER_SOURCE_SHA,
+            (
+                "publisher_checkpoint",
+                "run_id",
+            ): POLARIS_IMAGE_PUBLISHER_RUN_ID,
+            (
+                "publisher_checkpoint",
+                "run_attempt",
+            ): POLARIS_IMAGE_PUBLISHER_RUN_ATTEMPT,
+            (
+                "publisher_checkpoint",
+                "build_contract",
+                "path",
+            ): POLARIS_CONTRACT.as_posix(),
+            (
+                "publisher_checkpoint",
+                "build_contract",
+                "sha256",
+            ): POLARIS_IMAGE_PUBLISHER_CONTRACT_SHA256,
+            (
+                "publisher_checkpoint",
+                "admission",
+                "path",
+            ): POLARIS_ADMISSION.as_posix(),
+            (
+                "publisher_checkpoint",
+                "admission",
+                "sha256",
+            ): POLARIS_IMAGE_PUBLISHER_ADMISSION_SHA256,
+            ("publisher_checkpoint", "retired"): True,
+            ("source", "record"): POLARIS_SOURCE.as_posix(),
+            ("source", "record_sha256"): POLARIS_SOURCE_SHA256,
+            ("source", "archive_sha512"): POLARIS_ARCHIVE_SHA512,
+            ("source", "commit"): POLARIS_COMMIT,
+            ("source", "tree"): POLARIS_TREE,
+            (
+                "build_inputs",
+                "containerfile",
+                "path",
+            ): POLARIS_CONTAINERFILE.as_posix(),
+            (
+                "build_inputs",
+                "containerfile",
+                "sha256",
+            ): POLARIS_CONTAINERFILE_SHA256,
+            (
+                "build_inputs",
+                "bounded_runtime_patch",
+                "path",
+            ): POLARIS_SOURCE_OVERLAY.as_posix(),
+            (
+                "build_inputs",
+                "bounded_runtime_patch",
+                "sha256",
+            ): POLARIS_SOURCE_OVERLAY_SHA256,
+            (
+                "build_inputs",
+                "dependency_reference",
+            ): POLARIS_DEPENDENCY_REFERENCE,
+            ("build_inputs", "runtime_base"): IMAGE_RUNTIME_ARM64,
+            (
+                "publication",
+                "record",
+            ): (POLARIS_IMAGE_EVIDENCE / "publication.json").as_posix(),
+            (
+                "publication",
+                "record_sha256",
+            ): "b620e2d752a93e9d0cf1a945e6ee820c0229eddb6033e2dc104086a40299d37c",
+            ("publication", "created"): POLARIS_IMAGE_CREATED,
+            (
+                "publication",
+                "promotion_completed_at",
+            ): POLARIS_IMAGE_PROMOTION_COMPLETED_AT,
+            ("publication", "anonymous_pull"): True,
+            ("publication", "promotion_anonymous_verification"): True,
+            (
+                "publication",
+                "slsa_provenance",
+            ): POLARIS_IMAGE_SLSA_PROVENANCE,
+            ("vulnerabilities", "high"): 0,
+            ("vulnerabilities", "critical"): 0,
+            ("sbom", "format"): "CycloneDX",
+            ("sbom", "spec_version"): "1.7",
+            ("sbom", "component_count"): 6_731,
+            (
+                "sbom",
+                "forbidden_component_terms",
+            ): ["hadoop", "ranger", "jetty-http"],
+            ("sbom", "matching_component_count"): 0,
+            ("runtime_smoke", "result"): "passed",
+            ("runtime_smoke", "user"): "10000:10001",
+            ("runtime_smoke", "read_only_rootfs"): True,
+            ("runtime_smoke", "capabilities_dropped"): "ALL",
+            ("runtime_smoke", "no_new_privileges"): True,
+            ("runtime_smoke", "readiness_endpoint"): "/q/health/ready",
+            ("runtime_smoke", "readiness_status"): "UP",
+            ("runtime_smoke", "raw_log_retained"): False,
+            ("runtime_smoke", "sanitized_log_retained"): False,
+            ("evidence", "directory"): POLARIS_IMAGE_EVIDENCE.as_posix(),
+            (
+                "evidence",
+                "self_manifest",
+                "path",
+            ): (POLARIS_IMAGE_EVIDENCE / "evidence.sha256").as_posix(),
+            (
+                "evidence",
+                "self_manifest",
+                "sha256",
+            ): POLARIS_IMAGE_EVIDENCE_MANIFEST_SHA256,
+            (
+                "evidence",
+                "self_manifest",
+                "size",
+            ): POLARIS_IMAGE_EVIDENCE_MANIFEST_SIZE,
+            ("evidence", "self_manifest", "entries"): 32,
+            ("next_boundary", "state"): "atomic_admission_pending",
+            (
+                "next_boundary",
+                "atomic_peer",
+            ): POSTGRES_ADMISSION.as_posix(),
+            ("next_boundary", "resident_ledger_permitted"): False,
+            ("next_boundary", "runtime_permitted"): False,
+        },
+        "IMAGE_EVIDENCE",
+    )
+    expected_actions = {
+        "build_input": {
+            "id": "8449152758",
+            "name": (
+                "polaris-1.6.0-arm64-build-input-29711984394-1"
+            ),
+            "sha256": (
+                "41a10eb6eeb46691d28c74262b3698baf14a7d9b31b0c960e4844b541ef2b657"
+            ),
+            "size": 148_344_354,
+            "retention_days": 7,
+        },
+        "candidate": {
+            "id": "8449174814",
+            "name": "polaris-1.6.0-arm64-candidate-29711984394-1",
+            "sha256": (
+                "73097c25794a8e58b46bad453236065cce39f38eece3c2647044d5cd910f98de"
+            ),
+            "size": 1_754_984,
+            "retention_days": 30,
+        },
+        "final": {
+            "id": "8449181390",
+            "name": "polaris-image-publication-29711984394-1",
+            "sha256": (
+                "97c413927e024ff5687350b75ee172a5a890e5423292ce9c6942fd1663d3121e"
+            ),
+            "size": 1_764_175,
+            "retention_days": 30,
+        },
+    }
+    _expect(
+        release.get("actions_artifacts") == expected_actions,
+        "IMAGE_EVIDENCE",
+        "GitHub Actions artifact metadata differs from the successful run",
+    )
+    return release
+
+
+def _audit_image_evidence_inventory(
+    root: Path,
+    release: Mapping[str, Any],
+) -> None:
+    records = _nested(release, "evidence", "records")
+    _expect(
+        isinstance(records, Mapping)
+        and set(records) == POLARIS_IMAGE_EVIDENCE_REQUIRED,
+        "IMAGE_EVIDENCE",
+        "release evidence payload inventory must be the exact 32-file closure",
+    )
+    directory = root / POLARIS_IMAGE_EVIDENCE
+    _expect(
+        directory.is_dir() and not directory.is_symlink(),
+        "IMAGE_EVIDENCE",
+        "retained image evidence directory is invalid",
+    )
+    actual_names: set[str] = set()
+    for path in directory.iterdir():
+        _expect(
+            path.is_file() and not path.is_symlink(),
+            "IMAGE_EVIDENCE",
+            f"retained image evidence must be a regular file: {path.name}",
+        )
+        actual_names.add(path.name)
+    _expect(
+        actual_names
+        == POLARIS_IMAGE_EVIDENCE_REQUIRED | {"evidence.sha256"},
+        "IMAGE_EVIDENCE",
+        "retained image evidence inventory must be closed",
+    )
+    observed_hashes: dict[str, str] = {}
+    for name in sorted(POLARIS_IMAGE_EVIDENCE_REQUIRED):
+        metadata = records.get(name)
+        _expect(
+            isinstance(metadata, Mapping)
+            and set(metadata) == {"sha256", "size"}
+            and isinstance(metadata.get("sha256"), str)
+            and re.fullmatch(r"[0-9a-f]{64}", metadata["sha256"])
+            is not None
+            and isinstance(metadata.get("size"), int)
+            and metadata["size"] > 0,
+            "IMAGE_EVIDENCE",
+            f"invalid release evidence metadata for {name}",
+        )
+        actual = _sha256_and_size(
+            root,
+            POLARIS_IMAGE_EVIDENCE / name,
+            "IMAGE_EVIDENCE",
+        )
+        _expect(
+            actual == (metadata["sha256"], metadata["size"]),
+            "IMAGE_EVIDENCE",
+            f"{name} differs from release-evidence.json",
+        )
+        observed_hashes[name] = actual[0]
+
+    manifest_relative = POLARIS_IMAGE_EVIDENCE / "evidence.sha256"
+    manifest_hash, manifest_size = _sha256_and_size(
+        root,
+        manifest_relative,
+        "IMAGE_EVIDENCE",
+    )
+    _expect(
+        (
+            manifest_hash,
+            manifest_size,
+        )
+        == (
+            POLARIS_IMAGE_EVIDENCE_MANIFEST_SHA256,
+            POLARIS_IMAGE_EVIDENCE_MANIFEST_SIZE,
+        ),
+        "IMAGE_EVIDENCE",
+        "publisher self-manifest differs from the reviewed artifact",
+    )
+    try:
+        lines = (root / manifest_relative).read_text(
+            encoding="utf-8"
+        ).splitlines()
+    except (OSError, UnicodeError) as error:
+        _fail("IMAGE_EVIDENCE", f"cannot read publisher self-manifest: {error}")
+    parsed: dict[str, str] = {}
+    ordered_names: list[str] = []
+    for line in lines:
+        match = re.fullmatch(r"([0-9a-f]{64})  \./([A-Za-z0-9._-]+)", line)
+        _expect(
+            match is not None,
+            "IMAGE_EVIDENCE",
+            "publisher self-manifest contains a noncanonical record",
+        )
+        assert match is not None
+        name = match.group(2)
+        _expect(
+            name not in parsed,
+            "IMAGE_EVIDENCE",
+            f"publisher self-manifest duplicates {name}",
+        )
+        parsed[name] = match.group(1)
+        ordered_names.append(name)
+    _expect(
+        set(parsed) == POLARIS_IMAGE_EVIDENCE_REQUIRED
+        and ordered_names == sorted(ordered_names)
+        and parsed == observed_hashes,
+        "IMAGE_EVIDENCE",
+        "publisher self-manifest does not close the exact payload inventory",
+    )
+
+
+def _audit_image_manifest_and_runtime(
+    root: Path,
+    release: Mapping[str, Any],
+) -> None:
+    manifest_paths = [
+        POLARIS_IMAGE_EVIDENCE / "image-manifest.json",
+        POLARIS_IMAGE_EVIDENCE / "anonymous-image-manifest.json",
+        POLARIS_IMAGE_EVIDENCE / "trusted-tag-manifest.json",
+    ]
+    try:
+        manifest_bytes = [(root / path).read_bytes() for path in manifest_paths]
+    except OSError as error:
+        _fail("IMAGE_EVIDENCE", f"cannot read retained image manifests: {error}")
+    _expect(
+        manifest_bytes[0] == manifest_bytes[1] == manifest_bytes[2],
+        "IMAGE_EVIDENCE",
+        "candidate, anonymous, and trusted-tag manifests must be byte-identical",
+    )
+    _expect(
+        hashlib.sha256(manifest_bytes[0]).hexdigest()
+        == POLARIS_IMAGE_DIGEST.removeprefix("sha256:"),
+        "IMAGE_EVIDENCE",
+        "retained manifest bytes do not equal the immutable image digest",
+    )
+    manifest = _load_json_value(
+        root,
+        manifest_paths[0],
+        "IMAGE_EVIDENCE",
+    )
+    layers = manifest.get("layers") if isinstance(manifest, Mapping) else None
+    _expect(
+        isinstance(manifest, Mapping)
+        and manifest.get("schemaVersion") == 2
+        and manifest.get("mediaType")
+        == "application/vnd.oci.image.manifest.v1+json"
+        and isinstance(manifest.get("config"), Mapping)
+        and isinstance(layers, list)
+        and len(layers) == 9
+        and all(
+            isinstance(layer, Mapping)
+            and set(layer) == {"mediaType", "digest", "size"}
+            and layer.get("mediaType")
+            == "application/vnd.oci.image.layer.v1.tar+gzip"
+            and isinstance(layer.get("digest"), str)
+            and re.fullmatch(r"sha256:[0-9a-f]{64}", layer["digest"])
+            is not None
+            and type(layer.get("size")) is int
+            and layer["size"] > 0
+            for layer in layers
+        ),
+        "IMAGE_EVIDENCE",
+        "retained OCI image manifest structure changed",
+    )
+    config_path = POLARIS_IMAGE_EVIDENCE / "image-config.json"
+    config_hash, config_size = _sha256_and_size(
+        root,
+        config_path,
+        "IMAGE_EVIDENCE",
+    )
+    _expect(
+        manifest["config"]
+        == {
+            "mediaType": "application/vnd.oci.image.config.v1+json",
+            "digest": "sha256:" + config_hash,
+            "size": config_size,
+        },
+        "IMAGE_EVIDENCE",
+        "OCI manifest does not bind the retained image config",
+    )
+    config = _load_json_value(root, config_path, "IMAGE_EVIDENCE")
+    _expect(
+        isinstance(config, Mapping)
+        and config.get("architecture") == "arm64"
+        and config.get("os") == "linux"
+        and _nested(config, "config", "User") == "10000:10001"
+        and _nested(config, "config", "Entrypoint") == ["/usr/bin/java"]
+        and _nested(config, "config", "Cmd")
+        == ["-jar", "/deployments/quarkus-run.jar"]
+        and _nested(config, "config", "WorkingDir") == "/deployments"
+        and _nested(
+            config,
+            "config",
+            "Labels",
+            "dev.shirokuma.runtime-base.arm64-digest",
+        )
+        == IMAGE_RUNTIME_ARM64.removeprefix("docker.io/library/amazoncorretto@"),
+        "IMAGE_EVIDENCE",
+        "retained image config violates platform, command, or user policy",
+    )
+    rootfs = config.get("rootfs") if isinstance(config, Mapping) else None
+    diff_ids = rootfs.get("diff_ids") if isinstance(rootfs, Mapping) else None
+    _expect(
+        isinstance(rootfs, Mapping)
+        and rootfs.get("type") == "layers"
+        and isinstance(diff_ids, list)
+        and len(diff_ids) == len(layers)
+        and all(
+            isinstance(diff_id, str)
+            and re.fullmatch(r"sha256:[0-9a-f]{64}", diff_id) is not None
+            for diff_id in diff_ids
+        ),
+        "IMAGE_EVIDENCE",
+        "retained image config rootfs layer chain changed",
+    )
+    runtime_base_path = POLARIS_IMAGE_EVIDENCE / "runtime-base-manifest.json"
+    _expect(
+        _sha256(root / runtime_base_path)
+        == IMAGE_RUNTIME_ARM64.rsplit("sha256:", 1)[1],
+        "IMAGE_EVIDENCE",
+        "runtime base manifest does not equal the pinned arm64 digest",
+    )
+    try:
+        java_version = (
+            root
+            / POLARIS_IMAGE_EVIDENCE
+            / "runtime-base-java-version.txt"
+        ).read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        _fail("IMAGE_EVIDENCE", f"cannot read runtime Java evidence: {error}")
+    _expect(
+        'openjdk version "21.0.11"' in java_version
+        and "Corretto" in java_version,
+        "IMAGE_EVIDENCE",
+        "runtime base Java evidence changed",
+    )
+
+    runtime_inspect = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "runtime-container-inspect.json",
+        "IMAGE_EVIDENCE",
+    )
+    _expect(
+        _json_equal_type_sensitive(
+            runtime_inspect,
+            {
+            "args": ["-jar", "/deployments/quarkus-run.jar"],
+            "capabilities_dropped": ["ALL"],
+            "memory_bytes": 1_610_612_736,
+            "path": "/usr/bin/java",
+            "pids_limit": 512,
+            "read_only_rootfs": True,
+            "reference": POLARIS_IMAGE_REFERENCE,
+            "schema_version": 1,
+            "security_options": ["no-new-privileges"],
+            "tmpfs": {
+                "/tmp": [
+                    "gid=10001",
+                    "mode=1777",
+                    "nodev",
+                    "nosuid",
+                    "rw",
+                    "size=64m",
+                    "uid=10000",
+                ]
+            },
+                "user": "10000:10001",
+            },
+        ),
+        "IMAGE_EVIDENCE",
+        "runtime container hardening evidence changed",
+    )
+    runtime_smoke = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "runtime-smoke.json",
+        "IMAGE_EVIDENCE",
+    )
+    _expect(
+        _json_equal_type_sensitive(
+            runtime_smoke,
+            {
+            "capabilities_dropped": "ALL",
+            "command": [
+                "/usr/bin/java",
+                "-jar",
+                "/deployments/quarkus-run.jar",
+            ],
+            "no_new_privileges": True,
+            "read_only_rootfs": True,
+            "readiness_endpoint": "/q/health/ready",
+            "readiness_status": "UP",
+            "reference": POLARIS_IMAGE_REFERENCE,
+            "result": "passed",
+            "runtime_inspect_sha256": release["evidence"]["records"][
+                "runtime-container-inspect.json"
+            ]["sha256"],
+            "schema_version": 1,
+            "tmpfs": ["/tmp"],
+                "user": "10000:10001",
+            },
+        ),
+        "IMAGE_EVIDENCE",
+        "runtime smoke evidence changed",
+    )
+    log_policy = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "runtime-smoke-log-policy.json",
+        "IMAGE_EVIDENCE",
+    )
+    _expect(
+        isinstance(log_policy, Mapping)
+        and log_policy.get("schema_version") == 1
+        and log_policy.get("result") == "passed"
+        and log_policy.get("raw_log_retained") is False
+        and log_policy.get("sanitized_log_retained") is False
+        and log_policy.get("redaction_count") == 1
+        and log_policy.get("redacted_fields")
+        == ["polaris_root_principal_credentials"],
+        "IMAGE_EVIDENCE",
+        "runtime log retention or redaction policy changed",
+    )
+    health = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "health-ready.json",
+        "IMAGE_EVIDENCE",
+    )
+    health_checks = health.get("checks") if isinstance(health, Mapping) else None
+    _expect(
+        isinstance(health, Mapping)
+        and health.get("status") == "UP"
+        and health_checks
+        == [
+            {
+                "name": "MongoDB connection health check",
+                "status": "UP",
+            },
+            {
+                "name": "Database connections health check",
+                "status": "UP",
+            },
+        ],
+        "IMAGE_EVIDENCE",
+        "retained readiness evidence is not healthy",
+    )
+
+
+def _audit_image_build_context(root: Path) -> None:
+    relative = POLARIS_IMAGE_EVIDENCE / "build-context.sha256"
+    try:
+        text = (root / relative).read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        _fail("IMAGE_EVIDENCE", f"cannot read retained build context: {error}")
+    _expect(
+        text.endswith("\n") and "\r" not in text,
+        "IMAGE_EVIDENCE",
+        "retained build-context manifest must use canonical LF records",
+    )
+    lines = text.splitlines()
+    _expect(
+        len(lines) == 450,
+        "IMAGE_EVIDENCE",
+        "retained build-context manifest must close exactly 450 files",
+    )
+    records: dict[str, str] = {}
+    paths: list[str] = []
+    for line in lines:
+        match = re.fullmatch(
+            r"([0-9a-f]{64})  ([A-Za-z0-9._+@/-]+)",
+            line,
+        )
+        _expect(
+            match is not None,
+            "IMAGE_EVIDENCE",
+            "retained build-context manifest contains a noncanonical record",
+        )
+        assert match is not None
+        digest, path = match.groups()
+        parsed = PurePosixPath(path)
+        _expect(
+            not parsed.is_absolute()
+            and parsed.as_posix() == path
+            and "." not in parsed.parts
+            and ".." not in parsed.parts
+            and path not in records,
+            "IMAGE_EVIDENCE",
+            f"retained build-context path is unsafe or duplicated: {path}",
+        )
+        allowed = (
+            path == "Containerfile"
+            or path.startswith("build/quarkus-app/")
+            or path in {"distribution/LICENSE", "distribution/NOTICE"}
+        )
+        _expect(
+            allowed,
+            "IMAGE_EVIDENCE",
+            f"retained build-context path is outside the approved closure: {path}",
+        )
+        records[path] = digest
+        paths.append(path)
+
+    def order(path: str) -> tuple[int, int, str]:
+        if path == "Containerfile":
+            return (0, 0, path)
+        if path.startswith("build/quarkus-app/"):
+            remainder = path.removeprefix("build/quarkus-app/")
+            return (1, 0 if "/" in remainder else 1, path)
+        return (2, 0, path)
+
+    _expect(
+        paths == sorted(paths, key=order),
+        "IMAGE_EVIDENCE",
+        "retained build-context paths are not in canonical order",
+    )
+    _expect(
+        records.get("Containerfile") == POLARIS_CONTAINERFILE_SHA256
+        and {
+            "build/quarkus-app/app/polaris-server-1.6.0.jar",
+            "build/quarkus-app/quarkus-run.jar",
+            "distribution/LICENSE",
+            "distribution/NOTICE",
+        }.issubset(records),
+        "IMAGE_EVIDENCE",
+        "retained build-context anchors or Containerfile hash changed",
+    )
+    forbidden_markers = ("hadoop", "ranger", "jetty-http")
+    _expect(
+        not any(
+            path.lower().endswith(".jar")
+            and any(marker in path.lower() for marker in forbidden_markers)
+            for path in paths
+        ),
+        "IMAGE_EVIDENCE",
+        "retained build-context contains a forbidden runtime JAR",
+    )
+
+
+def _audit_image_build_and_scan(
+    root: Path,
+    release: Mapping[str, Any],
+) -> None:
+    _audit_image_build_context(root)
+    publication = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "publication.json",
+        "IMAGE_EVIDENCE",
+    )
+    _expect(
+        isinstance(publication, Mapping),
+        "IMAGE_EVIDENCE",
+        "publication.json must be an object",
+    )
+    _expect_fields(
+        publication,
+        {
+            ("schema_version",): 1,
+            ("component",): "polaris",
+            ("version",): POLARIS_VERSION,
+            ("platform",): "linux/arm64",
+            ("reference",): POLARIS_IMAGE_REFERENCE,
+            ("trusted_tag",): POLARIS_IMAGE_TRUSTED_TAG,
+            ("candidate_tag",): POLARIS_IMAGE_CANDIDATE_TAG,
+            ("trusted_tag_role",): "non_authoritative_pointer",
+            ("state",): "image_evidence_review_pending",
+            ("created",): POLARIS_IMAGE_CREATED,
+            (
+                "promotion_completed_at",
+            ): POLARIS_IMAGE_PROMOTION_COMPLETED_AT,
+            ("slsa_provenance",): POLARIS_IMAGE_SLSA_PROVENANCE,
+            ("admitted",): False,
+            ("promoted",): True,
+            ("anonymous_pull",): True,
+            ("promotion_anonymous_verification",): True,
+            ("build_contract_sha256",): POLARIS_IMAGE_PUBLISHER_CONTRACT_SHA256,
+            ("admission_sha256",): POLARIS_IMAGE_PUBLISHER_ADMISSION_SHA256,
+            ("containerfile_sha256",): POLARIS_CONTAINERFILE_SHA256,
+            ("bounded_runtime_patch_sha256",): POLARIS_SOURCE_OVERLAY_SHA256,
+            ("dependency_reference",): POLARIS_DEPENDENCY_REFERENCE,
+            ("runtime_base",): IMAGE_RUNTIME_ARM64,
+            ("source_archive_sha512",): POLARIS_ARCHIVE_SHA512,
+            ("source_commit",): POLARIS_COMMIT,
+            ("workflow", "repository"): POLARIS_IMAGE_PUBLISHER_REPOSITORY,
+            ("workflow", "ref"): POLARIS_IMAGE_PUBLISHER_REF,
+            ("workflow", "event"): POLARIS_IMAGE_PUBLISHER_TRIGGER,
+            ("workflow", "source_sha"): POLARIS_IMAGE_PUBLISHER_SOURCE_SHA,
+            ("workflow", "workflow_sha"): POLARIS_IMAGE_PUBLISHER_SOURCE_SHA,
+            ("workflow", "run_id"): POLARIS_IMAGE_PUBLISHER_RUN_ID,
+            ("workflow", "run_attempt"): POLARIS_IMAGE_PUBLISHER_RUN_ATTEMPT,
+        },
+        "IMAGE_EVIDENCE",
+    )
+    _expect(
+        publication.get("input_artifact_digest")
+        == release["actions_artifacts"]["build_input"]["sha256"],
+        "IMAGE_EVIDENCE",
+        "publication does not bind the exact build-input artifact",
+    )
+
+    build_input = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "build-input.json",
+        "IMAGE_EVIDENCE",
+    )
+    _expect_fields(
+        build_input,
+        {
+            ("schema_version",): 1,
+            ("repository",): POLARIS_IMAGE_PUBLISHER_REPOSITORY,
+            ("ref",): POLARIS_IMAGE_PUBLISHER_REF,
+            ("source_sha",): POLARIS_IMAGE_PUBLISHER_SOURCE_SHA,
+            ("workflow_sha",): POLARIS_IMAGE_PUBLISHER_SOURCE_SHA,
+            ("run_id",): POLARIS_IMAGE_PUBLISHER_RUN_ID,
+            ("run_attempt",): POLARIS_IMAGE_PUBLISHER_RUN_ATTEMPT,
+            ("state",): "image_publication_pending",
+            ("admitted",): False,
+            (
+                "context_manifest_sha256",
+            ): release["evidence"]["records"]["build-context.sha256"]["sha256"],
+        },
+        "IMAGE_EVIDENCE",
+    )
+    dependency_input = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "dependency-input.json",
+        "IMAGE_EVIDENCE",
+    )
+    _expect_fields(
+        dependency_input,
+        {
+            ("schema_version",): 1,
+            ("result",): "passed",
+            ("anonymous_pull",): True,
+            ("reference",): POLARIS_DEPENDENCY_REFERENCE,
+            (
+                "manifest_sha256",
+            ): POLARIS_DEPENDENCY_MANIFEST_SHA256,
+            (
+                "descriptor_sha256",
+            ): POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+                "gradle-dependency-inputs.json"
+            ][0],
+            ("archive_sha256",): POLARIS_DEPENDENCY_ARCHIVE_SHA256,
+            (
+                "verification_metadata_sha256",
+            ): POLARIS_DEPENDENCY_EVIDENCE_RECORDS[
+                "verification-metadata.xml"
+            ][0],
+        },
+        "IMAGE_EVIDENCE",
+    )
+    source_authentication = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "source-authentication.json",
+        "IMAGE_EVIDENCE",
+    )
+    _expect_fields(
+        source_authentication,
+        {
+            ("schema_version",): 1,
+            ("result",): "passed",
+            ("archive_sha512",): POLARIS_ARCHIVE_SHA512,
+            ("source_commit",): POLARIS_COMMIT,
+            ("signing_key_fingerprint",): POLARIS_KEY_FINGERPRINT,
+        },
+        "IMAGE_EVIDENCE",
+    )
+    offline = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "offline-build.json",
+        "IMAGE_EVIDENCE",
+    )
+    _expect(
+        isinstance(offline, Mapping)
+        and offline.get("schema_version") == 1
+        and offline.get("result") == "passed"
+        and offline.get("platform") == "linux/arm64"
+        and offline.get("network") == "none"
+        and offline.get("gradle_offline") is True
+        and offline.get("dependency_verification") == "strict"
+        and offline.get("build_cache") is False
+        and offline.get("configuration_cache") is False
+        and offline.get("rerun_tasks") is True
+        and offline.get("tasks") == POLARIS_SERVER_TASKS
+        and offline.get("dependency_reference") == POLARIS_DEPENDENCY_REFERENCE
+        and _nested(offline, "bounded_runtime_patch", "sha256")
+        == POLARIS_SOURCE_OVERLAY_SHA256
+        and _nested(offline, "bounded_runtime_patch", "forbidden_runtime_jars")
+        == ["hadoop", "ranger", "jetty-http"],
+        "IMAGE_EVIDENCE",
+        "offline build or bounded-runtime proof changed",
+    )
+
+    sbom = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "polaris-1.6.0-arm64.cdx.json",
+        "IMAGE_EVIDENCE",
+    )
+    components = sbom.get("components") if isinstance(sbom, Mapping) else None
+    _expect(
+        isinstance(sbom, Mapping)
+        and sbom.get("bomFormat") == "CycloneDX"
+        and sbom.get("specVersion") == "1.7"
+        and isinstance(components, list)
+        and len(components) == 6_731,
+        "IMAGE_EVIDENCE",
+        "retained CycloneDX SBOM format or component count changed",
+    )
+    _expect(
+        _json_equal_type_sensitive(
+            _nested(sbom, "metadata", "component"),
+            {
+                "bom-ref": "fa460d203894d3b3",
+                "type": "container",
+                "name": "ghcr.io/tommykammy/shirokuma-polaris",
+                "version": POLARIS_IMAGE_DIGEST,
+            },
+        )
+        and _json_equal_type_sensitive(
+            _nested(sbom, "metadata", "tools", "components"),
+            [
+                {
+                    "type": "application",
+                    "author": "anchore",
+                    "name": "syft",
+                    "version": "1.46.0",
+                }
+            ],
+        ),
+        "IMAGE_EVIDENCE",
+        "CycloneDX metadata does not bind the exact image and Syft tool",
+    )
+    forbidden = {"hadoop", "ranger", "jetty-http"}
+    matching_components: list[str] = []
+    component_references: set[str] = set()
+    component_type_counts = {
+        "file": 0,
+        "library": 0,
+        "operating-system": 0,
+    }
+    for component in components:
+        _expect(
+            isinstance(component, Mapping),
+            "IMAGE_EVIDENCE",
+            "CycloneDX component must be an object",
+        )
+        component_type = component.get("type")
+        component_name = component.get("name")
+        component_reference = component.get("bom-ref")
+        _expect(
+            isinstance(component_type, str)
+            and component_type in {"library", "operating-system", "file"}
+            and isinstance(component_name, str)
+            and bool(component_name.strip())
+            and isinstance(component_reference, str)
+            and bool(component_reference.strip())
+            and component_reference not in component_references,
+            "IMAGE_EVIDENCE",
+            "CycloneDX component identity is incomplete or duplicated",
+        )
+        component_references.add(component_reference)
+        component_type_counts[component_type] += 1
+        if component_type == "library":
+            _expect(
+                isinstance(component.get("version"), str)
+                and bool(component["version"].strip())
+                and isinstance(component.get("purl"), str)
+                and bool(component["purl"].strip())
+                and component["purl"].startswith("pkg:"),
+                "IMAGE_EVIDENCE",
+                "CycloneDX library identity is incomplete",
+            )
+        elif component_type == "operating-system":
+            _expect(
+                component_name == "amzn"
+                and component.get("version") == "2023",
+                "IMAGE_EVIDENCE",
+                "CycloneDX operating-system identity is incomplete",
+            )
+        else:
+            _expect(
+                component_name.startswith("/"),
+                "IMAGE_EVIDENCE",
+                "CycloneDX file identity is not an absolute image path",
+            )
+            hashes = component.get("hashes")
+            hash_values = (
+                {
+                    item["alg"]: item["content"]
+                    for item in hashes
+                    if isinstance(item, Mapping)
+                    and isinstance(item.get("alg"), str)
+                    and isinstance(item.get("content"), str)
+                }
+                if isinstance(hashes, list)
+                else {}
+            )
+            _expect(
+                isinstance(hashes, list)
+                and len(hashes) == 2
+                and len(hash_values) == 2
+                and set(hash_values) == {"SHA-1", "SHA-256"}
+                and re.fullmatch(r"[0-9a-f]{40}", hash_values["SHA-1"])
+                is not None
+                and re.fullmatch(r"[0-9a-f]{64}", hash_values["SHA-256"])
+                is not None,
+                "IMAGE_EVIDENCE",
+                "CycloneDX file hashes are incomplete",
+            )
+        identity = " ".join(
+            str(component.get(field, ""))
+            for field in ("group", "name", "purl", "bom-ref")
+        ).lower()
+        if any(term in identity for term in forbidden):
+            matching_components.append(identity)
+    _expect(
+        component_type_counts
+        == {
+            "file": 6_136,
+            "library": 594,
+            "operating-system": 1,
+        },
+        "IMAGE_EVIDENCE",
+        "CycloneDX component type distribution changed",
+    )
+    _expect(
+        not matching_components,
+        "IMAGE_EVIDENCE",
+        "SBOM contains forbidden Hadoop, Ranger, or Jetty runtime components",
+    )
+    sbom_policy = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "sbom-policy.json",
+        "IMAGE_EVIDENCE",
+    )
+    _expect(
+        sbom_policy
+        == {
+            "forbidden_component_terms": [
+                "hadoop",
+                "ranger",
+                "jetty-http",
+            ],
+            "matching_components": [],
+            "result": "passed",
+            "schema_version": 1,
+        },
+        "IMAGE_EVIDENCE",
+        "retained SBOM policy result changed",
+    )
+
+    trivy = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "trivy.json",
+        "IMAGE_EVIDENCE",
+    )
+    results = trivy.get("Results") if isinstance(trivy, Mapping) else None
+    _expect(
+        isinstance(trivy, Mapping)
+        and trivy.get("SchemaVersion") == 2
+        and trivy.get("ArtifactName") == POLARIS_IMAGE_REFERENCE
+        and trivy.get("ArtifactType") == "container_image"
+        and isinstance(results, list)
+        and [
+            (
+                result.get("Target"),
+                result.get("Class"),
+                result.get("Type"),
+                (
+                    len(result["Packages"])
+                    if isinstance(result.get("Packages"), list)
+                    else None
+                ),
+            )
+            for result in results
+            if isinstance(result, Mapping)
+        ]
+        == [
+            (
+                (
+                    f"{POLARIS_IMAGE_REFERENCE} "
+                    "(amazon 2023.12.20260710 (Amazon Linux))"
+                ),
+                "os-pkgs",
+                "amazon",
+                133,
+            ),
+            ("Java", "lang-pkgs", "jar", 456),
+        ]
+        and all(
+            isinstance(result, Mapping)
+            and isinstance(result.get("Packages"), list)
+            and bool(result["Packages"])
+            and (
+                "Vulnerabilities" not in result
+                or isinstance(result.get("Vulnerabilities"), list)
+            )
+            for result in results
+        ),
+        "IMAGE_EVIDENCE",
+        "retained Trivy report does not bind the exact image and scan scopes",
+    )
+    retained_config = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "image-config.json",
+        "IMAGE_EVIDENCE",
+    )
+    metadata = trivy.get("Metadata")
+    diff_ids = _nested(retained_config, "rootfs", "diff_ids")
+    trivy_layers = metadata.get("Layers") if isinstance(metadata, Mapping) else None
+    _expect(
+        isinstance(retained_config, Mapping)
+        and isinstance(diff_ids, list)
+        and isinstance(metadata, Mapping)
+        and metadata.get("Reference") == POLARIS_IMAGE_REFERENCE
+        and metadata.get("RepoDigests") == [POLARIS_IMAGE_REFERENCE]
+        and metadata.get("ImageID")
+        == (
+            "sha256:"
+            + release["evidence"]["records"]["image-config.json"]["sha256"]
+        )
+        and metadata.get("DiffIDs") == diff_ids
+        and metadata.get("OS")
+        == {
+            "Family": "amazon",
+            "Name": "2023.12.20260710 (Amazon Linux)",
+        }
+        and _nested(metadata, "ImageConfig", "architecture")
+        == retained_config.get("architecture")
+        and _nested(metadata, "ImageConfig", "os") == retained_config.get("os")
+        and _nested(metadata, "ImageConfig", "created")
+        == retained_config.get("created")
+        and _json_equal_type_sensitive(
+            _nested(metadata, "ImageConfig", "rootfs"),
+            retained_config.get("rootfs"),
+        )
+        and _json_equal_type_sensitive(
+            _nested(metadata, "ImageConfig", "config"),
+            retained_config.get("config"),
+        )
+        and isinstance(trivy_layers, list)
+        and len(trivy_layers) == len(diff_ids)
+        and all(
+            isinstance(layer, Mapping)
+            and type(layer.get("Size")) is int
+            and layer["Size"] > 0
+            and layer.get("DiffID") == diff_id
+            for layer, diff_id in zip(trivy_layers, diff_ids)
+        ),
+        "IMAGE_EVIDENCE",
+        "retained Trivy metadata does not bind the exact OCI config and layers",
+    )
+    severities: list[str] = []
+    recognized_severities = {"UNKNOWN", "LOW", "MEDIUM", "HIGH", "CRITICAL"}
+    for result in results:
+        assert isinstance(result, Mapping)
+        packages = result["Packages"]
+        _expect(
+            all(
+                isinstance(package, Mapping)
+                and isinstance(package.get("Name"), str)
+                and bool(package["Name"].strip())
+                and isinstance(package.get("Version"), str)
+                and bool(package["Version"].strip())
+                and isinstance(package.get("Identifier"), Mapping)
+                and isinstance(package["Identifier"].get("PURL"), str)
+                and bool(package["Identifier"]["PURL"].strip())
+                and isinstance(package["Identifier"].get("UID"), str)
+                and bool(package["Identifier"]["UID"].strip())
+                for package in packages
+            ),
+            "IMAGE_EVIDENCE",
+            "retained Trivy package inventory contains incomplete identities",
+        )
+        _expect(
+            len(
+                {
+                    package["Identifier"]["UID"]
+                    for package in packages
+                }
+            )
+            == len(packages),
+            "IMAGE_EVIDENCE",
+            "retained Trivy package inventory contains duplicate identities",
+        )
+        if result["Class"] == "os-pkgs":
+            _expect(
+                len(
+                    {
+                        package["Identifier"]["PURL"]
+                        for package in packages
+                    }
+                )
+                == len(packages),
+                "IMAGE_EVIDENCE",
+                "retained Trivy OS package inventory contains duplicate PURLs",
+            )
+        else:
+            _expect(
+                all(
+                    isinstance(package.get("FilePath"), str)
+                    and bool(package["FilePath"].strip())
+                    for package in packages
+                )
+                and len(
+                    {
+                        (
+                            package["Identifier"]["PURL"],
+                            package["FilePath"],
+                        )
+                        for package in packages
+                    }
+                )
+                == len(packages),
+                "IMAGE_EVIDENCE",
+                "retained Trivy Java package inventory contains duplicate paths",
+            )
+        vulnerabilities = result.get("Vulnerabilities", [])
+        _expect(
+            isinstance(vulnerabilities, list)
+            and all(
+                isinstance(vulnerability, Mapping)
+                and isinstance(vulnerability.get("VulnerabilityID"), str)
+                and bool(vulnerability["VulnerabilityID"].strip())
+                and isinstance(vulnerability.get("PkgName"), str)
+                and bool(vulnerability["PkgName"].strip())
+                and isinstance(vulnerability.get("InstalledVersion"), str)
+                and bool(vulnerability["InstalledVersion"].strip())
+                and isinstance(vulnerability.get("Severity"), str)
+                and vulnerability["Severity"].upper() in recognized_severities
+                for vulnerability in vulnerabilities
+            ),
+            "IMAGE_EVIDENCE",
+            "retained Trivy vulnerability records are malformed",
+        )
+        severities.extend(
+            vulnerability["Severity"].upper()
+            for vulnerability in vulnerabilities
+        )
+    _expect(
+        severities.count("HIGH") == 0
+        and severities.count("CRITICAL") == 0
+        and release.get("vulnerabilities") == {"high": 0, "critical": 0},
+        "IMAGE_EVIDENCE",
+        "retained Trivy report exceeds the zero High/Critical gate",
+    )
+    trivy_version = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "trivy-version.json",
+        "IMAGE_EVIDENCE",
+    )
+    toolchain = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "toolchain.json",
+        "IMAGE_EVIDENCE",
+    )
+    _expect(
+        isinstance(trivy_version, Mapping)
+        and trivy_version.get("Version") == "0.72.0"
+        and isinstance(toolchain, Mapping)
+        and toolchain.get("trivy_version") == "v0.72.0"
+        and toolchain.get("syft_version") == "v1.46.0"
+        and toolchain.get("runner")
+        == {
+            "architecture": "aarch64",
+            "label": "ubuntu-24.04-arm",
+            "os": "Linux",
+        },
+        "IMAGE_EVIDENCE",
+        "retained scanner, SBOM, or runner toolchain changed",
+    )
+
+
+def _audit_image_sigstore_structure(
+    root: Path,
+) -> Mapping[str, Any]:
+    signature_bundle = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "cosign-signature-bundle.json",
+        "IMAGE_EVIDENCE",
+    )
+    _expect(
+        isinstance(signature_bundle, Mapping),
+        "IMAGE_EVIDENCE",
+        "retained image signature bundle must be an object",
+    )
+    signature_statement = _decode_image_dsse_statement(
+        signature_bundle,
+        "cosign-signature-bundle.json",
+    )
+    _expect_image_statement(
+        signature_statement,
+        "https://sigstore.dev/cosign/sign/v1",
+        "cosign-signature-bundle.json",
+    )
+    registry_bundles = _load_jsonl(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "registry-signature-bundles.jsonl",
+        "IMAGE_EVIDENCE",
+    )
+    _expect(
+        registry_bundles == [signature_bundle],
+        "IMAGE_EVIDENCE",
+        "registry signature download differs from the retained detached bundle",
+    )
+    verification = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "cosign-verify.json",
+        "IMAGE_EVIDENCE",
+    )
+    _expect_fields(
+        verification,
+        {
+            ("schema_version",): 1,
+            ("reference",): POLARIS_IMAGE_REFERENCE,
+            ("detached_bundle_verified",): True,
+            ("registry_signature_verified",): True,
+            (
+                "certificate_constraints",
+                "issuer",
+            ): POLARIS_IMAGE_PUBLISHER_ISSUER,
+            (
+                "certificate_constraints",
+                "identity",
+            ): POLARIS_IMAGE_PUBLISHER_IDENTITY,
+            (
+                "certificate_constraints",
+                "github_workflow_repository",
+            ): POLARIS_IMAGE_PUBLISHER_REPOSITORY,
+            (
+                "certificate_constraints",
+                "github_workflow_ref",
+            ): POLARIS_IMAGE_PUBLISHER_REF,
+            (
+                "certificate_constraints",
+                "github_workflow_sha",
+            ): POLARIS_IMAGE_PUBLISHER_SOURCE_SHA,
+            (
+                "certificate_constraints",
+                "github_workflow_trigger",
+            ): POLARIS_IMAGE_PUBLISHER_TRIGGER,
+            (
+                "registry_bundle",
+                "exact_matches",
+            ): 1,
+            (
+                "registry_bundle",
+                "bundle_sha256",
+            ): "f2d75f0812df81eb62dfc5c8ebd8fbe4b38da7cb003a85643a6aebf289c9a280",
+        },
+        "IMAGE_EVIDENCE",
+    )
+    verified_payloads = verification.get("verified_payloads")
+    _expect(
+        isinstance(verified_payloads, list)
+        and len(verified_payloads) == 1
+        and _nested(
+            verified_payloads[0],
+            "critical",
+            "identity",
+            "docker-reference",
+        )
+        == POLARIS_IMAGE_REFERENCE
+        and _nested(
+            verified_payloads[0],
+            "critical",
+            "image",
+            "docker-manifest-digest",
+        )
+        == POLARIS_IMAGE_DIGEST
+        and _nested(verified_payloads[0], "critical", "type")
+        == "https://sigstore.dev/cosign/sign/v1",
+        "IMAGE_EVIDENCE",
+        "retained registry verification payload changed",
+    )
+
+    for bundle_name, predicate_name, predicate_type in (
+        (
+            "sbom-attestation-bundle.json",
+            "polaris-1.6.0-arm64.cdx.json",
+            "https://cyclonedx.org/bom",
+        ),
+        (
+            "trivy-attestation-bundle.json",
+            "trivy.json",
+            "https://shirokuma.dev/attestations/trivy/v1",
+        ),
+    ):
+        bundle = _load_json_value(
+            root,
+            POLARIS_IMAGE_EVIDENCE / bundle_name,
+            "IMAGE_EVIDENCE",
+        )
+        _expect(
+            isinstance(bundle, Mapping),
+            "IMAGE_EVIDENCE",
+            f"{bundle_name} must be an object",
+        )
+        statement = _decode_image_dsse_statement(bundle, bundle_name)
+        _expect_image_statement(statement, predicate_type, bundle_name)
+        predicate = _load_json_value(
+            root,
+            POLARIS_IMAGE_EVIDENCE / predicate_name,
+            "IMAGE_EVIDENCE",
+        )
+        _expect(
+            statement.get("predicate") == predicate,
+            "IMAGE_EVIDENCE",
+            f"{bundle_name} does not sign the retained {predicate_name}",
+        )
+
+    slsa = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "slsa-verify.json",
+        "IMAGE_EVIDENCE",
+    )
+    promotion_slsa = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "promotion-slsa-verify.json",
+        "IMAGE_EVIDENCE",
+    )
+    _expect(
+        isinstance(slsa, list)
+        and len(slsa) == 1
+        and isinstance(slsa[0], Mapping)
+        and isinstance(promotion_slsa, list)
+        and len(promotion_slsa) == 1
+        and isinstance(promotion_slsa[0], Mapping),
+        "IMAGE_EVIDENCE",
+        "SLSA verification must contain exactly one result",
+    )
+    nested_bundle = _nested(slsa[0], "attestation", "bundle")
+    promotion_bundle = _nested(promotion_slsa[0], "attestation", "bundle")
+    _expect(
+        isinstance(nested_bundle, Mapping)
+        and nested_bundle == promotion_bundle,
+        "IMAGE_EVIDENCE",
+        "promotion did not reverify the exact retained SLSA bundle",
+    )
+    slsa_bundles = _load_jsonl(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "slsa-bundles.jsonl",
+        "IMAGE_EVIDENCE",
+    )
+    _expect(
+        slsa_bundles == [nested_bundle],
+        "IMAGE_EVIDENCE",
+        "registry SLSA download differs from the verified retained bundle",
+    )
+    slsa_statement = _decode_image_dsse_statement(
+        nested_bundle,
+        "slsa-bundles.jsonl",
+    )
+    _expect_image_statement(
+        slsa_statement,
+        "https://slsa.dev/provenance/v1",
+        "slsa-bundles.jsonl",
+    )
+    _expect(
+        _nested(
+            slsa_statement,
+            "predicate",
+            "buildDefinition",
+            "buildType",
+        )
+        == "https://actions.github.io/buildtypes/workflow/v1"
+        and _json_equal_type_sensitive(
+            _nested(
+                slsa_statement,
+                "predicate",
+                "buildDefinition",
+                "internalParameters",
+                "github",
+            ),
+            {
+                "event_name": "push",
+                "repository_id": "1289807958",
+                "repository_owner_id": "257892020",
+                "runner_environment": "github-hosted",
+            },
+        )
+        and _nested(
+            slsa_statement,
+            "predicate",
+            "runDetails",
+            "builder",
+            "id",
+        )
+        == POLARIS_IMAGE_PUBLISHER_IDENTITY
+        and _nested(
+            slsa_statement,
+            "predicate",
+            "buildDefinition",
+            "externalParameters",
+            "workflow",
+        )
+        == {
+            "path": POLARIS_IMAGE_WORKFLOW.as_posix(),
+            "ref": POLARIS_IMAGE_PUBLISHER_REF,
+            "repository": "https://github.com/TommyKammy/Shirokuma",
+        }
+        and _nested(
+            slsa_statement,
+            "predicate",
+            "buildDefinition",
+            "resolvedDependencies",
+        )
+        == [
+            {
+                "uri": (
+                    "git+https://github.com/TommyKammy/Shirokuma"
+                    "@refs/heads/main"
+                ),
+                "digest": {
+                    "gitCommit": POLARIS_IMAGE_PUBLISHER_SOURCE_SHA
+                },
+            }
+        ]
+        and _nested(
+            slsa_statement,
+            "predicate",
+            "runDetails",
+            "metadata",
+            "invocationId",
+        )
+        == (
+            "https://github.com/TommyKammy/Shirokuma/actions/runs/"
+            f"{POLARIS_IMAGE_PUBLISHER_RUN_ID}/attempts/"
+            f"{POLARIS_IMAGE_PUBLISHER_RUN_ATTEMPT}"
+        ),
+        "IMAGE_EVIDENCE",
+        "SLSA provenance does not bind the exact workflow run and commit",
+    )
+    _expect(
+        _nested(slsa[0], "verificationResult", "statement")
+        == slsa_statement
+        and _nested(promotion_slsa[0], "verificationResult", "statement")
+        == slsa_statement,
+        "IMAGE_EVIDENCE",
+        "SLSA verification result differs from its signed statement",
+    )
+    promotion_cosign = _load_json_value(
+        root,
+        POLARIS_IMAGE_EVIDENCE / "promotion-cosign-verify.json",
+        "IMAGE_EVIDENCE",
+    )
+    expected_types = {
+        "https://sigstore.dev/cosign/sign/v1",
+        "https://slsa.dev/provenance/v1",
+        "https://cyclonedx.org/bom",
+        "https://shirokuma.dev/attestations/trivy/v1",
+    }
+    _expect(
+        isinstance(promotion_cosign, list)
+        and len(promotion_cosign) == 4
+        and {
+            _nested(item, "critical", "type")
+            for item in promotion_cosign
+            if isinstance(item, Mapping)
+        }
+        == expected_types
+        and all(
+            _nested(
+                item,
+                "critical",
+                "identity",
+                "docker-reference",
+            )
+            == POLARIS_IMAGE_REFERENCE
+            and _nested(
+                item,
+                "critical",
+                "image",
+                "docker-manifest-digest",
+            )
+            == POLARIS_IMAGE_DIGEST
+            for item in promotion_cosign
+            if isinstance(item, Mapping)
+        ),
+        "IMAGE_EVIDENCE",
+        "promotion verification does not bind every required predicate",
+    )
+    return nested_bundle
+
+
+def _reverify_image_sigstore_cryptographically(
+    root: Path,
+    slsa_bundle: Mapping[str, Any],
+) -> None:
+    try:
+        version = subprocess.run(
+            ["cosign", "version"],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        _fail("IMAGE_EVIDENCE", f"cannot inspect Cosign: {error}")
+    _expect(
+        version.returncode == 0
+        and re.search(r"(?m)^GitVersion:\s+v3\.1\.1\s*$", version.stdout)
+        is not None,
+        "IMAGE_EVIDENCE",
+        "Cosign 3.1.1 is required for retained image evidence",
+    )
+    common = [
+        "--certificate-identity",
+        POLARIS_IMAGE_PUBLISHER_IDENTITY,
+        "--certificate-oidc-issuer",
+        POLARIS_IMAGE_PUBLISHER_ISSUER,
+        "--certificate-github-workflow-repository",
+        POLARIS_IMAGE_PUBLISHER_REPOSITORY,
+        "--certificate-github-workflow-ref",
+        POLARIS_IMAGE_PUBLISHER_REF,
+        "--certificate-github-workflow-sha",
+        POLARIS_IMAGE_PUBLISHER_SOURCE_SHA,
+        "--certificate-github-workflow-trigger",
+        POLARIS_IMAGE_PUBLISHER_TRIGGER,
+    ]
+    manifest = POLARIS_IMAGE_EVIDENCE / "image-manifest.json"
+    _run_cosign(
+        root,
+        [
+            "verify-blob",
+            "--bundle",
+            (
+                POLARIS_IMAGE_EVIDENCE
+                / "cosign-signature-bundle.json"
+            ).as_posix(),
+            *common,
+            manifest.as_posix(),
+        ],
+        "retained image signature-bundle verification",
+        code="IMAGE_EVIDENCE",
+    )
+    _run_cosign(
+        root,
+        ["verify", *common, POLARIS_IMAGE_REFERENCE],
+        "authoritative registry image verification",
+        code="IMAGE_EVIDENCE",
+    )
+    for bundle_name, cli_type in (
+        ("sbom-attestation-bundle.json", "cyclonedx"),
+        (
+            "trivy-attestation-bundle.json",
+            "https://shirokuma.dev/attestations/trivy/v1",
+        ),
+    ):
+        _run_cosign(
+            root,
+            [
+                "verify-blob-attestation",
+                "--bundle",
+                (POLARIS_IMAGE_EVIDENCE / bundle_name).as_posix(),
+                "--type",
+                cli_type,
+                *common,
+                manifest.as_posix(),
+            ],
+            f"retained {bundle_name} verification",
+            code="IMAGE_EVIDENCE",
+        )
+    with tempfile.TemporaryDirectory(
+        prefix="polaris-image-slsa-bundle-"
+    ) as directory:
+        bundle_path = Path(directory) / "bundle.json"
+        try:
+            bundle_path.write_text(
+                json.dumps(slsa_bundle, separators=(",", ":")),
+                encoding="utf-8",
+            )
+        except OSError as error:
+            _fail(
+                "IMAGE_EVIDENCE",
+                f"cannot stage retained image SLSA bundle: {error}",
+            )
+        _run_cosign(
+            root,
+            [
+                "verify-blob-attestation",
+                "--bundle",
+                bundle_path.as_posix(),
+                "--type",
+                "slsaprovenance1",
+                *common,
+                manifest.as_posix(),
+            ],
+            "retained image SLSA-bundle verification",
+            code="IMAGE_EVIDENCE",
+        )
+
+
+def _audit_image_publication_evidence(
+    root: Path,
+    image_crypto_verifier: ImageCryptoVerifier,
+) -> Mapping[str, Any]:
+    release = _audit_image_release_record(root)
+    _audit_image_evidence_inventory(root, release)
+    _audit_image_manifest_and_runtime(root, release)
+    _audit_image_build_and_scan(root, release)
+    slsa_bundle = _audit_image_sigstore_structure(root)
+    image_crypto_verifier(root, slsa_bundle)
+    return release
 
 
 def _audit_postgres_admission(root: Path) -> Mapping[str, Any]:
@@ -5549,7 +7086,7 @@ def _audit_runtime_absence(root: Path) -> None:
 
 
 def audit_publication_bootstrap(root: Path) -> None:
-    """Validate immutable publication policy before third-party tooling runs."""
+    """Validate the retired publisher and post-publication contract statically."""
 
     root = root.resolve()
     _audit_source(root)
@@ -5561,12 +7098,15 @@ def audit(
     root: Path,
     *,
     dependency_crypto_verifier: Optional[DependencyCryptoVerifier] = None,
+    image_crypto_verifier: Optional[ImageCryptoVerifier] = None,
 ) -> None:
     root = root.resolve()
     if dependency_crypto_verifier is None:
         dependency_crypto_verifier = (
             _reverify_dependency_sigstore_cryptographically
         )
+    if image_crypto_verifier is None:
+        image_crypto_verifier = _reverify_image_sigstore_cryptographically
     _audit_source(root)
     contract = _audit_contract(root)
     _audit_polaris_admission(root)
@@ -5575,6 +7115,7 @@ def audit(
         contract,
         dependency_crypto_verifier,
     )
+    _audit_image_publication_evidence(root, image_crypto_verifier)
     _audit_postgres_admission(root)
     _audit_pending_files(root)
     _audit_retained_pending_evidence(root)
@@ -5605,14 +7146,15 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if args.command == "audit-publication-bootstrap":
         print(
-            "polaris-trusted-image: static publication policy is bound; "
+            "polaris-trusted-image: retired publisher and evidence contract "
+            "are bound; "
             "cryptographic evidence remains unverified"
         )
         return 0
     print(
-        "polaris-trusted-image: dependency snapshot is approved for the "
-        "main-only image publisher; image evidence, admission, and runtime "
-        "remain fail-closed"
+        "polaris-trusted-image: retained image evidence is approved for "
+        "atomic Polaris/PostgreSQL admission; admission and runtime remain "
+        "fail-closed"
     )
     return 0
 

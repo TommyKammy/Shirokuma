@@ -1,11 +1,11 @@
 {
-  "schema_version": 5,
+  "schema_version": 6,
   "component": "polaris",
   "version": "1.6.0",
   "platform": "linux/arm64",
   "lifecycle": {
-    "state": "image_publication_pending",
-    "next_state": "image_evidence_review_pending"
+    "state": "atomic_admission_pending",
+    "next_state": "runtime_acceptance_pending"
   },
   "source": {
     "record": "bootstrap/polaris/v1.6.0/source.json",
@@ -180,10 +180,16 @@
     }
   },
   "image_publication": {
-    "state": "pending_main_publication",
-    "enabled": true,
+    "state": "approved_for_atomic_admission",
+    "enabled": false,
     "repository": "ghcr.io/tommykammy/shirokuma-polaris",
     "trusted_tag": "1.6.0-arm64",
+    "reference": "ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+    "digest": "sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+    "release_evidence": {
+      "path": "bootstrap/polaris/v1.6.0/release-evidence.json",
+      "sha256": "ead3a652f8b48d5a4643dbc124b57b8faeb722d851d6aa733f91c40db531e5f8"
+    },
     "containerfile": {
       "path": "bootstrap/polaris/v1.6.0/Containerfile",
       "sha256": "e2aea29a93ac4369fc558c2161966fa48e3061238cc41ae849788f8e8e4cfea8"
@@ -242,12 +248,20 @@
       "quarantine_before_promotion": true,
       "anonymous_exact_digest_verification": true,
       "credential_fallback_permitted": false,
-      "release_evidence_committed": false,
+      "release_evidence_committed": true,
       "admission_permitted": false
     },
     "workflow": {
       "path": ".github/workflows/polaris-arm64.yml",
-      "sha256": "50e0a0407cd65accdd573cf85637d7ccec97774aeecf569d8b5c9acc6b502b5d"
+      "sha256": "50e0a0407cd65accdd573cf85637d7ccec97774aeecf569d8b5c9acc6b502b5d",
+      "repository": "TommyKammy/Shirokuma",
+      "ref": "refs/heads/main",
+      "event": "push",
+      "source_sha": "706575ba3f21987033a29b6d21367981e9c54e3e",
+      "workflow_sha": "706575ba3f21987033a29b6d21367981e9c54e3e",
+      "run_id": "29711984394",
+      "run_attempt": "1",
+      "retired": true
     }
   },
   "transparency_log": {
@@ -279,7 +293,7 @@
     }
   },
   "evidence": {
-    "directory": "candidate-evidence",
+    "directory": "bootstrap/polaris/v1.6.0/image-evidence",
     "candidate_required": [
       "anonymous-image-manifest.json",
       "builder-metadata.json",
@@ -316,6 +330,11 @@
       "publication.json",
       "trusted-tag-manifest.json"
     ],
+    "self_manifest": {
+      "path": "bootstrap/polaris/v1.6.0/image-evidence/evidence.sha256",
+      "sha256": "5aac29c01f28f410a6e564b87cd2748eeef1204341a8373934491d29b21564d7",
+      "entries": 32
+    },
     "actions_artifact_role": "retained mirror only",
     "candidate_retention_days": 30,
     "final_retention_days": 30

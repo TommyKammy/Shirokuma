@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-20
-version: "1.4"
+version: "1.5"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -234,10 +234,13 @@ exception. A local fresh network-none build, Java 21 check, High=0/Critical=0
 scan, and non-root read-only readiness smoke passed; only the main run may
 produce reviewable publication evidence.
 
-Polaris image release evidence, resident-image entries, and runtime manifests
-remain absent and forbidden at this checkpoint. Overall admission stays
-blocked. A successful main publication must be followed by a separate
-image-evidence-only review, then atomic Polaris/PostgreSQL admission.
+Polaris image release evidence is retained at
+`bootstrap/polaris/v1.6.0/image-evidence/` and the write-capable publisher is
+retired. This checkpoint advances the contract to `atomic_admission_pending`
+and marks only the exact image digest as `approved_for_atomic_admission`.
+Overall admission remains blocked: no Polaris resident-image entry or runtime
+manifest is permitted until the exact PostgreSQL evidence is reviewed and the
+two components pass atomic admission together.
 
 Within `caches/modules-2/files-2.1`, the checksum directory follows Gradle
 9.6's canonical artifact-store rule: SHA-1 is lowercase hexadecimal with every
@@ -375,6 +378,22 @@ short-lived candidate artifact expires. Runtime evidence likewise retains raw
 Docker inspect output and reconciles the effective user, command, read-only
 root, tmpfs mounts, dropped capabilities, security option, and resource limits
 instead of trusting a self-asserted smoke-test summary.
+For Polaris 1.6.0, main run `29711984394`, attempt `1`, from reviewed main
+commit `706575ba3f21987033a29b6d21367981e9c54e3e` published and promoted
+`ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e`.
+The mutable `1.6.0-arm64` tag remains a non-authoritative pointer. Final
+artifact `polaris-image-publication-29711984394-1` (artifact ID `8449181390`,
+Actions digest
+`sha256:97c413927e024ff5687350b75ee172a5a890e5423292ce9c6942fd1663d3121e`)
+contained 33 files; its 32-entry `evidence.sha256` manifest reverified without
+mismatch before the files were fixed in Git. Unlike the SeaweedFS checkpoint
+above, the Polaris set excludes the raw smoke log and raw container inspect
+because those surfaces can expose temporary credentials; it retains a
+secret-scanned log policy and an allowlisted hardening projection instead. The
+retained publication record has `promoted=true`, `admitted=false`, and
+`state=image_evidence_review_pending`. Evidence review advances the repository
+state to `atomic_admission_pending`, retires the publisher, and does not
+authorize resident or runtime use.
 
 ## Resident image and SBOM evidence
 

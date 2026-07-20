@@ -2,10 +2,10 @@
 project: Shirokuma
 doc_id: "ADR-0021"
 title: "Adopt a source-built Polaris 1.6.0 and signed PostgreSQL metadata store"
-status: proposed
+status: accepted
 created: 2026-07-16
 updated: 2026-07-20
-version: "0.2"
+version: "0.3"
 area: "architecture"
 tags: [shirokuma, adr, polaris, postgresql, arm64, supply-chain]
 ---
@@ -48,6 +48,13 @@ OIDC issuer. A focused Trivy 0.72.0 scan reported High=0 and Critical=0.
 
 These observations select build paths; they are not resident admission by
 themselves. Durable evidence and repository verification remain authoritative.
+Reviewed main run `29711984394`, attempt `1`, subsequently published
+`ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e`
+from commit `706575ba3f21987033a29b6d21367981e9c54e3e`. Final artifact
+`polaris-image-publication-29711984394-1` (ID `8449181390`) passed its 32-entry
+evidence manifest, High=0/Critical=0 scan, and non-root read-only smoke. These
+results establish the exact Polaris candidate; they still do not authorize a
+resident image or runtime.
 
 ## Decision
 
@@ -78,6 +85,11 @@ themselves. Durable evidence and repository verification remain authoritative.
   may introduce a closed, runtime-disabled build contract. Only a successful
   `refs/heads/main` publication followed by an evidence-only review may approve
   the Polaris digest.
+- Retain the reviewed final publication set under
+  `bootstrap/polaris/v1.6.0/image-evidence/`, mark the exact digest
+  `approved_for_atomic_admission`, advance the lifecycle to
+  `atomic_admission_pending`, and retire the write-capable publisher. The
+  mutable `1.6.0-arm64` tag is only a non-authoritative pointer.
 - Do not add Polaris, PostgreSQL, catalog bootstrap, or credential manifests
   while either image is pending. Missing evidence fails closed.
 - Keep PostgreSQL credentials and the SeaweedFS application credentials in the
@@ -103,6 +115,12 @@ WP-L1-LAKE-002 remains incomplete until both exact digests enter
 `shirokuma-object-storage`, and live Ready plus catalog create/list/read evidence
 is recorded.
 
+The retained Polaris image is approved only as one half of a future atomic
+admission. The evidence-only checkpoint leaves admission, resident-ledger
+permission, runtime manifests, and credentials blocked. PostgreSQL exact image
+evidence and the combined Polaris/PostgreSQL admission review are the next
+permitted changes. Issue #61 remains Open through runtime acceptance.
+
 ## Verification
 
 The source-build checkpoint must pass:
@@ -113,18 +131,22 @@ The source-build checkpoint must pass:
     python3 scripts/verify_design_context.py
     make verify-security
 
-The later admission checkpoint must additionally pass the repository trusted
-image verifier using pinned Cosign and the retained evidence. The later runtime
-checkpoint owns `make verify`, `make verify-gitops-bootstrap`, and live
-`make gitops-status` evidence.
+The evidence-only checkpoint must pass the repository trusted-image verifier
+using pinned Cosign against every retained bundle and the exact main workflow
+identity. The later atomic admission checkpoint must additionally bind the
+reviewed PostgreSQL evidence, both exact digests, and the resident-image record
+in one change. The later runtime checkpoint owns `make verify`,
+`make verify-gitops-bootstrap`, and live `make gitops-status` evidence.
 
 ## Rollback
 
-Before runtime admission, revert this ADR and its build contract; no cluster or
-metadata state exists to recover. After admission, remove or revoke the affected
-digest and evidence, keep runtime manifests blocked, and rebuild only from the
-accepted source or re-resolved signed PostgreSQL image. After deployment, take
-the documented PostgreSQL backup before reverting Flux resources.
+Before atomic admission, revert the evidence checkpoint, withdraw
+`approved_for_atomic_admission`, and keep the retired publisher and runtime
+manifests absent; no cluster or metadata state exists to recover. After
+admission, remove or revoke the affected digest and evidence, keep runtime
+manifests blocked, and rebuild only from the accepted source or re-resolved
+signed PostgreSQL image. After deployment, take the documented PostgreSQL
+backup before reverting Flux resources.
 
 ## Related
 

@@ -1,0 +1,13 @@
+{
+    "status": "UP",
+    "checks": [
+        {
+            "name": "MongoDB connection health check",
+            "status": "UP"
+        },
+        {
+            "name": "Database connections health check",
+            "status": "UP"
+        }
+    ]
+}

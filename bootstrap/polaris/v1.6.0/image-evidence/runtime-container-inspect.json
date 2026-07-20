@@ -1,0 +1,30 @@
+{
+  "args": [
+    "-jar",
+    "/deployments/quarkus-run.jar"
+  ],
+  "capabilities_dropped": [
+    "ALL"
+  ],
+  "memory_bytes": 1610612736,
+  "path": "/usr/bin/java",
+  "pids_limit": 512,
+  "read_only_rootfs": true,
+  "reference": "ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+  "schema_version": 1,
+  "security_options": [
+    "no-new-privileges"
+  ],
+  "tmpfs": {
+    "/tmp": [
+      "gid=10001",
+      "mode=1777",
+      "nodev",
+      "nosuid",
+      "rw",
+      "size=64m",
+      "uid=10000"
+    ]
+  },
+  "user": "10000:10001"
+}

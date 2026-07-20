@@ -1,0 +1,10 @@
+{
+  "anonymous_pull": true,
+  "archive_sha256": "18933bfb895c267302f1ee1c80cfb9712eac736ffcefade48dac53f79e8e3bc0",
+  "descriptor_sha256": "3bab7b055d29be1bc59f2fe605960f49bbceee2639ad68086822c62ee8533841",
+  "manifest_sha256": "fa889d2c0a6e6dc48816d79680a366e21040be333ab6007b88e4ca4dbf6e59d6",
+  "reference": "ghcr.io/tommykammy/shirokuma-polaris-gradle-dependencies@sha256:fa889d2c0a6e6dc48816d79680a366e21040be333ab6007b88e4ca4dbf6e59d6",
+  "result": "passed",
+  "schema_version": 1,
+  "verification_metadata_sha256": "b8b1fa91bc9d98eaf676dbab76c5452411fcdf6b11a8c9959c131799c71deaf2"
+}

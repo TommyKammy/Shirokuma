@@ -26,8 +26,32 @@ dependency lifecycle. No remaining workflow may republish or replace this
 snapshot. This checkpoint does not authorize a Polaris image, resident-ledger
 entry, credentials, deployment, or runtime manifest.
 
-After this evidence-only review merges, the next permitted step is a separate
-main-only Polaris image publication. Image admission still requires its own
-evidence-only review, including the immutable image manifest, keyless signature,
-SLSA provenance, CycloneDX SBOM, Trivy result, pinned toolchain, and non-root
-read-only runtime smoke. Polaris and PostgreSQL admission must remain atomic.
+The separate main-only Polaris image publication completed in run
+`29711984394` from commit
+`706575ba3f21987033a29b6d21367981e9c54e3e`. Its evidence is retained under
+`bootstrap/polaris/v1.6.0/image-evidence/` so its filenames cannot collide with
+this dependency checkpoint.
+
+## Polaris image evidence checkpoint
+
+The immutable review candidate is
+`ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e`.
+The durable image checkpoint is an exact 33-file closed set:
+`bootstrap/polaris/v1.6.0/release-evidence.json` binds the publisher run,
+historical contract and admission hashes, GitHub Actions artifacts, and the
+exact 32-file payload inventory. The publisher-generated `evidence.sha256`
+self-manifest is retained as the 33rd file and is checked independently against
+that same closed payload set.
+The retained `publication.json` records `promoted=true` and `admitted=false`.
+
+The retained checks prove anonymous exact-digest retrieval, native
+`linux/arm64`, keyless signature and SLSA identity at the exact publisher
+commit, CycloneDX SBOM, zero High/Critical Trivy findings, bounded runtime
+contents, and a non-root/read-only/capability-dropped smoke. Raw and sanitized
+runtime logs are deliberately absent; only the reviewed redaction policy record
+is retained.
+
+The image publisher is retired in this evidence-only change. The checkpoint
+advances only to `atomic_admission_pending`: the image remains
+`admitted=false`, no resident-ledger or runtime manifest is permitted, and
+Polaris must not be admitted separately from PostgreSQL.

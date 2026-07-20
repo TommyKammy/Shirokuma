@@ -1,0 +1,10 @@
+{
+  "forbidden_component_terms": [
+    "hadoop",
+    "ranger",
+    "jetty-http"
+  ],
+  "matching_components": [],
+  "result": "passed",
+  "schema_version": 1
+}

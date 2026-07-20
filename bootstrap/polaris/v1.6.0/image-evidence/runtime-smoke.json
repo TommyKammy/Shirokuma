@@ -1,0 +1,20 @@
+{
+  "capabilities_dropped": "ALL",
+  "command": [
+    "/usr/bin/java",
+    "-jar",
+    "/deployments/quarkus-run.jar"
+  ],
+  "no_new_privileges": true,
+  "read_only_rootfs": true,
+  "readiness_endpoint": "/q/health/ready",
+  "readiness_status": "UP",
+  "reference": "ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+  "result": "passed",
+  "runtime_inspect_sha256": "1ccf6f8b674a3207e42f1c474606d2de50369b3ea65baf0b9204e260b41dfbd6",
+  "schema_version": 1,
+  "tmpfs": [
+    "/tmp"
+  ],
+  "user": "10000:10001"
+}

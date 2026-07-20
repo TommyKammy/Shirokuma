@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "reference": "ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+  "certificate_constraints": {
+    "issuer": "https://token.actions.githubusercontent.com",
+    "identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/polaris-arm64.yml@refs/heads/main",
+    "github_workflow_name": "Polaris 1.6.0 trusted arm64 image publication",
+    "github_workflow_repository": "TommyKammy/Shirokuma",
+    "github_workflow_ref": "refs/heads/main",
+    "github_workflow_sha": "706575ba3f21987033a29b6d21367981e9c54e3e",
+    "github_workflow_trigger": "push"
+  },
+  "detached_bundle_verified": true,
+  "registry_signature_verified": true,
+  "registry_bundle": {
+    "file": "registry-signature-bundles.jsonl",
+    "exact_matches": 1,
+    "bundle_sha256": "f2d75f0812df81eb62dfc5c8ebd8fbe4b38da7cb003a85643a6aebf289c9a280"
+  },
+  "transparency_log": {
+    "base_url": "https://rekor.sigstore.dev",
+    "major_api_version": 1,
+    "entry_lookup": "/api/v1/log/entries?logIndex=2204691364"
+  },
+  "verified_payloads": [
+    {
+      "critical": {
+        "identity": {
+          "docker-reference": "ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e"
+        },
+        "image": {
+          "docker-manifest-digest": "sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e"
+        },
+        "type": "https://sigstore.dev/cosign/sign/v1"
+      },
+      "optional": {}
+    }
+  ],
+  "rekor_entries": [
+    {
+      "uuid": "108e9186e8c5677a0df9da287c3405ecf6ca6b4e54205eba43aed824d687cb076ddb3decc156f968",
+      "log_index": "2204691364",
+      "integrated_time": "1784513681",
+      "log_id": "wNI9atQGlz+VWfO6LRygH4QUfY/8W4RFwiT5i5WRgB0=",
+      "log_id_hex": "c0d23d6ad406973f9559f3ba2d1ca01f84147d8ffc5b8445c224f98b9591801d"
+    }
+  ]
+}

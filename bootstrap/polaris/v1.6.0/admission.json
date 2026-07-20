@@ -1,14 +1,14 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "component": "polaris",
   "version": "1.6.0",
   "platform": "linux/arm64",
   "admission": "blocked",
-  "state": "image_publication_pending",
+  "state": "atomic_admission_pending",
   "source_record": "bootstrap/polaris/v1.6.0/source.json",
   "source_record_sha256": "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb",
   "build_contract": "bootstrap/polaris/v1.6.0/trusted-build-contract.json",
-  "build_contract_sha256": "8625191c6a186880d7ec7a596667b047881170e987527c5987a5ee87285b83f8",
+  "build_contract_sha256": "e2d277bcd747fb7a880f83d4f18973696dc334c3c9bc6e2726bd8b305a64b664",
   "dependency_snapshot": {
     "state": "approved_for_image_build",
     "admitted": false,
@@ -31,15 +31,31 @@
   },
   "planned_candidate": {
     "repository": "ghcr.io/tommykammy/shirokuma-polaris",
-    "reference": null,
-    "release_evidence": null
+    "reference": "ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+    "release_evidence": {
+      "path": "bootstrap/polaris/v1.6.0/release-evidence.json",
+      "sha256": "ead3a652f8b48d5a4643dbc124b57b8faeb722d851d6aa733f91c40db531e5f8"
+    }
   },
   "image_publication": {
-    "state": "pending_main_publication",
-    "enabled": true,
+    "state": "approved_for_atomic_admission",
+    "enabled": false,
     "admitted": false,
+    "reference": "ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+    "digest": "sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
     "containerfile": "bootstrap/polaris/v1.6.0/Containerfile",
-    "workflow": ".github/workflows/polaris-arm64.yml"
+    "release_evidence": {
+      "path": "bootstrap/polaris/v1.6.0/release-evidence.json",
+      "sha256": "ead3a652f8b48d5a4643dbc124b57b8faeb722d851d6aa733f91c40db531e5f8"
+    },
+    "workflow": {
+      "path": ".github/workflows/polaris-arm64.yml",
+      "sha256": "50e0a0407cd65accdd573cf85637d7ccec97774aeecf569d8b5c9acc6b502b5d",
+      "source_sha": "706575ba3f21987033a29b6d21367981e9c54e3e",
+      "run_id": "29711984394",
+      "run_attempt": "1",
+      "retired": true
+    }
   },
   "resident_ledger": {
     "permitted": false,
@@ -64,16 +80,16 @@
     },
     {
       "id": "POLARIS-IMAGE-MAIN-PUBLICATION",
-      "state": "pending"
+      "state": "satisfied"
     },
     {
       "id": "POLARIS-IMAGE-EVIDENCE-REVIEW",
-      "state": "pending"
+      "state": "satisfied"
     },
     {
       "id": "POLARIS-POSTGRES-ATOMIC-ADMISSION",
       "state": "pending"
     }
   ],
-  "next_action": "merge-image-publication-policy-and-run-main-publisher"
+  "next_action": "atomically-admit-polaris-and-postgresql"
 }
