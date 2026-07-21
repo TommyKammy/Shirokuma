@@ -1,0 +1,90 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: polaris-bootstrap
+  namespace: shirokuma-dev
+  labels:
+    app.kubernetes.io/name: polaris
+    app.kubernetes.io/component: catalog-bootstrap
+    app.kubernetes.io/part-of: shirokuma
+spec:
+  activeDeadlineSeconds: 600
+  backoffLimit: 6
+  template:
+    metadata:
+      annotations:
+        shirokuma.dev/polaris-credential-generation: "${POLARIS_CREDENTIAL_GENERATION}"
+      labels:
+        app.kubernetes.io/name: polaris
+        app.kubernetes.io/component: catalog-bootstrap
+        app.kubernetes.io/part-of: shirokuma
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10000
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: polaris-admin
+          image: ghcr.io/tommykammy/shirokuma-polaris-admin@sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd
+          imagePullPolicy: IfNotPresent
+          args:
+            - bootstrap
+            - --credentials-file=/var/run/secrets/shirokuma/polaris/credentials.json
+          env:
+            - name: POLARIS_PERSISTENCE_TYPE
+              value: relational-jdbc
+            - name: POLARIS_REALM_CONTEXT_REALMS
+              value: POLARIS
+            - name: QUARKUS_DATASOURCE_DB_KIND
+              value: postgresql
+            - name: QUARKUS_DATASOURCE_JDBC_URL
+              value: jdbc:postgresql://polaris-postgresql.shirokuma-dev.svc.cluster.local:5432/polaris
+            - name: QUARKUS_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: polaris-postgresql-credentials
+                  key: username
+            - name: QUARKUS_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: polaris-postgresql-credentials
+                  key: password
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10000
+            runAsGroup: 10001
+          volumeMounts:
+            - name: credentials
+              mountPath: /var/run/secrets/shirokuma/polaris
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: credentials
+          secret:
+            secretName: polaris-root-credentials
+            defaultMode: 0440
+            items:
+              - key: credentials.json
+                path: credentials.json
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi

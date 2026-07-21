@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: polaris
+  namespace: shirokuma-dev
+  labels:
+    app.kubernetes.io/name: polaris
+    app.kubernetes.io/component: catalog-server
+    app.kubernetes.io/part-of: shirokuma
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: polaris
+      app.kubernetes.io/component: catalog-server
+  template:
+    metadata:
+      annotations:
+        shirokuma.dev/polaris-credential-generation: "${POLARIS_CREDENTIAL_GENERATION}"
+      labels:
+        app.kubernetes.io/name: polaris
+        app.kubernetes.io/component: catalog-server
+        app.kubernetes.io/part-of: shirokuma
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10000
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: polaris
+          image: ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POLARIS_PERSISTENCE_TYPE
+              value: relational-jdbc
+            - name: POLARIS_REALM_CONTEXT_REALMS
+              value: POLARIS
+            - name: QUARKUS_DATASOURCE_DB_KIND
+              value: postgresql
+            - name: QUARKUS_DATASOURCE_JDBC_URL
+              value: jdbc:postgresql://polaris-postgresql.shirokuma-dev.svc.cluster.local:5432/polaris
+            - name: QUARKUS_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: polaris-postgresql-credentials
+                  key: username
+            - name: QUARKUS_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: polaris-postgresql-credentials
+                  key: password
+          ports:
+            - name: http
+              containerPort: 8181
+              protocol: TCP
+            - name: management
+              containerPort: 8182
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /q/health/started
+              port: management
+            failureThreshold: 30
+            periodSeconds: 2
+            timeoutSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: management
+            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: management
+            initialDelaySeconds: 30
+            failureThreshold: 3
+            periodSeconds: 30
+            timeoutSeconds: 2
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10000
+            runAsGroup: 10001
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi

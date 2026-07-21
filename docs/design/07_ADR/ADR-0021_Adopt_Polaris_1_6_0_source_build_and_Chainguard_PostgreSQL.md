@@ -5,7 +5,7 @@ title: "Adopt a source-built Polaris 1.6.0 and signed PostgreSQL metadata store"
 status: accepted
 created: 2026-07-16
 updated: 2026-07-21
-version: "0.14"
+version: "0.16"
 area: "architecture"
 tags: [shirokuma, adr, polaris, postgresql, arm64, supply-chain]
 ---
@@ -302,6 +302,29 @@ the Admin Tool's credential-file input. Credentials in command arguments,
 generated credentials printed to logs, image layers, publication evidence, or
 server-side relational auto-bootstrap do not satisfy this decision.
 
+The runtime activation decision is a static desired-state boundary after PR #92
+merged the independent Admin admission as
+`47ce8ad6b58f1ab5f0d7c12e5813125804b7651c`. OpenTofu owns two external
+Secrets in `shirokuma-dev`: one for PostgreSQL connection material and one
+for the Polaris root credential file. Flux orders
+`shirokuma-object-storage`, the PostgreSQL StatefulSet, the bounded Admin
+bootstrap Job, and the Polaris Deployment through three bounded
+`Kustomization.spec.dependsOn` edges with explicit health checks. The Job
+mounts only `credentials.json` read-only with mode `0440` and invokes only
+`bootstrap --credentials-file=...`; singular credential arguments, realm
+arguments, and credential output remain forbidden. The hash-closed
+`security/polaris-runtime-activation.json` state is
+`runtime_acceptance_pending`. It does not claim live Flux readiness, catalog
+API success, backup/restore, rollback, teardown, or Issue #61 completion.
+The Flux root explicitly lists the three catalog Kustomizations. A reviewed
+`polaris-runtime-generation` ConfigMap is the single non-secret generation
+source consumed by OpenTofu and all catalog Pod templates. In-place Secret data
+updates are ignored because PostgreSQL role and Polaris root credential changes
+cannot be made safe by Pod restart alone; credential replacement requires a
+reviewed catalog rebuild, Job recreation, and backup/restore acceptance. The
+metadata StatefulSet reserves a retained `5Gi` PVC in addition to SeaweedFS's
+`20Gi` claim.
+
 ## Verification
 
 The source-build checkpoint must pass:
@@ -321,6 +344,12 @@ CycloneDX-input rescans that close all 60 libraries, both exact digests, and the
 resident-image records in one change. Runtime remains a separate checkpoint
 that owns `make verify`, `make verify-gitops-bootstrap`, and live
 `make gitops-status` evidence.
+
+The static activation checkpoint additionally runs
+`python3 scripts/verify_polaris_runtime.py audit --root .`. It closes the
+manifest hashes, exact admitted image set, external Secret references, Admin
+credential-file command, Flux dependency/health chain, and explicit incomplete
+live-acceptance state. Live acceptance remains a later checkpoint.
 
 For the Admin dependency snapshot, the evidence-only checkpoint additionally
 hash- and size-binds all 12 retained files, the main run and attempt, the exact

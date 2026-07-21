@@ -88,3 +88,37 @@ variable "seaweedfs_s3_credential_generation" {
     error_message = "The SeaweedFS S3 credential generation must be a positive decimal integer."
   }
 }
+
+variable "polaris_postgresql_password" {
+  description = "Polaris metadata database password injected through TF_VAR_polaris_postgresql_password."
+  type        = string
+  sensitive   = true
+  nullable    = false
+
+  validation {
+    condition = (
+      length(var.polaris_postgresql_password) >= 32 &&
+      length(var.polaris_postgresql_password) <= 256 &&
+      trimspace(var.polaris_postgresql_password) == var.polaris_postgresql_password &&
+      can(regex("^[^\\r\\n]+$", var.polaris_postgresql_password))
+    )
+    error_message = "The Polaris PostgreSQL password must contain 32-256 characters with no surrounding whitespace or line breaks."
+  }
+}
+
+variable "polaris_root_client_secret" {
+  description = "Polaris root client secret injected through TF_VAR_polaris_root_client_secret."
+  type        = string
+  sensitive   = true
+  nullable    = false
+
+  validation {
+    condition = (
+      length(var.polaris_root_client_secret) >= 32 &&
+      length(var.polaris_root_client_secret) <= 256 &&
+      trimspace(var.polaris_root_client_secret) == var.polaris_root_client_secret &&
+      can(regex("^[^\\r\\n]+$", var.polaris_root_client_secret))
+    )
+    error_message = "The Polaris root client secret must contain 32-256 characters with no surrounding whitespace or line breaks."
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "issue": 61,
+  "state": "runtime_acceptance_pending",
+  "images": {
+    "polaris": "ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+    "postgresql": "cgr.dev/chainguard/postgres@sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+    "polaris-admin": "ghcr.io/tommykammy/shirokuma-polaris-admin@sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd"
+  },
+  "flux_order": [
+    "shirokuma-object-storage",
+    "shirokuma-catalog-database",
+    "shirokuma-catalog-bootstrap",
+    "shirokuma-catalog"
+  ],
+  "secrets": {
+    "provisioner": "OpenTofu",
+    "manifests_contain_material": false,
+    "references": {
+      "polaris-postgresql-credentials": [
+        "database",
+        "password",
+        "username"
+      ],
+      "polaris-root-credentials": [
+        "credentials.json"
+      ]
+    }
+  },
+  "admin_bootstrap": {
+    "command": [
+      "bootstrap",
+      "--credentials-file=/var/run/secrets/shirokuma/polaris/credentials.json"
+    ],
+    "credential_output_permitted": false
+  },
+  "credential_generation": {
+    "source": "deploy/gitops/clusters/local-lite/polaris-runtime-generation.yaml",
+    "in_place_rotation_permitted": false,
+    "requires_catalog_rebuild": true
+  },
+  "documentation": {
+    "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md": "d1e36e86d8b0edaaf081accc85488224a9f76b399cd0914214674f7596dfe131"
+  },
+  "manifests": {
+    "deploy/gitops/clusters/local-lite/kustomization.yaml": "a1510faf71d6f489ccd909d5ad8f0698f0f91c39d82af6be20476b4cf5750d31",
+    "deploy/gitops/clusters/local-lite/polaris-runtime-generation.yaml": "0941adf4bd44880672cd482fc4e0728cd1df36090275736380b7004e7a3e6b26",
+    "deploy/gitops/clusters/local-lite/catalog-database.yaml": "af46db378c423be8f393f7dd3a0d78906315ac11359dffd0dde6dd24d5fcffa7",
+    "deploy/gitops/clusters/local-lite/catalog-bootstrap.yaml": "25fa2cefff1ab6c2b20862cb2c2d22ffa6d1324098749239a635b6501f85aa57",
+    "deploy/gitops/clusters/local-lite/catalog.yaml": "1c28c9f6040eff4d329150d2988f77219e794552fcd4a894302ee678f2c8d9ef",
+    "deploy/gitops/catalog/database/kustomization.yaml": "bad6ff79a2f973b0d40df87326686c2e5cce2c4633ec8009ad86a2c354e2510a",
+    "deploy/gitops/catalog/database/networkpolicy.yaml": "19cbee36ab6e53ac6522848a4732bd02a1536ddde10a697157ead4f5bf17a96f",
+    "deploy/gitops/catalog/database/service.yaml": "34d57c1841aac1d74b6ad390277598f454786d20dcfc3821422a3b3c43ea841c",
+    "deploy/gitops/catalog/database/statefulset.yaml": "482b7e31942472c7bba75fd9a963c45bf502fcfbc358a9f26314c6f0cfb3c8d4",
+    "deploy/catalog/bootstrap/kustomization.yaml": "d2585fddd0b5f3a3eed90eef4f5f56b43ae12b6c3138832d13d448de7dbcfaba",
+    "deploy/catalog/bootstrap/networkpolicy.yaml": "a90b2e70b2d998e319fd0f9505214981a96a33349527b70a004791bf0f5e7dc9",
+    "deploy/catalog/bootstrap/job.yaml": "1e047e1b92e87556085d3dfd6114c98c45ba9159ff48e7fea3e4edbc1cb59dd6",
+    "deploy/gitops/catalog/server/kustomization.yaml": "9a64b028354da7f98a9198332c485569771f040070fcb55a8403ae24e71e591f",
+    "deploy/gitops/catalog/server/networkpolicy.yaml": "0589cec0e1fbddc97a97ebd22c62fc281e48fbdfbe0b5c22f33421082c835e76",
+    "deploy/gitops/catalog/server/service.yaml": "236e72858ee54034280046d73925d3291fab330793df71c7b8c1666bc13132a8",
+    "deploy/gitops/catalog/server/deployment.yaml": "44bba6c37ce2ff4aaca93c46412549570348b9166eb799edf765191bdc28bc79",
+    "opentofu/dev/catalog.tf": "4da191cedd4f0b6233697ea56ddfe7b0f8d6dd0ee3934792adbb00bf9f619eb0"
+  },
+  "live_acceptance": {
+    "complete": false,
+    "required": [
+      "flux_ready",
+      "catalog_create_list_read",
+      "backup_restore",
+      "rollback_teardown"
+    ]
+  }
+}

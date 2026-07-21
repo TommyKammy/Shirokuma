@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: polaris-postgresql
+  namespace: shirokuma-dev
+  labels:
+    app.kubernetes.io/name: polaris-postgresql
+    app.kubernetes.io/component: catalog-metadata
+    app.kubernetes.io/part-of: shirokuma
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: polaris-postgresql
+    app.kubernetes.io/component: catalog-metadata
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: postgresql
+      protocol: TCP

@@ -93,8 +93,9 @@ test-polaris-admin-image-contract: test-polaris-admin-build-inputs-contract
 verify-polaris-admin-image-contract: test-polaris-admin-image-contract verify-cosign
 	@$(PYTHON) scripts/verify_polaris_admin_image.py audit --root .
 
-verify-polaris-runtime: verify-polaris-build-contract
+verify-polaris-runtime: verify-polaris-build-contract verify-polaris-admin-image-contract
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_polaris_runtime.py'
+	@$(PYTHON) scripts/verify_polaris_runtime.py audit --root .
 
 verify-iceberg-table-bootstrap: flux-version-check
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_iceberg_table_bootstrap.py'
@@ -136,6 +137,8 @@ gitops-bootstrap: colima-status verify-gitops-image-admission tofu-init flux-ver
 	@test -n "$${TF_VAR_seaweedfs_s3_operator_secret_key:-}" || { echo "TF_VAR_seaweedfs_s3_operator_secret_key is required for OpenTofu apply and is never persisted or printed by this target"; exit 1; }
 	@test -n "$${TF_VAR_seaweedfs_s3_application_access_key:-}" || { echo "TF_VAR_seaweedfs_s3_application_access_key is required for OpenTofu apply and is never persisted or printed by this target"; exit 1; }
 	@test -n "$${TF_VAR_seaweedfs_s3_application_secret_key:-}" || { echo "TF_VAR_seaweedfs_s3_application_secret_key is required for OpenTofu apply and is never persisted or printed by this target"; exit 1; }
+	@test -n "$${TF_VAR_polaris_postgresql_password:-}" || { echo "TF_VAR_polaris_postgresql_password is required for OpenTofu apply and is never persisted or printed by this target"; exit 1; }
+	@test -n "$${TF_VAR_polaris_root_client_secret:-}" || { echo "TF_VAR_polaris_root_client_secret is required for OpenTofu apply and is never persisted or printed by this target"; exit 1; }
 	@legacy_pvc="$$(kubectl --context $(KUBE_CONTEXT) -n shirokuma-dev get pvc seaweedfs-data-seaweedfs-0 --ignore-not-found -o name)" || { echo "legacy PVC lookup failed; refusing OpenTofu apply"; exit 1; }; test -z "$$legacy_pvc" || { echo "legacy shirokuma-dev/seaweedfs-data-seaweedfs-0 PVC exists; complete a verified export and the whole-profile nuke/rebuild procedure before bootstrap"; exit 1; }
 	@$(TOFU) -chdir=$(TOFU_DIR) apply -input=false -auto-approve
 	@$(FLUX) bootstrap github --owner=$(GITHUB_OWNER) --repository=$(FLUX_GITHUB_REPOSITORY) --private=$(FLUX_GITHUB_PRIVATE) --branch=$(FLUX_BOOTSTRAP_BRANCH) --path=$(FLUX_PATH) --personal --components=source-controller,kustomize-controller,helm-controller,notification-controller --version=$(FLUX_VERSION) --context=$(KUBE_CONTEXT)
@@ -150,12 +153,17 @@ gitops-reconcile: flux-version-check
 	@$(FLUX) reconcile kustomization flux-system -n flux-system --with-source --context=$(KUBE_CONTEXT)
 	@$(FLUX) reconcile kustomization shirokuma-dev -n flux-system --context=$(KUBE_CONTEXT)
 	@object_storage="$$(kubectl --context $(KUBE_CONTEXT) -n flux-system get kustomization.kustomize.toolkit.fluxcd.io shirokuma-object-storage --ignore-not-found -o name)" || { echo "shirokuma-object-storage Kustomization lookup failed"; exit 1; }; if test -n "$$object_storage"; then $(FLUX) reconcile kustomization shirokuma-object-storage -n flux-system --context=$(KUBE_CONTEXT); else echo "shirokuma-object-storage Kustomization is absent; skipping reconcile"; fi
+	@$(FLUX) reconcile kustomization shirokuma-catalog-database -n flux-system --context=$(KUBE_CONTEXT)
+	@$(FLUX) reconcile kustomization shirokuma-catalog-bootstrap -n flux-system --context=$(KUBE_CONTEXT)
+	@$(FLUX) reconcile kustomization shirokuma-catalog -n flux-system --context=$(KUBE_CONTEXT)
 
 gitops-teardown: tofu-init
 	@test -n "$${TF_VAR_seaweedfs_s3_operator_access_key:-}" || { echo "TF_VAR_seaweedfs_s3_operator_access_key is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
 	@test -n "$${TF_VAR_seaweedfs_s3_operator_secret_key:-}" || { echo "TF_VAR_seaweedfs_s3_operator_secret_key is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
 	@test -n "$${TF_VAR_seaweedfs_s3_application_access_key:-}" || { echo "TF_VAR_seaweedfs_s3_application_access_key is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
 	@test -n "$${TF_VAR_seaweedfs_s3_application_secret_key:-}" || { echo "TF_VAR_seaweedfs_s3_application_secret_key is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
+	@test -n "$${TF_VAR_polaris_postgresql_password:-}" || { echo "TF_VAR_polaris_postgresql_password is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
+	@test -n "$${TF_VAR_polaris_root_client_secret:-}" || { echo "TF_VAR_polaris_root_client_secret is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
 	@$(TOFU) -chdir=$(TOFU_DIR) plan -destroy -refresh=false -input=false >/dev/null
 	@$(FLUX) uninstall --context=$(KUBE_CONTEXT) --namespace=flux-system --silent
 	@$(TOFU) -chdir=$(TOFU_DIR) destroy -input=false -auto-approve
