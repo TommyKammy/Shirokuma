@@ -5,7 +5,7 @@ title: "Adopt a source-built Polaris 1.6.0 and signed PostgreSQL metadata store"
 status: accepted
 created: 2026-07-16
 updated: 2026-07-21
-version: "0.8"
+version: "0.10"
 area: "architecture"
 tags: [shirokuma, adr, polaris, postgresql, arm64, supply-chain]
 ---
@@ -110,15 +110,35 @@ surface rather than claim a relational-only runtime.
   The upstream NoSQL/MongoDB dependency surface is `review_required`; a later
   image-publication decision must retain SBOM and vulnerability evidence and
   must not infer relational-only scope from this build-input publication.
+- After the dependency evidence review merges, permit a separate Admin image
+  publication-policy checkpoint to add only
+  `bootstrap/polaris/v1.6.0/admin-image-contract.json`,
+  `bootstrap/polaris/v1.6.0/Containerfile.admin`, and
+  `.github/workflows/polaris-admin-arm64.yml`. It records
+  `admin_image_publication_pending` with next state
+  `admin_image_evidence_review_pending` and may publish
+  `ghcr.io/tommykammy/shirokuma-polaris-admin:1.6.0-arm64` only from main. The
+  mutable tag does not approve or admit an image.
+- Preserve the upstream Admin fast-jar layout and launch
+  `/usr/bin/java -jar /deployments/quarkus-run.jar`; an inert `--help` default
+  and exact Picocli usage marker are mandatory smoke evidence. The image SBOM
+  and scan must include the upstream NoSQL/MongoDB surface.
+- Reserve `bootstrap --credentials-file=<file>` for the later runtime
+  checkpoint using an externally provisioned, read-only Secret. The YAML or
+  JSON file maps realms to non-empty `client-id` and `client-secret`, and file
+  input is mutually exclusive with `--realm`, singular `--credential`, and
+  `--print-credentials`. No credential material is allowed at publication.
 - Treat one-shot as publisher-lifecycle retirement, not as a single workflow
   attempt. Each attempt has an immutable run-scoped tag. If the new GHCR
-  package is initially private, signing and provenance publication happen
-  first and anonymous retrieval must fail closed; the owner may make the exact
-  package public and rerun before evidence review. Failed attempts are never
-  admitted, and authenticated retrieval is not a fallback.
-- Run the static publication contract audit before the lifecycle gate and
-  require the observed Gradle and Java versions to equal the pinned toolchain
-  before retaining candidate evidence.
+  package is initially private, the credential-free exact-digest retrieval gate
+  fails after the quarantined candidate is created but before signing,
+  provenance, or trusted-tag promotion. The owner may make that package public
+  and rerun before evidence review. Failed attempts are never admitted, and
+  authenticated retrieval is not a fallback.
+- Evaluate the lifecycle gate first. Every active prepare, verify, and promote
+  job must then run the static and cryptographic publication audits before any
+  registry credential is created, and the observed Gradle and Java versions
+  must equal the pinned toolchain before retaining candidate evidence.
 - Retain the reviewed final publication set under
   `bootstrap/polaris/v1.6.0/image-evidence/`, mark the exact digest
   `approved_for_atomic_admission`, advance the lifecycle to
@@ -210,17 +230,23 @@ its SHA-256
 `e771fe2ec6b2d0f6940b1247a512eb5cbc78dd0f36e7be247975f2c5fa36fc4d`, size,
 and gzip structure before evidence review.
 
-That checkpoint retains 12 files, advances the schema-v2 lifecycle to
-`admin_dependency_snapshot_review_pending`, and names
-`admin_image_publication_pending` as the next state. It retires and removes the
-write-capable Admin dependency publisher. The snapshot remains non-admitted;
-Admin image publication/admission, runtime, Flux, and credential gates remain
-false, and Issue #61 remains Open.
+PR #87 merged that 12-file evidence review as
+`8e5c6927e95d1027e16fe2ac27ab8322b45359c9`, retired the write-capable Admin
+dependency publisher, and approved the exact public dependency superset only
+for Admin image building. The pending Admin image publication PR consumes
+`ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18`,
+records `admin_image_publication_pending` with next state
+`admin_image_evidence_review_pending`, and targets repository/tag
+`ghcr.io/tommykammy/shirokuma-polaris-admin:1.6.0-arm64`. No exact Admin image
+digest exists as review authority until the main publication and separate
+evidence-only review complete.
 
-The later runtime activation must use the Admin Tool's credential-file input
-from an externally provisioned Secret. Credentials in command arguments,
-generated credentials printed to logs, or server-side relational
-auto-bootstrap do not satisfy this decision.
+The Admin snapshot and pending image remain non-admitted. Admin image admission,
+runtime, Flux, and credential gates remain false, and Issue #61 remains Open.
+The later runtime activation must mount an externally provisioned Secret and use
+the Admin Tool's credential-file input. Credentials in command arguments,
+generated credentials printed to logs, image layers, publication evidence, or
+server-side relational auto-bootstrap do not satisfy this decision.
 
 ## Verification
 

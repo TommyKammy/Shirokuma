@@ -1,0 +1,2945 @@
+name: Polaris Admin 1.6.0 trusted arm64 image publication
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/polaris-admin-arm64.yml
+      - bootstrap/polaris/v1.6.0/Containerfile.admin
+      - bootstrap/polaris/v1.6.0/source.json
+      - bootstrap/polaris/v1.6.0/admin-image-contract.json
+      - bootstrap/polaris/v1.6.0/admin-build-inputs-contract.json
+      - bootstrap/polaris/v1.6.0/apache-polaris-release-signing-key.asc
+      - bootstrap/polaris/v1.6.0/admin-build-inputs-evidence/**
+      - scripts/package_polaris_gradle_dependencies.py
+      - scripts/validate_polaris_source_archive.py
+      - scripts/verify_polaris_admin_build_inputs.py
+      - scripts/verify_polaris_admin_image.py
+      - scripts/verify_polaris_trusted_image.py
+      - tests/test_package_polaris_gradle_dependencies.py
+      - tests/test_polaris_admin_build_inputs.py
+      - tests/test_polaris_admin_image_contract.py
+      - tests/test_polaris_trusted_image_contract.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: polaris-admin-1.6.0-arm64-publication
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/tommykammy/shirokuma-polaris-admin
+  TRUSTED_TAG: 1.6.0-arm64
+  SOURCE_ARCHIVE_URL: https://downloads.apache.org/polaris/1.6.0/apache-polaris-1.6.0.tar.gz
+  SOURCE_SIGNATURE_URL: https://downloads.apache.org/polaris/1.6.0/apache-polaris-1.6.0.tar.gz.asc
+  SOURCE_CHECKSUM_URL: https://downloads.apache.org/polaris/1.6.0/apache-polaris-1.6.0.tar.gz.sha512
+  SOURCE_ARCHIVE_SHA512: d69b1a91e16e210a78dec327fc4725983b114fbec5d86d078a3827f35fe7dd5df3e4b12d18965e5a72eace65ad224aa007004ed61c66f9abb2efafc44ceac95b
+  SOURCE_SIGNATURE_SHA256: 2338e1c2385874e9bf5cf513b4d27732b1cd59e943e1662e62fa995d915e6481
+  SOURCE_SIGNING_KEY_FINGERPRINT: F2EE EB06 110B EE13 97EC 74CB B896 0FF5 2D9B 1312
+  SOURCE_COMMIT: dd306009d81a0e15adafe9dcd7d1c6d04d326f34
+  SOURCE_CREATED: "2026-07-04T05:22:21Z"
+  SOURCE_DATE_EPOCH: "1783142541"
+  DEPENDENCY_REF: ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18
+  DEPENDENCY_MANIFEST_DIGEST: sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18
+  DEPENDENCY_DESCRIPTOR_SHA256: 798802722e730174caa581cbffd4f82e5dd4a43aee92201df26f14db4ab005bc
+  DEPENDENCY_ARCHIVE_SHA256: e771fe2ec6b2d0f6940b1247a512eb5cbc78dd0f36e7be247975f2c5fa36fc4d
+  DEPENDENCY_VERIFICATION_METADATA_SHA256: 171ccaf781d4ae63375b332205d25653ebcd29471e9e9c0cfba1b978144065b8
+  BUILDER_IMAGE: docker.io/library/gradle@sha256:cc583fa5245267fe0e1546c9989e8575473a37336ad9894dc0684a99fea1fb03
+  RUNTIME_BASE_INDEX: docker.io/library/amazoncorretto@sha256:d3a3476c19cbe37b2e3e46a2116ff197ab37c7072baad55ee0ad07f3b97e8d02
+  RUNTIME_BASE_INDEX_DIGEST: sha256:d3a3476c19cbe37b2e3e46a2116ff197ab37c7072baad55ee0ad07f3b97e8d02
+  RUNTIME_BASE: docker.io/library/amazoncorretto@sha256:ba1fe4a3fd4c6b70360183fccd1f0a168c3ea6f73709e8f81945cb9087431ff2
+  RUNTIME_BASE_DIGEST: sha256:ba1fe4a3fd4c6b70360183fccd1f0a168c3ea6f73709e8f81945cb9087431ff2
+  RUNTIME_BASE_JAVA_VERSION: 21.0.11
+  CONTAINERFILE_SHA256: 39ab3fa250600d144d1a4deb00ac7d6277707994fd9b53b3a7f0968c279f6b72
+  ADMIN_BUILD_PREIMAGE_SHA256: 6e3aabc2090cda72c03608053f41899792a6c62bec382ed18d6b02703574fde9
+  ORAS_VERSION: 1.3.3
+  ORAS_URL: https://github.com/oras-project/oras/releases/download/v1.3.3/oras_1.3.3_linux_arm64.tar.gz
+  ORAS_ARCHIVE_SHA256: ac7156f93a21e903f7ad606c792f3560f17e0cd0e36365634701b1e7cc4e4eca
+  BUILDX_VERSION: v0.35.0
+  BUILDX_URL: https://github.com/docker/buildx/releases/download/v0.35.0/buildx-v0.35.0.linux-arm64
+  BUILDX_BINARY_SHA256: c4248d6cbc4a619a7e0b4609c11e509ad4ac0b475e1c64817c0ac20c5d90c766
+  BUILDKIT_VERSION: v0.31.1
+  BUILDKIT_IMAGE: moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a
+  BUILDKIT_IMAGE_DIGEST: sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a
+  BUILDKIT_ARM64_MANIFEST_DIGEST: sha256:4eee950fb9d134cbf4e228ea3906eb4c7403323334af013c443302f7b74f2737
+  CRANE_VERSION: v0.21.7
+  CRANE_URL: https://github.com/google/go-containerregistry/releases/download/v0.21.7/go-containerregistry_Linux_arm64.tar.gz
+  CRANE_ARCHIVE_SHA256: b6ee979d9411dfb05ce35ab9e156fe5de7def11a230764a7856ffa2eb971fa88
+  SYFT_VERSION: v1.46.0
+  TRIVY_VERSION: v0.72.0
+  COSIGN_VERSION: v3.1.1
+  REKOR_URL: https://rekor.sigstore.dev
+  REKOR_MAJOR_API_VERSION: "1"
+
+jobs:
+  prepare:
+    if: >-
+      github.repository == 'TommyKammy/Shirokuma' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    outputs:
+      active: ${{ steps.lifecycle.outputs.active }}
+      context_sha256: ${{ steps.stage.outputs.context_sha256 }}
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+      artifact_name: polaris-admin-image-build-input-${{ github.run_id }}-${{ github.run_attempt }}
+
+    steps:
+      - name: Check out the reviewed Polaris publication policy
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Bind the run to reviewed main and check publication lifecycle
+        id: lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REPOSITORY}" = "TommyKammy/Shirokuma"
+          test "${GITHUB_REF}" = "refs/heads/main"
+          test "${GITHUB_WORKFLOW_REF}" = \
+            "TommyKammy/Shirokuma/.github/workflows/polaris-admin-arm64.yml@refs/heads/main"
+          test "${GITHUB_SHA}" = "${GITHUB_WORKFLOW_SHA}"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          case "${GITHUB_EVENT_NAME}" in
+            push|workflow_dispatch) ;;
+            *) echo "unsupported workflow event: ${GITHUB_EVENT_NAME}" >&2; exit 1 ;;
+          esac
+
+          state=$(
+            python3 -c \
+              'import json; print(json.load(open("bootstrap/polaris/v1.6.0/admin-image-contract.json"))["lifecycle"]["state"])'
+          )
+          case "${state}" in
+            admin_image_publication_pending)
+              echo "active=true" >> "${GITHUB_OUTPUT}"
+              ;;
+            admin_image_evidence_review_pending)
+              echo "active=false" >> "${GITHUB_OUTPUT}"
+              echo "Polaris Admin image publisher is retired for this lifecycle state"
+              ;;
+            *)
+              echo "unexpected Polaris Admin image publication lifecycle: ${state}" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Validate the static publication bootstrap policy
+        if: steps.lifecycle.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_polaris_admin_image.py audit-publication-bootstrap --root .
+
+      - name: Install pinned Cosign for dependency evidence revalidation
+        if: steps.lifecycle.outputs.active == 'true'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.1
+
+      - name: Complete the cryptographic image-publication-pending audit
+        if: steps.lifecycle.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_polaris_admin_image.py audit --root .
+          python3 scripts/verify_polaris_trusted_image.py audit --root .
+          python3 -m unittest -v tests.test_package_polaris_gradle_dependencies
+          python3 -m unittest -v tests.test_polaris_admin_build_inputs
+          python3 -m unittest -v tests.test_polaris_admin_image_contract
+
+      - name: Install checksum-pinned ORAS without credentials
+        if: steps.lifecycle.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = "Linux"
+          test "$(uname -m)" = "aarch64"
+          tool_dir="${RUNNER_TEMP}/oras"
+          mkdir -p "${tool_dir}"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --retry 5 --retry-all-errors \
+            --output "${tool_dir}/oras.tar.gz" "${ORAS_URL}"
+          echo "${ORAS_ARCHIVE_SHA256}  ${tool_dir}/oras.tar.gz" \
+            | sha256sum --check --strict
+          tar --extract --gzip --file "${tool_dir}/oras.tar.gz" \
+            --directory "${tool_dir}" oras
+          install -m 0755 "${tool_dir}/oras" "${tool_dir}/oras.bin"
+          echo "${tool_dir}" >> "${GITHUB_PATH}"
+          test "$("${tool_dir}/oras.bin" version | awk '$1 == "Version:" {print $2; exit}')" = \
+            "${ORAS_VERSION}"
+
+      - name: Anonymously fetch and verify the exact reviewed dependency snapshot
+        if: steps.lifecycle.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${DOCKER_AUTH_CONFIG:-}"
+          dependency_dir="${RUNNER_TEMP}/polaris-admin-dependencies"
+          gradle_home="${RUNNER_TEMP}/polaris-admin-gradle-home"
+          anonymous_config="${RUNNER_TEMP}/anonymous-admin-registry-config.json"
+          mkdir -p "${dependency_dir}"
+          test ! -e "${gradle_home}"
+          printf '{}\n' > "${anonymous_config}"
+
+          oras.bin manifest fetch \
+            --registry-config "${anonymous_config}" \
+            --output "${dependency_dir}/oci-manifest.json" \
+            "${DEPENDENCY_REF}"
+          echo "${DEPENDENCY_MANIFEST_DIGEST#sha256:}  ${dependency_dir}/oci-manifest.json" \
+            | sha256sum --check --strict
+          oras.bin pull \
+            --registry-config "${anonymous_config}" \
+            --output "${dependency_dir}" \
+            "${DEPENDENCY_REF}"
+
+          expected_files=$(
+            printf '%s\n' \
+              gradle-dependency-inputs.json \
+              oci-manifest.json \
+              polaris-gradle-dependencies-1.6.0.tar.gz \
+              | sort
+          )
+          actual_files=$(
+            find "${dependency_dir}" -mindepth 1 -maxdepth 1 -type f \
+              -exec basename {} \; | sort
+          )
+          test "${actual_files}" = "${expected_files}"
+          echo "${DEPENDENCY_DESCRIPTOR_SHA256}  ${dependency_dir}/gradle-dependency-inputs.json" \
+            | sha256sum --check --strict
+          echo "${DEPENDENCY_ARCHIVE_SHA256}  ${dependency_dir}/polaris-gradle-dependencies-1.6.0.tar.gz" \
+            | sha256sum --check --strict
+
+          python3 scripts/package_polaris_gradle_dependencies.py verify \
+            --descriptor "${dependency_dir}/gradle-dependency-inputs.json" \
+            --verification-metadata \
+              bootstrap/polaris/v1.6.0/admin-build-inputs-evidence/verification-metadata.xml \
+            --archive \
+              "${dependency_dir}/polaris-gradle-dependencies-1.6.0.tar.gz" \
+            --extract-root "${gradle_home}"
+          cmp bootstrap/polaris/v1.6.0/admin-build-inputs-evidence/verification-metadata.xml \
+            "${gradle_home}/verification-metadata.xml"
+          echo "${DEPENDENCY_VERIFICATION_METADATA_SHA256}  ${gradle_home}/verification-metadata.xml" \
+            | sha256sum --check --strict
+
+          DEPENDENCY_DIR="${dependency_dir}" python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["DEPENDENCY_DIR"])
+          descriptor = root / "gradle-dependency-inputs.json"
+          archive = root / "polaris-gradle-dependencies-1.6.0.tar.gz"
+          manifest = root / "oci-manifest.json"
+          publication = json.loads(
+              Path(
+                  "bootstrap/polaris/v1.6.0/admin-build-inputs-evidence/publication.json"
+              ).read_text(encoding="utf-8")
+          )
+          expected_reference = os.environ["DEPENDENCY_REF"]
+          historical_surface = publication.get("admin_dependency_surface", {})
+          expected_projects = [
+              ":polaris-persistence-nosql-api",
+              ":polaris-persistence-nosql-maintenance-api",
+              ":polaris-persistence-nosql-metastore",
+              ":polaris-persistence-nosql-cdi-quarkus",
+              ":polaris-persistence-nosql-cdi-quarkus-distcache",
+              ":polaris-persistence-nosql-maintenance-impl",
+              ":polaris-persistence-nosql-metastore-maintenance",
+          ]
+          if (
+              publication.get("artifact_reference") != expected_reference
+              or publication.get("state")
+              != "admin_dependency_snapshot_review_pending"
+              or publication.get("downstream_gates", {}).get(
+                  "admin_image_admitted"
+              ) is not False
+              or historical_surface.get("relational_only") is not False
+              or historical_surface.get("review_state") != "review_required"
+              or historical_surface.get("unconditional_external_dependencies")
+              != ["io.quarkus:quarkus-mongodb-client"]
+              or historical_surface.get("unconditional_project_dependencies")
+              != expected_projects
+          ):
+              raise SystemExit("reviewed dependency publication binding is invalid")
+          record = {
+              "schema_version": 1,
+              "result": "passed",
+              "anonymous_pull": True,
+              "reference": expected_reference,
+              "admin_dependency_surface": historical_surface,
+              "current_review_state": "reviewed_for_image_publication",
+              "image_publication_decision": (
+                  "accepted_unmodified_for_image_publication_only"
+              ),
+              "review_checkpoint": {
+                  "repository": "TommyKammy/Shirokuma",
+                  "pull_request": 87,
+                  "reviewed_head_commit": (
+                      "178b5ca03a2575a7100cfb47daede795fbd1d30c"
+                  ),
+                  "merge_commit": (
+                      "8e5c6927e95d1027e16fe2ac27ab8322b45359c9"
+                  ),
+                  "merged_at": "2026-07-20T23:24:12Z",
+                  "merged_by": "TommyKammy",
+                  "reviewed_contract_sha256": (
+                      "26f5259642007aa11a4676ccee918bd5b1e55f8eb5c0025f92a12f1d8ccb37db"
+                  ),
+                  "reviewed_evidence_manifest_sha256": (
+                      "026c4d82e9031532323ccb3c31ea83939010982cfcf373644cdcf064e2613409"
+                  ),
+                  "reviewed_verifier_sha256": (
+                      "ef1fad340179e61f7d1291d9e3fd44c793c4761af4b094a0b232ea663c7f41c9"
+                  ),
+              },
+              "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+              "descriptor_sha256": hashlib.sha256(descriptor.read_bytes()).hexdigest(),
+              "archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+              "verification_metadata_sha256": os.environ[
+                  "DEPENDENCY_VERIFICATION_METADATA_SHA256"
+              ],
+          }
+          Path(os.environ["RUNNER_TEMP"], "dependency-input.json").write_text(
+              json.dumps(record, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Fetch and authenticate the signed ASF source release
+        if: steps.lifecycle.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SOURCE_SIGNING_KEY_FINGERPRINT="${SOURCE_SIGNING_KEY_FINGERPRINT// /}"
+          source_dir="${RUNNER_TEMP}/polaris-source"
+          mkdir -p "${source_dir}"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --retry 5 --retry-all-errors \
+            "${SOURCE_ARCHIVE_URL}" \
+            --output "${source_dir}/apache-polaris-1.6.0.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --retry 5 --retry-all-errors \
+            "${SOURCE_SIGNATURE_URL}" \
+            --output "${source_dir}/apache-polaris-1.6.0.tar.gz.asc"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --retry 5 --retry-all-errors \
+            "${SOURCE_CHECKSUM_URL}" \
+            --output "${source_dir}/apache-polaris-1.6.0.tar.gz.sha512"
+          echo "${SOURCE_ARCHIVE_SHA512}  ${source_dir}/apache-polaris-1.6.0.tar.gz" \
+            | sha512sum --check --strict
+          echo "${SOURCE_SIGNATURE_SHA256}  ${source_dir}/apache-polaris-1.6.0.tar.gz.asc" \
+            | sha256sum --check --strict
+          grep --fixed-strings --quiet \
+            "${SOURCE_ARCHIVE_SHA512}" \
+            "${source_dir}/apache-polaris-1.6.0.tar.gz.sha512"
+
+          export GNUPGHOME="${RUNNER_TEMP}/polaris-release-keyring"
+          mkdir -m 0700 "${GNUPGHOME}"
+          gpg --batch --import \
+            bootstrap/polaris/v1.6.0/apache-polaris-release-signing-key.asc
+          actual_fingerprint=$(
+            gpg --batch --with-colons --fingerprint \
+              | awk -F: '$1 == "fpr" {print $10; exit}'
+          )
+          test "${actual_fingerprint}" = "${SOURCE_SIGNING_KEY_FINGERPRINT}"
+          gpg --batch --verify \
+            "${source_dir}/apache-polaris-1.6.0.tar.gz.asc" \
+            "${source_dir}/apache-polaris-1.6.0.tar.gz"
+          python3 scripts/validate_polaris_source_archive.py \
+            --archive "${source_dir}/apache-polaris-1.6.0.tar.gz"
+
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          record = {
+              "schema_version": 1,
+              "result": "passed",
+              "archive_url": os.environ["SOURCE_ARCHIVE_URL"],
+              "archive_sha512": os.environ["SOURCE_ARCHIVE_SHA512"],
+              "signature_url": os.environ["SOURCE_SIGNATURE_URL"],
+              "signature_sha256": os.environ["SOURCE_SIGNATURE_SHA256"],
+              "signing_key_fingerprint": os.environ[
+                  "SOURCE_SIGNING_KEY_FINGERPRINT"
+              ],
+              "source_commit": os.environ["SOURCE_COMMIT"],
+              "source_created": os.environ["SOURCE_CREATED"],
+          }
+          Path(os.environ["RUNNER_TEMP"], "source-authentication.json").write_text(
+              json.dumps(record, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Build Polaris Admin and server regressions from retained dependencies
+        if: steps.lifecycle.outputs.active == 'true'
+        timeout-minutes: 55
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_archive="${RUNNER_TEMP}/polaris-source/apache-polaris-1.6.0.tar.gz"
+          offline_source="${RUNNER_TEMP}/polaris-admin-offline"
+          gradle_home="${RUNNER_TEMP}/polaris-admin-gradle-home"
+          test ! -e "${offline_source}"
+          test ! -L "${offline_source}"
+          install -d -m 0700 "${offline_source}"
+          tar --extract --gzip --file "${source_archive}" \
+            --directory "${offline_source}" --strip-components 1 \
+            --no-same-owner --no-same-permissions
+          echo "${ADMIN_BUILD_PREIMAGE_SHA256}  ${offline_source}/runtime/admin/build.gradle.kts" \
+            | sha256sum --check --strict
+          install -m 0644 "${gradle_home}/verification-metadata.xml" \
+            "${offline_source}/gradle/verification-metadata.xml"
+          rm "${gradle_home}/verification-metadata.xml"
+          rm -rf "${offline_source}/runtime/admin/build"
+          rm -rf "${offline_source}/runtime/server/build"
+
+          docker pull --platform linux/arm64 "${BUILDER_IMAGE}"
+          test "$(
+            docker image inspect "${BUILDER_IMAGE}" --format '{{.Os}}/{{.Architecture}}'
+          )" = "linux/arm64"
+          docker run --rm \
+            --platform linux/arm64 \
+            --network none \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp/gradle-user \
+            --env GRADLE_USER_HOME=/gradle-home \
+            --env SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH}" \
+            --tmpfs /tmp:rw,nosuid,nodev,size=1g \
+            --volume "${offline_source}:/workspace:rw" \
+            --volume "${gradle_home}:/gradle-home:rw" \
+            --workdir /workspace \
+            "${BUILDER_IMAGE}" \
+            gradle \
+              --offline \
+              --dependency-verification strict \
+              --no-daemon \
+              --no-build-cache \
+              --no-configuration-cache \
+              --rerun-tasks \
+              :polaris-admin:assemble \
+              :polaris-admin:quarkusAppPartsBuild \
+              :polaris-server:assemble \
+              :polaris-server:quarkusAppPartsBuild
+
+          test -s "${offline_source}/runtime/admin/build/quarkus-app/quarkus-run.jar"
+          test -d "${offline_source}/runtime/admin/build/quarkus-app/lib"
+          test -d "${offline_source}/runtime/admin/build/quarkus-app/app"
+          test -d "${offline_source}/runtime/admin/build/quarkus-app/quarkus"
+          test -s "${offline_source}/runtime/admin/distribution/LICENSE"
+          test -s "${offline_source}/runtime/admin/distribution/NOTICE"
+          test -s "${offline_source}/runtime/server/build/quarkus-app/quarkus-run.jar"
+          test -d "${offline_source}/runtime/server/build/quarkus-app/lib"
+          test -d "${offline_source}/runtime/server/build/quarkus-app/app"
+          test -d "${offline_source}/runtime/server/build/quarkus-app/quarkus"
+          for required_term in mongodb polaris-persistence-nosql; do
+            if ! find "${offline_source}/runtime/admin/build/quarkus-app" \
+              -type f -iname "*${required_term}*.jar" -print -quit | grep --quiet .
+            then
+              echo "Admin image build omitted dependency term: ${required_term}" >&2
+              exit 1
+            fi
+          done
+
+          OFFLINE_SOURCE="${offline_source}" python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          admin_app = (
+              Path(os.environ["OFFLINE_SOURCE"])
+              / "runtime/admin/build/quarkus-app"
+          )
+          required_terms = ["mongodb", "polaris-persistence-nosql"]
+          matching_dependency_files_by_term = {
+              term: sorted(
+                  path.relative_to(admin_app).as_posix()
+                  for path in admin_app.rglob("*.jar")
+                  if term in path.name.lower()
+              )
+              for term in required_terms
+          }
+          if any(
+              not matching_dependency_files_by_term[term]
+              for term in required_terms
+          ):
+              raise SystemExit("Admin build output dependency disclosure is incomplete")
+          record = {
+              "schema_version": 1,
+              "result": "passed",
+              "platform": "linux/arm64",
+              "network": "none",
+              "builder_image": os.environ["BUILDER_IMAGE"],
+              "gradle_offline": True,
+              "dependency_verification": "strict",
+              "build_cache": False,
+              "configuration_cache": False,
+              "rerun_tasks": True,
+              "tasks": [
+                  ":polaris-admin:assemble",
+                  ":polaris-admin:quarkusAppPartsBuild",
+                  ":polaris-server:assemble",
+                  ":polaris-server:quarkusAppPartsBuild",
+              ],
+              "dependency_reference": os.environ["DEPENDENCY_REF"],
+              "admin_build_preimage_sha256": os.environ[
+                  "ADMIN_BUILD_PREIMAGE_SHA256"
+              ],
+              "required_dependency_terms": required_terms,
+              "matching_dependency_files_by_term": (
+                  matching_dependency_files_by_term
+              ),
+              "admin_dependency_surface": {
+                  "relational_only": False,
+                  "review_state": "reviewed_for_image_publication",
+                  "image_publication_decision": (
+                      "accepted_unmodified_for_image_publication_only"
+                  ),
+                  "unconditional_external_dependencies": [
+                      "io.quarkus:quarkus-mongodb-client"
+                  ],
+                  "unconditional_project_dependencies": [
+                      ":polaris-persistence-nosql-api",
+                      ":polaris-persistence-nosql-maintenance-api",
+                      ":polaris-persistence-nosql-metastore",
+                      ":polaris-persistence-nosql-cdi-quarkus",
+                      ":polaris-persistence-nosql-cdi-quarkus-distcache",
+                      ":polaris-persistence-nosql-maintenance-impl",
+                      ":polaris-persistence-nosql-metastore-maintenance",
+                  ],
+              },
+          }
+          Path(os.environ["RUNNER_TEMP"], "offline-build.json").write_text(
+              json.dumps(record, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Stage and retain the closed image build context
+        if: steps.lifecycle.outputs.active == 'true'
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          offline_source="${RUNNER_TEMP}/polaris-admin-offline"
+          context="${RUNNER_TEMP}/polaris-admin-image-context"
+          artifact="${RUNNER_TEMP}/polaris-admin-image-build-input"
+          test ! -e "${context}"
+          install -d -m 0755 "${context}/build" "${context}/distribution" "${artifact}"
+          echo "${CONTAINERFILE_SHA256}  bootstrap/polaris/v1.6.0/Containerfile.admin" \
+            | sha256sum --check --strict
+          install -m 0644 bootstrap/polaris/v1.6.0/Containerfile.admin \
+            "${context}/Containerfile.admin"
+          cp -a "${offline_source}/runtime/admin/build/quarkus-app" \
+            "${context}/build/quarkus-app"
+          install -m 0644 "${offline_source}/runtime/admin/distribution/LICENSE" \
+            "${context}/distribution/LICENSE"
+          install -m 0644 "${offline_source}/runtime/admin/distribution/NOTICE" \
+            "${context}/distribution/NOTICE"
+
+          CONTEXT="${context}" python3 - <<'PY'
+          import hashlib
+          import os
+          import stat
+          from pathlib import Path
+
+          root = Path(os.environ["CONTEXT"])
+          allowed_roots = {"Containerfile.admin", "build", "distribution"}
+          if {path.name for path in root.iterdir()} != allowed_roots:
+              raise SystemExit("closed image context has unexpected top-level paths")
+          files = []
+          for path in sorted(root.rglob("*")):
+              mode = path.lstat().st_mode
+              if path.is_symlink():
+                  raise SystemExit(f"closed image context contains symlink: {path}")
+              if not (stat.S_ISDIR(mode) or stat.S_ISREG(mode)):
+                  raise SystemExit(f"closed image context contains special file: {path}")
+              if mode & stat.S_IWOTH:
+                  raise SystemExit(f"closed image context contains world-writable path: {path}")
+              if path.is_file():
+                  relative = path.relative_to(root).as_posix()
+                  digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                  files.append((relative, digest))
+          required = {
+              "Containerfile.admin",
+              "build/quarkus-app/quarkus-run.jar",
+              "distribution/LICENSE",
+              "distribution/NOTICE",
+          }
+          file_names = {name for name, _ in files}
+          if not required.issubset(file_names):
+              raise SystemExit("closed image context is missing required files")
+          required_dependency_terms = ["mongodb", "polaris-persistence-nosql"]
+          matching_dependency_files_by_term = {
+              term: sorted(
+                  name
+                  for name in file_names
+                  if name.startswith("build/quarkus-app/")
+                  and name.endswith(".jar")
+                  and term in name.lower()
+              )
+              for term in required_dependency_terms
+          }
+          if any(
+              not matching_dependency_files_by_term[term]
+              for term in required_dependency_terms
+          ):
+              raise SystemExit("closed image context dependency disclosure is incomplete")
+          Path(os.environ["RUNNER_TEMP"], "build-context.sha256").write_text(
+              "".join(f"{digest}  {name}\n" for name, digest in files),
+              encoding="utf-8",
+          )
+          PY
+
+          tar --create --gzip --format=posix --sort=name \
+            --mtime="@${SOURCE_DATE_EPOCH}" --owner=0 --group=0 --numeric-owner \
+            --file "${artifact}/polaris-admin-image-build-context.tar.gz" \
+            --directory "${context}" .
+          install -m 0644 "${RUNNER_TEMP}/build-context.sha256" \
+            "${artifact}/build-context.sha256"
+          install -m 0644 "${RUNNER_TEMP}/dependency-input.json" \
+            "${artifact}/dependency-input.json"
+          install -m 0644 "${RUNNER_TEMP}/source-authentication.json" \
+            "${artifact}/source-authentication.json"
+          install -m 0644 "${RUNNER_TEMP}/offline-build.json" \
+            "${artifact}/offline-build.json"
+          context_sha256=$(
+            sha256sum "${artifact}/polaris-admin-image-build-context.tar.gz" \
+              | cut -d' ' -f1
+          )
+          echo "context_sha256=${context_sha256}" >> "${GITHUB_OUTPUT}"
+          ARTIFACT="${artifact}" CONTEXT_SHA256="${context_sha256}" python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          artifact = Path(os.environ["ARTIFACT"])
+          context_files = [
+              line.split("  ", 1)[1]
+              for line in (artifact / "build-context.sha256").read_text(
+                  encoding="utf-8"
+              ).splitlines()
+          ]
+          required_dependency_terms = ["mongodb", "polaris-persistence-nosql"]
+          context_dependency_files_by_term = {
+              term: sorted(
+                  name
+                  for name in context_files
+                  if name.startswith("build/quarkus-app/")
+                  and name.endswith(".jar")
+                  and term in name.lower()
+              )
+              for term in required_dependency_terms
+          }
+          if any(
+              not context_dependency_files_by_term[term]
+              for term in required_dependency_terms
+          ):
+              raise SystemExit("retained Admin context dependency disclosure is incomplete")
+          record = {
+              "schema_version": 1,
+              "component": "polaris-admin",
+              "state": "admin_image_publication_pending",
+              "admitted": False,
+              "context_archive_sha256": os.environ["CONTEXT_SHA256"],
+              "context_manifest_sha256": hashlib.sha256(
+                  (artifact / "build-context.sha256").read_bytes()
+              ).hexdigest(),
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "ref": os.environ["GITHUB_REF"],
+              "source_sha": os.environ["GITHUB_SHA"],
+              "workflow_sha": os.environ["GITHUB_WORKFLOW_SHA"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "required_dependency_terms": required_dependency_terms,
+              "context_dependency_files_by_term": (
+                  context_dependency_files_by_term
+              ),
+              "admin_dependency_surface": {
+                  "relational_only": False,
+                  "review_state": "reviewed_for_image_publication",
+                  "image_publication_decision": (
+                      "accepted_unmodified_for_image_publication_only"
+                  ),
+                  "unconditional_external_dependencies": [
+                      "io.quarkus:quarkus-mongodb-client"
+                  ],
+                  "unconditional_project_dependencies": [
+                      ":polaris-persistence-nosql-api",
+                      ":polaris-persistence-nosql-maintenance-api",
+                      ":polaris-persistence-nosql-metastore",
+                      ":polaris-persistence-nosql-cdi-quarkus",
+                      ":polaris-persistence-nosql-cdi-quarkus-distcache",
+                      ":polaris-persistence-nosql-maintenance-impl",
+                      ":polaris-persistence-nosql-metastore-maintenance",
+                  ],
+                  "required_sbom_terms": [
+                      "mongodb",
+                      "polaris-persistence-nosql",
+                  ],
+              },
+              "review_checkpoint": {
+                  "repository": "TommyKammy/Shirokuma",
+                  "pull_request": 87,
+                  "reviewed_head_commit": (
+                      "178b5ca03a2575a7100cfb47daede795fbd1d30c"
+                  ),
+                  "merge_commit": (
+                      "8e5c6927e95d1027e16fe2ac27ab8322b45359c9"
+                  ),
+                  "merged_at": "2026-07-20T23:24:12Z",
+                  "merged_by": "TommyKammy",
+                  "reviewed_contract_sha256": (
+                      "26f5259642007aa11a4676ccee918bd5b1e55f8eb5c0025f92a12f1d8ccb37db"
+                  ),
+                  "reviewed_evidence_manifest_sha256": (
+                      "026c4d82e9031532323ccb3c31ea83939010982cfcf373644cdcf064e2613409"
+                  ),
+                  "reviewed_verifier_sha256": (
+                      "ef1fad340179e61f7d1291d9e3fd44c793c4761af4b094a0b232ea663c7f41c9"
+                  ),
+              },
+          }
+          (artifact / "build-input.json").write_text(
+              json.dumps(record, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Upload the read-only-verified image build input
+        if: steps.lifecycle.outputs.active == 'true'
+        id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: polaris-admin-image-build-input-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/polaris-admin-image-build-input/
+          if-no-files-found: error
+          retention-days: 7
+
+  verify:
+    needs: prepare
+    if: >-
+      needs.prepare.result == 'success' &&
+      needs.prepare.outputs.active == 'true' &&
+      github.repository == 'TommyKammy/Shirokuma' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      candidate_artifact: polaris-admin-image-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+      provenance_url: ${{ steps.provenance.outputs.attestation-url }}
+
+    steps:
+      - name: Check out the reviewed image publication policy
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Rebind the write-capable job to the static publication policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REPOSITORY}" = "TommyKammy/Shirokuma"
+          test "${GITHUB_REF}" = "refs/heads/main"
+          test "${GITHUB_WORKFLOW_REF}" = \
+            "TommyKammy/Shirokuma/.github/workflows/polaris-admin-arm64.yml@refs/heads/main"
+          test "${GITHUB_SHA}" = "${GITHUB_WORKFLOW_SHA}"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          python3 scripts/verify_polaris_admin_image.py audit-publication-bootstrap --root .
+
+      - name: Install pinned Cosign before write-capable policy revalidation
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.1
+
+      - name: Complete the write-capable cryptographic policy audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_polaris_admin_image.py audit --root .
+          python3 scripts/verify_polaris_trusted_image.py audit --root .
+
+      - name: Download the exact read-only-verified image build input
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.prepare.outputs.artifact_name }}
+          path: candidate-input
+
+      - name: Revalidate and safely extract the closed context before credentials exist
+        env:
+          EXPECTED_CONTEXT_SHA256: ${{ needs.prepare.outputs.context_sha256 }}
+          EXPECTED_ARTIFACT_DIGEST: ${{ needs.prepare.outputs.artifact_digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${DOCKER_AUTH_CONFIG:-}"
+          expected_files=$(
+            printf '%s\n' \
+              build-context.sha256 \
+              build-input.json \
+              dependency-input.json \
+              offline-build.json \
+              polaris-admin-image-build-context.tar.gz \
+              source-authentication.json \
+              | sort
+          )
+          actual_files=$(
+            find candidate-input -mindepth 1 -maxdepth 1 -type f \
+              -exec basename {} \; | sort
+          )
+          test "${actual_files}" = "${expected_files}"
+          echo "${EXPECTED_CONTEXT_SHA256}  candidate-input/polaris-admin-image-build-context.tar.gz" \
+            | sha256sum --check --strict
+          test "${EXPECTED_ARTIFACT_DIGEST}" != ""
+
+          python3 - <<'PY'
+          import json
+          import os
+          import tarfile
+          from pathlib import Path, PurePosixPath
+
+          record = json.loads(
+              Path("candidate-input/build-input.json").read_text(encoding="utf-8")
+          )
+          expected = {
+              "schema_version": 1,
+              "component": "polaris-admin",
+              "state": "admin_image_publication_pending",
+              "admitted": False,
+              "context_archive_sha256": os.environ["EXPECTED_CONTEXT_SHA256"],
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "ref": os.environ["GITHUB_REF"],
+              "source_sha": os.environ["GITHUB_SHA"],
+              "workflow_sha": os.environ["GITHUB_WORKFLOW_SHA"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+          }
+          for key, value in expected.items():
+              if record.get(key) != value:
+                  raise SystemExit(f"build input binding mismatch for {key}")
+
+          archive = Path("candidate-input/polaris-admin-image-build-context.tar.gz")
+          destination = Path("polaris-admin-image-context")
+          destination.mkdir(mode=0o755)
+          with tarfile.open(archive, mode="r:gz") as bundle:
+              for member in bundle.getmembers():
+                  path = PurePosixPath(member.name)
+                  if (
+                      path.is_absolute()
+                      or ".." in path.parts
+                      or member.issym()
+                      or member.islnk()
+                      or not (member.isfile() or member.isdir())
+                  ):
+                      raise SystemExit(f"unsafe closed-context member: {member.name}")
+              bundle.extractall(destination, filter="data")
+          PY
+
+          (
+            cd polaris-admin-image-context
+            sha256sum --check --strict ../candidate-input/build-context.sha256
+          )
+          cmp bootstrap/polaris/v1.6.0/Containerfile.admin \
+            polaris-admin-image-context/Containerfile.admin
+          test -s polaris-admin-image-context/build/quarkus-app/quarkus-run.jar
+          test -s polaris-admin-image-context/distribution/LICENSE
+          test -s polaris-admin-image-context/distribution/NOTICE
+          if ! find polaris-admin-image-context/build/quarkus-app \
+            -type f -iname '*mongodb*.jar' -print -quit | grep --quiet .
+          then
+            echo "closed Admin image context omitted its disclosed MongoDB surface" >&2
+            exit 1
+          fi
+          if find polaris-admin-image-context -type l -print -quit | grep --quiet .; then
+            echo "closed image context contains a symlink after extraction" >&2
+            exit 1
+          fi
+
+      - name: Install and verify pinned Buildx, BuildKit, Crane, and runtime base
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = "Linux"
+          test "$(uname -m)" = "aarch64"
+
+          export DOCKER_CONFIG="${RUNNER_TEMP}/docker-config"
+          plugin_dir="${DOCKER_CONFIG}/cli-plugins"
+          buildx_bin="${plugin_dir}/docker-buildx"
+          mkdir -p "${plugin_dir}"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --retry 5 --retry-all-errors \
+            --output "${buildx_bin}.download" "${BUILDX_URL}"
+          echo "${BUILDX_BINARY_SHA256}  ${buildx_bin}.download" \
+            | sha256sum --check --strict
+          install -m 0755 "${buildx_bin}.download" "${buildx_bin}"
+          echo "DOCKER_CONFIG=${DOCKER_CONFIG}" >> "${GITHUB_ENV}"
+          case "$(docker buildx version)" in
+            *" ${BUILDX_VERSION} "*) ;;
+            *) echo "unexpected Buildx version" >&2; exit 1 ;;
+          esac
+
+          tool_dir="${RUNNER_TEMP}/crane"
+          mkdir -p "${tool_dir}"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --retry 5 --retry-all-errors \
+            --output "${tool_dir}/crane.tar.gz" "${CRANE_URL}"
+          echo "${CRANE_ARCHIVE_SHA256}  ${tool_dir}/crane.tar.gz" \
+            | sha256sum --check --strict
+          tar --extract --gzip --file "${tool_dir}/crane.tar.gz" \
+            --directory "${tool_dir}" crane
+          install -m 0755 "${tool_dir}/crane" "${tool_dir}/crane.bin"
+          echo "${tool_dir}" >> "${GITHUB_PATH}"
+          test "$("${tool_dir}/crane.bin" version)" = "${CRANE_VERSION#v}"
+
+          docker buildx imagetools inspect --raw "${RUNTIME_BASE_INDEX}" \
+            > runtime-base-index.json
+          echo "${RUNTIME_BASE_INDEX_DIGEST#sha256:}  runtime-base-index.json" \
+            | sha256sum --check --strict
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          index = json.loads(
+              Path("runtime-base-index.json").read_text(encoding="utf-8")
+          )
+          arm64 = [
+              descriptor
+              for descriptor in index.get("manifests", [])
+              if descriptor.get("platform", {}).get("os") == "linux"
+              and descriptor.get("platform", {}).get("architecture") == "arm64"
+              and descriptor.get("platform", {}).get("variant") in (None, "v8")
+          ]
+          if (
+              len(arm64) != 1
+              or arm64[0].get("digest") != os.environ["RUNTIME_BASE_DIGEST"]
+          ):
+              raise SystemExit("runtime base index does not bind the reviewed arm64 manifest")
+          PY
+
+          docker buildx imagetools inspect --raw "${RUNTIME_BASE}" \
+            > runtime-base-manifest.json
+          echo "${RUNTIME_BASE_DIGEST#sha256:}  runtime-base-manifest.json" \
+            | sha256sum --check --strict
+          docker pull --platform linux/arm64 "${RUNTIME_BASE}"
+          docker run --rm --platform linux/arm64 --network none \
+            "${RUNTIME_BASE}" java -version > runtime-base-java-version.txt 2>&1
+          grep --fixed-strings --quiet \
+            "openjdk version \"${RUNTIME_BASE_JAVA_VERSION}\"" \
+            runtime-base-java-version.txt
+
+          docker buildx imagetools inspect --raw "${BUILDKIT_IMAGE}" \
+            > "${RUNNER_TEMP}/buildkit-index.json"
+          echo "${BUILDKIT_IMAGE_DIGEST#sha256:}  ${RUNNER_TEMP}/buildkit-index.json" \
+            | sha256sum --check --strict
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          index = json.loads(
+              Path(os.environ["RUNNER_TEMP"], "buildkit-index.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          matches = [
+              item["digest"]
+              for item in index.get("manifests", [])
+              if item.get("platform", {}).get("os") == "linux"
+              and item.get("platform", {}).get("architecture") == "arm64"
+              and not item.get("platform", {}).get("variant")
+          ]
+          if matches != [os.environ["BUILDKIT_ARM64_MANIFEST_DIGEST"]]:
+              raise SystemExit(f"unexpected BuildKit arm64 manifest: {matches}")
+          PY
+
+          builder_name="shirokuma-polaris-admin-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker buildx create \
+            --name "${builder_name}" \
+            --driver docker-container \
+            --driver-opt "image=${BUILDKIT_IMAGE}" \
+            --use >/dev/null
+          docker buildx inspect --bootstrap > "${RUNNER_TEMP}/buildx-inspect.txt"
+          actual_buildkit_version=$(
+            awk '$1 == "BuildKit" && $2 == "version:" {print $3; exit}' \
+              "${RUNNER_TEMP}/buildx-inspect.txt"
+          )
+          test "${actual_buildkit_version}" = "${BUILDKIT_VERSION}"
+          builder_container=$(
+            docker ps --filter "name=buildx_buildkit_${builder_name}" \
+              --format '{{.ID}}'
+          )
+          test -n "${builder_container}"
+          test "$(
+            docker inspect "${builder_container}" --format '{{.Config.Image}}'
+          )" = "${BUILDKIT_IMAGE}"
+          echo "BUILDER_NAME=${builder_name}" >> "${GITHUB_ENV}"
+
+          ACTUAL_BUILDKIT_VERSION="${actual_buildkit_version}" python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          record = {
+              "schema_version": 1,
+              "buildx": {
+                  "version": os.environ["BUILDX_VERSION"],
+                  "binary_sha256": os.environ["BUILDX_BINARY_SHA256"],
+              },
+              "buildkit": {
+                  "version": os.environ["ACTUAL_BUILDKIT_VERSION"],
+                  "image": os.environ["BUILDKIT_IMAGE"],
+                  "linux_arm64_manifest_digest": os.environ[
+                      "BUILDKIT_ARM64_MANIFEST_DIGEST"
+                  ],
+              },
+              "runtime_base": {
+                  "index": os.environ["RUNTIME_BASE_INDEX"],
+                  "linux_arm64_manifest": os.environ["RUNTIME_BASE"],
+                  "java_version": os.environ["RUNTIME_BASE_JAVA_VERSION"],
+              },
+          }
+          Path("builder-metadata.json").write_text(
+              json.dumps(record, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Log in to GHCR for the run-scoped quarantine push
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish only the closed linux/arm64 context
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          builder: ${{ env.BUILDER_NAME }}
+          context: polaris-admin-image-context
+          file: polaris-admin-image-context/Containerfile.admin
+          platforms: linux/arm64
+          push: true
+          provenance: false
+          sbom: false
+          no-cache: true
+          network: none
+          tags: ${{ env.IMAGE }}:1.6.0-${{ github.run_id }}-${{ github.run_attempt }}
+          build-args: |
+            SOURCE_COMMIT=${{ env.SOURCE_COMMIT }}
+            SOURCE_CREATED=${{ env.SOURCE_CREATED }}
+
+      - name: Verify exact image platform, config, and manifest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]
+          crane.bin manifest "${IMAGE}@${DIGEST}" > image-manifest.json
+          echo "${DIGEST#sha256:}  image-manifest.json" \
+            | sha256sum --check --strict
+          crane.bin config "${IMAGE}@${DIGEST}" > image-config.json
+          docker pull --platform linux/arm64 "${IMAGE}@${DIGEST}"
+          test "$(
+            docker image inspect "${IMAGE}@${DIGEST}" \
+              --format '{{.Os}}/{{.Architecture}}'
+          )" = "linux/arm64"
+
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          config = json.loads(Path("image-config.json").read_text(encoding="utf-8"))
+          runtime = config.get("config", {})
+          expected_labels = {
+              "org.opencontainers.image.source": "https://github.com/apache/polaris",
+              "org.opencontainers.image.revision": os.environ["SOURCE_COMMIT"],
+              "org.opencontainers.image.version": "1.6.0",
+              "org.opencontainers.image.created": os.environ["SOURCE_CREATED"],
+              "org.opencontainers.image.description": (
+                  "Apache Polaris Admin Tool 1.6.0 built from the ASF-signed source release"
+              ),
+              "org.opencontainers.image.licenses": "Apache-2.0",
+              "org.opencontainers.image.base.name": (
+                  "docker.io/library/amazoncorretto"
+              ),
+              "dev.shirokuma.runtime-base.arm64-digest": os.environ[
+                  "RUNTIME_BASE_DIGEST"
+              ],
+          }
+          conditions = (
+              config.get("os") == "linux",
+              config.get("architecture") == "arm64",
+              runtime.get("User") == "10000:10001",
+              runtime.get("WorkingDir") == "/deployments",
+              runtime.get("Entrypoint")
+              == ["/usr/bin/java", "-jar", "/deployments/quarkus-run.jar"],
+              runtime.get("Cmd") == ["--help"],
+              runtime.get("ExposedPorts") in (None, {}),
+              "HOME=/tmp" in runtime.get("Env", []),
+              not any(
+                  any(marker in item.casefold() for marker in (
+                      "credential",
+                      "password",
+                      "secret",
+                      "token",
+                      "datasource",
+                  ))
+                  for item in runtime.get("Env", [])
+              ),
+              all(
+                  runtime.get("Labels", {}).get(key) == value
+                  for key, value in expected_labels.items()
+              ),
+          )
+          if not all(conditions):
+              raise SystemExit("published Polaris Admin image config differs from policy")
+          PY
+
+      - name: Smoke-test credential-free Admin help under hardened controls
+        timeout-minutes: 4
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root_container="polaris-admin-help-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          bootstrap_container="polaris-admin-bootstrap-help-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          root_log="${RUNNER_TEMP}/polaris-admin-help.raw.log"
+          bootstrap_log="${RUNNER_TEMP}/polaris-admin-bootstrap-help.raw.log"
+          root_inspect="${RUNNER_TEMP}/polaris-admin-help.raw-inspect.json"
+          bootstrap_inspect="${RUNNER_TEMP}/polaris-admin-bootstrap-help.raw-inspect.json"
+          cleanup() {
+            rm -f \
+              "${root_log}" \
+              "${bootstrap_log}" \
+              "${root_inspect}" \
+              "${bootstrap_inspect}"
+            docker rm --force "${root_container}" >/dev/null 2>&1 || true
+            docker rm --force "${bootstrap_container}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          test "$(
+            docker image inspect "${IMAGE}@${DIGEST}" --format '{{.Config.User}}'
+          )" = "10000:10001"
+
+          create_admin_smoke() {
+            local name="$1"
+            shift
+            docker create \
+              --name "${name}" \
+              --network none \
+              --user 10000:10001 \
+              --read-only \
+              --tmpfs /tmp:rw,nosuid,nodev,size=64m,uid=10000,gid=10001,mode=1777 \
+              --cap-drop ALL \
+              --security-opt no-new-privileges \
+              --pids-limit 512 \
+              --memory 1536m \
+              "${IMAGE}@${DIGEST}" "$@" >/dev/null
+            docker start "${name}" >/dev/null
+            test "$(docker wait "${name}")" = "0"
+          }
+
+          create_admin_smoke "${root_container}" --help
+          create_admin_smoke "${bootstrap_container}" bootstrap --help
+          docker logs "${root_container}" > "${root_log}" 2>&1
+          docker logs "${bootstrap_container}" > "${bootstrap_log}" 2>&1
+          docker inspect "${root_container}" > "${root_inspect}"
+          docker inspect "${bootstrap_container}" > "${bootstrap_inspect}"
+
+          ROOT_LOG="${root_log}" \
+          BOOTSTRAP_LOG="${bootstrap_log}" \
+          ROOT_INSPECT="${root_inspect}" \
+          BOOTSTRAP_INSPECT="${bootstrap_inspect}" \
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          reference = f"{os.environ['IMAGE']}@{os.environ['DIGEST']}"
+          root_log = Path(os.environ["ROOT_LOG"]).read_text(encoding="utf-8")
+          bootstrap_log = Path(os.environ["BOOTSTRAP_LOG"]).read_text(
+              encoding="utf-8"
+          )
+          required_root_markers = [
+              "Usage: polaris-admin-tool.jar [-hV] [COMMAND]",
+              "Polaris administration & maintenance tool",
+              "bootstrap",
+              "purge",
+              "nosql",
+          ]
+          required_bootstrap_markers = [
+              "Usage: polaris-admin-tool.jar bootstrap",
+              "Bootstraps realms and root principal credentials.",
+              "--realm",
+              "--credential",
+              "--print-credentials",
+              "--credentials-file",
+          ]
+          for label, output, markers in (
+              ("root help", root_log, required_root_markers),
+              ("bootstrap help", bootstrap_log, required_bootstrap_markers),
+          ):
+              missing = [marker for marker in markers if marker not in output]
+              if missing:
+                  raise SystemExit(f"{label} omitted required markers: {missing}")
+
+          forbidden = {
+              "generated_root_credential": r"(?i)\b[0-9a-f]{16}:[0-9a-f]{32}\b",
+              "root_credential_output": (
+                  r"(?im)^realm:\s+\S+\s+root principal credentials:\s+\S+\s*$"
+              ),
+              "bootstrap_credential_assignment": (
+                  r"(?i)\b(?:POLARIS_BOOTSTRAP_CREDENTIALS|"
+                  r"polaris\.bootstrap\.credentials)\s*[:=]\s*\S+"
+              ),
+              "authorization_header": (
+                  r"(?i)\bAuthorization\s*:\s*(?:Bearer|Basic)\s+\S+"
+              ),
+              "secret_assignment": (
+                  r"(?i)\b(?:password|access[_-]?token|refresh[_-]?token)"
+                  r"\s*[:=]\s*\S+"
+              ),
+          }
+          combined = root_log + "\n" + bootstrap_log
+          leaked = [
+              name for name, pattern in forbidden.items() if re.search(pattern, combined)
+          ]
+          if leaked:
+              raise SystemExit(f"credential-free Admin help leaked: {leaked}")
+
+          expected_tmpfs = {
+              "rw",
+              "nosuid",
+              "nodev",
+              "size=64m",
+              "uid=10000",
+              "gid=10001",
+              "mode=1777",
+          }
+          expected_args = {
+              "root_help": ["-jar", "/deployments/quarkus-run.jar", "--help"],
+              "bootstrap_help": [
+                  "-jar",
+                  "/deployments/quarkus-run.jar",
+                  "bootstrap",
+                  "--help",
+              ],
+          }
+          retained = []
+          for label, env_name in (
+              ("root_help", "ROOT_INSPECT"),
+              ("bootstrap_help", "BOOTSTRAP_INSPECT"),
+          ):
+              containers = json.loads(
+                  Path(os.environ[env_name]).read_text(encoding="utf-8")
+              )
+              if len(containers) != 1:
+                  raise SystemExit(f"{label} inspect must contain one container")
+              container = containers[0]
+              config = container.get("Config", {})
+              host = container.get("HostConfig", {})
+              security_options = host.get("SecurityOpt", [])
+              if (
+                  config.get("User") != "10000:10001"
+                  or container.get("Path") != "/usr/bin/java"
+                  or container.get("Args") != expected_args[label]
+                  or host.get("NetworkMode") != "none"
+                  or host.get("ReadonlyRootfs") is not True
+                  or set(host.get("Tmpfs", {}).get("/tmp", "").split(","))
+                  != expected_tmpfs
+                  or host.get("CapDrop") != ["ALL"]
+                  or host.get("PidsLimit") != 512
+                  or host.get("Memory") != 1610612736
+                  or len(security_options) != 1
+                  or not security_options[0].startswith("no-new-privileges")
+                  or any(
+                      any(marker in value.casefold() for marker in (
+                          "credential",
+                          "password",
+                          "secret",
+                          "token",
+                          "datasource",
+                      ))
+                      for value in config.get("Env", [])
+                  )
+              ):
+                  raise SystemExit(
+                      f"effective {label} Admin smoke controls differ from policy"
+                  )
+              retained.append(
+                  {
+                      "name": label,
+                      "user": config["User"],
+                      "path": container["Path"],
+                      "args": container["Args"],
+                      "network_mode": host["NetworkMode"],
+                      "read_only_rootfs": host["ReadonlyRootfs"],
+                      "tmpfs": {"/tmp": sorted(expected_tmpfs)},
+                      "capabilities_dropped": host["CapDrop"],
+                      "pids_limit": host["PidsLimit"],
+                      "memory_bytes": host["Memory"],
+                      "security_options": security_options,
+                  }
+              )
+
+          inspect_record = {
+              "schema_version": 1,
+              "result": "passed",
+              "reference": reference,
+              "containers": retained,
+          }
+          inspect_path = Path("admin-container-inspect.json")
+          inspect_path.write_text(
+              json.dumps(inspect_record, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          inspect_sha256 = hashlib.sha256(inspect_path.read_bytes()).hexdigest()
+
+          def output_record(command, output, markers):
+              encoded = output.encode("utf-8")
+              return {
+                  "schema_version": 1,
+                  "result": "passed",
+                  "reference": reference,
+                  "command": command,
+                  "exit_code": 0,
+                  "network": "none",
+                  "credentials_supplied": False,
+                  "required_output_markers": markers,
+                  "output_sha256": hashlib.sha256(encoded).hexdigest(),
+                  "output_size": len(encoded),
+                  "admin_container_inspect_sha256": inspect_sha256,
+              }
+
+          Path("admin-help.json").write_text(
+              json.dumps(
+                  output_record(["--help"], root_log, required_root_markers),
+                  indent=2,
+                  sort_keys=True,
+              )
+              + "\n",
+              encoding="utf-8",
+          )
+          bootstrap_record = output_record(
+              ["bootstrap", "--help"],
+              bootstrap_log,
+              required_bootstrap_markers,
+          )
+          bootstrap_record.update(
+              {
+                  "credential_bearing_options": [
+                      "--credential",
+                      "--credentials-file",
+                      "--print-credentials",
+                  ],
+                  "credential_argument_permitted": False,
+                  "credential_file_read": False,
+                  "print_credentials_requested": False,
+              }
+          )
+          Path("admin-bootstrap-help.json").write_text(
+              json.dumps(bootstrap_record, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          policy = {
+              "schema_version": 1,
+              "result": "passed",
+              "sources": ["root --help", "bootstrap --help"],
+              "forbidden_pattern_classes": sorted(forbidden),
+              "redaction_count": 0,
+              "raw_logs_retained": False,
+              "credentials_supplied": False,
+              "combined_output_sha256": hashlib.sha256(
+                  combined.encode("utf-8")
+              ).hexdigest(),
+              "combined_output_size": len(combined.encode("utf-8")),
+          }
+          Path("admin-smoke-log-policy.json").write_text(
+              json.dumps(policy, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          rm -f \
+            "${root_log}" \
+            "${bootstrap_log}" \
+            "${root_inspect}" \
+            "${bootstrap_inspect}"
+
+      - name: Generate CycloneDX SBOM for the exact digest
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: cyclonedx-json
+          output-file: polaris-admin-1.6.0-arm64.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
+          syft-version: v1.46.0
+
+      - name: Scan the exact digest and block High or Critical findings
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.72.0
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: json
+          output: trivy.json
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          vuln-type: os,library
+          exit-code: 1
+
+      - name: Record scanner freshness and pinned build tools
+        env:
+          TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
+        shell: bash
+        run: |
+          set -euo pipefail
+          trivy version --format json > trivy-version.json
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          trivy = json.loads(Path("trivy-version.json").read_text(encoding="utf-8"))
+          if trivy.get("Version") != os.environ["TRIVY_VERSION"].removeprefix("v"):
+              raise SystemExit("unexpected Trivy version")
+          database = trivy.get("VulnerabilityDB", {})
+          if not database.get("UpdatedAt") or not database.get("DownloadedAt"):
+              raise SystemExit("missing vulnerability DB freshness metadata")
+          sbom = json.loads(
+              Path("polaris-admin-1.6.0-arm64.cdx.json").read_text(encoding="utf-8")
+          )
+          syft = [
+              item
+              for item in sbom["metadata"]["tools"]["components"]
+              if item.get("name") == "syft"
+          ]
+          if len(syft) != 1 or (
+              "v" + syft[0]["version"].removeprefix("v")
+          ) != os.environ["SYFT_VERSION"]:
+              raise SystemExit("unexpected Syft version in SBOM")
+          builder = json.loads(
+              Path("builder-metadata.json").read_text(encoding="utf-8")
+          )
+          record = {
+              "schema_version": 1,
+              "runner": {
+                  "label": "ubuntu-24.04-arm",
+                  "os": os.uname().sysname,
+                  "architecture": os.uname().machine,
+              },
+              "builder": builder,
+              "syft_version": os.environ["SYFT_VERSION"],
+              "trivy_version": os.environ["TRIVY_VERSION"],
+              "trivy_database": database,
+          }
+          Path("toolchain.json").write_text(
+              json.dumps(record, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Prove the SBOM retains the disclosed Admin NoSQL and MongoDB surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          sbom = json.loads(
+              Path("polaris-admin-1.6.0-arm64.cdx.json").read_text(encoding="utf-8")
+          )
+          required_terms = ["mongodb", "polaris-persistence-nosql"]
+          matching_components_by_term = {term: [] for term in required_terms}
+          for component in sbom.get("components", []):
+              identity = " ".join(
+                  str(component.get(field, ""))
+                  for field in ("group", "name", "purl")
+              ).lower()
+              for term in required_terms:
+                  if term in identity:
+                      matching_components_by_term[term].append(
+                          {
+                              "group": component.get("group"),
+                              "name": component.get("name"),
+                              "purl": component.get("purl"),
+                          }
+                      )
+          missing_terms = [
+              term
+              for term in required_terms
+              if not matching_components_by_term[term]
+          ]
+          if missing_terms:
+              raise SystemExit(
+                  "Admin SBOM omitted dependency terms: " + ", ".join(missing_terms)
+              )
+          record = {
+              "schema_version": 1,
+              "result": "passed",
+              "relational_only": False,
+              "review_state": "reviewed_for_image_publication",
+              "image_publication_decision": (
+                  "accepted_unmodified_for_image_publication_only"
+              ),
+              "required_component_terms": required_terms,
+              "matching_components_by_term": matching_components_by_term,
+          }
+          Path("sbom-policy.json").write_text(
+              json.dumps(record, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Remove registry credentials and prove anonymous exact-digest retrieval
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker logout ghcr.io
+          docker image rm "${IMAGE}@${DIGEST}" >/dev/null 2>&1 || true
+          rm -f anonymous-image-manifest.json.tmp
+          for registry_attempt in 1 2 3 4 5 6; do
+            if crane.bin manifest "${IMAGE}@${DIGEST}" \
+              > anonymous-image-manifest.json.tmp \
+              && docker pull --platform linux/arm64 "${IMAGE}@${DIGEST}"
+            then
+              mv anonymous-image-manifest.json.tmp anonymous-image-manifest.json
+              break
+            fi
+            rm -f anonymous-image-manifest.json.tmp
+            if [ "${registry_attempt}" -eq 6 ]; then
+              echo "public exact-digest retrieval failed; no credential fallback is permitted" >&2
+              exit 1
+            fi
+            sleep "$((registry_attempt * 2))"
+          done
+          echo "${DIGEST#sha256:}  anonymous-image-manifest.json" \
+            | sha256sum --check --strict
+          cmp image-manifest.json anonymous-image-manifest.json
+          test "$(
+            docker image inspect "${IMAGE}@${DIGEST}" \
+              --format '{{.Os}}/{{.Architecture}}'
+          )" = "linux/arm64"
+
+      - name: Restore GHCR credentials for signature and provenance publication
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Keyless-sign and verify the exact scanned image
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(
+            cosign version | awk '$1 == "GitVersion:" {print $2; exit}'
+          )" = "${COSIGN_VERSION}"
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/polaris-admin-arm64.yml@${GITHUB_REF}"
+          cosign sign --yes --bundle cosign-signature-bundle.json \
+            "${IMAGE}@${DIGEST}"
+          cosign verify-blob \
+            --bundle cosign-signature-bundle.json \
+            --certificate-oidc-issuer \
+              "https://token.actions.githubusercontent.com" \
+            --certificate-identity "${identity}" \
+            --certificate-github-workflow-name "${GITHUB_WORKFLOW}" \
+            --certificate-github-workflow-repository "${GITHUB_REPOSITORY}" \
+            --certificate-github-workflow-ref "${GITHUB_REF}" \
+            --certificate-github-workflow-sha "${GITHUB_WORKFLOW_SHA}" \
+            --certificate-github-workflow-trigger "${GITHUB_EVENT_NAME}" \
+            image-manifest.json
+
+          for registry_attempt in 1 2 3 4 5 6; do
+            if cosign verify \
+              --certificate-oidc-issuer \
+                "https://token.actions.githubusercontent.com" \
+              --certificate-identity "${identity}" \
+              --certificate-github-workflow-name "${GITHUB_WORKFLOW}" \
+              --certificate-github-workflow-repository "${GITHUB_REPOSITORY}" \
+              --certificate-github-workflow-ref "${GITHUB_REF}" \
+              --certificate-github-workflow-sha "${GITHUB_WORKFLOW_SHA}" \
+              --certificate-github-workflow-trigger "${GITHUB_EVENT_NAME}" \
+              --output json "${IMAGE}@${DIGEST}" > cosign-payloads.json.tmp \
+              && cosign download signature "${IMAGE}@${DIGEST}" \
+                > registry-signature-bundles.jsonl.tmp \
+              && test -s registry-signature-bundles.jsonl.tmp
+            then
+              mv cosign-payloads.json.tmp cosign-payloads.json
+              mv registry-signature-bundles.jsonl.tmp \
+                registry-signature-bundles.jsonl
+              break
+            fi
+            rm -f cosign-payloads.json.tmp registry-signature-bundles.jsonl.tmp
+            if [ "${registry_attempt}" -eq 6 ]; then
+              echo "registry signature was not visible after bounded retries" >&2
+              exit 1
+            fi
+            sleep "$((registry_attempt * 2))"
+          done
+
+          rekor_index=$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          bundle = json.loads(
+              Path("cosign-signature-bundle.json").read_text(encoding="utf-8")
+          )
+          entries = bundle["verificationMaterial"]["tlogEntries"]
+          if len(entries) != 1:
+              raise SystemExit("exactly one Rekor entry is required")
+          print(entries[0]["logIndex"])
+          PY
+          )
+          curl --fail --location \
+            --proto '=https' --tlsv1.2 \
+            --retry 5 --retry-all-errors \
+            --output rekor-entry.json \
+            "${REKOR_URL}/api/v1/log/entries?logIndex=${rekor_index}"
+
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          bundle = json.loads(
+              Path("cosign-signature-bundle.json").read_text(encoding="utf-8")
+          )
+          payloads = json.loads(
+              Path("cosign-payloads.json").read_text(encoding="utf-8")
+          )
+          registry_bundles = [
+              json.loads(line)
+              for line in Path("registry-signature-bundles.jsonl")
+              .read_text(encoding="utf-8")
+              .splitlines()
+              if line.strip()
+          ]
+          rekor = json.loads(Path("rekor-entry.json").read_text(encoding="utf-8"))
+          bundle_media_type = "application/vnd.dev.sigstore.bundle.v0.3+json"
+          if bundle.get("mediaType") != bundle_media_type:
+              raise SystemExit("unexpected Sigstore bundle format")
+          for candidate in registry_bundles:
+              if "Base64Signature" in candidate or "Payload" in candidate:
+                  raise SystemExit(
+                      "Cosign v3.1.1 contract rejects legacy signature records"
+                  )
+              if candidate.get("mediaType") != bundle_media_type:
+                  raise SystemExit("registry signature is not a Sigstore v0.3 bundle")
+              if "dsseEnvelope" not in candidate or "messageSignature" in candidate:
+                  raise SystemExit("registry signature is not the required DSSE bundle")
+              candidate_statement = json.loads(
+                  base64.b64decode(
+                      candidate["dsseEnvelope"]["payload"], validate=True
+                  )
+              )
+              if candidate_statement.get("predicateType") != (
+                  "https://sigstore.dev/cosign/sign/v1"
+              ):
+                  raise SystemExit("registry bundle has an unexpected predicate type")
+          material = bundle["verificationMaterial"]
+          if not material.get("certificate", {}).get("rawBytes"):
+              raise SystemExit("bundle certificate is missing")
+          statement = json.loads(
+              base64.b64decode(
+                  bundle["dsseEnvelope"]["payload"], validate=True
+              )
+          )
+          subjects = statement.get("subject", [])
+          expected_digest = os.environ["DIGEST"].removeprefix("sha256:")
+          if not (
+              statement.get("predicateType") == "https://sigstore.dev/cosign/sign/v1"
+              and len(subjects) == 1
+              and subjects[0].get("digest") == {"sha256": expected_digest}
+              and subjects[0].get("name", "") == ""
+              and subjects[0].get("annotations", {}) == {}
+          ):
+              raise SystemExit("bundle subject is not the exact image digest")
+          entries = material.get("tlogEntries", [])
+          if len(entries) != 1:
+              raise SystemExit("exactly one bundle tlog entry is required")
+          entry = entries[0]
+          proof = entry.get("inclusionProof", {})
+          if not (
+              entry.get("canonicalizedBody")
+              and entry.get("inclusionPromise", {}).get("signedEntryTimestamp")
+              and proof.get("checkpoint")
+              and proof.get("rootHash")
+              and proof.get("treeSize")
+              and isinstance(proof.get("hashes"), list)
+          ):
+              raise SystemExit("incomplete Rekor inclusion evidence")
+          if not isinstance(rekor, dict) or len(rekor) != 1:
+              raise SystemExit("expected one Rekor API entry")
+          uuid, api_entry = next(iter(rekor.items()))
+          log_id_hex = base64.b64decode(
+              entry["logId"]["keyId"], validate=True
+          ).hex()
+          stable_pairs = (
+              (str(api_entry.get("logIndex")), str(entry["logIndex"])),
+              (str(api_entry.get("integratedTime")), str(entry["integratedTime"])),
+              (api_entry.get("logID"), log_id_hex),
+              (api_entry.get("body"), entry["canonicalizedBody"]),
+          )
+          if any(left != right for left, right in stable_pairs):
+              raise SystemExit("Rekor API entry does not match the signed bundle")
+          if not isinstance(payloads, list) or not payloads:
+              raise SystemExit("registry verification returned no payloads")
+          expected_reference = f"{os.environ['IMAGE']}@{os.environ['DIGEST']}"
+          for payload in payloads:
+              critical = payload.get("critical", payload.get("Critical", {}))
+              image = critical.get("image", critical.get("Image", {}))
+              identity = critical.get("identity", critical.get("Identity", {}))
+              payload_digest = image.get(
+                  "docker-manifest-digest",
+                  image.get("Docker-manifest-digest"),
+              )
+              payload_reference = identity.get(
+                  "docker-reference",
+                  identity.get("Docker-reference"),
+              )
+              if (
+                  payload_digest != os.environ["DIGEST"]
+                  or payload_reference != expected_reference
+              ):
+                  raise SystemExit(
+                      "registry verification payload reference or digest mismatch"
+                  )
+          registry_bundle_matches = sum(
+              candidate == bundle for candidate in registry_bundles
+          )
+          if registry_bundle_matches != 1:
+              raise SystemExit("registry does not contain exactly the retained bundle")
+          Path("registry-signature-bundles.jsonl").write_text(
+              json.dumps(bundle, separators=(",", ":")) + "\n",
+              encoding="utf-8",
+          )
+          bundle_sha256 = hashlib.sha256(
+              Path("cosign-signature-bundle.json").read_bytes()
+          ).hexdigest()
+
+          record = {
+              "schema_version": 1,
+              "reference": expected_reference,
+              "certificate_constraints": {
+                  "issuer": "https://token.actions.githubusercontent.com",
+                  "identity": (
+                      f"https://github.com/{os.environ['GITHUB_REPOSITORY']}"
+                      f"/.github/workflows/polaris-admin-arm64.yml@{os.environ['GITHUB_REF']}"
+                  ),
+                  "github_workflow_name": os.environ["GITHUB_WORKFLOW"],
+                  "github_workflow_repository": os.environ["GITHUB_REPOSITORY"],
+                  "github_workflow_ref": os.environ["GITHUB_REF"],
+                  "github_workflow_sha": os.environ["GITHUB_WORKFLOW_SHA"],
+                  "github_workflow_trigger": os.environ["GITHUB_EVENT_NAME"],
+              },
+              "detached_bundle_verified": True,
+              "registry_signature_verified": True,
+              "registry_bundle": {
+                  "file": "registry-signature-bundles.jsonl",
+                  "exact_matches": registry_bundle_matches,
+                  "bundle_sha256": bundle_sha256,
+              },
+              "transparency_log": {
+                  "base_url": os.environ["REKOR_URL"],
+                  "major_api_version": int(os.environ["REKOR_MAJOR_API_VERSION"]),
+                  "entry_lookup": (
+                      f"/api/v1/log/entries?logIndex={entry['logIndex']}"
+                  ),
+              },
+              "verified_payloads": payloads,
+              "rekor_entries": [
+                  {
+                      "uuid": uuid,
+                      "log_index": str(entry["logIndex"]),
+                      "integrated_time": str(entry["integratedTime"]),
+                      "log_id": entry["logId"]["keyId"],
+                      "log_id_hex": log_id_hex,
+                  }
+              ],
+          }
+          Path("cosign-verify.json").write_text(
+              json.dumps(record, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+          rm cosign-payloads.json
+
+      - name: Mirror GHCR credentials for provenance publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          default_config_dir="${HOME}/.docker"
+          default_config="${default_config_dir}/config.json"
+          backup="${RUNNER_TEMP}/docker-config-before-provenance.json"
+          mkdir -p "${default_config_dir}"
+          if [ -e "${default_config}" ]; then
+            install -m 0600 "${default_config}" "${backup}"
+            echo "PROVENANCE_DOCKER_CONFIG_BACKUP=1" >> "${GITHUB_ENV}"
+          else
+            echo "PROVENANCE_DOCKER_CONFIG_BACKUP=0" >> "${GITHUB_ENV}"
+          fi
+          install -m 0600 "${DOCKER_CONFIG}/config.json" "${default_config}"
+
+      - name: Publish SLSA provenance for the exact scanned digest
+        id: provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Remove provenance credential mirror
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          default_config="${HOME}/.docker/config.json"
+          backup="${RUNNER_TEMP}/docker-config-before-provenance.json"
+          rm -f "${default_config}"
+          if [ "${PROVENANCE_DOCKER_CONFIG_BACKUP:-0}" = "1" ]; then
+            install -m 0600 "${backup}" "${default_config}"
+            rm -f "${backup}"
+          fi
+
+      - name: Verify SLSA provenance from this exact workflow
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh attestation verify "oci://${IMAGE}@${DIGEST}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --predicate-type "https://slsa.dev/provenance/v1" \
+            --signer-workflow \
+              "${GITHUB_REPOSITORY}/.github/workflows/polaris-admin-arm64.yml" \
+            --signer-digest "${GITHUB_WORKFLOW_SHA}" \
+            --source-digest "${GITHUB_SHA}" \
+            --source-ref "${GITHUB_REF}" \
+            --format json > slsa-verify.json
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          records = json.loads(
+              Path("slsa-verify.json").read_text(encoding="utf-8")
+          )
+          expected_digest = os.environ["DIGEST"].removeprefix("sha256:")
+          repository = os.environ["GITHUB_REPOSITORY"]
+          repository_url = f"https://github.com/{repository}"
+          workflow_path = ".github/workflows/polaris-admin-arm64.yml"
+          identity = f"{repository_url}/{workflow_path}@{os.environ['GITHUB_REF']}"
+          invocation = (
+              f"{repository_url}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+              f"/attempts/{os.environ['GITHUB_RUN_ATTEMPT']}"
+          )
+          matches = []
+          bundles = []
+          for record in records:
+              certificate = record["verificationResult"]["signature"]["certificate"]
+              bundle = record["attestation"]["bundle"]
+              statement = json.loads(
+                  base64.b64decode(
+                      bundle["dsseEnvelope"]["payload"], validate=True
+                  )
+              )
+              predicate = statement.get("predicate", {})
+              definition = predicate.get("buildDefinition", {})
+              workflow = definition.get("externalParameters", {}).get("workflow", {})
+              details = predicate.get("runDetails", {})
+              conditions = (
+                  statement.get("_type") == "https://in-toto.io/Statement/v1",
+                  statement.get("predicateType")
+                  == "https://slsa.dev/provenance/v1",
+                  definition.get("buildType")
+                  == "https://actions.github.io/buildtypes/workflow/v1",
+                  certificate.get("issuer")
+                  == "https://token.actions.githubusercontent.com",
+                  certificate.get("subjectAlternativeName") == identity,
+                  certificate.get("githubWorkflowName")
+                  == os.environ["GITHUB_WORKFLOW"],
+                  certificate.get("githubWorkflowRepository") == repository,
+                  certificate.get("githubWorkflowRef")
+                  == os.environ["GITHUB_REF"],
+                  certificate.get("githubWorkflowSHA")
+                  == os.environ["GITHUB_WORKFLOW_SHA"],
+                  certificate.get("githubWorkflowTrigger")
+                  == os.environ["GITHUB_EVENT_NAME"],
+                  certificate.get("buildTrigger")
+                  == os.environ["GITHUB_EVENT_NAME"],
+                  certificate.get("runnerEnvironment") == "github-hosted",
+                  certificate.get("buildSignerURI") == identity,
+                  certificate.get("buildSignerDigest")
+                  == os.environ["GITHUB_WORKFLOW_SHA"],
+                  certificate.get("buildConfigURI") == identity,
+                  certificate.get("buildConfigDigest")
+                  == os.environ["GITHUB_WORKFLOW_SHA"],
+                  certificate.get("sourceRepositoryURI") == repository_url,
+                  certificate.get("sourceRepositoryDigest")
+                  == os.environ["GITHUB_SHA"],
+                  certificate.get("sourceRepositoryRef")
+                  == os.environ["GITHUB_REF"],
+                  certificate.get("runInvocationURI") == invocation,
+                  workflow.get("repository") == repository_url,
+                  workflow.get("path") == workflow_path,
+                  workflow.get("ref") == os.environ["GITHUB_REF"],
+                  details.get("builder", {}).get("id") == identity,
+                  details.get("metadata", {}).get("invocationId") == invocation,
+                  any(
+                      subject.get("name") == os.environ["IMAGE"]
+                      and subject.get("digest", {}).get("sha256")
+                      == expected_digest
+                      for subject in statement.get("subject", [])
+                  ),
+              )
+              if all(conditions):
+                  matches.append(record)
+                  bundles.append(bundle)
+          if not matches:
+              raise SystemExit("no SLSA provenance matches the workflow invocation")
+          Path("slsa-verify.json").write_text(
+              json.dumps(matches, indent=2) + "\n", encoding="utf-8"
+          )
+          Path("slsa-bundles.jsonl").write_text(
+              "".join(
+                  json.dumps(bundle, separators=(",", ":")) + "\n"
+                  for bundle in bundles
+              ),
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Keyless-attest the retained Polaris SBOM and scan
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          verify_attestation_bundle() {
+            local bundle="$1"
+            local predicate_type="$2"
+            cosign verify-blob-attestation \
+              --bundle "${bundle}" \
+              --type "${predicate_type}" \
+              --certificate-identity \
+                "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/polaris-admin-arm64.yml@${GITHUB_REF}" \
+              --certificate-oidc-issuer \
+                "https://token.actions.githubusercontent.com" \
+              --certificate-github-workflow-name "${GITHUB_WORKFLOW}" \
+              --certificate-github-workflow-ref "${GITHUB_REF}" \
+              --certificate-github-workflow-repository "${GITHUB_REPOSITORY}" \
+              --certificate-github-workflow-sha "${GITHUB_WORKFLOW_SHA}" \
+              --certificate-github-workflow-trigger "${GITHUB_EVENT_NAME}" \
+              --digest "${DIGEST#sha256:}" \
+              --digestAlg sha256
+          }
+
+          cosign attest --yes \
+            --bundle sbom-attestation-bundle.json \
+            --type cyclonedx \
+            --predicate polaris-admin-1.6.0-arm64.cdx.json "${IMAGE}@${DIGEST}"
+          verify_attestation_bundle \
+            sbom-attestation-bundle.json cyclonedx
+
+          cosign attest --yes \
+            --bundle trivy-attestation-bundle.json \
+            --type https://shirokuma.dev/attestations/trivy/v1 \
+            --predicate trivy.json "${IMAGE}@${DIGEST}"
+          verify_attestation_bundle \
+            trivy-attestation-bundle.json \
+            https://shirokuma.dev/attestations/trivy/v1
+
+      - name: Record and retain the non-admitted image candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence_dir="${RUNNER_TEMP}/polaris-admin-image-candidate"
+          mkdir -p "${evidence_dir}"
+          cp \
+            anonymous-image-manifest.json \
+            builder-metadata.json \
+            candidate-input/build-context.sha256 \
+            candidate-input/build-input.json \
+            candidate-input/dependency-input.json \
+            candidate-input/offline-build.json \
+            candidate-input/source-authentication.json \
+            cosign-signature-bundle.json \
+            cosign-verify.json \
+            admin-help.json \
+            admin-bootstrap-help.json \
+            admin-container-inspect.json \
+            admin-smoke-log-policy.json \
+            image-config.json \
+            image-manifest.json \
+            polaris-admin-1.6.0-arm64.cdx.json \
+            registry-signature-bundles.jsonl \
+            rekor-entry.json \
+            runtime-base-index.json \
+            runtime-base-java-version.txt \
+            runtime-base-manifest.json \
+            sbom-attestation-bundle.json \
+            sbom-policy.json \
+            slsa-bundles.jsonl \
+            slsa-verify.json \
+            toolchain.json \
+            trivy-attestation-bundle.json \
+            trivy-version.json \
+            trivy.json \
+            "${evidence_dir}/"
+
+          expected_files=$(printf '%s\n' \
+            admin-bootstrap-help.json \
+            admin-container-inspect.json \
+            admin-help.json \
+            admin-smoke-log-policy.json \
+            anonymous-image-manifest.json \
+            build-context.sha256 \
+            build-input.json \
+            builder-metadata.json \
+            cosign-signature-bundle.json \
+            cosign-verify.json \
+            dependency-input.json \
+            image-config.json \
+            image-manifest.json \
+            offline-build.json \
+            polaris-admin-1.6.0-arm64.cdx.json \
+            registry-signature-bundles.jsonl \
+            rekor-entry.json \
+            runtime-base-index.json \
+            runtime-base-java-version.txt \
+            runtime-base-manifest.json \
+            sbom-attestation-bundle.json \
+            sbom-policy.json \
+            slsa-bundles.jsonl \
+            slsa-verify.json \
+            source-authentication.json \
+            toolchain.json \
+            trivy-attestation-bundle.json \
+            trivy-version.json \
+            trivy.json | sort)
+          actual_files=$(
+            find "${evidence_dir}" -mindepth 1 -maxdepth 1 -type f \
+              -exec basename {} \; | sort
+          )
+          test "${actual_files}" = "${expected_files}"
+
+      - name: Upload candidate evidence before trusted-tag promotion
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: polaris-admin-image-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/polaris-admin-image-candidate/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Remove registry credentials and ephemeral builder
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker logout ghcr.io >/dev/null 2>&1 || true
+          if [ -n "${BUILDER_NAME:-}" ]; then
+            docker buildx rm "${BUILDER_NAME}" >/dev/null 2>&1 || true
+          fi
+
+  promote:
+    needs:
+      - prepare
+      - verify
+    if: >-
+      needs.prepare.result == 'success' &&
+      needs.verify.result == 'success' &&
+      needs.prepare.outputs.active == 'true' &&
+      github.repository == 'TommyKammy/Shirokuma' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Check out the reviewed promotion policy
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Rebind promotion to the static publication policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REPOSITORY}" = "TommyKammy/Shirokuma"
+          test "${GITHUB_REF}" = "refs/heads/main"
+          test "${GITHUB_WORKFLOW_REF}" = \
+            "TommyKammy/Shirokuma/.github/workflows/polaris-admin-arm64.yml@refs/heads/main"
+          test "${GITHUB_SHA}" = "${GITHUB_WORKFLOW_SHA}"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          python3 scripts/verify_polaris_admin_image.py audit-publication-bootstrap --root .
+
+      - name: Install pinned Cosign before promotion policy revalidation
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.1
+
+      - name: Complete the promotion cryptographic policy audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_polaris_admin_image.py audit --root .
+          python3 scripts/verify_polaris_trusted_image.py audit --root .
+
+      - name: Download retained candidate evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.verify.outputs.candidate_artifact }}
+          path: candidate-evidence
+
+      - name: Revalidate candidate evidence before promotion credentials exist
+        env:
+          DIGEST: ${{ needs.verify.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${DOCKER_AUTH_CONFIG:-}"
+          expected_files=$(printf '%s\n' \
+            admin-bootstrap-help.json \
+            admin-container-inspect.json \
+            admin-help.json \
+            admin-smoke-log-policy.json \
+            anonymous-image-manifest.json \
+            build-context.sha256 \
+            build-input.json \
+            builder-metadata.json \
+            cosign-signature-bundle.json \
+            cosign-verify.json \
+            dependency-input.json \
+            image-config.json \
+            image-manifest.json \
+            offline-build.json \
+            polaris-admin-1.6.0-arm64.cdx.json \
+            registry-signature-bundles.jsonl \
+            rekor-entry.json \
+            runtime-base-index.json \
+            runtime-base-java-version.txt \
+            runtime-base-manifest.json \
+            sbom-attestation-bundle.json \
+            sbom-policy.json \
+            slsa-bundles.jsonl \
+            slsa-verify.json \
+            source-authentication.json \
+            toolchain.json \
+            trivy-attestation-bundle.json \
+            trivy-version.json \
+            trivy.json | sort)
+          actual_files=$(
+            find candidate-evidence -mindepth 1 -maxdepth 1 -type f \
+              -exec basename {} \; | sort
+          )
+          test "${actual_files}" = "${expected_files}"
+          if find candidate-evidence -mindepth 1 -maxdepth 1 \
+            \( -type l -o ! -type f \) -print -quit | grep --quiet .
+          then
+            echo "candidate evidence contains a symlink or special file" >&2
+            exit 1
+          fi
+          echo "${DIGEST#sha256:}  candidate-evidence/image-manifest.json" \
+            | sha256sum --check --strict
+          cmp candidate-evidence/image-manifest.json \
+            candidate-evidence/anonymous-image-manifest.json
+          echo "${RUNTIME_BASE_INDEX_DIGEST#sha256:}  candidate-evidence/runtime-base-index.json" \
+            | sha256sum --check --strict
+          echo "${RUNTIME_BASE_DIGEST#sha256:}  candidate-evidence/runtime-base-manifest.json" \
+            | sha256sum --check --strict
+          grep --fixed-strings --quiet \
+            "openjdk version \"${RUNTIME_BASE_JAVA_VERSION}\"" \
+            candidate-evidence/runtime-base-java-version.txt
+
+          DIGEST="${DIGEST}" python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path("candidate-evidence")
+
+          def reject_duplicates(pairs):
+              result = {}
+              for key, value in pairs:
+                  if key in result:
+                      raise ValueError(f"duplicate JSON key: {key}")
+                  result[key] = value
+              return result
+
+          def load(name, maximum=16 * 1024 * 1024):
+              path = root / name
+              size = path.stat().st_size
+              if size <= 0 or size > maximum:
+                  raise SystemExit(f"invalid retained evidence size: {name}={size}")
+              try:
+                  return json.loads(
+                      path.read_text(encoding="utf-8"),
+                      object_pairs_hook=reject_duplicates,
+                  )
+              except (UnicodeDecodeError, ValueError) as error:
+                  raise SystemExit(f"invalid retained JSON {name}: {error}") from error
+
+          reference = f"{os.environ['IMAGE']}@{os.environ['DIGEST']}"
+          expected_decision = "accepted_unmodified_for_image_publication_only"
+          required_terms = ["mongodb", "polaris-persistence-nosql"]
+          expected_projects = [
+              ":polaris-persistence-nosql-api",
+              ":polaris-persistence-nosql-maintenance-api",
+              ":polaris-persistence-nosql-metastore",
+              ":polaris-persistence-nosql-cdi-quarkus",
+              ":polaris-persistence-nosql-cdi-quarkus-distcache",
+              ":polaris-persistence-nosql-maintenance-impl",
+              ":polaris-persistence-nosql-metastore-maintenance",
+          ]
+          expected_review_checkpoint = {
+              "repository": "TommyKammy/Shirokuma",
+              "pull_request": 87,
+              "reviewed_head_commit": (
+                  "178b5ca03a2575a7100cfb47daede795fbd1d30c"
+              ),
+              "merge_commit": "8e5c6927e95d1027e16fe2ac27ab8322b45359c9",
+              "merged_at": "2026-07-20T23:24:12Z",
+              "merged_by": "TommyKammy",
+              "reviewed_contract_sha256": (
+                  "26f5259642007aa11a4676ccee918bd5b1e55f8eb5c0025f92a12f1d8ccb37db"
+              ),
+              "reviewed_evidence_manifest_sha256": (
+                  "026c4d82e9031532323ccb3c31ea83939010982cfcf373644cdcf064e2613409"
+              ),
+              "reviewed_verifier_sha256": (
+                  "ef1fad340179e61f7d1291d9e3fd44c793c4761af4b094a0b232ea663c7f41c9"
+              ),
+          }
+          context_files = [
+              line.split("  ", 1)[1]
+              for line in (root / "build-context.sha256").read_text(
+                  encoding="utf-8"
+              ).splitlines()
+          ]
+          expected_context_matches = {
+              term: sorted(
+                  name
+                  for name in context_files
+                  if name.startswith("build/quarkus-app/")
+                  and name.endswith(".jar")
+                  and term in name.lower()
+              )
+              for term in required_terms
+          }
+          if any(not expected_context_matches[term] for term in required_terms):
+              raise SystemExit("retained Admin context omits a dependency term")
+
+          build_input = load("build-input.json")
+          build_surface = build_input.get("admin_dependency_surface", {})
+          if (
+              build_input.get("component") != "polaris-admin"
+              or build_input.get("state") != "admin_image_publication_pending"
+              or build_input.get("admitted") is not False
+              or build_input.get("source_sha") != os.environ["GITHUB_SHA"]
+              or build_input.get("workflow_sha") != os.environ["GITHUB_WORKFLOW_SHA"]
+              or build_input.get("required_dependency_terms") != required_terms
+              or build_input.get("context_dependency_files_by_term")
+              != expected_context_matches
+              or build_surface.get("relational_only") is not False
+              or build_surface.get("review_state")
+              != "reviewed_for_image_publication"
+              or build_surface.get("image_publication_decision")
+              != expected_decision
+              or build_surface.get("unconditional_external_dependencies")
+              != ["io.quarkus:quarkus-mongodb-client"]
+              or build_surface.get("unconditional_project_dependencies")
+              != expected_projects
+              or build_surface.get("required_sbom_terms") != required_terms
+              or build_input.get("review_checkpoint")
+              != expected_review_checkpoint
+          ):
+              raise SystemExit("Admin build input binding is invalid")
+
+          dependency = load("dependency-input.json")
+          historical_surface = dependency.get("admin_dependency_surface", {})
+          if (
+              dependency.get("result") != "passed"
+              or dependency.get("anonymous_pull") is not True
+              or dependency.get("reference") != os.environ["DEPENDENCY_REF"]
+              or historical_surface.get("relational_only") is not False
+              or historical_surface.get("review_state") != "review_required"
+              or historical_surface.get("unconditional_external_dependencies")
+              != ["io.quarkus:quarkus-mongodb-client"]
+              or historical_surface.get("unconditional_project_dependencies")
+              != expected_projects
+              or dependency.get("current_review_state")
+              != "reviewed_for_image_publication"
+              or dependency.get("image_publication_decision")
+              != expected_decision
+              or dependency.get("review_checkpoint")
+              != expected_review_checkpoint
+          ):
+              raise SystemExit("Admin dependency input or NoSQL/Mongo disclosure is invalid")
+
+          offline = load("offline-build.json")
+          expected_tasks = [
+              ":polaris-admin:assemble",
+              ":polaris-admin:quarkusAppPartsBuild",
+              ":polaris-server:assemble",
+              ":polaris-server:quarkusAppPartsBuild",
+          ]
+          offline_surface = offline.get("admin_dependency_surface", {})
+          expected_offline_matches = {
+              term: [
+                  name.removeprefix("build/quarkus-app/")
+                  for name in expected_context_matches[term]
+              ]
+              for term in required_terms
+          }
+          if (
+              offline.get("result") != "passed"
+              or offline.get("network") != "none"
+              or offline.get("gradle_offline") is not True
+              or offline.get("dependency_verification") != "strict"
+              or offline.get("tasks") != expected_tasks
+              or offline.get("required_dependency_terms") != required_terms
+              or offline.get("matching_dependency_files_by_term")
+              != expected_offline_matches
+              or offline_surface.get("relational_only") is not False
+              or offline_surface.get("review_state")
+              != "reviewed_for_image_publication"
+              or offline_surface.get("image_publication_decision")
+              != expected_decision
+              or offline_surface.get("unconditional_external_dependencies")
+              != ["io.quarkus:quarkus-mongodb-client"]
+              or offline_surface.get("unconditional_project_dependencies")
+              != expected_projects
+          ):
+              raise SystemExit("Admin offline build evidence is invalid")
+
+          expected_help = {
+              "admin-help.json": {
+                  "command": ["--help"],
+                  "markers": [
+                      "Usage: polaris-admin-tool.jar [-hV] [COMMAND]",
+                      "Polaris administration & maintenance tool",
+                  ],
+              },
+              "admin-bootstrap-help.json": {
+                  "command": ["bootstrap", "--help"],
+                  "markers": [
+                      "Usage: polaris-admin-tool.jar bootstrap",
+                      "--credential",
+                      "--credentials-file",
+                      "--print-credentials",
+                  ],
+              },
+          }
+          for name, expected in expected_help.items():
+              record = load(name)
+              if (
+                  record.get("result") != "passed"
+                  or record.get("reference") != reference
+                  or record.get("command") != expected["command"]
+                  or record.get("exit_code") != 0
+                  or record.get("network") != "none"
+                  or record.get("credentials_supplied") is not False
+                  or not set(expected["markers"]).issubset(
+                      set(record.get("required_output_markers", []))
+                  )
+              ):
+                  raise SystemExit(f"credential-free Admin help evidence is invalid: {name}")
+
+          bootstrap = load("admin-bootstrap-help.json")
+          if (
+              bootstrap.get("credential_argument_permitted") is not False
+              or bootstrap.get("credential_file_read") is not False
+              or bootstrap.get("print_credentials_requested") is not False
+          ):
+              raise SystemExit("bootstrap help evidence permits credential material")
+
+          inspect = load("admin-container-inspect.json")
+          containers = inspect.get("containers", [])
+          if (
+              inspect.get("result") != "passed"
+              or inspect.get("reference") != reference
+              or [item.get("name") for item in containers]
+              != ["root_help", "bootstrap_help"]
+              or any(
+                  item.get("user") != "10000:10001"
+                  or item.get("network_mode") != "none"
+                  or item.get("read_only_rootfs") is not True
+                  or item.get("capabilities_dropped") != ["ALL"]
+                  for item in containers
+              )
+          ):
+              raise SystemExit("Admin container control evidence is invalid")
+
+          log_policy = load("admin-smoke-log-policy.json")
+          if (
+              log_policy.get("result") != "passed"
+              or log_policy.get("redaction_count") != 0
+              or log_policy.get("raw_logs_retained") is not False
+              or log_policy.get("credentials_supplied") is not False
+          ):
+              raise SystemExit("Admin smoke log policy is invalid")
+
+          builder = load("builder-metadata.json")
+          if builder.get("runtime_base") != {
+              "index": os.environ["RUNTIME_BASE_INDEX"],
+              "linux_arm64_manifest": os.environ["RUNTIME_BASE"],
+              "java_version": os.environ["RUNTIME_BASE_JAVA_VERSION"],
+          }:
+              raise SystemExit("runtime base metadata is not pinned to reviewed bytes")
+          runtime_index = load("runtime-base-index.json")
+          arm64 = [
+              descriptor
+              for descriptor in runtime_index.get("manifests", [])
+              if descriptor.get("platform", {}).get("os") == "linux"
+              and descriptor.get("platform", {}).get("architecture") == "arm64"
+              and descriptor.get("platform", {}).get("variant") in (None, "v8")
+          ]
+          if (
+              len(arm64) != 1
+              or arm64[0].get("digest") != os.environ["RUNTIME_BASE_DIGEST"]
+              or load("runtime-base-manifest.json").get("schemaVersion") != 2
+          ):
+              raise SystemExit("runtime base index or arm64 manifest evidence is invalid")
+
+          sbom_policy = load("sbom-policy.json")
+          matching_components = sbom_policy.get(
+              "matching_components_by_term", {}
+          )
+          if (
+              sbom_policy.get("result") != "passed"
+              or sbom_policy.get("relational_only") is not False
+              or sbom_policy.get("review_state")
+              != "reviewed_for_image_publication"
+              or sbom_policy.get("image_publication_decision")
+              != expected_decision
+              or sbom_policy.get("required_component_terms") != required_terms
+              or set(matching_components) != set(required_terms)
+              or any(not matching_components[term] for term in required_terms)
+              or any(
+                  term
+                  not in " ".join(
+                      str(component.get(field, ""))
+                      for field in ("group", "name", "purl")
+                  ).lower()
+                  for term in required_terms
+                  for component in matching_components[term]
+              )
+          ):
+              raise SystemExit("Admin SBOM disclosure policy is invalid")
+
+          scan = load("trivy.json", maximum=64 * 1024 * 1024)
+          findings = [
+              vulnerability
+              for result in scan.get("Results") or []
+              for vulnerability in result.get("Vulnerabilities") or []
+          ]
+          if findings:
+              raise SystemExit("retained Trivy evidence contains vulnerabilities")
+
+          for name in (
+              "source-authentication.json",
+              "cosign-verify.json",
+              "slsa-verify.json",
+              "toolchain.json",
+              "trivy-version.json",
+          ):
+              load(name)
+          PY
+
+      - name: Install pinned Crane without registry credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          tool_dir="${RUNNER_TEMP}/crane"
+          mkdir -p "${tool_dir}"
+          export DOCKER_CONFIG="${RUNNER_TEMP}/anonymous-docker-config"
+          mkdir -p "${DOCKER_CONFIG}"
+          echo "DOCKER_CONFIG=${DOCKER_CONFIG}" >> "${GITHUB_ENV}"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --retry 5 --retry-all-errors \
+            --output "${tool_dir}/crane.tar.gz" "${CRANE_URL}"
+          echo "${CRANE_ARCHIVE_SHA256}  ${tool_dir}/crane.tar.gz" \
+            | sha256sum --check --strict
+          tar --extract --gzip --file "${tool_dir}/crane.tar.gz" \
+            --directory "${tool_dir}" crane
+          install -m 0755 "${tool_dir}/crane" "${tool_dir}/crane.bin"
+          echo "${tool_dir}" >> "${GITHUB_PATH}"
+          test "$("${tool_dir}/crane.bin" version)" = "${CRANE_VERSION#v}"
+
+      - name: Reverify the public digest, signature, and provenance before promotion
+        env:
+          DIGEST: ${{ needs.verify.outputs.digest }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${DOCKER_AUTH_CONFIG:-}"
+          crane.bin manifest "${IMAGE}@${DIGEST}" > promotion-manifest.json
+          echo "${DIGEST#sha256:}  promotion-manifest.json" \
+            | sha256sum --check --strict
+          cmp candidate-evidence/image-manifest.json promotion-manifest.json
+          crane.bin config "${IMAGE}@${DIGEST}" > promotion-config.json
+          cmp candidate-evidence/image-config.json promotion-config.json
+
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/polaris-admin-arm64.yml@${GITHUB_REF}"
+          cosign verify \
+            --certificate-oidc-issuer \
+              "https://token.actions.githubusercontent.com" \
+            --certificate-identity "${identity}" \
+            --certificate-github-workflow-name "${GITHUB_WORKFLOW}" \
+            --certificate-github-workflow-repository "${GITHUB_REPOSITORY}" \
+            --certificate-github-workflow-ref "${GITHUB_REF}" \
+            --certificate-github-workflow-sha "${GITHUB_WORKFLOW_SHA}" \
+            --certificate-github-workflow-trigger "${GITHUB_EVENT_NAME}" \
+            --output json "${IMAGE}@${DIGEST}" > promotion-cosign-verify.json
+          cosign download signature "${IMAGE}@${DIGEST}" \
+            > promotion-registry-signature-bundles.jsonl
+          test -s promotion-registry-signature-bundles.jsonl
+
+          rekor_index=$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          bundle = json.loads(
+              Path("candidate-evidence/cosign-signature-bundle.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          entries = bundle["verificationMaterial"]["tlogEntries"]
+          if len(entries) != 1:
+              raise SystemExit("exactly one retained Rekor entry is required")
+          print(entries[0]["logIndex"])
+          PY
+          )
+          curl --fail --location \
+            --proto '=https' --tlsv1.2 \
+            --retry 5 --retry-all-errors \
+            --output promotion-rekor-entry.json \
+            "${REKOR_URL}/api/v1/log/entries?logIndex=${rekor_index}"
+
+          gh attestation verify "oci://${IMAGE}@${DIGEST}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --predicate-type "https://slsa.dev/provenance/v1" \
+            --signer-workflow \
+              "${GITHUB_REPOSITORY}/.github/workflows/polaris-admin-arm64.yml" \
+            --signer-digest "${GITHUB_WORKFLOW_SHA}" \
+            --source-digest "${GITHUB_SHA}" \
+            --source-ref "${GITHUB_REF}" \
+            --format json > promotion-slsa-verify.json
+          test -s promotion-cosign-verify.json
+          test -s promotion-slsa-verify.json
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          from collections import Counter
+          from pathlib import Path
+
+          retained_bundle = json.loads(
+              Path("candidate-evidence/cosign-signature-bundle.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          live_registry_bundles = [
+              json.loads(line)
+              for line in Path(
+                  "promotion-registry-signature-bundles.jsonl"
+              ).read_text(encoding="utf-8").splitlines()
+              if line.strip()
+          ]
+          if sum(item == retained_bundle for item in live_registry_bundles) != 1:
+              raise SystemExit(
+                  "live registry does not contain exactly one retained signature bundle"
+              )
+          retained_rekor = json.loads(
+              Path("candidate-evidence/rekor-entry.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          live_rekor = json.loads(
+              Path("promotion-rekor-entry.json").read_text(encoding="utf-8")
+          )
+
+          def rekor_identity(response, label):
+              if not isinstance(response, dict) or len(response) != 1:
+                  raise SystemExit(f"{label} Rekor response must contain one entry")
+              uuid, entry = next(iter(response.items()))
+              if not isinstance(uuid, str) or not uuid or not isinstance(entry, dict):
+                  raise SystemExit(f"{label} Rekor entry identity is invalid")
+              verification = entry.get("verification", {})
+              proof = verification.get("inclusionProof", {})
+
+              def decimal(value, field):
+                  if (
+                      isinstance(value, bool)
+                      or not isinstance(value, (int, str))
+                      or not str(value).isdigit()
+                  ):
+                      raise SystemExit(
+                          f"{label} Rekor {field} must be a non-negative integer"
+                      )
+                  return int(value)
+
+              log_index = decimal(entry.get("logIndex"), "logIndex")
+              proof_log_index = decimal(proof.get("logIndex"), "proof logIndex")
+              tree_size = decimal(proof.get("treeSize"), "proof treeSize")
+              if not (
+                  isinstance(entry.get("body"), str)
+                  and entry["body"]
+                  and isinstance(entry.get("logID"), str)
+                  and entry["logID"]
+                  and isinstance(
+                      verification.get("signedEntryTimestamp"), str
+                  )
+                  and verification["signedEntryTimestamp"]
+                  and isinstance(proof.get("checkpoint"), str)
+                  and proof["checkpoint"]
+                  and isinstance(proof.get("rootHash"), str)
+                  and proof["rootHash"]
+                  and isinstance(proof.get("hashes"), list)
+                  and all(
+                      isinstance(item, str) and item
+                      for item in proof["hashes"]
+                  )
+                  and proof_log_index < tree_size
+              ):
+                  raise SystemExit(
+                      f"{label} Rekor response has incomplete inclusion evidence"
+                  )
+              return {
+                  "uuid": uuid,
+                  "body": entry["body"],
+                  "integratedTime": decimal(
+                      entry.get("integratedTime"), "integratedTime"
+                  ),
+                  "logID": entry["logID"],
+                  "logIndex": log_index,
+                  "proofLogIndex": proof_log_index,
+              }
+
+          retained_identity = rekor_identity(retained_rekor, "retained")
+          live_identity = rekor_identity(live_rekor, "live")
+          if live_identity != retained_identity:
+              raise SystemExit(
+                  "live Rekor immutable identity differs from retained evidence"
+              )
+          bundle_entry = retained_bundle["verificationMaterial"]["tlogEntries"][0]
+          expected_rekor_identity = {
+              "body": bundle_entry["canonicalizedBody"],
+              "integratedTime": int(bundle_entry["integratedTime"]),
+              "logID": base64.b64decode(
+                  bundle_entry["logId"]["keyId"], validate=True
+                  ).hex(),
+                  "logIndex": int(bundle_entry["logIndex"]),
+                  "proofLogIndex": int(
+                      bundle_entry["inclusionProof"]["logIndex"]
+                  ),
+              }
+          if any(
+              retained_identity[field] != value
+              for field, value in expected_rekor_identity.items()
+          ):
+              raise SystemExit(
+                  "retained Rekor immutable identity differs from the signed bundle"
+              )
+
+          payloads = json.loads(
+              Path("promotion-cosign-verify.json").read_text(encoding="utf-8")
+          )
+          if not isinstance(payloads, list) or not payloads:
+              raise SystemExit("live registry signature verification is empty")
+          reference = f"{os.environ['IMAGE']}@{os.environ['DIGEST']}"
+          for payload in payloads:
+              critical = payload.get("critical", payload.get("Critical", {}))
+              image = critical.get("image", critical.get("Image", {}))
+              identity = critical.get("identity", critical.get("Identity", {}))
+              if image.get(
+                  "docker-manifest-digest",
+                  image.get("Docker-manifest-digest"),
+              ) != os.environ["DIGEST"]:
+                  raise SystemExit("live signature payload digest mismatch")
+              if identity.get(
+                  "docker-reference",
+                  identity.get("Docker-reference"),
+              ) != reference:
+                  raise SystemExit("live signature payload reference mismatch")
+
+          retained_slsa = [
+              json.loads(line)
+              for line in Path(
+                  "candidate-evidence/slsa-bundles.jsonl"
+              ).read_text(encoding="utf-8").splitlines()
+              if line.strip()
+          ]
+          live_records = json.loads(
+              Path("promotion-slsa-verify.json").read_text(encoding="utf-8")
+          )
+          live_slsa = [record["attestation"]["bundle"] for record in live_records]
+          canonical = lambda item: json.dumps(
+              item, separators=(",", ":"), sort_keys=True
+          )
+          if Counter(map(canonical, live_slsa)) != Counter(
+              map(canonical, retained_slsa)
+          ):
+              raise SystemExit(
+                  "live exact-workflow SLSA bundles differ from retained evidence"
+              )
+          PY
+
+      - name: Log in to GHCR for trusted-tag promotion
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote the fully verified digest to the non-authoritative trusted tag
+        env:
+          DIGEST: ${{ needs.verify.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          crane.bin copy "${IMAGE}@${DIGEST}" "${IMAGE}:${TRUSTED_TAG}"
+          test "$(crane.bin digest "${IMAGE}:${TRUSTED_TAG}")" = "${DIGEST}"
+          docker logout ghcr.io
+
+      - name: Verify final evidence after credentials are removed
+        env:
+          DIGEST: ${{ needs.verify.outputs.digest }}
+          INPUT_ARTIFACT_DIGEST: ${{ needs.prepare.outputs.artifact_digest }}
+          PROVENANCE_URL: ${{ needs.verify.outputs.provenance_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(crane.bin digest "${IMAGE}:${TRUSTED_TAG}")" = "${DIGEST}"
+          crane.bin manifest "${IMAGE}:${TRUSTED_TAG}" > trusted-tag-manifest.json
+          echo "${DIGEST#sha256:}  trusted-tag-manifest.json" \
+            | sha256sum --check --strict
+          cmp candidate-evidence/image-manifest.json trusted-tag-manifest.json
+          cp promotion-cosign-verify.json candidate-evidence/
+          cp promotion-slsa-verify.json candidate-evidence/
+          cp trusted-tag-manifest.json candidate-evidence/
+
+          EVIDENCE_DIR="candidate-evidence" python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          root = Path(os.environ["EVIDENCE_DIR"])
+          path = root / "publication.json"
+          completed = datetime.now(timezone.utc).isoformat()
+          record = {
+              "schema_version": 1,
+              "component": "polaris-admin",
+              "version": "1.6.0",
+              "platform": "linux/arm64",
+              "state": "admin_image_evidence_review_pending",
+              "admitted": False,
+              "promoted": True,
+              "reference": f"{os.environ['IMAGE']}@{os.environ['DIGEST']}",
+              "candidate_tag": (
+                  f"{os.environ['IMAGE']}:1.6.0-{os.environ['GITHUB_RUN_ID']}-"
+                  f"{os.environ['GITHUB_RUN_ATTEMPT']}"
+              ),
+              "trusted_tag": f"{os.environ['IMAGE']}:{os.environ['TRUSTED_TAG']}",
+              "trusted_tag_role": "non_authoritative_pointer",
+              "anonymous_pull": True,
+              "promotion_anonymous_verification": True,
+              "source_commit": os.environ["SOURCE_COMMIT"],
+              "source_archive_sha512": os.environ["SOURCE_ARCHIVE_SHA512"],
+              "dependency_reference": os.environ["DEPENDENCY_REF"],
+              "admin_dependency_surface": {
+                  "relational_only": False,
+                  "review_state": "reviewed_for_image_publication",
+                  "image_publication_decision": (
+                      "accepted_unmodified_for_image_publication_only"
+                  ),
+                  "source_overlay_permitted": False,
+                  "runtime_activation_permitted": False,
+                  "unconditional_external_dependencies": [
+                      "io.quarkus:quarkus-mongodb-client"
+                  ],
+                  "unconditional_project_dependencies": [
+                      ":polaris-persistence-nosql-api",
+                      ":polaris-persistence-nosql-maintenance-api",
+                      ":polaris-persistence-nosql-metastore",
+                      ":polaris-persistence-nosql-cdi-quarkus",
+                      ":polaris-persistence-nosql-cdi-quarkus-distcache",
+                      ":polaris-persistence-nosql-maintenance-impl",
+                      ":polaris-persistence-nosql-metastore-maintenance",
+                  ],
+                  "required_sbom_terms": [
+                      "mongodb",
+                      "polaris-persistence-nosql",
+                  ],
+                  "exclusion_permitted": False,
+              },
+              "review_checkpoint": {
+                  "repository": "TommyKammy/Shirokuma",
+                  "pull_request": 87,
+                  "reviewed_head_commit": (
+                      "178b5ca03a2575a7100cfb47daede795fbd1d30c"
+                  ),
+                  "merge_commit": (
+                      "8e5c6927e95d1027e16fe2ac27ab8322b45359c9"
+                  ),
+                  "merged_at": "2026-07-20T23:24:12Z",
+                  "merged_by": "TommyKammy",
+                  "reviewed_contract_sha256": (
+                      "26f5259642007aa11a4676ccee918bd5b1e55f8eb5c0025f92a12f1d8ccb37db"
+                  ),
+                  "reviewed_evidence_manifest_sha256": (
+                      "026c4d82e9031532323ccb3c31ea83939010982cfcf373644cdcf064e2613409"
+                  ),
+                  "reviewed_verifier_sha256": (
+                      "ef1fad340179e61f7d1291d9e3fd44c793c4761af4b094a0b232ea663c7f41c9"
+                  ),
+              },
+              "runtime_base_index": os.environ["RUNTIME_BASE_INDEX"],
+              "runtime_base": os.environ["RUNTIME_BASE"],
+              "runtime_base_java_version": os.environ[
+                  "RUNTIME_BASE_JAVA_VERSION"
+              ],
+              "containerfile_sha256": os.environ["CONTAINERFILE_SHA256"],
+              "admin_image_contract_sha256": hashlib.sha256(
+                  Path(
+                      "bootstrap/polaris/v1.6.0/admin-image-contract.json"
+                  ).read_bytes()
+              ).hexdigest(),
+              "admin_build_inputs_contract_sha256": hashlib.sha256(
+                  Path(
+                      "bootstrap/polaris/v1.6.0/admin-build-inputs-contract.json"
+                  ).read_bytes()
+              ).hexdigest(),
+              "input_artifact_digest": os.environ["INPUT_ARTIFACT_DIGEST"],
+              "slsa_provenance": os.environ["PROVENANCE_URL"],
+              "created": completed,
+              "promotion_completed_at": completed,
+              "downstream_gates": {
+                  "admin_image_admitted": False,
+                  "resident_image_ledger_enabled": False,
+                  "admin_runtime_enabled": False,
+                  "gitops_resources_enabled": False,
+                  "credential_material_permitted": False,
+              },
+              "workflow": {
+                  "repository": os.environ["GITHUB_REPOSITORY"],
+                  "ref": os.environ["GITHUB_REF"],
+                  "event": os.environ["GITHUB_EVENT_NAME"],
+                  "source_sha": os.environ["GITHUB_SHA"],
+                  "workflow_sha": os.environ["GITHUB_WORKFLOW_SHA"],
+                  "run_id": os.environ["GITHUB_RUN_ID"],
+                  "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              },
+          }
+          path.write_text(
+              json.dumps(record, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          expected_payloads=$(printf '%s\n' \
+            admin-bootstrap-help.json \
+            admin-container-inspect.json \
+            admin-help.json \
+            admin-smoke-log-policy.json \
+            anonymous-image-manifest.json \
+            build-context.sha256 \
+            build-input.json \
+            builder-metadata.json \
+            cosign-signature-bundle.json \
+            cosign-verify.json \
+            dependency-input.json \
+            image-config.json \
+            image-manifest.json \
+            offline-build.json \
+            polaris-admin-1.6.0-arm64.cdx.json \
+            promotion-cosign-verify.json \
+            promotion-slsa-verify.json \
+            publication.json \
+            registry-signature-bundles.jsonl \
+            rekor-entry.json \
+            runtime-base-index.json \
+            runtime-base-java-version.txt \
+            runtime-base-manifest.json \
+            sbom-attestation-bundle.json \
+            sbom-policy.json \
+            slsa-bundles.jsonl \
+            slsa-verify.json \
+            source-authentication.json \
+            toolchain.json \
+            trivy-attestation-bundle.json \
+            trivy-version.json \
+            trivy.json \
+            trusted-tag-manifest.json | sort)
+          actual_payloads=$(
+            find candidate-evidence -mindepth 1 -maxdepth 1 -type f \
+              -exec basename {} \; | sort
+          )
+          test "${actual_payloads}" = "${expected_payloads}"
+          (
+            cd candidate-evidence
+            find . -mindepth 1 -maxdepth 1 -type f \
+              -print0 \
+              | sort -z \
+              | xargs -0 sha256sum > evidence.sha256
+            sha256sum --check --strict evidence.sha256
+            test "$(find . -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')" = \
+              "34"
+          )
+
+      - name: Retain non-admitted image publication evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: polaris-admin-image-publication-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate-evidence/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Remove promotion credentials
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker logout ghcr.io >/dev/null 2>&1 || true

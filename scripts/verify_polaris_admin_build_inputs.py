@@ -109,6 +109,21 @@ EXPECTED_WORKFLOW_IDENTITY = (
 EXPECTED_ISSUER = "https://token.actions.githubusercontent.com"
 EXPECTED_CREATED = "2026-07-21T06:46:09+09:00"
 EXPECTED_REVIEWED_AT = "2026-07-20T22:27:20Z"
+EXPECTED_REVIEW_CHECKPOINT = {
+    "repository": "TommyKammy/Shirokuma",
+    "pull_request": 87,
+    "reviewed_head_commit": "178b5ca03a2575a7100cfb47daede795fbd1d30c",
+    "merge_commit": "8e5c6927e95d1027e16fe2ac27ab8322b45359c9",
+    "merged_at": "2026-07-20T23:24:12Z",
+    "merged_by": "TommyKammy",
+    "reviewed_contract_sha256": (
+        "26f5259642007aa11a4676ccee918bd5b1e55f8eb5c0025f92a12f1d8ccb37db"
+    ),
+    "reviewed_evidence_manifest_sha256": EXPECTED_EVIDENCE_MANIFEST_SHA256,
+    "reviewed_verifier_sha256": (
+        "ef1fad340179e61f7d1291d9e3fd44c793c4761af4b094a0b232ea663c7f41c9"
+    ),
+}
 
 EXPECTED_TASKS = [
     ":polaris-admin:assemble",
@@ -381,7 +396,7 @@ def _validate_contract(root: Path, contract: Mapping[str, Any]) -> None:
         "root",
     )
     _expect(
-        contract["schema_version"] == 2
+        contract["schema_version"] == 3
         and contract["component"] == "polaris-admin-build-inputs"
         and contract["version"] == "1.6.0"
         and contract["platform"] == EXPECTED_BUILDER_PLATFORM,
@@ -391,8 +406,8 @@ def _validate_contract(root: Path, contract: Mapping[str, Any]) -> None:
     _expect(
         contract["lifecycle"]
         == {
-            "state": "admin_dependency_snapshot_review_pending",
-            "next_state": "admin_image_publication_pending",
+            "state": "admin_image_publication_pending",
+            "next_state": "admin_image_evidence_review_pending",
         },
         "LIFECYCLE_STATE",
         repr(contract["lifecycle"]),
@@ -489,6 +504,9 @@ def _validate_contract(root: Path, contract: Mapping[str, Any]) -> None:
         {
             "review_state",
             "relational_only",
+            "image_publication_decision",
+            "source_overlay_permitted",
+            "runtime_activation_permitted",
             "reason",
             "unconditional_project_dependencies",
             "unconditional_external_dependencies",
@@ -498,8 +516,12 @@ def _validate_contract(root: Path, contract: Mapping[str, Any]) -> None:
         "admin_dependency_surface",
     )
     _expect(
-        surface["review_state"] == "review_required"
+        surface["review_state"] == "reviewed_for_image_publication"
         and surface["relational_only"] is False
+        and surface["image_publication_decision"]
+        == "accepted_unmodified_for_image_publication_only"
+        and surface["source_overlay_permitted"] is False
+        and surface["runtime_activation_permitted"] is False
         and "unconditionally" in surface["reason"]
         and surface["unconditional_project_dependencies"] == EXPECTED_NOSQL_PROJECTS
         and surface["unconditional_external_dependencies"]
@@ -510,7 +532,7 @@ def _validate_contract(root: Path, contract: Mapping[str, Any]) -> None:
             for record in surface["main_source_records"]
         ),
         "ADMIN_SURFACE",
-        "unconditional upstream NoSQL/Mongo surface is not review-required",
+        "unconditional upstream NoSQL/Mongo surface is not exactly bound to the image-only review decision",
     )
 
     candidate = contract["candidate_snapshot"]
@@ -518,6 +540,7 @@ def _validate_contract(root: Path, contract: Mapping[str, Any]) -> None:
         candidate,
         {
             "state",
+            "admitted",
             "artifact_repository",
             "artifact_reference",
             "artifact_type",
@@ -531,6 +554,7 @@ def _validate_contract(root: Path, contract: Mapping[str, Any]) -> None:
             "superset_proof",
             "offline_proof",
             "retained_evidence",
+            "review_checkpoint",
             "publication",
             "review",
             "visibility_bootstrap",
@@ -540,7 +564,8 @@ def _validate_contract(root: Path, contract: Mapping[str, Any]) -> None:
         "candidate_snapshot",
     )
     _expect(
-        candidate["state"] == "review_pending"
+        candidate["state"] == "approved_for_admin_image_build"
+        and candidate["admitted"] is False
         and candidate["artifact_repository"] == EXPECTED_ARTIFACT_REPOSITORY
         and candidate["artifact_reference"] == EXPECTED_ARTIFACT_REFERENCE
         and candidate["artifact_type"]
@@ -576,6 +601,11 @@ def _validate_contract(root: Path, contract: Mapping[str, Any]) -> None:
         },
         "CANDIDATE_SNAPSHOT",
         "reviewed candidate identity, bytes, or trusted tool pin changed",
+    )
+    _expect(
+        candidate["review_checkpoint"] == EXPECTED_REVIEW_CHECKPOINT,
+        "REVIEW_CHECKPOINT",
+        "PR #87 merge, reviewed evidence, contract, or verifier binding changed",
     )
     _expect(
         candidate["superset_proof"]
@@ -734,20 +764,23 @@ def _validate_contract(root: Path, contract: Mapping[str, Any]) -> None:
         "downstream_gates",
     )
     _expect(
-        all(
+        gates["admin_image_publication_enabled"] is True
+        and all(
             gates[key] is False
             for key in (
-                "admin_image_publication_enabled",
                 "admin_image_admitted",
                 "admin_runtime_enabled",
                 "gitops_resources_enabled",
                 "credential_material_permitted",
             )
         )
-        and "published full admin dependency snapshot" in gates["next_checkpoint"]
-        and "NoSQL/Mongo" in gates["next_checkpoint"],
+        and gates["next_checkpoint"]
+        == (
+            "publish, retain, and review the exact Admin image evidence before "
+            "admission or runtime activation"
+        ),
         "DOWNSTREAM_GATE",
-        "admin image, admission, runtime, GitOps, and credentials must stay disabled",
+        "only Admin image publication may be enabled before image evidence review",
     )
 
     _require_file(root, SOURCE_PATH, EXPECTED_SOURCE_SHA256, 2_798, "SOURCE_HASH")
@@ -1143,12 +1176,18 @@ def _audit_publication(root: Path, contract: Mapping[str, Any]) -> Mapping[str, 
                 "io.quarkus:quarkus-mongodb-client"
             ],
         }
-        and surface == {
-            key: contract["admin_dependency_surface"][key]
-            for key in surface
-        },
+        and surface["relational_only"]
+        is contract["admin_dependency_surface"]["relational_only"]
+        and surface["unconditional_project_dependencies"]
+        == contract["admin_dependency_surface"][
+            "unconditional_project_dependencies"
+        ]
+        and surface["unconditional_external_dependencies"]
+        == contract["admin_dependency_surface"][
+            "unconditional_external_dependencies"
+        ],
         "ADMIN_SURFACE_EVIDENCE",
-        "publication does not preserve the review-required NoSQL/Mongo surface",
+        "retained publication does not preserve the pre-review NoSQL/Mongo surface",
     )
     _expect(
         publication["downstream_gates"]
@@ -1556,7 +1595,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(
         "polaris-admin-build-inputs: reviewed retained evidence verified; "
-        "one-shot publisher absent; admin image/runtime remain disabled"
+        "one-shot dependency publisher absent; Admin image publication is "
+        "policy-enabled; admission/runtime/Flux/credentials remain disabled"
     )
     return 0
 
