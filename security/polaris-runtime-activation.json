@@ -40,7 +40,7 @@
     "requires_catalog_rebuild": true
   },
   "documentation": {
-    "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md": "00b704d7ca5811400511dd3d08ad0c16688e5c7033c4dab0c73cb9639cde71e4"
+    "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md": "d1e36e86d8b0edaaf081accc85488224a9f76b399cd0914214674f7596dfe131"
   },
   "manifests": {
     "deploy/gitops/clusters/local-lite/kustomization.yaml": "a1510faf71d6f489ccd909d5ad8f0698f0f91c39d82af6be20476b4cf5750d31",

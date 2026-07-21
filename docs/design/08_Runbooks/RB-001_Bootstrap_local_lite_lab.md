@@ -170,6 +170,8 @@ unset TF_VAR_seaweedfs_s3_operator_access_key
 unset TF_VAR_seaweedfs_s3_operator_secret_key
 unset TF_VAR_seaweedfs_s3_application_access_key
 unset TF_VAR_seaweedfs_s3_application_secret_key
+unset TF_VAR_polaris_postgresql_password
+unset TF_VAR_polaris_root_client_secret
 ```
 
 Confirm controller readiness, Source/Kustomization state, and the

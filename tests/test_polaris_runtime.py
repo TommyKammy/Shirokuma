@@ -52,6 +52,24 @@ class PolarisRuntimeActivationTests(unittest.TestCase):
         )
         self._assert_code(root, "RUNTIME_DOCUMENTATION")
 
+    def test_bootstrap_cleanup_drift_fails_closed_even_if_rehashed(self) -> None:
+        root = self._fixture()
+        relative = "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md"
+        path = root / relative
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "unset TF_VAR_polaris_postgresql_password\n", "", 1
+            ),
+            encoding="utf-8",
+        )
+        contract_path = root / verifier.CONTRACT
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        contract["documentation"][relative] = verifier._sha256(path)
+        contract_path.write_text(
+            json.dumps(contract, indent=2) + "\n", encoding="utf-8"
+        )
+        self._assert_code(root, "RUNTIME_SECRET")
+
     def test_unregistered_runtime_file_fails_closed(self) -> None:
         root = self._fixture()
         path = root / "deploy/gitops/catalog/neutral.yaml"

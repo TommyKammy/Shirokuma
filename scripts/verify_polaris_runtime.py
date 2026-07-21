@@ -436,6 +436,26 @@ def _audit_semantics(root: Path, texts: Mapping[str, str], runbook: str) -> None
                 f"{target} preflight missing {variable}",
             )
 
+    cleanup_start = "After bootstrap completes"
+    cleanup_end = "Confirm controller readiness"
+    _expect(
+        cleanup_start in runbook and cleanup_end in runbook,
+        "RUNTIME_SECRET",
+        "bootstrap cleanup section is missing",
+    )
+    bootstrap_cleanup = runbook.split(cleanup_start, 1)[1].split(
+        cleanup_end, 1
+    )[0]
+    for variable in (
+        "TF_VAR_polaris_postgresql_password",
+        "TF_VAR_polaris_root_client_secret",
+    ):
+        _expect(
+            f"unset {variable}" in bootstrap_cleanup,
+            "RUNTIME_SECRET",
+            f"bootstrap cleanup missing {variable}",
+        )
+
     for token in (
         "data-polaris-postgresql-0",
         "reserve `25Gi`",
@@ -444,8 +464,6 @@ def _audit_semantics(root: Path, texts: Mapping[str, str], runbook: str) -> None
         "polaris.dump.sha256",
         "whole-profile metadata restore remains blocked",
         "all six required S3 and Polaris variables",
-        "unset TF_VAR_polaris_postgresql_password",
-        "unset TF_VAR_polaris_root_client_secret",
     ):
         _expect(
             token in runbook,
