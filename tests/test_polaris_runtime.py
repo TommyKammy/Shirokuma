@@ -280,7 +280,9 @@ class PolarisRuntimeActivationTests(unittest.TestCase):
         self._rehash_documentation(root, relative)
         self._assert_code(root, "RUNTIME_GENERATION")
 
-    def test_inline_storage_credential_fails_closed(self) -> None:
+    def test_duplicate_inline_storage_credential_fails_closed_even_if_rehashed(
+        self,
+    ) -> None:
         root = self._fixture()
         relative = "deploy/gitops/catalog/server/deployment.yaml"
         path = root / relative
@@ -294,8 +296,8 @@ class PolarisRuntimeActivationTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        with self.assertRaises(AssertionError):
-            self._assert_storage_env_contract(path.read_text(encoding="utf-8"))
+        self._rehash_manifest(root, relative)
+        self._assert_code(root, "RUNTIME_SECRET")
 
     def test_admin_argument_fallback_fails_closed_even_if_rehashed(self) -> None:
         root = self._fixture()

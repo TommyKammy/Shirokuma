@@ -584,6 +584,13 @@ def _audit_semantics(
             _expect(key in combined, "RUNTIME_SECRET", f"missing Secret key reference: {secret}/{key}")
 
     server = texts["deploy/gitops/catalog/server/deployment.yaml"]
+    _, env_marker, env_and_ports = server.partition("          env:\n")
+    env_section, ports_marker, _ = env_and_ports.partition("          ports:\n")
+    _expect(
+        bool(env_marker and ports_marker),
+        "RUNTIME_SECRET",
+        "Polaris container environment boundary changed",
+    )
     for variable, key in EXPECTED_POLARIS_STORAGE_ENV.items():
         block = (
             f"            - name: {variable}\n"
@@ -596,6 +603,21 @@ def _audit_semantics(
             server.count(block) == 1,
             "RUNTIME_SECRET",
             f"Polaris storage Secret binding changed: {variable}",
+        )
+        quoted_variable = rf'(?:{re.escape(variable)}|"{re.escape(variable)}"|\'{re.escape(variable)}\')'
+        block_names = re.findall(
+            rf"^\s*(?:-\s*)?name\s*:\s*{quoted_variable}\s*$",
+            env_section,
+            re.MULTILINE,
+        )
+        flow_names = re.findall(
+            rf"(?:\{{|,)\s*name\s*:\s*{quoted_variable}(?=\s*[,}}])",
+            env_section,
+        )
+        _expect(
+            len(block_names) + len(flow_names) == 1,
+            "RUNTIME_SECRET",
+            f"Polaris storage environment name must occur exactly once: {variable}",
         )
     _expect(
         "AWS_SESSION_TOKEN" not in server,
