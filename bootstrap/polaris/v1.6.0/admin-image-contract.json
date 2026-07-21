@@ -117,7 +117,7 @@
     "trusted_tag": "1.6.0-arm64",
     "containerfile": {
       "path": "bootstrap/polaris/v1.6.0/Containerfile.admin",
-      "sha256": "39ab3fa250600d144d1a4deb00ac7d6277707994fd9b53b3a7f0968c279f6b72"
+      "sha256": "cecd7e40f0bd3b2f5b0de90233677772c0c55c745f4f4cc975eda83b42f40112"
     },
     "build_context": {
       "containerfile_name": "Containerfile.admin",
@@ -144,8 +144,10 @@
     "runtime_base": {
       "distribution": "Amazon Corretto",
       "java_version": "21.0.11",
-      "index": "docker.io/library/amazoncorretto@sha256:d3a3476c19cbe37b2e3e46a2116ff197ab37c7072baad55ee0ad07f3b97e8d02",
-      "arm64_manifest": "docker.io/library/amazoncorretto@sha256:ba1fe4a3fd4c6b70360183fccd1f0a168c3ea6f73709e8f81945cb9087431ff2",
+      "os": "Alpine Linux",
+      "os_version": "3.24.1",
+      "index": "docker.io/library/amazoncorretto@sha256:30b1b2246cee9a98c9bf8a11537a04f1eaf8c59279b0c70ae02d7e5b934edeaa",
+      "arm64_manifest": "docker.io/library/amazoncorretto@sha256:dc43b39c47f1729dc772a9b8af7222757fac6c8cfa8a0802829af665b1c89925",
       "user": "10000:10001"
     },
     "cli": {
@@ -202,7 +204,7 @@
     },
     "workflow": {
       "path": ".github/workflows/polaris-admin-arm64.yml",
-      "sha256": "cf72c732e57f593ce25aa08a076ed7b221cfc07768b307ea923423d4db856398",
+      "sha256": "4450b601ace1bde8c9542a958983c2199638ee61a8c245b1276fbf022c527587",
       "repository": "TommyKammy/Shirokuma",
       "ref": "refs/heads/main",
       "oidc_identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/polaris-admin-arm64.yml@refs/heads/main",
@@ -245,6 +247,7 @@
       "runtime-base-index.json",
       "runtime-base-java-version.txt",
       "runtime-base-manifest.json",
+      "runtime-base-os-version.txt",
       "sbom-attestation-bundle.json",
       "sbom-policy.json",
       "slsa-bundles.jsonl",
@@ -261,7 +264,7 @@
       "trusted-tag-manifest.json"
     ],
     "checksum_manifest": "evidence.sha256",
-    "checksum_manifest_entries": 33,
+    "checksum_manifest_entries": 34,
     "directory_file_count_after_review": 34,
     "raw_logs_permitted": false
   },

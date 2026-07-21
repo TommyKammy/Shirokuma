@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-21
-version: "1.13"
+version: "1.14"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -283,7 +283,7 @@ dependency input
 `ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18`
 for an Admin image build. It does not admit an image or enable runtime.
 
-The next Admin image publication PR records lifecycle state
+PR #88 merged as `0fca9059179900a6d236961c1d595a66e752fb3e` and records lifecycle state
 `admin_image_publication_pending` with next state
 `admin_image_evidence_review_pending`. Its bounded policy surface is
 `bootstrap/polaris/v1.6.0/admin-image-contract.json`,
@@ -292,6 +292,28 @@ The next Admin image publication PR records lifecycle state
 `ghcr.io/tommykammy/shirokuma-polaris-admin:1.6.0-arm64`; the mutable tag is
 never review authority, and no exact Admin image digest is approved before the
 separate retained-evidence review.
+
+The first main publication run
+[`29798208118`](https://github.com/TommyKammy/Shirokuma/actions/runs/29798208118)
+built and smoke-tested quarantine digest
+`sha256:78a4d4f4609dfc58d6c43526ab9ea198dea2427415ad7ce86fbf2e34e76b9a84`,
+then stopped at the blocking Trivy 0.72.0 scan. The Amazon Linux 2023 runtime
+base contributed 19 High findings (`glib2` 7, `libacl` 2, `python3` 5, and
+`python3-libs` 5) and zero Critical findings. Promotion, keyless signing,
+provenance, retained candidate evidence, and trusted-tag publication were
+skipped. The quarantine digest is not review authority and cannot enter an
+evidence-only review or admission record.
+
+The approved correction does not waive or ignore those findings. The Admin
+image alone will repin to the Docker Official Image for Amazon Corretto 21 on
+Alpine 3.24: index
+`sha256:30b1b2246cee9a98c9bf8a11537a04f1eaf8c59279b0c70ae02d7e5b934edeaa`
+and linux/arm64 manifest
+`sha256:dc43b39c47f1729dc772a9b8af7222757fac6c8cfa8a0802829af665b1c89925`.
+Image history pins Corretto `21.0.11.10.1`, `/usr/bin/java` is present, and a
+focused Trivy 0.72.0 scan reports High=0/Critical=0. The mutable `21-alpine`
+tag is discovery input only; the contract, Containerfile, workflow, verifier,
+and build must use the exact digests and repeat all publication checks on main.
 
 The Containerfile preserves upstream's Quarkus fast-jar layout
 `build/quarkus-app/{lib/,quarkus-run.jar,app/,quarkus/}`, runs as

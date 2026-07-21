@@ -5,7 +5,7 @@ title: "Adopt a source-built Polaris 1.6.0 and signed PostgreSQL metadata store"
 status: accepted
 created: 2026-07-16
 updated: 2026-07-21
-version: "0.10"
+version: "0.11"
 area: "architecture"
 tags: [shirokuma, adr, polaris, postgresql, arm64, supply-chain]
 ---
@@ -81,6 +81,17 @@ surface rather than claim a relational-only runtime.
   `sha256:ba1fe4a3fd4c6b70360183fccd1f0a168c3ea6f73709e8f81945cb9087431ff2`.
   The main publisher must repeat the zero High/Critical scan; the workstation
   observation is not admission evidence.
+- For the separate Polaris Admin Tool image only, supersede the original
+  Amazon Linux 2023 Corretto base after main run `29798208118` found 19 High
+  OS-package vulnerabilities. Repin the Admin image to Amazon Corretto 21 on
+  Alpine 3.24, using exact index
+  `sha256:30b1b2246cee9a98c9bf8a11537a04f1eaf8c59279b0c70ae02d7e5b934edeaa`
+  and exact linux/arm64 manifest
+  `sha256:dc43b39c47f1729dc772a9b8af7222757fac6c8cfa8a0802829af665b1c89925`.
+  This does not change the already reviewed server image. The Admin publisher
+  must re-prove Java 21, CLI compatibility, SBOM/NoSQL disclosure,
+  High=0/Critical=0, signature, provenance, and anonymous retrieval before any
+  evidence review.
 - Build a bounded Shirokuma downstream distribution by applying one
   hash-pinned overlay only after pristine ASF source verification. The overlay
   removes HadoopFileIO, Hadoop external-catalog federation, and Ranger
@@ -233,13 +244,31 @@ and gzip structure before evidence review.
 PR #87 merged that 12-file evidence review as
 `8e5c6927e95d1027e16fe2ac27ab8322b45359c9`, retired the write-capable Admin
 dependency publisher, and approved the exact public dependency superset only
-for Admin image building. The pending Admin image publication PR consumes
+for Admin image building. PR #88 merged as
+`0fca9059179900a6d236961c1d595a66e752fb3e` and consumes
 `ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18`,
 records `admin_image_publication_pending` with next state
 `admin_image_evidence_review_pending`, and targets repository/tag
 `ghcr.io/tommykammy/shirokuma-polaris-admin:1.6.0-arm64`. No exact Admin image
 digest exists as review authority until the main publication and separate
 evidence-only review complete.
+
+The first main publication run
+[`29798208118`](https://github.com/TommyKammy/Shirokuma/actions/runs/29798208118)
+proved the fresh offline build, closed context, native arm64 image, Admin CLI
+help smoke, and CycloneDX generation. Its blocking Trivy scan then found 19
+High and zero Critical OS-package vulnerabilities in the pinned Amazon Linux
+2023 base: `glib2` 7, `libacl` 2, `python3` 5, and `python3-libs` 5. The run
+failed before signature, provenance, retained candidate evidence, and
+promotion. Quarantine digest
+`sha256:78a4d4f4609dfc58d6c43526ab9ea198dea2427415ad7ce86fbf2e34e76b9a84`
+is rejected and is not evidence-review or admission authority.
+
+On 2026-07-21 the Admin-only Alpine 3.24 repin above was approved. Registry
+inspection records Corretto `21.0.11.10.1`, native linux/arm64, and the
+`/usr/bin/java` symlink; a focused Trivy 0.72.0 scan reports
+High=0/Critical=0. These are selection observations only. The corrected main
+publication must generate the authoritative digest and complete every gate.
 
 The Admin snapshot and pending image remain non-admitted. Admin image admission,
 runtime, Flux, and credential gates remain false, and Issue #61 remains Open.

@@ -50,16 +50,16 @@ EXPECTED_ADMIN_INPUT_CONTRACT_SHA256 = (
 # Rebound after the policy files are stable. These constants deliberately pin
 # exact bytes in addition to the semantic checks below.
 EXPECTED_CONTRACT_SHA256 = (
-    "c87156046ba1025c64521a6022aae95dcf653e4e20979b1c8d96c276c30e047c"
+    "94a19306272fbc05eaef4645dbf653b38b328d068f528d202a1598137a0e516f"
 )
 EXPECTED_ADMIN_INPUT_VERIFIER_SHA256 = (
     "5e153aacecaec7c313d9caba5b38ef65ff92f7eed25746e879222a4cdf441a42"
 )
 EXPECTED_CONTAINERFILE_SHA256 = (
-    "39ab3fa250600d144d1a4deb00ac7d6277707994fd9b53b3a7f0968c279f6b72"
+    "cecd7e40f0bd3b2f5b0de90233677772c0c55c745f4f4cc975eda83b42f40112"
 )
 EXPECTED_WORKFLOW_SHA256 = (
-    "cf72c732e57f593ce25aa08a076ed7b221cfc07768b307ea923423d4db856398"
+    "4450b601ace1bde8c9542a958983c2199638ee61a8c245b1276fbf022c527587"
 )
 
 EXPECTED_REPOSITORY = "TommyKammy/Shirokuma"
@@ -76,13 +76,15 @@ EXPECTED_DEPENDENCY_REFERENCE = (
 )
 EXPECTED_RUNTIME_BASE = (
     "docker.io/library/amazoncorretto@sha256:"
-    "ba1fe4a3fd4c6b70360183fccd1f0a168c3ea6f73709e8f81945cb9087431ff2"
+    "dc43b39c47f1729dc772a9b8af7222757fac6c8cfa8a0802829af665b1c89925"
 )
 EXPECTED_RUNTIME_BASE_INDEX = (
     "docker.io/library/amazoncorretto@sha256:"
-    "d3a3476c19cbe37b2e3e46a2116ff197ab37c7072baad55ee0ad07f3b97e8d02"
+    "30b1b2246cee9a98c9bf8a11537a04f1eaf8c59279b0c70ae02d7e5b934edeaa"
 )
 EXPECTED_RUNTIME_BASE_JAVA_VERSION = "21.0.11"
+EXPECTED_RUNTIME_BASE_OS = "Alpine Linux"
+EXPECTED_RUNTIME_BASE_OS_VERSION = "3.24.1"
 EXPECTED_REVIEW_CHECKPOINT = {
     "repository": EXPECTED_REPOSITORY,
     "pull_request": 87,
@@ -137,6 +139,7 @@ EXPECTED_CANDIDATE_EVIDENCE = [
     "runtime-base-index.json",
     "runtime-base-java-version.txt",
     "runtime-base-manifest.json",
+    "runtime-base-os-version.txt",
     "sbom-attestation-bundle.json",
     "sbom-policy.json",
     "slsa-bundles.jsonl",
@@ -450,6 +453,8 @@ def _validate_image_publication(publication: Mapping[str, Any]) -> None:
         == {
             "distribution": "Amazon Corretto",
             "java_version": EXPECTED_RUNTIME_BASE_JAVA_VERSION,
+            "os": EXPECTED_RUNTIME_BASE_OS,
+            "os_version": EXPECTED_RUNTIME_BASE_OS_VERSION,
             "index": EXPECTED_RUNTIME_BASE_INDEX,
             "arm64_manifest": EXPECTED_RUNTIME_BASE,
             "user": "10000:10001",
@@ -549,7 +554,7 @@ def _validate_evidence(evidence: Mapping[str, Any]) -> None:
             "candidate_required": EXPECTED_CANDIDATE_EVIDENCE,
             "promotion_required": EXPECTED_PROMOTION_EVIDENCE,
             "checksum_manifest": "evidence.sha256",
-            "checksum_manifest_entries": 33,
+            "checksum_manifest_entries": 34,
             "directory_file_count_after_review": 34,
             "raw_logs_permitted": False,
         },
@@ -557,12 +562,12 @@ def _validate_evidence(evidence: Mapping[str, Any]) -> None:
         "candidate/promotion evidence closure or retention policy changed",
     )
     _expect(
-        len(EXPECTED_CANDIDATE_EVIDENCE) == 29
+        len(EXPECTED_CANDIDATE_EVIDENCE) == 30
         and len(EXPECTED_PROMOTION_EVIDENCE) == 4
         and len(set(EXPECTED_CANDIDATE_EVIDENCE + EXPECTED_PROMOTION_EVIDENCE))
-        == 33,
+        == 34,
         "EVIDENCE_POLICY",
-        "internal expected evidence inventory is not a 29+4 closed set",
+        "internal expected evidence inventory is not a 30+4 closed set",
     )
 
 
@@ -660,6 +665,11 @@ def _audit_containerfile(root: Path) -> None:
     )
     required = {
         f"FROM {EXPECTED_RUNTIME_BASE}",
+        f'dev.shirokuma.runtime-base.os="{EXPECTED_RUNTIME_BASE_OS}"',
+        (
+            'dev.shirokuma.runtime-base.os-version="'
+            f'{EXPECTED_RUNTIME_BASE_OS_VERSION}"'
+        ),
         "WORKDIR /deployments",
         "USER 10000:10001",
         'ENTRYPOINT ["/usr/bin/java", "-jar", "/deployments/quarkus-run.jar"]',
@@ -1088,10 +1098,22 @@ def _audit_workflow(root: Path) -> None:
         in blocks["verify"]
         and 'arm64[0].get("digest") != os.environ["RUNTIME_BASE_DIGEST"]'
         in blocks["verify"]
+        and 'cat /etc/alpine-release > runtime-base-os-version.txt'
+        in blocks["verify"]
+        and re.search(
+            r'(?s)test "\$\(tr -d \'\\r\\n\' < '
+            r'runtime-base-os-version\.txt\)" =\s*\\\s*'
+            r'"\$\{RUNTIME_BASE_OS_VERSION\}"',
+            blocks["verify"],
+        )
+        is not None
         and '"index": os.environ["RUNTIME_BASE_INDEX"]' in blocks["verify"]
         and '"linux_arm64_manifest": os.environ["RUNTIME_BASE"]'
         in blocks["verify"]
         and '"java_version": os.environ["RUNTIME_BASE_JAVA_VERSION"]'
+        in blocks["verify"]
+        and '"os": os.environ["RUNTIME_BASE_OS"]' in blocks["verify"]
+        and '"os_version": os.environ["RUNTIME_BASE_OS_VERSION"]'
         in blocks["verify"]
         and 'runtime_index = load("runtime-base-index.json")'
         in blocks["promote"]
@@ -1100,22 +1122,32 @@ def _audit_workflow(root: Path) -> None:
         in blocks["promote"]
         and '"openjdk version \\"${RUNTIME_BASE_JAVA_VERSION}\\""'
         in blocks["promote"]
+        and re.search(
+            r'(?s)test "\$\(tr -d \'\\r\\n\' < '
+            r'candidate-evidence/runtime-base-os-version\.txt\)" =\s*\\\s*'
+            r'"\$\{RUNTIME_BASE_OS_VERSION\}"',
+            blocks["promote"],
+        )
+        is not None
         and '"runtime_base_index": os.environ["RUNTIME_BASE_INDEX"]'
         in publication_record
         and '"runtime_base": os.environ["RUNTIME_BASE"]' in publication_record
-        and '"runtime_base_java_version": os.environ[' in publication_record,
+        and '"runtime_base_java_version": os.environ[' in publication_record
+        and '"runtime_base_os": os.environ["RUNTIME_BASE_OS"]'
+        in publication_record
+        and '"runtime_base_os_version": os.environ[' in publication_record,
         "WORKFLOW_RUNTIME_BASE",
-        "runtime index, arm64 descriptor, or exact Java evidence is not revalidated",
+        "runtime index, arm64 descriptor, Java, or Alpine identity is not revalidated",
     )
     _expect(
         re.search(
             r'(?s)test "\$\(find \. -mindepth 1 -maxdepth 1 -type f '
-            r'\| wc -l \| tr -d \' \'\)" =\s*\\\s*"34"',
+            r'\| wc -l \| tr -d \' \'\)" =\s*\\\s*"35"',
             blocks["promote"],
         )
         is not None,
         "WORKFLOW_EVIDENCE_CLOSURE",
-        "final evidence directory must contain exactly 33 payloads plus evidence.sha256",
+        "final evidence directory must contain exactly 34 payloads plus evidence.sha256",
     )
     credential_bearing_invocations = [
         command

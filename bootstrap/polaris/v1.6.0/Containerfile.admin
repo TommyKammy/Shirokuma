@@ -6,9 +6,9 @@
 #
 # This runtime layout follows Apache Polaris 1.6.0
 # runtime/admin/src/main/docker/Dockerfile.jvm. The Docker Official
-# Image for Amazon Corretto 21 is pinned to the exact linux/arm64
+# Image for Amazon Corretto 21 on Alpine 3.24 is pinned to the exact linux/arm64
 # manifest below; mutable tags are not used during the build.
-FROM docker.io/library/amazoncorretto@sha256:ba1fe4a3fd4c6b70360183fccd1f0a168c3ea6f73709e8f81945cb9087431ff2
+FROM docker.io/library/amazoncorretto@sha256:dc43b39c47f1729dc772a9b8af7222757fac6c8cfa8a0802829af665b1c89925
 
 ARG SOURCE_COMMIT
 ARG SOURCE_CREATED
@@ -20,7 +20,9 @@ LABEL org.opencontainers.image.source="https://github.com/apache/polaris" \
       org.opencontainers.image.description="Apache Polaris Admin Tool 1.6.0 built from the ASF-signed source release" \
       org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.base.name="docker.io/library/amazoncorretto" \
-      dev.shirokuma.runtime-base.arm64-digest="sha256:ba1fe4a3fd4c6b70360183fccd1f0a168c3ea6f73709e8f81945cb9087431ff2"
+      dev.shirokuma.runtime-base.arm64-digest="sha256:dc43b39c47f1729dc772a9b8af7222757fac6c8cfa8a0802829af665b1c89925" \
+      dev.shirokuma.runtime-base.os="Alpine Linux" \
+      dev.shirokuma.runtime-base.os-version="3.24.1"
 
 ENV HOME=/tmp \
     LANG=en_US.UTF-8

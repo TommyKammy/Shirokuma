@@ -226,12 +226,12 @@ class PolarisAdminImageContractTests(unittest.TestCase):
                     ].__setitem__(field, True),
                 )
 
-    def test_evidence_inventory_is_exactly_29_plus_4(self) -> None:
+    def test_evidence_inventory_is_exactly_30_plus_4(self) -> None:
         contract = self._contract()
-        self.assertEqual(29, len(verifier.EXPECTED_CANDIDATE_EVIDENCE))
+        self.assertEqual(30, len(verifier.EXPECTED_CANDIDATE_EVIDENCE))
         self.assertEqual(4, len(verifier.EXPECTED_PROMOTION_EVIDENCE))
         self.assertEqual(
-            33,
+            34,
             contract["evidence"]["checksum_manifest_entries"],
         )
         self._assert_contract_code(
@@ -266,6 +266,27 @@ class PolarisAdminImageContractTests(unittest.TestCase):
         path = root / verifier.CONTAINERFILE_PATH
         path.write_text(
             path.read_text(encoding="utf-8") + "\nEXPOSE 8181\n",
+            encoding="utf-8",
+        )
+        with mock.patch.object(
+            verifier, "EXPECTED_CONTAINERFILE_SHA256", verifier._sha256(path)
+        ):
+            with self.assertRaises(verifier.ContractError) as raised:
+                verifier._audit_containerfile(root)
+        self.assertEqual("CONTAINERFILE_SEMANTICS", raised.exception.code)
+
+    def test_containerfile_requires_alpine_identity_labels_after_hash_rebinding(
+        self,
+    ) -> None:
+        root = self._temporary_root(verifier.CONTAINERFILE_PATH)
+        path = root / verifier.CONTAINERFILE_PATH
+        text = path.read_text(encoding="utf-8")
+        path.write_text(
+            text.replace(
+                'dev.shirokuma.runtime-base.os-version="3.24.1"',
+                'dev.shirokuma.runtime-base.os-version="3.24"',
+                1,
+            ),
             encoding="utf-8",
         )
         with mock.patch.object(
@@ -346,7 +367,7 @@ class PolarisAdminImageContractTests(unittest.TestCase):
             ),
         )
 
-    def test_workflow_revalidates_runtime_index_arm64_and_exact_java(self) -> None:
+    def test_workflow_revalidates_runtime_index_arm64_java_and_alpine(self) -> None:
         self._assert_workflow_code(
             "WORKFLOW_RUNTIME_BASE",
             lambda text: text.replace(
@@ -360,11 +381,35 @@ class PolarisAdminImageContractTests(unittest.TestCase):
             "WORKFLOW_RUNTIME_BASE",
             lambda text: text.replace(java_marker, '"openjdk version 21"'),
         )
+        self._assert_workflow_code(
+            "WORKFLOW_RUNTIME_BASE",
+            lambda text: text.replace(
+                'cat /etc/alpine-release > runtime-base-os-version.txt',
+                'cat /etc/os-release > runtime-base-os-version.txt',
+                1,
+            ),
+        )
+        self._assert_workflow_code(
+            "WORKFLOW_RUNTIME_BASE",
+            lambda text: text.replace(
+                'tr -d \'\\r\\n\' < candidate-evidence/runtime-base-os-version.txt',
+                'tr -d \'\\r\\n\' < candidate-evidence/runtime-base-java-version.txt',
+                1,
+            ),
+        )
+        self._assert_workflow_code(
+            "WORKFLOW_RUNTIME_BASE",
+            lambda text: text.replace(
+                '"runtime_base_os": os.environ["RUNTIME_BASE_OS"]',
+                '"runtime_base_os": "unknown"',
+                1,
+            ),
+        )
 
     def test_workflow_requires_exact_final_evidence_file_count(self) -> None:
         self._assert_workflow_code(
             "WORKFLOW_EVIDENCE_CLOSURE",
-            lambda text: text.replace('              "34"\n', '              "33"\n', 1),
+            lambda text: text.replace('              "35"\n', '              "34"\n', 1),
         )
 
     def test_workflow_evidence_and_credential_boundaries_survive_rebinding(self) -> None:
