@@ -217,9 +217,11 @@ check-required-files:
 	@test -f tests/test_gitops_teardown.py
 	@test -f tests/test_polaris_admin_build_inputs.py
 	@test -f bootstrap/polaris/v1.6.0/admin-build-inputs-contract.json
+	@test -f bootstrap/polaris/v1.6.0/admin-admission.json
 	@test -f bootstrap/polaris/v1.6.0/admin-image-contract.json
 	@test -f bootstrap/polaris/v1.6.0/admin-release-evidence.json
 	@test -f bootstrap/polaris/v1.6.0/admin-image-evidence/evidence.sha256
+	@test -f security/evidence/polaris-admin-v1.6.0/evidence.sha256
 	@test -f security/resident-images.json
 	@test -f security/resident-image-exceptions.json
 	@test -f policies/kyverno/baseline.yaml

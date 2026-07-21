@@ -55,6 +55,9 @@ REPOSITORY_SOURCE_BUILD_EVIDENCE_MODE = "repository_source_build"
 REVIEWED_REPOSITORY_PUBLICATION_EVIDENCE_MODE = (
     "reviewed_repository_publication"
 )
+REVIEWED_REPOSITORY_ADMIN_PUBLICATION_EVIDENCE_MODE = (
+    "reviewed_repository_admin_publication"
+)
 SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 ATOMIC_ADMISSION_RECEIPT_PATH = (
     "bootstrap/polaris/v1.6.0/atomic-admission.json"
@@ -159,6 +162,50 @@ CANONICAL_REVIEWED_REPOSITORY_PUBLICATIONS = {
         ),
         "resident_scan_sha256": (
             "1ee7994db68a5ad999fc1604b8e0902add3f492b97c12c88f6c3fbbf3a3f098e"
+        ),
+    }
+}
+CANONICAL_REVIEWED_REPOSITORY_ADMIN_PUBLICATIONS = {
+    ("polaris-admin", "1.6.0"): {
+        "source": "https://github.com/apache/polaris",
+        "reference": (
+            "ghcr.io/tommykammy/shirokuma-polaris-admin@"
+            "sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd"
+        ),
+        "admission": "bootstrap/polaris/v1.6.0/admin-admission.json",
+        "image_contract": {
+            "path": "bootstrap/polaris/v1.6.0/admin-image-contract.json",
+            "sha256": (
+                "c5aacf801c54413fcc2e8b7a460527f56dabcc65ef560d1ab879e3c58c33c862"
+            ),
+        },
+        "release_evidence": {
+            "path": "bootstrap/polaris/v1.6.0/admin-release-evidence.json",
+            "sha256": (
+                "8d3f4b4550e4cebbd7e9d83d07376c7b5ba5f0013a49a044624d914d70df7c10"
+            ),
+        },
+        "publication_evidence": {
+            "path": (
+                "bootstrap/polaris/v1.6.0/admin-image-evidence/publication.json"
+            ),
+            "sha256": (
+                "d6051d8d30c2cf890409c8a484233b2ae56b745369639c3cc680170479647063"
+            ),
+        },
+        "evidence_manifest": {
+            "path": (
+                "bootstrap/polaris/v1.6.0/admin-image-evidence/evidence.sha256"
+            ),
+            "sha256": (
+                "f1290ccf0fff852fb965d46ab55c12623ce15e36e15b4bbeb6627999bf11a97f"
+            ),
+        },
+        "resident_sbom_sha256": (
+            "b7c5a9e3fab873b9a655059ab0297e45a70273fff95eef62a1cdd8afa28589e8"
+        ),
+        "resident_scan_sha256": (
+            "a067f022234f60b64f6fe9add3998cc8bc0d26191facaedf8a1112014c5ad91e"
         ),
     }
 }
@@ -1231,6 +1278,223 @@ def check_reviewed_repository_publication_record(
         raise PolicyError("reviewed Polaris publication evidence is not canonical")
 
 
+def check_reviewed_repository_admin_publication_record(
+    record: dict[str, Any],
+    *,
+    repository: Path,
+    component: str,
+    reference: str,
+    version: str,
+    source: str,
+    sbom_path: Path,
+    scan_path: Path,
+    vulnerability_db_updated_at: str,
+) -> None:
+    reviewed = record.get("reviewed_repository_admin_publication")
+    if not isinstance(reviewed, dict):
+        raise PolicyError(
+            "reviewed Admin publication mode requires publication evidence"
+        )
+    require_exact_object_fields(
+        record,
+        {
+            "component",
+            "version",
+            "source",
+            "platform",
+            "reference",
+            "verified_at",
+            "evidence_mode",
+            "reviewed_repository_admin_publication",
+        },
+        "reviewed Admin publication",
+    )
+    require_exact_object_fields(
+        reviewed,
+        {
+            "admission",
+            "image_contract",
+            "release_evidence",
+            "publication_evidence",
+            "evidence_manifest",
+        },
+        "reviewed Admin publication evidence",
+    )
+    canonical = CANONICAL_REVIEWED_REPOSITORY_ADMIN_PUBLICATIONS.get(
+        (component, version)
+    )
+    if canonical is None:
+        raise PolicyError(
+            f"reviewed Admin publication mode is not approved for {component} {version}"
+        )
+    if reference != canonical["reference"] or source != canonical["source"]:
+        raise PolicyError("reviewed Admin publication identity is not canonical")
+
+    admission_binding = reviewed.get("admission")
+    if (
+        not isinstance(admission_binding, dict)
+        or set(admission_binding) != {"path"}
+        or admission_binding.get("path") != canonical["admission"]
+    ):
+        raise PolicyError(
+            "reviewed Admin publication admission path must be canonical without a byte hash"
+        )
+    admission_path = repository_artifact_path(
+        repository,
+        admission_binding["path"],
+        "reviewed_repository_admin_publication.admission.path",
+    )
+    contract_path, _ = checked_canonical_binding(
+        repository,
+        reviewed.get("image_contract"),
+        "reviewed_repository_admin_publication.image_contract",
+        canonical["image_contract"],
+    )
+    release_path, _ = checked_canonical_binding(
+        repository,
+        reviewed.get("release_evidence"),
+        "reviewed_repository_admin_publication.release_evidence",
+        canonical["release_evidence"],
+    )
+    publication_path, _ = checked_canonical_binding(
+        repository,
+        reviewed.get("publication_evidence"),
+        "reviewed_repository_admin_publication.publication_evidence",
+        canonical["publication_evidence"],
+    )
+    evidence_manifest_path, _ = checked_canonical_binding(
+        repository,
+        reviewed.get("evidence_manifest"),
+        "reviewed_repository_admin_publication.evidence_manifest",
+        canonical["evidence_manifest"],
+    )
+
+    admission = load_json(admission_path)
+    require_exact_object_fields(
+        admission,
+        {
+            "schema_version",
+            "component",
+            "version",
+            "platform",
+            "admission",
+            "state",
+            "decision_at",
+            "source",
+            "reference",
+            "digest",
+            "image_contract",
+            "release_evidence",
+            "reviewed_evidence_manifest",
+            "admission_evidence_manifest",
+            "anonymous_preflight",
+            "vulnerability_database",
+            "scans",
+            "supply_chain",
+            "resident_ledger",
+            "runtime",
+            "gitops",
+            "credentials",
+        },
+        "reviewed Admin admission",
+    )
+    if (
+        admission.get("schema_version") != 1
+        or admission.get("component") != component
+        or admission.get("version") != version
+        or admission.get("platform") != "linux/arm64"
+        or admission.get("admission") != "approved"
+        or admission.get("state") != "admin_runtime_activation_pending"
+        or admission.get("source") != source
+        or admission.get("reference") != reference
+        or admission.get("digest") != reference_digest(reference)
+        or admission.get("image_contract") != canonical["image_contract"]
+        or admission.get("release_evidence") != canonical["release_evidence"]
+    ):
+        raise PolicyError("reviewed Admin admission is not canonical")
+    scans = admission.get("scans")
+    sbom = scans.get("sbom") if isinstance(scans, dict) else None
+    vulnerability_scan = (
+        scans.get("vulnerability_scan") if isinstance(scans, dict) else None
+    )
+    database = admission.get("vulnerability_database")
+    if (
+        not isinstance(sbom, dict)
+        or not isinstance(vulnerability_scan, dict)
+        or not isinstance(database, dict)
+        or sbom.get("sha256") != canonical["resident_sbom_sha256"]
+        or vulnerability_scan.get("sha256")
+        != canonical["resident_scan_sha256"]
+        or vulnerability_scan.get("artifact_reference") != reference
+        or vulnerability_scan.get("high") != 0
+        or vulnerability_scan.get("critical") != 0
+        or database.get("updated_at") != vulnerability_db_updated_at
+        or file_sha256(sbom_path, "resident Admin SBOM")
+        != canonical["resident_sbom_sha256"]
+        or file_sha256(scan_path, "resident Admin scan")
+        != canonical["resident_scan_sha256"]
+    ):
+        raise PolicyError("reviewed Admin resident evidence is not canonical")
+    if (
+        admission.get("resident_ledger")
+        != {"path": "security/resident-images.json", "enabled": True}
+        or admission.get("runtime")
+        != {
+            "permitted": False,
+            "next_boundary": "admin_runtime_activation_pending",
+        }
+        or admission.get("gitops") != {"resources_permitted": False}
+        or admission.get("credentials") != {"material_permitted": False}
+    ):
+        raise PolicyError("reviewed Admin admission opened a downstream runtime gate")
+
+    contract = load_json(contract_path)
+    downstream = contract.get("downstream_gates") if isinstance(contract, dict) else None
+    if (
+        not isinstance(contract, dict)
+        or contract.get("schema_version") != 3
+        or contract.get("component") != component
+        or contract.get("lifecycle")
+        != {
+            "state": "admin_runtime_activation_pending",
+            "next_state": "admin_runtime_acceptance_pending",
+        }
+        or not isinstance(downstream, dict)
+        or downstream.get("admin_image_admitted") is not True
+        or downstream.get("resident_image_ledger_enabled") is not True
+        or downstream.get("admin_runtime_enabled") is not False
+        or downstream.get("gitops_resources_enabled") is not False
+        or downstream.get("credential_material_permitted") is not False
+    ):
+        raise PolicyError("reviewed Admin contract is not admission-only")
+
+    release = load_json(release_path)
+    publication = load_json(publication_path)
+    if (
+        not isinstance(release, dict)
+        or release.get("state") != "approved_for_admin_admission"
+        or release.get("admitted") is not False
+        or release.get("reference") != reference
+        or not isinstance(publication, dict)
+        or publication.get("reference") != reference
+        or publication.get("promoted") is not True
+        or publication.get("anonymous_pull") is not True
+        or publication.get("admitted") is not False
+    ):
+        raise PolicyError("reviewed Admin publication evidence is not canonical")
+    try:
+        manifest = evidence_manifest_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        raise PolicyError("cannot read reviewed Admin evidence manifest") from error
+    if (
+        canonical["resident_sbom_sha256"]
+        + "  ./polaris-admin-1.6.0-arm64.cdx.json"
+        not in manifest
+        or canonical["resident_scan_sha256"] + "  ./trivy.json" not in manifest
+    ):
+        raise PolicyError("reviewed Admin evidence manifest does not bind resident evidence")
+
+
 def check_repository_source_build_record(
     record: dict[str, Any],
     *,
@@ -1543,6 +1807,18 @@ def check_supply_chain_evidence(
             sbom_path=sbom_path,
             scan_path=scan_path,
             atomic_receipt_binding=atomic_receipt_binding,
+        )
+    elif mode == REVIEWED_REPOSITORY_ADMIN_PUBLICATION_EVIDENCE_MODE:
+        check_reviewed_repository_admin_publication_record(
+            record,
+            repository=repository,
+            component=component,
+            reference=reference,
+            version=version,
+            source=source,
+            sbom_path=sbom_path,
+            scan_path=scan_path,
+            vulnerability_db_updated_at=vulnerability_db_updated_at,
         )
     else:
         raise PolicyError(f"unsupported supply-chain evidence_mode {mode!r}")

@@ -41,12 +41,18 @@ POLARIS_ADMIN_BUILD_INPUTS_VERIFIER = Path(
 POLARIS_ADMIN_IMAGE_CONTRACT = Path(
     "bootstrap/polaris/v1.6.0/admin-image-contract.json"
 )
+POLARIS_ADMIN_ADMISSION = Path(
+    "bootstrap/polaris/v1.6.0/admin-admission.json"
+)
 POLARIS_ADMIN_IMAGE_CONTAINERFILE = Path(
     "bootstrap/polaris/v1.6.0/Containerfile.admin"
 )
 POLARIS_ADMIN_IMAGE_VERIFIER = Path("scripts/verify_polaris_admin_image.py")
 POLARIS_ADMIN_IMAGE_EVIDENCE = Path(
     "bootstrap/polaris/v1.6.0/admin-image-evidence"
+)
+POLARIS_ADMIN_ADMISSION_EVIDENCE = Path(
+    "security/evidence/polaris-admin-v1.6.0"
 )
 POLARIS_ADMIN_RELEASE_EVIDENCE = Path(
     "bootstrap/polaris/v1.6.0/admin-release-evidence.json"
@@ -120,13 +126,16 @@ POLARIS_ADMIN_BUILD_INPUTS_VERIFIER_SHA256 = (
     "5e153aacecaec7c313d9caba5b38ef65ff92f7eed25746e879222a4cdf441a42"
 )
 POLARIS_ADMIN_IMAGE_CONTRACT_SHA256 = (
-    "41e1464d2bcb5bf4021813abbd6ddd7090d6e8411009a0a5d78e231348570925"
+    "c5aacf801c54413fcc2e8b7a460527f56dabcc65ef560d1ab879e3c58c33c862"
+)
+POLARIS_ADMIN_ADMISSION_SHA256 = (
+    "99d1fc36c2960584be7b529c9601e6667deae842f2eb16fd36c949b7c3efaa14"
 )
 POLARIS_ADMIN_IMAGE_CONTAINERFILE_SHA256 = (
     "cecd7e40f0bd3b2f5b0de90233677772c0c55c745f4f4cc975eda83b42f40112"
 )
 POLARIS_ADMIN_IMAGE_VERIFIER_SHA256 = (
-    "4f2136ce327a669c3ed64da79b5d8525648f8259501701b758ffe923bd64c2a4"
+    "e7cf968266a109169c73323c91e407dc6638b784aab88dc82b2fcbc679d4d672"
 )
 POLARIS_ADMIN_RELEASE_EVIDENCE_SHA256 = (
     "8d3f4b4550e4cebbd7e9d83d07376c7b5ba5f0013a49a044624d914d70df7c10"
@@ -619,6 +628,7 @@ POLARIS_ALLOWED_PATHS = {
         f"admin-build-inputs-evidence/{filename}"
         for filename in POLARIS_ADMIN_BUILD_INPUTS_EVIDENCE_RECORDS
     },
+    "admin-admission.json",
     "admin-image-contract.json",
     "admin-image-evidence",
     *{
@@ -745,7 +755,7 @@ PENDING_SCRIPT_FILE_INVENTORY = {
         "b6bbbd383c74b190872bdcf144ede8126d8da5dbeb03e291027aaf276c62c955"
     ),
     "scripts/verify_supply_chain.py": (
-        "7164dee8ade7f00acdd936745c6976eb8d3dab4acd45050db6932270ea763ce9"
+        "f5923551dee296c25b7786634340fece2ce89f03d9fd4398d3c182e610a6dedf"
     ),
     "scripts/verify_trivyignore.py": (
         "75cee002d5749c0ec91629edb905c27362bee5c0813b0cbefcb59f161734f445"
@@ -2796,6 +2806,7 @@ def _audit_admin_build_inputs_retained_evidence(root: Path) -> None:
 
 def _audit_admin_image_publication_policy(root: Path) -> None:
     expected_files = {
+        POLARIS_ADMIN_ADMISSION: POLARIS_ADMIN_ADMISSION_SHA256,
         POLARIS_ADMIN_IMAGE_CONTRACT: POLARIS_ADMIN_IMAGE_CONTRACT_SHA256,
         POLARIS_ADMIN_IMAGE_CONTAINERFILE: (
             POLARIS_ADMIN_IMAGE_CONTAINERFILE_SHA256
@@ -9033,7 +9044,13 @@ def _audit_retained_pending_evidence(root: Path) -> None:
     )
     for path in directory.rglob("*"):
         atomic_directory = root / ATOMIC_EVIDENCE
-        if path == atomic_directory or atomic_directory in path.parents:
+        admin_admission_directory = root / POLARIS_ADMIN_ADMISSION_EVIDENCE
+        if (
+            path == atomic_directory
+            or atomic_directory in path.parents
+            or path == admin_admission_directory
+            or admin_admission_directory in path.parents
+        ):
             continue
         relative = path.relative_to(root).as_posix()
         evidence_relative = path.relative_to(directory).as_posix()
@@ -9128,6 +9145,7 @@ def _audit_ledger(root: Path) -> None:
         "apachepolaris",
         "chainguardpostgres",
         "polaris",
+        "polarisadmin",
         "postgres",
         "postgresql",
     }
@@ -9212,18 +9230,42 @@ def _audit_ledger(root: Path) -> None:
                 "2026-07-19T18:43:16.060990559Z"
             ),
         },
+        {
+            "component": "polaris-admin",
+            "version": "1.6.0",
+            "source": "https://github.com/apache/polaris",
+            "platform": "linux/arm64",
+            "reference": (
+                "ghcr.io/tommykammy/shirokuma-polaris-admin@"
+                "sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd"
+            ),
+            "sbom_artifact": (
+                "evidence/polaris-admin-v1.6.0/"
+                "polaris-admin-1.6.0-arm64.cdx.json"
+            ),
+            "scan_artifact": "evidence/polaris-admin-v1.6.0/trivy.json",
+            "supply_chain_artifact": (
+                "evidence/polaris-admin-v1.6.0/supply-chain.json"
+            ),
+            "sbom_generator": "syft 1.46.0",
+            "scanner_version": "trivy 0.72.0",
+            "vulnerability_db_updated_at": (
+                "2026-07-21T01:08:43.916306317Z"
+            ),
+        },
     ]
     observed_components = sorted(
         str(entry.get("component", "<unnamed>")) for entry in admitted
     )
     missing_components = sorted(
-        {"polaris", "postgresql"} - set(observed_components)
+        {"polaris", "postgresql", "polaris-admin"} - set(observed_components)
     )
     _expect(
         _json_equal_type_sensitive(admitted, expected),
         code,
-        "resident ledger must contain the exact atomic Polaris/PostgreSQL "
-        f"pair; missing {missing_components}, found {observed_components}",
+        "resident ledger must contain the exact Polaris/PostgreSQL pair plus "
+        f"the admitted Admin image; missing {missing_components}, "
+        f"found {observed_components}",
     )
     for entry in admitted:
         for field in (
@@ -10321,10 +10363,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     print(
-        "polaris-trusted-image: atomic Polaris/PostgreSQL admission and "
-        "retained Polaris Admin build-input evidence pass; fresh dual-scope "
-        "evidence, exact-digest preflight, and resident ledger are bound; "
-        "runtime remains fail-closed pending acceptance"
+        "polaris-trusted-image: atomic Polaris/PostgreSQL and separate Admin "
+        "admissions pass; reviewed evidence, exact-digest preflight, and the "
+        "resident ledger are bound; runtime remains fail-closed pending activation"
     )
     return 0
 

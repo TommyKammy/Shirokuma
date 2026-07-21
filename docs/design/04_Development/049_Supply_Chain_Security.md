@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-21
-version: "1.16"
+version: "1.17"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -340,11 +340,24 @@ The final artifact (ID `8486076696`, Actions digest
 expiry `2026-08-20T06:37:23Z`) contains exactly 34 payload records plus the
 checksum manifest. The retained manifest SHA-256 is
 `f1290ccf0fff852fb965d46ab55c12623ce15e36e15b4bbeb6627999bf11a97f`.
-The evidence-only review must independently recheck every payload, exact
-workflow identity/SHA, Cosign/Rekor, SLSA v1, CycloneDX 1.7, Trivy
-High=0/Critical=0, and credential-free CLI smoke before retiring the one-shot
-publisher. It may advance only to `admin_image_admission_pending`; admission,
-resident ledger, runtime, Flux, and credential gates remain closed.
+PR #91 merged the evidence-only review as
+`2dfc02dde2d00226012500308f771326ee6b30df`. It independently rechecked every
+payload, exact workflow identity/SHA, Cosign/Rekor, SLSA v1, CycloneDX 1.7,
+Trivy High=0/Critical=0, and credential-free CLI smoke, then retired the
+one-shot publisher and advanced only to `admin_image_admission_pending`.
+
+The separate admission checkpoint re-proves anonymous exact-digest retrieval
+with an empty Docker config and binds a Trivy 0.72.0 database updated fewer than
+24 hours before the decision. It copies the exact reviewed CycloneDX and Trivy
+payload bytes into `security/evidence/polaris-admin-v1.6.0/`, closes that
+directory with a five-entry checksum manifest, and adds only
+`ghcr.io/tommykammy/shirokuma-polaris-admin@sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd`
+to `security/resident-images.json`. The admission record binds the reviewed
+contract, release evidence, 35-file publication closure, anonymous preflight,
+CycloneDX 1.7 with 1,618 components, and exact-image scan scopes for 29 Alpine
+packages plus 377 JAR packages. Both High and Critical remain zero; no exception
+is used. This advances only to `admin_runtime_activation_pending`. Runtime,
+Flux resources, credentials, and cluster mutation remain prohibited.
 
 The Containerfile preserves upstream's Quarkus fast-jar layout
 `build/quarkus-app/{lib/,quarkus-run.jar,app/,quarkus/}`, runs as
@@ -361,8 +374,9 @@ read-only Secret. The YAML or JSON file maps each top-level realm to non-empty
 `client-id` and `client-secret`; file input is mutually exclusive with
 `--realm`, singular `--credential`, and `--print-credentials`. Credential
 material is forbidden from the image, workflow evidence, command arguments,
-and current manifests. Admin image admission, runtime, Flux, and credential
-gates remain false, and Issue #61 remains Open.
+and current manifests. Admin image admission and the resident ledger are now
+approved for the exact digest; runtime, Flux, and credential gates remain
+false, and Issue #61 remains Open.
 
 The image-publication checkpoint adds only the hash-bound
 `bootstrap/polaris/v1.6.0/Containerfile`, the bounded downstream source overlay,

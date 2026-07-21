@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "images": [
+    {
+      "component": "polaris-admin",
+      "version": "1.6.0",
+      "source": "https://github.com/apache/polaris",
+      "platform": "linux/arm64",
+      "reference": "ghcr.io/tommykammy/shirokuma-polaris-admin@sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd",
+      "verified_at": "2026-07-21T09:19:33Z",
+      "evidence_mode": "reviewed_repository_admin_publication",
+      "reviewed_repository_admin_publication": {
+        "admission": {
+          "path": "bootstrap/polaris/v1.6.0/admin-admission.json"
+        },
+        "image_contract": {
+          "path": "bootstrap/polaris/v1.6.0/admin-image-contract.json",
+          "sha256": "c5aacf801c54413fcc2e8b7a460527f56dabcc65ef560d1ab879e3c58c33c862"
+        },
+        "release_evidence": {
+          "path": "bootstrap/polaris/v1.6.0/admin-release-evidence.json",
+          "sha256": "8d3f4b4550e4cebbd7e9d83d07376c7b5ba5f0013a49a044624d914d70df7c10"
+        },
+        "publication_evidence": {
+          "path": "bootstrap/polaris/v1.6.0/admin-image-evidence/publication.json",
+          "sha256": "d6051d8d30c2cf890409c8a484233b2ae56b745369639c3cc680170479647063"
+        },
+        "evidence_manifest": {
+          "path": "bootstrap/polaris/v1.6.0/admin-image-evidence/evidence.sha256",
+          "sha256": "f1290ccf0fff852fb965d46ab55c12623ce15e36e15b4bbeb6627999bf11a97f"
+        }
+      }
+    }
+  ]
+}

@@ -60,6 +60,13 @@ class PolarisAdminImageContractTests(unittest.TestCase):
     def _release_root(self) -> Path:
         return self._temporary_root(verifier.RELEASE_EVIDENCE_PATH)
 
+    def _admission_root(self) -> Path:
+        return self._temporary_root(
+            verifier.ADMISSION_PATH,
+            verifier.ADMISSION_EVIDENCE_PATH,
+            verifier.RESIDENT_IMAGE_LEDGER,
+        )
+
     def _assert_contract_code(
         self, expected: str, mutator: Callable[[dict], None]
     ) -> verifier.ContractError:
@@ -143,11 +150,11 @@ class PolarisAdminImageContractTests(unittest.TestCase):
                 command[-1],
             )
 
-    def test_lifecycle_cannot_skip_admin_admission(self) -> None:
+    def test_lifecycle_cannot_skip_admin_runtime_activation(self) -> None:
         self._assert_contract_code(
             "LIFECYCLE_STATE",
             lambda value: value["lifecycle"].__setitem__(
-                "state", "admin_runtime_activation_pending"
+                "state", "admin_runtime_acceptance_pending"
             ),
         )
 
@@ -206,14 +213,14 @@ class PolarisAdminImageContractTests(unittest.TestCase):
             lambda value: value["evidence"]["candidate_required"].pop(),
         )
 
-    def test_all_admission_runtime_flux_and_credential_gates_stay_closed(self) -> None:
+    def test_only_admission_and_resident_ledger_gates_are_open(self) -> None:
         for section, key, opened in (
-            ("admission", "permitted", True),
+            ("admission", "permitted", False),
             ("runtime", "enabled", True),
             ("gitops", "resources_enabled", True),
             ("credentials", "material_permitted", True),
-            ("downstream_gates", "admin_image_admitted", True),
-            ("downstream_gates", "resident_image_ledger_enabled", True),
+            ("downstream_gates", "admin_image_admitted", False),
+            ("downstream_gates", "resident_image_ledger_enabled", False),
         ):
             with self.subTest(section=section, key=key):
                 self._assert_contract_code(
@@ -225,6 +232,41 @@ class PolarisAdminImageContractTests(unittest.TestCase):
 
     def test_retained_evidence_inventory_and_manifest_pass(self) -> None:
         verifier._audit_evidence_inventory(ROOT)
+
+    def test_admission_evidence_and_resident_ledger_pass(self) -> None:
+        verifier._audit_downstream_files(ROOT)
+
+    def test_admission_evidence_inventory_and_bytes_fail_closed(self) -> None:
+        root = self._admission_root()
+        extra = root / verifier.ADMISSION_EVIDENCE_PATH / "unexpected.json"
+        extra.write_text("{}\n", encoding="utf-8")
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_downstream_files(root)
+        self.assertEqual("ADMIN_ADMISSION_EVIDENCE", raised.exception.code)
+
+        root = self._admission_root()
+        preflight = (
+            root / verifier.ADMISSION_EVIDENCE_PATH / "anonymous-preflight.json"
+        )
+        preflight.write_text("{}\n", encoding="utf-8")
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_downstream_files(root)
+        self.assertEqual("ADMIN_ADMISSION_EVIDENCE", raised.exception.code)
+
+    def test_admin_resident_ledger_reference_fails_closed(self) -> None:
+        root = self._admission_root()
+        ledger = root / verifier.RESIDENT_IMAGE_LEDGER
+        value = json.loads(ledger.read_text(encoding="utf-8"))
+        admin = next(
+            image
+            for image in value["images"]
+            if image["component"] == "polaris-admin"
+        )
+        admin["reference"] = "ghcr.io/example/admin@sha256:" + "0" * 64
+        ledger.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_downstream_files(root)
+        self.assertEqual("ADMIN_ADMISSION_LEDGER", raised.exception.code)
 
     def test_missing_and_extra_evidence_fail_closed(self) -> None:
         root = self._evidence_root()
@@ -340,24 +382,21 @@ class PolarisAdminImageContractTests(unittest.TestCase):
             verifier.audit_publication_bootstrap(root)
         self.assertEqual("RETIRED_PUBLISHER", raised.exception.code)
 
-    def test_premature_admission_ledger_and_gitops_are_rejected(self) -> None:
+    def test_missing_admission_ledger_and_premature_gitops_are_rejected(self) -> None:
         root = self._temporary_root()
-        admission = root / verifier.FUTURE_ADMISSION_PATH
-        admission.parent.mkdir(parents=True, exist_ok=True)
-        admission.write_text("{}\n", encoding="utf-8")
         with self.assertRaises(verifier.ContractError) as raised:
             verifier._audit_downstream_files(root)
-        self.assertEqual("PREMATURE_ADMISSION", raised.exception.code)
+        self.assertEqual("ADMIN_ADMISSION", raised.exception.code)
 
-        admission.unlink()
-        ledger = root / verifier.RESIDENT_IMAGE_LEDGER
-        ledger.parent.mkdir(parents=True, exist_ok=True)
-        ledger.write_text(verifier.EXPECTED_IMAGE_REPOSITORY, encoding="utf-8")
+        root = self._temporary_root(
+            verifier.ADMISSION_PATH,
+            verifier.ADMISSION_EVIDENCE_PATH,
+        )
         with self.assertRaises(verifier.ContractError) as raised:
             verifier._audit_downstream_files(root)
-        self.assertEqual("PREMATURE_ADMISSION", raised.exception.code)
+        self.assertEqual("ADMIN_ADMISSION_LEDGER", raised.exception.code)
 
-        ledger.unlink()
+        root = self._admission_root()
         manifest = root / "deploy/gitops/catalog/deployment.yaml"
         manifest.parent.mkdir(parents=True, exist_ok=True)
         manifest.write_text("image: shirokuma-polaris-admin\n", encoding="utf-8")
@@ -367,14 +406,14 @@ class PolarisAdminImageContractTests(unittest.TestCase):
 
     def test_downstream_guard_rejects_symlinks(self) -> None:
         root = self._temporary_root()
-        admission = root / verifier.FUTURE_ADMISSION_PATH
+        admission = root / verifier.ADMISSION_PATH
         admission.parent.mkdir(parents=True, exist_ok=True)
         admission.symlink_to(root / "missing")
         with self.assertRaises(verifier.ContractError) as raised:
             verifier._audit_downstream_files(root)
-        self.assertEqual("PREMATURE_ADMISSION", raised.exception.code)
+        self.assertEqual("ADMIN_ADMISSION", raised.exception.code)
 
-        admission.unlink()
+        root = self._admission_root()
         gitops = root / "deploy/gitops"
         gitops.parent.mkdir(parents=True, exist_ok=True)
         gitops.symlink_to(root / "missing-gitops", target_is_directory=True)
