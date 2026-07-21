@@ -1,7 +1,7 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "issue": 61,
-  "state": "runtime_acceptance_pending",
+  "state": "runtime_accepted",
   "images": {
     "polaris": "ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
     "postgresql": "cgr.dev/chainguard/postgres@sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
@@ -40,7 +40,11 @@
     "requires_catalog_rebuild": true
   },
   "documentation": {
-    "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md": "d1e36e86d8b0edaaf081accc85488224a9f76b399cd0914214674f7596dfe131"
+    "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md": "7bd131a9b94d629b06cae0009a4e6c6ddea916dfccc704f28b9cb602ae5a913f"
+  },
+  "tooling": {
+    "scripts/polaris_runtime_acceptance.py": "0ace333bf74672a9bee05d518338bed4bb8af51d2227dea0bed6b15fae6b0a8c",
+    "tests/test_polaris_runtime_acceptance.py": "2b7bbeb09d62121ab7fae4abd532178c6be646546d3fce0cf0ead56e8a051247"
   },
   "manifests": {
     "deploy/gitops/clusters/local-lite/kustomization.yaml": "a1510faf71d6f489ccd909d5ad8f0698f0f91c39d82af6be20476b4cf5750d31",
@@ -62,7 +66,9 @@
     "opentofu/dev/catalog.tf": "4da191cedd4f0b6233697ea56ddfe7b0f8d6dd0ee3934792adbb00bf9f619eb0"
   },
   "live_acceptance": {
-    "complete": false,
+    "complete": true,
+    "receipt": "security/evidence/polaris-runtime-acceptance.json",
+    "receipt_sha256": "7c0a9779fdf1d2107edddaa3a2953d2b5dee17d25a20b7a11eb635dd8bb76421",
     "required": [
       "flux_ready",
       "catalog_create_list_read",

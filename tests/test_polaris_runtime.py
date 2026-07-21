@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import tempfile
@@ -22,6 +23,8 @@ class PolarisRuntimeActivationTests(unittest.TestCase):
             Path("Makefile"),
             *map(Path, contract["manifests"]),
             *map(Path, contract["documentation"]),
+            *map(Path, contract["tooling"]),
+            Path(contract["live_acceptance"]["receipt"]),
         ]
         for relative in paths:
             destination = root / relative
@@ -184,13 +187,48 @@ class PolarisRuntimeActivationTests(unittest.TestCase):
         contract_path.write_text(json.dumps(contract, indent=2) + "\n", encoding="utf-8")
         self._assert_code(root, "RUNTIME_FLUX")
 
-    def test_live_acceptance_cannot_self_approve(self) -> None:
+    def test_live_acceptance_cannot_revert_to_incomplete(self) -> None:
         root = self._fixture()
         contract_path = root / verifier.CONTRACT
         contract = json.loads(contract_path.read_text(encoding="utf-8"))
-        contract["live_acceptance"]["complete"] = True
+        contract["live_acceptance"]["complete"] = False
         contract_path.write_text(json.dumps(contract, indent=2) + "\n", encoding="utf-8")
         self._assert_code(root, "RUNTIME_ACCEPTANCE")
+
+    def test_live_acceptance_receipt_drift_fails_closed(self) -> None:
+        root = self._fixture()
+        receipt = root / "security/evidence/polaris-runtime-acceptance.json"
+        receipt.write_text(
+            receipt.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        self._assert_code(root, "RUNTIME_ACCEPTANCE")
+
+    def test_live_acceptance_rejects_unbound_producer(self) -> None:
+        root = self._fixture()
+        receipt_path = root / "security/evidence/polaris-runtime-acceptance.json"
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        receipt["acceptance_tool_sha256"] = "0" * 64
+        receipt_path.write_text(
+            json.dumps(receipt, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        contract_path = root / verifier.CONTRACT
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        contract["live_acceptance"]["receipt_sha256"] = hashlib.sha256(
+            receipt_path.read_bytes()
+        ).hexdigest()
+        contract_path.write_text(
+            json.dumps(contract, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        self._assert_code(root, "RUNTIME_ACCEPTANCE")
+
+    def test_acceptance_tooling_drift_fails_closed(self) -> None:
+        root = self._fixture()
+        tool = root / "scripts/polaris_runtime_acceptance.py"
+        tool.write_text(tool.read_text(encoding="utf-8") + "# drift\n", encoding="utf-8")
+        self._assert_code(root, "RUNTIME_TOOLING")
 
 
 if __name__ == "__main__":

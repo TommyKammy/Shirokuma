@@ -4,8 +4,8 @@ doc_id: "WP-L1-LAKE-002"
 title: "WP-L1-LAKE-002 Polaris catalog bootstrap"
 status: in-progress
 created: 2026-07-05
-updated: 2026-07-21
-version: "1.28"
+updated: 2026-07-22
+version: "1.29"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -59,10 +59,10 @@ Openを維持します。
 ## Acceptance Criteria
 
 - [x] Polaris/PostgreSQL exact digests pass ARM64 and supply-chain admission.
-- [ ] Flux reports the catalog Kustomization and both workloads Ready=True.
-- [ ] Catalog create/list/read smoke passes against the approved S3 endpoint.
-- [ ] Credentials remain outside Git and policy checks pass.
-- [ ] Backup/restore, rollback, teardown, and metadata-storage host SSD impact are
+- [x] Flux reports the catalog Kustomization and both workloads Ready=True.
+- [x] Catalog create/list/read smoke passes against the approved S3 endpoint.
+- [x] Credentials remain outside Git and policy checks pass.
+- [x] Backup/restore, rollback, teardown, and metadata-storage host SSD impact are
   verified and documented.
 - [ ] CI and required human review pass on the focused PR chain.
 
@@ -472,6 +472,21 @@ Openを維持します。
   focused repairはannotation値を`generation-${POLARIS_CREDENTIAL_GENERATION}`へ
   型安定化し、同じConfigMap tokenからの更新伝播を維持します。Secret投入、
   Ready/API smoke、backup/restore、Issue #61 closureは引き続きpendingです。
+- PR #94はtype-stable annotation修復をmerge
+  `04b0800b77d4a4731b232d14d1788ee793f5c79c`として完了しました。同revisionを
+  local-liteへreconcileし、OpenTofu planをPolaris Secret 2件のcreateだけに限定して
+  applyしました。object storage、database、Admin bootstrap、serverの4
+  Kustomizationは同revisionでReady=True、PostgreSQL StatefulSetとPolaris
+  DeploymentはReady、bootstrap JobはCompletedです。
+- `scripts/polaris_runtime_acceptance.py`による2026-07-21 UTCのlive受入では、
+  temporary S3-backed Catalogのcreate/list/read/deleteと削除確認が成功しました。
+  `27,186` byte / 66 entriesのPostgreSQL custom dumpをmacOS hostへ`0600`で保持し、隔離した
+  temporary databaseへのrestore後に9 tables / 7 rows、schema MD5、content
+  SHA-256がsourceと一致し、temporary databaseを削除しました。backup SHA-256は
+  `1dd1aaa744bb926adf6779a14e9eb310016171ab85ef688bb6f71663105efe4a`、
+  capture後のhost free spaceは`2,874,895,852 KiB`です。credential materialは
+  receipt/Gitへ保持せず、`security/evidence/polaris-runtime-acceptance.json`へ
+  bounded local-lite evidenceだけを記録します。
 - PR #74以降の本文はIssue参照を`Refs #61`だけに限定します。否定文であっても
   closing keywordとIssue番号を組み合わせません。Issue #61は上記runtime
   acceptance chainの完了までOpenを維持します。
@@ -583,14 +598,17 @@ Openを維持します。
   [#93](https://github.com/TommyKammy/Shirokuma/pull/93)
   (merged as `46654ee7f4959167f6fbba128c489b26aae06680`; static desired stateと
   external Secret contractだけを追加し、`runtime_acceptance_pending`で停止)
-- Type-stable credential-generation annotation repair: this focused PR
-  (`Refs #61`); live reconcileで検出したnumeric scalar化を修正し、runtime
-  acceptanceはpendingを維持。
+- Type-stable credential-generation annotation repair:
+  [#94](https://github.com/TommyKammy/Shirokuma/pull/94)
+  (merged as `04b0800b77d4a4731b232d14d1788ee793f5c79c`; numeric scalar化を
+  修正、`Refs #61`)
+- Live runtime acceptance: this focused PR (`Refs #61`); Ready/API smoke、
+  non-destructive restore、rollback/teardown contract、host SSD evidenceを保持。
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
 - Execution order: `1 of 8`
-- Queue: credential-safe Flux activation review、live Ready/API smoke、
-  backup/restoreを順に完了するまで、Issue #61はOpen、後続#62は
-  dependency-blockedを維持します。
+- Queue: このfocused PRのCIとrequired human reviewが完了するまでIssue #61は
+  Open、後続#62はdependency-blockedを維持します。merge後に#61を明示Closeし、
+  #62を次の実行候補にします。
 
 ## Definition of Done
 

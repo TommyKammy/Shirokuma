@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-07-21
-version: "1.19"
+updated: 2026-07-22
+version: "1.20"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -681,8 +681,15 @@ Tool and hash-closes every runtime manifest in
 `security/polaris-runtime-activation.json`. Secret material is created only by
 OpenTofu; Git contains Secret names and keys but no Secret manifest,
 `secretGenerator`, `stringData`, credential value, or credential-producing
-command. The activation gate remains `runtime_acceptance_pending` until live
-Ready, API smoke, backup/restore, rollback, and teardown evidence are reviewed.
+command. The 2026-07-21 UTC local-lite acceptance at revision
+`04b0800b77d4a4731b232d14d1788ee793f5c79c` proved all four Flux
+Kustomizations Ready, credential-safe Catalog create/list/read/delete, and a
+PostgreSQL custom dump restored into an isolated temporary database with exact
+schema and row fingerprints. The sanitized receipt is hash-bound from
+`security/polaris-runtime-activation.json`; the dump remains owner-only on the
+macOS host outside Git and Colima. The gate may advance to `runtime_accepted`
+only through the focused PR after CI and required human review. This is bounded
+local-lite evidence and makes no production recovery claim.
 Credential generation is a reviewed non-secret ConfigMap consumed by both
 OpenTofu and Flux substitutions. Independent `TF_VAR` generation overrides and
 in-place Secret data rotation are forbidden; replacement requires a reviewed

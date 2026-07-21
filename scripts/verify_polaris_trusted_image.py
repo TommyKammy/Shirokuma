@@ -730,6 +730,9 @@ PENDING_SCRIPT_FILE_INVENTORY = {
     "scripts/package_go_vendor.py": (
         "ff2da02c6f1927522ed0852beb0f6373f38c4bbaf0ac6597d9acefe1402ffec4"
     ),
+    "scripts/polaris_runtime_acceptance.py": (
+        "0ace333bf74672a9bee05d518338bed4bb8af51d2227dea0bed6b15fae6b0a8c"
+    ),
     "scripts/preflight_supervisor_issues.py": (
         "fcd3f9ea30a8448ef53c1e37874f187cc5598f43f7c82fd24b11896ecfa9ac64"
     ),
@@ -752,7 +755,7 @@ PENDING_SCRIPT_FILE_INVENTORY = {
         POLARIS_ADMIN_IMAGE_VERIFIER_SHA256
     ),
     "scripts/verify_polaris_runtime.py": (
-        "76a0409051279397762cffb696abd0e4136d31c6f4151eab3859c95713f4f985"
+        "0be5c156b5770f42b421390c59811a8898271814a32af0bc6017d442c91b668f"
     ),
     "scripts/verify_repository_skeleton.py": (
         "b6bbbd383c74b190872bdcf144ede8126d8da5dbeb03e291027aaf276c62c955"
@@ -786,6 +789,12 @@ POLARIS_SERVER_TASKS = [
 RUNTIME_ROOTS = (Path("deploy"), Path("charts"), Path("opentofu"))
 RUNTIME_GENERATED_DIRS = {".terraform"}
 RETAINED_EVIDENCE_ROOT = Path("security/evidence")
+POLARIS_RUNTIME_ACTIVATION_CONTRACT = Path(
+    "security/polaris-runtime-activation.json"
+)
+POLARIS_RUNTIME_ACCEPTANCE_RECEIPT = Path(
+    "security/evidence/polaris-runtime-acceptance.json"
+)
 RETAINED_EVIDENCE_JSON_SUFFIXES = {".json", ".jsonl"}
 RETAINED_EVIDENCE_DOCUMENT_SUFFIXES = {".md"}
 MAX_DSSE_PAYLOAD_BYTES = 16 * 1024 * 1024
@@ -9036,10 +9045,45 @@ def _is_pending_evidence_reference(value: str) -> bool:
     return False
 
 
+def _bound_runtime_acceptance_receipt(root: Path) -> Path | None:
+    contract_path = root / POLARIS_RUNTIME_ACTIVATION_CONTRACT
+    if not contract_path.is_file():
+        return None
+    contract = _load_json(
+        root,
+        POLARIS_RUNTIME_ACTIVATION_CONTRACT,
+        "FORBIDDEN_PATH",
+    )
+    live_acceptance = contract.get("live_acceptance")
+    if (
+        contract.get("schema_version") != 2
+        or contract.get("state") != "runtime_accepted"
+        or not isinstance(live_acceptance, Mapping)
+        or live_acceptance.get("complete") is not True
+        or live_acceptance.get("receipt")
+        != POLARIS_RUNTIME_ACCEPTANCE_RECEIPT.as_posix()
+    ):
+        return None
+    expected_sha256 = live_acceptance.get("receipt_sha256")
+    if not isinstance(expected_sha256, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", expected_sha256
+    ):
+        return None
+    observed_sha256, _ = _sha256_and_size(
+        root,
+        POLARIS_RUNTIME_ACCEPTANCE_RECEIPT,
+        "FORBIDDEN_PATH",
+    )
+    if observed_sha256 != expected_sha256:
+        return None
+    return POLARIS_RUNTIME_ACCEPTANCE_RECEIPT
+
+
 def _audit_retained_pending_evidence(root: Path) -> None:
     directory = root / RETAINED_EVIDENCE_ROOT
     if not directory.exists():
         return
+    accepted_runtime_receipt = _bound_runtime_acceptance_receipt(root)
     _expect(
         directory.is_dir() and not directory.is_symlink(),
         "FORBIDDEN_PATH",
@@ -9056,10 +9100,15 @@ def _audit_retained_pending_evidence(root: Path) -> None:
         ):
             continue
         relative = path.relative_to(root).as_posix()
+        is_accepted_runtime_receipt = (
+            accepted_runtime_receipt is not None
+            and path.relative_to(root) == accepted_runtime_receipt
+        )
         evidence_relative = path.relative_to(directory).as_posix()
         path_tokens = _path_identity_tokens(evidence_relative)
         _expect(
-            not any(
+            is_accepted_runtime_receipt
+            or not any(
                 _is_segmented_identity(
                     token,
                     PENDING_EVIDENCE_PATH_TOKENS,
@@ -9087,7 +9136,8 @@ def _audit_retained_pending_evidence(root: Path) -> None:
                     f"cannot inspect retained evidence {relative}: {error}",
                 )
             _expect(
-                not _is_pending_evidence_identity([text]),
+                is_accepted_runtime_receipt
+                or not _is_pending_evidence_identity([text]),
                 "FORBIDDEN_PATH",
                 f"pending catalog evidence cannot be retained: {relative}",
             )
@@ -9123,7 +9173,8 @@ def _audit_retained_pending_evidence(root: Path) -> None:
             )
         ]
         _expect(
-            not any(
+            is_accepted_runtime_receipt
+            or not any(
                 _is_pending_evidence_identity(
                     _retained_evidence_subject_values(document)
                 )
@@ -10384,8 +10435,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     runtime_state = (
-        "static runtime activation is bound; live acceptance remains pending"
-        if (args.root / "security/polaris-runtime-activation.json").is_file()
+        "live runtime acceptance is bound"
+        if (args.root / POLARIS_RUNTIME_ACTIVATION_CONTRACT).is_file()
         else "runtime remains fail-closed pending activation"
     )
     print(
