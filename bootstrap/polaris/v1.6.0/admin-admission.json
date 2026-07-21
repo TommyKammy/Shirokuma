@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "component": "polaris-admin",
+  "version": "1.6.0",
+  "platform": "linux/arm64",
+  "admission": "approved",
+  "state": "admin_runtime_activation_pending",
+  "decision_at": "2026-07-21T09:19:33Z",
+  "source": "https://github.com/apache/polaris",
+  "reference": "ghcr.io/tommykammy/shirokuma-polaris-admin@sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd",
+  "digest": "sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd",
+  "image_contract": {
+    "path": "bootstrap/polaris/v1.6.0/admin-image-contract.json",
+    "sha256": "c5aacf801c54413fcc2e8b7a460527f56dabcc65ef560d1ab879e3c58c33c862"
+  },
+  "release_evidence": {
+    "path": "bootstrap/polaris/v1.6.0/admin-release-evidence.json",
+    "sha256": "8d3f4b4550e4cebbd7e9d83d07376c7b5ba5f0013a49a044624d914d70df7c10"
+  },
+  "reviewed_evidence_manifest": {
+    "path": "bootstrap/polaris/v1.6.0/admin-image-evidence/evidence.sha256",
+    "sha256": "f1290ccf0fff852fb965d46ab55c12623ce15e36e15b4bbeb6627999bf11a97f",
+    "size": 3105,
+    "entries": 34
+  },
+  "admission_evidence_manifest": {
+    "path": "security/evidence/polaris-admin-v1.6.0/evidence.sha256",
+    "sha256": "9106bb4e7d2f25c8a2443ee17541c7f3c3586a14e0bac57160af0981bf1389ca",
+    "size": 438,
+    "entries": 5
+  },
+  "anonymous_preflight": {
+    "path": "security/evidence/polaris-admin-v1.6.0/anonymous-preflight.json",
+    "sha256": "db1b2d3d0f3b17437580c10d74393e5c7acda1ba1a3f87ddea4f03892f1ef86d",
+    "preflighted_at": "2026-07-21T09:19:33Z",
+    "network_boundary": "anonymous-empty-docker-config",
+    "tool": {
+      "name": "crane",
+      "version": "0.21.7"
+    }
+  },
+  "vulnerability_database": {
+    "path": "security/evidence/polaris-admin-v1.6.0/trivy-version.json",
+    "sha256": "e1aa93c50d458f6b00081dc00bf03d973ff6cb8f4dd48c73c3bc838e8899efa7",
+    "updated_at": "2026-07-21T01:08:43.916306317Z",
+    "maximum_age_hours_at_decision": 24
+  },
+  "scans": {
+    "sbom": {
+      "path": "security/evidence/polaris-admin-v1.6.0/polaris-admin-1.6.0-arm64.cdx.json",
+      "sha256": "b7c5a9e3fab873b9a655059ab0297e45a70273fff95eef62a1cdd8afa28589e8",
+      "format": "CycloneDX",
+      "spec_version": "1.7",
+      "component_count": 1618
+    },
+    "vulnerability_scan": {
+      "path": "security/evidence/polaris-admin-v1.6.0/trivy.json",
+      "sha256": "a067f022234f60b64f6fe9add3998cc8bc0d26191facaedf8a1112014c5ad91e",
+      "artifact_reference": "ghcr.io/tommykammy/shirokuma-polaris-admin@sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd",
+      "scopes": [
+        {
+          "class": "os-pkgs",
+          "type": "alpine",
+          "package_count": 29
+        },
+        {
+          "class": "lang-pkgs",
+          "type": "jar",
+          "package_count": 377
+        }
+      ],
+      "high": 0,
+      "critical": 0
+    }
+  },
+  "supply_chain": {
+    "path": "security/evidence/polaris-admin-v1.6.0/supply-chain.json",
+    "sha256": "0de48604bbc40cbc012ae12b8bb39d4fe94c4007c6ff05e27057719cc617601a"
+  },
+  "resident_ledger": {
+    "path": "security/resident-images.json",
+    "enabled": true
+  },
+  "runtime": {
+    "permitted": false,
+    "next_boundary": "admin_runtime_activation_pending"
+  },
+  "gitops": {
+    "resources_permitted": false
+  },
+  "credentials": {
+    "material_permitted": false
+  }
+}

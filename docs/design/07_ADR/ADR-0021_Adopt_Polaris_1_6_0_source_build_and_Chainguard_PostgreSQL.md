@@ -5,7 +5,7 @@ title: "Adopt a source-built Polaris 1.6.0 and signed PostgreSQL metadata store"
 status: accepted
 created: 2026-07-16
 updated: 2026-07-21
-version: "0.13"
+version: "0.14"
 area: "architecture"
 tags: [shirokuma, adr, polaris, postgresql, arm64, supply-chain]
 ---
@@ -276,20 +276,27 @@ inspection records Corretto `21.0.11.10.1`, native linux/arm64, and the
 High=0/Critical=0. These are selection observations only. The corrected main
 publication must generate the authoritative digest and complete every gate.
 
-The Admin snapshot and pending image remain non-admitted. Admin image admission,
-runtime, Flux, and credential gates remain false, and Issue #61 remains Open.
-
 PR #90 merged the checksum-manifest closure repair as
 `a1339e71bc3a19814102bd689fb88bfab4fb71c5`. Corrected main run
 [`29807128630`](https://github.com/TommyKammy/Shirokuma/actions/runs/29807128630)
 attempt `1` completed every publication gate for exact Admin image
 `ghcr.io/tommykammy/shirokuma-polaris-admin@sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd`.
-The separate evidence-only checkpoint retains 34 payloads plus one checksum
-manifest, re-verifies signature and SLSA identity against the exact main
-workflow SHA, and retires the one-shot publisher. This decision allows only the
-transition to `admin_image_admission_pending`; it does not amend the existing
-separation between image admission, runtime activation, Flux resources, and
-credential provisioning.
+PR #91 merged the separate evidence-only checkpoint as
+`2dfc02dde2d00226012500308f771326ee6b30df`. It retains 34 payloads plus one
+checksum manifest, re-verifies signature and SLSA identity against the exact
+main workflow SHA, retires the one-shot publisher, and transitions only to
+`admin_image_admission_pending`.
+
+The next decision admits that exact Admin digest independently of the existing
+atomic Polaris/PostgreSQL receipt. It records a new empty-Docker-config anonymous
+preflight, requires the retained Trivy database to be no more than 24 hours old
+at the decision, copies the exact reviewed CycloneDX and Trivy payload bytes into
+a closed resident-evidence directory, and adds one canonical `polaris-admin`
+entry to `security/resident-images.json`. No vulnerability exception is used;
+the exact image remains High=0/Critical=0 across 29 Alpine and 377 JAR packages.
+The post-decision state is `admin_runtime_activation_pending`, not runtime
+acceptance. This does not amend the separation between image admission, runtime
+activation, Flux resources, and credential provisioning. Issue #61 remains Open.
 The later runtime activation must mount an externally provisioned Secret and use
 the Admin Tool's credential-file input. Credentials in command arguments,
 generated credentials printed to logs, image layers, publication evidence, or

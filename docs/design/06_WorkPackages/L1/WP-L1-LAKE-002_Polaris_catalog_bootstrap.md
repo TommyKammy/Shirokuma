@@ -5,7 +5,7 @@ title: "WP-L1-LAKE-002 Polaris catalog bootstrap"
 status: in-progress
 created: 2026-07-05
 updated: 2026-07-21
-version: "1.24"
+version: "1.25"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -422,13 +422,18 @@ Openを維持します。
   attestationsを保持しています。final artifact ID `8486076696`、Actions digest
   `sha256:9acfbe58503852943fc075f33a73286993be30702e235604c814202e108686db`、
   expiry `2026-08-20T06:37:23Z`です。
-- 次のevidence-only reviewはfinal artifactの34 payloadsと
-  `evidence.sha256`をexact 35-file closureとして
-  `bootstrap/polaris/v1.6.0/admin-image-evidence/`へ保持し、one-shot Admin image
-  publisherを退役します。manifest SHA-256は
-  `f1290ccf0fff852fb965d46ab55c12623ce15e36e15b4bbeb6627999bf11a97f`です。
-  lifecycleは`admin_image_admission_pending`へだけ進め、image admission、resident
-  ledger、runtime、Flux、credential gateはすべて`false`のままです。
+- PR #91はfinal artifactの34 payloadsと`evidence.sha256`をexact 35-file
+  closureとして`bootstrap/polaris/v1.6.0/admin-image-evidence/`へ保持し、merge
+  `2dfc02dde2d00226012500308f771326ee6b30df`でone-shot Admin image publisherを
+  退役しました。manifest SHA-256は
+  `f1290ccf0fff852fb965d46ab55c12623ce15e36e15b4bbeb6627999bf11a97f`、
+  lifecycleは`admin_image_admission_pending`です。
+- 次のadmission checkpointはexact Admin digestを匿名取得で再確認し、24時間以内の
+  Trivy DB、CycloneDX 1.7、High=0/Critical=0、reviewed signature/SLSA/SBOM/scan
+  closureを`security/evidence/polaris-admin-v1.6.0/`へ束縛して
+  `security/resident-images.json`へ追加します。到達stateは
+  `admin_runtime_activation_pending`です。runtime、Flux resource、credential
+  materialは引き続き`false`であり、このcheckpointではcluster mutationを行いません。
 - Admin imageはupstream fast-jarの
   `build/quarkus-app/{lib/,quarkus-run.jar,app/,quarkus/}`を保持し、
   `10000:10001`で`/usr/bin/java -jar /deployments/quarkus-run.jar`を実行します。
@@ -541,10 +546,16 @@ Openを維持します。
   (attempt `1` success、exact digest
   `sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd`、
   final artifact ID `8486076696`、35-file closure)
+- Polaris Admin image evidence-only review:
+  [#91](https://github.com/TommyKammy/Shirokuma/pull/91)
+  (merged as `2dfc02dde2d00226012500308f771326ee6b30df`; exact 35-file closureを
+  reviewしpublisherを退役、`admin_image_admission_pending`へ遷移、`Refs #61`)
+- Polaris Admin image admission: this focused PR (`Refs #61`); exact digest、
+  anonymous preflight、fresh-at-decision zero High/Critical evidence、resident ledgerを
+  bindし、runtime/Flux/credentialsはnon-scope。
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
 - Execution order: `1 of 8`
-- Queue: evidence-only review、Admin image admission、
-  credential-safe Flux activation、API smoke、
+- Queue: Admin image admission review、credential-safe Flux activation、API smoke、
   backup/restoreを順に完了するまで、Issue #61はOpen、後続#62は
   dependency-blockedを維持します。
 

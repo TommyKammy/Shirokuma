@@ -91,6 +91,19 @@
       "sbom_generator": "syft 1.46.0",
       "scanner_version": "trivy 0.72.0",
       "vulnerability_db_updated_at": "2026-07-19T18:43:16.060990559Z"
+    },
+    {
+      "component": "polaris-admin",
+      "version": "1.6.0",
+      "source": "https://github.com/apache/polaris",
+      "platform": "linux/arm64",
+      "reference": "ghcr.io/tommykammy/shirokuma-polaris-admin@sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd",
+      "sbom_artifact": "evidence/polaris-admin-v1.6.0/polaris-admin-1.6.0-arm64.cdx.json",
+      "scan_artifact": "evidence/polaris-admin-v1.6.0/trivy.json",
+      "supply_chain_artifact": "evidence/polaris-admin-v1.6.0/supply-chain.json",
+      "sbom_generator": "syft 1.46.0",
+      "scanner_version": "trivy 0.72.0",
+      "vulnerability_db_updated_at": "2026-07-21T01:08:43.916306317Z"
     }
   ]
 }

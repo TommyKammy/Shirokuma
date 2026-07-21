@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "component": "polaris-admin",
+  "version": "1.6.0",
+  "platform": "linux/arm64",
+  "reference": "ghcr.io/tommykammy/shirokuma-polaris-admin@sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd",
+  "preflighted_at": "2026-07-21T09:19:33Z",
+  "network_boundary": "anonymous-empty-docker-config",
+  "tool": {
+    "name": "crane",
+    "version": "0.21.7"
+  },
+  "manifest": {
+    "sha256": "a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd",
+    "size": 2006,
+    "media_type": "application/vnd.oci.image.manifest.v1+json",
+    "config_digest": "sha256:e91e9c08b0283b742fa086c0e6af4772babd7bfdac0af20aebdd01a22327f64a",
+    "layer_count": 9
+  }
+}

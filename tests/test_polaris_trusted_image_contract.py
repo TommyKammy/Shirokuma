@@ -166,6 +166,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 "security/evidence/"
                 "polaris-v1.6.0-postgresql-v18.4"
             ),
+            Path("security/evidence/polaris-admin-v1.6.0"),
             Path(".github/workflows"),
             Path("scripts"),
         ):

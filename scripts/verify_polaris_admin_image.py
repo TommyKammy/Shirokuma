@@ -18,6 +18,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable, Mapping
@@ -40,8 +41,9 @@ EVIDENCE_PATH = Path(
 RELEASE_EVIDENCE_PATH = Path(
     "bootstrap/polaris/v1.6.0/admin-release-evidence.json"
 )
-FUTURE_ADMISSION_PATH = Path("bootstrap/polaris/v1.6.0/admin-admission.json")
-RESIDENT_IMAGE_LEDGER = Path("security/admission/resident-images.json")
+ADMISSION_PATH = Path("bootstrap/polaris/v1.6.0/admin-admission.json")
+ADMISSION_EVIDENCE_PATH = Path("security/evidence/polaris-admin-v1.6.0")
+RESIDENT_IMAGE_LEDGER = Path("security/resident-images.json")
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 FULL_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -56,7 +58,7 @@ EXPECTED_ADMIN_INPUT_CONTRACT_SHA256 = (
 # Rebound after the policy files are stable. These constants deliberately pin
 # exact bytes in addition to the semantic checks below.
 EXPECTED_CONTRACT_SHA256 = (
-    "41e1464d2bcb5bf4021813abbd6ddd7090d6e8411009a0a5d78e231348570925"
+    "c5aacf801c54413fcc2e8b7a460527f56dabcc65ef560d1ab879e3c58c33c862"
 )
 EXPECTED_ADMIN_INPUT_VERIFIER_SHA256 = (
     "5e153aacecaec7c313d9caba5b38ef65ff92f7eed25746e879222a4cdf441a42"
@@ -79,6 +81,27 @@ EXPECTED_PUBLICATION_SHA256 = (
     "d6051d8d30c2cf890409c8a484233b2ae56b745369639c3cc680170479647063"
 )
 EXPECTED_PUBLICATION_SIZE = 4_009
+EXPECTED_ADMISSION_SHA256 = (
+    "99d1fc36c2960584be7b529c9601e6667deae842f2eb16fd36c949b7c3efaa14"
+)
+EXPECTED_ADMISSION_EVIDENCE_MANIFEST_SHA256 = (
+    "9106bb4e7d2f25c8a2443ee17541c7f3c3586a14e0bac57160af0981bf1389ca"
+)
+EXPECTED_ADMISSION_PREFLIGHT_SHA256 = (
+    "db1b2d3d0f3b17437580c10d74393e5c7acda1ba1a3f87ddea4f03892f1ef86d"
+)
+EXPECTED_ADMISSION_SUPPLY_CHAIN_SHA256 = (
+    "0de48604bbc40cbc012ae12b8bb39d4fe94c4007c6ff05e27057719cc617601a"
+)
+EXPECTED_ADMISSION_SBOM_SHA256 = (
+    "b7c5a9e3fab873b9a655059ab0297e45a70273fff95eef62a1cdd8afa28589e8"
+)
+EXPECTED_ADMISSION_TRIVY_SHA256 = (
+    "a067f022234f60b64f6fe9add3998cc8bc0d26191facaedf8a1112014c5ad91e"
+)
+EXPECTED_ADMISSION_TRIVY_VERSION_SHA256 = (
+    "e1aa93c50d458f6b00081dc00bf03d973ff6cb8f4dd48c73c3bc838e8899efa7"
+)
 
 EXPECTED_REPOSITORY = "TommyKammy/Shirokuma"
 EXPECTED_REF = "refs/heads/main"
@@ -234,6 +257,16 @@ def _sha256(path: Path) -> str:
     except OSError as error:
         _fail("FILE_READ", f"cannot hash {path}: {error}")
     return digest.hexdigest()
+
+
+def _parse_timestamp(value: Any) -> datetime:
+    text = str(value)
+    match = re.fullmatch(r"(.+?\.\d{6})\d+(Z|[+-]\d{2}:\d{2})", text)
+    if match:
+        text = "".join(match.groups())
+    return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(
+        timezone.utc
+    )
 
 
 def _require_regular_file(root: Path, relative: Path, code: str) -> Path:
@@ -539,7 +572,7 @@ def _validate_image_publication(publication: Mapping[str, Any]) -> None:
             "quarantine_before_promotion": True,
             "anonymous_exact_digest_verification": True,
             "credential_fallback_permitted": False,
-            "admission_permitted": False,
+            "admission_permitted": True,
             "release_evidence_committed": True,
         },
         "PUBLICATION_BOUNDARY",
@@ -623,15 +656,15 @@ def _validate_downstream(contract: Mapping[str, Any]) -> None:
     _expect(
         contract["admission"]
         == {
-            "state": "pending_admin_image_admission",
-            "permitted": False,
-            "record": FUTURE_ADMISSION_PATH.as_posix(),
+            "state": "approved_admin_image_admission",
+            "permitted": True,
+            "record": ADMISSION_PATH.as_posix(),
         }
         and contract["runtime"]
-        == {"state": "blocked_admin_image_admission", "enabled": False}
+        == {"state": "pending_admin_runtime_activation", "enabled": False}
         and contract["gitops"]
         == {
-            "state": "blocked_admin_image_admission",
+            "state": "blocked_admin_runtime_activation",
             "resources_enabled": False,
         }
         and contract["credentials"]
@@ -641,17 +674,17 @@ def _validate_downstream(contract: Mapping[str, Any]) -> None:
         }
         and contract["downstream_gates"]
         == {
-            "admin_image_admitted": False,
-            "resident_image_ledger_enabled": False,
+            "admin_image_admitted": True,
+            "resident_image_ledger_enabled": True,
             "admin_runtime_enabled": False,
             "gitops_resources_enabled": False,
             "credential_material_permitted": False,
             "next_checkpoint": (
-                "admit the exact Admin image before runtime or Flux activation"
+                "activate the admitted Admin image through credential-safe Flux resources"
             ),
         },
         "DOWNSTREAM_GATE",
-        "admission, resident ledger, runtime, GitOps, or credentials opened early",
+        "admission, resident ledger, runtime, GitOps, or credential gate drifted",
     )
 
 
@@ -679,7 +712,7 @@ def _validate_contract(contract: Mapping[str, Any]) -> None:
         "root",
     )
     _expect(
-        contract["schema_version"] == 2
+        contract["schema_version"] == 3
         and contract["component"] == "polaris-admin"
         and contract["version"] == "1.6.0"
         and contract["platform"] == "linux/arm64",
@@ -689,11 +722,11 @@ def _validate_contract(contract: Mapping[str, Any]) -> None:
     _expect(
         contract["lifecycle"]
         == {
-            "state": "admin_image_admission_pending",
-            "next_state": "admin_runtime_activation_pending",
+            "state": "admin_runtime_activation_pending",
+            "next_state": "admin_runtime_acceptance_pending",
         },
         "LIFECYCLE_STATE",
-        "Admin image lifecycle skipped admission or runtime activation review",
+        "Admin image lifecycle skipped runtime activation or acceptance review",
     )
     _validate_source(contract["source"])
     _validate_dependency_snapshot(contract["dependency_snapshot"])
@@ -1067,31 +1100,304 @@ def _audit_evidence_semantics(root: Path) -> None:
 
 
 def _audit_downstream_files(root: Path) -> None:
+    admission_path = _require_regular_file(root, ADMISSION_PATH, "ADMIN_ADMISSION")
     _expect(
-        not os.path.lexists(root / FUTURE_ADMISSION_PATH),
-        "PREMATURE_ADMISSION",
-        "Admin image admission record exists before the separate admission review",
+        _sha256(admission_path) == EXPECTED_ADMISSION_SHA256,
+        "ADMIN_ADMISSION",
+        "admin-admission.json bytes differ from the reviewed decision",
     )
-    if (root / RESIDENT_IMAGE_LEDGER).is_file():
-        ledger = (root / RESIDENT_IMAGE_LEDGER).read_text(encoding="utf-8")
-        _expect(
-            EXPECTED_IMAGE_REPOSITORY not in ledger,
-            "PREMATURE_ADMISSION",
-            "Admin image entered the resident-image ledger before admission review",
+    admission = _load_json(admission_path)
+    _expect_exact_keys(
+        admission,
+        {
+            "schema_version",
+            "component",
+            "version",
+            "platform",
+            "admission",
+            "state",
+            "decision_at",
+            "source",
+            "reference",
+            "digest",
+            "image_contract",
+            "release_evidence",
+            "reviewed_evidence_manifest",
+            "admission_evidence_manifest",
+            "anonymous_preflight",
+            "vulnerability_database",
+            "scans",
+            "supply_chain",
+            "resident_ledger",
+            "runtime",
+            "gitops",
+            "credentials",
+        },
+        "ADMIN_ADMISSION",
+        "root",
+    )
+    _expect(
+        admission["schema_version"] == 1
+        and admission["component"] == "polaris-admin"
+        and admission["version"] == "1.6.0"
+        and admission["platform"] == "linux/arm64"
+        and admission["admission"] == "approved"
+        and admission["state"] == "admin_runtime_activation_pending"
+        and admission["source"] == "https://github.com/apache/polaris"
+        and admission["reference"] == EXPECTED_IMAGE_REFERENCE
+        and admission["digest"] == EXPECTED_IMAGE_DIGEST,
+        "ADMIN_ADMISSION",
+        "Admin admission identity, digest, or lifecycle changed",
+    )
+    _expect(
+        admission["image_contract"]
+        == {"path": CONTRACT_PATH.as_posix(), "sha256": EXPECTED_CONTRACT_SHA256}
+        and admission["release_evidence"]
+        == {
+            "path": RELEASE_EVIDENCE_PATH.as_posix(),
+            "sha256": EXPECTED_RELEASE_EVIDENCE_SHA256,
+        }
+        and admission["reviewed_evidence_manifest"]
+        == {
+            "path": (EVIDENCE_PATH / "evidence.sha256").as_posix(),
+            "sha256": EXPECTED_EVIDENCE_MANIFEST_SHA256,
+            "size": EXPECTED_EVIDENCE_MANIFEST_SIZE,
+            "entries": 34,
+        },
+        "ADMIN_ADMISSION",
+        "reviewed Admin contract or publication evidence binding changed",
+    )
+    expected_admission_files = {
+        "anonymous-preflight.json": EXPECTED_ADMISSION_PREFLIGHT_SHA256,
+        "polaris-admin-1.6.0-arm64.cdx.json": EXPECTED_ADMISSION_SBOM_SHA256,
+        "supply-chain.json": EXPECTED_ADMISSION_SUPPLY_CHAIN_SHA256,
+        "trivy-version.json": EXPECTED_ADMISSION_TRIVY_VERSION_SHA256,
+        "trivy.json": EXPECTED_ADMISSION_TRIVY_SHA256,
+    }
+    evidence_directory = root / ADMISSION_EVIDENCE_PATH
+    _expect(
+        evidence_directory.is_dir() and not evidence_directory.is_symlink(),
+        "ADMIN_ADMISSION_EVIDENCE",
+        "Admin admission evidence root must be a real directory",
+    )
+    actual = {
+        path.relative_to(evidence_directory).as_posix()
+        for path in evidence_directory.rglob("*")
+        if path.is_file() or path.is_symlink()
+    }
+    _expect(
+        actual == {"evidence.sha256", *expected_admission_files},
+        "ADMIN_ADMISSION_EVIDENCE",
+        "Admin admission evidence must be an exact six-file closed set",
+    )
+    evidence_manifest = _require_regular_file(
+        root, ADMISSION_EVIDENCE_PATH / "evidence.sha256", "ADMIN_ADMISSION_EVIDENCE"
+    )
+    _expect(
+        _sha256(evidence_manifest) == EXPECTED_ADMISSION_EVIDENCE_MANIFEST_SHA256
+        and evidence_manifest.stat().st_size == 438
+        and admission["admission_evidence_manifest"]
+        == {
+            "path": evidence_manifest.relative_to(root).as_posix(),
+            "sha256": EXPECTED_ADMISSION_EVIDENCE_MANIFEST_SHA256,
+            "size": 438,
+            "entries": 5,
+        },
+        "ADMIN_ADMISSION_EVIDENCE",
+        "Admin admission evidence manifest binding changed",
+    )
+    records = _parse_checksum_manifest(evidence_manifest, "ADMIN_ADMISSION_EVIDENCE")
+    _expect(
+        records == expected_admission_files,
+        "ADMIN_ADMISSION_EVIDENCE",
+        "Admin admission evidence manifest entries changed",
+    )
+    for filename, expected_sha256 in expected_admission_files.items():
+        path = _require_regular_file(
+            root, ADMISSION_EVIDENCE_PATH / filename, "ADMIN_ADMISSION_EVIDENCE"
         )
+        _expect(
+            _sha256(path) == expected_sha256,
+            "ADMIN_ADMISSION_EVIDENCE",
+            f"Admin admission evidence bytes changed: {filename}",
+        )
+
+    preflight = _load_json(evidence_directory / "anonymous-preflight.json")
+    _expect(
+        preflight
+        == {
+            "schema_version": 1,
+            "component": "polaris-admin",
+            "version": "1.6.0",
+            "platform": "linux/arm64",
+            "reference": EXPECTED_IMAGE_REFERENCE,
+            "preflighted_at": "2026-07-21T09:19:33Z",
+            "network_boundary": "anonymous-empty-docker-config",
+            "tool": {"name": "crane", "version": "0.21.7"},
+            "manifest": {
+                "sha256": EXPECTED_IMAGE_DIGEST.removeprefix("sha256:"),
+                "size": 2006,
+                "media_type": "application/vnd.oci.image.manifest.v1+json",
+                "config_digest": (
+                    "sha256:e91e9c08b0283b742fa086c0e6af4772babd7bfdac0af20aebdd01a22327f64a"
+                ),
+                "layer_count": 9,
+            },
+        }
+        and admission["anonymous_preflight"]
+        == {
+            "path": (ADMISSION_EVIDENCE_PATH / "anonymous-preflight.json").as_posix(),
+            "sha256": EXPECTED_ADMISSION_PREFLIGHT_SHA256,
+            "preflighted_at": "2026-07-21T09:19:33Z",
+            "network_boundary": "anonymous-empty-docker-config",
+            "tool": {"name": "crane", "version": "0.21.7"},
+        },
+        "ADMIN_ADMISSION_PREFLIGHT",
+        "anonymous exact-digest preflight changed",
+    )
+    try:
+        decision_at = _parse_timestamp(admission["decision_at"])
+        database_updated_at = _parse_timestamp(
+            admission["vulnerability_database"]["updated_at"]
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        _fail("ADMIN_ADMISSION_SCAN", f"invalid admission or database timestamp: {error}")
+    _expect(
+        admission["decision_at"] == "2026-07-21T09:19:33Z"
+        and admission["vulnerability_database"]
+        == {
+            "path": (ADMISSION_EVIDENCE_PATH / "trivy-version.json").as_posix(),
+            "sha256": EXPECTED_ADMISSION_TRIVY_VERSION_SHA256,
+            "updated_at": "2026-07-21T01:08:43.916306317Z",
+            "maximum_age_hours_at_decision": 24,
+        }
+        and database_updated_at <= decision_at
+        and decision_at - database_updated_at <= timedelta(hours=24),
+        "ADMIN_ADMISSION_SCAN",
+        "Trivy database was not within 24 hours of the admission decision",
+    )
+    sbom = _load_json(evidence_directory / "polaris-admin-1.6.0-arm64.cdx.json")
+    scan = _load_json(evidence_directory / "trivy.json")
+    scans = admission["scans"]
+    _expect(
+        scans["sbom"]
+        == {
+            "path": (
+                ADMISSION_EVIDENCE_PATH / "polaris-admin-1.6.0-arm64.cdx.json"
+            ).as_posix(),
+            "sha256": EXPECTED_ADMISSION_SBOM_SHA256,
+            "format": "CycloneDX",
+            "spec_version": "1.7",
+            "component_count": 1618,
+        }
+        and sbom.get("bomFormat") == "CycloneDX"
+        and sbom.get("specVersion") == "1.7"
+        and len(sbom.get("components", [])) == 1618,
+        "ADMIN_ADMISSION_SBOM",
+        "resident Admin SBOM identity or component closure changed",
+    )
+    high_or_critical = [
+        vulnerability
+        for result in scan.get("Results", [])
+        for vulnerability in result.get("Vulnerabilities") or []
+        if vulnerability.get("Severity") in {"HIGH", "CRITICAL"}
+    ]
+    observed_scopes = [
+        {
+            "class": result.get("Class"),
+            "type": result.get("Type"),
+            "package_count": len(result.get("Packages") or []),
+        }
+        for result in scan.get("Results", [])
+    ]
+    _expect(
+        scans["vulnerability_scan"]
+        == {
+            "path": (ADMISSION_EVIDENCE_PATH / "trivy.json").as_posix(),
+            "sha256": EXPECTED_ADMISSION_TRIVY_SHA256,
+            "artifact_reference": EXPECTED_IMAGE_REFERENCE,
+            "scopes": [
+                {"class": "os-pkgs", "type": "alpine", "package_count": 29},
+                {"class": "lang-pkgs", "type": "jar", "package_count": 377},
+            ],
+            "high": 0,
+            "critical": 0,
+        }
+        and scan.get("ArtifactName") == EXPECTED_IMAGE_REFERENCE
+        and scan.get("ArtifactType") == "container_image"
+        and observed_scopes
+        == [
+            {"class": "os-pkgs", "type": "alpine", "package_count": 29},
+            {"class": "lang-pkgs", "type": "jar", "package_count": 377},
+        ]
+        and not high_or_critical,
+        "ADMIN_ADMISSION_SCAN",
+        "resident Admin scan scope or zero High/Critical gate changed",
+    )
+    _expect(
+        admission["supply_chain"]
+        == {
+            "path": (ADMISSION_EVIDENCE_PATH / "supply-chain.json").as_posix(),
+            "sha256": EXPECTED_ADMISSION_SUPPLY_CHAIN_SHA256,
+        }
+        and admission["resident_ledger"]
+        == {"path": RESIDENT_IMAGE_LEDGER.as_posix(), "enabled": True}
+        and admission["runtime"]
+        == {
+            "permitted": False,
+            "next_boundary": "admin_runtime_activation_pending",
+        }
+        and admission["gitops"] == {"resources_permitted": False}
+        and admission["credentials"] == {"material_permitted": False},
+        "ADMIN_ADMISSION_GATE",
+        "resident ledger, runtime, Flux, or credential boundary changed",
+    )
+    ledger = _load_json(
+        _require_regular_file(root, RESIDENT_IMAGE_LEDGER, "ADMIN_ADMISSION_LEDGER")
+    )
+    entries = [
+        entry
+        for entry in ledger.get("images", [])
+        if isinstance(entry, Mapping) and entry.get("component") == "polaris-admin"
+    ]
+    _expect(
+        entries
+        == [
+            {
+                "component": "polaris-admin",
+                "version": "1.6.0",
+                "source": "https://github.com/apache/polaris",
+                "platform": "linux/arm64",
+                "reference": EXPECTED_IMAGE_REFERENCE,
+                "sbom_artifact": (
+                    "evidence/polaris-admin-v1.6.0/"
+                    "polaris-admin-1.6.0-arm64.cdx.json"
+                ),
+                "scan_artifact": "evidence/polaris-admin-v1.6.0/trivy.json",
+                "supply_chain_artifact": (
+                    "evidence/polaris-admin-v1.6.0/supply-chain.json"
+                ),
+                "sbom_generator": "syft 1.46.0",
+                "scanner_version": "trivy 0.72.0",
+                "vulnerability_db_updated_at": "2026-07-21T01:08:43.916306317Z",
+            }
+        ],
+        "ADMIN_ADMISSION_LEDGER",
+        "resident ledger does not contain exactly one canonical Admin image",
+    )
     gitops = root / "deploy/gitops"
     if os.path.lexists(gitops):
         _expect(
             not gitops.is_symlink() and gitops.is_dir(),
             "PREMATURE_GITOPS",
-            "deploy/gitops must be a real directory while Admin admission is pending",
+            "deploy/gitops must be a real directory while Admin runtime activation is pending",
         )
         for path in gitops.rglob("*"):
             relative = path.relative_to(root).as_posix()
             _expect(
                 not path.is_symlink(),
                 "PREMATURE_GITOPS",
-                f"GitOps symlink is forbidden while Admin admission is pending: {relative}",
+                f"GitOps symlink is forbidden before Admin runtime activation: {relative}",
             )
             if path.is_dir():
                 continue
@@ -1343,7 +1649,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"polaris-admin-image: {error}", file=sys.stderr)
         return 1
     print(
-        f"polaris-admin-image: {message}; admission/runtime/Flux/credentials remain disabled"
+        f"polaris-admin-image: {message}; exact digest admitted while "
+        "runtime/Flux/credentials remain disabled"
     )
     return 0
 

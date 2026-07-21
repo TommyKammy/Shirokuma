@@ -1,11 +1,11 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "component": "polaris-admin",
   "version": "1.6.0",
   "platform": "linux/arm64",
   "lifecycle": {
-    "state": "admin_image_admission_pending",
-    "next_state": "admin_runtime_activation_pending"
+    "state": "admin_runtime_activation_pending",
+    "next_state": "admin_runtime_acceptance_pending"
   },
   "source": {
     "record": "bootstrap/polaris/v1.6.0/source.json",
@@ -195,7 +195,7 @@
       "quarantine_before_promotion": true,
       "anonymous_exact_digest_verification": true,
       "credential_fallback_permitted": false,
-      "admission_permitted": false,
+      "admission_permitted": true,
       "release_evidence_committed": true
     },
     "vulnerability_gate": {
@@ -284,16 +284,16 @@
     "raw_logs_permitted": false
   },
   "admission": {
-    "state": "pending_admin_image_admission",
-    "permitted": false,
+    "state": "approved_admin_image_admission",
+    "permitted": true,
     "record": "bootstrap/polaris/v1.6.0/admin-admission.json"
   },
   "runtime": {
-    "state": "blocked_admin_image_admission",
+    "state": "pending_admin_runtime_activation",
     "enabled": false
   },
   "gitops": {
-    "state": "blocked_admin_image_admission",
+    "state": "blocked_admin_runtime_activation",
     "resources_enabled": false
   },
   "credentials": {
@@ -301,11 +301,11 @@
     "material_permitted": false
   },
   "downstream_gates": {
-    "admin_image_admitted": false,
-    "resident_image_ledger_enabled": false,
+    "admin_image_admitted": true,
+    "resident_image_ledger_enabled": true,
     "admin_runtime_enabled": false,
     "gitops_resources_enabled": false,
     "credential_material_permitted": false,
-    "next_checkpoint": "admit the exact Admin image before runtime or Flux activation"
+    "next_checkpoint": "activate the admitted Admin image through credential-safe Flux resources"
   }
 }
