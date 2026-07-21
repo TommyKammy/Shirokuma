@@ -5,7 +5,7 @@ title: "WP-L1-LAKE-002 Polaris catalog bootstrap"
 status: in-progress
 created: 2026-07-05
 updated: 2026-07-21
-version: "1.23"
+version: "1.24"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -409,6 +409,26 @@ Openを維持します。
   review authorityでもadmission candidateでもありません。修復はchecksum manifestを
   directory外の一時ファイルで完成・検証してから原子的に配置し、同じ自己参照を
   回帰テストで拒否します。
+- PR [#90](https://github.com/TommyKammy/Shirokuma/pull/90)はmerge SHA
+  `a1339e71bc3a19814102bd689fb88bfab4fb71c5`としてmainへ反映され、checksum
+  manifestをclosed evidence directory外で完成・検証してから原子的に配置する
+  修復を固定しました。main run
+  [29807128630](https://github.com/TommyKammy/Shirokuma/actions/runs/29807128630)
+  attempt `1`はprepare/verify/promoteを完了し、native linux/arm64 Admin image
+  `ghcr.io/tommykammy/shirokuma-polaris-admin@sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd`
+  を確定しました。Corretto Java `21.0.11` / Alpine `3.24.1`、CycloneDX 1.7
+  1,618 components、NoSQL/MongoDB surface、Trivy 0.72.0 High=0/Critical=0、
+  credential-free network-none CLI smoke、Cosign/Rekor、SLSA v1、SBOM/Trivy
+  attestationsを保持しています。final artifact ID `8486076696`、Actions digest
+  `sha256:9acfbe58503852943fc075f33a73286993be30702e235604c814202e108686db`、
+  expiry `2026-08-20T06:37:23Z`です。
+- 次のevidence-only reviewはfinal artifactの34 payloadsと
+  `evidence.sha256`をexact 35-file closureとして
+  `bootstrap/polaris/v1.6.0/admin-image-evidence/`へ保持し、one-shot Admin image
+  publisherを退役します。manifest SHA-256は
+  `f1290ccf0fff852fb965d46ab55c12623ce15e36e15b4bbeb6627999bf11a97f`です。
+  lifecycleは`admin_image_admission_pending`へだけ進め、image admission、resident
+  ledger、runtime、Flux、credential gateはすべて`false`のままです。
 - Admin imageはupstream fast-jarの
   `build/quarkus-app/{lib/,quarkus-run.jar,app/,quarkus/}`を保持し、
   `10000:10001`で`/usr/bin/java -jar /deployments/quarkus-run.jar`を実行します。
@@ -512,10 +532,18 @@ Openを維持します。
   (`sha256:16e3fd99da2afd446463405bd59236322c37bb066b2af5f46f6e3dd5b7c8710b`、
   verify成功、trusted tag promotion成功、final checksum self-referenceで失敗、
   final artifactなし、review/admission authorityなし)
+- Polaris Admin checksum closure repair:
+  [#90](https://github.com/TommyKammy/Shirokuma/pull/90)
+  (merged as `a1339e71bc3a19814102bd689fb88bfab4fb71c5`; publisher repair only,
+  `Refs #61`)
+- Polaris Admin successful main publication:
+  [run `29807128630`](https://github.com/TommyKammy/Shirokuma/actions/runs/29807128630)
+  (attempt `1` success、exact digest
+  `sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd`、
+  final artifact ID `8486076696`、35-file closure)
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
 - Execution order: `1 of 8`
-- Queue: final checksum-manifest closure修復、main publication再実行、
-  evidence-only review、admission、
+- Queue: evidence-only review、Admin image admission、
   credential-safe Flux activation、API smoke、
   backup/restoreを順に完了するまで、Issue #61はOpen、後続#62は
   dependency-blockedを維持します。

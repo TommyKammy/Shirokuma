@@ -217,6 +217,9 @@ check-required-files:
 	@test -f tests/test_gitops_teardown.py
 	@test -f tests/test_polaris_admin_build_inputs.py
 	@test -f bootstrap/polaris/v1.6.0/admin-build-inputs-contract.json
+	@test -f bootstrap/polaris/v1.6.0/admin-image-contract.json
+	@test -f bootstrap/polaris/v1.6.0/admin-release-evidence.json
+	@test -f bootstrap/polaris/v1.6.0/admin-image-evidence/evidence.sha256
 	@test -f security/resident-images.json
 	@test -f security/resident-image-exceptions.json
 	@test -f policies/kyverno/baseline.yaml
@@ -231,6 +234,7 @@ check-newlines:
 			bootstrap/seaweedfs/v4.39/evidence/cosign-signature-bundle.json|bootstrap/seaweedfs/v4.39/evidence/image-manifest.json|bootstrap/seaweedfs/v4.39/evidence/sbom-attestation-bundle.json|bootstrap/seaweedfs/v4.39/evidence/trivy-attestation-bundle.json) continue ;; \
 			bootstrap/polaris/v1.6.0/evidence/cosign-signature-bundle.json|bootstrap/polaris/v1.6.0/evidence/oci-manifest.json) continue ;; \
 			bootstrap/polaris/v1.6.0/admin-build-inputs-evidence/cosign-signature-bundle.json|bootstrap/polaris/v1.6.0/admin-build-inputs-evidence/oci-manifest.json) continue ;; \
+			bootstrap/polaris/v1.6.0/admin-image-evidence/anonymous-image-manifest.json|bootstrap/polaris/v1.6.0/admin-image-evidence/cosign-signature-bundle.json|bootstrap/polaris/v1.6.0/admin-image-evidence/image-config.json|bootstrap/polaris/v1.6.0/admin-image-evidence/image-manifest.json|bootstrap/polaris/v1.6.0/admin-image-evidence/runtime-base-index.json|bootstrap/polaris/v1.6.0/admin-image-evidence/runtime-base-manifest.json|bootstrap/polaris/v1.6.0/admin-image-evidence/sbom-attestation-bundle.json|bootstrap/polaris/v1.6.0/admin-image-evidence/trivy-attestation-bundle.json|bootstrap/polaris/v1.6.0/admin-image-evidence/trusted-tag-manifest.json) continue ;; \
 			bootstrap/polaris/v1.6.0/image-evidence/anonymous-image-manifest.json|bootstrap/polaris/v1.6.0/image-evidence/cosign-signature-bundle.json|bootstrap/polaris/v1.6.0/image-evidence/health-ready.json|bootstrap/polaris/v1.6.0/image-evidence/image-config.json|bootstrap/polaris/v1.6.0/image-evidence/image-manifest.json|bootstrap/polaris/v1.6.0/image-evidence/runtime-base-manifest.json|bootstrap/polaris/v1.6.0/image-evidence/sbom-attestation-bundle.json|bootstrap/polaris/v1.6.0/image-evidence/trivy-attestation-bundle.json|bootstrap/polaris/v1.6.0/image-evidence/trusted-tag-manifest.json) continue ;; \
 			bootstrap/postgresql/v18.4/evidence/index-manifest.json|bootstrap/postgresql/v18.4/evidence/arm64-manifest.json|bootstrap/postgresql/v18.4/evidence/attestation-manifest.json|bootstrap/postgresql/v18.4/evidence/index-signature-payload.json|bootstrap/postgresql/v18.4/evidence/arm64-signature-payload.json|bootstrap/postgresql/v18.4/evidence/slsa-attestation-envelope.json|bootstrap/postgresql/v18.4/evidence/spdx-attestation-envelope.json) continue ;; \
 		esac; \

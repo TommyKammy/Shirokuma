@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.oci.image.manifest.v1+json",
+  "config": {
+    "mediaType": "application/vnd.oci.image.config.v1+json",
+    "digest": "sha256:1a9a2608a3b6e369b406dff44c78d437e4278669be74c8f79e060696f26d6a09",
+    "size": 2499
+  },
+  "layers": [
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:5de55e5ef9c033997441461efe7ba23a986db059c0bb78b38f84ee0d72b99167",
+      "size": 4183037
+    },
+    {
+      "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+      "digest": "sha256:6e77b0e734531ffce2dd53a41d8efbea96cb25eff325d8480cac6ef130b7bb81",
+      "size": 159841745
+    }
+  ],
+  "annotations": {
+    "com.docker.official-images.bashbrew.arch": "arm64v8",
+    "org.opencontainers.image.base.digest": "sha256:e7a1a92a5bfeee40966aea60f0796b0e7917cc35591542701834f03a68fa3d18",
+    "org.opencontainers.image.base.name": "alpine:3.24",
+    "org.opencontainers.image.created": "2026-06-16T00:17:29Z",
+    "org.opencontainers.image.revision": "b8045df4f76b173c45f9499ca5aa5a82c591a993",
+    "org.opencontainers.image.source": "https://github.com/corretto/corretto-docker.git#b8045df4f76b173c45f9499ca5aa5a82c591a993:21/jdk/alpine/3.24",
+    "org.opencontainers.image.url": "https://hub.docker.com/_/amazoncorretto",
+    "org.opencontainers.image.version": "21-alpine3.24"
+  }
+}

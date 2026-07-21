@@ -1,0 +1,327 @@
+{
+  "image_publication_decision": "accepted_unmodified_for_image_publication_only",
+  "matching_components_by_term": {
+    "mongodb": [
+      {
+        "group": null,
+        "name": "bson",
+        "purl": "pkg:maven/org.mongodb.bson/bson@5.6.5"
+      },
+      {
+        "group": null,
+        "name": "bson-record-codec",
+        "purl": "pkg:maven/org.mongodb.bson-record-codec/bson-record-codec@5.6.5"
+      },
+      {
+        "group": null,
+        "name": "mongodb-crypt",
+        "purl": "pkg:maven/com.mongodb.crypt.capi/mongodb-crypt@5.6.5"
+      },
+      {
+        "group": null,
+        "name": "mongodb-driver-core",
+        "purl": "pkg:maven/org.mongodb.driver-core/mongodb-driver-core@5.6.5"
+      },
+      {
+        "group": null,
+        "name": "mongodb-driver-reactivestreams",
+        "purl": "pkg:maven/org.mongodb.driver-reactivestreams/mongodb-driver-reactivestreams@5.6.5"
+      },
+      {
+        "group": null,
+        "name": "mongodb-driver-sync",
+        "purl": "pkg:maven/org.mongodb.driver-sync/mongodb-driver-sync@5.6.5"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-mongodb",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-mongodb@1.6.0"
+      },
+      {
+        "group": "io.quarkus",
+        "name": "quarkus-mongodb-client",
+        "purl": "pkg:maven/io.quarkus/quarkus-mongodb-client@3.36.3"
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/io.quarkus.quarkus-mongodb-client-3.36.3.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-mongodb-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.mongodb.bson-5.6.5.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.mongodb.bson-record-codec-5.6.5.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.mongodb.mongodb-crypt-5.6.5.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.mongodb.mongodb-driver-core-5.6.5.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.mongodb.mongodb-driver-reactivestreams-5.6.5.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.mongodb.mongodb-driver-sync-5.6.5.jar",
+        "purl": null
+      }
+    ],
+    "polaris-persistence-nosql": [
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-api",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-api@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-authz-api",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-authz-api@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-authz-impl",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-authz-impl@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-authz-spi",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-authz-spi@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-authz-store-nosql",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-authz-store-nosql@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-cdi-common",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-cdi-common@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-cdi-quarkus",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-cdi-quarkus@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-cdi-quarkus-distcache",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-cdi-quarkus-distcache@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-impl",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-impl@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-inmemory",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-inmemory@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-maintenance-api",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-maintenance-api@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-maintenance-cel",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-maintenance-cel@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-maintenance-impl",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-maintenance-impl@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-maintenance-spi",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-maintenance-spi@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-metastore",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-metastore@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-metastore-maintenance",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-metastore-maintenance@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-metastore-types",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-metastore-types@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-mongodb",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-mongodb@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-realms-api",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-realms-api@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-realms-impl",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-realms-impl@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-realms-spi",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-realms-spi@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-realms-store-nosql",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-realms-store-nosql@1.6.0"
+      },
+      {
+        "group": "org.apache.polaris",
+        "name": "polaris-persistence-nosql-varint",
+        "purl": "pkg:maven/org.apache.polaris/polaris-persistence-nosql-varint@1.6.0"
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-api-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-authz-api-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-authz-impl-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-authz-spi-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-authz-store-nosql-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-cdi-common-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-cdi-quarkus-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-cdi-quarkus-distcache-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-impl-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-inmemory-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-maintenance-api-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-maintenance-cel-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-maintenance-impl-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-maintenance-spi-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-metastore-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-metastore-maintenance-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-metastore-types-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-mongodb-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-realms-api-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-realms-impl-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-realms-spi-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-realms-store-nosql-1.6.0.jar",
+        "purl": null
+      },
+      {
+        "group": null,
+        "name": "/deployments/lib/main/org.apache.polaris.polaris-persistence-nosql-varint-1.6.0.jar",
+        "purl": null
+      }
+    ]
+  },
+  "relational_only": false,
+  "required_component_terms": [
+    "mongodb",
+    "polaris-persistence-nosql"
+  ],
+  "result": "passed",
+  "review_state": "reviewed_for_image_publication",
+  "schema_version": 1
+}

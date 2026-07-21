@@ -1,0 +1,21 @@
+{
+  "admin_container_inspect_sha256": "a511dbdadabfaa28b003055aae012a764192f3e023af87972542c7b9c248cdaa",
+  "command": [
+    "--help"
+  ],
+  "credentials_supplied": false,
+  "exit_code": 0,
+  "network": "none",
+  "output_sha256": "44d1be7c91af6ae995e7b8366df14797cfacd640da4bdd1e3a11367c9c5e3189",
+  "output_size": 445,
+  "reference": "ghcr.io/tommykammy/shirokuma-polaris-admin@sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd",
+  "required_output_markers": [
+    "Usage: polaris-admin-tool.jar [-hV] [COMMAND]",
+    "Polaris administration & maintenance tool",
+    "bootstrap",
+    "purge",
+    "nosql"
+  ],
+  "result": "passed",
+  "schema_version": 1
+}

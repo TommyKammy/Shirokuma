@@ -1,11 +1,11 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "component": "polaris-admin",
   "version": "1.6.0",
   "platform": "linux/arm64",
   "lifecycle": {
-    "state": "admin_image_publication_pending",
-    "next_state": "admin_image_evidence_review_pending"
+    "state": "admin_image_admission_pending",
+    "next_state": "admin_runtime_activation_pending"
   },
   "source": {
     "record": "bootstrap/polaris/v1.6.0/source.json",
@@ -111,10 +111,17 @@
     "exclusion_permitted": false
   },
   "image_publication": {
-    "enabled": true,
-    "state": "pending_main_publication",
+    "enabled": false,
+    "state": "approved_for_admin_admission",
     "repository": "ghcr.io/tommykammy/shirokuma-polaris-admin",
     "trusted_tag": "1.6.0-arm64",
+    "reference": "ghcr.io/tommykammy/shirokuma-polaris-admin@sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd",
+    "digest": "sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd",
+    "release_evidence": {
+      "path": "bootstrap/polaris/v1.6.0/admin-release-evidence.json",
+      "sha256": "8d3f4b4550e4cebbd7e9d83d07376c7b5ba5f0013a49a044624d914d70df7c10",
+      "size": 6029
+    },
     "containerfile": {
       "path": "bootstrap/polaris/v1.6.0/Containerfile.admin",
       "sha256": "cecd7e40f0bd3b2f5b0de90233677772c0c55c745f4f4cc975eda83b42f40112"
@@ -189,7 +196,7 @@
       "anonymous_exact_digest_verification": true,
       "credential_fallback_permitted": false,
       "admission_permitted": false,
-      "release_evidence_committed": false
+      "release_evidence_committed": true
     },
     "vulnerability_gate": {
       "scanner": "trivy",
@@ -217,14 +224,19 @@
         "build_input_prefix": "polaris-admin-image-build-input-",
         "candidate_prefix": "polaris-admin-image-candidate-",
         "publication_prefix": "polaris-admin-image-publication-"
-      }
+      },
+      "source_sha": "a1339e71bc3a19814102bd689fb88bfab4fb71c5",
+      "workflow_sha": "a1339e71bc3a19814102bd689fb88bfab4fb71c5",
+      "run_id": "29807128630",
+      "run_attempt": "1",
+      "retired": true
     }
   },
   "evidence": {
     "candidate_retention_days": 30,
     "final_retention_days": 30,
-    "actions_artifact_role": "finite-retention transport copy pending evidence review",
-    "future_directory": "bootstrap/polaris/v1.6.0/admin-image-evidence",
+    "actions_artifact_role": "finite-retention transport copy; repository evidence is authoritative",
+    "directory": "bootstrap/polaris/v1.6.0/admin-image-evidence",
     "candidate_required": [
       "anonymous-image-manifest.json",
       "builder-metadata.json",
@@ -264,12 +276,15 @@
       "trusted-tag-manifest.json"
     ],
     "checksum_manifest": "evidence.sha256",
+    "checksum_manifest_sha256": "f1290ccf0fff852fb965d46ab55c12623ce15e36e15b4bbeb6627999bf11a97f",
+    "checksum_manifest_size": 3105,
     "checksum_manifest_entries": 34,
-    "directory_file_count_after_review": 34,
+    "directory_file_count_after_review": 35,
+    "review_state": "reviewed_for_admin_admission",
     "raw_logs_permitted": false
   },
   "admission": {
-    "state": "blocked_admin_image_evidence_review",
+    "state": "pending_admin_image_admission",
     "permitted": false,
     "record": "bootstrap/polaris/v1.6.0/admin-admission.json"
   },
@@ -291,6 +306,6 @@
     "admin_runtime_enabled": false,
     "gitops_resources_enabled": false,
     "credential_material_permitted": false,
-    "next_checkpoint": "retain and independently review the exact published Admin image evidence"
+    "next_checkpoint": "admit the exact Admin image before runtime or Flux activation"
   }
 }
