@@ -16,7 +16,7 @@ FLUX_GITHUB_PRIVATE ?= false
 FLUX_BOOTSTRAP_BRANCH ?= flux/bootstrap-local-lite
 FLUX_PATH ?= deploy/gitops/clusters/local-lite
 
-.PHONY: prepare verify verify-cosign verify-security verify-policy verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-image-admission verify-gitops-teardown verify-kyverno-bootstrap verify-object-storage-profile test-polaris-build-contract verify-polaris-build-contract test-polaris-admin-build-inputs-contract verify-polaris-admin-build-inputs-contract test-polaris-admin-image-contract verify-polaris-admin-image-contract verify-polaris-runtime verify-iceberg-table-bootstrap verify-trino-bootstrap verify-dataops-bootstrap verify-superset-bootstrap verify-tpch-benchmark verify-metadata-bootstrap verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go supervisor-preflight colima-start colima-status tofu-init tofu-fmt tofu-validate flux-version-check gitops-bootstrap gitops-status gitops-reconcile gitops-teardown check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
+.PHONY: prepare verify verify-cosign verify-security verify-policy verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-image-admission verify-gitops-teardown verify-kyverno-bootstrap verify-object-storage-profile test-polaris-build-contract verify-polaris-build-contract test-polaris-admin-build-inputs-contract verify-polaris-admin-build-inputs-contract test-polaris-admin-image-contract verify-polaris-admin-image-contract verify-polaris-runtime capture-polaris-runtime-acceptance verify-iceberg-table-bootstrap verify-trino-bootstrap verify-dataops-bootstrap verify-superset-bootstrap verify-tpch-benchmark verify-metadata-bootstrap verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go supervisor-preflight colima-start colima-status tofu-init tofu-fmt tofu-validate flux-version-check gitops-bootstrap gitops-status gitops-reconcile gitops-teardown check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
 
 verify: check-required-files verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-teardown verify-kyverno-bootstrap verify-object-storage-profile verify-polaris-admin-image-contract verify-polaris-runtime verify-iceberg-table-bootstrap verify-trino-bootstrap verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go verify-security verify-policy check-newlines check-trailing-whitespace check-no-secret-filenames
 
@@ -95,7 +95,14 @@ verify-polaris-admin-image-contract: test-polaris-admin-image-contract verify-co
 
 verify-polaris-runtime: verify-polaris-build-contract verify-polaris-admin-image-contract
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_polaris_runtime.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_polaris_runtime_acceptance.py'
 	@$(PYTHON) scripts/verify_polaris_runtime.py audit --root .
+
+capture-polaris-runtime-acceptance:
+	@test -n "$${SHIROKUMA_HOST_EXPORT_ROOT:-}" || { echo "SHIROKUMA_HOST_EXPORT_ROOT is required and must be a durable macOS directory outside Colima"; exit 1; }
+	@$(PYTHON) scripts/polaris_runtime_acceptance.py \
+		--backup-root "$${SHIROKUMA_HOST_EXPORT_ROOT}" \
+		--output security/evidence/polaris-runtime-acceptance.json
 
 verify-iceberg-table-bootstrap: flux-version-check
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_iceberg_table_bootstrap.py'
@@ -222,8 +229,11 @@ check-required-files:
 	@test -f scripts/verify_policy_exceptions.py
 	@test -f scripts/verify_gitops_teardown.py
 	@test -f scripts/verify_polaris_admin_build_inputs.py
+	@test -x scripts/polaris_runtime_acceptance.py
 	@test -f tests/test_gitops_teardown.py
 	@test -f tests/test_polaris_admin_build_inputs.py
+	@test -f tests/test_polaris_runtime_acceptance.py
+	@test -f security/evidence/polaris-runtime-acceptance.json
 	@test -f bootstrap/polaris/v1.6.0/admin-build-inputs-contract.json
 	@test -f bootstrap/polaris/v1.6.0/admin-admission.json
 	@test -f bootstrap/polaris/v1.6.0/admin-image-contract.json

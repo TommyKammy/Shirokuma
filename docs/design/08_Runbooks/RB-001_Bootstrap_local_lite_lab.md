@@ -4,8 +4,8 @@ doc_id: "RB-001"
 title: "Bootstrap local-lite lab"
 status: draft
 created: 2026-07-05
-updated: 2026-07-21
-version: "1.2.1"
+updated: 2026-07-22
+version: "1.3.0"
 area: "runbook"
 tags: [shirokuma, runbook]
 ---
@@ -215,6 +215,39 @@ backup overhead. Before bootstrap, teardown, or reset, record `df -h` for the
 host and Colima VM and retain enough owner-controlled storage outside Colima for
 the database export plus its checksum.
 
+For the bounded, non-destructive runtime acceptance, retain the dump on the
+macOS host and restore it into an isolated temporary database. The repository
+tool obtains credentials only from the mounted PostgreSQL environment and the
+OpenTofu-managed root Secret, never prints them, compares the source and restored
+schema/row fingerprints, and drops only the temporary database:
+
+```bash
+set +x
+umask 077
+export SHIROKUMA_HOST_EXPORT_ROOT="/Volumes/<managed-backup>/shirokuma/polaris"
+mkdir -p "$SHIROKUMA_HOST_EXPORT_ROOT"
+chmod 0700 "$SHIROKUMA_HOST_EXPORT_ROOT"
+make capture-polaris-runtime-acceptance
+```
+
+The target refuses `/tmp`, symlinked paths, Colima-owned paths, and roots with
+permissions broader than `0700`. It writes the custom-format dump as `0600`
+outside Git and records only its basename, size, SHA-256, host free space,
+readiness, API status codes, and database fingerprints in
+`security/evidence/polaris-runtime-acceptance.json`. A successful run creates,
+lists, reads, and deletes a temporary S3-backed Polaris Catalog and proves that
+the temporary restore database is absent before publishing the receipt.
+
+The 2026-07-21 local-lite acceptance against revision
+`04b0800b77d4a4731b232d14d1788ee793f5c79c` retained a `27,186` byte dump with
+66 archive entries and SHA-256
+`1dd1aaa744bb926adf6779a14e9eb310016171ab85ef688bb6f71663105efe4a`.
+The source and restored databases both contained 9 tables and 7 rows with
+content SHA-256
+`c5032a0d5fb2e8b2b9724978c8a40d4965f7b5b66c04f5ae08c8192e7cd31736`;
+the host filesystem had `2,874,895,852 KiB` free after capture. This is bounded
+local-lite evidence, not a production recovery claim.
+
 Before any destructive operation, export the live database without displaying
 credentials. `pg_dump` creates a consistent archive while the API remains
 online; the restore procedure below then quiesces catalog writers before it
@@ -270,12 +303,13 @@ flux reconcile kustomization shirokuma-catalog -n flux-system \
   --context=colima-mac-studio-solo
 ```
 
-Capture Ready and catalog create/list/read evidence after restore. A lost PVC or
-whole-profile reset additionally requires the original root credential and a
-reviewed empty-database bootstrap/restore sequence; that path remains part of
-the pending live acceptance gate. Do not delete the PostgreSQL PVC, change the
-credential generation, or reset Colima until that destructive recovery path has
-been exercised and recorded.
+Capture Ready and catalog create/list/read evidence after restore. The bounded
+isolated-database restore above satisfies the local-lite runtime acceptance
+without modifying the live `polaris` database. A lost PVC or whole-profile reset
+additionally requires the original root credential and a reviewed empty-database
+bootstrap/restore sequence; that destructive path remains a recovery runbook,
+not evidence of production readiness. Do not delete the PostgreSQL PVC, change
+the credential generation, or reset Colima outside that reviewed procedure.
 
 Teardown uses the same OpenTofu state and removes the Flux installation and
 both `shirokuma-storage` and `shirokuma-dev` namespaces:

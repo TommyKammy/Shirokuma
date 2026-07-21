@@ -35,6 +35,15 @@ EXPECTED_SECRET_REFS = {
     "polaris-postgresql-credentials": ["database", "password", "username"],
     "polaris-root-credentials": ["credentials.json"],
 }
+EXPECTED_SECRET_DATA_KEYS = {
+    "polaris-postgresql-credentials": ["database", "password", "username"],
+    "polaris-root-credentials": [
+        "client_id",
+        "client_secret",
+        "credentials.json",
+        "realm",
+    ],
+}
 
 
 class RuntimeContractError(RuntimeError):
@@ -98,6 +107,12 @@ def _documentation_map(contract: Mapping[str, Any]) -> Mapping[str, Any]:
     return documentation
 
 
+def _tooling_map(contract: Mapping[str, Any]) -> Mapping[str, Any]:
+    tooling = contract.get("tooling")
+    _expect(isinstance(tooling, dict), "RUNTIME_CONTRACT", "tooling must be an object")
+    return tooling
+
+
 def _audit_contract(root: Path) -> Mapping[str, Any]:
     path = root / CONTRACT
     _expect(path.is_file() and not path.is_symlink(), "RUNTIME_CONTRACT", f"missing {CONTRACT}")
@@ -112,16 +127,17 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
         "admin_bootstrap",
         "credential_generation",
         "documentation",
+        "tooling",
         "manifests",
         "live_acceptance",
     }
     _expect(set(contract) == expected_keys, "RUNTIME_CONTRACT", "contract key set changed")
-    _expect(contract.get("schema_version") == 1, "RUNTIME_CONTRACT", "schema_version must be 1")
+    _expect(contract.get("schema_version") == 2, "RUNTIME_CONTRACT", "schema_version must be 2")
     _expect(contract.get("issue") == 61, "RUNTIME_CONTRACT", "issue must be 61")
     _expect(
-        contract.get("state") == "runtime_acceptance_pending",
+        contract.get("state") == "runtime_accepted",
         "RUNTIME_CONTRACT",
-        "state must remain runtime_acceptance_pending",
+        "state must be runtime_accepted",
     )
     _expect(
         contract.get("images")
@@ -167,18 +183,9 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
         "credential generation boundary changed",
     )
     _expect(
-        contract.get("live_acceptance")
-        == {
-            "complete": False,
-            "required": [
-                "flux_ready",
-                "catalog_create_list_read",
-                "backup_restore",
-                "rollback_teardown",
-            ],
-        },
+        isinstance(contract.get("live_acceptance"), dict),
         "RUNTIME_ACCEPTANCE",
-        "live acceptance must remain explicitly pending",
+        "live acceptance must be an object",
     )
     return contract
 
@@ -248,6 +255,251 @@ def _audit_documentation(root: Path, contract: Mapping[str, Any]) -> str:
         f"hash mismatch: {relative}",
     )
     return path.read_text(encoding="utf-8")
+
+
+def _audit_tooling(root: Path, contract: Mapping[str, Any]) -> None:
+    tooling = _tooling_map(contract)
+    expected = {
+        "scripts/polaris_runtime_acceptance.py",
+        "tests/test_polaris_runtime_acceptance.py",
+    }
+    _expect(set(tooling) == expected, "RUNTIME_TOOLING", "acceptance tooling set changed")
+    for relative, expected_digest in tooling.items():
+        _expect(
+            isinstance(relative, str)
+            and isinstance(expected_digest, str)
+            and re.fullmatch(r"[0-9a-f]{64}", expected_digest) is not None,
+            "RUNTIME_TOOLING",
+            f"invalid tooling record: {relative!r}",
+        )
+        path = root / relative
+        _expect(
+            path.is_file() and not path.is_symlink(),
+            "RUNTIME_TOOLING",
+            f"missing regular file: {relative}",
+        )
+        _expect(
+            _sha256(path) == expected_digest,
+            "RUNTIME_TOOLING",
+            f"hash mismatch: {relative}",
+        )
+
+
+def _audit_live_acceptance(root: Path, contract: Mapping[str, Any]) -> None:
+    live = contract.get("live_acceptance")
+    _expect(isinstance(live, dict), "RUNTIME_ACCEPTANCE", "live acceptance is missing")
+    _expect(
+        set(live) == {"complete", "receipt", "receipt_sha256", "required"},
+        "RUNTIME_ACCEPTANCE",
+        "live acceptance key set changed",
+    )
+    _expect(live.get("complete") is True, "RUNTIME_ACCEPTANCE", "live acceptance is incomplete")
+    _expect(
+        live.get("required")
+        == [
+            "flux_ready",
+            "catalog_create_list_read",
+            "backup_restore",
+            "rollback_teardown",
+        ],
+        "RUNTIME_ACCEPTANCE",
+        "live acceptance requirements changed",
+    )
+    relative = live.get("receipt")
+    expected_digest = live.get("receipt_sha256")
+    _expect(
+        relative == "security/evidence/polaris-runtime-acceptance.json"
+        and isinstance(expected_digest, str)
+        and re.fullmatch(r"[0-9a-f]{64}", expected_digest) is not None,
+        "RUNTIME_ACCEPTANCE",
+        "live acceptance receipt binding is invalid",
+    )
+    path = root / relative
+    _expect(
+        path.is_file() and not path.is_symlink(),
+        "RUNTIME_ACCEPTANCE",
+        "live acceptance receipt is missing",
+    )
+    _expect(
+        _sha256(path) == expected_digest,
+        "RUNTIME_ACCEPTANCE",
+        "live acceptance receipt hash mismatch",
+    )
+    receipt = _load_json(path)
+    _expect(
+        set(receipt)
+        == {
+            "schema_version",
+            "kind",
+            "issue",
+            "acceptance_tool_sha256",
+            "captured_at",
+            "repository_revision",
+            "cluster",
+            "readiness",
+            "catalog_api_smoke",
+            "backup_restore",
+            "rollback_teardown",
+            "secrets",
+        },
+        "RUNTIME_ACCEPTANCE",
+        "receipt key set changed",
+    )
+    _expect(
+        receipt.get("schema_version") == 1
+        and receipt.get("kind") == "shirokuma-polaris-runtime-acceptance"
+        and receipt.get("issue") == 61,
+        "RUNTIME_ACCEPTANCE",
+        "receipt identity is invalid",
+    )
+    _expect(
+        receipt.get("acceptance_tool_sha256")
+        == _tooling_map(contract)["scripts/polaris_runtime_acceptance.py"],
+        "RUNTIME_ACCEPTANCE",
+        "receipt was not produced by the bound acceptance tool",
+    )
+    repository_revision = receipt.get("repository_revision")
+    _expect(
+        isinstance(repository_revision, str)
+        and re.fullmatch(r"[0-9a-f]{40}", repository_revision) is not None,
+        "RUNTIME_ACCEPTANCE",
+        "receipt repository revision is invalid",
+    )
+    cluster = receipt.get("cluster")
+    _expect(
+        cluster
+        == {
+            "context": "colima-mac-studio-solo",
+            "namespace": "shirokuma-dev",
+            "production_claim": False,
+            "profile": "local-lite",
+        },
+        "RUNTIME_ACCEPTANCE",
+        "receipt cluster boundary changed",
+    )
+    readiness = receipt.get("readiness")
+    _expect(isinstance(readiness, dict), "RUNTIME_ACCEPTANCE", "readiness receipt is missing")
+    expected_revision = f"main@sha1:{repository_revision}"
+    _expect(
+        readiness.get("revision") == expected_revision,
+        "RUNTIME_ACCEPTANCE",
+        "receipt revision does not bind repository and Flux",
+    )
+    kustomizations = readiness.get("kustomizations")
+    _expect(
+        isinstance(kustomizations, list)
+        and [item.get("name") for item in kustomizations if isinstance(item, dict)]
+        == EXPECTED_FLUX_ORDER
+        and all(
+            isinstance(item, dict)
+            and item.get("ready") is True
+            and item.get("revision") == expected_revision
+            and item.get("reason") == "ReconciliationSucceeded"
+            for item in kustomizations
+        ),
+        "RUNTIME_ACCEPTANCE",
+        "Flux Ready evidence is invalid",
+    )
+    workloads = readiness.get("workloads")
+    _expect(
+        isinstance(workloads, dict)
+        and workloads.get("polaris_deployment") == "Ready"
+        and workloads.get("postgresql_statefulset") == "Ready"
+        and workloads.get("postgresql_pvc") == "Bound"
+        and isinstance(workloads.get("bootstrap_job"), str)
+        and workloads["bootstrap_job"].startswith("polaris-bootstrap"),
+        "RUNTIME_ACCEPTANCE",
+        "workload Ready evidence is invalid",
+    )
+    secret_records = readiness.get("secrets")
+    _expect(
+        isinstance(secret_records, list)
+        and {item.get("name") for item in secret_records if isinstance(item, dict)}
+        == set(EXPECTED_SECRET_DATA_KEYS)
+        and all(
+            isinstance(item, dict)
+            and item.get("managed_by") == "OpenTofu"
+            and isinstance(item.get("generation"), str)
+            and item["generation"].isdigit()
+            and item.get("keys") == EXPECTED_SECRET_DATA_KEYS[item["name"]]
+            for item in secret_records
+        ),
+        "RUNTIME_ACCEPTANCE",
+        "OpenTofu Secret evidence is invalid",
+    )
+    smoke = receipt.get("catalog_api_smoke")
+    _expect(
+        isinstance(smoke, dict)
+        and smoke.get("token_status") == 200
+        and smoke.get("create_status") == 201
+        and smoke.get("list_status") == 200
+        and smoke.get("read_status") == 200
+        and smoke.get("delete_status") == 204
+        and smoke.get("cleanup_absent") is True
+        and smoke.get("credential_material_retained") is False
+        and smoke.get("storage_type") == "S3"
+        and isinstance(smoke.get("base_location"), str)
+        and smoke["base_location"].startswith("s3://shirokuma-lakehouse/"),
+        "RUNTIME_ACCEPTANCE",
+        "catalog API smoke evidence is invalid",
+    )
+    recovery = receipt.get("backup_restore")
+    _expect(isinstance(recovery, dict), "RUNTIME_ACCEPTANCE", "backup receipt is missing")
+    source = recovery.get("source_fingerprint")
+    restored = recovery.get("restored_fingerprint")
+    _expect(
+        isinstance(recovery.get("backup_file"), str)
+        and re.fullmatch(r"polaris-postgresql-[0-9]{8}T[0-9]{6}Z\.dump", recovery["backup_file"])
+        is not None
+        and isinstance(recovery.get("backup_sha256"), str)
+        and re.fullmatch(r"[0-9a-f]{64}", recovery["backup_sha256"])
+        is not None
+        and isinstance(recovery.get("backup_bytes"), int)
+        and recovery["backup_bytes"] > 0
+        and isinstance(recovery.get("archive_entries"), int)
+        and recovery["archive_entries"] > 0
+        and recovery.get("backup_mode") == "0600"
+        and recovery.get("host_root_mode") == "0700"
+        and isinstance(recovery.get("host_free_kib"), int)
+        and recovery["host_free_kib"] > 0
+        and recovery.get("backup_location_policy")
+        == "durable macOS host outside Colima"
+        and recovery.get("postgresql_tools") == "pg_dump (PostgreSQL) 18.4"
+        and recovery.get("fingerprints_match") is True
+        and recovery.get("temporary_database_removed") is True
+        and isinstance(source, dict)
+        and source == restored
+        and isinstance(source.get("table_count"), int)
+        and source["table_count"] > 0
+        and isinstance(source.get("row_count"), int)
+        and source["row_count"] >= 0
+        and re.fullmatch(r"[0-9a-f]{32}", str(source.get("schema_md5"))) is not None
+        and re.fullmatch(r"[0-9a-f]{64}", str(source.get("content_sha256"))) is not None,
+        "RUNTIME_ACCEPTANCE",
+        "backup/restore evidence is invalid",
+    )
+    rollback = receipt.get("rollback_teardown")
+    _expect(
+        isinstance(rollback, dict)
+        and rollback.get("destructive_teardown_executed") is False
+        and set(rollback.get("runbooks", []))
+        == {
+            "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md",
+            "docs/design/08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo.md",
+        },
+        "RUNTIME_ACCEPTANCE",
+        "rollback/teardown evidence is invalid",
+    )
+    _expect(
+        receipt.get("secrets")
+        == {
+            "material_in_git": False,
+            "material_in_receipt": False,
+            "provisioner": "OpenTofu",
+        },
+        "RUNTIME_ACCEPTANCE",
+        "receipt secret boundary changed",
+    )
 
 
 def _audit_runtime_inventory(root: Path, manifests: Mapping[str, Any]) -> None:
@@ -467,7 +719,9 @@ def _audit_semantics(root: Path, texts: Mapping[str, str], runbook: str) -> None
         "pg_dump",
         "pg_restore",
         "polaris.dump.sha256",
-        "whole-profile metadata restore remains blocked",
+        "destructive path remains a recovery runbook",
+        "capture-polaris-runtime-acceptance",
+        "isolated temporary database",
         "all six required S3 and Polaris variables",
     ):
         _expect(
@@ -482,6 +736,8 @@ def audit(root: Path) -> None:
     contract = _audit_contract(root)
     texts = _audit_manifests(root, contract)
     runbook = _audit_documentation(root, contract)
+    _audit_tooling(root, contract)
+    _audit_live_acceptance(root, contract)
     _audit_runtime_inventory(root, _manifest_map(contract))
     _audit_semantics(root, texts, runbook)
 
