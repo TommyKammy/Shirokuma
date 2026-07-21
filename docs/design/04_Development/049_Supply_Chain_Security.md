@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-21
-version: "1.14"
+version: "1.15"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -314,6 +314,21 @@ Image history pins Corretto `21.0.11.10.1`, `/usr/bin/java` is present, and a
 focused Trivy 0.72.0 scan reports High=0/Critical=0. The mutable `21-alpine`
 tag is discovery input only; the contract, Containerfile, workflow, verifier,
 and build must use the exact digests and repeat all publication checks on main.
+
+PR #89 merged as `fe00970d75c2022c51f80cb5f00021778e8312e1` and applied that
+Admin-only Alpine repin. Main run
+[`29802331708`](https://github.com/TommyKammy/Shirokuma/actions/runs/29802331708)
+then completed the offline build, arm64 image and CLI smoke, SBOM, Trivy
+High=0/Critical=0 gate, anonymous exact-digest retrieval, Cosign signature,
+SLSA provenance, attestations, candidate retention, and non-authoritative
+trusted-tag move for digest
+`sha256:16e3fd99da2afd446463405bd59236322c37bb066b2af5f46f6e3dd5b7c8710b`.
+Final retention still failed closed: redirecting the new `evidence.sha256`
+inside the evidence directory made `find` include the manifest being written,
+so its self-referential checksum failed. No final artifact was retained and the
+digest has no review or admission authority. The repair must stage the manifest
+outside the closed directory, move it into place only after payload hashing,
+and retain a regression that rejects direct self-hashing output.
 
 The Containerfile preserves upstream's Quarkus fast-jar layout
 `build/quarkus-app/{lib/,quarkus-run.jar,app/,quarkus/}`, runs as

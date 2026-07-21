@@ -204,7 +204,7 @@
     },
     "workflow": {
       "path": ".github/workflows/polaris-admin-arm64.yml",
-      "sha256": "4450b601ace1bde8c9542a958983c2199638ee61a8c245b1276fbf022c527587",
+      "sha256": "e064dd4ded373c1529dc59cdaee695791fd6bce356c4383eee7b70746d599d0d",
       "repository": "TommyKammy/Shirokuma",
       "ref": "refs/heads/main",
       "oidc_identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/polaris-admin-arm64.yml@refs/heads/main",

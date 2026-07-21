@@ -5,7 +5,7 @@ title: "Adopt a source-built Polaris 1.6.0 and signed PostgreSQL metadata store"
 status: accepted
 created: 2026-07-16
 updated: 2026-07-21
-version: "0.11"
+version: "0.12"
 area: "architecture"
 tags: [shirokuma, adr, polaris, postgresql, arm64, supply-chain]
 ---
@@ -92,6 +92,12 @@ surface rather than claim a relational-only runtime.
   must re-prove Java 21, CLI compatibility, SBOM/NoSQL disclosure,
   High=0/Critical=0, signature, provenance, and anonymous retrieval before any
   evidence review.
+  Main run `29802331708` proved those candidate gates for exact digest
+  `sha256:16e3fd99da2afd446463405bd59236322c37bb066b2af5f46f6e3dd5b7c8710b`
+  but failed before final retention because the checksum generator included the
+  `evidence.sha256` file being written. The trusted tag remains a
+  non-authoritative pointer, the digest is not approved, and a corrected run
+  must stage the manifest outside the evidence directory before atomic placement.
 - Build a bounded Shirokuma downstream distribution by applying one
   hash-pinned overlay only after pristine ASF source verification. The overlay
   removes HadoopFileIO, Hadoop external-catalog federation, and Ranger

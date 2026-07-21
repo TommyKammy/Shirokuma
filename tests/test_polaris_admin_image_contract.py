@@ -412,6 +412,24 @@ class PolarisAdminImageContractTests(unittest.TestCase):
             lambda text: text.replace('              "35"\n', '              "34"\n', 1),
         )
 
+    def test_workflow_stages_checksum_manifest_outside_evidence_directory(self) -> None:
+        self._assert_workflow_code(
+            "WORKFLOW_EVIDENCE_CLOSURE",
+            lambda text: text.replace(
+                "mktemp ../evidence.sha256.tmp.XXXXXX",
+                "mktemp",
+                1,
+            ),
+        )
+        self._assert_workflow_code(
+            "WORKFLOW_EVIDENCE_CLOSURE",
+            lambda text: text.replace(
+                '| xargs -0 sha256sum > "${checksum_manifest}"',
+                "| xargs -0 sha256sum > evidence.sha256",
+                1,
+            ),
+        )
+
     def test_workflow_evidence_and_credential_boundaries_survive_rebinding(self) -> None:
         self._assert_workflow_code(
             "WORKFLOW_SEMANTICS",
