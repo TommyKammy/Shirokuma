@@ -102,16 +102,17 @@ class PolarisAdminBuildInputsTests(unittest.TestCase):
                 result = verifier.main(["audit", "--root", str(ROOT)])
         self.assertEqual(0, result)
         audit.assert_called_once_with(ROOT)
-        self.assertIn("one-shot publisher absent", stdout.getvalue())
-        self.assertIn("admin image/runtime remain disabled", stdout.getvalue())
+        self.assertIn("one-shot dependency publisher absent", stdout.getvalue())
+        self.assertIn("Admin image publication is policy-enabled", stdout.getvalue())
+        self.assertIn("admission/runtime/Flux/credentials remain disabled", stdout.getvalue())
 
     def test_duplicate_contract_key_is_rejected(self) -> None:
         root = self._copy_root()
         path = root / verifier.CONTRACT_PATH
         path.write_text(
             path.read_text(encoding="utf-8").replace(
-                '{\n  "schema_version": 2,',
-                '{\n  "schema_version": 999,\n  "schema_version": 2,',
+                '{\n  "schema_version": 3,',
+                '{\n  "schema_version": 999,\n  "schema_version": 3,',
                 1,
             ),
             encoding="utf-8",
@@ -259,16 +260,68 @@ class PolarisAdminBuildInputsTests(unittest.TestCase):
         )
         self._assert_code(root, "ADMIN_SURFACE")
 
-    def test_admin_image_gate_remains_disabled(self) -> None:
+    def test_admin_image_publication_gate_is_the_only_enabled_gate(self) -> None:
         root = self._copy_root()
         self._mutate_json(
             root,
             verifier.CONTRACT_PATH,
             lambda value: value["downstream_gates"].__setitem__(
-                "admin_image_publication_enabled", True
+                "admin_image_admitted", True
             ),
         )
         self._assert_code(root, "DOWNSTREAM_GATE")
+
+    def test_pr87_review_checkpoint_is_immutable(self) -> None:
+        fields = {
+            "repository": "other/repository",
+            "pull_request": 88,
+            "reviewed_head_commit": "0" * 40,
+            "merge_commit": "0" * 40,
+            "merged_at": "2026-07-21T00:00:00Z",
+            "merged_by": "other-user",
+            "reviewed_contract_sha256": "0" * 64,
+            "reviewed_evidence_manifest_sha256": "0" * 64,
+            "reviewed_verifier_sha256": "0" * 64,
+        }
+        for field, replacement in fields.items():
+            with self.subTest(field=field):
+                root = self._copy_root()
+                self._mutate_json(
+                    root,
+                    verifier.CONTRACT_PATH,
+                    lambda value, field=field, replacement=replacement: value[
+                        "candidate_snapshot"
+                    ]["review_checkpoint"].__setitem__(field, replacement),
+                )
+                self._assert_code(root, "REVIEW_CHECKPOINT")
+
+    def test_reviewed_snapshot_cannot_claim_admission(self) -> None:
+        root = self._copy_root()
+        self._mutate_json(
+            root,
+            verifier.CONTRACT_PATH,
+            lambda value: value["candidate_snapshot"].__setitem__(
+                "admitted", True
+            ),
+        )
+        self._assert_code(root, "CANDIDATE_SNAPSHOT")
+
+    def test_nosql_mongo_review_does_not_enable_runtime(self) -> None:
+        for field, replacement in (
+            ("image_publication_decision", "relational_only"),
+            ("source_overlay_permitted", True),
+            ("runtime_activation_permitted", True),
+        ):
+            with self.subTest(field=field):
+                root = self._copy_root()
+                self._mutate_json(
+                    root,
+                    verifier.CONTRACT_PATH,
+                    lambda value, field=field, replacement=replacement: value[
+                        "admin_dependency_surface"
+                    ].__setitem__(field, replacement),
+                )
+                self._assert_code(root, "ADMIN_SURFACE")
 
     def test_retired_publisher_cannot_be_reintroduced(self) -> None:
         root = self._copy_root()

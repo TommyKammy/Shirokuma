@@ -75,9 +75,11 @@ regexes = ['''^F2EEEB06110BEE1397EC74CBB8960FF52D9B1312$''']
 targetRules = ["generic-api-key"]
 paths = [
   '''^bootstrap/polaris/v1\.6\.0/admin-build-inputs-contract\.json$''',
+  '''^bootstrap/polaris/v1\.6\.0/admin-image-contract\.json$''',
   '''^bootstrap/polaris/v1\.6\.0/image-evidence/source-authentication\.json$''',
   '''^bootstrap/polaris/v1\.6\.0/trusted-build-contract\.json$''',
   '''^scripts/verify_polaris_admin_build_inputs\.py$''',
+  '''^scripts/verify_polaris_admin_image\.py$''',
   '''^scripts/verify_polaris_trusted_image\.py$''',
 ]
 

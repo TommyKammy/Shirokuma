@@ -38,6 +38,16 @@ POLARIS_ADMIN_BUILD_INPUTS_EVIDENCE = Path(
 POLARIS_ADMIN_BUILD_INPUTS_VERIFIER = Path(
     "scripts/verify_polaris_admin_build_inputs.py"
 )
+POLARIS_ADMIN_IMAGE_CONTRACT = Path(
+    "bootstrap/polaris/v1.6.0/admin-image-contract.json"
+)
+POLARIS_ADMIN_IMAGE_CONTAINERFILE = Path(
+    "bootstrap/polaris/v1.6.0/Containerfile.admin"
+)
+POLARIS_ADMIN_IMAGE_VERIFIER = Path("scripts/verify_polaris_admin_image.py")
+POLARIS_ADMIN_IMAGE_WORKFLOW = Path(
+    ".github/workflows/polaris-admin-arm64.yml"
+)
 POLARIS_CONTAINERFILE = Path("bootstrap/polaris/v1.6.0/Containerfile")
 POLARIS_SOURCE_OVERLAY = Path(
     "bootstrap/polaris/v1.6.0/patches/"
@@ -101,10 +111,22 @@ POLARIS_CONTRACT_SHA256 = (
     "cacd353f81996f5b04965fb3213cdecb3ebfbdc648ebbb3a8a90609412fa59ac"
 )
 POLARIS_ADMIN_BUILD_INPUTS_CONTRACT_SHA256 = (
-    "26f5259642007aa11a4676ccee918bd5b1e55f8eb5c0025f92a12f1d8ccb37db"
+    "6d56a2b086591f746bf272ff9388529013780b36950834e5233e41c34b16e400"
 )
 POLARIS_ADMIN_BUILD_INPUTS_VERIFIER_SHA256 = (
-    "ef1fad340179e61f7d1291d9e3fd44c793c4761af4b094a0b232ea663c7f41c9"
+    "5e153aacecaec7c313d9caba5b38ef65ff92f7eed25746e879222a4cdf441a42"
+)
+POLARIS_ADMIN_IMAGE_CONTRACT_SHA256 = (
+    "c87156046ba1025c64521a6022aae95dcf653e4e20979b1c8d96c276c30e047c"
+)
+POLARIS_ADMIN_IMAGE_CONTAINERFILE_SHA256 = (
+    "39ab3fa250600d144d1a4deb00ac7d6277707994fd9b53b3a7f0968c279f6b72"
+)
+POLARIS_ADMIN_IMAGE_VERIFIER_SHA256 = (
+    "90386061e130868a3bae512b39dcca29f0e1f1aa6bc04646b3013f4c6a818f4e"
+)
+POLARIS_ADMIN_IMAGE_WORKFLOW_SHA256 = (
+    "cf72c732e57f593ce25aa08a076ed7b221cfc07768b307ea923423d4db856398"
 )
 REVIEWED_POLARIS_CONTRACT_SHA256 = (
     "db27ec5ebf627ef1772c898614d5f206a2a3affc67007ee29221c525ab8fd3d6"
@@ -545,12 +567,14 @@ POLARIS_SOURCE_ARCHIVE_VALIDATOR_SHA256 = (
 )
 POLARIS_ALLOWED_PATHS = {
     "Containerfile",
+    "Containerfile.admin",
     "admin-build-inputs-contract.json",
     "admin-build-inputs-evidence",
     *{
         f"admin-build-inputs-evidence/{filename}"
         for filename in POLARIS_ADMIN_BUILD_INPUTS_EVIDENCE_RECORDS
     },
+    "admin-image-contract.json",
     "admission.json",
     "atomic-admission.json",
     "apache-polaris-release-signing-key.asc",
@@ -610,6 +634,9 @@ PENDING_BOOTSTRAP_ARTIFACT_MARKERS = {
     "source",
 }
 REVIEW_PENDING_WORKFLOW_INVENTORY = {
+    ".github/workflows/polaris-admin-arm64.yml": (
+        POLARIS_ADMIN_IMAGE_WORKFLOW_SHA256
+    ),
     ".github/workflows/ci.yml": (
         "36666a76c07b428adda5fe71e4bd21643d05e66f56043dcef514101add63dd72"
     ),
@@ -662,6 +689,9 @@ PENDING_SCRIPT_FILE_INVENTORY = {
     ),
     "scripts/verify_polaris_admin_build_inputs.py": (
         POLARIS_ADMIN_BUILD_INPUTS_VERIFIER_SHA256
+    ),
+    "scripts/verify_polaris_admin_image.py": (
+        POLARIS_ADMIN_IMAGE_VERIFIER_SHA256
     ),
     "scripts/verify_repository_skeleton.py": (
         "b6bbbd383c74b190872bdcf144ede8126d8da5dbeb03e291027aaf276c62c955"
@@ -2714,6 +2744,42 @@ def _audit_admin_build_inputs_retained_evidence(root: Path) -> None:
             "ADMIN_DEPENDENCY_EVIDENCE",
             f"{relative} differs from the retained publication evidence",
         )
+
+
+def _audit_admin_image_publication_policy(root: Path) -> None:
+    expected_files = {
+        POLARIS_ADMIN_IMAGE_CONTRACT: POLARIS_ADMIN_IMAGE_CONTRACT_SHA256,
+        POLARIS_ADMIN_IMAGE_CONTAINERFILE: (
+            POLARIS_ADMIN_IMAGE_CONTAINERFILE_SHA256
+        ),
+        POLARIS_ADMIN_IMAGE_VERIFIER: POLARIS_ADMIN_IMAGE_VERIFIER_SHA256,
+        POLARIS_ADMIN_IMAGE_WORKFLOW: POLARIS_ADMIN_IMAGE_WORKFLOW_SHA256,
+    }
+    for relative, expected_sha256 in expected_files.items():
+        actual_sha256, _ = _sha256_and_size(
+            root,
+            relative,
+            "ADMIN_IMAGE_POLICY",
+        )
+        _expect(
+            actual_sha256 == expected_sha256,
+            "ADMIN_IMAGE_POLICY",
+            f"{relative} differs from the reviewed Admin image policy",
+        )
+
+    verifier_path = root / POLARIS_ADMIN_IMAGE_VERIFIER
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "_polaris_admin_image_policy_for_global_audit",
+            verifier_path,
+        )
+        if spec is None or spec.loader is None:
+            _fail("ADMIN_IMAGE_POLICY", f"cannot load {verifier_path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.audit_publication_bootstrap(root)
+    except (OSError, ImportError, AttributeError, RuntimeError) as error:
+        _fail("ADMIN_IMAGE_POLICY", f"Admin image policy audit failed: {error}")
 
 
 def _dependency_packager_module(root: Path) -> Any:
@@ -10164,6 +10230,7 @@ def audit(
     )
     _audit_atomic_admission(root)
     _audit_pending_files(root)
+    _audit_admin_image_publication_policy(root)
     _audit_retained_pending_evidence(root)
     _audit_ledger(root)
     _audit_pending_runtime_inventory(root)

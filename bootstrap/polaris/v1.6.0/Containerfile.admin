@@ -1,0 +1,40 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements. See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership. The ASF licenses this file
+# to you under the Apache License, Version 2.0.
+#
+# This runtime layout follows Apache Polaris 1.6.0
+# runtime/admin/src/main/docker/Dockerfile.jvm. The Docker Official
+# Image for Amazon Corretto 21 is pinned to the exact linux/arm64
+# manifest below; mutable tags are not used during the build.
+FROM docker.io/library/amazoncorretto@sha256:ba1fe4a3fd4c6b70360183fccd1f0a168c3ea6f73709e8f81945cb9087431ff2
+
+ARG SOURCE_COMMIT
+ARG SOURCE_CREATED
+
+LABEL org.opencontainers.image.source="https://github.com/apache/polaris" \
+      org.opencontainers.image.revision="${SOURCE_COMMIT}" \
+      org.opencontainers.image.version="1.6.0" \
+      org.opencontainers.image.created="${SOURCE_CREATED}" \
+      org.opencontainers.image.description="Apache Polaris Admin Tool 1.6.0 built from the ASF-signed source release" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.base.name="docker.io/library/amazoncorretto" \
+      dev.shirokuma.runtime-base.arm64-digest="sha256:ba1fe4a3fd4c6b70360183fccd1f0a168c3ea6f73709e8f81945cb9087431ff2"
+
+ENV HOME=/tmp \
+    LANG=en_US.UTF-8
+
+WORKDIR /deployments
+
+COPY --chown=10000:10001 build/quarkus-app/lib/ /deployments/lib/
+COPY --chown=10000:10001 build/quarkus-app/quarkus-run.jar /deployments/quarkus-run.jar
+COPY --chown=10000:10001 build/quarkus-app/app/ /deployments/app/
+COPY --chown=10000:10001 build/quarkus-app/quarkus/ /deployments/quarkus/
+COPY --chown=10000:10001 distribution/LICENSE /deployments/LICENSE
+COPY --chown=10000:10001 distribution/NOTICE /deployments/NOTICE
+
+USER 10000:10001
+
+ENTRYPOINT ["/usr/bin/java", "-jar", "/deployments/quarkus-run.jar"]
+CMD ["--help"]

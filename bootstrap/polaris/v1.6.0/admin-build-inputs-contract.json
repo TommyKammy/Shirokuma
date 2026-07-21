@@ -1,11 +1,11 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "component": "polaris-admin-build-inputs",
   "version": "1.6.0",
   "platform": "linux/arm64",
   "lifecycle": {
-    "state": "admin_dependency_snapshot_review_pending",
-    "next_state": "admin_image_publication_pending"
+    "state": "admin_image_publication_pending",
+    "next_state": "admin_image_evidence_review_pending"
   },
   "source": {
     "record": "bootstrap/polaris/v1.6.0/source.json",
@@ -53,8 +53,11 @@
     "required_relationship": "exact-module-artifact-superset"
   },
   "admin_dependency_surface": {
-    "review_state": "review_required",
+    "review_state": "reviewed_for_image_publication",
     "relational_only": false,
+    "image_publication_decision": "accepted_unmodified_for_image_publication_only",
+    "source_overlay_permitted": false,
+    "runtime_activation_permitted": false,
     "reason": "The unmodified upstream Polaris 1.6.0 admin application unconditionally compiles and packages NoSQL maintenance APIs, NoSQL metastore implementations, distributed-cache support, and the Quarkus MongoDB client.",
     "unconditional_project_dependencies": [
       ":polaris-persistence-nosql-api",
@@ -92,7 +95,8 @@
     ]
   },
   "candidate_snapshot": {
-    "state": "review_pending",
+    "state": "approved_for_admin_image_build",
+    "admitted": false,
     "artifact_repository": "ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies",
     "artifact_reference": "ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18",
     "artifact_type": "application/vnd.shirokuma.polaris-admin.gradle-dependencies.v1",
@@ -158,6 +162,17 @@
         "sha256": "026c4d82e9031532323ccb3c31ea83939010982cfcf373644cdcf064e2613409",
         "size": 953
       }
+    },
+    "review_checkpoint": {
+      "repository": "TommyKammy/Shirokuma",
+      "pull_request": 87,
+      "reviewed_head_commit": "178b5ca03a2575a7100cfb47daede795fbd1d30c",
+      "merge_commit": "8e5c6927e95d1027e16fe2ac27ab8322b45359c9",
+      "merged_at": "2026-07-20T23:24:12Z",
+      "merged_by": "TommyKammy",
+      "reviewed_contract_sha256": "26f5259642007aa11a4676ccee918bd5b1e55f8eb5c0025f92a12f1d8ccb37db",
+      "reviewed_evidence_manifest_sha256": "026c4d82e9031532323ccb3c31ea83939010982cfcf373644cdcf064e2613409",
+      "reviewed_verifier_sha256": "ef1fad340179e61f7d1291d9e3fd44c793c4761af4b094a0b232ea663c7f41c9"
     },
     "publication": {
       "record": {
@@ -247,11 +262,11 @@
     }
   },
   "downstream_gates": {
-    "admin_image_publication_enabled": false,
+    "admin_image_publication_enabled": true,
     "admin_image_admitted": false,
     "admin_runtime_enabled": false,
     "gitops_resources_enabled": false,
     "credential_material_permitted": false,
-    "next_checkpoint": "review the published full admin dependency snapshot and unconditional NoSQL/Mongo surface before defining any admin image"
+    "next_checkpoint": "publish, retain, and review the exact Admin image evidence before admission or runtime activation"
   }
 }

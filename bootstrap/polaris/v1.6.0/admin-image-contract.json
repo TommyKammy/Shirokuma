@@ -1,0 +1,293 @@
+{
+  "schema_version": 1,
+  "component": "polaris-admin",
+  "version": "1.6.0",
+  "platform": "linux/arm64",
+  "lifecycle": {
+    "state": "admin_image_publication_pending",
+    "next_state": "admin_image_evidence_review_pending"
+  },
+  "source": {
+    "record": "bootstrap/polaris/v1.6.0/source.json",
+    "record_sha256": "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb",
+    "archive_sha512": "d69b1a91e16e210a78dec327fc4725983b114fbec5d86d078a3827f35fe7dd5df3e4b12d18965e5a72eace65ad224aa007004ed61c66f9abb2efafc44ceac95b",
+    "signature_sha256": "2338e1c2385874e9bf5cf513b4d27732b1cd59e943e1662e62fa995d915e6481",
+    "signing_key_fingerprint": "F2EEEB06110BEE1397EC74CBB8960FF52D9B1312",
+    "git_commit": "dd306009d81a0e15adafe9dcd7d1c6d04d326f34",
+    "git_tree": "1ad42f42aaebfa767b66a37f522a6c8d6693d841",
+    "builder_index": "docker.io/library/gradle@sha256:ecbf526b4d3c247b4cc61e9850eae2addd5f73a7c849bf026000442808f54b56",
+    "builder_arm64_manifest": "docker.io/library/gradle@sha256:cc583fa5245267fe0e1546c9989e8575473a37336ad9894dc0684a99fea1fb03",
+    "java_major": 21,
+    "gradle_version": "9.6.0",
+    "tasks": [
+      ":polaris-admin:assemble",
+      ":polaris-admin:quarkusAppPartsBuild",
+      ":polaris-server:assemble",
+      ":polaris-server:quarkusAppPartsBuild"
+    ],
+    "admin_build_preimage": {
+      "path": "runtime/admin/build.gradle.kts",
+      "git_blob": "94bf1dfd2b1039f1ca23d5dd7437429c11db66dd",
+      "sha256": "6e3aabc2090cda72c03608053f41899792a6c62bec382ed18d6b02703574fde9",
+      "size": 4149
+    }
+  },
+  "dependency_snapshot": {
+    "contract": {
+      "path": "bootstrap/polaris/v1.6.0/admin-build-inputs-contract.json",
+      "sha256": "6d56a2b086591f746bf272ff9388529013780b36950834e5233e41c34b16e400"
+    },
+    "state": "approved_for_admin_image_build",
+    "admitted": false,
+    "artifact_reference": "ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18",
+    "artifact_repository": "ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies",
+    "artifact_type": "application/vnd.shirokuma.polaris-admin.gradle-dependencies.v1",
+    "descriptor_media_type": "application/vnd.shirokuma.gradle-dependency-descriptor.v1+json",
+    "archive_media_type": "application/vnd.shirokuma.gradle-cache.v1.tar+gzip",
+    "descriptor": {
+      "path": "bootstrap/polaris/v1.6.0/admin-build-inputs-evidence/gradle-dependency-inputs.json",
+      "sha256": "798802722e730174caa581cbffd4f82e5dd4a43aee92201df26f14db4ab005bc",
+      "size": 2175793
+    },
+    "archive": {
+      "filename": "polaris-gradle-dependencies-1.6.0.tar.gz",
+      "sha256": "e771fe2ec6b2d0f6940b1247a512eb5cbc78dd0f36e7be247975f2c5fa36fc4d",
+      "size": 701437153
+    },
+    "verification_metadata": {
+      "path": "bootstrap/polaris/v1.6.0/admin-build-inputs-evidence/verification-metadata.xml",
+      "sha256": "171ccaf781d4ae63375b332205d25653ebcd29471e9e9c0cfba1b978144065b8",
+      "size": 881256
+    },
+    "review_checkpoint": {
+      "repository": "TommyKammy/Shirokuma",
+      "pull_request": 87,
+      "reviewed_head_commit": "178b5ca03a2575a7100cfb47daede795fbd1d30c",
+      "merge_commit": "8e5c6927e95d1027e16fe2ac27ab8322b45359c9",
+      "merged_at": "2026-07-20T23:24:12Z",
+      "merged_by": "TommyKammy",
+      "reviewed_contract_sha256": "26f5259642007aa11a4676ccee918bd5b1e55f8eb5c0025f92a12f1d8ccb37db",
+      "reviewed_evidence_manifest_sha256": "026c4d82e9031532323ccb3c31ea83939010982cfcf373644cdcf064e2613409",
+      "reviewed_verifier_sha256": "ef1fad340179e61f7d1291d9e3fd44c793c4761af4b094a0b232ea663c7f41c9"
+    },
+    "offline_proof": {
+      "fresh_source_tree": true,
+      "fresh_gradle_home": true,
+      "container_network": "none",
+      "gradle_offline": true,
+      "dependency_verification": "strict",
+      "build_cache": false,
+      "configuration_cache": false,
+      "tasks": [
+        ":polaris-admin:assemble",
+        ":polaris-admin:quarkusAppPartsBuild",
+        ":polaris-server:assemble",
+        ":polaris-server:quarkusAppPartsBuild"
+      ]
+    }
+  },
+  "admin_dependency_surface": {
+    "review_state": "reviewed_for_image_publication",
+    "relational_only": false,
+    "image_publication_decision": "accepted_unmodified_for_image_publication_only",
+    "source_overlay_permitted": false,
+    "runtime_activation_permitted": false,
+    "unconditional_project_dependencies": [
+      ":polaris-persistence-nosql-api",
+      ":polaris-persistence-nosql-maintenance-api",
+      ":polaris-persistence-nosql-metastore",
+      ":polaris-persistence-nosql-cdi-quarkus",
+      ":polaris-persistence-nosql-cdi-quarkus-distcache",
+      ":polaris-persistence-nosql-maintenance-impl",
+      ":polaris-persistence-nosql-metastore-maintenance"
+    ],
+    "unconditional_external_dependencies": [
+      "io.quarkus:quarkus-mongodb-client"
+    ],
+    "required_sbom_terms": [
+      "mongodb",
+      "polaris-persistence-nosql"
+    ],
+    "exclusion_permitted": false
+  },
+  "image_publication": {
+    "enabled": true,
+    "state": "pending_main_publication",
+    "repository": "ghcr.io/tommykammy/shirokuma-polaris-admin",
+    "trusted_tag": "1.6.0-arm64",
+    "containerfile": {
+      "path": "bootstrap/polaris/v1.6.0/Containerfile.admin",
+      "sha256": "39ab3fa250600d144d1a4deb00ac7d6277707994fd9b53b3a7f0968c279f6b72"
+    },
+    "build_context": {
+      "containerfile_name": "Containerfile.admin",
+      "admin_application_source": "runtime/admin/build/quarkus-app",
+      "admin_application_destination": "build/quarkus-app",
+      "license_source": "LICENSE",
+      "notice_source": "NOTICE",
+      "allowed_roots": [
+        "Containerfile.admin",
+        "build/quarkus-app",
+        "distribution/LICENSE",
+        "distribution/NOTICE"
+      ],
+      "checksum_manifest": "build-context.sha256",
+      "checksum_format": "sha256-two-space-posix-path-v1",
+      "closed_world": true,
+      "symlinks_permitted": false,
+      "hardlinks_permitted": false,
+      "special_files_permitted": false,
+      "path_traversal_permitted": false,
+      "server_output_permitted": false,
+      "dependency_library_closure": "reviewed-admin-descriptor"
+    },
+    "runtime_base": {
+      "distribution": "Amazon Corretto",
+      "java_version": "21.0.11",
+      "index": "docker.io/library/amazoncorretto@sha256:d3a3476c19cbe37b2e3e46a2116ff197ab37c7072baad55ee0ad07f3b97e8d02",
+      "arm64_manifest": "docker.io/library/amazoncorretto@sha256:ba1fe4a3fd4c6b70360183fccd1f0a168c3ea6f73709e8f81945cb9087431ff2",
+      "user": "10000:10001"
+    },
+    "cli": {
+      "entrypoint": [
+        "/usr/bin/java",
+        "-jar",
+        "/deployments/quarkus-run.jar"
+      ],
+      "default_arguments": [
+        "--help"
+      ],
+      "smoke_commands": [
+        [
+          "--help"
+        ],
+        [
+          "bootstrap",
+          "--help"
+        ]
+      ],
+      "required_output_markers": [
+        "Usage: polaris-admin-tool.jar [-hV] [COMMAND]",
+        "Polaris administration & maintenance tool"
+      ],
+      "credential_file_option": "--credentials-file",
+      "credential_option": "--credential",
+      "print_credentials_option": "--print-credentials",
+      "bootstrap_help_evidence_mode": "network-none-read-only-help-invocation",
+      "credential_file_runtime_only": true,
+      "credential_file_image_default_permitted": false,
+      "credential_argument_permitted": false,
+      "print_credentials_permitted": false
+    },
+    "publication_boundary": {
+      "repository": "TommyKammy/Shirokuma",
+      "ref": "refs/heads/main",
+      "workflow_sha_equals_source_sha": true,
+      "quarantine_before_promotion": true,
+      "anonymous_exact_digest_verification": true,
+      "credential_fallback_permitted": false,
+      "admission_permitted": false,
+      "release_evidence_committed": false
+    },
+    "vulnerability_gate": {
+      "scanner": "trivy",
+      "version": "0.72.0",
+      "vulnerability_types": "os,library",
+      "scanners": "vuln",
+      "severity": "HIGH,CRITICAL",
+      "ignore_unfixed": false,
+      "maximum_high": 0,
+      "maximum_critical": 0,
+      "exception_permitted": false
+    },
+    "workflow": {
+      "path": ".github/workflows/polaris-admin-arm64.yml",
+      "sha256": "cf72c732e57f593ce25aa08a076ed7b221cfc07768b307ea923423d4db856398",
+      "repository": "TommyKammy/Shirokuma",
+      "ref": "refs/heads/main",
+      "oidc_identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/polaris-admin-arm64.yml@refs/heads/main",
+      "jobs": [
+        "prepare",
+        "verify",
+        "promote"
+      ],
+      "artifacts": {
+        "build_input_prefix": "polaris-admin-image-build-input-",
+        "candidate_prefix": "polaris-admin-image-candidate-",
+        "publication_prefix": "polaris-admin-image-publication-"
+      }
+    }
+  },
+  "evidence": {
+    "candidate_retention_days": 30,
+    "final_retention_days": 30,
+    "actions_artifact_role": "finite-retention transport copy pending evidence review",
+    "future_directory": "bootstrap/polaris/v1.6.0/admin-image-evidence",
+    "candidate_required": [
+      "anonymous-image-manifest.json",
+      "builder-metadata.json",
+      "build-context.sha256",
+      "build-input.json",
+      "dependency-input.json",
+      "offline-build.json",
+      "source-authentication.json",
+      "cosign-signature-bundle.json",
+      "cosign-verify.json",
+      "admin-help.json",
+      "admin-bootstrap-help.json",
+      "admin-container-inspect.json",
+      "admin-smoke-log-policy.json",
+      "image-config.json",
+      "image-manifest.json",
+      "polaris-admin-1.6.0-arm64.cdx.json",
+      "registry-signature-bundles.jsonl",
+      "rekor-entry.json",
+      "runtime-base-index.json",
+      "runtime-base-java-version.txt",
+      "runtime-base-manifest.json",
+      "sbom-attestation-bundle.json",
+      "sbom-policy.json",
+      "slsa-bundles.jsonl",
+      "slsa-verify.json",
+      "toolchain.json",
+      "trivy-attestation-bundle.json",
+      "trivy-version.json",
+      "trivy.json"
+    ],
+    "promotion_required": [
+      "promotion-cosign-verify.json",
+      "promotion-slsa-verify.json",
+      "publication.json",
+      "trusted-tag-manifest.json"
+    ],
+    "checksum_manifest": "evidence.sha256",
+    "checksum_manifest_entries": 33,
+    "directory_file_count_after_review": 34,
+    "raw_logs_permitted": false
+  },
+  "admission": {
+    "state": "blocked_admin_image_evidence_review",
+    "permitted": false,
+    "record": "bootstrap/polaris/v1.6.0/admin-admission.json"
+  },
+  "runtime": {
+    "state": "blocked_admin_image_admission",
+    "enabled": false
+  },
+  "gitops": {
+    "state": "blocked_admin_image_admission",
+    "resources_enabled": false
+  },
+  "credentials": {
+    "state": "blocked_admin_runtime_activation",
+    "material_permitted": false
+  },
+  "downstream_gates": {
+    "admin_image_admitted": false,
+    "resident_image_ledger_enabled": false,
+    "admin_runtime_enabled": false,
+    "gitops_resources_enabled": false,
+    "credential_material_permitted": false,
+    "next_checkpoint": "retain and independently review the exact published Admin image evidence"
+  }
+}

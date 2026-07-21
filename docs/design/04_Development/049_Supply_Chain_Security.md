@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-21
-version: "1.12"
+version: "1.13"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -275,13 +275,41 @@ SHA-256 `e771fe2ec6b2d0f6940b1247a512eb5cbc78dd0f36e7be247975f2c5fa36fc4d`,
 size, and gzip structure. The publication Actions artifact is a
 finite-retention evidence transport copy, not the durable review authority.
 
-The current evidence-only review checkpoint retains 12 hash-bound files under
-`bootstrap/polaris/v1.6.0/admin-build-inputs-evidence/`. Its schema-v2 contract
-records `admin_dependency_snapshot_review_pending` with next state
-`admin_image_publication_pending`. This checkpoint retires and removes the
-sole write-capable Admin dependency publisher. The Admin snapshot remains
-non-admitted, and Admin image publication/admission, runtime, Flux, and
-credential gates remain false. Issue #61 remains Open.
+PR #87 merged the evidence-only review as
+`8e5c6927e95d1027e16fe2ac27ab8322b45359c9`. It retains 12 hash-bound files
+under `bootstrap/polaris/v1.6.0/admin-build-inputs-evidence/`, retires the sole
+write-capable Admin dependency publisher, and approves only the exact public
+dependency input
+`ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18`
+for an Admin image build. It does not admit an image or enable runtime.
+
+The next Admin image publication PR records lifecycle state
+`admin_image_publication_pending` with next state
+`admin_image_evidence_review_pending`. Its bounded policy surface is
+`bootstrap/polaris/v1.6.0/admin-image-contract.json`,
+`bootstrap/polaris/v1.6.0/Containerfile.admin`, and
+`.github/workflows/polaris-admin-arm64.yml`. The main-only workflow may publish
+`ghcr.io/tommykammy/shirokuma-polaris-admin:1.6.0-arm64`; the mutable tag is
+never review authority, and no exact Admin image digest is approved before the
+separate retained-evidence review.
+
+The Containerfile preserves upstream's Quarkus fast-jar layout
+`build/quarkus-app/{lib/,quarkus-run.jar,app/,quarkus/}`, runs as
+`10000:10001`, and fixes the CLI launcher to
+`/usr/bin/java -jar /deployments/quarkus-run.jar` with `--help` as its inert
+default. Smoke must exit zero and include
+`Usage: polaris-admin-tool.jar [-hV] [COMMAND]`. Upstream's Admin graph includes
+the NoSQL maintenance/metastore modules and Quarkus MongoDB client, so the SBOM
+and scan must retain that surface rather than claim a relational-only image.
+
+Runtime bootstrap may later use only the official
+`bootstrap --credentials-file=<file>` path with an externally provisioned,
+read-only Secret. The YAML or JSON file maps each top-level realm to non-empty
+`client-id` and `client-secret`; file input is mutually exclusive with
+`--realm`, singular `--credential`, and `--print-credentials`. Credential
+material is forbidden from the image, workflow evidence, command arguments,
+and current manifests. Admin image admission, runtime, Flux, and credential
+gates remain false, and Issue #61 remains Open.
 
 The image-publication checkpoint adds only the hash-bound
 `bootstrap/polaris/v1.6.0/Containerfile`, the bounded downstream source overlay,

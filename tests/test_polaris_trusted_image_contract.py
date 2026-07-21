@@ -3301,6 +3301,46 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             verifier.POLARIS_ADMIN_BUILD_INPUTS_VERIFIER.as_posix(),
         )
 
+    def test_admin_image_publication_policy_is_globally_bound(self) -> None:
+        verifier._audit_admin_image_publication_policy(ROOT)
+        self.assertIn(
+            "Containerfile.admin",
+            verifier.POLARIS_ALLOWED_PATHS,
+        )
+        self.assertIn(
+            "admin-image-contract.json",
+            verifier.POLARIS_ALLOWED_PATHS,
+        )
+        self.assertEqual(
+            verifier.POLARIS_ADMIN_IMAGE_WORKFLOW_SHA256,
+            verifier.REVIEW_PENDING_WORKFLOW_INVENTORY[
+                verifier.POLARIS_ADMIN_IMAGE_WORKFLOW.as_posix()
+            ],
+        )
+        self.assertEqual(
+            verifier.POLARIS_ADMIN_IMAGE_VERIFIER_SHA256,
+            verifier.PENDING_SCRIPT_FILE_INVENTORY[
+                verifier.POLARIS_ADMIN_IMAGE_VERIFIER.as_posix()
+            ],
+        )
+
+    def test_admin_image_policy_byte_drift_fails_global_audit(self) -> None:
+        cases = (
+            verifier.POLARIS_ADMIN_IMAGE_CONTRACT,
+            verifier.POLARIS_ADMIN_IMAGE_CONTAINERFILE,
+            verifier.POLARIS_ADMIN_IMAGE_VERIFIER,
+            verifier.POLARIS_ADMIN_IMAGE_WORKFLOW,
+        )
+        for relative in cases:
+            with self.subTest(relative=relative):
+                root = self._fixture()
+                path = root / relative
+                path.write_bytes(path.read_bytes() + b"\n")
+                with self.assertRaises(verifier.ContractError) as raised:
+                    verifier._audit_admin_image_publication_policy(root)
+                self.assertEqual("ADMIN_IMAGE_POLICY", raised.exception.code)
+                self.assertIn(relative.as_posix(), raised.exception.detail)
+
     def test_pending_retained_evidence_paths_fail_closed(self) -> None:
         cases = (
             "security/evidence/polaris-v1.6.0/supply-chain.json",

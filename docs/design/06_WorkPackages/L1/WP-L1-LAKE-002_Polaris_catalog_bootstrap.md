@@ -5,7 +5,7 @@ title: "WP-L1-LAKE-002 Polaris catalog bootstrap"
 status: in-progress
 created: 2026-07-05
 updated: 2026-07-21
-version: "1.19"
+version: "1.21"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -362,17 +362,35 @@ Openを維持します。
   OCI第2 layerとして公開されました。独立したanonymous exact-digest pullで
   SHA-256 `e771fe2ec6b2d0f6940b1247a512eb5cbc78dd0f36e7be247975f2c5fa36fc4d`、
   size、gzip構造を再検証済みです。
-- 現在のevidence-only review checkpointは12ファイルを
-  `bootstrap/polaris/v1.6.0/admin-build-inputs-evidence/`へ保持し、schema-v2
-  contractを`admin_dependency_snapshot_review_pending`、次状態を
-  `admin_image_publication_pending`へ固定します。このcheckpointでsole
-  write-capable publisherは退役・削除されます。Admin image publication/admission、
-  runtime、Flux、credentialのdownstream gateはすべて`false`です。
+- evidence-only PR #87はmerge SHA
+  `8e5c6927e95d1027e16fe2ac27ab8322b45359c9`としてmainへ反映済みです。12ファイルを
+  `bootstrap/polaris/v1.6.0/admin-build-inputs-evidence/`へ保持し、sole write-capable
+  dependency publisherを退役・削除しました。承認対象は公開exact input
+  `ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18`
+  のAdmin image build利用だけで、image admissionやruntime利用ではありません。
+- Draft PR [#88](https://github.com/TommyKammy/Shirokuma/pull/88)はlifecycleを
+  `admin_image_publication_pending`、次状態を
+  `admin_image_evidence_review_pending`として固定し、
+  `bootstrap/polaris/v1.6.0/admin-image-contract.json`、
+  `bootstrap/polaris/v1.6.0/Containerfile.admin`、
+  `.github/workflows/polaris-admin-arm64.yml`だけをpublication-policy surfaceへ
+  追加します。main限定workflowのrepository/tagは
+  `ghcr.io/tommykammy/shirokuma-polaris-admin:1.6.0-arm64`ですが、exact digestは
+  main publication後の別evidence-only reviewまで承認しません。
+- Admin imageはupstream fast-jarの
+  `build/quarkus-app/{lib/,quarkus-run.jar,app/,quarkus/}`を保持し、
+  `10000:10001`で`/usr/bin/java -jar /deployments/quarkus-run.jar`を実行します。
+  inert defaultとsmokeは`--help`で、終了コード0と
+  `Usage: polaris-admin-tool.jar [-hV] [COMMAND]`を必須とします。
 - upstream Admin Toolはrelational JDBCだけでなくNoSQL/MongoDB moduleも
-  build graphへ無条件に含めます。002Hはこのsurfaceを`review_required`として
-  明示し、relational-only imageやruntime適合を主張しません。現在のevidence-only
-  review完了後、別のAdmin image publication/admission checkpointを通過してから
-  runtime activationへ進みます。
+  build graphへ無条件に含めます。このsurfaceはimage SBOM/scanでも保持し、
+  relational-only imageやruntime適合を主張しません。runtime bootstrap時の
+  credential入力は外部Secretをread-only mountした
+  `bootstrap --credentials-file=<file>`だけを候補とします。YAML/JSONの
+  top-level realmごとにnon-empty `client-id` / `client-secret`を持たせ、
+  `--realm`、singular `--credential`、`--print-credentials`とは併用しません。
+  Admin image admission、runtime、Flux、credentialのdownstream gateはすべて
+  `false`のままです。
 - PR #74以降の本文はIssue参照を`Refs #61`だけに限定します。否定文であっても
   closing keywordとIssue番号を組み合わせません。Issue #61は上記runtime
   acceptance chainの完了までOpenを維持します。
@@ -436,11 +454,17 @@ Openを維持します。
   (attempt `1` success、public exact digestと12 retained filesを確定)
 - Polaris Admin dependency evidence-only review:
   [#87](https://github.com/TommyKammy/Shirokuma/pull/87)
-  (Draft; `admin_dependency_snapshot_review_pending`、publisherを退役し、次状態を
-  `admin_image_publication_pending`へ固定、`Refs #61`)
+  (merged as `8e5c6927e95d1027e16fe2ac27ab8322b45359c9`;
+  `admin_dependency_snapshot_review_pending`を完了し、publisherを退役、
+  `Refs #61`)
+- Polaris Admin image publication policy Draft PR:
+  [#88](https://github.com/TommyKammy/Shirokuma/pull/88)
+  (`admin_image_publication_pending`から
+  `admin_image_evidence_review_pending`へのmain publication境界を定義、
+  admission/runtime/Flux/credentialsはnon-scope、`Refs #61`)
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
 - Execution order: `1 of 8`
-- Queue: evidence-only review、Admin image publication/admission、
+- Queue: Admin image main publication、evidence-only review、admission、
   credential-safe Flux activation、API smoke、
   backup/restoreを順に完了するまで、Issue #61はOpen、後続#62は
   dependency-blockedを維持します。
