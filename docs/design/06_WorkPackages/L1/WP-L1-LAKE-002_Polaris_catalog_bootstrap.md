@@ -5,7 +5,7 @@ title: "WP-L1-LAKE-002 Polaris catalog bootstrap"
 status: in-progress
 created: 2026-07-05
 updated: 2026-07-21
-version: "1.22"
+version: "1.23"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -388,14 +388,27 @@ Openを維持します。
   verify jobはfail-closed、promotionはskipされました。このdigestは署名・
   provenance・retained evidenceを完了しておらず、review authorityでもadmission
   candidateでもありません。
-- 2026-07-21にAdmin imageだけのruntime baseをAmazon Corretto 21 Alpine 3.24へ
-  repinする方針を承認しました。候補はDocker Official Image index
+- PR #89はmerge SHA `fe00970d75c2022c51f80cb5f00021778e8312e1`としてmainへ
+  反映され、Admin imageだけのruntime baseをAmazon Corretto 21 Alpine 3.24へ
+  repinしました。Docker Official Image index
   `sha256:30b1b2246cee9a98c9bf8a11537a04f1eaf8c59279b0c70ae02d7e5b934edeaa`、
   linux/arm64 manifest
   `sha256:dc43b39c47f1729dc772a9b8af7222757fac6c8cfa8a0802829af665b1c89925`です。
   image historyはCorretto `21.0.11.10.1`、`/usr/bin/java` symlinkを保持し、
   focused Trivy 0.72.0 scanはHigh=0/Critical=0でした。mutable `21-alpine` tagは
-  discoveryにだけ用い、修正PRとbuildはexact digestだけを使用します。
+  discoveryにだけ用い、contractとbuildはexact digestだけを使用します。
+- PR #89 merge後のmain run
+  [29802331708](https://github.com/TommyKammy/Shirokuma/actions/runs/29802331708)は、
+  fresh offline Admin/server build、closed-context arm64 image、CLI smoke、SBOM、
+  Trivy High=0/Critical=0、anonymous exact-digest pull、Cosign signature、SLSA
+  provenance、attestation、candidate evidenceを完了しました。exact digest
+  `sha256:16e3fd99da2afd446463405bd59236322c37bb066b2af5f46f6e3dd5b7c8710b`
+  はnon-authoritative trusted tagへ移動しましたが、final `evidence.sha256`を
+  evidence directory内へ直接redirectしたため、生成中manifest自身をhash対象へ
+  含めてself-checkが失敗しました。final artifactは保持されておらず、このdigestは
+  review authorityでもadmission candidateでもありません。修復はchecksum manifestを
+  directory外の一時ファイルで完成・検証してから原子的に配置し、同じ自己参照を
+  回帰テストで拒否します。
 - Admin imageはupstream fast-jarの
   `build/quarkus-app/{lib/,quarkus-run.jar,app/,quarkus/}`を保持し、
   `10000:10001`で`/usr/bin/java -jar /deployments/quarkus-run.jar`を実行します。
@@ -492,10 +505,16 @@ Openを維持します。
   `sha256:30b1b2246cee9a98c9bf8a11537a04f1eaf8c59279b0c70ae02d7e5b934edeaa` /
   arm64 manifest
   `sha256:dc43b39c47f1729dc772a9b8af7222757fac6c8cfa8a0802829af665b1c89925`
-  へrepinし、full main publicationを再実行する。
+  へrepinするPR [#89](https://github.com/TommyKammy/Shirokuma/pull/89)を
+  `fe00970d75c2022c51f80cb5f00021778e8312e1`としてmerge済み。
+- Polaris Admin Alpine main publication:
+  [run `29802331708`](https://github.com/TommyKammy/Shirokuma/actions/runs/29802331708)
+  (`sha256:16e3fd99da2afd446463405bd59236322c37bb066b2af5f46f6e3dd5b7c8710b`、
+  verify成功、trusted tag promotion成功、final checksum self-referenceで失敗、
+  final artifactなし、review/admission authorityなし)
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
 - Execution order: `1 of 8`
-- Queue: Admin Alpine runtime-base repin、main publication再実行、
+- Queue: final checksum-manifest closure修復、main publication再実行、
   evidence-only review、admission、
   credential-safe Flux activation、API smoke、
   backup/restoreを順に完了するまで、Issue #61はOpen、後続#62は

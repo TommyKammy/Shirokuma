@@ -50,7 +50,7 @@ EXPECTED_ADMIN_INPUT_CONTRACT_SHA256 = (
 # Rebound after the policy files are stable. These constants deliberately pin
 # exact bytes in addition to the semantic checks below.
 EXPECTED_CONTRACT_SHA256 = (
-    "94a19306272fbc05eaef4645dbf653b38b328d068f528d202a1598137a0e516f"
+    "3afb9235d91a1b5a00f861383068fbc91f16464df177183a181434d541e64247"
 )
 EXPECTED_ADMIN_INPUT_VERIFIER_SHA256 = (
     "5e153aacecaec7c313d9caba5b38ef65ff92f7eed25746e879222a4cdf441a42"
@@ -59,7 +59,7 @@ EXPECTED_CONTAINERFILE_SHA256 = (
     "cecd7e40f0bd3b2f5b0de90233677772c0c55c745f4f4cc975eda83b42f40112"
 )
 EXPECTED_WORKFLOW_SHA256 = (
-    "4450b601ace1bde8c9542a958983c2199638ee61a8c245b1276fbf022c527587"
+    "e064dd4ded373c1529dc59cdaee695791fd6bce356c4383eee7b70746d599d0d"
 )
 
 EXPECTED_REPOSITORY = "TommyKammy/Shirokuma"
@@ -1138,6 +1138,18 @@ def _audit_workflow(root: Path) -> None:
         and '"runtime_base_os_version": os.environ[' in publication_record,
         "WORKFLOW_RUNTIME_BASE",
         "runtime index, arm64 descriptor, Java, or Alpine identity is not revalidated",
+    )
+    _expect(
+        'checksum_manifest="$(mktemp ../evidence.sha256.tmp.XXXXXX)"'
+        in blocks["promote"]
+        and 'trap \'rm -f "${checksum_manifest}"\' EXIT' in blocks["promote"]
+        and '| xargs -0 sha256sum > "${checksum_manifest}"'
+        in blocks["promote"]
+        and 'mv "${checksum_manifest}" evidence.sha256' in blocks["promote"]
+        and "trap - EXIT" in blocks["promote"]
+        and "xargs -0 sha256sum > evidence.sha256" not in blocks["promote"],
+        "WORKFLOW_EVIDENCE_CLOSURE",
+        "checksum manifest must be staged outside the evidence directory to avoid self-hashing",
     )
     _expect(
         re.search(

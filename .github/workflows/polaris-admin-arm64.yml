@@ -2940,10 +2940,14 @@ jobs:
           test "${actual_payloads}" = "${expected_payloads}"
           (
             cd candidate-evidence
+            checksum_manifest="$(mktemp ../evidence.sha256.tmp.XXXXXX)"
+            trap 'rm -f "${checksum_manifest}"' EXIT
             find . -mindepth 1 -maxdepth 1 -type f \
               -print0 \
               | sort -z \
-              | xargs -0 sha256sum > evidence.sha256
+              | xargs -0 sha256sum > "${checksum_manifest}"
+            mv "${checksum_manifest}" evidence.sha256
+            trap - EXIT
             sha256sum --check --strict evidence.sha256
             test "$(find . -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')" = \
               "35"

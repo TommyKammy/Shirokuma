@@ -5,7 +5,7 @@ title: "ARM64 Container Image Compatibility"
 status: draft
 created: 2026-07-05
 updated: 2026-07-21
-version: "0.18"
+version: "0.19"
 area: "research"
 tags: [shirokuma, arm64, apple-silicon]
 ---
@@ -284,6 +284,18 @@ Registry history reports Corretto `21.0.11.10.1`, the filesystem exposes
 `/usr/bin/java`, and a focused Trivy 0.72.0 scan reports High=0/Critical=0.
 The correction PR must pin these bytes and repeat every main publication gate;
 this feasibility result is not image evidence or admission.
+
+PR #89 merged that correction as
+`fe00970d75c2022c51f80cb5f00021778e8312e1`. Main run
+[`29802331708`](https://github.com/TommyKammy/Shirokuma/actions/runs/29802331708)
+proved native arm64, Admin CLI smoke, the disclosed NoSQL/MongoDB SBOM surface,
+Trivy High=0/Critical=0, anonymous exact-digest retrieval, signature, provenance,
+and attestations for
+`sha256:16e3fd99da2afd446463405bd59236322c37bb066b2af5f46f6e3dd5b7c8710b`.
+Promotion moved the non-authoritative trusted tag, but final artifact creation
+failed because `evidence.sha256` hashed itself while being generated. The run
+therefore supplies feasibility and failure evidence only; it does not authorize
+review, admission, runtime, Flux, or credentials.
 
 The later bootstrap command may use only
 `bootstrap --credentials-file=<file>` with a read-only external Secret. YAML or
