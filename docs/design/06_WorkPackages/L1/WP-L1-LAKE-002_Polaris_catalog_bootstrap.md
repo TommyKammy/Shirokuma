@@ -5,7 +5,7 @@ title: "WP-L1-LAKE-002 Polaris catalog bootstrap"
 status: in-progress
 created: 2026-07-05
 updated: 2026-07-22
-version: "1.29"
+version: "1.30"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -64,7 +64,7 @@ Openを維持します。
 - [x] Credentials remain outside Git and policy checks pass.
 - [x] Backup/restore, rollback, teardown, and metadata-storage host SSD impact are
   verified and documented.
-- [ ] CI and required human review pass on the focused PR chain.
+- [x] CI and required human review pass on the Issue #61 focused PR chain.
 
 ## Related docs / ADR
 
@@ -490,6 +490,14 @@ Openを維持します。
 - PR #74以降の本文はIssue参照を`Refs #61`だけに限定します。否定文であっても
   closing keywordとIssue番号を組み合わせません。Issue #61は上記runtime
   acceptance chainの完了までOpenを維持します。
+- 2026-07-22: 後続Issue #62の事前probeで、Polaris serverがIceberg table
+  metadataをcommitする際にAWS default credential provider chainから資格情報を
+  取得できずHTTP 500になることを確認しました。SeaweedFSにはSTSがないため
+  `stsUnavailable: true`を維持し、Issue #96で既存のbucket限定application
+  Secretを`AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`、`AWS_REGION`の
+  `secretKeyRef`としてPolaris Deploymentへ追加します。Secret material、image、
+  PostgreSQL、SeaweedFS、NetworkPolicyは変更せず、merge後のFlux再起動とbounded
+  table-create probeで修復を確認するまでIssue #62をblockします。
 
 ## GitHub Tracking
 
@@ -498,7 +506,10 @@ Openを維持します。
 - PR: [#52](https://github.com/TommyKammy/Shirokuma/pull/52) (merged)
 - Runtime follow-up Epic: [#60](https://github.com/TommyKammy/Shirokuma/issues/60)
 - Runtime follow-up Issue: [#61](https://github.com/TommyKammy/Shirokuma/issues/61)
-  (reopened again 2026-07-20; runtime acceptance完了までOpen)
+  (PR #95 merge後の2026-07-22に明示Close)
+- S3 credential-reference repair:
+  [#96](https://github.com/TommyKammy/Shirokuma/issues/96)
+  (`#61`完了後に判明したbounded prerequisite repair; `#62`をblock)
 - Runtime phase-1 Draft PR:
   [#71](https://github.com/TommyKammy/Shirokuma/pull/71) (merged, `Refs #61`)
 - Runtime phase-2 PR:
@@ -602,13 +613,15 @@ Openを維持します。
   [#94](https://github.com/TommyKammy/Shirokuma/pull/94)
   (merged as `04b0800b77d4a4731b232d14d1788ee793f5c79c`; numeric scalar化を
   修正、`Refs #61`)
-- Live runtime acceptance: this focused PR (`Refs #61`); Ready/API smoke、
-  non-destructive restore、rollback/teardown contract、host SSD evidenceを保持。
+- Live runtime acceptance:
+  [#95](https://github.com/TommyKammy/Shirokuma/pull/95)
+  (merged; Ready/API smoke、non-destructive restore、rollback/teardown
+  contract、host SSD evidenceを保持、`Refs #61`)
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
 - Execution order: `1 of 8`
-- Queue: このfocused PRのCIとrequired human reviewが完了するまでIssue #61は
-  Open、後続#62はdependency-blockedを維持します。merge後に#61を明示Closeし、
-  #62を次の実行候補にします。
+- Queue: Issue #61とPR #95は完了済みです。新たに判明したIssue #96を
+  Secret-reference prerequisite repairとして先行し、merge/reconcile後のbounded
+  probeが成功するまで後続#62をdependency-blockedに維持します。
 
 ## Definition of Done
 

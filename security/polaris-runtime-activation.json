@@ -62,7 +62,7 @@
     "deploy/gitops/catalog/server/kustomization.yaml": "9a64b028354da7f98a9198332c485569771f040070fcb55a8403ae24e71e591f",
     "deploy/gitops/catalog/server/networkpolicy.yaml": "0589cec0e1fbddc97a97ebd22c62fc281e48fbdfbe0b5c22f33421082c835e76",
     "deploy/gitops/catalog/server/service.yaml": "236e72858ee54034280046d73925d3291fab330793df71c7b8c1666bc13132a8",
-    "deploy/gitops/catalog/server/deployment.yaml": "6f5ce742b747ba2a73235ea75ae3216d1df2ce663464282b138172a0c8722c04",
+    "deploy/gitops/catalog/server/deployment.yaml": "c569021ab0e5004b4af3d90da1be92beb032fbf377e30979e0eef1c4a01abb1c",
     "opentofu/dev/catalog.tf": "4da191cedd4f0b6233697ea56ddfe7b0f8d6dd0ee3934792adbb00bf9f619eb0"
   },
   "live_acceptance": {

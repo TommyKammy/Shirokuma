@@ -14,6 +14,24 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PolarisRuntimeActivationTests(unittest.TestCase):
+    def _assert_storage_env_contract(self, deployment: str) -> None:
+        expected = {
+            "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",
+            "AWS_REGION": "S3_REGION",
+        }
+        for variable, key in expected.items():
+            block = (
+                f"            - name: {variable}\n"
+                "              valueFrom:\n"
+                "                secretKeyRef:\n"
+                "                  name: seaweedfs-s3-application-credentials\n"
+                f"                  key: {key}\n"
+            )
+            self.assertEqual(1, deployment.count(block))
+            self.assertEqual(1, deployment.count(f"- name: {variable}\n"))
+        self.assertNotIn("AWS_SESSION_TOKEN", deployment)
+
     def _fixture(self) -> Path:
         root = Path(tempfile.mkdtemp(prefix="polaris-runtime-"))
         self.addCleanup(shutil.rmtree, root)
@@ -39,6 +57,12 @@ class PolarisRuntimeActivationTests(unittest.TestCase):
 
     def test_repository_runtime_activation_is_valid(self) -> None:
         verifier.audit(ROOT)
+
+    def test_repository_storage_environment_is_secret_ref_only(self) -> None:
+        deployment = (
+            ROOT / "deploy/gitops/catalog/server/deployment.yaml"
+        ).read_text(encoding="utf-8")
+        self._assert_storage_env_contract(deployment)
 
     def test_manifest_hash_drift_fails_closed(self) -> None:
         root = self._fixture()
@@ -164,6 +188,53 @@ class PolarisRuntimeActivationTests(unittest.TestCase):
         contract["manifests"][relative] = verifier._sha256(path)
         contract_path.write_text(json.dumps(contract, indent=2) + "\n", encoding="utf-8")
         self._assert_code(root, "RUNTIME_SECRET")
+
+    def test_storage_secret_name_drift_fails_closed(self) -> None:
+        root = self._fixture()
+        relative = "deploy/gitops/catalog/server/deployment.yaml"
+        path = root / relative
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "name: seaweedfs-s3-application-credentials",
+                "name: unreviewed-storage-credentials",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        with self.assertRaises(AssertionError):
+            self._assert_storage_env_contract(path.read_text(encoding="utf-8"))
+
+    def test_storage_secret_key_drift_fails_closed(self) -> None:
+        root = self._fixture()
+        relative = "deploy/gitops/catalog/server/deployment.yaml"
+        path = root / relative
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "                  key: S3_REGION\n",
+                "                  key: AWS_DEFAULT_REGION\n",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        with self.assertRaises(AssertionError):
+            self._assert_storage_env_contract(path.read_text(encoding="utf-8"))
+
+    def test_inline_storage_credential_fails_closed(self) -> None:
+        root = self._fixture()
+        relative = "deploy/gitops/catalog/server/deployment.yaml"
+        path = root / relative
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "          ports:\n",
+                "            - name: AWS_ACCESS_KEY_ID\n"
+                "              value: forbidden-inline-value\n"
+                "          ports:\n",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        with self.assertRaises(AssertionError):
+            self._assert_storage_env_contract(path.read_text(encoding="utf-8"))
 
     def test_admin_argument_fallback_fails_closed_even_if_rehashed(self) -> None:
         root = self._fixture()

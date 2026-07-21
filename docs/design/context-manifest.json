@@ -22,6 +22,7 @@
     {"source": "06_WorkPackages/L0/WP-L0-GITOPS-001_OpenTofu_and_Flux_bootstrap.md", "target": "docs/design/06_WorkPackages/L0/WP-L0-GITOPS-001_OpenTofu_and_Flux_bootstrap.md"},
     {"source": "06_WorkPackages/L1/WP-L1-LAKE-001_Object_storage_profile.md", "target": "docs/design/06_WorkPackages/L1/WP-L1-LAKE-001_Object_storage_profile.md"},
     {"source": "06_WorkPackages/L1/WP-L1-LAKE-002_Polaris_catalog_bootstrap.md", "target": "docs/design/06_WorkPackages/L1/WP-L1-LAKE-002_Polaris_catalog_bootstrap.md"},
+    {"source": "06_WorkPackages/L1/WP-L1-LAKE-003_Iceberg_table_bootstrap.md", "target": "docs/design/06_WorkPackages/L1/WP-L1-LAKE-003_Iceberg_table_bootstrap.md"},
     {"source": "06_WorkPackages/L1/WP-L1-LAKE-004_RustFS_maturity_review.md", "target": "docs/design/06_WorkPackages/L1/WP-L1-LAKE-004_RustFS_maturity_review.md"},
     {"source": "07_ADR/ADR-0015_Use_AGENTS_md_as_mandatory_repository_instruction.md", "target": "docs/design/07_ADR/ADR-0015_Use_AGENTS_md_as_mandatory_repository_instruction.md"},
     {"source": "07_ADR/ADR-0016_Use_Colima_on_Mac_Studio_Solo_as_primary_lab_runtime.md", "target": "docs/design/07_ADR/ADR-0016_Use_Colima_on_Mac_Studio_Solo_as_primary_lab_runtime.md"},
