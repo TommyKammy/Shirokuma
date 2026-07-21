@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Mapping
@@ -145,9 +146,10 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
     _expect(contract.get("schema_version") == 2, "RUNTIME_CONTRACT", "schema_version must be 2")
     _expect(contract.get("issue") == 61, "RUNTIME_CONTRACT", "issue must be 61")
     _expect(
-        contract.get("state") == "runtime_acceptance_pending",
+        contract.get("state")
+        in {"runtime_acceptance_pending", "runtime_accepted"},
         "RUNTIME_CONTRACT",
-        "state must remain runtime_acceptance_pending until current desired state is live-tested",
+        "state must be runtime_acceptance_pending or runtime_accepted",
     )
     _expect(
         contract.get("images")
@@ -303,6 +305,41 @@ def _audit_tooling(root: Path, contract: Mapping[str, Any]) -> None:
         )
 
 
+def _git_blob_sha256(root: Path, revision: str, relative: str) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "show", f"{revision}:{relative}"],
+            check=True,
+            capture_output=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        _fail(
+            "RUNTIME_ACCEPTANCE",
+            f"cannot read accepted revision binding for {relative}: {error}",
+        )
+    return hashlib.sha256(result.stdout).hexdigest()
+
+
+def _audit_accepted_revision_binding(
+    root: Path,
+    contract: Mapping[str, Any],
+    repository_revision: str,
+) -> None:
+    for records in (
+        _manifest_map(contract),
+        _documentation_map(contract),
+        _tooling_map(contract),
+    ):
+        for relative, expected_digest in records.items():
+            _expect(
+                _git_blob_sha256(root, repository_revision, relative)
+                == expected_digest,
+                "RUNTIME_ACCEPTANCE",
+                "accepted revision does not contain the contracted desired state: "
+                f"{relative}",
+            )
+
+
 def _audit_live_acceptance(root: Path, contract: Mapping[str, Any]) -> None:
     live = contract.get("live_acceptance")
     _expect(isinstance(live, dict), "RUNTIME_ACCEPTANCE", "live acceptance is missing")
@@ -390,6 +427,7 @@ def _audit_live_acceptance(root: Path, contract: Mapping[str, Any]) -> None:
         "RUNTIME_ACCEPTANCE",
         "receipt repository revision is invalid",
     )
+    _audit_accepted_revision_binding(root, contract, repository_revision)
     cluster = receipt.get("cluster")
     _expect(
         cluster

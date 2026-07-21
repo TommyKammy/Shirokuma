@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -68,6 +69,43 @@ class PolarisRuntimeActivationTests(unittest.TestCase):
         contract_path.write_text(
             json.dumps(contract, indent=2) + "\n", encoding="utf-8"
         )
+
+    def _commit_fixture(self, root: Path) -> str:
+        subprocess.run(
+            ["git", "init", "--quiet"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "add", "--force", "."],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=Shirokuma Tests",
+                "-c",
+                "user.email=tests@shirokuma.invalid",
+                "commit",
+                "--quiet",
+                "-m",
+                "fixture",
+            ],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        )
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
 
     def test_repository_runtime_activation_is_valid(self) -> None:
         verifier.audit(ROOT)
@@ -343,7 +381,7 @@ class PolarisRuntimeActivationTests(unittest.TestCase):
         )
         self._assert_code(root, "RUNTIME_ACCEPTANCE")
 
-    def test_pending_runtime_rejects_state_only_promotion(self) -> None:
+    def test_accepted_runtime_requires_receipt_binding(self) -> None:
         root = self._fixture()
         contract_path = root / verifier.CONTRACT
         contract = json.loads(contract_path.read_text(encoding="utf-8"))
@@ -351,7 +389,25 @@ class PolarisRuntimeActivationTests(unittest.TestCase):
         contract_path.write_text(
             json.dumps(contract, indent=2) + "\n", encoding="utf-8"
         )
-        self._assert_code(root, "RUNTIME_CONTRACT")
+        self._assert_code(root, "RUNTIME_ACCEPTANCE")
+
+    def test_accepted_revision_must_contain_contracted_desired_state(self) -> None:
+        root = self._fixture()
+        contract_path = root / verifier.CONTRACT
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        revision = self._commit_fixture(root)
+        verifier._audit_accepted_revision_binding(root, contract, revision)
+
+        relative = "deploy/gitops/catalog/server/deployment.yaml"
+        path = root / relative
+        path.write_text(
+            path.read_text(encoding="utf-8") + "# unaccepted drift\n",
+            encoding="utf-8",
+        )
+        contract["manifests"][relative] = verifier._sha256(path)
+        with self.assertRaises(verifier.RuntimeContractError) as raised:
+            verifier._audit_accepted_revision_binding(root, contract, revision)
+        self.assertEqual("RUNTIME_ACCEPTANCE", raised.exception.code)
 
     def test_acceptance_tooling_drift_fails_closed(self) -> None:
         root = self._fixture()
