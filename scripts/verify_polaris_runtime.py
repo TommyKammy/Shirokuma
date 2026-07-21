@@ -145,9 +145,9 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
     _expect(contract.get("schema_version") == 2, "RUNTIME_CONTRACT", "schema_version must be 2")
     _expect(contract.get("issue") == 61, "RUNTIME_CONTRACT", "issue must be 61")
     _expect(
-        contract.get("state") == "runtime_accepted",
+        contract.get("state") == "runtime_acceptance_pending",
         "RUNTIME_CONTRACT",
-        "state must be runtime_accepted",
+        "state must remain runtime_acceptance_pending until current desired state is live-tested",
     )
     _expect(
         contract.get("images")
@@ -306,6 +306,19 @@ def _audit_tooling(root: Path, contract: Mapping[str, Any]) -> None:
 def _audit_live_acceptance(root: Path, contract: Mapping[str, Any]) -> None:
     live = contract.get("live_acceptance")
     _expect(isinstance(live, dict), "RUNTIME_ACCEPTANCE", "live acceptance is missing")
+    required = [
+        "flux_ready",
+        "catalog_create_list_read",
+        "backup_restore",
+        "rollback_teardown",
+    ]
+    if contract.get("state") == "runtime_acceptance_pending":
+        _expect(
+            live == {"complete": False, "required": required},
+            "RUNTIME_ACCEPTANCE",
+            "changed desired state must remain explicitly pending without a stale receipt binding",
+        )
+        return
     _expect(
         set(live) == {"complete", "receipt", "receipt_sha256", "required"},
         "RUNTIME_ACCEPTANCE",
@@ -313,13 +326,7 @@ def _audit_live_acceptance(root: Path, contract: Mapping[str, Any]) -> None:
     )
     _expect(live.get("complete") is True, "RUNTIME_ACCEPTANCE", "live acceptance is incomplete")
     _expect(
-        live.get("required")
-        == [
-            "flux_ready",
-            "catalog_create_list_read",
-            "backup_restore",
-            "rollback_teardown",
-        ],
+        live.get("required") == required,
         "RUNTIME_ACCEPTANCE",
         "live acceptance requirements changed",
     )
