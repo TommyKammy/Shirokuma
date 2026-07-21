@@ -284,11 +284,13 @@ with its old in-process configuration even when the required Secret is absent.
 1. Quiesce writers and keep the old operator and application credentials in the
    approved secure channel for rollback. Choose the next positive decimal
    generation `N+1`.
-2. Open a focused PR that advances both the OpenTofu
-   `seaweedfs_s3_credential_generation` default and StatefulSet pod-template
-   `shirokuma.dev/s3-credential-generation` annotation to the same `N+1`. Do not
-   put credential values in the PR. Pass repository and OpenTofu checks, but do
-   not merge yet.
+2. Open a focused PR that advances the OpenTofu
+   `seaweedfs_s3_credential_generation` default and both pod-template
+   `shirokuma.dev/s3-credential-generation` annotations in
+   `deploy/gitops/object-storage/statefulset.yaml` and
+   `deploy/gitops/catalog/server/deployment.yaml` to the same `N+1`. Do not put
+   credential values in the PR. Pass repository and OpenTofu checks, but do not
+   merge yet.
 3. From the reviewed candidate checkout, inject all four new sensitive
    `TF_VAR_seaweedfs_s3_{operator,application}_{access,secret}_key` values and
    `TF_VAR_seaweedfs_s3_credential_generation=N+1`, then apply OpenTofu. The
@@ -297,17 +299,27 @@ with its old in-process configuration even when the required Secret is absent.
    the server config and application Secrets both exist and carry generation
    `N+1` without reading or retaining their data. The running process still uses
    the old static configuration at this point.
-4. Merge the generation PR and wait for Flux to perform the planned StatefulSet
-   rollout. Do not delete the Pod, patch the StatefulSet, or treat the Secret
-   apply as a reload shortcut.
-5. Re-establish the port-forward, confirm `/healthz` and `/readyz`, and run
+4. Merge the generation PR and wait for Flux to perform the planned SeaweedFS
+   StatefulSet and Polaris Deployment rollouts. Do not delete Pods, patch either
+   workload, or treat the Secret apply as a reload shortcut.
+5. Confirm both rollouts completed before validating the new credentials:
+
+   ```bash
+   kubectl -n shirokuma-storage rollout status statefulset/seaweedfs --timeout=10m
+   kubectl -n shirokuma-dev rollout status deployment/polaris --timeout=10m
+   ```
+
+   Re-establish the port-forward, confirm `/healthz` and `/readyz`, and run
    authenticated CRUD with the new
    `S3_IDENTITY_NAME=shirokuma-local-lite-operator`. Confirm application access
    separately through `Secret/seaweedfs-s3-application-credentials`; application
    pods also require `shirokuma.dev/object-storage-client: "true"` for ingress.
-6. Retire the old credentials and resume writers only after the rollout, both
-   HTTP endpoints, Secret-existence check, and authenticated data-plane smoke
-   all succeed. On failure, keep maintenance in effect and use a reviewed
+   Run the reviewed Polaris catalog API smoke after its rollout so the new
+   process environment is exercised before rollback credentials are removed.
+6. Retire the old credentials and resume writers only after both the SeaweedFS
+   and Polaris rollouts, both HTTP endpoints, Secret-existence check,
+   authenticated data-plane smoke, and Polaris catalog API smoke all succeed.
+   On failure, keep maintenance in effect and use a reviewed
    rollback plus another monotonic generation bump; never reuse `N`. Keep any
    pre-rotation or apply-time `terraform.tfstate*` backup owner-only and outside
    Git and the object-store export; it remains credential material even after

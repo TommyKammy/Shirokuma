@@ -34,6 +34,16 @@ EXPECTED_FLUX_ORDER = [
 EXPECTED_SECRET_REFS = {
     "polaris-postgresql-credentials": ["database", "password", "username"],
     "polaris-root-credentials": ["credentials.json"],
+    "seaweedfs-s3-application-credentials": [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "S3_REGION",
+    ],
+}
+EXPECTED_POLARIS_STORAGE_ENV = {
+    "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",
+    "AWS_REGION": "S3_REGION",
 }
 EXPECTED_SECRET_DATA_KEYS = {
     "polaris-postgresql-credentials": ["database", "password", "username"],
@@ -209,6 +219,7 @@ def _audit_manifests(root: Path, contract: Mapping[str, Any]) -> dict[str, str]:
         "deploy/gitops/catalog/server/networkpolicy.yaml",
         "deploy/gitops/catalog/server/service.yaml",
         "deploy/gitops/catalog/server/deployment.yaml",
+        "deploy/gitops/object-storage/statefulset.yaml",
         "opentofu/dev/catalog.tf",
     }
     _expect(set(manifests) == expected_paths, "RUNTIME_MANIFEST", "activation file set changed")
@@ -228,33 +239,40 @@ def _audit_manifests(root: Path, contract: Mapping[str, Any]) -> dict[str, str]:
     return texts
 
 
-def _audit_documentation(root: Path, contract: Mapping[str, Any]) -> str:
+def _audit_documentation(
+    root: Path, contract: Mapping[str, Any]
+) -> dict[str, str]:
     documentation = _documentation_map(contract)
-    relative = "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md"
+    expected = {
+        "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md",
+        "docs/design/08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo.md",
+    }
     _expect(
-        set(documentation) == {relative},
+        set(documentation) == expected,
         "RUNTIME_DOCUMENTATION",
         "runtime recovery documentation set changed",
     )
-    expected_digest = documentation[relative]
-    _expect(
-        isinstance(expected_digest, str)
-        and re.fullmatch(r"[0-9a-f]{64}", expected_digest) is not None,
-        "RUNTIME_DOCUMENTATION",
-        f"invalid documentation record: {relative!r}",
-    )
-    path = root / relative
-    _expect(
-        path.is_file() and not path.is_symlink(),
-        "RUNTIME_DOCUMENTATION",
-        f"missing regular file: {relative}",
-    )
-    _expect(
-        _sha256(path) == expected_digest,
-        "RUNTIME_DOCUMENTATION",
-        f"hash mismatch: {relative}",
-    )
-    return path.read_text(encoding="utf-8")
+    texts: dict[str, str] = {}
+    for relative, expected_digest in documentation.items():
+        _expect(
+            isinstance(expected_digest, str)
+            and re.fullmatch(r"[0-9a-f]{64}", expected_digest) is not None,
+            "RUNTIME_DOCUMENTATION",
+            f"invalid documentation record: {relative!r}",
+        )
+        path = root / relative
+        _expect(
+            path.is_file() and not path.is_symlink(),
+            "RUNTIME_DOCUMENTATION",
+            f"missing regular file: {relative}",
+        )
+        _expect(
+            _sha256(path) == expected_digest,
+            "RUNTIME_DOCUMENTATION",
+            f"hash mismatch: {relative}",
+        )
+        texts[relative] = path.read_text(encoding="utf-8")
+    return texts
 
 
 def _audit_tooling(root: Path, contract: Mapping[str, Any]) -> None:
@@ -524,6 +542,7 @@ def _audit_runtime_inventory(root: Path, manifests: Mapping[str, Any]) -> None:
     for relative in (
         "deploy/gitops/clusters/local-lite/kustomization.yaml",
         "deploy/gitops/clusters/local-lite/polaris-runtime-generation.yaml",
+        "deploy/gitops/object-storage/statefulset.yaml",
     ):
         path = root / relative
         if path.is_file() or path.is_symlink():
@@ -536,8 +555,18 @@ def _audit_runtime_inventory(root: Path, manifests: Mapping[str, Any]) -> None:
     )
 
 
-def _audit_semantics(root: Path, texts: Mapping[str, str], runbook: str) -> None:
+def _audit_semantics(
+    root: Path,
+    texts: Mapping[str, str],
+    documentation: Mapping[str, str],
+) -> None:
     combined = "\n".join(texts.values())
+    runbook = documentation[
+        "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md"
+    ]
+    rotation_runbook = documentation[
+        "docs/design/08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo.md"
+    ]
     _expect("kind: Secret" not in combined, "RUNTIME_SECRET", "Secret manifests are forbidden")
     _expect("secretGenerator:" not in combined and "stringData:" not in combined, "RUNTIME_SECRET", "generated or inline Secret material is forbidden")
     for image in (POLARIS_IMAGE, POSTGRES_IMAGE, ADMIN_IMAGE):
@@ -546,6 +575,63 @@ def _audit_semantics(root: Path, texts: Mapping[str, str], runbook: str) -> None
         _expect(secret in combined, "RUNTIME_SECRET", f"missing Secret reference: {secret}")
         for key in keys:
             _expect(key in combined, "RUNTIME_SECRET", f"missing Secret key reference: {secret}/{key}")
+
+    server = texts["deploy/gitops/catalog/server/deployment.yaml"]
+    for variable, key in EXPECTED_POLARIS_STORAGE_ENV.items():
+        block = (
+            f"            - name: {variable}\n"
+            "              valueFrom:\n"
+            "                secretKeyRef:\n"
+            "                  name: seaweedfs-s3-application-credentials\n"
+            f"                  key: {key}\n"
+        )
+        _expect(
+            server.count(block) == 1,
+            "RUNTIME_SECRET",
+            f"Polaris storage Secret binding changed: {variable}",
+        )
+    _expect(
+        "AWS_SESSION_TOKEN" not in server,
+        "RUNTIME_SECRET",
+        "Polaris must not require an unprovisioned S3 session token",
+    )
+    _, metadata_marker, pod_metadata_and_spec = server.partition("    metadata:\n")
+    pod_metadata, spec_marker, _ = pod_metadata_and_spec.partition("    spec:\n")
+    _expect(
+        bool(metadata_marker and spec_marker),
+        "RUNTIME_NETWORK",
+        "Polaris Pod template metadata boundary changed",
+    )
+    _expect(
+        pod_metadata.count('shirokuma.dev/object-storage-client: "true"') == 1,
+        "RUNTIME_NETWORK",
+        "Polaris Pod must opt in to the SeaweedFS S3 ingress policy",
+    )
+
+    storage = texts["deploy/gitops/object-storage/statefulset.yaml"]
+    generation_pattern = re.compile(
+        r'^\s*shirokuma\.dev/s3-credential-generation: "([1-9][0-9]*)"$',
+        re.MULTILINE,
+    )
+    server_generations = generation_pattern.findall(server)
+    storage_generations = generation_pattern.findall(storage)
+    _expect(
+        len(server_generations) == 1
+        and len(storage_generations) == 1
+        and server_generations == storage_generations,
+        "RUNTIME_GENERATION",
+        "Polaris and SeaweedFS must consume the same S3 credential generation",
+    )
+    for token in (
+        "deploy/gitops/catalog/server/deployment.yaml",
+        "kubectl -n shirokuma-dev rollout status deployment/polaris",
+        "and Polaris rollouts",
+    ):
+        _expect(
+            token in rotation_runbook,
+            "RUNTIME_GENERATION",
+            f"S3 credential rotation runbook missing {token}",
+        )
 
     job = texts["deploy/catalog/bootstrap/job.yaml"]
     _expect("--credentials-file=/var/run/secrets/shirokuma/polaris/credentials.json" in job, "RUNTIME_ADMIN", "credential-file input is missing")
@@ -735,11 +821,11 @@ def audit(root: Path) -> None:
     root = root.resolve()
     contract = _audit_contract(root)
     texts = _audit_manifests(root, contract)
-    runbook = _audit_documentation(root, contract)
+    documentation = _audit_documentation(root, contract)
     _audit_tooling(root, contract)
     _audit_live_acceptance(root, contract)
     _audit_runtime_inventory(root, _manifest_map(contract))
-    _audit_semantics(root, texts, runbook)
+    _audit_semantics(root, texts, documentation)
 
 
 def _parser() -> argparse.ArgumentParser:

@@ -55,6 +55,22 @@ class PolarisRuntimeActivationTests(unittest.TestCase):
             verifier.audit(root)
         self.assertEqual(code, raised.exception.code)
 
+    def _rehash_manifest(self, root: Path, relative: str) -> None:
+        contract_path = root / verifier.CONTRACT
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        contract["manifests"][relative] = verifier._sha256(root / relative)
+        contract_path.write_text(
+            json.dumps(contract, indent=2) + "\n", encoding="utf-8"
+        )
+
+    def _rehash_documentation(self, root: Path, relative: str) -> None:
+        contract_path = root / verifier.CONTRACT
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        contract["documentation"][relative] = verifier._sha256(root / relative)
+        contract_path.write_text(
+            json.dumps(contract, indent=2) + "\n", encoding="utf-8"
+        )
+
     def test_repository_runtime_activation_is_valid(self) -> None:
         verifier.audit(ROOT)
 
@@ -189,7 +205,7 @@ class PolarisRuntimeActivationTests(unittest.TestCase):
         contract_path.write_text(json.dumps(contract, indent=2) + "\n", encoding="utf-8")
         self._assert_code(root, "RUNTIME_SECRET")
 
-    def test_storage_secret_name_drift_fails_closed(self) -> None:
+    def test_storage_secret_name_drift_fails_closed_even_if_rehashed(self) -> None:
         root = self._fixture()
         relative = "deploy/gitops/catalog/server/deployment.yaml"
         path = root / relative
@@ -201,10 +217,10 @@ class PolarisRuntimeActivationTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        with self.assertRaises(AssertionError):
-            self._assert_storage_env_contract(path.read_text(encoding="utf-8"))
+        self._rehash_manifest(root, relative)
+        self._assert_code(root, "RUNTIME_SECRET")
 
-    def test_storage_secret_key_drift_fails_closed(self) -> None:
+    def test_storage_secret_key_drift_fails_closed_even_if_rehashed(self) -> None:
         root = self._fixture()
         relative = "deploy/gitops/catalog/server/deployment.yaml"
         path = root / relative
@@ -216,8 +232,55 @@ class PolarisRuntimeActivationTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        with self.assertRaises(AssertionError):
-            self._assert_storage_env_contract(path.read_text(encoding="utf-8"))
+        self._rehash_manifest(root, relative)
+        self._assert_code(root, "RUNTIME_SECRET")
+
+    def test_storage_network_label_drift_fails_closed_even_if_rehashed(self) -> None:
+        root = self._fixture()
+        relative = "deploy/gitops/catalog/server/deployment.yaml"
+        path = root / relative
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                '        shirokuma.dev/object-storage-client: "true"\n', "", 1
+            ),
+            encoding="utf-8",
+        )
+        self._rehash_manifest(root, relative)
+        self._assert_code(root, "RUNTIME_NETWORK")
+
+    def test_storage_generation_drift_fails_closed_even_if_rehashed(self) -> None:
+        root = self._fixture()
+        relative = "deploy/gitops/catalog/server/deployment.yaml"
+        path = root / relative
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                '        shirokuma.dev/s3-credential-generation: "1"\n',
+                '        shirokuma.dev/s3-credential-generation: "2"\n',
+                1,
+            ),
+            encoding="utf-8",
+        )
+        self._rehash_manifest(root, relative)
+        self._assert_code(root, "RUNTIME_GENERATION")
+
+    def test_storage_rotation_runbook_drift_fails_closed_even_if_rehashed(self) -> None:
+        root = self._fixture()
+        relative = (
+            "docs/design/08_Runbooks/"
+            "RB-013_Nuke_and_Rebuild_mac_studio_solo.md"
+        )
+        path = root / relative
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "   kubectl -n shirokuma-dev rollout status "
+                "deployment/polaris --timeout=10m\n",
+                "",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        self._rehash_documentation(root, relative)
+        self._assert_code(root, "RUNTIME_GENERATION")
 
     def test_inline_storage_credential_fails_closed(self) -> None:
         root = self._fixture()

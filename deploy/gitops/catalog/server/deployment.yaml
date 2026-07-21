@@ -20,10 +20,12 @@ spec:
     metadata:
       annotations:
         shirokuma.dev/polaris-credential-generation: "generation-${POLARIS_CREDENTIAL_GENERATION}"
+        shirokuma.dev/s3-credential-generation: "1"
       labels:
         app.kubernetes.io/name: polaris
         app.kubernetes.io/component: catalog-server
         app.kubernetes.io/part-of: shirokuma
+        shirokuma.dev/object-storage-client: "true"
     spec:
       automountServiceAccountToken: false
       enableServiceLinks: false

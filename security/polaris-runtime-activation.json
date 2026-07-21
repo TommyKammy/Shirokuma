@@ -24,6 +24,11 @@
       ],
       "polaris-root-credentials": [
         "credentials.json"
+      ],
+      "seaweedfs-s3-application-credentials": [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "S3_REGION"
       ]
     }
   },
@@ -40,7 +45,8 @@
     "requires_catalog_rebuild": true
   },
   "documentation": {
-    "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md": "7bd131a9b94d629b06cae0009a4e6c6ddea916dfccc704f28b9cb602ae5a913f"
+    "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md": "7bd131a9b94d629b06cae0009a4e6c6ddea916dfccc704f28b9cb602ae5a913f",
+    "docs/design/08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo.md": "e5374c1ba3bf5036058cde656dbb9b98edb83591236c4095adefbffb926bc7ec"
   },
   "tooling": {
     "scripts/polaris_runtime_acceptance.py": "0ace333bf74672a9bee05d518338bed4bb8af51d2227dea0bed6b15fae6b0a8c",
@@ -62,7 +68,8 @@
     "deploy/gitops/catalog/server/kustomization.yaml": "9a64b028354da7f98a9198332c485569771f040070fcb55a8403ae24e71e591f",
     "deploy/gitops/catalog/server/networkpolicy.yaml": "0589cec0e1fbddc97a97ebd22c62fc281e48fbdfbe0b5c22f33421082c835e76",
     "deploy/gitops/catalog/server/service.yaml": "236e72858ee54034280046d73925d3291fab330793df71c7b8c1666bc13132a8",
-    "deploy/gitops/catalog/server/deployment.yaml": "c569021ab0e5004b4af3d90da1be92beb032fbf377e30979e0eef1c4a01abb1c",
+    "deploy/gitops/catalog/server/deployment.yaml": "3a26267900b81673ac224a1dd5d93c12ea676ff075dbedbc8f64f4ccc658b6f3",
+    "deploy/gitops/object-storage/statefulset.yaml": "55f7e30e45ee100bd031ef02b1ebe0d59220fb29525969f7e67d7ebb1c3dc4cc",
     "opentofu/dev/catalog.tf": "4da191cedd4f0b6233697ea56ddfe7b0f8d6dd0ee3934792adbb00bf9f619eb0"
   },
   "live_acceptance": {
