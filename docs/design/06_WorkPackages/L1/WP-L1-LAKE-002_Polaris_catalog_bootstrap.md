@@ -5,7 +5,7 @@ title: "WP-L1-LAKE-002 Polaris catalog bootstrap"
 status: in-progress
 created: 2026-07-05
 updated: 2026-07-21
-version: "1.20"
+version: "1.21"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -368,7 +368,7 @@ Openを維持します。
   dependency publisherを退役・削除しました。承認対象は公開exact input
   `ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18`
   のAdmin image build利用だけで、image admissionやruntime利用ではありません。
-- 次のAdmin image publication PRはlifecycleを
+- Draft PR [#88](https://github.com/TommyKammy/Shirokuma/pull/88)はlifecycleを
   `admin_image_publication_pending`、次状態を
   `admin_image_evidence_review_pending`として固定し、
   `bootstrap/polaris/v1.6.0/admin-image-contract.json`、
@@ -457,8 +457,9 @@ Openを維持します。
   (merged as `8e5c6927e95d1027e16fe2ac27ab8322b45359c9`;
   `admin_dependency_snapshot_review_pending`を完了し、publisherを退役、
   `Refs #61`)
-- Polaris Admin image publication policy: next Admin image publication PR
-  (PR番号未確定; `admin_image_publication_pending`から
+- Polaris Admin image publication policy Draft PR:
+  [#88](https://github.com/TommyKammy/Shirokuma/pull/88)
+  (`admin_image_publication_pending`から
   `admin_image_evidence_review_pending`へのmain publication境界を定義、
   admission/runtime/Flux/credentialsはnon-scope、`Refs #61`)
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
