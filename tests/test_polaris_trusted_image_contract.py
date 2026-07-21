@@ -3301,7 +3301,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             verifier.POLARIS_ADMIN_BUILD_INPUTS_VERIFIER.as_posix(),
         )
 
-    def test_admin_image_publication_policy_is_globally_bound(self) -> None:
+    def test_admin_image_reviewed_evidence_is_globally_bound(self) -> None:
         verifier._audit_admin_image_publication_policy(ROOT)
         self.assertIn(
             "Containerfile.admin",
@@ -3311,11 +3311,12 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             "admin-image-contract.json",
             verifier.POLARIS_ALLOWED_PATHS,
         )
-        self.assertEqual(
-            verifier.POLARIS_ADMIN_IMAGE_WORKFLOW_SHA256,
-            verifier.REVIEW_PENDING_WORKFLOW_INVENTORY[
-                verifier.POLARIS_ADMIN_IMAGE_WORKFLOW.as_posix()
-            ],
+        self.assertNotIn(
+            ".github/workflows/polaris-admin-arm64.yml",
+            verifier.REVIEW_PENDING_WORKFLOW_INVENTORY,
+        )
+        self.assertFalse(
+            (ROOT / ".github/workflows/polaris-admin-arm64.yml").exists()
         )
         self.assertEqual(
             verifier.POLARIS_ADMIN_IMAGE_VERIFIER_SHA256,
@@ -3329,7 +3330,8 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             verifier.POLARIS_ADMIN_IMAGE_CONTRACT,
             verifier.POLARIS_ADMIN_IMAGE_CONTAINERFILE,
             verifier.POLARIS_ADMIN_IMAGE_VERIFIER,
-            verifier.POLARIS_ADMIN_IMAGE_WORKFLOW,
+            verifier.POLARIS_ADMIN_RELEASE_EVIDENCE,
+            verifier.POLARIS_ADMIN_IMAGE_EVIDENCE / "evidence.sha256",
         )
         for relative in cases:
             with self.subTest(relative=relative):

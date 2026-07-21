@@ -1,0 +1,39 @@
+{
+  "admin_dependency_surface": {
+    "relational_only": false,
+    "review_state": "review_required",
+    "unconditional_external_dependencies": [
+      "io.quarkus:quarkus-mongodb-client"
+    ],
+    "unconditional_project_dependencies": [
+      ":polaris-persistence-nosql-api",
+      ":polaris-persistence-nosql-maintenance-api",
+      ":polaris-persistence-nosql-metastore",
+      ":polaris-persistence-nosql-cdi-quarkus",
+      ":polaris-persistence-nosql-cdi-quarkus-distcache",
+      ":polaris-persistence-nosql-maintenance-impl",
+      ":polaris-persistence-nosql-metastore-maintenance"
+    ]
+  },
+  "anonymous_pull": true,
+  "archive_sha256": "e771fe2ec6b2d0f6940b1247a512eb5cbc78dd0f36e7be247975f2c5fa36fc4d",
+  "current_review_state": "reviewed_for_image_publication",
+  "descriptor_sha256": "798802722e730174caa581cbffd4f82e5dd4a43aee92201df26f14db4ab005bc",
+  "image_publication_decision": "accepted_unmodified_for_image_publication_only",
+  "manifest_sha256": "7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18",
+  "reference": "ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18",
+  "result": "passed",
+  "review_checkpoint": {
+    "merge_commit": "8e5c6927e95d1027e16fe2ac27ab8322b45359c9",
+    "merged_at": "2026-07-20T23:24:12Z",
+    "merged_by": "TommyKammy",
+    "pull_request": 87,
+    "repository": "TommyKammy/Shirokuma",
+    "reviewed_contract_sha256": "26f5259642007aa11a4676ccee918bd5b1e55f8eb5c0025f92a12f1d8ccb37db",
+    "reviewed_evidence_manifest_sha256": "026c4d82e9031532323ccb3c31ea83939010982cfcf373644cdcf064e2613409",
+    "reviewed_head_commit": "178b5ca03a2575a7100cfb47daede795fbd1d30c",
+    "reviewed_verifier_sha256": "ef1fad340179e61f7d1291d9e3fd44c793c4761af4b094a0b232ea663c7f41c9"
+  },
+  "schema_version": 1,
+  "verification_metadata_sha256": "171ccaf781d4ae63375b332205d25653ebcd29471e9e9c0cfba1b978144065b8"
+}

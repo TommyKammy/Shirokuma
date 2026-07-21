@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-21
-version: "1.15"
+version: "1.16"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -329,6 +329,22 @@ so its self-referential checksum failed. No final artifact was retained and the
 digest has no review or admission authority. The repair must stage the manifest
 outside the closed directory, move it into place only after payload hashing,
 and retain a regression that rejects direct self-hashing output.
+
+PR #90 merged the closure repair as
+`a1339e71bc3a19814102bd689fb88bfab4fb71c5`. Main run
+[`29807128630`](https://github.com/TommyKammy/Shirokuma/actions/runs/29807128630)
+attempt `1` then completed prepare, verify, and promote for exact Admin digest
+`sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd`.
+The final artifact (ID `8486076696`, Actions digest
+`sha256:9acfbe58503852943fc075f33a73286993be30702e235604c814202e108686db`,
+expiry `2026-08-20T06:37:23Z`) contains exactly 34 payload records plus the
+checksum manifest. The retained manifest SHA-256 is
+`f1290ccf0fff852fb965d46ab55c12623ce15e36e15b4bbeb6627999bf11a97f`.
+The evidence-only review must independently recheck every payload, exact
+workflow identity/SHA, Cosign/Rekor, SLSA v1, CycloneDX 1.7, Trivy
+High=0/Critical=0, and credential-free CLI smoke before retiring the one-shot
+publisher. It may advance only to `admin_image_admission_pending`; admission,
+resident ledger, runtime, Flux, and credential gates remain closed.
 
 The Containerfile preserves upstream's Quarkus fast-jar layout
 `build/quarkus-app/{lib/,quarkus-run.jar,app/,quarkus/}`, runs as

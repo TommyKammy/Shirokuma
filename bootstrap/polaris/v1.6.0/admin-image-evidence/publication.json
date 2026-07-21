@@ -1,0 +1,81 @@
+{
+  "admin_build_inputs_contract_sha256": "6d56a2b086591f746bf272ff9388529013780b36950834e5233e41c34b16e400",
+  "admin_dependency_surface": {
+    "exclusion_permitted": false,
+    "image_publication_decision": "accepted_unmodified_for_image_publication_only",
+    "relational_only": false,
+    "required_sbom_terms": [
+      "mongodb",
+      "polaris-persistence-nosql"
+    ],
+    "review_state": "reviewed_for_image_publication",
+    "runtime_activation_permitted": false,
+    "source_overlay_permitted": false,
+    "unconditional_external_dependencies": [
+      "io.quarkus:quarkus-mongodb-client"
+    ],
+    "unconditional_project_dependencies": [
+      ":polaris-persistence-nosql-api",
+      ":polaris-persistence-nosql-maintenance-api",
+      ":polaris-persistence-nosql-metastore",
+      ":polaris-persistence-nosql-cdi-quarkus",
+      ":polaris-persistence-nosql-cdi-quarkus-distcache",
+      ":polaris-persistence-nosql-maintenance-impl",
+      ":polaris-persistence-nosql-metastore-maintenance"
+    ]
+  },
+  "admin_image_contract_sha256": "3afb9235d91a1b5a00f861383068fbc91f16464df177183a181434d541e64247",
+  "admitted": false,
+  "anonymous_pull": true,
+  "candidate_tag": "ghcr.io/tommykammy/shirokuma-polaris-admin:1.6.0-29807128630-1",
+  "component": "polaris-admin",
+  "containerfile_sha256": "cecd7e40f0bd3b2f5b0de90233677772c0c55c745f4f4cc975eda83b42f40112",
+  "created": "2026-07-21T06:37:23.242242+00:00",
+  "dependency_reference": "ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18",
+  "downstream_gates": {
+    "admin_image_admitted": false,
+    "admin_runtime_enabled": false,
+    "credential_material_permitted": false,
+    "gitops_resources_enabled": false,
+    "resident_image_ledger_enabled": false
+  },
+  "input_artifact_digest": "94fa9b826a775cd8996277832009bf5379061c4a8f2522f5b0fe501ce47c2927",
+  "platform": "linux/arm64",
+  "promoted": true,
+  "promotion_anonymous_verification": true,
+  "promotion_completed_at": "2026-07-21T06:37:23.242242+00:00",
+  "reference": "ghcr.io/tommykammy/shirokuma-polaris-admin@sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd",
+  "review_checkpoint": {
+    "merge_commit": "8e5c6927e95d1027e16fe2ac27ab8322b45359c9",
+    "merged_at": "2026-07-20T23:24:12Z",
+    "merged_by": "TommyKammy",
+    "pull_request": 87,
+    "repository": "TommyKammy/Shirokuma",
+    "reviewed_contract_sha256": "26f5259642007aa11a4676ccee918bd5b1e55f8eb5c0025f92a12f1d8ccb37db",
+    "reviewed_evidence_manifest_sha256": "026c4d82e9031532323ccb3c31ea83939010982cfcf373644cdcf064e2613409",
+    "reviewed_head_commit": "178b5ca03a2575a7100cfb47daede795fbd1d30c",
+    "reviewed_verifier_sha256": "ef1fad340179e61f7d1291d9e3fd44c793c4761af4b094a0b232ea663c7f41c9"
+  },
+  "runtime_base": "docker.io/library/amazoncorretto@sha256:dc43b39c47f1729dc772a9b8af7222757fac6c8cfa8a0802829af665b1c89925",
+  "runtime_base_index": "docker.io/library/amazoncorretto@sha256:30b1b2246cee9a98c9bf8a11537a04f1eaf8c59279b0c70ae02d7e5b934edeaa",
+  "runtime_base_java_version": "21.0.11",
+  "runtime_base_os": "Alpine Linux",
+  "runtime_base_os_version": "3.24.1",
+  "schema_version": 1,
+  "slsa_provenance": "https://github.com/TommyKammy/Shirokuma/attestations/36296256",
+  "source_archive_sha512": "d69b1a91e16e210a78dec327fc4725983b114fbec5d86d078a3827f35fe7dd5df3e4b12d18965e5a72eace65ad224aa007004ed61c66f9abb2efafc44ceac95b",
+  "source_commit": "dd306009d81a0e15adafe9dcd7d1c6d04d326f34",
+  "state": "admin_image_evidence_review_pending",
+  "trusted_tag": "ghcr.io/tommykammy/shirokuma-polaris-admin:1.6.0-arm64",
+  "trusted_tag_role": "non_authoritative_pointer",
+  "version": "1.6.0",
+  "workflow": {
+    "event": "push",
+    "ref": "refs/heads/main",
+    "repository": "TommyKammy/Shirokuma",
+    "run_attempt": "1",
+    "run_id": "29807128630",
+    "source_sha": "a1339e71bc3a19814102bd689fb88bfab4fb71c5",
+    "workflow_sha": "a1339e71bc3a19814102bd689fb88bfab4fb71c5"
+  }
+}

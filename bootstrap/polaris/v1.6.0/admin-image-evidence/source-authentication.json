@@ -1,0 +1,11 @@
+{
+  "archive_sha512": "d69b1a91e16e210a78dec327fc4725983b114fbec5d86d078a3827f35fe7dd5df3e4b12d18965e5a72eace65ad224aa007004ed61c66f9abb2efafc44ceac95b",
+  "archive_url": "https://downloads.apache.org/polaris/1.6.0/apache-polaris-1.6.0.tar.gz",
+  "result": "passed",
+  "schema_version": 1,
+  "signature_sha256": "2338e1c2385874e9bf5cf513b4d27732b1cd59e943e1662e62fa995d915e6481",
+  "signature_url": "https://downloads.apache.org/polaris/1.6.0/apache-polaris-1.6.0.tar.gz.asc",
+  "signing_key_fingerprint": "F2EEEB06110BEE1397EC74CBB8960FF52D9B1312",
+  "source_commit": "dd306009d81a0e15adafe9dcd7d1c6d04d326f34",
+  "source_created": "2026-07-04T05:22:21Z"
+}

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Fail-closed policy audit for the Polaris Admin linux/arm64 publisher.
+"""Fail-closed audit for reviewed Polaris Admin linux/arm64 image evidence.
 
-``audit-publication-bootstrap`` is intentionally static and safe to run before
-Cosign is installed. ``audit`` repeats the static boundary and then performs
-the retained Admin dependency snapshot's cryptographic verification.
+The one-shot publisher is retired. ``audit`` validates the repository-retained
+image evidence and repeats the retained Admin dependency snapshot's
+cryptographic verification. ``audit-publication-bootstrap`` remains as a
+compatibility alias for the static, network-free portion of the reviewed gate.
 """
 
 from __future__ import annotations
@@ -14,8 +15,9 @@ import importlib.util
 import json
 import os
 import re
-import shlex
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable, Mapping
@@ -32,14 +34,18 @@ WORKFLOW_PATH = Path(".github/workflows/polaris-admin-arm64.yml")
 RETIRED_ADMIN_INPUT_WORKFLOW = Path(
     ".github/workflows/polaris-admin-build-inputs.yml"
 )
-FUTURE_EVIDENCE_PATH = Path(
+EVIDENCE_PATH = Path(
     "bootstrap/polaris/v1.6.0/admin-image-evidence"
+)
+RELEASE_EVIDENCE_PATH = Path(
+    "bootstrap/polaris/v1.6.0/admin-release-evidence.json"
 )
 FUTURE_ADMISSION_PATH = Path("bootstrap/polaris/v1.6.0/admin-admission.json")
 RESIDENT_IMAGE_LEDGER = Path("security/admission/resident-images.json")
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 FULL_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+CHECKSUM_LINE_RE = re.compile(r"^([0-9a-f]{64})  ([^\s].*)$")
 
 EXPECTED_SOURCE_SHA256 = (
     "7d14b606dd756f501644190c10deb64a1e046d46faacd0f76f92501ccd5185bb"
@@ -50,7 +56,7 @@ EXPECTED_ADMIN_INPUT_CONTRACT_SHA256 = (
 # Rebound after the policy files are stable. These constants deliberately pin
 # exact bytes in addition to the semantic checks below.
 EXPECTED_CONTRACT_SHA256 = (
-    "3afb9235d91a1b5a00f861383068fbc91f16464df177183a181434d541e64247"
+    "41e1464d2bcb5bf4021813abbd6ddd7090d6e8411009a0a5d78e231348570925"
 )
 EXPECTED_ADMIN_INPUT_VERIFIER_SHA256 = (
     "5e153aacecaec7c313d9caba5b38ef65ff92f7eed25746e879222a4cdf441a42"
@@ -58,14 +64,37 @@ EXPECTED_ADMIN_INPUT_VERIFIER_SHA256 = (
 EXPECTED_CONTAINERFILE_SHA256 = (
     "cecd7e40f0bd3b2f5b0de90233677772c0c55c745f4f4cc975eda83b42f40112"
 )
-EXPECTED_WORKFLOW_SHA256 = (
+EXPECTED_PUBLISHER_WORKFLOW_SHA256 = (
     "e064dd4ded373c1529dc59cdaee695791fd6bce356c4383eee7b70746d599d0d"
 )
+EXPECTED_RELEASE_EVIDENCE_SHA256 = (
+    "8d3f4b4550e4cebbd7e9d83d07376c7b5ba5f0013a49a044624d914d70df7c10"
+)
+EXPECTED_RELEASE_EVIDENCE_SIZE = 6_029
+EXPECTED_EVIDENCE_MANIFEST_SHA256 = (
+    "f1290ccf0fff852fb965d46ab55c12623ce15e36e15b4bbeb6627999bf11a97f"
+)
+EXPECTED_EVIDENCE_MANIFEST_SIZE = 3_105
+EXPECTED_PUBLICATION_SHA256 = (
+    "d6051d8d30c2cf890409c8a484233b2ae56b745369639c3cc680170479647063"
+)
+EXPECTED_PUBLICATION_SIZE = 4_009
 
 EXPECTED_REPOSITORY = "TommyKammy/Shirokuma"
 EXPECTED_REF = "refs/heads/main"
 EXPECTED_IMAGE_REPOSITORY = "ghcr.io/tommykammy/shirokuma-polaris-admin"
 EXPECTED_TRUSTED_TAG = "1.6.0-arm64"
+EXPECTED_IMAGE_DIGEST = (
+    "sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd"
+)
+EXPECTED_IMAGE_REFERENCE = EXPECTED_IMAGE_REPOSITORY + "@" + EXPECTED_IMAGE_DIGEST
+EXPECTED_TRUSTED_TAG_REFERENCE = EXPECTED_IMAGE_REPOSITORY + ":" + EXPECTED_TRUSTED_TAG
+EXPECTED_PUBLISHER_SOURCE_SHA = "a1339e71bc3a19814102bd689fb88bfab4fb71c5"
+EXPECTED_PUBLISHER_RUN_ID = "29807128630"
+EXPECTED_PUBLISHER_RUN_ATTEMPT = "1"
+EXPECTED_PROVENANCE_URL = (
+    "https://github.com/TommyKammy/Shirokuma/attestations/36296256"
+)
 EXPECTED_WORKFLOW_IDENTITY = (
     "https://github.com/TommyKammy/Shirokuma/.github/workflows/"
     "polaris-admin-arm64.yml@refs/heads/main"
@@ -397,6 +426,9 @@ def _validate_image_publication(publication: Mapping[str, Any]) -> None:
             "state",
             "repository",
             "trusted_tag",
+            "reference",
+            "digest",
+            "release_evidence",
             "containerfile",
             "build_context",
             "runtime_base",
@@ -409,10 +441,18 @@ def _validate_image_publication(publication: Mapping[str, Any]) -> None:
         "image_publication",
     )
     _expect(
-        publication["enabled"] is True
-        and publication["state"] == "pending_main_publication"
+        publication["enabled"] is False
+        and publication["state"] == "approved_for_admin_admission"
         and publication["repository"] == EXPECTED_IMAGE_REPOSITORY
         and publication["trusted_tag"] == EXPECTED_TRUSTED_TAG
+        and publication["reference"] == EXPECTED_IMAGE_REFERENCE
+        and publication["digest"] == EXPECTED_IMAGE_DIGEST
+        and publication["release_evidence"]
+        == {
+            "path": RELEASE_EVIDENCE_PATH.as_posix(),
+            "sha256": EXPECTED_RELEASE_EVIDENCE_SHA256,
+            "size": EXPECTED_RELEASE_EVIDENCE_SIZE,
+        }
         and publication["containerfile"]
         == {
             "path": CONTAINERFILE_PATH.as_posix(),
@@ -500,7 +540,7 @@ def _validate_image_publication(publication: Mapping[str, Any]) -> None:
             "anonymous_exact_digest_verification": True,
             "credential_fallback_permitted": False,
             "admission_permitted": False,
-            "release_evidence_committed": False,
+            "release_evidence_committed": True,
         },
         "PUBLICATION_BOUNDARY",
         "main-only quarantine, anonymous verification, or fail-closed gate changed",
@@ -525,7 +565,7 @@ def _validate_image_publication(publication: Mapping[str, Any]) -> None:
         publication["workflow"]
         == {
             "path": WORKFLOW_PATH.as_posix(),
-            "sha256": EXPECTED_WORKFLOW_SHA256,
+            "sha256": EXPECTED_PUBLISHER_WORKFLOW_SHA256,
             "repository": EXPECTED_REPOSITORY,
             "ref": EXPECTED_REF,
             "oidc_identity": EXPECTED_WORKFLOW_IDENTITY,
@@ -535,9 +575,14 @@ def _validate_image_publication(publication: Mapping[str, Any]) -> None:
                 "candidate_prefix": "polaris-admin-image-candidate-",
                 "publication_prefix": "polaris-admin-image-publication-",
             },
+            "source_sha": EXPECTED_PUBLISHER_SOURCE_SHA,
+            "workflow_sha": EXPECTED_PUBLISHER_SOURCE_SHA,
+            "run_id": EXPECTED_PUBLISHER_RUN_ID,
+            "run_attempt": EXPECTED_PUBLISHER_RUN_ATTEMPT,
+            "retired": True,
         },
         "WORKFLOW_CONTRACT",
-        "publisher workflow identity, jobs, artifacts, or hash changed",
+        "retired publisher checkpoint identity, run, artifacts, or hash changed",
     )
 
 
@@ -548,14 +593,17 @@ def _validate_evidence(evidence: Mapping[str, Any]) -> None:
             "candidate_retention_days": 30,
             "final_retention_days": 30,
             "actions_artifact_role": (
-                "finite-retention transport copy pending evidence review"
+                "finite-retention transport copy; repository evidence is authoritative"
             ),
-            "future_directory": FUTURE_EVIDENCE_PATH.as_posix(),
+            "directory": EVIDENCE_PATH.as_posix(),
             "candidate_required": EXPECTED_CANDIDATE_EVIDENCE,
             "promotion_required": EXPECTED_PROMOTION_EVIDENCE,
             "checksum_manifest": "evidence.sha256",
+            "checksum_manifest_sha256": EXPECTED_EVIDENCE_MANIFEST_SHA256,
+            "checksum_manifest_size": EXPECTED_EVIDENCE_MANIFEST_SIZE,
             "checksum_manifest_entries": 34,
-            "directory_file_count_after_review": 34,
+            "directory_file_count_after_review": 35,
+            "review_state": "reviewed_for_admin_admission",
             "raw_logs_permitted": False,
         },
         "EVIDENCE_POLICY",
@@ -575,7 +623,7 @@ def _validate_downstream(contract: Mapping[str, Any]) -> None:
     _expect(
         contract["admission"]
         == {
-            "state": "blocked_admin_image_evidence_review",
+            "state": "pending_admin_image_admission",
             "permitted": False,
             "record": FUTURE_ADMISSION_PATH.as_posix(),
         }
@@ -599,7 +647,7 @@ def _validate_downstream(contract: Mapping[str, Any]) -> None:
             "gitops_resources_enabled": False,
             "credential_material_permitted": False,
             "next_checkpoint": (
-                "retain and independently review the exact published Admin image evidence"
+                "admit the exact Admin image before runtime or Flux activation"
             ),
         },
         "DOWNSTREAM_GATE",
@@ -631,7 +679,7 @@ def _validate_contract(contract: Mapping[str, Any]) -> None:
         "root",
     )
     _expect(
-        contract["schema_version"] == 1
+        contract["schema_version"] == 2
         and contract["component"] == "polaris-admin"
         and contract["version"] == "1.6.0"
         and contract["platform"] == "linux/arm64",
@@ -641,11 +689,11 @@ def _validate_contract(contract: Mapping[str, Any]) -> None:
     _expect(
         contract["lifecycle"]
         == {
-            "state": "admin_image_publication_pending",
-            "next_state": "admin_image_evidence_review_pending",
+            "state": "admin_image_admission_pending",
+            "next_state": "admin_runtime_activation_pending",
         },
         "LIFECYCLE_STATE",
-        "Admin image lifecycle skipped publication or evidence review",
+        "Admin image lifecycle skipped admission or runtime activation review",
     )
     _validate_source(contract["source"])
     _validate_dependency_snapshot(contract["dependency_snapshot"])
@@ -691,513 +739,345 @@ def _audit_containerfile(root: Path) -> None:
     )
 
 
-def _job_blocks(text: str) -> dict[str, str]:
-    marker = re.search(r"(?m)^jobs:\s*$", text)
-    _expect(marker is not None, "WORKFLOW_SEMANTICS", "jobs mapping missing")
-    tail = text[marker.end() :]
-    starts = list(re.finditer(r"(?m)^  ([a-z][a-z0-9_-]*):\s*$", tail))
-    blocks: dict[str, str] = {}
-    for index, match in enumerate(starts):
-        end = starts[index + 1].start() if index + 1 < len(starts) else len(tail)
-        blocks[match.group(1)] = tail[match.start() : end]
-    return blocks
-
-
-def _workflow_shell_commands(text: str) -> list[str]:
-    """Return logical shell commands from YAML ``run`` blocks.
-
-    Backslash continuations are joined before policy matching. Python here-doc
-    payloads are skipped because they contain evidence data rather than shell,
-    while every other here-doc is treated as shell input and inspected.
-    """
-    lines = text.splitlines()
-    commands: list[str] = []
-    index = 0
-    while index < len(lines):
-        match = re.match(
-            r'''^(\s*)(?:run|["']run["'])\s*:\s*(.*)$''', lines[index]
-        )
-        if match is None:
-            index += 1
-            continue
-        base_indent = len(match.group(1))
-        value = match.group(2).strip()
-        index += 1
-        if value and not re.fullmatch(r"[|>][-+]?", value):
-            commands.append(value)
-            continue
-
-        block: list[str] = []
-        while index < len(lines):
-            line = lines[index]
-            if line.strip() and len(line) - len(line.lstrip()) <= base_indent:
-                break
-            block.append(line)
-            index += 1
-
-        heredoc_delimiter: str | None = None
-        skip_heredoc_payload = False
-        pending: list[str] = []
-        for raw_line in block:
-            line = raw_line.strip()
-            if heredoc_delimiter is not None:
-                if line == heredoc_delimiter:
-                    heredoc_delimiter = None
-                    skip_heredoc_payload = False
-                    if pending:
-                        commands.append(" ".join(part for part in pending if part))
-                        pending = []
-                    continue
-                if skip_heredoc_payload:
-                    continue
-            if not line or line.startswith("#"):
-                continue
-            pending.append(line[:-1].rstrip() if line.endswith("\\") else line)
-            if line.endswith("\\"):
-                continue
-            command = " ".join(part for part in pending if part)
-            pending = []
-            commands.append(command)
-            heredoc = re.search(
-                r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1(?:\s|$)",
-                command,
-            )
-            if heredoc is not None:
-                heredoc_delimiter = heredoc.group(2)
-                prefix = command[: heredoc.start()]
-                try:
-                    prefix_tokens = shlex.split(prefix, comments=False, posix=True)
-                except ValueError:
-                    prefix_tokens = prefix.split()
-                skip_heredoc_payload = any(
-                    token.rsplit("/", 1)[-1]
-                    in {"python", "python3", "python3.11", "python3.12", "python3.13"}
-                    for token in prefix_tokens
-                )
-        if pending:
-            commands.append(" ".join(part for part in pending if part))
-    return commands
-
-
-def _credential_bearing_container_invocation(command: str) -> bool:
-    """Detect forbidden credentials on docker-compatible run/create commands.
-
-    Tokenizing logical command segments makes wrapper commands (``env``,
-    ``command``, ``sudo``) and path-qualified runtimes equivalent to a direct
-    invocation without relying on fragile prefix matching.
-    """
-
+def _parse_checksum_manifest(path: Path, code: str) -> dict[str, str]:
     try:
-        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|()")
-        lexer.whitespace_split = True
-        lexer.commenters = ""
-        tokens = list(lexer)
-    except ValueError:
-        # The workflow itself must remain valid shell. A conservative fallback
-        # still catches the policy-bearing spellings in malformed text.
-        tokens = re.split(r"\s+|(?=[;&|()])|(?<=[;&|()])", command)
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as error:
+        _fail(code, f"cannot read checksum manifest {path}: {error}")
+    records: dict[str, str] = {}
+    for line in lines:
+        match = CHECKSUM_LINE_RE.fullmatch(line)
+        _expect(match is not None, code, f"invalid checksum line: {line!r}")
+        digest, filename = match.groups()
+        normalized = filename[2:] if filename.startswith("./") else filename
+        _expect(
+            normalized not in records
+            and Path(normalized).name == normalized
+            and normalized not in {".", "..", "evidence.sha256"},
+            code,
+            f"unsafe, self-referential, or duplicate checksum filename: {filename!r}",
+        )
+        records[normalized] = digest
+    return records
 
-    segment: list[str] = []
-    segments: list[list[str]] = []
-    for token in tokens:
-        if token and all(character in ";&|()" for character in token):
-            if segment:
-                segments.append(segment)
-                segment = []
-            continue
-        if token:
-            segment.append(token)
-    if segment:
-        segments.append(segment)
 
-    runtimes = {"docker", "podman", "nerdctl"}
-    forbidden_options = {
-        "--credential",
-        "--credentials-file",
-        "--print-credentials",
+def _audit_evidence_inventory(root: Path) -> None:
+    directory = root / EVIDENCE_PATH
+    _expect(
+        directory.is_dir() and not directory.is_symlink(),
+        "EVIDENCE_INVENTORY",
+        "Admin image evidence root must be a real directory",
+    )
+    try:
+        directory.resolve(strict=True).relative_to(root.resolve())
+    except (OSError, ValueError) as error:
+        _fail("EVIDENCE_INVENTORY", f"evidence root escapes repository: {error}")
+    expected_payloads = set(EXPECTED_CANDIDATE_EVIDENCE + EXPECTED_PROMOTION_EVIDENCE)
+    expected = {"evidence.sha256", *expected_payloads}
+    actual = {
+        path.relative_to(directory).as_posix()
+        for path in directory.rglob("*")
+        if path.is_file() or path.is_symlink()
     }
-    for logical in segments:
-        for runtime_index, token in enumerate(logical):
-            if token.rsplit("/", 1)[-1] not in runtimes:
-                continue
-            action_index = next(
-                (
-                    index
-                    for index in range(runtime_index + 1, len(logical))
-                    if logical[index] in {"run", "create"}
-                ),
-                None,
-            )
-            if action_index is None:
-                continue
-            for option in logical[action_index + 1 :]:
-                name = option.split("=", 1)[0]
-                if name in forbidden_options:
-                    return True
-    return False
+    _expect(
+        actual == expected,
+        "EVIDENCE_INVENTORY",
+        f"exact 35-file inventory required; expected={sorted(expected)!r}, "
+        f"actual={sorted(actual)!r}",
+    )
+    for filename in expected:
+        _require_regular_file(root, EVIDENCE_PATH / filename, "EVIDENCE_INVENTORY")
+
+    manifest_path = directory / "evidence.sha256"
+    _expect(
+        _sha256(manifest_path) == EXPECTED_EVIDENCE_MANIFEST_SHA256
+        and manifest_path.stat().st_size == EXPECTED_EVIDENCE_MANIFEST_SIZE,
+        "EVIDENCE_MANIFEST",
+        "reviewed evidence.sha256 bytes changed",
+    )
+    records = _parse_checksum_manifest(manifest_path, "EVIDENCE_MANIFEST")
+    _expect(
+        set(records) == expected_payloads and len(records) == 34,
+        "EVIDENCE_MANIFEST",
+        "evidence.sha256 must bind exactly the 30 candidate and four promotion records",
+    )
+    for filename, digest in records.items():
+        _expect(
+            _sha256(directory / filename) == digest,
+            "EVIDENCE_BYTES",
+            f"retained evidence digest mismatch: {filename}",
+        )
 
 
-def _workflow_record_before_output(
-    block: str,
-    output_marker: str,
-    *,
-    anchor: str | None = None,
-) -> str:
-    search_from = 0
-    if anchor is not None:
-        search_from = block.find(anchor)
-        _expect(
-            search_from >= 0,
-            "WORKFLOW_RECORD_POLICY",
-            f"workflow record anchor is missing: {anchor}",
-        )
-    output_offset = block.find(output_marker, search_from)
+def _audit_release_evidence(root: Path) -> None:
+    release_path = _require_regular_file(root, RELEASE_EVIDENCE_PATH, "RELEASE_EVIDENCE")
     _expect(
-        output_offset >= 0,
-        "WORKFLOW_RECORD_POLICY",
-        f"workflow record output is missing: {output_marker}",
+        _sha256(release_path) == EXPECTED_RELEASE_EVIDENCE_SHA256
+        and release_path.stat().st_size == EXPECTED_RELEASE_EVIDENCE_SIZE,
+        "RELEASE_EVIDENCE",
+        "admin-release-evidence.json bytes changed",
     )
-    record_offset = block.rfind("record = {", search_from, output_offset)
+    release = _load_json(release_path)
     _expect(
-        record_offset >= 0,
-        "WORKFLOW_RECORD_POLICY",
-        f"workflow record body is missing before: {output_marker}",
+        release.get("schema_version") == 1
+        and release.get("component") == "polaris-admin"
+        and release.get("version") == "1.6.0"
+        and release.get("platform") == "linux/arm64"
+        and release.get("state") == "approved_for_admin_admission"
+        and release.get("admitted") is False
+        and release.get("reference") == EXPECTED_IMAGE_REFERENCE
+        and release.get("digest") == EXPECTED_IMAGE_DIGEST
+        and release.get("trusted_tag") == EXPECTED_TRUSTED_TAG_REFERENCE
+        and release.get("trusted_tag_role") == "non_authoritative_pointer"
+        and release.get("next_boundary")
+        == "admit the exact Admin image before runtime or Flux activation",
+        "RELEASE_EVIDENCE",
+        "release identity, state, digest, or next boundary changed",
     )
-    return block[record_offset:output_offset]
+    publisher = release.get("publisher_checkpoint")
+    _expect(
+        isinstance(publisher, Mapping)
+        and publisher.get("repository") == EXPECTED_REPOSITORY
+        and publisher.get("workflow") == WORKFLOW_PATH.as_posix()
+        and publisher.get("workflow_file_sha256")
+        == EXPECTED_PUBLISHER_WORKFLOW_SHA256
+        and publisher.get("ref") == EXPECTED_REF
+        and publisher.get("event") == "push"
+        and publisher.get("source_sha") == EXPECTED_PUBLISHER_SOURCE_SHA
+        and publisher.get("workflow_sha") == EXPECTED_PUBLISHER_SOURCE_SHA
+        and publisher.get("run_id") == EXPECTED_PUBLISHER_RUN_ID
+        and publisher.get("run_attempt") == EXPECTED_PUBLISHER_RUN_ATTEMPT
+        and publisher.get("publisher_contract_sha256")
+        == "3afb9235d91a1b5a00f861383068fbc91f16464df177183a181434d541e64247"
+        and publisher.get("retired") is True,
+        "PUBLISHER_CHECKPOINT",
+        "retired publisher checkpoint changed",
+    )
+    evidence = release.get("evidence")
+    _expect(
+        isinstance(evidence, Mapping)
+        and evidence.get("directory") == EVIDENCE_PATH.as_posix()
+        and evidence.get("checksum_manifest")
+        == (EVIDENCE_PATH / "evidence.sha256").as_posix()
+        and evidence.get("checksum_manifest_sha256")
+        == EXPECTED_EVIDENCE_MANIFEST_SHA256
+        and evidence.get("checksum_manifest_size")
+        == EXPECTED_EVIDENCE_MANIFEST_SIZE
+        and evidence.get("checksum_manifest_entries") == 34
+        and evidence.get("directory_file_count") == 35
+        and evidence.get("raw_logs_retained") is False,
+        "RELEASE_EVIDENCE",
+        "release evidence closure changed",
+    )
+    gates = release.get("downstream_gates")
+    _expect(
+        gates
+        == {
+            "admin_image_admitted": False,
+            "resident_image_ledger_enabled": False,
+            "admin_runtime_enabled": False,
+            "gitops_resources_enabled": False,
+            "credential_material_permitted": False,
+        },
+        "RELEASE_EVIDENCE",
+        "release evidence opened a downstream gate",
+    )
 
 
-def _audit_workflow(root: Path) -> None:
-    path = _require_regular_file(root, WORKFLOW_PATH, "WORKFLOW_FILE")
-    text = path.read_text(encoding="utf-8")
+def _audit_evidence_semantics(root: Path) -> None:
+    directory = root / EVIDENCE_PATH
+    publication_path = directory / "publication.json"
     _expect(
-        _sha256(path) == EXPECTED_WORKFLOW_SHA256,
-        "WORKFLOW_FILE",
-        "Admin image publisher bytes differ from the reviewed policy",
+        _sha256(publication_path) == EXPECTED_PUBLICATION_SHA256
+        and publication_path.stat().st_size == EXPECTED_PUBLICATION_SIZE,
+        "PUBLICATION_EVIDENCE",
+        "publication.json bytes changed",
+    )
+    publication = _load_json(publication_path)
+    _expect(
+        publication.get("schema_version") == 1
+        and publication.get("component") == "polaris-admin"
+        and publication.get("version") == "1.6.0"
+        and publication.get("platform") == "linux/arm64"
+        and publication.get("state") == "admin_image_evidence_review_pending"
+        and publication.get("reference") == EXPECTED_IMAGE_REFERENCE
+        and publication.get("trusted_tag") == EXPECTED_TRUSTED_TAG_REFERENCE
+        and publication.get("trusted_tag_role") == "non_authoritative_pointer"
+        and publication.get("anonymous_pull") is True
+        and publication.get("promoted") is True
+        and publication.get("promotion_anonymous_verification") is True
+        and publication.get("admitted") is False
+        and publication.get("dependency_reference") == EXPECTED_DEPENDENCY_REFERENCE
+        and publication.get("runtime_base") == EXPECTED_RUNTIME_BASE
+        and publication.get("runtime_base_index") == EXPECTED_RUNTIME_BASE_INDEX
+        and publication.get("runtime_base_java_version")
+        == EXPECTED_RUNTIME_BASE_JAVA_VERSION
+        and publication.get("runtime_base_os") == EXPECTED_RUNTIME_BASE_OS
+        and publication.get("runtime_base_os_version")
+        == EXPECTED_RUNTIME_BASE_OS_VERSION
+        and publication.get("slsa_provenance") == EXPECTED_PROVENANCE_URL,
+        "PUBLICATION_EVIDENCE",
+        "publication identity, gates, runtime base, or provenance changed",
+    )
+    workflow = publication.get("workflow")
+    _expect(
+        isinstance(workflow, Mapping)
+        and workflow.get("repository") == EXPECTED_REPOSITORY
+        and workflow.get("ref") == EXPECTED_REF
+        and workflow.get("event") == "push"
+        and workflow.get("source_sha") == EXPECTED_PUBLISHER_SOURCE_SHA
+        and workflow.get("workflow_sha") == EXPECTED_PUBLISHER_SOURCE_SHA
+        and workflow.get("run_id") == EXPECTED_PUBLISHER_RUN_ID
+        and workflow.get("run_attempt") == EXPECTED_PUBLISHER_RUN_ATTEMPT,
+        "PUBLICATION_EVIDENCE",
+        "publication workflow identity or run changed",
     )
     _expect(
-        not re.search(r"(?m)^\s*(pull_request|pull_request_target|workflow_call):", text),
-        "WORKFLOW_SEMANTICS",
-        "PR-triggered or reusable publication workflow is forbidden",
+        publication.get("downstream_gates")
+        == {
+            "admin_image_admitted": False,
+            "admin_runtime_enabled": False,
+            "credential_material_permitted": False,
+            "gitops_resources_enabled": False,
+            "resident_image_ledger_enabled": False,
+        },
+        "PUBLICATION_EVIDENCE",
+        "publisher evidence opened a downstream gate",
     )
-    _expect(
-        "refs/heads/main" in text
-        and "admin_image_publication_pending" in text
-        and "workflow_dispatch:" in text
-        and re.search(r"(?m)^\s+push:\s*$", text) is not None,
-        "WORKFLOW_SEMANTICS",
-        "publisher must be main-only and lifecycle-guarded",
-    )
-    blocks = _job_blocks(text)
-    _expect(
-        set(blocks) == {"prepare", "verify", "promote"},
-        "WORKFLOW_SEMANTICS",
-        f"expected prepare/verify/promote only, found {sorted(blocks)}",
-    )
-    _expect(
-        "needs: prepare" in blocks["verify"]
-        and re.search(r"(?ms)^    needs:\s*\n\s+- prepare\s*\n\s+- verify", blocks["promote"])
-        is not None,
-        "WORKFLOW_SEMANTICS",
-        "publisher job dependency chain is not prepare -> verify -> promote",
-    )
-    _expect(
-        blocks["prepare"].count("packages: write") == 0
-        and blocks["prepare"].count("id-token: write") == 0
-        and blocks["verify"].count("packages: write") == 1
-        and blocks["verify"].count("id-token: write") == 1
-        and blocks["promote"].count("packages: write") == 1
-        and blocks["promote"].count("id-token: write") == 0,
-        "WORKFLOW_PERMISSIONS",
-        "write/OIDC permissions are not job-local and least-privilege",
-    )
-    for job, block in blocks.items():
-        global_audit = "python3 scripts/verify_polaris_trusted_image.py audit --root ."
-        global_audit_offset = block.find(global_audit)
-        credential_offsets = [
-            offset
-            for marker in ("docker/login-action@", "secrets.GITHUB_TOKEN")
-            if (offset := block.find(marker)) >= 0
-        ]
-        _expect(
-            block.count("runs-on: ubuntu-24.04-arm") == 1,
-            "WORKFLOW_PLATFORM",
-            f"{job} must use the native arm64 runner",
-        )
-        _expect(
-            block.count(
-                "python3 scripts/verify_polaris_admin_image.py "
-                "audit-publication-bootstrap --root ."
-            )
-            >= 1,
-            "WORKFLOW_AUDIT_ORDER",
-            f"{job} is missing the pre-Cosign static audit",
-        )
-        _expect(
-            block.count(
-                "python3 scripts/verify_polaris_admin_image.py audit --root ."
-            )
-            >= 1,
-            "WORKFLOW_AUDIT_ORDER",
-            f"{job} is missing the post-Cosign full audit",
-        )
-        _expect(
-            global_audit_offset >= 0
-            and (
-                not credential_offsets
-                or global_audit_offset < min(credential_offsets)
-            ),
-            "WORKFLOW_AUDIT_ORDER",
-            f"{job} must run the global pending-runtime audit before credentials",
-        )
-    for match in re.finditer(r"(?m)^\s*uses:\s*([^\s#]+)", text):
-        use = match.group(1)
-        _expect("@" in use, "ACTION_PIN", f"action is not pinned: {use}")
-        reference = use.rsplit("@", 1)[1]
-        _expect(
-            FULL_COMMIT_RE.fullmatch(reference) is not None,
-            "ACTION_PIN",
-            f"action is not pinned to a full commit: {use}",
-        )
-    required_tokens = {
-        EXPECTED_IMAGE_REPOSITORY,
-        EXPECTED_TRUSTED_TAG,
-        EXPECTED_DEPENDENCY_REFERENCE,
-        EXPECTED_RUNTIME_BASE_INDEX,
-        EXPECTED_RUNTIME_BASE,
-        f"RUNTIME_BASE_JAVA_VERSION: {EXPECTED_RUNTIME_BASE_JAVA_VERSION}",
-        CONTAINERFILE_PATH.as_posix(),
-        "runtime/admin/build/quarkus-app",
-        "build-context.sha256",
-        "--network none",
-        "--offline",
-        "--dependency-verification strict",
-        ":polaris-admin:assemble",
-        ":polaris-admin:quarkusAppPartsBuild",
-        ":polaris-server:assemble",
-        ":polaris-server:quarkusAppPartsBuild",
-        "polaris-admin-image-build-input-",
-        "polaris-admin-image-candidate-",
-        "polaris-admin-image-publication-",
-        "run-scoped quarantine push",
-        "HIGH,CRITICAL",
-        "os,library",
-        "ignore-unfixed: false",
-        "--help",
-        "bootstrap",
-    }
-    required_tokens.update(EXPECTED_NOSQL_PROJECTS)
-    required_tokens.update(
-        {
-            "io.quarkus:quarkus-mongodb-client",
-            "mongodb",
-            "polaris-persistence-nosql",
-            "runtime-base-index.json",
-        }
-    )
-    required_tokens.update(EXPECTED_CANDIDATE_EVIDENCE)
-    required_tokens.update(EXPECTED_PROMOTION_EVIDENCE)
-    missing = sorted(token for token in required_tokens if token not in text)
-    _expect(
-        not missing,
-        "WORKFLOW_SEMANTICS",
-        f"publisher is missing required controls or evidence names: {missing}",
-    )
-
-    dependency_record = _workflow_record_before_output(
-        blocks["prepare"],
-        'Path(os.environ["RUNNER_TEMP"], "dependency-input.json").write_text',
-    )
-    offline_record = _workflow_record_before_output(
-        blocks["prepare"],
-        'Path(os.environ["RUNNER_TEMP"], "offline-build.json").write_text',
-    )
-    build_input_record = _workflow_record_before_output(
-        blocks["prepare"],
-        '(artifact / "build-input.json").write_text',
-    )
-    sbom_record = _workflow_record_before_output(
-        blocks["verify"],
-        'Path("sbom-policy.json").write_text',
-    )
-    publication_record = _workflow_record_before_output(
-        blocks["promote"],
-        "path.write_text(",
-        anchor='path = root / "publication.json"',
-    )
-    current_surface_tokens = {
-        '"review_state": "reviewed_for_image_publication"',
-        '"image_publication_decision": (',
-        '"accepted_unmodified_for_image_publication_only"',
-    }
-    for name, record in (
-        ("offline-build.json", offline_record),
-        ("build-input.json", build_input_record),
-        ("sbom-policy.json", sbom_record),
-        ("publication.json", publication_record),
+    for filename in (
+        "anonymous-image-manifest.json",
+        "image-manifest.json",
+        "trusted-tag-manifest.json",
     ):
         _expect(
-            all(token in record for token in current_surface_tokens),
-            "WORKFLOW_REVIEW_STATE",
-            f"{name} does not emit the reviewed image-only dependency decision",
+            _sha256(directory / filename) == EXPECTED_IMAGE_DIGEST.removeprefix("sha256:"),
+            "IMAGE_MANIFEST",
+            f"{filename} does not encode the reviewed image digest",
         )
+
+    cosign = _load_json(directory / "cosign-verify.json")
+    constraints = cosign.get("certificate_constraints")
     _expect(
-        'historical_surface.get("review_state") != "review_required"'
-        in blocks["prepare"]
-        and '"current_review_state": "reviewed_for_image_publication"'
-        in dependency_record
-        and '"image_publication_decision": (' in dependency_record,
-        "WORKFLOW_REVIEW_STATE",
-        "dependency-input.json must distinguish historical and current review state",
+        cosign.get("reference") == EXPECTED_IMAGE_REFERENCE
+        and cosign.get("detached_bundle_verified") is True
+        and cosign.get("registry_signature_verified") is True
+        and isinstance(constraints, Mapping)
+        and constraints.get("issuer") == "https://token.actions.githubusercontent.com"
+        and constraints.get("identity") == EXPECTED_WORKFLOW_IDENTITY
+        and constraints.get("github_workflow_repository") == EXPECTED_REPOSITORY
+        and constraints.get("github_workflow_ref") == EXPECTED_REF
+        and constraints.get("github_workflow_sha") == EXPECTED_PUBLISHER_SOURCE_SHA
+        and constraints.get("github_workflow_trigger") == "push",
+        "SIGNATURE_EVIDENCE",
+        "signature verification identity or result changed",
     )
-    checkpoint_tokens = {'"review_checkpoint": {', '"pull_request": 87'}
-    checkpoint_tokens.update(
-        f'"{value}"'
-        for value in EXPECTED_REVIEW_CHECKPOINT.values()
-        if isinstance(value, str)
+    promotion_cosign = (directory / "promotion-cosign-verify.json").read_text(
+        encoding="utf-8"
     )
-    for name, record in (
-        ("dependency-input.json", dependency_record),
-        ("build-input.json", build_input_record),
-        ("publication.json", publication_record),
-    ):
+    _expect(
+        EXPECTED_IMAGE_REFERENCE in promotion_cosign
+        and EXPECTED_IMAGE_DIGEST in promotion_cosign
+        and "https://sigstore.dev/cosign/sign/v1" in promotion_cosign
+        and "https://slsa.dev/provenance/v1" in promotion_cosign
+        and "https://cyclonedx.org/bom" in promotion_cosign
+        and "https://shirokuma.dev/attestations/trivy/v1" in promotion_cosign,
+        "SIGNATURE_EVIDENCE",
+        "post-promotion signature and attestation set changed",
+    )
+    for filename in ("slsa-verify.json", "promotion-slsa-verify.json"):
+        text = (directory / filename).read_text(encoding="utf-8")
         _expect(
-            all(token in record for token in checkpoint_tokens),
-            "WORKFLOW_REVIEW_STATE",
-            f"{name} does not bind the exact PR #87 review checkpoint",
+            EXPECTED_IMAGE_DIGEST.removeprefix("sha256:") in text
+            and EXPECTED_WORKFLOW_IDENTITY in text
+            and EXPECTED_PUBLISHER_SOURCE_SHA in text,
+            "PROVENANCE_EVIDENCE",
+            f"{filename} lost the exact image or publisher identity",
         )
 
-    required_terms_literal = '["mongodb", "polaris-persistence-nosql"]'
+    admin_help = _load_json(directory / "admin-help.json")
+    bootstrap_help = _load_json(directory / "admin-bootstrap-help.json")
+    inspect = _load_json(directory / "admin-container-inspect.json")
+    smoke_policy = _load_json(directory / "admin-smoke-log-policy.json")
     _expect(
-        f"required_terms = {required_terms_literal}" in blocks["prepare"]
-        and f"required_dependency_terms = {required_terms_literal}"
-        in blocks["prepare"]
-        and f"required_terms = {required_terms_literal}" in blocks["verify"]
-        and f"required_terms = {required_terms_literal}" in blocks["promote"]
-        and '"required_dependency_terms": required_terms' in offline_record
-        and '"matching_dependency_files_by_term": (' in offline_record
-        and '"required_dependency_terms": required_dependency_terms'
-        in build_input_record
-        and '"context_dependency_files_by_term": (' in build_input_record
-        and '"required_component_terms": required_terms' in sbom_record
-        and '"matching_components_by_term": matching_components_by_term'
-        in sbom_record
-        and 'set(matching_components) != set(required_terms)'
-        in blocks["promote"]
-        and 'any(not matching_components[term] for term in required_terms)'
-        in blocks["promote"]
-        and 'build_input.get("context_dependency_files_by_term")'
-        in blocks["promote"]
-        and 'offline.get("matching_dependency_files_by_term")'
-        in blocks["promote"],
-        "WORKFLOW_DEPENDENCY_SURFACE",
-        "Admin NoSQL/Mongo matching sets are not emitted and revalidated exactly",
+        admin_help.get("reference") == EXPECTED_IMAGE_REFERENCE
+        and admin_help.get("command") == ["--help"]
+        and admin_help.get("exit_code") == 0
+        and admin_help.get("network") == "none"
+        and admin_help.get("credentials_supplied") is False
+        and bootstrap_help.get("reference") == EXPECTED_IMAGE_REFERENCE
+        and bootstrap_help.get("command") == ["bootstrap", "--help"]
+        and bootstrap_help.get("exit_code") == 0
+        and bootstrap_help.get("network") == "none"
+        and bootstrap_help.get("credentials_supplied") is False
+        and bootstrap_help.get("credential_file_read") is False
+        and bootstrap_help.get("print_credentials_requested") is False
+        and inspect.get("reference") == EXPECTED_IMAGE_REFERENCE
+        and inspect.get("result") == "passed"
+        and smoke_policy.get("result") == "passed"
+        and smoke_policy.get("credentials_supplied") is False
+        and smoke_policy.get("raw_logs_retained") is False,
+        "CLI_EVIDENCE",
+        "Admin help, bootstrap help, inspect, or credential-safe log policy changed",
     )
 
+    sbom = _load_json(directory / "polaris-admin-1.6.0-arm64.cdx.json")
+    components = sbom.get("components")
     _expect(
-        'docker buildx imagetools inspect --raw "${RUNTIME_BASE_INDEX}"'
-        in blocks["verify"]
-        and 'arm64[0].get("digest") != os.environ["RUNTIME_BASE_DIGEST"]'
-        in blocks["verify"]
-        and 'cat /etc/alpine-release > runtime-base-os-version.txt'
-        in blocks["verify"]
-        and re.search(
-            r'(?s)test "\$\(tr -d \'\\r\\n\' < '
-            r'runtime-base-os-version\.txt\)" =\s*\\\s*'
-            r'"\$\{RUNTIME_BASE_OS_VERSION\}"',
-            blocks["verify"],
-        )
-        is not None
-        and '"index": os.environ["RUNTIME_BASE_INDEX"]' in blocks["verify"]
-        and '"linux_arm64_manifest": os.environ["RUNTIME_BASE"]'
-        in blocks["verify"]
-        and '"java_version": os.environ["RUNTIME_BASE_JAVA_VERSION"]'
-        in blocks["verify"]
-        and '"os": os.environ["RUNTIME_BASE_OS"]' in blocks["verify"]
-        and '"os_version": os.environ["RUNTIME_BASE_OS_VERSION"]'
-        in blocks["verify"]
-        and 'runtime_index = load("runtime-base-index.json")'
-        in blocks["promote"]
-        and 'builder.get("runtime_base") != {' in blocks["promote"]
-        and 'arm64[0].get("digest") != os.environ["RUNTIME_BASE_DIGEST"]'
-        in blocks["promote"]
-        and '"openjdk version \\"${RUNTIME_BASE_JAVA_VERSION}\\""'
-        in blocks["promote"]
-        and re.search(
-            r'(?s)test "\$\(tr -d \'\\r\\n\' < '
-            r'candidate-evidence/runtime-base-os-version\.txt\)" =\s*\\\s*'
-            r'"\$\{RUNTIME_BASE_OS_VERSION\}"',
-            blocks["promote"],
-        )
-        is not None
-        and '"runtime_base_index": os.environ["RUNTIME_BASE_INDEX"]'
-        in publication_record
-        and '"runtime_base": os.environ["RUNTIME_BASE"]' in publication_record
-        and '"runtime_base_java_version": os.environ[' in publication_record
-        and '"runtime_base_os": os.environ["RUNTIME_BASE_OS"]'
-        in publication_record
-        and '"runtime_base_os_version": os.environ[' in publication_record,
-        "WORKFLOW_RUNTIME_BASE",
-        "runtime index, arm64 descriptor, Java, or Alpine identity is not revalidated",
+        sbom.get("bomFormat") == "CycloneDX"
+        and sbom.get("specVersion") == "1.7"
+        and isinstance(components, list)
+        and len(components) == 1_618,
+        "SBOM_EVIDENCE",
+        "CycloneDX identity or component count changed",
     )
+    component_text = json.dumps(components, sort_keys=True).lower()
     _expect(
-        'checksum_manifest="$(mktemp ../evidence.sha256.tmp.XXXXXX)"'
-        in blocks["promote"]
-        and 'trap \'rm -f "${checksum_manifest}"\' EXIT' in blocks["promote"]
-        and '| xargs -0 sha256sum > "${checksum_manifest}"'
-        in blocks["promote"]
-        and 'mv "${checksum_manifest}" evidence.sha256' in blocks["promote"]
-        and "trap - EXIT" in blocks["promote"]
-        and "xargs -0 sha256sum > evidence.sha256" not in blocks["promote"],
-        "WORKFLOW_EVIDENCE_CLOSURE",
-        "checksum manifest must be staged outside the evidence directory to avoid self-hashing",
+        "mongodb" in component_text and "polaris-persistence-nosql" in component_text,
+        "SBOM_EVIDENCE",
+        "required MongoDB or Polaris NoSQL dependency surface is absent",
     )
-    _expect(
-        re.search(
-            r'(?s)test "\$\(find \. -mindepth 1 -maxdepth 1 -type f '
-            r'\| wc -l \| tr -d \' \'\)" =\s*\\\s*"35"',
-            blocks["promote"],
-        )
-        is not None,
-        "WORKFLOW_EVIDENCE_CLOSURE",
-        "final evidence directory must contain exactly 34 payloads plus evidence.sha256",
-    )
-    credential_bearing_invocations = [
-        command
-        for command in _workflow_shell_commands(text)
-        if _credential_bearing_container_invocation(command)
+    trivy = _load_json(directory / "trivy.json")
+    results = trivy.get("Results")
+    _expect(isinstance(results, list), "TRIVY_EVIDENCE", "Trivy Results missing")
+    vulnerabilities = [
+        finding
+        for result in results
+        if isinstance(result, Mapping)
+        for finding in (result.get("Vulnerabilities") or [])
+        if isinstance(finding, Mapping)
     ]
+    high_or_critical = [
+        finding
+        for finding in vulnerabilities
+        if finding.get("Severity") in {"HIGH", "CRITICAL"}
+    ]
+    metadata = trivy.get("Metadata")
+    os_record = metadata.get("OS") if isinstance(metadata, Mapping) else None
     _expect(
-        "--disable-path-validation" not in text
-        and "pull_request_target" not in text
-        and "credential_fallback" not in text
-        and '"credentials_supplied": False' in text
-        and '"credential_argument_permitted": False' in text
-        and '"credential_file_read": False' in text
-        and '"print_credentials_requested": False' in text
-        and not credential_bearing_invocations,
-        "WORKFLOW_CREDENTIAL_BOUNDARY",
-        "unsafe path or credential-bearing Admin run/create invocation is present: "
-        f"{credential_bearing_invocations}",
+        trivy.get("SchemaVersion") == 2
+        and trivy.get("ArtifactName") == EXPECTED_IMAGE_REFERENCE
+        and trivy.get("ArtifactType") == "container_image"
+        and not high_or_critical
+        and isinstance(os_record, Mapping)
+        and os_record.get("Family") == "alpine"
+        and os_record.get("Name") == EXPECTED_RUNTIME_BASE_OS_VERSION,
+        "TRIVY_EVIDENCE",
+        "Trivy target, Alpine identity, or zero High/Critical gate changed",
     )
 
 
 def _audit_downstream_files(root: Path) -> None:
     _expect(
-        not os.path.lexists(root / FUTURE_EVIDENCE_PATH),
-        "PREMATURE_EVIDENCE",
-        "Admin image evidence may only be committed by the later evidence review",
-    )
-    _expect(
         not os.path.lexists(root / FUTURE_ADMISSION_PATH),
         "PREMATURE_ADMISSION",
-        "Admin image admission record exists before evidence review",
+        "Admin image admission record exists before the separate admission review",
     )
     if (root / RESIDENT_IMAGE_LEDGER).is_file():
         ledger = (root / RESIDENT_IMAGE_LEDGER).read_text(encoding="utf-8")
         _expect(
             EXPECTED_IMAGE_REPOSITORY not in ledger,
             "PREMATURE_ADMISSION",
-            "Admin image entered the resident-image ledger before evidence review",
+            "Admin image entered the resident-image ledger before admission review",
         )
     gitops = root / "deploy/gitops"
     if os.path.lexists(gitops):
@@ -1263,8 +1143,121 @@ def _audit_admin_dependency_crypto(root: Path) -> None:
     module.audit(root)
 
 
+def _run_cosign(command: list[str]) -> None:
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+    except FileNotFoundError:
+        _fail("IMAGE_CRYPTO", "cosign is required for the full Admin image audit")
+    except subprocess.TimeoutExpired:
+        _fail("IMAGE_CRYPTO", f"cosign timed out: {command[1]}")
+    _expect(
+        result.returncode == 0,
+        "IMAGE_CRYPTO",
+        f"cosign {command[1]} failed: {(result.stderr or result.stdout).strip()}",
+    )
+
+
+def _cosign_identity_arguments() -> list[str]:
+    return [
+        "--certificate-identity",
+        EXPECTED_WORKFLOW_IDENTITY,
+        "--certificate-oidc-issuer",
+        "https://token.actions.githubusercontent.com",
+        "--certificate-github-workflow-repository",
+        EXPECTED_REPOSITORY,
+        "--certificate-github-workflow-ref",
+        EXPECTED_REF,
+        "--certificate-github-workflow-sha",
+        EXPECTED_PUBLISHER_SOURCE_SHA,
+        "--certificate-github-workflow-trigger",
+        "push",
+    ]
+
+
+def _audit_admin_image_crypto(root: Path) -> None:
+    """Reverify the retained image signature and SLSA bundle with Sigstore."""
+
+    directory = root / EVIDENCE_PATH
+    manifest = directory / "anonymous-image-manifest.json"
+    signature_bundle = directory / "cosign-signature-bundle.json"
+    _run_cosign(
+        [
+            "cosign",
+            "verify-blob",
+            "--bundle",
+            str(signature_bundle),
+            *_cosign_identity_arguments(),
+            str(manifest),
+        ]
+    )
+
+    try:
+        slsa_records = json.loads(
+            (directory / "slsa-verify.json").read_text(encoding="utf-8")
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        _fail("IMAGE_CRYPTO", f"cannot parse retained SLSA record: {error}")
+    _expect(
+        isinstance(slsa_records, list) and len(slsa_records) == 1,
+        "IMAGE_CRYPTO",
+        "exactly one retained SLSA verification record is required",
+    )
+    record = slsa_records[0]
+    attestation = record.get("attestation") if isinstance(record, Mapping) else None
+    bundle = attestation.get("bundle") if isinstance(attestation, Mapping) else None
+    _expect(
+        isinstance(bundle, Mapping),
+        "IMAGE_CRYPTO",
+        "retained SLSA verification record has no Sigstore bundle",
+    )
+    with tempfile.TemporaryDirectory(prefix="shirokuma-admin-slsa-") as temporary:
+        bundle_path = Path(temporary) / "slsa.sigstore.json"
+        bundle_path.write_text(
+            json.dumps(bundle, separators=(",", ":"), sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        _run_cosign(
+            [
+                "cosign",
+                "verify-blob-attestation",
+                "--bundle",
+                str(bundle_path),
+                "--type",
+                "slsaprovenance1",
+                *_cosign_identity_arguments(),
+                str(manifest),
+            ]
+        )
+
+    for filename, predicate_type in (
+        ("sbom-attestation-bundle.json", "cyclonedx"),
+        (
+            "trivy-attestation-bundle.json",
+            "https://shirokuma.dev/attestations/trivy/v1",
+        ),
+    ):
+        _run_cosign(
+            [
+                "cosign",
+                "verify-blob-attestation",
+                "--bundle",
+                str(directory / filename),
+                "--type",
+                predicate_type,
+                *_cosign_identity_arguments(),
+                str(manifest),
+            ]
+        )
+
+
 def audit_publication_bootstrap(root: Path) -> None:
-    """Validate the publication policy without invoking external crypto."""
+    """Validate reviewed image evidence without invoking external crypto."""
 
     root = root.resolve()
     contract_path = _require_regular_file(root, CONTRACT_PATH, "CONTRACT_FILE")
@@ -1302,9 +1295,16 @@ def audit_publication_bootstrap(root: Path) -> None:
         "RETIRED_PUBLISHER",
         "retired Admin dependency publisher was restored",
     )
+    _expect(
+        not os.path.lexists(root / WORKFLOW_PATH),
+        "RETIRED_PUBLISHER",
+        "retired Admin image publisher was restored",
+    )
     _audit_admin_dependency_static(root)
     _audit_containerfile(root)
-    _audit_workflow(root)
+    _audit_evidence_inventory(root)
+    _audit_release_evidence(root)
+    _audit_evidence_semantics(root)
     _audit_downstream_files(root)
 
 
@@ -1312,9 +1312,12 @@ def audit(
     root: Path,
     *,
     dependency_crypto_auditor: Callable[[Path], None] | None = None,
+    image_crypto_auditor: Callable[[Path], None] | None = None,
 ) -> None:
     audit_publication_bootstrap(root)
-    (dependency_crypto_auditor or _audit_admin_dependency_crypto)(root.resolve())
+    resolved = root.resolve()
+    (dependency_crypto_auditor or _audit_admin_dependency_crypto)(resolved)
+    (image_crypto_auditor or _audit_admin_image_crypto)(resolved)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -1332,10 +1335,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "audit-publication-bootstrap":
             audit_publication_bootstrap(args.root)
-            message = "static Admin image publication policy verified"
+            message = "static reviewed Admin image evidence verified"
         else:
             audit(args.root)
-            message = "Admin image publication policy and dependency trust verified"
+            message = "reviewed Admin image evidence and dependency trust verified"
     except ContractError as error:
         print(f"polaris-admin-image: {error}", file=sys.stderr)
         return 1

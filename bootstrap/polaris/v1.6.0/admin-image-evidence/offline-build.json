@@ -1,0 +1,78 @@
+{
+  "admin_build_preimage_sha256": "6e3aabc2090cda72c03608053f41899792a6c62bec382ed18d6b02703574fde9",
+  "admin_dependency_surface": {
+    "image_publication_decision": "accepted_unmodified_for_image_publication_only",
+    "relational_only": false,
+    "review_state": "reviewed_for_image_publication",
+    "unconditional_external_dependencies": [
+      "io.quarkus:quarkus-mongodb-client"
+    ],
+    "unconditional_project_dependencies": [
+      ":polaris-persistence-nosql-api",
+      ":polaris-persistence-nosql-maintenance-api",
+      ":polaris-persistence-nosql-metastore",
+      ":polaris-persistence-nosql-cdi-quarkus",
+      ":polaris-persistence-nosql-cdi-quarkus-distcache",
+      ":polaris-persistence-nosql-maintenance-impl",
+      ":polaris-persistence-nosql-metastore-maintenance"
+    ]
+  },
+  "build_cache": false,
+  "builder_image": "docker.io/library/gradle@sha256:cc583fa5245267fe0e1546c9989e8575473a37336ad9894dc0684a99fea1fb03",
+  "configuration_cache": false,
+  "dependency_reference": "ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18",
+  "dependency_verification": "strict",
+  "gradle_offline": true,
+  "matching_dependency_files_by_term": {
+    "mongodb": [
+      "lib/main/io.quarkus.quarkus-mongodb-client-3.36.3.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-mongodb-1.6.0.jar",
+      "lib/main/org.mongodb.bson-5.6.5.jar",
+      "lib/main/org.mongodb.bson-record-codec-5.6.5.jar",
+      "lib/main/org.mongodb.mongodb-crypt-5.6.5.jar",
+      "lib/main/org.mongodb.mongodb-driver-core-5.6.5.jar",
+      "lib/main/org.mongodb.mongodb-driver-reactivestreams-5.6.5.jar",
+      "lib/main/org.mongodb.mongodb-driver-sync-5.6.5.jar"
+    ],
+    "polaris-persistence-nosql": [
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-api-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-authz-api-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-authz-impl-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-authz-spi-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-authz-store-nosql-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-cdi-common-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-cdi-quarkus-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-cdi-quarkus-distcache-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-impl-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-inmemory-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-maintenance-api-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-maintenance-cel-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-maintenance-impl-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-maintenance-spi-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-metastore-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-metastore-maintenance-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-metastore-types-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-mongodb-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-realms-api-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-realms-impl-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-realms-spi-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-realms-store-nosql-1.6.0.jar",
+      "lib/main/org.apache.polaris.polaris-persistence-nosql-varint-1.6.0.jar"
+    ]
+  },
+  "network": "none",
+  "platform": "linux/arm64",
+  "required_dependency_terms": [
+    "mongodb",
+    "polaris-persistence-nosql"
+  ],
+  "rerun_tasks": true,
+  "result": "passed",
+  "schema_version": 1,
+  "tasks": [
+    ":polaris-admin:assemble",
+    ":polaris-admin:quarkusAppPartsBuild",
+    ":polaris-server:assemble",
+    ":polaris-server:quarkusAppPartsBuild"
+  ]
+}

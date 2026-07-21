@@ -45,10 +45,20 @@ class PolarisAdminImageContractTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
         for relative in paths:
+            source = ROOT / relative
             destination = root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(ROOT / relative, destination)
+            if source.is_dir():
+                shutil.copytree(source, destination)
+            else:
+                shutil.copy2(source, destination)
         return root
+
+    def _evidence_root(self) -> Path:
+        return self._temporary_root(verifier.EVIDENCE_PATH)
+
+    def _release_root(self) -> Path:
+        return self._temporary_root(verifier.RELEASE_EVIDENCE_PATH)
 
     def _assert_contract_code(
         self, expected: str, mutator: Callable[[dict], None]
@@ -58,110 +68,120 @@ class PolarisAdminImageContractTests(unittest.TestCase):
         self.assertEqual(expected, raised.exception.code)
         return raised.exception
 
-    def _assert_workflow_code(
+    def _mutate_evidence_json(
         self,
+        filename: str,
+        mutator: Callable[[dict], None],
         expected: str,
-        replacement: Callable[[str], str],
     ) -> verifier.ContractError:
-        root = self._temporary_root(verifier.WORKFLOW_PATH)
-        path = root / verifier.WORKFLOW_PATH
-        path.write_text(replacement(path.read_text(encoding="utf-8")), encoding="utf-8")
-        with mock.patch.object(
-            verifier, "EXPECTED_WORKFLOW_SHA256", verifier._sha256(path)
-        ):
-            with self.assertRaises(verifier.ContractError) as raised:
-                verifier._audit_workflow(root)
+        root = self._evidence_root()
+        path = root / verifier.EVIDENCE_PATH / filename
+        document = json.loads(path.read_text(encoding="utf-8"))
+        mutator(document)
+        path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_evidence_semantics(root)
         self.assertEqual(expected, raised.exception.code)
         return raised.exception
 
     def test_repository_contract_is_semantically_exact(self) -> None:
         verifier._validate_contract(self._contract())
 
-    def test_repository_static_publication_audit_passes(self) -> None:
+    def test_repository_static_reviewed_evidence_audit_passes(self) -> None:
         verifier.audit_publication_bootstrap(ROOT)
 
-    def test_full_audit_delegates_to_crypto_boundary(self) -> None:
-        crypto = mock.Mock()
-        verifier.audit(ROOT, dependency_crypto_auditor=crypto)
-        crypto.assert_called_once_with(ROOT.resolve())
+    def test_full_audit_delegates_to_both_crypto_boundaries(self) -> None:
+        dependency_crypto = mock.Mock()
+        image_crypto = mock.Mock()
+        verifier.audit(
+            ROOT,
+            dependency_crypto_auditor=dependency_crypto,
+            image_crypto_auditor=image_crypto,
+        )
+        dependency_crypto.assert_called_once_with(ROOT.resolve())
+        image_crypto.assert_called_once_with(ROOT.resolve())
 
     def test_static_cli_does_not_enter_full_crypto_boundary(self) -> None:
         stdout = io.StringIO()
         with mock.patch.object(
             verifier, "_audit_admin_dependency_crypto", autospec=True
-        ) as crypto:
+        ) as dependency_crypto, mock.patch.object(
+            verifier, "_audit_admin_image_crypto", autospec=True
+        ) as image_crypto:
             with contextlib.redirect_stdout(stdout):
                 result = verifier.main(
                     ["audit-publication-bootstrap", "--root", str(ROOT)]
                 )
         self.assertEqual(0, result)
-        crypto.assert_not_called()
-        self.assertIn("static Admin image publication policy verified", stdout.getvalue())
+        dependency_crypto.assert_not_called()
+        image_crypto.assert_not_called()
+        self.assertIn("static reviewed Admin image evidence verified", stdout.getvalue())
 
-    def test_lifecycle_cannot_skip_image_evidence_review(self) -> None:
+    def test_image_crypto_reverifies_signature_and_all_attestations(self) -> None:
+        with mock.patch.object(verifier, "_run_cosign", autospec=True) as run:
+            verifier._audit_admin_image_crypto(ROOT)
+        self.assertEqual(4, run.call_count)
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertEqual("verify-blob", commands[0][1])
+        self.assertEqual(
+            [
+                "slsaprovenance1",
+                "cyclonedx",
+                "https://shirokuma.dev/attestations/trivy/v1",
+            ],
+            [command[command.index("--type") + 1] for command in commands[1:]],
+        )
+        for command in commands:
+            self.assertIn(verifier.EXPECTED_WORKFLOW_IDENTITY, command)
+            self.assertIn(verifier.EXPECTED_PUBLISHER_SOURCE_SHA, command)
+            self.assertEqual(
+                str(
+                    ROOT
+                    / verifier.EVIDENCE_PATH
+                    / "anonymous-image-manifest.json"
+                ),
+                command[-1],
+            )
+
+    def test_lifecycle_cannot_skip_admin_admission(self) -> None:
         self._assert_contract_code(
             "LIFECYCLE_STATE",
             lambda value: value["lifecycle"].__setitem__(
-                "next_state", "admin_image_admitted"
+                "state", "admin_runtime_activation_pending"
             ),
         )
 
-    def test_reviewed_dependency_cannot_claim_admission(self) -> None:
-        self._assert_contract_code(
-            "DEPENDENCY_IDENTITY",
-            lambda value: value["dependency_snapshot"].__setitem__(
-                "admitted", True
-            ),
-        )
-
-    def test_pr87_review_checkpoint_is_immutable(self) -> None:
-        replacements = {
-            "repository": "other/repository",
-            "pull_request": 88,
-            "reviewed_head_commit": "0" * 40,
-            "merge_commit": "0" * 40,
-            "merged_at": "2026-07-21T00:00:00Z",
-            "merged_by": "other-user",
-            "reviewed_contract_sha256": "0" * 64,
-            "reviewed_evidence_manifest_sha256": "0" * 64,
-            "reviewed_verifier_sha256": "0" * 64,
-        }
-        for field, replacement in replacements.items():
-            with self.subTest(field=field):
+    def test_image_publication_is_retired_and_exact_digest_bound(self) -> None:
+        for key, value in (
+            ("enabled", True),
+            ("state", "pending_main_publication"),
+            ("reference", "ghcr.io/example/admin@sha256:" + "0" * 64),
+            ("digest", "sha256:" + "0" * 64),
+        ):
+            with self.subTest(key=key):
                 self._assert_contract_code(
-                    "REVIEW_CHECKPOINT",
-                    lambda value, field=field, replacement=replacement: value[
-                        "dependency_snapshot"
-                    ]["review_checkpoint"].__setitem__(field, replacement),
+                    "IMAGE_IDENTITY",
+                    lambda document, key=key, value=value: document[
+                        "image_publication"
+                    ].__setitem__(key, value),
                 )
 
-    def test_dependency_bytes_and_offline_task_closure_are_exact(self) -> None:
-        mutations = (
-            (
-                "DEPENDENCY_BYTES",
-                lambda value: value["dependency_snapshot"]["archive"].__setitem__(
-                    "sha256", "0" * 64
-                ),
-            ),
-            (
-                "OFFLINE_POLICY",
-                lambda value: value["dependency_snapshot"]["offline_proof"].__setitem__(
-                    "gradle_offline", False
-                ),
-            ),
-            (
-                "OFFLINE_POLICY",
-                lambda value: value["dependency_snapshot"]["offline_proof"][
-                    "tasks"
-                ].remove(":polaris-server:assemble"),
+    def test_release_evidence_contract_binding_is_exact(self) -> None:
+        self._assert_contract_code(
+            "IMAGE_IDENTITY",
+            lambda value: value["image_publication"]["release_evidence"].__setitem__(
+                "sha256", "0" * 64
             ),
         )
-        for expected, mutation in mutations:
-            with self.subTest(expected=expected):
-                self._assert_contract_code(expected, mutation)
+
+    def test_reviewed_dependency_stays_non_admitted(self) -> None:
+        self._assert_contract_code(
+            "DEPENDENCY_IDENTITY",
+            lambda value: value["dependency_snapshot"].__setitem__("admitted", True),
+        )
 
     def test_nosql_mongo_surface_cannot_be_hidden_or_activated(self) -> None:
-        mutations = (
+        for mutator in (
             lambda value: value["admin_dependency_surface"].__setitem__(
                 "relational_only", True
             ),
@@ -169,335 +189,159 @@ class PolarisAdminImageContractTests(unittest.TestCase):
                 "runtime_activation_permitted", True
             ),
             lambda value: value["admin_dependency_surface"][
-                "unconditional_project_dependencies"
-            ].pop(),
-            lambda value: value["admin_dependency_surface"][
                 "required_sbom_terms"
             ].remove("mongodb"),
-        )
-        for mutation in mutations:
-            with self.subTest(mutation=mutation):
-                self._assert_contract_code("ADMIN_SURFACE", mutation)
+        ):
+            self._assert_contract_code("ADMIN_SURFACE", mutator)
 
-    def test_closed_build_context_cannot_gain_server_output_or_symlinks(self) -> None:
-        for field in ("server_output_permitted", "symlinks_permitted"):
-            with self.subTest(field=field):
-                self._assert_contract_code(
-                    "BUILD_CONTEXT_POLICY",
-                    lambda value, field=field: value["image_publication"][
-                        "build_context"
-                    ].__setitem__(field, True),
-                )
-        mutations = (
-            lambda value: value["image_publication"]["build_context"].__setitem__(
-                "containerfile_name", "Containerfile"
+    def test_evidence_inventory_is_exactly_34_payloads_plus_manifest(self) -> None:
+        self._assert_contract_code(
+            "EVIDENCE_POLICY",
+            lambda value: value["evidence"].__setitem__(
+                "directory_file_count_after_review", 34
             ),
-            lambda value: value["image_publication"]["build_context"][
-                "allowed_roots"
-            ].__setitem__(0, "Containerfile"),
-        )
-        for mutation in mutations:
-            with self.subTest(mutation=mutation):
-                self._assert_contract_code("BUILD_CONTEXT_POLICY", mutation)
-
-    def test_cli_policy_forbids_credential_bearing_defaults(self) -> None:
-        mutations = (
-            lambda value: value["image_publication"]["cli"].__setitem__(
-                "credential_argument_permitted", True
-            ),
-            lambda value: value["image_publication"]["cli"].__setitem__(
-                "default_arguments", ["bootstrap", "--credential=x"]
-            ),
-            lambda value: value["image_publication"]["cli"].__setitem__(
-                "smoke_commands", [["bootstrap"]]
-            ),
-        )
-        for mutation in mutations:
-            with self.subTest(mutation=mutation):
-                self._assert_contract_code("CLI_POLICY", mutation)
-
-    def test_vulnerability_gate_cannot_ignore_unfixed_or_allow_exception(self) -> None:
-        for field in ("ignore_unfixed", "exception_permitted"):
-            with self.subTest(field=field):
-                self._assert_contract_code(
-                    "VULNERABILITY_GATE",
-                    lambda value, field=field: value["image_publication"][
-                        "vulnerability_gate"
-                    ].__setitem__(field, True),
-                )
-
-    def test_evidence_inventory_is_exactly_30_plus_4(self) -> None:
-        contract = self._contract()
-        self.assertEqual(30, len(verifier.EXPECTED_CANDIDATE_EVIDENCE))
-        self.assertEqual(4, len(verifier.EXPECTED_PROMOTION_EVIDENCE))
-        self.assertEqual(
-            34,
-            contract["evidence"]["checksum_manifest_entries"],
         )
         self._assert_contract_code(
             "EVIDENCE_POLICY",
             lambda value: value["evidence"]["candidate_required"].pop(),
         )
-        self._assert_contract_code(
-            "EVIDENCE_POLICY",
-            lambda value: value["evidence"]["promotion_required"].append(
-                "unreviewed.json"
-            ),
-        )
 
     def test_all_admission_runtime_flux_and_credential_gates_stay_closed(self) -> None:
-        mutations = (
-            lambda value: value["admission"].__setitem__("permitted", True),
-            lambda value: value["runtime"].__setitem__("enabled", True),
-            lambda value: value["gitops"].__setitem__("resources_enabled", True),
-            lambda value: value["credentials"].__setitem__(
-                "material_permitted", True
-            ),
-            lambda value: value["downstream_gates"].__setitem__(
-                "resident_image_ledger_enabled", True
-            ),
-        )
-        for mutation in mutations:
-            with self.subTest(mutation=mutation):
-                self._assert_contract_code("DOWNSTREAM_GATE", mutation)
-
-    def test_containerfile_semantics_survive_hash_rebinding(self) -> None:
-        root = self._temporary_root(verifier.CONTAINERFILE_PATH)
-        path = root / verifier.CONTAINERFILE_PATH
-        path.write_text(
-            path.read_text(encoding="utf-8") + "\nEXPOSE 8181\n",
-            encoding="utf-8",
-        )
-        with mock.patch.object(
-            verifier, "EXPECTED_CONTAINERFILE_SHA256", verifier._sha256(path)
+        for section, key, opened in (
+            ("admission", "permitted", True),
+            ("runtime", "enabled", True),
+            ("gitops", "resources_enabled", True),
+            ("credentials", "material_permitted", True),
+            ("downstream_gates", "admin_image_admitted", True),
+            ("downstream_gates", "resident_image_ledger_enabled", True),
         ):
-            with self.assertRaises(verifier.ContractError) as raised:
-                verifier._audit_containerfile(root)
-        self.assertEqual("CONTAINERFILE_SEMANTICS", raised.exception.code)
-
-    def test_containerfile_requires_alpine_identity_labels_after_hash_rebinding(
-        self,
-    ) -> None:
-        root = self._temporary_root(verifier.CONTAINERFILE_PATH)
-        path = root / verifier.CONTAINERFILE_PATH
-        text = path.read_text(encoding="utf-8")
-        path.write_text(
-            text.replace(
-                'dev.shirokuma.runtime-base.os-version="3.24.1"',
-                'dev.shirokuma.runtime-base.os-version="3.24"',
-                1,
-            ),
-            encoding="utf-8",
-        )
-        with mock.patch.object(
-            verifier, "EXPECTED_CONTAINERFILE_SHA256", verifier._sha256(path)
-        ):
-            with self.assertRaises(verifier.ContractError) as raised:
-                verifier._audit_containerfile(root)
-        self.assertEqual("CONTAINERFILE_SEMANTICS", raised.exception.code)
-
-    def test_workflow_rejects_pr_trigger_after_hash_rebinding(self) -> None:
-        self._assert_workflow_code(
-            "WORKFLOW_SEMANTICS",
-            lambda text: text.replace("on:\n", "on:\n  pull_request:\n", 1),
-        )
-
-    def test_workflow_requires_full_commit_action_pins(self) -> None:
-        self._assert_workflow_code(
-            "ACTION_PIN",
-            lambda text: re_sub_first_action(text),
-        )
-
-    def test_workflow_prepare_job_cannot_gain_registry_write(self) -> None:
-        self._assert_workflow_code(
-            "WORKFLOW_PERMISSIONS",
-            lambda text: text.replace(
-                "      contents: read\n", "      contents: read\n      packages: write\n", 1
-            ),
-        )
-
-    def test_workflow_requires_static_then_full_audit_in_every_job(self) -> None:
-        needle = (
-            "python3 scripts/verify_polaris_admin_image.py "
-            "audit-publication-bootstrap --root ."
-        )
-        self._assert_workflow_code(
-            "WORKFLOW_AUDIT_ORDER",
-            lambda text: text.replace(needle, "python3 -m compileall scripts", 1),
-        )
-
-    def test_workflow_requires_global_pending_runtime_audit_before_credentials(
-        self,
-    ) -> None:
-        needle = "python3 scripts/verify_polaris_trusted_image.py audit --root ."
-        self._assert_workflow_code(
-            "WORKFLOW_AUDIT_ORDER",
-            lambda text: text.replace(needle, "python3 -m compileall scripts", 1),
-        )
-
-    def test_workflow_emitted_records_cannot_restore_stale_review_state(
-        self,
-    ) -> None:
-        self._assert_workflow_code(
-            "WORKFLOW_REVIEW_STATE",
-            lambda text: text.replace(
-                '"review_state": "reviewed_for_image_publication"',
-                '"review_state": "review_required"',
-                1,
-            ),
-        )
-
-    def test_workflow_requires_both_dependency_terms_and_promotion_revalidation(
-        self,
-    ) -> None:
-        self._assert_workflow_code(
-            "WORKFLOW_DEPENDENCY_SURFACE",
-            lambda text: text.replace(
-                'required_terms = ["mongodb", "polaris-persistence-nosql"]',
-                'required_terms = ["mongodb"]',
-                1,
-            ),
-        )
-        self._assert_workflow_code(
-            "WORKFLOW_DEPENDENCY_SURFACE",
-            lambda text: text.replace(
-                "set(matching_components) != set(required_terms)",
-                "False",
-                1,
-            ),
-        )
-
-    def test_workflow_revalidates_runtime_index_arm64_java_and_alpine(self) -> None:
-        self._assert_workflow_code(
-            "WORKFLOW_RUNTIME_BASE",
-            lambda text: text.replace(
-                'arm64[0].get("digest") != os.environ["RUNTIME_BASE_DIGEST"]',
-                "False",
-                1,
-            ),
-        )
-        java_marker = '"openjdk version \\"${RUNTIME_BASE_JAVA_VERSION}\\""'
-        self._assert_workflow_code(
-            "WORKFLOW_RUNTIME_BASE",
-            lambda text: text.replace(java_marker, '"openjdk version 21"'),
-        )
-        self._assert_workflow_code(
-            "WORKFLOW_RUNTIME_BASE",
-            lambda text: text.replace(
-                'cat /etc/alpine-release > runtime-base-os-version.txt',
-                'cat /etc/os-release > runtime-base-os-version.txt',
-                1,
-            ),
-        )
-        self._assert_workflow_code(
-            "WORKFLOW_RUNTIME_BASE",
-            lambda text: text.replace(
-                'tr -d \'\\r\\n\' < candidate-evidence/runtime-base-os-version.txt',
-                'tr -d \'\\r\\n\' < candidate-evidence/runtime-base-java-version.txt',
-                1,
-            ),
-        )
-        self._assert_workflow_code(
-            "WORKFLOW_RUNTIME_BASE",
-            lambda text: text.replace(
-                '"runtime_base_os": os.environ["RUNTIME_BASE_OS"]',
-                '"runtime_base_os": "unknown"',
-                1,
-            ),
-        )
-
-    def test_workflow_requires_exact_final_evidence_file_count(self) -> None:
-        self._assert_workflow_code(
-            "WORKFLOW_EVIDENCE_CLOSURE",
-            lambda text: text.replace('              "35"\n', '              "34"\n', 1),
-        )
-
-    def test_workflow_stages_checksum_manifest_outside_evidence_directory(self) -> None:
-        self._assert_workflow_code(
-            "WORKFLOW_EVIDENCE_CLOSURE",
-            lambda text: text.replace(
-                "mktemp ../evidence.sha256.tmp.XXXXXX",
-                "mktemp",
-                1,
-            ),
-        )
-        self._assert_workflow_code(
-            "WORKFLOW_EVIDENCE_CLOSURE",
-            lambda text: text.replace(
-                '| xargs -0 sha256sum > "${checksum_manifest}"',
-                "| xargs -0 sha256sum > evidence.sha256",
-                1,
-            ),
-        )
-
-    def test_workflow_evidence_and_credential_boundaries_survive_rebinding(self) -> None:
-        self._assert_workflow_code(
-            "WORKFLOW_SEMANTICS",
-            lambda text: text.replace("admin-help.json", "admin-help.txt"),
-        )
-        self._assert_workflow_code(
-            "WORKFLOW_CREDENTIAL_BOUNDARY",
-            lambda text: text
-            + "\n      run: docker run image bootstrap --credentials-file=/tmp/secret\n",
-        )
-
-    def test_workflow_rejects_multiline_credential_bearing_invocations(self) -> None:
-        cases = (
-            ("docker", "run", "--credential=secret"),
-            ("podman", "run", "--credentials-file=/tmp/secret"),
-            ("nerdctl", "run", "--print-credentials"),
-            ("docker", "create", "--credentials-file=/tmp/secret"),
-        )
-        for runtime, action, option in cases:
-            with self.subTest(runtime=runtime, action=action, option=option):
-                self._assert_workflow_code(
-                    "WORKFLOW_CREDENTIAL_BOUNDARY",
-                    lambda text, runtime=runtime, action=action, option=option: text
-                    + "\n      run: |\n"
-                    + f"        {runtime} {action} --rm \\\n"
-                    + "          image bootstrap \\\n"
-                    + f"          {option}\n",
+            with self.subTest(section=section, key=key):
+                self._assert_contract_code(
+                    "DOWNSTREAM_GATE",
+                    lambda value, section=section, key=key, opened=opened: value[
+                        section
+                    ].__setitem__(key, opened),
                 )
 
-    def test_workflow_rejects_credential_invocations_across_yaml_and_shell_forms(
-        self,
-    ) -> None:
-        cases = (
-            '      "run": |\n        docker run image --credentials-file=/tmp/secret\n',
-            "      run : |\n        docker run image --credential=secret\n",
-            "      run: |\n        bash <<'SH'\n        docker run image --print-credentials\n        SH\n",
-            "      run: env docker run image --credentials-file=/tmp/secret\n",
-            "      run: command docker create image --credential=secret\n",
-            "      run: sudo podman run image --print-credentials\n",
-            "      run: /usr/bin/nerdctl create image --credentials-file=/tmp/secret\n",
-        )
-        for payload in cases:
-            with self.subTest(payload=payload.splitlines()[0]):
-                self._assert_workflow_code(
-                    "WORKFLOW_CREDENTIAL_BOUNDARY",
-                    lambda text, payload=payload: text + "\n" + payload,
-                )
+    def test_retained_evidence_inventory_and_manifest_pass(self) -> None:
+        verifier._audit_evidence_inventory(ROOT)
 
-    def test_python_heredoc_evidence_text_is_not_treated_as_shell(self) -> None:
-        commands = verifier._workflow_shell_commands(
-            "      run: |\n"
-            "        python3 - <<'PY'\n"
-            '        print("docker run image --credentials-file=/tmp/example")\n'
-            "        PY\n"
-        )
-        self.assertFalse(
-            any(verifier._credential_bearing_container_invocation(c) for c in commands)
-        )
-
-    def test_premature_evidence_admission_ledger_and_gitops_are_rejected(self) -> None:
-        root = self._temporary_root()
-        evidence = root / verifier.FUTURE_EVIDENCE_PATH
-        evidence.mkdir(parents=True)
+    def test_missing_and_extra_evidence_fail_closed(self) -> None:
+        root = self._evidence_root()
+        (root / verifier.EVIDENCE_PATH / "admin-help.json").unlink()
         with self.assertRaises(verifier.ContractError) as raised:
-            verifier._audit_downstream_files(root)
-        self.assertEqual("PREMATURE_EVIDENCE", raised.exception.code)
+            verifier._audit_evidence_inventory(root)
+        self.assertEqual("EVIDENCE_INVENTORY", raised.exception.code)
 
-        evidence.rmdir()
+        root = self._evidence_root()
+        (root / verifier.EVIDENCE_PATH / "extra.json").write_text("{}\n")
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_evidence_inventory(root)
+        self.assertEqual("EVIDENCE_INVENTORY", raised.exception.code)
+
+    def test_evidence_symlink_fails_closed(self) -> None:
+        root = self._evidence_root()
+        path = root / verifier.EVIDENCE_PATH / "admin-help.json"
+        path.unlink()
+        path.symlink_to(ROOT / verifier.EVIDENCE_PATH / "admin-help.json")
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_evidence_inventory(root)
+        self.assertEqual("EVIDENCE_INVENTORY", raised.exception.code)
+
+    def test_self_referential_or_rebound_manifest_fails_closed(self) -> None:
+        root = self._evidence_root()
+        manifest = root / verifier.EVIDENCE_PATH / "evidence.sha256"
+        manifest.write_text(
+            manifest.read_text(encoding="utf-8")
+            + f"{'0' * 64}  ./evidence.sha256\n",
+            encoding="utf-8",
+        )
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier._audit_evidence_inventory(root)
+        self.assertEqual("EVIDENCE_MANIFEST", raised.exception.code)
+
+    def test_release_evidence_semantics_and_bytes_are_exact(self) -> None:
+        verifier._audit_release_evidence(ROOT)
+        root = self._release_root()
+        path = root / verifier.RELEASE_EVIDENCE_PATH
+        document = json.loads(path.read_text(encoding="utf-8"))
+        document["admitted"] = True
+        path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
+        with mock.patch.object(
+            verifier, "EXPECTED_RELEASE_EVIDENCE_SHA256", verifier._sha256(path)
+        ), mock.patch.object(
+            verifier, "EXPECTED_RELEASE_EVIDENCE_SIZE", path.stat().st_size
+        ):
+            with self.assertRaises(verifier.ContractError) as raised:
+                verifier._audit_release_evidence(root)
+        self.assertEqual("RELEASE_EVIDENCE", raised.exception.code)
+
+    def test_publication_run_and_downstream_gates_are_immutable(self) -> None:
+        self._mutate_evidence_json(
+            "publication.json",
+            lambda value: value["workflow"].__setitem__("run_id", "1"),
+            "PUBLICATION_EVIDENCE",
+        )
+        self._mutate_evidence_json(
+            "publication.json",
+            lambda value: value["downstream_gates"].__setitem__(
+                "admin_runtime_enabled", True
+            ),
+            "PUBLICATION_EVIDENCE",
+        )
+
+    def test_signature_identity_is_immutable(self) -> None:
+        self._mutate_evidence_json(
+            "cosign-verify.json",
+            lambda value: value["certificate_constraints"].__setitem__(
+                "identity", "https://example.invalid/workflow"
+            ),
+            "SIGNATURE_EVIDENCE",
+        )
+
+    def test_cli_evidence_cannot_claim_credentials_or_network(self) -> None:
+        self._mutate_evidence_json(
+            "admin-help.json",
+            lambda value: value.__setitem__("credentials_supplied", True),
+            "CLI_EVIDENCE",
+        )
+        self._mutate_evidence_json(
+            "admin-bootstrap-help.json",
+            lambda value: value.__setitem__("credential_file_read", True),
+            "CLI_EVIDENCE",
+        )
+
+    def test_sbom_requires_disclosed_nosql_and_mongodb_surface(self) -> None:
+        self._mutate_evidence_json(
+            "polaris-admin-1.6.0-arm64.cdx.json",
+            lambda value: value.__setitem__("components", []),
+            "SBOM_EVIDENCE",
+        )
+
+    def test_trivy_high_or_critical_finding_fails_closed(self) -> None:
+        def add_high(value: dict) -> None:
+            value["Results"][0]["Vulnerabilities"] = [
+                {"Severity": "HIGH", "VulnerabilityID": "CVE-test"}
+            ]
+
+        self._mutate_evidence_json("trivy.json", add_high, "TRIVY_EVIDENCE")
+
+    def test_retired_image_publisher_cannot_be_restored(self) -> None:
+        root = self._temporary_root(
+            verifier.CONTRACT_PATH,
+            verifier.SOURCE_PATH,
+            verifier.ADMIN_INPUT_CONTRACT_PATH,
+            verifier.ADMIN_INPUT_VERIFIER_PATH,
+        )
+        workflow = root / verifier.WORKFLOW_PATH
+        workflow.parent.mkdir(parents=True, exist_ok=True)
+        workflow.write_text("name: restored\n", encoding="utf-8")
+        with self.assertRaises(verifier.ContractError) as raised:
+            verifier.audit_publication_bootstrap(root)
+        self.assertEqual("RETIRED_PUBLISHER", raised.exception.code)
+
+    def test_premature_admission_ledger_and_gitops_are_rejected(self) -> None:
+        root = self._temporary_root()
         admission = root / verifier.FUTURE_ADMISSION_PATH
         admission.parent.mkdir(parents=True, exist_ok=True)
         admission.write_text("{}\n", encoding="utf-8")
@@ -521,50 +365,22 @@ class PolarisAdminImageContractTests(unittest.TestCase):
             verifier._audit_downstream_files(root)
         self.assertEqual("PREMATURE_GITOPS", raised.exception.code)
 
-    def test_gitops_guard_fails_closed_on_symlinks(self) -> None:
+    def test_downstream_guard_rejects_symlinks(self) -> None:
         root = self._temporary_root()
-        gitops = root / "deploy/gitops"
-        gitops.mkdir(parents=True)
-        target = root / "neutral.yaml"
-        target.write_text("kind: ConfigMap\n", encoding="utf-8")
-        (gitops / "neutral.yaml").symlink_to(target)
+        admission = root / verifier.FUTURE_ADMISSION_PATH
+        admission.parent.mkdir(parents=True, exist_ok=True)
+        admission.symlink_to(root / "missing")
         with self.assertRaises(verifier.ContractError) as raised:
             verifier._audit_downstream_files(root)
-        self.assertEqual("PREMATURE_GITOPS", raised.exception.code)
+        self.assertEqual("PREMATURE_ADMISSION", raised.exception.code)
 
-    def test_downstream_guard_rejects_broken_symlink_markers(self) -> None:
-        for relative, expected in (
-            (verifier.FUTURE_EVIDENCE_PATH, "PREMATURE_EVIDENCE"),
-            (verifier.FUTURE_ADMISSION_PATH, "PREMATURE_ADMISSION"),
-        ):
-            with self.subTest(relative=relative):
-                root = self._temporary_root()
-                marker = root / relative
-                marker.parent.mkdir(parents=True, exist_ok=True)
-                marker.symlink_to(root / "missing-target")
-                with self.assertRaises(verifier.ContractError) as raised:
-                    verifier._audit_downstream_files(root)
-                self.assertEqual(expected, raised.exception.code)
-
-    def test_gitops_guard_rejects_root_symlink(self) -> None:
-        root = self._temporary_root()
+        admission.unlink()
         gitops = root / "deploy/gitops"
-        gitops.parent.mkdir(parents=True)
+        gitops.parent.mkdir(parents=True, exist_ok=True)
         gitops.symlink_to(root / "missing-gitops", target_is_directory=True)
         with self.assertRaises(verifier.ContractError) as raised:
             verifier._audit_downstream_files(root)
         self.assertEqual("PREMATURE_GITOPS", raised.exception.code)
-
-
-def re_sub_first_action(text: str) -> str:
-    import re
-
-    return re.sub(
-        r"(?m)^(\s*uses:\s*[^@\s]+)@[0-9a-f]{40}",
-        r"\1@main",
-        text,
-        count=1,
-    )
 
 
 if __name__ == "__main__":

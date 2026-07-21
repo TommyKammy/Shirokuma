@@ -1,0 +1,20 @@
+{
+  "combined_output_sha256": "1397c3c2c62c327039ff0fec645a402b86889f09b4b3fd08f410a2344f1aed6a",
+  "combined_output_size": 1682,
+  "credentials_supplied": false,
+  "forbidden_pattern_classes": [
+    "authorization_header",
+    "bootstrap_credential_assignment",
+    "generated_root_credential",
+    "root_credential_output",
+    "secret_assignment"
+  ],
+  "raw_logs_retained": false,
+  "redaction_count": 0,
+  "result": "passed",
+  "schema_version": 1,
+  "sources": [
+    "root --help",
+    "bootstrap --help"
+  ]
+}

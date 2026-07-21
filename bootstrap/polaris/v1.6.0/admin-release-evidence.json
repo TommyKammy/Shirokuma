@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "component": "polaris-admin",
+  "version": "1.6.0",
+  "platform": "linux/arm64",
+  "state": "approved_for_admin_admission",
+  "admitted": false,
+  "reference": "ghcr.io/tommykammy/shirokuma-polaris-admin@sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd",
+  "digest": "sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd",
+  "trusted_tag": "ghcr.io/tommykammy/shirokuma-polaris-admin:1.6.0-arm64",
+  "trusted_tag_role": "non_authoritative_pointer",
+  "publisher_checkpoint": {
+    "repository": "TommyKammy/Shirokuma",
+    "workflow": ".github/workflows/polaris-admin-arm64.yml",
+    "workflow_file_sha256": "e064dd4ded373c1529dc59cdaee695791fd6bce356c4383eee7b70746d599d0d",
+    "ref": "refs/heads/main",
+    "event": "push",
+    "source_sha": "a1339e71bc3a19814102bd689fb88bfab4fb71c5",
+    "workflow_sha": "a1339e71bc3a19814102bd689fb88bfab4fb71c5",
+    "run_id": "29807128630",
+    "run_attempt": "1",
+    "publisher_contract_sha256": "3afb9235d91a1b5a00f861383068fbc91f16464df177183a181434d541e64247",
+    "retired": true
+  },
+  "publication": {
+    "record": "bootstrap/polaris/v1.6.0/admin-image-evidence/publication.json",
+    "record_sha256": "d6051d8d30c2cf890409c8a484233b2ae56b745369639c3cc680170479647063",
+    "record_size": 4009,
+    "created": "2026-07-21T06:37:23.242242+00:00",
+    "promotion_completed_at": "2026-07-21T06:37:23.242242+00:00",
+    "anonymous_pull": true,
+    "promotion_anonymous_verification": true,
+    "slsa_provenance": "https://github.com/TommyKammy/Shirokuma/attestations/36296256"
+  },
+  "evidence": {
+    "directory": "bootstrap/polaris/v1.6.0/admin-image-evidence",
+    "checksum_manifest": "bootstrap/polaris/v1.6.0/admin-image-evidence/evidence.sha256",
+    "checksum_manifest_sha256": "f1290ccf0fff852fb965d46ab55c12623ce15e36e15b4bbeb6627999bf11a97f",
+    "checksum_manifest_size": 3105,
+    "checksum_manifest_entries": 34,
+    "directory_file_count": 35,
+    "raw_logs_retained": false
+  },
+  "actions_artifacts": {
+    "final": {
+      "name": "polaris-admin-image-publication-29807128630-1",
+      "id": 8486076696,
+      "digest": "sha256:9acfbe58503852943fc075f33a73286993be30702e235604c814202e108686db",
+      "size": 574403,
+      "expires_at": "2026-08-20T06:37:23Z",
+      "role": "finite-retention transport copy"
+    },
+    "candidate": {
+      "name": "polaris-admin-image-candidate-29807128630-1",
+      "id": 8486061845,
+      "digest": "sha256:10d0f3cccc4ad8e1d90690a3d90cd1e5c248781d02bc2a9f75d3f4e7106493c4",
+      "size": 561945,
+      "expires_at": "2026-08-20T06:36:36Z",
+      "role": "finite-retention pre-promotion copy"
+    },
+    "build_input": {
+      "name": "polaris-admin-image-build-input-29807128630-1",
+      "id": 8486005962,
+      "digest": "sha256:94fa9b826a775cd8996277832009bf5379061c4a8f2522f5b0fe501ce47c2927",
+      "size": 136755130,
+      "expires_at": "2026-07-28T06:33:38Z",
+      "role": "finite-retention closed build input"
+    }
+  },
+  "build_inputs": {
+    "dependency_reference": "ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18",
+    "admin_build_inputs_contract_sha256": "6d56a2b086591f746bf272ff9388529013780b36950834e5233e41c34b16e400",
+    "containerfile_sha256": "cecd7e40f0bd3b2f5b0de90233677772c0c55c745f4f4cc975eda83b42f40112",
+    "source_commit": "dd306009d81a0e15adafe9dcd7d1c6d04d326f34",
+    "source_archive_sha512": "d69b1a91e16e210a78dec327fc4725983b114fbec5d86d078a3827f35fe7dd5df3e4b12d18965e5a72eace65ad224aa007004ed61c66f9abb2efafc44ceac95b"
+  },
+  "runtime_base": {
+    "index": "docker.io/library/amazoncorretto@sha256:30b1b2246cee9a98c9bf8a11537a04f1eaf8c59279b0c70ae02d7e5b934edeaa",
+    "arm64_manifest": "docker.io/library/amazoncorretto@sha256:dc43b39c47f1729dc772a9b8af7222757fac6c8cfa8a0802829af665b1c89925",
+    "java_version": "21.0.11",
+    "os": "Alpine Linux",
+    "os_version": "3.24.1"
+  },
+  "cli_smoke": {
+    "root_help": "bootstrap/polaris/v1.6.0/admin-image-evidence/admin-help.json",
+    "bootstrap_help": "bootstrap/polaris/v1.6.0/admin-image-evidence/admin-bootstrap-help.json",
+    "container_inspect": "bootstrap/polaris/v1.6.0/admin-image-evidence/admin-container-inspect.json",
+    "network": "none",
+    "credentials_supplied": false,
+    "raw_logs_retained": false
+  },
+  "sbom": {
+    "record": "bootstrap/polaris/v1.6.0/admin-image-evidence/polaris-admin-1.6.0-arm64.cdx.json",
+    "record_sha256": "b7c5a9e3fab873b9a655059ab0297e45a70273fff95eef62a1cdd8afa28589e8",
+    "record_size": 1480961,
+    "format": "CycloneDX",
+    "spec_version": "1.7",
+    "component_count": 1618,
+    "required_terms": {
+      "mongodb": 16,
+      "polaris-persistence-nosql": 46
+    }
+  },
+  "vulnerabilities": {
+    "record": "bootstrap/polaris/v1.6.0/admin-image-evidence/trivy.json",
+    "record_sha256": "a067f022234f60b64f6fe9add3998cc8bc0d26191facaedf8a1112014c5ad91e",
+    "record_size": 302609,
+    "scanner": "trivy",
+    "scanner_version": "0.72.0",
+    "high": 0,
+    "critical": 0,
+    "exception_used": false
+  },
+  "signature_and_provenance": {
+    "cosign_verify": "bootstrap/polaris/v1.6.0/admin-image-evidence/cosign-verify.json",
+    "promotion_cosign_verify": "bootstrap/polaris/v1.6.0/admin-image-evidence/promotion-cosign-verify.json",
+    "slsa_verify": "bootstrap/polaris/v1.6.0/admin-image-evidence/slsa-verify.json",
+    "promotion_slsa_verify": "bootstrap/polaris/v1.6.0/admin-image-evidence/promotion-slsa-verify.json",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/polaris-admin-arm64.yml@refs/heads/main"
+  },
+  "downstream_gates": {
+    "admin_image_admitted": false,
+    "resident_image_ledger_enabled": false,
+    "admin_runtime_enabled": false,
+    "gitops_resources_enabled": false,
+    "credential_material_permitted": false
+  },
+  "next_boundary": "admit the exact Admin image before runtime or Flux activation"
+}

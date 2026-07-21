@@ -5,7 +5,7 @@ title: "Adopt a source-built Polaris 1.6.0 and signed PostgreSQL metadata store"
 status: accepted
 created: 2026-07-16
 updated: 2026-07-21
-version: "0.12"
+version: "0.13"
 area: "architecture"
 tags: [shirokuma, adr, polaris, postgresql, arm64, supply-chain]
 ---
@@ -278,6 +278,18 @@ publication must generate the authoritative digest and complete every gate.
 
 The Admin snapshot and pending image remain non-admitted. Admin image admission,
 runtime, Flux, and credential gates remain false, and Issue #61 remains Open.
+
+PR #90 merged the checksum-manifest closure repair as
+`a1339e71bc3a19814102bd689fb88bfab4fb71c5`. Corrected main run
+[`29807128630`](https://github.com/TommyKammy/Shirokuma/actions/runs/29807128630)
+attempt `1` completed every publication gate for exact Admin image
+`ghcr.io/tommykammy/shirokuma-polaris-admin@sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd`.
+The separate evidence-only checkpoint retains 34 payloads plus one checksum
+manifest, re-verifies signature and SLSA identity against the exact main
+workflow SHA, and retires the one-shot publisher. This decision allows only the
+transition to `admin_image_admission_pending`; it does not amend the existing
+separation between image admission, runtime activation, Flux resources, and
+credential provisioning.
 The later runtime activation must mount an externally provisioned Secret and use
 the Admin Tool's credential-file input. Credentials in command arguments,
 generated credentials printed to logs, image layers, publication evidence, or

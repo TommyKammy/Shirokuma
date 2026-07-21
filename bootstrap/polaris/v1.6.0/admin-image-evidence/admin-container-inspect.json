@@ -1,0 +1,70 @@
+{
+  "containers": [
+    {
+      "args": [
+        "-jar",
+        "/deployments/quarkus-run.jar",
+        "--help"
+      ],
+      "capabilities_dropped": [
+        "ALL"
+      ],
+      "memory_bytes": 1610612736,
+      "name": "root_help",
+      "network_mode": "none",
+      "path": "/usr/bin/java",
+      "pids_limit": 512,
+      "read_only_rootfs": true,
+      "security_options": [
+        "no-new-privileges"
+      ],
+      "tmpfs": {
+        "/tmp": [
+          "gid=10001",
+          "mode=1777",
+          "nodev",
+          "nosuid",
+          "rw",
+          "size=64m",
+          "uid=10000"
+        ]
+      },
+      "user": "10000:10001"
+    },
+    {
+      "args": [
+        "-jar",
+        "/deployments/quarkus-run.jar",
+        "bootstrap",
+        "--help"
+      ],
+      "capabilities_dropped": [
+        "ALL"
+      ],
+      "memory_bytes": 1610612736,
+      "name": "bootstrap_help",
+      "network_mode": "none",
+      "path": "/usr/bin/java",
+      "pids_limit": 512,
+      "read_only_rootfs": true,
+      "security_options": [
+        "no-new-privileges"
+      ],
+      "tmpfs": {
+        "/tmp": [
+          "gid=10001",
+          "mode=1777",
+          "nodev",
+          "nosuid",
+          "rw",
+          "size=64m",
+          "uid=10000"
+        ]
+      },
+      "user": "10000:10001"
+    }
+  ],
+  "reference": "ghcr.io/tommykammy/shirokuma-polaris-admin@sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd",
+  "result": "passed",
+  "schema_version": 1
+}

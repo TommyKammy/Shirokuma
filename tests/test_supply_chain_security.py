@@ -2130,6 +2130,7 @@ class SupplyChainSecurityTests(unittest.TestCase):
             ),
             {
                 r"^bootstrap/polaris/v1\.6\.0/admin-build-inputs-contract\.json$",
+                r"^bootstrap/polaris/v1\.6\.0/admin-image-evidence/source-authentication\.json$",
                 r"^bootstrap/polaris/v1\.6\.0/admin-image-contract\.json$",
                 r"^bootstrap/polaris/v1\.6\.0/image-evidence/source-authentication\.json$",
                 r"^bootstrap/polaris/v1\.6\.0/trusted-build-contract\.json$",

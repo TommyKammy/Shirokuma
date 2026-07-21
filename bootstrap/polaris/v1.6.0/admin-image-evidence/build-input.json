@@ -1,0 +1,87 @@
+{
+  "admin_dependency_surface": {
+    "image_publication_decision": "accepted_unmodified_for_image_publication_only",
+    "relational_only": false,
+    "required_sbom_terms": [
+      "mongodb",
+      "polaris-persistence-nosql"
+    ],
+    "review_state": "reviewed_for_image_publication",
+    "unconditional_external_dependencies": [
+      "io.quarkus:quarkus-mongodb-client"
+    ],
+    "unconditional_project_dependencies": [
+      ":polaris-persistence-nosql-api",
+      ":polaris-persistence-nosql-maintenance-api",
+      ":polaris-persistence-nosql-metastore",
+      ":polaris-persistence-nosql-cdi-quarkus",
+      ":polaris-persistence-nosql-cdi-quarkus-distcache",
+      ":polaris-persistence-nosql-maintenance-impl",
+      ":polaris-persistence-nosql-metastore-maintenance"
+    ]
+  },
+  "admitted": false,
+  "component": "polaris-admin",
+  "context_archive_sha256": "6df3570b4e95c0cf591527de5daf723434b0d28db3a6d4db225bd9c3bf49ac52",
+  "context_dependency_files_by_term": {
+    "mongodb": [
+      "build/quarkus-app/lib/main/io.quarkus.quarkus-mongodb-client-3.36.3.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-mongodb-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.mongodb.bson-5.6.5.jar",
+      "build/quarkus-app/lib/main/org.mongodb.bson-record-codec-5.6.5.jar",
+      "build/quarkus-app/lib/main/org.mongodb.mongodb-crypt-5.6.5.jar",
+      "build/quarkus-app/lib/main/org.mongodb.mongodb-driver-core-5.6.5.jar",
+      "build/quarkus-app/lib/main/org.mongodb.mongodb-driver-reactivestreams-5.6.5.jar",
+      "build/quarkus-app/lib/main/org.mongodb.mongodb-driver-sync-5.6.5.jar"
+    ],
+    "polaris-persistence-nosql": [
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-api-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-authz-api-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-authz-impl-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-authz-spi-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-authz-store-nosql-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-cdi-common-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-cdi-quarkus-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-cdi-quarkus-distcache-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-impl-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-inmemory-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-maintenance-api-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-maintenance-cel-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-maintenance-impl-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-maintenance-spi-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-metastore-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-metastore-maintenance-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-metastore-types-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-mongodb-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-realms-api-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-realms-impl-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-realms-spi-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-realms-store-nosql-1.6.0.jar",
+      "build/quarkus-app/lib/main/org.apache.polaris.polaris-persistence-nosql-varint-1.6.0.jar"
+    ]
+  },
+  "context_manifest_sha256": "2d15bda72ba2200eab535972424626a7d8678a73337c935da580837bc7520f5a",
+  "ref": "refs/heads/main",
+  "repository": "TommyKammy/Shirokuma",
+  "required_dependency_terms": [
+    "mongodb",
+    "polaris-persistence-nosql"
+  ],
+  "review_checkpoint": {
+    "merge_commit": "8e5c6927e95d1027e16fe2ac27ab8322b45359c9",
+    "merged_at": "2026-07-20T23:24:12Z",
+    "merged_by": "TommyKammy",
+    "pull_request": 87,
+    "repository": "TommyKammy/Shirokuma",
+    "reviewed_contract_sha256": "26f5259642007aa11a4676ccee918bd5b1e55f8eb5c0025f92a12f1d8ccb37db",
+    "reviewed_evidence_manifest_sha256": "026c4d82e9031532323ccb3c31ea83939010982cfcf373644cdcf064e2613409",
+    "reviewed_head_commit": "178b5ca03a2575a7100cfb47daede795fbd1d30c",
+    "reviewed_verifier_sha256": "ef1fad340179e61f7d1291d9e3fd44c793c4761af4b094a0b232ea663c7f41c9"
+  },
+  "run_attempt": "1",
+  "run_id": "29807128630",
+  "schema_version": 1,
+  "source_sha": "a1339e71bc3a19814102bd689fb88bfab4fb71c5",
+  "state": "admin_image_publication_pending",
+  "workflow_sha": "a1339e71bc3a19814102bd689fb88bfab4fb71c5"
+}
