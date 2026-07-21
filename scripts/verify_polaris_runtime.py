@@ -393,9 +393,14 @@ def _audit_semantics(root: Path, texts: Mapping[str, str], runbook: str) -> None
         "deploy/gitops/catalog/server/deployment.yaml",
     ):
         _expect(
-            texts[relative].count("${POLARIS_CREDENTIAL_GENERATION}") == 1,
+            texts[relative].count("${POLARIS_CREDENTIAL_GENERATION}") == 1
+            and (
+                'shirokuma.dev/polaris-credential-generation: '
+                '"generation-${POLARIS_CREDENTIAL_GENERATION}"'
+            )
+            in texts[relative],
             "RUNTIME_GENERATION",
-            f"{relative} must consume the shared credential generation exactly once",
+            f"{relative} must consume the shared generation as a type-stable string",
         )
 
     tofu = texts["opentofu/dev/catalog.tf"]

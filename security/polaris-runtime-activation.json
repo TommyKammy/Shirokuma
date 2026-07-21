@@ -51,14 +51,14 @@
     "deploy/gitops/catalog/database/kustomization.yaml": "bad6ff79a2f973b0d40df87326686c2e5cce2c4633ec8009ad86a2c354e2510a",
     "deploy/gitops/catalog/database/networkpolicy.yaml": "19cbee36ab6e53ac6522848a4732bd02a1536ddde10a697157ead4f5bf17a96f",
     "deploy/gitops/catalog/database/service.yaml": "34d57c1841aac1d74b6ad390277598f454786d20dcfc3821422a3b3c43ea841c",
-    "deploy/gitops/catalog/database/statefulset.yaml": "482b7e31942472c7bba75fd9a963c45bf502fcfbc358a9f26314c6f0cfb3c8d4",
+    "deploy/gitops/catalog/database/statefulset.yaml": "87247c9063c77a1532d62b8fae6ac25a0cacb4fc7471e165fd137c77e660e60e",
     "deploy/catalog/bootstrap/kustomization.yaml": "d2585fddd0b5f3a3eed90eef4f5f56b43ae12b6c3138832d13d448de7dbcfaba",
     "deploy/catalog/bootstrap/networkpolicy.yaml": "a90b2e70b2d998e319fd0f9505214981a96a33349527b70a004791bf0f5e7dc9",
-    "deploy/catalog/bootstrap/job.yaml": "1e047e1b92e87556085d3dfd6114c98c45ba9159ff48e7fea3e4edbc1cb59dd6",
+    "deploy/catalog/bootstrap/job.yaml": "d48987082d602906ddc8a373cf5247b4f73c8b8f8364c7412aadd558ca346be3",
     "deploy/gitops/catalog/server/kustomization.yaml": "9a64b028354da7f98a9198332c485569771f040070fcb55a8403ae24e71e591f",
     "deploy/gitops/catalog/server/networkpolicy.yaml": "0589cec0e1fbddc97a97ebd22c62fc281e48fbdfbe0b5c22f33421082c835e76",
     "deploy/gitops/catalog/server/service.yaml": "236e72858ee54034280046d73925d3291fab330793df71c7b8c1666bc13132a8",
-    "deploy/gitops/catalog/server/deployment.yaml": "44bba6c37ce2ff4aaca93c46412549570348b9166eb799edf765191bdc28bc79",
+    "deploy/gitops/catalog/server/deployment.yaml": "6f5ce742b747ba2a73235ea75ae3216d1df2ce663464282b138172a0c8722c04",
     "opentofu/dev/catalog.tf": "4da191cedd4f0b6233697ea56ddfe7b0f8d6dd0ee3934792adbb00bf9f619eb0"
   },
   "live_acceptance": {
