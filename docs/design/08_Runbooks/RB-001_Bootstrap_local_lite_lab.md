@@ -5,7 +5,7 @@ title: "Bootstrap local-lite lab"
 status: draft
 created: 2026-07-05
 updated: 2026-07-21
-version: "1.2.0"
+version: "1.2.1"
 area: "runbook"
 tags: [shirokuma, runbook]
 ---
@@ -96,6 +96,14 @@ operator/application access keys. Do not weaken or bypass this preflight.
 OpenTofu writes the Polaris values only to the owner-controlled state and the
 `shirokuma-dev` Secrets `polaris-postgresql-credentials` and
 `polaris-root-credentials`; do not inspect or print either Secret value.
+The reviewed `flux-system/ConfigMap/polaris-runtime-generation` is the only
+credential-generation source. OpenTofu reads the same repository file used by
+Flux, and all three catalog Pod templates consume its substituted token. Do not
+try to rotate either credential by changing only a `TF_VAR`: OpenTofu ignores
+in-place Secret data changes to prevent a half-rotated database. Credential
+replacement requires a separate reviewed catalog rebuild that increments the
+generation token, recreates PostgreSQL and the completed Admin Job, and proves
+backup/restore and API acceptance.
 
 The same target performs a read-only lookup for the legacy
 `shirokuma-dev/PersistentVolumeClaim/seaweedfs-data-seaweedfs-0` before
@@ -195,12 +203,84 @@ bucket-scoped `shirokuma-dev/Secret/seaweedfs-s3-application-credentials`, call
 cross-namespace `shirokuma-storage/Secret/seaweedfs-s3-credentials` and never
 receive the operator `Admin` identity.
 
+### PostgreSQL catalog metadata capacity and recovery
+
+The Polaris StatefulSet reserves an additional retained `5Gi` PVC named
+`shirokuma-dev/PersistentVolumeClaim/data-polaris-postgresql-0`. Together with
+the SeaweedFS `20Gi` claim, the reviewed data services reserve `25Gi` inside the
+400GB Colima disk, excluding filesystem, image, database WAL, and external
+backup overhead. Before bootstrap, teardown, or reset, record `df -h` for the
+host and Colima VM and retain enough owner-controlled storage outside Colima for
+the database export plus its checksum.
+
+Before any destructive operation, export the live database without displaying
+credentials. `pg_dump` creates a consistent archive while the API remains
+online; the restore procedure below then quiesces catalog writers before it
+changes the database. Store the archive outside Colima with owner-only
+permissions and validate it with the exact admitted PostgreSQL image:
+
+```bash
+set +x
+umask 077
+backup_dir="$HOME/Shirokuma-backups/polaris/$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir -p "$backup_dir"
+kubectl --context colima-mac-studio-solo -n shirokuma-dev \
+  exec statefulset/polaris-postgresql -c postgresql -- \
+  sh -ceu 'export PGPASSWORD="$POSTGRES_PASSWORD"; exec pg_dump \
+    --host=127.0.0.1 --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" \
+    --format=custom --no-owner --no-acl' \
+  > "$backup_dir/polaris.dump"
+test -s "$backup_dir/polaris.dump"
+shasum -a 256 "$backup_dir/polaris.dump" \
+  > "$backup_dir/polaris.dump.sha256"
+docker run --rm --entrypoint pg_restore \
+  -v "$backup_dir:/backup:ro" \
+  cgr.dev/chainguard/postgres@sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8 \
+  --list /backup/polaris.dump > "$backup_dir/polaris.dump.list"
+test -s "$backup_dir/polaris.dump.list"
+```
+
+An in-place restore is allowed only after the archive checksum and list pass,
+the Polaris server is suspended, and the existing PostgreSQL Pod is Ready. Keep
+the Flux server Kustomization suspended until `pg_restore` succeeds:
+
+```bash
+shasum -a 256 -c "$backup_dir/polaris.dump.sha256"
+flux suspend kustomization shirokuma-catalog -n flux-system \
+  --context=colima-mac-studio-solo
+kubectl --context colima-mac-studio-solo -n shirokuma-dev \
+  scale deployment/polaris --replicas=0
+pod="$(kubectl --context colima-mac-studio-solo -n shirokuma-dev \
+  get pod -l app.kubernetes.io/name=polaris-postgresql \
+  -o jsonpath='{.items[0].metadata.name}')"
+kubectl --context colima-mac-studio-solo -n shirokuma-dev \
+  exec -i "$pod" -c postgresql -- sh -ceu '
+    export PGPASSWORD="$POSTGRES_PASSWORD"
+    dropdb --force --host=127.0.0.1 --username="$POSTGRES_USER" "$POSTGRES_DB"
+    createdb --host=127.0.0.1 --username="$POSTGRES_USER" "$POSTGRES_DB"
+    pg_restore --exit-on-error --single-transaction --no-owner --no-acl \
+      --host=127.0.0.1 --username="$POSTGRES_USER" \
+      --dbname="$POSTGRES_DB"
+  ' < "$backup_dir/polaris.dump"
+flux resume kustomization shirokuma-catalog -n flux-system \
+  --context=colima-mac-studio-solo
+flux reconcile kustomization shirokuma-catalog -n flux-system \
+  --context=colima-mac-studio-solo
+```
+
+Capture Ready and catalog create/list/read evidence after restore. A lost PVC or
+whole-profile reset additionally requires the original root credential and a
+reviewed empty-database bootstrap/restore sequence; that path remains part of
+the pending live acceptance gate. Do not delete the PostgreSQL PVC, change the
+credential generation, or reset Colima until that destructive recovery path has
+been exercised and recorded.
+
 Teardown uses the same OpenTofu state and removes the Flux installation and
 both `shirokuma-storage` and `shirokuma-dev` namespaces:
 
-OpenTofu evaluates all four required S3 variables during destroy even though it
-will delete, rather than update, the Secrets. In the same trusted owner-only
-shell, re-export four fresh valid values with the non-logging generation block
+OpenTofu evaluates all six required S3 and Polaris variables during destroy
+even though it will delete, rather than update, the Secrets. In the same trusted owner-only
+shell, re-export six fresh valid values with the non-logging generation block
 above. They are destroy evaluation inputs and do not need to recover the
 deployed credentials. `make gitops-teardown` fails before any cluster mutation
 when a variable is missing or invalid, and completes a non-mutating destroy plan
@@ -212,17 +292,21 @@ unset TF_VAR_seaweedfs_s3_operator_access_key
 unset TF_VAR_seaweedfs_s3_operator_secret_key
 unset TF_VAR_seaweedfs_s3_application_access_key
 unset TF_VAR_seaweedfs_s3_application_secret_key
+unset TF_VAR_polaris_postgresql_password
+unset TF_VAR_polaris_root_client_secret
 ```
 
 This command is destructive once the Issue #26 object-store revision is active.
 It uninstalls Flux and then destroys both OpenTofu-managed namespaces;
 `shirokuma-storage` deletion also removes
 `PersistentVolumeClaim/seaweedfs-data-seaweedfs-0` and can delete its backing
-volume and all object data. Before running it, quiesce writers and complete the
-verified export and paired inventory procedure in
+volume and all object data. Namespace deletion also removes the retained `5Gi`
+PostgreSQL PVC and all catalog metadata. Before running it, quiesce writers and
+complete the verified export and paired inventory procedure in
 [[08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo]]. The SeaweedFS profile
-requests a retained `20Gi` PVC; actual object and metadata growth consumes host
-SSD inside the 400GB Colima disk and is not negligible operationally.
+requests a retained `20Gi` PVC and Polaris requests `5Gi`; actual object and
+metadata growth consumes host SSD inside the 400GB Colima disk and is not
+negligible operationally.
 
 ## Reset and recovery
 
@@ -232,7 +316,9 @@ space can hold both the export and replacement 400GB profile. Then run:
 
 For SeaweedFS inventory, checksum, restore, persistence, and Issue #26 closure
 evidence, follow [[08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo]] before
-executing the reset command.
+executing the reset command. For Polaris, complete the export above and retain
+the original root credential; whole-profile metadata restore remains blocked
+until the pending live acceptance procedure has been exercised.
 
 ```bash
 scripts/colima_baseline.sh reset --confirm-data-loss

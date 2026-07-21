@@ -1,0 +1,37 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - flux-system
+  - dev.yaml
+  - object-storage.yaml
+  - polaris-runtime-generation.yaml
+  - catalog-database.yaml
+  - catalog-bootstrap.yaml
+  - catalog.yaml
+replacements:
+  - source:
+      kind: ConfigMap
+      name: polaris-runtime-generation
+      fieldPath: data.POLARIS_CREDENTIAL_GENERATION
+    targets:
+      - select:
+          group: kustomize.toolkit.fluxcd.io
+          version: v1
+          kind: Kustomization
+          name: shirokuma-catalog-database
+        fieldPaths:
+          - spec.postBuild.substitute.POLARIS_CREDENTIAL_GENERATION
+      - select:
+          group: kustomize.toolkit.fluxcd.io
+          version: v1
+          kind: Kustomization
+          name: shirokuma-catalog-bootstrap
+        fieldPaths:
+          - spec.postBuild.substitute.POLARIS_CREDENTIAL_GENERATION
+      - select:
+          group: kustomize.toolkit.fluxcd.io
+          version: v1
+          kind: Kustomization
+          name: shirokuma-catalog
+        fieldPaths:
+          - spec.postBuild.substitute.POLARIS_CREDENTIAL_GENERATION

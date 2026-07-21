@@ -31,6 +31,8 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
             "deploy/gitops/dev/kustomization.yaml",
             "deploy/gitops/dev/smoke-configmap.yaml",
             "deploy/gitops/clusters/local-lite/dev.yaml",
+            "deploy/gitops/clusters/local-lite/kustomization.yaml",
+            "deploy/gitops/clusters/local-lite/polaris-runtime-generation.yaml",
             "deploy/gitops/clusters/local-lite/flux-system/kustomization.yaml",
             "deploy/gitops/clusters/local-lite/flux-system/gotk-components.yaml",
             "deploy/gitops/clusters/local-lite/flux-system/gotk-sync.yaml",
@@ -328,6 +330,8 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
             "TF_VAR_seaweedfs_s3_operator_secret_key",
             "TF_VAR_seaweedfs_s3_application_access_key",
             "TF_VAR_seaweedfs_s3_application_secret_key",
+            "TF_VAR_polaris_postgresql_password",
+            "TF_VAR_polaris_root_client_secret",
         )
 
         for variable in required_variables:

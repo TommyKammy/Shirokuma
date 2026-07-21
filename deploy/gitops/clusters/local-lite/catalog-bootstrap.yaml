@@ -11,9 +11,13 @@ spec:
   timeout: 10m
   path: ./deploy/catalog/bootstrap
   prune: true
+  force: true
   sourceRef:
     kind: GitRepository
     name: flux-system
+  postBuild:
+    substitute:
+      POLARIS_CREDENTIAL_GENERATION: __REPLACED_BY_ROOT_KUSTOMIZATION__
   wait: true
   healthChecks:
     - apiVersion: batch/v1

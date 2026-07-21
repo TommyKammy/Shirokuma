@@ -88,6 +88,16 @@ def _manifest_map(contract: Mapping[str, Any]) -> Mapping[str, Any]:
     return manifests
 
 
+def _documentation_map(contract: Mapping[str, Any]) -> Mapping[str, Any]:
+    documentation = contract.get("documentation")
+    _expect(
+        isinstance(documentation, dict),
+        "RUNTIME_CONTRACT",
+        "documentation must be an object",
+    )
+    return documentation
+
+
 def _audit_contract(root: Path) -> Mapping[str, Any]:
     path = root / CONTRACT
     _expect(path.is_file() and not path.is_symlink(), "RUNTIME_CONTRACT", f"missing {CONTRACT}")
@@ -100,6 +110,8 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
         "flux_order",
         "secrets",
         "admin_bootstrap",
+        "credential_generation",
+        "documentation",
         "manifests",
         "live_acceptance",
     }
@@ -145,6 +157,16 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
         "Admin bootstrap boundary changed",
     )
     _expect(
+        contract.get("credential_generation")
+        == {
+            "source": "deploy/gitops/clusters/local-lite/polaris-runtime-generation.yaml",
+            "in_place_rotation_permitted": False,
+            "requires_catalog_rebuild": True,
+        },
+        "RUNTIME_GENERATION",
+        "credential generation boundary changed",
+    )
+    _expect(
         contract.get("live_acceptance")
         == {
             "complete": False,
@@ -164,6 +186,8 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
 def _audit_manifests(root: Path, contract: Mapping[str, Any]) -> dict[str, str]:
     manifests = _manifest_map(contract)
     expected_paths = {
+        "deploy/gitops/clusters/local-lite/kustomization.yaml",
+        "deploy/gitops/clusters/local-lite/polaris-runtime-generation.yaml",
         "deploy/gitops/clusters/local-lite/catalog-database.yaml",
         "deploy/gitops/clusters/local-lite/catalog-bootstrap.yaml",
         "deploy/gitops/clusters/local-lite/catalog.yaml",
@@ -197,6 +221,35 @@ def _audit_manifests(root: Path, contract: Mapping[str, Any]) -> dict[str, str]:
     return texts
 
 
+def _audit_documentation(root: Path, contract: Mapping[str, Any]) -> str:
+    documentation = _documentation_map(contract)
+    relative = "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md"
+    _expect(
+        set(documentation) == {relative},
+        "RUNTIME_DOCUMENTATION",
+        "runtime recovery documentation set changed",
+    )
+    expected_digest = documentation[relative]
+    _expect(
+        isinstance(expected_digest, str)
+        and re.fullmatch(r"[0-9a-f]{64}", expected_digest) is not None,
+        "RUNTIME_DOCUMENTATION",
+        f"invalid documentation record: {relative!r}",
+    )
+    path = root / relative
+    _expect(
+        path.is_file() and not path.is_symlink(),
+        "RUNTIME_DOCUMENTATION",
+        f"missing regular file: {relative}",
+    )
+    _expect(
+        _sha256(path) == expected_digest,
+        "RUNTIME_DOCUMENTATION",
+        f"hash mismatch: {relative}",
+    )
+    return path.read_text(encoding="utf-8")
+
+
 def _audit_runtime_inventory(root: Path, manifests: Mapping[str, Any]) -> None:
     found: set[str] = set()
     for relative_root in (Path("deploy/catalog"), Path("deploy/gitops/catalog")):
@@ -216,6 +269,13 @@ def _audit_runtime_inventory(root: Path, manifests: Mapping[str, Any]) -> None:
             for path in root.glob(pattern)
             if path.is_file() or path.is_symlink()
         )
+    for relative in (
+        "deploy/gitops/clusters/local-lite/kustomization.yaml",
+        "deploy/gitops/clusters/local-lite/polaris-runtime-generation.yaml",
+    ):
+        path = root / relative
+        if path.is_file() or path.is_symlink():
+            found.add(relative)
     _expect(
         found == set(manifests),
         "RUNTIME_MANIFEST",
@@ -224,7 +284,7 @@ def _audit_runtime_inventory(root: Path, manifests: Mapping[str, Any]) -> None:
     )
 
 
-def _audit_semantics(root: Path, texts: Mapping[str, str]) -> None:
+def _audit_semantics(root: Path, texts: Mapping[str, str], runbook: str) -> None:
     combined = "\n".join(texts.values())
     _expect("kind: Secret" not in combined, "RUNTIME_SECRET", "Secret manifests are forbidden")
     _expect("secretGenerator:" not in combined and "stringData:" not in combined, "RUNTIME_SECRET", "generated or inline Secret material is forbidden")
@@ -259,8 +319,84 @@ def _audit_semantics(root: Path, texts: Mapping[str, str]) -> None:
     }
     for relative, (dependency, kind, name) in chain.items():
         text = texts[relative]
-        for token in (f"- name: {dependency}", "prune: true", "wait: true", "timeout: 10m", "healthChecks:", f"kind: {kind}", f"name: {name}"):
+        for token in (
+            f"- name: {dependency}",
+            "prune: true",
+            "wait: true",
+            "timeout: 10m",
+            "healthChecks:",
+            f"kind: {kind}",
+            f"name: {name}",
+            "substitute:",
+            "POLARIS_CREDENTIAL_GENERATION: __REPLACED_BY_ROOT_KUSTOMIZATION__",
+        ):
             _expect(token in text, "RUNTIME_FLUX", f"{relative} missing {token}")
+    _expect(
+        "force: true"
+        in texts["deploy/gitops/clusters/local-lite/catalog-bootstrap.yaml"],
+        "RUNTIME_GENERATION",
+        "bootstrap Flux Kustomization must recreate the immutable Job on generation change",
+    )
+
+    root_kustomization = texts[
+        "deploy/gitops/clusters/local-lite/kustomization.yaml"
+    ]
+    for resource in (
+        "flux-system",
+        "dev.yaml",
+        "object-storage.yaml",
+        "polaris-runtime-generation.yaml",
+        "catalog-database.yaml",
+        "catalog-bootstrap.yaml",
+        "catalog.yaml",
+    ):
+        _expect(
+            f"- {resource}" in root_kustomization,
+            "RUNTIME_FLUX",
+            f"Flux root missing resource: {resource}",
+        )
+    for token in (
+        "replacements:",
+        "name: polaris-runtime-generation",
+        "fieldPath: data.POLARIS_CREDENTIAL_GENERATION",
+        "spec.postBuild.substitute.POLARIS_CREDENTIAL_GENERATION",
+        "name: shirokuma-catalog-database",
+        "name: shirokuma-catalog-bootstrap",
+        "name: shirokuma-catalog",
+    ):
+        _expect(
+            token in root_kustomization,
+            "RUNTIME_GENERATION",
+            f"Flux root credential-generation replacement missing {token}",
+        )
+    _expect(
+        root_kustomization.count(
+            "spec.postBuild.substitute.POLARIS_CREDENTIAL_GENERATION"
+        )
+        == 3,
+        "RUNTIME_GENERATION",
+        "Flux root must replace the generation value in exactly three catalog Kustomizations",
+    )
+
+    generation = texts[
+        "deploy/gitops/clusters/local-lite/polaris-runtime-generation.yaml"
+    ]
+    _expect(
+        "name: polaris-runtime-generation" in generation
+        and 'POLARIS_CREDENTIAL_GENERATION: "1"' in generation,
+        "RUNTIME_GENERATION",
+        "credential generation source must be the reviewed positive token",
+    )
+    for relative in (
+        "deploy/catalog/bootstrap/job.yaml",
+        "deploy/gitops/catalog/database/statefulset.yaml",
+        "deploy/gitops/catalog/server/deployment.yaml",
+    ):
+        _expect(
+            texts[relative].count("${POLARIS_CREDENTIAL_GENERATION}") == 1,
+            "RUNTIME_GENERATION",
+            f"{relative} must consume the shared credential generation exactly once",
+        )
 
     tofu = texts["opentofu/dev/catalog.tf"]
     for token in (
@@ -269,20 +405,62 @@ def _audit_semantics(root: Path, texts: Mapping[str, str]) -> None:
         "var.polaris_postgresql_password",
         "var.polaris_root_client_secret",
         '"credentials.json" = local.polaris_root_credentials',
+        "yamldecode(file(",
+        "polaris-runtime-generation.yaml",
+        "local.polaris_credential_generation",
     ):
         _expect(token in tofu, "RUNTIME_SECRET", f"OpenTofu credential boundary missing {token}")
+    _expect(
+        tofu.count("ignore_changes = [data]") == 2,
+        "RUNTIME_GENERATION",
+        "in-place Secret data rotation must remain blocked for both credentials",
+    )
+    _expect(
+        "var.polaris_credential_generation" not in tofu,
+        "RUNTIME_GENERATION",
+        "credential generation may not be overridden independently through TF_VAR",
+    )
 
     makefile = (root / "Makefile").read_text(encoding="utf-8")
+    bootstrap = makefile.split("gitops-bootstrap:", 1)[1].split(
+        "\ngitops-status:", 1
+    )[0]
+    teardown = makefile.split("gitops-teardown:", 1)[1].split(
+        "\ncolima-start:", 1
+    )[0]
     for variable in ("TF_VAR_polaris_postgresql_password", "TF_VAR_polaris_root_client_secret"):
-        _expect(f"$${{{variable}:-}}" in makefile, "RUNTIME_SECRET", f"bootstrap preflight missing {variable}")
+        for target, recipe in (("bootstrap", bootstrap), ("teardown", teardown)):
+            _expect(
+                f"$${{{variable}:-}}" in recipe,
+                "RUNTIME_SECRET",
+                f"{target} preflight missing {variable}",
+            )
+
+    for token in (
+        "data-polaris-postgresql-0",
+        "reserve `25Gi`",
+        "pg_dump",
+        "pg_restore",
+        "polaris.dump.sha256",
+        "whole-profile metadata restore remains blocked",
+        "all six required S3 and Polaris variables",
+        "unset TF_VAR_polaris_postgresql_password",
+        "unset TF_VAR_polaris_root_client_secret",
+    ):
+        _expect(
+            token in runbook,
+            "RUNTIME_RECOVERY",
+            f"PostgreSQL capacity/recovery runbook missing {token}",
+        )
 
 
 def audit(root: Path) -> None:
     root = root.resolve()
     contract = _audit_contract(root)
     texts = _audit_manifests(root, contract)
+    runbook = _audit_documentation(root, contract)
     _audit_runtime_inventory(root, _manifest_map(contract))
-    _audit_semantics(root, texts)
+    _audit_semantics(root, texts, runbook)
 
 
 def _parser() -> argparse.ArgumentParser:

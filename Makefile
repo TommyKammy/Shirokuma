@@ -162,6 +162,8 @@ gitops-teardown: tofu-init
 	@test -n "$${TF_VAR_seaweedfs_s3_operator_secret_key:-}" || { echo "TF_VAR_seaweedfs_s3_operator_secret_key is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
 	@test -n "$${TF_VAR_seaweedfs_s3_application_access_key:-}" || { echo "TF_VAR_seaweedfs_s3_application_access_key is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
 	@test -n "$${TF_VAR_seaweedfs_s3_application_secret_key:-}" || { echo "TF_VAR_seaweedfs_s3_application_secret_key is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
+	@test -n "$${TF_VAR_polaris_postgresql_password:-}" || { echo "TF_VAR_polaris_postgresql_password is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
+	@test -n "$${TF_VAR_polaris_root_client_secret:-}" || { echo "TF_VAR_polaris_root_client_secret is required for OpenTofu destroy and is never persisted or printed by this target"; exit 1; }
 	@$(TOFU) -chdir=$(TOFU_DIR) plan -destroy -refresh=false -input=false >/dev/null
 	@$(FLUX) uninstall --context=$(KUBE_CONTEXT) --namespace=flux-system --silent
 	@$(TOFU) -chdir=$(TOFU_DIR) destroy -input=false -auto-approve

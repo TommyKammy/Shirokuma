@@ -5,7 +5,7 @@ title: "WP-L1-LAKE-002 Polaris catalog bootstrap"
 status: in-progress
 created: 2026-07-05
 updated: 2026-07-21
-version: "1.26"
+version: "1.27"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -461,6 +461,10 @@ Openを維持します。
   `security/polaris-runtime-activation.json`を
   `runtime_acceptance_pending`として閉じ、live cluster mutation、
   Ready evidence、API smoke、backup/restore、Issue #61 closureは行いません。
+  Flux rootは3つのcatalog Kustomizationを明示的に列挙し、credential
+  generationはreview済みConfigMapをOpenTofuと全Pod templateで共有します。
+  in-place credential更新は許可せず、`5Gi` PostgreSQL PVCのexport/restoreと
+  catalog rebuildを伴う別のreview済み手順までrotationをblockします。
 - PR #74以降の本文はIssue参照を`Refs #61`だけに限定します。否定文であっても
   closing keywordとIssue番号を組み合わせません。Issue #61は上記runtime
   acceptance chainの完了までOpenを維持します。

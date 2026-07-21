@@ -17,7 +17,12 @@ class PolarisRuntimeActivationTests(unittest.TestCase):
         root = Path(tempfile.mkdtemp(prefix="polaris-runtime-"))
         self.addCleanup(shutil.rmtree, root)
         contract = json.loads((ROOT / verifier.CONTRACT).read_text(encoding="utf-8"))
-        paths = [verifier.CONTRACT, Path("Makefile"), *map(Path, contract["manifests"])]
+        paths = [
+            verifier.CONTRACT,
+            Path("Makefile"),
+            *map(Path, contract["manifests"]),
+            *map(Path, contract["documentation"]),
+        ]
         for relative in paths:
             destination = root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -38,11 +43,76 @@ class PolarisRuntimeActivationTests(unittest.TestCase):
         path.write_text(path.read_text(encoding="utf-8") + "# drift\n", encoding="utf-8")
         self._assert_code(root, "RUNTIME_MANIFEST")
 
+    def test_recovery_runbook_hash_drift_fails_closed(self) -> None:
+        root = self._fixture()
+        path = root / "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md"
+        path.write_text(
+            path.read_text(encoding="utf-8") + "# drift\n",
+            encoding="utf-8",
+        )
+        self._assert_code(root, "RUNTIME_DOCUMENTATION")
+
     def test_unregistered_runtime_file_fails_closed(self) -> None:
         root = self._fixture()
         path = root / "deploy/gitops/catalog/neutral.yaml"
         path.write_text("kind: ConfigMap\n", encoding="utf-8")
         self._assert_code(root, "RUNTIME_MANIFEST")
+
+    def test_flux_root_omission_fails_closed_even_if_rehashed(self) -> None:
+        root = self._fixture()
+        relative = "deploy/gitops/clusters/local-lite/kustomization.yaml"
+        path = root / relative
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "  - catalog-database.yaml\n", ""
+            ),
+            encoding="utf-8",
+        )
+        contract_path = root / verifier.CONTRACT
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        contract["manifests"][relative] = verifier._sha256(path)
+        contract_path.write_text(
+            json.dumps(contract, indent=2) + "\n", encoding="utf-8"
+        )
+        self._assert_code(root, "RUNTIME_FLUX")
+
+    def test_generation_divergence_fails_closed_even_if_rehashed(self) -> None:
+        root = self._fixture()
+        relative = "deploy/gitops/catalog/server/deployment.yaml"
+        path = root / relative
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "${POLARIS_CREDENTIAL_GENERATION}", "2"
+            ),
+            encoding="utf-8",
+        )
+        contract_path = root / verifier.CONTRACT
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        contract["manifests"][relative] = verifier._sha256(path)
+        contract_path.write_text(
+            json.dumps(contract, indent=2) + "\n", encoding="utf-8"
+        )
+        self._assert_code(root, "RUNTIME_GENERATION")
+
+    def test_generation_replacement_omission_fails_closed_even_if_rehashed(self) -> None:
+        root = self._fixture()
+        relative = "deploy/gitops/clusters/local-lite/kustomization.yaml"
+        path = root / relative
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "          - spec.postBuild.substitute.POLARIS_CREDENTIAL_GENERATION\n",
+                "",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        contract_path = root / verifier.CONTRACT
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        contract["manifests"][relative] = verifier._sha256(path)
+        contract_path.write_text(
+            json.dumps(contract, indent=2) + "\n", encoding="utf-8"
+        )
+        self._assert_code(root, "RUNTIME_GENERATION")
 
     def test_inline_secret_manifest_fails_closed_even_if_rehashed(self) -> None:
         root = self._fixture()

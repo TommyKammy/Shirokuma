@@ -3,6 +3,9 @@ locals {
   polaris_root_client_id      = "root"
   polaris_postgresql_database = "polaris"
   polaris_postgresql_username = "polaris"
+  polaris_credential_generation = yamldecode(file(
+    "${path.module}/../../deploy/gitops/clusters/local-lite/polaris-runtime-generation.yaml"
+  )).data.POLARIS_CREDENTIAL_GENERATION
   polaris_root_credentials = jsonencode({
     (local.polaris_realm) = {
       "client-id"     = local.polaris_root_client_id
@@ -16,7 +19,7 @@ resource "kubernetes_secret_v1" "polaris_postgresql_credentials" {
     name      = "polaris-postgresql-credentials"
     namespace = kubernetes_namespace_v1.dev.metadata[0].name
     annotations = {
-      "shirokuma.dev/polaris-credential-generation" = var.polaris_credential_generation
+      "shirokuma.dev/polaris-credential-generation" = local.polaris_credential_generation
     }
     labels = {
       "app.kubernetes.io/name"       = "polaris-postgresql"
@@ -33,6 +36,10 @@ resource "kubernetes_secret_v1" "polaris_postgresql_credentials" {
   }
 
   type = "Opaque"
+
+  lifecycle {
+    ignore_changes = [data]
+  }
 }
 
 resource "kubernetes_secret_v1" "polaris_root_credentials" {
@@ -40,7 +47,7 @@ resource "kubernetes_secret_v1" "polaris_root_credentials" {
     name      = "polaris-root-credentials"
     namespace = kubernetes_namespace_v1.dev.metadata[0].name
     annotations = {
-      "shirokuma.dev/polaris-credential-generation" = var.polaris_credential_generation
+      "shirokuma.dev/polaris-credential-generation" = local.polaris_credential_generation
     }
     labels = {
       "app.kubernetes.io/name"       = "polaris"
@@ -58,4 +65,8 @@ resource "kubernetes_secret_v1" "polaris_root_credentials" {
   }
 
   type = "Opaque"
+
+  lifecycle {
+    ignore_changes = [data]
+  }
 }

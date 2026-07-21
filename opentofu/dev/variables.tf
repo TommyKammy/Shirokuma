@@ -122,14 +122,3 @@ variable "polaris_root_client_secret" {
     error_message = "The Polaris root client secret must contain 32-256 characters with no surrounding whitespace or line breaks."
   }
 }
-
-variable "polaris_credential_generation" {
-  description = "Monotonic generation token shared by Polaris Secret annotations and workload pod templates."
-  type        = string
-  default     = "1"
-
-  validation {
-    condition     = can(regex("^[1-9][0-9]*$", var.polaris_credential_generation))
-    error_message = "The Polaris credential generation must be a positive decimal integer."
-  }
-}

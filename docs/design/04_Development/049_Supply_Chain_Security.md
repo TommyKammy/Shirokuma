@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-21
-version: "1.18"
+version: "1.19"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -683,6 +683,10 @@ OpenTofu; Git contains Secret names and keys but no Secret manifest,
 `secretGenerator`, `stringData`, credential value, or credential-producing
 command. The activation gate remains `runtime_acceptance_pending` until live
 Ready, API smoke, backup/restore, rollback, and teardown evidence are reviewed.
+Credential generation is a reviewed non-secret ConfigMap consumed by both
+OpenTofu and Flux substitutions. Independent `TF_VAR` generation overrides and
+in-place Secret data rotation are forbidden; replacement requires a reviewed
+catalog rebuild so credential and workload generations cannot diverge.
 
 ## Local-lab resident image exceptions
 

@@ -14,6 +14,9 @@ spec:
   sourceRef:
     kind: GitRepository
     name: flux-system
+  postBuild:
+    substitute:
+      POLARIS_CREDENTIAL_GENERATION: __REPLACED_BY_ROOT_KUSTOMIZATION__
   wait: true
   healthChecks:
     - apiVersion: apps/v1

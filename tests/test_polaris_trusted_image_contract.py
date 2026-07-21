@@ -3103,6 +3103,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             "security/polaris-runtime-activation.json",
             "Makefile",
             *contract["manifests"],
+            *contract["documentation"],
         ):
             source = ROOT / relative
             destination = root / relative

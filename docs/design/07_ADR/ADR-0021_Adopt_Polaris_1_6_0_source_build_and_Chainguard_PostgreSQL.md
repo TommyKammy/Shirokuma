@@ -5,7 +5,7 @@ title: "Adopt a source-built Polaris 1.6.0 and signed PostgreSQL metadata store"
 status: accepted
 created: 2026-07-16
 updated: 2026-07-21
-version: "0.15"
+version: "0.16"
 area: "architecture"
 tags: [shirokuma, adr, polaris, postgresql, arm64, supply-chain]
 ---
@@ -316,6 +316,14 @@ arguments, and credential output remain forbidden. The hash-closed
 `security/polaris-runtime-activation.json` state is
 `runtime_acceptance_pending`. It does not claim live Flux readiness, catalog
 API success, backup/restore, rollback, teardown, or Issue #61 completion.
+The Flux root explicitly lists the three catalog Kustomizations. A reviewed
+`polaris-runtime-generation` ConfigMap is the single non-secret generation
+source consumed by OpenTofu and all catalog Pod templates. In-place Secret data
+updates are ignored because PostgreSQL role and Polaris root credential changes
+cannot be made safe by Pod restart alone; credential replacement requires a
+reviewed catalog rebuild, Job recreation, and backup/restore acceptance. The
+metadata StatefulSet reserves a retained `5Gi` PVC in addition to SeaweedFS's
+`20Gi` claim.
 
 ## Verification
 
