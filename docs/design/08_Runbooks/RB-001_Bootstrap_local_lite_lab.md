@@ -4,8 +4,8 @@ doc_id: "RB-001"
 title: "Bootstrap local-lite lab"
 status: draft
 created: 2026-07-05
-updated: 2026-07-16
-version: "1.1.0"
+updated: 2026-07-21
+version: "1.2.0"
 area: "runbook"
 tags: [shirokuma, runbook]
 ---
@@ -72,7 +72,7 @@ cluster prerequisites; `flux bootstrap github` installs the four standard
 controllers into `flux-system` and creates repository sync resources without
 changing the operator's current Kubernetes context.
 
-Before `make gitops-bootstrap`, generate all four required S3 values in a
+Before `make gitops-bootstrap`, generate all six required S3 and Polaris values in a
 dedicated trusted owner-only shell. Do not enable `set -x`, run `env` or
 `export -p`, echo the variables, write them to a dotenv file, or paste values
 into a terminal, log, Issue, or PR. The command substitutions below deliver
@@ -86,11 +86,16 @@ export TF_VAR_seaweedfs_s3_operator_access_key="$(python3 -c 'import secrets; pr
 export TF_VAR_seaweedfs_s3_operator_secret_key="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
 export TF_VAR_seaweedfs_s3_application_access_key="$(python3 -c 'import secrets; print(secrets.token_hex(16))')"
 export TF_VAR_seaweedfs_s3_application_secret_key="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+export TF_VAR_polaris_postgresql_password="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+export TF_VAR_polaris_root_client_secret="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
 ```
 
 `make gitops-bootstrap` has a fail-closed preflight: if any variable is unset or
 empty, it stops before OpenTofu mutates the cluster. It also rejects equal
 operator/application access keys. Do not weaken or bypass this preflight.
+OpenTofu writes the Polaris values only to the owner-controlled state and the
+`shirokuma-dev` Secrets `polaris-postgresql-credentials` and
+`polaris-root-credentials`; do not inspect or print either Secret value.
 
 The same target performs a read-only lookup for the legacy
 `shirokuma-dev/PersistentVolumeClaim/seaweedfs-data-seaweedfs-0` before

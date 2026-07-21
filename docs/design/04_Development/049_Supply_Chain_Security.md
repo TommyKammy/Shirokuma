@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-21
-version: "1.17"
+version: "1.18"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -674,6 +674,15 @@ Pinned fallback images are exceptional and require `fallback: true`, documented
 CVE risk, a future ISO `expires_on` date, and a concrete replacement plan in
 the ledger. Expired or malformed dates fail closed. Every MinIO entry must be
 marked as a fallback; SeaweedFS stays the mainline object-storage choice.
+
+The Polaris runtime activation gate does not reopen image admission. It accepts
+only the three exact resident references for Polaris, PostgreSQL, and the Admin
+Tool and hash-closes every runtime manifest in
+`security/polaris-runtime-activation.json`. Secret material is created only by
+OpenTofu; Git contains Secret names and keys but no Secret manifest,
+`secretGenerator`, `stringData`, credential value, or credential-producing
+command. The activation gate remains `runtime_acceptance_pending` until live
+Ready, API smoke, backup/restore, rollback, and teardown evidence are reviewed.
 
 ## Local-lab resident image exceptions
 

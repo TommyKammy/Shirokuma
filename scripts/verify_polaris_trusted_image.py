@@ -751,6 +751,9 @@ PENDING_SCRIPT_FILE_INVENTORY = {
     "scripts/verify_polaris_admin_image.py": (
         POLARIS_ADMIN_IMAGE_VERIFIER_SHA256
     ),
+    "scripts/verify_polaris_runtime.py": (
+        "bf1c0257222f0b6688b2cd6d208f6635ce1a4ef425f44ae7e431576d1ac1701b"
+    ),
     "scripts/verify_repository_skeleton.py": (
         "b6bbbd383c74b190872bdcf144ede8126d8da5dbeb03e291027aaf276c62c955"
     ),
@@ -10331,8 +10334,26 @@ def audit(
     _audit_admin_image_publication_policy(root)
     _audit_retained_pending_evidence(root)
     _audit_ledger(root)
-    _audit_pending_runtime_inventory(root)
-    _audit_runtime_absence(root)
+    runtime_activation = root / "security/polaris-runtime-activation.json"
+    if runtime_activation.is_file():
+        try:
+            from scripts.verify_polaris_runtime import (
+                RuntimeContractError,
+                audit as audit_runtime_activation,
+            )
+        except ModuleNotFoundError:
+            from verify_polaris_runtime import (  # type: ignore[no-redef]
+                RuntimeContractError,
+                audit as audit_runtime_activation,
+            )
+
+        try:
+            audit_runtime_activation(root)
+        except RuntimeContractError as error:
+            _fail(error.code, error.detail)
+    else:
+        _audit_pending_runtime_inventory(root)
+        _audit_runtime_absence(root)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -10362,10 +10383,15 @@ def main(argv: list[str] | None = None) -> int:
             "cryptographic evidence remains unverified"
         )
         return 0
+    runtime_state = (
+        "static runtime activation is bound; live acceptance remains pending"
+        if (args.root / "security/polaris-runtime-activation.json").is_file()
+        else "runtime remains fail-closed pending activation"
+    )
     print(
         "polaris-trusted-image: atomic Polaris/PostgreSQL and separate Admin "
         "admissions pass; reviewed evidence, exact-digest preflight, and the "
-        "resident ledger are bound; runtime remains fail-closed pending activation"
+        f"resident ledger are bound; {runtime_state}"
     )
     return 0
 

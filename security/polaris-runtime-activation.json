@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "issue": 61,
+  "state": "runtime_acceptance_pending",
+  "images": {
+    "polaris": "ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+    "postgresql": "cgr.dev/chainguard/postgres@sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
+    "polaris-admin": "ghcr.io/tommykammy/shirokuma-polaris-admin@sha256:a56d09406c9dc1602cc49c0e792035c1163abf0e975fe702ef7e775c445317dd"
+  },
+  "flux_order": [
+    "shirokuma-object-storage",
+    "shirokuma-catalog-database",
+    "shirokuma-catalog-bootstrap",
+    "shirokuma-catalog"
+  ],
+  "secrets": {
+    "provisioner": "OpenTofu",
+    "manifests_contain_material": false,
+    "references": {
+      "polaris-postgresql-credentials": [
+        "database",
+        "password",
+        "username"
+      ],
+      "polaris-root-credentials": [
+        "credentials.json"
+      ]
+    }
+  },
+  "admin_bootstrap": {
+    "command": [
+      "bootstrap",
+      "--credentials-file=/var/run/secrets/shirokuma/polaris/credentials.json"
+    ],
+    "credential_output_permitted": false
+  },
+  "manifests": {
+    "deploy/gitops/clusters/local-lite/catalog-database.yaml": "76d8bbd39508046e3d0576b57b8d196c29eb75d15cb8ad8fc4861b238a639858",
+    "deploy/gitops/clusters/local-lite/catalog-bootstrap.yaml": "018e69e1cb41e42dd142af03b2a1b9384d3c8a0188a7a71d7b1baeb43bcd69ec",
+    "deploy/gitops/clusters/local-lite/catalog.yaml": "8b762b10765776a5faa7cdfe07bf82079af71147f111cc75acf86ba4bc3b2c10",
+    "deploy/gitops/catalog/database/kustomization.yaml": "bad6ff79a2f973b0d40df87326686c2e5cce2c4633ec8009ad86a2c354e2510a",
+    "deploy/gitops/catalog/database/networkpolicy.yaml": "19cbee36ab6e53ac6522848a4732bd02a1536ddde10a697157ead4f5bf17a96f",
+    "deploy/gitops/catalog/database/service.yaml": "34d57c1841aac1d74b6ad390277598f454786d20dcfc3821422a3b3c43ea841c",
+    "deploy/gitops/catalog/database/statefulset.yaml": "3d920354605cf86d46f6692b233bbb180725219711172aaedcaea0865961a3ac",
+    "deploy/catalog/bootstrap/kustomization.yaml": "d2585fddd0b5f3a3eed90eef4f5f56b43ae12b6c3138832d13d448de7dbcfaba",
+    "deploy/catalog/bootstrap/networkpolicy.yaml": "a90b2e70b2d998e319fd0f9505214981a96a33349527b70a004791bf0f5e7dc9",
+    "deploy/catalog/bootstrap/job.yaml": "667438281115259de44fa90c13c94cc8dbc3baa35e8de6e5abd781eca08453d0",
+    "deploy/gitops/catalog/server/kustomization.yaml": "9a64b028354da7f98a9198332c485569771f040070fcb55a8403ae24e71e591f",
+    "deploy/gitops/catalog/server/networkpolicy.yaml": "0589cec0e1fbddc97a97ebd22c62fc281e48fbdfbe0b5c22f33421082c835e76",
+    "deploy/gitops/catalog/server/service.yaml": "236e72858ee54034280046d73925d3291fab330793df71c7b8c1666bc13132a8",
+    "deploy/gitops/catalog/server/deployment.yaml": "4e300d97db74c0382809217763e445025b2efa3897449987c6ffb389f374d7fe",
+    "opentofu/dev/catalog.tf": "8d42a1b414decbf750cc6f8d8d561daea2e2e62ed4fb014ffb223f4a3545fa2c"
+  },
+  "live_acceptance": {
+    "complete": false,
+    "required": [
+      "flux_ready",
+      "catalog_create_list_read",
+      "backup_restore",
+      "rollback_teardown"
+    ]
+  }
+}

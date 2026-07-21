@@ -22,3 +22,13 @@ output "seaweedfs_s3_endpoint" {
   description = "Cross-namespace in-cluster S3 endpoint for application clients."
   value       = "http://seaweedfs-s3.shirokuma-storage.svc.cluster.local:8333"
 }
+
+output "polaris_postgresql_secret_name" {
+  description = "Name of the OpenTofu-managed Polaris PostgreSQL credential Secret."
+  value       = kubernetes_secret_v1.polaris_postgresql_credentials.metadata[0].name
+}
+
+output "polaris_root_secret_name" {
+  description = "Name of the OpenTofu-managed Polaris root credential-file Secret."
+  value       = kubernetes_secret_v1.polaris_root_credentials.metadata[0].name
+}

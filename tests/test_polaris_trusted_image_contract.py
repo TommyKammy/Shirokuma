@@ -3092,56 +3092,47 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             "tracked scripts inventory changed",
         )
 
-    def test_tracked_runtime_inventory_is_closed_world(self) -> None:
+    def test_activated_runtime_inventory_is_closed_world(self) -> None:
         root = self._fixture()
-        for relative in verifier.PENDING_RUNTIME_FILE_INVENTORY:
+        contract = json.loads(
+            (ROOT / "security/polaris-runtime-activation.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        for relative in (
+            "security/polaris-runtime-activation.json",
+            "Makefile",
+            *contract["manifests"],
+        ):
             source = ROOT / relative
             destination = root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
-        subprocess.run(
-            ["git", "init", "--quiet"],
-            cwd=root,
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "add", "."],
-            cwd=root,
-            check=True,
-            capture_output=True,
-        )
         self._audit(root)
 
-        with self.subTest(case="tracked-mutation"):
-            runtime_file = root / "deploy/gitops/dev/smoke-configmap.yaml"
+        with self.subTest(case="hash-mutation"):
+            runtime_file = root / "deploy/gitops/catalog/server/deployment.yaml"
             runtime_file.write_text(
                 runtime_file.read_text(encoding="utf-8") + "\n",
                 encoding="utf-8",
             )
             self._assert_code(
                 root,
-                "RUNTIME_BLOCK",
+                "RUNTIME_MANIFEST",
                 str(runtime_file.relative_to(root)),
             )
 
         shutil.copy2(
-            ROOT / "deploy/gitops/dev/smoke-configmap.yaml",
+            ROOT / "deploy/gitops/catalog/server/deployment.yaml",
             runtime_file,
         )
-        with self.subTest(case="tracked-addition"):
-            addition = root / "deploy/gitops/dev/neutral.yaml"
+        with self.subTest(case="unregistered-addition"):
+            addition = root / "deploy/gitops/catalog/neutral.yaml"
             addition.write_text("kind: ConfigMap\n", encoding="utf-8")
-            subprocess.run(
-                ["git", "add", str(addition.relative_to(root))],
-                cwd=root,
-                check=True,
-                capture_output=True,
-            )
             self._assert_code(
                 root,
-                "RUNTIME_BLOCK",
-                "tracked runtime inventory changed",
+                "RUNTIME_MANIFEST",
+                "catalog runtime inventory changed",
             )
 
     def test_alternate_containerfile_name_is_forbidden_while_pending(

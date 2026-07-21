@@ -5,7 +5,7 @@ title: "WP-L1-LAKE-002 Polaris catalog bootstrap"
 status: in-progress
 created: 2026-07-05
 updated: 2026-07-21
-version: "1.25"
+version: "1.26"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -448,6 +448,19 @@ Openを維持します。
   `--realm`、singular `--credential`、`--print-credentials`とは併用しません。
   Admin image admission、runtime、Flux、credentialのdownstream gateはすべて
   `false`のままです。
+- PR #92はexact Admin digestの独立admissionをmerge
+  `47ce8ad6b58f1ab5f0d7c12e5813125804b7651c`として完了し、stateを
+  `admin_runtime_activation_pending`へ進めました。次のfocused checkpointは
+  OpenTofu管理の`polaris-postgresql-credentials`と
+  `polaris-root-credentials`だけをSecret materialの境界とし、Fluxの
+  `shirokuma-object-storage` → database → Admin bootstrap Job → server
+  `dependsOn` chainをdesired stateへ追加します。Admin JobはSecretを
+  read-only `0440`でmountし、
+  `bootstrap --credentials-file=/var/run/secrets/shirokuma/polaris/credentials.json`
+  だけを使用します。このcheckpointは
+  `security/polaris-runtime-activation.json`を
+  `runtime_acceptance_pending`として閉じ、live cluster mutation、
+  Ready evidence、API smoke、backup/restore、Issue #61 closureは行いません。
 - PR #74以降の本文はIssue参照を`Refs #61`だけに限定します。否定文であっても
   closing keywordとIssue番号を組み合わせません。Issue #61は上記runtime
   acceptance chainの完了までOpenを維持します。
@@ -550,12 +563,17 @@ Openを維持します。
   [#91](https://github.com/TommyKammy/Shirokuma/pull/91)
   (merged as `2dfc02dde2d00226012500308f771326ee6b30df`; exact 35-file closureを
   reviewしpublisherを退役、`admin_image_admission_pending`へ遷移、`Refs #61`)
-- Polaris Admin image admission: this focused PR (`Refs #61`); exact digest、
-  anonymous preflight、fresh-at-decision zero High/Critical evidence、resident ledgerを
-  bindし、runtime/Flux/credentialsはnon-scope。
+- Polaris Admin image admission:
+  [#92](https://github.com/TommyKammy/Shirokuma/pull/92)
+  (merged as `47ce8ad6b58f1ab5f0d7c12e5813125804b7651c`; exact digest、
+  anonymous preflight、fresh-at-decision zero High/Critical evidence、resident
+  ledgerをbind、`Refs #61`)
+- Credential-safe Flux runtime activation: this focused PR (`Refs #61`);
+  static desired stateとexternal Secret contractだけを追加し、
+  `runtime_acceptance_pending`で停止。
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
 - Execution order: `1 of 8`
-- Queue: Admin image admission review、credential-safe Flux activation、API smoke、
+- Queue: credential-safe Flux activation review、live Ready/API smoke、
   backup/restoreを順に完了するまで、Issue #61はOpen、後続#62は
   dependency-blockedを維持します。
 

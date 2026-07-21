@@ -3507,19 +3507,25 @@ metadata:
 
 
 class IcebergTableBootstrapPrerequisiteTests(unittest.TestCase):
-    def test_missing_polaris_workload_keeps_bootstrap_blocked(self) -> None:
+    def test_polaris_workload_keeps_bootstrap_blocked_pending_readiness(
+        self,
+    ) -> None:
         self.assertEqual(
-            [],
+            [
+                (
+                    ROOT
+                    / "deploy/gitops/catalog/server/deployment.yaml"
+                ).resolve()
+            ],
             _polaris_workload_manifests(),
-            "Replace this blocker regression with the Iceberg bootstrap checks once "
-            "an approved Polaris Deployment or StatefulSet is materialized through "
-            "deploy or a Helm chart template",
+            "Only the exact-digest Polaris Deployment may satisfy the static "
+            "workload prerequisite",
         )
         self.assertEqual(
             [],
             _iceberg_bootstrap_manifests(),
             "Iceberg namespace/table bootstrap resources must remain absent until "
-            "an admitted Polaris workload and its catalog readiness evidence exist",
+            "live catalog readiness evidence is reviewed",
         )
 
 

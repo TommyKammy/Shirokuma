@@ -145,6 +145,8 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
             "TF_VAR_seaweedfs_s3_operator_secret_key",
             "TF_VAR_seaweedfs_s3_application_access_key",
             "TF_VAR_seaweedfs_s3_application_secret_key",
+            "TF_VAR_polaris_postgresql_password",
+            "TF_VAR_polaris_root_client_secret",
         )
 
         for variable in required_variables:
