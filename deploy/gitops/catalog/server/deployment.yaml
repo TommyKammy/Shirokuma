@@ -19,7 +19,7 @@ spec:
   template:
     metadata:
       annotations:
-        shirokuma.dev/polaris-credential-generation: "${POLARIS_CREDENTIAL_GENERATION}"
+        shirokuma.dev/polaris-credential-generation: "generation-${POLARIS_CREDENTIAL_GENERATION}"
       labels:
         app.kubernetes.io/name: polaris
         app.kubernetes.io/component: catalog-server

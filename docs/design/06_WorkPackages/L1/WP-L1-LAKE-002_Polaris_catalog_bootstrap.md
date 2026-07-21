@@ -5,7 +5,7 @@ title: "WP-L1-LAKE-002 Polaris catalog bootstrap"
 status: in-progress
 created: 2026-07-05
 updated: 2026-07-21
-version: "1.27"
+version: "1.28"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -465,6 +465,13 @@ Openを維持します。
   generationはreview済みConfigMapをOpenTofuと全Pod templateで共有します。
   in-place credential更新は許可せず、`5Gi` PostgreSQL PVCのexport/restoreと
   catalog rebuildを伴う別のreview済み手順までrotationをblockします。
+- PR #93はcredential-safe Flux runtime activationをmerge
+  `46654ee7f4959167f6fbba128c489b26aae06680`として完了しました。mainのlive
+  reconcileで、generation token `1`がFlux post-build後に数値scalarへ解釈され、
+  Pod template annotationのstring schemaに違反することを確認しました。この
+  focused repairはannotation値を`generation-${POLARIS_CREDENTIAL_GENERATION}`へ
+  型安定化し、同じConfigMap tokenからの更新伝播を維持します。Secret投入、
+  Ready/API smoke、backup/restore、Issue #61 closureは引き続きpendingです。
 - PR #74以降の本文はIssue参照を`Refs #61`だけに限定します。否定文であっても
   closing keywordとIssue番号を組み合わせません。Issue #61は上記runtime
   acceptance chainの完了までOpenを維持します。
@@ -572,9 +579,13 @@ Openを維持します。
   (merged as `47ce8ad6b58f1ab5f0d7c12e5813125804b7651c`; exact digest、
   anonymous preflight、fresh-at-decision zero High/Critical evidence、resident
   ledgerをbind、`Refs #61`)
-- Credential-safe Flux runtime activation: this focused PR (`Refs #61`);
-  static desired stateとexternal Secret contractだけを追加し、
-  `runtime_acceptance_pending`で停止。
+- Credential-safe Flux runtime activation:
+  [#93](https://github.com/TommyKammy/Shirokuma/pull/93)
+  (merged as `46654ee7f4959167f6fbba128c489b26aae06680`; static desired stateと
+  external Secret contractだけを追加し、`runtime_acceptance_pending`で停止)
+- Type-stable credential-generation annotation repair: this focused PR
+  (`Refs #61`); live reconcileで検出したnumeric scalar化を修正し、runtime
+  acceptanceはpendingを維持。
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
 - Execution order: `1 of 8`
 - Queue: credential-safe Flux activation review、live Ready/API smoke、

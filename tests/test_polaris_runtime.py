@@ -112,6 +112,25 @@ class PolarisRuntimeActivationTests(unittest.TestCase):
         )
         self._assert_code(root, "RUNTIME_GENERATION")
 
+    def test_numeric_generation_annotation_fails_closed_even_if_rehashed(self) -> None:
+        root = self._fixture()
+        relative = "deploy/gitops/catalog/database/statefulset.yaml"
+        path = root / relative
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "generation-${POLARIS_CREDENTIAL_GENERATION}",
+                "${POLARIS_CREDENTIAL_GENERATION}",
+            ),
+            encoding="utf-8",
+        )
+        contract_path = root / verifier.CONTRACT
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        contract["manifests"][relative] = verifier._sha256(path)
+        contract_path.write_text(
+            json.dumps(contract, indent=2) + "\n", encoding="utf-8"
+        )
+        self._assert_code(root, "RUNTIME_GENERATION")
+
     def test_generation_replacement_omission_fails_closed_even_if_rehashed(self) -> None:
         root = self._fixture()
         relative = "deploy/gitops/clusters/local-lite/kustomization.yaml"
