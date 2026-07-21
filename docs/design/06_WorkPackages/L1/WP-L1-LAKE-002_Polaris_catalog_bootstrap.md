@@ -5,7 +5,7 @@ title: "WP-L1-LAKE-002 Polaris catalog bootstrap"
 status: in-progress
 created: 2026-07-05
 updated: 2026-07-21
-version: "1.21"
+version: "1.22"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, lakehouse]
 ---
@@ -368,15 +368,34 @@ Openを維持します。
   dependency publisherを退役・削除しました。承認対象は公開exact input
   `ghcr.io/tommykammy/shirokuma-polaris-admin-gradle-dependencies@sha256:7a505defcd78c7a7b978e88cd4c72e0a5d8b69cbb57ddd311c163b09fe789d18`
   のAdmin image build利用だけで、image admissionやruntime利用ではありません。
-- Draft PR [#88](https://github.com/TommyKammy/Shirokuma/pull/88)はlifecycleを
-  `admin_image_publication_pending`、次状態を
-  `admin_image_evidence_review_pending`として固定し、
+- PR [#88](https://github.com/TommyKammy/Shirokuma/pull/88)はmerge SHA
+  `0fca9059179900a6d236961c1d595a66e752fb3e`としてmainへ反映され、lifecycleを
+  `admin_image_publication_pending`、成功時の次状態を
+  `admin_image_evidence_review_pending`として固定しました。
   `bootstrap/polaris/v1.6.0/admin-image-contract.json`、
   `bootstrap/polaris/v1.6.0/Containerfile.admin`、
   `.github/workflows/polaris-admin-arm64.yml`だけをpublication-policy surfaceへ
   追加します。main限定workflowのrepository/tagは
   `ghcr.io/tommykammy/shirokuma-polaris-admin:1.6.0-arm64`ですが、exact digestは
   main publication後の別evidence-only reviewまで承認しません。
+- PR #88 merge後のmain run
+  [29798208118](https://github.com/TommyKammy/Shirokuma/actions/runs/29798208118)は、
+  fresh offline Admin/server build、closed context、exact arm64 image build、CLI
+  smoke、CycloneDX生成まで成功しました。quarantine digest
+  `sha256:78a4d4f4609dfc58d6c43526ab9ea198dea2427415ad7ce86fbf2e34e76b9a84`
+  のTrivy 0.72.0 scanがAmazon Linux 2023 packagesにHigh 19件
+  （`glib2` 7、`libacl` 2、`python3` 5、`python3-libs` 5、Critical 0）を検出し、
+  verify jobはfail-closed、promotionはskipされました。このdigestは署名・
+  provenance・retained evidenceを完了しておらず、review authorityでもadmission
+  candidateでもありません。
+- 2026-07-21にAdmin imageだけのruntime baseをAmazon Corretto 21 Alpine 3.24へ
+  repinする方針を承認しました。候補はDocker Official Image index
+  `sha256:30b1b2246cee9a98c9bf8a11537a04f1eaf8c59279b0c70ae02d7e5b934edeaa`、
+  linux/arm64 manifest
+  `sha256:dc43b39c47f1729dc772a9b8af7222757fac6c8cfa8a0802829af665b1c89925`です。
+  image historyはCorretto `21.0.11.10.1`、`/usr/bin/java` symlinkを保持し、
+  focused Trivy 0.72.0 scanはHigh=0/Critical=0でした。mutable `21-alpine` tagは
+  discoveryにだけ用い、修正PRとbuildはexact digestだけを使用します。
 - Admin imageはupstream fast-jarの
   `build/quarkus-app/{lib/,quarkus-run.jar,app/,quarkus/}`を保持し、
   `10000:10001`で`/usr/bin/java -jar /deployments/quarkus-run.jar`を実行します。
@@ -457,14 +476,27 @@ Openを維持します。
   (merged as `8e5c6927e95d1027e16fe2ac27ab8322b45359c9`;
   `admin_dependency_snapshot_review_pending`を完了し、publisherを退役、
   `Refs #61`)
-- Polaris Admin image publication policy Draft PR:
+- Polaris Admin image publication policy PR:
   [#88](https://github.com/TommyKammy/Shirokuma/pull/88)
-  (`admin_image_publication_pending`から
+  (merged as `0fca9059179900a6d236961c1d595a66e752fb3e`;
+  `admin_image_publication_pending`から
   `admin_image_evidence_review_pending`へのmain publication境界を定義、
   admission/runtime/Flux/credentialsはnon-scope、`Refs #61`)
+- Polaris Admin image first main publication:
+  [run `29798208118`](https://github.com/TommyKammy/Shirokuma/actions/runs/29798208118)
+  (`sha256:78a4d4f4609dfc58d6c43526ab9ea198dea2427415ad7ce86fbf2e34e76b9a84`
+  のAmazon Linux 2023 packagesにHigh 19/Critical 0を検出、
+  verify failure、promotion skipped、retained evidenceなし)
+- Polaris Admin runtime-base correction: approved 2026-07-21; Amazon Corretto
+  21 Alpine 3.24 exact index
+  `sha256:30b1b2246cee9a98c9bf8a11537a04f1eaf8c59279b0c70ae02d7e5b934edeaa` /
+  arm64 manifest
+  `sha256:dc43b39c47f1729dc772a9b8af7222757fac6c8cfa8a0802829af665b1c89925`
+  へrepinし、full main publicationを再実行する。
 - Runtime follow-up depends on: `#27` (closed prerequisite checkpoint)
 - Execution order: `1 of 8`
-- Queue: Admin image main publication、evidence-only review、admission、
+- Queue: Admin Alpine runtime-base repin、main publication再実行、
+  evidence-only review、admission、
   credential-safe Flux activation、API smoke、
   backup/restoreを順に完了するまで、Issue #61はOpen、後続#62は
   dependency-blockedを維持します。

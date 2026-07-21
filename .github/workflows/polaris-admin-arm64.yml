@@ -48,12 +48,14 @@ env:
   DEPENDENCY_ARCHIVE_SHA256: e771fe2ec6b2d0f6940b1247a512eb5cbc78dd0f36e7be247975f2c5fa36fc4d
   DEPENDENCY_VERIFICATION_METADATA_SHA256: 171ccaf781d4ae63375b332205d25653ebcd29471e9e9c0cfba1b978144065b8
   BUILDER_IMAGE: docker.io/library/gradle@sha256:cc583fa5245267fe0e1546c9989e8575473a37336ad9894dc0684a99fea1fb03
-  RUNTIME_BASE_INDEX: docker.io/library/amazoncorretto@sha256:d3a3476c19cbe37b2e3e46a2116ff197ab37c7072baad55ee0ad07f3b97e8d02
-  RUNTIME_BASE_INDEX_DIGEST: sha256:d3a3476c19cbe37b2e3e46a2116ff197ab37c7072baad55ee0ad07f3b97e8d02
-  RUNTIME_BASE: docker.io/library/amazoncorretto@sha256:ba1fe4a3fd4c6b70360183fccd1f0a168c3ea6f73709e8f81945cb9087431ff2
-  RUNTIME_BASE_DIGEST: sha256:ba1fe4a3fd4c6b70360183fccd1f0a168c3ea6f73709e8f81945cb9087431ff2
+  RUNTIME_BASE_INDEX: docker.io/library/amazoncorretto@sha256:30b1b2246cee9a98c9bf8a11537a04f1eaf8c59279b0c70ae02d7e5b934edeaa
+  RUNTIME_BASE_INDEX_DIGEST: sha256:30b1b2246cee9a98c9bf8a11537a04f1eaf8c59279b0c70ae02d7e5b934edeaa
+  RUNTIME_BASE: docker.io/library/amazoncorretto@sha256:dc43b39c47f1729dc772a9b8af7222757fac6c8cfa8a0802829af665b1c89925
+  RUNTIME_BASE_DIGEST: sha256:dc43b39c47f1729dc772a9b8af7222757fac6c8cfa8a0802829af665b1c89925
   RUNTIME_BASE_JAVA_VERSION: 21.0.11
-  CONTAINERFILE_SHA256: 39ab3fa250600d144d1a4deb00ac7d6277707994fd9b53b3a7f0968c279f6b72
+  RUNTIME_BASE_OS: Alpine Linux
+  RUNTIME_BASE_OS_VERSION: 3.24.1
+  CONTAINERFILE_SHA256: cecd7e40f0bd3b2f5b0de90233677772c0c55c745f4f4cc975eda83b42f40112
   ADMIN_BUILD_PREIMAGE_SHA256: 6e3aabc2090cda72c03608053f41899792a6c62bec382ed18d6b02703574fde9
   ORAS_VERSION: 1.3.3
   ORAS_URL: https://github.com/oras-project/oras/releases/download/v1.3.3/oras_1.3.3_linux_arm64.tar.gz
@@ -944,6 +946,10 @@ jobs:
           grep --fixed-strings --quiet \
             "openjdk version \"${RUNTIME_BASE_JAVA_VERSION}\"" \
             runtime-base-java-version.txt
+          docker run --rm --platform linux/arm64 --network none \
+            "${RUNTIME_BASE}" cat /etc/alpine-release > runtime-base-os-version.txt
+          test "$(tr -d '\r\n' < runtime-base-os-version.txt)" = \
+            "${RUNTIME_BASE_OS_VERSION}"
 
           docker buildx imagetools inspect --raw "${BUILDKIT_IMAGE}" \
             > "${RUNNER_TEMP}/buildkit-index.json"
@@ -1014,6 +1020,8 @@ jobs:
                   "index": os.environ["RUNTIME_BASE_INDEX"],
                   "linux_arm64_manifest": os.environ["RUNTIME_BASE"],
                   "java_version": os.environ["RUNTIME_BASE_JAVA_VERSION"],
+                  "os": os.environ["RUNTIME_BASE_OS"],
+                  "os_version": os.environ["RUNTIME_BASE_OS_VERSION"],
               },
           }
           Path("builder-metadata.json").write_text(
@@ -2013,6 +2021,7 @@ jobs:
             runtime-base-index.json \
             runtime-base-java-version.txt \
             runtime-base-manifest.json \
+            runtime-base-os-version.txt \
             sbom-attestation-bundle.json \
             sbom-policy.json \
             slsa-bundles.jsonl \
@@ -2044,6 +2053,7 @@ jobs:
             runtime-base-index.json \
             runtime-base-java-version.txt \
             runtime-base-manifest.json \
+            runtime-base-os-version.txt \
             sbom-attestation-bundle.json \
             sbom-policy.json \
             slsa-bundles.jsonl \
@@ -2158,6 +2168,7 @@ jobs:
             runtime-base-index.json \
             runtime-base-java-version.txt \
             runtime-base-manifest.json \
+            runtime-base-os-version.txt \
             sbom-attestation-bundle.json \
             sbom-policy.json \
             slsa-bundles.jsonl \
@@ -2189,6 +2200,8 @@ jobs:
           grep --fixed-strings --quiet \
             "openjdk version \"${RUNTIME_BASE_JAVA_VERSION}\"" \
             candidate-evidence/runtime-base-java-version.txt
+          test "$(tr -d '\r\n' < candidate-evidence/runtime-base-os-version.txt)" = \
+            "${RUNTIME_BASE_OS_VERSION}"
 
           DIGEST="${DIGEST}" python3 - <<'PY'
           import json
@@ -2423,6 +2436,8 @@ jobs:
               "index": os.environ["RUNTIME_BASE_INDEX"],
               "linux_arm64_manifest": os.environ["RUNTIME_BASE"],
               "java_version": os.environ["RUNTIME_BASE_JAVA_VERSION"],
+              "os": os.environ["RUNTIME_BASE_OS"],
+              "os_version": os.environ["RUNTIME_BASE_OS_VERSION"],
           }:
               raise SystemExit("runtime base metadata is not pinned to reviewed bytes")
           runtime_index = load("runtime-base-index.json")
@@ -2841,6 +2856,10 @@ jobs:
               "runtime_base_java_version": os.environ[
                   "RUNTIME_BASE_JAVA_VERSION"
               ],
+              "runtime_base_os": os.environ["RUNTIME_BASE_OS"],
+              "runtime_base_os_version": os.environ[
+                  "RUNTIME_BASE_OS_VERSION"
+              ],
               "containerfile_sha256": os.environ["CONTAINERFILE_SHA256"],
               "admin_image_contract_sha256": hashlib.sha256(
                   Path(
@@ -2903,6 +2922,7 @@ jobs:
             runtime-base-index.json \
             runtime-base-java-version.txt \
             runtime-base-manifest.json \
+            runtime-base-os-version.txt \
             sbom-attestation-bundle.json \
             sbom-policy.json \
             slsa-bundles.jsonl \
@@ -2926,7 +2946,7 @@ jobs:
               | xargs -0 sha256sum > evidence.sha256
             sha256sum --check --strict evidence.sha256
             test "$(find . -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')" = \
-              "34"
+              "35"
           )
 
       - name: Retain non-admitted image publication evidence
