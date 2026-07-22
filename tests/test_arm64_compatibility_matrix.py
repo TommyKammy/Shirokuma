@@ -125,6 +125,27 @@ class Arm64CompatibilityMatrixTests(unittest.TestCase):
         self.assertIn("Critical=0", row["Signature / provenance"])
         self.assertIn("runtime remains blocked", row["v0.2 decision"])
 
+    def test_trino_candidate_is_refreshed_and_remains_fail_closed(self) -> None:
+        row = self.rows["Trino"]
+        self.assertIn("`483` (2026-07-17)", row["Upstream release"])
+        self.assertIn(
+            "sha256:db58cc93e593a2706553745f276bb119c9810e69918be56ecde088ba7ccb0534",
+            row["Image or build path"],
+        )
+        self.assertIn(
+            "sha256:aa18e61b2e7776ab8641ba8baaa8687d0430894e88c639e61010cc46a994ab36",
+            row["linux/arm64 evidence"],
+        )
+        self.assertIn("no attestation manifest", row["Signature / provenance"])
+        self.assertIn("unsigned", row["Signature / provenance"])
+        self.assertIn("no trusted SLSA", row["Signature / provenance"])
+        self.assertIn("runtime remain blocked", row["v0.2 decision"])
+        self.assertIn("re-signing", row["Fallback owner / risk / replacement"])
+        self.assertIn(
+            "repository-owned reproducible source build",
+            row["Fallback owner / risk / replacement"],
+        )
+
     def test_postgresql_follow_up_inventory_and_owner_remain_explicit(self) -> None:
         registry_section = self.matrix_text.split(
             "### Registry inspection method", 1
