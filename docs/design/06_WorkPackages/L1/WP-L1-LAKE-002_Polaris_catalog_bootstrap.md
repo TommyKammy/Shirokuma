@@ -498,6 +498,14 @@ Openを維持します。
   `secretKeyRef`としてPolaris Deploymentへ追加します。Secret material、image、
   PostgreSQL、SeaweedFS、NetworkPolicyは変更せず、merge後のFlux再起動とbounded
   table-create probeで修復を確認するまでIssue #62をblockします。
+- 2026-07-22: PR #97はmerge
+  `e6bc687ef936943a1d73d82dd1eb4ea8fec07bbc`として完了しました。Fluxは
+  object storage、database、Admin bootstrap、serverを同revisionへreconcileし、
+  新しいPolaris Podはapplication Secretの`AWS_*`参照だけを受けてReadyです。
+  fresh acceptanceはCatalog API create/list/read/deleteと隔離DB restoreを再度通過し、
+  temporary Iceberg table create/list/loadも成功してcleanupされました。receiptを
+  `security/evidence/polaris-runtime-acceptance.json`へ再取得し、runtime contractを
+  `runtime_accepted`へ戻すfocused evidence reviewを行います。Issue #62のblockは解除します。
 
 ## GitHub Tracking
 

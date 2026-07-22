@@ -47,6 +47,15 @@ class PolarisRuntimeActivationTests(unittest.TestCase):
             destination = root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / relative, destination)
+        contract["state"] = "runtime_acceptance_pending"
+        contract["live_acceptance"] = {
+            "complete": False,
+            "required": contract["live_acceptance"]["required"],
+        }
+        (root / verifier.CONTRACT).write_text(
+            json.dumps(contract, indent=2) + "\n",
+            encoding="utf-8",
+        )
         return root
 
     def _assert_code(self, root: Path, code: str) -> None:
