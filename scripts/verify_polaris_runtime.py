@@ -9,6 +9,7 @@ import json
 import re
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -82,15 +83,18 @@ def _reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def _load_json(path: Path) -> Mapping[str, Any]:
+def _load_json(
+    path: Path,
+    code: str = "RUNTIME_CONTRACT",
+) -> Mapping[str, Any]:
     try:
         value = json.loads(
             path.read_text(encoding="utf-8"),
             object_pairs_hook=_reject_duplicates,
         )
     except (OSError, UnicodeError, ValueError) as error:
-        _fail("RUNTIME_CONTRACT", f"cannot read {path}: {error}")
-    _expect(isinstance(value, dict), "RUNTIME_CONTRACT", "contract must be an object")
+        _fail(code, f"cannot read {path}: {error}")
+    _expect(isinstance(value, dict), code, f"{path} must contain an object")
     return value
 
 
@@ -340,6 +344,279 @@ def _audit_accepted_revision_binding(
             )
 
 
+def _audit_iceberg_acceptance_receipt(
+    path: Path,
+    contract: Mapping[str, Any],
+    repository_revision: str,
+) -> None:
+    receipt = _load_json(path, "RUNTIME_ACCEPTANCE")
+    _expect(
+        set(receipt)
+        == {
+            "schema_version",
+            "kind",
+            "issue",
+            "captured_at",
+            "scope",
+            "cluster",
+            "flux",
+            "image",
+            "initial",
+            "rerun_after_polaris_restart",
+            "storage_inventory_after_rerun",
+            "capacity",
+            "assertions",
+            "secrets",
+        },
+        "RUNTIME_ACCEPTANCE",
+        "Iceberg acceptance receipt key set changed",
+    )
+    _expect(
+        type(receipt.get("schema_version")) is int
+        and receipt.get("schema_version") == 1
+        and receipt.get("kind") == "iceberg_table_bootstrap_runtime_acceptance"
+        and type(receipt.get("issue")) is int
+        and receipt.get("issue") == 62
+        and receipt.get("scope") == "non-production local-lite",
+        "RUNTIME_ACCEPTANCE",
+        "Iceberg acceptance receipt identity is invalid",
+    )
+    captured_at = receipt.get("captured_at")
+    try:
+        parsed_captured_at = datetime.strptime(
+            captured_at if isinstance(captured_at, str) else "",
+            "%Y-%m-%dT%H:%M:%SZ",
+        )
+    except ValueError:
+        parsed_captured_at = None
+    _expect(
+        parsed_captured_at is not None
+        and parsed_captured_at.strftime("%Y-%m-%dT%H:%M:%SZ") == captured_at,
+        "RUNTIME_ACCEPTANCE",
+        "Iceberg acceptance receipt timestamp is invalid",
+    )
+
+    expected_revision = f"main@sha1:{repository_revision}"
+    _expect(
+        receipt.get("cluster")
+        == {
+            "kubernetes_context": "colima-mac-studio-solo",
+            "namespace": "shirokuma-dev",
+            "repository_revision": repository_revision,
+            "flux_revision": expected_revision,
+        },
+        "RUNTIME_ACCEPTANCE",
+        "Iceberg acceptance cluster or revision binding is invalid",
+    )
+
+    flux = receipt.get("flux")
+    _expect(
+        isinstance(flux, dict) and set(flux) == {"kustomizations"},
+        "RUNTIME_ACCEPTANCE",
+        "Iceberg acceptance Flux evidence key set changed",
+    )
+    kustomizations = flux.get("kustomizations") if isinstance(flux, dict) else None
+    _expect(
+        isinstance(kustomizations, list)
+        and kustomizations
+        == [
+            {
+                "name": "shirokuma-catalog",
+                "ready": True,
+                "revision": expected_revision,
+            },
+            {
+                "name": "shirokuma-iceberg-bootstrap",
+                "ready": True,
+                "revision": expected_revision,
+            },
+        ],
+        "RUNTIME_ACCEPTANCE",
+        "Iceberg acceptance Flux Ready evidence is invalid",
+    )
+
+    images = contract.get("images")
+    image_reference = images.get("polaris") if isinstance(images, dict) else None
+    _expect(
+        image_reference == POLARIS_IMAGE
+        and receipt.get("image")
+        == {
+            "reference": image_reference,
+            "runtime_image_id": f"docker-pullable://{image_reference}",
+        },
+        "RUNTIME_ACCEPTANCE",
+        "Iceberg acceptance runtime image evidence is invalid",
+    )
+
+    run_keys = {
+        "polaris_pod_uid",
+        "polaris_restart_count",
+        "job_uid",
+        "job_pod_uid",
+        "summary",
+        "summary_canonical_sha256",
+    }
+    summary_keys = {
+        "catalog",
+        "namespace",
+        "table",
+        "result",
+        "created",
+        "snapshot_id",
+        "data_files",
+        "rows",
+        "credential_material_retained",
+    }
+    runs: list[Mapping[str, Any]] = []
+    for key, expected_created in (
+        ("initial", True),
+        ("rerun_after_polaris_restart", False),
+    ):
+        run = receipt.get(key)
+        _expect(
+            isinstance(run, dict) and set(run) == run_keys,
+            "RUNTIME_ACCEPTANCE",
+            f"Iceberg acceptance {key} key set changed",
+        )
+        summary = run.get("summary") if isinstance(run, dict) else None
+        _expect(
+            isinstance(summary, dict)
+            and set(summary) == summary_keys
+            and summary.get("catalog") == "shirokuma_l1"
+            and summary.get("namespace") == "smoke"
+            and summary.get("table") == "fixture_v1"
+            and summary.get("result") == "passed"
+            and summary.get("created") is expected_created
+            and isinstance(summary.get("snapshot_id"), str)
+            and summary["snapshot_id"].isdigit()
+            and int(summary["snapshot_id"]) > 0
+            and type(summary.get("data_files")) is int
+            and summary.get("data_files") == 1
+            and type(summary.get("rows")) is int
+            and summary.get("rows") == 2
+            and summary.get("credential_material_retained") is False,
+            "RUNTIME_ACCEPTANCE",
+            f"Iceberg acceptance {key} summary is invalid",
+        )
+        canonical = json.dumps(
+            summary,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode()
+        _expect(
+            isinstance(run.get("summary_canonical_sha256"), str)
+            and run.get("summary_canonical_sha256")
+            == hashlib.sha256(canonical).hexdigest(),
+            "RUNTIME_ACCEPTANCE",
+            f"Iceberg acceptance {key} summary digest is invalid",
+        )
+        _expect(
+            type(run.get("polaris_restart_count")) is int
+            and run.get("polaris_restart_count") == 0
+            and all(
+                isinstance(run.get(uid_key), str)
+                and re.fullmatch(
+                    r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
+                    run[uid_key],
+                )
+                is not None
+                for uid_key in ("polaris_pod_uid", "job_uid", "job_pod_uid")
+            ),
+            "RUNTIME_ACCEPTANCE",
+            f"Iceberg acceptance {key} workload identity is invalid",
+        )
+        runs.append(run)
+
+    initial, rerun = runs
+    initial_summary = initial["summary"]
+    rerun_summary = rerun["summary"]
+    _expect(
+        initial["polaris_pod_uid"] != rerun["polaris_pod_uid"]
+        and initial["job_uid"] != rerun["job_uid"]
+        and initial["job_pod_uid"] != rerun["job_pod_uid"]
+        and initial_summary["snapshot_id"] == rerun_summary["snapshot_id"],
+        "RUNTIME_ACCEPTANCE",
+        "Iceberg restart and idempotence evidence is invalid",
+    )
+
+    storage = receipt.get("storage_inventory_after_rerun")
+    _expect(
+        isinstance(storage, dict)
+        and set(storage)
+        == {
+            "bucket",
+            "prefix",
+            "object_count",
+            "total_bytes",
+            "maximum_object_count",
+            "maximum_total_bytes",
+        }
+        and storage.get("bucket") == "shirokuma-lakehouse"
+        and storage.get("prefix") == "l1/"
+        and type(storage.get("object_count")) is int
+        and 0 < storage["object_count"] <= 8
+        and type(storage.get("total_bytes")) is int
+        and 0 < storage["total_bytes"] <= 1_048_576
+        and type(storage.get("maximum_object_count")) is int
+        and storage.get("maximum_object_count") == 8
+        and type(storage.get("maximum_total_bytes")) is int
+        and storage.get("maximum_total_bytes") == 1_048_576,
+        "RUNTIME_ACCEPTANCE",
+        "Iceberg storage inventory evidence is invalid",
+    )
+
+    capacity = receipt.get("capacity")
+    _expect(
+        isinstance(capacity, dict)
+        and set(capacity)
+        == {
+            "minimum_available_kib",
+            "host_available_kib",
+            "colima_available_kib",
+        }
+        and type(capacity.get("minimum_available_kib")) is int
+        and capacity.get("minimum_available_kib") == 131_072
+        and type(capacity.get("host_available_kib")) is int
+        and capacity["host_available_kib"] >= 131_072
+        and type(capacity.get("colima_available_kib")) is int
+        and capacity["colima_available_kib"] >= 131_072,
+        "RUNTIME_ACCEPTANCE",
+        "Iceberg capacity evidence is invalid",
+    )
+
+    expected_assertions = {
+        "polaris_pod_uid_changed": initial["polaris_pod_uid"]
+        != rerun["polaris_pod_uid"],
+        "job_uid_changed": initial["job_uid"] != rerun["job_uid"],
+        "snapshot_id_unchanged": initial_summary["snapshot_id"]
+        == rerun_summary["snapshot_id"],
+        "idempotent_rerun": initial_summary["created"] is True
+        and rerun_summary["created"] is False,
+        "storage_guard_passed": storage["object_count"]
+        <= storage["maximum_object_count"]
+        and storage["total_bytes"] <= storage["maximum_total_bytes"],
+        "capacity_guard_passed": capacity["host_available_kib"]
+        >= capacity["minimum_available_kib"]
+        and capacity["colima_available_kib"] >= capacity["minimum_available_kib"],
+    }
+    _expect(
+        receipt.get("assertions") == expected_assertions
+        and all(expected_assertions.values()),
+        "RUNTIME_ACCEPTANCE",
+        "Iceberg acceptance assertions are invalid",
+    )
+    _expect(
+        receipt.get("secrets")
+        == {
+            "credential_material_retained": False,
+            "pod_spec_retained": False,
+            "environment_retained": False,
+        },
+        "RUNTIME_ACCEPTANCE",
+        "Iceberg acceptance secret boundary changed",
+    )
+
+
 def _audit_live_acceptance(root: Path, contract: Mapping[str, Any]) -> None:
     live = contract.get("live_acceptance")
     _expect(isinstance(live, dict), "RUNTIME_ACCEPTANCE", "live acceptance is missing")
@@ -357,7 +634,14 @@ def _audit_live_acceptance(root: Path, contract: Mapping[str, Any]) -> None:
         )
         return
     _expect(
-        set(live) == {"complete", "receipt", "receipt_sha256", "required"},
+        set(live)
+        == {
+            "complete",
+            "receipt",
+            "receipt_sha256",
+            "additional_receipts",
+            "required",
+        },
         "RUNTIME_ACCEPTANCE",
         "live acceptance key set changed",
     )
@@ -386,6 +670,36 @@ def _audit_live_acceptance(root: Path, contract: Mapping[str, Any]) -> None:
         _sha256(path) == expected_digest,
         "RUNTIME_ACCEPTANCE",
         "live acceptance receipt hash mismatch",
+    )
+    additional = live.get("additional_receipts")
+    _expect(
+        isinstance(additional, list)
+        and len(additional) == 1
+        and isinstance(additional[0], dict)
+        and set(additional[0]) == {"receipt", "receipt_sha256"},
+        "RUNTIME_ACCEPTANCE",
+        "additional acceptance receipt binding is invalid",
+    )
+    additional_relative = additional[0].get("receipt")
+    additional_digest = additional[0].get("receipt_sha256")
+    _expect(
+        additional_relative
+        == "security/evidence/iceberg-table-bootstrap-runtime-acceptance.json"
+        and isinstance(additional_digest, str)
+        and re.fullmatch(r"[0-9a-f]{64}", additional_digest) is not None,
+        "RUNTIME_ACCEPTANCE",
+        "Iceberg acceptance receipt binding is invalid",
+    )
+    additional_path = root / additional_relative
+    _expect(
+        additional_path.is_file() and not additional_path.is_symlink(),
+        "RUNTIME_ACCEPTANCE",
+        "Iceberg acceptance receipt is missing",
+    )
+    _expect(
+        _sha256(additional_path) == additional_digest,
+        "RUNTIME_ACCEPTANCE",
+        "Iceberg acceptance receipt hash mismatch",
     )
     receipt = _load_json(path)
     _expect(
@@ -428,6 +742,11 @@ def _audit_live_acceptance(root: Path, contract: Mapping[str, Any]) -> None:
         "receipt repository revision is invalid",
     )
     _audit_accepted_revision_binding(root, contract, repository_revision)
+    _audit_iceberg_acceptance_receipt(
+        additional_path,
+        contract,
+        repository_revision,
+    )
     cluster = receipt.get("cluster")
     _expect(
         cluster

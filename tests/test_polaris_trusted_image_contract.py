@@ -3100,6 +3100,12 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             )
         )
         receipt = contract["live_acceptance"].get("receipt")
+        additional_receipts = [
+            binding["receipt"]
+            for binding in contract["live_acceptance"].get(
+                "additional_receipts", []
+            )
+        ]
         for relative in (
             "security/polaris-runtime-activation.json",
             "Makefile",
@@ -3107,6 +3113,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             *contract["documentation"],
             *contract["tooling"],
             *([receipt] if receipt else []),
+            *additional_receipts,
         ):
             source = ROOT / relative
             destination = root / relative
@@ -3144,7 +3151,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             self._assert_code(
                 root,
                 "FORBIDDEN_PATH",
-                verifier.POLARIS_RUNTIME_ACCEPTANCE_RECEIPT.as_posix(),
+                "pending catalog evidence",
             )
         if receipt:
             shutil.copy2(ROOT / receipt, stale_receipt)
@@ -5466,6 +5473,59 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             encoding="utf-8",
         )
         self._audit(root)
+
+    def test_runtime_acceptance_binds_the_exact_iceberg_receipt(self) -> None:
+        directory = Path(tempfile.mkdtemp(prefix="runtime-acceptance-"))
+        self.addCleanup(shutil.rmtree, directory)
+        for relative in (
+            verifier.POLARIS_RUNTIME_ACTIVATION_CONTRACT,
+            verifier.POLARIS_RUNTIME_ACCEPTANCE_RECEIPT,
+            verifier.ICEBERG_RUNTIME_ACCEPTANCE_RECEIPT,
+        ):
+            destination = directory / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / relative, destination)
+        self.assertEqual(
+            {
+                verifier.POLARIS_RUNTIME_ACCEPTANCE_RECEIPT,
+                verifier.ICEBERG_RUNTIME_ACCEPTANCE_RECEIPT,
+            },
+            verifier._bound_runtime_acceptance_receipts(directory),
+        )
+
+    def test_runtime_acceptance_rejects_unbound_iceberg_receipt(self) -> None:
+        cases = {
+            "wrong-path": lambda binding: binding.update(
+                {"receipt": "security/evidence/other.json"}
+            ),
+            "wrong-hash": lambda binding: binding.update(
+                {"receipt_sha256": "0" * 64}
+            ),
+            "extra-key": lambda binding: binding.update({"unreviewed": True}),
+        }
+        for label, mutate in cases.items():
+            with self.subTest(label=label):
+                directory = Path(tempfile.mkdtemp(prefix="runtime-acceptance-"))
+                self.addCleanup(shutil.rmtree, directory)
+                for relative in (
+                    verifier.POLARIS_RUNTIME_ACTIVATION_CONTRACT,
+                    verifier.POLARIS_RUNTIME_ACCEPTANCE_RECEIPT,
+                    verifier.ICEBERG_RUNTIME_ACCEPTANCE_RECEIPT,
+                ):
+                    destination = directory / relative
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(ROOT / relative, destination)
+                self._rewrite_json(
+                    directory,
+                    verifier.POLARIS_RUNTIME_ACTIVATION_CONTRACT,
+                    lambda contract: mutate(
+                        contract["live_acceptance"]["additional_receipts"][0]
+                    ),
+                )
+                self.assertEqual(
+                    set(),
+                    verifier._bound_runtime_acceptance_receipts(directory),
+                )
 
 
 if __name__ == "__main__":

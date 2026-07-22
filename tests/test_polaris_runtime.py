@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from scripts import verify_polaris_runtime as verifier
 
@@ -135,6 +136,89 @@ class PolarisRuntimeActivationTests(unittest.TestCase):
 
     def test_repository_runtime_activation_is_valid(self) -> None:
         verifier.audit(ROOT)
+
+    def _iceberg_receipt_fixture(self) -> tuple[Path, dict, str]:
+        root = Path(tempfile.mkdtemp(prefix="iceberg-acceptance-"))
+        self.addCleanup(shutil.rmtree, root)
+        relative = Path(
+            "security/evidence/iceberg-table-bootstrap-runtime-acceptance.json"
+        )
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / relative, path)
+        primary_relative = Path(
+            "security/evidence/polaris-runtime-acceptance.json"
+        )
+        shutil.copy2(ROOT / primary_relative, root / primary_relative)
+        contract = json.loads((ROOT / verifier.CONTRACT).read_text(encoding="utf-8"))
+        primary = json.loads(
+            (
+                ROOT / "security/evidence/polaris-runtime-acceptance.json"
+            ).read_text(encoding="utf-8")
+        )
+        return path, contract, primary["repository_revision"]
+
+    def _assert_iceberg_receipt_rejected(
+        self,
+        path: Path,
+        contract: dict,
+        revision: str,
+    ) -> None:
+        with self.assertRaises(verifier.RuntimeContractError) as raised:
+            verifier._audit_iceberg_acceptance_receipt(path, contract, revision)
+        self.assertEqual("RUNTIME_ACCEPTANCE", raised.exception.code)
+
+    def test_repository_iceberg_acceptance_receipt_is_valid(self) -> None:
+        path, contract, revision = self._iceberg_receipt_fixture()
+        verifier._audit_iceberg_acceptance_receipt(path, contract, revision)
+
+    def test_iceberg_acceptance_receipt_rejects_non_json_content(self) -> None:
+        path, contract, revision = self._iceberg_receipt_fixture()
+        path.write_text("arbitrary receipt content\n", encoding="utf-8")
+        self._assert_iceberg_receipt_rejected(path, contract, revision)
+
+    def test_live_acceptance_rejects_rehashed_non_json_iceberg_receipt(self) -> None:
+        path, contract, _ = self._iceberg_receipt_fixture()
+        path.write_text("arbitrary receipt content\n", encoding="utf-8")
+        contract["live_acceptance"]["additional_receipts"][0][
+            "receipt_sha256"
+        ] = verifier._sha256(path)
+        with mock.patch.object(verifier, "_audit_accepted_revision_binding"):
+            with self.assertRaises(verifier.RuntimeContractError) as raised:
+                verifier._audit_live_acceptance(path.parents[2], contract)
+        self.assertEqual("RUNTIME_ACCEPTANCE", raised.exception.code)
+
+    def test_iceberg_acceptance_receipt_rejects_semantic_tampering(self) -> None:
+        path, contract, revision = self._iceberg_receipt_fixture()
+        original = json.loads(path.read_text(encoding="utf-8"))
+        cases = (
+            ("schema", ("schema_version",), 2),
+            ("revision", ("cluster", "repository_revision"), "0" * 40),
+            ("flux-ready", ("flux", "kustomizations", 1, "ready"), False),
+            (
+                "restart",
+                ("initial", "polaris_pod_uid"),
+                original["rerun_after_polaris_restart"]["polaris_pod_uid"],
+            ),
+            ("idempotence", ("rerun_after_polaris_restart", "summary", "created"), True),
+            ("summary-digest", ("initial", "summary_canonical_sha256"), "0" * 64),
+            ("storage", ("storage_inventory_after_rerun", "object_count"), 9),
+            ("capacity", ("capacity", "host_available_kib"), 0),
+            ("assertion", ("assertions", "storage_guard_passed"), False),
+            ("secret", ("secrets", "environment_retained"), True),
+        )
+        for label, keys, value in cases:
+            with self.subTest(label=label):
+                receipt = json.loads(json.dumps(original))
+                target = receipt
+                for key in keys[:-1]:
+                    target = target[key]
+                target[keys[-1]] = value
+                path.write_text(
+                    json.dumps(receipt, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                self._assert_iceberg_receipt_rejected(path, contract, revision)
 
     def test_repository_storage_environment_is_secret_ref_only(self) -> None:
         deployment = (

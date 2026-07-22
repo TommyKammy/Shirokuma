@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "issue": 61,
-  "state": "runtime_acceptance_pending",
+  "state": "runtime_accepted",
   "images": {
     "polaris": "ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
     "postgresql": "cgr.dev/chainguard/postgres@sha256:c455ec159d05d99ee031d471b8692668562fed8e8c9c37be5e0dbdbee8e5f7b8",
@@ -73,7 +73,15 @@
     "opentofu/dev/catalog.tf": "4da191cedd4f0b6233697ea56ddfe7b0f8d6dd0ee3934792adbb00bf9f619eb0"
   },
   "live_acceptance": {
-    "complete": false,
+    "complete": true,
+    "receipt": "security/evidence/polaris-runtime-acceptance.json",
+    "receipt_sha256": "e809ea6e6a427881203f7e0cf60cac1a7da13d849995c7150d8d95e8b0c69327",
+    "additional_receipts": [
+      {
+        "receipt": "security/evidence/iceberg-table-bootstrap-runtime-acceptance.json",
+        "receipt_sha256": "f8a803a354e5e3e0061380aa24f507c2793197bfb04c861d6d7133bff236041f"
+      }
+    ],
     "required": [
       "flux_ready",
       "catalog_create_list_read",

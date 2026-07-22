@@ -755,7 +755,7 @@ PENDING_SCRIPT_FILE_INVENTORY = {
         POLARIS_ADMIN_IMAGE_VERIFIER_SHA256
     ),
     "scripts/verify_polaris_runtime.py": (
-        "77abd8797607af3f42a566734aeffcd892cc094f120b828757800b39bf5e43c3"
+        "cd87946305f97d13ed909807605fb286e0390f6ab82172864158c58a216adeb7"
     ),
     "scripts/verify_repository_skeleton.py": (
         "b6bbbd383c74b190872bdcf144ede8126d8da5dbeb03e291027aaf276c62c955"
@@ -794,6 +794,9 @@ POLARIS_RUNTIME_ACTIVATION_CONTRACT = Path(
 )
 POLARIS_RUNTIME_ACCEPTANCE_RECEIPT = Path(
     "security/evidence/polaris-runtime-acceptance.json"
+)
+ICEBERG_RUNTIME_ACCEPTANCE_RECEIPT = Path(
+    "security/evidence/iceberg-table-bootstrap-runtime-acceptance.json"
 )
 RETAINED_EVIDENCE_JSON_SUFFIXES = {".json", ".jsonl"}
 RETAINED_EVIDENCE_DOCUMENT_SUFFIXES = {".md"}
@@ -9079,11 +9082,48 @@ def _bound_runtime_acceptance_receipt(root: Path) -> Path | None:
     return POLARIS_RUNTIME_ACCEPTANCE_RECEIPT
 
 
+def _bound_runtime_acceptance_receipts(root: Path) -> set[Path]:
+    primary = _bound_runtime_acceptance_receipt(root)
+    if primary is None:
+        return set()
+    contract = _load_json(
+        root,
+        POLARIS_RUNTIME_ACTIVATION_CONTRACT,
+        "FORBIDDEN_PATH",
+    )
+    live_acceptance = contract["live_acceptance"]
+    additional = live_acceptance.get("additional_receipts")
+    if additional is None:
+        return {primary}
+    if (
+        not isinstance(additional, list)
+        or len(additional) != 1
+        or not isinstance(additional[0], Mapping)
+        or set(additional[0]) != {"receipt", "receipt_sha256"}
+        or additional[0].get("receipt")
+        != ICEBERG_RUNTIME_ACCEPTANCE_RECEIPT.as_posix()
+    ):
+        return set()
+    expected_sha256 = additional[0].get("receipt_sha256")
+    if not isinstance(expected_sha256, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", expected_sha256
+    ):
+        return set()
+    observed_sha256, _ = _sha256_and_size(
+        root,
+        ICEBERG_RUNTIME_ACCEPTANCE_RECEIPT,
+        "FORBIDDEN_PATH",
+    )
+    if observed_sha256 != expected_sha256:
+        return set()
+    return {primary, ICEBERG_RUNTIME_ACCEPTANCE_RECEIPT}
+
+
 def _audit_retained_pending_evidence(root: Path) -> None:
     directory = root / RETAINED_EVIDENCE_ROOT
     if not directory.exists():
         return
-    accepted_runtime_receipt = _bound_runtime_acceptance_receipt(root)
+    accepted_runtime_receipts = _bound_runtime_acceptance_receipts(root)
     _expect(
         directory.is_dir() and not directory.is_symlink(),
         "FORBIDDEN_PATH",
@@ -9101,8 +9141,7 @@ def _audit_retained_pending_evidence(root: Path) -> None:
             continue
         relative = path.relative_to(root).as_posix()
         is_accepted_runtime_receipt = (
-            accepted_runtime_receipt is not None
-            and path.relative_to(root) == accepted_runtime_receipt
+            path.relative_to(root) in accepted_runtime_receipts
         )
         evidence_relative = path.relative_to(directory).as_posix()
         path_tokens = _path_identity_tokens(evidence_relative)
