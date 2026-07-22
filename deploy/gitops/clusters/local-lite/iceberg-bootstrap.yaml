@@ -1,0 +1,23 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: shirokuma-iceberg-bootstrap
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: shirokuma-catalog
+  interval: 10m
+  retryInterval: 1m
+  timeout: 10m
+  path: ./deploy/gitops/iceberg/bootstrap
+  prune: true
+  force: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  wait: true
+  healthChecks:
+    - apiVersion: batch/v1
+      kind: Job
+      name: iceberg-table-bootstrap
+      namespace: shirokuma-dev

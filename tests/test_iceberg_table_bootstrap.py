@@ -17,6 +17,7 @@ from gitops_render import (
     RepositoryContext,
     default_repository_context,
     iceberg_bootstrap_manifests,
+    load_yaml_file,
     polaris_workload_manifests,
 )
 
@@ -3507,7 +3508,7 @@ metadata:
 
 
 class IcebergTableBootstrapPrerequisiteTests(unittest.TestCase):
-    def test_polaris_workload_keeps_bootstrap_blocked_pending_readiness(
+    def test_polaris_workload_and_bootstrap_are_both_reconciled(
         self,
     ) -> None:
         self.assertEqual(
@@ -3522,10 +3523,192 @@ class IcebergTableBootstrapPrerequisiteTests(unittest.TestCase):
             "workload prerequisite",
         )
         self.assertEqual(
-            [],
+            [
+                (
+                    ROOT
+                    / "deploy/gitops/clusters/local-lite/flux-system/gotk-sync.yaml"
+                ).resolve()
+            ],
             _iceberg_bootstrap_manifests(),
-            "Iceberg namespace/table bootstrap resources must remain absent until "
-            "live catalog readiness evidence is reviewed",
+            "Only the reviewed Iceberg table bootstrap Job may satisfy the "
+            "materialized bootstrap contract",
+        )
+
+    def test_bootstrap_job_uses_only_admitted_images_and_secret_references(
+        self,
+    ) -> None:
+        job = load_yaml_file(
+            ROOT / "deploy/gitops/iceberg/bootstrap/job.yaml"
+        )[0]
+        pod = job["spec"]["template"]["spec"]
+        self.assertFalse(pod["automountServiceAccountToken"])
+        self.assertFalse(pod["enableServiceLinks"])
+        self.assertEqual("OnFailure", pod["restartPolicy"])
+        self.assertEqual(600, job["spec"]["activeDeadlineSeconds"])
+        self.assertEqual(3, job["spec"]["backoffLimit"])
+        container = pod["containers"][0]
+        self.assertEqual(
+            "ghcr.io/tommykammy/shirokuma-polaris@sha256:"
+            "db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+            container["image"],
+        )
+        self.assertEqual(["/usr/bin/java"], container["command"])
+        self.assertEqual(
+            "-Djava.util.logging.manager=org.jboss.logmanager.LogManager",
+            container["args"][0],
+        )
+        self.assertEqual(
+            "/deployments/lib/boot/*:/deployments/lib/main/*:/deployments/app/*",
+            container["args"][2],
+        )
+        self.assertFalse(
+            any(argument.startswith("-Dshirokuma.") for argument in container["args"])
+        )
+        environment = {item["name"]: item for item in container["env"]}
+        expected_secret_refs = {
+            "POLARIS_CLIENT_ID": ("polaris-root-credentials", "client_id"),
+            "POLARIS_CLIENT_SECRET": (
+                "polaris-root-credentials",
+                "client_secret",
+            ),
+            "POLARIS_REALM": ("polaris-root-credentials", "realm"),
+            "AWS_REGION": (
+                "seaweedfs-s3-application-credentials",
+                "S3_REGION",
+            ),
+            "AWS_ACCESS_KEY_ID": (
+                "seaweedfs-s3-application-credentials",
+                "AWS_ACCESS_KEY_ID",
+            ),
+            "AWS_SECRET_ACCESS_KEY": (
+                "seaweedfs-s3-application-credentials",
+                "AWS_SECRET_ACCESS_KEY",
+            ),
+        }
+        for name, (secret_name, key) in expected_secret_refs.items():
+            with self.subTest(name=name):
+                reference = environment[name]["valueFrom"]["secretKeyRef"]
+                self.assertEqual(secret_name, reference["name"])
+                self.assertEqual(key, reference["key"])
+                self.assertNotIn("value", environment[name])
+        self.assertEqual(
+            {
+                "POLARIS_URI": (
+                    "http://polaris.shirokuma-dev.svc.cluster.local:8181"
+                ),
+                "S3_ENDPOINT": (
+                    "http://seaweedfs-s3.shirokuma-storage.svc.cluster.local:8333"
+                ),
+            },
+            {
+                name: environment[name]["value"]
+                for name in ("POLARIS_URI", "S3_ENDPOINT")
+            },
+        )
+
+    def test_bootstrap_job_is_non_root_read_only_and_network_bounded(
+        self,
+    ) -> None:
+        job = load_yaml_file(
+            ROOT / "deploy/gitops/iceberg/bootstrap/job.yaml"
+        )[0]
+        pod = job["spec"]["template"]["spec"]
+        container = pod["containers"][0]
+        self.assertEqual(
+            {
+                "allowPrivilegeEscalation": False,
+                "capabilities": {"drop": ["ALL"]},
+                "readOnlyRootFilesystem": True,
+                "runAsNonRoot": True,
+                "runAsUser": 10000,
+                "runAsGroup": 10001,
+            },
+            container["securityContext"],
+        )
+        self.assertEqual(10000, pod["securityContext"]["runAsUser"])
+        self.assertEqual(
+            "true",
+            job["spec"]["template"]["metadata"]["labels"][
+                "shirokuma.dev/object-storage-client"
+            ],
+        )
+        policy = load_yaml_file(
+            ROOT / "deploy/gitops/iceberg/bootstrap/networkpolicy.yaml"
+        )[0]
+        self.assertEqual([], policy["spec"]["ingress"])
+        self.assertEqual(3, len(policy["spec"]["egress"]))
+        self.assertEqual([8181, 8333, 53], [
+            rule["ports"][0]["port"] for rule in policy["spec"]["egress"]
+        ])
+
+    def test_flux_orders_bootstrap_after_catalog_and_waits_for_job(
+        self,
+    ) -> None:
+        flux = load_yaml_file(
+            ROOT
+            / "deploy/gitops/clusters/local-lite/iceberg-bootstrap.yaml"
+        )[0]
+        self.assertEqual(
+            [{"name": "shirokuma-catalog"}], flux["spec"]["dependsOn"]
+        )
+        self.assertTrue(flux["spec"]["prune"])
+        self.assertTrue(flux["spec"]["force"])
+        self.assertTrue(flux["spec"]["wait"])
+        self.assertEqual(
+            {
+                "apiVersion": "batch/v1",
+                "kind": "Job",
+                "name": "iceberg-table-bootstrap",
+                "namespace": "shirokuma-dev",
+            },
+            flux["spec"]["healthChecks"][0],
+        )
+
+    def test_source_implements_create_write_read_and_idempotence(self) -> None:
+        source = (
+            ROOT
+            / "deploy/gitops/iceberg/bootstrap/IcebergBootstrap.java"
+        ).read_text(encoding="utf-8")
+        for expected in (
+            "ensureManagementCatalog",
+            "catalog.namespaceExists",
+            "catalog.tableExists",
+            "writeFixture",
+            "table.newAppend().appendFile(dataFile).commit()",
+            "verifyFixtureRead",
+            "catalog.listTables(namespace)",
+            "table.currentSnapshot() == null",
+            '"--cleanup"',
+            "CatalogUtil.dropTableData",
+            "catalog.dropTable(identifier, false)",
+            "hasSingleAllowedLocation",
+            'storage.path("endpointInternal")',
+            'storage.path("pathStyleAccess")',
+            "error instanceof BootstrapException",
+            '"operation failed"',
+            "credential_material_retained",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, source)
+        for forbidden in (
+            "http://169.254.169.254",
+            "Runtime.getRuntime().exec",
+            "ProcessBuilder",
+            "latest",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, source)
+        self.assertLess(
+            source.index("catalog.dropTable(identifier, false)"),
+            source.index("CatalogUtil.dropTableData"),
+            "Catalog metadata must be detached before object deletion so a "
+            "failed catalog drop cannot leave a live table pointing at deleted data",
+        )
+        self.assertNotIn(
+            "Set.of(environment.clientSecret()",
+            source,
+            "Redaction must tolerate equal credential values without disclosing "
+            "the duplicate through an exception",
         )
 
 

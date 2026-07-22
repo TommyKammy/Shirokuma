@@ -3146,7 +3146,10 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 "FORBIDDEN_PATH",
                 verifier.POLARIS_RUNTIME_ACCEPTANCE_RECEIPT.as_posix(),
             )
-        shutil.copy2(ROOT / receipt, stale_receipt)
+        if receipt:
+            shutil.copy2(ROOT / receipt, stale_receipt)
+        else:
+            stale_receipt.unlink()
         with self.subTest(case="hash-mutation"):
             runtime_file = root / "deploy/gitops/catalog/server/deployment.yaml"
             runtime_file.write_text(

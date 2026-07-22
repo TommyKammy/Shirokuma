@@ -1,0 +1,106 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: iceberg-table-bootstrap
+  namespace: shirokuma-dev
+  labels:
+    app.kubernetes.io/name: iceberg-table-bootstrap
+    app.kubernetes.io/component: lakehouse-bootstrap
+    app.kubernetes.io/part-of: shirokuma
+spec:
+  activeDeadlineSeconds: 600
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: iceberg-table-bootstrap
+        app.kubernetes.io/component: lakehouse-bootstrap
+        app.kubernetes.io/part-of: shirokuma
+        shirokuma.dev/object-storage-client: "true"
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10000
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: iceberg-table-bootstrap
+          image: ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e
+          imagePullPolicy: IfNotPresent
+          command:
+            - /usr/bin/java
+          args:
+            - -Djava.util.logging.manager=org.jboss.logmanager.LogManager
+            - --class-path
+            - /deployments/lib/boot/*:/deployments/lib/main/*:/deployments/app/*
+            - /opt/shirokuma/IcebergBootstrap.java
+          env:
+            - name: POLARIS_URI
+              value: http://polaris.shirokuma-dev.svc.cluster.local:8181
+            - name: POLARIS_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: polaris-root-credentials
+                  key: client_id
+            - name: POLARIS_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: polaris-root-credentials
+                  key: client_secret
+            - name: POLARIS_REALM
+              valueFrom:
+                secretKeyRef:
+                  name: polaris-root-credentials
+                  key: realm
+            - name: S3_ENDPOINT
+              value: http://seaweedfs-s3.shirokuma-storage.svc.cluster.local:8333
+            - name: AWS_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-application-credentials
+                  key: S3_REGION
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-application-credentials
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: seaweedfs-s3-application-credentials
+                  key: AWS_SECRET_ACCESS_KEY
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10000
+            runAsGroup: 10001
+          volumeMounts:
+            - name: source
+              mountPath: /opt/shirokuma
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: source
+          configMap:
+            name: iceberg-table-bootstrap-source
+            defaultMode: 0440
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi

@@ -8,6 +8,7 @@ resources:
   - catalog-database.yaml
   - catalog-bootstrap.yaml
   - catalog.yaml
+  - iceberg-bootstrap.yaml
 replacements:
   - source:
       kind: ConfigMap
