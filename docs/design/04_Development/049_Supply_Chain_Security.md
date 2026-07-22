@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-22
-version: "1.20"
+version: "1.21"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -598,6 +598,22 @@ retained publication record has `promoted=true`, `admitted=false`, and
 `state=image_evidence_review_pending`. Evidence review advances the repository
 state to `atomic_admission_pending`, retires the publisher, and does not
 authorize resident or runtime use.
+
+ADR-0022 selects a repository-owned Trino 483 source build after PR #101
+retained the unsigned upstream image as blocked evidence. The exact source is
+commit `50b0b50b75abd47f830b7805ee1b51716eb4065e`, tree
+`3b5414292a614b12393bb4605ea2d4c588a5b8ee`. The first permitted implementation
+boundary is a main-only Maven dependency-snapshot publisher followed by a
+separate evidence-only review. It must use Maven 3.9.16 and Temurin 25 from the
+exact native-arm64 builder selected by the ADR, allow only Maven Central and
+the explicit Confluent repository, manifest every dependency byte, and prove a
+fresh `mvn --offline clean install -DskipTests` with networking disabled. The
+unchecked Maven-wrapper download, upstream server tarball, upstream Dockerfile,
+image publication, resident ledger, credentials, Flux, and runtime all remain
+forbidden at this decision checkpoint. The selected Amazon Corretto 25 Alpine
+3.24 runtime base is feasibility evidence only until a later main publication
+repeats native smoke, SBOM, High=0/Critical=0 scan, signature, provenance, and
+anonymous exact-digest retrieval.
 
 ## Resident image and SBOM evidence
 

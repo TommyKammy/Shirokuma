@@ -74,7 +74,9 @@
   },
   "next_action": {
     "mode": "repository-owned-reproducible-source-build",
-    "decision_record_required": true,
+    "decision_record_required": false,
+    "decision_record": "docs/design/07_ADR/ADR-0022_Adopt_Trino_483_repository_source_build.md",
+    "phase": "dependency_snapshot_publication_contract_review",
     "requirements": [
       "immutable source commit and release identity",
       "authenticated closed dependency snapshot",

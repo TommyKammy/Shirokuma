@@ -29,6 +29,7 @@
     {"source": "07_ADR/ADR-0018_Use_Flux_v2_as_the_GitOps_reconciler.md", "target": "docs/design/07_ADR/ADR-0018_Use_Flux_v2_as_the_GitOps_reconciler.md"},
     {"source": "07_ADR/ADR-0019_Allow_time_boxed_resident_image_exceptions_for_local_lab.md", "target": "docs/design/07_ADR/ADR-0019_Allow_time_boxed_resident_image_exceptions_for_local_lab.md"},
     {"source": "07_ADR/ADR-0021_Adopt_Polaris_1_6_0_source_build_and_Chainguard_PostgreSQL.md", "target": "docs/design/07_ADR/ADR-0021_Adopt_Polaris_1_6_0_source_build_and_Chainguard_PostgreSQL.md"},
+    {"source": "07_ADR/ADR-0022_Adopt_Trino_483_repository_source_build.md", "target": "docs/design/07_ADR/ADR-0022_Adopt_Trino_483_repository_source_build.md"},
     {"source": "08_Runbooks/RB-001_Bootstrap_local_lite_lab.md", "target": "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md"},
     {"source": "08_Runbooks/RB-002_Diagnose_failed_Flux_reconciliation.md", "target": "docs/design/08_Runbooks/RB-002_Diagnose_failed_Flux_reconciliation.md"},
     {"source": "08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo.md", "target": "docs/design/08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo.md"},

@@ -70,7 +70,7 @@ class Arm64CompatibilityMatrixTests(unittest.TestCase):
     def test_document_metadata_matches_latest_verification(self) -> None:
         front_matter = self.matrix_text.split("---", 2)[1]
         self.assertIn("\nupdated: 2026-07-22\n", front_matter)
-        self.assertIn('\nversion: "0.22"\n', front_matter)
+        self.assertIn('\nversion: "0.23"\n', front_matter)
         self.assertIn("Verification date: 2026-07-22.", self.matrix_text)
 
     def test_all_required_components_have_complete_evidence_rows(self) -> None:
@@ -151,6 +151,15 @@ class Arm64CompatibilityMatrixTests(unittest.TestCase):
             "repository-owned reproducible source build",
             row["Fallback owner / risk / replacement"],
         )
+        self.assertIn("ADR-0022", row["Image or build path"])
+        self.assertIn("ADR-0022", row["v0.2 decision"])
+        for digest in (
+            "sha256:7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c",
+            "sha256:5476bfca9d0a6485b7161f6863123f7e6822336de4177273b47b5ec38ffd573a",
+            "sha256:32d81edae73e1670244827c2f12e5bcf0d335f035b538455fe9d02eb0771d41b",
+            "sha256:da20e1e0a2004dfb95e963d6ad978b5c0effdfc7000bce6a68836058ef24b427",
+        ):
+            self.assertIn(digest, self.matrix_text)
 
     def test_postgresql_follow_up_inventory_and_owner_remain_explicit(self) -> None:
         registry_section = self.matrix_text.split(
