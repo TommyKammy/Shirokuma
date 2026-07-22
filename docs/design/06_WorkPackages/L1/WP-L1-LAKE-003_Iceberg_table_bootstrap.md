@@ -2,7 +2,7 @@
 project: Shirokuma
 doc_id: "WP-L1-LAKE-003"
 title: "WP-L1-LAKE-003 Iceberg table bootstrap"
-status: implementation-in-progress
+status: implementation-in-review
 created: 2026-07-05
 updated: 2026-07-22
 version: "1.0"
@@ -86,6 +86,7 @@ Do not add unrelated dependencies or bypass policy checks.
 - PR: [#53](https://github.com/TommyKammy/Shirokuma/pull/53)
 - Runtime follow-up Epic: [#60](https://github.com/TommyKammy/Shirokuma/issues/60)
 - Runtime follow-up Issue: [#62](https://github.com/TommyKammy/Shirokuma/issues/62)
+- Runtime follow-up PR: [#99](https://github.com/TommyKammy/Shirokuma/pull/99)
 - GitHub depends on: `#27`
 - Runtime follow-up depends on: `#61`
 - Runtime repair depends on: `#96`
@@ -158,6 +159,10 @@ Do not add unrelated dependencies or bypass policy checks.
   the reviewed root hash. After merge and Flux reconciliation, one focused
   evidence PR must recapture both the Polaris runtime acceptance and RB-014
   Iceberg restart/idempotence receipt before #62 closes or #63 begins.
+- 2026-07-22: Draft PR #99 now carries the reviewed implementation commit
+  `b0fb3d7`. Local focused and full repository verification pass. Issue #62
+  remains Open while PR review/CI and the required post-merge evidence review
+  are pending.
 
 ## Definition of Done
 
