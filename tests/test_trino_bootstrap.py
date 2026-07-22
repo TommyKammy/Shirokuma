@@ -2577,8 +2577,9 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "verified upstream signature from a separately approved Trino "
                     "release identity over the exact tag, or over the exact commit "
                     "plus an authenticated release-to-commit binding",
-                    "signed upstream source release whose verified digest and "
-                    "extracted tree bind to the exact commit and tree",
+                    "signed upstream source release verified against a separately "
+                    "approved Trino release trust root and signer identity, whose "
+                    "digest and extracted tree bind to the exact commit and tree",
                     "trusted upstream provenance statement whose subject and source "
                     "claims bind to the exact repository, tag, commit, and tree",
                 ],
@@ -2743,6 +2744,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             "separate evidence-only PR",
             "A SHA, HTTPS transport, GitHub account attribution, release page, or "
             "Shirokuma re-signature alone is insufficient.",
+            "A self-selected or merely embedded signing key is not a trust root.",
             "The next review boundary is source-authentication evidence",
         ):
             with self.subTest(required=required):

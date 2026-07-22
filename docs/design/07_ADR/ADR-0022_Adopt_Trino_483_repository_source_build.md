@@ -87,12 +87,14 @@ so native container smoke remains a mandatory publisher gate.
   `3b5414292a614b12393bb4605ea2d4c588a5b8ee` through at least one of: (1) a
   verified upstream signature from a separately approved Trino release identity
   over the exact tag, or over the exact commit plus an authenticated
-  release-to-commit binding; (2) a signed upstream source release whose verified
-  digest and extracted tree bind to the exact commit and tree; or (3) trusted
-  upstream provenance whose subject and source claims bind all four coordinates.
-  A SHA, HTTPS transport, GitHub account attribution, release page, or Shirokuma
-  re-signature alone is insufficient. If no qualifying proof is available,
-  Trino remains blocked and the implementation must not proceed.
+  release-to-commit binding; (2) a signed upstream source release verified
+  against a separately approved Trino release trust root and signer identity,
+  whose digest and extracted tree bind to the exact commit and tree; or (3)
+  trusted upstream provenance whose subject and source claims bind all four
+  coordinates. A self-selected or merely embedded signing key is not a trust
+  root. A SHA, HTTPS transport, GitHub account attribution, release page, or
+  Shirokuma re-signature alone is insufficient. If no qualifying proof is
+  available, Trino remains blocked and the implementation must not proceed.
 - Use Maven 3.9.16 with Eclipse Temurin 25 from the exact builder index above.
   After the source-authentication gate closes, the main-only workflow must
   verify the native arm64 child and observed Maven, Java, OS, and architecture

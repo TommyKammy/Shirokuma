@@ -606,9 +606,11 @@ commit `50b0b50b75abd47f830b7805ee1b51716eb4065e`, tree
 commit are unsigned, so these SHAs identify bytes without authenticating the
 upstream publisher. The next boundary is a separate source-authentication
 evidence review. It must bind the exact repository, tag, commit, and tree using
-an approved upstream signature, a signed source release with matching extracted
-tree, or trusted upstream provenance; SHA pinning, HTTPS, account attribution,
-the release page, and Shirokuma re-signing are insufficient by themselves.
+an approved upstream signature, a source release signature verified against a
+separately approved Trino trust root and signer identity with matching extracted
+tree, or trusted upstream provenance; self-selected keys, SHA pinning, HTTPS,
+account attribution, the release page, and Shirokuma re-signing are insufficient
+by themselves.
 
 Until that gate closes, no Maven dependency-snapshot publisher or other Trino
 workflow is permitted. If it closes, the later publisher must use Maven 3.9.16
