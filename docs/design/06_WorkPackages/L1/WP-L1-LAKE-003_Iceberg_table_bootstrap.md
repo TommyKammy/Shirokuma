@@ -87,7 +87,7 @@ Do not add unrelated dependencies or bypass policy checks.
 - Runtime follow-up Epic: [#60](https://github.com/TommyKammy/Shirokuma/issues/60)
 - Runtime follow-up Issue: [#62](https://github.com/TommyKammy/Shirokuma/issues/62)
 - Runtime follow-up PR: [#99](https://github.com/TommyKammy/Shirokuma/pull/99)
-- Runtime acceptance evidence: focused PR pending
+- Runtime acceptance evidence PR: [#100](https://github.com/TommyKammy/Shirokuma/pull/100)
 - GitHub depends on: `#27`
 - Runtime follow-up depends on: `#61`
 - Runtime repair depends on: `#96`
