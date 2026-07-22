@@ -67,6 +67,12 @@ class Arm64CompatibilityMatrixTests(unittest.TestCase):
             if len(cells) == len(EXPECTED_HEADER):
                 cls.rows[cells[0]] = dict(zip(EXPECTED_HEADER, cells))
 
+    def test_document_metadata_matches_latest_verification(self) -> None:
+        front_matter = self.matrix_text.split("---", 2)[1]
+        self.assertIn("\nupdated: 2026-07-22\n", front_matter)
+        self.assertIn('\nversion: "0.22"\n', front_matter)
+        self.assertIn("Verification date: 2026-07-22.", self.matrix_text)
+
     def test_all_required_components_have_complete_evidence_rows(self) -> None:
         self.assertEqual(REQUIRED_COMPONENTS, REQUIRED_COMPONENTS & self.rows.keys())
         ambiguous = re.compile(r"\b(?:unknown|verify|tbd|todo)\b", re.IGNORECASE)
@@ -124,6 +130,27 @@ class Arm64CompatibilityMatrixTests(unittest.TestCase):
         self.assertIn("High=0", row["Signature / provenance"])
         self.assertIn("Critical=0", row["Signature / provenance"])
         self.assertIn("runtime remains blocked", row["v0.2 decision"])
+
+    def test_trino_candidate_is_refreshed_and_remains_fail_closed(self) -> None:
+        row = self.rows["Trino"]
+        self.assertIn("`483` (2026-07-17)", row["Upstream release"])
+        self.assertIn(
+            "sha256:db58cc93e593a2706553745f276bb119c9810e69918be56ecde088ba7ccb0534",
+            row["Image or build path"],
+        )
+        self.assertIn(
+            "sha256:aa18e61b2e7776ab8641ba8baaa8687d0430894e88c639e61010cc46a994ab36",
+            row["linux/arm64 evidence"],
+        )
+        self.assertIn("no attestation manifest", row["Signature / provenance"])
+        self.assertIn("unsigned", row["Signature / provenance"])
+        self.assertIn("no trusted SLSA", row["Signature / provenance"])
+        self.assertIn("runtime remain blocked", row["v0.2 decision"])
+        self.assertIn("re-signing", row["Fallback owner / risk / replacement"])
+        self.assertIn(
+            "repository-owned reproducible source build",
+            row["Fallback owner / risk / replacement"],
+        )
 
     def test_postgresql_follow_up_inventory_and_owner_remain_explicit(self) -> None:
         registry_section = self.matrix_text.split(

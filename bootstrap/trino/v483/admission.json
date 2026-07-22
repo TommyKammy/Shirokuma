@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "component": "trino",
+  "version": "483",
+  "source": {
+    "repository": "https://github.com/trinodb/trino",
+    "release_tag": "483",
+    "tag_object_sha": "32d4f28e8311ea6f67edca209df59a0493d869fa",
+    "commit_sha": "50b0b50b75abd47f830b7805ee1b51716eb4065e",
+    "tag_signature": "unsigned",
+    "server_asset": {
+      "url": "https://github.com/trinodb/trino/releases/download/483/trino-server-483.tar.gz",
+      "sha256": "4f3978428f26f36398c94b85a3e03b5301394919c8a4271b497b0fcd1698d0cb",
+      "bytes": 851844304,
+      "role": "evaluated_upstream_binary_not_approved_build_input"
+    }
+  },
+  "platform": "linux/arm64",
+  "candidate": {
+    "index_reference": "docker.io/trinodb/trino@sha256:db58cc93e593a2706553745f276bb119c9810e69918be56ecde088ba7ccb0534",
+    "manifest_digest": "sha256:aa18e61b2e7776ab8641ba8baaa8687d0430894e88c639e61010cc46a994ab36",
+    "observed_platforms": [
+      "linux/amd64",
+      "linux/arm64",
+      "linux/ppc64le"
+    ],
+    "attestation_manifest_count": 0
+  },
+  "assessment": {
+    "assessed_on": "2026-07-22",
+    "scope": "mac-studio-solo/local-lite",
+    "admission": "blocked",
+    "exception_eligible": false,
+    "blockers": [
+      {
+        "control": "upstream_image_signature",
+        "status": "missing",
+        "evidence": "the immutable 483 image index exposes only runtime platform manifests and no trusted signer is documented"
+      },
+      {
+        "control": "source_tag_signature",
+        "status": "missing",
+        "evidence": "GitHub reports annotated tag object 32d4f28e8311ea6f67edca209df59a0493d869fa as unsigned"
+      },
+      {
+        "control": "slsa_provenance",
+        "status": "missing",
+        "evidence": "no trusted provenance statement binds the upstream image or server asset to commit 50b0b50b75abd47f830b7805ee1b51716eb4065e"
+      },
+      {
+        "control": "repository_source_build",
+        "status": "not_retained",
+        "evidence": "no reviewed dependency closure, offline build, signature, SBOM, scan, or runtime-smoke evidence exists in this repository"
+      }
+    ],
+    "rationale": "ADR-0019 permits only exact time-bounded High vulnerability exceptions; it does not waive source identity, image signature, transparency-log, provenance, or evidence requirements. Re-signing the untrusted upstream image is forbidden."
+  },
+  "repository_state": {
+    "publication_workflow_permitted": false,
+    "resident_ledger_permitted": false,
+    "runtime_manifests_permitted": false,
+    "allowed_paths": [
+      "bootstrap/trino/v483/admission.json"
+    ],
+    "forbidden_paths": [
+      ".github/workflows/trino-arm64.yml",
+      "bootstrap/trino/v483/Containerfile",
+      "bootstrap/trino/v483/trusted-build-contract.json",
+      "security/evidence/trino-v483",
+      "deploy/trino",
+      "deploy/gitops/trino",
+      "charts/trino"
+    ]
+  },
+  "next_action": {
+    "mode": "repository-owned-reproducible-source-build",
+    "decision_record_required": true,
+    "requirements": [
+      "immutable source commit and release identity",
+      "authenticated closed dependency snapshot",
+      "network-none reproducible linux/arm64 build",
+      "digest-pinned builder and runtime bases",
+      "native linux/arm64 runtime smoke",
+      "Cosign signature and transparency-log evidence",
+      "SLSA provenance bound to the source revision",
+      "retained SBOM and fresh vulnerability scan",
+      "anonymous exact-digest retrieval before separate admission review"
+    ]
+  }
+}

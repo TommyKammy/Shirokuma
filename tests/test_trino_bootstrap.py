@@ -24,8 +24,17 @@ from test_iceberg_table_bootstrap import (
     _polaris_workload_manifests,
 )
 
+ROOT = Path(__file__).resolve().parents[1]
 TRINO_COMPONENT = "trino"
 POSTGRESQL_COMPONENT = "postgresql"
+TRINO_ADMISSION = ROOT / "bootstrap/trino/v483/admission.json"
+TRINO_INDEX_REFERENCE = (
+    "docker.io/trinodb/trino@"
+    "sha256:db58cc93e593a2706553745f276bb119c9810e69918be56ecde088ba7ccb0534"
+)
+TRINO_ARM64_DIGEST = (
+    "sha256:aa18e61b2e7776ab8641ba8baaa8687d0430894e88c639e61010cc46a994ab36"
+)
 HELM_RELEASE_IDENTITY_PATHS = (
     ("metadata", "name"),
     ("metadata", "labels", "app.kubernetes.io/name"),
@@ -46,6 +55,15 @@ HELM_IMAGE_VALUE_KEYS = {
 HelmResourceKey = tuple[object, ...]
 HelmValuesSources = dict[HelmResourceKey, dict[str, str]]
 HelmChartReferences = dict[HelmResourceKey, tuple[str, ...]]
+
+
+def _github_workflow_paths(root: Path = ROOT) -> list[Path]:
+    workflows = root / ".github/workflows"
+    return sorted(
+        path
+        for path in workflows.iterdir()
+        if path.is_file() and path.suffix.casefold() in {".yaml", ".yml"}
+    )
 
 
 def _has_trino_identity(value: str | None) -> bool:
@@ -2384,6 +2402,245 @@ class PolarisPrerequisiteWorkloadDetectionTests(unittest.TestCase):
                     ("OCIRepository", "default", "polaris"): ("polaris",)
                 },
             )
+        )
+
+
+class TrinoAdmissionBlockerTests(unittest.TestCase):
+    @staticmethod
+    def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict:
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate key: {key}")
+            result[key] = value
+        return result
+
+    def _admission(self) -> dict:
+        return json.loads(
+            TRINO_ADMISSION.read_text(encoding="utf-8"),
+            object_pairs_hook=self._reject_duplicate_keys,
+        )
+
+    def test_blocker_checkpoint_is_closed_world_and_immutable(self) -> None:
+        admission = self._admission()
+        self.assertEqual(
+            {
+                "schema_version",
+                "component",
+                "version",
+                "source",
+                "platform",
+                "candidate",
+                "assessment",
+                "repository_state",
+                "next_action",
+            },
+            set(admission),
+        )
+        self.assertIs(type(admission["schema_version"]), int)
+        self.assertEqual(1, admission["schema_version"])
+        self.assertEqual("trino", admission["component"])
+        self.assertEqual("483", admission["version"])
+        self.assertEqual("linux/arm64", admission["platform"])
+        self.assertEqual(
+            {
+                "repository": "https://github.com/trinodb/trino",
+                "release_tag": "483",
+                "tag_object_sha": "32d4f28e8311ea6f67edca209df59a0493d869fa",
+                "commit_sha": "50b0b50b75abd47f830b7805ee1b51716eb4065e",
+                "tag_signature": "unsigned",
+                "server_asset": {
+                    "url": (
+                        "https://github.com/trinodb/trino/releases/download/483/"
+                        "trino-server-483.tar.gz"
+                    ),
+                    "sha256": (
+                        "4f3978428f26f36398c94b85a3e03b5301394919c8a4271b"
+                        "497b0fcd1698d0cb"
+                    ),
+                    "bytes": 851844304,
+                    "role": "evaluated_upstream_binary_not_approved_build_input",
+                },
+            },
+            admission["source"],
+        )
+        self.assertIs(type(admission["source"]["server_asset"]["bytes"]), int)
+        self.assertEqual(
+            {
+                "index_reference": TRINO_INDEX_REFERENCE,
+                "manifest_digest": TRINO_ARM64_DIGEST,
+                "observed_platforms": [
+                    "linux/amd64",
+                    "linux/arm64",
+                    "linux/ppc64le",
+                ],
+                "attestation_manifest_count": 0,
+            },
+            admission["candidate"],
+        )
+        self.assertIs(
+            type(admission["candidate"]["attestation_manifest_count"]), int
+        )
+
+    def test_missing_trust_controls_cannot_be_waived_by_exception(self) -> None:
+        assessment = self._admission()["assessment"]
+        self.assertEqual(
+            {
+                "assessed_on": "2026-07-22",
+                "scope": "mac-studio-solo/local-lite",
+                "admission": "blocked",
+                "exception_eligible": False,
+                "blockers": [
+                    {
+                        "control": "upstream_image_signature",
+                        "status": "missing",
+                        "evidence": (
+                            "the immutable 483 image index exposes only runtime "
+                            "platform manifests and no trusted signer is documented"
+                        ),
+                    },
+                    {
+                        "control": "source_tag_signature",
+                        "status": "missing",
+                        "evidence": (
+                            "GitHub reports annotated tag object "
+                            "32d4f28e8311ea6f67edca209df59a0493d869fa as unsigned"
+                        ),
+                    },
+                    {
+                        "control": "slsa_provenance",
+                        "status": "missing",
+                        "evidence": (
+                            "no trusted provenance statement binds the upstream image "
+                            "or server asset to commit "
+                            "50b0b50b75abd47f830b7805ee1b51716eb4065e"
+                        ),
+                    },
+                    {
+                        "control": "repository_source_build",
+                        "status": "not_retained",
+                        "evidence": (
+                            "no reviewed dependency closure, offline build, signature, "
+                            "SBOM, scan, or runtime-smoke evidence exists in this repository"
+                        ),
+                    },
+                ],
+                "rationale": (
+                    "ADR-0019 permits only exact time-bounded High vulnerability "
+                    "exceptions; it does not waive source identity, image signature, "
+                    "transparency-log, provenance, or evidence requirements. Re-signing "
+                    "the untrusted upstream image is forbidden."
+                ),
+            },
+            assessment,
+        )
+
+    def test_blocked_candidate_cannot_publish_admit_or_materialize(self) -> None:
+        admission = self._admission()
+        repository_state = admission["repository_state"]
+        self.assertEqual(
+            {
+                "publication_workflow_permitted": False,
+                "resident_ledger_permitted": False,
+                "runtime_manifests_permitted": False,
+                "allowed_paths": ["bootstrap/trino/v483/admission.json"],
+                "forbidden_paths": [
+                    ".github/workflows/trino-arm64.yml",
+                    "bootstrap/trino/v483/Containerfile",
+                    "bootstrap/trino/v483/trusted-build-contract.json",
+                    "security/evidence/trino-v483",
+                    "deploy/trino",
+                    "deploy/gitops/trino",
+                    "charts/trino",
+                ],
+            },
+            repository_state,
+        )
+        for key in (
+            "publication_workflow_permitted",
+            "resident_ledger_permitted",
+            "runtime_manifests_permitted",
+        ):
+            self.assertIs(repository_state[key], False)
+        bootstrap_inventory = {
+            path.relative_to(ROOT).as_posix()
+            for path in TRINO_ADMISSION.parent.rglob("*")
+            if path.is_file() or path.is_symlink()
+        }
+        self.assertEqual(set(repository_state["allowed_paths"]), bootstrap_inventory)
+        all_trino_bootstrap_paths = {
+            path.relative_to(ROOT).as_posix()
+            for path in (ROOT / "bootstrap").rglob("*")
+            if (path.is_file() or path.is_symlink())
+            and "trino" in path.relative_to(ROOT).as_posix().casefold()
+        }
+        self.assertEqual(bootstrap_inventory, all_trino_bootstrap_paths)
+        for relative in repository_state["forbidden_paths"]:
+            with self.subTest(forbidden_path=relative):
+                self.assertFalse((ROOT / relative).exists())
+
+        ledger = json.loads(RESIDENT_IMAGES.read_text(encoding="utf-8"))
+        self.assertEqual(
+            [],
+            [
+                image.get("component", "<unknown>")
+                for image in ledger["images"]
+                if image.get("component") == TRINO_COMPONENT
+                or image.get("reference") == TRINO_INDEX_REFERENCE
+                or image.get("reference", "").endswith(TRINO_ARM64_DIGEST)
+            ],
+        )
+        self.assertEqual([], _trino_workload_manifests())
+        for path in _deployment_manifest_paths(DEPLOY_ROOT, CHARTS_ROOT):
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(manifest=path):
+                self.assertNotIn(TRINO_INDEX_REFERENCE, text)
+                self.assertNotIn(TRINO_ARM64_DIGEST, text)
+                self.assertNotIn("trinodb/trino", text.casefold())
+                self.assertNotIn("shirokuma-trino", text.casefold())
+        for path in _github_workflow_paths():
+            workflow = path.read_text(encoding="utf-8").casefold()
+            with self.subTest(workflow=path):
+                self.assertNotIn("trinodb/trino", workflow)
+                self.assertNotIn("shirokuma-trino", workflow)
+
+    def test_blocked_candidate_scans_both_workflow_extensions(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            workflows = root / ".github/workflows"
+            workflows.mkdir(parents=True)
+            for name in ("publication.yml", "publication.yaml", "ignored.json"):
+                (workflows / name).write_text("name: fixture\n", encoding="utf-8")
+
+            self.assertEqual(
+                ["publication.yaml", "publication.yml"],
+                [path.name for path in _github_workflow_paths(root)],
+            )
+
+    def test_next_action_requires_a_separate_reviewed_source_build(self) -> None:
+        next_action = self._admission()["next_action"]
+        self.assertEqual(
+            {"mode", "decision_record_required", "requirements"},
+            set(next_action),
+        )
+        self.assertEqual(
+            "repository-owned-reproducible-source-build",
+            next_action["mode"],
+        )
+        self.assertIs(next_action["decision_record_required"], True)
+        self.assertEqual(
+            [
+                "immutable source commit and release identity",
+                "authenticated closed dependency snapshot",
+                "network-none reproducible linux/arm64 build",
+                "digest-pinned builder and runtime bases",
+                "native linux/arm64 runtime smoke",
+                "Cosign signature and transparency-log evidence",
+                "SLSA provenance bound to the source revision",
+                "retained SBOM and fresh vulnerability scan",
+                "anonymous exact-digest retrieval before separate admission review",
+            ],
+            next_action["requirements"],
         )
 
 
