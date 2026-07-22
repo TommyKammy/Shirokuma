@@ -69,8 +69,8 @@ class Arm64CompatibilityMatrixTests(unittest.TestCase):
 
     def test_document_metadata_matches_latest_verification(self) -> None:
         front_matter = self.matrix_text.split("---", 2)[1]
-        self.assertIn("\nupdated: 2026-07-22\n", front_matter)
-        self.assertIn('\nversion: "0.23"\n', front_matter)
+        self.assertIn("\nupdated: 2026-07-23\n", front_matter)
+        self.assertIn('\nversion: "0.24"\n', front_matter)
         self.assertIn("Verification date: 2026-07-22.", self.matrix_text)
 
     def test_all_required_components_have_complete_evidence_rows(self) -> None:
@@ -153,6 +153,11 @@ class Arm64CompatibilityMatrixTests(unittest.TestCase):
         )
         self.assertIn("ADR-0022", row["Image or build path"])
         self.assertIn("ADR-0022", row["v0.2 decision"])
+        self.assertIn("476 fallback", row["v0.2 decision"])
+        self.assertIn("Critical=2/High=52", row["v0.2 decision"])
+        self.assertIn(
+            "480-or-newer", row["Fallback owner / risk / replacement"]
+        )
         for digest in (
             "sha256:7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c",
             "sha256:5476bfca9d0a6485b7161f6863123f7e6822336de4177273b47b5ec38ffd573a",

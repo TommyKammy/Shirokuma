@@ -28,6 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TRINO_COMPONENT = "trino"
 POSTGRESQL_COMPONENT = "postgresql"
 TRINO_ADMISSION = ROOT / "bootstrap/trino/v483/admission.json"
+TRINO_476_FEASIBILITY = ROOT / "bootstrap/trino/v476/feasibility.json"
 TRINO_SOURCE_BUILD_ADR = (
     ROOT / "docs/design/07_ADR/ADR-0022_Adopt_Trino_483_repository_source_build.md"
 )
@@ -2438,6 +2439,150 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             object_pairs_hook=self._reject_duplicate_keys,
         )
 
+    def _feasibility(self) -> dict:
+        return json.loads(
+            TRINO_476_FEASIBILITY.read_text(encoding="utf-8"),
+            object_pairs_hook=self._reject_duplicate_keys,
+        )
+
+    def test_476_signed_distribution_is_rejected(self) -> None:
+        feasibility = self._feasibility()
+        self.assertEqual(
+            {
+                "schema_version",
+                "component",
+                "version",
+                "review_type",
+                "assessed_on",
+                "platform",
+                "source",
+                "distribution",
+                "archive",
+                "runtime",
+                "vulnerability_assessment",
+                "decision",
+            },
+            set(feasibility),
+        )
+        self.assertEqual(1, feasibility["schema_version"])
+        self.assertEqual("trino", feasibility["component"])
+        self.assertEqual("476", feasibility["version"])
+        self.assertEqual(
+            "signed_distribution_feasibility", feasibility["review_type"]
+        )
+        self.assertEqual("2026-07-23", feasibility["assessed_on"])
+        self.assertEqual("linux/arm64", feasibility["platform"])
+        self.assertEqual(
+            {
+                "repository": "https://github.com/trinodb/trino",
+                "release_tag": "476",
+                "tag_object_sha": "ecb143d60e11131d167b3d3e1d726e053745aa6f",
+                "commit_sha": "7f3746a7fa0b27ace2470340e848feaf3ee73f48",
+                "tree_sha": "74ac3497643a111798df430355077f3a9a9d6da5",
+                "tag_signature": "unsigned",
+                "commit_signature": "unsigned",
+            },
+            feasibility["source"],
+        )
+
+        distribution = feasibility["distribution"]
+        self.assertEqual(821045832, distribution["bytes"])
+        self.assertEqual(
+            "cfd5accde17e8ebd251eeeb78aed1f490e77bb3a164d95a0f454bf8a7c1cbd3f",
+            distribution["sha256"],
+        )
+        signature = distribution["detached_signature"]
+        self.assertEqual(
+            {
+                "algorithm",
+                "created_at",
+                "issuer_fingerprint",
+                "issuer_key_id",
+                "cryptographic_verification",
+                "trust_root_status",
+                "key_source",
+                "public_material_sha256",
+                "limitations",
+            },
+            set(signature),
+        )
+        self.assertEqual(
+            "passed_with_pgpy_0.6.0",
+            signature["cryptographic_verification"],
+        )
+        self.assertEqual("unapproved", signature["trust_root_status"])
+        self.assertEqual(
+            "C328250FE23A2420814521EC0EB69F76FD171538",
+            signature["issuer_fingerprint"],
+        )
+        self.assertEqual(
+            "e37a6a94215760b0bfa695eedd12ff70962df737a8aa648643b710c0660850b3",
+            signature["public_material_sha256"],
+        )
+        self.assertGreaterEqual(len(signature["limitations"]), 3)
+
+        assessment = feasibility["vulnerability_assessment"]
+        self.assertEqual(
+            {"UNKNOWN": 2, "LOW": 9, "MEDIUM": 55, "HIGH": 52, "CRITICAL": 2},
+            assessment["severity_counts"],
+        )
+        findings = {
+            finding["id"]: finding
+            for finding in assessment["blocking_findings"]
+        }
+        self.assertEqual(
+            {"CVE-2025-68121", "CVE-2025-59059", "CVE-2026-34214"},
+            set(findings),
+        )
+        self.assertEqual("CRITICAL", findings["CVE-2025-68121"]["severity"])
+        self.assertEqual("CRITICAL", findings["CVE-2025-59059"]["severity"])
+        self.assertEqual("HIGH", findings["CVE-2026-34214"]["severity"])
+        self.assertEqual(
+            "io.trino:trino-iceberg",
+            findings["CVE-2026-34214"]["package"],
+        )
+        self.assertEqual("480", findings["CVE-2026-34214"]["fixed_version"])
+        self.assertIs(assessment["raw_artifacts_retained"], False)
+        self.assertIs(
+            assessment["fresh_scan_required_for_future_candidate"], True
+        )
+
+        decision = feasibility["decision"]
+        self.assertEqual("rejected", decision["status"])
+        for key in (
+            "exception_eligible",
+            "admission_permitted",
+            "publication_workflow_permitted",
+            "resident_ledger_permitted",
+            "runtime_manifests_permitted",
+        ):
+            self.assertIs(decision[key], False)
+        self.assertEqual(
+            "bootstrap/trino/v476/feasibility.json",
+            decision["allowed_path"],
+        )
+
+    def test_476_archive_review_does_not_claim_runtime_acceptance(self) -> None:
+        feasibility = self._feasibility()
+        archive = feasibility["archive"]
+        self.assertEqual(6732, archive["entries"])
+        self.assertEqual(5713, archive["hard_links"])
+        self.assertEqual(454, archive["unique_hard_link_targets"])
+        self.assertEqual(0, archive["symbolic_links"])
+        self.assertEqual(0, archive["special_files"])
+        self.assertEqual(0, archive["unsafe_paths"])
+        self.assertEqual(0, archive["missing_hard_link_targets"])
+        self.assertIn("linux-arm64", archive["native_launchers"])
+        self.assertEqual(
+            "plugin/iceberg/io.trino_trino-iceberg-476.jar",
+            archive["iceberg_module"],
+        )
+        self.assertEqual("24.0.1", feasibility["runtime"]["minimum_java"])
+        self.assertEqual(
+            "not_smoked",
+            feasibility["runtime"]["java_25_alpine_3_24_compatibility"],
+        )
+
     def test_blocker_checkpoint_is_closed_world_and_immutable(self) -> None:
         admission = self._admission()
         self.assertEqual(
@@ -2630,7 +2775,12 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             if (path.is_file() or path.is_symlink())
             and "trino" in path.relative_to(ROOT).as_posix().casefold()
         }
-        self.assertEqual(bootstrap_inventory, all_trino_bootstrap_paths)
+        expected_trino_bootstrap_paths = bootstrap_inventory | {
+            self._feasibility()["decision"]["allowed_path"]
+        }
+        self.assertEqual(
+            expected_trino_bootstrap_paths, all_trino_bootstrap_paths
+        )
         for relative in repository_state["forbidden_paths"]:
             with self.subTest(forbidden_path=relative):
                 self.assertFalse((ROOT / relative).exists())
@@ -2769,6 +2919,18 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "target": (
                     "docs/design/07_ADR/"
                     "ADR-0022_Adopt_Trino_483_repository_source_build.md"
+                ),
+            },
+            context["documents"],
+        )
+        self.assertIn(
+            {
+                "source": (
+                    "10_Research/107_Trino_476_Signed_Distribution_Feasibility.md"
+                ),
+                "target": (
+                    "docs/design/10_Research/"
+                    "107_Trino_476_Signed_Distribution_Feasibility.md"
                 ),
             },
             context["documents"],
