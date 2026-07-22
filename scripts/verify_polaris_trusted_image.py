@@ -696,7 +696,7 @@ PENDING_BOOTSTRAP_ARTIFACT_MARKERS = {
 }
 REVIEW_PENDING_WORKFLOW_INVENTORY = {
     ".github/workflows/ci.yml": (
-        "36666a76c07b428adda5fe71e4bd21643d05e66f56043dcef514101add63dd72"
+        "9f5684fab946b3b20337fcc6bec1d6ff3f7f432a6a3275a3fa46d2a3a4676244"
     ),
     ".github/workflows/seaweedfs-arm64.yml": (
         "f097273d79c9595d42be816152ff1aabc862faf2667cb0648434280ce8b8ac06"

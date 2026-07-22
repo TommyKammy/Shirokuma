@@ -14,6 +14,23 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PolarisRuntimeActivationTests(unittest.TestCase):
+    def test_ci_checkout_retains_accepted_revision_history(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        checkout = (
+            "      - name: Checkout\n"
+            "        uses: actions/checkout@"
+        )
+        start = workflow.find(checkout)
+        self.assertGreaterEqual(start, 0)
+        end = workflow.find("\n      - name:", start + len(checkout))
+        self.assertGreater(end, start)
+        checkout_step = workflow[start:end]
+        self.assertEqual(1, checkout_step.count("          fetch-depth: 0\n"))
+        self.assertEqual(
+            1,
+            checkout_step.count("          persist-credentials: false\n"),
+        )
+
     def _assert_storage_env_contract(self, deployment: str) -> None:
         expected = {
             "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
