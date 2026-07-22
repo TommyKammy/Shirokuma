@@ -3711,6 +3711,26 @@ class IcebergTableBootstrapPrerequisiteTests(unittest.TestCase):
             "the duplicate through an exception",
         )
 
+    def test_runbook_bounds_host_ssd_and_export_impact(self) -> None:
+        runbook = (
+            ROOT
+            / "docs/design/08_Runbooks/"
+            "RB-014_Verify_and_recover_Iceberg_table_bootstrap.md"
+        ).read_text(encoding="utf-8")
+        for expected in (
+            "six objects totaling 16,547",
+            "at most eight objects and 1 MiB",
+            "at least 128 MiB free in the Colima data filesystem",
+            "at least\n  128 MiB free on the host outside Colima",
+            "20Gi SeaweedFS PVC request",
+            "400GB `solo-lite` VM disk commitment",
+            "object_count",
+            "total_bytes",
+            "--bucket shirokuma-lakehouse --prefix l1/",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, runbook)
+
 
 if __name__ == "__main__":
     unittest.main()

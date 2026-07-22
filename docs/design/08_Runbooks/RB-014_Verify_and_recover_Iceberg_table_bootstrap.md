@@ -41,19 +41,22 @@ profile. It makes no production, GxP, HA, or physical multi-node claim.
    clean.
 2. Confirm mac-studio-solo is active and the Kubernetes context is
    colima-mac-studio-solo.
-3. Run the repository gates:
+3. Refresh the host, Colima, and `l1/` inventory measurements under
+   **Host SSD capacity and export impact**. Stop before reconciliation if any
+   guard fails.
+4. Run the repository gates:
 
        make verify-iceberg-table-bootstrap
        make verify-security
        make verify
 
-4. Confirm the prerequisite Flux objects are Ready at one revision:
+5. Confirm the prerequisite Flux objects are Ready at one revision:
 
        flux get kustomizations -A
        kubectl -n shirokuma-dev rollout status deployment/polaris --timeout=5m
        kubectl -n shirokuma-storage rollout status statefulset/seaweedfs --timeout=5m
 
-5. Capture a fresh Polaris backup using the repository-owned acceptance path
+6. Capture a fresh Polaris backup using the repository-owned acceptance path
    and its private host export root. Do not redirect Secret or Pod environment
    output into evidence.
 
@@ -143,6 +146,41 @@ fails after catalog detachment, treat remaining s3://shirokuma-lakehouse/l1
 objects as orphans and preserve them until a reviewed recovery PR authorizes
 deletion.
 
+## Host SSD capacity and export impact
+
+The bounded pre-review probe on 2026-07-22 created six objects totaling 16,547
+logical bytes under `s3://shirokuma-lakehouse/l1/`. An idempotent re-run kept
+the same object count and byte total, and reviewed cleanup returned the prefix
+to zero objects and zero bytes. This is local-lite sizing evidence, not a
+production capacity claim.
+
+- The acceptance guard is at most eight objects and 1 MiB of logical object
+  data for this fixture. Stop and review object or metadata growth before
+  reconciliation when either bound is exceeded.
+- The Job's temporary `emptyDir` is capped at 64 MiB. Before reconciliation,
+  require at least 128 MiB free in the Colima data filesystem and at least
+  128 MiB free on the host outside Colima for a scoped export, in addition to
+  normal macOS headroom. This covers the logical fixture, temporary compilation,
+  SeaweedFS metadata overhead, and one bounded export copy.
+- This change does not resize the existing 20Gi SeaweedFS PVC request or the
+  400GB `solo-lite` VM disk commitment. A full SeaweedFS export or nuke/rebuild
+  still uses the larger capacity boundary in RB-013; the 1 MiB allowance applies
+  only to this deterministic `l1/` fixture.
+- The pre-review observation was 2,889,108,840 KiB host free space (about
+  2.69 TiB) and 381,469,356 KiB Colima filesystem free space (about 363.8 GiB).
+  These values are evidence, not permanent assumptions; refresh them immediately
+  before reconciliation and retain only the secret-free totals.
+
+Using the file-backed credential procedure from RB-013, record the refreshed
+host/VM free-space totals plus only `object_count` and `total_bytes` from the
+scoped inventory. Do not retain Secret values or object contents.
+
+    df -k "$HOME"
+    colima --profile mac-studio-solo ssh -- \
+      sudo df -k /var/lib/rancher/k3s/storage
+    python3 scripts/object_storage_backup.py inventory \
+      --bucket shirokuma-lakehouse --prefix l1/
+
 ## Disk-space recovery
 
 - Stop new benchmark or data-load work and inspect host/Colima capacity without
@@ -163,4 +201,3 @@ deletion.
 - docs/design/08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo.md
 - docs/design/04_Development/049_Supply_Chain_Security.md
 - docs/design/07_ADR/ADR-0018_Use_Flux_v2_as_the_GitOps_reconciler.md
-

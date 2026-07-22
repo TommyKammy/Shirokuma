@@ -163,6 +163,11 @@ Do not add unrelated dependencies or bypass policy checks.
   `b0fb3d7`. Local focused and full repository verification pass. Issue #62
   remains Open while PR review/CI and the required post-merge evidence review
   are pending.
+- 2026-07-22: PR #99 review repair quantified the deterministic storage impact.
+  A credential-redacted bounded probe measured six `l1/` objects and 16,547
+  logical bytes, unchanged by the idempotent re-run; cleanup restored zero
+  objects. RB-014 now sets an eight-object/1 MiB acceptance guard and 128 MiB
+  host/Colima minimum operational headroom before reconciliation.
 
 ## Definition of Done
 
