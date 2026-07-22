@@ -233,7 +233,6 @@ check-required-files:
 	@test -f tests/test_gitops_teardown.py
 	@test -f tests/test_polaris_admin_build_inputs.py
 	@test -f tests/test_polaris_runtime_acceptance.py
-	@test -f security/evidence/polaris-runtime-acceptance.json
 	@test -f bootstrap/polaris/v1.6.0/admin-build-inputs-contract.json
 	@test -f bootstrap/polaris/v1.6.0/admin-admission.json
 	@test -f bootstrap/polaris/v1.6.0/admin-image-contract.json

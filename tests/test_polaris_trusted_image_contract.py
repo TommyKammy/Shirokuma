@@ -3101,7 +3101,6 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
         )
         for relative in (
             "security/polaris-runtime-activation.json",
-            contract["live_acceptance"]["receipt"],
             "Makefile",
             *contract["manifests"],
             *contract["documentation"],
@@ -3113,22 +3112,16 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
             shutil.copy2(source, destination)
         self._audit(root)
 
-        receipt = root / contract["live_acceptance"]["receipt"]
-        with self.subTest(case="acceptance-receipt-hash-mutation"):
-            receipt.write_text(
-                receipt.read_text(encoding="utf-8") + "\n",
-                encoding="utf-8",
-            )
+        stale_receipt = root / verifier.POLARIS_RUNTIME_ACCEPTANCE_RECEIPT
+        with self.subTest(case="stale-acceptance-receipt"):
+            stale_receipt.parent.mkdir(parents=True, exist_ok=True)
+            stale_receipt.write_text("{}\n", encoding="utf-8")
             self._assert_code(
                 root,
                 "FORBIDDEN_PATH",
-                contract["live_acceptance"]["receipt"],
+                verifier.POLARIS_RUNTIME_ACCEPTANCE_RECEIPT.as_posix(),
             )
-
-        shutil.copy2(
-            ROOT / contract["live_acceptance"]["receipt"],
-            receipt,
-        )
+        stale_receipt.unlink()
         with self.subTest(case="hash-mutation"):
             runtime_file = root / "deploy/gitops/catalog/server/deployment.yaml"
             runtime_file.write_text(

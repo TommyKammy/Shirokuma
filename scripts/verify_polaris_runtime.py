@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Mapping
@@ -34,6 +35,16 @@ EXPECTED_FLUX_ORDER = [
 EXPECTED_SECRET_REFS = {
     "polaris-postgresql-credentials": ["database", "password", "username"],
     "polaris-root-credentials": ["credentials.json"],
+    "seaweedfs-s3-application-credentials": [
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "S3_REGION",
+    ],
+}
+EXPECTED_POLARIS_STORAGE_ENV = {
+    "AWS_ACCESS_KEY_ID": "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY": "AWS_SECRET_ACCESS_KEY",
+    "AWS_REGION": "S3_REGION",
 }
 EXPECTED_SECRET_DATA_KEYS = {
     "polaris-postgresql-credentials": ["database", "password", "username"],
@@ -135,9 +146,10 @@ def _audit_contract(root: Path) -> Mapping[str, Any]:
     _expect(contract.get("schema_version") == 2, "RUNTIME_CONTRACT", "schema_version must be 2")
     _expect(contract.get("issue") == 61, "RUNTIME_CONTRACT", "issue must be 61")
     _expect(
-        contract.get("state") == "runtime_accepted",
+        contract.get("state")
+        in {"runtime_acceptance_pending", "runtime_accepted"},
         "RUNTIME_CONTRACT",
-        "state must be runtime_accepted",
+        "state must be runtime_acceptance_pending or runtime_accepted",
     )
     _expect(
         contract.get("images")
@@ -209,6 +221,7 @@ def _audit_manifests(root: Path, contract: Mapping[str, Any]) -> dict[str, str]:
         "deploy/gitops/catalog/server/networkpolicy.yaml",
         "deploy/gitops/catalog/server/service.yaml",
         "deploy/gitops/catalog/server/deployment.yaml",
+        "deploy/gitops/object-storage/statefulset.yaml",
         "opentofu/dev/catalog.tf",
     }
     _expect(set(manifests) == expected_paths, "RUNTIME_MANIFEST", "activation file set changed")
@@ -228,33 +241,40 @@ def _audit_manifests(root: Path, contract: Mapping[str, Any]) -> dict[str, str]:
     return texts
 
 
-def _audit_documentation(root: Path, contract: Mapping[str, Any]) -> str:
+def _audit_documentation(
+    root: Path, contract: Mapping[str, Any]
+) -> dict[str, str]:
     documentation = _documentation_map(contract)
-    relative = "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md"
+    expected = {
+        "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md",
+        "docs/design/08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo.md",
+    }
     _expect(
-        set(documentation) == {relative},
+        set(documentation) == expected,
         "RUNTIME_DOCUMENTATION",
         "runtime recovery documentation set changed",
     )
-    expected_digest = documentation[relative]
-    _expect(
-        isinstance(expected_digest, str)
-        and re.fullmatch(r"[0-9a-f]{64}", expected_digest) is not None,
-        "RUNTIME_DOCUMENTATION",
-        f"invalid documentation record: {relative!r}",
-    )
-    path = root / relative
-    _expect(
-        path.is_file() and not path.is_symlink(),
-        "RUNTIME_DOCUMENTATION",
-        f"missing regular file: {relative}",
-    )
-    _expect(
-        _sha256(path) == expected_digest,
-        "RUNTIME_DOCUMENTATION",
-        f"hash mismatch: {relative}",
-    )
-    return path.read_text(encoding="utf-8")
+    texts: dict[str, str] = {}
+    for relative, expected_digest in documentation.items():
+        _expect(
+            isinstance(expected_digest, str)
+            and re.fullmatch(r"[0-9a-f]{64}", expected_digest) is not None,
+            "RUNTIME_DOCUMENTATION",
+            f"invalid documentation record: {relative!r}",
+        )
+        path = root / relative
+        _expect(
+            path.is_file() and not path.is_symlink(),
+            "RUNTIME_DOCUMENTATION",
+            f"missing regular file: {relative}",
+        )
+        _expect(
+            _sha256(path) == expected_digest,
+            "RUNTIME_DOCUMENTATION",
+            f"hash mismatch: {relative}",
+        )
+        texts[relative] = path.read_text(encoding="utf-8")
+    return texts
 
 
 def _audit_tooling(root: Path, contract: Mapping[str, Any]) -> None:
@@ -285,9 +305,57 @@ def _audit_tooling(root: Path, contract: Mapping[str, Any]) -> None:
         )
 
 
+def _git_blob_sha256(root: Path, revision: str, relative: str) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "show", f"{revision}:{relative}"],
+            check=True,
+            capture_output=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        _fail(
+            "RUNTIME_ACCEPTANCE",
+            f"cannot read accepted revision binding for {relative}: {error}",
+        )
+    return hashlib.sha256(result.stdout).hexdigest()
+
+
+def _audit_accepted_revision_binding(
+    root: Path,
+    contract: Mapping[str, Any],
+    repository_revision: str,
+) -> None:
+    for records in (
+        _manifest_map(contract),
+        _documentation_map(contract),
+        _tooling_map(contract),
+    ):
+        for relative, expected_digest in records.items():
+            _expect(
+                _git_blob_sha256(root, repository_revision, relative)
+                == expected_digest,
+                "RUNTIME_ACCEPTANCE",
+                "accepted revision does not contain the contracted desired state: "
+                f"{relative}",
+            )
+
+
 def _audit_live_acceptance(root: Path, contract: Mapping[str, Any]) -> None:
     live = contract.get("live_acceptance")
     _expect(isinstance(live, dict), "RUNTIME_ACCEPTANCE", "live acceptance is missing")
+    required = [
+        "flux_ready",
+        "catalog_create_list_read",
+        "backup_restore",
+        "rollback_teardown",
+    ]
+    if contract.get("state") == "runtime_acceptance_pending":
+        _expect(
+            live == {"complete": False, "required": required},
+            "RUNTIME_ACCEPTANCE",
+            "changed desired state must remain explicitly pending without a stale receipt binding",
+        )
+        return
     _expect(
         set(live) == {"complete", "receipt", "receipt_sha256", "required"},
         "RUNTIME_ACCEPTANCE",
@@ -295,13 +363,7 @@ def _audit_live_acceptance(root: Path, contract: Mapping[str, Any]) -> None:
     )
     _expect(live.get("complete") is True, "RUNTIME_ACCEPTANCE", "live acceptance is incomplete")
     _expect(
-        live.get("required")
-        == [
-            "flux_ready",
-            "catalog_create_list_read",
-            "backup_restore",
-            "rollback_teardown",
-        ],
+        live.get("required") == required,
         "RUNTIME_ACCEPTANCE",
         "live acceptance requirements changed",
     )
@@ -365,6 +427,7 @@ def _audit_live_acceptance(root: Path, contract: Mapping[str, Any]) -> None:
         "RUNTIME_ACCEPTANCE",
         "receipt repository revision is invalid",
     )
+    _audit_accepted_revision_binding(root, contract, repository_revision)
     cluster = receipt.get("cluster")
     _expect(
         cluster
@@ -524,6 +587,7 @@ def _audit_runtime_inventory(root: Path, manifests: Mapping[str, Any]) -> None:
     for relative in (
         "deploy/gitops/clusters/local-lite/kustomization.yaml",
         "deploy/gitops/clusters/local-lite/polaris-runtime-generation.yaml",
+        "deploy/gitops/object-storage/statefulset.yaml",
     ):
         path = root / relative
         if path.is_file() or path.is_symlink():
@@ -536,8 +600,18 @@ def _audit_runtime_inventory(root: Path, manifests: Mapping[str, Any]) -> None:
     )
 
 
-def _audit_semantics(root: Path, texts: Mapping[str, str], runbook: str) -> None:
+def _audit_semantics(
+    root: Path,
+    texts: Mapping[str, str],
+    documentation: Mapping[str, str],
+) -> None:
     combined = "\n".join(texts.values())
+    runbook = documentation[
+        "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md"
+    ]
+    rotation_runbook = documentation[
+        "docs/design/08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo.md"
+    ]
     _expect("kind: Secret" not in combined, "RUNTIME_SECRET", "Secret manifests are forbidden")
     _expect("secretGenerator:" not in combined and "stringData:" not in combined, "RUNTIME_SECRET", "generated or inline Secret material is forbidden")
     for image in (POLARIS_IMAGE, POSTGRES_IMAGE, ADMIN_IMAGE):
@@ -546,6 +620,85 @@ def _audit_semantics(root: Path, texts: Mapping[str, str], runbook: str) -> None
         _expect(secret in combined, "RUNTIME_SECRET", f"missing Secret reference: {secret}")
         for key in keys:
             _expect(key in combined, "RUNTIME_SECRET", f"missing Secret key reference: {secret}/{key}")
+
+    server = texts["deploy/gitops/catalog/server/deployment.yaml"]
+    _, env_marker, env_and_ports = server.partition("          env:\n")
+    env_section, ports_marker, _ = env_and_ports.partition("          ports:\n")
+    _expect(
+        bool(env_marker and ports_marker),
+        "RUNTIME_SECRET",
+        "Polaris container environment boundary changed",
+    )
+    for variable, key in EXPECTED_POLARIS_STORAGE_ENV.items():
+        block = (
+            f"            - name: {variable}\n"
+            "              valueFrom:\n"
+            "                secretKeyRef:\n"
+            "                  name: seaweedfs-s3-application-credentials\n"
+            f"                  key: {key}\n"
+        )
+        _expect(
+            server.count(block) == 1,
+            "RUNTIME_SECRET",
+            f"Polaris storage Secret binding changed: {variable}",
+        )
+        quoted_variable = rf'(?:{re.escape(variable)}|"{re.escape(variable)}"|\'{re.escape(variable)}\')'
+        block_names = re.findall(
+            rf"^\s*(?:-\s*)?name\s*:\s*{quoted_variable}\s*$",
+            env_section,
+            re.MULTILINE,
+        )
+        flow_names = re.findall(
+            rf"(?:\{{|,)\s*name\s*:\s*{quoted_variable}(?=\s*[,}}])",
+            env_section,
+        )
+        _expect(
+            len(block_names) + len(flow_names) == 1,
+            "RUNTIME_SECRET",
+            f"Polaris storage environment name must occur exactly once: {variable}",
+        )
+    _expect(
+        "AWS_SESSION_TOKEN" not in server,
+        "RUNTIME_SECRET",
+        "Polaris must not require an unprovisioned S3 session token",
+    )
+    _, metadata_marker, pod_metadata_and_spec = server.partition("    metadata:\n")
+    pod_metadata, spec_marker, _ = pod_metadata_and_spec.partition("    spec:\n")
+    _expect(
+        bool(metadata_marker and spec_marker),
+        "RUNTIME_NETWORK",
+        "Polaris Pod template metadata boundary changed",
+    )
+    _expect(
+        pod_metadata.count('shirokuma.dev/object-storage-client: "true"') == 1,
+        "RUNTIME_NETWORK",
+        "Polaris Pod must opt in to the SeaweedFS S3 ingress policy",
+    )
+
+    storage = texts["deploy/gitops/object-storage/statefulset.yaml"]
+    generation_pattern = re.compile(
+        r'^\s*shirokuma\.dev/s3-credential-generation: "([1-9][0-9]*)"$',
+        re.MULTILINE,
+    )
+    server_generations = generation_pattern.findall(server)
+    storage_generations = generation_pattern.findall(storage)
+    _expect(
+        len(server_generations) == 1
+        and len(storage_generations) == 1
+        and server_generations == storage_generations,
+        "RUNTIME_GENERATION",
+        "Polaris and SeaweedFS must consume the same S3 credential generation",
+    )
+    for token in (
+        "deploy/gitops/catalog/server/deployment.yaml",
+        "kubectl -n shirokuma-dev rollout status deployment/polaris",
+        "and Polaris rollouts",
+    ):
+        _expect(
+            token in rotation_runbook,
+            "RUNTIME_GENERATION",
+            f"S3 credential rotation runbook missing {token}",
+        )
 
     job = texts["deploy/catalog/bootstrap/job.yaml"]
     _expect("--credentials-file=/var/run/secrets/shirokuma/polaris/credentials.json" in job, "RUNTIME_ADMIN", "credential-file input is missing")
@@ -735,11 +888,11 @@ def audit(root: Path) -> None:
     root = root.resolve()
     contract = _audit_contract(root)
     texts = _audit_manifests(root, contract)
-    runbook = _audit_documentation(root, contract)
+    documentation = _audit_documentation(root, contract)
     _audit_tooling(root, contract)
     _audit_live_acceptance(root, contract)
     _audit_runtime_inventory(root, _manifest_map(contract))
-    _audit_semantics(root, texts, runbook)
+    _audit_semantics(root, texts, documentation)
 
 
 def _parser() -> argparse.ArgumentParser:
