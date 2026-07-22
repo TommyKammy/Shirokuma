@@ -57,6 +57,15 @@ HelmValuesSources = dict[HelmResourceKey, dict[str, str]]
 HelmChartReferences = dict[HelmResourceKey, tuple[str, ...]]
 
 
+def _github_workflow_paths(root: Path = ROOT) -> list[Path]:
+    workflows = root / ".github/workflows"
+    return sorted(
+        path
+        for path in workflows.iterdir()
+        if path.is_file() and path.suffix.casefold() in {".yaml", ".yml"}
+    )
+
+
 def _has_trino_identity(value: str | None) -> bool:
     return value == "trino" or bool(
         value and re.fullmatch(r"trino[-_][a-z0-9_-]+", value)
@@ -2589,11 +2598,24 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 self.assertNotIn(TRINO_ARM64_DIGEST, text)
                 self.assertNotIn("trinodb/trino", text.casefold())
                 self.assertNotIn("shirokuma-trino", text.casefold())
-        for path in (ROOT / ".github/workflows").glob("*.yml"):
+        for path in _github_workflow_paths():
             workflow = path.read_text(encoding="utf-8").casefold()
             with self.subTest(workflow=path):
                 self.assertNotIn("trinodb/trino", workflow)
                 self.assertNotIn("shirokuma-trino", workflow)
+
+    def test_blocked_candidate_scans_both_workflow_extensions(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            workflows = root / ".github/workflows"
+            workflows.mkdir(parents=True)
+            for name in ("publication.yml", "publication.yaml", "ignored.json"):
+                (workflows / name).write_text("name: fixture\n", encoding="utf-8")
+
+            self.assertEqual(
+                ["publication.yaml", "publication.yml"],
+                [path.name for path in _github_workflow_paths(root)],
+            )
 
     def test_next_action_requires_a_separate_reviewed_source_build(self) -> None:
         next_action = self._admission()["next_action"]

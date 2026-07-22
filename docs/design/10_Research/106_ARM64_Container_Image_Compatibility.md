@@ -4,15 +4,15 @@ doc_id: "RES-106"
 title: "ARM64 Container Image Compatibility"
 status: draft
 created: 2026-07-05
-updated: 2026-07-21
-version: "0.21"
+updated: 2026-07-22
+version: "0.22"
 area: "research"
 tags: [shirokuma, arm64, apple-silicon]
 ---
 
 # ARM64 Container Image Compatibility
 
-Verification date: 2026-07-21. Primary target: Colima Linux/arm64 on Mac Studio M3 Ultra.
+Verification date: 2026-07-22. Primary target: Colima Linux/arm64 on Mac Studio M3 Ultra.
 
 ## L0 platform baseline
 

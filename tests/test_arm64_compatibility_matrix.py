@@ -67,6 +67,12 @@ class Arm64CompatibilityMatrixTests(unittest.TestCase):
             if len(cells) == len(EXPECTED_HEADER):
                 cls.rows[cells[0]] = dict(zip(EXPECTED_HEADER, cells))
 
+    def test_document_metadata_matches_latest_verification(self) -> None:
+        front_matter = self.matrix_text.split("---", 2)[1]
+        self.assertIn("\nupdated: 2026-07-22\n", front_matter)
+        self.assertIn('\nversion: "0.22"\n', front_matter)
+        self.assertIn("Verification date: 2026-07-22.", self.matrix_text)
+
     def test_all_required_components_have_complete_evidence_rows(self) -> None:
         self.assertEqual(REQUIRED_COMPONENTS, REQUIRED_COMPONENTS & self.rows.keys())
         ambiguous = re.compile(r"\b(?:unknown|verify|tbd|todo)\b", re.IGNORECASE)
