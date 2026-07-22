@@ -755,7 +755,7 @@ PENDING_SCRIPT_FILE_INVENTORY = {
         POLARIS_ADMIN_IMAGE_VERIFIER_SHA256
     ),
     "scripts/verify_polaris_runtime.py": (
-        "245a86932c40c2766c36ff9456bb503df6b45842e144ec809984648e38306c35"
+        "cd87946305f97d13ed909807605fb286e0390f6ab82172864158c58a216adeb7"
     ),
     "scripts/verify_repository_skeleton.py": (
         "b6bbbd383c74b190872bdcf144ede8126d8da5dbeb03e291027aaf276c62c955"
