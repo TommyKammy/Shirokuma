@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-22
-version: "1.20"
+version: "1.21"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -598,6 +598,32 @@ retained publication record has `promoted=true`, `admitted=false`, and
 `state=image_evidence_review_pending`. Evidence review advances the repository
 state to `atomic_admission_pending`, retires the publisher, and does not
 authorize resident or runtime use.
+
+ADR-0022 selects a repository-owned Trino 483 source build after PR #101
+retained the unsigned upstream image as blocked evidence. The exact source is
+commit `50b0b50b75abd47f830b7805ee1b51716eb4065e`, tree
+`3b5414292a614b12393bb4605ea2d4c588a5b8ee`. Both the tag object and source
+commit are unsigned, so these SHAs identify bytes without authenticating the
+upstream publisher. The next boundary is a separate source-authentication
+evidence review. It must bind the exact repository, tag, commit, and tree using
+an approved upstream signature, a source release signature verified against a
+separately approved Trino trust root and signer identity with matching extracted
+tree, or trusted upstream provenance; self-selected keys, SHA pinning, HTTPS,
+account attribution, the release page, and Shirokuma re-signing are insufficient
+by themselves.
+
+Until that gate closes, no Maven dependency-snapshot publisher or other Trino
+workflow is permitted. If it closes, the later publisher must use Maven 3.9.16
+and Temurin 25 from the exact native-arm64 builder selected by the ADR, allow
+only Maven Central and the explicit Confluent repository, manifest every
+dependency byte, and prove a fresh `mvn --offline clean install -DskipTests`
+with networking disabled. The unchecked Maven-wrapper download, upstream server
+tarball, upstream Dockerfile, image publication, resident ledger, credentials,
+Flux, and runtime all remain forbidden at this decision checkpoint. The
+selected Amazon Corretto 25 Alpine 3.24 runtime base is feasibility evidence
+only until a later main publication repeats native smoke, SBOM,
+High=0/Critical=0 scan, signature, provenance, and anonymous exact-digest
+retrieval.
 
 ## Resident image and SBOM evidence
 

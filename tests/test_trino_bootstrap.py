@@ -28,6 +28,23 @@ ROOT = Path(__file__).resolve().parents[1]
 TRINO_COMPONENT = "trino"
 POSTGRESQL_COMPONENT = "postgresql"
 TRINO_ADMISSION = ROOT / "bootstrap/trino/v483/admission.json"
+TRINO_SOURCE_BUILD_ADR = (
+    ROOT / "docs/design/07_ADR/ADR-0022_Adopt_Trino_483_repository_source_build.md"
+)
+TRINO_BUILDER_INDEX = (
+    "docker.io/library/maven@"
+    "sha256:7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c"
+)
+TRINO_BUILDER_ARM64_DIGEST = (
+    "sha256:5476bfca9d0a6485b7161f6863123f7e6822336de4177273b47b5ec38ffd573a"
+)
+TRINO_RUNTIME_INDEX = (
+    "docker.io/library/amazoncorretto@"
+    "sha256:32d81edae73e1670244827c2f12e5bcf0d335f035b538455fe9d02eb0771d41b"
+)
+TRINO_RUNTIME_ARM64_DIGEST = (
+    "sha256:da20e1e0a2004dfb95e963d6ad978b5c0effdfc7000bce6a68836058ef24b427"
+)
 TRINO_INDEX_REFERENCE = (
     "docker.io/trinodb/trino@"
     "sha256:db58cc93e593a2706553745f276bb119c9810e69918be56ecde088ba7ccb0534"
@@ -2432,6 +2449,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "platform",
                 "candidate",
                 "assessment",
+                "source_authentication",
                 "repository_state",
                 "next_action",
             },
@@ -2449,6 +2467,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "tag_object_sha": "32d4f28e8311ea6f67edca209df59a0493d869fa",
                 "commit_sha": "50b0b50b75abd47f830b7805ee1b51716eb4065e",
                 "tag_signature": "unsigned",
+                "commit_signature": "unsigned",
                 "server_asset": {
                     "url": (
                         "https://github.com/trinodb/trino/releases/download/483/"
@@ -2508,6 +2527,14 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                         ),
                     },
                     {
+                        "control": "source_commit_signature",
+                        "status": "missing",
+                        "evidence": (
+                            "GitHub reports source commit "
+                            "50b0b50b75abd47f830b7805ee1b51716eb4065e as unsigned"
+                        ),
+                    },
+                    {
                         "control": "slsa_provenance",
                         "status": "missing",
                         "evidence": (
@@ -2533,6 +2560,35 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 ),
             },
             assessment,
+        )
+
+    def test_source_authentication_precedes_any_publisher(self) -> None:
+        admission = self._admission()
+        self.assertEqual(
+            {
+                "status": "blocked",
+                "required_binding": {
+                    "repository": "https://github.com/trinodb/trino",
+                    "release_tag": "483",
+                    "commit_sha": "50b0b50b75abd47f830b7805ee1b51716eb4065e",
+                    "tree_sha": "3b5414292a614b12393bb4605ea2d4c588a5b8ee",
+                },
+                "accepted_evidence_classes": [
+                    "verified upstream signature from a separately approved Trino "
+                    "release identity over the exact tag, or over the exact commit "
+                    "plus an authenticated release-to-commit binding",
+                    "signed upstream source release verified against a separately "
+                    "approved Trino release trust root and signer identity, whose "
+                    "digest and extracted tree bind to the exact commit and tree",
+                    "trusted upstream provenance statement whose subject and source "
+                    "claims bind to the exact repository, tag, commit, and tree",
+                ],
+                "sha_only_is_sufficient": False,
+            },
+            admission["source_authentication"],
+        )
+        self.assertIs(
+            admission["repository_state"]["publication_workflow_permitted"], False
         )
 
     def test_blocked_candidate_cannot_publish_admit_or_materialize(self) -> None:
@@ -2617,20 +2673,35 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 [path.name for path in _github_workflow_paths(root)],
             )
 
-    def test_next_action_requires_a_separate_reviewed_source_build(self) -> None:
+    def test_next_action_requires_source_authentication_before_build(self) -> None:
         next_action = self._admission()["next_action"]
         self.assertEqual(
-            {"mode", "decision_record_required", "requirements"},
+            {
+                "mode",
+                "decision_record_required",
+                "decision_record",
+                "phase",
+                "requirements",
+            },
             set(next_action),
         )
         self.assertEqual(
             "repository-owned-reproducible-source-build",
             next_action["mode"],
         )
-        self.assertIs(next_action["decision_record_required"], True)
+        self.assertIs(next_action["decision_record_required"], False)
+        self.assertEqual(
+            "docs/design/07_ADR/ADR-0022_Adopt_Trino_483_repository_source_build.md",
+            next_action["decision_record"],
+        )
+        self.assertEqual(
+            "source_authentication_evidence_review",
+            next_action["phase"],
+        )
         self.assertEqual(
             [
-                "immutable source commit and release identity",
+                "authenticated upstream publisher identity bound to the exact "
+                "source repository, tag, commit, and tree",
                 "authenticated closed dependency snapshot",
                 "network-none reproducible linux/arm64 build",
                 "digest-pinned builder and runtime bases",
@@ -2641,6 +2712,66 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "anonymous exact-digest retrieval before separate admission review",
             ],
             next_action["requirements"],
+        )
+
+    def test_source_build_decision_closes_only_the_decision_boundary(self) -> None:
+        decision = TRINO_SOURCE_BUILD_ADR.read_text(encoding="utf-8")
+        normalized_decision = " ".join(decision.split())
+        front_matter = decision.split("---", 2)[1]
+        self.assertIn('\ndoc_id: "ADR-0022"\n', front_matter)
+        self.assertIn("\nstatus: accepted\n", front_matter)
+        for required in (
+            "50b0b50b75abd47f830b7805ee1b51716eb4065e",
+            "3b5414292a614b12393bb4605ea2d4c588a5b8ee",
+            "cae96cef89ebea3531221f4ae17c23cf8edf67d00eae8306d4186ae1bbed4d02",
+            "488e1b3f2e641779d4636abf9390845f901e64607261bc3c0b0bfe4fe96e6706",
+            "e1ba9a61315097e3a7133238c778ec161ac6097fe77a660fc5455a3e84568820",
+            "663d8bc33313160b26df9c80d4f1e5a3d970700573a914fb22db3462ac0e06d2",
+            "Maven 3.9.16",
+            "Eclipse Temurin 25",
+            TRINO_BUILDER_INDEX,
+            TRINO_BUILDER_ARM64_DIGEST,
+            TRINO_RUNTIME_INDEX,
+            TRINO_RUNTIME_ARM64_DIGEST,
+            "https://repo.maven.apache.org/maven2/",
+            "https://packages.confluent.io/maven/",
+            "unchecked wrapper download path is forbidden",
+            "`io/trino/**` artifacts fail closed",
+            "mvn --offline clean install -DskipTests",
+            "core/trino-server/target/trino-server-483.tar.gz",
+            "High=0/Critical=0",
+            "main-only",
+            "separate evidence-only PR",
+            "A SHA, HTTPS transport, GitHub account attribution, release page, or "
+            "Shirokuma re-signature alone is insufficient.",
+            "A self-selected or merely embedded signing key is not a trust root.",
+            "The next review boundary is source-authentication evidence",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(" ".join(required.split()), normalized_decision)
+        self.assertIn(
+            "Reject the upstream Trino 483 OCI image and the upstream server tarball "
+            "as resident or repository-build inputs.",
+            normalized_decision,
+        )
+        self.assertIn(
+            "Do not add a Trino workflow, dependency artifact, Containerfile, "
+            "resident",
+            normalized_decision,
+        )
+
+        context = json.loads(
+            (ROOT / "docs/design/context-manifest.json").read_text(encoding="utf-8")
+        )
+        self.assertIn(
+            {
+                "source": "07_ADR/ADR-0022_Adopt_Trino_483_repository_source_build.md",
+                "target": (
+                    "docs/design/07_ADR/"
+                    "ADR-0022_Adopt_Trino_483_repository_source_build.md"
+                ),
+            },
+            context["documents"],
         )
 
 

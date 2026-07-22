@@ -8,6 +8,7 @@
     "tag_object_sha": "32d4f28e8311ea6f67edca209df59a0493d869fa",
     "commit_sha": "50b0b50b75abd47f830b7805ee1b51716eb4065e",
     "tag_signature": "unsigned",
+    "commit_signature": "unsigned",
     "server_asset": {
       "url": "https://github.com/trinodb/trino/releases/download/483/trino-server-483.tar.gz",
       "sha256": "4f3978428f26f36398c94b85a3e03b5301394919c8a4271b497b0fcd1698d0cb",
@@ -43,6 +44,11 @@
         "evidence": "GitHub reports annotated tag object 32d4f28e8311ea6f67edca209df59a0493d869fa as unsigned"
       },
       {
+        "control": "source_commit_signature",
+        "status": "missing",
+        "evidence": "GitHub reports source commit 50b0b50b75abd47f830b7805ee1b51716eb4065e as unsigned"
+      },
+      {
         "control": "slsa_provenance",
         "status": "missing",
         "evidence": "no trusted provenance statement binds the upstream image or server asset to commit 50b0b50b75abd47f830b7805ee1b51716eb4065e"
@@ -54,6 +60,21 @@
       }
     ],
     "rationale": "ADR-0019 permits only exact time-bounded High vulnerability exceptions; it does not waive source identity, image signature, transparency-log, provenance, or evidence requirements. Re-signing the untrusted upstream image is forbidden."
+  },
+  "source_authentication": {
+    "status": "blocked",
+    "required_binding": {
+      "repository": "https://github.com/trinodb/trino",
+      "release_tag": "483",
+      "commit_sha": "50b0b50b75abd47f830b7805ee1b51716eb4065e",
+      "tree_sha": "3b5414292a614b12393bb4605ea2d4c588a5b8ee"
+    },
+    "accepted_evidence_classes": [
+      "verified upstream signature from a separately approved Trino release identity over the exact tag, or over the exact commit plus an authenticated release-to-commit binding",
+      "signed upstream source release verified against a separately approved Trino release trust root and signer identity, whose digest and extracted tree bind to the exact commit and tree",
+      "trusted upstream provenance statement whose subject and source claims bind to the exact repository, tag, commit, and tree"
+    ],
+    "sha_only_is_sufficient": false
   },
   "repository_state": {
     "publication_workflow_permitted": false,
@@ -74,9 +95,11 @@
   },
   "next_action": {
     "mode": "repository-owned-reproducible-source-build",
-    "decision_record_required": true,
+    "decision_record_required": false,
+    "decision_record": "docs/design/07_ADR/ADR-0022_Adopt_Trino_483_repository_source_build.md",
+    "phase": "source_authentication_evidence_review",
     "requirements": [
-      "immutable source commit and release identity",
+      "authenticated upstream publisher identity bound to the exact source repository, tag, commit, and tree",
       "authenticated closed dependency snapshot",
       "network-none reproducible linux/arm64 build",
       "digest-pinned builder and runtime bases",
