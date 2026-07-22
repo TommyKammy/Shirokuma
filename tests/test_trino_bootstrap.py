@@ -2449,6 +2449,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "platform",
                 "candidate",
                 "assessment",
+                "source_authentication",
                 "repository_state",
                 "next_action",
             },
@@ -2466,6 +2467,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "tag_object_sha": "32d4f28e8311ea6f67edca209df59a0493d869fa",
                 "commit_sha": "50b0b50b75abd47f830b7805ee1b51716eb4065e",
                 "tag_signature": "unsigned",
+                "commit_signature": "unsigned",
                 "server_asset": {
                     "url": (
                         "https://github.com/trinodb/trino/releases/download/483/"
@@ -2525,6 +2527,14 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                         ),
                     },
                     {
+                        "control": "source_commit_signature",
+                        "status": "missing",
+                        "evidence": (
+                            "GitHub reports source commit "
+                            "50b0b50b75abd47f830b7805ee1b51716eb4065e as unsigned"
+                        ),
+                    },
+                    {
                         "control": "slsa_provenance",
                         "status": "missing",
                         "evidence": (
@@ -2550,6 +2560,34 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 ),
             },
             assessment,
+        )
+
+    def test_source_authentication_precedes_any_publisher(self) -> None:
+        admission = self._admission()
+        self.assertEqual(
+            {
+                "status": "blocked",
+                "required_binding": {
+                    "repository": "https://github.com/trinodb/trino",
+                    "release_tag": "483",
+                    "commit_sha": "50b0b50b75abd47f830b7805ee1b51716eb4065e",
+                    "tree_sha": "3b5414292a614b12393bb4605ea2d4c588a5b8ee",
+                },
+                "accepted_evidence_classes": [
+                    "verified upstream signature from a separately approved Trino "
+                    "release identity over the exact tag, or over the exact commit "
+                    "plus an authenticated release-to-commit binding",
+                    "signed upstream source release whose verified digest and "
+                    "extracted tree bind to the exact commit and tree",
+                    "trusted upstream provenance statement whose subject and source "
+                    "claims bind to the exact repository, tag, commit, and tree",
+                ],
+                "sha_only_is_sufficient": False,
+            },
+            admission["source_authentication"],
+        )
+        self.assertIs(
+            admission["repository_state"]["publication_workflow_permitted"], False
         )
 
     def test_blocked_candidate_cannot_publish_admit_or_materialize(self) -> None:
@@ -2634,7 +2672,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 [path.name for path in _github_workflow_paths(root)],
             )
 
-    def test_next_action_requires_a_separate_reviewed_source_build(self) -> None:
+    def test_next_action_requires_source_authentication_before_build(self) -> None:
         next_action = self._admission()["next_action"]
         self.assertEqual(
             {
@@ -2656,12 +2694,13 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             next_action["decision_record"],
         )
         self.assertEqual(
-            "dependency_snapshot_publication_contract_review",
+            "source_authentication_evidence_review",
             next_action["phase"],
         )
         self.assertEqual(
             [
-                "immutable source commit and release identity",
+                "authenticated upstream publisher identity bound to the exact "
+                "source repository, tag, commit, and tree",
                 "authenticated closed dependency snapshot",
                 "network-none reproducible linux/arm64 build",
                 "digest-pinned builder and runtime bases",
@@ -2702,6 +2741,9 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             "High=0/Critical=0",
             "main-only",
             "separate evidence-only PR",
+            "A SHA, HTTPS transport, GitHub account attribution, release page, or "
+            "Shirokuma re-signature alone is insufficient.",
+            "The next review boundary is source-authentication evidence",
         ):
             with self.subTest(required=required):
                 self.assertIn(" ".join(required.split()), normalized_decision)

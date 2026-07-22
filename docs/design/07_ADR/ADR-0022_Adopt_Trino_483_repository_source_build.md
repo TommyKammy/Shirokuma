@@ -1,16 +1,16 @@
 ---
 project: Shirokuma
 doc_id: "ADR-0022"
-title: "Adopt a repository-owned Trino 483 source build"
+title: "Select a conditional repository-owned Trino 483 source build"
 status: accepted
 created: 2026-07-22
-updated: 2026-07-22
-version: "0.1"
+updated: 2026-07-23
+version: "0.2"
 area: "architecture"
 tags: [shirokuma, adr, trino, arm64, maven, supply-chain]
 ---
 
-# ADR-0022: Adopt a repository-owned Trino 483 source build
+# ADR-0022: Select a conditional repository-owned Trino 483 source build
 
 ## Context
 
@@ -37,6 +37,11 @@ The exact upstream source identity reviewed for this decision is:
   `e1ba9a61315097e3a7133238c778ec161ac6097fe77a660fc5455a3e84568820`;
 - `core/trino-server/pom.xml` SHA-256
   `663d8bc33313160b26df9c80d4f1e5a3d970700573a914fb22db3462ac0e06d2`.
+
+GitHub reports both the annotated tag object and the source commit as unsigned.
+The immutable SHAs above identify exact bytes but do not authenticate the
+upstream publisher. They are therefore comparison coordinates, not sufficient
+authorization to execute the tree as a build input or publish its outputs.
 
 Upstream requires Java 25.0.1 or newer and recommends
 `./mvnw clean install -DskipTests`. The wrapper selects Maven 3.9.16 but does
@@ -70,15 +75,29 @@ so native container smoke remains a mandatory publisher gate.
 
 - Reject the upstream Trino 483 OCI image and the upstream server tarball as
   resident or repository-build inputs. Keep both as evaluated evidence only.
-- Build the unmodified Trino 483 source tree from exact commit
-  `50b0b50b75abd47f830b7805ee1b51716eb4065e` in a repository-owned, main-only
-  workflow. Any source patch requires a new decision record and a closed
-  preimage/postimage review.
+- Select the unmodified Trino 483 source tree at exact commit
+  `50b0b50b75abd47f830b7805ee1b51716eb4065e` only as a conditional build
+  candidate. No dependency or image publisher may fetch, execute, build, or
+  publish it until a separate evidence-only PR closes the source-authentication
+  gate described below. Any source patch requires a new decision record and a
+  closed preimage/postimage review.
+- Accept source authentication only when retained, independently verified
+  evidence binds repository `https://github.com/trinodb/trino`, release tag
+  `483`, the exact commit above, and tree
+  `3b5414292a614b12393bb4605ea2d4c588a5b8ee` through at least one of: (1) a
+  verified upstream signature from a separately approved Trino release identity
+  over the exact tag, or over the exact commit plus an authenticated
+  release-to-commit binding; (2) a signed upstream source release whose verified
+  digest and extracted tree bind to the exact commit and tree; or (3) trusted
+  upstream provenance whose subject and source claims bind all four coordinates.
+  A SHA, HTTPS transport, GitHub account attribution, release page, or Shirokuma
+  re-signature alone is insufficient. If no qualifying proof is available,
+  Trino remains blocked and the implementation must not proceed.
 - Use Maven 3.9.16 with Eclipse Temurin 25 from the exact builder index above.
-  The workflow must verify the native arm64 child and observed Maven, Java, OS,
-  and architecture before resolving dependencies. It must invoke the pinned
-  image's `mvn` binary directly; the unchecked wrapper download path is
-  forbidden.
+  After the source-authentication gate closes, the main-only workflow must
+  verify the native arm64 child and observed Maven, Java, OS, and architecture
+  before resolving dependencies. It must invoke the pinned image's `mvn` binary
+  directly; the unchecked wrapper download path is forbidden.
 - Limit networked dependency resolution to HTTPS Maven Central
   (`https://repo.maven.apache.org/maven2/`) and the explicit Confluent
   repository (`https://packages.confluent.io/maven/`). Private repositories,
@@ -98,9 +117,9 @@ so native container smoke remains a mandatory publisher gate.
   `core/trino-server/target/trino-server-483.tar.gz`; its hash, size, and
   reproducible-build comparison become retained evidence.
 - Follow the two-phase publication lifecycle used by ADR-0020 and ADR-0021.
-  A reviewed main-only publisher may create review-pending dependency evidence;
-  a separate evidence-only PR must pin and verify it before any Trino image
-  publisher is introduced.
+  Only after source-authentication evidence is reviewed may a reviewed main-only
+  publisher create review-pending dependency evidence; a separate evidence-only
+  PR must pin and verify it before any Trino image publisher is introduced.
 - Build the later runtime image from the reviewed server archive with the exact
   Amazon Corretto 25 Alpine 3.24 runtime base above. Repeat a fresh
   High=0/Critical=0 scan, native arm64 Java/server smoke, non-root and read-only
@@ -108,18 +127,20 @@ so native container smoke remains a mandatory publisher gate.
   and anonymous exact-digest retrieval on the main publication run.
 - Do not add a Trino workflow, dependency artifact, Containerfile, resident
   ledger entry, credentials, Flux object, Helm chart, or runtime manifest in
-  this decision checkpoint. The next review boundary is the dependency-snapshot
-  contract, packager/verifier, and main-only publisher.
+  this decision checkpoint. The next review boundary is source-authentication
+  evidence, not the dependency-snapshot contract, packager/verifier, or
+  main-only publisher.
 - Keep Issue #63 open through dependency review, image publication and review,
   resident admission, Flux reconciliation, and deterministic Polaris/Iceberg
   queries. No checkpoint may infer completion from an earlier boundary.
 
 ## Consequences
 
-The source-build path avoids laundering an unsigned upstream image and makes
-the complete Maven dependency graph reviewable. It also introduces substantial
-Actions time, registry storage, and review surface; the publisher PR must
-measure and disclose its actual dependency artifact size before merge.
+The conditional source-build path avoids laundering an unsigned upstream image
+and, if source authentication is later established, makes the complete Maven
+dependency graph reviewable. It also introduces substantial Actions time,
+registry storage, and review surface; a future publisher PR must measure and
+disclose its actual dependency artifact size before merge.
 
 The build is intentionally full rather than a hand-pruned collection of JARs.
 This preserves the upstream Trino server distribution and Iceberg plugin while
@@ -130,6 +151,10 @@ If either allowed repository, the native arm64 builder, the offline rebuild,
 the vulnerability feed, or anonymous registry access is unavailable, the
 publication remains blocked. Authenticated pulls, stale scans, a mutable base,
 or direct cluster mutation are not fallbacks.
+
+If the source tag, commit, and publisher identity cannot be authenticated under
+the accepted evidence policy, no publication phase exists to fall back to. The
+exact source coordinates remain useful only as rejected-candidate evidence.
 
 Rollback for this decision-only checkpoint is to revert the focused PR and
 restore `decision_record_required: true` in the Trino admission record. No
