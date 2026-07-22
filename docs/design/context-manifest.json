@@ -36,6 +36,7 @@
     {"source": "08_Runbooks/RB-014_Verify_and_recover_Iceberg_table_bootstrap.md", "target": "docs/design/08_Runbooks/RB-014_Verify_and_recover_Iceberg_table_bootstrap.md"},
     {"source": "10_Research/105_License_Notes.md", "target": "docs/design/10_Research/105_License_Notes.md"},
     {"source": "10_Research/106_ARM64_Container_Image_Compatibility.md", "target": "docs/design/10_Research/106_ARM64_Container_Image_Compatibility.md"},
+    {"source": "10_Research/107_Trino_476_Signed_Distribution_Feasibility.md", "target": "docs/design/10_Research/107_Trino_476_Signed_Distribution_Feasibility.md"},
     {"source": "10_Research/108_RustFS_Maturity_Assessment.md", "target": "docs/design/10_Research/108_RustFS_Maturity_Assessment.md"},
     {"source": "11_UI_UX/110_UI_Strategy.md", "target": "docs/design/11_UI_UX/110_UI_Strategy.md"},
     {"source": "11_UI_UX/111_UI_Mockups_v0.2.2.md", "target": "docs/design/11_UI_UX/111_UI_Mockups_v0.2.2.md"},

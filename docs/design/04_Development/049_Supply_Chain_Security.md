@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-07-22
-version: "1.21"
+updated: 2026-07-23
+version: "1.22"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -624,6 +624,20 @@ selected Amazon Corretto 25 Alpine 3.24 runtime base is feasibility evidence
 only until a later main publication repeats native smoke, SBOM,
 High=0/Critical=0 scan, signature, provenance, and anonymous exact-digest
 retrieval.
+
+Trino 476 is not a permissible signed-binary fallback. Its Maven Central
+detached signature verifies cryptographically against fingerprint
+`C328250FE23A2420814521EC0EB69F76FD171538`, but the key was obtained from a
+public keyserver and is not independently bound to an approved Trino release
+authority. The extracted upstream distribution also fails the vulnerability
+gate: Syft 1.46.0 plus Trivy 0.72.0 reported Critical=2 and High=52, including
+Critical findings in the bundled native launcher and Ranger module and
+`CVE-2026-34214` in `io.trino:trino-iceberg` 476, fixed in 480. ADR-0019 never
+permits a Critical exception. Removing or replacing signed distribution
+contents is not an admission workaround, because it changes the reviewed input
+and leaves the Iceberg finding unresolved. The closed feasibility record is
+`bootstrap/trino/v476/feasibility.json`; no 476 workflow, image, ledger entry,
+or runtime is allowed.
 
 ## Resident image and SBOM evidence
 

@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "component": "trino",
+  "version": "476",
+  "review_type": "signed_distribution_feasibility",
+  "assessed_on": "2026-07-23",
+  "platform": "linux/arm64",
+  "source": {
+    "repository": "https://github.com/trinodb/trino",
+    "release_tag": "476",
+    "tag_object_sha": "ecb143d60e11131d167b3d3e1d726e053745aa6f",
+    "commit_sha": "7f3746a7fa0b27ace2470340e848feaf3ee73f48",
+    "tree_sha": "74ac3497643a111798df430355077f3a9a9d6da5",
+    "tag_signature": "unsigned",
+    "commit_signature": "unsigned"
+  },
+  "distribution": {
+    "url": "https://repo.maven.apache.org/maven2/io/trino/trino-server/476/trino-server-476.tar.gz",
+    "signature_url": "https://repo.maven.apache.org/maven2/io/trino/trino-server/476/trino-server-476.tar.gz.asc",
+    "bytes": 821045832,
+    "sha256": "cfd5accde17e8ebd251eeeb78aed1f490e77bb3a164d95a0f454bf8a7c1cbd3f",
+    "sha512": "fe5e5b8cb2d71e8ccaccfc2acb60f88d43686a2a77b239bfd4fda6d2b0a5016e01f3bfad078954928de9b88f76b55023871c2b0efb83b609d9300906813ac7c2",
+    "signature_sha256": "e6a17fa6e1d086316b2308dfdf3145bd87fcc836f18c89f74559550e03e497d6",
+    "detached_signature": {
+      "algorithm": "RSA/SHA512",
+      "created_at": "2025-06-06T04:05:16Z",
+      "issuer_fingerprint": "C328250FE23A2420814521EC0EB69F76FD171538",
+      "issuer_key_id": "0EB69F76FD171538",
+      "cryptographic_verification": "passed_with_pgpy_0.6.0",
+      "trust_root_status": "unapproved",
+      "key_source": "https://keyserver.ubuntu.com",
+      "public_material_sha256": "e37a6a94215760b0bfa695eedd12ff70962df737a8aa648643b710c0660850b3",
+      "limitations": [
+        "the keyserver-delivered key is not an independently approved Trino trust root",
+        "PGPy 0.6.0 does not validate key self-signatures, revocation, or disabled-key state",
+        "the signed distribution is not proven to reproduce the unsigned repository tag and tree"
+      ]
+    }
+  },
+  "archive": {
+    "root": "trino-server-476",
+    "entries": 6732,
+    "directories": 70,
+    "regular_files": 949,
+    "hard_links": 5713,
+    "unique_hard_link_targets": 454,
+    "symbolic_links": 0,
+    "special_files": 0,
+    "unsafe_paths": 0,
+    "missing_hard_link_targets": 0,
+    "regular_file_uncompressed_bytes": 936655091,
+    "iceberg_plugin_entries": 451,
+    "iceberg_module": "plugin/iceberg/io.trino_trino-iceberg-476.jar",
+    "native_launchers": [
+      "linux-amd64",
+      "linux-arm64",
+      "linux-ppc64le"
+    ]
+  },
+  "runtime": {
+    "minimum_java": "24.0.1",
+    "project_target_jdk": "24",
+    "native_linux_arm64_launcher_present": true,
+    "java_25_alpine_3_24_compatibility": "not_smoked",
+    "upstream_dockerfile": "rejected_mutable_inputs"
+  },
+  "vulnerability_assessment": {
+    "sbom_generator": "syft 1.46.0",
+    "sbom_format": "CycloneDX 1.7",
+    "sbom_components": 13484,
+    "sbom_file_components": 6587,
+    "sbom_library_components": 6897,
+    "scanner": "trivy 0.72.0",
+    "vulnerability_db_updated_at": "2026-07-22T13:17:28.096603393Z",
+    "severity_counts": {
+      "UNKNOWN": 2,
+      "LOW": 9,
+      "MEDIUM": 55,
+      "HIGH": 52,
+      "CRITICAL": 2
+    },
+    "blocking_findings": [
+      {
+        "id": "CVE-2025-68121",
+        "severity": "CRITICAL",
+        "package": "stdlib",
+        "installed_version": "1.24.2",
+        "fixed_version": "1.24.13, 1.25.7, 1.26.0-rc.3",
+        "affected_surface": "bundled native launchers including linux-arm64"
+      },
+      {
+        "id": "CVE-2025-59059",
+        "severity": "CRITICAL",
+        "package": "org.apache.ranger:ranger-plugins-common",
+        "installed_version": "2.6.0",
+        "fixed_version": "2.8.0",
+        "affected_surface": "plugin/ranger"
+      },
+      {
+        "id": "CVE-2026-34214",
+        "severity": "HIGH",
+        "package": "io.trino:trino-iceberg",
+        "installed_version": "476",
+        "fixed_version": "480",
+        "affected_surface": "plugin/iceberg"
+      }
+    ],
+    "raw_artifacts_retained": false,
+    "fresh_scan_required_for_future_candidate": true
+  },
+  "decision": {
+    "status": "rejected",
+    "exception_eligible": false,
+    "admission_permitted": false,
+    "publication_workflow_permitted": false,
+    "resident_ledger_permitted": false,
+    "runtime_manifests_permitted": false,
+    "reasons": [
+      "Critical findings are never eligible for the ADR-0019 local-lab exception",
+      "the required Iceberg module has a High vulnerability fixed in Trino 480",
+      "the detached signature verifies cryptographically but its signer is not anchored to an approved Trino trust root",
+      "removing or replacing bundled modules or launchers would no longer preserve the reviewed signed distribution"
+    ],
+    "allowed_path": "bootstrap/trino/v476/feasibility.json",
+    "next_candidate_requirement": "an authenticated Trino 480-or-newer source or distribution that passes a fresh High=0/Critical=0 scan and native linux/arm64 smoke"
+  }
+}
