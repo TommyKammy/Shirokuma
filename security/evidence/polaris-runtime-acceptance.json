@@ -1,0 +1,122 @@
+{
+  "acceptance_tool_sha256": "0ace333bf74672a9bee05d518338bed4bb8af51d2227dea0bed6b15fae6b0a8c",
+  "backup_restore": {
+    "archive_entries": 66,
+    "backup_bytes": 27674,
+    "backup_file": "polaris-postgresql-20260722T005545Z.dump",
+    "backup_location_policy": "durable macOS host outside Colima",
+    "backup_mode": "0600",
+    "backup_sha256": "80bae677e04dc55081ba1637773c7c045883cb9d4da1c819b730b40485f68a86",
+    "fingerprints_match": true,
+    "host_free_kib": 2889916308,
+    "host_root_mode": "0700",
+    "postgresql_tools": "pg_dump (PostgreSQL) 18.4",
+    "restored_fingerprint": {
+      "content_sha256": "5ec6928584323b59569f1fcf23cddd1f8437f9bfa4bfd92cb3cfb3471db5f3ed",
+      "row_count": 13,
+      "schema_md5": "adf3747657babcffa615521b7ca93ea3",
+      "table_count": 9
+    },
+    "source_fingerprint": {
+      "content_sha256": "5ec6928584323b59569f1fcf23cddd1f8437f9bfa4bfd92cb3cfb3471db5f3ed",
+      "row_count": 13,
+      "schema_md5": "adf3747657babcffa615521b7ca93ea3",
+      "table_count": 9
+    },
+    "temporary_database_removed": true
+  },
+  "captured_at": "2026-07-22T00:55:48+00:00",
+  "catalog_api_smoke": {
+    "base_location": "s3://shirokuma-lakehouse/polaris-acceptance/shirokuma_acceptance_20260722005545_8a8fcc",
+    "catalog_name": "shirokuma_acceptance_20260722005545_8a8fcc",
+    "cleanup_absent": true,
+    "create_status": 201,
+    "credential_material_retained": false,
+    "delete_status": 204,
+    "list_status": 200,
+    "read_status": 200,
+    "storage_type": "S3",
+    "token_status": 200
+  },
+  "cluster": {
+    "context": "colima-mac-studio-solo",
+    "namespace": "shirokuma-dev",
+    "production_claim": false,
+    "profile": "local-lite"
+  },
+  "issue": 61,
+  "kind": "shirokuma-polaris-runtime-acceptance",
+  "readiness": {
+    "kustomizations": [
+      {
+        "name": "shirokuma-object-storage",
+        "ready": true,
+        "reason": "ReconciliationSucceeded",
+        "revision": "main@sha1:e6bc687ef936943a1d73d82dd1eb4ea8fec07bbc"
+      },
+      {
+        "name": "shirokuma-catalog-database",
+        "ready": true,
+        "reason": "ReconciliationSucceeded",
+        "revision": "main@sha1:e6bc687ef936943a1d73d82dd1eb4ea8fec07bbc"
+      },
+      {
+        "name": "shirokuma-catalog-bootstrap",
+        "ready": true,
+        "reason": "ReconciliationSucceeded",
+        "revision": "main@sha1:e6bc687ef936943a1d73d82dd1eb4ea8fec07bbc"
+      },
+      {
+        "name": "shirokuma-catalog",
+        "ready": true,
+        "reason": "ReconciliationSucceeded",
+        "revision": "main@sha1:e6bc687ef936943a1d73d82dd1eb4ea8fec07bbc"
+      }
+    ],
+    "revision": "main@sha1:e6bc687ef936943a1d73d82dd1eb4ea8fec07bbc",
+    "secrets": [
+      {
+        "generation": "1",
+        "keys": [
+          "database",
+          "password",
+          "username"
+        ],
+        "managed_by": "OpenTofu",
+        "name": "polaris-postgresql-credentials"
+      },
+      {
+        "generation": "1",
+        "keys": [
+          "client_id",
+          "client_secret",
+          "credentials.json",
+          "realm"
+        ],
+        "managed_by": "OpenTofu",
+        "name": "polaris-root-credentials"
+      }
+    ],
+    "workloads": {
+      "bootstrap_job": "polaris-bootstrap",
+      "polaris_deployment": "Ready",
+      "postgresql_pvc": "Bound",
+      "postgresql_statefulset": "Ready"
+    }
+  },
+  "repository_revision": "e6bc687ef936943a1d73d82dd1eb4ea8fec07bbc",
+  "rollback_teardown": {
+    "destructive_teardown_executed": false,
+    "runbooks": [
+      "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md",
+      "docs/design/08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo.md"
+    ],
+    "verified_by": "static contract and focused tests"
+  },
+  "schema_version": 1,
+  "secrets": {
+    "material_in_git": false,
+    "material_in_receipt": false,
+    "provisioner": "OpenTofu"
+  }
+}

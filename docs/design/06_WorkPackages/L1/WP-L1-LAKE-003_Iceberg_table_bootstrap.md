@@ -2,7 +2,7 @@
 project: Shirokuma
 doc_id: "WP-L1-LAKE-003"
 title: "WP-L1-LAKE-003 Iceberg table bootstrap"
-status: blocked-prerequisite-repair
+status: ready-for-implementation
 created: 2026-07-05
 updated: 2026-07-22
 version: "1.0"
@@ -89,11 +89,12 @@ Do not add unrelated dependencies or bypass policy checks.
 - Runtime repair depends on: `#96`
 - Execution order: `2 of 8`
 - Queue: #28 closed and PR #53 merged for the prerequisite contract. Issue #61
-  and its runtime acceptance PR #95 are complete. Issue #62の事前probeで、
-  Polaris serverにSeaweedFS application credentialの`AWS_*` Secret参照がなく、
-  table metadata commitがHTTP 500になることを確認しました。focused repair
-  Issue #96を先に完了し、merge後のFlux readinessとbounded table-create probeで
-  修復を確認してから#62のbootstrap実装を再開します。
+  and its runtime acceptance PR #95 are complete. PR #97 merged as
+  `e6bc687ef936943a1d73d82dd1eb4ea8fec07bbc`; the local-lite cluster reconciled
+  every required Kustomization to that revision, restarted Polaris with only the
+  existing application Secret references, and passed fresh catalog/API,
+  backup/restore, and bounded Iceberg table create/list/load evidence. Issue #96
+  is complete and Issue #62 is unblocked for implementation through a focused PR.
 
 ## Implementation status
 
@@ -124,6 +125,13 @@ Do not add unrelated dependencies or bypass policy checks.
   credential. No direct apply or credential disclosure occurred. Issue #96 now
   owns the prerequisite repair; the #62 worktree is retained but must not be
   pushed until #96 is reviewed, merged, reconciled, and live-verified.
+- 2026-07-22: PR #97 merged the credential-reference repair as
+  `e6bc687ef936943a1d73d82dd1eb4ea8fec07bbc`. Flux reconciled all six local-lite
+  Kustomizations to that revision and created a new Ready Polaris Pod. A fresh
+  credential-redacted runtime acceptance passed catalog create/list/read/delete
+  and isolated PostgreSQL restore, and an additional temporary Iceberg probe
+  passed namespace/table create, list, and load before cleanup. The default AWS
+  credential-provider failure is no longer reproducible, so #62 may proceed.
 
 ## Definition of Done
 

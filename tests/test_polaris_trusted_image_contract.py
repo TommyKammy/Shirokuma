@@ -3099,17 +3099,42 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
+        receipt = contract["live_acceptance"].get("receipt")
         for relative in (
             "security/polaris-runtime-activation.json",
             "Makefile",
             *contract["manifests"],
             *contract["documentation"],
             *contract["tooling"],
+            *([receipt] if receipt else []),
         ):
             source = ROOT / relative
             destination = root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
+        subprocess.run(
+            ["git", "init", "--quiet"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        )
+        common_directory = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        common_objects = (ROOT / common_directory).resolve() / "objects"
+        alternates = root / ".git/objects/info/alternates"
+        alternates.parent.mkdir(parents=True, exist_ok=True)
+        alternates.write_text(str(common_objects) + "\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "add", "."],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        )
         self._audit(root)
 
         stale_receipt = root / verifier.POLARIS_RUNTIME_ACCEPTANCE_RECEIPT
@@ -3121,7 +3146,7 @@ class PolarisTrustedImageContractTests(unittest.TestCase):
                 "FORBIDDEN_PATH",
                 verifier.POLARIS_RUNTIME_ACCEPTANCE_RECEIPT.as_posix(),
             )
-        stale_receipt.unlink()
+        shutil.copy2(ROOT / receipt, stale_receipt)
         with self.subTest(case="hash-mutation"):
             runtime_file = root / "deploy/gitops/catalog/server/deployment.yaml"
             runtime_file.write_text(
