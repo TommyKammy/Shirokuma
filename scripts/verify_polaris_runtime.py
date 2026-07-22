@@ -357,7 +357,14 @@ def _audit_live_acceptance(root: Path, contract: Mapping[str, Any]) -> None:
         )
         return
     _expect(
-        set(live) == {"complete", "receipt", "receipt_sha256", "required"},
+        set(live)
+        == {
+            "complete",
+            "receipt",
+            "receipt_sha256",
+            "additional_receipts",
+            "required",
+        },
         "RUNTIME_ACCEPTANCE",
         "live acceptance key set changed",
     )
@@ -386,6 +393,36 @@ def _audit_live_acceptance(root: Path, contract: Mapping[str, Any]) -> None:
         _sha256(path) == expected_digest,
         "RUNTIME_ACCEPTANCE",
         "live acceptance receipt hash mismatch",
+    )
+    additional = live.get("additional_receipts")
+    _expect(
+        isinstance(additional, list)
+        and len(additional) == 1
+        and isinstance(additional[0], dict)
+        and set(additional[0]) == {"receipt", "receipt_sha256"},
+        "RUNTIME_ACCEPTANCE",
+        "additional acceptance receipt binding is invalid",
+    )
+    additional_relative = additional[0].get("receipt")
+    additional_digest = additional[0].get("receipt_sha256")
+    _expect(
+        additional_relative
+        == "security/evidence/iceberg-table-bootstrap-runtime-acceptance.json"
+        and isinstance(additional_digest, str)
+        and re.fullmatch(r"[0-9a-f]{64}", additional_digest) is not None,
+        "RUNTIME_ACCEPTANCE",
+        "Iceberg acceptance receipt binding is invalid",
+    )
+    additional_path = root / additional_relative
+    _expect(
+        additional_path.is_file() and not additional_path.is_symlink(),
+        "RUNTIME_ACCEPTANCE",
+        "Iceberg acceptance receipt is missing",
+    )
+    _expect(
+        _sha256(additional_path) == additional_digest,
+        "RUNTIME_ACCEPTANCE",
+        "Iceberg acceptance receipt hash mismatch",
     )
     receipt = _load_json(path)
     _expect(

@@ -2,7 +2,7 @@
 project: Shirokuma
 doc_id: "WP-L1-LAKE-003"
 title: "WP-L1-LAKE-003 Iceberg table bootstrap"
-status: implementation-in-review
+status: evidence-in-review
 created: 2026-07-05
 updated: 2026-07-22
 version: "1.0"
@@ -87,17 +87,16 @@ Do not add unrelated dependencies or bypass policy checks.
 - Runtime follow-up Epic: [#60](https://github.com/TommyKammy/Shirokuma/issues/60)
 - Runtime follow-up Issue: [#62](https://github.com/TommyKammy/Shirokuma/issues/62)
 - Runtime follow-up PR: [#99](https://github.com/TommyKammy/Shirokuma/pull/99)
+- Runtime acceptance evidence: focused PR pending
 - GitHub depends on: `#27`
 - Runtime follow-up depends on: `#61`
 - Runtime repair depends on: `#96`
 - Execution order: `2 of 8`
-- Queue: #28 closed and PR #53 merged for the prerequisite contract. Issue #61
-  and its runtime acceptance PR #95 are complete. PR #97 merged as
-  `e6bc687ef936943a1d73d82dd1eb4ea8fec07bbc`; the local-lite cluster reconciled
-  every required Kustomization to that revision, restarted Polaris with only the
-  existing application Secret references, and passed fresh catalog/API,
-  backup/restore, and bounded Iceberg table create/list/load evidence. Issue #96
-  is complete and Issue #62 is unblocked for implementation through a focused PR.
+- Queue: PR #99 merged as `5e4b1a43d95d7a6b495487cb25166be3f7f71ee3`.
+  Flux reconciled the catalog and Iceberg bootstrap to that revision. Fresh
+  Polaris backup/restore and catalog API acceptance passed, and RB-014 restart
+  persistence/idempotence evidence is retained for focused review. Issue #62
+  remains Open until the evidence PR is reviewed and merged; #63 must not begin.
 
 ## Implementation status
 
@@ -168,6 +167,19 @@ Do not add unrelated dependencies or bypass policy checks.
   logical bytes, unchanged by the idempotent re-run; cleanup restored zero
   objects. RB-014 now sets an eight-object/1 MiB acceptance guard and 128 MiB
   host/Colima minimum operational headroom before reconciliation.
+- 2026-07-22: PR #99 was squash-merged as
+  `5e4b1a43d95d7a6b495487cb25166be3f7f71ee3`, and Flux reconciled both
+  `shirokuma-catalog` and `shirokuma-iceberg-bootstrap` Ready at that exact
+  revision. Fresh Polaris runtime acceptance passed catalog API smoke and an
+  isolated PostgreSQL backup/restore with no retained credential material.
+  After deleting only the controller-owned Polaris Pod, its UID changed with
+  zero restarts; Flux then recreated the bootstrap Job with a new UID. The
+  second Job reported `created=false`, retained snapshot
+  `7141845066324476177`, and read the same two rows from one data file. The
+  post-rerun `l1/` inventory was six objects / 16,549 logical bytes, within the
+  eight-object / 1 MiB guard. Host and Colima capacity guards also passed. The
+  credential-free Polaris and Iceberg receipts are now awaiting focused PR
+  review, so Issue #62 remains Open and #63 remains blocked.
 
 ## Definition of Done
 

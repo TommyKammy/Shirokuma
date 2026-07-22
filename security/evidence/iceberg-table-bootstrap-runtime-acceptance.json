@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "kind": "iceberg_table_bootstrap_runtime_acceptance",
+  "issue": 62,
+  "captured_at": "2026-07-22T10:04:54Z",
+  "scope": "non-production local-lite",
+  "cluster": {
+    "kubernetes_context": "colima-mac-studio-solo",
+    "namespace": "shirokuma-dev",
+    "repository_revision": "5e4b1a43d95d7a6b495487cb25166be3f7f71ee3",
+    "flux_revision": "main@sha1:5e4b1a43d95d7a6b495487cb25166be3f7f71ee3"
+  },
+  "flux": {
+    "kustomizations": [
+      {
+        "name": "shirokuma-catalog",
+        "ready": true,
+        "revision": "main@sha1:5e4b1a43d95d7a6b495487cb25166be3f7f71ee3"
+      },
+      {
+        "name": "shirokuma-iceberg-bootstrap",
+        "ready": true,
+        "revision": "main@sha1:5e4b1a43d95d7a6b495487cb25166be3f7f71ee3"
+      }
+    ]
+  },
+  "image": {
+    "reference": "ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e",
+    "runtime_image_id": "docker-pullable://ghcr.io/tommykammy/shirokuma-polaris@sha256:db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e"
+  },
+  "initial": {
+    "polaris_pod_uid": "cbbf7a74-a06f-40aa-9a27-12b1a975f85d",
+    "polaris_restart_count": 0,
+    "job_uid": "4ad7cb74-0faf-453d-b3c6-ef9e6d9fa53f",
+    "job_pod_uid": "5f329440-2195-42bf-a04d-b52a7a40e4c5",
+    "summary": {
+      "catalog": "shirokuma_l1",
+      "namespace": "smoke",
+      "table": "fixture_v1",
+      "result": "passed",
+      "created": true,
+      "snapshot_id": "7141845066324476177",
+      "data_files": 1,
+      "rows": 2,
+      "credential_material_retained": false
+    },
+    "summary_canonical_sha256": "9c79b6f575e87d239fa77ed7ab8c300eb8b030dc9a0d189065b3ea201ce872f9"
+  },
+  "rerun_after_polaris_restart": {
+    "polaris_pod_uid": "0e783e1e-aa57-484f-84ab-2918c2f9c759",
+    "polaris_restart_count": 0,
+    "job_uid": "cefebd4b-8e41-44f7-ac2a-6f1adc0497e9",
+    "job_pod_uid": "81201666-e205-456c-bf20-4631d5117d37",
+    "summary": {
+      "catalog": "shirokuma_l1",
+      "namespace": "smoke",
+      "table": "fixture_v1",
+      "result": "passed",
+      "created": false,
+      "snapshot_id": "7141845066324476177",
+      "data_files": 1,
+      "rows": 2,
+      "credential_material_retained": false
+    },
+    "summary_canonical_sha256": "f776670d10b94346ce70605ba2079c23c5c22706359512f15c95b071b6cd1778"
+  },
+  "storage_inventory_after_rerun": {
+    "bucket": "shirokuma-lakehouse",
+    "prefix": "l1/",
+    "object_count": 6,
+    "total_bytes": 16549,
+    "maximum_object_count": 8,
+    "maximum_total_bytes": 1048576
+  },
+  "capacity": {
+    "minimum_available_kib": 131072,
+    "host_available_kib": 2889017152,
+    "colima_available_kib": 17756004
+  },
+  "assertions": {
+    "polaris_pod_uid_changed": true,
+    "job_uid_changed": true,
+    "snapshot_id_unchanged": true,
+    "idempotent_rerun": true,
+    "storage_guard_passed": true,
+    "capacity_guard_passed": true
+  },
+  "secrets": {
+    "credential_material_retained": false,
+    "pod_spec_retained": false,
+    "environment_retained": false
+  }
+}

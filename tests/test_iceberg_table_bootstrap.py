@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import re
 import tempfile
@@ -3730,6 +3731,149 @@ class IcebergTableBootstrapPrerequisiteTests(unittest.TestCase):
         ):
             with self.subTest(expected=expected):
                 self.assertIn(expected, runbook)
+
+
+class IcebergRuntimeAcceptanceEvidenceTests(unittest.TestCase):
+    EVIDENCE = (
+        ROOT
+        / "security/evidence/iceberg-table-bootstrap-runtime-acceptance.json"
+    )
+    REVISION = "5e4b1a43d95d7a6b495487cb25166be3f7f71ee3"
+    FLUX_REVISION = f"main@sha1:{REVISION}"
+    IMAGE = (
+        "ghcr.io/tommykammy/shirokuma-polaris@sha256:"
+        "db403e2db7afbe4e8a62261500e229f6d796a420e814564b49f3e14217fd6c9e"
+    )
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.receipt = json.loads(cls.EVIDENCE.read_text(encoding="utf-8"))
+
+    def test_receipt_is_closed_world_and_bound_to_merged_runtime(self) -> None:
+        self.assertEqual(
+            {
+                "schema_version",
+                "kind",
+                "issue",
+                "captured_at",
+                "scope",
+                "cluster",
+                "flux",
+                "image",
+                "initial",
+                "rerun_after_polaris_restart",
+                "storage_inventory_after_rerun",
+                "capacity",
+                "assertions",
+                "secrets",
+            },
+            set(self.receipt),
+        )
+        self.assertEqual(1, self.receipt["schema_version"])
+        self.assertEqual(
+            "iceberg_table_bootstrap_runtime_acceptance",
+            self.receipt["kind"],
+        )
+        self.assertEqual(62, self.receipt["issue"])
+        self.assertEqual("non-production local-lite", self.receipt["scope"])
+        self.assertEqual(
+            {
+                "kubernetes_context": "colima-mac-studio-solo",
+                "namespace": "shirokuma-dev",
+                "repository_revision": self.REVISION,
+                "flux_revision": self.FLUX_REVISION,
+            },
+            self.receipt["cluster"],
+        )
+        self.assertEqual(self.IMAGE, self.receipt["image"]["reference"])
+        self.assertEqual(
+            f"docker-pullable://{self.IMAGE}",
+            self.receipt["image"]["runtime_image_id"],
+        )
+
+    def test_both_flux_dependencies_are_ready_at_the_merged_revision(self) -> None:
+        kustomizations = self.receipt["flux"]["kustomizations"]
+        self.assertEqual(
+            ["shirokuma-catalog", "shirokuma-iceberg-bootstrap"],
+            [item["name"] for item in kustomizations],
+        )
+        for item in kustomizations:
+            with self.subTest(name=item["name"]):
+                self.assertIs(item["ready"], True)
+                self.assertEqual(self.FLUX_REVISION, item["revision"])
+
+    def test_restart_and_rerun_prove_persistence_and_idempotence(self) -> None:
+        initial = self.receipt["initial"]
+        rerun = self.receipt["rerun_after_polaris_restart"]
+        self.assertNotEqual(initial["polaris_pod_uid"], rerun["polaris_pod_uid"])
+        self.assertNotEqual(initial["job_uid"], rerun["job_uid"])
+        self.assertNotEqual(initial["job_pod_uid"], rerun["job_pod_uid"])
+        self.assertEqual(0, initial["polaris_restart_count"])
+        self.assertEqual(0, rerun["polaris_restart_count"])
+        self.assertIs(initial["summary"]["created"], True)
+        self.assertIs(rerun["summary"]["created"], False)
+        self.assertEqual(
+            initial["summary"]["snapshot_id"],
+            rerun["summary"]["snapshot_id"],
+        )
+        self.assertGreater(int(initial["summary"]["snapshot_id"]), 0)
+        for item in (initial, rerun):
+            summary = item["summary"]
+            with self.subTest(created=summary["created"]):
+                self.assertEqual("shirokuma_l1", summary["catalog"])
+                self.assertEqual("smoke", summary["namespace"])
+                self.assertEqual("fixture_v1", summary["table"])
+                self.assertEqual("passed", summary["result"])
+                self.assertEqual(1, summary["data_files"])
+                self.assertEqual(2, summary["rows"])
+                self.assertIs(summary["credential_material_retained"], False)
+                canonical = json.dumps(
+                    summary,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                ).encode()
+                self.assertEqual(
+                    hashlib.sha256(canonical).hexdigest(),
+                    item["summary_canonical_sha256"],
+                )
+        self.assertTrue(all(self.receipt["assertions"].values()))
+
+    def test_storage_and_capacity_guards_pass_without_secret_material(self) -> None:
+        inventory = self.receipt["storage_inventory_after_rerun"]
+        self.assertEqual("shirokuma-lakehouse", inventory["bucket"])
+        self.assertEqual("l1/", inventory["prefix"])
+        self.assertGreater(inventory["object_count"], 0)
+        self.assertLessEqual(
+            inventory["object_count"], inventory["maximum_object_count"]
+        )
+        self.assertLessEqual(
+            inventory["total_bytes"], inventory["maximum_total_bytes"]
+        )
+        capacity = self.receipt["capacity"]
+        self.assertGreaterEqual(
+            capacity["host_available_kib"], capacity["minimum_available_kib"]
+        )
+        self.assertGreaterEqual(
+            capacity["colima_available_kib"], capacity["minimum_available_kib"]
+        )
+        self.assertEqual(
+            {
+                "credential_material_retained": False,
+                "pod_spec_retained": False,
+                "environment_retained": False,
+            },
+            self.receipt["secrets"],
+        )
+        serialized = json.dumps(self.receipt).lower()
+        for forbidden in (
+            "aws_access_key_id",
+            "aws_secret_access_key",
+            "client_secret",
+            "credentials.json",
+            "password",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, serialized)
 
 
 if __name__ == "__main__":
