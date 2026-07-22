@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "component": "trino",
   "version": "483",
   "source": {
@@ -59,10 +59,11 @@
         "evidence": "no reviewed dependency closure, offline build, signature, SBOM, scan, or runtime-smoke evidence exists in this repository"
       }
     ],
-    "rationale": "ADR-0019 permits only exact time-bounded High vulnerability exceptions; it does not waive source identity, image signature, transparency-log, provenance, or evidence requirements. Re-signing the untrusted upstream image is forbidden."
+    "rationale": "ADR-0019 does not waive source identity, image signature, transparency-log, provenance, or evidence requirements. ADR-0023 separately accepts only the exact Trino 483 source-identity risk for a time-boxed local PoC; the upstream image and server asset remain rejected, all image controls remain mandatory, and re-signing untrusted upstream bytes is forbidden."
   },
   "source_authentication": {
-    "status": "blocked",
+    "status": "provisionally_authorized_for_local_poc",
+    "authorization_record": "docs/design/07_ADR/ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md",
     "required_binding": {
       "repository": "https://github.com/trinodb/trino",
       "release_tag": "483",
@@ -76,7 +77,59 @@
     ],
     "sha_only_is_sufficient": false
   },
+  "provisional_source_authorization": {
+    "status": "active",
+    "authorization_type": "time_boxed_source_identity_risk_acceptance",
+    "decision_record": "docs/design/07_ADR/ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md",
+    "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5052385803",
+    "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
+    "approved_at": "2026-07-22T22:43:36Z",
+    "expires_at": "2026-08-21T22:43:36Z",
+    "maximum_duration_days": 30,
+    "automatic_renewal": false,
+    "risk_owner": "TommyKammy",
+    "implementation_author": "Codex",
+    "review": {
+      "required_before_merge": true,
+      "reviewer_must_differ_from_implementation_author": true,
+      "enforcement": "required_pull_request_review_before_merge"
+    },
+    "scope": {
+      "profile": "mac-studio-solo/local-lite",
+      "purpose": "non-production-poc",
+      "data_classification": [
+        "synthetic",
+        "poc"
+      ],
+      "public_service_or_ingress_permitted": false,
+      "source_binding": {
+        "repository": "https://github.com/trinodb/trino",
+        "release_tag": "483",
+        "commit_sha": "50b0b50b75abd47f830b7805ee1b51716eb4065e",
+        "tree_sha": "3b5414292a614b12393bb4605ea2d4c588a5b8ee"
+      }
+    },
+    "accepted_risk": [
+      "the exact source binding lacks a qualifying upstream publisher signature or provenance statement"
+    ],
+    "non_waivable_controls": [
+      "authenticated closed dependency snapshot",
+      "network-none reproducible native linux/arm64 build",
+      "digest-pinned builder and runtime bases",
+      "native linux/arm64 runtime smoke",
+      "High=0/Critical=0 fresh vulnerability scan",
+      "retained CycloneDX SBOM and scan evidence",
+      "Cosign signature and Rekor transparency-log evidence",
+      "SLSA provenance bound to the exact source revision",
+      "anonymous exact-digest retrieval",
+      "separate resident-image admission",
+      "credential-safe Flux reconciliation and deterministic Polaris/Iceberg query acceptance"
+    ],
+    "stacked_vulnerability_exception_permitted": false,
+    "expiry_action": "fail_closed_before_dependency_or_image_publication_resident_admission_or_runtime_reconciliation"
+  },
   "repository_state": {
+    "dependency_snapshot_contract_permitted": true,
     "publication_workflow_permitted": false,
     "resident_ledger_permitted": false,
     "runtime_manifests_permitted": false,
@@ -86,7 +139,6 @@
     "forbidden_paths": [
       ".github/workflows/trino-arm64.yml",
       "bootstrap/trino/v483/Containerfile",
-      "bootstrap/trino/v483/trusted-build-contract.json",
       "security/evidence/trino-v483",
       "deploy/trino",
       "deploy/gitops/trino",
@@ -96,10 +148,10 @@
   "next_action": {
     "mode": "repository-owned-reproducible-source-build",
     "decision_record_required": false,
-    "decision_record": "docs/design/07_ADR/ADR-0022_Adopt_Trino_483_repository_source_build.md",
-    "phase": "source_authentication_evidence_review",
+    "decision_record": "docs/design/07_ADR/ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md",
+    "phase": "dependency_snapshot_contract_review",
     "requirements": [
-      "authenticated upstream publisher identity bound to the exact source repository, tag, commit, and tree",
+      "active and unexpired provisional source authorization bound to the exact source repository, tag, commit, and tree",
       "authenticated closed dependency snapshot",
       "network-none reproducible linux/arm64 build",
       "digest-pinned builder and runtime bases",
