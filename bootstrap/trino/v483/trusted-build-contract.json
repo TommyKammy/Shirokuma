@@ -210,7 +210,18 @@
         "build_workflow_identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/trino-maven-dependencies.yml@refs/heads/main",
         "build_workflow_sha_must_equal_source_sha": true,
         "build_definition_must_bind_source_repository_ref_and_sha": true,
-        "generator_workflow_must_be_commit_pinned": true
+        "generator_workflow_must_be_commit_pinned": true,
+        "trino_source_resolved_dependency": {
+          "claim_path": "predicate.buildDefinition.resolvedDependencies",
+          "required_uri": "git+https://github.com/trinodb/trino@refs/tags/483",
+          "required_digest": {
+            "gitTagObject": "32d4f28e8311ea6f67edca209df59a0493d869fa",
+            "gitCommit": "50b0b50b75abd47f830b7805ee1b51716eb4065e",
+            "gitTree": "3b5414292a614b12393bb4605ea2d4c588a5b8ee"
+          },
+          "exactly_one_matching_descriptor_required": true,
+          "source_checkout_must_match_descriptor": true
+        }
       }
     },
     "evidence": {
@@ -219,7 +230,16 @@
       "maximum_vulnerability_database_age_hours": 24,
       "maximum_high": 0,
       "maximum_critical": 0,
-      "ignore_unfixed": false
+      "ignore_unfixed": false,
+      "artifact_binding": {
+        "digest_source": "publisher_oras_push_digest_output",
+        "immutable_reference_required": true,
+        "cyclonedx_document_subject_must_equal_artifact_digest": true,
+        "cyclonedx_attestation_subject_must_equal_artifact_digest": true,
+        "vulnerability_scan_document_subject_must_equal_artifact_digest": true,
+        "vulnerability_scan_attestation_subject_must_equal_artifact_digest": true,
+        "binding_verification_required_before_evidence_review": true
+      }
     }
   },
   "offline_rebuild": {
@@ -230,6 +250,17 @@
     "network": "none",
     "fresh_builder_required": true,
     "fresh_source_checkout_required": true,
+    "runner": {
+      "required_platform": "linux/arm64",
+      "required_runner_arch": "ARM64",
+      "required_host_uname_machine": "aarch64",
+      "required_container_architecture": "arm64",
+      "native_execution_required": true,
+      "emulation_permitted": false,
+      "qemu_binfmt_handlers_permitted": false,
+      "observations_retained_as_evidence": true,
+      "verification_failure_action": "fail_closed_before_offline_rebuild"
+    },
     "command": "mvn --offline -Dmaven.repo.local=/workspace/.m2/repository clean install -DskipTests",
     "maven_wrapper_permitted": false,
     "snapshot_input": {

@@ -621,8 +621,13 @@ manifest, and an independent fresh
 with networking disabled. It records
 the future Corretto 25 Alpine 3.24 arm64 base without authorizing image use.
 The future dependency verifier must bind Cosign to the exact main-branch
-publisher workflow identity, bind SLSA subject/source/ref/SHA claims, and use
-the exact digest returned by the publisher as the sole isolated
+publisher workflow identity and bind SLSA subject/source/ref/SHA claims. Its
+`predicate.buildDefinition.resolvedDependencies` must identify the exact Trino
+483 repository, tag object, commit, and tree used by the build. The verifier
+must run on a native linux/arm64 host, retain runner/host/container architecture
+observations, and reject QEMU or binfmt emulation. The SBOM and vulnerability
+scan documents and their attestations must identify the exact immutable
+dependency-snapshot digest. That digest must also become the sole isolated
 `maven.repo.local` input after closed-manifest comparison. Ambient Maven caches
 remain forbidden.
 Every publication, image, resident, and runtime switch remains false while the

@@ -118,6 +118,19 @@ so native container smoke remains a mandatory publisher gate.
   in a fresh network-none native-arm64 builder. The output must be exactly
   `core/trino-server/target/trino-server-483.tar.gz`; its hash, size, and
   reproducible-build comparison become retained evidence.
+- Require the verifier workflow to run on a native linux/arm64 host. It must
+  retain `RUNNER_ARCH=ARM64`, host `uname -m=aarch64`, and container
+  architecture `arm64` observations, reject QEMU or binfmt emulation, and fail
+  closed before the offline rebuild when any observation is absent or differs.
+- Bind dependency-snapshot SLSA provenance to the exact Trino source input via
+  `predicate.buildDefinition.resolvedDependencies`. Exactly one descriptor must
+  identify `git+https://github.com/trinodb/trino@refs/tags/483` and carry the
+  reviewed tag-object, commit, and tree digests; the checkout used by the build
+  must match that descriptor.
+- Bind the SBOM and vulnerability-scan documents and their attestations to the
+  immutable dependency-snapshot digest returned by the publisher. Evidence
+  review must reject a missing or mismatched document subject or attestation
+  subject before admitting the snapshot.
 - Follow the two-phase publication lifecycle used by ADR-0020 and ADR-0021.
   Only after source-authentication evidence is reviewed may a reviewed main-only
   publisher create review-pending dependency evidence; a separate evidence-only

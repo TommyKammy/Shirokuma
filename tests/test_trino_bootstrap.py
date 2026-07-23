@@ -3539,9 +3539,46 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "build_workflow_sha_must_equal_source_sha": True,
                     "build_definition_must_bind_source_repository_ref_and_sha": True,
                     "generator_workflow_must_be_commit_pinned": True,
+                    "trino_source_resolved_dependency": {
+                        "claim_path": (
+                            "predicate.buildDefinition.resolvedDependencies"
+                        ),
+                        "required_uri": (
+                            "git+https://github.com/trinodb/trino@refs/tags/483"
+                        ),
+                        "required_digest": {
+                            "gitTagObject": (
+                                "32d4f28e8311ea6f67edca209df59a0493d869fa"
+                            ),
+                            "gitCommit": (
+                                "50b0b50b75abd47f830b7805ee1b51716eb4065e"
+                            ),
+                            "gitTree": (
+                                "3b5414292a614b12393bb4605ea2d4c588a5b8ee"
+                            ),
+                        },
+                        "exactly_one_matching_descriptor_required": True,
+                        "source_checkout_must_match_descriptor": True,
+                    },
                 },
             },
             snapshot["authentication"],
+        )
+        resolved_dependency = snapshot["authentication"]["provenance"][
+            "trino_source_resolved_dependency"
+        ]
+        source = contract["source"]
+        self.assertEqual(
+            f"git+{source['repository']}@refs/tags/{source['release_tag']}",
+            resolved_dependency["required_uri"],
+        )
+        self.assertEqual(
+            {
+                "gitTagObject": source["tag_object_sha"],
+                "gitCommit": source["commit_sha"],
+                "gitTree": source["tree_sha"],
+            },
+            resolved_dependency["required_digest"],
         )
         self.assertEqual(
             {
@@ -3551,8 +3588,35 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "maximum_high": 0,
                 "maximum_critical": 0,
                 "ignore_unfixed": False,
+                "artifact_binding": {
+                    "digest_source": "publisher_oras_push_digest_output",
+                    "immutable_reference_required": True,
+                    (
+                        "cyclonedx_document_subject_must_equal_"
+                        "artifact_digest"
+                    ): True,
+                    (
+                        "cyclonedx_attestation_subject_must_equal_"
+                        "artifact_digest"
+                    ): True,
+                    (
+                        "vulnerability_scan_document_subject_must_equal_"
+                        "artifact_digest"
+                    ): True,
+                    (
+                        "vulnerability_scan_attestation_subject_must_equal_"
+                        "artifact_digest"
+                    ): True,
+                    (
+                        "binding_verification_required_before_evidence_review"
+                    ): True,
+                },
             },
             snapshot["evidence"],
+        )
+        self.assertEqual(
+            contract["offline_rebuild"]["snapshot_input"]["reference_source"],
+            snapshot["evidence"]["artifact_binding"]["digest_source"],
         )
 
     def test_dependency_snapshot_contract_requires_network_none_rebuild(
@@ -3569,6 +3633,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "network",
                 "fresh_builder_required",
                 "fresh_source_checkout_required",
+                "runner",
                 "command",
                 "maven_wrapper_permitted",
                 "snapshot_input",
@@ -3588,6 +3653,30 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         self.assertEqual("none", rebuild["network"])
         self.assertIs(rebuild["fresh_builder_required"], True)
         self.assertIs(rebuild["fresh_source_checkout_required"], True)
+        self.assertEqual(
+            {
+                "required_platform": "linux/arm64",
+                "required_runner_arch": "ARM64",
+                "required_host_uname_machine": "aarch64",
+                "required_container_architecture": "arm64",
+                "native_execution_required": True,
+                "emulation_permitted": False,
+                "qemu_binfmt_handlers_permitted": False,
+                "observations_retained_as_evidence": True,
+                "verification_failure_action": (
+                    "fail_closed_before_offline_rebuild"
+                ),
+            },
+            rebuild["runner"],
+        )
+        self.assertEqual(
+            contract["platform"],
+            rebuild["runner"]["required_platform"],
+        )
+        self.assertEqual(
+            contract["toolchain"]["builder"]["architecture"],
+            rebuild["runner"]["required_container_architecture"],
+        )
         self.assertEqual(
             (
                 "mvn --offline "
@@ -3829,6 +3918,9 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             "High=0/Critical=0",
             "main-only",
             "separate evidence-only PR",
+            "predicate.buildDefinition.resolvedDependencies",
+            "`RUNNER_ARCH=ARM64`",
+            "SBOM and vulnerability-scan documents and their attestations",
             "A SHA, HTTPS transport, GitHub account attribution, release page, or "
             "Shirokuma re-signature alone is insufficient.",
             "A self-selected or merely embedded signing key is not a trust root.",
