@@ -3033,7 +3033,10 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "publication_workflow_permitted": False,
                 "resident_ledger_permitted": False,
                 "runtime_manifests_permitted": False,
-                "allowed_paths": ["bootstrap/trino/v483/admission.json"],
+                "allowed_paths": [
+                    "bootstrap/trino/v483/admission.json",
+                    "bootstrap/trino/v483/trusted-build-contract.json",
+                ],
                 "forbidden_paths": [
                     ".github/workflows/trino-arm64.yml",
                     "bootstrap/trino/v483/Containerfile",
@@ -3059,7 +3062,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             for path in TRINO_ADMISSION.parent.rglob("*")
             if path.is_file() or path.is_symlink()
         }
-        self.assertEqual(set(repository_state["allowed_paths"]), bootstrap_inventory)
+        self.assertEqual(
+            set(repository_state["allowed_paths"]),
+            bootstrap_inventory
+            | {"bootstrap/trino/v483/trusted-build-contract.json"},
+        )
         all_trino_bootstrap_paths = {
             path.relative_to(ROOT).as_posix()
             for path in (ROOT / "bootstrap").rglob("*")

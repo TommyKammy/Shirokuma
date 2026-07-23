@@ -134,7 +134,8 @@
     "resident_ledger_permitted": false,
     "runtime_manifests_permitted": false,
     "allowed_paths": [
-      "bootstrap/trino/v483/admission.json"
+      "bootstrap/trino/v483/admission.json",
+      "bootstrap/trino/v483/trusted-build-contract.json"
     ],
     "forbidden_paths": [
       ".github/workflows/trino-arm64.yml",
