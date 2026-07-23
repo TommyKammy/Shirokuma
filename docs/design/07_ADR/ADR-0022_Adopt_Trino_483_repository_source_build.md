@@ -5,7 +5,7 @@ title: "Select a conditional repository-owned Trino 483 source build"
 status: accepted
 created: 2026-07-22
 updated: 2026-07-23
-version: "0.2"
+version: "0.3"
 area: "architecture"
 tags: [shirokuma, adr, trino, arm64, maven, supply-chain]
 ---
@@ -135,6 +135,15 @@ so native container smoke remains a mandatory publisher gate.
 - Keep Issue #63 open through dependency review, image publication and review,
   resident admission, Flux reconciliation, and deterministic Polaris/Iceberg
   queries. No checkpoint may infer completion from an earlier boundary.
+
+## Subsequent amendment
+
+ADR-0023 supersedes only the requirement to wait indefinitely for qualifying
+upstream authentication before the dependency-snapshot contract can be
+reviewed. From `2026-07-22T22:43:36Z` through `2026-08-21T22:43:36Z`, the exact
+483 source coordinates may proceed under a time-boxed local-PoC source-identity
+risk acceptance. All dependency, offline-build, image, vulnerability,
+provenance, admission, and runtime controls in this ADR remain mandatory.
 
 ## Consequences
 

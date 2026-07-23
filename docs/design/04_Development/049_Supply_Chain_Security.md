@@ -604,26 +604,24 @@ retained the unsigned upstream image as blocked evidence. The exact source is
 commit `50b0b50b75abd47f830b7805ee1b51716eb4065e`, tree
 `3b5414292a614b12393bb4605ea2d4c588a5b8ee`. Both the tag object and source
 commit are unsigned, so these SHAs identify bytes without authenticating the
-upstream publisher. The next boundary is a separate source-authentication
-evidence review. It must bind the exact repository, tag, commit, and tree using
-an approved upstream signature, a source release signature verified against a
-separately approved Trino trust root and signer identity with matching extracted
-tree, or trusted upstream provenance; self-selected keys, SHA pinning, HTTPS,
-account attribution, the release page, and Shirokuma re-signing are insufficient
-by themselves.
+upstream publisher. ADR-0023 accepts only that exact source-identity gap for the
+`mac-studio-solo/local-lite` non-production PoC from
+`2026-07-22T22:43:36Z` through `2026-08-21T22:43:36Z`. The authorization is
+Issue #63-bound, limited to synthetic/PoC data with no public Service or
+Ingress, requires owner/reviewer separation, cannot renew automatically, and
+fails closed at expiry. It does not establish upstream authenticity.
 
-Until that gate closes, no Maven dependency-snapshot publisher or other Trino
-workflow is permitted. If it closes, the later publisher must use Maven 3.9.16
-and Temurin 25 from the exact native-arm64 builder selected by the ADR, allow
+The next permitted boundary is an evidence-only Maven dependency-snapshot
+contract review; no publisher exists yet. The later path must use Maven 3.9.16
+and Temurin 25 from the exact native-arm64 builder selected by ADR-0022, allow
 only Maven Central and the explicit Confluent repository, manifest every
 dependency byte, and prove a fresh `mvn --offline clean install -DskipTests`
-with networking disabled. The unchecked Maven-wrapper download, upstream server
-tarball, upstream Dockerfile, image publication, resident ledger, credentials,
-Flux, and runtime all remain forbidden at this decision checkpoint. The
-selected Amazon Corretto 25 Alpine 3.24 runtime base is feasibility evidence
-only until a later main publication repeats native smoke, SBOM,
-High=0/Critical=0 scan, signature, provenance, and anonymous exact-digest
-retrieval.
+with networking disabled. The upstream image and server tarball remain rejected
+build inputs. The unchecked Maven-wrapper download, image publication, resident
+ledger, credentials, Flux, and runtime remain forbidden at this checkpoint.
+High=0/Critical=0, native smoke, SBOM, Cosign/Rekor, SLSA provenance, and
+anonymous exact-digest retrieval remain mandatory and cannot be stacked with an
+ADR-0019 Trino vulnerability exception.
 
 Trino 476 is not a permissible signed-binary fallback. Its Maven Central
 detached signature verifies cryptographically against fingerprint

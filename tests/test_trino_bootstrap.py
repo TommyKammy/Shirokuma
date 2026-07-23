@@ -7,6 +7,7 @@ import re
 import tempfile
 import unittest
 from collections.abc import Callable
+from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
 
 from test_iceberg_table_bootstrap import (
@@ -32,6 +33,16 @@ TRINO_476_FEASIBILITY = ROOT / "bootstrap/trino/v476/feasibility.json"
 TRINO_SOURCE_BUILD_ADR = (
     ROOT / "docs/design/07_ADR/ADR-0022_Adopt_Trino_483_repository_source_build.md"
 )
+TRINO_PROVISIONAL_SOURCE_ADR = ROOT / (
+    "docs/design/07_ADR/"
+    "ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md"
+)
+TRINO_PROVISIONAL_APPROVAL_WINDOWS = {
+    "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5052385803": (
+        "2026-07-22T22:43:36Z",
+        "2026-08-21T22:43:36Z",
+    )
+}
 TRINO_BUILDER_INDEX = (
     "docker.io/library/maven@"
     "sha256:7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c"
@@ -73,6 +84,135 @@ HELM_IMAGE_VALUE_KEYS = {
 HelmResourceKey = tuple[object, ...]
 HelmValuesSources = dict[HelmResourceKey, dict[str, str]]
 HelmChartReferences = dict[HelmResourceKey, tuple[str, ...]]
+
+
+def _parse_utc_timestamp(value: object) -> datetime:
+    if not isinstance(value, str) or not re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", value
+    ):
+        raise ValueError("timestamp must use second-precision UTC Z format")
+    return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(
+        tzinfo=timezone.utc
+    )
+
+
+def _provisional_source_authorization_errors(
+    admission: dict, *, now: datetime
+) -> list[str]:
+    errors: list[str] = []
+    authorization = admission.get("provisional_source_authorization")
+    if not isinstance(authorization, dict):
+        return ["provisional_source_authorization must be an object"]
+
+    if authorization.get("status") != "active":
+        errors.append("authorization must be active")
+    if type(authorization.get("maximum_duration_days")) is not int:
+        errors.append("maximum_duration_days must be an integer")
+    elif authorization["maximum_duration_days"] != 30:
+        errors.append("maximum_duration_days must equal 30")
+    if authorization.get("automatic_renewal") is not False:
+        errors.append("automatic renewal is forbidden")
+    if authorization.get("stacked_vulnerability_exception_permitted") is not False:
+        errors.append("stacked vulnerability exceptions are forbidden")
+
+    approval_record = authorization.get("approval_record")
+    if not isinstance(approval_record, str) or not approval_record.strip():
+        approval_window = None
+        errors.append("approval record must be a non-empty URL")
+    else:
+        approval_window = TRINO_PROVISIONAL_APPROVAL_WINDOWS.get(approval_record)
+    if (
+        isinstance(approval_record, str)
+        and approval_record.strip()
+        and approval_window is None
+    ):
+        errors.append("approval record is not recognized")
+    elif approval_window is not None and (
+        authorization.get("approved_at"),
+        authorization.get("expires_at"),
+    ) != approval_window:
+        errors.append("authorization timestamps do not match the approval record")
+
+    try:
+        approved_at = _parse_utc_timestamp(authorization.get("approved_at"))
+        expires_at = _parse_utc_timestamp(authorization.get("expires_at"))
+    except ValueError as error:
+        errors.append(str(error))
+    else:
+        if expires_at <= approved_at:
+            errors.append("expiry must follow approval")
+        if expires_at - approved_at > timedelta(days=30):
+            errors.append("authorization exceeds 30 days")
+        if now.tzinfo is None or now.utcoffset() is None:
+            errors.append("validation time must be timezone-aware")
+        elif now < approved_at:
+            errors.append("authorization is not yet active")
+        elif now >= expires_at:
+            errors.append("authorization is expired")
+
+    scope = authorization.get("scope")
+    if not isinstance(scope, dict):
+        errors.append("scope must be an object")
+    else:
+        if scope.get("source_binding") != admission.get(
+            "source_authentication", {}
+        ).get("required_binding"):
+            errors.append("provisional source binding must match the required binding")
+        if scope.get("profile") != "mac-studio-solo/local-lite":
+            errors.append("authorization is limited to mac-studio-solo/local-lite")
+        if scope.get("purpose") != "non-production-poc":
+            errors.append("authorization is limited to the non-production PoC")
+        if scope.get("data_classification") != ["synthetic", "poc"]:
+            errors.append("authorization permits only synthetic and PoC data")
+        if scope.get("public_service_or_ingress_permitted") is not False:
+            errors.append("public Service or Ingress is forbidden")
+
+    risk_owner = authorization.get("risk_owner")
+    implementation_author = authorization.get("implementation_author")
+    if not isinstance(risk_owner, str) or not risk_owner.strip():
+        errors.append("risk_owner must be a non-empty name")
+    if not isinstance(implementation_author, str) or not implementation_author.strip():
+        errors.append("implementation_author must be a non-empty name")
+    if (
+        isinstance(risk_owner, str)
+        and risk_owner.strip()
+        and isinstance(implementation_author, str)
+        and implementation_author.strip()
+        and risk_owner.strip().casefold() == implementation_author.strip().casefold()
+    ):
+        errors.append("risk owner and implementation author must differ")
+    review = authorization.get("review")
+    if not isinstance(review, dict):
+        errors.append("review must be an object")
+    else:
+        if review.get("required_before_merge") is not True:
+            errors.append("review must be required before merge")
+        if review.get("reviewer_must_differ_from_implementation_author") is not True:
+            errors.append("reviewer must differ from implementation author")
+        if review.get("enforcement") != "required_pull_request_review_before_merge":
+            errors.append("authorization must require pull request review before merge")
+
+    required_controls = {
+        "authenticated closed dependency snapshot",
+        "network-none reproducible native linux/arm64 build",
+        "digest-pinned builder and runtime bases",
+        "native linux/arm64 runtime smoke",
+        "High=0/Critical=0 fresh vulnerability scan",
+        "retained CycloneDX SBOM and scan evidence",
+        "Cosign signature and Rekor transparency-log evidence",
+        "SLSA provenance bound to the exact source revision",
+        "anonymous exact-digest retrieval",
+        "separate resident-image admission",
+        (
+            "credential-safe Flux reconciliation and deterministic "
+            "Polaris/Iceberg query acceptance"
+        ),
+    }
+    controls = authorization.get("non_waivable_controls")
+    if not isinstance(controls, list) or set(controls) != required_controls:
+        errors.append("non-waivable controls are incomplete or unexpected")
+
+    return errors
 
 
 def _github_workflow_paths(root: Path = ROOT) -> list[Path]:
@@ -2595,13 +2735,14 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "candidate",
                 "assessment",
                 "source_authentication",
+                "provisional_source_authorization",
                 "repository_state",
                 "next_action",
             },
             set(admission),
         )
         self.assertIs(type(admission["schema_version"]), int)
-        self.assertEqual(1, admission["schema_version"])
+        self.assertEqual(2, admission["schema_version"])
         self.assertEqual("trino", admission["component"])
         self.assertEqual("483", admission["version"])
         self.assertEqual("linux/arm64", admission["platform"])
@@ -2698,20 +2839,26 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     },
                 ],
                 "rationale": (
-                    "ADR-0019 permits only exact time-bounded High vulnerability "
-                    "exceptions; it does not waive source identity, image signature, "
-                    "transparency-log, provenance, or evidence requirements. Re-signing "
-                    "the untrusted upstream image is forbidden."
+                    "ADR-0019 does not waive source identity, image signature, "
+                    "transparency-log, provenance, or evidence requirements. ADR-0023 "
+                    "separately accepts only the exact Trino 483 source-identity risk "
+                    "for a time-boxed local PoC; the upstream image and server asset "
+                    "remain rejected, all image controls remain mandatory, and "
+                    "re-signing untrusted upstream bytes is forbidden."
                 ),
             },
             assessment,
         )
 
-    def test_source_authentication_precedes_any_publisher(self) -> None:
+    def test_source_authentication_is_only_provisionally_authorized(self) -> None:
         admission = self._admission()
         self.assertEqual(
             {
-                "status": "blocked",
+                "status": "provisionally_authorized_for_local_poc",
+                "authorization_record": (
+                    "docs/design/07_ADR/"
+                    "ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md"
+                ),
                 "required_binding": {
                     "repository": "https://github.com/trinodb/trino",
                     "release_tag": "483",
@@ -2736,19 +2883,163 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             admission["repository_state"]["publication_workflow_permitted"], False
         )
 
+    def test_provisional_source_authorization_is_bounded_and_fail_closed(self) -> None:
+        admission = self._admission()
+        authorization = admission["provisional_source_authorization"]
+        self.assertEqual(
+            {
+                "status",
+                "authorization_type",
+                "decision_record",
+                "approval_record",
+                "issue",
+                "approved_at",
+                "expires_at",
+                "maximum_duration_days",
+                "automatic_renewal",
+                "risk_owner",
+                "implementation_author",
+                "review",
+                "scope",
+                "accepted_risk",
+                "non_waivable_controls",
+                "stacked_vulnerability_exception_permitted",
+                "expiry_action",
+            },
+            set(authorization),
+        )
+        self.assertEqual(
+            "time_boxed_source_identity_risk_acceptance",
+            authorization["authorization_type"],
+        )
+        self.assertEqual(
+            "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5052385803",
+            authorization["approval_record"],
+        )
+        self.assertEqual(
+            [
+                "the exact source binding lacks a qualifying upstream publisher "
+                "signature or provenance statement"
+            ],
+            authorization["accepted_risk"],
+        )
+        self.assertEqual(
+            "fail_closed_before_dependency_or_image_publication_"
+            "resident_admission_or_runtime_reconciliation",
+            authorization["expiry_action"],
+        )
+        self.assertEqual(
+            [],
+            _provisional_source_authorization_errors(
+                admission, now=datetime.now(timezone.utc)
+            ),
+        )
+
+    def test_provisional_source_authorization_rejects_policy_drift(self) -> None:
+        mutations: list[tuple[str, Callable[[dict], None], str]] = [
+            (
+                "expired",
+                lambda record: None,
+                "authorization is expired",
+            ),
+            (
+                "over-30-day",
+                lambda record: record["provisional_source_authorization"].__setitem__(
+                    "expires_at", "2026-08-21T22:43:37Z"
+                ),
+                "authorization exceeds 30 days",
+            ),
+            (
+                "automatic-renewal",
+                lambda record: record["provisional_source_authorization"].__setitem__(
+                    "automatic_renewal", True
+                ),
+                "automatic renewal is forbidden",
+            ),
+            (
+                "in-place-renewal",
+                lambda record: record["provisional_source_authorization"].update(
+                    {
+                        "approved_at": "2026-07-23T22:43:36Z",
+                        "expires_at": "2026-08-22T22:43:36Z",
+                    }
+                ),
+                "authorization timestamps do not match the approval record",
+            ),
+            (
+                "unrecognized-approval-record",
+                lambda record: record["provisional_source_authorization"].__setitem__(
+                    "approval_record",
+                    "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-0",
+                ),
+                "approval record is not recognized",
+            ),
+            (
+                "blank-risk-owner",
+                lambda record: record["provisional_source_authorization"].__setitem__(
+                    "risk_owner", "   "
+                ),
+                "risk_owner must be a non-empty name",
+            ),
+            (
+                "owner-author-collision",
+                lambda record: record["provisional_source_authorization"].__setitem__(
+                    "implementation_author", "TommyKammy"
+                ),
+                "risk owner and implementation author must differ",
+            ),
+            (
+                "source-mismatch",
+                lambda record: record["provisional_source_authorization"]["scope"][
+                    "source_binding"
+                ].__setitem__("commit_sha", "0" * 40),
+                "provisional source binding must match the required binding",
+            ),
+            (
+                "stacked-vulnerability-exception",
+                lambda record: record["provisional_source_authorization"].__setitem__(
+                    "stacked_vulnerability_exception_permitted", True
+                ),
+                "stacked vulnerability exceptions are forbidden",
+            ),
+        ]
+        for name, mutate, expected_error in mutations:
+            admission = json.loads(json.dumps(self._admission()))
+            mutate(admission)
+            now = datetime(2026, 8, 21, 22, 43, 36, tzinfo=timezone.utc)
+            if name != "expired":
+                now = datetime(2026, 7, 23, tzinfo=timezone.utc)
+            with self.subTest(mutation=name):
+                self.assertIn(
+                    expected_error,
+                    _provisional_source_authorization_errors(admission, now=now),
+                )
+
+    def test_provisional_source_authorization_rejects_preapproval_use(self) -> None:
+        self.assertIn(
+            "authorization is not yet active",
+            _provisional_source_authorization_errors(
+                self._admission(),
+                now=datetime(2026, 7, 22, 22, 43, 35, tzinfo=timezone.utc),
+            ),
+        )
+
     def test_blocked_candidate_cannot_publish_admit_or_materialize(self) -> None:
         admission = self._admission()
         repository_state = admission["repository_state"]
         self.assertEqual(
             {
+                "dependency_snapshot_contract_permitted": True,
                 "publication_workflow_permitted": False,
                 "resident_ledger_permitted": False,
                 "runtime_manifests_permitted": False,
-                "allowed_paths": ["bootstrap/trino/v483/admission.json"],
+                "allowed_paths": [
+                    "bootstrap/trino/v483/admission.json",
+                    "bootstrap/trino/v483/trusted-build-contract.json",
+                ],
                 "forbidden_paths": [
                     ".github/workflows/trino-arm64.yml",
                     "bootstrap/trino/v483/Containerfile",
-                    "bootstrap/trino/v483/trusted-build-contract.json",
                     "security/evidence/trino-v483",
                     "deploy/trino",
                     "deploy/gitops/trino",
@@ -2763,12 +3054,19 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             "runtime_manifests_permitted",
         ):
             self.assertIs(repository_state[key], False)
+        self.assertIs(
+            repository_state["dependency_snapshot_contract_permitted"], True
+        )
         bootstrap_inventory = {
             path.relative_to(ROOT).as_posix()
             for path in TRINO_ADMISSION.parent.rglob("*")
             if path.is_file() or path.is_symlink()
         }
-        self.assertEqual(set(repository_state["allowed_paths"]), bootstrap_inventory)
+        self.assertEqual(
+            set(repository_state["allowed_paths"]),
+            bootstrap_inventory
+            | {"bootstrap/trino/v483/trusted-build-contract.json"},
+        )
         all_trino_bootstrap_paths = {
             path.relative_to(ROOT).as_posix()
             for path in (ROOT / "bootstrap").rglob("*")
@@ -2823,7 +3121,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 [path.name for path in _github_workflow_paths(root)],
             )
 
-    def test_next_action_requires_source_authentication_before_build(self) -> None:
+    def test_next_action_is_dependency_snapshot_contract_review(self) -> None:
         next_action = self._admission()["next_action"]
         self.assertEqual(
             {
@@ -2841,17 +3139,18 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertIs(next_action["decision_record_required"], False)
         self.assertEqual(
-            "docs/design/07_ADR/ADR-0022_Adopt_Trino_483_repository_source_build.md",
+            "docs/design/07_ADR/"
+            "ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md",
             next_action["decision_record"],
         )
         self.assertEqual(
-            "source_authentication_evidence_review",
+            "dependency_snapshot_contract_review",
             next_action["phase"],
         )
         self.assertEqual(
             [
-                "authenticated upstream publisher identity bound to the exact "
-                "source repository, tag, commit, and tree",
+                "active and unexpired provisional source authorization bound to the "
+                "exact source repository, tag, commit, and tree",
                 "authenticated closed dependency snapshot",
                 "network-none reproducible linux/arm64 build",
                 "digest-pinned builder and runtime bases",
@@ -2862,6 +3161,48 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "anonymous exact-digest retrieval before separate admission review",
             ],
             next_action["requirements"],
+        )
+
+    def test_provisional_source_decision_authorizes_only_the_next_boundary(self) -> None:
+        decision = TRINO_PROVISIONAL_SOURCE_ADR.read_text(encoding="utf-8")
+        normalized_decision = " ".join(decision.split())
+        front_matter = decision.split("---", 2)[1]
+        self.assertIn('\ndoc_id: "ADR-0023"\n', front_matter)
+        self.assertIn("\nstatus: accepted\n", front_matter)
+        for required in (
+            "2026-07-22T22:43:36Z",
+            "2026-08-21T22:43:36Z",
+            "maximum duration is 30 days",
+            "automatic renewal is forbidden",
+            "mac-studio-solo/local-lite",
+            "synthetic or PoC data",
+            "no public Service or Ingress",
+            "owner/reviewer separation",
+            "dependency_snapshot_contract_review",
+            "High=0/Critical=0",
+            "Do not stack this authorization with an ADR-0019 vulnerability exception",
+            "Fail closed at expiry",
+            "upstream Trino OCI image and server archive",
+            "This decision supersedes only ADR-0022",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(" ".join(required.split()), normalized_decision)
+
+        context = json.loads(
+            (ROOT / "docs/design/context-manifest.json").read_text(encoding="utf-8")
+        )
+        self.assertIn(
+            {
+                "source": (
+                    "07_ADR/"
+                    "ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md"
+                ),
+                "target": (
+                    "docs/design/07_ADR/"
+                    "ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md"
+                ),
+            },
+            context["documents"],
         )
 
     def test_source_build_decision_closes_only_the_decision_boundary(self) -> None:
