@@ -4,14 +4,36 @@
   "version": "483",
   "platform": "linux/arm64",
   "lifecycle": {
-    "state": "dependency_snapshot_contract_review",
-    "contract_only": true,
+    "state": "dependency_snapshot_publication_pending",
+    "contract_only": false,
     "dependency_artifact_present": false,
-    "publication_workflow_permitted": false,
+    "publication_workflow_permitted": true,
     "image_publication_permitted": false,
     "resident_admission_permitted": false,
     "runtime_reconciliation_permitted": false
   },
+  "policy_files": [
+    {
+      "path": "bootstrap/trino/v483/settings.xml",
+      "sha256": "7c55da9b400b32e250fdca3dabb65b08e71eff1e5eff67984a85313922e793ee"
+    },
+    {
+      "path": "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
+      "sha256": "46b658da8d190179af6f8c1328e44388f0ff2807507bf580e236e31580c73d48"
+    },
+    {
+      "path": "scripts/package_trino_maven_dependencies.py",
+      "sha256": "39f4f77347c3e7db7eb476f6f595a234fa9fc274b2985016442f8c1f75f07354"
+    },
+    {
+      "path": "scripts/verify_trino_dependency_publisher.py",
+      "sha256": "1019f3fef364c5984f4606f16713a964400b49311ac5e8089575c567bb8165f1"
+    },
+    {
+      "path": "tests/test_trino_dependency_publisher.py",
+      "sha256": "767cdbe4b1b5b144a46768876264173b466a50b8501314475cae02a4182ecf99"
+    }
+  ],
   "authorization": {
     "type": "time_boxed_source_identity_risk_acceptance",
     "decision_record": "docs/design/07_ADR/ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md",
@@ -75,9 +97,25 @@
         "path": "pom.xml",
         "sha256": "e1ba9a61315097e3a7133238c778ec161ac6097fe77a660fc5455a3e84568820"
       },
-      {
-        "path": "core/trino-server/pom.xml",
-        "sha256": "663d8bc33313160b26df9c80d4f1e5a3d970700573a914fb22db3462ac0e06d2"
+    {
+      "path": "core/trino-server/pom.xml",
+      "sha256": "663d8bc33313160b26df9c80d4f1e5a3d970700573a914fb22db3462ac0e06d2"
+    },
+    {
+      "path": ".mvn/extensions.xml",
+      "sha256": "5d034f440781f43f035303fe029c6a6a751f207a88e7b2f1fe57ff2029b325fb"
+    },
+    {
+      "path": ".mvn/maven.config",
+      "sha256": "d79502f51b88441a7fc7d30e99b9ff979d9cbd2f23f924d579bfa81763566a02"
+    },
+    {
+      "path": ".mvn/jvm.config",
+      "sha256": "46b658da8d190179af6f8c1328e44388f0ff2807507bf580e236e31580c73d48"
+    },
+    {
+      "path": ".mvn/settings.xml",
+      "sha256": "d06dc6c2d5e027397bd1188b8d8f72caa58a1789f5f642d8f48e832ef0c2ebe3"
       }
     ],
     "forbidden_build_inputs": [
@@ -135,11 +173,18 @@
     }
   },
   "snapshot": {
-    "state": "contract_only_not_published",
+    "state": "publication_pending_not_admitted",
     "packaging": "deterministic_run_scoped_oci_artifact",
     "artifact_repository": "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies",
     "reference_policy": "immutable_digest_only_after_publication",
     "mutable_tags_permitted": false,
+    "visibility_bootstrap": {
+      "required_visibility": "public",
+      "sign_and_attest_before_anonymous_pull": true,
+      "owner_action_on_first_private_run": "set-package-public-and-rerun",
+      "failed_attempt_admitted": false,
+      "user_credential_fallback": false
+    },
     "artifact_type": "application/vnd.shirokuma.trino.maven-dependencies.v1",
     "descriptor_media_type": "application/vnd.shirokuma.maven-dependency-manifest.v1+json",
     "archive_media_type": "application/vnd.shirokuma.maven-repository.v1.tar+gzip",
@@ -158,6 +203,12 @@
         "file_count",
         "total_bytes"
       ],
+      "excluded_resolver_metadata": [
+        "_remote.repositories",
+        "resolver-status.properties"
+      ],
+      "maximum_file_count": 250000,
+      "maximum_total_bytes": 8589934592,
       "canonical_paths_required": true,
       "sorted_unique_paths_required": true
     },
@@ -261,7 +312,7 @@
       "observations_retained_as_evidence": true,
       "verification_failure_action": "fail_closed_before_offline_rebuild"
     },
-    "command": "mvn --offline -Dmaven.repo.local=/workspace/.m2/repository clean install -DskipTests",
+  "command": "mvn --offline -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml clean install -DskipTests",
     "maven_wrapper_permitted": false,
     "snapshot_input": {
       "artifact_repository": "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies",
@@ -294,14 +345,29 @@
     ]
   },
   "publication": {
-    "permitted": false,
-    "workflow_present": false,
-    "planned_workflow": ".github/workflows/trino-maven-dependencies.yml",
-    "future_allowed_ref": "refs/heads/main",
-    "future_artifact_role": "review_pending_dependency_evidence",
+    "permitted": true,
+    "workflow_present": true,
+    "workflow": ".github/workflows/trino-maven-dependencies.yml",
+    "allowed_ref": "refs/heads/main",
+    "artifact_role": "review_pending_dependency_evidence",
+    "retire_in_evidence_review_pr": true,
     "separate_evidence_only_pr_required": true,
     "image_publisher_permitted_before_evidence_review": false,
-    "anonymous_exact_digest_pull_required": true
+    "anonymous_exact_digest_pull_required": true,
+    "pull_request_behavior": "static_read_only_contract_validation",
+    "publication_event": "push",
+    "runner": "ubuntu-24.04-arm",
+    "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",
+    "retained_evidence": [
+      "closed Maven dependency manifest and deterministic archive digest",
+      "independent reconstruction equality",
+      "two network-none native arm64 build output comparisons",
+      "CycloneDX dependency SBOM",
+      "fresh High=0/Critical=0 Trivy result and database metadata",
+      "Cosign signature and Rekor bundle",
+      "SLSA v1 provenance with predicate.buildDefinition.resolvedDependencies",
+      "anonymous exact-digest retrieval proof"
+    ]
   },
   "downstream_gates": {
     "dependency_artifact_published": false,

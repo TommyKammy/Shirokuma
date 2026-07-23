@@ -1,0 +1,1045 @@
+name: Trino 483 Maven dependency snapshot
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/trino-maven-dependencies.yml
+      - bootstrap/trino/v483/admission.json
+      - bootstrap/trino/v483/maven-policy/.mvn/jvm.config
+      - bootstrap/trino/v483/settings.xml
+      - bootstrap/trino/v483/trusted-build-contract.json
+      - scripts/package_trino_maven_dependencies.py
+      - scripts/verify_trino_dependency_publisher.py
+      - tests/test_trino_dependency_publisher.py
+      - Makefile
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/trino-maven-dependencies.yml
+      - bootstrap/trino/v483/admission.json
+      - bootstrap/trino/v483/maven-policy/.mvn/jvm.config
+      - bootstrap/trino/v483/settings.xml
+      - bootstrap/trino/v483/trusted-build-contract.json
+      - scripts/package_trino_maven_dependencies.py
+      - scripts/verify_trino_dependency_publisher.py
+      - tests/test_trino_dependency_publisher.py
+      - Makefile
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trino-483-maven-dependencies-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SOURCE_REPOSITORY: https://github.com/trinodb/trino
+  SOURCE_TAG: "483"
+  SOURCE_TAG_OBJECT: 32d4f28e8311ea6f67edca209df59a0493d869fa
+  SOURCE_COMMIT: 50b0b50b75abd47f830b7805ee1b51716eb4065e
+  SOURCE_TREE: 3b5414292a614b12393bb4605ea2d4c588a5b8ee
+  BUILDER_IMAGE: docker.io/library/maven@sha256:7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c
+  BUILDER_ARM64_MANIFEST: sha256:5476bfca9d0a6485b7161f6863123f7e6822336de4177273b47b5ec38ffd573a
+  ARTIFACT_REPOSITORY: ghcr.io/tommykammy/shirokuma-trino-maven-dependencies
+  ARTIFACT_TYPE: application/vnd.shirokuma.trino.maven-dependencies.v1
+  DESCRIPTOR_MEDIA_TYPE: application/vnd.shirokuma.maven-dependency-manifest.v1+json
+  ARCHIVE_MEDIA_TYPE: application/vnd.shirokuma.maven-repository.v1.tar+gzip
+  ORAS_VERSION: 1.3.3
+  ORAS_URL: https://github.com/oras-project/oras/releases/download/v1.3.3/oras_1.3.3_linux_arm64.tar.gz
+  ORAS_ARCHIVE_SHA256: ac7156f93a21e903f7ad606c792f3560f17e0cd0e36365634701b1e7cc4e4eca
+  COSIGN_VERSION: v3.1.1
+  TRIVY_VERSION: v0.72.0
+
+jobs:
+  validate:
+    if: >-
+      github.repository == 'TommyKammy/Shirokuma' &&
+      (
+        github.event_name == 'pull_request' ||
+        (
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          github.sha == github.workflow_sha
+        )
+      )
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 240
+    permissions:
+      contents: read
+    outputs:
+      active: ${{ steps.lifecycle.outputs.active }}
+      candidate_artifact_name: ${{ steps.record.outputs.candidate_artifact_name }}
+      archive_sha256: ${{ steps.record.outputs.archive_sha256 }}
+      descriptor_sha256: ${{ steps.record.outputs.descriptor_sha256 }}
+      offline_sha256: ${{ steps.record.outputs.offline_sha256 }}
+      reconstruction_sha256: ${{ steps.record.outputs.reconstruction_sha256 }}
+      sbom_sha256: ${{ steps.record.outputs.sbom_sha256 }}
+      scan_sha256: ${{ steps.record.outputs.scan_sha256 }}
+      toolchain_sha256: ${{ steps.record.outputs.toolchain_sha256 }}
+
+    steps:
+      - name: Check out the reviewed Trino dependency policy
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate the publication-pending contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest -v tests.test_trino_dependency_publisher
+          python3 scripts/verify_trino_dependency_publisher.py audit --root .
+
+      - name: Check the Trino dependency publication lifecycle
+        id: lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${GITHUB_EVENT_NAME}:${GITHUB_REF}" in
+            pull_request:*)
+              echo "active=false" >> "${GITHUB_OUTPUT}"
+              echo "Pull requests perform static read-only contract validation only"
+              ;;
+            push:refs/heads/main)
+              test "${GITHUB_SHA}" = "${GITHUB_WORKFLOW_SHA}"
+              python3 scripts/verify_trino_dependency_publisher.py authorize --root .
+              echo "active=true" >> "${GITHUB_OUTPUT}"
+              ;;
+            *)
+              echo "unexpected event/ref for Trino dependency publisher" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Verify the native arm64 builder substrate
+        if: steps.lifecycle.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py authorize --root .
+          test "${RUNNER_OS}" = "Linux"
+          test "${RUNNER_ARCH}" = "ARM64"
+          test "$(uname -s)" = "Linux"
+          test "$(uname -m)" = "aarch64"
+          if test -d /proc/sys/fs/binfmt_misc; then
+            test -z "$(find /proc/sys/fs/binfmt_misc -maxdepth 1 -type f -name 'qemu-*' -print -quit)"
+          fi
+          docker pull --platform linux/arm64 "${BUILDER_IMAGE}"
+          test "$(docker image inspect "${BUILDER_IMAGE}" --format '{{.Architecture}}')" = "arm64"
+          container_arch=$(
+            docker run --rm --platform linux/arm64 "${BUILDER_IMAGE}" uname -m
+          )
+          test "${container_arch}" = "aarch64"
+          docker run --rm --platform linux/arm64 \
+            --env HOME=/tmp/maven-home \
+            --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
+            --env MAVEN_OPTS= \
+            --env JAVA_TOOL_OPTIONS= \
+            --entrypoint /usr/share/maven/bin/mvn \
+            "${BUILDER_IMAGE}" --version \
+            > "${RUNNER_TEMP}/maven-version.txt"
+          grep -F 'Apache Maven 3.9.16' "${RUNNER_TEMP}/maven-version.txt"
+          grep -F 'Java version: 25' "${RUNNER_TEMP}/maven-version.txt"
+          grep -F 'vendor: Eclipse Adoptium' "${RUNNER_TEMP}/maven-version.txt"
+          grep -F 'OS name: "linux", version:' "${RUNNER_TEMP}/maven-version.txt"
+          grep -F 'arch: "aarch64"' "${RUNNER_TEMP}/maven-version.txt"
+          docker run --rm --platform linux/arm64 \
+            --entrypoint /bin/cat \
+            "${BUILDER_IMAGE}" /usr/share/maven/conf/settings.xml \
+            > "${RUNNER_TEMP}/maven-global-settings.xml"
+          GLOBAL_SETTINGS="${RUNNER_TEMP}/maven-global-settings.xml" \
+            python3 - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          root = ET.parse(Path(os.environ["GLOBAL_SETTINGS"])).getroot()
+          forbidden = {
+              "activeProfiles",
+              "localRepository",
+              "mirrors",
+              "pluginGroups",
+              "profiles",
+              "proxies",
+              "servers",
+          }
+          active = [
+              element.tag.rsplit("}", 1)[-1]
+              for element in root
+              if element.tag.rsplit("}", 1)[-1] in forbidden
+          ]
+          if active:
+              raise SystemExit(
+                  f"builder global Maven settings are not empty: {active!r}"
+              )
+          PY
+          RUNNER_UNAME="$(uname -a)" CONTAINER_ARCH="${container_arch}" \
+            python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          record = {
+              "schema_version": 1,
+              "result": "passed",
+              "runner_os": os.environ["RUNNER_OS"],
+              "runner_arch": os.environ["RUNNER_ARCH"],
+              "runner_uname": os.environ["RUNNER_UNAME"],
+              "container_architecture": os.environ["CONTAINER_ARCH"],
+              "native_execution": True,
+              "qemu_binfmt_handlers": [],
+              "builder_index": os.environ["BUILDER_IMAGE"],
+              "builder_arm64_manifest": os.environ["BUILDER_ARM64_MANIFEST"],
+              "maven_version_output": Path(
+                  os.environ["RUNNER_TEMP"], "maven-version.txt"
+              ).read_text(encoding="utf-8"),
+              "global_settings_sha256": hashlib.sha256(
+                  Path(
+                      os.environ["RUNNER_TEMP"], "maven-global-settings.xml"
+                  ).read_bytes()
+              ).hexdigest(),
+              "global_settings_active_sections": [],
+          }
+          Path(os.environ["RUNNER_TEMP"], "trino-toolchain.json").write_text(
+              json.dumps(record, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Fetch and verify the exact provisionally authorized source
+        if: steps.lifecycle.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py authorize --root .
+          source_dir="${RUNNER_TEMP}/trino-source"
+          test ! -e "${source_dir}"
+          git init "${source_dir}"
+          git -C "${source_dir}" remote add origin "${SOURCE_REPOSITORY}"
+          git -C "${source_dir}" fetch --depth=1 origin \
+            "${SOURCE_COMMIT}" "refs/tags/${SOURCE_TAG}:refs/tags/${SOURCE_TAG}"
+          test "$(git -C "${source_dir}" rev-parse "refs/tags/${SOURCE_TAG}")" \
+            = "${SOURCE_TAG_OBJECT}"
+          test "$(git -C "${source_dir}" rev-parse "refs/tags/${SOURCE_TAG}^{}")" \
+            = "${SOURCE_COMMIT}"
+          git -C "${source_dir}" checkout --detach "${SOURCE_COMMIT}"
+          test "$(git -C "${source_dir}" rev-parse 'HEAD^{tree}')" = "${SOURCE_TREE}"
+          python3 scripts/verify_trino_dependency_publisher.py audit-source \
+            --root . --checkout "${source_dir}"
+
+      - name: Resolve and package the first closed Maven repository
+        if: steps.lifecycle.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py authorize --root .
+          source_dir="${RUNNER_TEMP}/trino-source"
+          repository="${RUNNER_TEMP}/maven-repository-a"
+          candidate="${GITHUB_WORKSPACE}/.trino-candidate"
+          install -d -m 0700 "${repository}" "${candidate}"
+          docker run --rm \
+            --platform linux/arm64 \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp/maven-home \
+            --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
+            --env MAVEN_OPTS= \
+            --env JAVA_TOOL_OPTIONS= \
+            --volume "${source_dir}:/workspace" \
+            --volume "${repository}:/m2" \
+            --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:/policy/.mvn:ro" \
+            --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:/policy/settings.xml:ro" \
+            --workdir /policy \
+            --entrypoint /usr/share/maven/bin/mvn \
+            "${BUILDER_IMAGE}" \
+            --batch-mode --show-version --errors --strict-checksums \
+              --settings /policy/settings.xml \
+              -Dmaven.repo.local=/m2 \
+              --file /workspace/pom.xml \
+              clean install -DskipTests \
+            2>&1 | tee "${candidate}/maven-transfer-a.log"
+          python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log \
+            --log "${candidate}/maven-transfer-a.log"
+          rm -rf "${repository}/io/trino"
+          python3 scripts/package_trino_maven_dependencies.py create \
+            --repository "${repository}" \
+            --descriptor "${candidate}/maven-dependency-manifest.json" \
+            --archive "${candidate}/trino-maven-dependencies-483.tar.gz"
+
+      - name: Independently reconstruct the closed Maven repository
+        if: steps.lifecycle.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py authorize --root .
+          source_dir="${RUNNER_TEMP}/trino-source-verifier"
+          repository="${RUNNER_TEMP}/maven-repository-b"
+          candidate="${GITHUB_WORKSPACE}/.trino-candidate"
+          test ! -e "${source_dir}"
+          git clone --no-local --no-checkout \
+            "${RUNNER_TEMP}/trino-source" "${source_dir}"
+          git -C "${source_dir}" remote set-url origin "${SOURCE_REPOSITORY}"
+          git -C "${source_dir}" checkout --detach "${SOURCE_COMMIT}"
+          python3 scripts/verify_trino_dependency_publisher.py audit-source \
+            --root . --checkout "${source_dir}"
+          install -d -m 0700 "${repository}"
+          docker run --rm \
+            --platform linux/arm64 \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp/maven-home \
+            --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
+            --env MAVEN_OPTS= \
+            --env JAVA_TOOL_OPTIONS= \
+            --volume "${source_dir}:/workspace" \
+            --volume "${repository}:/m2" \
+            --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:/policy/.mvn:ro" \
+            --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:/policy/settings.xml:ro" \
+            --workdir /policy \
+            --entrypoint /usr/share/maven/bin/mvn \
+            "${BUILDER_IMAGE}" \
+            --batch-mode --show-version --errors --strict-checksums \
+              --settings /policy/settings.xml \
+              -Dmaven.repo.local=/m2 \
+              --file /workspace/pom.xml \
+              clean install -DskipTests \
+            2>&1 | tee "${candidate}/maven-transfer-b.log"
+          python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log \
+            --log "${candidate}/maven-transfer-b.log"
+          rm -rf "${repository}/io/trino"
+          python3 scripts/package_trino_maven_dependencies.py create \
+            --repository "${repository}" \
+            --descriptor "${RUNNER_TEMP}/maven-dependency-manifest-b.json" \
+            --archive "${RUNNER_TEMP}/trino-maven-dependencies-b.tar.gz"
+          cmp \
+            "${candidate}/maven-dependency-manifest.json" \
+            "${RUNNER_TEMP}/maven-dependency-manifest-b.json"
+          cmp \
+            "${candidate}/trino-maven-dependencies-483.tar.gz" \
+            "${RUNNER_TEMP}/trino-maven-dependencies-b.tar.gz"
+          CANDIDATE="${candidate}" python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          candidate = Path(os.environ["CANDIDATE"])
+          descriptor = candidate / "maven-dependency-manifest.json"
+          archive = candidate / "trino-maven-dependencies-483.tar.gz"
+          record = {
+              "schema_version": 1,
+              "result": "passed",
+              "independent_fresh_repository": True,
+              "same_allowlisted_repositories": True,
+              "complete_manifest_equal": True,
+              "archive_equal": True,
+              "manifest_sha256": hashlib.sha256(descriptor.read_bytes()).hexdigest(),
+              "archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+          }
+          (candidate / "independent-reconstruction.json").write_text(
+              json.dumps(record, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Prove two fresh network-none offline source builds
+        if: steps.lifecycle.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py authorize --root .
+          candidate="${GITHUB_WORKSPACE}/.trino-candidate"
+          for suffix in a b; do
+            offline_source="${RUNNER_TEMP}/trino-offline-${suffix}"
+            git clone --no-local --no-checkout \
+              "${RUNNER_TEMP}/trino-source" "${offline_source}"
+            git -C "${offline_source}" remote set-url origin "${SOURCE_REPOSITORY}"
+            git -C "${offline_source}" checkout --detach "${SOURCE_COMMIT}"
+            python3 scripts/verify_trino_dependency_publisher.py audit-source \
+              --root . --checkout "${offline_source}"
+            python3 scripts/package_trino_maven_dependencies.py verify \
+              --descriptor "${candidate}/maven-dependency-manifest.json" \
+              --archive "${candidate}/trino-maven-dependencies-483.tar.gz" \
+              --extract-root "${offline_source}/.m2/repository"
+            docker run --rm \
+              --platform linux/arm64 \
+              --network none \
+              --user "$(id -u):$(id -g)" \
+              --env HOME=/tmp/maven-home \
+              --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
+              --env MAVEN_OPTS= \
+              --env JAVA_TOOL_OPTIONS= \
+              --volume "${offline_source}:/workspace" \
+              --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:/policy/.mvn:ro" \
+              --workdir /policy \
+              --entrypoint /usr/share/maven/bin/mvn \
+              "${BUILDER_IMAGE}" \
+              --offline -Dmaven.repo.local=/workspace/.m2/repository \
+              --file /workspace/pom.xml clean install -DskipTests
+            output="${offline_source}/core/trino-server/target/trino-server-483.tar.gz"
+            test -s "${output}"
+            sha256sum "${output}" > "${candidate}/offline-output-${suffix}.sha256"
+            stat --format='%s' "${output}" > "${candidate}/offline-output-${suffix}.size"
+          done
+          cmp \
+            "${candidate}/offline-output-a.sha256" \
+            "${candidate}/offline-output-b.sha256"
+          cmp \
+            "${candidate}/offline-output-a.size" \
+            "${candidate}/offline-output-b.size"
+          CANDIDATE="${candidate}" python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          candidate = Path(os.environ["CANDIDATE"])
+          digest = (candidate / "offline-output-a.sha256").read_text(
+              encoding="utf-8"
+          ).split()[0]
+          size = int(
+              (candidate / "offline-output-a.size").read_text(encoding="utf-8")
+          )
+          record = {
+              "schema_version": 1,
+              "result": "passed",
+              "platform": "linux/arm64",
+              "fresh_source_checkouts": 2,
+              "fresh_snapshot_extractions": 2,
+              "network": "none",
+              "maven_wrapper_used": False,
+              "command": (
+                  "mvn --offline "
+                  "-Dmaven.repo.local=/workspace/.m2/repository "
+                  "--file /workspace/pom.xml "
+                  "clean install -DskipTests"
+              ),
+              "output": "core/trino-server/target/trino-server-483.tar.gz",
+              "output_sha256": digest,
+              "output_size": size,
+              "reproducible_build_comparison": "equal",
+          }
+          (candidate / "offline-build.json").write_text(
+              json.dumps(record, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Generate a CycloneDX dependency SBOM
+        if: steps.lifecycle.outputs.active == 'true'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.72.0
+          scan-type: fs
+          scan-ref: ${{ runner.temp }}/maven-repository-a
+          format: cyclonedx
+          output: .trino-candidate/trino-maven-dependencies-483.cdx.json
+          scanners: vuln
+
+      - name: Scan the dependency closure and block High or Critical findings
+        if: steps.lifecycle.outputs.active == 'true'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.72.0
+          scan-type: fs
+          scan-ref: ${{ runner.temp }}/maven-repository-a
+          format: json
+          output: .trino-candidate/trivy-vulnerability.json
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          vuln-type: library
+          exit-code: 1
+
+      - name: Record the read-only candidate
+        if: steps.lifecycle.outputs.active == 'true'
+        id: record
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="${GITHUB_WORKSPACE}/.trino-candidate"
+          trivy version --format json > "${candidate}/trivy-version.json"
+          cp "${RUNNER_TEMP}/trino-toolchain.json" "${candidate}/toolchain.json"
+          CANDIDATE="${candidate}" python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          candidate = Path(os.environ["CANDIDATE"])
+          trivy = json.loads(
+              (candidate / "trivy-version.json").read_text(encoding="utf-8")
+          )
+          if trivy.get("Version") != os.environ["TRIVY_VERSION"].removeprefix("v"):
+              raise SystemExit("unexpected Trivy version")
+          database = trivy.get("VulnerabilityDB", {})
+          if not database.get("UpdatedAt") or not database.get("DownloadedAt"):
+              raise SystemExit("missing Trivy vulnerability DB freshness metadata")
+          files = {
+              "archive": "trino-maven-dependencies-483.tar.gz",
+              "descriptor": "maven-dependency-manifest.json",
+              "offline": "offline-build.json",
+              "reconstruction": "independent-reconstruction.json",
+              "sbom": "trino-maven-dependencies-483.cdx.json",
+              "scan": "trivy-vulnerability.json",
+              "toolchain": "toolchain.json",
+          }
+          outputs = {
+              "candidate_artifact_name": (
+                  f"trino-maven-candidate-{os.environ['GITHUB_RUN_ID']}-"
+                  f"{os.environ['GITHUB_RUN_ATTEMPT']}"
+              )
+          }
+          checksums = {}
+          for key, filename in files.items():
+              path = candidate / filename
+              if not path.is_file() or path.is_symlink() or path.stat().st_size == 0:
+                  raise SystemExit(f"missing candidate evidence: {filename}")
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              outputs[f"{key}_sha256"] = digest
+              checksums[filename] = digest
+          (candidate / "candidate.sha256").write_text(
+              "".join(
+                  f"{digest}  {filename}\n"
+                  for filename, digest in sorted(checksums.items())
+              ),
+              encoding="utf-8",
+          )
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              for key, value in outputs.items():
+                  output.write(f"{key}={value}\n")
+          PY
+
+      - name: Retain the read-only-verified candidate
+        if: steps.lifecycle.outputs.active == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.record.outputs.candidate_artifact_name }}
+          path: |
+            .trino-candidate/candidate.sha256
+            .trino-candidate/independent-reconstruction.json
+            .trino-candidate/maven-dependency-manifest.json
+            .trino-candidate/maven-transfer-a.log
+            .trino-candidate/maven-transfer-b.log
+            .trino-candidate/offline-build.json
+            .trino-candidate/toolchain.json
+            .trino-candidate/trino-maven-dependencies-483.cdx.json
+            .trino-candidate/trino-maven-dependencies-483.tar.gz
+            .trino-candidate/trivy-version.json
+            .trino-candidate/trivy-vulnerability.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  publish:
+    needs: validate
+    if: >-
+      github.repository == 'TommyKammy/Shirokuma' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      github.sha == github.workflow_sha &&
+      needs.validate.result == 'success' &&
+      needs.validate.outputs.active == 'true'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+
+    steps:
+      - name: Enforce the main-source trust boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REPOSITORY}" = "TommyKammy/Shirokuma"
+          test "${GITHUB_EVENT_NAME}" = "push"
+          test "${GITHUB_REF}" = "refs/heads/main"
+          test "${GITHUB_SHA}" = "${GITHUB_WORKFLOW_SHA}"
+          case "${GITHUB_SHA}" in
+            [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
+              ;;
+            *)
+              echo "source SHA is not a lowercase 40-character Git object ID" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Check out the reviewed publication policy
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Revalidate the write-capable publication boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          python3 scripts/verify_trino_dependency_publisher.py audit --root .
+          python3 scripts/verify_trino_dependency_publisher.py authorize --root .
+
+      - name: Download the exact read-only-verified candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.validate.outputs.candidate_artifact_name }}
+          path: ${{ runner.temp }}/trino-maven-candidate
+
+      - name: Install checksum-pinned ORAS for publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="${RUNNER_TEMP}/oras-publish.tar.gz"
+          install_dir="${RUNNER_TEMP}/oras-publish-bin"
+          mkdir -p "${install_dir}"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            "${ORAS_URL}" --output "${archive}"
+          echo "${ORAS_ARCHIVE_SHA256}  ${archive}" \
+            | sha256sum --check --strict
+          tar --extract --gzip --file "${archive}" \
+            --directory "${install_dir}" oras
+          chmod 0755 "${install_dir}/oras"
+          echo "${install_dir}" >> "${GITHUB_PATH}"
+          test "$("${install_dir}/oras" version | awk '/Version:/ {print $2}')" \
+            = "${ORAS_VERSION}"
+
+      - name: Validate the candidate before registry authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py authorize --root .
+          candidate="${RUNNER_TEMP}/trino-maven-candidate"
+          (
+            cd "${candidate}"
+            sha256sum --check --strict candidate.sha256
+          )
+          test "$(sha256sum "${candidate}/trino-maven-dependencies-483.tar.gz" | cut -d' ' -f1)" \
+            = "${{ needs.validate.outputs.archive_sha256 }}"
+          test "$(sha256sum "${candidate}/maven-dependency-manifest.json" | cut -d' ' -f1)" \
+            = "${{ needs.validate.outputs.descriptor_sha256 }}"
+          test "$(sha256sum "${candidate}/offline-build.json" | cut -d' ' -f1)" \
+            = "${{ needs.validate.outputs.offline_sha256 }}"
+          test "$(sha256sum "${candidate}/independent-reconstruction.json" | cut -d' ' -f1)" \
+            = "${{ needs.validate.outputs.reconstruction_sha256 }}"
+          test "$(sha256sum "${candidate}/trino-maven-dependencies-483.cdx.json" | cut -d' ' -f1)" \
+            = "${{ needs.validate.outputs.sbom_sha256 }}"
+          test "$(sha256sum "${candidate}/trivy-vulnerability.json" | cut -d' ' -f1)" \
+            = "${{ needs.validate.outputs.scan_sha256 }}"
+          test "$(sha256sum "${candidate}/toolchain.json" | cut -d' ' -f1)" \
+            = "${{ needs.validate.outputs.toolchain_sha256 }}"
+          python3 scripts/package_trino_maven_dependencies.py verify \
+            --descriptor "${candidate}/maven-dependency-manifest.json" \
+            --archive "${candidate}/trino-maven-dependencies-483.tar.gz"
+
+      - name: Publish the immutable run-scoped OCI artifact
+        id: push
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py authorize --root .
+          candidate="${RUNNER_TEMP}/trino-maven-candidate"
+          tag="run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          tagged_reference="${ARTIFACT_REPOSITORY}:${tag}"
+          echo "${GHCR_TOKEN}" \
+            | oras login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+          oras push \
+            --artifact-type "${ARTIFACT_TYPE}" \
+            "${tagged_reference}" \
+            "${candidate}/maven-dependency-manifest.json:${DESCRIPTOR_MEDIA_TYPE}" \
+            "${candidate}/trino-maven-dependencies-483.tar.gz:${ARCHIVE_MEDIA_TYPE}" \
+            > "${candidate}/oras-push.txt"
+          digest=$(oras resolve "${tagged_reference}")
+          case "${digest}" in
+            sha256:[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
+              ;;
+            *)
+              echo "ORAS did not return a lowercase sha256 digest" >&2
+              exit 1
+              ;;
+          esac
+          reference="${ARTIFACT_REPOSITORY}@${digest}"
+          oras manifest fetch "${reference}" > "${candidate}/oci-manifest.json"
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+          echo "reference=${reference}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Install pinned Cosign after publication
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.1
+
+      - name: Keyless-sign and attest the exact OCI manifest
+        env:
+          PUBLISHED_REFERENCE: ${{ steps.push.outputs.reference }}
+          PUBLISHED_DIGEST: ${{ steps.push.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py authorize --root .
+          candidate="${RUNNER_TEMP}/trino-maven-candidate"
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/trino-maven-dependencies.yml@${GITHUB_REF}"
+          test "$(cosign version | awk '$1 == "GitVersion:" {print $2; exit}')" \
+            = "${COSIGN_VERSION}"
+          cosign sign --yes \
+            --bundle "${candidate}/cosign-signature-bundle.json" \
+            "${PUBLISHED_REFERENCE}"
+          CANDIDATE="${candidate}" python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          candidate = Path(os.environ["CANDIDATE"])
+          digest = os.environ["PUBLISHED_DIGEST"].removeprefix("sha256:")
+          predicate = {
+              "buildDefinition": {
+                  "buildType": (
+                      "https://github.com/TommyKammy/Shirokuma/"
+                      ".github/workflows/trino-maven-dependencies.yml@v1"
+                  ),
+                  "externalParameters": {
+                      "repository": os.environ["GITHUB_REPOSITORY"],
+                      "ref": os.environ["GITHUB_REF"],
+                      "sourceSha": os.environ["GITHUB_SHA"],
+                      "runId": os.environ["GITHUB_RUN_ID"],
+                      "runAttempt": os.environ["GITHUB_RUN_ATTEMPT"],
+                  },
+                  "internalParameters": {
+                      "sourceIdentityRisk": (
+                          "provisionally-authorized-not-authenticated"
+                      ),
+                      "authorizationExpiresAt": "2026-08-21T22:43:36Z",
+                  },
+                  "resolvedDependencies": [
+                      {
+                          "uri": "git+https://github.com/trinodb/trino@refs/tags/483",
+                          "digest": {
+                              "gitCommit": os.environ["SOURCE_COMMIT"],
+                              "gitTree": os.environ["SOURCE_TREE"],
+                          },
+                      },
+                      {
+                          "uri": (
+                              "file:maven-dependency-manifest.json"
+                          ),
+                          "digest": {
+                              "sha256": hashlib.sha256(
+                                  (candidate / "maven-dependency-manifest.json").read_bytes()
+                              ).hexdigest()
+                          },
+                      },
+                      {
+                          "uri": "file:trino-maven-dependencies-483.tar.gz",
+                          "digest": {
+                              "sha256": hashlib.sha256(
+                                  (
+                                      candidate
+                                      / "trino-maven-dependencies-483.tar.gz"
+                                  ).read_bytes()
+                              ).hexdigest()
+                          },
+                      },
+                      {
+                          "uri": "file:trino-maven-dependencies-483.cdx.json",
+                          "digest": {
+                              "sha256": hashlib.sha256(
+                                  (
+                                      candidate
+                                      / "trino-maven-dependencies-483.cdx.json"
+                                  ).read_bytes()
+                              ).hexdigest()
+                          },
+                      },
+                      {
+                          "uri": "file:trivy-vulnerability.json",
+                          "digest": {
+                              "sha256": hashlib.sha256(
+                                  (
+                                      candidate
+                                      / "trivy-vulnerability.json"
+                                  ).read_bytes()
+                              ).hexdigest()
+                          },
+                      },
+                      {
+                          "uri": "file:offline-build.json",
+                          "digest": {
+                              "sha256": hashlib.sha256(
+                                  (candidate / "offline-build.json").read_bytes()
+                              ).hexdigest()
+                          },
+                      },
+                      {
+                          "uri": "file:independent-reconstruction.json",
+                          "digest": {
+                              "sha256": hashlib.sha256(
+                                  (
+                                      candidate
+                                      / "independent-reconstruction.json"
+                                  ).read_bytes()
+                              ).hexdigest()
+                          },
+                      },
+                      {
+                          "uri": "file:toolchain.json",
+                          "digest": {
+                              "sha256": hashlib.sha256(
+                                  (candidate / "toolchain.json").read_bytes()
+                              ).hexdigest()
+                          },
+                      },
+                  ],
+              },
+              "runDetails": {
+                  "builder": {
+                      "id": (
+                          "https://github.com/TommyKammy/Shirokuma/"
+                          ".github/workflows/trino-maven-dependencies.yml@refs/heads/main"
+                      )
+                  },
+                  "metadata": {
+                      "invocationId": (
+                          f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/"
+                          f"actions/runs/{os.environ['GITHUB_RUN_ID']}/"
+                          f"attempts/{os.environ['GITHUB_RUN_ATTEMPT']}"
+                      ),
+                  },
+                  "byproducts": [
+                      {
+                          "name": "oci-subject",
+                          "digest": {"sha256": digest},
+                      }
+                  ],
+              },
+          }
+          (candidate / "slsa-provenance.json").write_text(
+              json.dumps(predicate, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          # The static contract closes
+          # predicate.buildDefinition.resolvedDependencies as mandatory.
+          assert predicate["buildDefinition"]["resolvedDependencies"]
+          PY
+          cosign attest --yes \
+            --type slsaprovenance1 \
+            --predicate "${candidate}/slsa-provenance.json" \
+            --bundle "${candidate}/cosign-provenance-bundle.json" \
+            "${PUBLISHED_REFERENCE}"
+          cosign verify \
+            --certificate-identity "${identity}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --certificate-github-workflow-repository "${GITHUB_REPOSITORY}" \
+            --certificate-github-workflow-ref "${GITHUB_REF}" \
+            --certificate-github-workflow-sha "${GITHUB_WORKFLOW_SHA}" \
+            --certificate-github-workflow-trigger "${GITHUB_EVENT_NAME}" \
+            --output json \
+            "${PUBLISHED_REFERENCE}" \
+            > "${candidate}/cosign-verify.json"
+          cosign verify-attestation \
+            --type slsaprovenance1 \
+            --certificate-identity "${identity}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --certificate-github-workflow-repository "${GITHUB_REPOSITORY}" \
+            --certificate-github-workflow-ref "${GITHUB_REF}" \
+            --certificate-github-workflow-sha "${GITHUB_WORKFLOW_SHA}" \
+            --certificate-github-workflow-trigger "${GITHUB_EVENT_NAME}" \
+            --output json \
+            "${PUBLISHED_REFERENCE}" \
+            > "${candidate}/cosign-verify-attestation.json"
+          CANDIDATE="${candidate}" PUBLISHED_DIGEST="${PUBLISHED_DIGEST}" \
+            PUBLISHED_REFERENCE="${PUBLISHED_REFERENCE}" python3 - <<'PY'
+          import base64
+          import json
+          import os
+          from pathlib import Path
+
+          candidate = Path(os.environ["CANDIDATE"])
+          raw = (
+              candidate / "cosign-verify-attestation.json"
+          ).read_text(encoding="utf-8").strip()
+          try:
+              decoded = json.loads(raw)
+          except json.JSONDecodeError:
+              decoded = [json.loads(line) for line in raw.splitlines() if line.strip()]
+          envelopes = decoded if isinstance(decoded, list) else [decoded]
+          expected_predicate = json.loads(
+              (candidate / "slsa-provenance.json").read_text(encoding="utf-8")
+          )
+          expected_digest = os.environ["PUBLISHED_DIGEST"].removeprefix("sha256:")
+          expected_name = os.environ["PUBLISHED_REFERENCE"].rsplit("@", 1)[0]
+          matches = []
+          for record in envelopes:
+              if not isinstance(record, dict):
+                  continue
+              payload = record.get("payload")
+              if not isinstance(payload, str):
+                  bundle = record.get("attestation", {}).get("bundle", {})
+                  payload = bundle.get("dsseEnvelope", {}).get("payload")
+              if not isinstance(payload, str):
+                  continue
+              statement = json.loads(
+                  base64.b64decode(payload, validate=True).decode("utf-8")
+              )
+              if (
+                  statement.get("_type") == "https://in-toto.io/Statement/v1"
+                  and statement.get("predicateType")
+                  == "https://slsa.dev/provenance/v1"
+                  and statement.get("predicate") == expected_predicate
+                  and statement.get("subject")
+                  == [
+                      {
+                          "name": expected_name,
+                          "digest": {"sha256": expected_digest},
+                      }
+                  ]
+              ):
+                  matches.append(statement)
+          if len(matches) != 1:
+              raise SystemExit(
+                  "verified SLSA v1 payload does not uniquely bind the "
+                  "expected predicate and OCI subject"
+              )
+          PY
+
+      - name: Prove anonymous exact-digest retrieval
+        env:
+          PUBLISHED_REFERENCE: ${{ steps.push.outputs.reference }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="${RUNNER_TEMP}/trino-maven-candidate"
+          oras logout ghcr.io
+          anonymous_config="${RUNNER_TEMP}/anonymous-trino-registry.json"
+          anonymous_dir="${RUNNER_TEMP}/anonymous-trino-pull"
+          printf '{}\n' > "${anonymous_config}"
+          mkdir -p "${anonymous_dir}"
+          oras pull \
+            --registry-config "${anonymous_config}" \
+            --output "${anonymous_dir}" \
+            "${PUBLISHED_REFERENCE}"
+          cmp \
+            "${candidate}/maven-dependency-manifest.json" \
+            "${anonymous_dir}/maven-dependency-manifest.json"
+          cmp \
+            "${candidate}/trino-maven-dependencies-483.tar.gz" \
+            "${anonymous_dir}/trino-maven-dependencies-483.tar.gz"
+          python3 scripts/package_trino_maven_dependencies.py verify \
+            --descriptor "${anonymous_dir}/maven-dependency-manifest.json" \
+            --archive "${anonymous_dir}/trino-maven-dependencies-483.tar.gz"
+          PUBLISHED_REFERENCE="${PUBLISHED_REFERENCE}" \
+            CANDIDATE="${candidate}" python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          candidate = Path(os.environ["CANDIDATE"])
+          record = {
+              "schema_version": 1,
+              "result": "passed",
+              "reference": os.environ["PUBLISHED_REFERENCE"],
+              "registry_config": "fresh-empty-no-credentials",
+              "manifest_equal": True,
+              "archive_equal": True,
+              "manifest_sha256": hashlib.sha256(
+                  (candidate / "maven-dependency-manifest.json").read_bytes()
+              ).hexdigest(),
+              "archive_sha256": hashlib.sha256(
+                  (candidate / "trino-maven-dependencies-483.tar.gz").read_bytes()
+              ).hexdigest(),
+          }
+          (candidate / "anonymous-pull.json").write_text(
+              json.dumps(record, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Record review-pending publication evidence
+        env:
+          PUBLISHED_REFERENCE: ${{ steps.push.outputs.reference }}
+          PUBLISHED_DIGEST: ${{ steps.push.outputs.digest }}
+          PUBLISHED_TAG: ${{ steps.push.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py authorize --root .
+          candidate="${RUNNER_TEMP}/trino-maven-candidate"
+          CANDIDATE="${candidate}" python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          candidate = Path(os.environ["CANDIDATE"])
+          retained = [
+              "anonymous-pull.json",
+              "cosign-provenance-bundle.json",
+              "cosign-signature-bundle.json",
+              "cosign-verify-attestation.json",
+              "cosign-verify.json",
+              "independent-reconstruction.json",
+              "maven-dependency-manifest.json",
+              "offline-build.json",
+              "oci-manifest.json",
+              "slsa-provenance.json",
+              "toolchain.json",
+              "trino-maven-dependencies-483.cdx.json",
+              "trivy-version.json",
+              "trivy-vulnerability.json",
+          ]
+          files = {}
+          for filename in retained:
+              path = candidate / filename
+              if not path.is_file() or path.is_symlink() or path.stat().st_size == 0:
+                  raise SystemExit(f"missing retained evidence: {filename}")
+              files[filename] = {
+                  "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                  "size": path.stat().st_size,
+              }
+          record = {
+              "schema_version": 1,
+              "state": "dependency_snapshot_evidence_review_pending",
+              "artifact_role": "review_pending_dependency_evidence",
+              "reference": os.environ["PUBLISHED_REFERENCE"],
+              "digest": os.environ["PUBLISHED_DIGEST"],
+              "run_scoped_tag": os.environ["PUBLISHED_TAG"],
+              "source_sha": os.environ["GITHUB_SHA"],
+              "workflow_sha": os.environ["GITHUB_WORKFLOW_SHA"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "authorization_expires_at": "2026-08-21T22:43:36Z",
+              "source_identity": "provisionally-authorized-not-authenticated",
+              "dependency_artifact_admitted": False,
+              "image_publication_permitted": False,
+              "resident_admission_permitted": False,
+              "runtime_reconciliation_permitted": False,
+              "retained_files": files,
+          }
+          (candidate / "publication.json").write_text(
+              json.dumps(record, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Retain review-pending publication evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: trino-maven-publication-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/trino-maven-candidate/anonymous-pull.json
+            ${{ runner.temp }}/trino-maven-candidate/cosign-provenance-bundle.json
+            ${{ runner.temp }}/trino-maven-candidate/cosign-signature-bundle.json
+            ${{ runner.temp }}/trino-maven-candidate/cosign-verify-attestation.json
+            ${{ runner.temp }}/trino-maven-candidate/cosign-verify.json
+            ${{ runner.temp }}/trino-maven-candidate/independent-reconstruction.json
+            ${{ runner.temp }}/trino-maven-candidate/maven-dependency-manifest.json
+            ${{ runner.temp }}/trino-maven-candidate/offline-build.json
+            ${{ runner.temp }}/trino-maven-candidate/oci-manifest.json
+            ${{ runner.temp }}/trino-maven-candidate/publication.json
+            ${{ runner.temp }}/trino-maven-candidate/slsa-provenance.json
+            ${{ runner.temp }}/trino-maven-candidate/toolchain.json
+            ${{ runner.temp }}/trino-maven-candidate/trino-maven-dependencies-483.cdx.json
+            ${{ runner.temp }}/trino-maven-candidate/trivy-version.json
+            ${{ runner.temp }}/trino-maven-candidate/trivy-vulnerability.json
+          if-no-files-found: error
+          retention-days: 30

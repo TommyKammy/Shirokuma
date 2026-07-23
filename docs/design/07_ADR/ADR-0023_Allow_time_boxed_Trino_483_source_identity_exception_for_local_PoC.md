@@ -93,6 +93,35 @@ Trino release passes the same compatibility and High=0/Critical=0 gates. The
 admission record must then remove or retire the provisional authorization before
 the authenticated path proceeds.
 
+## Subsequent publisher checkpoint
+
+The dependency-snapshot contract review completed on 2026-07-24. The next
+reviewed boundary permits a one-shot repository-owned publisher at
+`.github/workflows/trino-maven-dependencies.yml` while the exact Issue #63
+authorization remains active. Pull requests perform only static read-only
+validation. A main push must revalidate the authorization before every
+source-use or publication boundary and stops fail closed at expiry.
+
+The publisher resolves two fresh Maven repositories through only Maven Central
+and Confluent, compares their complete deterministic manifests and archives,
+uses resolver markers to bind each dependency origin, excludes timestamp-bearing
+resolver metadata, and performs two fresh native linux/arm64 builds with
+networking disabled. It retains the dependency SBOM, fresh High=0/Critical=0 scan, Cosign/Rekor
+signature, SLSA provenance with the exact source and dependency inputs, and
+anonymous exact-digest retrieval proof. Its output is
+`review_pending_dependency_evidence`, not an admitted dependency or runtime
+input.
+
+A separate evidence-only PR must review and pin the exact OCI digest and retire
+the publisher. Image publication, resident admission, credentials, Flux
+objects, and runtime activation remain forbidden until their own later
+checkpoints.
+
+GitHub Container Registry creates a first publication as private. If the first
+main run stops at the anonymous pull gate, the failed attempt is not admitted.
+The owner must make the package public and rerun the same reviewed main
+revision; a user-credential fallback is forbidden.
+
 ## Consequences
 
 Shirokuma can make bounded progress toward the L1 query PoC without claiming
@@ -101,10 +130,11 @@ accepts operational cost: expiry can block unrelated forward progress until the
 authorization is retired, replaced with authenticated evidence, or re-approved
 through a new review.
 
-The current admission remains `blocked`; no Trino image exists yet. The only
-newly permitted state is `dependency_snapshot_contract_review`. Publication,
-resident admission, Flux readiness, and Polaris/Iceberg query acceptance remain
-separate fail-closed checkpoints.
+The current admission remains `blocked`; no Trino image exists yet. The
+repository state is `dependency_snapshot_publication_pending`, and a successful
+main run can create only a review-pending dependency artifact. Dependency
+admission, image publication, resident admission, Flux readiness, and
+Polaris/Iceberg query acceptance remain separate fail-closed checkpoints.
 
 ## Verification
 

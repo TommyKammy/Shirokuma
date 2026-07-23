@@ -130,15 +130,23 @@
   },
   "repository_state": {
     "dependency_snapshot_contract_permitted": true,
-    "publication_workflow_permitted": false,
+    "publication_workflow_permitted": true,
+    "dependency_artifact_present": false,
     "resident_ledger_permitted": false,
     "runtime_manifests_permitted": false,
     "allowed_paths": [
+      ".github/workflows/trino-maven-dependencies.yml",
       "bootstrap/trino/v483/admission.json",
-      "bootstrap/trino/v483/trusted-build-contract.json"
+      "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
+      "bootstrap/trino/v483/settings.xml",
+      "bootstrap/trino/v483/trusted-build-contract.json",
+      "scripts/package_trino_maven_dependencies.py",
+      "scripts/verify_polaris_trusted_image.py",
+      "scripts/verify_trino_dependency_publisher.py",
+      "tests/test_trino_dependency_publisher.py",
+      "Makefile"
     ],
     "forbidden_paths": [
-      ".github/workflows/trino-maven-dependencies.yml",
       ".github/workflows/trino-arm64.yml",
       "bootstrap/trino/v483/Containerfile",
       "security/evidence/trino-v483",
@@ -151,7 +159,7 @@
     "mode": "repository-owned-reproducible-source-build",
     "decision_record_required": false,
     "decision_record": "docs/design/07_ADR/ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md",
-    "phase": "dependency_snapshot_contract_review",
+    "phase": "dependency_snapshot_publication_pending",
     "requirements": [
       "active and unexpired provisional source authorization bound to the exact source repository, tag, commit, and tree",
       "authenticated closed dependency snapshot",

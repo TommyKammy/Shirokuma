@@ -16,7 +16,7 @@ FLUX_GITHUB_PRIVATE ?= false
 FLUX_BOOTSTRAP_BRANCH ?= flux/bootstrap-local-lite
 FLUX_PATH ?= deploy/gitops/clusters/local-lite
 
-.PHONY: prepare verify verify-cosign verify-security verify-policy verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-image-admission verify-gitops-teardown verify-kyverno-bootstrap verify-object-storage-profile test-polaris-build-contract verify-polaris-build-contract test-polaris-admin-build-inputs-contract verify-polaris-admin-build-inputs-contract test-polaris-admin-image-contract verify-polaris-admin-image-contract verify-polaris-runtime capture-polaris-runtime-acceptance verify-iceberg-table-bootstrap verify-trino-bootstrap verify-dataops-bootstrap verify-superset-bootstrap verify-tpch-benchmark verify-metadata-bootstrap verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go supervisor-preflight colima-start colima-status tofu-init tofu-fmt tofu-validate flux-version-check gitops-bootstrap gitops-status gitops-reconcile gitops-teardown check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
+.PHONY: prepare verify verify-cosign verify-security verify-policy verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-image-admission verify-gitops-teardown verify-kyverno-bootstrap verify-object-storage-profile test-polaris-build-contract verify-polaris-build-contract test-polaris-admin-build-inputs-contract verify-polaris-admin-build-inputs-contract test-polaris-admin-image-contract verify-polaris-admin-image-contract verify-polaris-runtime capture-polaris-runtime-acceptance verify-iceberg-table-bootstrap test-trino-dependency-publisher verify-trino-dependency-publisher verify-trino-bootstrap verify-dataops-bootstrap verify-superset-bootstrap verify-tpch-benchmark verify-metadata-bootstrap verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go supervisor-preflight colima-start colima-status tofu-init tofu-fmt tofu-validate flux-version-check gitops-bootstrap gitops-status gitops-reconcile gitops-teardown check-newlines check-trailing-whitespace check-required-files check-no-secret-filenames
 
 verify: check-required-files verify-design-context verify-preflight-parser verify-supervisor-workflow-docs verify-colima-baseline verify-gitops-bootstrap verify-gitops-teardown verify-kyverno-bootstrap verify-object-storage-profile verify-polaris-admin-image-contract verify-polaris-runtime verify-iceberg-table-bootstrap verify-trino-bootstrap verify-ui-design-baseline verify-observability-baseline verify-repository-skeleton verify-go verify-security verify-policy check-newlines check-trailing-whitespace check-no-secret-filenames
 
@@ -107,7 +107,13 @@ capture-polaris-runtime-acceptance:
 verify-iceberg-table-bootstrap: flux-version-check
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_iceberg_table_bootstrap.py'
 
-verify-trino-bootstrap:
+test-trino-dependency-publisher:
+	@$(PYTHON) -m unittest -v tests.test_trino_dependency_publisher
+
+verify-trino-dependency-publisher: test-trino-dependency-publisher
+	@$(PYTHON) scripts/verify_trino_dependency_publisher.py audit --root .
+
+verify-trino-bootstrap: verify-trino-dependency-publisher
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_trino_bootstrap.py'
 
 verify-dataops-bootstrap:

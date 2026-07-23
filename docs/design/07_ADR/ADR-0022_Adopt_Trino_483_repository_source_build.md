@@ -114,7 +114,7 @@ so native container smoke remains a mandatory publisher gate.
   reviewed source and cannot enter the dependency input.
 - Require an independent clean verifier to reconstruct the candidate from the
   same allowlisted repositories, compare the complete manifest, then run
-  `mvn --offline -Dmaven.repo.local=/workspace/.m2/repository clean install -DskipTests`
+  `mvn --offline -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml clean install -DskipTests`
   in a fresh network-none native-arm64 builder. The output must be exactly
   `core/trino-server/target/trino-server-483.tar.gz`; its hash, size, and
   reproducible-build comparison become retained evidence.

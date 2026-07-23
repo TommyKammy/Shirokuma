@@ -611,31 +611,52 @@ Issue #63-bound, limited to synthetic/PoC data with no public Service or
 Ingress, requires owner/reviewer separation, cannot renew automatically, and
 fails closed at expiry. It does not establish upstream authenticity.
 
-The current permitted boundary is the evidence-only Maven dependency-snapshot
-contract in `bootstrap/trino/v483/trusted-build-contract.json`; no publisher or
-dependency artifact exists yet. The contract binds the exact authorization and
-source coordinates, Maven 3.9.16 and Temurin 25 native-arm64 builder, Maven
-Central plus the explicit Confluent repository, a regular-file-only closed
-manifest, and an independent fresh
-`mvn --offline -Dmaven.repo.local=/workspace/.m2/repository clean install -DskipTests`
-with networking disabled. It records
-the future Corretto 25 Alpine 3.24 arm64 base without authorizing image use.
-The future dependency verifier must bind Cosign to the exact main-branch
-publisher workflow identity and bind SLSA subject/source/ref/SHA claims. Its
+The dependency-snapshot contract review completed before the repository enabled
+the one-shot `.github/workflows/trino-maven-dependencies.yml` publisher. Pull
+requests execute only static, read-only policy validation. A reviewed main push
+must revalidate the unexpired Issue #63 authorization before source fetch,
+source execution, dependency resolution, publication, and evidence retention.
+The workflow binds the exact source coordinates, Maven 3.9.16 and Temurin 25
+native-arm64 builder, Maven Central plus the explicit Confluent repository, a
+regular-file-only closed manifest, and an independent fresh
+`mvn --offline -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml clean install -DskipTests`
+with networking disabled. It records the future Corretto 25 Alpine 3.24 arm64
+base without authorizing image use.
+
+The publisher resolves and packages two independent empty Maven repositories,
+requires their complete manifests and deterministic archives to be equal, and
+then performs two fresh network-none native-arm64 source builds from the exact
+snapshot. Their sole expected output,
+`core/trino-server/target/trino-server-483.tar.gz`, must match by digest and
+size. Symlinks, hard links, special files, partial or lock files, unknown
+origins, duplicate paths, and repository-produced `io/trino/**` reactor outputs
+fail closed. Origin markers are consumed before the timestamp-bearing
+`_remote.repositories` and `resolver-status.properties` resolver metadata are
+excluded from the deterministic archive. A fresh Trivy dependency scan must
+remain High=0/Critical=0 and its CycloneDX result is retained with the candidate.
+
+Publication is main-only, uses an immutable `run_id` / `run_attempt` tag, and
+produces only a review-pending OCI dependency artifact. Cosign identity is bound
+to the exact main-branch workflow, while SLSA subject/source/ref/SHA claims bind
+the downstream build. Its
 `predicate.buildDefinition.resolvedDependencies` must identify the exact Trino
 483 repository, tag object, commit, and tree used by the build. The verifier
-must run on a native linux/arm64 host, retain runner/host/container architecture
-observations, and reject QEMU or binfmt emulation. The SBOM and vulnerability
-scan documents and their attestations must identify the exact immutable
-dependency-snapshot digest. That digest must also become the sole isolated
-`maven.repo.local` input after closed-manifest comparison. Ambient Maven caches
-remain forbidden.
-Every publication, image, resident, and runtime switch remains false while the
-contract is reviewed. The upstream image and server tarball, unchecked
-Maven-wrapper download, credentials, Flux, and runtime remain forbidden.
-High=0/Critical=0, native smoke, SBOM, Cosign/Rekor, SLSA provenance, and
-anonymous exact-digest retrieval remain mandatory and cannot be stacked with an
-ADR-0019 Trino vulnerability exception.
+must retain runner/host/container architecture observations and reject QEMU or
+binfmt emulation. Anonymous exact-digest retrieval is mandatory before the
+publication evidence is retained.
+
+GitHub Container Registry creates the first package version as private. The
+first main run may therefore stop after signing and attestation at the anonymous
+pull gate. That failed attempt is not admitted: the owner must make the package
+public in GitHub and rerun the same reviewed main revision. User credentials
+must not be substituted for the anonymous proof.
+
+The main run does not admit the dependency artifact. A separate evidence-only
+PR must pin and independently review the exact digest, then retire the
+write-capable publisher. Image publication, resident admission, credentials,
+Flux objects, and runtime reconciliation remain forbidden. The upstream image
+and server tarball and unchecked Maven-wrapper download remain forbidden. No
+control can be stacked with an ADR-0019 Trino vulnerability exception.
 
 Trino 476 is not a permissible signed-binary fallback. Its Maven Central
 detached signature verifies cryptographically against fingerprint
