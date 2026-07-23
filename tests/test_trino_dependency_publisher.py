@@ -287,11 +287,7 @@ class PublisherContractTests(unittest.TestCase):
         namespace = "http://maven.apache.org/SETTINGS/1.2.0"
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "settings.xml"
-            path.write_text(
-                f'<settings xmlns="{namespace}">\n'
-                "  <pluginGroups/>\n"
-                "  <proxies/>\n"
-                "  <servers/>\n"
+            blocker_settings = (
                 "  <mirrors>\n"
                 "    <mirror>\n"
                 "      <id>maven-default-http-blocker</id>\n"
@@ -302,10 +298,17 @@ class PublisherContractTests(unittest.TestCase):
                 "      <blocked>true</blocked>\n"
                 "    </mirror>\n"
                 "  </mirrors>\n"
-                "  <profiles/>\n"
-                "</settings>\n",
-                encoding="utf-8",
             )
+            safe_settings = (
+                f'<settings xmlns="{namespace}">\n'
+                "  <pluginGroups/>\n"
+                "  <proxies/>\n"
+                "  <servers/>\n"
+                f"{blocker_settings}"
+                "  <profiles/>\n"
+                "</settings>\n"
+            )
+            path.write_text(safe_settings, encoding="utf-8")
             verify.audit_builder_settings(path)
             workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
             self.assertNotIn('"global_settings_active_sections": []', workflow)
@@ -346,6 +349,21 @@ class PublisherContractTests(unittest.TestCase):
                 )
                 with self.subTest(child=child):
                     with self.assertRaises(verify.ContractError):
+                        verify.audit_builder_settings(path)
+
+            for unsafe_settings, error in (
+                (
+                    safe_settings.replace(blocker_settings, "  <mirrors/>\n"),
+                    "default HTTP blocker differs",
+                ),
+                (
+                    safe_settings.replace(blocker_settings, ""),
+                    "global settings container set differs",
+                ),
+            ):
+                path.write_text(unsafe_settings, encoding="utf-8")
+                with self.subTest(unsafe_settings=unsafe_settings):
+                    with self.assertRaisesRegex(verify.ContractError, error):
                         verify.audit_builder_settings(path)
 
     def test_slsa_v1_payload_binds_evidence_and_exact_oci_subject(self) -> None:

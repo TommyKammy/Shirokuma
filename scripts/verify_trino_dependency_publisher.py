@@ -252,7 +252,7 @@ def audit_builder_settings(path: Path) -> None:
         if name in observed:
             _fail("BUILDER_SETTINGS", f"duplicate container: {name}")
         children = list(element)
-        if name == "mirrors" and children:
+        if name == "mirrors":
             mirror = children[0] if len(children) == 1 else None
             values = (
                 tuple(
@@ -293,6 +293,11 @@ def audit_builder_settings(path: Path) -> None:
         ):
             _fail("BUILDER_SETTINGS", f"non-empty container: {name}")
         observed.add(name)
+    if observed != ALLOWED_GLOBAL_SETTINGS_CONTAINERS:
+        _fail(
+            "BUILDER_SETTINGS",
+            f"global settings container set differs: {sorted(observed)!r}",
+        )
 
 
 def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:

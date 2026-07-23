@@ -27,11 +27,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "f89c8f91bea118a4286bf9c29c374d63711808336929e0b88b651859763f7528"
+      "sha256": "4dfe5edb584fb1b35bfa3c4777677a377ca50b99e0bda9ee82ace4910bbfb96e"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "f7ea46cd391666717181af2e0bbea67a1aa9f6029574205420d305b4d0b78c45"
+      "sha256": "a778f978522517fb9691c73839b4b916214efd4d4f560e38f19f2139699e8b21"
     }
   ],
   "authorization": {
