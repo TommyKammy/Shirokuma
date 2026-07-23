@@ -619,6 +619,11 @@ Central plus the explicit Confluent repository, a regular-file-only closed
 manifest, and an independent fresh
 `mvn --offline clean install -DskipTests` with networking disabled. It records
 the future Corretto 25 Alpine 3.24 arm64 base without authorizing image use.
+The future dependency verifier must bind Cosign to the exact main-branch
+publisher workflow identity, bind SLSA subject/source/ref/SHA claims, and use
+the exact digest returned by the publisher as the sole isolated
+`maven.repo.local` input after closed-manifest comparison. Ambient Maven caches
+remain forbidden.
 Every publication, image, resident, and runtime switch remains false while the
 contract is reviewed. The upstream image and server tarball, unchecked
 Maven-wrapper download, credentials, Flux, and runtime remain forbidden.

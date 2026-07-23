@@ -3509,6 +3509,37 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "slsa_provenance_required": True,
                 "anonymous_exact_digest_pull_required": True,
                 "separate_evidence_review_required": True,
+                "sigstore_identity": {
+                    "oidc_issuer": "https://token.actions.githubusercontent.com",
+                    "certificate_identity": (
+                        "https://github.com/TommyKammy/Shirokuma/.github/"
+                        "workflows/trino-maven-dependencies.yml@refs/heads/main"
+                    ),
+                    "repository": "TommyKammy/Shirokuma",
+                    "ref": "refs/heads/main",
+                    "workflow_path": (
+                        ".github/workflows/trino-maven-dependencies.yml"
+                    ),
+                    "workflow_sha_environment": "GITHUB_WORKFLOW_SHA",
+                    "source_sha_environment": "GITHUB_SHA",
+                    "workflow_sha_must_equal_source_sha": True,
+                },
+                "provenance": {
+                    "predicate_type": "https://slsa.dev/provenance/v1",
+                    "subject_must_equal_artifact_digest": True,
+                    "source_repository": (
+                        "https://github.com/TommyKammy/Shirokuma"
+                    ),
+                    "source_ref": "refs/heads/main",
+                    "source_sha_must_equal_publisher_commit": True,
+                    "build_workflow_identity": (
+                        "https://github.com/TommyKammy/Shirokuma/.github/"
+                        "workflows/trino-maven-dependencies.yml@refs/heads/main"
+                    ),
+                    "build_workflow_sha_must_equal_source_sha": True,
+                    "build_definition_must_bind_source_repository_ref_and_sha": True,
+                    "generator_workflow_must_be_commit_pinned": True,
+                },
             },
             snapshot["authentication"],
         )
@@ -3540,6 +3571,8 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "fresh_source_checkout_required",
                 "command",
                 "maven_wrapper_permitted",
+                "snapshot_input",
+                "maven_repository",
                 "expected_output",
                 "retained_output_evidence",
             },
@@ -3560,6 +3593,56 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             rebuild["command"],
         )
         self.assertIs(rebuild["maven_wrapper_permitted"], False)
+        self.assertEqual(
+            {
+                "artifact_repository": (
+                    "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies"
+                ),
+                "reference_source": "publisher_oras_push_digest_output",
+                "required_reference_format": (
+                    "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies"
+                    "@sha256:<64-lowercase-hex>"
+                ),
+                "same_run_digest_required": True,
+                "future_evidence_must_pin_exact_reference": True,
+                "anonymous_pull_required": True,
+                "extraction_root": "/workspace/dependency-snapshot",
+                "repository_root_after_extraction": (
+                    "/workspace/dependency-snapshot/repository"
+                ),
+                "manifest_path": (
+                    "/workspace/dependency-snapshot/"
+                    "maven-dependency-manifest.json"
+                ),
+                "archive_path": (
+                    "/workspace/dependency-snapshot/"
+                    "trino-maven-dependencies-483.tar.gz"
+                ),
+                "manifest_equality_required_before_build": True,
+            },
+            rebuild["snapshot_input"],
+        )
+        self.assertEqual(
+            {
+                "path": "/workspace/.m2/repository",
+                "initialization": (
+                    "copy_verified_snapshot_repository_to_empty_path_"
+                    "before_network_none_builder_start"
+                ),
+                "sole_dependency_repository": True,
+                "maven_args": (
+                    "-Dmaven.repo.local=/workspace/.m2/repository"
+                ),
+                "ambient_cache_mounts_permitted": False,
+                "ambient_home_permitted": False,
+                "prebuild_manifest_must_equal_snapshot": True,
+                (
+                    "postbuild_io_trino_entries_are_verifier_outputs_"
+                    "not_dependency_inputs"
+                ): True,
+            },
+            rebuild["maven_repository"],
+        )
         self.assertEqual(
             "core/trino-server/target/trino-server-483.tar.gz",
             rebuild["expected_output"],
