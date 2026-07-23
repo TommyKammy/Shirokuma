@@ -37,6 +37,12 @@ TRINO_PROVISIONAL_SOURCE_ADR = ROOT / (
     "docs/design/07_ADR/"
     "ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md"
 )
+TRINO_PROVISIONAL_APPROVAL_WINDOWS = {
+    "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5052385803": (
+        "2026-07-22T22:43:36Z",
+        "2026-08-21T22:43:36Z",
+    )
+}
 TRINO_BUILDER_INDEX = (
     "docker.io/library/maven@"
     "sha256:7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c"
@@ -109,6 +115,24 @@ def _provisional_source_authorization_errors(
     if authorization.get("stacked_vulnerability_exception_permitted") is not False:
         errors.append("stacked vulnerability exceptions are forbidden")
 
+    approval_record = authorization.get("approval_record")
+    if not isinstance(approval_record, str) or not approval_record.strip():
+        approval_window = None
+        errors.append("approval record must be a non-empty URL")
+    else:
+        approval_window = TRINO_PROVISIONAL_APPROVAL_WINDOWS.get(approval_record)
+    if (
+        isinstance(approval_record, str)
+        and approval_record.strip()
+        and approval_window is None
+    ):
+        errors.append("approval record is not recognized")
+    elif approval_window is not None and (
+        authorization.get("approved_at"),
+        authorization.get("expires_at"),
+    ) != approval_window:
+        errors.append("authorization timestamps do not match the approval record")
+
     try:
         approved_at = _parse_utc_timestamp(authorization.get("approved_at"))
         expires_at = _parse_utc_timestamp(authorization.get("expires_at"))
@@ -121,6 +145,8 @@ def _provisional_source_authorization_errors(
             errors.append("authorization exceeds 30 days")
         if now.tzinfo is None or now.utcoffset() is None:
             errors.append("validation time must be timezone-aware")
+        elif now < approved_at:
+            errors.append("authorization is not yet active")
         elif now >= expires_at:
             errors.append("authorization is expired")
 
@@ -141,12 +167,19 @@ def _provisional_source_authorization_errors(
         if scope.get("public_service_or_ingress_permitted") is not False:
             errors.append("public Service or Ingress is forbidden")
 
+    risk_owner = authorization.get("risk_owner")
     implementation_author = authorization.get("implementation_author")
-    if not isinstance(authorization.get("risk_owner"), str):
-        errors.append("risk_owner must be named")
-    if not isinstance(implementation_author, str):
-        errors.append("implementation_author must be named")
-    if authorization.get("risk_owner") == implementation_author:
+    if not isinstance(risk_owner, str) or not risk_owner.strip():
+        errors.append("risk_owner must be a non-empty name")
+    if not isinstance(implementation_author, str) or not implementation_author.strip():
+        errors.append("implementation_author must be a non-empty name")
+    if (
+        isinstance(risk_owner, str)
+        and risk_owner.strip()
+        and isinstance(implementation_author, str)
+        and implementation_author.strip()
+        and risk_owner.strip().casefold() == implementation_author.strip().casefold()
+    ):
         errors.append("risk owner and implementation author must differ")
     review = authorization.get("review")
     if not isinstance(review, dict):
@@ -2924,6 +2957,31 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "automatic renewal is forbidden",
             ),
             (
+                "in-place-renewal",
+                lambda record: record["provisional_source_authorization"].update(
+                    {
+                        "approved_at": "2026-07-23T22:43:36Z",
+                        "expires_at": "2026-08-22T22:43:36Z",
+                    }
+                ),
+                "authorization timestamps do not match the approval record",
+            ),
+            (
+                "unrecognized-approval-record",
+                lambda record: record["provisional_source_authorization"].__setitem__(
+                    "approval_record",
+                    "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-0",
+                ),
+                "approval record is not recognized",
+            ),
+            (
+                "blank-risk-owner",
+                lambda record: record["provisional_source_authorization"].__setitem__(
+                    "risk_owner", "   "
+                ),
+                "risk_owner must be a non-empty name",
+            ),
+            (
                 "owner-author-collision",
                 lambda record: record["provisional_source_authorization"].__setitem__(
                     "implementation_author", "TommyKammy"
@@ -2956,6 +3014,15 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     expected_error,
                     _provisional_source_authorization_errors(admission, now=now),
                 )
+
+    def test_provisional_source_authorization_rejects_preapproval_use(self) -> None:
+        self.assertIn(
+            "authorization is not yet active",
+            _provisional_source_authorization_errors(
+                self._admission(),
+                now=datetime(2026, 7, 22, 22, 43, 35, tzinfo=timezone.utc),
+            ),
+        )
 
     def test_blocked_candidate_cannot_publish_admit_or_materialize(self) -> None:
         admission = self._admission()

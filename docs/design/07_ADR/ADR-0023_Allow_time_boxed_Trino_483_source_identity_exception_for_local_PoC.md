@@ -128,5 +128,4 @@ and object-storage state.
 - [[07_ADR/ADR-0019_Allow_time_boxed_resident_image_exceptions_for_local_lab]]
 - [[07_ADR/ADR-0022_Adopt_Trino_483_repository_source_build]]
 - [[04_Development/049_Supply_Chain_Security]]
-- [[06_WorkPackages/L1/WP-L1-QUERY-001A_Trino_483_admission_checkpoint]]
 - [Issue #63](https://github.com/TommyKammy/Shirokuma/issues/63)
