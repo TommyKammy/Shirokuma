@@ -230,7 +230,7 @@
     "network": "none",
     "fresh_builder_required": true,
     "fresh_source_checkout_required": true,
-    "command": "mvn --offline clean install -DskipTests",
+    "command": "mvn --offline -Dmaven.repo.local=/workspace/.m2/repository clean install -DskipTests",
     "maven_wrapper_permitted": false,
     "snapshot_input": {
       "artifact_repository": "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies",

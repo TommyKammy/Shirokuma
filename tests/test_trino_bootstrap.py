@@ -3589,7 +3589,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         self.assertIs(rebuild["fresh_builder_required"], True)
         self.assertIs(rebuild["fresh_source_checkout_required"], True)
         self.assertEqual(
-            "mvn --offline clean install -DskipTests",
+            (
+                "mvn --offline "
+                "-Dmaven.repo.local=/workspace/.m2/repository "
+                "clean install -DskipTests"
+            ),
             rebuild["command"],
         )
         self.assertIs(rebuild["maven_wrapper_permitted"], False)
@@ -3642,6 +3646,10 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 ): True,
             },
             rebuild["maven_repository"],
+        )
+        self.assertIn(
+            rebuild["maven_repository"]["maven_args"],
+            rebuild["command"],
         )
         self.assertEqual(
             "core/trino-server/target/trino-server-483.tar.gz",
@@ -3812,7 +3820,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             "https://packages.confluent.io/maven/",
             "unchecked wrapper download path is forbidden",
             "`io/trino/**` artifacts fail closed",
-            "mvn --offline clean install -DskipTests",
+            (
+                "mvn --offline "
+                "-Dmaven.repo.local=/workspace/.m2/repository "
+                "clean install -DskipTests"
+            ),
             "core/trino-server/target/trino-server-483.tar.gz",
             "High=0/Critical=0",
             "main-only",

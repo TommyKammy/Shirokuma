@@ -617,7 +617,8 @@ dependency artifact exists yet. The contract binds the exact authorization and
 source coordinates, Maven 3.9.16 and Temurin 25 native-arm64 builder, Maven
 Central plus the explicit Confluent repository, a regular-file-only closed
 manifest, and an independent fresh
-`mvn --offline clean install -DskipTests` with networking disabled. It records
+`mvn --offline -Dmaven.repo.local=/workspace/.m2/repository clean install -DskipTests`
+with networking disabled. It records
 the future Corretto 25 Alpine 3.24 arm64 base without authorizing image use.
 The future dependency verifier must bind Cosign to the exact main-branch
 publisher workflow identity, bind SLSA subject/source/ref/SHA claims, and use
