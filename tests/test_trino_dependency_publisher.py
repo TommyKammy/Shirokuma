@@ -281,6 +281,73 @@ class PublisherContractTests(unittest.TestCase):
         self.assertIn("--file /workspace/pom.xml", workflow)
         self.assertNotIn("--workdir /workspace", workflow)
 
+    def test_builder_global_settings_allow_only_inert_defaults(
+        self,
+    ) -> None:
+        namespace = "http://maven.apache.org/SETTINGS/1.2.0"
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "settings.xml"
+            path.write_text(
+                f'<settings xmlns="{namespace}">\n'
+                "  <pluginGroups/>\n"
+                "  <proxies/>\n"
+                "  <servers/>\n"
+                "  <mirrors>\n"
+                "    <mirror>\n"
+                "      <id>maven-default-http-blocker</id>\n"
+                "      <mirrorOf>external:http:*</mirrorOf>\n"
+                "      <name>Pseudo repository to mirror external "
+                "repositories initially using HTTP.</name>\n"
+                "      <url>http://0.0.0.0/</url>\n"
+                "      <blocked>true</blocked>\n"
+                "    </mirror>\n"
+                "  </mirrors>\n"
+                "  <profiles/>\n"
+                "</settings>\n",
+                encoding="utf-8",
+            )
+            verify.audit_builder_settings(path)
+            workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+            self.assertNotIn('"global_settings_active_sections": []', workflow)
+            self.assertIn(
+                '"mirror:maven-default-http-blocker"',
+                workflow,
+            )
+            self.assertIn(
+                '"empty-standard-containers-plus-exact-default-http-blocker"',
+                workflow,
+            )
+
+            unsafe_children = (
+                "<activeProfiles/>",
+                "<localRepository>/tmp/repository</localRepository>",
+                "<offline>false</offline>",
+                "<servers><server><id>other</id></server></servers>",
+                "<mirrors>unexpected</mirrors>",
+                "<profiles/><profiles/>",
+                '<servers enabled="true"/>',
+                '<foreign:servers xmlns:foreign="urn:foreign"/>',
+                "unexpected<servers/>",
+                "<servers/>unexpected",
+                "<mirrors><mirror><id>other</id></mirror></mirrors>",
+                "<mirrors><mirror>"
+                "<id>maven-default-http-blocker</id>"
+                "<mirrorOf>external:http:*</mirrorOf>"
+                "<name>Pseudo repository to mirror external repositories "
+                "initially using HTTP.</name>"
+                "<url>http://0.0.0.0/</url>"
+                "<blocked>false</blocked>"
+                "</mirror></mirrors>",
+            )
+            for child in unsafe_children:
+                path.write_text(
+                    f'<settings xmlns="{namespace}">{child}</settings>\n',
+                    encoding="utf-8",
+                )
+                with self.subTest(child=child):
+                    with self.assertRaises(verify.ContractError):
+                        verify.audit_builder_settings(path)
+
     def test_slsa_v1_payload_binds_evidence_and_exact_oci_subject(self) -> None:
         workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
         self.assertEqual(2, workflow.count("--type slsaprovenance1"))
