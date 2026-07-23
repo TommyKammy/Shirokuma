@@ -29,6 +29,9 @@ ROOT = Path(__file__).resolve().parents[1]
 TRINO_COMPONENT = "trino"
 POSTGRESQL_COMPONENT = "postgresql"
 TRINO_ADMISSION = ROOT / "bootstrap/trino/v483/admission.json"
+TRINO_TRUSTED_BUILD_CONTRACT = (
+    ROOT / "bootstrap/trino/v483/trusted-build-contract.json"
+)
 TRINO_476_FEASIBILITY = ROOT / "bootstrap/trino/v476/feasibility.json"
 TRINO_SOURCE_BUILD_ADR = (
     ROOT / "docs/design/07_ADR/ADR-0022_Adopt_Trino_483_repository_source_build.md"
@@ -2585,6 +2588,12 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             object_pairs_hook=self._reject_duplicate_keys,
         )
 
+    def _trusted_build_contract(self) -> dict:
+        return json.loads(
+            TRINO_TRUSTED_BUILD_CONTRACT.read_text(encoding="utf-8"),
+            object_pairs_hook=self._reject_duplicate_keys,
+        )
+
     def test_476_signed_distribution_is_rejected(self) -> None:
         feasibility = self._feasibility()
         self.assertEqual(
@@ -3038,6 +3047,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "bootstrap/trino/v483/trusted-build-contract.json",
                 ],
                 "forbidden_paths": [
+                    ".github/workflows/trino-maven-dependencies.yml",
                     ".github/workflows/trino-arm64.yml",
                     "bootstrap/trino/v483/Containerfile",
                     "security/evidence/trino-v483",
@@ -3064,8 +3074,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         }
         self.assertEqual(
             set(repository_state["allowed_paths"]),
-            bootstrap_inventory
-            | {"bootstrap/trino/v483/trusted-build-contract.json"},
+            bootstrap_inventory,
         )
         all_trino_bootstrap_paths = {
             path.relative_to(ROOT).as_posix()
@@ -3120,6 +3129,498 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 ["publication.yaml", "publication.yml"],
                 [path.name for path in _github_workflow_paths(root)],
             )
+
+    def test_dependency_snapshot_contract_is_closed_world_and_source_bound(
+        self,
+    ) -> None:
+        contract = self._trusted_build_contract()
+        admission = self._admission()
+        self.assertEqual(
+            {
+                "schema_version",
+                "component",
+                "version",
+                "platform",
+                "lifecycle",
+                "authorization",
+                "source",
+                "toolchain",
+                "dependency_resolution",
+                "snapshot",
+                "offline_rebuild",
+                "publication",
+                "downstream_gates",
+            },
+            set(contract),
+        )
+        self.assertEqual(1, contract["schema_version"])
+        self.assertEqual("trino", contract["component"])
+        self.assertEqual("483", contract["version"])
+        self.assertEqual("linux/arm64", contract["platform"])
+
+        required_binding = admission["source_authentication"]["required_binding"]
+        source = contract["source"]
+        self.assertEqual(
+            {
+                "repository": source["repository"],
+                "release_tag": source["release_tag"],
+                "commit_sha": source["commit_sha"],
+                "tree_sha": source["tree_sha"],
+            },
+            required_binding,
+        )
+        self.assertEqual(
+            "32d4f28e8311ea6f67edca209df59a0493d869fa",
+            source["tag_object_sha"],
+        )
+        self.assertEqual(
+            "provisionally_accepted_risk_not_authenticated",
+            source["publisher_identity_status"],
+        )
+        self.assertEqual(
+            {
+                "repository",
+                "release_tag",
+                "tag_object_sha",
+                "commit_sha",
+                "tree_sha",
+                "publisher_identity_status",
+                "unmodified_source_required",
+                "preimages",
+                "forbidden_build_inputs",
+            },
+            set(source),
+        )
+        self.assertIs(source["unmodified_source_required"], True)
+        self.assertEqual(4, len(source["preimages"]))
+        self.assertEqual(
+            {
+                "mvnw": (
+                    "cae96cef89ebea3531221f4ae17c23cf8edf67d00eae8306d4186ae1bbed4d02"
+                ),
+                ".mvn/wrapper/maven-wrapper.properties": (
+                    "488e1b3f2e641779d4636abf9390845f901e64607261bc3c0b0bfe4fe96e6706"
+                ),
+                "pom.xml": (
+                    "e1ba9a61315097e3a7133238c778ec161ac6097fe77a660fc5455a3e84568820"
+                ),
+                "core/trino-server/pom.xml": (
+                    "663d8bc33313160b26df9c80d4f1e5a3d970700573a914fb22db3462ac0e06d2"
+                ),
+            },
+            {
+                entry["path"]: entry["sha256"]
+                for entry in source["preimages"]
+            },
+        )
+        self.assertEqual(
+            {
+                "docker.io/trinodb/trino:483",
+                TRINO_INDEX_REFERENCE,
+                (
+                    "https://github.com/trinodb/trino/releases/download/483/"
+                    "trino-server-483.tar.gz"
+                ),
+            },
+            set(source["forbidden_build_inputs"]),
+        )
+
+    def test_dependency_snapshot_contract_revalidates_the_exact_authorization(
+        self,
+    ) -> None:
+        admission = self._admission()
+        contract = self._trusted_build_contract()
+        admitted = admission["provisional_source_authorization"]
+        authorization = contract["authorization"]
+        self.assertEqual(
+            {
+                "type",
+                "decision_record",
+                "approval_record",
+                "issue",
+                "approved_at",
+                "expires_at",
+                "maximum_duration_days",
+                "automatic_renewal",
+                "risk_owner",
+                "implementation_author",
+                "review",
+                "validation_points",
+                "scope",
+                "accepted_risk",
+                "stacked_vulnerability_exception_permitted",
+                "expiry_action",
+            },
+            set(authorization),
+        )
+        self.assertEqual(
+            admitted["authorization_type"], authorization["type"]
+        )
+        for key in (
+            "decision_record",
+            "approval_record",
+            "issue",
+            "approved_at",
+            "expires_at",
+            "maximum_duration_days",
+            "automatic_renewal",
+            "risk_owner",
+            "implementation_author",
+            "review",
+            "scope",
+            "stacked_vulnerability_exception_permitted",
+            "expiry_action",
+        ):
+            with self.subTest(key=key):
+                self.assertEqual(admitted[key], authorization[key])
+        self.assertEqual(admitted["accepted_risk"], [authorization["accepted_risk"]])
+        self.assertEqual(
+            [
+                "before_source_fetch",
+                "before_source_execution",
+                "before_dependency_resolution",
+                "before_dependency_publication",
+                "before_evidence_review",
+            ],
+            authorization["validation_points"],
+        )
+        self.assertEqual(
+            [],
+            _provisional_source_authorization_errors(
+                admission, now=datetime.now(timezone.utc)
+            ),
+        )
+
+    def test_dependency_snapshot_contract_closes_network_and_archive_inputs(
+        self,
+    ) -> None:
+        contract = self._trusted_build_contract()
+        builder = contract["toolchain"]["builder"]
+        self.assertEqual(
+            {"builder", "future_runtime_base"},
+            set(contract["toolchain"]),
+        )
+        self.assertEqual(
+            {
+                "index",
+                "arm64_manifest",
+                "maven_version",
+                "java_vendor",
+                "java_major",
+                "os",
+                "architecture",
+                "maven_executable",
+                "maven_wrapper_permitted",
+            },
+            set(builder),
+        )
+        self.assertEqual(TRINO_BUILDER_INDEX, builder["index"])
+        self.assertEqual(
+            TRINO_BUILDER_ARM64_DIGEST, builder["arm64_manifest"]
+        )
+        self.assertEqual("3.9.16", builder["maven_version"])
+        self.assertEqual("Eclipse Temurin", builder["java_vendor"])
+        self.assertEqual(25, builder["java_major"])
+        self.assertEqual("arm64", builder["architecture"])
+        self.assertEqual("mvn", builder["maven_executable"])
+        self.assertIs(builder["maven_wrapper_permitted"], False)
+
+        runtime = contract["toolchain"]["future_runtime_base"]
+        self.assertEqual(
+            {"index", "arm64_manifest", "java_major", "os", "usage"},
+            set(runtime),
+        )
+        self.assertEqual(TRINO_RUNTIME_INDEX, runtime["index"])
+        self.assertEqual(
+            TRINO_RUNTIME_ARM64_DIGEST, runtime["arm64_manifest"]
+        )
+        self.assertEqual("Alpine 3.24", runtime["os"])
+        self.assertEqual(
+            "downstream_image_only_not_authorized_by_this_contract",
+            runtime["usage"],
+        )
+
+        resolution = contract["dependency_resolution"]
+        self.assertEqual(
+            {
+                "network_policy",
+                "repositories",
+                "maven_local_repository",
+                "repository_origin_capture_required",
+                "settings_policy",
+                "transfer_audit",
+                "reactor_outputs",
+            },
+            set(resolution),
+        )
+        self.assertEqual(
+            [
+                "https://repo.maven.apache.org/maven2/",
+                "https://packages.confluent.io/maven/",
+            ],
+            resolution["repositories"],
+        )
+        self.assertEqual(
+            "allowlisted_https_repositories_only",
+            resolution["network_policy"],
+        )
+        self.assertEqual(
+            "fresh_empty_workflow_owned_directory",
+            resolution["maven_local_repository"],
+        )
+        self.assertIs(resolution["repository_origin_capture_required"], True)
+        self.assertEqual(
+            {
+                "repository_owned_settings_only": True,
+                "user_settings_permitted": False,
+                "ambient_maven_home_permitted": False,
+                "extensions_permitted": False,
+                "mirrors_permitted": False,
+                "proxies_permitted": False,
+                "credentials_permitted": False,
+            },
+            resolution["settings_policy"],
+        )
+        self.assertEqual(
+            {
+                "complete_repository_origin_log_required": True,
+                "unknown_repository_fails_closed": True,
+                "redirect_outside_allowlist_fails_closed": True,
+            },
+            resolution["transfer_audit"],
+        )
+        self.assertEqual(
+            {
+                "repository_path_prefix": "io/trino/",
+                "dependency_input_permitted": False,
+                "rebuild_from_reviewed_source_required": True,
+            },
+            resolution["reactor_outputs"],
+        )
+
+        snapshot = contract["snapshot"]
+        self.assertEqual(
+            {
+                "state",
+                "packaging",
+                "artifact_repository",
+                "reference_policy",
+                "mutable_tags_permitted",
+                "artifact_type",
+                "descriptor_media_type",
+                "archive_media_type",
+                "archive_filename",
+                "manifest_filename",
+                "manifest",
+                "archive",
+                "forbidden_entries",
+                "independent_reconstruction",
+                "authentication",
+                "evidence",
+            },
+            set(snapshot),
+        )
+        self.assertEqual("contract_only_not_published", snapshot["state"])
+        self.assertEqual(
+            "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies",
+            snapshot["artifact_repository"],
+        )
+        self.assertEqual(
+            "immutable_digest_only_after_publication",
+            snapshot["reference_policy"],
+        )
+        self.assertIs(snapshot["mutable_tags_permitted"], False)
+        self.assertEqual(
+            "application/vnd.shirokuma.trino.maven-dependencies.v1",
+            snapshot["artifact_type"],
+        )
+        self.assertEqual(
+            "application/vnd.shirokuma.maven-dependency-manifest.v1+json",
+            snapshot["descriptor_media_type"],
+        )
+        self.assertEqual(
+            "application/vnd.shirokuma.maven-repository.v1.tar+gzip",
+            snapshot["archive_media_type"],
+        )
+        self.assertEqual(
+            "trino-maven-dependencies-483.tar.gz",
+            snapshot["archive_filename"],
+        )
+        self.assertEqual(
+            "maven-dependency-manifest.json",
+            snapshot["manifest_filename"],
+        )
+        self.assertEqual(
+            [
+                "path",
+                "size",
+                "mode",
+                "sha256",
+                "repository_origin",
+            ],
+            snapshot["manifest"]["entry_fields"],
+        )
+        self.assertEqual(
+            ["file_count", "total_bytes"],
+            snapshot["manifest"]["aggregate_fields"],
+        )
+        self.assertIs(snapshot["manifest"]["closed_world"], True)
+        self.assertIs(snapshot["manifest"]["canonical_paths_required"], True)
+        self.assertIs(
+            snapshot["manifest"]["sorted_unique_paths_required"], True
+        )
+        self.assertEqual(
+            {
+                "regular_files_only": True,
+                "canonical_owner": "0:0",
+                "canonical_mtime": 0,
+                "canonical_order": "bytewise_path",
+                "compression": "gzip",
+                "gzip_header_timestamp": 0,
+            },
+            snapshot["archive"],
+        )
+        self.assertEqual(
+            {
+                "symlink",
+                "hardlink",
+                "special_file",
+                "lock_file",
+                "partial_download",
+                "unknown_repository_origin",
+                "duplicate_path",
+                "io/trino/**",
+            },
+            set(snapshot["forbidden_entries"]),
+        )
+        self.assertEqual(
+            {
+                "required": True,
+                "fresh_empty_repository_required": True,
+                "same_allowlisted_repositories_required": True,
+                "complete_manifest_equality_required": True,
+            },
+            snapshot["independent_reconstruction"],
+        )
+        self.assertEqual(
+            {
+                "cosign_keyless_signature_required": True,
+                "rekor_transparency_log_required": True,
+                "slsa_provenance_required": True,
+                "anonymous_exact_digest_pull_required": True,
+                "separate_evidence_review_required": True,
+            },
+            snapshot["authentication"],
+        )
+        self.assertEqual(
+            {
+                "cyclonedx_sbom_required": True,
+                "vulnerability_scan_required": True,
+                "maximum_vulnerability_database_age_hours": 24,
+                "maximum_high": 0,
+                "maximum_critical": 0,
+                "ignore_unfixed": False,
+            },
+            snapshot["evidence"],
+        )
+
+    def test_dependency_snapshot_contract_requires_network_none_rebuild(
+        self,
+    ) -> None:
+        contract = self._trusted_build_contract()
+        rebuild = contract["offline_rebuild"]
+        self.assertEqual(
+            {
+                "required",
+                "independent_clean_verifier_required",
+                "builder_index",
+                "builder_arm64_manifest",
+                "network",
+                "fresh_builder_required",
+                "fresh_source_checkout_required",
+                "command",
+                "maven_wrapper_permitted",
+                "expected_output",
+                "retained_output_evidence",
+            },
+            set(rebuild),
+        )
+        self.assertIs(rebuild["required"], True)
+        self.assertIs(rebuild["independent_clean_verifier_required"], True)
+        self.assertEqual(TRINO_BUILDER_INDEX, rebuild["builder_index"])
+        self.assertEqual(
+            TRINO_BUILDER_ARM64_DIGEST,
+            rebuild["builder_arm64_manifest"],
+        )
+        self.assertEqual("none", rebuild["network"])
+        self.assertIs(rebuild["fresh_builder_required"], True)
+        self.assertIs(rebuild["fresh_source_checkout_required"], True)
+        self.assertEqual(
+            "mvn --offline clean install -DskipTests",
+            rebuild["command"],
+        )
+        self.assertIs(rebuild["maven_wrapper_permitted"], False)
+        self.assertEqual(
+            "core/trino-server/target/trino-server-483.tar.gz",
+            rebuild["expected_output"],
+        )
+        self.assertEqual(
+            ["sha256", "size", "reproducible_build_comparison"],
+            rebuild["retained_output_evidence"],
+        )
+
+    def test_dependency_snapshot_contract_does_not_authorize_publication(
+        self,
+    ) -> None:
+        contract = self._trusted_build_contract()
+        lifecycle = contract["lifecycle"]
+        self.assertEqual(
+            {
+                "state": "dependency_snapshot_contract_review",
+                "contract_only": True,
+                "dependency_artifact_present": False,
+                "publication_workflow_permitted": False,
+                "image_publication_permitted": False,
+                "resident_admission_permitted": False,
+                "runtime_reconciliation_permitted": False,
+            },
+            lifecycle,
+        )
+        self.assertEqual(
+            {
+                "permitted": False,
+                "workflow_present": False,
+                "planned_workflow": (
+                    ".github/workflows/trino-maven-dependencies.yml"
+                ),
+                "future_ref_policy": "refs/heads/main_only",
+                "future_artifact_role": "review_pending_dependency_evidence",
+                "separate_evidence_only_pr_required": True,
+                "image_publisher_permitted_before_evidence_review": False,
+                "anonymous_exact_digest_pull_required": True,
+            },
+            contract["publication"],
+        )
+        self.assertEqual(
+            {
+                "dependency_artifact_published": False,
+                "dependency_evidence_admitted": False,
+                "network_none_source_build_verified": False,
+                "runtime_image_published": False,
+                "native_arm64_smoke_verified": False,
+                "high_zero_critical_zero_scan_verified": False,
+                "cyclonedx_sbom_retained": False,
+                "cosign_rekor_signature_verified": False,
+                "slsa_provenance_verified": False,
+                "anonymous_exact_digest_pull_verified": False,
+                "resident_image_admitted": False,
+                "flux_runtime_reconciled": False,
+            },
+            contract["downstream_gates"],
+        )
+        self.assertFalse(
+            (ROOT / contract["publication"]["planned_workflow"]).exists()
+        )
 
     def test_next_action_is_dependency_snapshot_contract_review(self) -> None:
         next_action = self._admission()["next_action"]

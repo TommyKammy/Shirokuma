@@ -138,6 +138,7 @@
       "bootstrap/trino/v483/trusted-build-contract.json"
     ],
     "forbidden_paths": [
+      ".github/workflows/trino-maven-dependencies.yml",
       ".github/workflows/trino-arm64.yml",
       "bootstrap/trino/v483/Containerfile",
       "security/evidence/trino-v483",
