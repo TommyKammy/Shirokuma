@@ -1,0 +1,320 @@
+{
+  "schema_version": 1,
+  "component": "trino",
+  "version": "483",
+  "platform": "linux/arm64",
+  "lifecycle": {
+    "state": "dependency_snapshot_contract_review",
+    "contract_only": true,
+    "dependency_artifact_present": false,
+    "publication_workflow_permitted": false,
+    "image_publication_permitted": false,
+    "resident_admission_permitted": false,
+    "runtime_reconciliation_permitted": false
+  },
+  "authorization": {
+    "type": "time_boxed_source_identity_risk_acceptance",
+    "decision_record": "docs/design/07_ADR/ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md",
+    "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5052385803",
+    "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
+    "approved_at": "2026-07-22T22:43:36Z",
+    "expires_at": "2026-08-21T22:43:36Z",
+    "maximum_duration_days": 30,
+    "automatic_renewal": false,
+    "risk_owner": "TommyKammy",
+    "implementation_author": "Codex",
+    "review": {
+      "required_before_merge": true,
+      "reviewer_must_differ_from_implementation_author": true,
+      "enforcement": "required_pull_request_review_before_merge"
+    },
+    "validation_points": [
+      "before_source_fetch",
+      "before_source_execution",
+      "before_dependency_resolution",
+      "before_dependency_publication",
+      "before_evidence_review"
+    ],
+    "scope": {
+      "profile": "mac-studio-solo/local-lite",
+      "purpose": "non-production-poc",
+      "data_classification": [
+        "synthetic",
+        "poc"
+      ],
+      "public_service_or_ingress_permitted": false,
+      "source_binding": {
+        "repository": "https://github.com/trinodb/trino",
+        "release_tag": "483",
+        "commit_sha": "50b0b50b75abd47f830b7805ee1b51716eb4065e",
+        "tree_sha": "3b5414292a614b12393bb4605ea2d4c588a5b8ee"
+      }
+    },
+    "accepted_risk": "the exact source binding lacks a qualifying upstream publisher signature or provenance statement",
+    "stacked_vulnerability_exception_permitted": false,
+    "expiry_action": "fail_closed_before_dependency_or_image_publication_resident_admission_or_runtime_reconciliation"
+  },
+  "source": {
+    "repository": "https://github.com/trinodb/trino",
+    "release_tag": "483",
+    "tag_object_sha": "32d4f28e8311ea6f67edca209df59a0493d869fa",
+    "commit_sha": "50b0b50b75abd47f830b7805ee1b51716eb4065e",
+    "tree_sha": "3b5414292a614b12393bb4605ea2d4c588a5b8ee",
+    "publisher_identity_status": "provisionally_accepted_risk_not_authenticated",
+    "unmodified_source_required": true,
+    "preimages": [
+      {
+        "path": "mvnw",
+        "sha256": "cae96cef89ebea3531221f4ae17c23cf8edf67d00eae8306d4186ae1bbed4d02"
+      },
+      {
+        "path": ".mvn/wrapper/maven-wrapper.properties",
+        "sha256": "488e1b3f2e641779d4636abf9390845f901e64607261bc3c0b0bfe4fe96e6706"
+      },
+      {
+        "path": "pom.xml",
+        "sha256": "e1ba9a61315097e3a7133238c778ec161ac6097fe77a660fc5455a3e84568820"
+      },
+      {
+        "path": "core/trino-server/pom.xml",
+        "sha256": "663d8bc33313160b26df9c80d4f1e5a3d970700573a914fb22db3462ac0e06d2"
+      }
+    ],
+    "forbidden_build_inputs": [
+      "docker.io/trinodb/trino:483",
+      "docker.io/trinodb/trino@sha256:db58cc93e593a2706553745f276bb119c9810e69918be56ecde088ba7ccb0534",
+      "https://github.com/trinodb/trino/releases/download/483/trino-server-483.tar.gz"
+    ]
+  },
+  "toolchain": {
+    "builder": {
+      "index": "docker.io/library/maven@sha256:7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c",
+      "arm64_manifest": "sha256:5476bfca9d0a6485b7161f6863123f7e6822336de4177273b47b5ec38ffd573a",
+      "maven_version": "3.9.16",
+      "java_vendor": "Eclipse Temurin",
+      "java_major": 25,
+      "os": "Ubuntu 24.04",
+      "architecture": "arm64",
+      "maven_executable": "mvn",
+      "maven_wrapper_permitted": false
+    },
+    "future_runtime_base": {
+      "index": "docker.io/library/amazoncorretto@sha256:32d81edae73e1670244827c2f12e5bcf0d335f035b538455fe9d02eb0771d41b",
+      "arm64_manifest": "sha256:da20e1e0a2004dfb95e963d6ad978b5c0effdfc7000bce6a68836058ef24b427",
+      "java_major": 25,
+      "os": "Alpine 3.24",
+      "usage": "downstream_image_only_not_authorized_by_this_contract"
+    }
+  },
+  "dependency_resolution": {
+    "network_policy": "allowlisted_https_repositories_only",
+    "repositories": [
+      "https://repo.maven.apache.org/maven2/",
+      "https://packages.confluent.io/maven/"
+    ],
+    "maven_local_repository": "fresh_empty_workflow_owned_directory",
+    "repository_origin_capture_required": true,
+    "settings_policy": {
+      "repository_owned_settings_only": true,
+      "user_settings_permitted": false,
+      "ambient_maven_home_permitted": false,
+      "extensions_permitted": false,
+      "mirrors_permitted": false,
+      "proxies_permitted": false,
+      "credentials_permitted": false
+    },
+    "transfer_audit": {
+      "complete_repository_origin_log_required": true,
+      "unknown_repository_fails_closed": true,
+      "redirect_outside_allowlist_fails_closed": true
+    },
+    "reactor_outputs": {
+      "repository_path_prefix": "io/trino/",
+      "dependency_input_permitted": false,
+      "rebuild_from_reviewed_source_required": true
+    }
+  },
+  "snapshot": {
+    "state": "contract_only_not_published",
+    "packaging": "deterministic_run_scoped_oci_artifact",
+    "artifact_repository": "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies",
+    "reference_policy": "immutable_digest_only_after_publication",
+    "mutable_tags_permitted": false,
+    "artifact_type": "application/vnd.shirokuma.trino.maven-dependencies.v1",
+    "descriptor_media_type": "application/vnd.shirokuma.maven-dependency-manifest.v1+json",
+    "archive_media_type": "application/vnd.shirokuma.maven-repository.v1.tar+gzip",
+    "archive_filename": "trino-maven-dependencies-483.tar.gz",
+    "manifest_filename": "maven-dependency-manifest.json",
+    "manifest": {
+      "closed_world": true,
+      "entry_fields": [
+        "path",
+        "size",
+        "mode",
+        "sha256",
+        "repository_origin"
+      ],
+      "aggregate_fields": [
+        "file_count",
+        "total_bytes"
+      ],
+      "canonical_paths_required": true,
+      "sorted_unique_paths_required": true
+    },
+    "archive": {
+      "regular_files_only": true,
+      "canonical_owner": "0:0",
+      "canonical_mtime": 0,
+      "canonical_order": "bytewise_path",
+      "compression": "gzip",
+      "gzip_header_timestamp": 0
+    },
+    "forbidden_entries": [
+      "symlink",
+      "hardlink",
+      "special_file",
+      "lock_file",
+      "partial_download",
+      "unknown_repository_origin",
+      "duplicate_path",
+      "io/trino/**"
+    ],
+    "independent_reconstruction": {
+      "required": true,
+      "fresh_empty_repository_required": true,
+      "same_allowlisted_repositories_required": true,
+      "complete_manifest_equality_required": true
+    },
+    "authentication": {
+      "cosign_keyless_signature_required": true,
+      "rekor_transparency_log_required": true,
+      "slsa_provenance_required": true,
+      "anonymous_exact_digest_pull_required": true,
+      "separate_evidence_review_required": true,
+      "sigstore_identity": {
+        "oidc_issuer": "https://token.actions.githubusercontent.com",
+        "certificate_identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/trino-maven-dependencies.yml@refs/heads/main",
+        "repository": "TommyKammy/Shirokuma",
+        "ref": "refs/heads/main",
+        "workflow_path": ".github/workflows/trino-maven-dependencies.yml",
+        "workflow_sha_environment": "GITHUB_WORKFLOW_SHA",
+        "source_sha_environment": "GITHUB_SHA",
+        "workflow_sha_must_equal_source_sha": true
+      },
+      "provenance": {
+        "predicate_type": "https://slsa.dev/provenance/v1",
+        "subject_must_equal_artifact_digest": true,
+        "source_repository": "https://github.com/TommyKammy/Shirokuma",
+        "source_ref": "refs/heads/main",
+        "source_sha_must_equal_publisher_commit": true,
+        "build_workflow_identity": "https://github.com/TommyKammy/Shirokuma/.github/workflows/trino-maven-dependencies.yml@refs/heads/main",
+        "build_workflow_sha_must_equal_source_sha": true,
+        "build_definition_must_bind_source_repository_ref_and_sha": true,
+        "generator_workflow_must_be_commit_pinned": true,
+        "trino_source_resolved_dependency": {
+          "claim_path": "predicate.buildDefinition.resolvedDependencies",
+          "required_uri": "git+https://github.com/trinodb/trino@refs/tags/483",
+          "required_digest": {
+            "gitTagObject": "32d4f28e8311ea6f67edca209df59a0493d869fa",
+            "gitCommit": "50b0b50b75abd47f830b7805ee1b51716eb4065e",
+            "gitTree": "3b5414292a614b12393bb4605ea2d4c588a5b8ee"
+          },
+          "exactly_one_matching_descriptor_required": true,
+          "source_checkout_must_match_descriptor": true
+        }
+      }
+    },
+    "evidence": {
+      "cyclonedx_sbom_required": true,
+      "vulnerability_scan_required": true,
+      "maximum_vulnerability_database_age_hours": 24,
+      "maximum_high": 0,
+      "maximum_critical": 0,
+      "ignore_unfixed": false,
+      "artifact_binding": {
+        "digest_source": "publisher_oras_push_digest_output",
+        "immutable_reference_required": true,
+        "cyclonedx_document_subject_must_equal_artifact_digest": true,
+        "cyclonedx_attestation_subject_must_equal_artifact_digest": true,
+        "vulnerability_scan_document_subject_must_equal_artifact_digest": true,
+        "vulnerability_scan_attestation_subject_must_equal_artifact_digest": true,
+        "binding_verification_required_before_evidence_review": true
+      }
+    }
+  },
+  "offline_rebuild": {
+    "required": true,
+    "independent_clean_verifier_required": true,
+    "builder_index": "docker.io/library/maven@sha256:7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c",
+    "builder_arm64_manifest": "sha256:5476bfca9d0a6485b7161f6863123f7e6822336de4177273b47b5ec38ffd573a",
+    "network": "none",
+    "fresh_builder_required": true,
+    "fresh_source_checkout_required": true,
+    "runner": {
+      "required_platform": "linux/arm64",
+      "required_runner_arch": "ARM64",
+      "required_host_uname_machine": "aarch64",
+      "required_container_architecture": "arm64",
+      "native_execution_required": true,
+      "emulation_permitted": false,
+      "qemu_binfmt_handlers_permitted": false,
+      "observations_retained_as_evidence": true,
+      "verification_failure_action": "fail_closed_before_offline_rebuild"
+    },
+    "command": "mvn --offline -Dmaven.repo.local=/workspace/.m2/repository clean install -DskipTests",
+    "maven_wrapper_permitted": false,
+    "snapshot_input": {
+      "artifact_repository": "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies",
+      "reference_source": "publisher_oras_push_digest_output",
+      "required_reference_format": "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@sha256:<64-lowercase-hex>",
+      "same_run_digest_required": true,
+      "future_evidence_must_pin_exact_reference": true,
+      "anonymous_pull_required": true,
+      "extraction_root": "/workspace/dependency-snapshot",
+      "repository_root_after_extraction": "/workspace/dependency-snapshot/repository",
+      "manifest_path": "/workspace/dependency-snapshot/maven-dependency-manifest.json",
+      "archive_path": "/workspace/dependency-snapshot/trino-maven-dependencies-483.tar.gz",
+      "manifest_equality_required_before_build": true
+    },
+    "maven_repository": {
+      "path": "/workspace/.m2/repository",
+      "initialization": "copy_verified_snapshot_repository_to_empty_path_before_network_none_builder_start",
+      "sole_dependency_repository": true,
+      "maven_args": "-Dmaven.repo.local=/workspace/.m2/repository",
+      "ambient_cache_mounts_permitted": false,
+      "ambient_home_permitted": false,
+      "prebuild_manifest_must_equal_snapshot": true,
+      "postbuild_io_trino_entries_are_verifier_outputs_not_dependency_inputs": true
+    },
+    "expected_output": "core/trino-server/target/trino-server-483.tar.gz",
+    "retained_output_evidence": [
+      "sha256",
+      "size",
+      "reproducible_build_comparison"
+    ]
+  },
+  "publication": {
+    "permitted": false,
+    "workflow_present": false,
+    "planned_workflow": ".github/workflows/trino-maven-dependencies.yml",
+    "future_allowed_ref": "refs/heads/main",
+    "future_artifact_role": "review_pending_dependency_evidence",
+    "separate_evidence_only_pr_required": true,
+    "image_publisher_permitted_before_evidence_review": false,
+    "anonymous_exact_digest_pull_required": true
+  },
+  "downstream_gates": {
+    "dependency_artifact_published": false,
+    "dependency_evidence_admitted": false,
+    "network_none_source_build_verified": false,
+    "runtime_image_published": false,
+    "native_arm64_smoke_verified": false,
+    "high_zero_critical_zero_scan_verified": false,
+    "cyclonedx_sbom_retained": false,
+    "cosign_rekor_signature_verified": false,
+    "slsa_provenance_verified": false,
+    "anonymous_exact_digest_pull_verified": false,
+    "resident_image_admitted": false,
+    "flux_runtime_reconciled": false
+  }
+}

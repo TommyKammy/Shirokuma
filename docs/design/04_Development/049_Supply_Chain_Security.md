@@ -611,14 +611,28 @@ Issue #63-bound, limited to synthetic/PoC data with no public Service or
 Ingress, requires owner/reviewer separation, cannot renew automatically, and
 fails closed at expiry. It does not establish upstream authenticity.
 
-The next permitted boundary is an evidence-only Maven dependency-snapshot
-contract review; no publisher exists yet. The later path must use Maven 3.9.16
-and Temurin 25 from the exact native-arm64 builder selected by ADR-0022, allow
-only Maven Central and the explicit Confluent repository, manifest every
-dependency byte, and prove a fresh `mvn --offline clean install -DskipTests`
-with networking disabled. The upstream image and server tarball remain rejected
-build inputs. The unchecked Maven-wrapper download, image publication, resident
-ledger, credentials, Flux, and runtime remain forbidden at this checkpoint.
+The current permitted boundary is the evidence-only Maven dependency-snapshot
+contract in `bootstrap/trino/v483/trusted-build-contract.json`; no publisher or
+dependency artifact exists yet. The contract binds the exact authorization and
+source coordinates, Maven 3.9.16 and Temurin 25 native-arm64 builder, Maven
+Central plus the explicit Confluent repository, a regular-file-only closed
+manifest, and an independent fresh
+`mvn --offline -Dmaven.repo.local=/workspace/.m2/repository clean install -DskipTests`
+with networking disabled. It records
+the future Corretto 25 Alpine 3.24 arm64 base without authorizing image use.
+The future dependency verifier must bind Cosign to the exact main-branch
+publisher workflow identity and bind SLSA subject/source/ref/SHA claims. Its
+`predicate.buildDefinition.resolvedDependencies` must identify the exact Trino
+483 repository, tag object, commit, and tree used by the build. The verifier
+must run on a native linux/arm64 host, retain runner/host/container architecture
+observations, and reject QEMU or binfmt emulation. The SBOM and vulnerability
+scan documents and their attestations must identify the exact immutable
+dependency-snapshot digest. That digest must also become the sole isolated
+`maven.repo.local` input after closed-manifest comparison. Ambient Maven caches
+remain forbidden.
+Every publication, image, resident, and runtime switch remains false while the
+contract is reviewed. The upstream image and server tarball, unchecked
+Maven-wrapper download, credentials, Flux, and runtime remain forbidden.
 High=0/Critical=0, native smoke, SBOM, Cosign/Rekor, SLSA provenance, and
 anonymous exact-digest retrieval remain mandatory and cannot be stacked with an
 ADR-0019 Trino vulnerability exception.
