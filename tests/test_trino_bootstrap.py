@@ -3593,7 +3593,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "planned_workflow": (
                     ".github/workflows/trino-maven-dependencies.yml"
                 ),
-                "future_ref_policy": "refs/heads/main_only",
+                "future_allowed_ref": "refs/heads/main",
                 "future_artifact_role": "review_pending_dependency_evidence",
                 "separate_evidence_only_pr_required": True,
                 "image_publisher_permitted_before_evidence_review": False,
