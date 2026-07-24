@@ -148,32 +148,8 @@ jobs:
             --entrypoint /bin/cat \
             "${BUILDER_IMAGE}" /usr/share/maven/conf/settings.xml \
             > "${RUNNER_TEMP}/maven-global-settings.xml"
-          GLOBAL_SETTINGS="${RUNNER_TEMP}/maven-global-settings.xml" \
-            python3 - <<'PY'
-          import os
-          import xml.etree.ElementTree as ET
-          from pathlib import Path
-
-          root = ET.parse(Path(os.environ["GLOBAL_SETTINGS"])).getroot()
-          forbidden = {
-              "activeProfiles",
-              "localRepository",
-              "mirrors",
-              "pluginGroups",
-              "profiles",
-              "proxies",
-              "servers",
-          }
-          active = [
-              element.tag.rsplit("}", 1)[-1]
-              for element in root
-              if element.tag.rsplit("}", 1)[-1] in forbidden
-          ]
-          if active:
-              raise SystemExit(
-                  f"builder global Maven settings are not empty: {active!r}"
-              )
-          PY
+          python3 scripts/verify_trino_dependency_publisher.py audit-builder-settings \
+            --settings "${RUNNER_TEMP}/maven-global-settings.xml"
           RUNNER_UNAME="$(uname -a)" CONTAINER_ARCH="${container_arch}" \
             python3 - <<'PY'
           import hashlib
@@ -200,7 +176,12 @@ jobs:
                       os.environ["RUNNER_TEMP"], "maven-global-settings.xml"
                   ).read_bytes()
               ).hexdigest(),
-              "global_settings_active_sections": [],
+              "global_settings_effective_entries": [
+                  "mirror:maven-default-http-blocker"
+              ],
+              "global_settings_policy": (
+                  "empty-standard-containers-plus-exact-default-http-blocker"
+              ),
           }
           Path(os.environ["RUNNER_TEMP"], "trino-toolchain.json").write_text(
               json.dumps(record, indent=2, sort_keys=True) + "\n",

@@ -37,6 +37,25 @@ EXPECTED_REPOSITORIES = {
     "central": "https://repo.maven.apache.org/maven2/",
     "confluent": "https://packages.confluent.io/maven/",
 }
+ALLOWED_GLOBAL_SETTINGS_CONTAINERS = frozenset(
+    {
+        "mirrors",
+        "pluginGroups",
+        "profiles",
+        "proxies",
+        "servers",
+    }
+)
+DEFAULT_HTTP_BLOCKER = (
+    ("id", "maven-default-http-blocker"),
+    ("mirrorOf", "external:http:*"),
+    (
+        "name",
+        "Pseudo repository to mirror external repositories initially using HTTP.",
+    ),
+    ("url", "http://0.0.0.0/"),
+    ("blocked", "true"),
+)
 EXPECTED_ACTIONS = {
     "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10": 2,
     "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02": 2,
@@ -210,6 +229,77 @@ def _validate_settings(root: Path) -> None:
             _fail("SETTINGS", f"credential element is forbidden: {local}")
 
 
+def audit_builder_settings(path: Path) -> None:
+    """Accept only inert containers and Maven's exact default HTTP blocker."""
+    namespace = "http://maven.apache.org/SETTINGS/1.2.0"
+    try:
+        root = ET.parse(path).getroot()
+    except (OSError, ET.ParseError) as error:
+        _fail("BUILDER_SETTINGS", str(error))
+    if root.tag != f"{{{namespace}}}settings":
+        _fail("BUILDER_SETTINGS", f"unexpected root element: {root.tag}")
+    if (root.text or "").strip():
+        _fail("BUILDER_SETTINGS", "settings root contains non-whitespace text")
+
+    observed: set[str] = set()
+    for element in root:
+        name = element.tag.rsplit("}", 1)[-1]
+        if (
+            name not in ALLOWED_GLOBAL_SETTINGS_CONTAINERS
+            or element.tag != f"{{{namespace}}}{name}"
+        ):
+            _fail("BUILDER_SETTINGS", f"active or unknown element: {name}")
+        if name in observed:
+            _fail("BUILDER_SETTINGS", f"duplicate container: {name}")
+        children = list(element)
+        if name == "mirrors":
+            mirror = children[0] if len(children) == 1 else None
+            values = (
+                tuple(
+                    (
+                        child.tag.rsplit("}", 1)[-1],
+                        (child.text or "").strip(),
+                    )
+                    for child in mirror
+                )
+                if mirror is not None
+                else ()
+            )
+            if (
+                mirror is None
+                or mirror.tag != f"{{{namespace}}}mirror"
+                or mirror.attrib
+                or (mirror.text or "").strip()
+                or (mirror.tail or "").strip()
+                or values != DEFAULT_HTTP_BLOCKER
+                or any(
+                    child.tag
+                    != f"{{{namespace}}}{expected_name}"
+                    or child.attrib
+                    or list(child)
+                    or (child.tail or "").strip()
+                    for child, (expected_name, _) in zip(
+                        mirror, DEFAULT_HTTP_BLOCKER
+                    )
+                )
+            ):
+                _fail("BUILDER_SETTINGS", "default HTTP blocker differs")
+            children = []
+        if (
+            element.attrib
+            or children
+            or (element.text or "").strip()
+            or (element.tail or "").strip()
+        ):
+            _fail("BUILDER_SETTINGS", f"non-empty container: {name}")
+        observed.add(name)
+    if observed != ALLOWED_GLOBAL_SETTINGS_CONTAINERS:
+        _fail(
+            "BUILDER_SETTINGS",
+            f"global settings container set differs: {sorted(observed)!r}",
+        )
+
+
 def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
     jobs, steps = _workflow_jobs_and_steps(workflow)
     lines = workflow.splitlines()
@@ -277,6 +367,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "--offline -Dmaven.repo.local=/workspace/.m2/repository \\",
         "--file /workspace/pom.xml clean install -DskipTests",
         "python3 scripts/verify_trino_dependency_publisher.py authorize",
+        "python3 scripts/verify_trino_dependency_publisher.py audit-builder-settings",
         "python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log",
         "python3 scripts/package_trino_maven_dependencies.py create",
         "python3 scripts/package_trino_maven_dependencies.py verify",
@@ -524,6 +615,8 @@ def _parser() -> argparse.ArgumentParser:
     source = commands.add_parser("audit-source")
     source.add_argument("--root", type=Path, default=Path("."))
     source.add_argument("--checkout", type=Path, required=True)
+    builder_settings = commands.add_parser("audit-builder-settings")
+    builder_settings.add_argument("--settings", type=Path, required=True)
     transfer = commands.add_parser("audit-transfer-log")
     transfer.add_argument("--log", type=Path, required=True)
     return parser
@@ -548,6 +641,8 @@ def main() -> int:
                 _fail("LIFECYCLE", "publisher is retired or not approved")
         elif args.command == "audit-source":
             audit_source(args.root.resolve(), args.checkout.resolve())
+        elif args.command == "audit-builder-settings":
+            audit_builder_settings(args.settings.resolve())
         else:
             audit_transfer_log(args.log)
     except ContractError as error:
