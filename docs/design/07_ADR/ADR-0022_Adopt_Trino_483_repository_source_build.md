@@ -5,7 +5,7 @@ title: "Select a conditional repository-owned Trino 483 source build"
 status: accepted
 created: 2026-07-22
 updated: 2026-07-24
-version: "0.5"
+version: "0.6"
 area: "architecture"
 tags: [shirokuma, adr, trino, arm64, maven, supply-chain]
 ---
@@ -103,10 +103,18 @@ so native container smoke remains a mandatory publisher gate.
 - Limit networked dependency resolution to HTTPS Maven Central
   (`https://repo.maven.apache.org/maven2/`) and the explicit Confluent
   repository (`https://packages.confluent.io/maven/`). Private repositories,
-  mirrors, proxies, user settings, ambient Maven homes, extensions, and
-  credential fallback are forbidden. Every online resolver and offline rebuild
-  must use Maven's `--ignore-transitive-repositories` control so third-party
-  dependency POMs cannot introduce additional repository endpoints.
+  arbitrary mirrors, proxies, user settings, ambient Maven homes, extensions,
+  and credential fallback are forbidden. Every online resolver and offline
+  rebuild must use Maven's `--ignore-transitive-repositories` control. The
+  repository-owned settings must additionally define exact `central` and
+  `confluent` mirrors to their allowlisted endpoints, followed by a
+  `mirrorOf=*` fallback to Maven Central. This prevents a third-party POM from
+  reusing either allowlisted repository ID with another URL and covers plugin
+  dependency version-range resolution, which Maven 3.9.16 does not suppress
+  with `--ignore-transitive-repositories`, without expanding the two-endpoint
+  network allowlist. The packager may normalize only those exact mirror IDs to
+  their corresponding allowlisted origins; any other repository ID or transfer
+  URL fails closed.
 - Publish the Maven local repository only as a deterministic, run-scoped OCI
   dependency artifact after a closed manifest records every regular file,
   canonical path, size, mode, SHA-256, repository origin, and total byte count.

@@ -28,13 +28,13 @@ class MavenSnapshotTests(unittest.TestCase):
         (artifact / "demo-1.0.pom").write_text("<project/>\n", encoding="utf-8")
         (artifact / "_remote.repositories").write_text(
             "# generated\n"
-            "demo-1.0.jar>central=\n"
-            "demo-1.0.pom>central=\n",
+            "demo-1.0.jar>shirokuma-central=\n"
+            "demo-1.0.pom>shirokuma-central-fallback=\n",
             encoding="iso-8859-1",
         )
         metadata = repository / "io/confluent/sample"
         metadata.mkdir(parents=True)
-        (metadata / "maven-metadata-confluent.xml").write_text(
+        (metadata / "maven-metadata-shirokuma-confluent.xml").write_text(
             "<metadata/>\n", encoding="utf-8"
         )
         return repository
@@ -134,6 +134,10 @@ class MavenSnapshotTests(unittest.TestCase):
             unknown = cases["unknown"] / "org/example/other/1.0"
             unknown.mkdir(parents=True)
             (unknown / "other.jar").write_bytes(b"unknown")
+            (unknown / "_remote.repositories").write_text(
+                "other.jar>sonatype-nexus-snapshots=\n",
+                encoding="iso-8859-1",
+            )
             for name, repository in cases.items():
                 with self.subTest(name=name):
                     with self.assertRaises(package.SnapshotError):
@@ -492,12 +496,22 @@ class PublisherContractTests(unittest.TestCase):
                     with self.assertRaises(verify.ContractError):
                         verify.audit_transfer_log(path)
 
-    def test_settings_have_no_credential_proxy_or_mirror_escape_hatch(self) -> None:
+    def test_settings_have_only_closed_allowlisted_origin_mirrors(self) -> None:
         verify._validate_settings(ROOT)
         settings = (ROOT / verify.SETTINGS_PATH).read_text(encoding="utf-8")
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            verify.EXPECTED_SETTINGS_POLICY,
+            contract["dependency_resolution"]["settings_policy"],
+        )
+        self.assertEqual(3, settings.count("<mirror>"))
+        for mirror in verify.EXPECTED_REPOSITORY_MIRRORS:
+            for name, value in mirror:
+                self.assertIn(f"<{name}>{value}</{name}>", settings)
         for forbidden in (
             "<server>",
-            "<mirror>",
             "<proxy>",
             "<username>",
             "<password>",
@@ -506,6 +520,41 @@ class PublisherContractTests(unittest.TestCase):
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, settings)
+
+    def test_settings_reject_allowlisted_origin_mirror_drift(self) -> None:
+        settings_path = ROOT / verify.SETTINGS_PATH
+        original = settings_path.read_text(encoding="utf-8")
+        mutations = (
+            (
+                "<mirrorOf>central</mirrorOf>",
+                "<mirrorOf>external:*</mirrorOf>",
+            ),
+            (
+                "<url>https://packages.confluent.io/maven/</url>",
+                "<url>https://oss.sonatype.org/content/repositories/snapshots/</url>",
+            ),
+            ("<mirrorOf>*</mirrorOf>", "<mirrorOf>*,!central</mirrorOf>"),
+            (
+                "</mirrors>",
+                """
+    <mirror>
+      <id>unexpected-fallback</id>
+      <mirrorOf>*</mirrorOf>
+      <name>Unexpected fallback</name>
+      <url>https://repo.maven.apache.org/maven2/</url>
+    </mirror>
+  </mirrors>""",
+            ),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / verify.SETTINGS_PATH
+            target.parent.mkdir(parents=True)
+            for old, new in mutations:
+                target.write_text(original.replace(old, new, 1), encoding="utf-8")
+                with self.subTest(old=old, new=new):
+                    with self.assertRaises(verify.ContractError):
+                        verify._validate_settings(root)
 
 
 if __name__ == "__main__":

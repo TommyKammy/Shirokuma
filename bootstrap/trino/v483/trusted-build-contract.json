@@ -15,7 +15,7 @@
   "policy_files": [
     {
       "path": "bootstrap/trino/v483/settings.xml",
-      "sha256": "7c55da9b400b32e250fdca3dabb65b08e71eff1e5eff67984a85313922e793ee"
+      "sha256": "8c904a2efa11666a38063f67ddd20d2ae6c737cd60c5ceb154637546ce14609e"
     },
     {
       "path": "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
@@ -23,15 +23,15 @@
     },
     {
       "path": "scripts/package_trino_maven_dependencies.py",
-      "sha256": "39f4f77347c3e7db7eb476f6f595a234fa9fc274b2985016442f8c1f75f07354"
+      "sha256": "d3ed68416f0ccf5aa3af93ac7bdb661049e2a6b5aea790c6f4d0ef3985fd8e72"
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "7ab8e266e819d1fb7e491baf0f9b434d4ffaef2dc87fee55bb041fd997c8811e"
+      "sha256": "6e29bdcb6afd547bdeb94c5465593648f410faf4c7470705f56349d4a171c311"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "9aadfa99b69822ad700d13a7145725dee08c2cacdd2c7b9c62a35ca20c902f39"
+      "sha256": "e971d8a4055cec96a5fcc621e2ca8da1877db6ad7897085939b6a7493dbd3d7e"
     }
   ],
   "authorization": {
@@ -153,12 +153,31 @@
     "maven_local_repository": "fresh_empty_workflow_owned_directory",
     "repository_origin_capture_required": true,
     "transitive_dependency_repositories_ignored": true,
+    "repository_mirrors": [
+      {
+        "id": "shirokuma-central",
+        "mirror_of": "central",
+        "url": "https://repo.maven.apache.org/maven2/"
+      },
+      {
+        "id": "shirokuma-confluent",
+        "mirror_of": "confluent",
+        "url": "https://packages.confluent.io/maven/"
+      },
+      {
+        "id": "shirokuma-central-fallback",
+        "mirror_of": "*",
+        "url": "https://repo.maven.apache.org/maven2/"
+      }
+    ],
     "settings_policy": {
       "repository_owned_settings_only": true,
       "user_settings_permitted": false,
       "ambient_maven_home_permitted": false,
       "extensions_permitted": false,
-      "mirrors_permitted": false,
+      "mirrors_permitted": true,
+      "mirror_escape_hatch_permitted": false,
+      "mirror_policy": "exact_repository_ids_and_catch_all_to_allowlisted_origins",
       "proxies_permitted": false,
       "credentials_permitted": false
     },

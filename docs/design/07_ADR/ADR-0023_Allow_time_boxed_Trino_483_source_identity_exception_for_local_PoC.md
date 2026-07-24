@@ -5,7 +5,7 @@ title: "Allow a time-boxed Trino 483 source identity exception for the local PoC
 status: accepted
 created: 2026-07-23
 updated: 2026-07-24
-version: "0.2"
+version: "0.3"
 area: "architecture"
 tags: [shirokuma, adr, trino, source, supply-chain, local-poc]
 ---
@@ -105,13 +105,24 @@ source-use or publication boundary and stops fail closed at expiry.
 The publisher resolves two fresh Maven repositories through only Maven Central
 and Confluent. Each online resolver and offline rebuild uses Maven 3.9.16
 `--ignore-transitive-repositories`, so repositories declared by third-party
-dependency POMs cannot expand that closed network boundary. The publisher
-compares complete deterministic manifests and archives, uses resolver markers
-to bind each dependency origin, excludes timestamp-bearing resolver metadata,
-and performs two fresh native linux/arm64 builds with networking disabled. It
-retains the dependency SBOM, fresh High=0/Critical=0 scan, Cosign/Rekor
-signature, SLSA provenance with the exact source and dependency inputs, and
-anonymous exact-digest retrieval proof. Its output is
+dependency POMs cannot expand that closed network boundary. Main run
+`30068723157` nevertheless proved that Maven plugin dependency version-range
+resolution still probed the plugin context's
+`sonatype-nexus-snapshots` repository after the full Trino reactor reported
+`BUILD SUCCESS`. The transfer audit failed closed before publication. The
+repository-owned settings therefore also require exact `central` and
+`confluent` mirrors to their allowlisted endpoints followed by a `mirrorOf=*`
+fallback to Maven Central. This prevents an introduced repository from reusing
+an allowlisted ID with another URL. Arbitrary mirrors stay forbidden; all
+repository IDs are collapsed onto an already allowlisted endpoint, and the
+packager normalizes only the three exact mirror IDs to their corresponding
+allowlisted origins. The publisher compares complete deterministic manifests
+and archives, uses resolver markers to bind each dependency origin, excludes
+timestamp-bearing resolver metadata, and performs two fresh native linux/arm64
+builds with networking disabled. It retains the dependency SBOM, fresh
+High=0/Critical=0 scan, Cosign/Rekor signature, SLSA provenance with the exact
+source and dependency inputs, and anonymous exact-digest retrieval proof. Its
+output is
 `review_pending_dependency_evidence`, not an admitted dependency or runtime
 input.
 
