@@ -27,11 +27,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "d772e07ab90318964ff87cd46ef697c7a606b828669f70e67afec5cc9172917b"
+      "sha256": "7ab8e266e819d1fb7e491baf0f9b434d4ffaef2dc87fee55bb041fd997c8811e"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "13a84bdaccc969a27fc999e23a30be5fb550491874a2e1e1cb5cb171ea5cd364"
+      "sha256": "9aadfa99b69822ad700d13a7145725dee08c2cacdd2c7b9c62a35ca20c902f39"
     }
   ],
   "authorization": {
@@ -152,6 +152,7 @@
     ],
     "maven_local_repository": "fresh_empty_workflow_owned_directory",
     "repository_origin_capture_required": true,
+    "transitive_dependency_repositories_ignored": true,
     "settings_policy": {
       "repository_owned_settings_only": true,
       "user_settings_permitted": false,
@@ -312,7 +313,7 @@
       "observations_retained_as_evidence": true,
       "verification_failure_action": "fail_closed_before_offline_rebuild"
     },
-    "command": "mvn --offline -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests",
+    "command": "mvn --offline --ignore-transitive-repositories -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests",
     "maven_wrapper_permitted": false,
     "snapshot_input": {
       "artifact_repository": "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies",

@@ -4,8 +4,8 @@ doc_id: "ADR-0023"
 title: "Allow a time-boxed Trino 483 source identity exception for the local PoC"
 status: accepted
 created: 2026-07-23
-updated: 2026-07-23
-version: "0.1"
+updated: 2026-07-24
+version: "0.2"
 area: "architecture"
 tags: [shirokuma, adr, trino, source, supply-chain, local-poc]
 ---
@@ -103,10 +103,13 @@ validation. A main push must revalidate the authorization before every
 source-use or publication boundary and stops fail closed at expiry.
 
 The publisher resolves two fresh Maven repositories through only Maven Central
-and Confluent, compares their complete deterministic manifests and archives,
-uses resolver markers to bind each dependency origin, excludes timestamp-bearing
-resolver metadata, and performs two fresh native linux/arm64 builds with
-networking disabled. It retains the dependency SBOM, fresh High=0/Critical=0 scan, Cosign/Rekor
+and Confluent. Each online resolver and offline rebuild uses Maven 3.9.16
+`--ignore-transitive-repositories`, so repositories declared by third-party
+dependency POMs cannot expand that closed network boundary. The publisher
+compares complete deterministic manifests and archives, uses resolver markers
+to bind each dependency origin, excludes timestamp-bearing resolver metadata,
+and performs two fresh native linux/arm64 builds with networking disabled. It
+retains the dependency SBOM, fresh High=0/Critical=0 scan, Cosign/Rekor
 signature, SLSA provenance with the exact source and dependency inputs, and
 anonymous exact-digest retrieval proof. Its output is
 `review_pending_dependency_evidence`, not an admitted dependency or runtime
