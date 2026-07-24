@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-24
-version: "1.24"
+version: "1.25"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -626,8 +626,17 @@ Sphinx to generate non-runtime documentation, while all remaining reactor
 modules stay inside the Trino server dependency and output boundary. The
 same four Maven executions require `--ignore-transitive-repositories`; this
 prevents repository declarations from third-party dependency POMs from
-expanding the Central/Confluent allowlist. The workflow records the future
-Corretto 25 Alpine 3.24 arm64 base without authorizing image use.
+expanding the Central/Confluent allowlist. Main run `30068723157` completed the
+Trino reactor with `BUILD SUCCESS`, but the transfer audit still detected
+`sonatype-nexus-snapshots` while the `git-commit-id` plugin dependency graph
+resolved BouncyCastle's `bcutil-jdk18on` version range. Maven 3.9.16 does not
+apply `--ignore-transitive-repositories` to that plugin-resolution path.
+Repository-owned settings therefore contain one exact enforcement mirror:
+`*,!central,!confluent` routes to Maven Central. This is not a general mirror
+escape hatch. The verifier binds its exact ID, selector, name, and URL; the
+packager normalizes only that ID to the Central origin, and all other repository
+IDs or transfer endpoints fail closed. The workflow records the future Corretto
+25 Alpine 3.24 arm64 base without authorizing image use.
 
 The publisher resolves and packages two independent empty Maven repositories,
 requires their complete manifests and deterministic archives to be equal, and

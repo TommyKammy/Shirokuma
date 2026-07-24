@@ -725,7 +725,7 @@ PENDING_SCRIPT_FILE_INVENTORY = {
         "4bba287743ddde6cd74b9d3f4f2c528ed6ca86e34e0a508bfc8135f901af5c3f"
     ),
     "scripts/package_trino_maven_dependencies.py": (
-        "39f4f77347c3e7db7eb476f6f595a234fa9fc274b2985016442f8c1f75f07354"
+        "718414d2cb09aa65b3f3fcca9e21616b0adb9c17101e27834ce243af05cb9b18"
     ),
     "scripts/package_polaris_gradle_dependencies.py": (
         POLARIS_DEPENDENCY_PACKAGER_SHA256
@@ -773,7 +773,7 @@ PENDING_SCRIPT_FILE_INVENTORY = {
         "75cee002d5749c0ec91629edb905c27362bee5c0813b0cbefcb59f161734f445"
     ),
     "scripts/verify_trino_dependency_publisher.py": (
-        "7ab8e266e819d1fb7e491baf0f9b434d4ffaef2dc87fee55bb041fd997c8811e"
+        "0af7f5afe25897bb086dcf846fb048a25f6a5a15159528a7a386fdd8a9e96234"
     ),
     "scripts/verify_trusted_image.py": (
         "cc569a5ee10400ad657f7648ccc2c14e8fd21691adfdc9e155212b16dc0afba0"

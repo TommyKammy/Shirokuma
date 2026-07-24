@@ -15,7 +15,7 @@
   "policy_files": [
     {
       "path": "bootstrap/trino/v483/settings.xml",
-      "sha256": "7c55da9b400b32e250fdca3dabb65b08e71eff1e5eff67984a85313922e793ee"
+      "sha256": "459c2971831994e2541e4da2936da6e39ffd17bc5211fe664219458c61cff051"
     },
     {
       "path": "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
@@ -23,15 +23,15 @@
     },
     {
       "path": "scripts/package_trino_maven_dependencies.py",
-      "sha256": "39f4f77347c3e7db7eb476f6f595a234fa9fc274b2985016442f8c1f75f07354"
+      "sha256": "718414d2cb09aa65b3f3fcca9e21616b0adb9c17101e27834ce243af05cb9b18"
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "7ab8e266e819d1fb7e491baf0f9b434d4ffaef2dc87fee55bb041fd997c8811e"
+      "sha256": "0af7f5afe25897bb086dcf846fb048a25f6a5a15159528a7a386fdd8a9e96234"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "9aadfa99b69822ad700d13a7145725dee08c2cacdd2c7b9c62a35ca20c902f39"
+      "sha256": "57b5841707890d116567e087b95bdf49db2395a88c9272cf37a6bb7f71016966"
     }
   ],
   "authorization": {
@@ -153,12 +153,19 @@
     "maven_local_repository": "fresh_empty_workflow_owned_directory",
     "repository_origin_capture_required": true,
     "transitive_dependency_repositories_ignored": true,
+    "non_allowlisted_repository_mirror": {
+      "id": "shirokuma-central-fallback",
+      "mirror_of": "*,!central,!confluent",
+      "url": "https://repo.maven.apache.org/maven2/"
+    },
     "settings_policy": {
       "repository_owned_settings_only": true,
       "user_settings_permitted": false,
       "ambient_maven_home_permitted": false,
       "extensions_permitted": false,
-      "mirrors_permitted": false,
+      "mirrors_permitted": true,
+      "mirror_escape_hatch_permitted": false,
+      "mirror_policy": "exact_non_allowlisted_repository_ids_to_central_only",
       "proxies_permitted": false,
       "credentials_permitted": false
     },

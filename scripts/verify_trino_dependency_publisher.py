@@ -38,6 +38,26 @@ EXPECTED_REPOSITORIES = {
     "central": "https://repo.maven.apache.org/maven2/",
     "confluent": "https://packages.confluent.io/maven/",
 }
+EXPECTED_REPOSITORY_MIRROR = (
+    ("id", "shirokuma-central-fallback"),
+    ("mirrorOf", "*,!central,!confluent"),
+    (
+        "name",
+        "Route non-allowlisted repository ids through Maven Central",
+    ),
+    ("url", EXPECTED_REPOSITORIES["central"]),
+)
+EXPECTED_SETTINGS_POLICY = {
+    "repository_owned_settings_only": True,
+    "user_settings_permitted": False,
+    "ambient_maven_home_permitted": False,
+    "extensions_permitted": False,
+    "mirrors_permitted": True,
+    "mirror_escape_hatch_permitted": False,
+    "mirror_policy": "exact_non_allowlisted_repository_ids_to_central_only",
+    "proxies_permitted": False,
+    "credentials_permitted": False,
+}
 ALLOWED_GLOBAL_SETTINGS_CONTAINERS = frozenset(
     {
         "mirrors",
@@ -264,9 +284,37 @@ def _validate_settings(root: Path) -> None:
         _fail("SETTINGS", str(error))
     root_element = tree.getroot()
     namespace = {"m": "http://maven.apache.org/SETTINGS/1.2.0"}
-    for forbidden in ("servers", "mirrors", "proxies", "pluginGroups"):
+    for forbidden in ("servers", "proxies", "pluginGroups"):
         if root_element.find(f"m:{forbidden}", namespace) is not None:
             _fail("SETTINGS", f"{forbidden} is forbidden")
+    mirror_containers = root_element.findall("m:mirrors", namespace)
+    mirrors = root_element.findall(".//m:mirror", namespace)
+    if (
+        len(mirror_containers) != 1
+        or len(mirrors) != 1
+        or list(mirror_containers[0]) != mirrors
+    ):
+        _fail("SETTINGS", "exactly one closed Central fallback mirror is required")
+    mirror = mirrors[0]
+    mirror_values = tuple(
+        (
+            child.tag.rsplit("}", 1)[-1],
+            (child.text or "").strip(),
+        )
+        for child in mirror
+    )
+    if (
+        mirror.attrib
+        or (mirror.text or "").strip()
+        or mirror_values != EXPECTED_REPOSITORY_MIRROR
+        or any(
+            child.attrib
+            or list(child)
+            or (child.tail or "").strip()
+            for child in mirror
+        )
+    ):
+        _fail("SETTINGS", "Central fallback mirror differs")
     repositories: dict[str, str] = {}
     for repository in root_element.findall(".//m:repository", namespace):
         repository_id = repository.findtext("m:id", namespaces=namespace)
@@ -563,6 +611,14 @@ def audit(root: Path) -> None:
         != list(EXPECTED_REPOSITORIES.values())
         or dependency_resolution.get("transitive_dependency_repositories_ignored")
         is not True
+        or dependency_resolution.get("non_allowlisted_repository_mirror")
+        != {
+            "id": "shirokuma-central-fallback",
+            "mirror_of": "*,!central,!confluent",
+            "url": EXPECTED_REPOSITORIES["central"],
+        }
+        or dependency_resolution.get("settings_policy")
+        != EXPECTED_SETTINGS_POLICY
     ):
         _fail("REPOSITORIES", "contract repository allowlist differs")
     if contract.get("snapshot", {}).get("visibility_bootstrap") != {
