@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-24
-version: "1.29"
+version: "1.30"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -675,6 +675,17 @@ recognizes only Maven 3.9 transfer-listener events beginning with
 not expand the repository allowlist. A missing or malformed transfer event,
 credentials, plaintext HTTP, or any transfer endpoint outside the exact
 Central and Confluent origins continues to fail closed.
+
+Reviewed-main run `30101601632` confirmed the refined transfer audit and again
+completed the reactor with `BUILD SUCCESS`. Packaging then stopped fail-closed
+because Maven stores checksum sidecars such as `*.jar.sha1` without separate
+entries in `_remote.repositories`. A checksum sidecar now inherits an origin
+only from its exact target artifact or repository metadata entry. The target
+must already resolve to an allowlisted origin, and the sidecar must contain
+only the correctly sized hexadecimal digest that matches the target bytes.
+Orphaned, malformed, mismatched, nested, or origin-conflicting sidecars remain
+rejected. Every retained sidecar is still hashed independently in the closed
+dependency manifest.
 
 The publisher resolves and packages two independent fresh Maven repositories,
 each seeded only with its independently digest-verified Bun input, requires

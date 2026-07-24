@@ -48,6 +48,10 @@ class MavenSnapshotTests(unittest.TestCase):
         artifact = repository / "org/example/demo/1.0"
         artifact.mkdir(parents=True)
         (artifact / "demo-1.0.jar").write_bytes(b"jar")
+        (artifact / "demo-1.0.jar.sha1").write_text(
+            hashlib.sha1(b"jar", usedforsecurity=False).hexdigest() + "\n",
+            encoding="ascii",
+        )
         (artifact / "demo-1.0.pom").write_text("<project/>\n", encoding="utf-8")
         (artifact / "_remote.repositories").write_text(
             "# generated\n"
@@ -132,6 +136,15 @@ class MavenSnapshotTests(unittest.TestCase):
                 }
                 & package.EXCLUDED_RESOLVER_METADATA
             )
+            checksum = next(
+                record
+                for record in manifest["files"]
+                if record["path"].endswith("demo-1.0.jar.sha1")
+            )
+            self.assertEqual(
+                package.ALLOWED_REPOSITORIES["central"],
+                checksum["repository_origin"],
+            )
             with gzip.GzipFile(fileobj=io.BytesIO(archive.read_bytes())) as stream:
                 stream.read(1)
                 self.assertEqual(0, stream.mtime)
@@ -192,6 +205,51 @@ class MavenSnapshotTests(unittest.TestCase):
                     with self.assertRaises(package.SnapshotError):
                         package.build_manifest(repository)
 
+    def test_checksum_sidecars_require_a_valid_target_and_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            cases = {}
+            for name in (
+                "mismatch",
+                "malformed",
+                "oversized",
+                "orphan",
+                "nested",
+                "conflict",
+            ):
+                cases[name] = self._repository(base / name)
+            artifact = Path("org/example/demo/1.0")
+            (cases["mismatch"] / artifact / "demo-1.0.jar.sha1").write_text(
+                "0" * 40 + "\n",
+                encoding="ascii",
+            )
+            (cases["malformed"] / artifact / "demo-1.0.jar.sha1").write_text(
+                hashlib.sha1(b"jar", usedforsecurity=False).hexdigest()
+                + "  demo-1.0.jar\n",
+                encoding="ascii",
+            )
+            (cases["oversized"] / artifact / "demo-1.0.jar.sha1").write_text(
+                "0" * (package.MAX_CHECKSUM_SIDECAR_BYTES + 1),
+                encoding="ascii",
+            )
+            (cases["orphan"] / artifact / "orphan.jar.sha1").write_text(
+                hashlib.sha1(b"orphan", usedforsecurity=False).hexdigest() + "\n",
+                encoding="ascii",
+            )
+            (cases["nested"] / artifact / "demo-1.0.jar.sha1.sha1").write_text(
+                hashlib.sha1(b"nested", usedforsecurity=False).hexdigest() + "\n",
+                encoding="ascii",
+            )
+            conflict_marker = cases["conflict"] / artifact / "_remote.repositories"
+            conflict_marker.write_text(
+                conflict_marker.read_text(encoding="iso-8859-1")
+                + "demo-1.0.jar.sha1>shirokuma-confluent=\n",
+                encoding="iso-8859-1",
+            )
+            for name, repository in cases.items():
+                with self.subTest(name=name):
+                    with self.assertRaises(package.SnapshotError):
+                        package.build_manifest(repository)
 
     def test_noncanonical_manifest_types_and_archive_links_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
