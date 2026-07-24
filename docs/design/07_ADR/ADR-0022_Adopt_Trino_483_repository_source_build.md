@@ -106,13 +106,15 @@ so native container smoke remains a mandatory publisher gate.
   arbitrary mirrors, proxies, user settings, ambient Maven homes, extensions,
   and credential fallback are forbidden. Every online resolver and offline
   rebuild must use Maven's `--ignore-transitive-repositories` control. The
-  repository-owned settings must additionally define exactly one closed mirror
-  with selector `*,!central,!confluent` that routes every other repository ID
-  to Maven Central. This covers plugin dependency version-range resolution,
-  which Maven 3.9.16 does not suppress with
-  `--ignore-transitive-repositories`, without expanding the two-endpoint
-  network allowlist. The packager may normalize that exact mirror ID to the
-  Maven Central origin; any other repository ID or transfer URL fails closed.
+  repository-owned settings must additionally define exact `central` and
+  `confluent` mirrors to their allowlisted endpoints, followed by a
+  `mirrorOf=*` fallback to Maven Central. This prevents a third-party POM from
+  reusing either allowlisted repository ID with another URL and covers plugin
+  dependency version-range resolution, which Maven 3.9.16 does not suppress
+  with `--ignore-transitive-repositories`, without expanding the two-endpoint
+  network allowlist. The packager may normalize only those exact mirror IDs to
+  their corresponding allowlisted origins; any other repository ID or transfer
+  URL fails closed.
 - Publish the Maven local repository only as a deterministic, run-scoped OCI
   dependency artifact after a closed manifest records every regular file,
   canonical path, size, mode, SHA-256, repository origin, and total byte count.

@@ -110,17 +110,19 @@ dependency POMs cannot expand that closed network boundary. Main run
 resolution still probed the plugin context's
 `sonatype-nexus-snapshots` repository after the full Trino reactor reported
 `BUILD SUCCESS`. The transfer audit failed closed before publication. The
-repository-owned settings therefore also require one exact mirror with selector
-`*,!central,!confluent` and Maven Central as its target. Arbitrary mirrors stay
-forbidden; the exact mirror collapses otherwise introduced repository IDs onto
-an already allowlisted endpoint, and the packager normalizes only that mirror
-ID to the Maven Central origin. The publisher compares complete deterministic
-manifests and archives, uses resolver markers to bind each dependency origin,
-excludes timestamp-bearing resolver metadata, and performs two fresh native
-linux/arm64 builds with networking disabled. It retains the dependency SBOM,
-fresh High=0/Critical=0 scan, Cosign/Rekor signature, SLSA provenance with the
-exact source and dependency inputs, and anonymous exact-digest retrieval proof.
-Its output is
+repository-owned settings therefore also require exact `central` and
+`confluent` mirrors to their allowlisted endpoints followed by a `mirrorOf=*`
+fallback to Maven Central. This prevents an introduced repository from reusing
+an allowlisted ID with another URL. Arbitrary mirrors stay forbidden; all
+repository IDs are collapsed onto an already allowlisted endpoint, and the
+packager normalizes only the three exact mirror IDs to their corresponding
+allowlisted origins. The publisher compares complete deterministic manifests
+and archives, uses resolver markers to bind each dependency origin, excludes
+timestamp-bearing resolver metadata, and performs two fresh native linux/arm64
+builds with networking disabled. It retains the dependency SBOM, fresh
+High=0/Critical=0 scan, Cosign/Rekor signature, SLSA provenance with the exact
+source and dependency inputs, and anonymous exact-digest retrieval proof. Its
+output is
 `review_pending_dependency_evidence`, not an admitted dependency or runtime
 input.
 

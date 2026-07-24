@@ -3378,7 +3378,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "maven_local_repository",
                 "repository_origin_capture_required",
                 "transitive_dependency_repositories_ignored",
-                "non_allowlisted_repository_mirror",
+                "repository_mirrors",
                 "settings_policy",
                 "transfer_audit",
                 "reactor_outputs",
@@ -3406,12 +3406,24 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             True,
         )
         self.assertEqual(
-            {
-                "id": "shirokuma-central-fallback",
-                "mirror_of": "*,!central,!confluent",
-                "url": "https://repo.maven.apache.org/maven2/",
-            },
-            resolution["non_allowlisted_repository_mirror"],
+            [
+                {
+                    "id": "shirokuma-central",
+                    "mirror_of": "central",
+                    "url": "https://repo.maven.apache.org/maven2/",
+                },
+                {
+                    "id": "shirokuma-confluent",
+                    "mirror_of": "confluent",
+                    "url": "https://packages.confluent.io/maven/",
+                },
+                {
+                    "id": "shirokuma-central-fallback",
+                    "mirror_of": "*",
+                    "url": "https://repo.maven.apache.org/maven2/",
+                },
+            ],
+            resolution["repository_mirrors"],
         )
         self.assertEqual(
             {
@@ -3422,7 +3434,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "mirrors_permitted": True,
                 "mirror_escape_hatch_permitted": False,
                 "mirror_policy": (
-                    "exact_non_allowlisted_repository_ids_to_central_only"
+                    "exact_repository_ids_and_catch_all_to_allowlisted_origins"
                 ),
                 "proxies_permitted": False,
                 "credentials_permitted": False,

@@ -38,14 +38,28 @@ EXPECTED_REPOSITORIES = {
     "central": "https://repo.maven.apache.org/maven2/",
     "confluent": "https://packages.confluent.io/maven/",
 }
-EXPECTED_REPOSITORY_MIRROR = (
-    ("id", "shirokuma-central-fallback"),
-    ("mirrorOf", "*,!central,!confluent"),
+EXPECTED_REPOSITORY_MIRRORS = (
     (
-        "name",
-        "Route non-allowlisted repository ids through Maven Central",
+        ("id", "shirokuma-central"),
+        ("mirrorOf", "central"),
+        ("name", "Pin the Central repository id to Maven Central"),
+        ("url", EXPECTED_REPOSITORIES["central"]),
     ),
-    ("url", EXPECTED_REPOSITORIES["central"]),
+    (
+        ("id", "shirokuma-confluent"),
+        ("mirrorOf", "confluent"),
+        ("name", "Pin the Confluent repository id to Confluent packages"),
+        ("url", EXPECTED_REPOSITORIES["confluent"]),
+    ),
+    (
+        ("id", "shirokuma-central-fallback"),
+        ("mirrorOf", "*"),
+        (
+            "name",
+            "Route every other repository id through Maven Central",
+        ),
+        ("url", EXPECTED_REPOSITORIES["central"]),
+    ),
 )
 EXPECTED_SETTINGS_POLICY = {
     "repository_owned_settings_only": True,
@@ -54,7 +68,7 @@ EXPECTED_SETTINGS_POLICY = {
     "extensions_permitted": False,
     "mirrors_permitted": True,
     "mirror_escape_hatch_permitted": False,
-    "mirror_policy": "exact_non_allowlisted_repository_ids_to_central_only",
+    "mirror_policy": "exact_repository_ids_and_catch_all_to_allowlisted_origins",
     "proxies_permitted": False,
     "credentials_permitted": False,
 }
@@ -291,30 +305,30 @@ def _validate_settings(root: Path) -> None:
     mirrors = root_element.findall(".//m:mirror", namespace)
     if (
         len(mirror_containers) != 1
-        or len(mirrors) != 1
+        or len(mirrors) != len(EXPECTED_REPOSITORY_MIRRORS)
         or list(mirror_containers[0]) != mirrors
     ):
-        _fail("SETTINGS", "exactly one closed Central fallback mirror is required")
-    mirror = mirrors[0]
-    mirror_values = tuple(
-        (
-            child.tag.rsplit("}", 1)[-1],
-            (child.text or "").strip(),
-        )
-        for child in mirror
-    )
-    if (
-        mirror.attrib
-        or (mirror.text or "").strip()
-        or mirror_values != EXPECTED_REPOSITORY_MIRROR
-        or any(
-            child.attrib
-            or list(child)
-            or (child.tail or "").strip()
+        _fail("SETTINGS", "exactly three closed repository mirrors are required")
+    for mirror, expected in zip(mirrors, EXPECTED_REPOSITORY_MIRRORS):
+        mirror_values = tuple(
+            (
+                child.tag.rsplit("}", 1)[-1],
+                (child.text or "").strip(),
+            )
             for child in mirror
         )
-    ):
-        _fail("SETTINGS", "Central fallback mirror differs")
+        if (
+            mirror.attrib
+            or (mirror.text or "").strip()
+            or mirror_values != expected
+            or any(
+                child.attrib
+                or list(child)
+                or (child.tail or "").strip()
+                for child in mirror
+            )
+        ):
+            _fail("SETTINGS", "closed repository mirror set differs")
     repositories: dict[str, str] = {}
     for repository in root_element.findall(".//m:repository", namespace):
         repository_id = repository.findtext("m:id", namespaces=namespace)
@@ -611,12 +625,15 @@ def audit(root: Path) -> None:
         != list(EXPECTED_REPOSITORIES.values())
         or dependency_resolution.get("transitive_dependency_repositories_ignored")
         is not True
-        or dependency_resolution.get("non_allowlisted_repository_mirror")
-        != {
-            "id": "shirokuma-central-fallback",
-            "mirror_of": "*,!central,!confluent",
-            "url": EXPECTED_REPOSITORIES["central"],
-        }
+        or dependency_resolution.get("repository_mirrors")
+        != [
+            {
+                "id": values[0][1],
+                "mirror_of": values[1][1],
+                "url": values[3][1],
+            }
+            for values in EXPECTED_REPOSITORY_MIRRORS
+        ]
         or dependency_resolution.get("settings_policy")
         != EXPECTED_SETTINGS_POLICY
     ):

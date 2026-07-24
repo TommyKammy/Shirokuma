@@ -6,9 +6,21 @@
   <offline>false</offline>
   <mirrors>
     <mirror>
+      <id>shirokuma-central</id>
+      <mirrorOf>central</mirrorOf>
+      <name>Pin the Central repository id to Maven Central</name>
+      <url>https://repo.maven.apache.org/maven2/</url>
+    </mirror>
+    <mirror>
+      <id>shirokuma-confluent</id>
+      <mirrorOf>confluent</mirrorOf>
+      <name>Pin the Confluent repository id to Confluent packages</name>
+      <url>https://packages.confluent.io/maven/</url>
+    </mirror>
+    <mirror>
       <id>shirokuma-central-fallback</id>
-      <mirrorOf>*,!central,!confluent</mirrorOf>
-      <name>Route non-allowlisted repository ids through Maven Central</name>
+      <mirrorOf>*</mirrorOf>
+      <name>Route every other repository id through Maven Central</name>
       <url>https://repo.maven.apache.org/maven2/</url>
     </mirror>
   </mirrors>

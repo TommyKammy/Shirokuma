@@ -26,6 +26,8 @@ ALLOWED_REPOSITORIES = {
 }
 ALLOWED_ORIGIN_IDS = {
     **ALLOWED_REPOSITORIES,
+    "shirokuma-central": ALLOWED_REPOSITORIES["central"],
+    "shirokuma-confluent": ALLOWED_REPOSITORIES["confluent"],
     "shirokuma-central-fallback": ALLOWED_REPOSITORIES["central"],
 }
 EXCLUDED_RESOLVER_METADATA = {

@@ -631,12 +631,15 @@ Trino reactor with `BUILD SUCCESS`, but the transfer audit still detected
 `sonatype-nexus-snapshots` while the `git-commit-id` plugin dependency graph
 resolved BouncyCastle's `bcutil-jdk18on` version range. Maven 3.9.16 does not
 apply `--ignore-transitive-repositories` to that plugin-resolution path.
-Repository-owned settings therefore contain one exact enforcement mirror:
-`*,!central,!confluent` routes to Maven Central. This is not a general mirror
-escape hatch. The verifier binds its exact ID, selector, name, and URL; the
-packager normalizes only that ID to the Central origin, and all other repository
-IDs or transfer endpoints fail closed. The workflow records the future Corretto
-25 Alpine 3.24 arm64 base without authorizing image use.
+Repository-owned settings therefore contain exact `central` and `confluent`
+mirrors to their allowlisted endpoints followed by a `mirrorOf=*` fallback to
+Maven Central. This prevents a third-party POM from reusing an allowlisted
+repository ID with a different URL to bypass enforcement. This is not a general
+mirror escape hatch. The verifier binds all three mirrors' exact order, IDs,
+selectors, names, and URLs; the packager normalizes only those exact mirror IDs
+to their corresponding allowlisted origins, and all other repository IDs or
+transfer endpoints fail closed. The workflow records the future Corretto 25
+Alpine 3.24 arm64 base without authorizing image use.
 
 The publisher resolves and packages two independent empty Maven repositories,
 requires their complete manifests and deterministic archives to be equal, and
