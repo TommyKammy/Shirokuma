@@ -2,24 +2,46 @@ from __future__ import annotations
 
 import datetime as dt
 import gzip
+import hashlib
 import io
 import json
 import os
+import stat
 import sys
 import tarfile
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import package_trino_maven_dependencies as package  # noqa: E402
+import prepare_trino_bun_input as bun  # noqa: E402
 import verify_trino_dependency_publisher as verify  # noqa: E402
 
 
 class MavenSnapshotTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._original_external_inputs = package.EXTERNAL_INPUTS
+        cls._original_bun_input = package.BUN_INPUT
+        test_input = {
+            **package.BUN_INPUT,
+            "sha256": hashlib.sha256(b"bun").hexdigest(),
+            "size": 3,
+        }
+        package.EXTERNAL_INPUTS = {"bun-linux-aarch64": test_input}
+        package.BUN_INPUT = test_input
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        package.EXTERNAL_INPUTS = cls._original_external_inputs
+        package.BUN_INPUT = cls._original_bun_input
+
     def _repository(self, root: Path) -> Path:
         repository = root / "repository"
         artifact = repository / "org/example/demo/1.0"
@@ -36,6 +58,13 @@ class MavenSnapshotTests(unittest.TestCase):
         metadata.mkdir(parents=True)
         (metadata / "maven-metadata-shirokuma-confluent.xml").write_text(
             "<metadata/>\n", encoding="utf-8"
+        )
+        bun_cache = repository / package.BUN_INPUT["cache_path"]
+        bun_cache.parent.mkdir(parents=True)
+        bun_cache.write_bytes(b"bun")
+        (bun_cache.parent / "_remote.repositories").write_text(
+            f"{bun_cache.name}>shirokuma-bun-release=\n",
+            encoding="iso-8859-1",
         )
         return repository
 
@@ -87,9 +116,10 @@ class MavenSnapshotTests(unittest.TestCase):
                 set(manifest["files"][0]),
             )
             self.assertEqual(
-                set(package.ALLOWED_REPOSITORIES.values()),
+                set(package.ALLOWED_ORIGINS),
                 {record["repository_origin"] for record in manifest["files"]},
             )
+            self.assertEqual(package.EXTERNAL_INPUTS, manifest["external_inputs"])
             self.assertEqual(
                 sorted(package.EXCLUDED_RESOLVER_METADATA),
                 manifest["excluded_resolver_metadata"],
@@ -118,7 +148,15 @@ class MavenSnapshotTests(unittest.TestCase):
         cases = {}
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
-            for name in ("symlink", "hardlink", "reactor", "partial", "unknown"):
+            for name in (
+                "symlink",
+                "hardlink",
+                "reactor",
+                "partial",
+                "unknown",
+                "bun-tamper",
+                "bun-origin-reuse",
+            ):
                 repository = self._repository(base / name)
                 cases[name] = repository
             symlink_target = cases["symlink"] / "org/example/demo/1.0/demo-1.0.jar"
@@ -138,10 +176,21 @@ class MavenSnapshotTests(unittest.TestCase):
                 "other.jar>sonatype-nexus-snapshots=\n",
                 encoding="iso-8859-1",
             )
+            (
+                cases["bun-tamper"] / package.BUN_INPUT["cache_path"]
+            ).write_bytes(b"tampered")
+            reuse = cases["bun-origin-reuse"] / "org/example/reused/1.0"
+            reuse.mkdir(parents=True)
+            (reuse / "reused.jar").write_bytes(b"reused")
+            (reuse / "_remote.repositories").write_text(
+                "reused.jar>shirokuma-bun-release=\n",
+                encoding="iso-8859-1",
+            )
             for name, repository in cases.items():
                 with self.subTest(name=name):
                     with self.assertRaises(package.SnapshotError):
                         package.build_manifest(repository)
+
 
     def test_noncanonical_manifest_types_and_archive_links_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -225,6 +274,61 @@ class MavenSnapshotTests(unittest.TestCase):
                             target.addfile(member, io.BytesIO(payloads[member.name]))
             with self.assertRaises(package.SnapshotError):
                 package.verify_snapshot(descriptor, tampered, None)
+
+
+class BunInputTests(unittest.TestCase):
+    def _archive(self, path: Path, payload: bytes = b"bun") -> None:
+        with zipfile.ZipFile(path, "w") as archive:
+            directory = zipfile.ZipInfo("bun-linux-aarch64/")
+            directory.external_attr = (stat.S_IFDIR | 0o755) << 16
+            archive.writestr(directory, b"")
+            executable = zipfile.ZipInfo("bun-linux-aarch64/bun")
+            executable.external_attr = (stat.S_IFREG | 0o755) << 16
+            archive.writestr(executable, payload)
+
+    def _contract(self, archive: Path):
+        payload = archive.read_bytes()
+        return mock.patch.multiple(
+            bun,
+            BUN_SIZE=len(payload),
+            BUN_SHA256=hashlib.sha256(payload).hexdigest(),
+        )
+
+    def test_exact_archive_is_staged_at_frontend_plugin_cache_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "bun.zip"
+            repository = root / "repository"
+            repository.mkdir()
+            self._archive(archive)
+            with self._contract(archive):
+                target = bun.stage_archive(archive, repository)
+                self.assertEqual(repository / bun.BUN_CACHE_PATH, target)
+                self.assertEqual(archive.read_bytes(), target.read_bytes())
+                self.assertEqual(
+                    f"{target.name}>{bun.BUN_ORIGIN_ID}=\n",
+                    (target.parent / "_remote.repositories").read_text(
+                        encoding="iso-8859-1"
+                    ),
+                )
+                with self.assertRaises(bun.BunInputError):
+                    bun.stage_archive(archive, repository)
+
+    def test_archive_tampering_and_unsafe_members_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "bun.zip"
+            self._archive(archive)
+            with self._contract(archive):
+                archive.write_bytes(archive.read_bytes() + b"tampered")
+                with self.assertRaises(bun.BunInputError):
+                    bun.verify_archive(archive)
+            unsafe = root / "unsafe.zip"
+            with zipfile.ZipFile(unsafe, "w") as bundle:
+                bundle.writestr("../bun", b"bun")
+            with self._contract(unsafe):
+                with self.assertRaises(bun.BunInputError):
+                    bun.verify_archive(unsafe)
 
 
 class PublisherContractTests(unittest.TestCase):
@@ -325,6 +429,40 @@ class PublisherContractTests(unittest.TestCase):
         with self.assertRaisesRegex(
             verify.ContractError,
             "WORKFLOW_RESOLUTION_COMMAND",
+        ):
+            verify._validate_workflow(contract, altered)
+
+    def test_each_fresh_repository_requires_exact_bun_staging(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        self.assertEqual(2, workflow.count(verify.EXPECTED_BUN_STAGE_BLOCK))
+        altered = workflow.replace(
+            verify.EXPECTED_BUN_STAGE_BLOCK,
+            verify.EXPECTED_BUN_STAGE_BLOCK.replace(
+                "--tlsv1.2 --fail",
+                "--fail",
+            ),
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_BUN_INPUT",
+        ):
+            verify._validate_workflow(contract, altered)
+        digest_line = (
+            f"  BUN_ARCHIVE_SHA256: {verify.EXPECTED_BUN_INPUT['sha256']}"
+        )
+        self.assertEqual(1, workflow.count(digest_line))
+        altered = workflow.replace(
+            digest_line,
+            f"{digest_line}\n# retained expected digest\n{digest_line}",
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_BUN_INPUT",
         ):
             verify._validate_workflow(contract, altered)
 

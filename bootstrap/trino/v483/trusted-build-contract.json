@@ -23,15 +23,19 @@
     },
     {
       "path": "scripts/package_trino_maven_dependencies.py",
-      "sha256": "d3ed68416f0ccf5aa3af93ac7bdb661049e2a6b5aea790c6f4d0ef3985fd8e72"
+      "sha256": "7c33ca92d5b64e18bf8e9e5e652b9cfd174cf298c9487d1238dc5b9b811a40a9"
+    },
+    {
+      "path": "scripts/prepare_trino_bun_input.py",
+      "sha256": "020d31c47dddd1e9afc9012b03c2987a7d4d71975d6b01475df9246ec05790df"
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "6e29bdcb6afd547bdeb94c5465593648f410faf4c7470705f56349d4a171c311"
+      "sha256": "6b5bad09a4d52cbff4faeefb25253762369e4d25c7df52e15d662abae2a17bd3"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "e971d8a4055cec96a5fcc621e2ca8da1877db6ad7897085939b6a7493dbd3d7e"
+      "sha256": "499ff2eb3da7d772ed1b023e0abf81c0376337ef073a61bb0ba89dec52915aca"
     }
   ],
   "authorization": {
@@ -98,6 +102,14 @@
         "sha256": "e1ba9a61315097e3a7133238c778ec161ac6097fe77a660fc5455a3e84568820"
       },
     {
+      "path": "core/trino-main/pom.xml",
+      "sha256": "bb3bfb37695cdbdf5e7b69e0eb4ad64d5446886f2050113ee04edc27c5ccde63"
+    },
+    {
+      "path": "core/trino-web-ui/pom.xml",
+      "sha256": "c9cb57ad7faa684e67250b0fb31e034a52c41b9a75de62ef29bb89f6ac64bd13"
+    },
+    {
       "path": "core/trino-server/pom.xml",
       "sha256": "663d8bc33313160b26df9c80d4f1e5a3d970700573a914fb22db3462ac0e06d2"
     },
@@ -145,12 +157,25 @@
     }
   },
   "dependency_resolution": {
-    "network_policy": "allowlisted_https_repositories_only",
+    "network_policy": "allowlisted_https_origins_only",
     "repositories": [
       "https://repo.maven.apache.org/maven2/",
       "https://packages.confluent.io/maven/"
     ],
-    "maven_local_repository": "fresh_empty_workflow_owned_directory",
+    "external_inputs": [
+      {
+        "name": "bun-linux-aarch64",
+        "version": "v1.3.14",
+        "platform": "linux/arm64",
+        "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-aarch64.zip",
+        "sha256": "a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b",
+        "size": 35700603,
+        "cache_path": "com/github/eirslett/bun/1.3.14/bun-1.3.14.zip",
+        "origin_id": "shirokuma-bun-release",
+        "independent_downloads": 2
+      }
+    ],
+    "maven_local_repository": "fresh_workflow_owned_directory_seeded_only_with_digest_verified_external_inputs",
     "repository_origin_capture_required": true,
     "transitive_dependency_repositories_ignored": true,
     "repository_mirrors": [
@@ -184,7 +209,9 @@
     "transfer_audit": {
       "complete_repository_origin_log_required": true,
       "unknown_repository_fails_closed": true,
-      "redirect_outside_allowlist_fails_closed": true
+      "redirect_outside_allowlist_fails_closed": true,
+      "external_input_verified_before_staging": true,
+      "external_input_downloads_independently_repeated": true
     },
     "reactor_outputs": {
       "repository_path_prefix": "io/trino/",
@@ -205,12 +232,13 @@
       "failed_attempt_admitted": false,
       "user_credential_fallback": false
     },
-    "artifact_type": "application/vnd.shirokuma.trino.maven-dependencies.v1",
-    "descriptor_media_type": "application/vnd.shirokuma.maven-dependency-manifest.v1+json",
+    "artifact_type": "application/vnd.shirokuma.trino.maven-dependencies.v2",
+    "descriptor_media_type": "application/vnd.shirokuma.maven-dependency-manifest.v2+json",
     "archive_media_type": "application/vnd.shirokuma.maven-repository.v1.tar+gzip",
     "archive_filename": "trino-maven-dependencies-483.tar.gz",
     "manifest_filename": "maven-dependency-manifest.json",
     "manifest": {
+      "schema_version": 2,
       "closed_world": true,
       "entry_fields": [
         "path",

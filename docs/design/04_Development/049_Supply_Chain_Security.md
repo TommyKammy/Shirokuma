@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-24
-version: "1.25"
+version: "1.26"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -638,12 +638,30 @@ repository ID with a different URL to bypass enforcement. This is not a general
 mirror escape hatch. The verifier binds all three mirrors' exact order, IDs,
 selectors, names, and URLs; the packager normalizes only those exact mirror IDs
 to their corresponding allowlisted origins, and all other repository IDs or
-transfer endpoints fail closed. The workflow records the future Corretto 25
-Alpine 3.24 arm64 base without authorizing image use.
+transfer endpoints fail closed. Reviewed-main run `30080444230` proved that
+mirror boundary and again completed the Trino reactor with `BUILD SUCCESS`.
+The transfer audit then identified the remaining non-Maven input:
+`trino-web-ui`, which is a runtime dependency of `trino-main`, uses
+`frontend-maven-plugin` to fetch
+`bun-linux-aarch64.zip` for Bun `v1.3.14` from GitHub Releases. Excluding that
+module would produce an incomplete runtime and is forbidden.
 
-The publisher resolves and packages two independent empty Maven repositories,
-requires their complete manifests and deterministic archives to be equal, and
-then performs two fresh network-none native-arm64 source builds from the exact
+The publisher therefore treats Bun as an explicit external toolchain input,
+not as another Maven repository. Each of the two online reconstructions
+independently downloads the exact asset, checks size `35700603` and SHA-256
+`a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b`,
+validates the ZIP member set and types, and only then stages it at the exact
+frontend-plugin cache path. The v2 dependency manifest records the Bun URL,
+version, platform, cache path, size, digest, and dedicated origin ID. The Bun
+origin is valid only for that one cache entry; redirects or reuse for any Maven
+artifact cannot bypass the exact-byte verification. The workflow records the
+future Corretto 25 Alpine 3.24
+arm64 base without authorizing image use.
+
+The publisher resolves and packages two independent fresh Maven repositories,
+each seeded only with its independently digest-verified Bun input, requires
+their complete manifests and deterministic archives to be equal, and then
+performs two fresh network-none native-arm64 source builds from the exact
 snapshot. Their sole expected output,
 `core/trino-server/target/trino-server-483.tar.gz`, must match by digest and
 size. Symlinks, hard links, special files, partial or lock files, unknown

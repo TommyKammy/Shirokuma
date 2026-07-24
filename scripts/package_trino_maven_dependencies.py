@@ -15,7 +15,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, BinaryIO, Iterable, Mapping
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 COMPONENT = "trino"
 VERSION = "483"
 ARCHIVE_PREFIX = PurePosixPath("repository")
@@ -24,12 +24,29 @@ ALLOWED_REPOSITORIES = {
     "central": "https://repo.maven.apache.org/maven2/",
     "confluent": "https://packages.confluent.io/maven/",
 }
+EXTERNAL_INPUTS = {
+    "bun-linux-aarch64": {
+        "version": "v1.3.14",
+        "url": (
+            "https://github.com/oven-sh/bun/releases/download/"
+            "bun-v1.3.14/bun-linux-aarch64.zip"
+        ),
+        "sha256": (
+            "a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b"
+        ),
+        "size": 35_700_603,
+        "cache_path": "com/github/eirslett/bun/1.3.14/bun-1.3.14.zip",
+    }
+}
+BUN_INPUT = EXTERNAL_INPUTS["bun-linux-aarch64"]
 ALLOWED_ORIGIN_IDS = {
     **ALLOWED_REPOSITORIES,
     "shirokuma-central": ALLOWED_REPOSITORIES["central"],
     "shirokuma-confluent": ALLOWED_REPOSITORIES["confluent"],
     "shirokuma-central-fallback": ALLOWED_REPOSITORIES["central"],
+    "shirokuma-bun-release": BUN_INPUT["url"],
 }
+ALLOWED_ORIGINS = frozenset(ALLOWED_ORIGIN_IDS.values())
 EXCLUDED_RESOLVER_METADATA = {
     "_remote.repositories",
     "resolver-status.properties",
@@ -169,6 +186,7 @@ def build_manifest(repository: Path) -> dict[str, Any]:
     }
     records: list[dict[str, Any]] = []
     observed: set[str] = set()
+    bun_input_seen = False
     total_bytes = 0
     for path in files:
         relative = _canonical_relative(path.relative_to(repository).as_posix())
@@ -186,22 +204,38 @@ def build_manifest(repository: Path) -> dict[str, Any]:
         total_bytes += metadata.st_size
         if total_bytes > MAX_TOTAL_BYTES:
             _fail("Maven dependency snapshot exceeds the byte limit")
+        digest = _sha256_file(path)
+        origin = _origin(path, markers)
+        if origin == BUN_INPUT["url"] and relative.as_posix() != BUN_INPUT["cache_path"]:
+            _fail(f"Bun release origin is forbidden for non-Bun input: {relative}")
+        if relative.as_posix() == BUN_INPUT["cache_path"]:
+            if (
+                bun_input_seen
+                or metadata.st_size != BUN_INPUT["size"]
+                or digest != BUN_INPUT["sha256"]
+                or origin != BUN_INPUT["url"]
+            ):
+                _fail("Bun toolchain input differs from its exact contract")
+            bun_input_seen = True
         records.append(
             {
                 "path": relative.as_posix(),
                 "size": metadata.st_size,
                 "mode": CANONICAL_MODE,
-                "sha256": _sha256_file(path),
-                "repository_origin": _origin(path, markers),
+                "sha256": digest,
+                "repository_origin": origin,
             }
         )
     if not records:
         _fail("Maven dependency snapshot must not be empty")
+    if not bun_input_seen:
+        _fail("Maven dependency snapshot is missing the exact Bun toolchain input")
     return {
         "schema_version": SCHEMA_VERSION,
         "component": COMPONENT,
         "version": VERSION,
         "repositories": ALLOWED_REPOSITORIES,
+        "external_inputs": EXTERNAL_INPUTS,
         "excluded_resolver_metadata": sorted(EXCLUDED_RESOLVER_METADATA),
         "file_count": len(records),
         "total_bytes": total_bytes,
@@ -268,6 +302,7 @@ def _load_manifest(path: Path) -> dict[str, Any]:
         "component",
         "version",
         "repositories",
+        "external_inputs",
         "excluded_resolver_metadata",
         "file_count",
         "total_bytes",
@@ -281,6 +316,7 @@ def _load_manifest(path: Path) -> dict[str, Any]:
         or manifest["component"] != COMPONENT
         or manifest["version"] != VERSION
         or manifest["repositories"] != ALLOWED_REPOSITORIES
+        or manifest["external_inputs"] != EXTERNAL_INPUTS
         or manifest["excluded_resolver_metadata"]
         != sorted(EXCLUDED_RESOLVER_METADATA)
     ):
@@ -308,6 +344,7 @@ def _load_manifest(path: Path) -> dict[str, Any]:
     }
     previous: bytes | None = None
     total_bytes = 0
+    bun_input_seen = False
     for record in records:
         if not isinstance(record, dict) or set(record) != expected_record_keys:
             _fail("Maven manifest file record is not closed-world")
@@ -329,10 +366,26 @@ def _load_manifest(path: Path) -> dict[str, Any]:
             _fail("Maven manifest size or digest is invalid")
         if (
             not isinstance(record["repository_origin"], str)
-            or record["repository_origin"] not in ALLOWED_REPOSITORIES.values()
+            or record["repository_origin"] not in ALLOWED_ORIGINS
         ):
             _fail("Maven manifest contains an unknown repository origin")
+        if (
+            record["repository_origin"] == BUN_INPUT["url"]
+            and relative.as_posix() != BUN_INPUT["cache_path"]
+        ):
+            _fail("Maven manifest uses the Bun origin for a non-Bun input")
+        if relative.as_posix() == BUN_INPUT["cache_path"]:
+            if (
+                bun_input_seen
+                or record["size"] != BUN_INPUT["size"]
+                or record["sha256"] != BUN_INPUT["sha256"]
+                or record["repository_origin"] != BUN_INPUT["url"]
+            ):
+                _fail("Maven manifest Bun toolchain input differs")
+            bun_input_seen = True
         total_bytes += record["size"]
+    if not bun_input_seen:
+        _fail("Maven manifest is missing the exact Bun toolchain input")
     if total_bytes != manifest["total_bytes"] or total_bytes > MAX_TOTAL_BYTES:
         _fail("Maven manifest total byte count differs")
     return manifest

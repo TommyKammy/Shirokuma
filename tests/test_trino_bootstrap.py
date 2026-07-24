@@ -3210,7 +3210,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             set(source),
         )
         self.assertIs(source["unmodified_source_required"], True)
-        self.assertEqual(8, len(source["preimages"]))
+        self.assertEqual(10, len(source["preimages"]))
         self.assertEqual(
             {
                 "mvnw": (
@@ -3221,6 +3221,12 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 ),
                 "pom.xml": (
                     "e1ba9a61315097e3a7133238c778ec161ac6097fe77a660fc5455a3e84568820"
+                ),
+                "core/trino-main/pom.xml": (
+                    "bb3bfb37695cdbdf5e7b69e0eb4ad64d5446886f2050113ee04edc27c5ccde63"
+                ),
+                "core/trino-web-ui/pom.xml": (
+                    "c9cb57ad7faa684e67250b0fb31e034a52c41b9a75de62ef29bb89f6ac64bd13"
                 ),
                 "core/trino-server/pom.xml": (
                     "663d8bc33313160b26df9c80d4f1e5a3d970700573a914fb22db3462ac0e06d2"
@@ -3375,6 +3381,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             {
                 "network_policy",
                 "repositories",
+                "external_inputs",
                 "maven_local_repository",
                 "repository_origin_capture_required",
                 "transitive_dependency_repositories_ignored",
@@ -3393,12 +3400,38 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             resolution["repositories"],
         )
         self.assertEqual(
-            "allowlisted_https_repositories_only",
+            "allowlisted_https_origins_only",
             resolution["network_policy"],
         )
         self.assertEqual(
-            "fresh_empty_workflow_owned_directory",
+            (
+                "fresh_workflow_owned_directory_seeded_only_with_"
+                "digest_verified_external_inputs"
+            ),
             resolution["maven_local_repository"],
+        )
+        self.assertEqual(
+            [
+                {
+                    "name": "bun-linux-aarch64",
+                    "version": "v1.3.14",
+                    "platform": "linux/arm64",
+                    "url": (
+                        "https://github.com/oven-sh/bun/releases/download/"
+                        "bun-v1.3.14/bun-linux-aarch64.zip"
+                    ),
+                    "sha256": (
+                        "a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b"
+                    ),
+                    "size": 35700603,
+                    "cache_path": (
+                        "com/github/eirslett/bun/1.3.14/bun-1.3.14.zip"
+                    ),
+                    "origin_id": "shirokuma-bun-release",
+                    "independent_downloads": 2,
+                }
+            ],
+            resolution["external_inputs"],
         )
         self.assertIs(resolution["repository_origin_capture_required"], True)
         self.assertIs(
@@ -3446,6 +3479,8 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "complete_repository_origin_log_required": True,
                 "unknown_repository_fails_closed": True,
                 "redirect_outside_allowlist_fails_closed": True,
+                "external_input_verified_before_staging": True,
+                "external_input_downloads_independently_repeated": True,
             },
             resolution["transfer_audit"],
         )
@@ -3492,11 +3527,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertIs(snapshot["mutable_tags_permitted"], False)
         self.assertEqual(
-            "application/vnd.shirokuma.trino.maven-dependencies.v1",
+            "application/vnd.shirokuma.trino.maven-dependencies.v2",
             snapshot["artifact_type"],
         )
         self.assertEqual(
-            "application/vnd.shirokuma.maven-dependency-manifest.v1+json",
+            "application/vnd.shirokuma.maven-dependency-manifest.v2+json",
             snapshot["descriptor_media_type"],
         )
         self.assertEqual(
@@ -3526,6 +3561,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             snapshot["manifest"]["aggregate_fields"],
         )
         self.assertIs(snapshot["manifest"]["closed_world"], True)
+        self.assertEqual(2, snapshot["manifest"]["schema_version"])
         self.assertEqual(
             ["_remote.repositories", "resolver-status.properties"],
             snapshot["manifest"]["excluded_resolver_metadata"],
