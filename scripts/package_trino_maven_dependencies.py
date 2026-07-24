@@ -66,7 +66,14 @@ FORBIDDEN_SUFFIXES = (
     ".partial",
     ".tmp",
 )
+CHECKSUM_SUFFIXES = {
+    ".md5": ("md5", 32),
+    ".sha1": ("sha1", 40),
+    ".sha256": ("sha256", 64),
+    ".sha512": ("sha512", 128),
+}
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+MAX_CHECKSUM_SIDECAR_BYTES = 256
 MAX_FILE_COUNT = 250_000
 MAX_TOTAL_BYTES = 8 * 1024 * 1024 * 1024
 
@@ -152,14 +159,74 @@ def _marker_origins(directory: Path) -> dict[str, str]:
     return result
 
 
-def _origin(path: Path, markers: Mapping[Path, Mapping[str, str]]) -> str:
-    marker = markers.get(path.parent, {})
-    origin = marker.get(path.name)
+def _declared_origin(filename: str, marker: Mapping[str, str]) -> str | None:
+    origin = marker.get(filename)
     if origin is None:
-        metadata = re.fullmatch(r"maven-metadata-([A-Za-z0-9_.-]+)\.xml(?:\.sha1)?", path.name)
+        metadata = re.fullmatch(
+            r"maven-metadata-([A-Za-z0-9_.-]+)\.xml",
+            filename,
+        )
         if metadata is not None:
             repository_id = metadata.group(1)
             origin = ALLOWED_ORIGIN_IDS.get(repository_id)
+    return origin
+
+
+def _verify_checksum_sidecar(
+    checksum: Path,
+    target: Path,
+    algorithm: str,
+    digest_length: int,
+) -> None:
+    checksum_metadata = _regular_stat(checksum)
+    if checksum_metadata.st_size > MAX_CHECKSUM_SIDECAR_BYTES:
+        _fail(f"Maven checksum sidecar exceeds the byte limit: {checksum}")
+    _regular_stat(target)
+    try:
+        value = checksum.read_text(encoding="ascii").strip()
+    except (OSError, UnicodeError) as error:
+        _fail(f"cannot read Maven checksum sidecar {checksum}: {error}")
+    if re.fullmatch(rf"[0-9A-Fa-f]{{{digest_length}}}", value) is None:
+        _fail(f"malformed Maven checksum sidecar: {checksum}")
+    digest = hashlib.new(algorithm, usedforsecurity=False)
+    try:
+        with target.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+    except OSError as error:
+        _fail(f"cannot hash Maven checksum target {target}: {error}")
+    if digest.hexdigest() != value.lower():
+        _fail(f"Maven checksum sidecar does not match its target: {checksum}")
+
+
+def _origin(path: Path, markers: Mapping[Path, Mapping[str, str]]) -> str:
+    marker = markers.get(path.parent, {})
+    origin = _declared_origin(path.name, marker)
+    checksum = next(
+        (
+            (suffix, algorithm, digest_length)
+            for suffix, (algorithm, digest_length) in CHECKSUM_SUFFIXES.items()
+            if path.name.endswith(suffix)
+        ),
+        None,
+    )
+    if checksum is not None:
+        suffix, algorithm, digest_length = checksum
+        target_name = path.name[: -len(suffix)]
+        if any(target_name.endswith(candidate) for candidate in CHECKSUM_SUFFIXES):
+            _fail(f"nested Maven checksum sidecar is forbidden: {path}")
+        target_origin = _declared_origin(target_name, marker)
+        if target_origin is None:
+            _fail(f"missing closed Maven repository origin for {path}")
+        if origin is not None and origin != target_origin:
+            _fail(f"Maven checksum sidecar origin differs from its target: {path}")
+        _verify_checksum_sidecar(
+            path,
+            path.with_name(target_name),
+            algorithm,
+            digest_length,
+        )
+        origin = target_origin
     if origin is None:
         _fail(f"missing closed Maven repository origin for {path}")
     return origin
