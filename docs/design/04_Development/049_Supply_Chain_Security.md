@@ -701,6 +701,18 @@ origin-conflicting resolution status remains fail-closed. The excluded status
 bytes are not a build input and are absent from the deterministic archive; the
 subsequent fresh network-none builds remain the sufficiency proof.
 
+Reviewed-main run `30124086690` passed both independent online reconstructions
+and their complete archive comparison, then showed that the reactor cleanup had
+also removed Maven Central's external build extension
+`io.trino:trino-maven-plugin:20`. That coordinate is not a Trino 483 reactor
+output, but the offline source build requires it while reading the root POM.
+The repository pruner now preserves only the exact version-20 JAR and POM when
+both are regular, single-link files bound by `_remote.repositories` to the
+allowlisted Maven Central origin. It removes every other `io/trino/**` file
+produced by the online reactor. The packager and manifest verifier admit only
+that exact coordinate; a missing file, another version, another artifact,
+another origin, a link, or any retained Trino 483 reactor output fails closed.
+
 The publisher resolves and packages two independent fresh Maven repositories,
 each seeded only with its independently digest-verified Bun input, requires
 their complete manifests and deterministic archives to be equal, and then

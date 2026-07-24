@@ -23,7 +23,7 @@
     },
     {
       "path": "scripts/package_trino_maven_dependencies.py",
-      "sha256": "d9c7068df538f8d3167b491785a60a2fefaeeb583d0bed4700aaa553d477df6d"
+      "sha256": "c0f282a2976de7316bc7e2b7676a58733b5b518085e3b7694bdcc57751389adb"
     },
     {
       "path": "scripts/prepare_trino_bun_input.py",
@@ -31,11 +31,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "d543d2de428fa359b6ec47599afd949bf0166e3813765626dd623691e4e480d6"
+      "sha256": "ed26b90a701755801dc185b0dcd8064173a75ab14490fce009e6ee52b584a476"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "17d95816d525302698fb00f64846293639ea57ea2a27c358ea391e0c900d21ca"
+      "sha256": "cad71eb5636f41e8ed45dd43de4eb54182c4847d2ada1dd75f660c0b23377943"
     }
   ],
   "authorization": {
@@ -222,7 +222,18 @@
     "reactor_outputs": {
       "repository_path_prefix": "io/trino/",
       "dependency_input_permitted": false,
-      "rebuild_from_reviewed_source_required": true
+      "rebuild_from_reviewed_source_required": true,
+      "exact_external_build_extension": {
+        "group_id": "io.trino",
+        "artifact_id": "trino-maven-plugin",
+        "version": "20",
+        "repository_origin": "https://repo.maven.apache.org/maven2/",
+        "required_files": [
+          "trino-maven-plugin-20.jar",
+          "trino-maven-plugin-20.pom"
+        ],
+        "reactor_output": false
+      }
     }
   },
   "snapshot": {

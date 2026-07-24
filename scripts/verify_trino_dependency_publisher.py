@@ -59,6 +59,17 @@ EXPECTED_BUN_INPUT = {
     "redirect_policy": "manual_validate_before_request",
     "maximum_redirects": 5,
 }
+EXPECTED_TRINO_BUILD_EXTENSION = {
+    "group_id": "io.trino",
+    "artifact_id": "trino-maven-plugin",
+    "version": "20",
+    "repository_origin": EXPECTED_REPOSITORIES["central"],
+    "required_files": [
+        "trino-maven-plugin-20.jar",
+        "trino-maven-plugin-20.pom",
+    ],
+    "reactor_output": False,
+}
 EXPECTED_ARTIFACT_TYPE = "application/vnd.shirokuma.trino.maven-dependencies.v2"
 EXPECTED_DESCRIPTOR_MEDIA_TYPE = (
     "application/vnd.shirokuma.maven-dependency-manifest.v2+json"
@@ -539,6 +550,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "python3 scripts/verify_trino_dependency_publisher.py authorize",
         "python3 scripts/verify_trino_dependency_publisher.py audit-builder-settings",
         "python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log",
+        "prune-reactor-outputs",
         "python3 scripts/package_trino_maven_dependencies.py create",
         "python3 scripts/package_trino_maven_dependencies.py verify",
         "python3 scripts/prepare_trino_bun_input.py download",
@@ -562,6 +574,18 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
     for value in required:
         if value not in workflow:
             _fail("WORKFLOW_REQUIRED", value)
+    if (
+        workflow.count(
+            "python3 scripts/package_trino_maven_dependencies.py \\\n"
+            '            prune-reactor-outputs --repository "${repository}"'
+        )
+        != 2
+        or 'rm -rf "${repository}/io/trino"' in workflow
+    ):
+        _fail(
+            "WORKFLOW_REACTOR_PRUNE",
+            "each fresh repository must use the bounded reactor-output pruner",
+        )
     for forbidden in (
         "./mvnw",
         "maven-wrapper.jar",
@@ -689,6 +713,7 @@ def audit(root: Path) -> None:
     if contract.get("toolchain", {}).get("builder", {}).get("index") != EXPECTED_BUILDER:
         _fail("BUILDER", "builder index differs")
     dependency_resolution = contract.get("dependency_resolution", {})
+    reactor_outputs = dependency_resolution.get("reactor_outputs", {})
     if (
         dependency_resolution.get("repositories")
         != list(EXPECTED_REPOSITORIES.values())
@@ -706,6 +731,11 @@ def audit(root: Path) -> None:
         or dependency_resolution.get("settings_policy")
         != EXPECTED_SETTINGS_POLICY
         or dependency_resolution.get("external_inputs") != [EXPECTED_BUN_INPUT]
+        or reactor_outputs.get("repository_path_prefix") != "io/trino/"
+        or reactor_outputs.get("dependency_input_permitted") is not False
+        or reactor_outputs.get("rebuild_from_reviewed_source_required") is not True
+        or reactor_outputs.get("exact_external_build_extension")
+        != EXPECTED_TRINO_BUILD_EXTENSION
     ):
         _fail("REPOSITORIES", "contract repository allowlist differs")
     snapshot = contract.get("snapshot", {})

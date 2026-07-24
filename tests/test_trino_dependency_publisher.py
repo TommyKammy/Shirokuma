@@ -76,6 +76,25 @@ class MavenSnapshotTests(unittest.TestCase):
         )
         return repository
 
+    def _trino_build_extension(
+        self,
+        repository: Path,
+        *,
+        origin: str = "shirokuma-central",
+    ) -> Path:
+        extension = repository.joinpath(*package.TRINO_BUILD_EXTENSION_PREFIX)
+        extension.mkdir(parents=True)
+        for name in package.TRINO_BUILD_EXTENSION_REQUIRED_FILES:
+            (extension / name).write_bytes(name.encode("ascii"))
+        (extension / "_remote.repositories").write_text(
+            "".join(
+                f"{name}>{origin}=\n"
+                for name in package.TRINO_BUILD_EXTENSION_REQUIRED_FILES
+            ),
+            encoding="iso-8859-1",
+        )
+        return extension
+
     def test_create_is_deterministic_and_verify_reconstructs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -98,6 +117,105 @@ class MavenSnapshotTests(unittest.TestCase):
             extracted = root / "extracted"
             package.verify_snapshot(first_descriptor, first_archive, extracted)
             self.assertEqual(b"jar", (extracted / "org/example/demo/1.0/demo-1.0.jar").read_bytes())
+
+    def test_prune_reactor_outputs_preserves_only_exact_build_extension(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = self._repository(Path(temporary))
+            extension = self._trino_build_extension(repository)
+            (extension / "trino-maven-plugin-20.jar.sha1").write_text(
+                hashlib.sha1(
+                    b"trino-maven-plugin-20.jar",
+                    usedforsecurity=False,
+                ).hexdigest()
+                + "\n",
+                encoding="ascii",
+            )
+            reactor = repository / "io/trino/trino-main/483"
+            reactor.mkdir(parents=True)
+            (reactor / "trino-main-483.jar").write_bytes(b"reactor")
+            (reactor / "maven-metadata-local.xml").write_text(
+                "<metadata/>\n", encoding="utf-8"
+            )
+            wrong_version = (
+                repository / "io/trino/trino-maven-plugin/21"
+            )
+            wrong_version.mkdir(parents=True)
+            (wrong_version / "trino-maven-plugin-21.jar").write_bytes(
+                b"wrong-version"
+            )
+
+            package.prune_reactor_outputs(repository)
+
+            self.assertFalse(reactor.exists())
+            self.assertFalse(wrong_version.exists())
+            self.assertFalse(
+                (extension / "trino-maven-plugin-20.jar.sha1").exists()
+            )
+            for name in package.TRINO_BUILD_EXTENSION_REQUIRED_FILES:
+                self.assertTrue((extension / name).is_file())
+            manifest = package.build_manifest(repository)
+            retained = {
+                record["path"]: record["repository_origin"]
+                for record in manifest["files"]
+                if record["path"].startswith("io/trino/")
+            }
+            self.assertEqual(
+                {
+                    (
+                        "io/trino/trino-maven-plugin/20/"
+                        "trino-maven-plugin-20.jar"
+                    ): package.ALLOWED_REPOSITORIES["central"],
+                    (
+                        "io/trino/trino-maven-plugin/20/"
+                        "trino-maven-plugin-20.pom"
+                    ): package.ALLOWED_REPOSITORIES["central"],
+                },
+                retained,
+            )
+
+    def test_prune_reactor_outputs_requires_exact_central_build_extension(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            missing = self._repository(root / "missing")
+            wrong_origin = self._repository(root / "wrong-origin")
+            self._trino_build_extension(
+                wrong_origin,
+                origin="shirokuma-confluent",
+            )
+            extra_marker = self._repository(root / "extra-marker")
+            extra_extension = self._trino_build_extension(extra_marker)
+            marker = extra_extension / "_remote.repositories"
+            marker.write_text(
+                marker.read_text(encoding="iso-8859-1")
+                + "unexpected.xml>shirokuma-central=\n",
+                encoding="iso-8859-1",
+            )
+            for name, repository in (
+                ("missing", missing),
+                ("wrong-origin", wrong_origin),
+                ("extra-marker", extra_marker),
+            ):
+                with self.subTest(name=name), self.assertRaises(
+                    package.SnapshotError
+                ):
+                    package.prune_reactor_outputs(repository)
+
+    def test_prune_reactor_outputs_rejects_links_before_deletion(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = self._repository(Path(temporary))
+            self._trino_build_extension(repository)
+            reactor = repository / "io/trino/trino-main/483"
+            reactor.mkdir(parents=True)
+            (reactor / "linked.jar").symlink_to(
+                repository / "org/example/demo/1.0/demo-1.0.jar"
+            )
+            with self.assertRaises(package.SnapshotError):
+                package.prune_reactor_outputs(repository)
+            self.assertTrue((reactor / "linked.jar").is_symlink())
 
     def test_manifest_records_only_closed_origins_and_canonical_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -561,6 +679,40 @@ class PublisherContractTests(unittest.TestCase):
             package.EXTERNAL_INPUTS,
         )
         self.assertEqual([verify.EXPECTED_BUN_INPUT], package.EXTERNAL_INPUTS)
+
+    def test_exact_external_trino_build_extension_is_closed(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            verify.EXPECTED_TRINO_BUILD_EXTENSION,
+            contract["dependency_resolution"]["reactor_outputs"][
+                "exact_external_build_extension"
+            ],
+        )
+        self.assertEqual(
+            tuple(
+                (
+                    verify.EXPECTED_TRINO_BUILD_EXTENSION["group_id"].replace(
+                        ".", "/"
+                    )
+                    + "/"
+                    + verify.EXPECTED_TRINO_BUILD_EXTENSION["artifact_id"]
+                    + "/"
+                    + verify.EXPECTED_TRINO_BUILD_EXTENSION["version"]
+                ).split("/")
+            ),
+            package.TRINO_BUILD_EXTENSION_PREFIX,
+        )
+
+    def test_each_fresh_repository_uses_the_bounded_reactor_pruner(self) -> None:
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        prune = (
+            "python3 scripts/package_trino_maven_dependencies.py \\\n"
+            '            prune-reactor-outputs --repository "${repository}"'
+        )
+        self.assertEqual(2, workflow.count(prune))
+        self.assertNotIn('rm -rf "${repository}/io/trino"', workflow)
 
     def test_first_private_publication_requires_owner_visibility_bootstrap(self) -> None:
         contract = json.loads(
