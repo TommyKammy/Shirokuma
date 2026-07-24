@@ -165,7 +165,14 @@ EXPECTED_STEPS = {
     ],
 }
 ACTION_RE = re.compile(r"^\s*uses:\s*([^#\s]+)", re.MULTILINE)
-URL_RE = re.compile(r"https?://[^\s\"'<>]+")
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+MAVEN_TRANSFER_EVENT_RE = re.compile(
+    r"^\[INFO\]\s+Download(?:ing|ed) from "
+    r"(?P<repository>[A-Za-z0-9_.-]+):\s+(?P<url>\S+)"
+)
+MAVEN_TRANSFER_EVENT_PREFIX_RE = re.compile(
+    r"^\[INFO\]\s+Download(?:ing|ed) from "
+)
 LOWER_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 EXPECTED_RESOLUTION_COMMAND = (
     "mvn --batch-mode --show-version --errors --strict-checksums "
@@ -827,8 +834,14 @@ def audit_transfer_log(path: Path) -> None:
         _fail("TRANSFER_LOG", str(error))
     allowed = tuple(EXPECTED_REPOSITORIES.values())
     observed = 0
-    for raw in URL_RE.findall(text):
-        url = raw.rstrip(").,]")
+    for raw_line in text.splitlines():
+        line = ANSI_ESCAPE_RE.sub("", raw_line)
+        if not MAVEN_TRANSFER_EVENT_PREFIX_RE.match(line):
+            continue
+        event = MAVEN_TRANSFER_EVENT_RE.match(line)
+        if event is None:
+            _fail("TRANSFER_LOG", f"malformed Maven transfer event: {line}")
+        url = event.group("url")
         parsed = urlsplit(url)
         if parsed.username or parsed.password or parsed.query or parsed.fragment:
             _fail("TRANSFER_LOG", f"unsafe Maven transfer URL: {url}")
