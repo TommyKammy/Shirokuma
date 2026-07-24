@@ -10,6 +10,7 @@ import json
 import os
 import re
 import subprocess
+import textwrap
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Mapping
@@ -96,6 +97,12 @@ EXPECTED_STEPS = {
 ACTION_RE = re.compile(r"^\s*uses:\s*([^#\s]+)", re.MULTILINE)
 URL_RE = re.compile(r"https?://[^\s\"'<>]+")
 LOWER_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+EXPECTED_RESOLUTION_COMMAND = (
+    "mvn --batch-mode --show-version --errors --strict-checksums "
+    "--settings /policy/settings.xml -Dmaven.repo.local=/m2 "
+    "--file /workspace/pom.xml -pl '!:trino-docs' "
+    "clean install -DskipTests"
+)
 
 
 class ContractError(ValueError):
@@ -188,6 +195,64 @@ def _workflow_jobs_and_steps(workflow: str) -> tuple[list[str], dict[str, list[s
         if step and current is not None:
             steps[current].append(step.group(1))
     return jobs, steps
+
+
+def _maven_command_before_marker(
+    workflow: str,
+    output_marker: str,
+    *,
+    code: str,
+    network_none: bool,
+) -> str:
+    docker_marker = "docker run --rm \\\n"
+    maven_marker = (
+        "  --entrypoint /usr/share/maven/bin/mvn \\\n"
+        '  "${BUILDER_IMAGE}" \\\n'
+    )
+    if workflow.count(output_marker) != 1:
+        _fail(code, f"output marker differs: {output_marker}")
+    end = workflow.index(output_marker)
+    docker_start = workflow.rfind(docker_marker, 0, end)
+    if docker_start < 0:
+        _fail(code, "builder invocation is missing")
+    line_start = workflow.rfind("\n", 0, docker_start) + 1
+    block = textwrap.dedent(workflow[line_start:end])
+    observed_network_none = block.count("  --network none \\\n")
+    if (
+        block.count(maven_marker) != 1
+        or observed_network_none != (1 if network_none else 0)
+    ):
+        _fail(code, "Maven builder invocation differs")
+    arguments = block.split(maven_marker, 1)[1]
+    normalized = " ".join(arguments.replace("\\\n", " ").split())
+    if not normalized:
+        _fail(code, "Maven arguments are missing")
+    return f"mvn {normalized}"
+
+
+def _offline_maven_command(workflow: str) -> str:
+    return _maven_command_before_marker(
+        workflow,
+        (
+            '            output="${offline_source}/core/trino-server/target/'
+            'trino-server-483.tar.gz"'
+        ),
+        code="WORKFLOW_OFFLINE_COMMAND",
+        network_none=True,
+    )
+
+
+def _resolution_maven_commands(workflow: str) -> tuple[str, str]:
+    commands = [
+        _maven_command_before_marker(
+            workflow,
+            f'            2>&1 | tee "${{candidate}}/maven-transfer-{suffix}.log"',
+            code="WORKFLOW_RESOLUTION_COMMAND",
+            network_none=False,
+        )
+        for suffix in ("a", "b")
+    ]
+    return commands[0], commands[1]
 
 
 def _validate_settings(root: Path) -> None:
@@ -364,8 +429,6 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "--env MAVEN_CONFIG=/tmp/maven-home/.m2",
         "--workdir /policy",
         "--file /workspace/pom.xml",
-        "--offline -Dmaven.repo.local=/workspace/.m2/repository \\",
-        "--file /workspace/pom.xml clean install -DskipTests",
         "python3 scripts/verify_trino_dependency_publisher.py authorize",
         "python3 scripts/verify_trino_dependency_publisher.py audit-builder-settings",
         "python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log",
@@ -399,6 +462,30 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
     ):
         if forbidden in workflow:
             _fail("WORKFLOW_FORBIDDEN", forbidden)
+    offline_rebuild = contract.get("offline_rebuild")
+    if not isinstance(offline_rebuild, dict):
+        _fail("WORKFLOW_OFFLINE_COMMAND", "contract offline rebuild is missing")
+    expected_offline_command = offline_rebuild.get("command")
+    if not isinstance(expected_offline_command, str):
+        _fail("WORKFLOW_OFFLINE_COMMAND", "contract command is missing")
+    observed_offline_command = _offline_maven_command(workflow)
+    if observed_offline_command != expected_offline_command:
+        _fail(
+            "WORKFLOW_OFFLINE_COMMAND",
+            (
+                f"expected {expected_offline_command!r}, "
+                f"found {observed_offline_command!r}"
+            ),
+        )
+    observed_resolution_commands = _resolution_maven_commands(workflow)
+    if observed_resolution_commands != (
+        EXPECTED_RESOLUTION_COMMAND,
+        EXPECTED_RESOLUTION_COMMAND,
+    ):
+        _fail(
+            "WORKFLOW_RESOLUTION_COMMAND",
+            f"resolver commands differ: {observed_resolution_commands!r}",
+        )
     if (
         workflow.count("--network none") != 1
         or "for suffix in a b; do" not in workflow

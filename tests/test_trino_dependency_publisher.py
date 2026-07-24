@@ -280,6 +280,53 @@ class PublisherContractTests(unittest.TestCase):
         self.assertIn("--workdir /policy", workflow)
         self.assertIn("--file /workspace/pom.xml", workflow)
         self.assertNotIn("--workdir /workspace", workflow)
+        self.assertEqual(
+            (
+                verify.EXPECTED_RESOLUTION_COMMAND,
+                verify.EXPECTED_RESOLUTION_COMMAND,
+            ),
+            verify._resolution_maven_commands(workflow),
+        )
+
+    def test_each_resolver_command_requires_the_docs_exclusion(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        exclusion = "              -pl '!:trino-docs' \\\n"
+        self.assertEqual(2, workflow.count(exclusion))
+        altered = (
+            workflow.replace(exclusion, "", 1)
+            + "\n# misleading occurrence: -pl '!:trino-docs'\n"
+        )
+        self.assertEqual(4, altered.count("-pl '!:trino-docs'"))
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_RESOLUTION_COMMAND",
+        ):
+            verify._validate_workflow(contract, altered)
+
+    def test_offline_workflow_command_is_bound_to_contract(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        self.assertEqual(
+            contract["offline_rebuild"]["command"],
+            verify._offline_maven_command(workflow),
+        )
+        offline_goal = "              clean install -DskipTests\n"
+        self.assertEqual(1, workflow.count(offline_goal))
+        altered = workflow.replace(
+            offline_goal,
+            "              clean package -DskipTests\n",
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_OFFLINE_COMMAND",
+        ):
+            verify._validate_workflow(contract, altered)
 
     def test_builder_global_settings_allow_only_inert_defaults(
         self,

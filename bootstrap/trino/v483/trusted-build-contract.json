@@ -27,11 +27,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "4dfe5edb584fb1b35bfa3c4777677a377ca50b99e0bda9ee82ace4910bbfb96e"
+      "sha256": "d772e07ab90318964ff87cd46ef697c7a606b828669f70e67afec5cc9172917b"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "a778f978522517fb9691c73839b4b916214efd4d4f560e38f19f2139699e8b21"
+      "sha256": "13a84bdaccc969a27fc999e23a30be5fb550491874a2e1e1cb5cb171ea5cd364"
     }
   ],
   "authorization": {
@@ -312,7 +312,7 @@
       "observations_retained_as_evidence": true,
       "verification_failure_action": "fail_closed_before_offline_rebuild"
     },
-  "command": "mvn --offline -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml clean install -DskipTests",
+    "command": "mvn --offline -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests",
     "maven_wrapper_permitted": false,
     "snapshot_input": {
       "artifact_repository": "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies",
