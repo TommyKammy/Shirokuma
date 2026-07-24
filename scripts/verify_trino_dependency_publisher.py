@@ -52,14 +52,21 @@ EXPECTED_BUN_INPUT = {
     "cache_path": "com/github/eirslett/bun/1.3.14/bun-1.3.14.zip",
     "origin_id": "shirokuma-bun-release",
     "independent_downloads": 2,
+    "allowed_https_origins": [
+        "https://github.com",
+        "https://release-assets.githubusercontent.com",
+    ],
+    "redirect_policy": "manual_validate_before_request",
+    "maximum_redirects": 5,
 }
 EXPECTED_ARTIFACT_TYPE = "application/vnd.shirokuma.trino.maven-dependencies.v2"
 EXPECTED_DESCRIPTOR_MEDIA_TYPE = (
     "application/vnd.shirokuma.maven-dependency-manifest.v2+json"
 )
 EXPECTED_BUN_STAGE_BLOCK = """\
-          curl --proto '=https' --tlsv1.2 --fail --location \\
-            --silent --show-error "${BUN_URL}" --output "${bun_archive}"
+          python3 scripts/prepare_trino_bun_input.py download \\
+            --url "${BUN_URL}" \\
+            --archive "${bun_archive}"
           test "$(stat --format='%s' "${bun_archive}")" = "${BUN_ARCHIVE_SIZE}"
           echo "${BUN_ARCHIVE_SHA256}  ${bun_archive}" \\
             | sha256sum --check --strict
@@ -527,6 +534,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log",
         "python3 scripts/package_trino_maven_dependencies.py create",
         "python3 scripts/package_trino_maven_dependencies.py verify",
+        "python3 scripts/prepare_trino_bun_input.py download",
         "python3 scripts/prepare_trino_bun_input.py stage",
         EXPECTED_BUN_INPUT["url"],
         EXPECTED_BUN_INPUT["sha256"],
@@ -598,6 +606,8 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         != 1
         or workflow.count('bun_archive="${RUNNER_TEMP}/bun-linux-aarch64-b.zip"')
         != 1
+        or workflow.count('"${BUN_URL}"')
+        != EXPECTED_BUN_INPUT["independent_downloads"]
         or lines.count(f'  BUN_URL: {EXPECTED_BUN_INPUT["url"]}') != 1
         or lines.count(
             f'  BUN_ARCHIVE_SHA256: {EXPECTED_BUN_INPUT["sha256"]}'

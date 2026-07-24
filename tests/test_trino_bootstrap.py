@@ -3429,6 +3429,12 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     ),
                     "origin_id": "shirokuma-bun-release",
                     "independent_downloads": 2,
+                    "allowed_https_origins": [
+                        "https://github.com",
+                        "https://release-assets.githubusercontent.com",
+                    ],
+                    "redirect_policy": "manual_validate_before_request",
+                    "maximum_redirects": 5,
                 }
             ],
             resolution["external_inputs"],

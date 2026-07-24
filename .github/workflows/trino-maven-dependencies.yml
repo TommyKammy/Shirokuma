@@ -226,8 +226,9 @@ jobs:
           candidate="${GITHUB_WORKSPACE}/.trino-candidate"
           bun_archive="${RUNNER_TEMP}/bun-linux-aarch64-a.zip"
           install -d -m 0700 "${repository}" "${candidate}"
-          curl --proto '=https' --tlsv1.2 --fail --location \
-            --silent --show-error "${BUN_URL}" --output "${bun_archive}"
+          python3 scripts/prepare_trino_bun_input.py download \
+            --url "${BUN_URL}" \
+            --archive "${bun_archive}"
           test "$(stat --format='%s' "${bun_archive}")" = "${BUN_ARCHIVE_SIZE}"
           echo "${BUN_ARCHIVE_SHA256}  ${bun_archive}" \
             | sha256sum --check --strict
@@ -282,8 +283,9 @@ jobs:
           python3 scripts/verify_trino_dependency_publisher.py audit-source \
             --root . --checkout "${source_dir}"
           install -d -m 0700 "${repository}"
-          curl --proto '=https' --tlsv1.2 --fail --location \
-            --silent --show-error "${BUN_URL}" --output "${bun_archive}"
+          python3 scripts/prepare_trino_bun_input.py download \
+            --url "${BUN_URL}" \
+            --archive "${bun_archive}"
           test "$(stat --format='%s' "${bun_archive}")" = "${BUN_ARCHIVE_SIZE}"
           echo "${BUN_ARCHIVE_SHA256}  ${bun_archive}" \
             | sha256sum --check --strict

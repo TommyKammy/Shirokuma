@@ -5,7 +5,7 @@ title: "Select a conditional repository-owned Trino 483 source build"
 status: accepted
 created: 2026-07-22
 updated: 2026-07-24
-version: "0.7"
+version: "0.8"
 area: "architecture"
 tags: [shirokuma, adr, trino, arm64, maven, supply-chain]
 ---
@@ -123,7 +123,11 @@ so native container smoke remains a mandatory publisher gate.
   `a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b`,
   and its closed ZIP member layout before staging it at
   `com/github/eirslett/bun/1.3.14/bun-1.3.14.zip`. The dedicated Bun origin ID
-  is valid only for that exact cache entry.
+  is valid only for that exact cache entry. Redirects must be handled manually,
+  validate the next HTTPS origin before requesting it, permit only
+  `github.com` and `release-assets.githubusercontent.com`, and fail closed
+  after five redirects or on any protocol, credential, port, fragment, cycle,
+  or host deviation.
 - Publish the Maven local repository only as a deterministic, run-scoped OCI
   dependency artifact after a closed manifest records every regular file,
   canonical path, size, mode, SHA-256, repository origin, and total byte count.

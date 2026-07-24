@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-24
-version: "1.26"
+version: "1.27"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -653,8 +653,13 @@ independently downloads the exact asset, checks size `35700603` and SHA-256
 validates the ZIP member set and types, and only then stages it at the exact
 frontend-plugin cache path. The v2 dependency manifest records the Bun URL,
 version, platform, cache path, size, digest, and dedicated origin ID. The Bun
-origin is valid only for that one cache entry; redirects or reuse for any Maven
-artifact cannot bypass the exact-byte verification. The workflow records the
+origin is valid only for that one cache entry. Redirects are followed manually:
+the next HTTPS origin is validated before any request and may be only
+`github.com` or `release-assets.githubusercontent.com`, with at most five
+redirects. Protocol downgrade, credentials, custom ports, fragments, redirect
+cycles, and any other host fail closed before the next outbound request. Reuse
+of the Bun origin for any Maven artifact cannot bypass the exact-byte
+verification. The workflow records the
 future Corretto 25 Alpine 3.24
 arm64 base without authorizing image use.
 

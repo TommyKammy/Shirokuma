@@ -5,7 +5,7 @@ title: "Allow a time-boxed Trino 483 source identity exception for the local PoC
 status: accepted
 created: 2026-07-23
 updated: 2026-07-24
-version: "0.4"
+version: "0.5"
 area: "architecture"
 tags: [shirokuma, adr, trino, source, supply-chain, local-poc]
 ---
@@ -125,7 +125,10 @@ GitHub Releases. The next reviewed boundary admits only the exact
 `bun-linux-aarch64.zip` bytes with size `35700603` and SHA-256
 `a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b`.
 Both fresh repositories independently download, verify, inspect, and stage the
-asset at the frontend plugin's exact cache path. This does not broaden the
+asset at the frontend plugin's exact cache path. Each redirect target is
+validated before the next request; only HTTPS on `github.com` and
+`release-assets.githubusercontent.com` is permitted, with a maximum of five
+redirects. This does not broaden the
 temporary Trino source-identity exception or authorize another Bun version,
 platform, URL, or cache entry.
 

@@ -12,6 +12,7 @@ import tarfile
 import tempfile
 import unittest
 import zipfile
+from email.message import Message
 from pathlib import Path
 from unittest import mock
 
@@ -330,6 +331,82 @@ class BunInputTests(unittest.TestCase):
                 with self.assertRaises(bun.BunInputError):
                     bun.verify_archive(unsafe)
 
+    def test_download_validates_each_redirect_origin_before_request(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source.zip"
+            output = root / "downloaded.zip"
+            self._archive(source)
+            payload = source.read_bytes()
+            redirected = (
+                "https://release-assets.githubusercontent.com/"
+                "github-production-release-asset/bun.zip?token=reviewed"
+            )
+            redirect_headers = Message()
+            redirect_headers.add_header("Location", redirected)
+            redirect_response = mock.Mock(status=302, headers=redirect_headers)
+            redirect_connection = mock.Mock()
+            final_headers = Message()
+            final_headers.add_header("Content-Length", str(len(payload)))
+            final_response = mock.Mock(status=200, headers=final_headers)
+            final_response.read.side_effect = [payload, b""]
+            final_connection = mock.Mock()
+            with (
+                self._contract(source),
+                mock.patch.object(
+                    bun,
+                    "_open_https",
+                    side_effect=[
+                        (redirect_connection, redirect_response),
+                        (final_connection, final_response),
+                    ],
+                ) as open_https,
+            ):
+                origins = bun.download_archive(bun.BUN_URL, output)
+            self.assertEqual(payload, output.read_bytes())
+            self.assertEqual(
+                (
+                    "https://github.com",
+                    "https://release-assets.githubusercontent.com",
+                ),
+                origins,
+            )
+            self.assertEqual(
+                [bun.BUN_URL, redirected],
+                [call.args[0] for call in open_https.call_args_list],
+            )
+            redirect_response.close.assert_called_once_with()
+            final_response.close.assert_called_once_with()
+            redirect_connection.close.assert_called_once_with()
+            final_connection.close.assert_called_once_with()
+
+    def test_download_rejects_unallowlisted_redirect_before_request(self) -> None:
+        unsafe_redirects = (
+            "https://release-assets.githubusercontent.com.evil.invalid/bun.zip",
+            "http://release-assets.githubusercontent.com/bun.zip",
+            "https://user@release-assets.githubusercontent.com/bun.zip",
+        )
+        for redirected in unsafe_redirects:
+            with self.subTest(redirected=redirected), tempfile.TemporaryDirectory() as temporary:
+                output = Path(temporary) / "downloaded.zip"
+                headers = Message()
+                headers.add_header("Location", redirected)
+                response = mock.Mock(status=302, headers=headers)
+                connection = mock.Mock()
+                with (
+                    mock.patch.object(
+                        bun,
+                        "_open_https",
+                        return_value=(connection, response),
+                    ) as open_https,
+                    self.assertRaises(bun.BunInputError),
+                ):
+                    bun.download_archive(bun.BUN_URL, output)
+                self.assertEqual(1, open_https.call_count)
+                self.assertFalse(output.exists())
+                response.close.assert_called_once_with()
+                connection.close.assert_called_once_with()
+
 
 class PublisherContractTests(unittest.TestCase):
     def test_repository_contract_and_workflow_are_closed(self) -> None:
@@ -441,8 +518,8 @@ class PublisherContractTests(unittest.TestCase):
         altered = workflow.replace(
             verify.EXPECTED_BUN_STAGE_BLOCK,
             verify.EXPECTED_BUN_STAGE_BLOCK.replace(
-                "--tlsv1.2 --fail",
-                "--fail",
+                "prepare_trino_bun_input.py download",
+                "prepare_trino_bun_input.py verify",
             ),
             1,
         )
