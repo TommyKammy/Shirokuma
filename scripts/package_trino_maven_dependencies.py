@@ -24,21 +24,29 @@ ALLOWED_REPOSITORIES = {
     "central": "https://repo.maven.apache.org/maven2/",
     "confluent": "https://packages.confluent.io/maven/",
 }
-EXTERNAL_INPUTS = {
-    "bun-linux-aarch64": {
-        "version": "v1.3.14",
-        "url": (
-            "https://github.com/oven-sh/bun/releases/download/"
-            "bun-v1.3.14/bun-linux-aarch64.zip"
-        ),
-        "sha256": (
-            "a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b"
-        ),
-        "size": 35_700_603,
-        "cache_path": "com/github/eirslett/bun/1.3.14/bun-1.3.14.zip",
-    }
+BUN_INPUT = {
+    "name": "bun-linux-aarch64",
+    "version": "v1.3.14",
+    "platform": "linux/arm64",
+    "url": (
+        "https://github.com/oven-sh/bun/releases/download/"
+        "bun-v1.3.14/bun-linux-aarch64.zip"
+    ),
+    "sha256": (
+        "a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b"
+    ),
+    "size": 35_700_603,
+    "cache_path": "com/github/eirslett/bun/1.3.14/bun-1.3.14.zip",
+    "origin_id": "shirokuma-bun-release",
+    "independent_downloads": 2,
+    "allowed_https_origins": [
+        "https://github.com",
+        "https://release-assets.githubusercontent.com",
+    ],
+    "redirect_policy": "manual_validate_before_request",
+    "maximum_redirects": 5,
 }
-BUN_INPUT = EXTERNAL_INPUTS["bun-linux-aarch64"]
+EXTERNAL_INPUTS = [BUN_INPUT]
 ALLOWED_ORIGIN_IDS = {
     **ALLOWED_REPOSITORIES,
     "shirokuma-central": ALLOWED_REPOSITORIES["central"],

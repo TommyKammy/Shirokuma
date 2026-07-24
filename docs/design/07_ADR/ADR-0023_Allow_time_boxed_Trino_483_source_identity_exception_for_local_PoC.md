@@ -5,7 +5,7 @@ title: "Allow a time-boxed Trino 483 source identity exception for the local PoC
 status: accepted
 created: 2026-07-23
 updated: 2026-07-24
-version: "0.5"
+version: "0.6"
 area: "architecture"
 tags: [shirokuma, adr, trino, source, supply-chain, local-poc]
 ---
@@ -132,7 +132,10 @@ redirects. This does not broaden the
 temporary Trino source-identity exception or authorize another Bun version,
 platform, URL, or cache entry.
 
-The publisher compares complete deterministic manifest-v2 documents and
+The publisher records the complete reviewed Bun platform, dedicated origin,
+independent-download count, allowed HTTPS origins, redirect policy, and
+redirect limit in each manifest-v2 document. It compares complete deterministic
+manifest-v2 documents and
 archives, uses resolver markers to bind each Maven and Bun origin, excludes
 timestamp-bearing resolver metadata, and performs two fresh native linux/arm64
 builds with networking disabled. It retains the dependency SBOM, fresh

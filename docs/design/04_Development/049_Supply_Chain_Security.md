@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-24
-version: "1.27"
+version: "1.28"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -652,7 +652,9 @@ independently downloads the exact asset, checks size `35700603` and SHA-256
 `a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b`,
 validates the ZIP member set and types, and only then stages it at the exact
 frontend-plugin cache path. The v2 dependency manifest records the Bun URL,
-version, platform, cache path, size, digest, and dedicated origin ID. The Bun
+version, platform, cache path, size, digest, dedicated origin ID, independent
+download count, allowed HTTPS origins, redirect policy, and redirect limit.
+The Bun
 origin is valid only for that one cache entry. Redirects are followed manually:
 the next HTTPS origin is validated before any request and may be only
 `github.com` or `release-assets.githubusercontent.com`, with at most five

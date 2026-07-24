@@ -5,7 +5,7 @@ title: "Select a conditional repository-owned Trino 483 source build"
 status: accepted
 created: 2026-07-22
 updated: 2026-07-24
-version: "0.8"
+version: "0.9"
 area: "architecture"
 tags: [shirokuma, adr, trino, arm64, maven, supply-chain]
 ---
@@ -131,8 +131,9 @@ so native container smoke remains a mandatory publisher gate.
 - Publish the Maven local repository only as a deterministic, run-scoped OCI
   dependency artifact after a closed manifest records every regular file,
   canonical path, size, mode, SHA-256, repository origin, and total byte count.
-  Manifest schema v2 must separately record the exact Bun external-input
-  contract.
+  Manifest schema v2 must separately record the complete Bun external-input
+  contract, including platform, dedicated origin ID, independent-download
+  count, allowed HTTPS origins, redirect policy, and redirect limit.
   Symlinks, hard links, special files, locks, partial downloads, unknown
   repositories, duplicate paths, mutable tags, and repository-produced
   `io/trino/**` artifacts fail closed. Reactor outputs must be rebuilt from the

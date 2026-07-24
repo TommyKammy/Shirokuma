@@ -35,7 +35,7 @@ class MavenSnapshotTests(unittest.TestCase):
             "sha256": hashlib.sha256(b"bun").hexdigest(),
             "size": 3,
         }
-        package.EXTERNAL_INPUTS = {"bun-linux-aarch64": test_input}
+        package.EXTERNAL_INPUTS = [test_input]
         package.BUN_INPUT = test_input
 
     @classmethod
@@ -411,6 +411,16 @@ class BunInputTests(unittest.TestCase):
 class PublisherContractTests(unittest.TestCase):
     def test_repository_contract_and_workflow_are_closed(self) -> None:
         verify.audit(ROOT)
+
+    def test_descriptor_records_the_complete_reviewed_bun_contract(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            contract["dependency_resolution"]["external_inputs"],
+            package.EXTERNAL_INPUTS,
+        )
+        self.assertEqual([verify.EXPECTED_BUN_INPUT], package.EXTERNAL_INPUTS)
 
     def test_first_private_publication_requires_owner_visibility_bootstrap(self) -> None:
         contract = json.loads(
