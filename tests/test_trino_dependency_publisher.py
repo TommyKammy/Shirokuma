@@ -53,6 +53,9 @@ class MavenSnapshotTests(unittest.TestCase):
             encoding="ascii",
         )
         (artifact / "demo-1.0.pom").write_text("<project/>\n", encoding="utf-8")
+        (artifact / "demo-1.0.jar.lastUpdated").write_text(
+            "# resolver attempt metadata\n", encoding="iso-8859-1"
+        )
         (artifact / "_remote.repositories").write_text(
             "# generated\n"
             "demo-1.0.jar>shirokuma-central=\n"
@@ -129,12 +132,19 @@ class MavenSnapshotTests(unittest.TestCase):
                 sorted(package.EXCLUDED_RESOLVER_METADATA),
                 manifest["excluded_resolver_metadata"],
             )
-            self.assertFalse(
+            self.assertTrue(
                 {
                     Path(record["path"]).name
                     for record in manifest["files"]
-                }
-                & package.EXCLUDED_RESOLVER_METADATA
+                }.isdisjoint(package.EXCLUDED_RESOLVER_METADATA_NAMES)
+            )
+            self.assertFalse(
+                any(
+                    record["path"].endswith(
+                        package.MAVEN_RESOLUTION_STATUS_SUFFIX
+                    )
+                    for record in manifest["files"]
+                )
             )
             checksum = next(
                 record
@@ -198,6 +208,78 @@ class MavenSnapshotTests(unittest.TestCase):
             (reuse / "reused.jar").write_bytes(b"reused")
             (reuse / "_remote.repositories").write_text(
                 "reused.jar>shirokuma-bun-release=\n",
+                encoding="iso-8859-1",
+            )
+            for name, repository in cases.items():
+                with self.subTest(name=name):
+                    with self.assertRaises(package.SnapshotError):
+                        package.build_manifest(repository)
+
+    def test_resolution_status_requires_a_safe_allowlisted_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            accepted = self._repository(base / "accepted")
+            confluent = accepted / "io/confluent/common-config/8.1.1"
+            confluent.mkdir(parents=True)
+            (confluent / "common-config-8.1.1.jar").write_bytes(b"confluent")
+            (confluent / "common-config-8.1.1.jar.lastUpdated").write_text(
+                "# failed fallback attempt\n", encoding="iso-8859-1"
+            )
+            (confluent / "_remote.repositories").write_text(
+                "common-config-8.1.1.jar>shirokuma-confluent=\n",
+                encoding="iso-8859-1",
+            )
+            manifest = package.build_manifest(accepted)
+            accepted_records = {
+                record["path"]: record for record in manifest["files"]
+            }
+            accepted_path = (
+                "io/confluent/common-config/8.1.1/common-config-8.1.1.jar"
+            )
+            self.assertEqual(
+                package.ALLOWED_REPOSITORIES["confluent"],
+                accepted_records[accepted_path]["repository_origin"],
+            )
+            self.assertNotIn(f"{accepted_path}.lastUpdated", accepted_records)
+
+            cases = {}
+            for name in (
+                "hardlink",
+                "symlink",
+                "oversized",
+                "orphan",
+                "nested-status",
+                "temporary-target",
+                "conflict",
+            ):
+                cases[name] = self._repository(base / name)
+            artifact = Path("org/example/demo/1.0")
+            hardlink = cases["hardlink"] / artifact / "demo-1.0.jar.lastUpdated"
+            hardlink.unlink()
+            os.link(cases["hardlink"] / artifact / "demo-1.0.jar", hardlink)
+            symlink = cases["symlink"] / artifact / "demo-1.0.jar.lastUpdated"
+            symlink.unlink()
+            symlink.symlink_to("demo-1.0.jar")
+            (cases["oversized"] / artifact / "demo-1.0.jar.lastUpdated").write_bytes(
+                b"x" * (package.MAX_RESOLVER_METADATA_BYTES + 1)
+            )
+            (cases["orphan"] / artifact / "orphan.jar.lastUpdated").write_text(
+                "orphan", encoding="iso-8859-1"
+            )
+            (
+                cases["nested-status"]
+                / artifact
+                / "demo-1.0.jar.lastUpdated.lastUpdated"
+            ).write_text("nested", encoding="iso-8859-1")
+            (
+                cases["temporary-target"]
+                / artifact
+                / "demo-1.0.jar.part.lastUpdated"
+            ).write_text("temporary", encoding="iso-8859-1")
+            conflict_marker = cases["conflict"] / artifact / "_remote.repositories"
+            conflict_marker.write_text(
+                conflict_marker.read_text(encoding="iso-8859-1")
+                + "demo-1.0.jar.lastUpdated>shirokuma-confluent=\n",
                 encoding="iso-8859-1",
             )
             for name, repository in cases.items():

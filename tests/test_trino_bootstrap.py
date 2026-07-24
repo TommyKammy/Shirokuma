@@ -3569,7 +3569,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         self.assertIs(snapshot["manifest"]["closed_world"], True)
         self.assertEqual(2, snapshot["manifest"]["schema_version"])
         self.assertEqual(
-            ["_remote.repositories", "resolver-status.properties"],
+            [
+                "*.lastUpdated",
+                "_remote.repositories",
+                "resolver-status.properties",
+            ],
             snapshot["manifest"]["excluded_resolver_metadata"],
         )
         self.assertEqual(250000, snapshot["manifest"]["maximum_file_count"])
