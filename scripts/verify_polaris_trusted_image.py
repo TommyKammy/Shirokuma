@@ -705,7 +705,7 @@ REVIEW_PENDING_WORKFLOW_INVENTORY = {
         "3f8c098cf514bf2f38f51ab35c7d5db4437a9b59f73780e8f85221b654f3f5f0"
     ),
     ".github/workflows/trino-maven-dependencies.yml": (
-        "7dfbf9201bad42a335199f025756a1e73dd60ea1140ca0664fd3c48a00ad61d1"
+        "113ab80a78a411141755280d94f43ad21bfe1475f695b3b0d9a5cc142e9694f7"
     ),
 }
 PENDING_SCRIPT_FILE_INVENTORY = {
@@ -725,7 +725,10 @@ PENDING_SCRIPT_FILE_INVENTORY = {
         "4bba287743ddde6cd74b9d3f4f2c528ed6ca86e34e0a508bfc8135f901af5c3f"
     ),
     "scripts/package_trino_maven_dependencies.py": (
-        "d3ed68416f0ccf5aa3af93ac7bdb661049e2a6b5aea790c6f4d0ef3985fd8e72"
+        "30039c95c36b579cfa81a99789bfa9f183da939f5d04e89ca7341741323c3e0a"
+    ),
+    "scripts/prepare_trino_bun_input.py": (
+        "4af7467ad9ae58f4e7fc150a93fa30d7e76e2563c48075e644819e63fbe55ebe"
     ),
     "scripts/package_polaris_gradle_dependencies.py": (
         POLARIS_DEPENDENCY_PACKAGER_SHA256
@@ -773,7 +776,7 @@ PENDING_SCRIPT_FILE_INVENTORY = {
         "75cee002d5749c0ec91629edb905c27362bee5c0813b0cbefcb59f161734f445"
     ),
     "scripts/verify_trino_dependency_publisher.py": (
-        "6e29bdcb6afd547bdeb94c5465593648f410faf4c7470705f56349d4a171c311"
+        "207dfc3efabb713b4affbd95dcb1b0e1fc031e1eb27f50f68da604def3ec4b2a"
     ),
     "scripts/verify_trusted_image.py": (
         "cc569a5ee10400ad657f7648ccc2c14e8fd21691adfdc9e155212b16dc0afba0"

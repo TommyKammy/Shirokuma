@@ -23,6 +23,7 @@ SETTINGS_PATH = Path("bootstrap/trino/v483/settings.xml")
 JVM_CONFIG_PATH = Path("bootstrap/trino/v483/maven-policy/.mvn/jvm.config")
 WORKFLOW_PATH = Path(".github/workflows/trino-maven-dependencies.yml")
 PACKAGER_PATH = Path("scripts/package_trino_maven_dependencies.py")
+BUN_PREPARER_PATH = Path("scripts/prepare_trino_bun_input.py")
 VERIFIER_PATH = Path("scripts/verify_trino_dependency_publisher.py")
 TEST_PATH = Path("tests/test_trino_dependency_publisher.py")
 EXPECTED_REPOSITORY = "TommyKammy/Shirokuma"
@@ -38,6 +39,41 @@ EXPECTED_REPOSITORIES = {
     "central": "https://repo.maven.apache.org/maven2/",
     "confluent": "https://packages.confluent.io/maven/",
 }
+EXPECTED_BUN_INPUT = {
+    "name": "bun-linux-aarch64",
+    "version": "v1.3.14",
+    "platform": "linux/arm64",
+    "url": (
+        "https://github.com/oven-sh/bun/releases/download/"
+        "bun-v1.3.14/bun-linux-aarch64.zip"
+    ),
+    "sha256": "a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b",
+    "size": 35_700_603,
+    "cache_path": "com/github/eirslett/bun/1.3.14/bun-1.3.14.zip",
+    "origin_id": "shirokuma-bun-release",
+    "independent_downloads": 2,
+    "allowed_https_origins": [
+        "https://github.com",
+        "https://release-assets.githubusercontent.com",
+    ],
+    "redirect_policy": "manual_validate_before_request",
+    "maximum_redirects": 5,
+}
+EXPECTED_ARTIFACT_TYPE = "application/vnd.shirokuma.trino.maven-dependencies.v2"
+EXPECTED_DESCRIPTOR_MEDIA_TYPE = (
+    "application/vnd.shirokuma.maven-dependency-manifest.v2+json"
+)
+EXPECTED_BUN_STAGE_BLOCK = """\
+          python3 scripts/prepare_trino_bun_input.py download \\
+            --url "${BUN_URL}" \\
+            --archive "${bun_archive}"
+          test "$(stat --format='%s' "${bun_archive}")" = "${BUN_ARCHIVE_SIZE}"
+          echo "${BUN_ARCHIVE_SHA256}  ${bun_archive}" \\
+            | sha256sum --check --strict
+          python3 scripts/prepare_trino_bun_input.py stage \\
+            --archive "${bun_archive}" \\
+            --repository "${repository}"
+"""
 EXPECTED_REPOSITORY_MIRRORS = (
     (
         ("id", "shirokuma-central"),
@@ -467,6 +503,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         JVM_CONFIG_PATH,
         SETTINGS_PATH,
         PACKAGER_PATH,
+        BUN_PREPARER_PATH,
         VERIFIER_PATH,
         TEST_PATH,
         Path("Makefile"),
@@ -497,6 +534,12 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log",
         "python3 scripts/package_trino_maven_dependencies.py create",
         "python3 scripts/package_trino_maven_dependencies.py verify",
+        "python3 scripts/prepare_trino_bun_input.py download",
+        "python3 scripts/prepare_trino_bun_input.py stage",
+        EXPECTED_BUN_INPUT["url"],
+        EXPECTED_BUN_INPUT["sha256"],
+        EXPECTED_ARTIFACT_TYPE,
+        EXPECTED_DESCRIPTOR_MEDIA_TYPE,
         "oras push",
         "cosign sign",
         "cosign attest",
@@ -556,6 +599,24 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         or '"fresh_snapshot_extractions": 2' not in workflow
     ):
         _fail("WORKFLOW_OFFLINE", "exactly two network-none rebuilds are required")
+    if (
+        workflow.count(EXPECTED_BUN_STAGE_BLOCK)
+        != EXPECTED_BUN_INPUT["independent_downloads"]
+        or workflow.count('bun_archive="${RUNNER_TEMP}/bun-linux-aarch64-a.zip"')
+        != 1
+        or workflow.count('bun_archive="${RUNNER_TEMP}/bun-linux-aarch64-b.zip"')
+        != 1
+        or workflow.count('"${BUN_URL}"')
+        != EXPECTED_BUN_INPUT["independent_downloads"]
+        or lines.count(f'  BUN_URL: {EXPECTED_BUN_INPUT["url"]}') != 1
+        or lines.count(
+            f'  BUN_ARCHIVE_SHA256: {EXPECTED_BUN_INPUT["sha256"]}'
+        )
+        != 1
+        or lines.count(f'  BUN_ARCHIVE_SIZE: "{EXPECTED_BUN_INPUT["size"]}"')
+        != 1
+    ):
+        _fail("WORKFLOW_BUN_INPUT", "exactly two verified Bun inputs are required")
     publication = contract.get("publication", {})
     if (
         publication.get("permitted") is not True
@@ -573,6 +634,7 @@ def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
         SETTINGS_PATH,
         JVM_CONFIG_PATH,
         PACKAGER_PATH,
+        BUN_PREPARER_PATH,
         VERIFIER_PATH,
         TEST_PATH,
     }
@@ -636,9 +698,18 @@ def audit(root: Path) -> None:
         ]
         or dependency_resolution.get("settings_policy")
         != EXPECTED_SETTINGS_POLICY
+        or dependency_resolution.get("external_inputs") != [EXPECTED_BUN_INPUT]
     ):
         _fail("REPOSITORIES", "contract repository allowlist differs")
-    if contract.get("snapshot", {}).get("visibility_bootstrap") != {
+    snapshot = contract.get("snapshot", {})
+    if (
+        snapshot.get("artifact_type") != EXPECTED_ARTIFACT_TYPE
+        or snapshot.get("descriptor_media_type")
+        != EXPECTED_DESCRIPTOR_MEDIA_TYPE
+        or snapshot.get("manifest", {}).get("schema_version") != 2
+    ):
+        _fail("SNAPSHOT_FORMAT", "dependency snapshot v2 contract differs")
+    if snapshot.get("visibility_bootstrap") != {
         "required_visibility": "public",
         "sign_and_attest_before_anonymous_pull": True,
         "owner_action_on_first_private_run": "set-package-public-and-rerun",

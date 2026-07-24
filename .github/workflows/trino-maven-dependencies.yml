@@ -9,6 +9,7 @@ on:
       - bootstrap/trino/v483/settings.xml
       - bootstrap/trino/v483/trusted-build-contract.json
       - scripts/package_trino_maven_dependencies.py
+      - scripts/prepare_trino_bun_input.py
       - scripts/verify_trino_dependency_publisher.py
       - tests/test_trino_dependency_publisher.py
       - Makefile
@@ -22,6 +23,7 @@ on:
       - bootstrap/trino/v483/settings.xml
       - bootstrap/trino/v483/trusted-build-contract.json
       - scripts/package_trino_maven_dependencies.py
+      - scripts/prepare_trino_bun_input.py
       - scripts/verify_trino_dependency_publisher.py
       - tests/test_trino_dependency_publisher.py
       - Makefile
@@ -41,9 +43,12 @@ env:
   SOURCE_TREE: 3b5414292a614b12393bb4605ea2d4c588a5b8ee
   BUILDER_IMAGE: docker.io/library/maven@sha256:7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c
   BUILDER_ARM64_MANIFEST: sha256:5476bfca9d0a6485b7161f6863123f7e6822336de4177273b47b5ec38ffd573a
+  BUN_URL: https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-aarch64.zip
+  BUN_ARCHIVE_SHA256: a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b
+  BUN_ARCHIVE_SIZE: "35700603"
   ARTIFACT_REPOSITORY: ghcr.io/tommykammy/shirokuma-trino-maven-dependencies
-  ARTIFACT_TYPE: application/vnd.shirokuma.trino.maven-dependencies.v1
-  DESCRIPTOR_MEDIA_TYPE: application/vnd.shirokuma.maven-dependency-manifest.v1+json
+  ARTIFACT_TYPE: application/vnd.shirokuma.trino.maven-dependencies.v2
+  DESCRIPTOR_MEDIA_TYPE: application/vnd.shirokuma.maven-dependency-manifest.v2+json
   ARCHIVE_MEDIA_TYPE: application/vnd.shirokuma.maven-repository.v1.tar+gzip
   ORAS_VERSION: 1.3.3
   ORAS_URL: https://github.com/oras-project/oras/releases/download/v1.3.3/oras_1.3.3_linux_arm64.tar.gz
@@ -219,7 +224,17 @@ jobs:
           source_dir="${RUNNER_TEMP}/trino-source"
           repository="${RUNNER_TEMP}/maven-repository-a"
           candidate="${GITHUB_WORKSPACE}/.trino-candidate"
+          bun_archive="${RUNNER_TEMP}/bun-linux-aarch64-a.zip"
           install -d -m 0700 "${repository}" "${candidate}"
+          python3 scripts/prepare_trino_bun_input.py download \
+            --url "${BUN_URL}" \
+            --archive "${bun_archive}"
+          test "$(stat --format='%s' "${bun_archive}")" = "${BUN_ARCHIVE_SIZE}"
+          echo "${BUN_ARCHIVE_SHA256}  ${bun_archive}" \
+            | sha256sum --check --strict
+          python3 scripts/prepare_trino_bun_input.py stage \
+            --archive "${bun_archive}" \
+            --repository "${repository}"
           docker run --rm \
             --platform linux/arm64 \
             --user "$(id -u):$(id -g)" \
@@ -259,6 +274,7 @@ jobs:
           source_dir="${RUNNER_TEMP}/trino-source-verifier"
           repository="${RUNNER_TEMP}/maven-repository-b"
           candidate="${GITHUB_WORKSPACE}/.trino-candidate"
+          bun_archive="${RUNNER_TEMP}/bun-linux-aarch64-b.zip"
           test ! -e "${source_dir}"
           git clone --no-local --no-checkout \
             "${RUNNER_TEMP}/trino-source" "${source_dir}"
@@ -267,6 +283,15 @@ jobs:
           python3 scripts/verify_trino_dependency_publisher.py audit-source \
             --root . --checkout "${source_dir}"
           install -d -m 0700 "${repository}"
+          python3 scripts/prepare_trino_bun_input.py download \
+            --url "${BUN_URL}" \
+            --archive "${bun_archive}"
+          test "$(stat --format='%s' "${bun_archive}")" = "${BUN_ARCHIVE_SIZE}"
+          echo "${BUN_ARCHIVE_SHA256}  ${bun_archive}" \
+            | sha256sum --check --strict
+          python3 scripts/prepare_trino_bun_input.py stage \
+            --archive "${bun_archive}" \
+            --repository "${repository}"
           docker run --rm \
             --platform linux/arm64 \
             --user "$(id -u):$(id -g)" \

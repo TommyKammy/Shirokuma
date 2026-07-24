@@ -5,7 +5,7 @@ title: "Allow a time-boxed Trino 483 source identity exception for the local PoC
 status: accepted
 created: 2026-07-23
 updated: 2026-07-24
-version: "0.3"
+version: "0.6"
 area: "architecture"
 tags: [shirokuma, adr, trino, source, supply-chain, local-poc]
 ---
@@ -116,8 +116,27 @@ fallback to Maven Central. This prevents an introduced repository from reusing
 an allowlisted ID with another URL. Arbitrary mirrors stay forbidden; all
 repository IDs are collapsed onto an already allowlisted endpoint, and the
 packager normalizes only the three exact mirror IDs to their corresponding
-allowlisted origins. The publisher compares complete deterministic manifests
-and archives, uses resolver markers to bind each dependency origin, excludes
+allowlisted origins.
+
+Reviewed-main run `30080444230` proved that the mirror boundary worked and the
+reactor again reached `BUILD SUCCESS`, then failed closed before publication
+because the runtime-required `trino-web-ui` module fetched Bun `v1.3.14` from
+GitHub Releases. The next reviewed boundary admits only the exact
+`bun-linux-aarch64.zip` bytes with size `35700603` and SHA-256
+`a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b`.
+Both fresh repositories independently download, verify, inspect, and stage the
+asset at the frontend plugin's exact cache path. Each redirect target is
+validated before the next request; only HTTPS on `github.com` and
+`release-assets.githubusercontent.com` is permitted, with a maximum of five
+redirects. This does not broaden the
+temporary Trino source-identity exception or authorize another Bun version,
+platform, URL, or cache entry.
+
+The publisher records the complete reviewed Bun platform, dedicated origin,
+independent-download count, allowed HTTPS origins, redirect policy, and
+redirect limit in each manifest-v2 document. It compares complete deterministic
+manifest-v2 documents and
+archives, uses resolver markers to bind each Maven and Bun origin, excludes
 timestamp-bearing resolver metadata, and performs two fresh native linux/arm64
 builds with networking disabled. It retains the dependency SBOM, fresh
 High=0/Critical=0 scan, Cosign/Rekor signature, SLSA provenance with the exact

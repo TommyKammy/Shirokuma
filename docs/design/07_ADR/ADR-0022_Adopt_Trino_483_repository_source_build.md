@@ -5,7 +5,7 @@ title: "Select a conditional repository-owned Trino 483 source build"
 status: accepted
 created: 2026-07-22
 updated: 2026-07-24
-version: "0.6"
+version: "0.9"
 area: "architecture"
 tags: [shirokuma, adr, trino, arm64, maven, supply-chain]
 ---
@@ -100,7 +100,7 @@ so native container smoke remains a mandatory publisher gate.
   verify the native arm64 child and observed Maven, Java, OS, and architecture
   before resolving dependencies. It must invoke the pinned image's `mvn` binary
   directly; the unchecked wrapper download path is forbidden.
-- Limit networked dependency resolution to HTTPS Maven Central
+- Limit networked Maven dependency resolution to HTTPS Maven Central
   (`https://repo.maven.apache.org/maven2/`) and the explicit Confluent
   repository (`https://packages.confluent.io/maven/`). Private repositories,
   arbitrary mirrors, proxies, user settings, ambient Maven homes, extensions,
@@ -115,9 +115,25 @@ so native container smoke remains a mandatory publisher gate.
   network allowlist. The packager may normalize only those exact mirror IDs to
   their corresponding allowlisted origins; any other repository ID or transfer
   URL fails closed.
+- Treat Trino 483's Bun `v1.3.14` linux/arm64 archive as a separate, exact
+  frontend toolchain input because `trino-main` depends on `trino-web-ui`.
+  Excluding the Web UI reactor module is forbidden. Each fresh resolution must
+  independently download the exact GitHub Release asset, verify size
+  `35700603`, SHA-256
+  `a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b`,
+  and its closed ZIP member layout before staging it at
+  `com/github/eirslett/bun/1.3.14/bun-1.3.14.zip`. The dedicated Bun origin ID
+  is valid only for that exact cache entry. Redirects must be handled manually,
+  validate the next HTTPS origin before requesting it, permit only
+  `github.com` and `release-assets.githubusercontent.com`, and fail closed
+  after five redirects or on any protocol, credential, port, fragment, cycle,
+  or host deviation.
 - Publish the Maven local repository only as a deterministic, run-scoped OCI
   dependency artifact after a closed manifest records every regular file,
   canonical path, size, mode, SHA-256, repository origin, and total byte count.
+  Manifest schema v2 must separately record the complete Bun external-input
+  contract, including platform, dedicated origin ID, independent-download
+  count, allowed HTTPS origins, redirect policy, and redirect limit.
   Symlinks, hard links, special files, locks, partial downloads, unknown
   repositories, duplicate paths, mutable tags, and repository-produced
   `io/trino/**` artifacts fail closed. Reactor outputs must be rebuilt from the
