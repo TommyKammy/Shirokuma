@@ -365,7 +365,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "--workdir /policy",
         "--file /workspace/pom.xml",
         "--offline -Dmaven.repo.local=/workspace/.m2/repository \\",
-        "--file /workspace/pom.xml clean install -DskipTests",
+        "--file /workspace/pom.xml -pl '!:trino-docs' \\",
         "python3 scripts/verify_trino_dependency_publisher.py authorize",
         "python3 scripts/verify_trino_dependency_publisher.py audit-builder-settings",
         "python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log",

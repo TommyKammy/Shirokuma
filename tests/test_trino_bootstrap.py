@@ -3719,6 +3719,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "mvn --offline "
                 "-Dmaven.repo.local=/workspace/.m2/repository "
                 "--file /workspace/pom.xml "
+                "-pl '!:trino-docs' "
                 "clean install -DskipTests"
             ),
             rebuild["command"],

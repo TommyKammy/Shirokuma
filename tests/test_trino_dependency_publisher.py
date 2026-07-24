@@ -280,6 +280,7 @@ class PublisherContractTests(unittest.TestCase):
         self.assertIn("--workdir /policy", workflow)
         self.assertIn("--file /workspace/pom.xml", workflow)
         self.assertNotIn("--workdir /workspace", workflow)
+        self.assertEqual(4, workflow.count("-pl '!:trino-docs'"))
 
     def test_builder_global_settings_allow_only_inert_defaults(
         self,

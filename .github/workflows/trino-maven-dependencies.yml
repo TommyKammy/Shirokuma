@@ -238,6 +238,7 @@ jobs:
               --settings /policy/settings.xml \
               -Dmaven.repo.local=/m2 \
               --file /workspace/pom.xml \
+              -pl '!:trino-docs' \
               clean install -DskipTests \
             2>&1 | tee "${candidate}/maven-transfer-a.log"
           python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log \
@@ -283,6 +284,7 @@ jobs:
               --settings /policy/settings.xml \
               -Dmaven.repo.local=/m2 \
               --file /workspace/pom.xml \
+              -pl '!:trino-docs' \
               clean install -DskipTests \
             2>&1 | tee "${candidate}/maven-transfer-b.log"
           python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log \
@@ -356,7 +358,8 @@ jobs:
               --entrypoint /usr/share/maven/bin/mvn \
               "${BUILDER_IMAGE}" \
               --offline -Dmaven.repo.local=/workspace/.m2/repository \
-              --file /workspace/pom.xml clean install -DskipTests
+              --file /workspace/pom.xml -pl '!:trino-docs' \
+              clean install -DskipTests
             output="${offline_source}/core/trino-server/target/trino-server-483.tar.gz"
             test -s "${output}"
             sha256sum "${output}" > "${candidate}/offline-output-${suffix}.sha256"
@@ -392,6 +395,7 @@ jobs:
                   "mvn --offline "
                   "-Dmaven.repo.local=/workspace/.m2/repository "
                   "--file /workspace/pom.xml "
+                  "-pl '!:trino-docs' "
                   "clean install -DskipTests"
               ),
               "output": "core/trino-server/target/trino-server-483.tar.gz",
