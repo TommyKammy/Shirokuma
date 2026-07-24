@@ -10,6 +10,7 @@ import json
 import os
 import re
 import subprocess
+import textwrap
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Mapping
@@ -96,6 +97,12 @@ EXPECTED_STEPS = {
 ACTION_RE = re.compile(r"^\s*uses:\s*([^#\s]+)", re.MULTILINE)
 URL_RE = re.compile(r"https?://[^\s\"'<>]+")
 LOWER_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+EXPECTED_RESOLUTION_COMMAND = (
+    "mvn --batch-mode --show-version --errors --strict-checksums "
+    "--settings /policy/settings.xml -Dmaven.repo.local=/m2 "
+    "--file /workspace/pom.xml -pl '!:trino-docs' "
+    "clean install -DskipTests"
+)
 
 
 class ContractError(ValueError):
@@ -190,36 +197,62 @@ def _workflow_jobs_and_steps(workflow: str) -> tuple[list[str], dict[str, list[s
     return jobs, steps
 
 
-def _offline_maven_command(workflow: str) -> str:
-    output_marker = (
-        '            output="${offline_source}/core/trino-server/target/'
-        'trino-server-483.tar.gz"'
-    )
-    docker_marker = "            docker run --rm \\\n"
+def _maven_command_before_marker(
+    workflow: str,
+    output_marker: str,
+    *,
+    code: str,
+    network_none: bool,
+) -> str:
+    docker_marker = "docker run --rm \\\n"
     maven_marker = (
-        "              --entrypoint /usr/share/maven/bin/mvn \\\n"
-        '              "${BUILDER_IMAGE}" \\\n'
+        "  --entrypoint /usr/share/maven/bin/mvn \\\n"
+        '  "${BUILDER_IMAGE}" \\\n'
     )
     if workflow.count(output_marker) != 1:
-        _fail("WORKFLOW_OFFLINE_COMMAND", "offline output marker differs")
+        _fail(code, f"output marker differs: {output_marker}")
     end = workflow.index(output_marker)
-    start = workflow.rfind(docker_marker, 0, end)
-    if start < 0:
-        _fail("WORKFLOW_OFFLINE_COMMAND", "offline builder invocation is missing")
-    block = workflow[start:end]
+    docker_start = workflow.rfind(docker_marker, 0, end)
+    if docker_start < 0:
+        _fail(code, "builder invocation is missing")
+    line_start = workflow.rfind("\n", 0, docker_start) + 1
+    block = textwrap.dedent(workflow[line_start:end])
+    observed_network_none = block.count("  --network none \\\n")
     if (
         block.count(maven_marker) != 1
-        or block.count("              --network none \\\n") != 1
+        or observed_network_none != (1 if network_none else 0)
     ):
-        _fail(
-            "WORKFLOW_OFFLINE_COMMAND",
-            "network-none Maven builder invocation differs",
-        )
+        _fail(code, "Maven builder invocation differs")
     arguments = block.split(maven_marker, 1)[1]
     normalized = " ".join(arguments.replace("\\\n", " ").split())
     if not normalized:
-        _fail("WORKFLOW_OFFLINE_COMMAND", "offline Maven arguments are missing")
+        _fail(code, "Maven arguments are missing")
     return f"mvn {normalized}"
+
+
+def _offline_maven_command(workflow: str) -> str:
+    return _maven_command_before_marker(
+        workflow,
+        (
+            '            output="${offline_source}/core/trino-server/target/'
+            'trino-server-483.tar.gz"'
+        ),
+        code="WORKFLOW_OFFLINE_COMMAND",
+        network_none=True,
+    )
+
+
+def _resolution_maven_commands(workflow: str) -> tuple[str, str]:
+    commands = [
+        _maven_command_before_marker(
+            workflow,
+            f'            2>&1 | tee "${{candidate}}/maven-transfer-{suffix}.log"',
+            code="WORKFLOW_RESOLUTION_COMMAND",
+            network_none=False,
+        )
+        for suffix in ("a", "b")
+    ]
+    return commands[0], commands[1]
 
 
 def _validate_settings(root: Path) -> None:
@@ -443,6 +476,15 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
                 f"expected {expected_offline_command!r}, "
                 f"found {observed_offline_command!r}"
             ),
+        )
+    observed_resolution_commands = _resolution_maven_commands(workflow)
+    if observed_resolution_commands != (
+        EXPECTED_RESOLUTION_COMMAND,
+        EXPECTED_RESOLUTION_COMMAND,
+    ):
+        _fail(
+            "WORKFLOW_RESOLUTION_COMMAND",
+            f"resolver commands differ: {observed_resolution_commands!r}",
         )
     if (
         workflow.count("--network none") != 1
