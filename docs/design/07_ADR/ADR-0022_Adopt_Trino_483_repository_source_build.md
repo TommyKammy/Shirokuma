@@ -4,8 +4,8 @@ doc_id: "ADR-0022"
 title: "Select a conditional repository-owned Trino 483 source build"
 status: accepted
 created: 2026-07-22
-updated: 2026-07-23
-version: "0.3"
+updated: 2026-07-24
+version: "0.4"
 area: "architecture"
 tags: [shirokuma, adr, trino, arm64, maven, supply-chain]
 ---
@@ -114,10 +114,15 @@ so native container smoke remains a mandatory publisher gate.
   reviewed source and cannot enter the dependency input.
 - Require an independent clean verifier to reconstruct the candidate from the
   same allowlisted repositories, compare the complete manifest, then run
-  `mvn --offline -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml clean install -DskipTests`
+  `mvn --offline -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests`
   in a fresh network-none native-arm64 builder. The output must be exactly
   `core/trino-server/target/trino-server-483.tar.gz`; its hash, size, and
-  reproducible-build comparison become retained evidence.
+  reproducible-build comparison become retained evidence. The explicit
+  `!:trino-docs` exclusion follows the Trino 483 upstream product-build
+  boundary: that reactor module invokes Sphinx to generate documentation and
+  contributes no Trino server runtime output. Both fresh dependency resolutions
+  and both offline rebuilds must use the same exclusion; all remaining reactor
+  modules stay inside the complete server-build and dependency-closure boundary.
 - Require the verifier workflow to run on a native linux/arm64 host. It must
   retain `RUNNER_ARCH=ARM64`, host `uname -m=aarch64`, and container
   architecture `arm64` observations, reject QEMU or binfmt emulation, and fail

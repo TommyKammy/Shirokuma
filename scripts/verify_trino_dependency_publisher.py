@@ -190,6 +190,38 @@ def _workflow_jobs_and_steps(workflow: str) -> tuple[list[str], dict[str, list[s
     return jobs, steps
 
 
+def _offline_maven_command(workflow: str) -> str:
+    output_marker = (
+        '            output="${offline_source}/core/trino-server/target/'
+        'trino-server-483.tar.gz"'
+    )
+    docker_marker = "            docker run --rm \\\n"
+    maven_marker = (
+        "              --entrypoint /usr/share/maven/bin/mvn \\\n"
+        '              "${BUILDER_IMAGE}" \\\n'
+    )
+    if workflow.count(output_marker) != 1:
+        _fail("WORKFLOW_OFFLINE_COMMAND", "offline output marker differs")
+    end = workflow.index(output_marker)
+    start = workflow.rfind(docker_marker, 0, end)
+    if start < 0:
+        _fail("WORKFLOW_OFFLINE_COMMAND", "offline builder invocation is missing")
+    block = workflow[start:end]
+    if (
+        block.count(maven_marker) != 1
+        or block.count("              --network none \\\n") != 1
+    ):
+        _fail(
+            "WORKFLOW_OFFLINE_COMMAND",
+            "network-none Maven builder invocation differs",
+        )
+    arguments = block.split(maven_marker, 1)[1]
+    normalized = " ".join(arguments.replace("\\\n", " ").split())
+    if not normalized:
+        _fail("WORKFLOW_OFFLINE_COMMAND", "offline Maven arguments are missing")
+    return f"mvn {normalized}"
+
+
 def _validate_settings(root: Path) -> None:
     path = root / SETTINGS_PATH
     try:
@@ -364,8 +396,6 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "--env MAVEN_CONFIG=/tmp/maven-home/.m2",
         "--workdir /policy",
         "--file /workspace/pom.xml",
-        "--offline -Dmaven.repo.local=/workspace/.m2/repository \\",
-        "--file /workspace/pom.xml -pl '!:trino-docs' \\",
         "python3 scripts/verify_trino_dependency_publisher.py authorize",
         "python3 scripts/verify_trino_dependency_publisher.py audit-builder-settings",
         "python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log",
@@ -399,6 +429,21 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
     ):
         if forbidden in workflow:
             _fail("WORKFLOW_FORBIDDEN", forbidden)
+    offline_rebuild = contract.get("offline_rebuild")
+    if not isinstance(offline_rebuild, dict):
+        _fail("WORKFLOW_OFFLINE_COMMAND", "contract offline rebuild is missing")
+    expected_offline_command = offline_rebuild.get("command")
+    if not isinstance(expected_offline_command, str):
+        _fail("WORKFLOW_OFFLINE_COMMAND", "contract command is missing")
+    observed_offline_command = _offline_maven_command(workflow)
+    if observed_offline_command != expected_offline_command:
+        _fail(
+            "WORKFLOW_OFFLINE_COMMAND",
+            (
+                f"expected {expected_offline_command!r}, "
+                f"found {observed_offline_command!r}"
+            ),
+        )
     if (
         workflow.count("--network none") != 1
         or "for suffix in a b; do" not in workflow

@@ -3939,6 +3939,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
 
     def test_source_build_decision_closes_only_the_decision_boundary(self) -> None:
+        contract = self._trusted_build_contract()
         decision = TRINO_SOURCE_BUILD_ADR.read_text(encoding="utf-8")
         normalized_decision = " ".join(decision.split())
         front_matter = decision.split("---", 2)[1]
@@ -3961,12 +3962,6 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             "https://packages.confluent.io/maven/",
             "unchecked wrapper download path is forbidden",
             "`io/trino/**` artifacts fail closed",
-            (
-                "mvn --offline "
-                "-Dmaven.repo.local=/workspace/.m2/repository "
-                "--file /workspace/pom.xml "
-                "clean install -DskipTests"
-            ),
             "core/trino-server/target/trino-server-483.tar.gz",
             "High=0/Critical=0",
             "main-only",
@@ -3981,6 +3976,10 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         ):
             with self.subTest(required=required):
                 self.assertIn(" ".join(required.split()), normalized_decision)
+        self.assertIn(
+            " ".join(contract["offline_rebuild"]["command"].split()),
+            normalized_decision,
+        )
         self.assertIn(
             "Reject the upstream Trino 483 OCI image and the upstream server tarball "
             "as resident or repository-build inputs.",
