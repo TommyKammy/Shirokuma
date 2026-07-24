@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-07-24
-version: "1.30"
+updated: 2026-07-25
+version: "1.31"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -686,6 +686,20 @@ only the correctly sized hexadecimal digest that matches the target bytes.
 Orphaned, malformed, mismatched, nested, or origin-conflicting sidecars remain
 rejected. Every retained sidecar is still hashed independently in the closed
 dependency manifest.
+
+Reviewed-main run `30110292434` then passed that checksum-sidecar boundary and
+completed the reactor with `BUILD SUCCESS`, but Maven retained
+`common-config-8.1.1.jar.lastUpdated` after an unsuccessful fallback lookup
+before resolving the exact artifact from the approved Confluent mirror. A
+`*.lastUpdated` file is now excluded as resolver metadata only when its exact
+target artifact is present as a regular, single-link file and that target's
+`_remote.repositories` entry resolves to an allowlisted origin. The metadata
+itself must also be a regular, single-link file within the 64 KiB resolver
+metadata limit; an explicit metadata origin must agree with the target.
+Orphaned, oversized, nested, symlinked, hard-linked, unknown-origin, or
+origin-conflicting resolution status remains fail-closed. The excluded status
+bytes are not a build input and are absent from the deterministic archive; the
+subsequent fresh network-none builds remain the sufficiency proof.
 
 The publisher resolves and packages two independent fresh Maven repositories,
 each seeded only with its independently digest-verified Bun input, requires

@@ -55,12 +55,16 @@ ALLOWED_ORIGIN_IDS = {
     "shirokuma-bun-release": BUN_INPUT["url"],
 }
 ALLOWED_ORIGINS = frozenset(ALLOWED_ORIGIN_IDS.values())
-EXCLUDED_RESOLVER_METADATA = {
+EXCLUDED_RESOLVER_METADATA_NAMES = {
     "_remote.repositories",
     "resolver-status.properties",
 }
+MAVEN_RESOLUTION_STATUS_SUFFIX = ".lastUpdated"
+EXCLUDED_RESOLVER_METADATA = {
+    *EXCLUDED_RESOLVER_METADATA_NAMES,
+    f"*{MAVEN_RESOLUTION_STATUS_SUFFIX}",
+}
 FORBIDDEN_SUFFIXES = (
-    ".lastUpdated",
     ".lock",
     ".part",
     ".partial",
@@ -74,6 +78,7 @@ CHECKSUM_SUFFIXES = {
 }
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 MAX_CHECKSUM_SIDECAR_BYTES = 256
+MAX_RESOLVER_METADATA_BYTES = 64 * 1024
 MAX_FILE_COUNT = 250_000
 MAX_TOTAL_BYTES = 8 * 1024 * 1024 * 1024
 
@@ -232,6 +237,38 @@ def _origin(path: Path, markers: Mapping[Path, Mapping[str, str]]) -> str:
     return origin
 
 
+def _is_excluded_resolver_metadata(
+    path: Path,
+    marker: Mapping[str, str],
+) -> bool:
+    if path.name in EXCLUDED_RESOLVER_METADATA_NAMES:
+        metadata = _regular_stat(path)
+        if metadata.st_size > MAX_RESOLVER_METADATA_BYTES:
+            _fail(f"Maven resolver metadata exceeds the byte limit: {path}")
+        return True
+    if not path.name.endswith(MAVEN_RESOLUTION_STATUS_SUFFIX):
+        return False
+
+    metadata = _regular_stat(path)
+    if metadata.st_size > MAX_RESOLVER_METADATA_BYTES:
+        _fail(f"Maven resolver metadata exceeds the byte limit: {path}")
+    target_name = path.name[: -len(MAVEN_RESOLUTION_STATUS_SUFFIX)]
+    if (
+        not target_name
+        or target_name.endswith(MAVEN_RESOLUTION_STATUS_SUFFIX)
+        or target_name.endswith(FORBIDDEN_SUFFIXES)
+    ):
+        _fail(f"invalid Maven resolution-status target: {path}")
+    target_origin = _declared_origin(target_name, marker)
+    if target_origin is None:
+        _fail(f"orphaned Maven resolution-status metadata is forbidden: {path}")
+    status_origin = _declared_origin(path.name, marker)
+    if status_origin is not None and status_origin != target_origin:
+        _fail(f"Maven resolution-status origin differs from its target: {path}")
+    _regular_stat(path.with_name(target_name))
+    return True
+
+
 def _repository_files(root: Path) -> list[Path]:
     if not root.is_dir() or root.is_symlink():
         _fail("Maven repository root must be a real directory")
@@ -265,7 +302,8 @@ def build_manifest(repository: Path) -> dict[str, Any]:
     total_bytes = 0
     for path in files:
         relative = _canonical_relative(path.relative_to(repository).as_posix())
-        if path.name in EXCLUDED_RESOLVER_METADATA:
+        marker = markers.get(path.parent, {})
+        if _is_excluded_resolver_metadata(path, marker):
             continue
         identity = relative.as_posix().casefold()
         if identity in observed:

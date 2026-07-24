@@ -23,7 +23,7 @@
     },
     {
       "path": "scripts/package_trino_maven_dependencies.py",
-      "sha256": "97d8733c0cf23d3a81d85017eed1520d256b7e630a46dcee609f2d828c33cbf9"
+      "sha256": "d9c7068df538f8d3167b491785a60a2fefaeeb583d0bed4700aaa553d477df6d"
     },
     {
       "path": "scripts/prepare_trino_bun_input.py",
@@ -35,7 +35,7 @@
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "9213c5db1568a6c932689b8faf329541643054855b5d4217d9a6b95a9220d5e0"
+      "sha256": "17d95816d525302698fb00f64846293639ea57ea2a27c358ea391e0c900d21ca"
     }
   ],
   "authorization": {
@@ -258,6 +258,7 @@
         "total_bytes"
       ],
       "excluded_resolver_metadata": [
+        "*.lastUpdated",
         "_remote.repositories",
         "resolver-status.properties"
       ],
