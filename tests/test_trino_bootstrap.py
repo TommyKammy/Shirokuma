@@ -3377,6 +3377,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "repositories",
                 "maven_local_repository",
                 "repository_origin_capture_required",
+                "transitive_dependency_repositories_ignored",
                 "settings_policy",
                 "transfer_audit",
                 "reactor_outputs",
@@ -3399,6 +3400,10 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             resolution["maven_local_repository"],
         )
         self.assertIs(resolution["repository_origin_capture_required"], True)
+        self.assertIs(
+            resolution["transitive_dependency_repositories_ignored"],
+            True,
+        )
         self.assertEqual(
             {
                 "repository_owned_settings_only": True,
@@ -3716,7 +3721,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertEqual(
             (
-                "mvn --offline "
+                "mvn --offline --ignore-transitive-repositories "
                 "-Dmaven.repo.local=/workspace/.m2/repository "
                 "--file /workspace/pom.xml "
                 "-pl '!:trino-docs' "

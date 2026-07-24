@@ -306,6 +306,24 @@ class PublisherContractTests(unittest.TestCase):
         ):
             verify._validate_workflow(contract, altered)
 
+    def test_each_resolver_command_ignores_transitive_repositories(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        option = "              --ignore-transitive-repositories \\\n"
+        self.assertEqual(2, workflow.count(option))
+        altered = (
+            workflow.replace(option, "", 1)
+            + "\n# misleading occurrence: --ignore-transitive-repositories\n"
+        )
+        self.assertEqual(4, altered.count("--ignore-transitive-repositories"))
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_RESOLUTION_COMMAND",
+        ):
+            verify._validate_workflow(contract, altered)
+
     def test_offline_workflow_command_is_bound_to_contract(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")

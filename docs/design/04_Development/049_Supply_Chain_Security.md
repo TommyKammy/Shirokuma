@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-24
-version: "1.23"
+version: "1.24"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -619,13 +619,15 @@ source execution, dependency resolution, publication, and evidence retention.
 The workflow binds the exact source coordinates, Maven 3.9.16 and Temurin 25
 native-arm64 builder, Maven Central plus the explicit Confluent repository, a
 regular-file-only closed manifest, and an independent fresh
-`mvn --offline -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests`
+`mvn --offline --ignore-transitive-repositories -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests`
 with networking disabled. The same explicit exclusion is required for both
 fresh dependency resolutions and both offline rebuilds: `trino-docs` invokes
 Sphinx to generate non-runtime documentation, while all remaining reactor
 modules stay inside the Trino server dependency and output boundary. The
-workflow records the future Corretto 25 Alpine 3.24 arm64 base without
-authorizing image use.
+same four Maven executions require `--ignore-transitive-repositories`; this
+prevents repository declarations from third-party dependency POMs from
+expanding the Central/Confluent allowlist. The workflow records the future
+Corretto 25 Alpine 3.24 arm64 base without authorizing image use.
 
 The publisher resolves and packages two independent empty Maven repositories,
 requires their complete manifests and deterministic archives to be equal, and

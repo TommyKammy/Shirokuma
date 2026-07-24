@@ -235,6 +235,7 @@ jobs:
             --entrypoint /usr/share/maven/bin/mvn \
             "${BUILDER_IMAGE}" \
             --batch-mode --show-version --errors --strict-checksums \
+              --ignore-transitive-repositories \
               --settings /policy/settings.xml \
               -Dmaven.repo.local=/m2 \
               --file /workspace/pom.xml \
@@ -281,6 +282,7 @@ jobs:
             --entrypoint /usr/share/maven/bin/mvn \
             "${BUILDER_IMAGE}" \
             --batch-mode --show-version --errors --strict-checksums \
+              --ignore-transitive-repositories \
               --settings /policy/settings.xml \
               -Dmaven.repo.local=/m2 \
               --file /workspace/pom.xml \
@@ -357,7 +359,8 @@ jobs:
               --workdir /policy \
               --entrypoint /usr/share/maven/bin/mvn \
               "${BUILDER_IMAGE}" \
-              --offline -Dmaven.repo.local=/workspace/.m2/repository \
+              --offline --ignore-transitive-repositories \
+              -Dmaven.repo.local=/workspace/.m2/repository \
               --file /workspace/pom.xml -pl '!:trino-docs' \
               clean install -DskipTests
             output="${offline_source}/core/trino-server/target/trino-server-483.tar.gz"
@@ -392,7 +395,7 @@ jobs:
               "network": "none",
               "maven_wrapper_used": False,
               "command": (
-                  "mvn --offline "
+                  "mvn --offline --ignore-transitive-repositories "
                   "-Dmaven.repo.local=/workspace/.m2/repository "
                   "--file /workspace/pom.xml "
                   "-pl '!:trino-docs' "

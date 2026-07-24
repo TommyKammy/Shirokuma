@@ -5,7 +5,7 @@ title: "Select a conditional repository-owned Trino 483 source build"
 status: accepted
 created: 2026-07-22
 updated: 2026-07-24
-version: "0.4"
+version: "0.5"
 area: "architecture"
 tags: [shirokuma, adr, trino, arm64, maven, supply-chain]
 ---
@@ -104,7 +104,9 @@ so native container smoke remains a mandatory publisher gate.
   (`https://repo.maven.apache.org/maven2/`) and the explicit Confluent
   repository (`https://packages.confluent.io/maven/`). Private repositories,
   mirrors, proxies, user settings, ambient Maven homes, extensions, and
-  credential fallback are forbidden.
+  credential fallback are forbidden. Every online resolver and offline rebuild
+  must use Maven's `--ignore-transitive-repositories` control so third-party
+  dependency POMs cannot introduce additional repository endpoints.
 - Publish the Maven local repository only as a deterministic, run-scoped OCI
   dependency artifact after a closed manifest records every regular file,
   canonical path, size, mode, SHA-256, repository origin, and total byte count.
@@ -114,7 +116,7 @@ so native container smoke remains a mandatory publisher gate.
   reviewed source and cannot enter the dependency input.
 - Require an independent clean verifier to reconstruct the candidate from the
   same allowlisted repositories, compare the complete manifest, then run
-  `mvn --offline -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests`
+  `mvn --offline --ignore-transitive-repositories -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests`
   in a fresh network-none native-arm64 builder. The output must be exactly
   `core/trino-server/target/trino-server-483.tar.gz`; its hash, size, and
   reproducible-build comparison become retained evidence. The explicit

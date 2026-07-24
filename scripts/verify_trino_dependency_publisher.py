@@ -99,6 +99,7 @@ URL_RE = re.compile(r"https?://[^\s\"'<>]+")
 LOWER_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 EXPECTED_RESOLUTION_COMMAND = (
     "mvn --batch-mode --show-version --errors --strict-checksums "
+    "--ignore-transitive-repositories "
     "--settings /policy/settings.xml -Dmaven.repo.local=/m2 "
     "--file /workspace/pom.xml -pl '!:trino-docs' "
     "clean install -DskipTests"
@@ -556,8 +557,12 @@ def audit(root: Path) -> None:
         _fail("SOURCE", "exact Trino source binding differs")
     if contract.get("toolchain", {}).get("builder", {}).get("index") != EXPECTED_BUILDER:
         _fail("BUILDER", "builder index differs")
-    if contract.get("dependency_resolution", {}).get("repositories") != list(
-        EXPECTED_REPOSITORIES.values()
+    dependency_resolution = contract.get("dependency_resolution", {})
+    if (
+        dependency_resolution.get("repositories")
+        != list(EXPECTED_REPOSITORIES.values())
+        or dependency_resolution.get("transitive_dependency_repositories_ignored")
+        is not True
     ):
         _fail("REPOSITORIES", "contract repository allowlist differs")
     if contract.get("snapshot", {}).get("visibility_bootstrap") != {
