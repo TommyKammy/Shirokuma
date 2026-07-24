@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-24
-version: "1.28"
+version: "1.29"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -664,6 +664,17 @@ of the Bun origin for any Maven artifact cannot bypass the exact-byte
 verification. The workflow records the
 future Corretto 25 Alpine 3.24
 arm64 base without authorizing image use.
+
+Reviewed-main run `30089478326` authenticated that exact Bun input and completed
+the Trino reactor with `BUILD SUCCESS`. Publication still stopped fail-closed
+because the original transfer audit classified every URL printed by the build
+as an artifact transfer, including webpack's informational
+`https://webpack.js.org/guides/code-splitting/` link. The audit therefore
+recognizes only Maven 3.9 transfer-listener events beginning with
+`Downloading from` or `Downloaded from`. Documentation and plugin-help URLs do
+not expand the repository allowlist. A missing or malformed transfer event,
+credentials, plaintext HTTP, or any transfer endpoint outside the exact
+Central and Confluent origins continues to fail closed.
 
 The publisher resolves and packages two independent fresh Maven repositories,
 each seeded only with its independently digest-verified Bun input, requires

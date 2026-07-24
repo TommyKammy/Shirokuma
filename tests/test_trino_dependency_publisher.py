@@ -704,9 +704,9 @@ class PublisherContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "transfer.log"
             path.write_text(
-                "Downloading from central: "
+                "\x1b[1;34m[INFO]\x1b[0m Downloading from central: "
                 "https://repo.maven.apache.org/maven2/org/example/demo.pom\n"
-                "Downloaded from confluent: "
+                "[INFO] Downloaded from confluent: "
                 "https://packages.confluent.io/maven/io/confluent/demo.jar\n",
                 encoding="utf-8",
             )
@@ -716,8 +716,39 @@ class PublisherContractTests(unittest.TestCase):
                 "https://user:secret@repo.maven.apache.org/maven2/demo.jar",
                 "http://repo.maven.apache.org/maven2/demo.jar",
             ):
-                path.write_text(f"Downloading from other: {unsafe}\n", encoding="utf-8")
+                path.write_text(
+                    f"[INFO] Downloading from other: {unsafe}\n",
+                    encoding="utf-8",
+                )
                 with self.subTest(unsafe=unsafe):
+                    with self.assertRaises(verify.ContractError):
+                        verify.audit_transfer_log(path)
+
+    def test_transfer_log_ignores_non_transfer_documentation_urls(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "transfer.log"
+            path.write_text(
+                "[INFO] Downloading from central: "
+                "https://repo.maven.apache.org/maven2/org/example/demo.pom\n"
+                "[INFO] For more info visit "
+                "https://webpack.js.org/guides/code-splitting/\n"
+                "[WARNING] See "
+                "https://rollupjs.org/configuration-options/#output-manualchunks\n",
+                encoding="utf-8",
+            )
+            verify.audit_transfer_log(path)
+
+    def test_transfer_log_rejects_missing_or_malformed_transfer_events(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "transfer.log"
+            for malformed in (
+                "[INFO] For more info visit "
+                "https://webpack.js.org/guides/code-splitting/\n",
+                "[INFO] Downloading from central:\n",
+                "[INFO] Downloaded from central: \n",
+            ):
+                path.write_text(malformed, encoding="utf-8")
+                with self.subTest(malformed=malformed):
                     with self.assertRaises(verify.ContractError):
                         verify.audit_transfer_log(path)
 
