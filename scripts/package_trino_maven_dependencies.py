@@ -24,6 +24,12 @@ ALLOWED_REPOSITORIES = {
     "central": "https://repo.maven.apache.org/maven2/",
     "confluent": "https://packages.confluent.io/maven/",
 }
+ALLOWED_ORIGIN_IDS = {
+    **ALLOWED_REPOSITORIES,
+    "shirokuma-central": ALLOWED_REPOSITORIES["central"],
+    "shirokuma-confluent": ALLOWED_REPOSITORIES["confluent"],
+    "shirokuma-central-fallback": ALLOWED_REPOSITORIES["central"],
+}
 EXCLUDED_RESOLVER_METADATA = {
     "_remote.repositories",
     "resolver-status.properties",
@@ -112,12 +118,12 @@ def _marker_origins(directory: Path) -> dict[str, str]:
         filename, repository_id = match.groups()
         if filename in result:
             _fail(f"duplicate Maven origin marker for {filename} in {marker}")
-        if repository_id not in ALLOWED_REPOSITORIES:
+        if repository_id not in ALLOWED_ORIGIN_IDS:
             _fail(
                 f"unknown Maven repository id {repository_id!r} "
                 f"for {directory / filename}"
             )
-        result[filename] = ALLOWED_REPOSITORIES[repository_id]
+        result[filename] = ALLOWED_ORIGIN_IDS[repository_id]
     return result
 
 
@@ -128,7 +134,7 @@ def _origin(path: Path, markers: Mapping[Path, Mapping[str, str]]) -> str:
         metadata = re.fullmatch(r"maven-metadata-([A-Za-z0-9_.-]+)\.xml(?:\.sha1)?", path.name)
         if metadata is not None:
             repository_id = metadata.group(1)
-            origin = ALLOWED_REPOSITORIES.get(repository_id)
+            origin = ALLOWED_ORIGIN_IDS.get(repository_id)
     if origin is None:
         _fail(f"missing closed Maven repository origin for {path}")
     return origin

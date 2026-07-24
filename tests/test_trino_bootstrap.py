@@ -3378,6 +3378,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "maven_local_repository",
                 "repository_origin_capture_required",
                 "transitive_dependency_repositories_ignored",
+                "repository_mirrors",
                 "settings_policy",
                 "transfer_audit",
                 "reactor_outputs",
@@ -3405,12 +3406,36 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             True,
         )
         self.assertEqual(
+            [
+                {
+                    "id": "shirokuma-central",
+                    "mirror_of": "central",
+                    "url": "https://repo.maven.apache.org/maven2/",
+                },
+                {
+                    "id": "shirokuma-confluent",
+                    "mirror_of": "confluent",
+                    "url": "https://packages.confluent.io/maven/",
+                },
+                {
+                    "id": "shirokuma-central-fallback",
+                    "mirror_of": "*",
+                    "url": "https://repo.maven.apache.org/maven2/",
+                },
+            ],
+            resolution["repository_mirrors"],
+        )
+        self.assertEqual(
             {
                 "repository_owned_settings_only": True,
                 "user_settings_permitted": False,
                 "ambient_maven_home_permitted": False,
                 "extensions_permitted": False,
-                "mirrors_permitted": False,
+                "mirrors_permitted": True,
+                "mirror_escape_hatch_permitted": False,
+                "mirror_policy": (
+                    "exact_repository_ids_and_catch_all_to_allowlisted_origins"
+                ),
                 "proxies_permitted": False,
                 "credentials_permitted": False,
             },
