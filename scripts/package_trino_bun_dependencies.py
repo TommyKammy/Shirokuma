@@ -40,6 +40,16 @@ MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
 MAX_FILE_BYTES = 256 * 1024 * 1024
 MAX_PATH_BYTES = 1_024
 MAX_LINK_BYTES = 1_024
+FORBIDDEN_TRANSIENT_NAMES = {
+    ".lock",
+}
+FORBIDDEN_TRANSIENT_SUFFIXES = (
+    ".part",
+    ".partial",
+    ".tmp",
+    ".download",
+    ".crdownload",
+)
 
 
 class BunSnapshotError(RuntimeError):
@@ -72,9 +82,20 @@ def _regular_stat(path: Path) -> os.stat_result:
         _fail(f"cannot inspect Bun cache file {path}: {error}")
     if not stat.S_ISREG(metadata.st_mode):
         _fail(f"Bun cache entry is not a regular file: {path}")
+    if metadata.st_nlink != 1:
+        _fail(f"hard-linked Bun cache file is forbidden: {path}")
     if metadata.st_size > MAX_FILE_BYTES:
         _fail(f"Bun cache file exceeds the byte limit: {path}")
     return metadata
+
+
+def _reject_transient_file(relative: PurePosixPath) -> None:
+    name = relative.name.casefold()
+    if (
+        name in FORBIDDEN_TRANSIENT_NAMES
+        or name.endswith(FORBIDDEN_TRANSIENT_SUFFIXES)
+    ):
+        _fail(f"transient Bun cache file is forbidden: {relative}")
 
 
 def _open_regular(path: Path) -> tuple[BinaryIO, os.stat_result]:
@@ -89,6 +110,7 @@ def _open_regular(path: Path) -> tuple[BinaryIO, os.stat_result]:
         _fail(f"cannot open Bun cache file {path}: {error}")
     if (
         not stat.S_ISREG(observed.st_mode)
+        or observed.st_nlink != 1
         or observed.st_dev != expected.st_dev
         or observed.st_ino != expected.st_ino
         or observed.st_size != expected.st_size
@@ -181,6 +203,7 @@ def _cache_entries(root: Path) -> list[tuple[Path, dict[str, Any]]]:
                 "target": _validated_link_target(root, path),
             }
         else:
+            _reject_transient_file(relative)
             metadata = _regular_stat(path)
             file_count += 1
             if file_count > MAX_FILE_COUNT:
@@ -373,6 +396,7 @@ def _load_manifest(path: Path) -> dict[str, Any]:
             _fail("Bun cache manifest contains a case-insensitive duplicate")
         observed.add(identity)
         if entry_type == "file":
+            _reject_transient_file(relative)
             file_count += 1
             if (
                 record["mode"] not in REGULAR_MODES

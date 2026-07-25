@@ -85,6 +85,40 @@ class TrinoBunDependencySnapshotTest(unittest.TestCase):
             self.assertEqual(manifest["file_count"], 2)
             self.assertEqual(manifest["symlink_count"], 1)
 
+    def test_rejects_hard_linked_cache_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            cache = self._cache(root)
+            source = cache / "example@1.2.3@@@1/package.json"
+            os.link(source, source.with_name("hard-link.json"))
+            with self.assertRaisesRegex(
+                package.BunSnapshotError, "hard-linked Bun cache file"
+            ):
+                package.build_manifest(cache)
+
+    def test_rejects_transient_cache_files(self) -> None:
+        for filename in (
+            ".lock",
+            "download.part",
+            "download.partial",
+            "download.tmp",
+            "download.download",
+            "download.crdownload",
+        ):
+            with (
+                self.subTest(filename=filename),
+                tempfile.TemporaryDirectory() as temporary,
+            ):
+                root = Path(temporary)
+                cache = self._cache(root)
+                (cache / "example@1.2.3@@@1" / filename).write_text(
+                    "transient\n", encoding="utf-8"
+                )
+                with self.assertRaisesRegex(
+                    package.BunSnapshotError, "transient Bun cache file"
+                ):
+                    package.build_manifest(cache)
+
     def test_rejects_relative_symlink_target(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -144,6 +178,28 @@ class TrinoBunDependencySnapshotTest(unittest.TestCase):
             )
             with self.assertRaisesRegex(
                 package.BunSnapshotError, "identity or origin policy differs"
+            ):
+                package.verify_snapshot(descriptor, archive, None)
+
+    def test_rejects_manifest_transient_file_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor, archive = self._create(root)
+            manifest = json.loads(descriptor.read_text(encoding="utf-8"))
+            file_record = next(
+                record
+                for record in manifest["entries"]
+                if record["type"] == "file"
+            )
+            file_record["path"] = (
+                "example@1.2.3@@@1/download.partial"
+            )
+            descriptor.write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                package.BunSnapshotError, "transient Bun cache file"
             ):
                 package.verify_snapshot(descriptor, archive, None)
 
