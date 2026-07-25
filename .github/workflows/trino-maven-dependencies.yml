@@ -287,6 +287,10 @@ jobs:
             --cache "${bun_cache}" \
             --descriptor "${candidate}/bun-dependency-manifest.json" \
             --archive "${candidate}/trino-bun-dependencies-483.tar.gz"
+          python3 scripts/verify_trino_dependency_publisher.py \
+            verify-bun-snapshot \
+            --descriptor "${candidate}/bun-dependency-manifest.json" \
+            --archive "${candidate}/trino-bun-dependencies-483.tar.gz"
 
       - name: Independently reconstruct the closed Maven repository
         if: steps.lifecycle.outputs.active == 'true'
@@ -354,6 +358,10 @@ jobs:
             --cache "${bun_cache}" \
             --descriptor "${RUNNER_TEMP}/bun-dependency-manifest-b.json" \
             --archive "${RUNNER_TEMP}/trino-bun-dependencies-b.tar.gz"
+          python3 scripts/verify_trino_dependency_publisher.py \
+            verify-bun-snapshot \
+            --descriptor "${RUNNER_TEMP}/bun-dependency-manifest-b.json" \
+            --archive "${RUNNER_TEMP}/trino-bun-dependencies-b.tar.gz"
           cmp \
             "${candidate}/maven-dependency-manifest.json" \
             "${RUNNER_TEMP}/maven-dependency-manifest-b.json"
@@ -410,6 +418,7 @@ jobs:
           candidate="${GITHUB_WORKSPACE}/.trino-candidate"
           for suffix in a b; do
             offline_source="${RUNNER_TEMP}/trino-offline-${suffix}"
+            offline_bun_cache="${RUNNER_TEMP}/trino-offline-bun-cache-${suffix}"
             git clone --no-local --no-checkout \
               "${RUNNER_TEMP}/trino-source" "${offline_source}"
             git -C "${offline_source}" remote set-url origin "${SOURCE_REPOSITORY}"
@@ -423,7 +432,7 @@ jobs:
             python3 scripts/package_trino_bun_dependencies.py verify \
               --descriptor "${candidate}/bun-dependency-manifest.json" \
               --archive "${candidate}/trino-bun-dependencies-483.tar.gz" \
-              --extract-root "${offline_source}/.bun-cache"
+              --extract-root "${offline_bun_cache}"
             docker run --rm \
               --platform linux/arm64 \
               --network none \
@@ -436,7 +445,7 @@ jobs:
               --env BUN_INSTALL_CACHE_DIR="${BUN_CACHE_DIRECTORY}" \
               --env BUN_CONFIG_REGISTRY="${BUN_REGISTRY}" \
               --volume "${offline_source}:/workspace" \
-              --volume "${offline_source}/.bun-cache:${BUN_CACHE_DIRECTORY}:ro" \
+              --volume "${offline_bun_cache}:${BUN_CACHE_DIRECTORY}:ro" \
               --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:/policy/.mvn:ro" \
               --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:/policy/settings.xml:ro" \
               --workdir /policy \
@@ -447,6 +456,9 @@ jobs:
               -Dmaven.repo.local=/workspace/.m2/repository \
               --file /workspace/pom.xml -pl '!:trino-docs' \
               clean install -DskipTests
+            python3 scripts/package_trino_bun_dependencies.py verify-cache \
+              --descriptor "${candidate}/bun-dependency-manifest.json" \
+              --cache "${offline_bun_cache}"
             output="${offline_source}/core/trino-server/target/trino-server-483.tar.gz"
             test -s "${output}"
             sha256sum "${output}" > "${candidate}/offline-output-${suffix}.sha256"

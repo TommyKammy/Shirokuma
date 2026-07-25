@@ -81,7 +81,18 @@ EXPECTED_BUN_PACKAGE_CACHE = {
         },
     ],
     "independent_reconstructions": 2,
+    "reviewed_snapshot": {
+        "manifest_sha256": (
+            "adfcb6663080ef7f39b5e592b7ca8df94e3449ae0ab73af630feac5a5fe721b0"
+        ),
+        "archive_sha256": (
+            "19087b76181177178ead04cabd85f81180ce64d71d84b78e5dda74a2dc71abd7"
+        ),
+        "archive_size": 128_457_765,
+    },
     "network_none_rebuild_mount": "read-only",
+    "network_none_cache_outside_source": True,
+    "post_build_integrity_verification": True,
     "unknown_registry_permitted": False,
 }
 EXPECTED_BUN_SCAN_RESULTS = {
@@ -376,6 +387,65 @@ def _read_reviewed_regular_file(path: Path, *, code: str) -> bytes:
         os.close(descriptor)
 
 
+def _reviewed_regular_identity(path: Path, *, code: str) -> tuple[str, int]:
+    try:
+        expected = path.lstat()
+    except OSError as error:
+        _fail(code, f"{path}: {error}")
+    if not stat.S_ISREG(expected.st_mode) or expected.st_nlink != 1:
+        _fail(code, f"{path} must be one regular, non-hard-linked file")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        _fail(code, f"{path}: {error}")
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        observed = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(observed.st_mode)
+            or observed.st_nlink != 1
+            or observed.st_dev != expected.st_dev
+            or observed.st_ino != expected.st_ino
+            or observed.st_size != expected.st_size
+        ):
+            _fail(code, f"{path} changed while it was opened")
+        with os.fdopen(descriptor, "rb", closefd=False) as source:
+            while chunk := source.read(1024 * 1024):
+                digest.update(chunk)
+                size += len(chunk)
+        final = os.fstat(descriptor)
+        if (
+            size != observed.st_size
+            or final.st_size != observed.st_size
+            or final.st_mtime_ns != observed.st_mtime_ns
+        ):
+            _fail(code, f"{path} changed while it was read")
+    finally:
+        os.close(descriptor)
+    return digest.hexdigest(), size
+
+
+def verify_bun_snapshot_identity(descriptor: Path, archive: Path) -> None:
+    expected = EXPECTED_BUN_PACKAGE_CACHE["reviewed_snapshot"]
+    descriptor_sha256, _ = _reviewed_regular_identity(
+        descriptor,
+        code="BUN_SNAPSHOT_IDENTITY",
+    )
+    archive_sha256, archive_size = _reviewed_regular_identity(
+        archive,
+        code="BUN_SNAPSHOT_IDENTITY",
+    )
+    if descriptor_sha256 != expected["manifest_sha256"]:
+        _fail("BUN_SNAPSHOT_IDENTITY", "manifest SHA-256 differs")
+    if (
+        archive_sha256 != expected["archive_sha256"]
+        or archive_size != expected["archive_size"]
+    ):
+        _fail("BUN_SNAPSHOT_IDENTITY", "archive identity differs")
+
+
 def stage_bun_scan_input(checkout: Path, output: Path) -> None:
     if output.exists() or output.is_symlink():
         _fail("BUN_SCAN_INPUT", f"output already exists: {output}")
@@ -616,8 +686,8 @@ def _offline_maven_command(workflow: str) -> str:
     return _maven_command_before_marker(
         workflow,
         (
-            '            output="${offline_source}/core/trino-server/target/'
-            'trino-server-483.tar.gz"'
+            "            python3 scripts/"
+            "package_trino_bun_dependencies.py verify-cache \\"
         ),
         code="WORKFLOW_OFFLINE_COMMAND",
         network_none=True,
@@ -966,7 +1036,13 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
         != 2
         or workflow.count(
-            '--volume "${offline_source}/.bun-cache:${BUN_CACHE_DIRECTORY}:ro" \\'
+            '--volume "${offline_bun_cache}:${BUN_CACHE_DIRECTORY}:ro" \\'
+        )
+        != 1
+        or '${offline_source}/.bun-cache' in workflow
+        or workflow.count(
+            'offline_bun_cache="${RUNNER_TEMP}/'
+            'trino-offline-bun-cache-${suffix}"'
         )
         != 1
         or workflow.count(
@@ -974,9 +1050,18 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
         != 2
         or workflow.count(
-            "python3 scripts/package_trino_bun_dependencies.py verify"
+            "python3 scripts/package_trino_bun_dependencies.py verify \\"
         )
         != 3
+        or workflow.count(
+            "python3 scripts/package_trino_bun_dependencies.py verify-cache \\"
+        )
+        != 1
+        or workflow.count(
+            "python3 scripts/verify_trino_dependency_publisher.py \\\n"
+            "            verify-bun-snapshot \\"
+        )
+        != 2
         or '"fresh_bun_cache_extractions": 2' not in workflow
         or '"bun_lockfile_mode": "frozen-via-CI-profile"' not in workflow
     ):
@@ -1296,6 +1381,9 @@ def _parser() -> argparse.ArgumentParser:
     bun_scan = commands.add_parser("verify-bun-scan")
     bun_scan.add_argument("--scan-input", type=Path, required=True)
     bun_scan.add_argument("--report", type=Path, required=True)
+    bun_snapshot = commands.add_parser("verify-bun-snapshot")
+    bun_snapshot.add_argument("--descriptor", type=Path, required=True)
+    bun_snapshot.add_argument("--archive", type=Path, required=True)
     return parser
 
 
@@ -1327,10 +1415,15 @@ def main() -> int:
                 args.checkout.resolve(),
                 args.output.resolve(),
             )
-        else:
+        elif args.command == "verify-bun-scan":
             verify_bun_scan(
                 args.scan_input.resolve(),
                 args.report.resolve(),
+            )
+        else:
+            verify_bun_snapshot_identity(
+                args.descriptor.resolve(),
+                args.archive.resolve(),
             )
     except ContractError as error:
         print(f"Trino dependency publisher rejected: {error}", file=os.sys.stderr)

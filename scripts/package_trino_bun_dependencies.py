@@ -553,6 +553,12 @@ def verify_snapshot(
             _fail("extracted Bun cache differs from the manifest")
 
 
+def verify_cache(descriptor: Path, cache: Path) -> None:
+    manifest = _load_manifest(descriptor)
+    if build_manifest(cache) != manifest:
+        _fail("Bun cache differs from the reviewed manifest")
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
@@ -564,6 +570,9 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--descriptor", type=Path, required=True)
     verify.add_argument("--archive", type=Path, required=True)
     verify.add_argument("--extract-root", type=Path)
+    cache = commands.add_parser("verify-cache")
+    cache.add_argument("--descriptor", type=Path, required=True)
+    cache.add_argument("--cache", type=Path, required=True)
     return parser
 
 
@@ -574,10 +583,12 @@ def main() -> int:
             create_snapshot(
                 arguments.cache, arguments.descriptor, arguments.archive
             )
-        else:
+        elif arguments.command == "verify":
             verify_snapshot(
                 arguments.descriptor, arguments.archive, arguments.extract_root
             )
+        else:
+            verify_cache(arguments.descriptor, arguments.cache)
     except BunSnapshotError as error:
         print(f"Trino Bun cache snapshot rejected: {error}", file=os.sys.stderr)
         return 1

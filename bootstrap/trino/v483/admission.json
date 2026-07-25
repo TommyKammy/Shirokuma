@@ -140,9 +140,12 @@
       "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
       "bootstrap/trino/v483/settings.xml",
       "bootstrap/trino/v483/trusted-build-contract.json",
+      "scripts/package_trino_bun_dependencies.py",
       "scripts/package_trino_maven_dependencies.py",
+      "scripts/prepare_trino_bun_input.py",
       "scripts/verify_polaris_trusted_image.py",
       "scripts/verify_trino_dependency_publisher.py",
+      "tests/test_trino_bun_dependencies.py",
       "tests/test_trino_dependency_publisher.py",
       "Makefile"
     ],

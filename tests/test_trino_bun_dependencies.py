@@ -203,6 +203,25 @@ class TrinoBunDependencySnapshotTest(unittest.TestCase):
             ):
                 package.verify_snapshot(descriptor, archive, None)
 
+    def test_verify_cache_rejects_post_build_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor, archive = self._create(root)
+            extracted = root / "extracted"
+            package.verify_snapshot(descriptor, archive, extracted)
+            package.verify_cache(descriptor, extracted)
+            target = next(
+                path
+                for path in extracted.rglob("*")
+                if path.is_file() and not path.is_symlink()
+            )
+            target.write_bytes(target.read_bytes() + b"mutated")
+            with self.assertRaisesRegex(
+                package.BunSnapshotError,
+                "differs from the reviewed manifest",
+            ):
+                package.verify_cache(descriptor, extracted)
+
     def test_rejects_archive_symlink_target_change(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

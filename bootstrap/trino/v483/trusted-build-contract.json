@@ -27,7 +27,7 @@
     },
     {
       "path": "scripts/package_trino_bun_dependencies.py",
-      "sha256": "e3a3bbcb0f0d2b08eac5bff4e6cb27ec8862f6a2339603cb79fedf4c41a68e06"
+      "sha256": "aa988a6357402d83748f41e71d03a2fa374ea578286dfd997be36178549189b3"
     },
     {
       "path": "scripts/prepare_trino_bun_input.py",
@@ -35,15 +35,15 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "c4913ea291379b074f626deee971e64a7b9402da263572cfbcf92cd6ca6d2827"
+      "sha256": "517be21cdc1bbab371d2acc766c676091e7ea316e21615fbcdb7fcf1984a82d6"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "5e519a7111daf8f368dd566621d6b5eb8aceb3627612b845b2842cb9b8727bbf"
+      "sha256": "be950b2ce2605a60d94d5021a7199d331cab314ea60250c9e6809b89533839df"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
-      "sha256": "d68417562c7636c6d260ffc829257a1f7f9823374fd4da990114f284c2101f58"
+      "sha256": "0d723923f18db912611193e462e7d8f3439fca3d2b1baa7423637362e518499b"
     }
   ],
   "authorization": {
@@ -213,7 +213,14 @@
         }
       ],
       "independent_reconstructions": 2,
+      "reviewed_snapshot": {
+        "manifest_sha256": "adfcb6663080ef7f39b5e592b7ca8df94e3449ae0ab73af630feac5a5fe721b0",
+        "archive_sha256": "19087b76181177178ead04cabd85f81180ce64d71d84b78e5dda74a2dc71abd7",
+        "archive_size": 128457765
+      },
       "network_none_rebuild_mount": "read-only",
+      "network_none_cache_outside_source": true,
+      "post_build_integrity_verification": true,
       "unknown_registry_permitted": false
     },
     "maven_local_repository": "fresh_workflow_owned_directory_seeded_only_with_digest_verified_external_inputs",

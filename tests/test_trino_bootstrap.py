@@ -3049,9 +3049,12 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
                     "bootstrap/trino/v483/settings.xml",
                     "bootstrap/trino/v483/trusted-build-contract.json",
+                    "scripts/package_trino_bun_dependencies.py",
                     "scripts/package_trino_maven_dependencies.py",
+                    "scripts/prepare_trino_bun_input.py",
                     "scripts/verify_polaris_trusted_image.py",
                     "scripts/verify_trino_dependency_publisher.py",
+                    "tests/test_trino_bun_dependencies.py",
                     "tests/test_trino_dependency_publisher.py",
                     "Makefile",
                 ],
@@ -3476,7 +3479,18 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     },
                 ],
                 "independent_reconstructions": 2,
+                "reviewed_snapshot": {
+                    "manifest_sha256": (
+                        "adfcb6663080ef7f39b5e592b7ca8df94e3449ae0ab73af630feac5a5fe721b0"
+                    ),
+                    "archive_sha256": (
+                        "19087b76181177178ead04cabd85f81180ce64d71d84b78e5dda74a2dc71abd7"
+                    ),
+                    "archive_size": 128457765,
+                },
                 "network_none_rebuild_mount": "read-only",
+                "network_none_cache_outside_source": True,
+                "post_build_integrity_verification": True,
                 "unknown_registry_permitted": False,
             },
             resolution["bun_package_cache"],

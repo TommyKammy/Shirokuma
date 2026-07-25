@@ -970,6 +970,38 @@ class BunScanEvidenceTests(unittest.TestCase):
             ):
                 verify.verify_bun_scan(scan_input, report)
 
+    def test_verify_bun_snapshot_requires_reviewed_identities(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = root / "manifest.json"
+            archive = root / "snapshot.tar.gz"
+            descriptor.write_bytes(b"reviewed manifest\n")
+            archive.write_bytes(b"reviewed archive\n")
+            contract = {
+                **self._cache_contract(),
+                "reviewed_snapshot": {
+                    "manifest_sha256": hashlib.sha256(
+                        descriptor.read_bytes()
+                    ).hexdigest(),
+                    "archive_sha256": hashlib.sha256(
+                        archive.read_bytes()
+                    ).hexdigest(),
+                    "archive_size": archive.stat().st_size,
+                },
+            }
+            with mock.patch.object(
+                verify,
+                "EXPECTED_BUN_PACKAGE_CACHE",
+                contract,
+            ):
+                verify.verify_bun_snapshot_identity(descriptor, archive)
+                archive.write_bytes(b"different archive\n")
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "archive identity differs",
+                ):
+                    verify.verify_bun_snapshot_identity(descriptor, archive)
+
 
 class PublisherContractTests(unittest.TestCase):
     def test_repository_contract_and_workflow_are_closed(self) -> None:
@@ -1239,11 +1271,39 @@ class PublisherContractTests(unittest.TestCase):
             ),
         )
         self.assertIn(
-            '--volume "${offline_source}/.bun-cache:'
+            '--volume "${offline_bun_cache}:'
             '${BUN_CACHE_DIRECTORY}:ro" \\',
             workflow,
         )
+        self.assertNotIn('${offline_source}/.bun-cache', workflow)
+        self.assertEqual(
+            1,
+            workflow.count(
+                "python3 scripts/package_trino_bun_dependencies.py "
+                "verify-cache \\"
+            ),
+        )
+        self.assertEqual(
+            2,
+            workflow.count(
+                "python3 scripts/verify_trino_dependency_publisher.py \\\n"
+                "            verify-bun-snapshot \\"
+            ),
+        )
         altered = workflow.replace("--env CI=true \\", "--env CI=false \\", 1)
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_BUN_CACHE",
+        ):
+            verify._validate_workflow(contract, altered)
+        altered = workflow.replace(
+            '--volume "${offline_bun_cache}:${BUN_CACHE_DIRECTORY}:ro" \\',
+            (
+                '--volume "${offline_source}/.bun-cache:'
+                '${BUN_CACHE_DIRECTORY}:ro" \\'
+            ),
+            1,
+        )
         with self.assertRaisesRegex(
             verify.ContractError,
             "WORKFLOW_BUN_CACHE",
