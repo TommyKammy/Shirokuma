@@ -1,4 +1,4 @@
-name: Trino 483 Maven dependency snapshot
+name: Trino 483 build dependency snapshot
 
 on:
   pull_request:
@@ -8,9 +8,11 @@ on:
       - bootstrap/trino/v483/maven-policy/.mvn/jvm.config
       - bootstrap/trino/v483/settings.xml
       - bootstrap/trino/v483/trusted-build-contract.json
+      - scripts/package_trino_bun_dependencies.py
       - scripts/package_trino_maven_dependencies.py
       - scripts/prepare_trino_bun_input.py
       - scripts/verify_trino_dependency_publisher.py
+      - tests/test_trino_bun_dependencies.py
       - tests/test_trino_dependency_publisher.py
       - Makefile
   push:
@@ -22,9 +24,11 @@ on:
       - bootstrap/trino/v483/maven-policy/.mvn/jvm.config
       - bootstrap/trino/v483/settings.xml
       - bootstrap/trino/v483/trusted-build-contract.json
+      - scripts/package_trino_bun_dependencies.py
       - scripts/package_trino_maven_dependencies.py
       - scripts/prepare_trino_bun_input.py
       - scripts/verify_trino_dependency_publisher.py
+      - tests/test_trino_bun_dependencies.py
       - tests/test_trino_dependency_publisher.py
       - Makefile
 
@@ -32,7 +36,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: trino-483-maven-dependencies-${{ github.event_name }}-${{ github.ref }}
+  group: trino-483-build-dependencies-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -46,10 +50,14 @@ env:
   BUN_URL: https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-aarch64.zip
   BUN_ARCHIVE_SHA256: a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b
   BUN_ARCHIVE_SIZE: "35700603"
+  BUN_CACHE_DIRECTORY: /bun-cache
+  BUN_REGISTRY: https://registry.npmjs.org/
   ARTIFACT_REPOSITORY: ghcr.io/tommykammy/shirokuma-trino-maven-dependencies
-  ARTIFACT_TYPE: application/vnd.shirokuma.trino.maven-dependencies.v2
+  ARTIFACT_TYPE: application/vnd.shirokuma.trino.build-dependencies.v3
   DESCRIPTOR_MEDIA_TYPE: application/vnd.shirokuma.maven-dependency-manifest.v2+json
   ARCHIVE_MEDIA_TYPE: application/vnd.shirokuma.maven-repository.v1.tar+gzip
+  BUN_DESCRIPTOR_MEDIA_TYPE: application/vnd.shirokuma.bun-dependency-manifest.v1+json
+  BUN_ARCHIVE_MEDIA_TYPE: application/vnd.shirokuma.bun-cache.v1.tar+gzip
   ORAS_VERSION: 1.3.3
   ORAS_URL: https://github.com/oras-project/oras/releases/download/v1.3.3/oras_1.3.3_linux_arm64.tar.gz
   ORAS_ARCHIVE_SHA256: ac7156f93a21e903f7ad606c792f3560f17e0cd0e36365634701b1e7cc4e4eca
@@ -76,6 +84,10 @@ jobs:
       active: ${{ steps.lifecycle.outputs.active }}
       candidate_artifact_name: ${{ steps.record.outputs.candidate_artifact_name }}
       archive_sha256: ${{ steps.record.outputs.archive_sha256 }}
+      bun_archive_sha256: ${{ steps.record.outputs.bun_archive_sha256 }}
+      bun_descriptor_sha256: ${{ steps.record.outputs.bun_descriptor_sha256 }}
+      bun_sbom_sha256: ${{ steps.record.outputs.bun_sbom_sha256 }}
+      bun_scan_sha256: ${{ steps.record.outputs.bun_scan_sha256 }}
       descriptor_sha256: ${{ steps.record.outputs.descriptor_sha256 }}
       offline_sha256: ${{ steps.record.outputs.offline_sha256 }}
       reconstruction_sha256: ${{ steps.record.outputs.reconstruction_sha256 }}
@@ -93,6 +105,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 -m unittest -v tests.test_trino_bun_dependencies
           python3 -m unittest -v tests.test_trino_dependency_publisher
           python3 scripts/verify_trino_dependency_publisher.py audit --root .
 
@@ -223,9 +236,10 @@ jobs:
           python3 scripts/verify_trino_dependency_publisher.py authorize --root .
           source_dir="${RUNNER_TEMP}/trino-source"
           repository="${RUNNER_TEMP}/maven-repository-a"
+          bun_cache="${RUNNER_TEMP}/bun-cache-a"
           candidate="${GITHUB_WORKSPACE}/.trino-candidate"
           bun_archive="${RUNNER_TEMP}/bun-linux-aarch64-a.zip"
-          install -d -m 0700 "${repository}" "${candidate}"
+          install -d -m 0700 "${repository}" "${bun_cache}" "${candidate}"
           python3 scripts/prepare_trino_bun_input.py download \
             --url "${BUN_URL}" \
             --archive "${bun_archive}"
@@ -242,8 +256,12 @@ jobs:
             --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
             --env MAVEN_OPTS= \
             --env JAVA_TOOL_OPTIONS= \
+            --env CI=true \
+            --env BUN_INSTALL_CACHE_DIR="${BUN_CACHE_DIRECTORY}" \
+            --env BUN_CONFIG_REGISTRY="${BUN_REGISTRY}" \
             --volume "${source_dir}:/workspace" \
             --volume "${repository}:/m2" \
+            --volume "${bun_cache}:${BUN_CACHE_DIRECTORY}" \
             --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:/policy/.mvn:ro" \
             --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:/policy/settings.xml:ro" \
             --workdir /policy \
@@ -265,6 +283,14 @@ jobs:
             --repository "${repository}" \
             --descriptor "${candidate}/maven-dependency-manifest.json" \
             --archive "${candidate}/trino-maven-dependencies-483.tar.gz"
+          python3 scripts/package_trino_bun_dependencies.py create \
+            --cache "${bun_cache}" \
+            --descriptor "${candidate}/bun-dependency-manifest.json" \
+            --archive "${candidate}/trino-bun-dependencies-483.tar.gz"
+          python3 scripts/verify_trino_dependency_publisher.py \
+            verify-bun-snapshot \
+            --descriptor "${candidate}/bun-dependency-manifest.json" \
+            --archive "${candidate}/trino-bun-dependencies-483.tar.gz"
 
       - name: Independently reconstruct the closed Maven repository
         if: steps.lifecycle.outputs.active == 'true'
@@ -274,6 +300,7 @@ jobs:
           python3 scripts/verify_trino_dependency_publisher.py authorize --root .
           source_dir="${RUNNER_TEMP}/trino-source-verifier"
           repository="${RUNNER_TEMP}/maven-repository-b"
+          bun_cache="${RUNNER_TEMP}/bun-cache-b"
           candidate="${GITHUB_WORKSPACE}/.trino-candidate"
           bun_archive="${RUNNER_TEMP}/bun-linux-aarch64-b.zip"
           test ! -e "${source_dir}"
@@ -283,7 +310,7 @@ jobs:
           git -C "${source_dir}" checkout --detach "${SOURCE_COMMIT}"
           python3 scripts/verify_trino_dependency_publisher.py audit-source \
             --root . --checkout "${source_dir}"
-          install -d -m 0700 "${repository}"
+          install -d -m 0700 "${repository}" "${bun_cache}"
           python3 scripts/prepare_trino_bun_input.py download \
             --url "${BUN_URL}" \
             --archive "${bun_archive}"
@@ -300,8 +327,12 @@ jobs:
             --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
             --env MAVEN_OPTS= \
             --env JAVA_TOOL_OPTIONS= \
+            --env CI=true \
+            --env BUN_INSTALL_CACHE_DIR="${BUN_CACHE_DIRECTORY}" \
+            --env BUN_CONFIG_REGISTRY="${BUN_REGISTRY}" \
             --volume "${source_dir}:/workspace" \
             --volume "${repository}:/m2" \
+            --volume "${bun_cache}:${BUN_CACHE_DIRECTORY}" \
             --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:/policy/.mvn:ro" \
             --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:/policy/settings.xml:ro" \
             --workdir /policy \
@@ -323,12 +354,26 @@ jobs:
             --repository "${repository}" \
             --descriptor "${RUNNER_TEMP}/maven-dependency-manifest-b.json" \
             --archive "${RUNNER_TEMP}/trino-maven-dependencies-b.tar.gz"
+          python3 scripts/package_trino_bun_dependencies.py create \
+            --cache "${bun_cache}" \
+            --descriptor "${RUNNER_TEMP}/bun-dependency-manifest-b.json" \
+            --archive "${RUNNER_TEMP}/trino-bun-dependencies-b.tar.gz"
+          python3 scripts/verify_trino_dependency_publisher.py \
+            verify-bun-snapshot \
+            --descriptor "${RUNNER_TEMP}/bun-dependency-manifest-b.json" \
+            --archive "${RUNNER_TEMP}/trino-bun-dependencies-b.tar.gz"
           cmp \
             "${candidate}/maven-dependency-manifest.json" \
             "${RUNNER_TEMP}/maven-dependency-manifest-b.json"
           cmp \
             "${candidate}/trino-maven-dependencies-483.tar.gz" \
             "${RUNNER_TEMP}/trino-maven-dependencies-b.tar.gz"
+          cmp \
+            "${candidate}/bun-dependency-manifest.json" \
+            "${RUNNER_TEMP}/bun-dependency-manifest-b.json"
+          cmp \
+            "${candidate}/trino-bun-dependencies-483.tar.gz" \
+            "${RUNNER_TEMP}/trino-bun-dependencies-b.tar.gz"
           CANDIDATE="${candidate}" python3 - <<'PY'
           import hashlib
           import json
@@ -338,6 +383,8 @@ jobs:
           candidate = Path(os.environ["CANDIDATE"])
           descriptor = candidate / "maven-dependency-manifest.json"
           archive = candidate / "trino-maven-dependencies-483.tar.gz"
+          bun_descriptor = candidate / "bun-dependency-manifest.json"
+          bun_archive = candidate / "trino-bun-dependencies-483.tar.gz"
           record = {
               "schema_version": 1,
               "result": "passed",
@@ -347,6 +394,14 @@ jobs:
               "archive_equal": True,
               "manifest_sha256": hashlib.sha256(descriptor.read_bytes()).hexdigest(),
               "archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+              "bun_cache_manifest_equal": True,
+              "bun_cache_archive_equal": True,
+              "bun_cache_manifest_sha256": hashlib.sha256(
+                  bun_descriptor.read_bytes()
+              ).hexdigest(),
+              "bun_cache_archive_sha256": hashlib.sha256(
+                  bun_archive.read_bytes()
+              ).hexdigest(),
           }
           (candidate / "independent-reconstruction.json").write_text(
               json.dumps(record, indent=2, sort_keys=True) + "\n",
@@ -363,6 +418,7 @@ jobs:
           candidate="${GITHUB_WORKSPACE}/.trino-candidate"
           for suffix in a b; do
             offline_source="${RUNNER_TEMP}/trino-offline-${suffix}"
+            offline_bun_cache="${RUNNER_TEMP}/trino-offline-bun-cache-${suffix}"
             git clone --no-local --no-checkout \
               "${RUNNER_TEMP}/trino-source" "${offline_source}"
             git -C "${offline_source}" remote set-url origin "${SOURCE_REPOSITORY}"
@@ -373,6 +429,10 @@ jobs:
               --descriptor "${candidate}/maven-dependency-manifest.json" \
               --archive "${candidate}/trino-maven-dependencies-483.tar.gz" \
               --extract-root "${offline_source}/.m2/repository"
+            python3 scripts/package_trino_bun_dependencies.py verify \
+              --descriptor "${candidate}/bun-dependency-manifest.json" \
+              --archive "${candidate}/trino-bun-dependencies-483.tar.gz" \
+              --extract-root "${offline_bun_cache}"
             docker run --rm \
               --platform linux/arm64 \
               --network none \
@@ -381,7 +441,11 @@ jobs:
               --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
               --env MAVEN_OPTS= \
               --env JAVA_TOOL_OPTIONS= \
+              --env CI=true \
+              --env BUN_INSTALL_CACHE_DIR="${BUN_CACHE_DIRECTORY}" \
+              --env BUN_CONFIG_REGISTRY="${BUN_REGISTRY}" \
               --volume "${offline_source}:/workspace" \
+              --volume "${offline_bun_cache}:${BUN_CACHE_DIRECTORY}:ro" \
               --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:/policy/.mvn:ro" \
               --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:/policy/settings.xml:ro" \
               --workdir /policy \
@@ -392,6 +456,9 @@ jobs:
               -Dmaven.repo.local=/workspace/.m2/repository \
               --file /workspace/pom.xml -pl '!:trino-docs' \
               clean install -DskipTests
+            python3 scripts/package_trino_bun_dependencies.py verify-cache \
+              --descriptor "${candidate}/bun-dependency-manifest.json" \
+              --cache "${offline_bun_cache}"
             output="${offline_source}/core/trino-server/target/trino-server-483.tar.gz"
             test -s "${output}"
             sha256sum "${output}" > "${candidate}/offline-output-${suffix}.sha256"
@@ -421,7 +488,11 @@ jobs:
               "platform": "linux/arm64",
               "fresh_source_checkouts": 2,
               "fresh_snapshot_extractions": 2,
+              "fresh_bun_cache_extractions": 2,
               "network": "none",
+              "bun_cache_directory": "/bun-cache",
+              "bun_registry": "https://registry.npmjs.org/",
+              "bun_lockfile_mode": "frozen-via-CI-profile",
               "maven_wrapper_used": False,
               "command": (
                   "mvn --offline --ignore-transitive-repositories "
@@ -468,6 +539,59 @@ jobs:
           vuln-type: library
           exit-code: 1
 
+      - name: Stage the exact Bun lockfiles for dependency analysis
+        if: steps.lifecycle.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py \
+            stage-bun-scan-input \
+            --checkout "${RUNNER_TEMP}/trino-source" \
+            --output "${RUNNER_TEMP}/trino-bun-scan-input"
+
+      - name: Generate a CycloneDX Bun dependency SBOM
+        if: steps.lifecycle.outputs.active == 'true'
+        env:
+          TRIVY_INCLUDE_DEV_DEPS: "true"
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.72.0
+          scan-type: fs
+          scan-ref: ${{ runner.temp }}/trino-bun-scan-input
+          format: cyclonedx
+          output: .trino-candidate/trino-bun-dependencies-483.cdx.json
+          scanners: vuln
+          list-all-pkgs: true
+
+      - name: Scan the Bun dependency closure and block High or Critical findings
+        if: steps.lifecycle.outputs.active == 'true'
+        env:
+          TRIVY_INCLUDE_DEV_DEPS: "true"
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.72.0
+          scan-type: fs
+          scan-ref: ${{ runner.temp }}/trino-bun-scan-input
+          format: json
+          output: .trino-candidate/trivy-bun-vulnerability.json
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          vuln-type: library
+          exit-code: 1
+          list-all-pkgs: true
+
+      - name: Verify both reviewed Bun dependency graphs were analyzed
+        if: steps.lifecycle.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py \
+            verify-bun-scan \
+            --scan-input "${RUNNER_TEMP}/trino-bun-scan-input" \
+            --report \
+              "${GITHUB_WORKSPACE}/.trino-candidate/trivy-bun-vulnerability.json"
+
       - name: Record the read-only candidate
         if: steps.lifecycle.outputs.active == 'true'
         id: record
@@ -494,6 +618,10 @@ jobs:
               raise SystemExit("missing Trivy vulnerability DB freshness metadata")
           files = {
               "archive": "trino-maven-dependencies-483.tar.gz",
+              "bun_archive": "trino-bun-dependencies-483.tar.gz",
+              "bun_descriptor": "bun-dependency-manifest.json",
+              "bun_sbom": "trino-bun-dependencies-483.cdx.json",
+              "bun_scan": "trivy-bun-vulnerability.json",
               "descriptor": "maven-dependency-manifest.json",
               "offline": "offline-build.json",
               "reconstruction": "independent-reconstruction.json",
@@ -534,15 +662,19 @@ jobs:
           name: ${{ steps.record.outputs.candidate_artifact_name }}
           path: |
             .trino-candidate/candidate.sha256
+            .trino-candidate/bun-dependency-manifest.json
             .trino-candidate/independent-reconstruction.json
             .trino-candidate/maven-dependency-manifest.json
             .trino-candidate/maven-transfer-a.log
             .trino-candidate/maven-transfer-b.log
             .trino-candidate/offline-build.json
             .trino-candidate/toolchain.json
+            .trino-candidate/trino-bun-dependencies-483.cdx.json
+            .trino-candidate/trino-bun-dependencies-483.tar.gz
             .trino-candidate/trino-maven-dependencies-483.cdx.json
             .trino-candidate/trino-maven-dependencies-483.tar.gz
             .trino-candidate/trivy-version.json
+            .trino-candidate/trivy-bun-vulnerability.json
             .trino-candidate/trivy-vulnerability.json
           if-no-files-found: error
           compression-level: 0
@@ -631,6 +763,14 @@ jobs:
           )
           test "$(sha256sum "${candidate}/trino-maven-dependencies-483.tar.gz" | cut -d' ' -f1)" \
             = "${{ needs.validate.outputs.archive_sha256 }}"
+          test "$(sha256sum "${candidate}/trino-bun-dependencies-483.tar.gz" | cut -d' ' -f1)" \
+            = "${{ needs.validate.outputs.bun_archive_sha256 }}"
+          test "$(sha256sum "${candidate}/bun-dependency-manifest.json" | cut -d' ' -f1)" \
+            = "${{ needs.validate.outputs.bun_descriptor_sha256 }}"
+          test "$(sha256sum "${candidate}/trino-bun-dependencies-483.cdx.json" | cut -d' ' -f1)" \
+            = "${{ needs.validate.outputs.bun_sbom_sha256 }}"
+          test "$(sha256sum "${candidate}/trivy-bun-vulnerability.json" | cut -d' ' -f1)" \
+            = "${{ needs.validate.outputs.bun_scan_sha256 }}"
           test "$(sha256sum "${candidate}/maven-dependency-manifest.json" | cut -d' ' -f1)" \
             = "${{ needs.validate.outputs.descriptor_sha256 }}"
           test "$(sha256sum "${candidate}/offline-build.json" | cut -d' ' -f1)" \
@@ -646,6 +786,9 @@ jobs:
           python3 scripts/package_trino_maven_dependencies.py verify \
             --descriptor "${candidate}/maven-dependency-manifest.json" \
             --archive "${candidate}/trino-maven-dependencies-483.tar.gz"
+          python3 scripts/package_trino_bun_dependencies.py verify \
+            --descriptor "${candidate}/bun-dependency-manifest.json" \
+            --archive "${candidate}/trino-bun-dependencies-483.tar.gz"
 
       - name: Publish the immutable run-scoped OCI artifact
         id: push
@@ -665,6 +808,8 @@ jobs:
             "${tagged_reference}" \
             "${candidate}/maven-dependency-manifest.json:${DESCRIPTOR_MEDIA_TYPE}" \
             "${candidate}/trino-maven-dependencies-483.tar.gz:${ARCHIVE_MEDIA_TYPE}" \
+            "${candidate}/bun-dependency-manifest.json:${BUN_DESCRIPTOR_MEDIA_TYPE}" \
+            "${candidate}/trino-bun-dependencies-483.tar.gz:${BUN_ARCHIVE_MEDIA_TYPE}" \
             > "${candidate}/oras-push.txt"
           digest=$(oras resolve "${tagged_reference}")
           case "${digest}" in
@@ -753,6 +898,47 @@ jobs:
                                   (
                                       candidate
                                       / "trino-maven-dependencies-483.tar.gz"
+                                  ).read_bytes()
+                              ).hexdigest()
+                          },
+                      },
+                      {
+                          "uri": "file:bun-dependency-manifest.json",
+                          "digest": {
+                              "sha256": hashlib.sha256(
+                                  (candidate / "bun-dependency-manifest.json").read_bytes()
+                              ).hexdigest()
+                          },
+                      },
+                      {
+                          "uri": "file:trino-bun-dependencies-483.tar.gz",
+                          "digest": {
+                              "sha256": hashlib.sha256(
+                                  (
+                                      candidate
+                                      / "trino-bun-dependencies-483.tar.gz"
+                                  ).read_bytes()
+                              ).hexdigest()
+                          },
+                      },
+                      {
+                          "uri": "file:trino-bun-dependencies-483.cdx.json",
+                          "digest": {
+                              "sha256": hashlib.sha256(
+                                  (
+                                      candidate
+                                      / "trino-bun-dependencies-483.cdx.json"
+                                  ).read_bytes()
+                              ).hexdigest()
+                          },
+                      },
+                      {
+                          "uri": "file:trivy-bun-vulnerability.json",
+                          "digest": {
+                              "sha256": hashlib.sha256(
+                                  (
+                                      candidate
+                                      / "trivy-bun-vulnerability.json"
                                   ).read_bytes()
                               ).hexdigest()
                           },
@@ -941,9 +1127,18 @@ jobs:
           cmp \
             "${candidate}/trino-maven-dependencies-483.tar.gz" \
             "${anonymous_dir}/trino-maven-dependencies-483.tar.gz"
+          cmp \
+            "${candidate}/bun-dependency-manifest.json" \
+            "${anonymous_dir}/bun-dependency-manifest.json"
+          cmp \
+            "${candidate}/trino-bun-dependencies-483.tar.gz" \
+            "${anonymous_dir}/trino-bun-dependencies-483.tar.gz"
           python3 scripts/package_trino_maven_dependencies.py verify \
             --descriptor "${anonymous_dir}/maven-dependency-manifest.json" \
             --archive "${anonymous_dir}/trino-maven-dependencies-483.tar.gz"
+          python3 scripts/package_trino_bun_dependencies.py verify \
+            --descriptor "${anonymous_dir}/bun-dependency-manifest.json" \
+            --archive "${anonymous_dir}/trino-bun-dependencies-483.tar.gz"
           PUBLISHED_REFERENCE="${PUBLISHED_REFERENCE}" \
             CANDIDATE="${candidate}" python3 - <<'PY'
           import hashlib
@@ -959,11 +1154,19 @@ jobs:
               "registry_config": "fresh-empty-no-credentials",
               "manifest_equal": True,
               "archive_equal": True,
+              "bun_manifest_equal": True,
+              "bun_archive_equal": True,
               "manifest_sha256": hashlib.sha256(
                   (candidate / "maven-dependency-manifest.json").read_bytes()
               ).hexdigest(),
               "archive_sha256": hashlib.sha256(
                   (candidate / "trino-maven-dependencies-483.tar.gz").read_bytes()
+              ).hexdigest(),
+              "bun_manifest_sha256": hashlib.sha256(
+                  (candidate / "bun-dependency-manifest.json").read_bytes()
+              ).hexdigest(),
+              "bun_archive_sha256": hashlib.sha256(
+                  (candidate / "trino-bun-dependencies-483.tar.gz").read_bytes()
               ).hexdigest(),
           }
           (candidate / "anonymous-pull.json").write_text(
@@ -991,6 +1194,7 @@ jobs:
           candidate = Path(os.environ["CANDIDATE"])
           retained = [
               "anonymous-pull.json",
+              "bun-dependency-manifest.json",
               "cosign-provenance-bundle.json",
               "cosign-signature-bundle.json",
               "cosign-verify-attestation.json",
@@ -1001,7 +1205,9 @@ jobs:
               "oci-manifest.json",
               "slsa-provenance.json",
               "toolchain.json",
+              "trino-bun-dependencies-483.cdx.json",
               "trino-maven-dependencies-483.cdx.json",
+              "trivy-bun-vulnerability.json",
               "trivy-version.json",
               "trivy-vulnerability.json",
           ]
@@ -1045,6 +1251,7 @@ jobs:
           name: trino-maven-publication-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/trino-maven-candidate/anonymous-pull.json
+            ${{ runner.temp }}/trino-maven-candidate/bun-dependency-manifest.json
             ${{ runner.temp }}/trino-maven-candidate/cosign-provenance-bundle.json
             ${{ runner.temp }}/trino-maven-candidate/cosign-signature-bundle.json
             ${{ runner.temp }}/trino-maven-candidate/cosign-verify-attestation.json
@@ -1056,7 +1263,9 @@ jobs:
             ${{ runner.temp }}/trino-maven-candidate/publication.json
             ${{ runner.temp }}/trino-maven-candidate/slsa-provenance.json
             ${{ runner.temp }}/trino-maven-candidate/toolchain.json
+            ${{ runner.temp }}/trino-maven-candidate/trino-bun-dependencies-483.cdx.json
             ${{ runner.temp }}/trino-maven-candidate/trino-maven-dependencies-483.cdx.json
+            ${{ runner.temp }}/trino-maven-candidate/trivy-bun-vulnerability.json
             ${{ runner.temp }}/trino-maven-candidate/trivy-version.json
             ${{ runner.temp }}/trino-maven-candidate/trivy-vulnerability.json
           if-no-files-found: error

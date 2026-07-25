@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 import textwrap
 import xml.etree.ElementTree as ET
@@ -23,9 +24,11 @@ SETTINGS_PATH = Path("bootstrap/trino/v483/settings.xml")
 JVM_CONFIG_PATH = Path("bootstrap/trino/v483/maven-policy/.mvn/jvm.config")
 WORKFLOW_PATH = Path(".github/workflows/trino-maven-dependencies.yml")
 PACKAGER_PATH = Path("scripts/package_trino_maven_dependencies.py")
+BUN_PACKAGER_PATH = Path("scripts/package_trino_bun_dependencies.py")
 BUN_PREPARER_PATH = Path("scripts/prepare_trino_bun_input.py")
 VERIFIER_PATH = Path("scripts/verify_trino_dependency_publisher.py")
 TEST_PATH = Path("tests/test_trino_dependency_publisher.py")
+BUN_TEST_PATH = Path("tests/test_trino_bun_dependencies.py")
 EXPECTED_REPOSITORY = "TommyKammy/Shirokuma"
 EXPECTED_SOURCE_REPOSITORY = "https://github.com/trinodb/trino"
 EXPECTED_TAG = "483"
@@ -59,6 +62,59 @@ EXPECTED_BUN_INPUT = {
     "redirect_policy": "manual_validate_before_request",
     "maximum_redirects": 5,
 }
+EXPECTED_BUN_PACKAGE_CACHE = {
+    "bun_version": "v1.3.14",
+    "platform": "linux/arm64",
+    "cache_directory": "/bun-cache",
+    "registry": "https://registry.npmjs.org/",
+    "frozen_lockfiles": [
+        {
+            "path": "core/trino-web-ui/src/main/resources/webapp/bun.lock",
+            "sha256": "70da1dad7c6f45743637cba7dde948793d787b1ced1382e90966d60fe17dc885",
+        },
+        {
+            "path": (
+                "core/trino-web-ui/src/main/resources/"
+                "webapp-legacy/src/bun.lock"
+            ),
+            "sha256": "0ca8b926ea0a2af3fff339b43c52de03a8f99c4aa9ba1d4c2ecd081bcd715ad3",
+        },
+    ],
+    "independent_reconstructions": 2,
+    "reviewed_snapshot": {
+        "manifest_sha256": (
+            "adfcb6663080ef7f39b5e592b7ca8df94e3449ae0ab73af630feac5a5fe721b0"
+        ),
+        "archive_sha256": (
+            "19087b76181177178ead04cabd85f81180ce64d71d84b78e5dda74a2dc71abd7"
+        ),
+        "archive_size": 128_457_765,
+    },
+    "network_none_rebuild_mount": "read-only",
+    "network_none_cache_outside_source": True,
+    "post_build_integrity_verification": True,
+    "unknown_registry_permitted": False,
+}
+EXPECTED_BUN_SCAN_RESULTS = {
+    "core/trino-web-ui/src/main/resources/webapp/bun.lock": {
+        "package_count": 473,
+        "required_packages": frozenset(
+            {
+                "@dagrejs/dagre",
+                "@mui/material",
+            }
+        ),
+    },
+    "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock": {
+        "package_count": 299,
+        "required_packages": frozenset(
+            {
+                "dagre-d3",
+                "reactable",
+            }
+        ),
+    },
+}
 EXPECTED_TRINO_BUILD_EXTENSION = {
     "group_id": "io.trino",
     "artifact_id": "trino-maven-plugin",
@@ -70,9 +126,59 @@ EXPECTED_TRINO_BUILD_EXTENSION = {
     ],
     "reactor_output": False,
 }
-EXPECTED_ARTIFACT_TYPE = "application/vnd.shirokuma.trino.maven-dependencies.v2"
+EXPECTED_TRINO_EXTERNAL_MAVEN_INPUTS = {
+    "repository_origin": EXPECTED_REPOSITORIES["central"],
+    "required_paths": [
+        "io/trino/benchto/benchto-base/0.34/benchto-base-0.34.pom",
+        "io/trino/benchto/benchto-driver/0.34/benchto-driver-0.34.jar",
+        "io/trino/benchto/benchto-driver/0.34/benchto-driver-0.34.pom",
+        "io/trino/coral/coral/2.2.49-1/coral-2.2.49-1.jar",
+        "io/trino/coral/coral/2.2.49-1/coral-2.2.49-1.pom",
+        "io/trino/hadoop/hadoop-apache/3.3.5-3/hadoop-apache-3.3.5-3.jar",
+        "io/trino/hadoop/hadoop-apache/3.3.5-3/hadoop-apache-3.3.5-3.pom",
+        "io/trino/hive/hive-apache-jdbc/0.13.1-10/hive-apache-jdbc-0.13.1-10.jar",
+        "io/trino/hive/hive-apache-jdbc/0.13.1-10/hive-apache-jdbc-0.13.1-10.pom",
+        "io/trino/hive/hive-apache/3.1.2-23/hive-apache-3.1.2-23.jar",
+        "io/trino/hive/hive-apache/3.1.2-23/hive-apache-3.1.2-23.pom",
+        "io/trino/hive/hive-thrift/3/hive-thrift-3.jar",
+        "io/trino/hive/hive-thrift/3/hive-thrift-3.pom",
+        "io/trino/tempto/tempto-core/204/tempto-core-204.jar",
+        "io/trino/tempto/tempto-core/204/tempto-core-204.pom",
+        "io/trino/tempto/tempto-kafka/204/tempto-kafka-204.jar",
+        "io/trino/tempto/tempto-kafka/204/tempto-kafka-204.pom",
+        "io/trino/tempto/tempto-ldap/204/tempto-ldap-204.jar",
+        "io/trino/tempto/tempto-ldap/204/tempto-ldap-204.pom",
+        "io/trino/tempto/tempto-root/204/tempto-root-204.pom",
+        "io/trino/tempto/tempto-runner/204/tempto-runner-204.jar",
+        "io/trino/tempto/tempto-runner/204/tempto-runner-204.pom",
+        "io/trino/tpcds/tpcds/1.7/tpcds-1.7.jar",
+        "io/trino/tpcds/tpcds/1.7/tpcds-1.7.pom",
+        "io/trino/tpch/tpch/1.4/tpch-1.4.jar",
+        "io/trino/tpch/tpch/1.4/tpch-1.4.pom",
+        "io/trino/trino-maven-plugin/20/trino-maven-plugin-20.jar",
+        "io/trino/trino-maven-plugin/20/trino-maven-plugin-20.pom",
+        "io/trino/trino-re2j/1.7/trino-re2j-1.7.jar",
+        "io/trino/trino-re2j/1.7/trino-re2j-1.7.pom",
+        "io/trino/trino-root/482/trino-root-482.pom",
+        "io/trino/trino-spi/482/trino-spi-482.jar",
+        "io/trino/trino-spi/482/trino-spi-482.pom",
+        "io/trino/trino-spi/maven-metadata-shirokuma-central-fallback.xml",
+        "io/trino/trino-spi/maven-metadata-shirokuma-central.xml",
+        "io/trino/trino-wasm-python/3.13-7/trino-wasm-python-3.13-7.jar",
+        "io/trino/trino-wasm-python/3.13-7/trino-wasm-python-3.13-7.pom",
+    ],
+    "unknown_paths_permitted": False,
+    "reactor_output": False,
+}
+EXPECTED_ARTIFACT_TYPE = "application/vnd.shirokuma.trino.build-dependencies.v3"
 EXPECTED_DESCRIPTOR_MEDIA_TYPE = (
     "application/vnd.shirokuma.maven-dependency-manifest.v2+json"
+)
+EXPECTED_BUN_DESCRIPTOR_MEDIA_TYPE = (
+    "application/vnd.shirokuma.bun-dependency-manifest.v1+json"
+)
+EXPECTED_BUN_ARCHIVE_MEDIA_TYPE = (
+    "application/vnd.shirokuma.bun-cache.v1.tar+gzip"
 )
 EXPECTED_BUN_STAGE_BLOCK = """\
           python3 scripts/prepare_trino_bun_input.py download \\
@@ -136,6 +242,16 @@ EXPECTED_OFFLINE_REPOSITORY_SETTINGS = {
     ),
     "network_access_permitted_by_this_setting": False,
 }
+EXPECTED_OFFLINE_BUN_CACHE = {
+    "path": "/bun-cache",
+    "registry": "https://registry.npmjs.org/",
+    "lockfile_mode": "frozen",
+    "mount": "read-only",
+    "network_none_required": True,
+    "absolute_cache_alias_target_prefix": "/bun-cache/",
+    "ambient_cache_permitted": False,
+    "unknown_registry_permitted": False,
+}
 ALLOWED_GLOBAL_SETTINGS_CONTAINERS = frozenset(
     {
         "mirrors",
@@ -159,7 +275,7 @@ EXPECTED_ACTIONS = {
     "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10": 2,
     "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02": 2,
     "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c": 1,
-    "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25": 2,
+    "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25": 4,
     "sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6": 1,
 }
 EXPECTED_STEPS = {
@@ -174,6 +290,10 @@ EXPECTED_STEPS = {
         "Prove two fresh network-none offline source builds",
         "Generate a CycloneDX dependency SBOM",
         "Scan the dependency closure and block High or Critical findings",
+        "Stage the exact Bun lockfiles for dependency analysis",
+        "Generate a CycloneDX Bun dependency SBOM",
+        "Scan the Bun dependency closure and block High or Critical findings",
+        "Verify both reviewed Bun dependency graphs were analyzed",
         "Record the read-only candidate",
         "Retain the read-only-verified candidate",
     ],
@@ -234,6 +354,231 @@ def _sha256(path: Path) -> str:
         return hashlib.sha256(path.read_bytes()).hexdigest()
     except OSError as error:
         _fail("POLICY_FILE", f"{path}: {error}")
+
+
+def _read_reviewed_regular_file(path: Path, *, code: str) -> bytes:
+    try:
+        expected = path.lstat()
+    except OSError as error:
+        _fail(code, f"{path}: {error}")
+    if not stat.S_ISREG(expected.st_mode) or expected.st_nlink != 1:
+        _fail(code, f"{path} must be one regular, non-hard-linked file")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        _fail(code, f"{path}: {error}")
+    try:
+        observed = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(observed.st_mode)
+            or observed.st_nlink != 1
+            or observed.st_dev != expected.st_dev
+            or observed.st_ino != expected.st_ino
+            or observed.st_size != expected.st_size
+        ):
+            _fail(code, f"{path} changed while it was opened")
+        with os.fdopen(descriptor, "rb", closefd=False) as source:
+            payload = source.read()
+        if len(payload) != observed.st_size:
+            _fail(code, f"{path} changed while it was read")
+        return payload
+    finally:
+        os.close(descriptor)
+
+
+def _reviewed_regular_identity(path: Path, *, code: str) -> tuple[str, int]:
+    try:
+        expected = path.lstat()
+    except OSError as error:
+        _fail(code, f"{path}: {error}")
+    if not stat.S_ISREG(expected.st_mode) or expected.st_nlink != 1:
+        _fail(code, f"{path} must be one regular, non-hard-linked file")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        _fail(code, f"{path}: {error}")
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        observed = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(observed.st_mode)
+            or observed.st_nlink != 1
+            or observed.st_dev != expected.st_dev
+            or observed.st_ino != expected.st_ino
+            or observed.st_size != expected.st_size
+        ):
+            _fail(code, f"{path} changed while it was opened")
+        with os.fdopen(descriptor, "rb", closefd=False) as source:
+            while chunk := source.read(1024 * 1024):
+                digest.update(chunk)
+                size += len(chunk)
+        final = os.fstat(descriptor)
+        if (
+            size != observed.st_size
+            or final.st_size != observed.st_size
+            or final.st_mtime_ns != observed.st_mtime_ns
+        ):
+            _fail(code, f"{path} changed while it was read")
+    finally:
+        os.close(descriptor)
+    return digest.hexdigest(), size
+
+
+def verify_bun_snapshot_identity(descriptor: Path, archive: Path) -> None:
+    expected = EXPECTED_BUN_PACKAGE_CACHE["reviewed_snapshot"]
+    descriptor_sha256, _ = _reviewed_regular_identity(
+        descriptor,
+        code="BUN_SNAPSHOT_IDENTITY",
+    )
+    archive_sha256, archive_size = _reviewed_regular_identity(
+        archive,
+        code="BUN_SNAPSHOT_IDENTITY",
+    )
+    if descriptor_sha256 != expected["manifest_sha256"]:
+        _fail("BUN_SNAPSHOT_IDENTITY", "manifest SHA-256 differs")
+    if (
+        archive_sha256 != expected["archive_sha256"]
+        or archive_size != expected["archive_size"]
+    ):
+        _fail("BUN_SNAPSHOT_IDENTITY", "archive identity differs")
+
+
+def stage_bun_scan_input(checkout: Path, output: Path) -> None:
+    if output.exists() or output.is_symlink():
+        _fail("BUN_SCAN_INPUT", f"output already exists: {output}")
+    try:
+        output.mkdir(mode=0o700)
+    except OSError as error:
+        _fail("BUN_SCAN_INPUT", f"{output}: {error}")
+    for record in EXPECTED_BUN_PACKAGE_CACHE["frozen_lockfiles"]:
+        relative = Path(record["path"])
+        payload = _read_reviewed_regular_file(
+            checkout / relative,
+            code="BUN_SCAN_INPUT",
+        )
+        if hashlib.sha256(payload).hexdigest() != record["sha256"]:
+            _fail("BUN_SCAN_INPUT", f"lockfile hash differs: {relative}")
+        target = output / relative
+        try:
+            target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            target.write_bytes(payload)
+            target.chmod(0o444)
+        except OSError as error:
+            _fail("BUN_SCAN_INPUT", f"{target}: {error}")
+
+
+def _bun_scan_target(target: object) -> str:
+    if not isinstance(target, str) or not target:
+        _fail("BUN_SCAN_REPORT", "result target must be a non-empty string")
+    normalized = target.replace("\\", "/").removeprefix("./")
+    if normalized not in EXPECTED_BUN_SCAN_RESULTS:
+        _fail("BUN_SCAN_REPORT", f"unexpected result target: {target}")
+    return normalized
+
+
+def verify_bun_scan(scan_input: Path, report_path: Path) -> None:
+    try:
+        root_metadata = scan_input.lstat()
+    except OSError as error:
+        _fail("BUN_SCAN_INPUT", f"{scan_input}: {error}")
+    if not stat.S_ISDIR(root_metadata.st_mode):
+        _fail("BUN_SCAN_INPUT", "scan input must be one real directory")
+    observed_files: set[str] = set()
+    try:
+        paths = tuple(scan_input.rglob("*"))
+    except OSError as error:
+        _fail("BUN_SCAN_INPUT", f"{scan_input}: {error}")
+    for path in paths:
+        try:
+            metadata = path.lstat()
+        except OSError as error:
+            _fail("BUN_SCAN_INPUT", f"{path}: {error}")
+        if stat.S_ISLNK(metadata.st_mode):
+            _fail("BUN_SCAN_INPUT", f"symlink is forbidden: {path}")
+        if stat.S_ISDIR(metadata.st_mode):
+            continue
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            _fail("BUN_SCAN_INPUT", f"unsafe scan input: {path}")
+        observed_files.add(path.relative_to(scan_input).as_posix())
+    expected_files = set(EXPECTED_BUN_SCAN_RESULTS)
+    if observed_files != expected_files:
+        _fail(
+            "BUN_SCAN_INPUT",
+            f"lockfile set differs: {sorted(observed_files)!r}",
+        )
+    frozen = {
+        record["path"]: record["sha256"]
+        for record in EXPECTED_BUN_PACKAGE_CACHE["frozen_lockfiles"]
+    }
+    if set(frozen) != expected_files:
+        _fail("BUN_SCAN_INPUT", "frozen lockfile contract differs")
+    for relative in sorted(expected_files):
+        payload = _read_reviewed_regular_file(
+            scan_input / relative,
+            code="BUN_SCAN_INPUT",
+        )
+        if hashlib.sha256(payload).hexdigest() != frozen[relative]:
+            _fail("BUN_SCAN_INPUT", f"lockfile hash differs: {relative}")
+
+    report = _load_json(report_path)
+    if (
+        report.get("SchemaVersion") != 2
+        or report.get("ArtifactType") != "filesystem"
+    ):
+        _fail("BUN_SCAN_REPORT", "unexpected Trivy report envelope")
+    results = report.get("Results")
+    if not isinstance(results, list):
+        _fail("BUN_SCAN_REPORT", "Results must be a list")
+    observed_results: dict[str, set[str]] = {}
+    observed_counts: dict[str, int] = {}
+    for result in results:
+        if not isinstance(result, dict):
+            _fail("BUN_SCAN_REPORT", "each result must be an object")
+        target = _bun_scan_target(result.get("Target"))
+        if target in observed_results:
+            _fail("BUN_SCAN_REPORT", f"duplicate result target: {target}")
+        if result.get("Class") != "lang-pkgs" or result.get("Type") != "bun":
+            _fail("BUN_SCAN_REPORT", f"unexpected package type for {target}")
+        packages = result.get("Packages")
+        if not isinstance(packages, list) or not packages:
+            _fail("BUN_SCAN_REPORT", f"no packages detected for {target}")
+        names: set[str] = set()
+        for package in packages:
+            if (
+                not isinstance(package, dict)
+                or not isinstance(package.get("Name"), str)
+                or not package["Name"]
+            ):
+                _fail("BUN_SCAN_REPORT", f"malformed package for {target}")
+            names.add(package["Name"])
+        vulnerabilities = result.get("Vulnerabilities", [])
+        if not isinstance(vulnerabilities, list) or vulnerabilities:
+            _fail("BUN_SCAN_REPORT", f"blocking findings remain for {target}")
+        observed_results[target] = names
+        observed_counts[target] = len(packages)
+    if set(observed_results) != expected_files:
+        _fail(
+            "BUN_SCAN_REPORT",
+            f"result targets differ: {sorted(observed_results)!r}",
+        )
+    for target, expectation in EXPECTED_BUN_SCAN_RESULTS.items():
+        if observed_counts[target] != expectation["package_count"]:
+            _fail(
+                "BUN_SCAN_REPORT",
+                (
+                    f"package count differs for {target}: "
+                    f"{observed_counts[target]}"
+                ),
+            )
+        missing = expectation["required_packages"] - observed_results[target]
+        if missing:
+            _fail(
+                "BUN_SCAN_REPORT",
+                f"required packages missing for {target}: {sorted(missing)!r}",
+            )
 
 
 def _parse_time(value: str) -> dt.datetime:
@@ -341,8 +686,8 @@ def _offline_maven_command(workflow: str) -> str:
     return _maven_command_before_marker(
         workflow,
         (
-            '            output="${offline_source}/core/trino-server/target/'
-            'trino-server-483.tar.gz"'
+            "            python3 scripts/"
+            "package_trino_bun_dependencies.py verify-cache \\"
         ),
         code="WORKFLOW_OFFLINE_COMMAND",
         network_none=True,
@@ -539,9 +884,11 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         JVM_CONFIG_PATH,
         SETTINGS_PATH,
         PACKAGER_PATH,
+        BUN_PACKAGER_PATH,
         BUN_PREPARER_PATH,
         VERIFIER_PATH,
         TEST_PATH,
+        BUN_TEST_PATH,
         Path("Makefile"),
     ):
         if lines.count(f"      - {path.as_posix()}") != 2:
@@ -571,12 +918,16 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "prune-reactor-outputs",
         "python3 scripts/package_trino_maven_dependencies.py create",
         "python3 scripts/package_trino_maven_dependencies.py verify",
+        "python3 scripts/package_trino_bun_dependencies.py create",
+        "python3 scripts/package_trino_bun_dependencies.py verify",
         "python3 scripts/prepare_trino_bun_input.py download",
         "python3 scripts/prepare_trino_bun_input.py stage",
         EXPECTED_BUN_INPUT["url"],
         EXPECTED_BUN_INPUT["sha256"],
         EXPECTED_ARTIFACT_TYPE,
         EXPECTED_DESCRIPTOR_MEDIA_TYPE,
+        EXPECTED_BUN_DESCRIPTOR_MEDIA_TYPE,
+        EXPECTED_BUN_ARCHIVE_MEDIA_TYPE,
         "oras push",
         "cosign sign",
         "cosign attest",
@@ -588,6 +939,8 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "predicate.buildDefinition.resolvedDependencies",
         "trivy-vulnerability.json",
         "trino-maven-dependencies-483.cdx.json",
+        "trivy-bun-vulnerability.json",
+        "trino-bun-dependencies-483.cdx.json",
     )
     for value in required:
         if value not in workflow:
@@ -637,6 +990,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
     if (
         offline_rebuild.get("repository_settings")
         != EXPECTED_OFFLINE_REPOSITORY_SETTINGS
+        or offline_rebuild.get("bun_cache") != EXPECTED_OFFLINE_BUN_CACHE
     ):
         _fail(
             "WORKFLOW_SETTINGS",
@@ -667,6 +1021,80 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         or '"fresh_snapshot_extractions": 2' not in workflow
     ):
         _fail("WORKFLOW_OFFLINE", "exactly two network-none rebuilds are required")
+    if (
+        lines.count("  BUN_CACHE_DIRECTORY: /bun-cache") != 1
+        or lines.count("  BUN_REGISTRY: https://registry.npmjs.org/") != 1
+        or workflow.count('--env CI=true \\') != 3
+        or workflow.count(
+            '--env BUN_INSTALL_CACHE_DIR="${BUN_CACHE_DIRECTORY}" \\'
+        )
+        != 3
+        or workflow.count('--env BUN_CONFIG_REGISTRY="${BUN_REGISTRY}" \\')
+        != 3
+        or workflow.count(
+            '--volume "${bun_cache}:${BUN_CACHE_DIRECTORY}" \\'
+        )
+        != 2
+        or workflow.count(
+            '--volume "${offline_bun_cache}:${BUN_CACHE_DIRECTORY}:ro" \\'
+        )
+        != 1
+        or '${offline_source}/.bun-cache' in workflow
+        or workflow.count(
+            'offline_bun_cache="${RUNNER_TEMP}/'
+            'trino-offline-bun-cache-${suffix}"'
+        )
+        != 1
+        or workflow.count(
+            "python3 scripts/package_trino_bun_dependencies.py create"
+        )
+        != 2
+        or workflow.count(
+            "python3 scripts/package_trino_bun_dependencies.py verify \\"
+        )
+        != 3
+        or workflow.count(
+            "python3 scripts/package_trino_bun_dependencies.py verify-cache \\"
+        )
+        != 1
+        or workflow.count(
+            "python3 scripts/verify_trino_dependency_publisher.py \\\n"
+            "            verify-bun-snapshot \\"
+        )
+        != 2
+        or '"fresh_bun_cache_extractions": 2' not in workflow
+        or '"bun_lockfile_mode": "frozen-via-CI-profile"' not in workflow
+    ):
+        _fail(
+            "WORKFLOW_BUN_CACHE",
+            "Bun cache must be frozen, independently reconstructed, and read-only offline",
+        )
+    if (
+        workflow.count(
+            "python3 scripts/verify_trino_dependency_publisher.py \\\n"
+            "            stage-bun-scan-input"
+        )
+        != 1
+        or workflow.count(
+            "python3 scripts/verify_trino_dependency_publisher.py \\\n"
+            "            verify-bun-scan"
+        )
+        != 1
+        or workflow.count(
+            "scan-ref: ${{ runner.temp }}/trino-bun-scan-input"
+        )
+        != 2
+        or "scan-ref: ${{ runner.temp }}/bun-cache-a" in workflow
+        or workflow.count('TRIVY_INCLUDE_DEV_DEPS: "true"') != 2
+        or workflow.count("list-all-pkgs: true") != 2
+    ):
+        _fail(
+            "WORKFLOW_BUN_SCAN",
+            (
+                "both exact Bun lockfiles and development dependencies must "
+                "be analyzed with package-presence verification"
+            ),
+        )
     if (
         workflow.count(EXPECTED_BUN_STAGE_BLOCK)
         != EXPECTED_BUN_INPUT["independent_downloads"]
@@ -702,9 +1130,11 @@ def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
         SETTINGS_PATH,
         JVM_CONFIG_PATH,
         PACKAGER_PATH,
+        BUN_PACKAGER_PATH,
         BUN_PREPARER_PATH,
         VERIFIER_PATH,
         TEST_PATH,
+        BUN_TEST_PATH,
     }
     policy_files = contract.get("policy_files")
     if not isinstance(policy_files, list):
@@ -768,11 +1198,15 @@ def audit(root: Path) -> None:
         or dependency_resolution.get("settings_policy")
         != EXPECTED_SETTINGS_POLICY
         or dependency_resolution.get("external_inputs") != [EXPECTED_BUN_INPUT]
+        or dependency_resolution.get("bun_package_cache")
+        != EXPECTED_BUN_PACKAGE_CACHE
         or reactor_outputs.get("repository_path_prefix") != "io/trino/"
         or reactor_outputs.get("dependency_input_permitted") is not False
         or reactor_outputs.get("rebuild_from_reviewed_source_required") is not True
         or reactor_outputs.get("exact_external_build_extension")
         != EXPECTED_TRINO_BUILD_EXTENSION
+        or reactor_outputs.get("exact_external_maven_inputs")
+        != EXPECTED_TRINO_EXTERNAL_MAVEN_INPUTS
     ):
         _fail("REPOSITORIES", "contract repository allowlist differs")
     snapshot = contract.get("snapshot", {})
@@ -781,6 +1215,12 @@ def audit(root: Path) -> None:
         or snapshot.get("descriptor_media_type")
         != EXPECTED_DESCRIPTOR_MEDIA_TYPE
         or snapshot.get("manifest", {}).get("schema_version") != 2
+        or snapshot.get("bun_cache")
+        != {
+            "descriptor_media_type": EXPECTED_BUN_DESCRIPTOR_MEDIA_TYPE,
+            "archive_media_type": EXPECTED_BUN_ARCHIVE_MEDIA_TYPE,
+            "manifest_schema_version": 1,
+        }
     ):
         _fail("SNAPSHOT_FORMAT", "dependency snapshot v2 contract differs")
     if snapshot.get("visibility_bootstrap") != {
@@ -935,6 +1375,15 @@ def _parser() -> argparse.ArgumentParser:
     builder_settings.add_argument("--settings", type=Path, required=True)
     transfer = commands.add_parser("audit-transfer-log")
     transfer.add_argument("--log", type=Path, required=True)
+    bun_scan_input = commands.add_parser("stage-bun-scan-input")
+    bun_scan_input.add_argument("--checkout", type=Path, required=True)
+    bun_scan_input.add_argument("--output", type=Path, required=True)
+    bun_scan = commands.add_parser("verify-bun-scan")
+    bun_scan.add_argument("--scan-input", type=Path, required=True)
+    bun_scan.add_argument("--report", type=Path, required=True)
+    bun_snapshot = commands.add_parser("verify-bun-snapshot")
+    bun_snapshot.add_argument("--descriptor", type=Path, required=True)
+    bun_snapshot.add_argument("--archive", type=Path, required=True)
     return parser
 
 
@@ -959,8 +1408,23 @@ def main() -> int:
             audit_source(args.root.resolve(), args.checkout.resolve())
         elif args.command == "audit-builder-settings":
             audit_builder_settings(args.settings.resolve())
-        else:
+        elif args.command == "audit-transfer-log":
             audit_transfer_log(args.log)
+        elif args.command == "stage-bun-scan-input":
+            stage_bun_scan_input(
+                args.checkout.resolve(),
+                args.output.resolve(),
+            )
+        elif args.command == "verify-bun-scan":
+            verify_bun_scan(
+                args.scan_input.resolve(),
+                args.report.resolve(),
+            )
+        else:
+            verify_bun_snapshot_identity(
+                args.descriptor.resolve(),
+                args.archive.resolve(),
+            )
     except ContractError as error:
         print(f"Trino dependency publisher rejected: {error}", file=os.sys.stderr)
         return 1

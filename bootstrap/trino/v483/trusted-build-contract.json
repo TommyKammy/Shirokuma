@@ -23,7 +23,11 @@
     },
     {
       "path": "scripts/package_trino_maven_dependencies.py",
-      "sha256": "b1aae7f363f71cb18c0ce1629aaa438ba01a73cd5a6ab18abba0018c02285945"
+      "sha256": "88e5bbf0801f32832d7105887136e24de3e162398360816264c47ce1db7c9805"
+    },
+    {
+      "path": "scripts/package_trino_bun_dependencies.py",
+      "sha256": "9b72416b2d247eaf0a110286e616c57b0711eb329735fd8692555e523a11715c"
     },
     {
       "path": "scripts/prepare_trino_bun_input.py",
@@ -31,11 +35,15 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "16800e982fce3a12a660d8319c34c7e8a0287686c86af766eb61ae174772bedc"
+      "sha256": "517be21cdc1bbab371d2acc766c676091e7ea316e21615fbcdb7fcf1984a82d6"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "f80d083e47d6ceb4a9254994bfda62b2f0a815f60a6e535e996349c0c80bc256"
+      "sha256": "be950b2ce2605a60d94d5021a7199d331cab314ea60250c9e6809b89533839df"
+    },
+    {
+      "path": "tests/test_trino_bun_dependencies.py",
+      "sha256": "78c19d82008476969f0fd0acce335fd2ccccc0841053429d14c05ec2f5442518"
     }
   ],
   "authorization": {
@@ -110,6 +118,14 @@
       "sha256": "c9cb57ad7faa684e67250b0fb31e034a52c41b9a75de62ef29bb89f6ac64bd13"
     },
     {
+      "path": "core/trino-web-ui/src/main/resources/webapp/bun.lock",
+      "sha256": "70da1dad7c6f45743637cba7dde948793d787b1ced1382e90966d60fe17dc885"
+    },
+    {
+      "path": "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock",
+      "sha256": "0ca8b926ea0a2af3fff339b43c52de03a8f99c4aa9ba1d4c2ecd081bcd715ad3"
+    },
+    {
       "path": "core/trino-server/pom.xml",
       "sha256": "663d8bc33313160b26df9c80d4f1e5a3d970700573a914fb22db3462ac0e06d2"
     },
@@ -181,6 +197,32 @@
         "maximum_redirects": 5
       }
     ],
+    "bun_package_cache": {
+      "bun_version": "v1.3.14",
+      "platform": "linux/arm64",
+      "cache_directory": "/bun-cache",
+      "registry": "https://registry.npmjs.org/",
+      "frozen_lockfiles": [
+        {
+          "path": "core/trino-web-ui/src/main/resources/webapp/bun.lock",
+          "sha256": "70da1dad7c6f45743637cba7dde948793d787b1ced1382e90966d60fe17dc885"
+        },
+        {
+          "path": "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock",
+          "sha256": "0ca8b926ea0a2af3fff339b43c52de03a8f99c4aa9ba1d4c2ecd081bcd715ad3"
+        }
+      ],
+      "independent_reconstructions": 2,
+      "reviewed_snapshot": {
+        "manifest_sha256": "adfcb6663080ef7f39b5e592b7ca8df94e3449ae0ab73af630feac5a5fe721b0",
+        "archive_sha256": "19087b76181177178ead04cabd85f81180ce64d71d84b78e5dda74a2dc71abd7",
+        "archive_size": 128457765
+      },
+      "network_none_rebuild_mount": "read-only",
+      "network_none_cache_outside_source": true,
+      "post_build_integrity_verification": true,
+      "unknown_registry_permitted": false
+    },
     "maven_local_repository": "fresh_workflow_owned_directory_seeded_only_with_digest_verified_external_inputs",
     "repository_origin_capture_required": true,
     "transitive_dependency_repositories_ignored": true,
@@ -233,6 +275,50 @@
           "trino-maven-plugin-20.pom"
         ],
         "reactor_output": false
+      },
+      "exact_external_maven_inputs": {
+        "repository_origin": "https://repo.maven.apache.org/maven2/",
+        "required_paths": [
+          "io/trino/benchto/benchto-base/0.34/benchto-base-0.34.pom",
+          "io/trino/benchto/benchto-driver/0.34/benchto-driver-0.34.jar",
+          "io/trino/benchto/benchto-driver/0.34/benchto-driver-0.34.pom",
+          "io/trino/coral/coral/2.2.49-1/coral-2.2.49-1.jar",
+          "io/trino/coral/coral/2.2.49-1/coral-2.2.49-1.pom",
+          "io/trino/hadoop/hadoop-apache/3.3.5-3/hadoop-apache-3.3.5-3.jar",
+          "io/trino/hadoop/hadoop-apache/3.3.5-3/hadoop-apache-3.3.5-3.pom",
+          "io/trino/hive/hive-apache-jdbc/0.13.1-10/hive-apache-jdbc-0.13.1-10.jar",
+          "io/trino/hive/hive-apache-jdbc/0.13.1-10/hive-apache-jdbc-0.13.1-10.pom",
+          "io/trino/hive/hive-apache/3.1.2-23/hive-apache-3.1.2-23.jar",
+          "io/trino/hive/hive-apache/3.1.2-23/hive-apache-3.1.2-23.pom",
+          "io/trino/hive/hive-thrift/3/hive-thrift-3.jar",
+          "io/trino/hive/hive-thrift/3/hive-thrift-3.pom",
+          "io/trino/tempto/tempto-core/204/tempto-core-204.jar",
+          "io/trino/tempto/tempto-core/204/tempto-core-204.pom",
+          "io/trino/tempto/tempto-kafka/204/tempto-kafka-204.jar",
+          "io/trino/tempto/tempto-kafka/204/tempto-kafka-204.pom",
+          "io/trino/tempto/tempto-ldap/204/tempto-ldap-204.jar",
+          "io/trino/tempto/tempto-ldap/204/tempto-ldap-204.pom",
+          "io/trino/tempto/tempto-root/204/tempto-root-204.pom",
+          "io/trino/tempto/tempto-runner/204/tempto-runner-204.jar",
+          "io/trino/tempto/tempto-runner/204/tempto-runner-204.pom",
+          "io/trino/tpcds/tpcds/1.7/tpcds-1.7.jar",
+          "io/trino/tpcds/tpcds/1.7/tpcds-1.7.pom",
+          "io/trino/tpch/tpch/1.4/tpch-1.4.jar",
+          "io/trino/tpch/tpch/1.4/tpch-1.4.pom",
+          "io/trino/trino-maven-plugin/20/trino-maven-plugin-20.jar",
+          "io/trino/trino-maven-plugin/20/trino-maven-plugin-20.pom",
+          "io/trino/trino-re2j/1.7/trino-re2j-1.7.jar",
+          "io/trino/trino-re2j/1.7/trino-re2j-1.7.pom",
+          "io/trino/trino-root/482/trino-root-482.pom",
+          "io/trino/trino-spi/482/trino-spi-482.jar",
+          "io/trino/trino-spi/482/trino-spi-482.pom",
+          "io/trino/trino-spi/maven-metadata-shirokuma-central-fallback.xml",
+          "io/trino/trino-spi/maven-metadata-shirokuma-central.xml",
+          "io/trino/trino-wasm-python/3.13-7/trino-wasm-python-3.13-7.jar",
+          "io/trino/trino-wasm-python/3.13-7/trino-wasm-python-3.13-7.pom"
+        ],
+        "unknown_paths_permitted": false,
+        "reactor_output": false
       }
     }
   },
@@ -249,7 +335,7 @@
       "failed_attempt_admitted": false,
       "user_credential_fallback": false
     },
-    "artifact_type": "application/vnd.shirokuma.trino.maven-dependencies.v2",
+    "artifact_type": "application/vnd.shirokuma.trino.build-dependencies.v3",
     "descriptor_media_type": "application/vnd.shirokuma.maven-dependency-manifest.v2+json",
     "archive_media_type": "application/vnd.shirokuma.maven-repository.v1.tar+gzip",
     "archive_filename": "trino-maven-dependencies-483.tar.gz",
@@ -278,7 +364,12 @@
       "canonical_paths_required": true,
       "sorted_unique_paths_required": true
     },
-    "archive": {
+    "bun_cache": {
+      "descriptor_media_type": "application/vnd.shirokuma.bun-dependency-manifest.v1+json",
+      "archive_media_type": "application/vnd.shirokuma.bun-cache.v1.tar+gzip",
+      "manifest_schema_version": 1
+    },
+    "maven_archive": {
       "regular_files_only": true,
       "canonical_owner": "0:0",
       "canonical_mtime": 0,
@@ -286,7 +377,7 @@
       "compression": "gzip",
       "gzip_header_timestamp": 0
     },
-    "forbidden_entries": [
+    "maven_forbidden_entries": [
       "symlink",
       "hardlink",
       "special_file",
@@ -299,8 +390,11 @@
     "independent_reconstruction": {
       "required": true,
       "fresh_empty_repository_required": true,
+      "fresh_empty_bun_cache_required": true,
       "same_allowlisted_repositories_required": true,
-      "complete_manifest_equality_required": true
+      "complete_manifest_equality_required": true,
+      "bun_manifest_equality_required": true,
+      "bun_archive_equality_required": true
     },
     "authentication": {
       "cosign_keyless_signature_required": true,
@@ -388,6 +482,16 @@
       "purpose": "preserve_reviewed_mirror_repository_ids_for_offline_version_range_metadata",
       "network_access_permitted_by_this_setting": false
     },
+    "bun_cache": {
+      "path": "/bun-cache",
+      "registry": "https://registry.npmjs.org/",
+      "lockfile_mode": "frozen",
+      "mount": "read-only",
+      "network_none_required": true,
+      "absolute_cache_alias_target_prefix": "/bun-cache/",
+      "ambient_cache_permitted": false,
+      "unknown_registry_permitted": false
+    },
     "maven_wrapper_permitted": false,
     "snapshot_input": {
       "artifact_repository": "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies",
@@ -435,9 +539,11 @@
     "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",
     "retained_evidence": [
       "closed Maven dependency manifest and deterministic archive digest",
+      "closed Bun dependency manifest and deterministic cache archive digest",
       "independent reconstruction equality",
       "two network-none native arm64 build output comparisons",
       "CycloneDX dependency SBOM",
+      "CycloneDX Bun dependency SBOM",
       "fresh High=0/Critical=0 Trivy result and database metadata",
       "Cosign signature and Rekor bundle",
       "SLSA v1 provenance with predicate.buildDefinition.resolvedDependencies",

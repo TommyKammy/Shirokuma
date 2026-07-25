@@ -4,8 +4,8 @@ doc_id: "ADR-0023"
 title: "Allow a time-boxed Trino 483 source identity exception for the local PoC"
 status: accepted
 created: 2026-07-23
-updated: 2026-07-24
-version: "0.6"
+updated: 2026-07-25
+version: "0.7"
 area: "architecture"
 tags: [shirokuma, adr, trino, source, supply-chain, local-poc]
 ---
@@ -134,16 +134,32 @@ platform, URL, or cache entry.
 
 The publisher records the complete reviewed Bun platform, dedicated origin,
 independent-download count, allowed HTTPS origins, redirect policy, and
-redirect limit in each manifest-v2 document. It compares complete deterministic
-manifest-v2 documents and
-archives, uses resolver markers to bind each Maven and Bun origin, excludes
-timestamp-bearing resolver metadata, and performs two fresh native linux/arm64
-builds with networking disabled. It retains the dependency SBOM, fresh
-High=0/Critical=0 scan, Cosign/Rekor signature, SLSA provenance with the exact
-source and dependency inputs, and anonymous exact-digest retrieval proof. Its
-output is
+redirect limit in the Maven dependency manifest. PR #119 merged the reviewed
+offline settings mount, and reviewed-main run `30143825129` then proved that
+mirror identity was preserved. The run failed on
+`io.trino.tempto:tempto-core:204` because the pruner removed external
+Maven Central dependencies under `io/trino/**`; the exact reviewed correction
+retains 37 paths covering 19 coordinates and two version-range metadata files.
+The next reconstruction exposed a separate npm cache gap for the Web UI.
+
+The publisher now compares two deterministic Maven manifest/archive pairs and
+two deterministic Bun-cache manifest/archive pairs. The Bun cache contract
+binds Bun `1.3.14`, `linux/arm64`, the npm registry, both exact `bun.lock`
+hashes, regular files, modes, and safe absolute `/bun-cache/` alias symlinks.
+Online and offline builds set `CI=true`, use the frozen lockfiles, and mount the
+verified Bun cache read-only for network-none builds. Resolver markers bind
+each origin and timestamp-bearing resolver metadata remains excluded. Maven and
+Bun inputs receive separate CycloneDX documents and fresh
+High=0/Critical=0 scans. The publisher retains those results, the
+Cosign/Rekor signature, SLSA provenance with exact source and dependency
+inputs, and anonymous exact-digest retrieval proof. Its output is
 `review_pending_dependency_evidence`, not an admitted dependency or runtime
 input.
+One local native-arm64 network-none build completed in 17 minutes 12 seconds
+and produced the expected 851,844,285-byte server tarball with SHA-256
+`d4ce3f05c26c1f29192e0668ac5345860b08df005c51d7f4187834b61e4554f2`.
+This is pre-merge sufficiency evidence only and does not exercise or waive the
+reviewed-main publication gates.
 
 A separate evidence-only PR must review and pin the exact OCI digest and retire
 the publisher. Image publication, resident admission, credentials, Flux
