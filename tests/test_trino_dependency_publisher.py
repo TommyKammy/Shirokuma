@@ -43,7 +43,13 @@ class MavenSnapshotTests(unittest.TestCase):
         package.EXTERNAL_INPUTS = cls._original_external_inputs
         package.BUN_INPUT = cls._original_bun_input
 
-    def _repository(self, root: Path) -> Path:
+    def _repository(
+        self,
+        root: Path,
+        *,
+        include_trino_extension: bool = True,
+        trino_origin: str = "shirokuma-central",
+    ) -> Path:
         repository = root / "repository"
         artifact = repository / "org/example/demo/1.0"
         artifact.mkdir(parents=True)
@@ -74,6 +80,8 @@ class MavenSnapshotTests(unittest.TestCase):
             f"{bun_cache.name}>shirokuma-bun-release=\n",
             encoding="iso-8859-1",
         )
+        if include_trino_extension:
+            self._trino_build_extension(repository, origin=trino_origin)
         return repository
 
     def _trino_build_extension(
@@ -123,7 +131,9 @@ class MavenSnapshotTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repository = self._repository(Path(temporary))
-            extension = self._trino_build_extension(repository)
+            extension = repository.joinpath(
+                *package.TRINO_BUILD_EXTENSION_PREFIX
+            )
             (extension / "trino-maven-plugin-20.jar.sha1").write_text(
                 hashlib.sha1(
                     b"trino-maven-plugin-20.jar",
@@ -180,14 +190,18 @@ class MavenSnapshotTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            missing = self._repository(root / "missing")
-            wrong_origin = self._repository(root / "wrong-origin")
-            self._trino_build_extension(
-                wrong_origin,
-                origin="shirokuma-confluent",
+            missing = self._repository(
+                root / "missing",
+                include_trino_extension=False,
+            )
+            wrong_origin = self._repository(
+                root / "wrong-origin",
+                trino_origin="shirokuma-confluent",
             )
             extra_marker = self._repository(root / "extra-marker")
-            extra_extension = self._trino_build_extension(extra_marker)
+            extra_extension = extra_marker.joinpath(
+                *package.TRINO_BUILD_EXTENSION_PREFIX
+            )
             marker = extra_extension / "_remote.repositories"
             marker.write_text(
                 marker.read_text(encoding="iso-8859-1")
@@ -207,7 +221,6 @@ class MavenSnapshotTests(unittest.TestCase):
     def test_prune_reactor_outputs_rejects_links_before_deletion(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repository = self._repository(Path(temporary))
-            self._trino_build_extension(repository)
             reactor = repository / "io/trino/trino-main/483"
             reactor.mkdir(parents=True)
             (reactor / "linked.jar").symlink_to(
@@ -505,6 +518,75 @@ class MavenSnapshotTests(unittest.TestCase):
                 with self.subTest(name=name):
                     with self.assertRaises(package.SnapshotError):
                         package.verify_snapshot(descriptor, linked_archive, None)
+
+    def test_manifest_requires_exact_central_build_extension(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            invalid_repositories = {
+                "missing": self._repository(
+                    root / "missing",
+                    include_trino_extension=False,
+                ),
+                "wrong-origin": self._repository(
+                    root / "wrong-origin",
+                    trino_origin="shirokuma-confluent",
+                ),
+            }
+            for name, repository in invalid_repositories.items():
+                with self.subTest(stage="create", name=name), self.assertRaises(
+                    package.SnapshotError
+                ):
+                    package.build_manifest(repository)
+
+            repository = self._repository(root / "valid")
+            descriptor = root / "manifest.json"
+            archive = root / "snapshot.tar.gz"
+            package.create_snapshot(repository, descriptor, archive)
+            manifest = json.loads(descriptor.read_text(encoding="utf-8"))
+            required_paths = {
+                path.as_posix()
+                for path in package.TRINO_BUILD_EXTENSION_REQUIRED_PATHS
+            }
+            extension_records = [
+                record
+                for record in manifest["files"]
+                if record["path"] in required_paths
+            ]
+            removed = extension_records[0]
+            missing_manifest = {
+                **manifest,
+                "files": [
+                    record
+                    for record in manifest["files"]
+                    if record["path"] != removed["path"]
+                ],
+                "file_count": manifest["file_count"] - 1,
+                "total_bytes": manifest["total_bytes"] - removed["size"],
+            }
+            wrong_origin_manifest = {
+                **manifest,
+                "files": [
+                    {
+                        **record,
+                        "repository_origin": package.ALLOWED_REPOSITORIES[
+                            "confluent"
+                        ],
+                    }
+                    if record["path"] == extension_records[0]["path"]
+                    else record
+                    for record in manifest["files"]
+                ],
+            }
+            for name, mutated in (
+                ("missing", missing_manifest),
+                ("wrong-origin", wrong_origin_manifest),
+            ):
+                malformed = root / f"{name}-extension.json"
+                malformed.write_bytes(package._manifest_bytes(mutated))
+                with self.subTest(stage="verify", name=name), self.assertRaises(
+                    package.SnapshotError
+                ):
+                    package.verify_snapshot(malformed, archive, None)
 
     def test_tampered_archive_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

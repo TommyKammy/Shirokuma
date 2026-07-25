@@ -67,6 +67,10 @@ TRINO_BUILD_EXTENSION_REQUIRED_FILES = (
     "trino-maven-plugin-20.jar",
     "trino-maven-plugin-20.pom",
 )
+TRINO_BUILD_EXTENSION_REQUIRED_PATHS = frozenset(
+    PurePosixPath(*TRINO_BUILD_EXTENSION_PREFIX, name)
+    for name in TRINO_BUILD_EXTENSION_REQUIRED_FILES
+)
 EXCLUDED_RESOLVER_METADATA_NAMES = {
     "_remote.repositories",
     "resolver-status.properties",
@@ -302,12 +306,24 @@ def _repository_files(root: Path) -> list[Path]:
 
 
 def _is_allowed_trino_dependency(relative: PurePosixPath) -> bool:
-    return (
-        relative.parts[: len(TRINO_BUILD_EXTENSION_PREFIX)]
-        == TRINO_BUILD_EXTENSION_PREFIX
-        and len(relative.parts) == len(TRINO_BUILD_EXTENSION_PREFIX) + 1
-        and relative.name in TRINO_BUILD_EXTENSION_REQUIRED_FILES
-    )
+    return relative in TRINO_BUILD_EXTENSION_REQUIRED_PATHS
+
+
+def _validate_trino_build_extension_records(
+    records: Mapping[PurePosixPath, str],
+) -> None:
+    if set(records) != TRINO_BUILD_EXTENSION_REQUIRED_PATHS:
+        _fail(
+            "Maven dependency snapshot must contain exactly the required "
+            "Trino build-extension JAR and POM"
+        )
+    if any(
+        origin != ALLOWED_REPOSITORIES["central"]
+        for origin in records.values()
+    ):
+        _fail(
+            "Trino build extension must resolve from the exact Maven Central origin"
+        )
 
 
 def prune_reactor_outputs(repository: Path) -> None:
@@ -373,6 +389,7 @@ def build_manifest(repository: Path) -> dict[str, Any]:
     records: list[dict[str, Any]] = []
     observed: set[str] = set()
     bun_input_seen = False
+    trino_build_extension_records: dict[PurePosixPath, str] = {}
     total_bytes = 0
     for path in files:
         relative = _canonical_relative(path.relative_to(repository).as_posix())
@@ -396,6 +413,8 @@ def build_manifest(repository: Path) -> dict[str, Any]:
             _fail("Maven dependency snapshot exceeds the byte limit")
         digest = _sha256_file(path)
         origin = _origin(path, markers)
+        if _is_allowed_trino_dependency(relative):
+            trino_build_extension_records[relative] = origin
         if origin == BUN_INPUT["url"] and relative.as_posix() != BUN_INPUT["cache_path"]:
             _fail(f"Bun release origin is forbidden for non-Bun input: {relative}")
         if relative.as_posix() == BUN_INPUT["cache_path"]:
@@ -418,6 +437,7 @@ def build_manifest(repository: Path) -> dict[str, Any]:
         )
     if not records:
         _fail("Maven dependency snapshot must not be empty")
+    _validate_trino_build_extension_records(trino_build_extension_records)
     if not bun_input_seen:
         _fail("Maven dependency snapshot is missing the exact Bun toolchain input")
     return {
@@ -535,6 +555,7 @@ def _load_manifest(path: Path) -> dict[str, Any]:
     previous: bytes | None = None
     total_bytes = 0
     bun_input_seen = False
+    trino_build_extension_records: dict[PurePosixPath, str] = {}
     for record in records:
         if not isinstance(record, dict) or set(record) != expected_record_keys:
             _fail("Maven manifest file record is not closed-world")
@@ -562,6 +583,10 @@ def _load_manifest(path: Path) -> dict[str, Any]:
             or record["repository_origin"] not in ALLOWED_ORIGINS
         ):
             _fail("Maven manifest contains an unknown repository origin")
+        if _is_allowed_trino_dependency(relative):
+            trino_build_extension_records[relative] = record[
+                "repository_origin"
+            ]
         if (
             record["repository_origin"] == BUN_INPUT["url"]
             and relative.as_posix() != BUN_INPUT["cache_path"]
@@ -577,6 +602,7 @@ def _load_manifest(path: Path) -> dict[str, Any]:
                 _fail("Maven manifest Bun toolchain input differs")
             bun_input_seen = True
         total_bytes += record["size"]
+    _validate_trino_build_extension_records(trino_build_extension_records)
     if not bun_input_seen:
         _fail("Maven manifest is missing the exact Bun toolchain input")
     if total_bytes != manifest["total_bytes"] or total_bytes > MAX_TOTAL_BYTES:

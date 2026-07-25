@@ -710,7 +710,9 @@ The repository pruner now preserves only the exact version-20 JAR and POM when
 both are regular, single-link files bound by `_remote.repositories` to the
 allowlisted Maven Central origin. It removes every other `io/trino/**` file
 produced by the online reactor. The packager and manifest verifier admit only
-that exact coordinate; a missing file, another version, another artifact,
+that exact coordinate. Both snapshot creation and independent manifest loading
+require the complete JAR-and-POM pair and require each record to name the exact
+Maven Central origin; a missing file, another version, another artifact,
 another origin, a link, or any retained Trino 483 reactor output fails closed.
 
 The publisher resolves and packages two independent fresh Maven repositories,

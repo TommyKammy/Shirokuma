@@ -23,7 +23,7 @@
     },
     {
       "path": "scripts/package_trino_maven_dependencies.py",
-      "sha256": "c0f282a2976de7316bc7e2b7676a58733b5b518085e3b7694bdcc57751389adb"
+      "sha256": "b1aae7f363f71cb18c0ce1629aaa438ba01a73cd5a6ab18abba0018c02285945"
     },
     {
       "path": "scripts/prepare_trino_bun_input.py",
@@ -35,7 +35,7 @@
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "cad71eb5636f41e8ed45dd43de4eb54182c4847d2ada1dd75f660c0b23377943"
+      "sha256": "4808e54fee692edb240c8c3251a0e12406ddbf9da69d7d48ff573c27040bc13a"
     }
   ],
   "authorization": {
