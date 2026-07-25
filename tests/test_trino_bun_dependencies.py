@@ -99,6 +99,7 @@ class TrinoBunDependencySnapshotTest(unittest.TestCase):
     def test_rejects_transient_cache_files(self) -> None:
         for filename in (
             ".lock",
+            "download.lock",
             "download.part",
             "download.partial",
             "download.tmp",

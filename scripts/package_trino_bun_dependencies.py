@@ -44,6 +44,7 @@ FORBIDDEN_TRANSIENT_NAMES = {
     ".lock",
 }
 FORBIDDEN_TRANSIENT_SUFFIXES = (
+    ".lock",
     ".part",
     ".partial",
     ".tmp",
