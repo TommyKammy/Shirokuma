@@ -527,24 +527,39 @@ jobs:
           vuln-type: library
           exit-code: 1
 
+      - name: Stage the exact Bun lockfiles for dependency analysis
+        if: steps.lifecycle.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py \
+            stage-bun-scan-input \
+            --checkout "${RUNNER_TEMP}/trino-source" \
+            --output "${RUNNER_TEMP}/trino-bun-scan-input"
+
       - name: Generate a CycloneDX Bun dependency SBOM
         if: steps.lifecycle.outputs.active == 'true'
+        env:
+          TRIVY_INCLUDE_DEV_DEPS: "true"
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: v0.72.0
           scan-type: fs
-          scan-ref: ${{ runner.temp }}/bun-cache-a
+          scan-ref: ${{ runner.temp }}/trino-bun-scan-input
           format: cyclonedx
           output: .trino-candidate/trino-bun-dependencies-483.cdx.json
           scanners: vuln
+          list-all-pkgs: true
 
       - name: Scan the Bun dependency closure and block High or Critical findings
         if: steps.lifecycle.outputs.active == 'true'
+        env:
+          TRIVY_INCLUDE_DEV_DEPS: "true"
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: v0.72.0
           scan-type: fs
-          scan-ref: ${{ runner.temp }}/bun-cache-a
+          scan-ref: ${{ runner.temp }}/trino-bun-scan-input
           format: json
           output: .trino-candidate/trivy-bun-vulnerability.json
           scanners: vuln
@@ -552,6 +567,18 @@ jobs:
           ignore-unfixed: false
           vuln-type: library
           exit-code: 1
+          list-all-pkgs: true
+
+      - name: Verify both reviewed Bun dependency graphs were analyzed
+        if: steps.lifecycle.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py \
+            verify-bun-scan \
+            --scan-input "${RUNNER_TEMP}/trino-bun-scan-input" \
+            --report \
+              "${GITHUB_WORKSPACE}/.trino-candidate/trivy-bun-vulnerability.json"
 
       - name: Record the read-only candidate
         if: steps.lifecycle.outputs.active == 'true'

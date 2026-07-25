@@ -833,6 +833,144 @@ class BunInputTests(unittest.TestCase):
                 connection.close.assert_called_once_with()
 
 
+class BunScanEvidenceTests(unittest.TestCase):
+    LOCKFILES = {
+        "webapp/bun.lock": b"webapp lock\n",
+        "legacy/bun.lock": b"legacy lock\n",
+    }
+    PACKAGE_EXPECTATIONS = {
+        "webapp/bun.lock": {
+            "package_count": 2,
+            "required_packages": frozenset({"web-package"}),
+        },
+        "legacy/bun.lock": {
+            "package_count": 1,
+            "required_packages": frozenset({"legacy-package"}),
+        },
+    }
+
+    def _cache_contract(self) -> dict[str, object]:
+        return {
+            **verify.EXPECTED_BUN_PACKAGE_CACHE,
+            "frozen_lockfiles": [
+                {
+                    "path": path,
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                }
+                for path, payload in self.LOCKFILES.items()
+            ],
+        }
+
+    def _write_lockfiles(self, root: Path) -> None:
+        for relative, payload in self.LOCKFILES.items():
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(payload)
+
+    def _report(self, root: Path, *, missing_sentinel: bool = False) -> Path:
+        packages = {
+            "webapp/bun.lock": [
+                {"Name": "web-package"},
+                {"Name": "transitive-package"},
+            ],
+            "legacy/bun.lock": [{"Name": "legacy-package"}],
+        }
+        if missing_sentinel:
+            packages["webapp/bun.lock"][0] = {"Name": "different-package"}
+        report = root / "trivy.json"
+        report.write_text(
+            json.dumps(
+                {
+                    "SchemaVersion": 2,
+                    "ArtifactType": "filesystem",
+                    "Results": [
+                        {
+                            "Target": target,
+                            "Class": "lang-pkgs",
+                            "Type": "bun",
+                            "Packages": records,
+                        }
+                        for target, records in packages.items()
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return report
+
+    def test_stage_bun_scan_input_copies_only_hash_bound_lockfiles(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            checkout = root / "checkout"
+            checkout.mkdir()
+            self._write_lockfiles(checkout)
+            output = root / "scan-input"
+            with mock.patch.object(
+                verify,
+                "EXPECTED_BUN_PACKAGE_CACHE",
+                self._cache_contract(),
+            ):
+                verify.stage_bun_scan_input(checkout, output)
+            self.assertEqual(
+                set(self.LOCKFILES),
+                {
+                    path.relative_to(output).as_posix()
+                    for path in output.rglob("*")
+                    if path.is_file()
+                },
+            )
+            for relative, payload in self.LOCKFILES.items():
+                path = output / relative
+                self.assertEqual(payload, path.read_bytes())
+                self.assertEqual(0o444, stat.S_IMODE(path.stat().st_mode))
+
+    def test_verify_bun_scan_requires_each_expected_package_graph(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scan_input = root / "scan-input"
+            scan_input.mkdir()
+            self._write_lockfiles(scan_input)
+            report = self._report(root)
+            with (
+                mock.patch.object(
+                    verify,
+                    "EXPECTED_BUN_PACKAGE_CACHE",
+                    self._cache_contract(),
+                ),
+                mock.patch.object(
+                    verify,
+                    "EXPECTED_BUN_SCAN_RESULTS",
+                    self.PACKAGE_EXPECTATIONS,
+                ),
+            ):
+                verify.verify_bun_scan(scan_input, report)
+
+    def test_verify_bun_scan_rejects_missing_expected_package(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scan_input = root / "scan-input"
+            scan_input.mkdir()
+            self._write_lockfiles(scan_input)
+            report = self._report(root, missing_sentinel=True)
+            with (
+                mock.patch.object(
+                    verify,
+                    "EXPECTED_BUN_PACKAGE_CACHE",
+                    self._cache_contract(),
+                ),
+                mock.patch.object(
+                    verify,
+                    "EXPECTED_BUN_SCAN_RESULTS",
+                    self.PACKAGE_EXPECTATIONS,
+                ),
+                self.assertRaisesRegex(
+                    verify.ContractError,
+                    "required packages missing",
+                ),
+            ):
+                verify.verify_bun_scan(scan_input, report)
+
+
 class PublisherContractTests(unittest.TestCase):
     def test_repository_contract_and_workflow_are_closed(self) -> None:
         verify.audit(ROOT)
@@ -929,6 +1067,37 @@ class PublisherContractTests(unittest.TestCase):
         )
         self.assertEqual(2, workflow.count(prune))
         self.assertNotIn('rm -rf "${repository}/io/trino"', workflow)
+
+    def test_bun_trivy_scan_is_bound_to_both_reviewed_lockfiles(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        self.assertEqual(
+            2,
+            workflow.count(
+                "scan-ref: ${{ runner.temp }}/trino-bun-scan-input"
+            ),
+        )
+        self.assertNotIn(
+            "scan-ref: ${{ runner.temp }}/bun-cache-a",
+            workflow,
+        )
+        self.assertEqual(
+            2,
+            workflow.count('TRIVY_INCLUDE_DEV_DEPS: "true"'),
+        )
+        self.assertEqual(2, workflow.count("list-all-pkgs: true"))
+        altered = workflow.replace(
+            "scan-ref: ${{ runner.temp }}/trino-bun-scan-input",
+            "scan-ref: ${{ runner.temp }}/bun-cache-a",
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_BUN_SCAN",
+        ):
+            verify._validate_workflow(contract, altered)
 
     def test_first_private_publication_requires_owner_visibility_bootstrap(self) -> None:
         contract = json.loads(

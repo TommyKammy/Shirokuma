@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 import textwrap
 import xml.etree.ElementTree as ET
@@ -82,6 +83,26 @@ EXPECTED_BUN_PACKAGE_CACHE = {
     "independent_reconstructions": 2,
     "network_none_rebuild_mount": "read-only",
     "unknown_registry_permitted": False,
+}
+EXPECTED_BUN_SCAN_RESULTS = {
+    "core/trino-web-ui/src/main/resources/webapp/bun.lock": {
+        "package_count": 473,
+        "required_packages": frozenset(
+            {
+                "@dagrejs/dagre",
+                "@mui/material",
+            }
+        ),
+    },
+    "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock": {
+        "package_count": 299,
+        "required_packages": frozenset(
+            {
+                "dagre-d3",
+                "reactable",
+            }
+        ),
+    },
 }
 EXPECTED_TRINO_BUILD_EXTENSION = {
     "group_id": "io.trino",
@@ -258,8 +279,10 @@ EXPECTED_STEPS = {
         "Prove two fresh network-none offline source builds",
         "Generate a CycloneDX dependency SBOM",
         "Scan the dependency closure and block High or Critical findings",
+        "Stage the exact Bun lockfiles for dependency analysis",
         "Generate a CycloneDX Bun dependency SBOM",
         "Scan the Bun dependency closure and block High or Critical findings",
+        "Verify both reviewed Bun dependency graphs were analyzed",
         "Record the read-only candidate",
         "Retain the read-only-verified candidate",
     ],
@@ -320,6 +343,172 @@ def _sha256(path: Path) -> str:
         return hashlib.sha256(path.read_bytes()).hexdigest()
     except OSError as error:
         _fail("POLICY_FILE", f"{path}: {error}")
+
+
+def _read_reviewed_regular_file(path: Path, *, code: str) -> bytes:
+    try:
+        expected = path.lstat()
+    except OSError as error:
+        _fail(code, f"{path}: {error}")
+    if not stat.S_ISREG(expected.st_mode) or expected.st_nlink != 1:
+        _fail(code, f"{path} must be one regular, non-hard-linked file")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        _fail(code, f"{path}: {error}")
+    try:
+        observed = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(observed.st_mode)
+            or observed.st_nlink != 1
+            or observed.st_dev != expected.st_dev
+            or observed.st_ino != expected.st_ino
+            or observed.st_size != expected.st_size
+        ):
+            _fail(code, f"{path} changed while it was opened")
+        with os.fdopen(descriptor, "rb", closefd=False) as source:
+            payload = source.read()
+        if len(payload) != observed.st_size:
+            _fail(code, f"{path} changed while it was read")
+        return payload
+    finally:
+        os.close(descriptor)
+
+
+def stage_bun_scan_input(checkout: Path, output: Path) -> None:
+    if output.exists() or output.is_symlink():
+        _fail("BUN_SCAN_INPUT", f"output already exists: {output}")
+    try:
+        output.mkdir(mode=0o700)
+    except OSError as error:
+        _fail("BUN_SCAN_INPUT", f"{output}: {error}")
+    for record in EXPECTED_BUN_PACKAGE_CACHE["frozen_lockfiles"]:
+        relative = Path(record["path"])
+        payload = _read_reviewed_regular_file(
+            checkout / relative,
+            code="BUN_SCAN_INPUT",
+        )
+        if hashlib.sha256(payload).hexdigest() != record["sha256"]:
+            _fail("BUN_SCAN_INPUT", f"lockfile hash differs: {relative}")
+        target = output / relative
+        try:
+            target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            target.write_bytes(payload)
+            target.chmod(0o444)
+        except OSError as error:
+            _fail("BUN_SCAN_INPUT", f"{target}: {error}")
+
+
+def _bun_scan_target(target: object) -> str:
+    if not isinstance(target, str) or not target:
+        _fail("BUN_SCAN_REPORT", "result target must be a non-empty string")
+    normalized = target.replace("\\", "/").removeprefix("./")
+    if normalized not in EXPECTED_BUN_SCAN_RESULTS:
+        _fail("BUN_SCAN_REPORT", f"unexpected result target: {target}")
+    return normalized
+
+
+def verify_bun_scan(scan_input: Path, report_path: Path) -> None:
+    try:
+        root_metadata = scan_input.lstat()
+    except OSError as error:
+        _fail("BUN_SCAN_INPUT", f"{scan_input}: {error}")
+    if not stat.S_ISDIR(root_metadata.st_mode):
+        _fail("BUN_SCAN_INPUT", "scan input must be one real directory")
+    observed_files: set[str] = set()
+    try:
+        paths = tuple(scan_input.rglob("*"))
+    except OSError as error:
+        _fail("BUN_SCAN_INPUT", f"{scan_input}: {error}")
+    for path in paths:
+        try:
+            metadata = path.lstat()
+        except OSError as error:
+            _fail("BUN_SCAN_INPUT", f"{path}: {error}")
+        if stat.S_ISLNK(metadata.st_mode):
+            _fail("BUN_SCAN_INPUT", f"symlink is forbidden: {path}")
+        if stat.S_ISDIR(metadata.st_mode):
+            continue
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            _fail("BUN_SCAN_INPUT", f"unsafe scan input: {path}")
+        observed_files.add(path.relative_to(scan_input).as_posix())
+    expected_files = set(EXPECTED_BUN_SCAN_RESULTS)
+    if observed_files != expected_files:
+        _fail(
+            "BUN_SCAN_INPUT",
+            f"lockfile set differs: {sorted(observed_files)!r}",
+        )
+    frozen = {
+        record["path"]: record["sha256"]
+        for record in EXPECTED_BUN_PACKAGE_CACHE["frozen_lockfiles"]
+    }
+    if set(frozen) != expected_files:
+        _fail("BUN_SCAN_INPUT", "frozen lockfile contract differs")
+    for relative in sorted(expected_files):
+        payload = _read_reviewed_regular_file(
+            scan_input / relative,
+            code="BUN_SCAN_INPUT",
+        )
+        if hashlib.sha256(payload).hexdigest() != frozen[relative]:
+            _fail("BUN_SCAN_INPUT", f"lockfile hash differs: {relative}")
+
+    report = _load_json(report_path)
+    if (
+        report.get("SchemaVersion") != 2
+        or report.get("ArtifactType") != "filesystem"
+    ):
+        _fail("BUN_SCAN_REPORT", "unexpected Trivy report envelope")
+    results = report.get("Results")
+    if not isinstance(results, list):
+        _fail("BUN_SCAN_REPORT", "Results must be a list")
+    observed_results: dict[str, set[str]] = {}
+    observed_counts: dict[str, int] = {}
+    for result in results:
+        if not isinstance(result, dict):
+            _fail("BUN_SCAN_REPORT", "each result must be an object")
+        target = _bun_scan_target(result.get("Target"))
+        if target in observed_results:
+            _fail("BUN_SCAN_REPORT", f"duplicate result target: {target}")
+        if result.get("Class") != "lang-pkgs" or result.get("Type") != "bun":
+            _fail("BUN_SCAN_REPORT", f"unexpected package type for {target}")
+        packages = result.get("Packages")
+        if not isinstance(packages, list) or not packages:
+            _fail("BUN_SCAN_REPORT", f"no packages detected for {target}")
+        names: set[str] = set()
+        for package in packages:
+            if (
+                not isinstance(package, dict)
+                or not isinstance(package.get("Name"), str)
+                or not package["Name"]
+            ):
+                _fail("BUN_SCAN_REPORT", f"malformed package for {target}")
+            names.add(package["Name"])
+        vulnerabilities = result.get("Vulnerabilities", [])
+        if not isinstance(vulnerabilities, list) or vulnerabilities:
+            _fail("BUN_SCAN_REPORT", f"blocking findings remain for {target}")
+        observed_results[target] = names
+        observed_counts[target] = len(packages)
+    if set(observed_results) != expected_files:
+        _fail(
+            "BUN_SCAN_REPORT",
+            f"result targets differ: {sorted(observed_results)!r}",
+        )
+    for target, expectation in EXPECTED_BUN_SCAN_RESULTS.items():
+        if observed_counts[target] != expectation["package_count"]:
+            _fail(
+                "BUN_SCAN_REPORT",
+                (
+                    f"package count differs for {target}: "
+                    f"{observed_counts[target]}"
+                ),
+            )
+        missing = expectation["required_packages"] - observed_results[target]
+        if missing:
+            _fail(
+                "BUN_SCAN_REPORT",
+                f"required packages missing for {target}: {sorted(missing)!r}",
+            )
 
 
 def _parse_time(value: str) -> dt.datetime:
@@ -796,6 +985,32 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
             "Bun cache must be frozen, independently reconstructed, and read-only offline",
         )
     if (
+        workflow.count(
+            "python3 scripts/verify_trino_dependency_publisher.py \\\n"
+            "            stage-bun-scan-input"
+        )
+        != 1
+        or workflow.count(
+            "python3 scripts/verify_trino_dependency_publisher.py \\\n"
+            "            verify-bun-scan"
+        )
+        != 1
+        or workflow.count(
+            "scan-ref: ${{ runner.temp }}/trino-bun-scan-input"
+        )
+        != 2
+        or "scan-ref: ${{ runner.temp }}/bun-cache-a" in workflow
+        or workflow.count('TRIVY_INCLUDE_DEV_DEPS: "true"') != 2
+        or workflow.count("list-all-pkgs: true") != 2
+    ):
+        _fail(
+            "WORKFLOW_BUN_SCAN",
+            (
+                "both exact Bun lockfiles and development dependencies must "
+                "be analyzed with package-presence verification"
+            ),
+        )
+    if (
         workflow.count(EXPECTED_BUN_STAGE_BLOCK)
         != EXPECTED_BUN_INPUT["independent_downloads"]
         or workflow.count('bun_archive="${RUNNER_TEMP}/bun-linux-aarch64-a.zip"')
@@ -1075,6 +1290,12 @@ def _parser() -> argparse.ArgumentParser:
     builder_settings.add_argument("--settings", type=Path, required=True)
     transfer = commands.add_parser("audit-transfer-log")
     transfer.add_argument("--log", type=Path, required=True)
+    bun_scan_input = commands.add_parser("stage-bun-scan-input")
+    bun_scan_input.add_argument("--checkout", type=Path, required=True)
+    bun_scan_input.add_argument("--output", type=Path, required=True)
+    bun_scan = commands.add_parser("verify-bun-scan")
+    bun_scan.add_argument("--scan-input", type=Path, required=True)
+    bun_scan.add_argument("--report", type=Path, required=True)
     return parser
 
 
@@ -1099,8 +1320,18 @@ def main() -> int:
             audit_source(args.root.resolve(), args.checkout.resolve())
         elif args.command == "audit-builder-settings":
             audit_builder_settings(args.settings.resolve())
-        else:
+        elif args.command == "audit-transfer-log":
             audit_transfer_log(args.log)
+        elif args.command == "stage-bun-scan-input":
+            stage_bun_scan_input(
+                args.checkout.resolve(),
+                args.output.resolve(),
+            )
+        else:
+            verify_bun_scan(
+                args.scan_input.resolve(),
+                args.report.resolve(),
+            )
     except ContractError as error:
         print(f"Trino dependency publisher rejected: {error}", file=os.sys.stderr)
         return 1
