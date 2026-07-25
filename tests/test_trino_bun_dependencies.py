@@ -120,6 +120,18 @@ class TrinoBunDependencySnapshotTest(unittest.TestCase):
                 ):
                     package.build_manifest(cache)
 
+    def test_allows_reviewed_package_yarn_lock_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            cache = self._cache(root)
+            lockfile = cache / "example@1.2.3@@@1" / "yarn.lock"
+            lockfile.write_text("reviewed package payload\n", encoding="utf-8")
+            manifest = package.build_manifest(cache)
+            self.assertIn(
+                "example@1.2.3@@@1/yarn.lock",
+                [entry["path"] for entry in manifest["entries"]],
+            )
+
     def test_rejects_relative_symlink_target(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

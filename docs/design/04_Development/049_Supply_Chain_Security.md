@@ -765,16 +765,27 @@ This single local execution proves pre-merge dependency sufficiency only; it
 does not replace the reviewed-main workflow's two fresh-build equality,
 security scan, signature, provenance, publication, and anonymous-pull gates.
 
+PR #120 merged as
+`ad220f0a033c803846bdd383c0191882eada8892`. Reviewed-main run
+`30157442187` completed the full Maven reactor with `BUILD SUCCESS` in
+14 minutes 5 seconds, then failed closed while packaging the Bun cache because
+the transient-file rule classified the legitimate package payload
+`combined-stream@1.0.8@@@1/yarn.lock` as a cache-control lock. The focused
+repair permits only the reviewed package payload name `yarn.lock`; `.lock`,
+`download.lock`, and all other unreviewed lock-suffixed files still fail
+closed, and the exact reviewed manifest/archive identity remains mandatory.
+
 The publisher resolves and packages two independent fresh Maven repositories
 and two independent fresh Bun caches, requires each complete
 manifest/archive pair to be byte-identical, and then
 performs two fresh network-none native-arm64 source builds from the exact
 snapshot. Their sole expected output,
 `core/trino-server/target/trino-server-483.tar.gz`, must match by digest and
-size. Symlinks, hard links, special files, partial or lock files, unknown
-origins, duplicate paths, and repository-produced `io/trino/**` reactor outputs
-fail closed, except for the Bun cache's closed absolute `/bun-cache/` alias
-symlink contract. The verified Bun cache is mounted read-only. Origin markers
+size. Symlinks, hard links, special files, partial files, cache-control lock
+files, unknown origins, duplicate paths, and repository-produced
+`io/trino/**` reactor outputs fail closed, except for the Bun cache's closed
+absolute `/bun-cache/` alias symlink contract and exact reviewed package
+payload lockfiles. The verified Bun cache is mounted read-only. Origin markers
 are consumed before the timestamp-bearing
 `_remote.repositories` and `resolver-status.properties` resolver metadata are
 excluded from the deterministic archive. Separate fresh Maven and Bun Trivy

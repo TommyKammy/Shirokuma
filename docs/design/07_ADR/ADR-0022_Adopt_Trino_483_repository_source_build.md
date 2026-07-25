@@ -134,11 +134,13 @@ so native container smoke remains a mandatory publisher gate.
   origin, and total byte count. The Bun manifest binds Bun `1.3.14`,
   `linux/arm64`, the exact npm registry, both reviewed `bun.lock` hashes, every
   retained file and mode, and only cache-alias symlinks whose absolute
-  `/bun-cache/` targets resolve to retained package directories. Hard links,
-  special files, locks, partial downloads, unknown repositories, duplicate
-  paths, mutable tags, unsafe links, and repository-produced `io/trino/**`
-  reactor artifacts fail closed. Reactor outputs must be rebuilt from the
-  reviewed source and cannot enter either dependency input.
+  `/bun-cache/` targets resolve to retained package directories. Package
+  payload lockfiles such as `yarn.lock` are permitted only when they are part
+  of the exact reviewed snapshot identity; Bun cache-control lock files,
+  hard links, special files, partial downloads, unknown repositories,
+  duplicate paths, mutable tags, unsafe links, and repository-produced
+  `io/trino/**` reactor artifacts fail closed. Reactor outputs must be rebuilt
+  from the reviewed source and cannot enter either dependency input.
 - Require an independent clean verifier to reconstruct the candidate from the
   same allowlisted Maven and npm repositories. It must create two empty Maven
   repositories and two empty Bun caches and require each manifest/archive pair

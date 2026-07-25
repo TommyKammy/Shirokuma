@@ -43,8 +43,10 @@ MAX_LINK_BYTES = 1_024
 FORBIDDEN_TRANSIENT_NAMES = {
     ".lock",
 }
+ALLOWED_REVIEWED_PACKAGE_LOCK_NAMES = {
+    "yarn.lock",
+}
 FORBIDDEN_TRANSIENT_SUFFIXES = (
-    ".lock",
     ".part",
     ".partial",
     ".tmp",
@@ -94,6 +96,10 @@ def _reject_transient_file(relative: PurePosixPath) -> None:
     name = relative.name.casefold()
     if (
         name in FORBIDDEN_TRANSIENT_NAMES
+        or (
+            name.endswith(".lock")
+            and name not in ALLOWED_REVIEWED_PACKAGE_LOCK_NAMES
+        )
         or name.endswith(FORBIDDEN_TRANSIENT_SUFFIXES)
     ):
         _fail(f"transient Bun cache file is forbidden: {relative}")
