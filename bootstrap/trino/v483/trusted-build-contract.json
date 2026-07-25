@@ -27,7 +27,7 @@
     },
     {
       "path": "scripts/package_trino_bun_dependencies.py",
-      "sha256": "9b72416b2d247eaf0a110286e616c57b0711eb329735fd8692555e523a11715c"
+      "sha256": "0953ee23e4ae00fc932aacfe7ac1e597af233756382ce3e907cae304760c15e9"
     },
     {
       "path": "scripts/prepare_trino_bun_input.py",
@@ -43,7 +43,7 @@
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
-      "sha256": "78c19d82008476969f0fd0acce335fd2ccccc0841053429d14c05ec2f5442518"
+      "sha256": "8384529fbc2696c5afe71c3dfa52d5aa73623d33a85944ba89837397c920fe0c"
     }
   ],
   "authorization": {
