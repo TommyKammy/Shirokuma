@@ -3495,6 +3495,19 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "repository_path_prefix": "io/trino/",
                 "dependency_input_permitted": False,
                 "rebuild_from_reviewed_source_required": True,
+                "exact_external_build_extension": {
+                    "group_id": "io.trino",
+                    "artifact_id": "trino-maven-plugin",
+                    "version": "20",
+                    "repository_origin": (
+                        "https://repo.maven.apache.org/maven2/"
+                    ),
+                    "required_files": [
+                        "trino-maven-plugin-20.jar",
+                        "trino-maven-plugin-20.pom",
+                    ],
+                    "reactor_output": False,
+                },
             },
             resolution["reactor_outputs"],
         )

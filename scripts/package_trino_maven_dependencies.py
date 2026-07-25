@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import gzip
 import hashlib
 import json
@@ -55,6 +56,21 @@ ALLOWED_ORIGIN_IDS = {
     "shirokuma-bun-release": BUN_INPUT["url"],
 }
 ALLOWED_ORIGINS = frozenset(ALLOWED_ORIGIN_IDS.values())
+TRINO_GROUP_PREFIX = ("io", "trino")
+TRINO_BUILD_EXTENSION_PREFIX = (
+    "io",
+    "trino",
+    "trino-maven-plugin",
+    "20",
+)
+TRINO_BUILD_EXTENSION_REQUIRED_FILES = (
+    "trino-maven-plugin-20.jar",
+    "trino-maven-plugin-20.pom",
+)
+TRINO_BUILD_EXTENSION_REQUIRED_PATHS = frozenset(
+    PurePosixPath(*TRINO_BUILD_EXTENSION_PREFIX, name)
+    for name in TRINO_BUILD_EXTENSION_REQUIRED_FILES
+)
 EXCLUDED_RESOLVER_METADATA_NAMES = {
     "_remote.repositories",
     "resolver-status.properties",
@@ -289,6 +305,80 @@ def _repository_files(root: Path) -> list[Path]:
     return files
 
 
+def _is_allowed_trino_dependency(relative: PurePosixPath) -> bool:
+    return relative in TRINO_BUILD_EXTENSION_REQUIRED_PATHS
+
+
+def _validate_trino_build_extension_records(
+    records: Mapping[PurePosixPath, str],
+) -> None:
+    if set(records) != TRINO_BUILD_EXTENSION_REQUIRED_PATHS:
+        _fail(
+            "Maven dependency snapshot must contain exactly the required "
+            "Trino build-extension JAR and POM"
+        )
+    if any(
+        origin != ALLOWED_REPOSITORIES["central"]
+        for origin in records.values()
+    ):
+        _fail(
+            "Trino build extension must resolve from the exact Maven Central origin"
+        )
+
+
+def prune_reactor_outputs(repository: Path) -> None:
+    files = _repository_files(repository)
+    for path in files:
+        _regular_stat(path)
+
+    extension = repository.joinpath(*TRINO_BUILD_EXTENSION_PREFIX)
+    marker = _marker_origins(extension)
+    if set(marker) != set(TRINO_BUILD_EXTENSION_REQUIRED_FILES):
+        _fail(
+            "Trino build extension origin marker must contain only the exact "
+            "required JAR and POM"
+        )
+    markers = {extension: marker}
+    for name in TRINO_BUILD_EXTENSION_REQUIRED_FILES:
+        required = extension / name
+        _regular_stat(required)
+        if _origin(required, markers) != ALLOWED_REPOSITORIES["central"]:
+            _fail(
+                "Trino build extension must resolve from the exact "
+                f"Maven Central origin: {required}"
+            )
+
+    for path in files:
+        relative = _canonical_relative(path.relative_to(repository).as_posix())
+        if (
+            relative.parts[: len(TRINO_GROUP_PREFIX)] == TRINO_GROUP_PREFIX
+            and not _is_allowed_trino_dependency(relative)
+            and not (
+                relative.parts[: len(TRINO_BUILD_EXTENSION_PREFIX)]
+                == TRINO_BUILD_EXTENSION_PREFIX
+                and len(relative.parts) == len(TRINO_BUILD_EXTENSION_PREFIX) + 1
+                and relative.name == "_remote.repositories"
+            )
+        ):
+            try:
+                path.unlink()
+            except OSError as error:
+                _fail(f"cannot remove Trino reactor output {path}: {error}")
+
+    for directory, _, _ in os.walk(repository, topdown=False, followlinks=False):
+        current = Path(directory)
+        if current == repository:
+            continue
+        try:
+            current.rmdir()
+        except OSError as error:
+            if error.errno not in (errno.ENOTEMPTY, errno.EEXIST):
+                _fail(
+                    "cannot prune empty Maven repository directory "
+                    f"{current}: {error}"
+                )
+
+
 def build_manifest(repository: Path) -> dict[str, Any]:
     files = _repository_files(repository)
     markers = {
@@ -299,6 +389,7 @@ def build_manifest(repository: Path) -> dict[str, Any]:
     records: list[dict[str, Any]] = []
     observed: set[str] = set()
     bun_input_seen = False
+    trino_build_extension_records: dict[PurePosixPath, str] = {}
     total_bytes = 0
     for path in files:
         relative = _canonical_relative(path.relative_to(repository).as_posix())
@@ -309,7 +400,10 @@ def build_manifest(repository: Path) -> dict[str, Any]:
         if identity in observed:
             _fail(f"case-insensitive duplicate repository path: {relative}")
         observed.add(identity)
-        if relative.parts[:2] == ("io", "trino"):
+        if (
+            relative.parts[: len(TRINO_GROUP_PREFIX)] == TRINO_GROUP_PREFIX
+            and not _is_allowed_trino_dependency(relative)
+        ):
             _fail(f"Trino reactor output is forbidden in dependency input: {relative}")
         if path.name.endswith(FORBIDDEN_SUFFIXES):
             _fail(f"partial, lock, or temporary Maven file is forbidden: {relative}")
@@ -319,6 +413,8 @@ def build_manifest(repository: Path) -> dict[str, Any]:
             _fail("Maven dependency snapshot exceeds the byte limit")
         digest = _sha256_file(path)
         origin = _origin(path, markers)
+        if _is_allowed_trino_dependency(relative):
+            trino_build_extension_records[relative] = origin
         if origin == BUN_INPUT["url"] and relative.as_posix() != BUN_INPUT["cache_path"]:
             _fail(f"Bun release origin is forbidden for non-Bun input: {relative}")
         if relative.as_posix() == BUN_INPUT["cache_path"]:
@@ -341,6 +437,7 @@ def build_manifest(repository: Path) -> dict[str, Any]:
         )
     if not records:
         _fail("Maven dependency snapshot must not be empty")
+    _validate_trino_build_extension_records(trino_build_extension_records)
     if not bun_input_seen:
         _fail("Maven dependency snapshot is missing the exact Bun toolchain input")
     return {
@@ -458,6 +555,7 @@ def _load_manifest(path: Path) -> dict[str, Any]:
     previous: bytes | None = None
     total_bytes = 0
     bun_input_seen = False
+    trino_build_extension_records: dict[PurePosixPath, str] = {}
     for record in records:
         if not isinstance(record, dict) or set(record) != expected_record_keys:
             _fail("Maven manifest file record is not closed-world")
@@ -466,7 +564,10 @@ def _load_manifest(path: Path) -> dict[str, Any]:
         if previous is not None and encoded <= previous:
             _fail("Maven manifest paths are not bytewise sorted and unique")
         previous = encoded
-        if relative.parts[:2] == ("io", "trino"):
+        if (
+            relative.parts[: len(TRINO_GROUP_PREFIX)] == TRINO_GROUP_PREFIX
+            and not _is_allowed_trino_dependency(relative)
+        ):
             _fail("Maven manifest contains a Trino reactor output")
         if record["mode"] != CANONICAL_MODE:
             _fail("Maven manifest mode is not canonical")
@@ -482,6 +583,10 @@ def _load_manifest(path: Path) -> dict[str, Any]:
             or record["repository_origin"] not in ALLOWED_ORIGINS
         ):
             _fail("Maven manifest contains an unknown repository origin")
+        if _is_allowed_trino_dependency(relative):
+            trino_build_extension_records[relative] = record[
+                "repository_origin"
+            ]
         if (
             record["repository_origin"] == BUN_INPUT["url"]
             and relative.as_posix() != BUN_INPUT["cache_path"]
@@ -497,6 +602,7 @@ def _load_manifest(path: Path) -> dict[str, Any]:
                 _fail("Maven manifest Bun toolchain input differs")
             bun_input_seen = True
         total_bytes += record["size"]
+    _validate_trino_build_extension_records(trino_build_extension_records)
     if not bun_input_seen:
         _fail("Maven manifest is missing the exact Bun toolchain input")
     if total_bytes != manifest["total_bytes"] or total_bytes > MAX_TOTAL_BYTES:
@@ -603,6 +709,8 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--descriptor", type=Path, required=True)
     verify.add_argument("--archive", type=Path, required=True)
     verify.add_argument("--extract-root", type=Path)
+    prune = commands.add_parser("prune-reactor-outputs")
+    prune.add_argument("--repository", type=Path, required=True)
     return parser
 
 
@@ -611,8 +719,10 @@ def main() -> int:
     try:
         if args.command == "create":
             create_snapshot(args.repository, args.descriptor, args.archive)
-        else:
+        elif args.command == "verify":
             verify_snapshot(args.descriptor, args.archive, args.extract_root)
+        else:
+            prune_reactor_outputs(args.repository)
     except SnapshotError as error:
         print(f"trino dependency snapshot rejected: {error}", file=os.sys.stderr)
         return 1
