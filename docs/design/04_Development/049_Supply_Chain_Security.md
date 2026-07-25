@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-25
-version: "1.31"
+version: "1.32"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -618,7 +618,8 @@ must revalidate the unexpired Issue #63 authorization before source fetch,
 source execution, dependency resolution, publication, and evidence retention.
 The workflow binds the exact source coordinates, Maven 3.9.16 and Temurin 25
 native-arm64 builder, Maven Central plus the explicit Confluent repository, a
-regular-file-only closed manifest, and an independent fresh
+closed Maven manifest plus a separately closed Bun package-cache manifest, and
+an independent fresh
 `mvn --offline --ignore-transitive-repositories -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests`
 with networking disabled. The same explicit exclusion is required for both
 fresh dependency resolutions and both offline rebuilds: `trino-docs` invokes
@@ -731,18 +732,54 @@ repository nor permits a network fallback. The verifier requires the exact
 settings mount and argument in both online resolver blocks and in the
 two-execution offline block.
 
-The publisher resolves and packages two independent fresh Maven repositories,
-each seeded only with its independently digest-verified Bun input, requires
-their complete manifests and deterministic archives to be equal, and then
+PR #119 merged that settings correction as
+`0342dfaead031016e4e33e0a88baa8dfef6fed77`. Reviewed-main run
+`30143825129` passed both independent online Maven reconstructions and their
+archive comparison, then failed offline on
+`io.trino.tempto:tempto-core:204`. The pruner had treated external Maven Central
+dependencies under `io/trino/**` as reactor output. The dependency contract now
+retains an exact 37-path external closure: 35 JAR/POM paths covering 19
+coordinates plus two required version-range metadata paths. Any other
+`io/trino/**` file still fails closed.
+
+The corrected Maven closure reached the Web UI and exposed a separate
+dependency-sufficiency gap: the exact Bun executable was present, but npm
+packages were absent during the network-none build. The publisher now sets
+`CI=true`, freezes both exact `bun.lock` files, binds
+`https://registry.npmjs.org/`, and packages a separately manifested Bun cache.
+Two independent local reconstructions produced byte-identical results with
+75,361 regular files, 664 safe cache-alias symlinks, and 500,213,727
+uncompressed bytes. The deterministic archive is 128,457,765 bytes with
+manifest SHA-256
+`adfcb6663080ef7f39b5e592b7ca8df94e3449ae0ab73af630feac5a5fe721b0`
+and archive SHA-256
+`19087b76181177178ead04cabd85f81180ce64d71d84b78e5dda74a2dc71abd7`.
+Those values are local pre-merge validation evidence only; reviewed-main
+publication evidence must reproduce them or fail closed.
+Using that verified cache and the exact pruned Maven repository, one native
+arm64 local network-none build completed with `BUILD SUCCESS` in 17 minutes
+12 seconds. It produced `trino-server-483.tar.gz` at 851,844,285 bytes with
+SHA-256
+`d4ce3f05c26c1f29192e0668ac5345860b08df005c51d7f4187834b61e4554f2`.
+This single local execution proves pre-merge dependency sufficiency only; it
+does not replace the reviewed-main workflow's two fresh-build equality,
+security scan, signature, provenance, publication, and anonymous-pull gates.
+
+The publisher resolves and packages two independent fresh Maven repositories
+and two independent fresh Bun caches, requires each complete
+manifest/archive pair to be byte-identical, and then
 performs two fresh network-none native-arm64 source builds from the exact
 snapshot. Their sole expected output,
 `core/trino-server/target/trino-server-483.tar.gz`, must match by digest and
 size. Symlinks, hard links, special files, partial or lock files, unknown
 origins, duplicate paths, and repository-produced `io/trino/**` reactor outputs
-fail closed. Origin markers are consumed before the timestamp-bearing
+fail closed, except for the Bun cache's closed absolute `/bun-cache/` alias
+symlink contract. The verified Bun cache is mounted read-only. Origin markers
+are consumed before the timestamp-bearing
 `_remote.repositories` and `resolver-status.properties` resolver metadata are
-excluded from the deterministic archive. A fresh Trivy dependency scan must
-remain High=0/Critical=0 and its CycloneDX result is retained with the candidate.
+excluded from the deterministic archive. Separate fresh Maven and Bun Trivy
+dependency scans must remain High=0/Critical=0, and both CycloneDX results are
+retained with the candidate.
 
 Publication is main-only, uses an immutable `run_id` / `run_attempt` tag, and
 produces only a review-pending OCI dependency artifact. Cosign identity is bound

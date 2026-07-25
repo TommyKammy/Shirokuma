@@ -5,7 +5,7 @@ title: "Select a conditional repository-owned Trino 483 source build"
 status: accepted
 created: 2026-07-22
 updated: 2026-07-25
-version: "1.0"
+version: "1.1"
 area: "architecture"
 tags: [shirokuma, adr, trino, arm64, maven, supply-chain]
 ---
@@ -128,18 +128,23 @@ so native container smoke remains a mandatory publisher gate.
   `github.com` and `release-assets.githubusercontent.com`, and fail closed
   after five redirects or on any protocol, credential, port, fragment, cycle,
   or host deviation.
-- Publish the Maven local repository only as a deterministic, run-scoped OCI
-  dependency artifact after a closed manifest records every regular file,
-  canonical path, size, mode, SHA-256, repository origin, and total byte count.
-  Manifest schema v2 must separately record the complete Bun external-input
-  contract, including platform, dedicated origin ID, independent-download
-  count, allowed HTTPS origins, redirect policy, and redirect limit.
-  Symlinks, hard links, special files, locks, partial downloads, unknown
-  repositories, duplicate paths, mutable tags, and repository-produced
-  `io/trino/**` artifacts fail closed. Reactor outputs must be rebuilt from the
-  reviewed source and cannot enter the dependency input.
+- Publish a deterministic, run-scoped OCI build-dependency artifact with
+  separate Maven-repository and Bun-package-cache layers. The Maven manifest
+  records every regular file, canonical path, size, mode, SHA-256, repository
+  origin, and total byte count. The Bun manifest binds Bun `1.3.14`,
+  `linux/arm64`, the exact npm registry, both reviewed `bun.lock` hashes, every
+  retained file and mode, and only cache-alias symlinks whose absolute
+  `/bun-cache/` targets resolve to retained package directories. Hard links,
+  special files, locks, partial downloads, unknown repositories, duplicate
+  paths, mutable tags, unsafe links, and repository-produced `io/trino/**`
+  reactor artifacts fail closed. Reactor outputs must be rebuilt from the
+  reviewed source and cannot enter either dependency input.
 - Require an independent clean verifier to reconstruct the candidate from the
-  same allowlisted repositories, compare the complete manifest, then run
+  same allowlisted Maven and npm repositories. It must create two empty Maven
+  repositories and two empty Bun caches and require each manifest/archive pair
+  to be byte-identical. Online and offline builds set `CI=true`, use the exact
+  npm registry and cache location, and therefore exercise Bun's frozen-lockfile
+  path. The offline cache is mounted read-only before running
   `mvn --offline --ignore-transitive-repositories --settings /policy/settings.xml -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests`
   in a fresh network-none native-arm64 builder. The output must be exactly
   `core/trino-server/target/trino-server-483.tar.gz`; its hash, size, and
@@ -155,6 +160,8 @@ so native container smoke remains a mandatory publisher gate.
   contributes no Trino server runtime output. Both fresh dependency resolutions
   and both offline rebuilds must use the same exclusion; all remaining reactor
   modules stay inside the complete server-build and dependency-closure boundary.
+  Maven and Bun layers receive separate CycloneDX documents and fresh
+  High=0/Critical=0 scans before publication.
 - Require the verifier workflow to run on a native linux/arm64 host. It must
   retain `RUNNER_ARCH=ARM64`, host `uname -m=aarch64`, and container
   architecture `arm64` observations, reject QEMU or binfmt emulation, and fail
@@ -194,6 +201,22 @@ reviewed. From `2026-07-22T22:43:36Z` through `2026-08-21T22:43:36Z`, the exact
 483 source coordinates may proceed under a time-boxed local-PoC source-identity
 risk acceptance. All dependency, offline-build, image, vulnerability,
 provenance, admission, and runtime controls in this ADR remain mandatory.
+
+Reviewed-main run `30143825129` confirmed that the settings correction from
+PR #119 preserved mirror identity, then failed offline on
+`io.trino.tempto:tempto-core:204`. The repository pruner had mistaken all
+`io/trino/**` paths except the build plugin for reactor output. The reviewed
+external Maven Central closure is now an exact 37-path catalog: 35 JAR/POM
+paths for 19 coordinates plus two required version-range metadata paths.
+Reconstruction then exposed a second sufficiency gap: the Web UI's npm packages
+were not part of the offline input. The separate closed Bun cache described
+above corrects only dependency sufficiency; it does not broaden source
+authorization, runtime admission, or network access.
+One local native-arm64 network-none integration build completed in 17 minutes
+12 seconds and produced the expected server tarball at 851,844,285 bytes with
+SHA-256
+`d4ce3f05c26c1f29192e0668ac5345860b08df005c51d7f4187834b61e4554f2`.
+It is pre-merge sufficiency evidence, not reviewed-main publication evidence.
 
 ## Consequences
 

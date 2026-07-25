@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import package_trino_maven_dependencies as package  # noqa: E402
+import package_trino_bun_dependencies as bun_package  # noqa: E402
 import prepare_trino_bun_input as bun  # noqa: E402
 import verify_trino_dependency_publisher as verify  # noqa: E402
 
@@ -80,9 +81,40 @@ class MavenSnapshotTests(unittest.TestCase):
             f"{bun_cache.name}>shirokuma-bun-release=\n",
             encoding="iso-8859-1",
         )
+        self._trino_external_dependencies(
+            repository,
+            include_trino_extension=include_trino_extension,
+            trino_origin=trino_origin,
+        )
+        return repository
+
+    def _trino_external_dependencies(
+        self,
+        repository: Path,
+        *,
+        include_trino_extension: bool = True,
+        trino_origin: str = "shirokuma-central",
+    ) -> None:
+        for prefix, required_files in package.TRINO_EXTERNAL_ARTIFACTS.items():
+            if prefix == package.TRINO_BUILD_EXTENSION_PREFIX:
+                continue
+            directory = repository.joinpath(*prefix)
+            directory.mkdir(parents=True)
+            for name in required_files:
+                (directory / name).write_bytes(name.encode("ascii"))
+            (directory / "_remote.repositories").write_text(
+                "".join(
+                    f"{name}>shirokuma-central=\n"
+                    for name in required_files
+                ),
+                encoding="iso-8859-1",
+            )
+        for relative in package.TRINO_EXTERNAL_METADATA_PATHS:
+            metadata = repository / relative
+            metadata.parent.mkdir(parents=True, exist_ok=True)
+            metadata.write_text("<metadata/>\n", encoding="utf-8")
         if include_trino_extension:
             self._trino_build_extension(repository, origin=trino_origin)
-        return repository
 
     def _trino_build_extension(
         self,
@@ -173,14 +205,8 @@ class MavenSnapshotTests(unittest.TestCase):
             }
             self.assertEqual(
                 {
-                    (
-                        "io/trino/trino-maven-plugin/20/"
-                        "trino-maven-plugin-20.jar"
-                    ): package.ALLOWED_REPOSITORIES["central"],
-                    (
-                        "io/trino/trino-maven-plugin/20/"
-                        "trino-maven-plugin-20.pom"
-                    ): package.ALLOWED_REPOSITORIES["central"],
+                    path.as_posix(): package.ALLOWED_REPOSITORIES["central"]
+                    for path in package.TRINO_EXTERNAL_REQUIRED_PATHS
                 },
                 retained,
             )
@@ -212,6 +238,44 @@ class MavenSnapshotTests(unittest.TestCase):
                 ("missing", missing),
                 ("wrong-origin", wrong_origin),
                 ("extra-marker", extra_marker),
+            ):
+                with self.subTest(name=name), self.assertRaises(
+                    package.SnapshotError
+                ):
+                    package.prune_reactor_outputs(repository)
+
+    def test_prune_reactor_outputs_requires_complete_external_closure(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            missing_artifact = self._repository(root / "missing-artifact")
+            (
+                missing_artifact
+                / "io/trino/tempto/tempto-core/204/tempto-core-204.jar"
+            ).unlink()
+            wrong_origin = self._repository(root / "wrong-origin")
+            marker = (
+                wrong_origin
+                / "io/trino/tempto/tempto-core/204/_remote.repositories"
+            )
+            marker.write_text(
+                marker.read_text(encoding="iso-8859-1").replace(
+                    "tempto-core-204.jar>shirokuma-central=",
+                    "tempto-core-204.jar>shirokuma-confluent=",
+                ),
+                encoding="iso-8859-1",
+            )
+            missing_metadata = self._repository(root / "missing-metadata")
+            (
+                missing_metadata
+                / "io/trino/trino-spi/"
+                "maven-metadata-shirokuma-central-fallback.xml"
+            ).unlink()
+            for name, repository in (
+                ("missing-artifact", missing_artifact),
+                ("wrong-origin", wrong_origin),
+                ("missing-metadata", missing_metadata),
             ):
                 with self.subTest(name=name), self.assertRaises(
                     package.SnapshotError
@@ -519,9 +583,28 @@ class MavenSnapshotTests(unittest.TestCase):
                     with self.assertRaises(package.SnapshotError):
                         package.verify_snapshot(descriptor, linked_archive, None)
 
-    def test_manifest_requires_exact_central_build_extension(self) -> None:
+    def test_manifest_requires_exact_central_external_closure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            missing_tempto = self._repository(root / "missing-tempto")
+            (
+                missing_tempto
+                / "io/trino/tempto/tempto-core/204/tempto-core-204.jar"
+            ).unlink()
+            wrong_tempto_origin = self._repository(
+                root / "wrong-tempto-origin"
+            )
+            marker = (
+                wrong_tempto_origin
+                / "io/trino/tempto/tempto-core/204/_remote.repositories"
+            )
+            marker.write_text(
+                marker.read_text(encoding="iso-8859-1").replace(
+                    "tempto-core-204.jar>shirokuma-central=",
+                    "tempto-core-204.jar>shirokuma-confluent=",
+                ),
+                encoding="iso-8859-1",
+            )
             invalid_repositories = {
                 "missing": self._repository(
                     root / "missing",
@@ -531,6 +614,8 @@ class MavenSnapshotTests(unittest.TestCase):
                     root / "wrong-origin",
                     trino_origin="shirokuma-confluent",
                 ),
+                "missing-tempto": missing_tempto,
+                "wrong-tempto-origin": wrong_tempto_origin,
             }
             for name, repository in invalid_repositories.items():
                 with self.subTest(stage="create", name=name), self.assertRaises(
@@ -761,6 +846,22 @@ class PublisherContractTests(unittest.TestCase):
             package.EXTERNAL_INPUTS,
         )
         self.assertEqual([verify.EXPECTED_BUN_INPUT], package.EXTERNAL_INPUTS)
+        self.assertEqual(
+            verify.EXPECTED_BUN_PACKAGE_CACHE,
+            contract["dependency_resolution"]["bun_package_cache"],
+        )
+        self.assertEqual(
+            verify.EXPECTED_BUN_PACKAGE_CACHE["frozen_lockfiles"],
+            bun_package.LOCKFILES,
+        )
+        self.assertEqual(
+            verify.EXPECTED_BUN_PACKAGE_CACHE["cache_directory"],
+            bun_package.BUN_CACHE_DIRECTORY,
+        )
+        self.assertEqual(
+            verify.EXPECTED_BUN_PACKAGE_CACHE["registry"],
+            bun_package.BUN_REGISTRY,
+        )
 
     def test_exact_external_trino_build_extension_is_closed(self) -> None:
         contract = json.loads(
@@ -786,6 +887,39 @@ class PublisherContractTests(unittest.TestCase):
             ),
             package.TRINO_BUILD_EXTENSION_PREFIX,
         )
+
+    def test_exact_external_trino_maven_closure_is_closed(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        expected_paths = sorted(
+            path.as_posix()
+            for path in package.TRINO_EXTERNAL_REQUIRED_PATHS
+        )
+        self.assertEqual(
+            verify.EXPECTED_TRINO_EXTERNAL_MAVEN_INPUTS,
+            contract["dependency_resolution"]["reactor_outputs"][
+                "exact_external_maven_inputs"
+            ],
+        )
+        self.assertEqual(
+            expected_paths,
+            verify.EXPECTED_TRINO_EXTERNAL_MAVEN_INPUTS["required_paths"],
+        )
+        self.assertEqual(37, len(expected_paths))
+        for required in (
+            "io/trino/tempto/tempto-core/204/tempto-core-204.jar",
+            "io/trino/tempto/tempto-kafka/204/tempto-kafka-204.jar",
+            "io/trino/tempto/tempto-ldap/204/tempto-ldap-204.jar",
+            "io/trino/tempto/tempto-runner/204/tempto-runner-204.jar",
+            "io/trino/trino-spi/maven-metadata-shirokuma-central.xml",
+            (
+                "io/trino/trino-spi/"
+                "maven-metadata-shirokuma-central-fallback.xml"
+            ),
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, expected_paths)
 
     def test_each_fresh_repository_uses_the_bounded_reactor_pruner(self) -> None:
         workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
@@ -910,6 +1044,40 @@ class PublisherContractTests(unittest.TestCase):
         with self.assertRaisesRegex(
             verify.ContractError,
             "WORKFLOW_BUN_INPUT",
+        ):
+            verify._validate_workflow(contract, altered)
+
+    def test_bun_cache_is_frozen_reconstructed_and_read_only_offline(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        self.assertEqual(3, workflow.count("--env CI=true \\"))
+        self.assertEqual(
+            3,
+            workflow.count(
+                '--env BUN_INSTALL_CACHE_DIR="${BUN_CACHE_DIRECTORY}" \\'
+            ),
+        )
+        self.assertEqual(
+            3,
+            workflow.count('--env BUN_CONFIG_REGISTRY="${BUN_REGISTRY}" \\'),
+        )
+        self.assertEqual(
+            2,
+            workflow.count(
+                "python3 scripts/package_trino_bun_dependencies.py create"
+            ),
+        )
+        self.assertIn(
+            '--volume "${offline_source}/.bun-cache:'
+            '${BUN_CACHE_DIRECTORY}:ro" \\',
+            workflow,
+        )
+        altered = workflow.replace("--env CI=true \\", "--env CI=false \\", 1)
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_BUN_CACHE",
         ):
             verify._validate_workflow(contract, altered)
         digest_line = (
@@ -1096,9 +1264,13 @@ class PublisherContractTests(unittest.TestCase):
         self.assertEqual(2, workflow.count("--type slsaprovenance1"))
         self.assertNotIn("--type slsaprovenance \\", workflow)
         for evidence in (
+            "bun-dependency-manifest.json",
             "maven-dependency-manifest.json",
+            "trino-bun-dependencies-483.tar.gz",
             "trino-maven-dependencies-483.tar.gz",
+            "trino-bun-dependencies-483.cdx.json",
             "trino-maven-dependencies-483.cdx.json",
+            "trivy-bun-vulnerability.json",
             "trivy-vulnerability.json",
             "offline-build.json",
             "independent-reconstruction.json",

@@ -23,9 +23,11 @@ SETTINGS_PATH = Path("bootstrap/trino/v483/settings.xml")
 JVM_CONFIG_PATH = Path("bootstrap/trino/v483/maven-policy/.mvn/jvm.config")
 WORKFLOW_PATH = Path(".github/workflows/trino-maven-dependencies.yml")
 PACKAGER_PATH = Path("scripts/package_trino_maven_dependencies.py")
+BUN_PACKAGER_PATH = Path("scripts/package_trino_bun_dependencies.py")
 BUN_PREPARER_PATH = Path("scripts/prepare_trino_bun_input.py")
 VERIFIER_PATH = Path("scripts/verify_trino_dependency_publisher.py")
 TEST_PATH = Path("tests/test_trino_dependency_publisher.py")
+BUN_TEST_PATH = Path("tests/test_trino_bun_dependencies.py")
 EXPECTED_REPOSITORY = "TommyKammy/Shirokuma"
 EXPECTED_SOURCE_REPOSITORY = "https://github.com/trinodb/trino"
 EXPECTED_TAG = "483"
@@ -59,6 +61,28 @@ EXPECTED_BUN_INPUT = {
     "redirect_policy": "manual_validate_before_request",
     "maximum_redirects": 5,
 }
+EXPECTED_BUN_PACKAGE_CACHE = {
+    "bun_version": "v1.3.14",
+    "platform": "linux/arm64",
+    "cache_directory": "/bun-cache",
+    "registry": "https://registry.npmjs.org/",
+    "frozen_lockfiles": [
+        {
+            "path": "core/trino-web-ui/src/main/resources/webapp/bun.lock",
+            "sha256": "70da1dad7c6f45743637cba7dde948793d787b1ced1382e90966d60fe17dc885",
+        },
+        {
+            "path": (
+                "core/trino-web-ui/src/main/resources/"
+                "webapp-legacy/src/bun.lock"
+            ),
+            "sha256": "0ca8b926ea0a2af3fff339b43c52de03a8f99c4aa9ba1d4c2ecd081bcd715ad3",
+        },
+    ],
+    "independent_reconstructions": 2,
+    "network_none_rebuild_mount": "read-only",
+    "unknown_registry_permitted": False,
+}
 EXPECTED_TRINO_BUILD_EXTENSION = {
     "group_id": "io.trino",
     "artifact_id": "trino-maven-plugin",
@@ -70,9 +94,59 @@ EXPECTED_TRINO_BUILD_EXTENSION = {
     ],
     "reactor_output": False,
 }
-EXPECTED_ARTIFACT_TYPE = "application/vnd.shirokuma.trino.maven-dependencies.v2"
+EXPECTED_TRINO_EXTERNAL_MAVEN_INPUTS = {
+    "repository_origin": EXPECTED_REPOSITORIES["central"],
+    "required_paths": [
+        "io/trino/benchto/benchto-base/0.34/benchto-base-0.34.pom",
+        "io/trino/benchto/benchto-driver/0.34/benchto-driver-0.34.jar",
+        "io/trino/benchto/benchto-driver/0.34/benchto-driver-0.34.pom",
+        "io/trino/coral/coral/2.2.49-1/coral-2.2.49-1.jar",
+        "io/trino/coral/coral/2.2.49-1/coral-2.2.49-1.pom",
+        "io/trino/hadoop/hadoop-apache/3.3.5-3/hadoop-apache-3.3.5-3.jar",
+        "io/trino/hadoop/hadoop-apache/3.3.5-3/hadoop-apache-3.3.5-3.pom",
+        "io/trino/hive/hive-apache-jdbc/0.13.1-10/hive-apache-jdbc-0.13.1-10.jar",
+        "io/trino/hive/hive-apache-jdbc/0.13.1-10/hive-apache-jdbc-0.13.1-10.pom",
+        "io/trino/hive/hive-apache/3.1.2-23/hive-apache-3.1.2-23.jar",
+        "io/trino/hive/hive-apache/3.1.2-23/hive-apache-3.1.2-23.pom",
+        "io/trino/hive/hive-thrift/3/hive-thrift-3.jar",
+        "io/trino/hive/hive-thrift/3/hive-thrift-3.pom",
+        "io/trino/tempto/tempto-core/204/tempto-core-204.jar",
+        "io/trino/tempto/tempto-core/204/tempto-core-204.pom",
+        "io/trino/tempto/tempto-kafka/204/tempto-kafka-204.jar",
+        "io/trino/tempto/tempto-kafka/204/tempto-kafka-204.pom",
+        "io/trino/tempto/tempto-ldap/204/tempto-ldap-204.jar",
+        "io/trino/tempto/tempto-ldap/204/tempto-ldap-204.pom",
+        "io/trino/tempto/tempto-root/204/tempto-root-204.pom",
+        "io/trino/tempto/tempto-runner/204/tempto-runner-204.jar",
+        "io/trino/tempto/tempto-runner/204/tempto-runner-204.pom",
+        "io/trino/tpcds/tpcds/1.7/tpcds-1.7.jar",
+        "io/trino/tpcds/tpcds/1.7/tpcds-1.7.pom",
+        "io/trino/tpch/tpch/1.4/tpch-1.4.jar",
+        "io/trino/tpch/tpch/1.4/tpch-1.4.pom",
+        "io/trino/trino-maven-plugin/20/trino-maven-plugin-20.jar",
+        "io/trino/trino-maven-plugin/20/trino-maven-plugin-20.pom",
+        "io/trino/trino-re2j/1.7/trino-re2j-1.7.jar",
+        "io/trino/trino-re2j/1.7/trino-re2j-1.7.pom",
+        "io/trino/trino-root/482/trino-root-482.pom",
+        "io/trino/trino-spi/482/trino-spi-482.jar",
+        "io/trino/trino-spi/482/trino-spi-482.pom",
+        "io/trino/trino-spi/maven-metadata-shirokuma-central-fallback.xml",
+        "io/trino/trino-spi/maven-metadata-shirokuma-central.xml",
+        "io/trino/trino-wasm-python/3.13-7/trino-wasm-python-3.13-7.jar",
+        "io/trino/trino-wasm-python/3.13-7/trino-wasm-python-3.13-7.pom",
+    ],
+    "unknown_paths_permitted": False,
+    "reactor_output": False,
+}
+EXPECTED_ARTIFACT_TYPE = "application/vnd.shirokuma.trino.build-dependencies.v3"
 EXPECTED_DESCRIPTOR_MEDIA_TYPE = (
     "application/vnd.shirokuma.maven-dependency-manifest.v2+json"
+)
+EXPECTED_BUN_DESCRIPTOR_MEDIA_TYPE = (
+    "application/vnd.shirokuma.bun-dependency-manifest.v1+json"
+)
+EXPECTED_BUN_ARCHIVE_MEDIA_TYPE = (
+    "application/vnd.shirokuma.bun-cache.v1.tar+gzip"
 )
 EXPECTED_BUN_STAGE_BLOCK = """\
           python3 scripts/prepare_trino_bun_input.py download \\
@@ -136,6 +210,16 @@ EXPECTED_OFFLINE_REPOSITORY_SETTINGS = {
     ),
     "network_access_permitted_by_this_setting": False,
 }
+EXPECTED_OFFLINE_BUN_CACHE = {
+    "path": "/bun-cache",
+    "registry": "https://registry.npmjs.org/",
+    "lockfile_mode": "frozen",
+    "mount": "read-only",
+    "network_none_required": True,
+    "absolute_cache_alias_target_prefix": "/bun-cache/",
+    "ambient_cache_permitted": False,
+    "unknown_registry_permitted": False,
+}
 ALLOWED_GLOBAL_SETTINGS_CONTAINERS = frozenset(
     {
         "mirrors",
@@ -159,7 +243,7 @@ EXPECTED_ACTIONS = {
     "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10": 2,
     "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02": 2,
     "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c": 1,
-    "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25": 2,
+    "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25": 4,
     "sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6": 1,
 }
 EXPECTED_STEPS = {
@@ -174,6 +258,8 @@ EXPECTED_STEPS = {
         "Prove two fresh network-none offline source builds",
         "Generate a CycloneDX dependency SBOM",
         "Scan the dependency closure and block High or Critical findings",
+        "Generate a CycloneDX Bun dependency SBOM",
+        "Scan the Bun dependency closure and block High or Critical findings",
         "Record the read-only candidate",
         "Retain the read-only-verified candidate",
     ],
@@ -539,9 +625,11 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         JVM_CONFIG_PATH,
         SETTINGS_PATH,
         PACKAGER_PATH,
+        BUN_PACKAGER_PATH,
         BUN_PREPARER_PATH,
         VERIFIER_PATH,
         TEST_PATH,
+        BUN_TEST_PATH,
         Path("Makefile"),
     ):
         if lines.count(f"      - {path.as_posix()}") != 2:
@@ -571,12 +659,16 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "prune-reactor-outputs",
         "python3 scripts/package_trino_maven_dependencies.py create",
         "python3 scripts/package_trino_maven_dependencies.py verify",
+        "python3 scripts/package_trino_bun_dependencies.py create",
+        "python3 scripts/package_trino_bun_dependencies.py verify",
         "python3 scripts/prepare_trino_bun_input.py download",
         "python3 scripts/prepare_trino_bun_input.py stage",
         EXPECTED_BUN_INPUT["url"],
         EXPECTED_BUN_INPUT["sha256"],
         EXPECTED_ARTIFACT_TYPE,
         EXPECTED_DESCRIPTOR_MEDIA_TYPE,
+        EXPECTED_BUN_DESCRIPTOR_MEDIA_TYPE,
+        EXPECTED_BUN_ARCHIVE_MEDIA_TYPE,
         "oras push",
         "cosign sign",
         "cosign attest",
@@ -588,6 +680,8 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "predicate.buildDefinition.resolvedDependencies",
         "trivy-vulnerability.json",
         "trino-maven-dependencies-483.cdx.json",
+        "trivy-bun-vulnerability.json",
+        "trino-bun-dependencies-483.cdx.json",
     )
     for value in required:
         if value not in workflow:
@@ -637,6 +731,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
     if (
         offline_rebuild.get("repository_settings")
         != EXPECTED_OFFLINE_REPOSITORY_SETTINGS
+        or offline_rebuild.get("bun_cache") != EXPECTED_OFFLINE_BUN_CACHE
     ):
         _fail(
             "WORKFLOW_SETTINGS",
@@ -667,6 +762,39 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         or '"fresh_snapshot_extractions": 2' not in workflow
     ):
         _fail("WORKFLOW_OFFLINE", "exactly two network-none rebuilds are required")
+    if (
+        lines.count("  BUN_CACHE_DIRECTORY: /bun-cache") != 1
+        or lines.count("  BUN_REGISTRY: https://registry.npmjs.org/") != 1
+        or workflow.count('--env CI=true \\') != 3
+        or workflow.count(
+            '--env BUN_INSTALL_CACHE_DIR="${BUN_CACHE_DIRECTORY}" \\'
+        )
+        != 3
+        or workflow.count('--env BUN_CONFIG_REGISTRY="${BUN_REGISTRY}" \\')
+        != 3
+        or workflow.count(
+            '--volume "${bun_cache}:${BUN_CACHE_DIRECTORY}" \\'
+        )
+        != 2
+        or workflow.count(
+            '--volume "${offline_source}/.bun-cache:${BUN_CACHE_DIRECTORY}:ro" \\'
+        )
+        != 1
+        or workflow.count(
+            "python3 scripts/package_trino_bun_dependencies.py create"
+        )
+        != 2
+        or workflow.count(
+            "python3 scripts/package_trino_bun_dependencies.py verify"
+        )
+        != 3
+        or '"fresh_bun_cache_extractions": 2' not in workflow
+        or '"bun_lockfile_mode": "frozen-via-CI-profile"' not in workflow
+    ):
+        _fail(
+            "WORKFLOW_BUN_CACHE",
+            "Bun cache must be frozen, independently reconstructed, and read-only offline",
+        )
     if (
         workflow.count(EXPECTED_BUN_STAGE_BLOCK)
         != EXPECTED_BUN_INPUT["independent_downloads"]
@@ -702,9 +830,11 @@ def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
         SETTINGS_PATH,
         JVM_CONFIG_PATH,
         PACKAGER_PATH,
+        BUN_PACKAGER_PATH,
         BUN_PREPARER_PATH,
         VERIFIER_PATH,
         TEST_PATH,
+        BUN_TEST_PATH,
     }
     policy_files = contract.get("policy_files")
     if not isinstance(policy_files, list):
@@ -768,11 +898,15 @@ def audit(root: Path) -> None:
         or dependency_resolution.get("settings_policy")
         != EXPECTED_SETTINGS_POLICY
         or dependency_resolution.get("external_inputs") != [EXPECTED_BUN_INPUT]
+        or dependency_resolution.get("bun_package_cache")
+        != EXPECTED_BUN_PACKAGE_CACHE
         or reactor_outputs.get("repository_path_prefix") != "io/trino/"
         or reactor_outputs.get("dependency_input_permitted") is not False
         or reactor_outputs.get("rebuild_from_reviewed_source_required") is not True
         or reactor_outputs.get("exact_external_build_extension")
         != EXPECTED_TRINO_BUILD_EXTENSION
+        or reactor_outputs.get("exact_external_maven_inputs")
+        != EXPECTED_TRINO_EXTERNAL_MAVEN_INPUTS
     ):
         _fail("REPOSITORIES", "contract repository allowlist differs")
     snapshot = contract.get("snapshot", {})
@@ -781,6 +915,12 @@ def audit(root: Path) -> None:
         or snapshot.get("descriptor_media_type")
         != EXPECTED_DESCRIPTOR_MEDIA_TYPE
         or snapshot.get("manifest", {}).get("schema_version") != 2
+        or snapshot.get("bun_cache")
+        != {
+            "descriptor_media_type": EXPECTED_BUN_DESCRIPTOR_MEDIA_TYPE,
+            "archive_media_type": EXPECTED_BUN_ARCHIVE_MEDIA_TYPE,
+            "manifest_schema_version": 1,
+        }
     ):
         _fail("SNAPSHOT_FORMAT", "dependency snapshot v2 contract differs")
     if snapshot.get("visibility_bootstrap") != {

@@ -3210,7 +3210,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             set(source),
         )
         self.assertIs(source["unmodified_source_required"], True)
-        self.assertEqual(10, len(source["preimages"]))
+        self.assertEqual(12, len(source["preimages"]))
         self.assertEqual(
             {
                 "mvnw": (
@@ -3227,6 +3227,15 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 ),
                 "core/trino-web-ui/pom.xml": (
                     "c9cb57ad7faa684e67250b0fb31e034a52c41b9a75de62ef29bb89f6ac64bd13"
+                ),
+                "core/trino-web-ui/src/main/resources/webapp/bun.lock": (
+                    "70da1dad7c6f45743637cba7dde948793d787b1ced1382e90966d60fe17dc885"
+                ),
+                (
+                    "core/trino-web-ui/src/main/resources/"
+                    "webapp-legacy/src/bun.lock"
+                ): (
+                    "0ca8b926ea0a2af3fff339b43c52de03a8f99c4aa9ba1d4c2ecd081bcd715ad3"
                 ),
                 "core/trino-server/pom.xml": (
                     "663d8bc33313160b26df9c80d4f1e5a3d970700573a914fb22db3462ac0e06d2"
@@ -3382,6 +3391,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "network_policy",
                 "repositories",
                 "external_inputs",
+                "bun_package_cache",
                 "maven_local_repository",
                 "repository_origin_capture_required",
                 "transitive_dependency_repositories_ignored",
@@ -3439,6 +3449,38 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             ],
             resolution["external_inputs"],
         )
+        self.assertEqual(
+            {
+                "bun_version": "v1.3.14",
+                "platform": "linux/arm64",
+                "cache_directory": "/bun-cache",
+                "registry": "https://registry.npmjs.org/",
+                "frozen_lockfiles": [
+                    {
+                        "path": (
+                            "core/trino-web-ui/src/main/resources/"
+                            "webapp/bun.lock"
+                        ),
+                        "sha256": (
+                            "70da1dad7c6f45743637cba7dde948793d787b1ced1382e90966d60fe17dc885"
+                        ),
+                    },
+                    {
+                        "path": (
+                            "core/trino-web-ui/src/main/resources/"
+                            "webapp-legacy/src/bun.lock"
+                        ),
+                        "sha256": (
+                            "0ca8b926ea0a2af3fff339b43c52de03a8f99c4aa9ba1d4c2ecd081bcd715ad3"
+                        ),
+                    },
+                ],
+                "independent_reconstructions": 2,
+                "network_none_rebuild_mount": "read-only",
+                "unknown_registry_permitted": False,
+            },
+            resolution["bun_package_cache"],
+        )
         self.assertIs(resolution["repository_origin_capture_required"], True)
         self.assertIs(
             resolution["transitive_dependency_repositories_ignored"],
@@ -3490,27 +3532,53 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             },
             resolution["transfer_audit"],
         )
+        reactor_outputs = resolution["reactor_outputs"]
         self.assertEqual(
             {
-                "repository_path_prefix": "io/trino/",
-                "dependency_input_permitted": False,
-                "rebuild_from_reviewed_source_required": True,
-                "exact_external_build_extension": {
-                    "group_id": "io.trino",
-                    "artifact_id": "trino-maven-plugin",
-                    "version": "20",
-                    "repository_origin": (
-                        "https://repo.maven.apache.org/maven2/"
-                    ),
-                    "required_files": [
-                        "trino-maven-plugin-20.jar",
-                        "trino-maven-plugin-20.pom",
-                    ],
-                    "reactor_output": False,
-                },
+                "repository_path_prefix",
+                "dependency_input_permitted",
+                "rebuild_from_reviewed_source_required",
+                "exact_external_build_extension",
+                "exact_external_maven_inputs",
             },
-            resolution["reactor_outputs"],
+            set(reactor_outputs),
         )
+        self.assertEqual("io/trino/", reactor_outputs["repository_path_prefix"])
+        self.assertIs(reactor_outputs["dependency_input_permitted"], False)
+        self.assertIs(
+            reactor_outputs["rebuild_from_reviewed_source_required"], True
+        )
+        self.assertEqual(
+            {
+                "group_id": "io.trino",
+                "artifact_id": "trino-maven-plugin",
+                "version": "20",
+                "repository_origin": (
+                    "https://repo.maven.apache.org/maven2/"
+                ),
+                "required_files": [
+                    "trino-maven-plugin-20.jar",
+                    "trino-maven-plugin-20.pom",
+                ],
+                "reactor_output": False,
+            },
+            reactor_outputs["exact_external_build_extension"],
+        )
+        external_maven = reactor_outputs["exact_external_maven_inputs"]
+        self.assertEqual(
+            "https://repo.maven.apache.org/maven2/",
+            external_maven["repository_origin"],
+        )
+        self.assertEqual(37, len(external_maven["required_paths"]))
+        self.assertEqual(
+            37, len(set(external_maven["required_paths"]))
+        )
+        self.assertIn(
+            "io/trino/tempto/tempto-core/204/tempto-core-204.jar",
+            external_maven["required_paths"],
+        )
+        self.assertIs(external_maven["unknown_paths_permitted"], False)
+        self.assertIs(external_maven["reactor_output"], False)
 
         snapshot = contract["snapshot"]
         self.assertEqual(
@@ -3527,8 +3595,9 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "archive_filename",
                 "manifest_filename",
                 "manifest",
-                "archive",
-                "forbidden_entries",
+                "bun_cache",
+                "maven_archive",
+                "maven_forbidden_entries",
                 "independent_reconstruction",
                 "authentication",
                 "evidence",
@@ -3546,7 +3615,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertIs(snapshot["mutable_tags_permitted"], False)
         self.assertEqual(
-            "application/vnd.shirokuma.trino.maven-dependencies.v2",
+            "application/vnd.shirokuma.trino.build-dependencies.v3",
             snapshot["artifact_type"],
         )
         self.assertEqual(
@@ -3604,7 +3673,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "compression": "gzip",
                 "gzip_header_timestamp": 0,
             },
-            snapshot["archive"],
+            snapshot["maven_archive"],
         )
         self.assertEqual(
             {
@@ -3617,14 +3686,30 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "duplicate_path",
                 "io/trino/**",
             },
-            set(snapshot["forbidden_entries"]),
+            set(snapshot["maven_forbidden_entries"]),
+        )
+        self.assertEqual(
+            {
+                "descriptor_media_type": (
+                    "application/vnd.shirokuma."
+                    "bun-dependency-manifest.v1+json"
+                ),
+                "archive_media_type": (
+                    "application/vnd.shirokuma.bun-cache.v1.tar+gzip"
+                ),
+                "manifest_schema_version": 1,
+            },
+            snapshot["bun_cache"],
         )
         self.assertEqual(
             {
                 "required": True,
                 "fresh_empty_repository_required": True,
+                "fresh_empty_bun_cache_required": True,
                 "same_allowlisted_repositories_required": True,
                 "complete_manifest_equality_required": True,
+                "bun_manifest_equality_required": True,
+                "bun_archive_equality_required": True,
             },
             snapshot["independent_reconstruction"],
         )
@@ -3762,6 +3847,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "runner",
                 "command",
                 "repository_settings",
+                "bun_cache",
                 "maven_wrapper_permitted",
                 "snapshot_input",
                 "maven_repository",
@@ -3829,6 +3915,19 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "network_access_permitted_by_this_setting": False,
             },
             rebuild["repository_settings"],
+        )
+        self.assertEqual(
+            {
+                "path": "/bun-cache",
+                "registry": "https://registry.npmjs.org/",
+                "lockfile_mode": "frozen",
+                "mount": "read-only",
+                "network_none_required": True,
+                "absolute_cache_alias_target_prefix": "/bun-cache/",
+                "ambient_cache_permitted": False,
+                "unknown_registry_permitted": False,
+            },
+            rebuild["bun_cache"],
         )
         self.assertIs(rebuild["maven_wrapper_permitted"], False)
         self.assertEqual(
@@ -3930,9 +4029,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",
                 "retained_evidence": [
                     "closed Maven dependency manifest and deterministic archive digest",
+                    "closed Bun dependency manifest and deterministic cache archive digest",
                     "independent reconstruction equality",
                     "two network-none native arm64 build output comparisons",
                     "CycloneDX dependency SBOM",
+                    "CycloneDX Bun dependency SBOM",
                     "fresh High=0/Critical=0 Trivy result and database metadata",
                     "Cosign signature and Rekor bundle",
                     "SLSA v1 provenance with predicate.buildDefinition.resolvedDependencies",
@@ -4067,7 +4168,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             "https://repo.maven.apache.org/maven2/",
             "https://packages.confluent.io/maven/",
             "unchecked wrapper download path is forbidden",
-            "`io/trino/**` artifacts fail closed",
+            "`io/trino/**` reactor artifacts fail closed",
             "core/trino-server/target/trino-server-483.tar.gz",
             "High=0/Critical=0",
             "main-only",

@@ -71,6 +71,94 @@ TRINO_BUILD_EXTENSION_REQUIRED_PATHS = frozenset(
     PurePosixPath(*TRINO_BUILD_EXTENSION_PREFIX, name)
     for name in TRINO_BUILD_EXTENSION_REQUIRED_FILES
 )
+TRINO_EXTERNAL_ARTIFACTS = {
+    ("io", "trino", "benchto", "benchto-base", "0.34"): (
+        "benchto-base-0.34.pom",
+    ),
+    ("io", "trino", "benchto", "benchto-driver", "0.34"): (
+        "benchto-driver-0.34.jar",
+        "benchto-driver-0.34.pom",
+    ),
+    ("io", "trino", "coral", "coral", "2.2.49-1"): (
+        "coral-2.2.49-1.jar",
+        "coral-2.2.49-1.pom",
+    ),
+    ("io", "trino", "hadoop", "hadoop-apache", "3.3.5-3"): (
+        "hadoop-apache-3.3.5-3.jar",
+        "hadoop-apache-3.3.5-3.pom",
+    ),
+    ("io", "trino", "hive", "hive-apache-jdbc", "0.13.1-10"): (
+        "hive-apache-jdbc-0.13.1-10.jar",
+        "hive-apache-jdbc-0.13.1-10.pom",
+    ),
+    ("io", "trino", "hive", "hive-apache", "3.1.2-23"): (
+        "hive-apache-3.1.2-23.jar",
+        "hive-apache-3.1.2-23.pom",
+    ),
+    ("io", "trino", "hive", "hive-thrift", "3"): (
+        "hive-thrift-3.jar",
+        "hive-thrift-3.pom",
+    ),
+    ("io", "trino", "tempto", "tempto-core", "204"): (
+        "tempto-core-204.jar",
+        "tempto-core-204.pom",
+    ),
+    ("io", "trino", "tempto", "tempto-kafka", "204"): (
+        "tempto-kafka-204.jar",
+        "tempto-kafka-204.pom",
+    ),
+    ("io", "trino", "tempto", "tempto-ldap", "204"): (
+        "tempto-ldap-204.jar",
+        "tempto-ldap-204.pom",
+    ),
+    ("io", "trino", "tempto", "tempto-root", "204"): (
+        "tempto-root-204.pom",
+    ),
+    ("io", "trino", "tempto", "tempto-runner", "204"): (
+        "tempto-runner-204.jar",
+        "tempto-runner-204.pom",
+    ),
+    ("io", "trino", "tpcds", "tpcds", "1.7"): (
+        "tpcds-1.7.jar",
+        "tpcds-1.7.pom",
+    ),
+    ("io", "trino", "tpch", "tpch", "1.4"): (
+        "tpch-1.4.jar",
+        "tpch-1.4.pom",
+    ),
+    TRINO_BUILD_EXTENSION_PREFIX: TRINO_BUILD_EXTENSION_REQUIRED_FILES,
+    ("io", "trino", "trino-re2j", "1.7"): (
+        "trino-re2j-1.7.jar",
+        "trino-re2j-1.7.pom",
+    ),
+    ("io", "trino", "trino-root", "482"): (
+        "trino-root-482.pom",
+    ),
+    ("io", "trino", "trino-spi", "482"): (
+        "trino-spi-482.jar",
+        "trino-spi-482.pom",
+    ),
+    ("io", "trino", "trino-wasm-python", "3.13-7"): (
+        "trino-wasm-python-3.13-7.jar",
+        "trino-wasm-python-3.13-7.pom",
+    ),
+}
+TRINO_EXTERNAL_METADATA_PATHS = frozenset(
+    {
+        PurePosixPath(
+            "io/trino/trino-spi/maven-metadata-shirokuma-central.xml"
+        ),
+        PurePosixPath(
+            "io/trino/trino-spi/"
+            "maven-metadata-shirokuma-central-fallback.xml"
+        ),
+    }
+)
+TRINO_EXTERNAL_REQUIRED_PATHS = frozenset(
+    PurePosixPath(*prefix, name)
+    for prefix, names in TRINO_EXTERNAL_ARTIFACTS.items()
+    for name in names
+) | TRINO_EXTERNAL_METADATA_PATHS
 EXCLUDED_RESOLVER_METADATA_NAMES = {
     "_remote.repositories",
     "resolver-status.properties",
@@ -306,23 +394,24 @@ def _repository_files(root: Path) -> list[Path]:
 
 
 def _is_allowed_trino_dependency(relative: PurePosixPath) -> bool:
-    return relative in TRINO_BUILD_EXTENSION_REQUIRED_PATHS
+    return relative in TRINO_EXTERNAL_REQUIRED_PATHS
 
 
-def _validate_trino_build_extension_records(
+def _validate_trino_external_dependency_records(
     records: Mapping[PurePosixPath, str],
 ) -> None:
-    if set(records) != TRINO_BUILD_EXTENSION_REQUIRED_PATHS:
+    if set(records) != TRINO_EXTERNAL_REQUIRED_PATHS:
         _fail(
             "Maven dependency snapshot must contain exactly the required "
-            "Trino build-extension JAR and POM"
+            "external io.trino dependency closure"
         )
     if any(
         origin != ALLOWED_REPOSITORIES["central"]
         for origin in records.values()
     ):
         _fail(
-            "Trino build extension must resolve from the exact Maven Central origin"
+            "External io.trino dependencies must resolve from the exact "
+            "Maven Central origin"
         )
 
 
@@ -331,20 +420,30 @@ def prune_reactor_outputs(repository: Path) -> None:
     for path in files:
         _regular_stat(path)
 
-    extension = repository.joinpath(*TRINO_BUILD_EXTENSION_PREFIX)
-    marker = _marker_origins(extension)
-    if set(marker) != set(TRINO_BUILD_EXTENSION_REQUIRED_FILES):
-        _fail(
-            "Trino build extension origin marker must contain only the exact "
-            "required JAR and POM"
-        )
-    markers = {extension: marker}
-    for name in TRINO_BUILD_EXTENSION_REQUIRED_FILES:
-        required = extension / name
+    markers: dict[Path, Mapping[str, str]] = {}
+    for prefix, required_files in TRINO_EXTERNAL_ARTIFACTS.items():
+        directory = repository.joinpath(*prefix)
+        marker = _marker_origins(directory)
+        if set(marker) != set(required_files):
+            _fail(
+                "External io.trino origin marker must contain only the exact "
+                f"required files: {directory}"
+            )
+        markers[directory] = marker
+        for name in required_files:
+            required = directory / name
+            _regular_stat(required)
+            if _origin(required, markers) != ALLOWED_REPOSITORIES["central"]:
+                _fail(
+                    "External io.trino dependency must resolve from the exact "
+                    f"Maven Central origin: {required}"
+                )
+    for relative in TRINO_EXTERNAL_METADATA_PATHS:
+        required = repository / relative
         _regular_stat(required)
         if _origin(required, markers) != ALLOWED_REPOSITORIES["central"]:
             _fail(
-                "Trino build extension must resolve from the exact "
+                "External io.trino metadata must resolve from the exact "
                 f"Maven Central origin: {required}"
             )
 
@@ -354,9 +453,7 @@ def prune_reactor_outputs(repository: Path) -> None:
             relative.parts[: len(TRINO_GROUP_PREFIX)] == TRINO_GROUP_PREFIX
             and not _is_allowed_trino_dependency(relative)
             and not (
-                relative.parts[: len(TRINO_BUILD_EXTENSION_PREFIX)]
-                == TRINO_BUILD_EXTENSION_PREFIX
-                and len(relative.parts) == len(TRINO_BUILD_EXTENSION_PREFIX) + 1
+                relative.parts[:-1] in TRINO_EXTERNAL_ARTIFACTS
                 and relative.name == "_remote.repositories"
             )
         ):
@@ -437,7 +534,7 @@ def build_manifest(repository: Path) -> dict[str, Any]:
         )
     if not records:
         _fail("Maven dependency snapshot must not be empty")
-    _validate_trino_build_extension_records(trino_build_extension_records)
+    _validate_trino_external_dependency_records(trino_build_extension_records)
     if not bun_input_seen:
         _fail("Maven dependency snapshot is missing the exact Bun toolchain input")
     return {
@@ -602,7 +699,7 @@ def _load_manifest(path: Path) -> dict[str, Any]:
                 _fail("Maven manifest Bun toolchain input differs")
             bun_input_seen = True
         total_bytes += record["size"]
-    _validate_trino_build_extension_records(trino_build_extension_records)
+    _validate_trino_external_dependency_records(trino_build_extension_records)
     if not bun_input_seen:
         _fail("Maven manifest is missing the exact Bun toolchain input")
     if total_bytes != manifest["total_bytes"] or total_bytes > MAX_TOTAL_BYTES:
