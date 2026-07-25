@@ -119,6 +119,23 @@ EXPECTED_SETTINGS_POLICY = {
     "proxies_permitted": False,
     "credentials_permitted": False,
 }
+EXPECTED_SETTINGS_MOUNT = (
+    '--volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:'
+    '/policy/settings.xml:ro"'
+)
+EXPECTED_SETTINGS_ARGUMENT = "--settings /policy/settings.xml"
+EXPECTED_OFFLINE_REPOSITORY_SETTINGS = {
+    "path": SETTINGS_PATH.as_posix(),
+    "container_path": "/policy/settings.xml",
+    "mount": "read-only",
+    "required_for_online_resolution": True,
+    "required_for_network_none_rebuild": True,
+    "purpose": (
+        "preserve_reviewed_mirror_repository_ids_for_offline_"
+        "version_range_metadata"
+    ),
+    "network_access_permitted_by_this_setting": False,
+}
 ALLOWED_GLOBAL_SETTINGS_CONTAINERS = frozenset(
     {
         "mirrors",
@@ -310,6 +327,7 @@ def _maven_command_before_marker(
     if (
         block.count(maven_marker) != 1
         or observed_network_none != (1 if network_none else 0)
+        or block.count(f"  {EXPECTED_SETTINGS_MOUNT} \\\n") != 1
     ):
         _fail(code, "Maven builder invocation differs")
     arguments = block.split(maven_marker, 1)[1]
@@ -575,6 +593,17 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         if value not in workflow:
             _fail("WORKFLOW_REQUIRED", value)
     if (
+        workflow.count(EXPECTED_SETTINGS_MOUNT) != 3
+        or workflow.count(f"{EXPECTED_SETTINGS_ARGUMENT} \\\n") != 3
+    ):
+        _fail(
+            "WORKFLOW_SETTINGS",
+            (
+                "both online resolvers and the two-run network-none rebuild "
+                "must use the exact read-only repository settings"
+            ),
+        )
+    if (
         workflow.count(
             "python3 scripts/package_trino_maven_dependencies.py \\\n"
             '            prune-reactor-outputs --repository "${repository}"'
@@ -605,6 +634,14 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
     expected_offline_command = offline_rebuild.get("command")
     if not isinstance(expected_offline_command, str):
         _fail("WORKFLOW_OFFLINE_COMMAND", "contract command is missing")
+    if (
+        offline_rebuild.get("repository_settings")
+        != EXPECTED_OFFLINE_REPOSITORY_SETTINGS
+    ):
+        _fail(
+            "WORKFLOW_SETTINGS",
+            "contract offline repository settings differ",
+        )
     observed_offline_command = _offline_maven_command(workflow)
     if observed_offline_command != expected_offline_command:
         _fail(

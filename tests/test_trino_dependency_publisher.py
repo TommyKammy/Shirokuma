@@ -949,6 +949,63 @@ class PublisherContractTests(unittest.TestCase):
         ):
             verify._validate_workflow(contract, altered)
 
+    def test_all_maven_invocations_use_exact_repository_settings(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        self.assertEqual(
+            verify.EXPECTED_OFFLINE_REPOSITORY_SETTINGS,
+            contract["offline_rebuild"]["repository_settings"],
+        )
+        self.assertEqual(3, workflow.count(verify.EXPECTED_SETTINGS_MOUNT))
+        self.assertEqual(
+            3,
+            workflow.count(f"{verify.EXPECTED_SETTINGS_ARGUMENT} \\\n"),
+        )
+        self.assertIn(
+            verify.EXPECTED_SETTINGS_ARGUMENT,
+            contract["offline_rebuild"]["command"],
+        )
+
+        for value in (
+            verify.EXPECTED_SETTINGS_MOUNT,
+            verify.EXPECTED_SETTINGS_ARGUMENT,
+        ):
+            with self.subTest(value=value):
+                altered = workflow.replace(value, "# removed exact setting", 1)
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "WORKFLOW_SETTINGS",
+                ):
+                    verify._validate_workflow(contract, altered)
+
+        online_mount_line = (
+            f"            {verify.EXPECTED_SETTINGS_MOUNT} \\\n"
+        )
+        relocated_online_mount = workflow.replace(online_mount_line, "", 1)
+        relocated_online_mount += (
+            f"\n# relocated {verify.EXPECTED_SETTINGS_MOUNT}\n"
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_RESOLUTION_COMMAND",
+        ):
+            verify._validate_workflow(contract, relocated_online_mount)
+
+        offline_mount_line = (
+            f"              {verify.EXPECTED_SETTINGS_MOUNT} \\\n"
+        )
+        relocated_offline_mount = workflow.replace(offline_mount_line, "", 1)
+        relocated_offline_mount += (
+            f"\n# relocated {verify.EXPECTED_SETTINGS_MOUNT}\n"
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_OFFLINE_COMMAND",
+        ):
+            verify._validate_workflow(contract, relocated_offline_mount)
+
     def test_builder_global_settings_allow_only_inert_defaults(
         self,
     ) -> None:
