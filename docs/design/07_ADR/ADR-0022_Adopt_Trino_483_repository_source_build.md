@@ -135,8 +135,9 @@ so native container smoke remains a mandatory publisher gate.
   `linux/arm64`, the exact npm registry, both reviewed `bun.lock` hashes, every
   retained file and mode, and only cache-alias symlinks whose absolute
   `/bun-cache/` targets resolve to retained package directories. Package
-  payload lockfiles such as `yarn.lock` are permitted only when they are part
-  of the exact reviewed snapshot identity; Bun cache-control lock files,
+  payload lockfiles are permitted only at the 11 exact reviewed paths and
+  spelling captured by the repository policy and exact snapshot identity;
+  Bun cache-control lock files,
   hard links, special files, partial downloads, unknown repositories,
   duplicate paths, mutable tags, unsafe links, and repository-produced
   `io/trino/**` reactor artifacts fail closed. Reactor outputs must be rebuilt

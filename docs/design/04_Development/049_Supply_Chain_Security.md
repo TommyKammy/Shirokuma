@@ -771,9 +771,10 @@ PR #120 merged as
 14 minutes 5 seconds, then failed closed while packaging the Bun cache because
 the transient-file rule classified the legitimate package payload
 `combined-stream@1.0.8@@@1/yarn.lock` as a cache-control lock. The focused
-repair permits only the reviewed package payload name `yarn.lock`; `.lock`,
-`download.lock`, and all other unreviewed lock-suffixed files still fail
-closed, and the exact reviewed manifest/archive identity remains mandatory.
+repair permits only the 11 exact reviewed package payload paths with the exact
+`yarn.lock` spelling; `.lock`, `download.lock`, path or case variants, and all
+other unreviewed lock-suffixed files still fail closed, and the exact reviewed
+manifest/archive identity remains mandatory.
 
 The publisher resolves and packages two independent fresh Maven repositories
 and two independent fresh Bun caches, requires each complete

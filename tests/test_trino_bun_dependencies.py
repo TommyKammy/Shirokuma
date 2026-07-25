@@ -124,13 +124,37 @@ class TrinoBunDependencySnapshotTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             cache = self._cache(root)
-            lockfile = cache / "example@1.2.3@@@1" / "yarn.lock"
+            lockfile = (
+                cache / "combined-stream@1.0.8@@@1" / "yarn.lock"
+            )
+            lockfile.parent.mkdir()
             lockfile.write_text("reviewed package payload\n", encoding="utf-8")
             manifest = package.build_manifest(cache)
             self.assertIn(
-                "example@1.2.3@@@1/yarn.lock",
+                "combined-stream@1.0.8@@@1/yarn.lock",
                 [entry["path"] for entry in manifest["entries"]],
             )
+
+    def test_rejects_unreviewed_package_yarn_lock_paths(self) -> None:
+        for relative in (
+            "example@1.2.3@@@1/yarn.lock",
+            "combined-stream@1.0.8@@@1/YARN.LOCK",
+        ):
+            with (
+                self.subTest(relative=relative),
+                tempfile.TemporaryDirectory() as temporary,
+            ):
+                root = Path(temporary)
+                cache = self._cache(root)
+                lockfile = cache / relative
+                lockfile.parent.mkdir(parents=True, exist_ok=True)
+                lockfile.write_text(
+                    "unreviewed package payload\n", encoding="utf-8"
+                )
+                with self.assertRaisesRegex(
+                    package.BunSnapshotError, "transient Bun cache file"
+                ):
+                    package.build_manifest(cache)
 
     def test_rejects_relative_symlink_target(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

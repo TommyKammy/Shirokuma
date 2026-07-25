@@ -43,8 +43,18 @@ MAX_LINK_BYTES = 1_024
 FORBIDDEN_TRANSIENT_NAMES = {
     ".lock",
 }
-ALLOWED_REVIEWED_PACKAGE_LOCK_NAMES = {
-    "yarn.lock",
+ALLOWED_REVIEWED_PACKAGE_LOCK_PATHS = {
+    "combined-stream@1.0.8@@@1/yarn.lock",
+    "d3-array@1.2.4@@@1/yarn.lock",
+    "d3-axis@1.0.12@@@1/yarn.lock",
+    "d3-chord@1.0.6@@@1/yarn.lock",
+    "d3-collection@1.0.7@@@1/yarn.lock",
+    "d3-contour@1.3.2@@@1/yarn.lock",
+    "d3-force@1.2.1@@@1/yarn.lock",
+    "d3-random@1.1.2@@@1/yarn.lock",
+    "d3-scale@2.2.2@@@1/yarn.lock",
+    "d3-voronoi@1.1.4@@@1/yarn.lock",
+    "uri-js@4.4.1@@@1/yarn.lock",
 }
 FORBIDDEN_TRANSIENT_SUFFIXES = (
     ".part",
@@ -93,12 +103,13 @@ def _regular_stat(path: Path) -> os.stat_result:
 
 
 def _reject_transient_file(relative: PurePosixPath) -> None:
+    canonical = relative.as_posix()
     name = relative.name.casefold()
     if (
         name in FORBIDDEN_TRANSIENT_NAMES
         or (
             name.endswith(".lock")
-            and name not in ALLOWED_REVIEWED_PACKAGE_LOCK_NAMES
+            and canonical not in ALLOWED_REVIEWED_PACKAGE_LOCK_PATHS
         )
         or name.endswith(FORBIDDEN_TRANSIENT_SUFFIXES)
     ):
