@@ -383,10 +383,12 @@ jobs:
               --env JAVA_TOOL_OPTIONS= \
               --volume "${offline_source}:/workspace" \
               --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:/policy/.mvn:ro" \
+              --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:/policy/settings.xml:ro" \
               --workdir /policy \
               --entrypoint /usr/share/maven/bin/mvn \
               "${BUILDER_IMAGE}" \
               --offline --ignore-transitive-repositories \
+              --settings /policy/settings.xml \
               -Dmaven.repo.local=/workspace/.m2/repository \
               --file /workspace/pom.xml -pl '!:trino-docs' \
               clean install -DskipTests
@@ -423,6 +425,7 @@ jobs:
               "maven_wrapper_used": False,
               "command": (
                   "mvn --offline --ignore-transitive-repositories "
+                  "--settings /policy/settings.xml "
                   "-Dmaven.repo.local=/workspace/.m2/repository "
                   "--file /workspace/pom.xml "
                   "-pl '!:trino-docs' "

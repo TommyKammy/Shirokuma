@@ -31,11 +31,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "ed26b90a701755801dc185b0dcd8064173a75ab14490fce009e6ee52b584a476"
+      "sha256": "16800e982fce3a12a660d8319c34c7e8a0287686c86af766eb61ae174772bedc"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "4808e54fee692edb240c8c3251a0e12406ddbf9da69d7d48ff573c27040bc13a"
+      "sha256": "f80d083e47d6ceb4a9254994bfda62b2f0a815f60a6e535e996349c0c80bc256"
     }
   ],
   "authorization": {
@@ -378,7 +378,16 @@
       "observations_retained_as_evidence": true,
       "verification_failure_action": "fail_closed_before_offline_rebuild"
     },
-    "command": "mvn --offline --ignore-transitive-repositories -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests",
+    "command": "mvn --offline --ignore-transitive-repositories --settings /policy/settings.xml -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests",
+    "repository_settings": {
+      "path": "bootstrap/trino/v483/settings.xml",
+      "container_path": "/policy/settings.xml",
+      "mount": "read-only",
+      "required_for_online_resolution": true,
+      "required_for_network_none_rebuild": true,
+      "purpose": "preserve_reviewed_mirror_repository_ids_for_offline_version_range_metadata",
+      "network_access_permitted_by_this_setting": false
+    },
     "maven_wrapper_permitted": false,
     "snapshot_input": {
       "artifact_repository": "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies",

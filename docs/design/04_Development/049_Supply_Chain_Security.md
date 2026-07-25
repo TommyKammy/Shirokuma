@@ -715,6 +715,22 @@ require the complete JAR-and-POM pair and require each record to name the exact
 Maven Central origin; a missing file, another version, another artifact,
 another origin, a link, or any retained Trino 483 reactor output fails closed.
 
+Reviewed-main run `30141163505` then passed both independent online
+reconstructions and their complete archive comparison. The first network-none
+build reached the Trino root lifecycle but could not resolve
+`org.bouncycastle:bcutil-jdk18on:[1.81,1.82)` for
+`git-commit-id-maven-plugin:10.0.0`. The closed repository contained the exact
+artifact and version-range metadata, but the online resolvers had stored that
+metadata under the reviewed mirror IDs while the offline invocation omitted the
+repository-owned settings and looked under the original `central` ID. The
+offline builder now mounts the same hash-bound settings read-only and passes
+`--settings /policy/settings.xml`. Local reproduction with the exact Trino 483
+source and pinned native-arm64 Maven builder failed without that argument and
+passed with it. Docker networking remains `none`; this change neither adds a
+repository nor permits a network fallback. The verifier requires the exact
+settings mount and argument in both online resolver blocks and in the
+two-execution offline block.
+
 The publisher resolves and packages two independent fresh Maven repositories,
 each seeded only with its independently digest-verified Bun input, requires
 their complete manifests and deterministic archives to be equal, and then

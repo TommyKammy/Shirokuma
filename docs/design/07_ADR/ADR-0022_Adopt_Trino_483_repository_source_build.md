@@ -4,8 +4,8 @@ doc_id: "ADR-0022"
 title: "Select a conditional repository-owned Trino 483 source build"
 status: accepted
 created: 2026-07-22
-updated: 2026-07-24
-version: "0.9"
+updated: 2026-07-25
+version: "1.0"
 area: "architecture"
 tags: [shirokuma, adr, trino, arm64, maven, supply-chain]
 ---
@@ -140,10 +140,16 @@ so native container smoke remains a mandatory publisher gate.
   reviewed source and cannot enter the dependency input.
 - Require an independent clean verifier to reconstruct the candidate from the
   same allowlisted repositories, compare the complete manifest, then run
-  `mvn --offline --ignore-transitive-repositories -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests`
+  `mvn --offline --ignore-transitive-repositories --settings /policy/settings.xml -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests`
   in a fresh network-none native-arm64 builder. The output must be exactly
   `core/trino-server/target/trino-server-483.tar.gz`; its hash, size, and
   reproducible-build comparison become retained evidence. The explicit
+  repository-owned settings file must be mounted read-only at
+  `/policy/settings.xml` during both online resolution and offline rebuild.
+  This preserves the reviewed mirror repository IDs used by Maven's
+  version-range metadata; it does not grant network access to the
+  network-none builder.
+  The explicit
   `!:trino-docs` exclusion follows the Trino 483 upstream product-build
   boundary: that reactor module invokes Sphinx to generate documentation and
   contributes no Trino server runtime output. Both fresh dependency resolutions

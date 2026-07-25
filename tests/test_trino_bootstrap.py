@@ -3761,6 +3761,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "fresh_source_checkout_required",
                 "runner",
                 "command",
+                "repository_settings",
                 "maven_wrapper_permitted",
                 "snapshot_input",
                 "maven_repository",
@@ -3806,12 +3807,28 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         self.assertEqual(
             (
                 "mvn --offline --ignore-transitive-repositories "
+                "--settings /policy/settings.xml "
                 "-Dmaven.repo.local=/workspace/.m2/repository "
                 "--file /workspace/pom.xml "
                 "-pl '!:trino-docs' "
                 "clean install -DskipTests"
             ),
             rebuild["command"],
+        )
+        self.assertEqual(
+            {
+                "path": "bootstrap/trino/v483/settings.xml",
+                "container_path": "/policy/settings.xml",
+                "mount": "read-only",
+                "required_for_online_resolution": True,
+                "required_for_network_none_rebuild": True,
+                "purpose": (
+                    "preserve_reviewed_mirror_repository_ids_for_offline_"
+                    "version_range_metadata"
+                ),
+                "network_access_permitted_by_this_setting": False,
+            },
+            rebuild["repository_settings"],
         )
         self.assertIs(rebuild["maven_wrapper_permitted"], False)
         self.assertEqual(
