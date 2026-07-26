@@ -161,6 +161,17 @@ and produced the expected 851,844,285-byte server tarball with SHA-256
 This is pre-merge sufficiency evidence only and does not exercise or waive the
 reviewed-main publication gates.
 
+PR #123 merged the ADR-0024 Web UI overlay as
+`a217edcd2ff414d347f04997df8ad2521d554217`. Reviewed-main run
+`30196716086` completed the independent dependency reconstructions, two
+network-none builds, archive equality, and the Maven and raw/OpenVEX-adjusted
+Bun scan gates. The run then failed closed before publication because its
+candidate-recording `trivy version` command did not point at the vulnerability
+database cache already populated by the Trivy action, so database freshness
+metadata was absent. The focused follow-up requires both direct Trivy commands
+to reuse that exact cache and makes either missing declaration a contract
+failure. The failed run created no admitted or published dependency artifact.
+
 A separate evidence-only PR must review and pin the exact OCI digest and retire
 the publisher. Image publication, resident admission, credentials, Flux
 objects, and runtime activation remain forbidden until their own later

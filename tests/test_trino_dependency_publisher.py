@@ -1242,7 +1242,7 @@ class PublisherContractTests(unittest.TestCase):
             workflow.count('TRIVY_INCLUDE_DEV_DEPS: "true"'),
         )
         self.assertEqual(
-            1,
+            2,
             workflow.count(
                 "TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy"
             ),
@@ -1263,6 +1263,20 @@ class PublisherContractTests(unittest.TestCase):
         ):
             verify._validate_workflow(contract, altered)
         altered = workflow.replace(
+            verify.EXPECTED_RECORD_TRIVY_CACHE_BLOCK,
+            verify.EXPECTED_RECORD_TRIVY_CACHE_BLOCK.replace(
+                "          TRIVY_CACHE_DIR: "
+                "${{ github.workspace }}/.cache/trivy\n",
+                "",
+            ),
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_TRIVY_CACHE",
+        ):
+            verify._validate_workflow(contract, altered)
+        altered = workflow.replace(
             "          TRIVY_CACHE_DIR: "
             "${{ github.workspace }}/.cache/trivy\n",
             "",
@@ -1270,7 +1284,7 @@ class PublisherContractTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(
             verify.ContractError,
-            "WORKFLOW_BUN_SCAN",
+            "WORKFLOW_TRIVY_CACHE",
         ):
             verify._validate_workflow(contract, altered)
 

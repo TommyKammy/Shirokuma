@@ -688,6 +688,8 @@ jobs:
       - name: Record the read-only candidate
         if: steps.lifecycle.outputs.active == 'true'
         id: record
+        env:
+          TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
         shell: bash
         run: |
           set -euo pipefail
