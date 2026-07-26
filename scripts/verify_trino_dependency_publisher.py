@@ -267,6 +267,10 @@ EXPECTED_OFFLINE_COMPILER_DEBUG = {
         "while retaining source and line diagnostics"
     ),
 }
+EXPECTED_OFFLINE_DIGEST_COMMAND = (
+    '            sha256sum "${output}" | cut -d\' \' -f1 \\\n'
+    '              > "${candidate}/offline-output-${suffix}.sha256"'
+)
 ALLOWED_GLOBAL_SETTINGS_CONTAINERS = frozenset(
     {
         "mirrors",
@@ -1039,10 +1043,15 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         or workflow.count('"compiler_debug_level": "source,lines"') != 1
         or workflow.count('"local_variable_debug_table_permitted": False') != 1
         or workflow.count("-Dmaven.compiler.debuglevel=source,lines") != 2
+        or workflow.count(EXPECTED_OFFLINE_DIGEST_COMMAND) != 1
+        or 'sha256sum "${output}" >' in workflow
     ):
         _fail(
             "WORKFLOW_OFFLINE",
-            "two network-none rebuilds and exact compiler evidence are required",
+            (
+                "two network-none rebuilds, exact compiler evidence, and "
+                "filename-independent digest comparison are required"
+            ),
         )
     if (
         lines.count("  BUN_CACHE_DIRECTORY: /bun-cache") != 1

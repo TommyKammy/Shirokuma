@@ -462,7 +462,8 @@ jobs:
               --cache "${offline_bun_cache}"
             output="${offline_source}/core/trino-server/target/trino-server-483.tar.gz"
             test -s "${output}"
-            sha256sum "${output}" > "${candidate}/offline-output-${suffix}.sha256"
+            sha256sum "${output}" | cut -d' ' -f1 \
+              > "${candidate}/offline-output-${suffix}.sha256"
             stat --format='%s' "${output}" > "${candidate}/offline-output-${suffix}.size"
           done
           cmp \
