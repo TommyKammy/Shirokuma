@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import gzip
 import hashlib
@@ -867,7 +868,58 @@ class BunScanEvidenceTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(payload)
 
-    def _report(self, root: Path, *, missing_sentinel: bool = False) -> Path:
+    def _overlay_contract(self) -> dict[str, object]:
+        overlay = json.loads(json.dumps(verify.EXPECTED_SOURCE_OVERLAY))
+        overlay["vulnerability_assessment"]["raw_finding"]["target"] = (
+            "webapp/bun.lock"
+        )
+        return overlay
+
+    @contextlib.contextmanager
+    def _scan_contract(self):
+        def load_json(path: Path) -> dict[str, object]:
+            if path.as_posix().endswith(verify.CONTRACT_PATH.as_posix()):
+                return {}
+            return json.loads(path.read_text(encoding="utf-8"))
+
+        with (
+            mock.patch.object(
+                verify,
+                "EXPECTED_BUN_PACKAGE_CACHE",
+                self._cache_contract(),
+            ),
+            mock.patch.object(
+                verify,
+                "EXPECTED_BUN_SCAN_RESULTS",
+                self.PACKAGE_EXPECTATIONS,
+            ),
+            mock.patch.object(
+                verify,
+                "EXPECTED_SOURCE_OVERLAY",
+                self._overlay_contract(),
+            ),
+            mock.patch.object(
+                verify,
+                "_validate_source_overlay_contract",
+            ),
+            mock.patch.object(
+                verify,
+                "_load_json",
+                side_effect=load_json,
+            ),
+        ):
+            yield
+
+    def _report(
+        self,
+        root: Path,
+        name: str,
+        *,
+        adjusted_finding: bool = False,
+        missing_sentinel: bool = False,
+        wrong_purl: bool = False,
+        inventory_drift: bool = False,
+    ) -> Path:
         packages = {
             "webapp/bun.lock": [
                 {"Name": "web-package"},
@@ -877,7 +929,23 @@ class BunScanEvidenceTests(unittest.TestCase):
         }
         if missing_sentinel:
             packages["webapp/bun.lock"][0] = {"Name": "different-package"}
-        report = root / "trivy.json"
+        if inventory_drift:
+            packages["legacy/bun.lock"][0]["Version"] = "changed"
+        finding = {
+            "VulnerabilityID": "GHSA-qwww-vcr4-c8h2",
+            "PkgName": "react-router",
+            "InstalledVersion": "7.18.1",
+            "FixedVersion": "8.3.0",
+            "Severity": "HIGH",
+            "PkgIdentifier": {
+                "PURL": (
+                    "pkg:npm/react-router@7.18.2"
+                    if wrong_purl
+                    else "pkg:npm/react-router@7.18.1"
+                )
+            },
+        }
+        report = root / name
         report.write_text(
             json.dumps(
                 {
@@ -889,6 +957,15 @@ class BunScanEvidenceTests(unittest.TestCase):
                             "Class": "lang-pkgs",
                             "Type": "bun",
                             "Packages": records,
+                            **(
+                                {"Vulnerabilities": [finding]}
+                                if target == "webapp/bun.lock"
+                                and (
+                                    name.startswith("raw")
+                                    or adjusted_finding
+                                )
+                                else {}
+                            ),
                         }
                         for target, records in packages.items()
                     ],
@@ -930,20 +1007,10 @@ class BunScanEvidenceTests(unittest.TestCase):
             scan_input = root / "scan-input"
             scan_input.mkdir()
             self._write_lockfiles(scan_input)
-            report = self._report(root)
-            with (
-                mock.patch.object(
-                    verify,
-                    "EXPECTED_BUN_PACKAGE_CACHE",
-                    self._cache_contract(),
-                ),
-                mock.patch.object(
-                    verify,
-                    "EXPECTED_BUN_SCAN_RESULTS",
-                    self.PACKAGE_EXPECTATIONS,
-                ),
-            ):
-                verify.verify_bun_scan(scan_input, report)
+            raw = self._report(root, "raw.json")
+            adjusted = self._report(root, "adjusted.json")
+            with self._scan_contract():
+                verify.verify_bun_scan(root, scan_input, raw, adjusted)
 
     def test_verify_bun_scan_rejects_missing_expected_package(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -951,24 +1018,79 @@ class BunScanEvidenceTests(unittest.TestCase):
             scan_input = root / "scan-input"
             scan_input.mkdir()
             self._write_lockfiles(scan_input)
-            report = self._report(root, missing_sentinel=True)
+            raw = self._report(root, "raw.json", missing_sentinel=True)
+            adjusted = self._report(
+                root,
+                "adjusted.json",
+                missing_sentinel=True,
+            )
             with (
-                mock.patch.object(
-                    verify,
-                    "EXPECTED_BUN_PACKAGE_CACHE",
-                    self._cache_contract(),
-                ),
-                mock.patch.object(
-                    verify,
-                    "EXPECTED_BUN_SCAN_RESULTS",
-                    self.PACKAGE_EXPECTATIONS,
-                ),
+                self._scan_contract(),
                 self.assertRaisesRegex(
                     verify.ContractError,
                     "required packages missing",
                 ),
             ):
-                verify.verify_bun_scan(scan_input, report)
+                verify.verify_bun_scan(root, scan_input, raw, adjusted)
+
+    def test_verify_bun_scan_rejects_raw_finding_identity_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scan_input = root / "scan-input"
+            scan_input.mkdir()
+            self._write_lockfiles(scan_input)
+            raw = self._report(root, "raw.json", wrong_purl=True)
+            adjusted = self._report(root, "adjusted.json")
+            with (
+                self._scan_contract(),
+                self.assertRaisesRegex(
+                    verify.ContractError,
+                    "BUN_SCAN_RAW_FINDING",
+                ),
+            ):
+                verify.verify_bun_scan(root, scan_input, raw, adjusted)
+
+    def test_verify_bun_scan_rejects_adjusted_finding(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scan_input = root / "scan-input"
+            scan_input.mkdir()
+            self._write_lockfiles(scan_input)
+            raw = self._report(root, "raw.json")
+            adjusted = self._report(
+                root,
+                "adjusted.json",
+                adjusted_finding=True,
+            )
+            with (
+                self._scan_contract(),
+                self.assertRaisesRegex(
+                    verify.ContractError,
+                    "BUN_SCAN_ADJUSTED_FINDING",
+                ),
+            ):
+                verify.verify_bun_scan(root, scan_input, raw, adjusted)
+
+    def test_verify_bun_scan_rejects_package_inventory_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scan_input = root / "scan-input"
+            scan_input.mkdir()
+            self._write_lockfiles(scan_input)
+            raw = self._report(root, "raw.json")
+            adjusted = self._report(
+                root,
+                "adjusted.json",
+                inventory_drift=True,
+            )
+            with (
+                self._scan_contract(),
+                self.assertRaisesRegex(
+                    verify.ContractError,
+                    "BUN_SCAN_INVENTORY",
+                ),
+            ):
+                verify.verify_bun_scan(root, scan_input, raw, adjusted)
 
     def test_verify_bun_snapshot_requires_reviewed_identities(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1116,10 +1238,14 @@ class PublisherContractTests(unittest.TestCase):
             workflow,
         )
         self.assertEqual(
-            2,
+            3,
             workflow.count('TRIVY_INCLUDE_DEV_DEPS: "true"'),
         )
         self.assertEqual(2, workflow.count("list-all-pkgs: true"))
+        self.assertIn('--vex "${vex}"', workflow)
+        self.assertEqual(1, workflow.count("--skip-db-update"))
+        self.assertIn("trivy-bun-vulnerability-raw.json", workflow)
+        self.assertIn("--adjusted-report \\", workflow)
         altered = workflow.replace(
             "scan-ref: ${{ runner.temp }}/trino-bun-scan-input",
             "scan-ref: ${{ runner.temp }}/bun-cache-a",
@@ -1579,6 +1705,33 @@ class PublisherContractTests(unittest.TestCase):
             with self.subTest(instant=instant):
                 with self.assertRaises(verify.ContractError):
                     verify._validate_authorization(contract, at=instant)
+
+    def test_source_overlay_authorization_expires_fail_closed(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        verify._validate_source_overlay_contract(
+            ROOT,
+            contract,
+            at=dt.datetime(2026, 8, 21, 22, 43, 35, tzinfo=dt.timezone.utc),
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "SOURCE_OVERLAY_EXPIRED",
+        ):
+            verify._validate_source_overlay_contract(
+                ROOT,
+                contract,
+                at=dt.datetime(
+                    2026,
+                    8,
+                    21,
+                    22,
+                    43,
+                    36,
+                    tzinfo=dt.timezone.utc,
+                ),
+            )
 
     def test_transfer_log_rejects_unknown_repositories_and_credentials(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

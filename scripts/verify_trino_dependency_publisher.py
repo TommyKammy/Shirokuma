@@ -29,6 +29,17 @@ BUN_PREPARER_PATH = Path("scripts/prepare_trino_bun_input.py")
 VERIFIER_PATH = Path("scripts/verify_trino_dependency_publisher.py")
 TEST_PATH = Path("tests/test_trino_dependency_publisher.py")
 BUN_TEST_PATH = Path("tests/test_trino_bun_dependencies.py")
+SOURCE_OVERLAY_PATH = Path(
+    "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch"
+)
+VEX_PATH = Path(
+    "bootstrap/trino/v483/vex/"
+    "react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
+)
+OVERLAY_ADR_PATH = Path(
+    "docs/design/07_ADR/"
+    "ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md"
+)
 EXPECTED_REPOSITORY = "TommyKammy/Shirokuma"
 EXPECTED_SOURCE_REPOSITORY = "https://github.com/trinodb/trino"
 EXPECTED_TAG = "483"
@@ -70,25 +81,25 @@ EXPECTED_BUN_PACKAGE_CACHE = {
     "frozen_lockfiles": [
         {
             "path": "core/trino-web-ui/src/main/resources/webapp/bun.lock",
-            "sha256": "70da1dad7c6f45743637cba7dde948793d787b1ced1382e90966d60fe17dc885",
+            "sha256": "b9010ec72590c76c7dc865a10b1fefe554a64eabb1492c422c954e45324cc9d3",
         },
         {
             "path": (
                 "core/trino-web-ui/src/main/resources/"
                 "webapp-legacy/src/bun.lock"
             ),
-            "sha256": "0ca8b926ea0a2af3fff339b43c52de03a8f99c4aa9ba1d4c2ecd081bcd715ad3",
+            "sha256": "14fa0d75107753676c59093978fe68fe67486868564f41dadc7d76d659d2df25",
         },
     ],
     "independent_reconstructions": 2,
     "reviewed_snapshot": {
         "manifest_sha256": (
-            "adfcb6663080ef7f39b5e592b7ca8df94e3449ae0ab73af630feac5a5fe721b0"
+            "6e7be3a404014f6f7ac7e4bc326c8d46f7d5822fcea1ac000219c17f1d23f421"
         ),
         "archive_sha256": (
-            "19087b76181177178ead04cabd85f81180ce64d71d84b78e5dda74a2dc71abd7"
+            "252eade2183bdf5a371f073752420c3a45f5ef8b1dacb08a4addea350389e3c2"
         ),
-        "archive_size": 128_457_765,
+        "archive_size": 128_423_777,
     },
     "network_none_rebuild_mount": "read-only",
     "network_none_cache_outside_source": True,
@@ -97,7 +108,7 @@ EXPECTED_BUN_PACKAGE_CACHE = {
 }
 EXPECTED_BUN_SCAN_RESULTS = {
     "core/trino-web-ui/src/main/resources/webapp/bun.lock": {
-        "package_count": 473,
+        "package_count": 470,
         "required_packages": frozenset(
             {
                 "@dagrejs/dagre",
@@ -114,6 +125,183 @@ EXPECTED_BUN_SCAN_RESULTS = {
             }
         ),
     },
+}
+EXPECTED_SOURCE_OVERLAY = {
+    "state": "approved_bounded_web_ui_security",
+    "decision_record": OVERLAY_ADR_PATH.as_posix(),
+    "approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5081842992"
+    ),
+    "expires_at": "2026-08-21T22:43:36Z",
+    "automatic_renewal": False,
+    "applied_after_source_verification": True,
+    "patch": {
+        "path": SOURCE_OVERLAY_PATH.as_posix(),
+        "sha256": "9062d9122b360c224dea5dd73a7cbc2b0d61291fd147c38883343c8352d8d7ca",
+    },
+    "permitted_paths": [
+        "core/trino-web-ui/src/main/resources/webapp/package.json",
+        "core/trino-web-ui/src/main/resources/webapp/bun.lock",
+        "core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json",
+        "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock",
+    ],
+    "preimages": {
+        "core/trino-web-ui/src/main/resources/webapp/package.json": (
+            "0e059ceb7d558961bfafc93cb1f34ad4aebbc28caa6ccbc62e4635bf4f9e44e9"
+        ),
+        "core/trino-web-ui/src/main/resources/webapp/bun.lock": (
+            "70da1dad7c6f45743637cba7dde948793d787b1ced1382e90966d60fe17dc885"
+        ),
+        "core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json": (
+            "d241303ae65fa0d79ada35538e6948a3e8bdcc96b1bf132cab0d9d87a50c1c60"
+        ),
+        "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock": (
+            "0ca8b926ea0a2af3fff339b43c52de03a8f99c4aa9ba1d4c2ecd081bcd715ad3"
+        ),
+    },
+    "postimages": {
+        "core/trino-web-ui/src/main/resources/webapp/package.json": (
+            "34b237a9af887a5cbe9c83f541a5084299f9eb3b1e974a661dea7cd17a1c8d38"
+        ),
+        "core/trino-web-ui/src/main/resources/webapp/bun.lock": (
+            "b9010ec72590c76c7dc865a10b1fefe554a64eabb1492c422c954e45324cc9d3"
+        ),
+        "core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json": (
+            "34f68bd556c33d54b2e3475ffd8dc45e1a7167b3c9c60ba257ed43e0f0e6a8df"
+        ),
+        "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock": (
+            "14fa0d75107753676c59093978fe68fe67486868564f41dadc7d76d659d2df25"
+        ),
+    },
+    "dependency_overrides": {
+        "brace-expansion": "5.0.8",
+        "d3-color": "3.1.0",
+        "fast-uri": "3.1.4",
+        "postcss": "8.5.18",
+        "react-router-dom": "7.18.1",
+    },
+    "react_router_import_inventory": [
+        {
+            "path": "core/trino-web-ui/src/main/resources/webapp/src/App.tsx",
+            "statement": (
+                "import { HashRouter as Router, Routes, Route, Navigate } "
+                "from 'react-router-dom'"
+            ),
+        },
+        {
+            "path": (
+                "core/trino-web-ui/src/main/resources/webapp/src/"
+                "components/Layout.tsx"
+            ),
+            "statement": "import { useLocation, Link } from 'react-router-dom'",
+        },
+        {
+            "path": (
+                "core/trino-web-ui/src/main/resources/webapp/src/"
+                "components/MetricCard.tsx"
+            ),
+            "statement": "import { Link as RouterLink } from 'react-router-dom'",
+        },
+        {
+            "path": (
+                "core/trino-web-ui/src/main/resources/webapp/src/"
+                "components/QueryDetails.tsx"
+            ),
+            "statement": (
+                "import { useParams, useSearchParams } from 'react-router-dom'"
+            ),
+        },
+        {
+            "path": (
+                "core/trino-web-ui/src/main/resources/webapp/src/"
+                "components/QueryListItem.tsx"
+            ),
+            "statement": "import { Link as RouterLink } from 'react-router-dom'",
+        },
+        {
+            "path": (
+                "core/trino-web-ui/src/main/resources/webapp/src/"
+                "components/QueryStageCard.tsx"
+            ),
+            "statement": "import { Link as RouterLink } from 'react-router'",
+        },
+        {
+            "path": (
+                "core/trino-web-ui/src/main/resources/webapp/src/"
+                "components/WorkerStatus.tsx"
+            ),
+            "statement": "import { useParams } from 'react-router-dom'",
+        },
+        {
+            "path": (
+                "core/trino-web-ui/src/main/resources/webapp/src/"
+                "components/WorkersList.tsx"
+            ),
+            "statement": "import { Link as RouterLink } from 'react-router-dom'",
+        },
+        {
+            "path": (
+                "core/trino-web-ui/src/main/resources/webapp/src/router.tsx"
+            ),
+            "statement": "import { RouteProps } from 'react-router-dom'",
+        },
+    ],
+    "vulnerability_assessment": {
+        "raw_report_required": True,
+        "adjusted_report_required": True,
+        "raw_finding": {
+            "target": "core/trino-web-ui/src/main/resources/webapp/bun.lock",
+            "vulnerability_id": "GHSA-qwww-vcr4-c8h2",
+            "package": "react-router",
+            "installed_version": "7.18.1",
+            "fixed_version": "8.3.0",
+            "severity": "HIGH",
+            "purl": "pkg:npm/react-router@7.18.1",
+        },
+        "openvex": {
+            "path": VEX_PATH.as_posix(),
+            "sha256": (
+                "f36e8c7ab98f177c0e3f796a22cfa23e8709dc9a9b39bff32806c9b5db534a2a"
+            ),
+            "status": "not_affected",
+            "justification": "vulnerable_code_not_in_execute_path",
+        },
+        "adjusted_maximum_high": 0,
+        "adjusted_maximum_critical": 0,
+        "raw_and_adjusted_package_inventory_must_match": True,
+    },
+}
+EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION = {
+    "status": "active",
+    "authorization_type": (
+        "time_boxed_bounded_source_overlay_and_not_affected_assessment"
+    ),
+    "decision_record": OVERLAY_ADR_PATH.as_posix(),
+    "approval_record": EXPECTED_SOURCE_OVERLAY["approval_record"],
+    "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
+    "expires_at": EXPECTED_SOURCE_OVERLAY["expires_at"],
+    "automatic_renewal": False,
+    "risk_owner": "TommyKammy",
+    "implementation_author": "Codex",
+    "reviewer_must_differ_from_implementation_author": True,
+    "source_binding": {
+        "repository": EXPECTED_SOURCE_REPOSITORY,
+        "release_tag": EXPECTED_TAG,
+        "commit_sha": EXPECTED_COMMIT,
+        "tree_sha": EXPECTED_TREE,
+    },
+    "permitted_paths": EXPECTED_SOURCE_OVERLAY["permitted_paths"],
+    "openvex_scope": {
+        "vulnerability_id": "GHSA-qwww-vcr4-c8h2",
+        "product": "pkg:npm/react-router@7.18.1",
+        "status": "not_affected",
+        "justification": "vulnerable_code_not_in_execute_path",
+    },
+    "vulnerability_risk_accepted": False,
+    "raw_finding_retention_required": True,
+    "adjusted_high_zero_critical_zero_required": True,
+    "expiry_action": "fail_closed_before_dependency_resolution_or_publication",
 }
 EXPECTED_TRINO_BUILD_EXTENSION = {
     "group_id": "io.trino",
@@ -304,6 +492,7 @@ EXPECTED_STEPS = {
         "Check the Trino dependency publication lifecycle",
         "Verify the native arm64 builder substrate",
         "Fetch and verify the exact provisionally authorized source",
+        "Apply the bounded Web UI security overlay",
         "Resolve and package the first closed Maven repository",
         "Independently reconstruct the closed Maven repository",
         "Prove two fresh network-none offline source builds",
@@ -311,8 +500,9 @@ EXPECTED_STEPS = {
         "Scan the dependency closure and block High or Critical findings",
         "Stage the exact Bun lockfiles for dependency analysis",
         "Generate a CycloneDX Bun dependency SBOM",
-        "Scan the Bun dependency closure and block High or Critical findings",
-        "Verify both reviewed Bun dependency graphs were analyzed",
+        "Retain the raw Bun High or Critical findings",
+        "Apply OpenVEX and block remaining Bun High or Critical findings",
+        "Verify the raw and OpenVEX-adjusted Bun dependency evidence",
         "Record the read-only candidate",
         "Retain the read-only-verified candidate",
     ],
@@ -465,6 +655,204 @@ def verify_bun_snapshot_identity(descriptor: Path, archive: Path) -> None:
         _fail("BUN_SNAPSHOT_IDENTITY", "archive identity differs")
 
 
+def _validate_openvex(root: Path) -> None:
+    expected = EXPECTED_SOURCE_OVERLAY["vulnerability_assessment"]["openvex"]
+    path = root / expected["path"]
+    if _sha256(path) != expected["sha256"]:
+        _fail("SOURCE_VEX", "OpenVEX SHA-256 differs")
+    document = _load_json(path)
+    expected_document = {
+        "@context": "https://openvex.dev/ns/v0.2.0",
+        "@id": (
+            "https://github.com/TommyKammy/Shirokuma/issues/63"
+            "#trino-483-react-router-ghsa-qwww-vcr4-c8h2"
+        ),
+        "author": "TommyKammy/Shirokuma",
+        "timestamp": "2026-07-26T03:42:59Z",
+        "version": 1,
+        "statements": [
+            {
+                "vulnerability": {"@id": "GHSA-qwww-vcr4-c8h2"},
+                "products": [{"@id": "pkg:npm/react-router@7.18.1"}],
+                "status": "not_affected",
+                "justification": "vulnerable_code_not_in_execute_path",
+                "impact_statement": (
+                    "The advisory affects unstable React Server Components APIs. "
+                    "Trino 483 imports only client-side HashRouter, Routes, Route, "
+                    "Navigate, Link, location, parameter, and search-parameter APIs; "
+                    "it does not import or invoke unstable RSC APIs."
+                ),
+            }
+        ],
+    }
+    if document != expected_document:
+        _fail("SOURCE_VEX", "OpenVEX document differs")
+
+
+def _validate_source_overlay_contract(
+    root: Path,
+    contract: Mapping[str, Any],
+    *,
+    at: dt.datetime | None,
+) -> None:
+    overlay = contract.get("source", {}).get("source_overlay")
+    if overlay != EXPECTED_SOURCE_OVERLAY:
+        _fail("SOURCE_OVERLAY", "bounded Web UI overlay contract differs")
+    patch = EXPECTED_SOURCE_OVERLAY["patch"]
+    if _sha256(root / patch["path"]) != patch["sha256"]:
+        _fail("SOURCE_OVERLAY", "source overlay SHA-256 differs")
+    _validate_openvex(root)
+    expires = _parse_time(EXPECTED_SOURCE_OVERLAY["expires_at"])
+    authorization_expires = _parse_time(contract["authorization"]["expires_at"])
+    if expires > authorization_expires:
+        _fail("SOURCE_OVERLAY", "overlay outlives source authorization")
+    if at is not None and at >= expires:
+        _fail("SOURCE_OVERLAY_EXPIRED", expires.isoformat())
+
+
+def _validate_react_router_import_inventory(checkout: Path) -> None:
+    source_root = (
+        checkout
+        / "core/trino-web-ui/src/main/resources/webapp/src"
+    )
+    observed: list[dict[str, str]] = []
+    forbidden_markers = (
+        "unstable_RSC",
+        "unstable_createCallServer",
+        "server.rsc",
+        "react-server",
+    )
+    try:
+        paths = sorted(
+            path
+            for path in source_root.rglob("*")
+            if path.is_file() and path.suffix in {".js", ".jsx", ".ts", ".tsx"}
+        )
+    except OSError as error:
+        _fail("SOURCE_IMPORT_INVENTORY", str(error))
+    for path in paths:
+        payload = _read_reviewed_regular_file(
+            path,
+            code="SOURCE_IMPORT_INVENTORY",
+        )
+        try:
+            text = payload.decode("utf-8", errors="strict")
+        except UnicodeDecodeError as error:
+            _fail("SOURCE_IMPORT_INVENTORY", f"{path}: {error}")
+        if any(marker in text for marker in forbidden_markers):
+            _fail("SOURCE_IMPORT_INVENTORY", f"RSC marker in {path}")
+        for line in text.splitlines():
+            if "react-router" not in line:
+                continue
+            statement = line.strip()
+            if re.fullmatch(
+                r"import .+ from ['\"]react-router(?:-dom)?['\"]",
+                statement,
+            ) is None:
+                _fail(
+                    "SOURCE_IMPORT_INVENTORY",
+                    f"non-static React Router reference in {path}: {statement}",
+                )
+            observed.append(
+                {
+                    "path": path.relative_to(checkout).as_posix(),
+                    "statement": statement,
+                }
+            )
+    expected = EXPECTED_SOURCE_OVERLAY["react_router_import_inventory"]
+    observed_inventory = sorted(
+        observed,
+        key=lambda item: (item["path"], item["statement"]),
+    )
+    expected_inventory = sorted(
+        expected,
+        key=lambda item: (item["path"], item["statement"]),
+    )
+    if observed_inventory != expected_inventory:
+        _fail("SOURCE_IMPORT_INVENTORY", f"imports differ: {observed!r}")
+
+
+def apply_source_overlay(root: Path, checkout: Path) -> None:
+    audit_source(root, checkout)
+    contract = _load_json(root / CONTRACT_PATH)
+    now = dt.datetime.now(dt.timezone.utc)
+    _validate_source_overlay_contract(root, contract, at=now)
+    overlay = EXPECTED_SOURCE_OVERLAY
+    permitted = set(overlay["permitted_paths"])
+    if permitted != set(overlay["preimages"]) or permitted != set(
+        overlay["postimages"]
+    ):
+        _fail("SOURCE_OVERLAY", "preimage/postimage path sets differ")
+    for relative, expected in overlay["preimages"].items():
+        payload = _read_reviewed_regular_file(
+            checkout / relative,
+            code="SOURCE_OVERLAY_PREIMAGE",
+        )
+        if hashlib.sha256(payload).hexdigest() != expected:
+            _fail("SOURCE_OVERLAY_PREIMAGE", relative)
+    _validate_react_router_import_inventory(checkout)
+    patch = root / overlay["patch"]["path"]
+    command = [
+        "git",
+        "apply",
+        "--whitespace=error-all",
+        str(patch),
+    ]
+    try:
+        subprocess.run(
+            [*command[:2], "--check", *command[2:]],
+            cwd=checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            command,
+            cwd=checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        changed = set(
+            subprocess.run(
+                [
+                    "git",
+                    "diff",
+                    "--name-only",
+                    "--diff-filter=ACDMRTUXB",
+                    "HEAD",
+                    "--",
+                ],
+                cwd=checkout,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.splitlines()
+        )
+        untracked = subprocess.run(
+            ["git", "ls-files", "--others", "--exclude-standard"],
+            cwd=checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+    except (OSError, subprocess.CalledProcessError) as error:
+        _fail("SOURCE_OVERLAY_APPLY", str(error))
+    if changed != permitted or untracked:
+        _fail(
+            "SOURCE_OVERLAY_APPLY",
+            f"changed={sorted(changed)!r}, untracked={untracked!r}",
+        )
+    for relative, expected in overlay["postimages"].items():
+        payload = _read_reviewed_regular_file(
+            checkout / relative,
+            code="SOURCE_OVERLAY_POSTIMAGE",
+        )
+        if hashlib.sha256(payload).hexdigest() != expected:
+            _fail("SOURCE_OVERLAY_POSTIMAGE", relative)
+    _validate_react_router_import_inventory(checkout)
+
+
 def stage_bun_scan_input(checkout: Path, output: Path) -> None:
     if output.exists() or output.is_symlink():
         _fail("BUN_SCAN_INPUT", f"output already exists: {output}")
@@ -498,7 +886,110 @@ def _bun_scan_target(target: object) -> str:
     return normalized
 
 
-def verify_bun_scan(scan_input: Path, report_path: Path) -> None:
+def _bun_scan_report(
+    report_path: Path,
+) -> tuple[dict[str, list[dict[str, Any]]], list[tuple[str, dict[str, Any]]]]:
+    report = _load_json(report_path)
+    if (
+        report.get("SchemaVersion") != 2
+        or report.get("ArtifactType") != "filesystem"
+    ):
+        _fail("BUN_SCAN_REPORT", "unexpected Trivy report envelope")
+    results = report.get("Results")
+    if not isinstance(results, list):
+        _fail("BUN_SCAN_REPORT", "Results must be a list")
+    inventories: dict[str, list[dict[str, Any]]] = {}
+    findings: list[tuple[str, dict[str, Any]]] = []
+    for result in results:
+        if not isinstance(result, dict):
+            _fail("BUN_SCAN_REPORT", "each result must be an object")
+        target = _bun_scan_target(result.get("Target"))
+        if target in inventories:
+            _fail("BUN_SCAN_REPORT", f"duplicate result target: {target}")
+        if result.get("Class") != "lang-pkgs" or result.get("Type") != "bun":
+            _fail("BUN_SCAN_REPORT", f"unexpected package type for {target}")
+        packages = result.get("Packages")
+        if not isinstance(packages, list) or not packages:
+            _fail("BUN_SCAN_REPORT", f"no packages detected for {target}")
+        for package in packages:
+            if (
+                not isinstance(package, dict)
+                or not isinstance(package.get("Name"), str)
+                or not package["Name"]
+            ):
+                _fail("BUN_SCAN_REPORT", f"malformed package for {target}")
+        vulnerabilities = result.get("Vulnerabilities", [])
+        if not isinstance(vulnerabilities, list):
+            _fail("BUN_SCAN_REPORT", f"malformed vulnerabilities for {target}")
+        for vulnerability in vulnerabilities:
+            if not isinstance(vulnerability, dict):
+                _fail("BUN_SCAN_REPORT", f"malformed finding for {target}")
+            findings.append((target, vulnerability))
+        inventories[target] = packages
+    expected_files = set(EXPECTED_BUN_SCAN_RESULTS)
+    if set(inventories) != expected_files:
+        _fail(
+            "BUN_SCAN_REPORT",
+            f"result targets differ: {sorted(inventories)!r}",
+        )
+    for target, expectation in EXPECTED_BUN_SCAN_RESULTS.items():
+        packages = inventories[target]
+        names = {package["Name"] for package in packages}
+        if len(packages) != expectation["package_count"]:
+            _fail(
+                "BUN_SCAN_REPORT",
+                f"package count differs for {target}: {len(packages)}",
+            )
+        missing = expectation["required_packages"] - names
+        if missing:
+            _fail(
+                "BUN_SCAN_REPORT",
+                f"required packages missing for {target}: {sorted(missing)!r}",
+            )
+    return inventories, findings
+
+
+def _verify_raw_bun_finding(findings: list[tuple[str, dict[str, Any]]]) -> None:
+    expected = EXPECTED_SOURCE_OVERLAY["vulnerability_assessment"]["raw_finding"]
+    if len(findings) != 1:
+        _fail(
+            "BUN_SCAN_RAW_FINDING",
+            f"expected exactly one reviewed finding, found {len(findings)}",
+        )
+    target, finding = findings[0]
+    identifier = finding.get("PkgIdentifier")
+    purl = identifier.get("PURL") if isinstance(identifier, dict) else None
+    observed = {
+        "target": target,
+        "vulnerability_id": finding.get("VulnerabilityID"),
+        "package": finding.get("PkgName"),
+        "installed_version": finding.get("InstalledVersion"),
+        "fixed_version": finding.get("FixedVersion"),
+        "severity": finding.get("Severity"),
+        "purl": purl,
+    }
+    if observed != expected:
+        _fail("BUN_SCAN_RAW_FINDING", f"finding differs: {observed!r}")
+
+
+def _canonical_inventory(
+    inventories: Mapping[str, list[dict[str, Any]]],
+) -> dict[str, list[str]]:
+    return {
+        target: sorted(
+            json.dumps(package, sort_keys=True, separators=(",", ":"))
+            for package in packages
+        )
+        for target, packages in inventories.items()
+    }
+
+
+def verify_bun_scan(
+    root: Path,
+    scan_input: Path,
+    raw_report_path: Path,
+    adjusted_report_path: Path,
+) -> None:
     try:
         root_metadata = scan_input.lstat()
     except OSError as error:
@@ -542,62 +1033,29 @@ def verify_bun_scan(scan_input: Path, report_path: Path) -> None:
         if hashlib.sha256(payload).hexdigest() != frozen[relative]:
             _fail("BUN_SCAN_INPUT", f"lockfile hash differs: {relative}")
 
-    report = _load_json(report_path)
-    if (
-        report.get("SchemaVersion") != 2
-        or report.get("ArtifactType") != "filesystem"
-    ):
-        _fail("BUN_SCAN_REPORT", "unexpected Trivy report envelope")
-    results = report.get("Results")
-    if not isinstance(results, list):
-        _fail("BUN_SCAN_REPORT", "Results must be a list")
-    observed_results: dict[str, set[str]] = {}
-    observed_counts: dict[str, int] = {}
-    for result in results:
-        if not isinstance(result, dict):
-            _fail("BUN_SCAN_REPORT", "each result must be an object")
-        target = _bun_scan_target(result.get("Target"))
-        if target in observed_results:
-            _fail("BUN_SCAN_REPORT", f"duplicate result target: {target}")
-        if result.get("Class") != "lang-pkgs" or result.get("Type") != "bun":
-            _fail("BUN_SCAN_REPORT", f"unexpected package type for {target}")
-        packages = result.get("Packages")
-        if not isinstance(packages, list) or not packages:
-            _fail("BUN_SCAN_REPORT", f"no packages detected for {target}")
-        names: set[str] = set()
-        for package in packages:
-            if (
-                not isinstance(package, dict)
-                or not isinstance(package.get("Name"), str)
-                or not package["Name"]
-            ):
-                _fail("BUN_SCAN_REPORT", f"malformed package for {target}")
-            names.add(package["Name"])
-        vulnerabilities = result.get("Vulnerabilities", [])
-        if not isinstance(vulnerabilities, list) or vulnerabilities:
-            _fail("BUN_SCAN_REPORT", f"blocking findings remain for {target}")
-        observed_results[target] = names
-        observed_counts[target] = len(packages)
-    if set(observed_results) != expected_files:
+    contract = _load_json(root / CONTRACT_PATH)
+    _validate_source_overlay_contract(
+        root,
+        contract,
+        at=dt.datetime.now(dt.timezone.utc),
+    )
+    raw_inventory, raw_findings = _bun_scan_report(raw_report_path)
+    adjusted_inventory, adjusted_findings = _bun_scan_report(
+        adjusted_report_path
+    )
+    _verify_raw_bun_finding(raw_findings)
+    if adjusted_findings:
         _fail(
-            "BUN_SCAN_REPORT",
-            f"result targets differ: {sorted(observed_results)!r}",
+            "BUN_SCAN_ADJUSTED_FINDING",
+            f"blocking findings remain: {adjusted_findings!r}",
         )
-    for target, expectation in EXPECTED_BUN_SCAN_RESULTS.items():
-        if observed_counts[target] != expectation["package_count"]:
-            _fail(
-                "BUN_SCAN_REPORT",
-                (
-                    f"package count differs for {target}: "
-                    f"{observed_counts[target]}"
-                ),
-            )
-        missing = expectation["required_packages"] - observed_results[target]
-        if missing:
-            _fail(
-                "BUN_SCAN_REPORT",
-                f"required packages missing for {target}: {sorted(missing)!r}",
-            )
+    if _canonical_inventory(raw_inventory) != _canonical_inventory(
+        adjusted_inventory
+    ):
+        _fail(
+            "BUN_SCAN_INVENTORY",
+            "raw and OpenVEX-adjusted package inventories differ",
+        )
 
 
 def _parse_time(value: str) -> dt.datetime:
@@ -908,6 +1366,9 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         VERIFIER_PATH,
         TEST_PATH,
         BUN_TEST_PATH,
+        SOURCE_OVERLAY_PATH,
+        VEX_PATH,
+        OVERLAY_ADR_PATH,
         Path("Makefile"),
     ):
         if lines.count(f"      - {path.as_posix()}") != 2:
@@ -959,6 +1420,8 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "trivy-vulnerability.json",
         "trino-maven-dependencies-483.cdx.json",
         "trivy-bun-vulnerability.json",
+        "trivy-bun-vulnerability-raw.json",
+        VEX_PATH.as_posix(),
         "trino-bun-dependencies-483.cdx.json",
     )
     for value in required:
@@ -1112,13 +1575,18 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
             "            verify-bun-scan"
         )
         != 1
+        or workflow.count("apply-source-overlay \\") != 3
         or workflow.count(
             "scan-ref: ${{ runner.temp }}/trino-bun-scan-input"
         )
         != 2
         or "scan-ref: ${{ runner.temp }}/bun-cache-a" in workflow
-        or workflow.count('TRIVY_INCLUDE_DEV_DEPS: "true"') != 2
+        or workflow.count('TRIVY_INCLUDE_DEV_DEPS: "true"') != 3
         or workflow.count("list-all-pkgs: true") != 2
+        or workflow.count('--vex "${vex}"') != 1
+        or workflow.count("--skip-db-update") != 1
+        or "--raw-report \\" not in workflow
+        or "--adjusted-report \\" not in workflow
     ):
         _fail(
             "WORKFLOW_BUN_SCAN",
@@ -1167,6 +1635,9 @@ def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
         VERIFIER_PATH,
         TEST_PATH,
         BUN_TEST_PATH,
+        SOURCE_OVERLAY_PATH,
+        VEX_PATH,
+        OVERLAY_ADR_PATH,
     }
     policy_files = contract.get("policy_files")
     if not isinstance(policy_files, list):
@@ -1189,6 +1660,7 @@ def audit(root: Path) -> None:
     contract = _load_json(root / CONTRACT_PATH)
     admission = _load_json(root / ADMISSION_PATH)
     _validate_authorization(contract, at=None)
+    _validate_source_overlay_contract(root, contract, at=None)
     lifecycle = contract.get("lifecycle", {})
     if lifecycle != {
         "state": "dependency_snapshot_publication_pending",
@@ -1206,7 +1678,8 @@ def audit(root: Path) -> None:
         or source.get("release_tag") != EXPECTED_TAG
         or source.get("commit_sha") != EXPECTED_COMMIT
         or source.get("tree_sha") != EXPECTED_TREE
-        or source.get("unmodified_source_required") is not True
+        or source.get("unmodified_source_required") is not False
+        or source.get("pristine_source_required_before_overlay") is not True
     ):
         _fail("SOURCE", "exact Trino source binding differs")
     if contract.get("toolchain", {}).get("builder", {}).get("index") != EXPECTED_BUILDER:
@@ -1265,7 +1738,9 @@ def audit(root: Path) -> None:
         _fail("VISIBILITY", "first-publication visibility contract differs")
     repository_state = admission.get("repository_state", {})
     if (
-        repository_state.get("publication_workflow_permitted") is not True
+        admission.get("source_overlay_authorization")
+        != EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION
+        or repository_state.get("publication_workflow_permitted") is not True
         or repository_state.get("dependency_artifact_present") is not False
         or repository_state.get("resident_ledger_permitted") is not False
         or repository_state.get("runtime_manifests_permitted") is not False
@@ -1403,6 +1878,9 @@ def _parser() -> argparse.ArgumentParser:
     source = commands.add_parser("audit-source")
     source.add_argument("--root", type=Path, default=Path("."))
     source.add_argument("--checkout", type=Path, required=True)
+    source_overlay = commands.add_parser("apply-source-overlay")
+    source_overlay.add_argument("--root", type=Path, default=Path("."))
+    source_overlay.add_argument("--checkout", type=Path, required=True)
     builder_settings = commands.add_parser("audit-builder-settings")
     builder_settings.add_argument("--settings", type=Path, required=True)
     transfer = commands.add_parser("audit-transfer-log")
@@ -1411,8 +1889,10 @@ def _parser() -> argparse.ArgumentParser:
     bun_scan_input.add_argument("--checkout", type=Path, required=True)
     bun_scan_input.add_argument("--output", type=Path, required=True)
     bun_scan = commands.add_parser("verify-bun-scan")
+    bun_scan.add_argument("--root", type=Path, default=Path("."))
     bun_scan.add_argument("--scan-input", type=Path, required=True)
-    bun_scan.add_argument("--report", type=Path, required=True)
+    bun_scan.add_argument("--raw-report", type=Path, required=True)
+    bun_scan.add_argument("--adjusted-report", type=Path, required=True)
     bun_snapshot = commands.add_parser("verify-bun-snapshot")
     bun_snapshot.add_argument("--descriptor", type=Path, required=True)
     bun_snapshot.add_argument("--archive", type=Path, required=True)
@@ -1438,6 +1918,11 @@ def main() -> int:
                 _fail("LIFECYCLE", "publisher is retired or not approved")
         elif args.command == "audit-source":
             audit_source(args.root.resolve(), args.checkout.resolve())
+        elif args.command == "apply-source-overlay":
+            apply_source_overlay(
+                args.root.resolve(),
+                args.checkout.resolve(),
+            )
         elif args.command == "audit-builder-settings":
             audit_builder_settings(args.settings.resolve())
         elif args.command == "audit-transfer-log":
@@ -1449,8 +1934,10 @@ def main() -> int:
             )
         elif args.command == "verify-bun-scan":
             verify_bun_scan(
+                args.root.resolve(),
                 args.scan_input.resolve(),
-                args.report.resolve(),
+                args.raw_report.resolve(),
+                args.adjusted_report.resolve(),
             )
         else:
             verify_bun_snapshot_identity(

@@ -200,8 +200,14 @@ def _provisional_source_authorization_errors(
         "network-none reproducible native linux/arm64 build",
         "digest-pinned builder and runtime bases",
         "native linux/arm64 runtime smoke",
-        "High=0/Critical=0 fresh vulnerability scan",
-        "retained CycloneDX SBOM and scan evidence",
+        (
+            "High=0/Critical=0 fresh vulnerability scan after exact reviewed "
+            "OpenVEX processing"
+        ),
+        (
+            "retained CycloneDX SBOM, raw scan, OpenVEX, and adjusted scan "
+            "evidence"
+        ),
         "Cosign signature and Rekor transparency-log evidence",
         "SLSA provenance bound to the exact source revision",
         "anonymous exact-digest retrieval",
@@ -2745,6 +2751,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "assessment",
                 "source_authentication",
                 "provisional_source_authorization",
+                "source_overlay_authorization",
                 "repository_state",
                 "next_action",
             },
@@ -2800,7 +2807,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         assessment = self._admission()["assessment"]
         self.assertEqual(
             {
-                "assessed_on": "2026-07-22",
+                "assessed_on": "2026-07-26",
                 "scope": "mac-studio-solo/local-lite",
                 "admission": "blocked",
                 "exception_eligible": False,
@@ -2851,9 +2858,13 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "ADR-0019 does not waive source identity, image signature, "
                     "transparency-log, provenance, or evidence requirements. ADR-0023 "
                     "separately accepts only the exact Trino 483 source-identity risk "
-                    "for a time-boxed local PoC; the upstream image and server asset "
-                    "remain rejected, all image controls remain mandatory, and "
-                    "re-signing untrusted upstream bytes is forbidden."
+                    "for a time-boxed local PoC. ADR-0024 authorizes a four-path Web "
+                    "UI dependency overlay and one not_affected OpenVEX assessment "
+                    "through the same expiry; it is not a vulnerability risk "
+                    "acceptance. The raw finding remains retained, adjusted "
+                    "High=0/Critical=0 remains mandatory, the upstream image and "
+                    "server asset remain rejected, all image controls remain "
+                    "mandatory, and re-signing untrusted upstream bytes is forbidden."
                 ),
             },
             assessment,
@@ -3024,6 +3035,41 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     _provisional_source_authorization_errors(admission, now=now),
                 )
 
+    def test_source_overlay_authorization_is_bounded_and_not_a_risk_waiver(
+        self,
+    ) -> None:
+        authorization = self._admission()["source_overlay_authorization"]
+        self.assertEqual("active", authorization["status"])
+        self.assertEqual(
+            "time_boxed_bounded_source_overlay_and_not_affected_assessment",
+            authorization["authorization_type"],
+        )
+        self.assertEqual(
+            "https://github.com/TommyKammy/Shirokuma/issues/63"
+            "#issuecomment-5081842992",
+            authorization["approval_record"],
+        )
+        self.assertEqual(
+            "2026-08-21T22:43:36Z",
+            authorization["expires_at"],
+        )
+        self.assertIs(authorization["automatic_renewal"], False)
+        self.assertIs(authorization["vulnerability_risk_accepted"], False)
+        self.assertIs(authorization["raw_finding_retention_required"], True)
+        self.assertIs(
+            authorization["adjusted_high_zero_critical_zero_required"],
+            True,
+        )
+        self.assertEqual(
+            {
+                "vulnerability_id": "GHSA-qwww-vcr4-c8h2",
+                "product": "pkg:npm/react-router@7.18.1",
+                "status": "not_affected",
+                "justification": "vulnerable_code_not_in_execute_path",
+            },
+            authorization["openvex_scope"],
+        )
+
     def test_provisional_source_authorization_rejects_preapproval_use(self) -> None:
         self.assertIn(
             "authorization is not yet active",
@@ -3047,14 +3093,33 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     ".github/workflows/trino-maven-dependencies.yml",
                     "bootstrap/trino/v483/admission.json",
                     "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
+                    (
+                        "bootstrap/trino/v483/patches/"
+                        "0001-shirokuma-web-ui-security.patch"
+                    ),
                     "bootstrap/trino/v483/settings.xml",
                     "bootstrap/trino/v483/trusted-build-contract.json",
+                    (
+                        "bootstrap/trino/v483/vex/"
+                        "react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
+                    ),
+                    "docs/design/04_Development/049_Supply_Chain_Security.md",
+                    (
+                        "docs/design/07_ADR/"
+                        "ADR-0022_Adopt_Trino_483_repository_source_build.md"
+                    ),
+                    (
+                        "docs/design/07_ADR/"
+                        "ADR-0024_Apply_bounded_Trino_483_Web_UI_"
+                        "dependency_overlay_and_OpenVEX.md"
+                    ),
                     "scripts/package_trino_bun_dependencies.py",
                     "scripts/package_trino_maven_dependencies.py",
                     "scripts/prepare_trino_bun_input.py",
                     "scripts/verify_polaris_trusted_image.py",
                     "scripts/verify_trino_dependency_publisher.py",
                     "tests/test_trino_bun_dependencies.py",
+                    "tests/test_trino_bootstrap.py",
                     "tests/test_trino_dependency_publisher.py",
                     "Makefile",
                 ],
@@ -3207,13 +3272,16 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "tree_sha",
                 "publisher_identity_status",
                 "unmodified_source_required",
+                "pristine_source_required_before_overlay",
                 "preimages",
+                "source_overlay",
                 "forbidden_build_inputs",
             },
             set(source),
         )
-        self.assertIs(source["unmodified_source_required"], True)
-        self.assertEqual(12, len(source["preimages"]))
+        self.assertIs(source["unmodified_source_required"], False)
+        self.assertIs(source["pristine_source_required_before_overlay"], True)
+        self.assertEqual(14, len(source["preimages"]))
         self.assertEqual(
             {
                 "mvnw": (
@@ -3231,8 +3299,17 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "core/trino-web-ui/pom.xml": (
                     "c9cb57ad7faa684e67250b0fb31e034a52c41b9a75de62ef29bb89f6ac64bd13"
                 ),
+                "core/trino-web-ui/src/main/resources/webapp/package.json": (
+                    "0e059ceb7d558961bfafc93cb1f34ad4aebbc28caa6ccbc62e4635bf4f9e44e9"
+                ),
                 "core/trino-web-ui/src/main/resources/webapp/bun.lock": (
                     "70da1dad7c6f45743637cba7dde948793d787b1ced1382e90966d60fe17dc885"
+                ),
+                (
+                    "core/trino-web-ui/src/main/resources/"
+                    "webapp-legacy/src/package.json"
+                ): (
+                    "d241303ae65fa0d79ada35538e6948a3e8bdcc96b1bf132cab0d9d87a50c1c60"
                 ),
                 (
                     "core/trino-web-ui/src/main/resources/"
@@ -3260,6 +3337,39 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 entry["path"]: entry["sha256"]
                 for entry in source["preimages"]
             },
+        )
+        overlay = source["source_overlay"]
+        self.assertEqual(
+            "approved_bounded_web_ui_security",
+            overlay["state"],
+        )
+        self.assertEqual(
+            "https://github.com/TommyKammy/Shirokuma/issues/63"
+            "#issuecomment-5081842992",
+            overlay["approval_record"],
+        )
+        self.assertEqual(
+            "2026-08-21T22:43:36Z",
+            overlay["expires_at"],
+        )
+        self.assertIs(overlay["automatic_renewal"], False)
+        self.assertEqual(
+            {
+                "brace-expansion": "5.0.8",
+                "d3-color": "3.1.0",
+                "fast-uri": "3.1.4",
+                "postcss": "8.5.18",
+                "react-router-dom": "7.18.1",
+            },
+            overlay["dependency_overrides"],
+        )
+        self.assertEqual(
+            "not_affected",
+            overlay["vulnerability_assessment"]["openvex"]["status"],
+        )
+        self.assertEqual(
+            0,
+            overlay["vulnerability_assessment"]["adjusted_maximum_high"],
         )
         self.assertEqual(
             {
@@ -3465,7 +3575,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                             "webapp/bun.lock"
                         ),
                         "sha256": (
-                            "70da1dad7c6f45743637cba7dde948793d787b1ced1382e90966d60fe17dc885"
+                            "b9010ec72590c76c7dc865a10b1fefe554a64eabb1492c422c954e45324cc9d3"
                         ),
                     },
                     {
@@ -3474,19 +3584,19 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                             "webapp-legacy/src/bun.lock"
                         ),
                         "sha256": (
-                            "0ca8b926ea0a2af3fff339b43c52de03a8f99c4aa9ba1d4c2ecd081bcd715ad3"
+                            "14fa0d75107753676c59093978fe68fe67486868564f41dadc7d76d659d2df25"
                         ),
                     },
                 ],
                 "independent_reconstructions": 2,
                 "reviewed_snapshot": {
                     "manifest_sha256": (
-                        "adfcb6663080ef7f39b5e592b7ca8df94e3449ae0ab73af630feac5a5fe721b0"
+                        "6e7be3a404014f6f7ac7e4bc326c8d46f7d5822fcea1ac000219c17f1d23f421"
                     ),
                     "archive_sha256": (
-                        "19087b76181177178ead04cabd85f81180ce64d71d84b78e5dda74a2dc71abd7"
+                        "252eade2183bdf5a371f073752420c3a45f5ef8b1dacb08a4addea350389e3c2"
                     ),
-                    "archive_size": 128457765,
+                    "archive_size": 128423777,
                 },
                 "network_none_rebuild_mount": "read-only",
                 "network_none_cache_outside_source": True,
@@ -4069,7 +4179,15 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "two network-none native arm64 build output comparisons",
                     "CycloneDX dependency SBOM",
                     "CycloneDX Bun dependency SBOM",
-                    "fresh High=0/Critical=0 Trivy result and database metadata",
+                    (
+                        "fresh Maven High=0/Critical=0 Trivy result and "
+                        "database metadata"
+                    ),
+                    (
+                        "exact raw Bun Trivy finding, hash-bound OpenVEX, and "
+                        "adjusted High=0/Critical=0 report with identical "
+                        "package inventories"
+                    ),
                     "Cosign signature and Rekor bundle",
                     "SLSA v1 provenance with predicate.buildDefinition.resolvedDependencies",
                     "anonymous exact-digest retrieval proof",
@@ -4102,7 +4220,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             {
                 "mode",
                 "decision_record_required",
-                "decision_record",
+                "decision_records",
                 "phase",
                 "requirements",
             },
@@ -4114,9 +4232,19 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertIs(next_action["decision_record_required"], False)
         self.assertEqual(
-            "docs/design/07_ADR/"
-            "ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md",
-            next_action["decision_record"],
+            [
+                (
+                    "docs/design/07_ADR/"
+                    "ADR-0023_Allow_time_boxed_Trino_483_"
+                    "source_identity_exception_for_local_PoC.md"
+                ),
+                (
+                    "docs/design/07_ADR/"
+                    "ADR-0024_Apply_bounded_Trino_483_Web_UI_"
+                    "dependency_overlay_and_OpenVEX.md"
+                ),
+            ],
+            next_action["decision_records"],
         )
         self.assertEqual(
             "dependency_snapshot_publication_pending",
@@ -4132,7 +4260,10 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "native linux/arm64 runtime smoke",
                 "Cosign signature and transparency-log evidence",
                 "SLSA provenance bound to the source revision",
-                "retained SBOM and fresh vulnerability scan",
+                (
+                    "retained SBOM, raw vulnerability scan, exact OpenVEX, and "
+                    "fresh adjusted High=0/Critical=0 scan"
+                ),
                 "anonymous exact-digest retrieval before separate admission review",
             ],
             next_action["requirements"],
