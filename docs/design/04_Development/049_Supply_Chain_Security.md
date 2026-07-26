@@ -620,7 +620,7 @@ The workflow binds the exact source coordinates, Maven 3.9.16 and Temurin 25
 native-arm64 builder, Maven Central plus the explicit Confluent repository, a
 closed Maven manifest plus a separately closed Bun package-cache manifest, and
 an independent fresh
-`mvn --offline --ignore-transitive-repositories -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests`
+`mvn --offline --ignore-transitive-repositories --settings /policy/settings.xml -Dmaven.repo.local=/workspace/.m2/repository -Dmaven.compiler.debuglevel=source,lines --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests`
 with networking disabled. The same explicit exclusion is required for both
 fresh dependency resolutions and both offline rebuilds: `trino-docs` invokes
 Sphinx to generate non-runtime documentation, while all remaining reactor
@@ -775,6 +775,39 @@ repair permits only the 11 exact reviewed package payload paths with the exact
 `yarn.lock` spelling; `.lock`, `download.lock`, path or case variants, and all
 other unreviewed lock-suffixed files still fail closed, and the exact reviewed
 manifest/archive identity remains mandatory.
+
+PR #121 merged that repair as
+`1341bfb27af996ed81375b1cb7209cda2f4297ed`. Reviewed-main run
+`30176604675` passed the independent Maven and Bun reconstruction gates and
+completed both fresh network-none Trino builds, but failed closed because the
+two server archives had different SHA-256 values. Local member-level
+reproduction proved that both archives contained the same 6,939 members and
+the same 973,910,528 uncompressed bytes. Only
+`lib/io.trino_trino-main-483.jar` differed; inside that JAR, only
+`io/trino/operator/window/GroupsFraming.class` differed, and its executable
+bytecode was unchanged. The difference was confined to two compiler-generated
+`LocalVariableTable` names whose `$<number>` suffix varied between clean
+compilations.
+
+The offline command therefore fixes
+`maven.compiler.debuglevel=source,lines`. This retains source-file and
+line-number diagnostics while omitting the non-runtime local-variable table;
+it does not rewrite or normalize a compiled artifact after the build. Two
+successive clean `trino-main` builds with the pinned native-arm64 builder
+produced the same complete JAR SHA-256
+`f0e6a9e3c833724a9862c7aa74fe393c193101f6e580c940085574af481d9b4e`.
+Two subsequent complete network-none reactor builds succeeded in 16 minutes
+40 seconds and 16 minutes 34 seconds and produced byte-identical
+`trino-server-483.tar.gz` archives at 849,577,808 bytes with SHA-256
+`974e3bcc3c3fc38896ef2fcd9e2b30cd592550b9272c0cde409e0d6969fa9880`.
+The contract and verifier bind the exact debug policy and fail closed if
+`vars`, another debug level, or an unreviewed compiler argument is restored.
+Because the pending Polaris boundary inventories every privileged workflow and
+script by digest, its cross-component inventory is advanced only to the exact
+reviewed Trino workflow and verifier bytes in the same change.
+Reviewed-main must still prove equality of two complete fresh server builds;
+the local clean-build results are diagnostic evidence, not publication
+evidence.
 
 The publisher resolves and packages two independent fresh Maven repositories
 and two independent fresh Bun caches, requires each complete

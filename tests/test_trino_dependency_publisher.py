@@ -1333,11 +1333,59 @@ class PublisherContractTests(unittest.TestCase):
             contract["offline_rebuild"]["command"],
             verify._offline_maven_command(workflow),
         )
+        self.assertEqual(
+            verify.EXPECTED_OFFLINE_COMPILER_DEBUG,
+            contract["offline_rebuild"]["compiler_debug_information"],
+        )
+        debug_property = (
+            "              -Dmaven.compiler.debuglevel=source,lines \\\n"
+        )
+        self.assertEqual(1, workflow.count(debug_property))
+        self.assertEqual(
+            1,
+            workflow.count(verify.EXPECTED_OFFLINE_DIGEST_COMMAND),
+        )
+        filename_bound_digest = (
+            '            sha256sum "${output}" \\\n'
+            '              > "${candidate}/offline-output-${suffix}.sha256"'
+        )
+        altered = workflow.replace(
+            verify.EXPECTED_OFFLINE_DIGEST_COMMAND,
+            filename_bound_digest,
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_OFFLINE",
+        ):
+            verify._validate_workflow(contract, altered)
         offline_goal = "              clean install -DskipTests\n"
         self.assertEqual(1, workflow.count(offline_goal))
         altered = workflow.replace(
             offline_goal,
             "              clean package -DskipTests\n",
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_OFFLINE_COMMAND",
+        ):
+            verify._validate_workflow(contract, altered)
+        evidence_marker = '"compiler_debug_level": "source,lines"'
+        self.assertEqual(1, workflow.count(evidence_marker))
+        altered = workflow.replace(
+            evidence_marker,
+            '"compiler_debug_level": "source,lines,vars"',
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_OFFLINE",
+        ):
+            verify._validate_workflow(contract, altered)
+        altered = workflow.replace(
+            debug_property,
+            "              -Dmaven.compiler.debuglevel=source,lines,vars \\\n",
             1,
         )
         with self.assertRaisesRegex(
