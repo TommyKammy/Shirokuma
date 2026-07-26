@@ -449,6 +449,13 @@ EXPECTED_ORAS_PUSH_BLOCK = """\
               > "oras-push.txt"
           )
 """
+EXPECTED_ORAS_DIGEST_VALIDATION_BLOCK = """\
+          digest=$(oras resolve "${tagged_reference}")
+          if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "ORAS did not return a lowercase sha256 digest" >&2
+            exit 1
+          fi
+"""
 EXPECTED_REPOSITORY_MIRRORS = (
     (
         ("id", "shirokuma-central"),
@@ -1527,6 +1534,11 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
                 "ORAS publication must use reviewed basenames from the "
                 "validated candidate directory without disabling path validation"
             ),
+        )
+    if workflow.count(EXPECTED_ORAS_DIGEST_VALIDATION_BLOCK) != 1:
+        _fail(
+            "WORKFLOW_ORAS_DIGEST",
+            "ORAS publication must require one exact lowercase sha256 digest",
         )
     if (
         workflow.count(EXPECTED_SETTINGS_MOUNT) != 3
