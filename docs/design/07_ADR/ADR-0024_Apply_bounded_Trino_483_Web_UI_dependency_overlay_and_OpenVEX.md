@@ -63,7 +63,9 @@ The authoritative owner approval is Issue #63 comment
   `core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json`, and
   `core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock`.
   Bind the exact patch bytes and every preimage/postimage SHA-256. Reject any
-  other changed or untracked path.
+  other changed or untracked path. Store the artifact as a zero-context unified
+  diff and invoke `git apply --unidiff-zero --whitespace=error-all` only after
+  all complete-file preimages pass; then require all complete-file postimages.
 - Override only `d3-color 3.1.0`, `fast-uri 3.1.4`,
   `brace-expansion 5.0.8`, and `postcss 8.5.18`. Pin
   `react-router-dom` exactly to `7.18.1` so a future lock refresh cannot select

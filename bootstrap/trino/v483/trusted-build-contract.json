@@ -35,7 +35,7 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "ed54a55e9a4639805d3a447607a3e00f65da2991c5acad348f5a7d2625625e1a"
+      "sha256": "4d024eb8461f34dc15e815b3522e86545c590d6a9af8d5ecf6f8b4ad6600a36d"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
@@ -47,7 +47,7 @@
     },
     {
       "path": "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch",
-      "sha256": "9062d9122b360c224dea5dd73a7cbc2b0d61291fd147c38883343c8352d8d7ca"
+      "sha256": "d74d13976a8368c818755d67bbe2f464393c185d87317164bd214108e5d4712d"
     },
     {
       "path": "bootstrap/trino/v483/vex/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json",
@@ -55,7 +55,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md",
-      "sha256": "ebb83556f8a13c3ce284008d554e744177d0f5389eef71a601beda177a5adc6f"
+      "sha256": "c91fc14f096d52c5076eef703355dc93e130a3cb623f4457d66da5c9e28905ff"
     }
   ],
   "authorization": {
@@ -176,8 +176,12 @@
       "applied_after_source_verification": true,
       "patch": {
         "path": "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch",
-        "sha256": "9062d9122b360c224dea5dd73a7cbc2b0d61291fd147c38883343c8352d8d7ca"
+        "sha256": "d74d13976a8368c818755d67bbe2f464393c185d87317164bd214108e5d4712d"
       },
+      "apply_arguments": [
+        "--unidiff-zero",
+        "--whitespace=error-all"
+      ],
       "permitted_paths": [
         "core/trino-web-ui/src/main/resources/webapp/package.json",
         "core/trino-web-ui/src/main/resources/webapp/bun.lock",

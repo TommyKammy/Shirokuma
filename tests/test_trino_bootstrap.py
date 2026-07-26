@@ -3354,6 +3354,10 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertIs(overlay["automatic_renewal"], False)
         self.assertEqual(
+            ["--unidiff-zero", "--whitespace=error-all"],
+            overlay["apply_arguments"],
+        )
+        self.assertEqual(
             {
                 "brace-expansion": "5.0.8",
                 "d3-color": "3.1.0",

@@ -138,8 +138,12 @@ EXPECTED_SOURCE_OVERLAY = {
     "applied_after_source_verification": True,
     "patch": {
         "path": SOURCE_OVERLAY_PATH.as_posix(),
-        "sha256": "9062d9122b360c224dea5dd73a7cbc2b0d61291fd147c38883343c8352d8d7ca",
+        "sha256": "d74d13976a8368c818755d67bbe2f464393c185d87317164bd214108e5d4712d",
     },
+    "apply_arguments": [
+        "--unidiff-zero",
+        "--whitespace=error-all",
+    ],
     "permitted_paths": [
         "core/trino-web-ui/src/main/resources/webapp/package.json",
         "core/trino-web-ui/src/main/resources/webapp/bun.lock",
@@ -795,7 +799,7 @@ def apply_source_overlay(root: Path, checkout: Path) -> None:
     command = [
         "git",
         "apply",
-        "--whitespace=error-all",
+        *overlay["apply_arguments"],
         str(patch),
     ]
     try:
