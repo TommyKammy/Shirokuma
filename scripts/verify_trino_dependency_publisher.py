@@ -383,6 +383,40 @@ EXPECTED_BUN_STAGE_BLOCK = """\
             --archive "${bun_archive}" \\
             --repository "${repository}"
 """
+EXPECTED_PR_SOURCE_CONDITION = """\
+        if: >-
+          steps.lifecycle.outputs.active == 'true' ||
+          github.event_name == 'pull_request'
+"""
+EXPECTED_PR_BUN_INPUT_BLOCK = """\
+          bun_archive="${RUNNER_TEMP}/bun-linux-aarch64-pr.zip"
+          bun_dir="${RUNNER_TEMP}/trino-pr-bun"
+          install -d -m 0700 "${bun_dir}" "${BUN_INSTALL_CACHE_DIR}"
+          python3 scripts/prepare_trino_bun_input.py download \\
+            --url "${BUN_URL}" \\
+            --archive "${bun_archive}"
+          python3 scripts/prepare_trino_bun_input.py verify \\
+            --archive "${bun_archive}"
+          unzip -p "${bun_archive}" bun-linux-aarch64/bun \\
+            > "${bun_dir}/bun"
+          chmod 0500 "${bun_dir}/bun"
+          test "$("${bun_dir}/bun" --version)" = "1.3.14"
+"""
+EXPECTED_PR_OVERLAY_BUILD_MARKERS = (
+    '              echo "active=false" >> "${GITHUB_OUTPUT}"',
+    (
+        '              echo "Pull requests perform static and Web UI overlay '
+        'build validation only"'
+    ),
+    "        if: github.event_name == 'pull_request'",
+    '          CI: "true"',
+    "          BUN_CONFIG_REGISTRY: ${{ env.BUN_REGISTRY }}",
+    "          BUN_INSTALL_CACHE_DIR: ${{ runner.temp }}/trino-pr-bun-cache",
+    '          bun install --frozen-lockfile --cwd "${modern}"',
+    '          bun run --cwd "${modern}" typecheck',
+    '          bun run --cwd "${modern}" build',
+    '          bun run --cwd "${legacy}" package:clean',
+)
 EXPECTED_REPOSITORY_MIRRORS = (
     (
         ("id", "shirokuma-central"),
@@ -497,6 +531,7 @@ EXPECTED_STEPS = {
         "Verify the native arm64 builder substrate",
         "Fetch and verify the exact provisionally authorized source",
         "Apply the bounded Web UI security overlay",
+        "Validate the bounded Web UI overlay before merge",
         "Resolve and package the first closed Maven repository",
         "Independently reconstruct the closed Maven repository",
         "Prove two fresh network-none offline source builds",
@@ -1340,6 +1375,21 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
     ):
         _fail("WORKFLOW_TRIGGER", "only PR validation and main push are allowed")
     if (
+        workflow.count(EXPECTED_PR_SOURCE_CONDITION) != 2
+        or workflow.count(EXPECTED_PR_BUN_INPUT_BLOCK) != 1
+        or any(
+            workflow.count(marker) != 1
+            for marker in EXPECTED_PR_OVERLAY_BUILD_MARKERS
+        )
+    ):
+        _fail(
+            "WORKFLOW_PR_OVERLAY_VALIDATION",
+            (
+                "pull requests must fetch, apply, and build the exact Web UI "
+                "overlay without enabling publication"
+            ),
+        )
+    if (
         lines.count("permissions:") != 1
         or lines.count("    permissions:") != 2
         or lines.count("  contents: read") != 1
@@ -1611,7 +1661,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         or workflow.count('bun_archive="${RUNNER_TEMP}/bun-linux-aarch64-b.zip"')
         != 1
         or workflow.count('"${BUN_URL}"')
-        != EXPECTED_BUN_INPUT["independent_downloads"]
+        != EXPECTED_BUN_INPUT["independent_downloads"] + 1
         or lines.count(f'  BUN_URL: {EXPECTED_BUN_INPUT["url"]}') != 1
         or lines.count(
             f'  BUN_ARCHIVE_SHA256: {EXPECTED_BUN_INPUT["sha256"]}'
@@ -1620,7 +1670,10 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         or lines.count(f'  BUN_ARCHIVE_SIZE: "{EXPECTED_BUN_INPUT["size"]}"')
         != 1
     ):
-        _fail("WORKFLOW_BUN_INPUT", "exactly two verified Bun inputs are required")
+        _fail(
+            "WORKFLOW_BUN_INPUT",
+            "two publisher inputs plus one PR build input are required",
+        )
     publication = contract.get("publication", {})
     if (
         publication.get("permitted") is not True

@@ -1371,6 +1371,30 @@ class PublisherContractTests(unittest.TestCase):
         ):
             verify._validate_workflow(contract, altered)
 
+    def test_pull_requests_apply_and_build_the_bounded_web_ui_overlay(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        self.assertEqual(2, workflow.count(verify.EXPECTED_PR_SOURCE_CONDITION))
+        self.assertEqual(1, workflow.count(verify.EXPECTED_PR_BUN_INPUT_BLOCK))
+        for marker in verify.EXPECTED_PR_OVERLAY_BUILD_MARKERS:
+            self.assertEqual(1, workflow.count(marker), marker)
+
+        for marker in (
+            '          bun run --cwd "${modern}" typecheck\n',
+            '          bun run --cwd "${legacy}" package:clean\n',
+            verify.EXPECTED_PR_BUN_INPUT_BLOCK,
+            verify.EXPECTED_PR_SOURCE_CONDITION,
+        ):
+            with self.subTest(marker=marker):
+                altered = workflow.replace(marker, "", 1)
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "WORKFLOW_PR_OVERLAY_VALIDATION",
+                ):
+                    verify._validate_workflow(contract, altered)
+
     def test_each_fresh_repository_requires_exact_bun_staging(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
