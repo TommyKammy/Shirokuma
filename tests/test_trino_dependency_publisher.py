@@ -1339,6 +1339,27 @@ class PublisherContractTests(unittest.TestCase):
         ):
             verify._validate_workflow(contract, altered)
 
+    def test_oras_digest_requires_exact_lowercase_sha256_length(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        expected = verify.EXPECTED_ORAS_DIGEST_VALIDATION_BLOCK
+        self.assertEqual(1, workflow.count(expected))
+        for invalid in (
+            expected.replace("{64}", "{62}", 1),
+            expected.replace("[0-9a-f]", "[0-9A-Fa-f]", 1),
+            expected.replace("^sha256:", "sha256:", 1),
+            expected.replace("{64}$", "{64}", 1),
+        ):
+            with self.subTest(invalid=invalid):
+                altered = workflow.replace(expected, invalid, 1)
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "WORKFLOW_ORAS_DIGEST",
+                ):
+                    verify._validate_workflow(contract, altered)
+
     def test_first_private_publication_requires_owner_visibility_bootstrap(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")

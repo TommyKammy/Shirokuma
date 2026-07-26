@@ -182,6 +182,20 @@ into the validated candidate directory; disabling ORAS path validation remains
 forbidden. No registry artifact, signature, attestation, admission, or runtime
 was created by the failed run.
 
+PR #125 merged the relative-path repair as
+`ce2369bdd793be990f0b2a0051003c2ed77f562f`. Reviewed-main run
+`30221290325` completed the full reconstruction, reproducibility, SBOM, scan,
+OpenVEX, and freshness gates. The ORAS push succeeded and created run-scoped
+digest
+`sha256:91a8fc1897639f1429c794174be1a7e6303976a9076cd0970b25d6e0b9760186`,
+but the workflow then rejected that correct digest because its handwritten
+glob had only 62 hexadecimal positions. The run created no signature,
+attestation, anonymous-pull receipt, admitted dependency artifact, image, or
+runtime. The unsigned registry object remains failed-attempt evidence only.
+The follow-up uses exact anchored Bash ERE `^sha256:[0-9a-f]{64}$` validation,
+and repository tests reject shortened, uppercase-permitting, or unanchored
+variants.
+
 A separate evidence-only PR must review and pin the exact OCI digest and retire
 the publisher. Image publication, resident admission, credentials, Flux
 objects, and runtime activation remain forbidden until their own later

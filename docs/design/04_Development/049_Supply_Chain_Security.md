@@ -867,6 +867,22 @@ validated candidate directory and push only the four reviewed basenames. It
 must not use `--disable-path-validation`, broaden the layer inventory, or make
 another directory the publication root.
 
+PR #125 merged the relative-path repair as
+`ce2369bdd793be990f0b2a0051003c2ed77f562f`. Reviewed-main run
+`30221290325` completed both dependency reconstructions, both network-none
+native-arm64 builds, archive equality, all Maven/Bun SBOM and vulnerability
+gates, and the candidate freshness record. Its ORAS push succeeded and created
+the run-scoped registry object
+`ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@sha256:91a8fc1897639f1429c794174be1a7e6303976a9076cd0970b25d6e0b9760186`.
+The publish job then failed closed because its handwritten digest glob contained
+only 62 hexadecimal positions and rejected the correct 64-position digest.
+No signature, attestation, anonymous-pull receipt, admitted dependency
+artifact, image, or runtime was created. The unsigned registry object is a
+failed-attempt record and is not admissible. The focused repair replaces the
+error-prone repeated glob with the anchored Bash ERE
+`^sha256:[0-9a-f]{64}$`; repository verification fixes that exact expression
+and rejects shortened, uppercase-permitting, or unanchored mutations.
+
 The publisher resolves and packages two independent fresh Maven repositories
 and two independent fresh Bun caches, requires each complete
 manifest/archive pair to be byte-identical, and then

@@ -920,14 +920,10 @@ jobs:
               > "oras-push.txt"
           )
           digest=$(oras resolve "${tagged_reference}")
-          case "${digest}" in
-            sha256:[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
-              ;;
-            *)
-              echo "ORAS did not return a lowercase sha256 digest" >&2
-              exit 1
-              ;;
-          esac
+          if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "ORAS did not return a lowercase sha256 digest" >&2
+            exit 1
+          fi
           reference="${ARTIFACT_REPOSITORY}@${digest}"
           oras manifest fetch "${reference}" > "${candidate}/oci-manifest.json"
           echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
