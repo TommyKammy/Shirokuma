@@ -454,6 +454,7 @@ jobs:
               --offline --ignore-transitive-repositories \
               --settings /policy/settings.xml \
               -Dmaven.repo.local=/workspace/.m2/repository \
+              -Dmaven.compiler.debuglevel=source,lines \
               --file /workspace/pom.xml -pl '!:trino-docs' \
               clean install -DskipTests
             python3 scripts/package_trino_bun_dependencies.py verify-cache \
@@ -493,11 +494,14 @@ jobs:
               "bun_cache_directory": "/bun-cache",
               "bun_registry": "https://registry.npmjs.org/",
               "bun_lockfile_mode": "frozen-via-CI-profile",
+              "compiler_debug_level": "source,lines",
+              "local_variable_debug_table_permitted": False,
               "maven_wrapper_used": False,
               "command": (
                   "mvn --offline --ignore-transitive-repositories "
                   "--settings /policy/settings.xml "
                   "-Dmaven.repo.local=/workspace/.m2/repository "
+                  "-Dmaven.compiler.debuglevel=source,lines "
                   "--file /workspace/pom.xml "
                   "-pl '!:trino-docs' "
                   "clean install -DskipTests"

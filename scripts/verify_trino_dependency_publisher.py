@@ -252,6 +252,21 @@ EXPECTED_OFFLINE_BUN_CACHE = {
     "ambient_cache_permitted": False,
     "unknown_registry_permitted": False,
 }
+EXPECTED_OFFLINE_COMPILER_DEBUG = {
+    "maven_property": "maven.compiler.debuglevel",
+    "value": "source,lines",
+    "retained_debug_information": [
+        "source",
+        "lines",
+    ],
+    "omitted_debug_information": [
+        "vars",
+    ],
+    "reason": (
+        "exclude nondeterministic compiler-generated LocalVariableTable names "
+        "while retaining source and line diagnostics"
+    ),
+}
 ALLOWED_GLOBAL_SETTINGS_CONTAINERS = frozenset(
     {
         "mirrors",
@@ -991,10 +1006,12 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         offline_rebuild.get("repository_settings")
         != EXPECTED_OFFLINE_REPOSITORY_SETTINGS
         or offline_rebuild.get("bun_cache") != EXPECTED_OFFLINE_BUN_CACHE
+        or offline_rebuild.get("compiler_debug_information")
+        != EXPECTED_OFFLINE_COMPILER_DEBUG
     ):
         _fail(
             "WORKFLOW_SETTINGS",
-            "contract offline repository settings differ",
+            "contract offline build settings differ",
         )
     observed_offline_command = _offline_maven_command(workflow)
     if observed_offline_command != expected_offline_command:
@@ -1019,8 +1036,14 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         or "for suffix in a b; do" not in workflow
         or '"fresh_source_checkouts": 2' not in workflow
         or '"fresh_snapshot_extractions": 2' not in workflow
+        or workflow.count('"compiler_debug_level": "source,lines"') != 1
+        or workflow.count('"local_variable_debug_table_permitted": False') != 1
+        or workflow.count("-Dmaven.compiler.debuglevel=source,lines") != 2
     ):
-        _fail("WORKFLOW_OFFLINE", "exactly two network-none rebuilds are required")
+        _fail(
+            "WORKFLOW_OFFLINE",
+            "two network-none rebuilds and exact compiler evidence are required",
+        )
     if (
         lines.count("  BUN_CACHE_DIRECTORY: /bun-cache") != 1
         or lines.count("  BUN_REGISTRY: https://registry.npmjs.org/") != 1

@@ -3860,6 +3860,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "fresh_source_checkout_required",
                 "runner",
                 "command",
+                "compiler_debug_information",
                 "repository_settings",
                 "bun_cache",
                 "maven_wrapper_permitted",
@@ -3909,11 +3910,31 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "mvn --offline --ignore-transitive-repositories "
                 "--settings /policy/settings.xml "
                 "-Dmaven.repo.local=/workspace/.m2/repository "
+                "-Dmaven.compiler.debuglevel=source,lines "
                 "--file /workspace/pom.xml "
                 "-pl '!:trino-docs' "
                 "clean install -DskipTests"
             ),
             rebuild["command"],
+        )
+        self.assertEqual(
+            {
+                "maven_property": "maven.compiler.debuglevel",
+                "value": "source,lines",
+                "retained_debug_information": [
+                    "source",
+                    "lines",
+                ],
+                "omitted_debug_information": [
+                    "vars",
+                ],
+                "reason": (
+                    "exclude nondeterministic compiler-generated "
+                    "LocalVariableTable names while retaining source and "
+                    "line diagnostics"
+                ),
+            },
+            rebuild["compiler_debug_information"],
         )
         self.assertEqual(
             {

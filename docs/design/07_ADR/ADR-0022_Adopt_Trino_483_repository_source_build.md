@@ -148,7 +148,7 @@ so native container smoke remains a mandatory publisher gate.
   to be byte-identical. Online and offline builds set `CI=true`, use the exact
   npm registry and cache location, and therefore exercise Bun's frozen-lockfile
   path. The offline cache is mounted read-only before running
-  `mvn --offline --ignore-transitive-repositories --settings /policy/settings.xml -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests`
+  `mvn --offline --ignore-transitive-repositories --settings /policy/settings.xml -Dmaven.repo.local=/workspace/.m2/repository -Dmaven.compiler.debuglevel=source,lines --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests`
   in a fresh network-none native-arm64 builder. The output must be exactly
   `core/trino-server/target/trino-server-483.tar.gz`; its hash, size, and
   reproducible-build comparison become retained evidence. The explicit
@@ -157,6 +157,12 @@ so native container smoke remains a mandatory publisher gate.
   This preserves the reviewed mirror repository IDs used by Maven's
   version-range metadata; it does not grant network access to the
   network-none builder.
+  The compiler debug level retains source-file and line-number diagnostics but
+  omits local-variable debug tables. Trino 483 otherwise emits
+  compiler-generated `$<number>` local names that vary between clean builds in
+  `GroupsFraming.class`; the executable bytecode is unchanged, but the random
+  debug metadata changes the complete server archive digest. The exact
+  `source,lines` policy is contract-bound and may not be broadened to `vars`.
   The explicit
   `!:trino-docs` exclusion follows the Trino 483 upstream product-build
   boundary: that reactor module invokes Sphinx to generate documentation and

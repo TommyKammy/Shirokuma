@@ -35,11 +35,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "517be21cdc1bbab371d2acc766c676091e7ea316e21615fbcdb7fcf1984a82d6"
+      "sha256": "6ecf50d1f94dd94da650c666658e60867031af719ce0673729febdd3e0f70e83"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "be950b2ce2605a60d94d5021a7199d331cab314ea60250c9e6809b89533839df"
+      "sha256": "5f6a19cf657a4d804fb2911a6096466b757f1e376e68bd719dfcb479b2042af2"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -472,7 +472,19 @@
       "observations_retained_as_evidence": true,
       "verification_failure_action": "fail_closed_before_offline_rebuild"
     },
-    "command": "mvn --offline --ignore-transitive-repositories --settings /policy/settings.xml -Dmaven.repo.local=/workspace/.m2/repository --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests",
+    "command": "mvn --offline --ignore-transitive-repositories --settings /policy/settings.xml -Dmaven.repo.local=/workspace/.m2/repository -Dmaven.compiler.debuglevel=source,lines --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests",
+    "compiler_debug_information": {
+      "maven_property": "maven.compiler.debuglevel",
+      "value": "source,lines",
+      "retained_debug_information": [
+        "source",
+        "lines"
+      ],
+      "omitted_debug_information": [
+        "vars"
+      ],
+      "reason": "exclude nondeterministic compiler-generated LocalVariableTable names while retaining source and line diagnostics"
+    },
     "repository_settings": {
       "path": "bootstrap/trino/v483/settings.xml",
       "container_path": "/policy/settings.xml",
