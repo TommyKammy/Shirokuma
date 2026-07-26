@@ -172,6 +172,16 @@ metadata was absent. The focused follow-up requires both direct Trivy commands
 to reuse that exact cache and makes either missing declaration a contract
 failure. The failed run created no admitted or published dependency artifact.
 
+PR #124 merged the cache repair as
+`834bfd5f11e3a1a654f9a24dd9d07170b2c1d791`. Reviewed-main run
+`30202114765` then completed the full reconstruction, reproducibility, SBOM,
+scan, OpenVEX, and freshness-recording gates. Its publish job failed closed at
+the first ORAS push because ORAS 1.3.3 rejects absolute layer input paths. The
+focused correction publishes only the four reviewed basenames after changing
+into the validated candidate directory; disabling ORAS path validation remains
+forbidden. No registry artifact, signature, attestation, admission, or runtime
+was created by the failed run.
+
 A separate evidence-only PR must review and pin the exact OCI digest and retire
 the publisher. Image publication, resident admission, credentials, Flux
 objects, and runtime activation remain forbidden until their own later

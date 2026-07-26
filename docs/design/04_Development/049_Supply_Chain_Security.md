@@ -856,6 +856,17 @@ workflow verifier binds both complete command blocks and exactly two matching
 cache declarations; removing either declaration fails closed before a
 publisher change can merge.
 
+PR #124 merged that repair as
+`834bfd5f11e3a1a654f9a24dd9d07170b2c1d791`. Reviewed-main run
+`30202114765` completed both dependency reconstructions, both network-none
+native-arm64 builds, archive equality, all Maven/Bun SBOM and vulnerability
+gates, and the candidate freshness record. Publication then failed closed
+before any registry object was created because ORAS 1.3.3 rejects absolute
+layer source paths by default. The publisher must change into the already
+validated candidate directory and push only the four reviewed basenames. It
+must not use `--disable-path-validation`, broaden the layer inventory, or make
+another directory the publication root.
+
 The publisher resolves and packages two independent fresh Maven repositories
 and two independent fresh Bun caches, requires each complete
 manifest/archive pair to be byte-identical, and then

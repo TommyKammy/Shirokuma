@@ -436,6 +436,19 @@ EXPECTED_RECORD_TRIVY_CACHE_BLOCK = """\
           candidate="${GITHUB_WORKSPACE}/.trino-candidate"
           trivy version --format json > "${candidate}/trivy-version.json"
 """
+EXPECTED_ORAS_PUSH_BLOCK = """\
+          (
+            cd "${candidate}"
+            oras push \\
+              --artifact-type "${ARTIFACT_TYPE}" \\
+              "${tagged_reference}" \\
+              "maven-dependency-manifest.json:${DESCRIPTOR_MEDIA_TYPE}" \\
+              "trino-maven-dependencies-483.tar.gz:${ARCHIVE_MEDIA_TYPE}" \\
+              "bun-dependency-manifest.json:${BUN_DESCRIPTOR_MEDIA_TYPE}" \\
+              "trino-bun-dependencies-483.tar.gz:${BUN_ARCHIVE_MEDIA_TYPE}" \\
+              > "oras-push.txt"
+          )
+"""
 EXPECTED_REPOSITORY_MIRRORS = (
     (
         ("id", "shirokuma-central"),
@@ -1500,6 +1513,21 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
     for value in required:
         if value not in workflow:
             _fail("WORKFLOW_REQUIRED", value)
+    if (
+        workflow.count(EXPECTED_ORAS_PUSH_BLOCK) != 1
+        or "--disable-path-validation" in workflow
+        or '"${candidate}/maven-dependency-manifest.json:' in workflow
+        or '"${candidate}/trino-maven-dependencies-483.tar.gz:' in workflow
+        or '"${candidate}/bun-dependency-manifest.json:' in workflow
+        or '"${candidate}/trino-bun-dependencies-483.tar.gz:' in workflow
+    ):
+        _fail(
+            "WORKFLOW_ORAS_PATHS",
+            (
+                "ORAS publication must use reviewed basenames from the "
+                "validated candidate directory without disabling path validation"
+            ),
+        )
     if (
         workflow.count(EXPECTED_SETTINGS_MOUNT) != 3
         or workflow.count(f"{EXPECTED_SETTINGS_ARGUMENT} \\\n") != 3

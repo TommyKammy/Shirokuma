@@ -1288,6 +1288,57 @@ class PublisherContractTests(unittest.TestCase):
         ):
             verify._validate_workflow(contract, altered)
 
+    def test_oras_push_uses_only_reviewed_candidate_basenames(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        self.assertEqual(1, workflow.count(verify.EXPECTED_ORAS_PUSH_BLOCK))
+        self.assertNotIn("--disable-path-validation", workflow)
+        altered = workflow.replace(
+            verify.EXPECTED_ORAS_PUSH_BLOCK,
+            verify.EXPECTED_ORAS_PUSH_BLOCK.replace(
+                '            cd "${candidate}"',
+                '            cd "${RUNNER_TEMP}"',
+                1,
+            ),
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_ORAS_PATHS",
+        ):
+            verify._validate_workflow(contract, altered)
+        altered = workflow.replace(
+            verify.EXPECTED_ORAS_PUSH_BLOCK,
+            verify.EXPECTED_ORAS_PUSH_BLOCK.replace(
+                '"maven-dependency-manifest.json:${DESCRIPTOR_MEDIA_TYPE}"',
+                '"${candidate}/maven-dependency-manifest.json:'
+                '${DESCRIPTOR_MEDIA_TYPE}"',
+                1,
+            ),
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_ORAS_PATHS",
+        ):
+            verify._validate_workflow(contract, altered)
+        altered = workflow.replace(
+            verify.EXPECTED_ORAS_PUSH_BLOCK,
+            verify.EXPECTED_ORAS_PUSH_BLOCK.replace(
+                '            oras push \\\n',
+                '            oras push --disable-path-validation \\\n',
+                1,
+            ),
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_ORAS_PATHS",
+        ):
+            verify._validate_workflow(contract, altered)
+
     def test_first_private_publication_requires_owner_visibility_bootstrap(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
