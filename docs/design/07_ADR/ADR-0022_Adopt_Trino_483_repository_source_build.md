@@ -227,6 +227,15 @@ SHA-256
 `d4ce3f05c26c1f29192e0668ac5345860b08df005c51d7f4187834b61e4554f2`.
 It is pre-merge sufficiency evidence, not reviewed-main publication evidence.
 
+ADR-0024 subsequently supersedes the unmodified-source requirement only for
+the four exact Web UI `package.json` / `bun.lock` paths. The pristine 483
+commit, tree, tag binding, source preimages, and clean-worktree audit must pass
+before applying the hash-bound overlay. The overlay, one exact-PURL
+`not_affected` OpenVEX assessment, raw finding retention, adjusted
+High=0/Critical=0 result, identical raw/adjusted package inventory, import
+inventory, expiry, and separate-review controls are closed by ADR-0024. No
+other source path or control in this ADR is relaxed.
+
 ## Consequences
 
 The conditional source-build path avoids laundering an unsigned upstream image

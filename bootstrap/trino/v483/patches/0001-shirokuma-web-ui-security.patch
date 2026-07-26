@@ -1,0 +1,61 @@
+diff --git a/core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock b/core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock
+index aaa9fead0d..e648b1e776 100644
+--- a/core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock
++++ b/core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock
+@@ -28,0 +29,4 @@
++  "overrides": {
++    "d3-color": "3.1.0",
++    "fast-uri": "3.1.4",
++  },
+@@ -342 +346 @@
+-    "d3-color": ["d3-color@1.4.1", "", {}, "sha512-p2sTHSLCJI2QKunbGb7ocOh7DgTAn8IrLx21QRc/BSnodXM4sv6aLQlnfpvehFMLZEfBc6g9pH9SWQccFYfJ9Q=="],
++    "d3-color": ["d3-color@3.1.0", "", {}, "sha512-zg/chbXyeBtMQ1LbD/WSoW2DpC3I0mpmPdW+ynRTj/x2DAWYrIY7qeZIHidozwV24m4iavr15lNwIwLxRmOxhA=="],
+@@ -424 +428 @@
+-    "fast-uri": ["fast-uri@3.1.3", "", {}, "sha512-i70LwGWUduXqzicKXWshooq+sWL1K3WUU5rKZNG/0i3a1OSoX3HqhH5WbWwTmqWfor4urUakGPiRQcleRZTwOg=="],
++    "fast-uri": ["fast-uri@3.1.4", "", {}, "sha512-8JnbkQ4juDyvYs4mgFGQqg4yCYtFDtUtmp2QIQq11ZZe5CFQ5wcqm1rqDgAh/QdMySuBnPzMUiJUNZG5N/AiQw=="],
+diff --git a/core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json b/core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json
+index 0cbf54b9d6..005809dc4a 100644
+--- a/core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json
++++ b/core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json
+@@ -25,0 +26,4 @@
++  "overrides": {
++    "d3-color": "3.1.0",
++    "fast-uri": "3.1.4"
++  },
+diff --git a/core/trino-web-ui/src/main/resources/webapp/bun.lock b/core/trino-web-ui/src/main/resources/webapp/bun.lock
+index dbd47cae7f..ca61ea8e31 100644
+--- a/core/trino-web-ui/src/main/resources/webapp/bun.lock
++++ b/core/trino-web-ui/src/main/resources/webapp/bun.lock
+@@ -22 +22 @@
+-        "react-router-dom": "^7.18.1",
++        "react-router-dom": "7.18.1",
+@@ -47,0 +48,2 @@
++    "brace-expansion": "5.0.8",
++    "postcss": "8.5.18",
+@@ -389 +391 @@
+-    "balanced-match": ["balanced-match@1.0.2", "", {}, "sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw=="],
++    "balanced-match": ["balanced-match@4.0.4", "", {}, "sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA=="],
+@@ -397 +399 @@
+-    "brace-expansion": ["brace-expansion@1.1.16", "", { "dependencies": { "balanced-match": "^1.0.0", "concat-map": "0.0.1" } }, "sha512-IDw48K2/2kRkg9LdJxurvq3lV3aBgq0REY89duEqFRthjlPdXHKMj7EnQOXVckxzgisinf3nHfrcE2FufFLXMw=="],
++    "brace-expansion": ["brace-expansion@5.0.8", "", { "dependencies": { "balanced-match": "^4.0.2" } }, "sha512-JZyDyq3D4AUifKTPOB7DELf6XsB3WdPuNxCtob1vFXPsSXhdAiHBWJ/tJ8HAc9aH84BK+5JFZLNkJKx3G9kzQg=="],
+@@ -427,2 +428,0 @@
+-    "concat-map": ["concat-map@0.0.1", "", {}, "sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg=="],
+-
+@@ -817 +817 @@
+-    "postcss": ["postcss@8.5.16", "", { "dependencies": { "nanoid": "^3.3.12", "picocolors": "^1.1.1", "source-map-js": "^1.2.1" } }, "sha512-vuwillviilfKZsg0VGj5R/YwwcHx4SLsIOI/7K6mQkWx+l5cUHTjj5g0AasTBcyXsbfTgrwsUNmVUb5xVwyPwg=="],
++    "postcss": ["postcss@8.5.18", "", { "dependencies": { "nanoid": "^3.3.12", "picocolors": "^1.1.1", "source-map-js": "^1.2.1" } }, "sha512-xdB1oSLHbz1vRWgCDalrCqEFTWzFlhqFC5tIHLMOSUIjhm3XXQ1qrFy8S/ESr1JYRRXqM3c1QFiMZUJdUTqyMQ=="],
+@@ -992,4 +991,0 @@
+-
+-    "@typescript-eslint/typescript-estree/minimatch/brace-expansion": ["brace-expansion@5.0.7", "", { "dependencies": { "balanced-match": "^4.0.2" } }, "sha512-7oFy703dxfY3/NLxC1fh2SUCQ0H9rmAY+5EpDVfXjUTTs+HEwR2nYaqLv+GWcTsumwxPfiz6CzCNkwXwBUwqCA=="],
+-
+-    "@typescript-eslint/typescript-estree/minimatch/brace-expansion/balanced-match": ["balanced-match@4.0.4", "", {}, "sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA=="],
+diff --git a/core/trino-web-ui/src/main/resources/webapp/package.json b/core/trino-web-ui/src/main/resources/webapp/package.json
+index 355c3d3acc..cd4110adea 100644
+--- a/core/trino-web-ui/src/main/resources/webapp/package.json
++++ b/core/trino-web-ui/src/main/resources/webapp/package.json
+@@ -34 +34 @@
+-    "react-router-dom": "^7.18.1",
++    "react-router-dom": "7.18.1",
+@@ -57,0 +58,2 @@
++    "brace-expansion": "5.0.8",
++    "postcss": "8.5.18",

@@ -809,6 +809,36 @@ Reviewed-main must still prove equality of two complete fresh server builds;
 the local clean-build results are diagnostic evidence, not publication
 evidence.
 
+Reviewed-main run `30184349867` completed both independent Maven/Bun
+reconstructions, both fresh network-none native-arm64 builds, byte-identical
+server archives, and the Maven High=0/Critical=0 scan. It then failed closed on
+five Bun High findings. ADR-0024 authorizes one overlay only after the pristine
+source audit. The overlay is limited to the four exact Web UI package and lock
+files, pins `react-router-dom 7.18.1`, and overrides only `d3-color 3.1.0`,
+`fast-uri 3.1.4`, `brace-expansion 5.0.8`, and `postcss 8.5.18`. Patch bytes,
+preimages, postimages, dependency versions, and the complete React Router
+import inventory are hash- or value-bound and fail closed on drift.
+Two independent clean native-arm64 reconstructions of the patched lockfiles
+produced 75,321 regular cache files, 660 safe alias symlinks, and 500,020,836
+uncompressed bytes. Their manifest SHA-256 is
+`6e7be3a404014f6f7ac7e4bc326c8d46f7d5822fcea1ac000219c17f1d23f421`;
+their 128,423,777-byte deterministic archive SHA-256 is
+`252eade2183bdf5a371f073752420c3a45f5ef8b1dacb08a4addea350389e3c2`.
+These are local pre-merge identities that reviewed main must reproduce exactly.
+
+The remaining GHSA-qwww-vcr4-c8h2 finding applies to unstable React Server
+Components APIs that the exact Trino 483 client-side import inventory does not
+use. The publisher retains the raw report with exactly that one High finding
+for `pkg:npm/react-router@7.18.1`, applies one hash-bound OpenVEX
+`not_affected` statement with `vulnerable_code_not_in_execute_path`, and
+retains a separate adjusted report. The adjusted report must be
+High=0/Critical=0 and its complete package inventory must equal the raw report.
+Any additional finding, changed PURL, version, advisory, severity, import,
+package inventory, VEX byte, or expiry fails closed. This is a reviewed
+non-applicability assessment, not an ADR-0019 vulnerability risk acceptance.
+It expires with the ADR-0023 authorization at `2026-08-21T22:43:36Z` and
+cannot renew automatically.
+
 The publisher resolves and packages two independent fresh Maven repositories
 and two independent fresh Bun caches, requires each complete
 manifest/archive pair to be byte-identical, and then
@@ -822,9 +852,10 @@ absolute `/bun-cache/` alias symlink contract and exact reviewed package
 payload lockfiles. The verified Bun cache is mounted read-only. Origin markers
 are consumed before the timestamp-bearing
 `_remote.repositories` and `resolver-status.properties` resolver metadata are
-excluded from the deterministic archive. Separate fresh Maven and Bun Trivy
-dependency scans must remain High=0/Critical=0, and both CycloneDX results are
-retained with the candidate.
+excluded from the deterministic archive. The fresh Maven Trivy dependency scan
+must remain High=0/Critical=0. The Bun scan must retain both the exact raw
+finding and the OpenVEX-adjusted High=0/Critical=0 report, plus the OpenVEX and
+both CycloneDX results, with the candidate.
 
 Publication is main-only, uses an immutable `run_id` / `run_attempt` tag, and
 produces only a review-pending OCI dependency artifact. Cosign identity is bound
