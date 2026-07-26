@@ -1586,6 +1586,10 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         != 2
         or "scan-ref: ${{ runner.temp }}/bun-cache-a" in workflow
         or workflow.count('TRIVY_INCLUDE_DEV_DEPS: "true"') != 3
+        or workflow.count(
+            "TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy"
+        )
+        != 1
         or workflow.count("list-all-pkgs: true") != 2
         or workflow.count('--vex "${vex}"') != 1
         or workflow.count("--skip-db-update") != 1

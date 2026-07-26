@@ -613,6 +613,7 @@ jobs:
         if: steps.lifecycle.outputs.active == 'true'
         env:
           TRIVY_INCLUDE_DEV_DEPS: "true"
+          TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
         shell: bash
         run: |
           set -euo pipefail

@@ -1241,6 +1241,12 @@ class PublisherContractTests(unittest.TestCase):
             3,
             workflow.count('TRIVY_INCLUDE_DEV_DEPS: "true"'),
         )
+        self.assertEqual(
+            1,
+            workflow.count(
+                "TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy"
+            ),
+        )
         self.assertEqual(2, workflow.count("list-all-pkgs: true"))
         self.assertIn('--vex "${vex}"', workflow)
         self.assertEqual(1, workflow.count("--skip-db-update"))
@@ -1249,6 +1255,17 @@ class PublisherContractTests(unittest.TestCase):
         altered = workflow.replace(
             "scan-ref: ${{ runner.temp }}/trino-bun-scan-input",
             "scan-ref: ${{ runner.temp }}/bun-cache-a",
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_BUN_SCAN",
+        ):
+            verify._validate_workflow(contract, altered)
+        altered = workflow.replace(
+            "          TRIVY_CACHE_DIR: "
+            "${{ github.workspace }}/.cache/trivy\n",
+            "",
             1,
         )
         with self.assertRaisesRegex(
