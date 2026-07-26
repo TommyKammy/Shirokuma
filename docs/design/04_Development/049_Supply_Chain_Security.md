@@ -839,6 +839,23 @@ non-applicability assessment, not an ADR-0019 vulnerability risk acceptance.
 It expires with the ADR-0023 authorization at `2026-08-21T22:43:36Z` and
 cannot renew automatically.
 
+PR #123 merged the bounded overlay and OpenVEX contract as
+`a217edcd2ff414d347f04997df8ad2521d554217`. Reviewed-main run
+`30196716086` then completed both independent Maven/Bun reconstructions, both
+fresh network-none native-arm64 builds, byte-identical server archives, the
+Maven scan, and the raw/OpenVEX-adjusted Bun gates. It failed closed before
+publication while recording the candidate because the direct
+`trivy version --format json` command did not reuse the vulnerability database
+cache populated by the Trivy action and therefore returned no database
+freshness timestamps. No dependency artifact, signature, attestation, image,
+resident admission, Flux object, or runtime was created.
+
+The record step and the direct OpenVEX-adjusted scan must both set
+`TRIVY_CACHE_DIR` to the same workspace cache used by the Trivy actions. The
+workflow verifier binds both complete command blocks and exactly two matching
+cache declarations; removing either declaration fails closed before a
+publisher change can merge.
+
 The publisher resolves and packages two independent fresh Maven repositories
 and two independent fresh Bun caches, requires each complete
 manifest/archive pair to be byte-identical, and then

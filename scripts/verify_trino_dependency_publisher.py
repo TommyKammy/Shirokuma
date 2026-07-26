@@ -417,6 +417,25 @@ EXPECTED_PR_OVERLAY_BUILD_MARKERS = (
     '          bun run --cwd "${modern}" build',
     '          bun run --cwd "${legacy}" package:clean',
 )
+EXPECTED_OPENVEX_TRIVY_CACHE_BLOCK = """\
+      - name: Apply OpenVEX and block remaining Bun High or Critical findings
+        if: steps.lifecycle.outputs.active == 'true'
+        env:
+          TRIVY_INCLUDE_DEV_DEPS: "true"
+          TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
+"""
+EXPECTED_RECORD_TRIVY_CACHE_BLOCK = """\
+      - name: Record the read-only candidate
+        if: steps.lifecycle.outputs.active == 'true'
+        id: record
+        env:
+          TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="${GITHUB_WORKSPACE}/.trino-candidate"
+          trivy version --format json > "${candidate}/trivy-version.json"
+"""
 EXPECTED_REPOSITORY_MIRRORS = (
     (
         ("id", "shirokuma-central"),
@@ -1619,6 +1638,21 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
             "Bun cache must be frozen, independently reconstructed, and read-only offline",
         )
     if (
+        workflow.count(EXPECTED_OPENVEX_TRIVY_CACHE_BLOCK) != 1
+        or workflow.count(EXPECTED_RECORD_TRIVY_CACHE_BLOCK) != 1
+        or workflow.count(
+            "TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy"
+        )
+        != 2
+    ):
+        _fail(
+            "WORKFLOW_TRIVY_CACHE",
+            (
+                "direct OpenVEX and version metadata commands must reuse the "
+                "Trivy action vulnerability database cache"
+            ),
+        )
+    if (
         workflow.count(
             "python3 scripts/verify_trino_dependency_publisher.py \\\n"
             "            stage-bun-scan-input"
@@ -1636,10 +1670,6 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         != 2
         or "scan-ref: ${{ runner.temp }}/bun-cache-a" in workflow
         or workflow.count('TRIVY_INCLUDE_DEV_DEPS: "true"') != 3
-        or workflow.count(
-            "TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy"
-        )
-        != 1
         or workflow.count("list-all-pkgs: true") != 2
         or workflow.count('--vex "${vex}"') != 1
         or workflow.count("--skip-db-update") != 1
