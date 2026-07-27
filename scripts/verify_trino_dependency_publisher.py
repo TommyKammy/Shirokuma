@@ -1415,12 +1415,12 @@ def generate_maven_sbom(
     )
 
 
-def _trivy_package_purls(report_path: Path) -> set[str]:
+def _trivy_package_identities(report_path: Path) -> set[tuple[str, str]]:
     report = _load_json(report_path)
     results = report.get("Results")
     if not isinstance(results, list) or not results:
         _fail("MAVEN_SCAN_REPORT", "Trivy report contains no results")
-    purls: set[str] = set()
+    identities: set[tuple[str, str]] = set()
     for result in results:
         if not isinstance(result, dict):
             _fail("MAVEN_SCAN_REPORT", "Trivy result is not an object")
@@ -1434,7 +1434,10 @@ def _trivy_package_purls(report_path: Path) -> set[str]:
             purl = identifier.get("PURL") if isinstance(identifier, dict) else None
             if not isinstance(purl, str) or not purl:
                 _fail("MAVEN_SCAN_REPORT", "Trivy package PURL is missing")
-            purls.add(purl)
+            path = package.get("FilePath")
+            if not isinstance(path, str) or not path:
+                _fail("MAVEN_SCAN_REPORT", "Trivy package file path is missing")
+            identities.add((purl, path))
         vulnerabilities = result.get("Vulnerabilities", [])
         if not isinstance(vulnerabilities, list):
             _fail("MAVEN_SCAN_REPORT", "Trivy vulnerabilities are malformed")
@@ -1444,9 +1447,12 @@ def _trivy_package_purls(report_path: Path) -> set[str]:
             for finding in vulnerabilities
         ):
             _fail("MAVEN_SCAN_FINDING", "Maven High/Critical finding remains")
-    if not purls:
-        _fail("MAVEN_SCAN_REPORT", "Trivy report inventories no Maven PURLs")
-    return purls
+    if not identities:
+        _fail(
+            "MAVEN_SCAN_REPORT",
+            "Trivy report inventories no Maven package identities",
+        )
+    return identities
 
 
 def _cyclonedx_components(
@@ -1534,19 +1540,27 @@ def verify_maven_scan(
         for component in components
     ):
         _fail("MAVEN_SBOM_CLOSURE", "CycloneDX component PURL is missing")
-    expected_purls = {
-        component.get("purl")
-        for component in components
-        if isinstance(component, dict) and isinstance(component.get("purl"), str)
-    }
-    observed_purls = _trivy_package_purls(report_path)
-    if observed_purls != expected_purls:
+    expected_identities: set[tuple[str, str]] = set()
+    for component in components:
+        paths = _component_file_paths(component)
+        if not paths:
+            _fail(
+                "MAVEN_SBOM_CLOSURE",
+                "CycloneDX component file path is missing",
+            )
+        expected_identities.update(
+            (component["purl"], path) for path in paths
+        )
+    observed_identities = _trivy_package_identities(report_path)
+    if observed_identities != expected_identities:
         _fail(
             "MAVEN_SCAN_CLOSURE",
             (
-                "Trivy report PURL closure differs: "
-                f"missing={sorted(expected_purls - observed_purls)!r}, "
-                f"unexpected={sorted(observed_purls - expected_purls)!r}"
+                "Trivy report package identity closure differs: "
+                "missing="
+                f"{sorted(expected_identities - observed_identities)!r}, "
+                "unexpected="
+                f"{sorted(observed_identities - expected_identities)!r}"
             ),
         )
 
@@ -1615,6 +1629,32 @@ def _bind_cyclonedx(path: Path, reference: str, digest_hex: str) -> None:
             {"name": "shirokuma:scan-source", "value": source or "unknown"},
         ],
     }
+    dependencies = document.get("dependencies")
+    if not isinstance(dependencies, list):
+        _fail("ARTIFACT_SBOM", f"{path} dependency graph is missing")
+    dependency_refs = {
+        dependency.get("ref")
+        for dependency in dependencies
+        if isinstance(dependency, dict)
+        and isinstance(dependency.get("ref"), str)
+    }
+    if len(dependency_refs) != len(dependencies):
+        _fail("ARTIFACT_SBOM", f"{path} dependency graph is malformed")
+    if reference not in dependency_refs:
+        component_refs = {
+            component["bom-ref"]
+            for component in components
+            if isinstance(component, dict)
+            and isinstance(component.get("bom-ref"), str)
+        }
+        if len(component_refs) != len(components):
+            _fail("ARTIFACT_SBOM", f"{path} component references differ")
+        dependencies.append(
+            {
+                "ref": reference,
+                "dependsOn": sorted(component_refs),
+            }
+        )
     path.write_text(
         json.dumps(document, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

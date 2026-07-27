@@ -1363,6 +1363,66 @@ class MavenScanEvidenceTests(unittest.TestCase):
             ):
                 verify.generate_maven_sbom(descriptor, escaped, generated)
 
+    def test_maven_scan_requires_every_purl_path_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self._descriptor(root)
+            sbom = self._sbom(root)
+            document = json.loads(sbom.read_text(encoding="utf-8"))
+            nested_path = f"{self.JARS[1]}!/embedded-alpha.jar"
+            nested_ref = "urn:test:duplicate-purl-at-nested-path"
+            duplicate_purl = verify._maven_purl(self.JARS[0])
+            document["components"].append(
+                {
+                    "bom-ref": nested_ref,
+                    "type": "library",
+                    "name": "embedded-alpha",
+                    "purl": duplicate_purl,
+                    "properties": [
+                        {
+                            "name": "aquasecurity:trivy:FilePath",
+                            "value": nested_path,
+                        }
+                    ],
+                }
+            )
+            document["dependencies"][0]["dependsOn"].append(nested_ref)
+            document["dependencies"].append(
+                {"ref": nested_ref, "dependsOn": []}
+            )
+            sbom.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "MAVEN_SCAN_CLOSURE",
+            ):
+                verify.verify_maven_scan(
+                    descriptor,
+                    sbom,
+                    self._report(root),
+                )
+            verify.verify_maven_scan(
+                descriptor,
+                sbom,
+                self._report(
+                    root,
+                    extra_packages=((nested_path, duplicate_purl),),
+                ),
+            )
+            document["components"][-1]["properties"] = []
+            sbom.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "MAVEN_SBOM_CLOSURE",
+            ):
+                verify.verify_maven_scan(
+                    descriptor,
+                    sbom,
+                    self._report(
+                        root,
+                        extra_packages=((nested_path, duplicate_purl),),
+                    ),
+                )
+
     def test_empty_maven_scan_and_sbom_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -1402,6 +1462,13 @@ class MavenScanEvidenceTests(unittest.TestCase):
             maven_report = self._report(root)
             maven_sbom = self._sbom(root)
             bun_sbom = self._sbom(root)
+            bun_document = json.loads(bun_sbom.read_text(encoding="utf-8"))
+            bun_document["dependencies"] = [
+                dependency
+                for dependency in bun_document["dependencies"]
+                if dependency["ref"] != "urn:test:maven-root"
+            ]
+            bun_sbom.write_text(json.dumps(bun_document), encoding="utf-8")
             bun_raw = self._report(root)
             bun_adjusted = self._report(root)
             reference = (
