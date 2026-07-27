@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "component": "trino",
   "version": "483",
   "source": {
@@ -55,8 +55,8 @@
       },
       {
         "control": "repository_source_build",
-        "status": "not_retained",
-        "evidence": "no reviewed dependency closure, offline build, signature, SBOM, scan, or runtime-smoke evidence exists in this repository"
+        "status": "publisher_repair_pending",
+        "evidence": "main run 30231656483 published digest sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c, but evidence review found an empty Maven SBOM/scan, missing OCI digest subjects, a non-recursive retained inventory, missing Trino tag-object provenance, and an unsigned anonymous-pull receipt; the object is a non-admitted failed attempt"
       }
     ],
     "rationale": "ADR-0019 does not waive source identity, image signature, transparency-log, provenance, or evidence requirements. ADR-0023 separately accepts only the exact Trino 483 source-identity risk for a time-boxed local PoC. ADR-0024 authorizes a four-path Web UI dependency overlay and one not_affected OpenVEX assessment through the same expiry; it is not a vulnerability risk acceptance. The raw finding remains retained, adjusted High=0/Critical=0 remains mandatory, the upstream image and server asset remain rejected, all image controls remain mandatory, and re-signing untrusted upstream bytes is forbidden."

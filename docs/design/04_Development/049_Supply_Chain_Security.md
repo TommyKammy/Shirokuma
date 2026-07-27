@@ -955,6 +955,36 @@ and leaves the Iceberg finding unresolved. The closed feasibility record is
 `bootstrap/trino/v476/feasibility.json`; no 476 workflow, image, ledger entry,
 or runtime is allowed.
 
+Reviewed-main Trino dependency publisher run
+[`30231656483`](https://github.com/TommyKammy/Shirokuma/actions/runs/30231656483)
+from commit `1ae1996eaf654e69daad60c574c7abb4e4d2be3b` completed the closed
+Maven/Bun reconstructions and published public dependency reference
+`ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c`.
+Evidence review rejected that object: Trivy filesystem mode inventoried zero
+Maven components/results, the SBOM and scan documents lacked an exact OCI
+digest subject, the retained inventory was not recursively closed against
+nested directories and symlinks, the signed SLSA resolved dependency omitted
+the reviewed `483` tag object, and the post-attestation anonymous-pull receipt
+lacked its own trusted signature. The object is a failed attempt and is not
+dependency evidence.
+
+The repair keeps the publisher active, switches the Maven repository scan to
+Trivy rootfs mode, requires exact equality between the 1,470 descriptor JAR
+paths and both Trivy/CycloneDX inventories, requires every descriptor JAR to be
+discovered by the rootfs scan, preserves every rootfs-discovered
+top-level and embedded component in the final scan graph, re-roots each
+CycloneDX dependency graph at the immutable OCI subject (creating a root edge
+during Maven generation or immutable-subject rebinding when Trivy omitted
+one), compares Maven scan identities by both PURL and file
+path, binds every retained
+SBOM and scan document to the ORAS digest before SLSA signing, includes tag object
+`32d4f28e8311ea6f67edca209df59a0493d869fa`, includes the exact retained Trivy
+version/database timestamp record in the signed SLSA dependencies, and
+keyless-signs the anonymous-pull receipt after retrieval. No dependency
+artifact, Trino image,
+resident admission, Flux object, or runtime is admitted until a fresh
+reviewed-main run and separate evidence-only review succeed.
+
 ## Resident image and SBOM evidence
 
 Every image admitted to a resident profile must have an entry in

@@ -1125,6 +1125,471 @@ class BunScanEvidenceTests(unittest.TestCase):
                     verify.verify_bun_snapshot_identity(descriptor, archive)
 
 
+class MavenScanEvidenceTests(unittest.TestCase):
+    JARS = (
+        "org/example/alpha/1.0/alpha-1.0.jar",
+        "org/example/beta/2.0/beta-2.0.jar",
+    )
+
+    def _descriptor(self, root: Path) -> Path:
+        records = [
+            {
+                "mode": "0644",
+                "path": path,
+                "repository_origin": "https://repo.maven.apache.org/maven2/",
+                "sha256": hashlib.sha256(path.encode()).hexdigest(),
+                "size": len(path),
+            }
+            for path in self.JARS
+        ]
+        descriptor = root / "descriptor.json"
+        descriptor.write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "file_count": len(records),
+                    "files": records,
+                }
+            ),
+            encoding="utf-8",
+        )
+        return descriptor
+
+    def _report(
+        self,
+        root: Path,
+        paths: tuple[str, ...] | None = None,
+        extra_packages: tuple[tuple[str, str], ...] = (),
+    ) -> Path:
+        packages = [
+            (path, verify._maven_purl(path))
+            for path in (paths if paths is not None else self.JARS)
+        ]
+        packages.extend(extra_packages)
+        report = root / "report.json"
+        report.write_text(
+            json.dumps(
+                {
+                    "SchemaVersion": 2,
+                    "ArtifactName": "/tmp/maven-repository-a",
+                    "ArtifactType": "rootfs",
+                    "Results": [
+                        {
+                            "Target": "Java",
+                            "Class": "lang-pkgs",
+                            "Type": "jar",
+                            "Packages": [
+                                {
+                                    "Name": Path(path).stem,
+                                    "FilePath": path,
+                                    "Identifier": {
+                                        "PURL": purl,
+                                    },
+                                }
+                                for path, purl in packages
+                            ],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return report
+
+    def _sbom(self, root: Path, paths: tuple[str, ...] | None = None) -> Path:
+        root_ref = "urn:test:maven-root"
+        selected_paths = paths if paths is not None else self.JARS
+        component_refs = [verify._maven_purl(path) for path in selected_paths]
+        sbom = root / "sbom.json"
+        sbom.write_text(
+            json.dumps(
+                {
+                    "bomFormat": "CycloneDX",
+                    "specVersion": "1.7",
+                    "metadata": {
+                        "component": {
+                            "bom-ref": root_ref,
+                            "type": "application",
+                            "name": "/tmp/maven-repository-a",
+                        }
+                    },
+                    "components": [
+                        {
+                            "bom-ref": verify._maven_purl(path),
+                            "type": "library",
+                            "name": Path(path).stem,
+                            "purl": verify._maven_purl(path),
+                            "properties": [
+                                {
+                                    "name": "aquasecurity:trivy:FilePath",
+                                    "value": path,
+                                }
+                            ],
+                        }
+                        for path in selected_paths
+                    ],
+                    "dependencies": [
+                        {"ref": root_ref, "dependsOn": component_refs},
+                        *[
+                            {"ref": component_ref, "dependsOn": []}
+                            for component_ref in component_refs
+                        ],
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return sbom
+
+    def test_complete_rootfs_maven_inventory_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self._descriptor(root)
+            report = self._report(root)
+            sbom = self._sbom(root)
+            verify.verify_maven_scan(descriptor, sbom, report)
+            incomplete = self._report(root, self.JARS[:1])
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "MAVEN_SCAN_CLOSURE",
+            ):
+                verify.verify_maven_scan(descriptor, sbom, incomplete)
+
+    def test_maven_sbom_generation_requires_every_descriptor_jar(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self._descriptor(root)
+            incomplete_rootfs = self._sbom(root, self.JARS[:1])
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "MAVEN_SBOM_ROOTFS",
+            ):
+                verify.generate_maven_sbom(
+                    descriptor,
+                    incomplete_rootfs,
+                    root / "generated-sbom.json",
+                )
+
+    def test_maven_sbom_generation_accepts_rootless_trivy_graph(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self._descriptor(root)
+            rootfs_sbom = self._sbom(root)
+            rootfs_document = json.loads(
+                rootfs_sbom.read_text(encoding="utf-8")
+            )
+            old_root_ref = rootfs_document["metadata"]["component"]["bom-ref"]
+            rootfs_document["dependencies"] = [
+                dependency
+                for dependency in rootfs_document["dependencies"]
+                if dependency["ref"] != old_root_ref
+            ]
+            rootfs_sbom.write_text(
+                json.dumps(rootfs_document),
+                encoding="utf-8",
+            )
+            generated = root / "generated-sbom.json"
+            verify.generate_maven_sbom(descriptor, rootfs_sbom, generated)
+            document = json.loads(generated.read_text(encoding="utf-8"))
+            root_ref = document["metadata"]["component"]["bom-ref"]
+            component_refs = {
+                component["bom-ref"] for component in document["components"]
+            }
+            root_dependencies = [
+                dependency
+                for dependency in document["dependencies"]
+                if dependency["ref"] == root_ref
+            ]
+            self.assertEqual(1, len(root_dependencies))
+            self.assertEqual(
+                component_refs,
+                set(root_dependencies[0]["dependsOn"]),
+            )
+            verify.verify_maven_scan(
+                descriptor,
+                generated,
+                self._report(root),
+            )
+            rootfs_document["dependencies"].append(
+                {"ref": "urn:test:unreviewed-root", "dependsOn": []}
+            )
+            rootfs_sbom.write_text(
+                json.dumps(rootfs_document),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "rootfs dependency references are not closed",
+            ):
+                verify.generate_maven_sbom(
+                    descriptor,
+                    rootfs_sbom,
+                    generated,
+                )
+
+    def test_manifest_closure_is_generated_after_rootfs_discovery(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self._descriptor(root)
+            rootfs_sbom = self._sbom(root)
+            rootfs_document = json.loads(
+                rootfs_sbom.read_text(encoding="utf-8")
+            )
+            nested_path = (
+                f"{self.JARS[0]}/META-INF/jars/embedded-3.0.jar"
+            )
+            nested_purl = "pkg:maven/org.example/embedded@3.0"
+            nested_ref = "urn:test:embedded"
+            rootfs_document["components"].append(
+                {
+                    "bom-ref": nested_ref,
+                    "type": "library",
+                    "name": "embedded",
+                    "version": "3.0",
+                    "purl": nested_purl,
+                    "properties": [
+                        {
+                            "name": "aquasecurity:trivy:FilePath",
+                            "value": nested_path,
+                        }
+                    ],
+                }
+            )
+            rootfs_document["dependencies"][0]["dependsOn"].append(nested_ref)
+            rootfs_document["dependencies"].append(
+                {"ref": nested_ref, "dependsOn": []}
+            )
+            rootfs_sbom.write_text(
+                json.dumps(rootfs_document),
+                encoding="utf-8",
+            )
+            generated = root / "generated-sbom.json"
+            verify.generate_maven_sbom(descriptor, rootfs_sbom, generated)
+            document = json.loads(generated.read_text(encoding="utf-8"))
+            self.assertEqual(
+                {
+                    *(verify._maven_purl(path) for path in self.JARS),
+                    nested_purl,
+                },
+                {component["purl"] for component in document["components"]},
+            )
+            self.assertIn(
+                nested_path,
+                {
+                    prop["value"]
+                    for component in document["components"]
+                    for prop in component.get("properties", [])
+                    if prop.get("name") == "aquasecurity:trivy:FilePath"
+                },
+            )
+            root_dependency = next(
+                dependency
+                for dependency in document["dependencies"]
+                if dependency["ref"]
+                == document["metadata"]["component"]["bom-ref"]
+            )
+            self.assertIn(nested_ref, root_dependency["dependsOn"])
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "MAVEN_SCAN_CLOSURE",
+            ):
+                verify.verify_maven_scan(
+                    descriptor,
+                    generated,
+                    self._report(root),
+                )
+            verify.verify_maven_scan(
+                descriptor,
+                generated,
+                self._report(
+                    root,
+                    extra_packages=((nested_path, nested_purl),),
+                ),
+            )
+            rootfs_document["components"][-1]["properties"][0]["value"] = (
+                "org/unreviewed/outer/1.0/outer-1.0.jar!/embedded.jar"
+            )
+            escaped = root / "escaped-rootfs.json"
+            escaped.write_text(
+                json.dumps(rootfs_document),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "MAVEN_SBOM_ROOTFS",
+            ):
+                verify.generate_maven_sbom(descriptor, escaped, generated)
+
+    def test_maven_scan_requires_every_purl_path_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self._descriptor(root)
+            sbom = self._sbom(root)
+            document = json.loads(sbom.read_text(encoding="utf-8"))
+            nested_path = f"{self.JARS[1]}!/embedded-alpha.jar"
+            nested_ref = "urn:test:duplicate-purl-at-nested-path"
+            duplicate_purl = verify._maven_purl(self.JARS[0])
+            document["components"].append(
+                {
+                    "bom-ref": nested_ref,
+                    "type": "library",
+                    "name": "embedded-alpha",
+                    "purl": duplicate_purl,
+                    "properties": [
+                        {
+                            "name": "aquasecurity:trivy:FilePath",
+                            "value": nested_path,
+                        }
+                    ],
+                }
+            )
+            document["dependencies"][0]["dependsOn"].append(nested_ref)
+            document["dependencies"].append(
+                {"ref": nested_ref, "dependsOn": []}
+            )
+            sbom.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "MAVEN_SCAN_CLOSURE",
+            ):
+                verify.verify_maven_scan(
+                    descriptor,
+                    sbom,
+                    self._report(root),
+                )
+            verify.verify_maven_scan(
+                descriptor,
+                sbom,
+                self._report(
+                    root,
+                    extra_packages=((nested_path, duplicate_purl),),
+                ),
+            )
+            document["components"][-1]["properties"] = []
+            sbom.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "MAVEN_SBOM_CLOSURE",
+            ):
+                verify.verify_maven_scan(
+                    descriptor,
+                    sbom,
+                    self._report(
+                        root,
+                        extra_packages=((nested_path, duplicate_purl),),
+                    ),
+                )
+
+    def test_empty_maven_scan_and_sbom_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self._descriptor(root)
+            report = root / "empty-report.json"
+            report.write_text(
+                json.dumps({"SchemaVersion": 2, "Results": []}),
+                encoding="utf-8",
+            )
+            sbom = root / "empty-sbom.json"
+            sbom.write_text(
+                json.dumps(
+                    {
+                        "bomFormat": "CycloneDX",
+                        "specVersion": "1.7",
+                        "metadata": {},
+                        "components": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "MAVEN_SBOM",
+            ):
+                verify.verify_maven_scan(descriptor, sbom, self._report(root))
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "MAVEN_SCAN_REPORT",
+            ):
+                verify.verify_maven_scan(descriptor, self._sbom(root), report)
+
+    def test_binding_sets_exact_immutable_subject_on_every_document(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self._descriptor(root)
+            maven_report = self._report(root)
+            maven_sbom = self._sbom(root)
+            bun_sbom = self._sbom(root)
+            bun_document = json.loads(bun_sbom.read_text(encoding="utf-8"))
+            bun_document["dependencies"] = [
+                dependency
+                for dependency in bun_document["dependencies"]
+                if dependency["ref"] != "urn:test:maven-root"
+            ]
+            bun_sbom.write_text(json.dumps(bun_document), encoding="utf-8")
+            bun_raw = self._report(root)
+            bun_adjusted = self._report(root)
+            reference = (
+                "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@"
+                "sha256:" + "a" * 64
+            )
+            verify.bind_artifact_evidence(
+                reference,
+                descriptor,
+                maven_sbom,
+                maven_report,
+                bun_sbom,
+                bun_raw,
+                bun_adjusted,
+            )
+            digest = "sha256:" + "a" * 64
+            for path in (maven_report, bun_raw, bun_adjusted):
+                document = json.loads(path.read_text(encoding="utf-8"))
+                self.assertEqual(reference, document["ArtifactName"])
+                self.assertEqual(digest, document["Metadata"]["ImageID"])
+                self.assertEqual(
+                    [reference],
+                    document["Metadata"]["RepoDigests"],
+                )
+            for path in (maven_sbom, bun_sbom):
+                document = json.loads(path.read_text(encoding="utf-8"))
+                component = document["metadata"]["component"]
+                self.assertEqual(reference, component["bom-ref"])
+                self.assertEqual(
+                    [{"alg": "SHA-256", "content": "a" * 64}],
+                    component["hashes"],
+                )
+                root_dependencies = [
+                    dependency
+                    for dependency in document["dependencies"]
+                    if dependency["ref"] == reference
+                ]
+                self.assertEqual(1, len(root_dependencies))
+                self.assertNotIn(
+                    "urn:test:maven-root",
+                    json.dumps(document),
+                )
+            document = json.loads(maven_sbom.read_text(encoding="utf-8"))
+            root_dependency = next(
+                dependency
+                for dependency in document["dependencies"]
+                if dependency["ref"] == reference
+            )
+            root_dependency["dependsOn"] = []
+            maven_sbom.write_text(
+                json.dumps(document),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "components are not root-reachable",
+            ):
+                verify._verify_cyclonedx_subject(
+                    maven_sbom,
+                    reference,
+                    "a" * 64,
+                )
+
+
 class PublisherContractTests(unittest.TestCase):
     def test_repository_contract_and_workflow_are_closed(self) -> None:
         verify.audit(ROOT)
@@ -1247,7 +1712,7 @@ class PublisherContractTests(unittest.TestCase):
                 "TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy"
             ),
         )
-        self.assertEqual(2, workflow.count("list-all-pkgs: true"))
+        self.assertEqual(3, workflow.count("list-all-pkgs: true"))
         self.assertIn('--vex "${vex}"', workflow)
         self.assertEqual(1, workflow.count("--skip-db-update"))
         self.assertIn("trivy-bun-vulnerability-raw.json", workflow)
@@ -1841,6 +2306,7 @@ class PublisherContractTests(unittest.TestCase):
             "trino-maven-dependencies-483.cdx.json",
             "trivy-bun-vulnerability.json",
             "trivy-vulnerability.json",
+            "trivy-version.json",
             "offline-build.json",
             "independent-reconstruction.json",
             "toolchain.json",
@@ -1849,6 +2315,7 @@ class PublisherContractTests(unittest.TestCase):
                 self.assertIn(f'"file:{evidence}"', workflow)
         self.assertIn('"https://in-toto.io/Statement/v1"', workflow)
         self.assertIn('"https://slsa.dev/provenance/v1"', workflow)
+        self.assertEqual(1, workflow.count('"file:trivy-version.json"'))
         self.assertIn("statement == expected_statement", workflow)
         self.assertIn('"digest": {"sha256": digest}', workflow)
 

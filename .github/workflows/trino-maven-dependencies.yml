@@ -578,31 +578,54 @@ jobs:
           )
           PY
 
-      - name: Generate a CycloneDX dependency SBOM
+      - name: Generate the raw rootfs Maven JAR inventory
         if: steps.lifecycle.outputs.active == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: v0.72.0
-          scan-type: fs
+          scan-type: rootfs
           scan-ref: ${{ runner.temp }}/maven-repository-a
           format: cyclonedx
-          output: .trino-candidate/trino-maven-dependencies-483.cdx.json
+          output: .trino-candidate/trino-maven-rootfs-483.cdx.json
           scanners: vuln
+
+      - name: Generate the closure-complete Maven CycloneDX SBOM
+        if: steps.lifecycle.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py \
+            generate-maven-sbom \
+            --descriptor .trino-candidate/maven-dependency-manifest.json \
+            --rootfs-sbom .trino-candidate/trino-maven-rootfs-483.cdx.json \
+            --output .trino-candidate/trino-maven-dependencies-483.cdx.json
 
       - name: Scan the dependency closure and block High or Critical findings
         if: steps.lifecycle.outputs.active == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: v0.72.0
-          scan-type: fs
-          scan-ref: ${{ runner.temp }}/maven-repository-a
+          scan-type: sbom
+          scan-ref: .trino-candidate/trino-maven-dependencies-483.cdx.json
           format: json
           output: .trino-candidate/trivy-vulnerability.json
           scanners: vuln
           severity: HIGH,CRITICAL
           ignore-unfixed: false
           vuln-type: library
+          list-all-pkgs: true
           exit-code: 1
+
+      - name: Verify the complete Maven JAR scan inventory
+        if: steps.lifecycle.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py \
+            verify-maven-scan \
+            --descriptor .trino-candidate/maven-dependency-manifest.json \
+            --sbom .trino-candidate/trino-maven-dependencies-483.cdx.json \
+            --report .trino-candidate/trivy-vulnerability.json
 
       - name: Stage the exact Bun lockfiles for dependency analysis
         if: steps.lifecycle.outputs.active == 'true'
@@ -935,6 +958,23 @@ jobs:
         with:
           cosign-release: v3.1.1
 
+      - name: Bind retained SBOM and scan evidence to the published digest
+        env:
+          PUBLISHED_REFERENCE: ${{ steps.push.outputs.reference }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="${RUNNER_TEMP}/trino-maven-candidate"
+          python3 scripts/verify_trino_dependency_publisher.py \
+            bind-artifact-evidence \
+            --reference "${PUBLISHED_REFERENCE}" \
+            --descriptor "${candidate}/maven-dependency-manifest.json" \
+            --maven-sbom "${candidate}/trino-maven-dependencies-483.cdx.json" \
+            --maven-report "${candidate}/trivy-vulnerability.json" \
+            --bun-sbom "${candidate}/trino-bun-dependencies-483.cdx.json" \
+            --bun-raw-report "${candidate}/trivy-bun-vulnerability-raw.json" \
+            --bun-adjusted-report "${candidate}/trivy-bun-vulnerability.json"
+
       - name: Keyless-sign and attest the exact OCI manifest
         env:
           PUBLISHED_REFERENCE: ${{ steps.push.outputs.reference }}
@@ -981,6 +1021,7 @@ jobs:
                       {
                           "uri": "git+https://github.com/trinodb/trino@refs/tags/483",
                           "digest": {
+                              "gitTagObject": os.environ["SOURCE_TAG_OBJECT"],
                               "gitCommit": os.environ["SOURCE_COMMIT"],
                               "gitTree": os.environ["SOURCE_TREE"],
                           },
@@ -1094,6 +1135,14 @@ jobs:
                                       candidate
                                       / "trivy-vulnerability.json"
                                   ).read_bytes()
+                              ).hexdigest()
+                          },
+                      },
+                      {
+                          "uri": "file:trivy-version.json",
+                          "digest": {
+                              "sha256": hashlib.sha256(
+                                  (candidate / "trivy-version.json").read_bytes()
                               ).hexdigest()
                           },
                       },
@@ -1307,6 +1356,20 @@ jobs:
               encoding="utf-8",
           )
           PY
+          identity="https://github.com/${GITHUB_REPOSITORY}/.github/workflows/trino-maven-dependencies.yml@${GITHUB_REF}"
+          cosign sign-blob --yes \
+            --bundle "${candidate}/anonymous-pull-signature-bundle.json" \
+            "${candidate}/anonymous-pull.json"
+          cosign verify-blob \
+            --bundle "${candidate}/anonymous-pull-signature-bundle.json" \
+            --certificate-identity "${identity}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --certificate-github-workflow-repository "${GITHUB_REPOSITORY}" \
+            --certificate-github-workflow-ref "${GITHUB_REF}" \
+            --certificate-github-workflow-sha "${GITHUB_WORKFLOW_SHA}" \
+            --certificate-github-workflow-trigger "${GITHUB_EVENT_NAME}" \
+            "${candidate}/anonymous-pull.json" \
+            > "${candidate}/cosign-verify-anonymous-pull.json"
 
       - name: Record review-pending publication evidence
         env:
@@ -1327,9 +1390,11 @@ jobs:
           candidate = Path(os.environ["CANDIDATE"])
           retained = [
               "anonymous-pull.json",
+              "anonymous-pull-signature-bundle.json",
               "bun-dependency-manifest.json",
               "cosign-provenance-bundle.json",
               "cosign-signature-bundle.json",
+              "cosign-verify-anonymous-pull.json",
               "cosign-verify-attestation.json",
               "cosign-verify.json",
               "independent-reconstruction.json",
@@ -1386,9 +1451,11 @@ jobs:
           name: trino-maven-publication-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/trino-maven-candidate/anonymous-pull.json
+            ${{ runner.temp }}/trino-maven-candidate/anonymous-pull-signature-bundle.json
             ${{ runner.temp }}/trino-maven-candidate/bun-dependency-manifest.json
             ${{ runner.temp }}/trino-maven-candidate/cosign-provenance-bundle.json
             ${{ runner.temp }}/trino-maven-candidate/cosign-signature-bundle.json
+            ${{ runner.temp }}/trino-maven-candidate/cosign-verify-anonymous-pull.json
             ${{ runner.temp }}/trino-maven-candidate/cosign-verify-attestation.json
             ${{ runner.temp }}/trino-maven-candidate/cosign-verify.json
             ${{ runner.temp }}/trino-maven-candidate/independent-reconstruction.json

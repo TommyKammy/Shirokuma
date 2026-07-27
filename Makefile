@@ -109,7 +109,6 @@ verify-iceberg-table-bootstrap: flux-version-check
 
 test-trino-dependency-publisher:
 	@$(PYTHON) -m unittest -v tests.test_trino_dependency_publisher
-
 verify-trino-dependency-publisher: test-trino-dependency-publisher
 	@$(PYTHON) scripts/verify_trino_dependency_publisher.py audit --root .
 

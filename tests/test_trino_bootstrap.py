@@ -2758,7 +2758,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             set(admission),
         )
         self.assertIs(type(admission["schema_version"]), int)
-        self.assertEqual(2, admission["schema_version"])
+        self.assertEqual(3, admission["schema_version"])
         self.assertEqual("trino", admission["component"])
         self.assertEqual("483", admission["version"])
         self.assertEqual("linux/arm64", admission["platform"])
@@ -2847,10 +2847,15 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     },
                     {
                         "control": "repository_source_build",
-                        "status": "not_retained",
+                        "status": "publisher_repair_pending",
                         "evidence": (
-                            "no reviewed dependency closure, offline build, signature, "
-                            "SBOM, scan, or runtime-smoke evidence exists in this repository"
+                            "main run 30231656483 published digest "
+                            "sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97"
+                            "e1e952499f8af5075c, but evidence review found an empty "
+                            "Maven SBOM/scan, missing OCI digest subjects, a non-"
+                            "recursive retained inventory, missing Trino tag-object "
+                            "provenance, and an unsigned anonymous-pull receipt; the "
+                            "object is a non-admitted failed attempt"
                         ),
                     },
                 ],
@@ -3148,8 +3153,13 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             for path in TRINO_ADMISSION.parent.rglob("*")
             if path.is_file() or path.is_symlink()
         }
+        allowed_paths = set(repository_state["allowed_paths"])
         self.assertTrue(
-            bootstrap_inventory <= set(repository_state["allowed_paths"])
+            all(
+                path in allowed_paths
+                or any(path.startswith(f"{prefix}/") for prefix in allowed_paths)
+                for path in bootstrap_inventory
+            )
         )
         all_trino_bootstrap_paths = {
             path.relative_to(ROOT).as_posix()
@@ -3235,11 +3245,12 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "snapshot",
                 "offline_rebuild",
                 "publication",
+                "failed_publications",
                 "downstream_gates",
             },
             set(contract),
         )
-        self.assertEqual(1, contract["schema_version"])
+        self.assertEqual(2, contract["schema_version"])
         self.assertEqual("trino", contract["component"])
         self.assertEqual("483", contract["version"])
         self.assertEqual("linux/arm64", contract["platform"])
@@ -4142,7 +4153,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             rebuild["retained_output_evidence"],
         )
 
-    def test_dependency_snapshot_contract_does_not_authorize_publication(
+    def test_dependency_snapshot_contract_allows_only_repaired_publication(
         self,
     ) -> None:
         contract = self._trusted_build_contract()
@@ -4176,16 +4187,28 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "publication_event": "push",
                 "runner": "ubuntu-24.04-arm",
                 "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",
+                "evidence_review_inventory_policy": {
+                    "recursive_closed_world_required": True,
+                    "regular_files_only": True,
+                    "directories_and_symlinks_rejected": True,
+                },
                 "retained_evidence": [
                     "closed Maven dependency manifest and deterministic archive digest",
                     "closed Bun dependency manifest and deterministic cache archive digest",
                     "independent reconstruction equality",
                     "two network-none native arm64 build output comparisons",
-                    "CycloneDX dependency SBOM",
-                    "CycloneDX Bun dependency SBOM",
                     (
-                        "fresh Maven High=0/Critical=0 Trivy result and "
-                        "database metadata"
+                        "descriptor-complete CycloneDX Maven dependency SBOM "
+                        "retaining every rootfs-discovered top-level and embedded "
+                        "component and bound to the exact OCI digest"
+                    ),
+                    (
+                        "CycloneDX Bun dependency SBOM bound to the exact OCI digest"
+                    ),
+                    (
+                        "descriptor-complete and embedded-component-complete Maven "
+                        "High=0/Critical=0 Trivy result and database metadata bound "
+                        "to the exact OCI digest"
                     ),
                     (
                         "exact raw Bun Trivy finding, hash-bound OpenVEX, and "
@@ -4193,8 +4216,12 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                         "package inventories"
                     ),
                     "Cosign signature and Rekor bundle",
-                    "SLSA v1 provenance with predicate.buildDefinition.resolvedDependencies",
-                    "anonymous exact-digest retrieval proof",
+                    (
+                        "SLSA v1 provenance with the exact tag object, commit, tree, "
+                        "and evidence hashes in predicate.buildDefinition."
+                        "resolvedDependencies"
+                    ),
+                    "keyless-signed anonymous exact-digest retrieval proof",
                 ],
             },
             contract["publication"],

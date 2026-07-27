@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "component": "trino",
   "version": "483",
   "platform": "linux/arm64",
@@ -35,11 +35,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "4303a9670246046473d249a80ee943ece41df92fd9c5935ead49d334908383e5"
+      "sha256": "780ab7e2782dedec2cb6e26d83fad7c5a75b42d6687cbf6f0f1ca2c550f36bb8"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "3079a87cdf0e8524da34584dd12638b729270b58d50a96a6d89a263af35063ca"
+      "sha256": "d67d059a64828448a8c53cb63a9cb19dc46f6e4f31c3e22c0c8c453d635d7c56"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -671,20 +671,41 @@
     "publication_event": "push",
     "runner": "ubuntu-24.04-arm",
     "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",
+    "evidence_review_inventory_policy": {
+      "recursive_closed_world_required": true,
+      "regular_files_only": true,
+      "directories_and_symlinks_rejected": true
+    },
     "retained_evidence": [
       "closed Maven dependency manifest and deterministic archive digest",
       "closed Bun dependency manifest and deterministic cache archive digest",
       "independent reconstruction equality",
       "two network-none native arm64 build output comparisons",
-      "CycloneDX dependency SBOM",
-      "CycloneDX Bun dependency SBOM",
-      "fresh Maven High=0/Critical=0 Trivy result and database metadata",
+      "descriptor-complete CycloneDX Maven dependency SBOM retaining every rootfs-discovered top-level and embedded component and bound to the exact OCI digest",
+      "CycloneDX Bun dependency SBOM bound to the exact OCI digest",
+      "descriptor-complete and embedded-component-complete Maven High=0/Critical=0 Trivy result and database metadata bound to the exact OCI digest",
       "exact raw Bun Trivy finding, hash-bound OpenVEX, and adjusted High=0/Critical=0 report with identical package inventories",
       "Cosign signature and Rekor bundle",
-      "SLSA v1 provenance with predicate.buildDefinition.resolvedDependencies",
-      "anonymous exact-digest retrieval proof"
+      "SLSA v1 provenance with the exact tag object, commit, tree, and evidence hashes in predicate.buildDefinition.resolvedDependencies",
+      "keyless-signed anonymous exact-digest retrieval proof"
     ]
   },
+  "failed_publications": [
+    {
+      "run_id": "30231656483",
+      "run_attempt": "1",
+      "source_sha": "1ae1996eaf654e69daad60c574c7abb4e4d2be3b",
+      "reference": "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c",
+      "admitted": false,
+      "reasons": [
+        "filesystem-mode Trivy produced an empty Maven CycloneDX document and no Maven scan Results",
+        "retained SBOM and scan documents were not bound to the published OCI digest",
+        "the retained evidence inventory was not recursively closed and did not reject nested directories or symlinks",
+        "SLSA resolvedDependencies omitted the exact Trino 483 tag object",
+        "the anonymous-pull receipt was not covered by a subsequent trusted signature"
+      ]
+    }
+  ],
   "downstream_gates": {
     "dependency_artifact_published": false,
     "dependency_evidence_admitted": false,
