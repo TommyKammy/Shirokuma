@@ -1360,6 +1360,45 @@ class PublisherContractTests(unittest.TestCase):
                 ):
                     verify._validate_workflow(contract, altered)
 
+    def test_slsa_attestation_signs_and_attaches_the_exact_v1_statement(
+        self,
+    ) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        expected = verify.EXPECTED_SLSA_STATEMENT_ATTESTATION_BLOCK
+        self.assertEqual(1, workflow.count(expected))
+        for invalid, error in (
+            (
+                expected.replace("cosign attest-blob", "cosign attest", 1),
+                "WORKFLOW_REQUIRED: cosign attest-blob",
+            ),
+            (
+                expected.replace("--statement", "--predicate", 1),
+                "WORKFLOW_SLSA_STATEMENT",
+            ),
+            (
+                expected.replace(
+                    '--hash "${PUBLISHED_DIGEST#sha256:}"',
+                    '--hash "${PUBLISHED_DIGEST}"',
+                    1,
+                ),
+                "WORKFLOW_SLSA_STATEMENT",
+            ),
+            (
+                expected.replace("cosign attach attestation", "cosign verify", 1),
+                "WORKFLOW_REQUIRED: cosign attach attestation",
+            ),
+        ):
+            with self.subTest(invalid=invalid):
+                altered = workflow.replace(expected, invalid, 1)
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    error,
+                ):
+                    verify._validate_workflow(contract, altered)
+
     def test_first_private_publication_requires_owner_visibility_bootstrap(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
@@ -1791,7 +1830,7 @@ class PublisherContractTests(unittest.TestCase):
 
     def test_slsa_v1_payload_binds_evidence_and_exact_oci_subject(self) -> None:
         workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
-        self.assertEqual(2, workflow.count("--type slsaprovenance1"))
+        self.assertEqual(1, workflow.count("--type slsaprovenance1"))
         self.assertNotIn("--type slsaprovenance \\", workflow)
         for evidence in (
             "bun-dependency-manifest.json",
@@ -1810,8 +1849,8 @@ class PublisherContractTests(unittest.TestCase):
                 self.assertIn(f'"file:{evidence}"', workflow)
         self.assertIn('"https://in-toto.io/Statement/v1"', workflow)
         self.assertIn('"https://slsa.dev/provenance/v1"', workflow)
-        self.assertIn("statement.get(\"predicate\") == expected_predicate", workflow)
-        self.assertIn('"digest": {"sha256": expected_digest}', workflow)
+        self.assertIn("statement == expected_statement", workflow)
+        self.assertIn('"digest": {"sha256": digest}', workflow)
 
     def test_authorization_is_half_open_and_expires_fail_closed(self) -> None:
         contract = json.loads(

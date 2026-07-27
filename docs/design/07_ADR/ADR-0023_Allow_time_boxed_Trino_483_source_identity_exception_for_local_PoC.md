@@ -196,6 +196,21 @@ The follow-up uses exact anchored Bash ERE `^sha256:[0-9a-f]{64}$` validation,
 and repository tests reject shortened, uppercase-permitting, or unanchored
 variants.
 
+PR #126 merged that correction as
+`b0aae2e5f50fd96fa68766f8da3d0ae7a6ba4054`. Reviewed-main run
+`30226355104` passed reconstruction, reproducibility, SBOM, scan, OpenVEX,
+freshness, publication, digest validation, signing, and cryptographic
+attestation verification for
+`sha256:06c87a7fc58d7ca155a558a6f86e110c631cb3071c80a4c58942f76f5da1ab4a`.
+The repository's semantic gate then rejected the attestation because Cosign
+3.1.1 `attest --predicate` reconstructed the envelope as in-toto Statement
+v0.1 rather than preserving the reviewed Statement v1. The signed and attested
+object is failed-attempt evidence only; there is no anonymous-pull receipt,
+admission, image, or runtime. The follow-up does not relax the v1 requirement:
+the repository generates the complete v1 statement, signs those exact bytes
+with `cosign attest-blob`, attaches the resulting bundle with
+`cosign attach attestation`, and requires verified statement equality.
+
 A separate evidence-only PR must review and pin the exact OCI digest and retire
 the publisher. Image publication, resident admission, credentials, Flux
 objects, and runtime activation remain forbidden until their own later
