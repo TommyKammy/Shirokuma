@@ -1148,18 +1148,31 @@ jobs:
                   ],
               },
           }
+          statement = {
+              "_type": "https://in-toto.io/Statement/v1",
+              "subject": [
+                  {
+                      "name": os.environ["PUBLISHED_REFERENCE"].rsplit("@", 1)[0],
+                      "digest": {"sha256": digest},
+                  }
+              ],
+              "predicateType": "https://slsa.dev/provenance/v1",
+              "predicate": predicate,
+          }
           (candidate / "slsa-provenance.json").write_text(
-              json.dumps(predicate, indent=2, sort_keys=True) + "\n",
+              json.dumps(statement, indent=2, sort_keys=True) + "\n",
               encoding="utf-8",
           )
           # The static contract closes
           # predicate.buildDefinition.resolvedDependencies as mandatory.
-          assert predicate["buildDefinition"]["resolvedDependencies"]
+          assert statement["predicate"]["buildDefinition"]["resolvedDependencies"]
           PY
-          cosign attest --yes \
-            --type slsaprovenance1 \
-            --predicate "${candidate}/slsa-provenance.json" \
-            --bundle "${candidate}/cosign-provenance-bundle.json" \
+          cosign attest-blob --yes \
+            --statement "${candidate}/slsa-provenance.json" \
+            --hash "${PUBLISHED_DIGEST#sha256:}" \
+            --bundle "${candidate}/cosign-provenance-bundle.json"
+          cosign attach attestation \
+            --attestation "${candidate}/cosign-provenance-bundle.json" \
             "${PUBLISHED_REFERENCE}"
           cosign verify \
             --certificate-identity "${identity}" \
@@ -1198,11 +1211,9 @@ jobs:
           except json.JSONDecodeError:
               decoded = [json.loads(line) for line in raw.splitlines() if line.strip()]
           envelopes = decoded if isinstance(decoded, list) else [decoded]
-          expected_predicate = json.loads(
+          expected_statement = json.loads(
               (candidate / "slsa-provenance.json").read_text(encoding="utf-8")
           )
-          expected_digest = os.environ["PUBLISHED_DIGEST"].removeprefix("sha256:")
-          expected_name = os.environ["PUBLISHED_REFERENCE"].rsplit("@", 1)[0]
           matches = []
           for record in envelopes:
               if not isinstance(record, dict):
@@ -1217,17 +1228,7 @@ jobs:
                   base64.b64decode(payload, validate=True).decode("utf-8")
               )
               if (
-                  statement.get("_type") == "https://in-toto.io/Statement/v1"
-                  and statement.get("predicateType")
-                  == "https://slsa.dev/provenance/v1"
-                  and statement.get("predicate") == expected_predicate
-                  and statement.get("subject")
-                  == [
-                      {
-                          "name": expected_name,
-                          "digest": {"sha256": expected_digest},
-                      }
-                  ]
+                  statement == expected_statement
               ):
                   matches.append(statement)
           if len(matches) != 1:

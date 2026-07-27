@@ -456,6 +456,15 @@ EXPECTED_ORAS_DIGEST_VALIDATION_BLOCK = """\
             exit 1
           fi
 """
+EXPECTED_SLSA_STATEMENT_ATTESTATION_BLOCK = """\
+          cosign attest-blob --yes \\
+            --statement "${candidate}/slsa-provenance.json" \\
+            --hash "${PUBLISHED_DIGEST#sha256:}" \\
+            --bundle "${candidate}/cosign-provenance-bundle.json"
+          cosign attach attestation \\
+            --attestation "${candidate}/cosign-provenance-bundle.json" \\
+            "${PUBLISHED_REFERENCE}"
+"""
 EXPECTED_REPOSITORY_MIRRORS = (
     (
         ("id", "shirokuma-central"),
@@ -1503,7 +1512,8 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         EXPECTED_BUN_ARCHIVE_MEDIA_TYPE,
         "oras push",
         "cosign sign",
-        "cosign attest",
+        "cosign attest-blob",
+        "cosign attach attestation",
         "cosign verify-attestation",
         "--type slsaprovenance1",
         '"https://slsa.dev/provenance/v1"',
@@ -1539,6 +1549,18 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         _fail(
             "WORKFLOW_ORAS_DIGEST",
             "ORAS publication must require one exact lowercase sha256 digest",
+        )
+    if (
+        workflow.count(EXPECTED_SLSA_STATEMENT_ATTESTATION_BLOCK) != 1
+        or 'cosign attest --yes \\\n' in workflow
+        or '--predicate "${candidate}/slsa-provenance.json"' in workflow
+    ):
+        _fail(
+            "WORKFLOW_SLSA_STATEMENT",
+            (
+                "SLSA publication must sign and attach the exact repository-"
+                "generated in-toto Statement/v1"
+            ),
         )
     if (
         workflow.count(EXPECTED_SETTINGS_MOUNT) != 3

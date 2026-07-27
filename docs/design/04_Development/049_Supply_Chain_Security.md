@@ -883,6 +883,23 @@ error-prone repeated glob with the anchored Bash ERE
 `^sha256:[0-9a-f]{64}$`; repository verification fixes that exact expression
 and rejects shortened, uppercase-permitting, or unanchored mutations.
 
+PR #126 merged that digest correction as
+`b0aae2e5f50fd96fa68766f8da3d0ae7a6ba4054`. Reviewed-main run
+`30226355104` completed reconstruction, reproducibility, SBOM, scan,
+OpenVEX, freshness, ORAS publication, digest validation, keyless signing, and
+cryptographic attestation verification for
+`sha256:06c87a7fc58d7ca155a558a6f86e110c631cb3071c80a4c58942f76f5da1ab4a`.
+It then failed closed because Cosign 3.1.1 `attest --predicate` reconstructed
+the signed envelope as in-toto Statement v0.1, while the reviewed repository
+contract requires the exact generated Statement v1. The signed and attested
+registry object is failed-attempt evidence only; no anonymous-pull receipt,
+admitted dependency artifact, image, or runtime was created. The focused
+follow-up keeps the v1 contract unchanged, generates the complete v1 statement
+in the repository, signs its exact bytes with `cosign attest-blob`, and attaches
+that verified bundle with `cosign attach attestation`. Repository verification
+must reject predicate-only signing, digest-prefix ambiguity, missing attachment,
+or any statement that differs from the generated object.
+
 The publisher resolves and packages two independent fresh Maven repositories
 and two independent fresh Bun caches, requires each complete
 manifest/archive pair to be byte-identical, and then
