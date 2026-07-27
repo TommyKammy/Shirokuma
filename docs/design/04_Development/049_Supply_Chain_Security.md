@@ -974,8 +974,10 @@ paths and both Trivy/CycloneDX inventories, preserves every rootfs-discovered
 top-level and embedded component in the final scan graph, re-roots each
 CycloneDX dependency graph at the immutable OCI subject, binds every retained
 SBOM and scan document to the ORAS digest before SLSA signing, includes tag object
-`32d4f28e8311ea6f67edca209df59a0493d869fa`, and keyless-signs the
-anonymous-pull receipt after retrieval. No dependency artifact, Trino image,
+`32d4f28e8311ea6f67edca209df59a0493d869fa`, includes the exact retained Trivy
+version/database timestamp record in the signed SLSA dependencies, and
+keyless-signs the anonymous-pull receipt after retrieval. No dependency
+artifact, Trino image,
 resident admission, Flux object, or runtime is admitted until a fresh
 reviewed-main run and separate evidence-only review succeed.
 

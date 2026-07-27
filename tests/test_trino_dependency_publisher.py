@@ -2167,6 +2167,7 @@ class PublisherContractTests(unittest.TestCase):
             "trino-maven-dependencies-483.cdx.json",
             "trivy-bun-vulnerability.json",
             "trivy-vulnerability.json",
+            "trivy-version.json",
             "offline-build.json",
             "independent-reconstruction.json",
             "toolchain.json",
@@ -2175,6 +2176,7 @@ class PublisherContractTests(unittest.TestCase):
                 self.assertIn(f'"file:{evidence}"', workflow)
         self.assertIn('"https://in-toto.io/Statement/v1"', workflow)
         self.assertIn('"https://slsa.dev/provenance/v1"', workflow)
+        self.assertEqual(1, workflow.count('"file:trivy-version.json"'))
         self.assertIn("statement == expected_statement", workflow)
         self.assertIn('"digest": {"sha256": digest}', workflow)
 

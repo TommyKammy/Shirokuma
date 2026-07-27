@@ -1139,6 +1139,14 @@ jobs:
                           },
                       },
                       {
+                          "uri": "file:trivy-version.json",
+                          "digest": {
+                              "sha256": hashlib.sha256(
+                                  (candidate / "trivy-version.json").read_bytes()
+                              ).hexdigest()
+                          },
+                      },
+                      {
                           "uri": "file:offline-build.json",
                           "digest": {
                               "sha256": hashlib.sha256(

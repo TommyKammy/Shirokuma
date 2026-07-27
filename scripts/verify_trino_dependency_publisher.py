@@ -2131,6 +2131,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         '"https://in-toto.io/Statement/v1"',
         "verified SLSA v1 payload does not uniquely bind",
         "predicate.buildDefinition.resolvedDependencies",
+        '"file:trivy-version.json"',
         "trivy-vulnerability.json",
         "trino-maven-dependencies-483.cdx.json",
         "trivy-bun-vulnerability.json",
