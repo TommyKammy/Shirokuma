@@ -1210,13 +1210,14 @@ def generate_maven_sbom(
         rootfs,
         rootfs_sbom_path,
     )
-    if (
-        not observed_rootfs.issubset(expected_paths)
-        or len(observed_rootfs) * 100 < len(expected_paths) * 95
-    ):
+    if observed_rootfs != expected_paths:
         _fail(
             "MAVEN_SBOM_ROOTFS",
-            "rootfs discovery is not a substantial subset of the closed JAR set",
+            (
+                "rootfs discovery differs from the closed JAR set: "
+                f"missing={sorted(expected_paths - observed_rootfs)!r}, "
+                f"unexpected={sorted(observed_rootfs - expected_paths)!r}"
+            ),
         )
     components = copy.deepcopy(rootfs_components)
     component_refs = {

@@ -1255,6 +1255,21 @@ class MavenScanEvidenceTests(unittest.TestCase):
             ):
                 verify.verify_maven_scan(descriptor, sbom, incomplete)
 
+    def test_maven_sbom_generation_requires_every_descriptor_jar(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self._descriptor(root)
+            incomplete_rootfs = self._sbom(root, self.JARS[:1])
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "MAVEN_SBOM_ROOTFS",
+            ):
+                verify.generate_maven_sbom(
+                    descriptor,
+                    incomplete_rootfs,
+                    root / "generated-sbom.json",
+                )
+
     def test_manifest_closure_is_generated_after_rootfs_discovery(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

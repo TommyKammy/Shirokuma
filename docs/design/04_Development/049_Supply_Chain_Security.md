@@ -970,7 +970,8 @@ dependency evidence.
 
 The repair keeps the publisher active, switches the Maven repository scan to
 Trivy rootfs mode, requires exact equality between the 1,470 descriptor JAR
-paths and both Trivy/CycloneDX inventories, preserves every rootfs-discovered
+paths and both Trivy/CycloneDX inventories, requires every descriptor JAR to be
+discovered by the rootfs scan, preserves every rootfs-discovered
 top-level and embedded component in the final scan graph, re-roots each
 CycloneDX dependency graph at the immutable OCI subject, binds every retained
 SBOM and scan document to the ORAS digest before SLSA signing, includes tag object
