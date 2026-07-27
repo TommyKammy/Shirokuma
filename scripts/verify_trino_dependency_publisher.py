@@ -1340,10 +1340,9 @@ def generate_maven_sbom(
         ):
             _fail("MAVEN_SBOM_ROOTFS", "rootfs dependency graph is malformed")
         dependency_map[dependency["ref"]] = dependency["dependsOn"]
-    if old_root_ref not in dependency_map:
-        _fail("MAVEN_SBOM_ROOTFS", "rootfs dependency root is missing")
+    external_refs = set(dependency_map) - component_refs
     if (
-        set(dependency_map) - component_refs != {old_root_ref}
+        external_refs not in (set(), {old_root_ref})
         or any(
             target not in component_refs
             for targets in dependency_map.values()

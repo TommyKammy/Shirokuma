@@ -1270,6 +1270,63 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     root / "generated-sbom.json",
                 )
 
+    def test_maven_sbom_generation_accepts_rootless_trivy_graph(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self._descriptor(root)
+            rootfs_sbom = self._sbom(root)
+            rootfs_document = json.loads(
+                rootfs_sbom.read_text(encoding="utf-8")
+            )
+            old_root_ref = rootfs_document["metadata"]["component"]["bom-ref"]
+            rootfs_document["dependencies"] = [
+                dependency
+                for dependency in rootfs_document["dependencies"]
+                if dependency["ref"] != old_root_ref
+            ]
+            rootfs_sbom.write_text(
+                json.dumps(rootfs_document),
+                encoding="utf-8",
+            )
+            generated = root / "generated-sbom.json"
+            verify.generate_maven_sbom(descriptor, rootfs_sbom, generated)
+            document = json.loads(generated.read_text(encoding="utf-8"))
+            root_ref = document["metadata"]["component"]["bom-ref"]
+            component_refs = {
+                component["bom-ref"] for component in document["components"]
+            }
+            root_dependencies = [
+                dependency
+                for dependency in document["dependencies"]
+                if dependency["ref"] == root_ref
+            ]
+            self.assertEqual(1, len(root_dependencies))
+            self.assertEqual(
+                component_refs,
+                set(root_dependencies[0]["dependsOn"]),
+            )
+            verify.verify_maven_scan(
+                descriptor,
+                generated,
+                self._report(root),
+            )
+            rootfs_document["dependencies"].append(
+                {"ref": "urn:test:unreviewed-root", "dependsOn": []}
+            )
+            rootfs_sbom.write_text(
+                json.dumps(rootfs_document),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "rootfs dependency references are not closed",
+            ):
+                verify.generate_maven_sbom(
+                    descriptor,
+                    rootfs_sbom,
+                    generated,
+                )
+
     def test_manifest_closure_is_generated_after_rootfs_discovery(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -974,7 +974,8 @@ paths and both Trivy/CycloneDX inventories, requires every descriptor JAR to be
 discovered by the rootfs scan, preserves every rootfs-discovered
 top-level and embedded component in the final scan graph, re-roots each
 CycloneDX dependency graph at the immutable OCI subject (creating a root edge
-when Trivy omitted one), compares Maven scan identities by both PURL and file
+during Maven generation or immutable-subject rebinding when Trivy omitted
+one), compares Maven scan identities by both PURL and file
 path, binds every retained
 SBOM and scan document to the ORAS digest before SLSA signing, includes tag object
 `32d4f28e8311ea6f67edca209df59a0493d869fa`, includes the exact retained Trivy
