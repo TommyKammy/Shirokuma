@@ -7,12 +7,14 @@ import argparse
 import copy
 import datetime as dt
 import hashlib
+import io
 import json
 import os
 import re
 import stat
 import subprocess
 import textwrap
+import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Mapping
@@ -1150,7 +1152,9 @@ def verify_bun_scan(
         )
 
 
-def _maven_jar_paths(descriptor_path: Path) -> set[str]:
+def _maven_jar_records(
+    descriptor_path: Path,
+) -> dict[str, Mapping[str, Any]]:
     descriptor = _load_json(descriptor_path)
     files = descriptor.get("files")
     if (
@@ -1159,7 +1163,7 @@ def _maven_jar_paths(descriptor_path: Path) -> set[str]:
         or descriptor.get("file_count") != len(files)
     ):
         _fail("MAVEN_SCAN_DESCRIPTOR", "closed Maven descriptor differs")
-    paths: set[str] = set()
+    records: dict[str, Mapping[str, Any]] = {}
     for record in files:
         if not isinstance(record, dict) or set(record) != {
             "mode",
@@ -1171,10 +1175,40 @@ def _maven_jar_paths(descriptor_path: Path) -> set[str]:
             _fail("MAVEN_SCAN_DESCRIPTOR", "Maven file identity differs")
         path = record.get("path")
         if isinstance(path, str) and path.endswith(".jar"):
-            paths.add(path)
-    if not paths:
+            if (
+                path in records
+                or Path(path).is_absolute()
+                or any(part in {"", ".", ".."} for part in path.split("/"))
+            ):
+                _fail(
+                    "MAVEN_SCAN_DESCRIPTOR",
+                    f"unsafe or duplicate Maven JAR path: {path}",
+                )
+            if (
+                re.fullmatch(r"0[0-7]{3}", str(record.get("mode"))) is None
+                or re.fullmatch(
+                    r"[0-9a-f]{64}",
+                    str(record.get("sha256")),
+                )
+                is None
+                or not isinstance(record.get("size"), int)
+                or record["size"] <= 0
+                or not isinstance(record.get("repository_origin"), str)
+                or record["repository_origin"]
+                not in set(EXPECTED_REPOSITORIES.values())
+            ):
+                _fail(
+                    "MAVEN_SCAN_DESCRIPTOR",
+                    f"invalid Maven JAR identity: {path}",
+                )
+            records[path] = record
+    if not records:
         _fail("MAVEN_SCAN_DESCRIPTOR", "Maven descriptor contains no JARs")
-    return paths
+    return records
+
+
+def _maven_jar_paths(descriptor_path: Path) -> set[str]:
+    return set(_maven_jar_records(descriptor_path))
 
 
 def _maven_purl(path: str) -> str:
@@ -1194,8 +1228,178 @@ def _maven_purl(path: str) -> str:
     )
 
 
+def _maven_classifier(path: str) -> str:
+    artifact, version, filename = path.split("/")[-3:]
+    prefix = f"{artifact}-{version}"
+    return filename[len(prefix) : -4].removeprefix("-")
+
+
+def _jar_entries(payload: bytes, path: str) -> tuple[zipfile.ZipFile, list[str]]:
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(payload))
+        entries = archive.infolist()
+    except (OSError, zipfile.BadZipFile) as error:
+        _fail("MAVEN_SBOM_ROOTFS", f"{path} is not a valid JAR: {error}")
+    names = [entry.filename for entry in entries]
+    if (
+        len(names) != len(set(names))
+        or any(
+            entry.flag_bits & 0x1
+            or entry.filename.startswith("/")
+            or "\\" in entry.filename
+            or any(
+                part in {"", ".", ".."}
+                for part in entry.filename.rstrip("/").split("/")
+            )
+            for entry in entries
+        )
+    ):
+        archive.close()
+        _fail(
+            "MAVEN_SBOM_ROOTFS",
+            f"{path} contains unsafe, encrypted, or duplicate entries",
+        )
+    if any(name.endswith(".jar") for name in names):
+        archive.close()
+        _fail(
+            "MAVEN_SBOM_ROOTFS",
+            f"{path} contains an undiscovered nested JAR",
+        )
+    return archive, names
+
+
+def _maven_properties(payload: bytes, path: str) -> dict[str, str]:
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as error:
+        _fail("MAVEN_SBOM_ROOTFS", f"{path} has non-UTF-8 pom.properties: {error}")
+    properties: dict[str, str] = {}
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#", "!")):
+            continue
+        if "=" not in stripped:
+            _fail("MAVEN_SBOM_ROOTFS", f"{path} has malformed pom.properties")
+        key, value = stripped.split("=", 1)
+        if key in properties:
+            _fail("MAVEN_SBOM_ROOTFS", f"{path} repeats {key!r}")
+        properties[key] = value
+    return properties
+
+
+def _validate_rootfs_discovery_omissions(
+    repository_path: Path,
+    records: Mapping[str, Mapping[str, Any]],
+    missing_paths: set[str],
+    rootfs_components: list[dict[str, Any]],
+) -> dict[str, str]:
+    try:
+        repository_root = repository_path.resolve(strict=True)
+    except OSError as error:
+        _fail("MAVEN_SBOM_ROOTFS", f"{repository_path}: {error}")
+    if not repository_root.is_dir():
+        _fail("MAVEN_SBOM_ROOTFS", f"{repository_path} is not a directory")
+    rootfs_purls = {
+        component["purl"]
+        for component in rootfs_components
+        if isinstance(component.get("purl"), str) and component["purl"]
+    }
+    discovery: dict[str, str] = {}
+    for path in sorted(missing_paths):
+        record = records[path]
+        candidate = repository_root / path
+        try:
+            resolved_candidate = candidate.resolve(strict=True)
+            candidate_mode = stat.S_IMODE(candidate.lstat().st_mode)
+        except OSError as error:
+            _fail("MAVEN_SBOM_ROOTFS", f"{candidate}: {error}")
+        if (
+            not resolved_candidate.is_relative_to(repository_root)
+            or candidate_mode != int(str(record["mode"]), 8)
+        ):
+            _fail(
+                "MAVEN_SBOM_ROOTFS",
+                f"{path} escapes the repository or has the wrong mode",
+            )
+        payload = _read_reviewed_regular_file(
+            candidate,
+            code="MAVEN_SBOM_ROOTFS",
+        )
+        if (
+            len(payload) != record["size"]
+            or hashlib.sha256(payload).hexdigest() != record["sha256"]
+        ):
+            _fail(
+                "MAVEN_SBOM_ROOTFS",
+                f"{path} differs from the closed Maven descriptor",
+            )
+        classifier = _maven_classifier(path)
+        purl = _maven_purl(path)
+        base_purl = purl.split("?classifier=", 1)[0]
+        if base_purl not in rootfs_purls:
+            _fail(
+                "MAVEN_SBOM_ROOTFS",
+                f"{path} has no rootfs-discovered base coordinate",
+            )
+        archive, names = _jar_entries(payload, path)
+        try:
+            if classifier == "sources":
+                if (
+                    any(name.endswith(".class") for name in names)
+                    or not any(name.endswith((".java", ".kt")) for name in names)
+                ):
+                    _fail(
+                        "MAVEN_SBOM_ROOTFS",
+                        f"{path} is not a source-only classifier JAR",
+                    )
+                discovery[path] = "manifest-supplemental-sources"
+                continue
+            if classifier == "tests":
+                if not any(name.endswith(".class") for name in names):
+                    _fail(
+                        "MAVEN_SBOM_ROOTFS",
+                        f"{path} contains no test bytecode",
+                    )
+                discovery[path] = "manifest-supplemental-tests"
+                continue
+            if classifier:
+                _fail(
+                    "MAVEN_SBOM_ROOTFS",
+                    f"{path} uses an unreviewed omitted classifier",
+                )
+            group = ".".join(path.split("/")[:-3])
+            artifact, version = path.split("/")[-3:-1]
+            properties_path = (
+                "META-INF/maven/"
+                f"{group}/{artifact}/pom.properties"
+            )
+            if names.count(properties_path) != 1:
+                _fail(
+                    "MAVEN_SBOM_ROOTFS",
+                    f"{path} does not contain its exact pom.properties",
+                )
+            properties = _maven_properties(
+                archive.read(properties_path),
+                path,
+            )
+            if properties != {
+                "artifactId": artifact,
+                "groupId": group,
+                "version": version,
+            }:
+                _fail(
+                    "MAVEN_SBOM_ROOTFS",
+                    f"{path} pom.properties coordinates differ",
+                )
+            discovery[path] = "manifest-rootfs-purl-deduplicated"
+        finally:
+            archive.close()
+    return discovery
+
+
 def generate_maven_sbom(
     descriptor_path: Path,
+    repository_path: Path,
     rootfs_sbom_path: Path,
     output_path: Path,
 ) -> None:
@@ -1203,22 +1407,29 @@ def generate_maven_sbom(
     files = descriptor.get("files")
     if not isinstance(files, list):
         _fail("MAVEN_SBOM", "closed Maven descriptor files are missing")
-    expected_paths = _maven_jar_paths(descriptor_path)
+    records = _maven_jar_records(descriptor_path)
+    expected_paths = set(records)
     rootfs = _load_json(rootfs_sbom_path)
     rootfs_components = _cyclonedx_components(rootfs, rootfs_sbom_path)
     observed_rootfs = _cyclonedx_top_level_jar_paths(
         rootfs,
         rootfs_sbom_path,
     )
-    if observed_rootfs != expected_paths:
+    unexpected_rootfs = observed_rootfs - expected_paths
+    if unexpected_rootfs:
         _fail(
             "MAVEN_SBOM_ROOTFS",
             (
-                "rootfs discovery differs from the closed JAR set: "
-                f"missing={sorted(expected_paths - observed_rootfs)!r}, "
-                f"unexpected={sorted(observed_rootfs - expected_paths)!r}"
+                "rootfs discovery escapes the closed JAR set: "
+                f"unexpected={sorted(unexpected_rootfs)!r}"
             ),
         )
+    discovery_omissions = _validate_rootfs_discovery_omissions(
+        repository_path,
+        records,
+        expected_paths - observed_rootfs,
+        rootfs_components,
+    )
     components = copy.deepcopy(rootfs_components)
     component_refs = {
         component.get("bom-ref")
@@ -1279,6 +1490,23 @@ def generate_maven_sbom(
             _fail("MAVEN_SBOM", f"duplicate generated bom-ref: {bom_ref}")
         component_refs.add(bom_ref)
         added_refs.append(bom_ref)
+        properties = [
+            {
+                "name": "aquasecurity:trivy:FilePath",
+                "value": path,
+            },
+            {
+                "name": "shirokuma:repository-origin",
+                "value": record["repository_origin"],
+            },
+        ]
+        if path in discovery_omissions:
+            properties.append(
+                {
+                    "name": "shirokuma:rootfs-discovery",
+                    "value": discovery_omissions[path],
+                }
+            )
         components.append(
             {
                 "bom-ref": bom_ref,
@@ -1290,16 +1518,7 @@ def generate_maven_sbom(
                     {"alg": "SHA-256", "content": record["sha256"]},
                 ],
                 "purl": purl,
-                "properties": [
-                    {
-                        "name": "aquasecurity:trivy:FilePath",
-                        "value": path,
-                    },
-                    {
-                        "name": "shirokuma:repository-origin",
-                        "value": record["repository_origin"],
-                    },
-                ],
+                "properties": properties,
             }
         )
     generated_paths = {
@@ -1402,6 +1621,28 @@ def generate_maven_sbom(
                 {
                     "name": "shirokuma:manifest-added-components",
                     "value": str(len(added_refs)),
+                },
+                {
+                    "name": "shirokuma:rootfs-audited-omissions",
+                    "value": str(len(discovery_omissions)),
+                },
+                {
+                    "name": "shirokuma:rootfs-audited-supplemental-jars",
+                    "value": str(
+                        sum(
+                            mode.startswith("manifest-supplemental-")
+                            for mode in discovery_omissions.values()
+                        )
+                    ),
+                },
+                {
+                    "name": "shirokuma:rootfs-purl-deduplicated-jars",
+                    "value": str(
+                        sum(
+                            mode == "manifest-rootfs-purl-deduplicated"
+                            for mode in discovery_omissions.values()
+                        )
+                    ),
                 },
             ],
         },
@@ -2189,10 +2430,17 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
             "          scan-ref: ${{ runner.temp }}/maven-repository-a"
         )
         != 1
+        or workflow.count(
+            '            --repository "${RUNNER_TEMP}/maven-repository-a" \\\n'
+        )
+        != 1
     ):
         _fail(
             "WORKFLOW_MAVEN_SCAN",
-            "Maven discovery must use rootfs and the scan must consume its closed SBOM",
+            (
+                "Maven discovery must use the exact repository rootfs and "
+                "the scan must consume its closed SBOM"
+            ),
         )
     if (
         workflow.count(EXPECTED_ORAS_PUSH_BLOCK) != 1
@@ -2743,6 +2991,7 @@ def _parser() -> argparse.ArgumentParser:
     maven_scan.add_argument("--report", type=Path, required=True)
     maven_sbom = commands.add_parser("generate-maven-sbom")
     maven_sbom.add_argument("--descriptor", type=Path, required=True)
+    maven_sbom.add_argument("--repository", type=Path, required=True)
     maven_sbom.add_argument("--rootfs-sbom", type=Path, required=True)
     maven_sbom.add_argument("--output", type=Path, required=True)
     bind = commands.add_parser("bind-artifact-evidence")
@@ -2810,6 +3059,7 @@ def main() -> int:
         elif args.command == "generate-maven-sbom":
             generate_maven_sbom(
                 args.descriptor.resolve(),
+                args.repository.resolve(),
                 args.rootfs_sbom.resolve(),
                 args.output.resolve(),
             )

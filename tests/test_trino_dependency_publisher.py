@@ -1155,6 +1155,45 @@ class MavenScanEvidenceTests(unittest.TestCase):
         )
         return descriptor
 
+    def _repository_descriptor(
+        self,
+        root: Path,
+        archives: dict[str, dict[str, bytes]],
+    ) -> tuple[Path, Path]:
+        repository = root / "repository"
+        records = []
+        for path, entries in archives.items():
+            destination = repository / path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(destination, "w") as archive:
+                for name, payload in entries.items():
+                    archive.writestr(name, payload)
+            destination.chmod(0o644)
+            payload = destination.read_bytes()
+            records.append(
+                {
+                    "mode": "0644",
+                    "path": path,
+                    "repository_origin": (
+                        "https://repo.maven.apache.org/maven2/"
+                    ),
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                    "size": len(payload),
+                }
+            )
+        descriptor = root / "descriptor.json"
+        descriptor.write_text(
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "file_count": len(records),
+                    "files": records,
+                }
+            ),
+            encoding="utf-8",
+        )
+        return repository, descriptor
+
     def _report(
         self,
         root: Path,
@@ -1266,9 +1305,167 @@ class MavenScanEvidenceTests(unittest.TestCase):
             ):
                 verify.generate_maven_sbom(
                     descriptor,
+                    root,
                     incomplete_rootfs,
                     root / "generated-sbom.json",
                 )
+
+    def test_maven_sbom_audits_only_known_rootfs_omissions(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            alpha, beta = self.JARS
+            sources = (
+                "org/example/alpha/1.0/alpha-1.0-sources.jar"
+            )
+            tests = "org/example/alpha/1.0/alpha-1.0-tests.jar"
+            repository, descriptor = self._repository_descriptor(
+                root,
+                {
+                    alpha: {"org/example/Alpha.class": b"alpha"},
+                    sources: {"org/example/Alpha.java": b"class Alpha {}"},
+                    tests: {"org/example/AlphaTest.class": b"test"},
+                    beta: {
+                        "org/example/Beta.class": b"beta",
+                        (
+                            "META-INF/maven/org.example/beta/"
+                            "pom.properties"
+                        ): (
+                            b"artifactId=beta\n"
+                            b"groupId=org.example\n"
+                            b"version=2.0\n"
+                        ),
+                    },
+                },
+            )
+            rootfs = self._sbom(root, (alpha,))
+            document = json.loads(rootfs.read_text(encoding="utf-8"))
+            nested_beta = f"{alpha}!/META-INF/lib/beta-2.0.jar"
+            beta_ref = "urn:test:rootfs-deduplicated-beta"
+            document["components"].append(
+                {
+                    "bom-ref": beta_ref,
+                    "type": "library",
+                    "name": "beta",
+                    "purl": verify._maven_purl(beta),
+                    "properties": [
+                        {
+                            "name": "aquasecurity:trivy:FilePath",
+                            "value": nested_beta,
+                        }
+                    ],
+                }
+            )
+            document["dependencies"][0]["dependsOn"].append(beta_ref)
+            document["dependencies"].append(
+                {"ref": beta_ref, "dependsOn": []}
+            )
+            rootfs.write_text(json.dumps(document), encoding="utf-8")
+            generated = root / "generated.json"
+            verify.generate_maven_sbom(
+                descriptor,
+                repository,
+                rootfs,
+                generated,
+            )
+            result = json.loads(generated.read_text(encoding="utf-8"))
+            metadata = {
+                prop["name"]: prop["value"]
+                for prop in result["metadata"]["properties"]
+            }
+            self.assertEqual("1", metadata["shirokuma:rootfs-discovered-jars"])
+            self.assertEqual("3", metadata["shirokuma:rootfs-audited-omissions"])
+            self.assertEqual(
+                "2",
+                metadata["shirokuma:rootfs-audited-supplemental-jars"],
+            )
+            self.assertEqual(
+                "1",
+                metadata["shirokuma:rootfs-purl-deduplicated-jars"],
+            )
+            modes = {
+                path: prop["value"]
+                for component in result["components"]
+                for path in verify._component_file_paths(component)
+                for prop in component.get("properties", [])
+                if prop.get("name") == "shirokuma:rootfs-discovery"
+            }
+            self.assertEqual(
+                {
+                    sources: "manifest-supplemental-sources",
+                    tests: "manifest-supplemental-tests",
+                    beta: "manifest-rootfs-purl-deduplicated",
+                },
+                modes,
+            )
+            identities = tuple(
+                (path, component["purl"])
+                for component in result["components"]
+                for path in verify._component_file_paths(component)
+            )
+            verify.verify_maven_scan(
+                descriptor,
+                generated,
+                self._report(root, paths=(), extra_packages=identities),
+            )
+
+    def test_maven_sbom_rejects_unsafe_rootfs_omission_evidence(self) -> None:
+        cases = (
+            (
+                "org/example/alpha/1.0/alpha-1.0-javadoc.jar",
+                {"org/example/Alpha.html": b"docs"},
+                "unreviewed omitted classifier",
+            ),
+            (
+                "org/example/alpha/1.0/alpha-1.0-sources.jar",
+                {"org/example/Alpha.class": b"bytecode"},
+                "not a source-only classifier",
+            ),
+            (
+                "org/example/alpha/1.0/alpha-1.0-sources.jar",
+                {
+                    "org/example/Alpha.java": b"class Alpha {}",
+                    "lib/nested.jar": b"nested",
+                },
+                "undiscovered nested JAR",
+            ),
+            (
+                "org/example/beta/2.0/beta-2.0.jar",
+                {
+                    "org/example/Beta.class": b"beta",
+                    (
+                        "META-INF/maven/org.example/beta/"
+                        "pom.properties"
+                    ): (
+                        b"artifactId=beta\n"
+                        b"groupId=org.example\n"
+                        b"version=2.0\n"
+                    ),
+                },
+                "no rootfs-discovered base coordinate",
+            ),
+        )
+        for path, entries, error in cases:
+            with self.subTest(path=path, error=error):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    alpha = self.JARS[0]
+                    repository, descriptor = self._repository_descriptor(
+                        root,
+                        {
+                            alpha: {"org/example/Alpha.class": b"alpha"},
+                            path: entries,
+                        },
+                    )
+                    with self.assertRaisesRegex(
+                        verify.ContractError,
+                        error,
+                    ):
+                        verify.generate_maven_sbom(
+                            descriptor,
+                            repository,
+                            self._sbom(root, (alpha,)),
+                            root / "generated.json",
+                        )
 
     def test_maven_sbom_generation_accepts_rootless_trivy_graph(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1289,7 +1486,12 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 encoding="utf-8",
             )
             generated = root / "generated-sbom.json"
-            verify.generate_maven_sbom(descriptor, rootfs_sbom, generated)
+            verify.generate_maven_sbom(
+                descriptor,
+                root,
+                rootfs_sbom,
+                generated,
+            )
             document = json.loads(generated.read_text(encoding="utf-8"))
             root_ref = document["metadata"]["component"]["bom-ref"]
             component_refs = {
@@ -1323,6 +1525,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
             ):
                 verify.generate_maven_sbom(
                     descriptor,
+                    root,
                     rootfs_sbom,
                     generated,
                 )
@@ -1364,7 +1567,12 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 encoding="utf-8",
             )
             generated = root / "generated-sbom.json"
-            verify.generate_maven_sbom(descriptor, rootfs_sbom, generated)
+            verify.generate_maven_sbom(
+                descriptor,
+                root,
+                rootfs_sbom,
+                generated,
+            )
             document = json.loads(generated.read_text(encoding="utf-8"))
             self.assertEqual(
                 {
@@ -1418,7 +1626,12 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 verify.ContractError,
                 "MAVEN_SBOM_ROOTFS",
             ):
-                verify.generate_maven_sbom(descriptor, escaped, generated)
+                verify.generate_maven_sbom(
+                    descriptor,
+                    root,
+                    escaped,
+                    generated,
+                )
 
     def test_maven_scan_requires_every_purl_path_identity(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1593,6 +1806,30 @@ class MavenScanEvidenceTests(unittest.TestCase):
 class PublisherContractTests(unittest.TestCase):
     def test_repository_contract_and_workflow_are_closed(self) -> None:
         verify.audit(ROOT)
+
+    def test_maven_sbom_generation_audits_the_exact_scanned_repository(
+        self,
+    ) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        marker = (
+            '            --repository "${RUNNER_TEMP}/'
+            'maven-repository-a" \\\n'
+        )
+        self.assertEqual(1, workflow.count(marker))
+        altered = workflow.replace(
+            marker,
+            '            --repository "${RUNNER_TEMP}/'
+            'maven-repository-b" \\\n',
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_MAVEN_SCAN",
+        ):
+            verify._validate_workflow(contract, altered)
 
     def test_descriptor_records_the_complete_reviewed_bun_contract(self) -> None:
         contract = json.loads(

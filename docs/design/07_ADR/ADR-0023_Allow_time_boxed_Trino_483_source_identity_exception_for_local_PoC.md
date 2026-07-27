@@ -211,6 +211,29 @@ the repository generates the complete v1 statement, signs those exact bytes
 with `cosign attest-blob`, attaches the resulting bundle with
 `cosign attach attestation`, and requires verified statement equality.
 
+PR #127 merged the Statement/v1 repair as
+`1ae1996eaf654e69daad60c574c7abb4e4d2be3b`, and PR #128 merged the
+closed-world dependency evidence repair as
+`016c277a0d3ba99fd669a1dd7e610773941306ca`. Reviewed-main run
+`30306042009` completed both independent dependency reconstructions and both
+network-none builds, then failed closed while generating the Maven SBOM.
+Trivy rootfs discovered 1,459 of the 1,470 manifest JAR paths. The 11 omitted
+paths consist of nine `sources` classifiers, one `tests` classifier, and one
+ordinary `dev.failsafe:failsafe:3.3.2` JAR whose PURL Trivy had already
+deduplicated onto an embedded occurrence.
+
+The focused correction does not restore a percentage threshold. It reads each
+omitted JAR from the exact scanned repository, requires its mode, size, and
+SHA-256 to match the closed descriptor, rejects unsafe or nested archive
+entries, and accepts only source-only `sources`, bytecode-bearing `tests`, or
+an unclassified JAR with exact matching `pom.properties` and a
+rootfs-discovered base PURL. Each accepted omission is labeled in the retained
+CycloneDX document. The subsequent Trivy SBOM scan must still return the exact
+complete `(PURL, FilePath)` identity set and fail on every remaining High or
+Critical finding. Local reproduction inventories all 1,731 identities and
+exposes all 64 High/Critical findings, so this correction records scanner
+deduplication without hiding package or vulnerability evidence.
+
 A separate evidence-only PR must review and pin the exact OCI digest and retire
 the publisher. Image publication, resident admission, credentials, Flux
 objects, and runtime activation remain forbidden until their own later
