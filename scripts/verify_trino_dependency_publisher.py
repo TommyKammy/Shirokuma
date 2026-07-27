@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime as dt
 import hashlib
 import json
@@ -1203,7 +1204,12 @@ def generate_maven_sbom(
     if not isinstance(files, list):
         _fail("MAVEN_SBOM", "closed Maven descriptor files are missing")
     expected_paths = _maven_jar_paths(descriptor_path)
-    observed_rootfs = _cyclonedx_jar_paths(rootfs_sbom_path)
+    rootfs = _load_json(rootfs_sbom_path)
+    rootfs_components = _cyclonedx_components(rootfs, rootfs_sbom_path)
+    observed_rootfs = _cyclonedx_top_level_jar_paths(
+        rootfs,
+        rootfs_sbom_path,
+    )
     if (
         not observed_rootfs.issubset(expected_paths)
         or len(observed_rootfs) * 100 < len(expected_paths) * 95
@@ -1212,8 +1218,46 @@ def generate_maven_sbom(
             "MAVEN_SBOM_ROOTFS",
             "rootfs discovery is not a substantial subset of the closed JAR set",
         )
-    components: list[dict[str, Any]] = []
-    purls: set[str] = set()
+    components = copy.deepcopy(rootfs_components)
+    component_refs = {
+        component.get("bom-ref")
+        for component in components
+        if isinstance(component.get("bom-ref"), str)
+        and component["bom-ref"]
+    }
+    if (
+        len(component_refs) != len(components)
+        or any(
+            not isinstance(component.get("purl"), str)
+            or not component["purl"]
+            for component in components
+        )
+    ):
+        _fail("MAVEN_SBOM_ROOTFS", "rootfs component bom-ref closure differs")
+    observed_identities = {
+        (component.get("purl"), path)
+        for component in components
+        if isinstance(component.get("purl"), str)
+        for path in _component_file_paths(component)
+    }
+    for component in components:
+        paths = _component_file_paths(component)
+        if not paths:
+            _fail("MAVEN_SBOM_ROOTFS", "rootfs component file path is missing")
+        for path in paths:
+            nested_parent = _nested_jar_parent(path)
+            if (
+                _is_top_level_jar_path(path)
+                and path in expected_paths
+            ):
+                continue
+            if nested_parent in expected_paths:
+                continue
+            _fail(
+                "MAVEN_SBOM_ROOTFS",
+                f"rootfs component path escapes the closed JAR set: {path}",
+            )
+    added_refs: list[str] = []
     for record in files:
         if not isinstance(record, dict):
             _fail("MAVEN_SBOM", "Maven descriptor entry is malformed")
@@ -1224,12 +1268,19 @@ def generate_maven_sbom(
         group = ".".join(parts[:-3])
         artifact, version = parts[-3:-1]
         purl = _maven_purl(path)
-        if purl in purls:
-            _fail("MAVEN_SBOM", f"duplicate Maven PURL: {purl}")
-        purls.add(purl)
+        if (purl, path) in observed_identities:
+            continue
+        bom_ref = (
+            "urn:shirokuma:maven-jar-path:sha256:"
+            + hashlib.sha256(path.encode("utf-8")).hexdigest()
+        )
+        if bom_ref in component_refs:
+            _fail("MAVEN_SBOM", f"duplicate generated bom-ref: {bom_ref}")
+        component_refs.add(bom_ref)
+        added_refs.append(bom_ref)
         components.append(
             {
-                "bom-ref": purl,
+                "bom-ref": bom_ref,
                 "type": "library",
                 "group": group,
                 "name": artifact,
@@ -1250,14 +1301,80 @@ def generate_maven_sbom(
                 ],
             }
         )
-    if len(components) != len(expected_paths):
-        _fail("MAVEN_SBOM", "generated component set is not closed")
+    generated_paths = {
+        path
+        for component in components
+        for path in _component_file_paths(component)
+        if _is_top_level_jar_path(path)
+    }
+    if generated_paths != expected_paths:
+        _fail("MAVEN_SBOM", "generated top-level JAR set is not closed")
+    rootfs_metadata = rootfs.get("metadata")
+    root_component = (
+        rootfs_metadata.get("component")
+        if isinstance(rootfs_metadata, dict)
+        else None
+    )
+    old_root_ref = (
+        root_component.get("bom-ref")
+        if isinstance(root_component, dict)
+        else None
+    )
+    if not isinstance(old_root_ref, str) or old_root_ref in component_refs:
+        _fail("MAVEN_SBOM_ROOTFS", "rootfs dependency root is invalid")
+    dependencies = rootfs.get("dependencies")
+    if not isinstance(dependencies, list):
+        _fail("MAVEN_SBOM_ROOTFS", "rootfs dependencies are missing")
+    dependency_map: dict[str, list[str]] = {}
+    for dependency in dependencies:
+        if (
+            not isinstance(dependency, dict)
+            or not isinstance(dependency.get("ref"), str)
+            or not isinstance(dependency.get("dependsOn"), list)
+            or not all(
+                isinstance(target, str)
+                for target in dependency["dependsOn"]
+            )
+            or dependency["ref"] in dependency_map
+        ):
+            _fail("MAVEN_SBOM_ROOTFS", "rootfs dependency graph is malformed")
+        dependency_map[dependency["ref"]] = dependency["dependsOn"]
+    if old_root_ref not in dependency_map:
+        _fail("MAVEN_SBOM_ROOTFS", "rootfs dependency root is missing")
+    if (
+        set(dependency_map) - component_refs != {old_root_ref}
+        or any(
+            target not in component_refs
+            for targets in dependency_map.values()
+            for target in targets
+        )
+    ):
+        _fail("MAVEN_SBOM_ROOTFS", "rootfs dependency references are not closed")
+    generated_root_ref = "urn:shirokuma:maven-closure:483"
+    generated_dependencies = [
+        {
+            "ref": generated_root_ref,
+            "dependsOn": sorted(component_refs),
+        },
+        *[
+            {
+                "ref": component["bom-ref"],
+                "dependsOn": dependency_map.get(component["bom-ref"], []),
+            }
+            for component in components
+        ],
+    ]
+    nested_components = sum(
+        any(_is_nested_jar_path(path) for path in _component_file_paths(component))
+        for component in rootfs_components
+    )
     output = {
         "bomFormat": "CycloneDX",
         "specVersion": "1.7",
         "version": 1,
         "metadata": {
             "component": {
+                "bom-ref": generated_root_ref,
                 "type": "application",
                 "name": "manifest-derived-maven-closure",
             },
@@ -1274,9 +1391,22 @@ def generate_maven_sbom(
                     "name": "shirokuma:closed-manifest-jars",
                     "value": str(len(expected_paths)),
                 },
+                {
+                    "name": "shirokuma:rootfs-discovered-components",
+                    "value": str(len(rootfs_components)),
+                },
+                {
+                    "name": "shirokuma:rootfs-discovered-nested-components",
+                    "value": str(nested_components),
+                },
+                {
+                    "name": "shirokuma:manifest-added-components",
+                    "value": str(len(added_refs)),
+                },
             ],
         },
         "components": components,
+        "dependencies": generated_dependencies,
     }
     output_path.write_text(
         json.dumps(output, indent=2, sort_keys=True) + "\n",
@@ -1318,8 +1448,10 @@ def _trivy_package_purls(report_path: Path) -> set[str]:
     return purls
 
 
-def _cyclonedx_jar_paths(sbom_path: Path) -> set[str]:
-    sbom = _load_json(sbom_path)
+def _cyclonedx_components(
+    sbom: Mapping[str, Any],
+    sbom_path: Path,
+) -> list[dict[str, Any]]:
     components = sbom.get("components")
     if (
         sbom.get("bomFormat") != "CycloneDX"
@@ -1328,22 +1460,50 @@ def _cyclonedx_jar_paths(sbom_path: Path) -> set[str]:
         or not components
     ):
         _fail("MAVEN_SBOM", "CycloneDX document contains no components")
+    if not all(isinstance(component, dict) for component in components):
+        _fail("MAVEN_SBOM", f"{sbom_path} contains a malformed component")
+    return components
+
+
+def _component_file_paths(component: Mapping[str, Any]) -> set[str]:
+    properties = component.get("properties", [])
+    if not isinstance(properties, list):
+        _fail("MAVEN_SBOM", "CycloneDX properties are malformed")
     paths: set[str] = set()
-    for component in components:
-        if not isinstance(component, dict):
-            _fail("MAVEN_SBOM", "CycloneDX component is not an object")
-        properties = component.get("properties", [])
-        if not isinstance(properties, list):
-            _fail("MAVEN_SBOM", "CycloneDX properties are malformed")
-        for prop in properties:
-            if (
-                isinstance(prop, dict)
-                and prop.get("name") == "aquasecurity:trivy:FilePath"
-                and isinstance(prop.get("value"), str)
-                and "!" not in prop["value"]
-                and ".jar/" not in prop["value"]
-            ):
-                paths.add(prop["value"])
+    for prop in properties:
+        if (
+            isinstance(prop, dict)
+            and prop.get("name") == "aquasecurity:trivy:FilePath"
+            and isinstance(prop.get("value"), str)
+        ):
+            paths.add(prop["value"])
+    return paths
+
+
+def _is_nested_jar_path(path: str) -> bool:
+    return "!" in path or ".jar/" in path
+
+
+def _nested_jar_parent(path: str) -> str | None:
+    match = re.match(r"^(.+?\.jar)(?:!|/).+$", path)
+    return match.group(1) if match is not None else None
+
+
+def _is_top_level_jar_path(path: str) -> bool:
+    return path.endswith(".jar") and not _is_nested_jar_path(path)
+
+
+def _cyclonedx_top_level_jar_paths(
+    sbom: Mapping[str, Any],
+    sbom_path: Path,
+) -> set[str]:
+    components = _cyclonedx_components(sbom, sbom_path)
+    paths = {
+        path
+        for component in components
+        for path in _component_file_paths(component)
+        if _is_top_level_jar_path(path)
+    }
     if not paths:
         _fail("MAVEN_SBOM", "CycloneDX document inventories no top-level JARs")
     return paths
@@ -1355,7 +1515,8 @@ def verify_maven_scan(
     report_path: Path,
 ) -> None:
     expected_paths = _maven_jar_paths(descriptor_path)
-    observed_paths = _cyclonedx_jar_paths(sbom_path)
+    sbom = _load_json(sbom_path)
+    observed_paths = _cyclonedx_top_level_jar_paths(sbom, sbom_path)
     if observed_paths != expected_paths:
         _fail(
             "MAVEN_SBOM_CLOSURE",
@@ -1365,8 +1526,13 @@ def verify_maven_scan(
                 f"unexpected={sorted(observed_paths - expected_paths)!r}"
             ),
         )
-    sbom = _load_json(sbom_path)
-    components = sbom.get("components", [])
+    components = _cyclonedx_components(sbom, sbom_path)
+    if any(
+        not isinstance(component.get("purl"), str)
+        or not component["purl"]
+        for component in components
+    ):
+        _fail("MAVEN_SBOM_CLOSURE", "CycloneDX component PURL is missing")
     expected_purls = {
         component.get("purl")
         for component in components
@@ -1408,7 +1574,35 @@ def _bind_cyclonedx(path: Path, reference: str, digest_hex: str) -> None:
     ):
         _fail("ARTIFACT_SBOM", f"{path} is not CycloneDX 1.7")
     previous = metadata.get("component")
+    previous_ref = (
+        previous.get("bom-ref")
+        if isinstance(previous, dict)
+        else None
+    )
     source = previous.get("name") if isinstance(previous, dict) else None
+    components = document.get("components")
+    if (
+        not isinstance(previous_ref, str)
+        or not isinstance(components, list)
+        or any(
+            isinstance(component, dict)
+            and component.get("bom-ref") in {previous_ref, reference}
+            for component in components
+        )
+    ):
+        _fail("ARTIFACT_SBOM", f"{path} dependency root is invalid")
+
+    def rebind(value: Any) -> Any:
+        if isinstance(value, str):
+            return reference if value == previous_ref else value
+        if isinstance(value, list):
+            return [rebind(item) for item in value]
+        if isinstance(value, dict):
+            return {key: rebind(item) for key, item in value.items()}
+        return value
+
+    document = rebind(document)
+    metadata = document["metadata"]
     metadata["component"] = {
         "bom-ref": reference,
         "type": "file",
@@ -1467,6 +1661,51 @@ def _verify_cyclonedx_subject(path: Path, reference: str, digest_hex: str) -> No
         not in properties
     ):
         _fail("ARTIFACT_SBOM", f"{path} immutable reference is missing")
+    components = document.get("components")
+    dependencies = document.get("dependencies")
+    if not isinstance(components, list) or not isinstance(dependencies, list):
+        _fail("ARTIFACT_SBOM", f"{path} dependency graph is missing")
+    component_refs = {
+        component.get("bom-ref")
+        for component in components
+        if isinstance(component, dict)
+        and isinstance(component.get("bom-ref"), str)
+    }
+    if len(component_refs) != len(components) or reference in component_refs:
+        _fail("ARTIFACT_SBOM", f"{path} component references differ")
+    dependency_map: dict[str, list[str]] = {}
+    for dependency in dependencies:
+        if (
+            not isinstance(dependency, dict)
+            or not isinstance(dependency.get("ref"), str)
+            or not isinstance(dependency.get("dependsOn"), list)
+            or not all(
+                isinstance(target, str)
+                for target in dependency["dependsOn"]
+            )
+            or dependency["ref"] in dependency_map
+        ):
+            _fail("ARTIFACT_SBOM", f"{path} dependency graph is malformed")
+        dependency_map[dependency["ref"]] = dependency["dependsOn"]
+    if (
+        set(dependency_map) - component_refs != {reference}
+        or any(
+            target not in component_refs
+            for targets in dependency_map.values()
+            for target in targets
+        )
+    ):
+        _fail("ARTIFACT_SBOM", f"{path} dependency references are not closed")
+    reachable: set[str] = set()
+    pending = list(dependency_map.get(reference, []))
+    while pending:
+        current = pending.pop()
+        if current in reachable:
+            continue
+        reachable.add(current)
+        pending.extend(dependency_map.get(current, []))
+    if reachable != component_refs:
+        _fail("ARTIFACT_SBOM", f"{path} components are not root-reachable")
 
 
 def _verify_trivy_subject(path: Path, reference: str, digest: str) -> None:

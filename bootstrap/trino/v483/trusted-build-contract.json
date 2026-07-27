@@ -35,11 +35,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "7354d2ceff17a94b98daa9deb07207407dd7625bd68296cebacea522b0b03228"
+      "sha256": "0587c6ca91954fae7d568ab32058d6de5568b727d027ac35b677bd80ff52401f"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "ad88b5d716cb8558c6869f4eb7bd55f49ba31b00c1e65744adc64e2a0d2fdde3"
+      "sha256": "992f5bc6877b576ef12e3af71d9b3d1f160065d5766faab74a9a22f857a52c49"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -681,9 +681,9 @@
       "closed Bun dependency manifest and deterministic cache archive digest",
       "independent reconstruction equality",
       "two network-none native arm64 build output comparisons",
-      "closure-complete rootfs-mode CycloneDX Maven dependency SBOM bound to the exact OCI digest",
+      "descriptor-complete CycloneDX Maven dependency SBOM retaining every rootfs-discovered top-level and embedded component and bound to the exact OCI digest",
       "CycloneDX Bun dependency SBOM bound to the exact OCI digest",
-      "closure-complete rootfs-mode Maven High=0/Critical=0 Trivy result and database metadata bound to the exact OCI digest",
+      "descriptor-complete and embedded-component-complete Maven High=0/Critical=0 Trivy result and database metadata bound to the exact OCI digest",
       "exact raw Bun Trivy finding, hash-bound OpenVEX, and adjusted High=0/Critical=0 report with identical package inventories",
       "Cosign signature and Rekor bundle",
       "SLSA v1 provenance with the exact tag object, commit, tree, and evidence hashes in predicate.buildDefinition.resolvedDependencies",

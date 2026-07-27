@@ -4198,16 +4198,17 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "independent reconstruction equality",
                     "two network-none native arm64 build output comparisons",
                     (
-                        "closure-complete rootfs-mode CycloneDX Maven dependency "
-                        "SBOM bound to the exact OCI digest"
+                        "descriptor-complete CycloneDX Maven dependency SBOM "
+                        "retaining every rootfs-discovered top-level and embedded "
+                        "component and bound to the exact OCI digest"
                     ),
                     (
                         "CycloneDX Bun dependency SBOM bound to the exact OCI digest"
                     ),
                     (
-                        "closure-complete rootfs-mode Maven High=0/Critical=0 "
-                        "Trivy result and database metadata bound to the exact "
-                        "OCI digest"
+                        "descriptor-complete and embedded-component-complete Maven "
+                        "High=0/Critical=0 Trivy result and database metadata bound "
+                        "to the exact OCI digest"
                     ),
                     (
                         "exact raw Bun Trivy finding, hash-bound OpenVEX, and "
