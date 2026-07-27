@@ -955,6 +955,27 @@ and leaves the Iceberg finding unresolved. The closed feasibility record is
 `bootstrap/trino/v476/feasibility.json`; no 476 workflow, image, ledger entry,
 or runtime is allowed.
 
+Reviewed-main Trino dependency publisher run
+[`30231656483`](https://github.com/TommyKammy/Shirokuma/actions/runs/30231656483)
+from commit `1ae1996eaf654e69daad60c574c7abb4e4d2be3b` completed the closed
+Maven/Bun reconstructions, two network-none native-arm64 builds, SBOM and
+raw/OpenVEX-adjusted scan gates, exact Statement/v1 SLSA provenance, keyless
+signature and Rekor verification, and a fresh empty-config anonymous pull. It
+published exact public dependency reference
+`ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c`.
+The raw Bun report retains the one reviewed
+`GHSA-qwww-vcr4-c8h2` High finding; the hash-bound OpenVEX-adjusted Bun report
+and Maven report are High=0/Critical=0.
+
+The evidence-only checkpoint retains the 20 publication records under
+`bootstrap/trino/v483/dependency-evidence/`, independently revalidates their
+closed hash/size inventory and Sigstore bundles, and retires
+`.github/workflows/trino-maven-dependencies.yml`. Repository verification
+rejects publisher reintroduction. The dependency artifact remains
+`dependency_snapshot_evidence_review_pending` and is not admitted; Trino image
+publication, resident admission, credentials, Flux objects, and runtime
+reconciliation remain forbidden.
+
 ## Resident image and SBOM evidence
 
 Every image admitted to a resident profile must have an entry in

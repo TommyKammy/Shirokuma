@@ -2758,7 +2758,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             set(admission),
         )
         self.assertIs(type(admission["schema_version"]), int)
-        self.assertEqual(2, admission["schema_version"])
+        self.assertEqual(3, admission["schema_version"])
         self.assertEqual("trino", admission["component"])
         self.assertEqual("483", admission["version"])
         self.assertEqual("linux/arm64", admission["platform"])
@@ -2847,10 +2847,14 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     },
                     {
                         "control": "repository_source_build",
-                        "status": "not_retained",
+                        "status": "dependency_evidence_review_pending",
                         "evidence": (
-                            "no reviewed dependency closure, offline build, signature, "
-                            "SBOM, scan, or runtime-smoke evidence exists in this repository"
+                            "main run 30231656483 published exact dependency digest "
+                            "sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97"
+                            "e1e952499f8af5075c with retained closure, offline-build, "
+                            "signature, SLSA Statement/v1, SBOM, raw/OpenVEX-adjusted "
+                            "scans, and anonymous-pull evidence; no runtime image or "
+                            "runtime-smoke evidence is admitted"
                         ),
                     },
                 ],
@@ -2900,7 +2904,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             admission["source_authentication"],
         )
         self.assertIs(
-            admission["repository_state"]["publication_workflow_permitted"], True
+            admission["repository_state"]["publication_workflow_permitted"], False
         )
 
     def test_provisional_source_authorization_is_bounded_and_fail_closed(self) -> None:
@@ -3085,13 +3089,13 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         self.assertEqual(
             {
                 "dependency_snapshot_contract_permitted": True,
-                "publication_workflow_permitted": True,
-                "dependency_artifact_present": False,
+                "publication_workflow_permitted": False,
+                "dependency_artifact_present": True,
                 "resident_ledger_permitted": False,
                 "runtime_manifests_permitted": False,
                 "allowed_paths": [
-                    ".github/workflows/trino-maven-dependencies.yml",
                     "bootstrap/trino/v483/admission.json",
+                    "bootstrap/trino/v483/dependency-evidence",
                     "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
                     (
                         "bootstrap/trino/v483/patches/"
@@ -3118,9 +3122,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "scripts/prepare_trino_bun_input.py",
                     "scripts/verify_polaris_trusted_image.py",
                     "scripts/verify_trino_dependency_publisher.py",
+                    "scripts/verify_trino_dependency_evidence.py",
                     "tests/test_trino_bun_dependencies.py",
                     "tests/test_trino_bootstrap.py",
                     "tests/test_trino_dependency_publisher.py",
+                    "tests/test_trino_dependency_evidence.py",
                     "Makefile",
                 ],
                 "forbidden_paths": [
@@ -3139,7 +3145,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             "runtime_manifests_permitted",
         ):
             self.assertIs(repository_state[key], False)
-        self.assertIs(repository_state["publication_workflow_permitted"], True)
+        self.assertIs(repository_state["publication_workflow_permitted"], False)
         self.assertIs(
             repository_state["dependency_snapshot_contract_permitted"], True
         )
@@ -3148,8 +3154,13 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             for path in TRINO_ADMISSION.parent.rglob("*")
             if path.is_file() or path.is_symlink()
         }
+        allowed_paths = set(repository_state["allowed_paths"])
         self.assertTrue(
-            bootstrap_inventory <= set(repository_state["allowed_paths"])
+            all(
+                path in allowed_paths
+                or any(path.startswith(f"{prefix}/") for prefix in allowed_paths)
+                for path in bootstrap_inventory
+            )
         )
         all_trino_bootstrap_paths = {
             path.relative_to(ROOT).as_posix()
@@ -3239,7 +3250,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             },
             set(contract),
         )
-        self.assertEqual(1, contract["schema_version"])
+        self.assertEqual(2, contract["schema_version"])
         self.assertEqual("trino", contract["component"])
         self.assertEqual("483", contract["version"])
         self.assertEqual("linux/arm64", contract["platform"])
@@ -3714,6 +3725,8 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "state",
                 "packaging",
                 "artifact_repository",
+                "reference",
+                "publication_evidence",
                 "reference_policy",
                 "mutable_tags_permitted",
                 "visibility_bootstrap",
@@ -3732,10 +3745,29 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             },
             set(snapshot),
         )
-        self.assertEqual("publication_pending_not_admitted", snapshot["state"])
+        self.assertEqual("evidence_review_pending_not_admitted", snapshot["state"])
         self.assertEqual(
             "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies",
             snapshot["artifact_repository"],
+        )
+        self.assertEqual(
+            (
+                "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@sha256:"
+                "0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c"
+            ),
+            snapshot["reference"],
+        )
+        self.assertEqual(
+            {
+                "path": (
+                    "bootstrap/trino/v483/dependency-evidence/publication.json"
+                ),
+                "sha256": (
+                    "6248b967b48c574b04cd757cb23b7ca291658be15b133bb4df2a005d"
+                    "29c4bfb2"
+                ),
+            },
+            snapshot["publication_evidence"],
         )
         self.assertEqual(
             "immutable_digest_only_after_publication",
@@ -3928,7 +3960,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "maximum_critical": 0,
                 "ignore_unfixed": False,
                 "artifact_binding": {
-                    "digest_source": "publisher_oras_push_digest_output",
+                    "digest_source": "reviewed_publication_evidence",
                     "immutable_reference_required": True,
                     (
                         "cyclonedx_document_subject_must_equal_"
@@ -4084,7 +4116,12 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "artifact_repository": (
                     "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies"
                 ),
-                "reference_source": "publisher_oras_push_digest_output",
+                "reference_source": "reviewed_publication_evidence",
+                "reference": (
+                    "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@"
+                    "sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499"
+                    "f8af5075c"
+                ),
                 "required_reference_format": (
                     "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies"
                     "@sha256:<64-lowercase-hex>"
@@ -4149,10 +4186,10 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         lifecycle = contract["lifecycle"]
         self.assertEqual(
             {
-                "state": "dependency_snapshot_publication_pending",
+                "state": "dependency_snapshot_review_pending",
                 "contract_only": False,
-                "dependency_artifact_present": False,
-                "publication_workflow_permitted": True,
+                "dependency_artifact_present": True,
+                "publication_workflow_permitted": False,
                 "image_publication_permitted": False,
                 "resident_admission_permitted": False,
                 "runtime_reconciliation_permitted": False,
@@ -4161,11 +4198,24 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertEqual(
             {
-                "permitted": True,
-                "workflow_present": True,
+                "permitted": False,
+                "workflow_present": False,
                 "workflow": (
                     ".github/workflows/trino-maven-dependencies.yml"
                 ),
+                "historical_workflow": (
+                    "bootstrap/trino/v483/dependency-evidence/"
+                    "historical-publisher-workflow.yml"
+                ),
+                "historical_workflow_sha256": (
+                    "3f1750bf0f81b6a8859af81c244eaf5aee16f520dd84ea22207f8bd9"
+                    "c9004c3f"
+                ),
+                "retired": True,
+                "source_sha": "1ae1996eaf654e69daad60c574c7abb4e4d2be3b",
+                "workflow_sha": "1ae1996eaf654e69daad60c574c7abb4e4d2be3b",
+                "run_id": "30231656483",
+                "run_attempt": "1",
                 "allowed_ref": "refs/heads/main",
                 "artifact_role": "review_pending_dependency_evidence",
                 "retire_in_evidence_review_pr": True,
@@ -4201,22 +4251,25 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertEqual(
             {
-                "dependency_artifact_published": False,
+                "dependency_artifact_published": True,
                 "dependency_evidence_admitted": False,
-                "network_none_source_build_verified": False,
+                "network_none_source_build_verified": True,
                 "runtime_image_published": False,
                 "native_arm64_smoke_verified": False,
-                "high_zero_critical_zero_scan_verified": False,
-                "cyclonedx_sbom_retained": False,
-                "cosign_rekor_signature_verified": False,
-                "slsa_provenance_verified": False,
-                "anonymous_exact_digest_pull_verified": False,
+                "high_zero_critical_zero_scan_verified": True,
+                "cyclonedx_sbom_retained": True,
+                "cosign_rekor_signature_verified": True,
+                "slsa_provenance_verified": True,
+                "anonymous_exact_digest_pull_verified": True,
                 "resident_image_admitted": False,
                 "flux_runtime_reconciled": False,
             },
             contract["downstream_gates"],
         )
-        self.assertTrue((ROOT / contract["publication"]["workflow"]).is_file())
+        self.assertFalse((ROOT / contract["publication"]["workflow"]).exists())
+        self.assertTrue(
+            (ROOT / contract["publication"]["historical_workflow"]).is_file()
+        )
 
     def test_next_action_is_dependency_snapshot_publication_pending(self) -> None:
         next_action = self._admission()["next_action"]
@@ -4251,7 +4304,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             next_action["decision_records"],
         )
         self.assertEqual(
-            "dependency_snapshot_publication_pending",
+            "dependency_snapshot_evidence_review_pending",
             next_action["phase"],
         )
         self.assertEqual(

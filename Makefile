@@ -109,9 +109,11 @@ verify-iceberg-table-bootstrap: flux-version-check
 
 test-trino-dependency-publisher:
 	@$(PYTHON) -m unittest -v tests.test_trino_dependency_publisher
+	@$(PYTHON) -m unittest -v tests.test_trino_dependency_evidence
 
-verify-trino-dependency-publisher: test-trino-dependency-publisher
+verify-trino-dependency-publisher: verify-cosign test-trino-dependency-publisher
 	@$(PYTHON) scripts/verify_trino_dependency_publisher.py audit --root .
+	@$(PYTHON) scripts/verify_trino_dependency_evidence.py audit --root .
 
 verify-trino-bootstrap: verify-trino-dependency-publisher
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_trino_bootstrap.py'
@@ -259,6 +261,7 @@ check-newlines:
 			bootstrap/seaweedfs/v4.39/evidence/cosign-signature-bundle.json|bootstrap/seaweedfs/v4.39/evidence/image-manifest.json|bootstrap/seaweedfs/v4.39/evidence/sbom-attestation-bundle.json|bootstrap/seaweedfs/v4.39/evidence/trivy-attestation-bundle.json) continue ;; \
 			bootstrap/polaris/v1.6.0/evidence/cosign-signature-bundle.json|bootstrap/polaris/v1.6.0/evidence/oci-manifest.json) continue ;; \
 			bootstrap/polaris/v1.6.0/admin-build-inputs-evidence/cosign-signature-bundle.json|bootstrap/polaris/v1.6.0/admin-build-inputs-evidence/oci-manifest.json) continue ;; \
+			bootstrap/trino/v483/dependency-evidence/cosign-provenance-bundle.json|bootstrap/trino/v483/dependency-evidence/cosign-signature-bundle.json|bootstrap/trino/v483/dependency-evidence/oci-manifest.json) continue ;; \
 			bootstrap/polaris/v1.6.0/admin-image-evidence/anonymous-image-manifest.json|bootstrap/polaris/v1.6.0/admin-image-evidence/cosign-signature-bundle.json|bootstrap/polaris/v1.6.0/admin-image-evidence/image-config.json|bootstrap/polaris/v1.6.0/admin-image-evidence/image-manifest.json|bootstrap/polaris/v1.6.0/admin-image-evidence/runtime-base-index.json|bootstrap/polaris/v1.6.0/admin-image-evidence/runtime-base-manifest.json|bootstrap/polaris/v1.6.0/admin-image-evidence/sbom-attestation-bundle.json|bootstrap/polaris/v1.6.0/admin-image-evidence/trivy-attestation-bundle.json|bootstrap/polaris/v1.6.0/admin-image-evidence/trusted-tag-manifest.json) continue ;; \
 			bootstrap/polaris/v1.6.0/image-evidence/anonymous-image-manifest.json|bootstrap/polaris/v1.6.0/image-evidence/cosign-signature-bundle.json|bootstrap/polaris/v1.6.0/image-evidence/health-ready.json|bootstrap/polaris/v1.6.0/image-evidence/image-config.json|bootstrap/polaris/v1.6.0/image-evidence/image-manifest.json|bootstrap/polaris/v1.6.0/image-evidence/runtime-base-manifest.json|bootstrap/polaris/v1.6.0/image-evidence/sbom-attestation-bundle.json|bootstrap/polaris/v1.6.0/image-evidence/trivy-attestation-bundle.json|bootstrap/polaris/v1.6.0/image-evidence/trusted-tag-manifest.json) continue ;; \
 			bootstrap/postgresql/v18.4/evidence/index-manifest.json|bootstrap/postgresql/v18.4/evidence/arm64-manifest.json|bootstrap/postgresql/v18.4/evidence/attestation-manifest.json|bootstrap/postgresql/v18.4/evidence/index-signature-payload.json|bootstrap/postgresql/v18.4/evidence/arm64-signature-payload.json|bootstrap/postgresql/v18.4/evidence/slsa-attestation-envelope.json|bootstrap/postgresql/v18.4/evidence/spdx-attestation-envelope.json) continue ;; \

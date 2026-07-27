@@ -1,0 +1,96 @@
+{
+  "artifact_role": "review_pending_dependency_evidence",
+  "authorization_expires_at": "2026-08-21T22:43:36Z",
+  "dependency_artifact_admitted": false,
+  "digest": "sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c",
+  "image_publication_permitted": false,
+  "reference": "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c",
+  "resident_admission_permitted": false,
+  "retained_files": {
+    "anonymous-pull.json": {
+      "sha256": "9552e5462e652a7d2812418b5184b78777fd1f7eb6269a1111480ea5b56e1f41",
+      "size": 715
+    },
+    "bun-dependency-manifest.json": {
+      "sha256": "6e7be3a404014f6f7ac7e4bc326c8d46f7d5822fcea1ac000219c17f1d23f421",
+      "size": 17312735
+    },
+    "cosign-provenance-bundle.json": {
+      "sha256": "9ec92ef805852a02499cbe9e30f4023edb56934859fa17c2737528228f57652c",
+      "size": 16215
+    },
+    "cosign-signature-bundle.json": {
+      "sha256": "722603ccf126114ac03ed357360714befb6d2d16a69dcec8240741af82ece968",
+      "size": 10867
+    },
+    "cosign-verify-attestation.json": {
+      "sha256": "3825a3e93aac919d592206ea1f3d4c3c231567a09f85cb04851e053d08ba0bb3",
+      "size": 5934
+    },
+    "cosign-verify.json": {
+      "sha256": "f213d61fe9b55ace092401b2c839827aae407000c7299da7bce363a4d1fe67e4",
+      "size": 684
+    },
+    "independent-reconstruction.json": {
+      "sha256": "99172850385373acb08c7ef65b6a8732615464489642487c9d85c63c60922e17",
+      "size": 634
+    },
+    "maven-dependency-manifest.json": {
+      "sha256": "c3753e3929cb93fa5e17a762e18f3e939416bc2130a5472dd7844ea5eb227728",
+      "size": 2996705
+    },
+    "oci-manifest.json": {
+      "sha256": "0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c",
+      "size": 1414
+    },
+    "offline-build.json": {
+      "sha256": "b70be000932dabb08054c5425d9470a524e29d6cd86af477792720a65022b5c4",
+      "size": 933
+    },
+    "react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json": {
+      "sha256": "f36e8c7ab98f177c0e3f796a22cfa23e8709dc9a9b39bff32806c9b5db534a2a",
+      "size": 804
+    },
+    "slsa-provenance.json": {
+      "sha256": "2f62b1fc36f2e5cfe8458b7b93e1ea3a60dbfca4765ae4e6b602406d5dd46b97",
+      "size": 4313
+    },
+    "toolchain.json": {
+      "sha256": "cdd809c1b4662e8b4f4cf3239a663de4f8f84a49756a04d874fd21e811296874",
+      "size": 1170
+    },
+    "trino-bun-dependencies-483.cdx.json": {
+      "sha256": "36b2cc3ffd62557b722ca4fa4550a67c96fd3bf0683e53de6928cb662a2649f6",
+      "size": 541243
+    },
+    "trino-maven-dependencies-483.cdx.json": {
+      "sha256": "35b0b16cb662081d0cf7e71a2de26659ef98c4c57e88b06d33c6c1bd7c42eb8a",
+      "size": 1012
+    },
+    "trivy-bun-vulnerability-raw.json": {
+      "sha256": "fede5af3854fd8f91afc2f9cbeb5eb7992f252c3a28edc6fbe77217dac6411ad",
+      "size": 466274
+    },
+    "trivy-bun-vulnerability.json": {
+      "sha256": "c6f14b6e650563142f8d9c9bda04c65a5ed03c548c7d89c4bb2ea5a89c7ac7b7",
+      "size": 464178
+    },
+    "trivy-version.json": {
+      "sha256": "5ee0671092c5408ecc2e8b1a6c232060670c925e0abd9dde61e8f37203c225b3",
+      "size": 339
+    },
+    "trivy-vulnerability.json": {
+      "sha256": "2f55ba487bab02cfeb3713cb576ddf7e2d9cf76e655f74e5e162cf994fb99bb7",
+      "size": 266
+    }
+  },
+  "run_attempt": "1",
+  "run_id": "30231656483",
+  "run_scoped_tag": "run-30231656483-1",
+  "runtime_reconciliation_permitted": false,
+  "schema_version": 1,
+  "source_identity": "provisionally-authorized-not-authenticated",
+  "source_sha": "1ae1996eaf654e69daad60c574c7abb4e4d2be3b",
+  "state": "dependency_snapshot_evidence_review_pending",
+  "workflow_sha": "1ae1996eaf654e69daad60c574c7abb4e4d2be3b"
+}

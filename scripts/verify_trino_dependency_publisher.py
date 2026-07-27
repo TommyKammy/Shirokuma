@@ -22,7 +22,10 @@ CONTRACT_PATH = Path("bootstrap/trino/v483/trusted-build-contract.json")
 ADMISSION_PATH = Path("bootstrap/trino/v483/admission.json")
 SETTINGS_PATH = Path("bootstrap/trino/v483/settings.xml")
 JVM_CONFIG_PATH = Path("bootstrap/trino/v483/maven-policy/.mvn/jvm.config")
-WORKFLOW_PATH = Path(".github/workflows/trino-maven-dependencies.yml")
+ACTIVE_WORKFLOW_PATH = Path(".github/workflows/trino-maven-dependencies.yml")
+WORKFLOW_PATH = Path(
+    "bootstrap/trino/v483/dependency-evidence/historical-publisher-workflow.yml"
+)
 PACKAGER_PATH = Path("scripts/package_trino_maven_dependencies.py")
 BUN_PACKAGER_PATH = Path("scripts/package_trino_bun_dependencies.py")
 BUN_PREPARER_PATH = Path("scripts/prepare_trino_bun_input.py")
@@ -1457,7 +1460,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
     if action_counts != EXPECTED_ACTIONS:
         _fail("WORKFLOW_ACTION", f"closed action set differs: {action_counts!r}")
     for path in (
-        WORKFLOW_PATH,
+        ACTIVE_WORKFLOW_PATH,
         CONTRACT_PATH,
         ADMISSION_PATH,
         JVM_CONFIG_PATH,
@@ -1768,14 +1771,16 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
     publication = contract.get("publication", {})
     if (
-        publication.get("permitted") is not True
-        or publication.get("workflow_present") is not True
-        or publication.get("workflow") != WORKFLOW_PATH.as_posix()
+        publication.get("permitted") is not False
+        or publication.get("workflow_present") is not False
+        or publication.get("workflow") != ACTIVE_WORKFLOW_PATH.as_posix()
+        or publication.get("historical_workflow") != WORKFLOW_PATH.as_posix()
+        or publication.get("retired") is not True
         or publication.get("allowed_ref") != "refs/heads/main"
         or publication.get("artifact_role") != "review_pending_dependency_evidence"
         or publication.get("retire_in_evidence_review_pr") is not True
     ):
-        _fail("PUBLICATION", "publication lifecycle is not narrowly pending")
+        _fail("PUBLICATION", "retired publication lifecycle differs")
 
 
 def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
@@ -1816,10 +1821,10 @@ def audit(root: Path) -> None:
     _validate_source_overlay_contract(root, contract, at=None)
     lifecycle = contract.get("lifecycle", {})
     if lifecycle != {
-        "state": "dependency_snapshot_publication_pending",
+        "state": "dependency_snapshot_review_pending",
         "contract_only": False,
-        "dependency_artifact_present": False,
-        "publication_workflow_permitted": True,
+        "dependency_artifact_present": True,
+        "publication_workflow_permitted": False,
         "image_publication_permitted": False,
         "resident_admission_permitted": False,
         "runtime_reconciliation_permitted": False,
@@ -1893,14 +1898,16 @@ def audit(root: Path) -> None:
     if (
         admission.get("source_overlay_authorization")
         != EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION
-        or repository_state.get("publication_workflow_permitted") is not True
-        or repository_state.get("dependency_artifact_present") is not False
+        or repository_state.get("publication_workflow_permitted") is not False
+        or repository_state.get("dependency_artifact_present") is not True
         or repository_state.get("resident_ledger_permitted") is not False
         or repository_state.get("runtime_manifests_permitted") is not False
     ):
         _fail("ADMISSION", "admission state crosses the publisher boundary")
     _validate_settings(root)
     _validate_policy_hashes(root, contract)
+    if (root / ACTIVE_WORKFLOW_PATH).exists():
+        _fail("WORKFLOW", "retired write-capable publisher was reintroduced")
     try:
         workflow = (root / WORKFLOW_PATH).read_text(encoding="utf-8")
     except OSError as error:

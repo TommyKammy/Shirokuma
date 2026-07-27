@@ -1,13 +1,13 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "component": "trino",
   "version": "483",
   "platform": "linux/arm64",
   "lifecycle": {
-    "state": "dependency_snapshot_publication_pending",
+    "state": "dependency_snapshot_review_pending",
     "contract_only": false,
-    "dependency_artifact_present": false,
-    "publication_workflow_permitted": true,
+    "dependency_artifact_present": true,
+    "publication_workflow_permitted": false,
     "image_publication_permitted": false,
     "resident_admission_permitted": false,
     "runtime_reconciliation_permitted": false
@@ -35,7 +35,7 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "4303a9670246046473d249a80ee943ece41df92fd9c5935ead49d334908383e5"
+      "sha256": "4ab1b7bab2686c40eb7331e1048a745c84236f9f0ab331629608e5e871c18e78"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
@@ -445,9 +445,14 @@
     }
   },
   "snapshot": {
-    "state": "publication_pending_not_admitted",
+    "state": "evidence_review_pending_not_admitted",
     "packaging": "deterministic_run_scoped_oci_artifact",
     "artifact_repository": "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies",
+    "reference": "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c",
+    "publication_evidence": {
+      "path": "bootstrap/trino/v483/dependency-evidence/publication.json",
+      "sha256": "6248b967b48c574b04cd757cb23b7ca291658be15b133bb4df2a005d29c4bfb2"
+    },
     "reference_policy": "immutable_digest_only_after_publication",
     "mutable_tags_permitted": false,
     "visibility_bootstrap": {
@@ -565,7 +570,7 @@
       "maximum_critical": 0,
       "ignore_unfixed": false,
       "artifact_binding": {
-        "digest_source": "publisher_oras_push_digest_output",
+        "digest_source": "reviewed_publication_evidence",
         "immutable_reference_required": true,
         "cyclonedx_document_subject_must_equal_artifact_digest": true,
         "cyclonedx_attestation_subject_must_equal_artifact_digest": true,
@@ -629,7 +634,8 @@
     "maven_wrapper_permitted": false,
     "snapshot_input": {
       "artifact_repository": "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies",
-      "reference_source": "publisher_oras_push_digest_output",
+      "reference_source": "reviewed_publication_evidence",
+      "reference": "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c",
       "required_reference_format": "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@sha256:<64-lowercase-hex>",
       "same_run_digest_required": true,
       "future_evidence_must_pin_exact_reference": true,
@@ -658,9 +664,16 @@
     ]
   },
   "publication": {
-    "permitted": true,
-    "workflow_present": true,
+    "permitted": false,
+    "workflow_present": false,
     "workflow": ".github/workflows/trino-maven-dependencies.yml",
+    "historical_workflow": "bootstrap/trino/v483/dependency-evidence/historical-publisher-workflow.yml",
+    "historical_workflow_sha256": "3f1750bf0f81b6a8859af81c244eaf5aee16f520dd84ea22207f8bd9c9004c3f",
+    "retired": true,
+    "source_sha": "1ae1996eaf654e69daad60c574c7abb4e4d2be3b",
+    "workflow_sha": "1ae1996eaf654e69daad60c574c7abb4e4d2be3b",
+    "run_id": "30231656483",
+    "run_attempt": "1",
     "allowed_ref": "refs/heads/main",
     "artifact_role": "review_pending_dependency_evidence",
     "retire_in_evidence_review_pr": true,
@@ -686,16 +699,16 @@
     ]
   },
   "downstream_gates": {
-    "dependency_artifact_published": false,
+    "dependency_artifact_published": true,
     "dependency_evidence_admitted": false,
-    "network_none_source_build_verified": false,
+    "network_none_source_build_verified": true,
     "runtime_image_published": false,
     "native_arm64_smoke_verified": false,
-    "high_zero_critical_zero_scan_verified": false,
-    "cyclonedx_sbom_retained": false,
-    "cosign_rekor_signature_verified": false,
-    "slsa_provenance_verified": false,
-    "anonymous_exact_digest_pull_verified": false,
+    "high_zero_critical_zero_scan_verified": true,
+    "cyclonedx_sbom_retained": true,
+    "cosign_rekor_signature_verified": true,
+    "slsa_provenance_verified": true,
+    "anonymous_exact_digest_pull_verified": true,
     "resident_image_admitted": false,
     "flux_runtime_reconciled": false
   }
