@@ -55,8 +55,8 @@
       },
       {
         "control": "repository_source_build",
-        "status": "dependency_evidence_review_pending",
-        "evidence": "main run 30231656483 published exact dependency digest sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c with retained closure, offline-build, signature, SLSA Statement/v1, SBOM, raw/OpenVEX-adjusted scans, and anonymous-pull evidence; no runtime image or runtime-smoke evidence is admitted"
+        "status": "publisher_repair_pending",
+        "evidence": "main run 30231656483 published digest sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c, but evidence review found an empty Maven SBOM/scan, missing OCI digest subjects, a non-recursive retained inventory, missing Trino tag-object provenance, and an unsigned anonymous-pull receipt; the object is a non-admitted failed attempt"
       }
     ],
     "rationale": "ADR-0019 does not waive source identity, image signature, transparency-log, provenance, or evidence requirements. ADR-0023 separately accepts only the exact Trino 483 source-identity risk for a time-boxed local PoC. ADR-0024 authorizes a four-path Web UI dependency overlay and one not_affected OpenVEX assessment through the same expiry; it is not a vulnerability risk acceptance. The raw finding remains retained, adjusted High=0/Critical=0 remains mandatory, the upstream image and server asset remain rejected, all image controls remain mandatory, and re-signing untrusted upstream bytes is forbidden."
@@ -164,13 +164,13 @@
   },
   "repository_state": {
     "dependency_snapshot_contract_permitted": true,
-    "publication_workflow_permitted": false,
-    "dependency_artifact_present": true,
+    "publication_workflow_permitted": true,
+    "dependency_artifact_present": false,
     "resident_ledger_permitted": false,
     "runtime_manifests_permitted": false,
     "allowed_paths": [
+      ".github/workflows/trino-maven-dependencies.yml",
       "bootstrap/trino/v483/admission.json",
-      "bootstrap/trino/v483/dependency-evidence",
       "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
       "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch",
       "bootstrap/trino/v483/settings.xml",
@@ -184,11 +184,9 @@
       "scripts/prepare_trino_bun_input.py",
       "scripts/verify_polaris_trusted_image.py",
       "scripts/verify_trino_dependency_publisher.py",
-      "scripts/verify_trino_dependency_evidence.py",
       "tests/test_trino_bun_dependencies.py",
       "tests/test_trino_bootstrap.py",
       "tests/test_trino_dependency_publisher.py",
-      "tests/test_trino_dependency_evidence.py",
       "Makefile"
     ],
     "forbidden_paths": [
@@ -207,7 +205,7 @@
       "docs/design/07_ADR/ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md",
       "docs/design/07_ADR/ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md"
     ],
-    "phase": "dependency_snapshot_evidence_review_pending",
+    "phase": "dependency_snapshot_publication_pending",
     "requirements": [
       "active and unexpired provisional source authorization bound to the exact source repository, tag, commit, and tree",
       "authenticated closed dependency snapshot",

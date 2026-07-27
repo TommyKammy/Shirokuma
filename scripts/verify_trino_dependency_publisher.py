@@ -15,17 +15,14 @@ import textwrap
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Mapping
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 
 CONTRACT_PATH = Path("bootstrap/trino/v483/trusted-build-contract.json")
 ADMISSION_PATH = Path("bootstrap/trino/v483/admission.json")
 SETTINGS_PATH = Path("bootstrap/trino/v483/settings.xml")
 JVM_CONFIG_PATH = Path("bootstrap/trino/v483/maven-policy/.mvn/jvm.config")
-ACTIVE_WORKFLOW_PATH = Path(".github/workflows/trino-maven-dependencies.yml")
-WORKFLOW_PATH = Path(
-    "bootstrap/trino/v483/dependency-evidence/historical-publisher-workflow.yml"
-)
+WORKFLOW_PATH = Path(".github/workflows/trino-maven-dependencies.yml")
 PACKAGER_PATH = Path("scripts/package_trino_maven_dependencies.py")
 BUN_PACKAGER_PATH = Path("scripts/package_trino_bun_dependencies.py")
 BUN_PREPARER_PATH = Path("scripts/prepare_trino_bun_input.py")
@@ -46,6 +43,7 @@ OVERLAY_ADR_PATH = Path(
 EXPECTED_REPOSITORY = "TommyKammy/Shirokuma"
 EXPECTED_SOURCE_REPOSITORY = "https://github.com/trinodb/trino"
 EXPECTED_TAG = "483"
+EXPECTED_TAG_OBJECT = "32d4f28e8311ea6f67edca209df59a0493d869fa"
 EXPECTED_COMMIT = "50b0b50b75abd47f830b7805ee1b51716eb4065e"
 EXPECTED_TREE = "3b5414292a614b12393bb4605ea2d4c588a5b8ee"
 EXPECTED_BUILDER = (
@@ -586,8 +584,10 @@ EXPECTED_STEPS = {
         "Resolve and package the first closed Maven repository",
         "Independently reconstruct the closed Maven repository",
         "Prove two fresh network-none offline source builds",
-        "Generate a CycloneDX dependency SBOM",
+        "Generate the raw rootfs Maven JAR inventory",
+        "Generate the closure-complete Maven CycloneDX SBOM",
         "Scan the dependency closure and block High or Critical findings",
+        "Verify the complete Maven JAR scan inventory",
         "Stage the exact Bun lockfiles for dependency analysis",
         "Generate a CycloneDX Bun dependency SBOM",
         "Retain the raw Bun High or Critical findings",
@@ -605,6 +605,7 @@ EXPECTED_STEPS = {
         "Validate the candidate before registry authentication",
         "Publish the immutable run-scoped OCI artifact",
         "Install pinned Cosign after publication",
+        "Bind retained SBOM and scan evidence to the published digest",
         "Keyless-sign and attest the exact OCI manifest",
         "Prove anonymous exact-digest retrieval",
         "Record review-pending publication evidence",
@@ -1148,6 +1149,367 @@ def verify_bun_scan(
         )
 
 
+def _maven_jar_paths(descriptor_path: Path) -> set[str]:
+    descriptor = _load_json(descriptor_path)
+    files = descriptor.get("files")
+    if (
+        descriptor.get("schema_version") != 2
+        or not isinstance(files, list)
+        or descriptor.get("file_count") != len(files)
+    ):
+        _fail("MAVEN_SCAN_DESCRIPTOR", "closed Maven descriptor differs")
+    paths: set[str] = set()
+    for record in files:
+        if not isinstance(record, dict) or set(record) != {
+            "mode",
+            "path",
+            "repository_origin",
+            "sha256",
+            "size",
+        }:
+            _fail("MAVEN_SCAN_DESCRIPTOR", "Maven file identity differs")
+        path = record.get("path")
+        if isinstance(path, str) and path.endswith(".jar"):
+            paths.add(path)
+    if not paths:
+        _fail("MAVEN_SCAN_DESCRIPTOR", "Maven descriptor contains no JARs")
+    return paths
+
+
+def _maven_purl(path: str) -> str:
+    parts = path.split("/")
+    if len(parts) < 4 or not path.endswith(".jar"):
+        _fail("MAVEN_SBOM", f"invalid Maven JAR path: {path}")
+    group = ".".join(parts[:-3])
+    artifact, version, filename = parts[-3:]
+    prefix = f"{artifact}-{version}"
+    if not filename.startswith(prefix):
+        _fail("MAVEN_SBOM", f"JAR does not match Maven coordinates: {path}")
+    classifier = filename[len(prefix) : -4].removeprefix("-")
+    qualifier = f"?classifier={quote(classifier, safe='')}" if classifier else ""
+    return (
+        f"pkg:maven/{quote(group, safe='.')}/{quote(artifact, safe='')}"
+        f"@{quote(version, safe='.')}{qualifier}"
+    )
+
+
+def generate_maven_sbom(
+    descriptor_path: Path,
+    rootfs_sbom_path: Path,
+    output_path: Path,
+) -> None:
+    descriptor = _load_json(descriptor_path)
+    files = descriptor.get("files")
+    if not isinstance(files, list):
+        _fail("MAVEN_SBOM", "closed Maven descriptor files are missing")
+    expected_paths = _maven_jar_paths(descriptor_path)
+    observed_rootfs = _cyclonedx_jar_paths(rootfs_sbom_path)
+    if (
+        not observed_rootfs.issubset(expected_paths)
+        or len(observed_rootfs) * 100 < len(expected_paths) * 95
+    ):
+        _fail(
+            "MAVEN_SBOM_ROOTFS",
+            "rootfs discovery is not a substantial subset of the closed JAR set",
+        )
+    components: list[dict[str, Any]] = []
+    purls: set[str] = set()
+    for record in files:
+        if not isinstance(record, dict):
+            _fail("MAVEN_SBOM", "Maven descriptor entry is malformed")
+        path = record.get("path")
+        if not isinstance(path, str) or not path.endswith(".jar"):
+            continue
+        parts = path.split("/")
+        group = ".".join(parts[:-3])
+        artifact, version = parts[-3:-1]
+        purl = _maven_purl(path)
+        if purl in purls:
+            _fail("MAVEN_SBOM", f"duplicate Maven PURL: {purl}")
+        purls.add(purl)
+        components.append(
+            {
+                "bom-ref": purl,
+                "type": "library",
+                "group": group,
+                "name": artifact,
+                "version": version,
+                "hashes": [
+                    {"alg": "SHA-256", "content": record["sha256"]},
+                ],
+                "purl": purl,
+                "properties": [
+                    {
+                        "name": "aquasecurity:trivy:FilePath",
+                        "value": path,
+                    },
+                    {
+                        "name": "shirokuma:repository-origin",
+                        "value": record["repository_origin"],
+                    },
+                ],
+            }
+        )
+    if len(components) != len(expected_paths):
+        _fail("MAVEN_SBOM", "generated component set is not closed")
+    output = {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.7",
+        "version": 1,
+        "metadata": {
+            "component": {
+                "type": "application",
+                "name": "manifest-derived-maven-closure",
+            },
+            "properties": [
+                {
+                    "name": "shirokuma:descriptor-sha256",
+                    "value": _sha256(descriptor_path),
+                },
+                {
+                    "name": "shirokuma:rootfs-discovered-jars",
+                    "value": str(len(observed_rootfs)),
+                },
+                {
+                    "name": "shirokuma:closed-manifest-jars",
+                    "value": str(len(expected_paths)),
+                },
+            ],
+        },
+        "components": components,
+    }
+    output_path.write_text(
+        json.dumps(output, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _trivy_package_purls(report_path: Path) -> set[str]:
+    report = _load_json(report_path)
+    results = report.get("Results")
+    if not isinstance(results, list) or not results:
+        _fail("MAVEN_SCAN_REPORT", "Trivy report contains no results")
+    purls: set[str] = set()
+    for result in results:
+        if not isinstance(result, dict):
+            _fail("MAVEN_SCAN_REPORT", "Trivy result is not an object")
+        packages = result.get("Packages")
+        if not isinstance(packages, list):
+            continue
+        for package in packages:
+            if not isinstance(package, dict):
+                _fail("MAVEN_SCAN_REPORT", "Trivy package is not an object")
+            identifier = package.get("Identifier")
+            purl = identifier.get("PURL") if isinstance(identifier, dict) else None
+            if not isinstance(purl, str) or not purl:
+                _fail("MAVEN_SCAN_REPORT", "Trivy package PURL is missing")
+            purls.add(purl)
+        vulnerabilities = result.get("Vulnerabilities", [])
+        if not isinstance(vulnerabilities, list):
+            _fail("MAVEN_SCAN_REPORT", "Trivy vulnerabilities are malformed")
+        if any(
+            isinstance(finding, dict)
+            and finding.get("Severity") in {"HIGH", "CRITICAL"}
+            for finding in vulnerabilities
+        ):
+            _fail("MAVEN_SCAN_FINDING", "Maven High/Critical finding remains")
+    if not purls:
+        _fail("MAVEN_SCAN_REPORT", "Trivy report inventories no Maven PURLs")
+    return purls
+
+
+def _cyclonedx_jar_paths(sbom_path: Path) -> set[str]:
+    sbom = _load_json(sbom_path)
+    components = sbom.get("components")
+    if (
+        sbom.get("bomFormat") != "CycloneDX"
+        or sbom.get("specVersion") != "1.7"
+        or not isinstance(components, list)
+        or not components
+    ):
+        _fail("MAVEN_SBOM", "CycloneDX document contains no components")
+    paths: set[str] = set()
+    for component in components:
+        if not isinstance(component, dict):
+            _fail("MAVEN_SBOM", "CycloneDX component is not an object")
+        properties = component.get("properties", [])
+        if not isinstance(properties, list):
+            _fail("MAVEN_SBOM", "CycloneDX properties are malformed")
+        for prop in properties:
+            if (
+                isinstance(prop, dict)
+                and prop.get("name") == "aquasecurity:trivy:FilePath"
+                and isinstance(prop.get("value"), str)
+                and "!" not in prop["value"]
+                and ".jar/" not in prop["value"]
+            ):
+                paths.add(prop["value"])
+    if not paths:
+        _fail("MAVEN_SBOM", "CycloneDX document inventories no top-level JARs")
+    return paths
+
+
+def verify_maven_scan(
+    descriptor_path: Path,
+    sbom_path: Path,
+    report_path: Path,
+) -> None:
+    expected_paths = _maven_jar_paths(descriptor_path)
+    observed_paths = _cyclonedx_jar_paths(sbom_path)
+    if observed_paths != expected_paths:
+        _fail(
+            "MAVEN_SBOM_CLOSURE",
+            (
+                "CycloneDX JAR closure differs: "
+                f"missing={sorted(expected_paths - observed_paths)!r}, "
+                f"unexpected={sorted(observed_paths - expected_paths)!r}"
+            ),
+        )
+    sbom = _load_json(sbom_path)
+    components = sbom.get("components", [])
+    expected_purls = {
+        component.get("purl")
+        for component in components
+        if isinstance(component, dict) and isinstance(component.get("purl"), str)
+    }
+    observed_purls = _trivy_package_purls(report_path)
+    if observed_purls != expected_purls:
+        _fail(
+            "MAVEN_SCAN_CLOSURE",
+            (
+                "Trivy report PURL closure differs: "
+                f"missing={sorted(expected_purls - observed_purls)!r}, "
+                f"unexpected={sorted(observed_purls - expected_purls)!r}"
+            ),
+        )
+
+
+def _artifact_identity(reference: str) -> tuple[str, str]:
+    expected_prefix = (
+        "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@sha256:"
+    )
+    if not reference.startswith(expected_prefix):
+        _fail("ARTIFACT_SUBJECT", "immutable artifact reference differs")
+    digest = reference.removeprefix(
+        "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@"
+    )
+    if re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is None:
+        _fail("ARTIFACT_SUBJECT", "artifact digest is not exact lowercase sha256")
+    return digest, digest.removeprefix("sha256:")
+
+
+def _bind_cyclonedx(path: Path, reference: str, digest_hex: str) -> None:
+    document = _load_json(path)
+    metadata = document.get("metadata")
+    if (
+        document.get("bomFormat") != "CycloneDX"
+        or document.get("specVersion") != "1.7"
+        or not isinstance(metadata, dict)
+    ):
+        _fail("ARTIFACT_SBOM", f"{path} is not CycloneDX 1.7")
+    previous = metadata.get("component")
+    source = previous.get("name") if isinstance(previous, dict) else None
+    metadata["component"] = {
+        "bom-ref": reference,
+        "type": "file",
+        "name": "shirokuma-trino-maven-dependencies",
+        "version": EXPECTED_TAG,
+        "hashes": [{"alg": "SHA-256", "content": digest_hex}],
+        "properties": [
+            {"name": "shirokuma:artifact-reference", "value": reference},
+            {"name": "shirokuma:scan-source", "value": source or "unknown"},
+        ],
+    }
+    path.write_text(
+        json.dumps(document, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _bind_trivy_report(path: Path, reference: str, digest: str) -> None:
+    document = _load_json(path)
+    if document.get("SchemaVersion") != 2:
+        _fail("ARTIFACT_SCAN", f"{path} is not a Trivy v2 report")
+    previous = document.get("ArtifactName")
+    metadata = document.get("Metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+        document["Metadata"] = metadata
+    document["ArtifactName"] = reference
+    metadata["ImageID"] = digest
+    metadata["RepoDigests"] = [reference]
+    metadata["ScanSource"] = previous
+    path.write_text(
+        json.dumps(document, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _verify_cyclonedx_subject(path: Path, reference: str, digest_hex: str) -> None:
+    document = _load_json(path)
+    metadata = document.get("metadata")
+    component = metadata.get("component") if isinstance(metadata, dict) else None
+    if not isinstance(component, dict):
+        _fail("ARTIFACT_SBOM", f"{path} subject is missing")
+    expected = {
+        "bom-ref": reference,
+        "type": "file",
+        "name": "shirokuma-trino-maven-dependencies",
+        "version": EXPECTED_TAG,
+        "hashes": [{"alg": "SHA-256", "content": digest_hex}],
+    }
+    if any(component.get(key) != value for key, value in expected.items()):
+        _fail("ARTIFACT_SBOM", f"{path} subject differs")
+    properties = component.get("properties")
+    if (
+        not isinstance(properties, list)
+        or {"name": "shirokuma:artifact-reference", "value": reference}
+        not in properties
+    ):
+        _fail("ARTIFACT_SBOM", f"{path} immutable reference is missing")
+
+
+def _verify_trivy_subject(path: Path, reference: str, digest: str) -> None:
+    document = _load_json(path)
+    metadata = document.get("Metadata")
+    if (
+        document.get("ArtifactName") != reference
+        or not isinstance(metadata, dict)
+        or metadata.get("ImageID") != digest
+        or metadata.get("RepoDigests") != [reference]
+    ):
+        _fail("ARTIFACT_SCAN", f"{path} subject differs")
+
+
+def bind_artifact_evidence(
+    reference: str,
+    descriptor_path: Path,
+    maven_sbom_path: Path,
+    maven_report_path: Path,
+    bun_sbom_path: Path,
+    bun_raw_report_path: Path,
+    bun_adjusted_report_path: Path,
+) -> None:
+    verify_maven_scan(descriptor_path, maven_sbom_path, maven_report_path)
+    digest, digest_hex = _artifact_identity(reference)
+    for path in (maven_sbom_path, bun_sbom_path):
+        _bind_cyclonedx(path, reference, digest_hex)
+    for path in (
+        maven_report_path,
+        bun_raw_report_path,
+        bun_adjusted_report_path,
+    ):
+        _bind_trivy_report(path, reference, digest)
+    for path in (maven_sbom_path, bun_sbom_path):
+        _verify_cyclonedx_subject(path, reference, digest_hex)
+    for path in (
+        maven_report_path,
+        bun_raw_report_path,
+        bun_adjusted_report_path,
+    ):
+        _verify_trivy_subject(path, reference, digest)
+
+
 def _parse_time(value: str) -> dt.datetime:
     try:
         result = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -1460,7 +1822,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
     if action_counts != EXPECTED_ACTIONS:
         _fail("WORKFLOW_ACTION", f"closed action set differs: {action_counts!r}")
     for path in (
-        ACTIVE_WORKFLOW_PATH,
+        WORKFLOW_PATH,
         CONTRACT_PATH,
         ADMISSION_PATH,
         JVM_CONFIG_PATH,
@@ -1492,6 +1854,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         EXPECTED_SOURCE_REPOSITORY,
         EXPECTED_COMMIT,
         EXPECTED_TREE,
+        EXPECTED_TAG_OBJECT,
         EXPECTED_BUILDER,
         "--entrypoint /usr/share/maven/bin/mvn",
         "--env MAVEN_CONFIG=/tmp/maven-home/.m2",
@@ -1500,6 +1863,10 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "python3 scripts/verify_trino_dependency_publisher.py authorize",
         "python3 scripts/verify_trino_dependency_publisher.py audit-builder-settings",
         "python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log",
+        "generate-maven-sbom",
+        "verify-maven-scan",
+        "bind-artifact-evidence",
+        "scan-type: rootfs",
         "prune-reactor-outputs",
         "python3 scripts/package_trino_maven_dependencies.py create",
         "python3 scripts/package_trino_maven_dependencies.py verify",
@@ -1518,6 +1885,8 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "cosign attest-blob",
         "cosign attach attestation",
         "cosign verify-attestation",
+        "anonymous-pull-signature-bundle.json",
+        "cosign-verify-anonymous-pull.json",
         "--type slsaprovenance1",
         '"https://slsa.dev/provenance/v1"',
         '"https://in-toto.io/Statement/v1"',
@@ -1533,6 +1902,18 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
     for value in required:
         if value not in workflow:
             _fail("WORKFLOW_REQUIRED", value)
+    if (
+        lines.count("          scan-type: rootfs") != 1
+        or lines.count("          scan-type: sbom") != 1
+        or lines.count(
+            "          scan-ref: ${{ runner.temp }}/maven-repository-a"
+        )
+        != 1
+    ):
+        _fail(
+            "WORKFLOW_MAVEN_SCAN",
+            "Maven discovery must use rootfs and the scan must consume its closed SBOM",
+        )
     if (
         workflow.count(EXPECTED_ORAS_PUSH_BLOCK) != 1
         or "--disable-path-validation" in workflow
@@ -1735,7 +2116,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         != 2
         or "scan-ref: ${{ runner.temp }}/bun-cache-a" in workflow
         or workflow.count('TRIVY_INCLUDE_DEV_DEPS: "true"') != 3
-        or workflow.count("list-all-pkgs: true") != 2
+        or workflow.count("list-all-pkgs: true") != 3
         or workflow.count('--vex "${vex}"') != 1
         or workflow.count("--skip-db-update") != 1
         or "--raw-report \\" not in workflow
@@ -1771,16 +2152,38 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
     publication = contract.get("publication", {})
     if (
-        publication.get("permitted") is not False
-        or publication.get("workflow_present") is not False
-        or publication.get("workflow") != ACTIVE_WORKFLOW_PATH.as_posix()
-        or publication.get("historical_workflow") != WORKFLOW_PATH.as_posix()
-        or publication.get("retired") is not True
+        publication.get("permitted") is not True
+        or publication.get("workflow_present") is not True
+        or publication.get("workflow") != WORKFLOW_PATH.as_posix()
         or publication.get("allowed_ref") != "refs/heads/main"
         or publication.get("artifact_role") != "review_pending_dependency_evidence"
         or publication.get("retire_in_evidence_review_pr") is not True
+        or publication.get("evidence_review_inventory_policy")
+        != {
+            "recursive_closed_world_required": True,
+            "regular_files_only": True,
+            "directories_and_symlinks_rejected": True,
+        }
     ):
-        _fail("PUBLICATION", "retired publication lifecycle differs")
+        _fail("PUBLICATION", "publication lifecycle is not narrowly pending")
+    failed = contract.get("failed_publications")
+    if (
+        not isinstance(failed, list)
+        or len(failed) != 1
+        or failed[0].get("run_id") != "30231656483"
+        or failed[0].get("run_attempt") != "1"
+        or failed[0].get("source_sha")
+        != "1ae1996eaf654e69daad60c574c7abb4e4d2be3b"
+        or failed[0].get("reference")
+        != (
+            "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@"
+            "sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97"
+            "e1e952499f8af5075c"
+        )
+        or failed[0].get("admitted") is not False
+        or len(failed[0].get("reasons", [])) != 5
+    ):
+        _fail("PUBLICATION", "failed publication record differs")
 
 
 def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
@@ -1821,10 +2224,10 @@ def audit(root: Path) -> None:
     _validate_source_overlay_contract(root, contract, at=None)
     lifecycle = contract.get("lifecycle", {})
     if lifecycle != {
-        "state": "dependency_snapshot_review_pending",
+        "state": "dependency_snapshot_publication_pending",
         "contract_only": False,
-        "dependency_artifact_present": True,
-        "publication_workflow_permitted": False,
+        "dependency_artifact_present": False,
+        "publication_workflow_permitted": True,
         "image_publication_permitted": False,
         "resident_admission_permitted": False,
         "runtime_reconciliation_permitted": False,
@@ -1898,16 +2301,14 @@ def audit(root: Path) -> None:
     if (
         admission.get("source_overlay_authorization")
         != EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION
-        or repository_state.get("publication_workflow_permitted") is not False
-        or repository_state.get("dependency_artifact_present") is not True
+        or repository_state.get("publication_workflow_permitted") is not True
+        or repository_state.get("dependency_artifact_present") is not False
         or repository_state.get("resident_ledger_permitted") is not False
         or repository_state.get("runtime_manifests_permitted") is not False
     ):
         _fail("ADMISSION", "admission state crosses the publisher boundary")
     _validate_settings(root)
     _validate_policy_hashes(root, contract)
-    if (root / ACTIVE_WORKFLOW_PATH).exists():
-        _fail("WORKFLOW", "retired write-capable publisher was reintroduced")
     try:
         workflow = (root / WORKFLOW_PATH).read_text(encoding="utf-8")
     except OSError as error:
@@ -1967,7 +2368,7 @@ def audit_source(root: Path, checkout: Path) -> None:
         commit != EXPECTED_COMMIT
         or tree != EXPECTED_TREE
         or remote != EXPECTED_SOURCE_REPOSITORY
-        or tag_object != "32d4f28e8311ea6f67edca209df59a0493d869fa"
+        or tag_object != EXPECTED_TAG_OBJECT
         or tag_commit != EXPECTED_COMMIT
         or status
     ):
@@ -2056,6 +2457,22 @@ def _parser() -> argparse.ArgumentParser:
     bun_snapshot = commands.add_parser("verify-bun-snapshot")
     bun_snapshot.add_argument("--descriptor", type=Path, required=True)
     bun_snapshot.add_argument("--archive", type=Path, required=True)
+    maven_scan = commands.add_parser("verify-maven-scan")
+    maven_scan.add_argument("--descriptor", type=Path, required=True)
+    maven_scan.add_argument("--sbom", type=Path, required=True)
+    maven_scan.add_argument("--report", type=Path, required=True)
+    maven_sbom = commands.add_parser("generate-maven-sbom")
+    maven_sbom.add_argument("--descriptor", type=Path, required=True)
+    maven_sbom.add_argument("--rootfs-sbom", type=Path, required=True)
+    maven_sbom.add_argument("--output", type=Path, required=True)
+    bind = commands.add_parser("bind-artifact-evidence")
+    bind.add_argument("--reference", required=True)
+    bind.add_argument("--descriptor", type=Path, required=True)
+    bind.add_argument("--maven-sbom", type=Path, required=True)
+    bind.add_argument("--maven-report", type=Path, required=True)
+    bind.add_argument("--bun-sbom", type=Path, required=True)
+    bind.add_argument("--bun-raw-report", type=Path, required=True)
+    bind.add_argument("--bun-adjusted-report", type=Path, required=True)
     return parser
 
 
@@ -2099,10 +2516,32 @@ def main() -> int:
                 args.raw_report.resolve(),
                 args.adjusted_report.resolve(),
             )
-        else:
+        elif args.command == "verify-bun-snapshot":
             verify_bun_snapshot_identity(
                 args.descriptor.resolve(),
                 args.archive.resolve(),
+            )
+        elif args.command == "verify-maven-scan":
+            verify_maven_scan(
+                args.descriptor.resolve(),
+                args.sbom.resolve(),
+                args.report.resolve(),
+            )
+        elif args.command == "generate-maven-sbom":
+            generate_maven_sbom(
+                args.descriptor.resolve(),
+                args.rootfs_sbom.resolve(),
+                args.output.resolve(),
+            )
+        else:
+            bind_artifact_evidence(
+                args.reference,
+                args.descriptor.resolve(),
+                args.maven_sbom.resolve(),
+                args.maven_report.resolve(),
+                args.bun_sbom.resolve(),
+                args.bun_raw_report.resolve(),
+                args.bun_adjusted_report.resolve(),
             )
     except ContractError as error:
         print(f"Trino dependency publisher rejected: {error}", file=os.sys.stderr)

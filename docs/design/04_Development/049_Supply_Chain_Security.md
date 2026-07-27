@@ -958,23 +958,24 @@ or runtime is allowed.
 Reviewed-main Trino dependency publisher run
 [`30231656483`](https://github.com/TommyKammy/Shirokuma/actions/runs/30231656483)
 from commit `1ae1996eaf654e69daad60c574c7abb4e4d2be3b` completed the closed
-Maven/Bun reconstructions, two network-none native-arm64 builds, SBOM and
-raw/OpenVEX-adjusted scan gates, exact Statement/v1 SLSA provenance, keyless
-signature and Rekor verification, and a fresh empty-config anonymous pull. It
-published exact public dependency reference
+Maven/Bun reconstructions and published public dependency reference
 `ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c`.
-The raw Bun report retains the one reviewed
-`GHSA-qwww-vcr4-c8h2` High finding; the hash-bound OpenVEX-adjusted Bun report
-and Maven report are High=0/Critical=0.
+Evidence review rejected that object: Trivy filesystem mode inventoried zero
+Maven components/results, the SBOM and scan documents lacked an exact OCI
+digest subject, the retained inventory was not recursively closed against
+nested directories and symlinks, the signed SLSA resolved dependency omitted
+the reviewed `483` tag object, and the post-attestation anonymous-pull receipt
+lacked its own trusted signature. The object is a failed attempt and is not
+dependency evidence.
 
-The evidence-only checkpoint retains the 20 publication records under
-`bootstrap/trino/v483/dependency-evidence/`, independently revalidates their
-closed hash/size inventory and Sigstore bundles, and retires
-`.github/workflows/trino-maven-dependencies.yml`. Repository verification
-rejects publisher reintroduction. The dependency artifact remains
-`dependency_snapshot_evidence_review_pending` and is not admitted; Trino image
-publication, resident admission, credentials, Flux objects, and runtime
-reconciliation remain forbidden.
+The repair keeps the publisher active, switches the Maven repository scan to
+Trivy rootfs mode, requires exact equality between the 1,470 descriptor JAR
+paths and both Trivy/CycloneDX inventories, binds every retained SBOM and scan
+document to the ORAS digest before SLSA signing, includes tag object
+`32d4f28e8311ea6f67edca209df59a0493d869fa`, and keyless-signs the
+anonymous-pull receipt after retrieval. No dependency artifact, Trino image,
+resident admission, Flux object, or runtime is admitted until a fresh
+reviewed-main run and separate evidence-only review succeed.
 
 ## Resident image and SBOM evidence
 
