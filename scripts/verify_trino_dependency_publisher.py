@@ -2781,6 +2781,12 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
                 "must use the exact read-only repository settings"
             ),
         )
+    staging_commands = re.findall(
+        r"python3 scripts/"
+        r"(prepare_trino_bun_input\.py stage|"
+        r"remediate_parquet_jackson\.py stage-artifact)",
+        workflow,
+    )
     if (
         workflow.count(
             "python3 scripts/remediate_parquet_jackson.py prepare-source"
@@ -2816,12 +2822,19 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
         != 1
         or "suffixes+=(b)" not in workflow
+        or staging_commands
+        != [
+            "prepare_trino_bun_input.py stage",
+            "remediate_parquet_jackson.py stage-artifact",
+            "prepare_trino_bun_input.py stage",
+            "remediate_parquet_jackson.py stage-artifact",
+        ]
     ):
         _fail(
             "WORKFLOW_SOURCE_REMEDIATION",
             (
                 "the exact Parquet source must be independently fetched, "
-                "built twice, compared, staged, and sealed"
+                "built twice, compared, staged after the Bun input, and sealed"
             ),
         )
     if (

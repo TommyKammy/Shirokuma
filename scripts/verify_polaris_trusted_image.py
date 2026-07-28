@@ -705,7 +705,7 @@ REVIEW_PENDING_WORKFLOW_INVENTORY = {
         "3f8c098cf514bf2f38f51ab35c7d5db4437a9b59f73780e8f85221b654f3f5f0"
     ),
     ".github/workflows/trino-maven-dependencies.yml": (
-        "64d4ba3a605f65217090f09841ce13b6c48fc98fca5dbe0f62107c46bae917e8"
+        "353c8c2437a4806eece8759f534db3d46bf82e07c4b7fb6ed5ab3eace2c0c590"
     ),
 }
 PENDING_SCRIPT_FILE_INVENTORY = {
@@ -782,7 +782,7 @@ PENDING_SCRIPT_FILE_INVENTORY = {
         "75cee002d5749c0ec91629edb905c27362bee5c0813b0cbefcb59f161734f445"
     ),
     "scripts/verify_trino_dependency_publisher.py": (
-        "1e95ee6bc0e498ccea4a0cbc394de3caba83ff072085922f4704a34b73a13dcc"
+        "1f584e702bd37df5b9d904c465d076bf4977fe4b225ee7256f3f48a4bbe343dc"
     ),
     "scripts/verify_trusted_image.py": (
         "cc569a5ee10400ad657f7648ccc2c14e8fd21691adfdc9e155212b16dc0afba0"

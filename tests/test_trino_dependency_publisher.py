@@ -2406,6 +2406,28 @@ class PublisherContractTests(unittest.TestCase):
         ):
             verify._validate_workflow(contract, altered)
 
+    def test_bun_input_is_staged_before_each_parquet_remediation(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        bun_command = "python3 scripts/prepare_trino_bun_input.py stage"
+        parquet_command = (
+            "python3 scripts/remediate_parquet_jackson.py stage-artifact"
+        )
+        self.assertEqual(2, workflow.count(bun_command))
+        self.assertEqual(2, workflow.count(parquet_command))
+        altered = (
+            workflow.replace(bun_command, "__BUN_STAGE__", 1)
+            .replace(parquet_command, bun_command, 1)
+            .replace("__BUN_STAGE__", parquet_command, 1)
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_SOURCE_REMEDIATION",
+        ):
+            verify._validate_workflow(contract, altered)
+
     def test_pull_requests_are_static_only_while_publication_is_blocked(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")

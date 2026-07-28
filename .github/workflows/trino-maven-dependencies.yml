@@ -394,10 +394,6 @@ jobs:
             2>&1 | tee "${RUNNER_TEMP}/parquet-maven-transfer-a.log"
           python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log \
             --log "${RUNNER_TEMP}/parquet-maven-transfer-a.log"
-          python3 scripts/remediate_parquet_jackson.py stage-artifact \
-            --checkout "${parquet_source}" \
-            --build-repository "${parquet_repository}" \
-            --target-repository "${repository}"
           python3 scripts/prepare_trino_bun_input.py download \
             --url "${BUN_URL}" \
             --archive "${bun_archive}"
@@ -407,6 +403,10 @@ jobs:
           python3 scripts/prepare_trino_bun_input.py stage \
             --archive "${bun_archive}" \
             --repository "${repository}"
+          python3 scripts/remediate_parquet_jackson.py stage-artifact \
+            --checkout "${parquet_source}" \
+            --build-repository "${parquet_repository}" \
+            --target-repository "${repository}"
           docker run --rm \
             --platform linux/arm64 \
             --user "$(id -u):$(id -g)" \
@@ -508,10 +508,6 @@ jobs:
             --first-repository \
               "${RUNNER_TEMP}/parquet-maven-repository-a" \
             --second-repository "${parquet_repository}"
-          python3 scripts/remediate_parquet_jackson.py stage-artifact \
-            --checkout "${parquet_source}" \
-            --build-repository "${parquet_repository}" \
-            --target-repository "${repository}"
           python3 scripts/prepare_trino_bun_input.py download \
             --url "${BUN_URL}" \
             --archive "${bun_archive}"
@@ -521,6 +517,10 @@ jobs:
           python3 scripts/prepare_trino_bun_input.py stage \
             --archive "${bun_archive}" \
             --repository "${repository}"
+          python3 scripts/remediate_parquet_jackson.py stage-artifact \
+            --checkout "${parquet_source}" \
+            --build-repository "${parquet_repository}" \
+            --target-repository "${repository}"
           docker run --rm \
             --platform linux/arm64 \
             --user "$(id -u):$(id -g)" \
