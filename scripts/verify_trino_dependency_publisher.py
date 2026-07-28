@@ -390,7 +390,7 @@ EXPECTED_BUN_STAGE_BLOCK = """\
 EXPECTED_PR_SOURCE_CONDITION = """\
         if: >-
           steps.lifecycle.outputs.active == 'true' ||
-          github.event_name == 'pull_request'
+          steps.lifecycle.outputs.source_validation_active == 'true'
 """
 EXPECTED_PR_BUN_INPUT_BLOCK = """\
           bun_archive="${RUNNER_TEMP}/bun-linux-aarch64-pr.zip"
@@ -409,10 +409,22 @@ EXPECTED_PR_BUN_INPUT_BLOCK = """\
 EXPECTED_PR_OVERLAY_BUILD_MARKERS = (
     '              echo "active=false" >> "${GITHUB_OUTPUT}"',
     (
+        '                echo "source_validation_active=false" >> '
+        '"${GITHUB_OUTPUT}"'
+    ),
+    (
+        '                echo "Pull requests perform static contract validation '
+        'only while publication is blocked"'
+    ),
+    (
+        '              echo "source_validation_active=true" >> '
+        '"${GITHUB_OUTPUT}"'
+    ),
+    (
         '              echo "Pull requests perform static and Web UI overlay '
         'build validation only"'
     ),
-    "        if: github.event_name == 'pull_request'",
+    "        if: steps.lifecycle.outputs.source_validation_active == 'true'",
     '          CI: "true"',
     "          BUN_CONFIG_REGISTRY: ${{ env.BUN_REGISTRY }}",
     "          BUN_INSTALL_CACHE_DIR: ${{ runner.temp }}/trino-pr-bun-cache",
@@ -2365,8 +2377,9 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         _fail(
             "WORKFLOW_PR_OVERLAY_VALIDATION",
             (
-                "pull requests must fetch, apply, and build the exact Web UI "
-                "overlay without enabling publication"
+                "blocked pull requests must remain static-only; authorized pull "
+                "requests must fetch, apply, and build the exact Web UI overlay "
+                "without enabling publication"
             ),
         )
     if (
@@ -2428,6 +2441,11 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "--workdir /policy",
         "--file /workspace/pom.xml",
         "python3 scripts/verify_trino_dependency_publisher.py authorize",
+        "publication-status --root .",
+        (
+            "Trino dependency publication is blocked pending "
+            "owner-authorized source remediation"
+        ),
         "python3 scripts/verify_trino_dependency_publisher.py audit-builder-settings",
         "python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log",
         "generate-maven-sbom",
@@ -2742,7 +2760,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
     publication = contract.get("publication", {})
     if (
-        publication.get("permitted") is not True
+        publication.get("permitted") is not False
         or publication.get("workflow_present") is not True
         or publication.get("workflow") != WORKFLOW_PATH.as_posix()
         or publication.get("allowed_ref") != "refs/heads/main"
@@ -2755,7 +2773,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
             "directories_and_symlinks_rejected": True,
         }
     ):
-        _fail("PUBLICATION", "publication lifecycle is not narrowly pending")
+        _fail("PUBLICATION", "blocked publication lifecycle differs")
     failed = contract.get("failed_publications")
     if (
         not isinstance(failed, list)
@@ -2814,10 +2832,10 @@ def audit(root: Path) -> None:
     _validate_source_overlay_contract(root, contract, at=None)
     lifecycle = contract.get("lifecycle", {})
     if lifecycle != {
-        "state": "dependency_snapshot_publication_pending",
+        "state": "source_remediation_authorization_pending",
         "contract_only": False,
         "dependency_artifact_present": False,
-        "publication_workflow_permitted": True,
+        "publication_workflow_permitted": False,
         "image_publication_permitted": False,
         "resident_admission_permitted": False,
         "runtime_reconciliation_permitted": False,
@@ -2891,7 +2909,7 @@ def audit(root: Path) -> None:
     if (
         admission.get("source_overlay_authorization")
         != EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION
-        or repository_state.get("publication_workflow_permitted") is not True
+        or repository_state.get("publication_workflow_permitted") is not False
         or repository_state.get("dependency_artifact_present") is not False
         or repository_state.get("resident_ledger_permitted") is not False
         or repository_state.get("runtime_manifests_permitted") is not False
@@ -2904,6 +2922,21 @@ def audit(root: Path) -> None:
     except OSError as error:
         _fail("WORKFLOW", str(error))
     _validate_workflow(contract, workflow)
+
+
+def publication_status(contract: dict[str, Any], admission: dict[str, Any]) -> str:
+    permissions = {
+        contract.get("lifecycle", {}).get("publication_workflow_permitted"),
+        contract.get("publication", {}).get("permitted"),
+        admission.get("repository_state", {}).get(
+            "publication_workflow_permitted"
+        ),
+    }
+    if permissions == {True}:
+        return "active"
+    if permissions == {False}:
+        return "blocked"
+    _fail("LIFECYCLE", "publication permission records disagree")
 
 
 def audit_source(root: Path, checkout: Path) -> None:
@@ -3026,6 +3059,8 @@ def _parser() -> argparse.ArgumentParser:
     authorize = commands.add_parser("authorize")
     authorize.add_argument("--root", type=Path, default=Path("."))
     authorize.add_argument("--at")
+    publication_status = commands.add_parser("publication-status")
+    publication_status.add_argument("--root", type=Path, default=Path("."))
     source = commands.add_parser("audit-source")
     source.add_argument("--root", type=Path, default=Path("."))
     source.add_argument("--checkout", type=Path, required=True)
@@ -3084,6 +3119,19 @@ def main() -> int:
                 "dependency_snapshot_publication_pending"
             ):
                 _fail("LIFECYCLE", "publisher is retired or not approved")
+            if (
+                contract.get("lifecycle", {}).get(
+                    "publication_workflow_permitted"
+                )
+                is not True
+                or contract.get("publication", {}).get("permitted") is not True
+            ):
+                _fail("LIFECYCLE", "publication is not permitted")
+        elif args.command == "publication-status":
+            root = args.root.resolve()
+            contract = _load_json(root / CONTRACT_PATH)
+            admission = _load_json(root / ADMISSION_PATH)
+            print(publication_status(contract, admission))
         elif args.command == "audit-source":
             audit_source(args.root.resolve(), args.checkout.resolve())
         elif args.command == "apply-source-overlay":

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import json
 import re
 import tempfile
@@ -39,6 +40,18 @@ TRINO_SOURCE_BUILD_ADR = (
 TRINO_PROVISIONAL_SOURCE_ADR = ROOT / (
     "docs/design/07_ADR/"
     "ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md"
+)
+TRINO_MAVEN_VULNERABILITY_CLASSIFICATION = ROOT / (
+    "docs/design/evidence/trino/"
+    "run-30331912718-maven-vulnerability-classification.json"
+)
+TRINO_MAVEN_VULNERABILITY_REPORT = ROOT / (
+    "docs/design/evidence/trino/"
+    "run-30331912718-trivy-vulnerability.json"
+)
+TRINO_MAVEN_CLOSURE_BLOCKER_ADR = ROOT / (
+    "docs/design/07_ADR/"
+    "ADR-0025_Keep_Trino_483_Maven_closure_blocked_pending_source_remediation.md"
 )
 TRINO_PROVISIONAL_APPROVAL_WINDOWS = {
     "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5052385803": (
@@ -1324,6 +1337,143 @@ def _trino_artifacts_violate_polaris_prerequisite(
         and postgresql_workloads
     )
     return trino_bootstrap_started and not polaris_runtime_complete
+
+
+class TrinoMavenVulnerabilityClassificationTests(unittest.TestCase):
+    def test_run_bound_classification_remains_fail_closed(self) -> None:
+        record = json.loads(
+            TRINO_MAVEN_VULNERABILITY_CLASSIFICATION.read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(1, record["schema_version"])
+        self.assertEqual(
+            "docs/design/evidence/trino/"
+            "run-30331912718-maven-vulnerability-classification.json",
+            record["record_path"],
+        )
+        self.assertEqual(30331912718, record["subject"]["workflow_run"])
+        self.assertEqual(
+            "9e371dca13b9268dbbcee33540046024843e1510",
+            record["subject"]["head_sha"],
+        )
+        self.assertEqual(
+            "sha256:"
+            "b507ea3df6ac0ff5ebb1676c4fb397852b33a16157522fa905ff7c04c040c819",
+            record["subject"]["diagnostic_artifact"]["digest"],
+        )
+        self.assertEqual(
+            4,
+            record["subject"]["diagnostic_artifact"]["exact_file_count"],
+        )
+        self.assertEqual(
+            {
+                "high_critical_occurrences": 64,
+                "package_version_groups": 40,
+                "physical_jar_paths": 37,
+                "official_trino_483_archive_verbatim_basename_matches": 0,
+            },
+            record["summary"],
+        )
+        self.assertEqual(
+            {
+                "physical_archive_absence_is_not_runtime_non_reachability": True,
+                "vulnerability_waiver_permitted": False,
+                "gate_status": "blocked",
+                "publication_reached": False,
+                "admission_reached": False,
+                "reason": "nonwaivable Maven High/Critical findings remain",
+            },
+            record["classification"],
+        )
+
+        paths = record["affected_paths"]
+        self.assertEqual(37, len(paths))
+        self.assertEqual(sorted(set(paths)), paths)
+        self.assertTrue(all(path.endswith(".jar") for path in paths))
+
+    def test_retained_report_recomputes_the_run_bound_classification(self) -> None:
+        record = json.loads(
+            TRINO_MAVEN_VULNERABILITY_CLASSIFICATION.read_text(encoding="utf-8")
+        )
+        report_bytes = TRINO_MAVEN_VULNERABILITY_REPORT.read_bytes()
+        report_input = record["inputs"]["trivy-vulnerability.json"]
+
+        self.assertEqual(
+            {
+                "sha256": (
+                    "ba6d9b2e2e1039e2720987bb04c644e5fdbf06084d9638d2"
+                    "cf33bf70482f4761"
+                ),
+                "bytes": 1426398,
+                "repository_path": (
+                    "docs/design/evidence/trino/"
+                    "run-30331912718-trivy-vulnerability.json"
+                ),
+            },
+            report_input,
+        )
+        self.assertEqual(report_input["bytes"], len(report_bytes))
+        self.assertEqual(
+            report_input["sha256"],
+            hashlib.sha256(report_bytes).hexdigest(),
+        )
+
+        report = json.loads(report_bytes)
+        findings = [
+            finding
+            for result in report["Results"]
+            for finding in result.get("Vulnerabilities", [])
+            if finding["Severity"] in {"HIGH", "CRITICAL"}
+        ]
+        package_versions = {
+            (finding["PkgName"], finding["InstalledVersion"])
+            for finding in findings
+        }
+        physical_paths = sorted({finding["PkgPath"] for finding in findings})
+
+        self.assertEqual(
+            record["summary"]["high_critical_occurrences"],
+            len(findings),
+        )
+        self.assertEqual(
+            record["summary"]["package_version_groups"],
+            len(package_versions),
+        )
+        self.assertEqual(
+            record["summary"]["physical_jar_paths"],
+            len(physical_paths),
+        )
+        self.assertEqual(record["affected_paths"], physical_paths)
+
+    def test_official_archive_comparison_is_bound_to_the_admission_source(
+        self,
+    ) -> None:
+        record = json.loads(
+            TRINO_MAVEN_VULNERABILITY_CLASSIFICATION.read_text(encoding="utf-8")
+        )
+        admission = json.loads(TRINO_ADMISSION.read_text(encoding="utf-8"))
+        server_asset = admission["source"]["server_asset"]
+
+        self.assertEqual(
+            {
+                "url": server_asset["url"],
+                "sha256": server_asset["sha256"],
+                "bytes": server_asset["bytes"],
+            },
+            record["inputs"]["official_trino_483_server_archive"],
+        )
+
+    def test_blocker_adr_cannot_be_mistaken_for_authorization(self) -> None:
+        adr = TRINO_MAVEN_CLOSURE_BLOCKER_ADR.read_text(encoding="utf-8")
+        normalized = " ".join(adr.split())
+
+        self.assertIn("\nstatus: proposed\n", adr)
+        self.assertIn(
+            "does not constitute the required owner authorization", normalized
+        )
+        self.assertIn("Do not add `.trivyignore`", adr)
+        self.assertIn("High=0/Critical=0 without waivers", adr)
+        self.assertIn("Issue #63 remains open", adr)
 
 
 class TrinoWorkloadDetectionTests(unittest.TestCase):
@@ -2807,7 +2957,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         assessment = self._admission()["assessment"]
         self.assertEqual(
             {
-                "assessed_on": "2026-07-26",
+                "assessed_on": "2026-07-28",
                 "scope": "mac-studio-solo/local-lite",
                 "admission": "blocked",
                 "exception_eligible": False,
@@ -2847,15 +2997,16 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     },
                     {
                         "control": "repository_source_build",
-                        "status": "publisher_repair_pending",
+                        "status": "source_remediation_authorization_required",
                         "evidence": (
-                            "main run 30231656483 published digest "
-                            "sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97"
-                            "e1e952499f8af5075c, but evidence review found an empty "
-                            "Maven SBOM/scan, missing OCI digest subjects, a non-"
-                            "recursive retained inventory, missing Trino tag-object "
-                            "provenance, and an unsigned anonymous-pull receipt; the "
-                            "object is a non-admitted failed attempt"
+                            "reviewed-main run 30331912718 failed closed on 64 "
+                            "nonwaivable Maven High/Critical occurrences across 40 "
+                            "package/version groups and 37 physical JAR paths; the "
+                            "exact report is retained at docs/design/evidence/trino/"
+                            "run-30331912718-trivy-vulnerability.json and ADR-0025 "
+                            "requires separate owner authorization plus independent "
+                            "review before source remediation or another publication "
+                            "attempt"
                         ),
                     },
                 ],
@@ -2866,10 +3017,13 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "for a time-boxed local PoC. ADR-0024 authorizes a four-path Web "
                     "UI dependency overlay and one not_affected OpenVEX assessment "
                     "through the same expiry; it is not a vulnerability risk "
-                    "acceptance. The raw finding remains retained, adjusted "
-                    "High=0/Critical=0 remains mandatory, the upstream image and "
-                    "server asset remain rejected, all image controls remain "
-                    "mandatory, and re-signing untrusted upstream bytes is forbidden."
+                    "acceptance. ADR-0025 records the run-bound Maven closure blocker "
+                    "and requires a separate owner-authorized, time-bounded source-"
+                    "remediation contract with independent review. The raw findings "
+                    "remain retained, High=0/Critical=0 without waivers remains "
+                    "mandatory, the upstream image and server asset remain rejected, "
+                    "all image controls remain mandatory, and re-signing untrusted "
+                    "upstream bytes is forbidden."
                 ),
             },
             assessment,
@@ -2905,7 +3059,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             admission["source_authentication"],
         )
         self.assertIs(
-            admission["repository_state"]["publication_workflow_permitted"], True
+            admission["repository_state"]["publication_workflow_permitted"], False
         )
 
     def test_provisional_source_authorization_is_bounded_and_fail_closed(self) -> None:
@@ -3090,7 +3244,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         self.assertEqual(
             {
                 "dependency_snapshot_contract_permitted": True,
-                "publication_workflow_permitted": True,
+                "publication_workflow_permitted": False,
                 "dependency_artifact_present": False,
                 "resident_ledger_permitted": False,
                 "runtime_manifests_permitted": False,
@@ -3118,6 +3272,20 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                         "ADR-0024_Apply_bounded_Trino_483_Web_UI_"
                         "dependency_overlay_and_OpenVEX.md"
                     ),
+                    (
+                        "docs/design/07_ADR/"
+                        "ADR-0025_Keep_Trino_483_Maven_closure_blocked_"
+                        "pending_source_remediation.md"
+                    ),
+                    "docs/design/context-manifest.json",
+                    (
+                        "docs/design/evidence/trino/"
+                        "run-30331912718-maven-vulnerability-classification.json"
+                    ),
+                    (
+                        "docs/design/evidence/trino/"
+                        "run-30331912718-trivy-vulnerability.json"
+                    ),
                     "scripts/package_trino_bun_dependencies.py",
                     "scripts/package_trino_maven_dependencies.py",
                     "scripts/prepare_trino_bun_input.py",
@@ -3144,7 +3312,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             "runtime_manifests_permitted",
         ):
             self.assertIs(repository_state[key], False)
-        self.assertIs(repository_state["publication_workflow_permitted"], True)
+        self.assertIs(repository_state["publication_workflow_permitted"], False)
         self.assertIs(
             repository_state["dependency_snapshot_contract_permitted"], True
         )
@@ -4153,17 +4321,17 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             rebuild["retained_output_evidence"],
         )
 
-    def test_dependency_snapshot_contract_allows_only_repaired_publication(
+    def test_dependency_snapshot_contract_blocks_publication_pending_authorization(
         self,
     ) -> None:
         contract = self._trusted_build_contract()
         lifecycle = contract["lifecycle"]
         self.assertEqual(
             {
-                "state": "dependency_snapshot_publication_pending",
+                "state": "source_remediation_authorization_pending",
                 "contract_only": False,
                 "dependency_artifact_present": False,
-                "publication_workflow_permitted": True,
+                "publication_workflow_permitted": False,
                 "image_publication_permitted": False,
                 "resident_admission_permitted": False,
                 "runtime_reconciliation_permitted": False,
@@ -4172,7 +4340,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertEqual(
             {
-                "permitted": True,
+                "permitted": False,
                 "workflow_present": True,
                 "workflow": (
                     ".github/workflows/trino-maven-dependencies.yml"
@@ -4245,7 +4413,9 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertTrue((ROOT / contract["publication"]["workflow"]).is_file())
 
-    def test_next_action_is_dependency_snapshot_publication_pending(self) -> None:
+    def test_next_action_requires_owner_source_remediation_authorization(
+        self,
+    ) -> None:
         next_action = self._admission()["next_action"]
         self.assertEqual(
             {
@@ -4258,10 +4428,10 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             set(next_action),
         )
         self.assertEqual(
-            "repository-owned-reproducible-source-build",
+            "owner-authorized-source-remediation-contract",
             next_action["mode"],
         )
-        self.assertIs(next_action["decision_record_required"], False)
+        self.assertIs(next_action["decision_record_required"], True)
         self.assertEqual(
             [
                 (
@@ -4274,17 +4444,31 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "ADR-0024_Apply_bounded_Trino_483_Web_UI_"
                     "dependency_overlay_and_OpenVEX.md"
                 ),
+                (
+                    "docs/design/07_ADR/"
+                    "ADR-0025_Keep_Trino_483_Maven_closure_blocked_"
+                    "pending_source_remediation.md"
+                ),
             ],
             next_action["decision_records"],
         )
         self.assertEqual(
-            "dependency_snapshot_publication_pending",
+            "source_remediation_authorization_pending",
             next_action["phase"],
         )
         self.assertEqual(
             [
                 "active and unexpired provisional source authorization bound to the "
                 "exact source repository, tag, commit, and tree",
+                (
+                    "separate owner authorization binding exact remediation "
+                    "repositories, commits, trees, preimages, postimages, permitted "
+                    "paths, dependency replacements, expiry, and rollback"
+                ),
+                (
+                    "independent reviewer approval distinct from the source-"
+                    "remediation author and owner"
+                ),
                 "authenticated closed dependency snapshot",
                 "network-none reproducible linux/arm64 build",
                 "digest-pinned builder and runtime bases",
@@ -4292,8 +4476,8 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "Cosign signature and transparency-log evidence",
                 "SLSA provenance bound to the source revision",
                 (
-                    "retained SBOM, raw vulnerability scan, exact OpenVEX, and "
-                    "fresh adjusted High=0/Critical=0 scan"
+                    "retained closure-complete SBOM, raw vulnerability scan, exact "
+                    "bounded OpenVEX, and fresh High=0/Critical=0 scan without waivers"
                 ),
                 "anonymous exact-digest retrieval before separate admission review",
             ],

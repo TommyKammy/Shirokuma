@@ -4,10 +4,10 @@
   "version": "483",
   "platform": "linux/arm64",
   "lifecycle": {
-    "state": "dependency_snapshot_publication_pending",
+    "state": "source_remediation_authorization_pending",
     "contract_only": false,
     "dependency_artifact_present": false,
-    "publication_workflow_permitted": true,
+    "publication_workflow_permitted": false,
     "image_publication_permitted": false,
     "resident_admission_permitted": false,
     "runtime_reconciliation_permitted": false
@@ -35,11 +35,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "477d0d1fe5a3a8e182b7d21baac88c7c7ec18e0007ee8c6826aa556e3d21adbe"
+      "sha256": "307e202c7960604b26174f6fad9e62bee59a1e9cbbe2493cd9a130ba115ee061"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "1ad3c1219d32a94532ef9fcd604e238ae9781d6e358860bec2f09fcfcece8a8b"
+      "sha256": "8887927bd5372b4d64b1946340878c8705279ad5bd8c2dec89d0aaab222bf013"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -658,7 +658,7 @@
     ]
   },
   "publication": {
-    "permitted": true,
+    "permitted": false,
     "workflow_present": true,
     "workflow": ".github/workflows/trino-maven-dependencies.yml",
     "allowed_ref": "refs/heads/main",
