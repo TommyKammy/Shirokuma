@@ -136,6 +136,10 @@ EXPECTED_PARQUET_SOURCE_REMEDIATION = {
     "expires_at": "2026-08-21T22:43:36Z",
     "automatic_renewal": False,
 }
+EXPECTED_PARQUET_REMEDIATION_JAR_PATH = (
+    "org/apache/parquet/parquet-jackson/1.17.1/"
+    "parquet-jackson-1.17.1.jar"
+)
 EXPECTED_BUN_PACKAGE_CACHE = {
     "bun_version": "v1.3.14",
     "platform": "linux/arm64",
@@ -1434,6 +1438,18 @@ def _maven_jar_records(
             _fail("MAVEN_SCAN_DESCRIPTOR", "Maven file identity differs")
         path = record.get("path")
         if isinstance(path, str) and path.endswith(".jar"):
+            repository_origin = record.get("repository_origin")
+            if not isinstance(repository_origin, str):
+                origin_is_expected = False
+            elif path == EXPECTED_PARQUET_REMEDIATION_JAR_PATH:
+                origin_is_expected = (
+                    repository_origin
+                    == EXPECTED_PARQUET_SOURCE_REMEDIATION["repository"]
+                )
+            else:
+                origin_is_expected = repository_origin in set(
+                    EXPECTED_REPOSITORIES.values()
+                )
             if (
                 path in records
                 or Path(path).is_absolute()
@@ -1452,9 +1468,7 @@ def _maven_jar_records(
                 is None
                 or not isinstance(record.get("size"), int)
                 or record["size"] <= 0
-                or not isinstance(record.get("repository_origin"), str)
-                or record["repository_origin"]
-                not in set(EXPECTED_REPOSITORIES.values())
+                or not origin_is_expected
             ):
                 _fail(
                     "MAVEN_SCAN_DESCRIPTOR",
