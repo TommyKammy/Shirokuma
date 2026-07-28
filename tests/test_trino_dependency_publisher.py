@@ -2304,7 +2304,7 @@ class PublisherContractTests(unittest.TestCase):
         ):
             verify._validate_workflow(contract, altered)
 
-    def test_pull_requests_apply_and_build_the_bounded_web_ui_overlay(self) -> None:
+    def test_pull_requests_are_static_only_while_publication_is_blocked(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
         )
@@ -2315,6 +2315,12 @@ class PublisherContractTests(unittest.TestCase):
             self.assertEqual(1, workflow.count(marker), marker)
 
         for marker in (
+            '                echo "source_validation_active=false" >> '
+            '"${GITHUB_OUTPUT}"\n',
+            (
+                '                echo "Pull requests perform static contract '
+                'validation only while publication is blocked"\n'
+            ),
             '          bun run --cwd "${modern}" typecheck\n',
             '          bun run --cwd "${legacy}" package:clean\n',
             verify.EXPECTED_PR_BUN_INPUT_BLOCK,

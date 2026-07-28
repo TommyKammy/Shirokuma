@@ -390,7 +390,7 @@ EXPECTED_BUN_STAGE_BLOCK = """\
 EXPECTED_PR_SOURCE_CONDITION = """\
         if: >-
           steps.lifecycle.outputs.active == 'true' ||
-          github.event_name == 'pull_request'
+          steps.lifecycle.outputs.source_validation_active == 'true'
 """
 EXPECTED_PR_BUN_INPUT_BLOCK = """\
           bun_archive="${RUNNER_TEMP}/bun-linux-aarch64-pr.zip"
@@ -409,10 +409,22 @@ EXPECTED_PR_BUN_INPUT_BLOCK = """\
 EXPECTED_PR_OVERLAY_BUILD_MARKERS = (
     '              echo "active=false" >> "${GITHUB_OUTPUT}"',
     (
+        '                echo "source_validation_active=false" >> '
+        '"${GITHUB_OUTPUT}"'
+    ),
+    (
+        '                echo "Pull requests perform static contract validation '
+        'only while publication is blocked"'
+    ),
+    (
+        '              echo "source_validation_active=true" >> '
+        '"${GITHUB_OUTPUT}"'
+    ),
+    (
         '              echo "Pull requests perform static and Web UI overlay '
         'build validation only"'
     ),
-    "        if: github.event_name == 'pull_request'",
+    "        if: steps.lifecycle.outputs.source_validation_active == 'true'",
     '          CI: "true"',
     "          BUN_CONFIG_REGISTRY: ${{ env.BUN_REGISTRY }}",
     "          BUN_INSTALL_CACHE_DIR: ${{ runner.temp }}/trino-pr-bun-cache",
@@ -2365,8 +2377,9 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         _fail(
             "WORKFLOW_PR_OVERLAY_VALIDATION",
             (
-                "pull requests must fetch, apply, and build the exact Web UI "
-                "overlay without enabling publication"
+                "blocked pull requests must remain static-only; authorized pull "
+                "requests must fetch, apply, and build the exact Web UI overlay "
+                "without enabling publication"
             ),
         )
     if (

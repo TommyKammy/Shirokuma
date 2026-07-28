@@ -122,17 +122,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          publication_status="$(
+            python3 scripts/verify_trino_dependency_publisher.py \
+              publication-status --root .
+          )"
           case "${GITHUB_EVENT_NAME}:${GITHUB_REF}" in
             pull_request:*)
               echo "active=false" >> "${GITHUB_OUTPUT}"
+              if [[ "${publication_status}" = "blocked" ]]; then
+                echo "source_validation_active=false" >> "${GITHUB_OUTPUT}"
+                echo "Pull requests perform static contract validation only while publication is blocked"
+                exit 0
+              fi
+              test "${publication_status}" = "active"
+              python3 scripts/verify_trino_dependency_publisher.py authorize --root .
+              echo "source_validation_active=true" >> "${GITHUB_OUTPUT}"
               echo "Pull requests perform static and Web UI overlay build validation only"
               ;;
             push:refs/heads/main)
               test "${GITHUB_SHA}" = "${GITHUB_WORKFLOW_SHA}"
-              publication_status="$(
-                python3 scripts/verify_trino_dependency_publisher.py \
-                  publication-status --root .
-              )"
+              echo "source_validation_active=false" >> "${GITHUB_OUTPUT}"
               if [[ "${publication_status}" = "blocked" ]]; then
                 printf 'active=false\n' >> "${GITHUB_OUTPUT}"
                 echo "Trino dependency publication is blocked pending owner-authorized source remediation"
@@ -228,7 +237,7 @@ jobs:
       - name: Fetch and verify the exact provisionally authorized source
         if: >-
           steps.lifecycle.outputs.active == 'true' ||
-          github.event_name == 'pull_request'
+          steps.lifecycle.outputs.source_validation_active == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -251,7 +260,7 @@ jobs:
       - name: Apply the bounded Web UI security overlay
         if: >-
           steps.lifecycle.outputs.active == 'true' ||
-          github.event_name == 'pull_request'
+          steps.lifecycle.outputs.source_validation_active == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -260,7 +269,7 @@ jobs:
             --root . --checkout "${RUNNER_TEMP}/trino-source"
 
       - name: Validate the bounded Web UI overlay before merge
-        if: github.event_name == 'pull_request'
+        if: steps.lifecycle.outputs.source_validation_active == 'true'
         env:
           CI: "true"
           BUN_CONFIG_REGISTRY: ${{ env.BUN_REGISTRY }}
