@@ -29,9 +29,13 @@ WORKFLOW_PATH = Path(".github/workflows/trino-maven-dependencies.yml")
 PACKAGER_PATH = Path("scripts/package_trino_maven_dependencies.py")
 BUN_PACKAGER_PATH = Path("scripts/package_trino_bun_dependencies.py")
 BUN_PREPARER_PATH = Path("scripts/prepare_trino_bun_input.py")
+PARQUET_REMEDIATION_PATH = Path("scripts/remediate_parquet_jackson.py")
 VERIFIER_PATH = Path("scripts/verify_trino_dependency_publisher.py")
 TEST_PATH = Path("tests/test_trino_dependency_publisher.py")
 BUN_TEST_PATH = Path("tests/test_trino_bun_dependencies.py")
+PARQUET_REMEDIATION_TEST_PATH = Path(
+    "tests/test_parquet_jackson_remediation.py"
+)
 SOURCE_OVERLAY_PATH = Path(
     "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch"
 )
@@ -42,6 +46,10 @@ VEX_PATH = Path(
 OVERLAY_ADR_PATH = Path(
     "docs/design/07_ADR/"
     "ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md"
+)
+PARQUET_REMEDIATION_ADR_PATH = Path(
+    "docs/design/07_ADR/"
+    "ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_source_remediation.md"
 )
 EXPECTED_REPOSITORY = "TommyKammy/Shirokuma"
 EXPECTED_SOURCE_REPOSITORY = "https://github.com/trinodb/trino"
@@ -76,6 +84,57 @@ EXPECTED_BUN_INPUT = {
     ],
     "redirect_policy": "manual_validate_before_request",
     "maximum_redirects": 5,
+}
+EXPECTED_PARQUET_SOURCE_REMEDIATION = {
+    "name": "parquet-jackson-source-remediation",
+    "coordinate": "org.apache.parquet:parquet-jackson:1.17.1",
+    "repository": "https://github.com/apache/parquet-java",
+    "release_tag": "apache-parquet-1.17.1",
+    "release_tag_object": "1f54ba44afb285fecbaf54bde5c0afa259327fc4",
+    "nested_rc_tag": "apache-parquet-1.17.1-rc0",
+    "nested_rc_tag_object": "172d200a7eb81161345bdccaf628af34178fc479",
+    "commit_sha": "78a8d3230eb4769db93de5f2f2e18363c04cae81",
+    "tree_sha": "28b877df95a7a661361b8776f6ebe21d73d8da6d",
+    "permitted_paths": ["pom.xml"],
+    "preimage": {
+        "path": "pom.xml",
+        "size": 24_493,
+        "sha256": (
+            "bfe7519b9886e9df51bfef8be52064b3aadcbf9ae21c77402d8a66837aa5442f"
+        ),
+    },
+    "replacements": [
+        {
+            "from": "<jackson.version>2.21.3</jackson.version>",
+            "to": "<jackson.version>2.21.4</jackson.version>",
+        },
+        {
+            "from": (
+                "<jackson-databind.version>2.21.3</jackson-databind.version>"
+            ),
+            "to": (
+                "<jackson-databind.version>2.21.4</jackson-databind.version>"
+            ),
+        },
+    ],
+    "postimage": {
+        "path": "pom.xml",
+        "size": 24_493,
+        "sha256": (
+            "e07982c0f114b592c06c2aba1254df9c280b69a2dd27f3a0739421fe84d12efa"
+        ),
+    },
+    "output_timestamp": "2026-05-08T01:45:35Z",
+    "independent_source_fetches": 2,
+    "independent_builds": 2,
+    "byte_identical_outputs_required": True,
+    "origin_id": "shirokuma-parquet-remediation",
+    "approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5105612399"
+    ),
+    "expires_at": "2026-08-21T22:43:36Z",
+    "automatic_renewal": False,
 }
 EXPECTED_BUN_PACKAGE_CACHE = {
     "bun_version": "v1.3.14",
@@ -311,6 +370,99 @@ EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION = {
     "adjusted_high_zero_critical_zero_required": True,
     "expiry_action": "fail_closed_before_dependency_resolution_or_publication",
 }
+EXPECTED_SOURCE_REMEDIATION = {
+    "state": "approved_bounded_parquet_jackson_1_17_1",
+    "decision_record": PARQUET_REMEDIATION_ADR_PATH.as_posix(),
+    "approval_record": EXPECTED_PARQUET_SOURCE_REMEDIATION["approval_record"],
+    "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
+    "expires_at": EXPECTED_PARQUET_SOURCE_REMEDIATION["expires_at"],
+    "automatic_renewal": False,
+    "risk_owner": "TommyKammy",
+    "implementation_author": "Codex",
+    "reviewer_must_differ_from_implementation_author": True,
+    "input": EXPECTED_PARQUET_SOURCE_REMEDIATION,
+    "outputs": [
+        (
+            "org/apache/parquet/parquet-jackson/1.17.1/"
+            "parquet-jackson-1.17.1.jar"
+        ),
+        (
+            "org/apache/parquet/parquet-jackson/1.17.1/"
+            "parquet-jackson-1.17.1.pom"
+        ),
+    ],
+    "high_zero_critical_zero_required": True,
+    "vulnerability_waiver_permitted": False,
+    "expiry_action": (
+        "fail_closed_before_source_execution_dependency_resolution_or_publication"
+    ),
+}
+EXPECTED_ADMISSION_SOURCE_REMEDIATION_AUTHORIZATION = {
+    "status": "active",
+    "authorization_type": (
+        "time_boxed_bounded_parquet_jackson_source_remediation"
+    ),
+    "decision_record": PARQUET_REMEDIATION_ADR_PATH.as_posix(),
+    "approval_record": EXPECTED_PARQUET_SOURCE_REMEDIATION["approval_record"],
+    "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
+    "expires_at": EXPECTED_PARQUET_SOURCE_REMEDIATION["expires_at"],
+    "automatic_renewal": False,
+    "risk_owner": "TommyKammy",
+    "implementation_author": "Codex",
+    "reviewer_must_differ_from_implementation_author": True,
+    "source_binding": {
+        key: EXPECTED_PARQUET_SOURCE_REMEDIATION[key]
+        for key in (
+            "repository",
+            "release_tag",
+            "release_tag_object",
+            "nested_rc_tag",
+            "nested_rc_tag_object",
+            "commit_sha",
+            "tree_sha",
+        )
+    },
+    "permitted_paths": ["pom.xml"],
+    "preimage_sha256": EXPECTED_PARQUET_SOURCE_REMEDIATION["preimage"][
+        "sha256"
+    ],
+    "postimage_sha256": EXPECTED_PARQUET_SOURCE_REMEDIATION["postimage"][
+        "sha256"
+    ],
+    "dependency_replacements": {
+        "jackson": "2.21.3 -> 2.21.4",
+        "jackson-databind": "2.21.3 -> 2.21.4",
+    },
+    "independent_source_fetches_required": 2,
+    "independent_builds_required": 2,
+    "byte_identical_outputs_required": True,
+    "vulnerability_risk_accepted": False,
+    "high_zero_critical_zero_required": True,
+    "expiry_action": (
+        "fail_closed_before_source_execution_dependency_resolution_or_publication"
+    ),
+}
+EXPECTED_PARQUET_SLSA_RESOLVED_DEPENDENCY = {
+    "claim_path": "predicate.buildDefinition.resolvedDependencies",
+    "required_uri": (
+        "git+https://github.com/apache/parquet-java"
+        "@refs/tags/apache-parquet-1.17.1"
+    ),
+    "required_digest": {
+        "gitTagObject": "1f54ba44afb285fecbaf54bde5c0afa259327fc4",
+        "gitNestedTagObject": "172d200a7eb81161345bdccaf628af34178fc479",
+        "gitCommit": "78a8d3230eb4769db93de5f2f2e18363c04cae81",
+        "gitTree": "28b877df95a7a661361b8776f6ebe21d73d8da6d",
+        "sourcePreimageSha256": (
+            "bfe7519b9886e9df51bfef8be52064b3aadcbf9ae21c77402d8a66837aa5442f"
+        ),
+        "sourcePostimageSha256": (
+            "e07982c0f114b592c06c2aba1254df9c280b69a2dd27f3a0739421fe84d12efa"
+        ),
+    },
+    "exactly_one_matching_descriptor_required": True,
+    "source_checkout_must_match_descriptor": True,
+}
 EXPECTED_TRINO_BUILD_EXTENSION = {
     "group_id": "io.trino",
     "artifact_id": "trino-maven-plugin",
@@ -527,6 +679,34 @@ EXPECTED_SLSA_STATEMENT_ATTESTATION_BLOCK = """\
             --attestation "${candidate}/cosign-provenance-bundle.json" \\
             "${PUBLISHED_REFERENCE}"
 """
+EXPECTED_PARQUET_SLSA_RESOLVED_DEPENDENCY_BLOCK = """\
+                      {
+                          "uri": (
+                              "git+https://github.com/apache/parquet-java"
+                              "@refs/tags/apache-parquet-1.17.1"
+                          ),
+                          "digest": {
+                              "gitTagObject": os.environ[
+                                  "PARQUET_RELEASE_TAG_OBJECT"
+                              ],
+                              "gitNestedTagObject": os.environ[
+                                  "PARQUET_RC_TAG_OBJECT"
+                              ],
+                              "gitCommit": os.environ[
+                                  "PARQUET_SOURCE_COMMIT"
+                              ],
+                              "gitTree": os.environ["PARQUET_SOURCE_TREE"],
+                              "sourcePreimageSha256": (
+                                  "bfe7519b9886e9df51bfef8be52064b3"
+                                  "aadcbf9ae21c77402d8a66837aa5442f"
+                              ),
+                              "sourcePostimageSha256": (
+                                  "e07982c0f114b592c06c2aba1254df9c"
+                                  "280b69a2dd27f3a0739421fe84d12efa"
+                              ),
+                          },
+                      },
+"""
 EXPECTED_REPOSITORY_MIRRORS = (
     (
         ("id", "shirokuma-central"),
@@ -641,6 +821,7 @@ EXPECTED_STEPS = {
         "Verify the native arm64 builder substrate",
         "Fetch and verify the exact provisionally authorized source",
         "Apply the bounded Web UI security overlay",
+        "Fetch and prepare the exact Parquet Jackson remediation sources",
         "Validate the bounded Web UI overlay before merge",
         "Resolve and package the first closed Maven repository",
         "Independently reconstruct the closed Maven repository",
@@ -861,6 +1042,25 @@ def _validate_source_overlay_contract(
         _fail("SOURCE_OVERLAY", "overlay outlives source authorization")
     if at is not None and at >= expires:
         _fail("SOURCE_OVERLAY_EXPIRED", expires.isoformat())
+
+
+def _validate_source_remediation_contract(
+    contract: Mapping[str, Any],
+    *,
+    at: dt.datetime | None,
+) -> None:
+    remediation = contract.get("source_remediation")
+    if remediation != EXPECTED_SOURCE_REMEDIATION:
+        _fail("SOURCE_REMEDIATION", "exact Parquet source remediation differs")
+    expires = _parse_time(EXPECTED_SOURCE_REMEDIATION["expires_at"])
+    authorization_expires = _parse_time(contract["authorization"]["expires_at"])
+    if expires > authorization_expires:
+        _fail(
+            "SOURCE_REMEDIATION",
+            "Parquet remediation outlives source authorization",
+        )
+    if at is not None and at >= expires:
+        _fail("SOURCE_REMEDIATION_EXPIRED", expires.isoformat())
 
 
 def _validate_react_router_import_inventory(checkout: Path) -> None:
@@ -2367,7 +2567,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
     ):
         _fail("WORKFLOW_TRIGGER", "only PR validation and main push are allowed")
     if (
-        workflow.count(EXPECTED_PR_SOURCE_CONDITION) != 2
+        workflow.count(EXPECTED_PR_SOURCE_CONDITION) != 3
         or workflow.count(EXPECTED_PR_BUN_INPUT_BLOCK) != 1
         or any(
             workflow.count(marker) != 1
@@ -2410,12 +2610,15 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         PACKAGER_PATH,
         BUN_PACKAGER_PATH,
         BUN_PREPARER_PATH,
+        PARQUET_REMEDIATION_PATH,
         VERIFIER_PATH,
         TEST_PATH,
         BUN_TEST_PATH,
+        PARQUET_REMEDIATION_TEST_PATH,
         SOURCE_OVERLAY_PATH,
         VEX_PATH,
         OVERLAY_ADR_PATH,
+        PARQUET_REMEDIATION_ADR_PATH,
         Path("Makefile"),
     ):
         if lines.count(f"      - {path.as_posix()}") != 2:
@@ -2432,6 +2635,11 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         'test "$(uname -m)" = "aarch64"',
         "--network none",
         EXPECTED_SOURCE_REPOSITORY,
+        EXPECTED_PARQUET_SOURCE_REMEDIATION["repository"],
+        EXPECTED_PARQUET_SOURCE_REMEDIATION["commit_sha"],
+        EXPECTED_PARQUET_SOURCE_REMEDIATION["tree_sha"],
+        EXPECTED_PARQUET_SOURCE_REMEDIATION["release_tag_object"],
+        EXPECTED_PARQUET_SOURCE_REMEDIATION["nested_rc_tag_object"],
         EXPECTED_COMMIT,
         EXPECTED_TREE,
         EXPECTED_TAG_OBJECT,
@@ -2448,6 +2656,10 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         ),
         "python3 scripts/verify_trino_dependency_publisher.py audit-builder-settings",
         "python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log",
+        "python3 scripts/remediate_parquet_jackson.py prepare-source",
+        "python3 scripts/remediate_parquet_jackson.py stage-artifact",
+        "python3 scripts/remediate_parquet_jackson.py seal-artifact",
+        "python3 scripts/remediate_parquet_jackson.py compare-artifacts",
         "generate-maven-sbom",
         "verify-maven-scan",
         "bind-artifact-evidence",
@@ -2544,6 +2756,8 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
     if (
         workflow.count(EXPECTED_SLSA_STATEMENT_ATTESTATION_BLOCK) != 1
+        or workflow.count(EXPECTED_PARQUET_SLSA_RESOLVED_DEPENDENCY_BLOCK)
+        != 1
         or 'cosign attest --yes \\\n' in workflow
         or '--predicate "${candidate}/slsa-provenance.json"' in workflow
     ):
@@ -2555,14 +2769,59 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
             ),
         )
     if (
-        workflow.count(EXPECTED_SETTINGS_MOUNT) != 3
-        or workflow.count(f"{EXPECTED_SETTINGS_ARGUMENT} \\\n") != 3
+        workflow.count(EXPECTED_SETTINGS_MOUNT) != 5
+        or workflow.count(f"{EXPECTED_SETTINGS_ARGUMENT} \\\n") != 5
+        or lines.count(f"            {EXPECTED_SETTINGS_MOUNT} \\") != 4
+        or lines.count(f"              {EXPECTED_SETTINGS_MOUNT} \\") != 1
     ):
         _fail(
             "WORKFLOW_SETTINGS",
             (
                 "both online resolvers and the two-run network-none rebuild "
                 "must use the exact read-only repository settings"
+            ),
+        )
+    if (
+        workflow.count(
+            "python3 scripts/remediate_parquet_jackson.py prepare-source"
+        )
+        != 1
+        or workflow.count(
+            "python3 scripts/remediate_parquet_jackson.py stage-artifact"
+        )
+        != 2
+        or workflow.count(
+            "python3 scripts/remediate_parquet_jackson.py seal-artifact"
+        )
+        != 2
+        or workflow.count(
+            "python3 scripts/remediate_parquet_jackson.py compare-artifacts"
+        )
+        != 1
+        or workflow.count(
+            '-Dproject.build.outputTimestamp="${PARQUET_OUTPUT_TIMESTAMP}"'
+        )
+        != 2
+        or workflow.count(
+            "              --ignore-transitive-repositories \\\n"
+        )
+        != 4
+        or workflow.count('--volume "${parquet_source}:/workspace" \\') != 2
+        or workflow.count(
+            '--volume "${parquet_repository}:/m2" \\'
+        )
+        != 2
+        or workflow.count(
+            '"${RUNNER_TEMP}/parquet-source-${suffix}"'
+        )
+        != 1
+        or "suffixes+=(b)" not in workflow
+    ):
+        _fail(
+            "WORKFLOW_SOURCE_REMEDIATION",
+            (
+                "the exact Parquet source must be independently fetched, "
+                "built twice, compared, staged, and sealed"
             ),
         )
     if (
@@ -2646,7 +2905,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
     if (
         lines.count("  BUN_CACHE_DIRECTORY: /bun-cache") != 1
         or lines.count("  BUN_REGISTRY: https://registry.npmjs.org/") != 1
-        or workflow.count('--env CI=true \\') != 3
+        or workflow.count('--env CI=true \\') != 5
         or workflow.count(
             '--env BUN_INSTALL_CACHE_DIR="${BUN_CACHE_DIRECTORY}" \\'
         )
@@ -2760,12 +3019,17 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
     publication = contract.get("publication", {})
     if (
-        publication.get("permitted") is not False
+        publication.get("permitted") is not True
         or publication.get("workflow_present") is not True
         or publication.get("workflow") != WORKFLOW_PATH.as_posix()
         or publication.get("allowed_ref") != "refs/heads/main"
         or publication.get("artifact_role") != "review_pending_dependency_evidence"
         or publication.get("retire_in_evidence_review_pr") is not True
+        or publication.get("pull_request_behavior")
+        != (
+            "static_and_authorized_source_overlay_and_remediation_"
+            "validation_without_publication"
+        )
         or publication.get("evidence_review_inventory_policy")
         != {
             "recursive_closed_world_required": True,
@@ -2801,12 +3065,15 @@ def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
         PACKAGER_PATH,
         BUN_PACKAGER_PATH,
         BUN_PREPARER_PATH,
+        PARQUET_REMEDIATION_PATH,
         VERIFIER_PATH,
         TEST_PATH,
         BUN_TEST_PATH,
+        PARQUET_REMEDIATION_TEST_PATH,
         SOURCE_OVERLAY_PATH,
         VEX_PATH,
         OVERLAY_ADR_PATH,
+        PARQUET_REMEDIATION_ADR_PATH,
     }
     policy_files = contract.get("policy_files")
     if not isinstance(policy_files, list):
@@ -2830,12 +3097,13 @@ def audit(root: Path) -> None:
     admission = _load_json(root / ADMISSION_PATH)
     _validate_authorization(contract, at=None)
     _validate_source_overlay_contract(root, contract, at=None)
+    _validate_source_remediation_contract(contract, at=None)
     lifecycle = contract.get("lifecycle", {})
     if lifecycle != {
-        "state": "source_remediation_authorization_pending",
+        "state": "dependency_snapshot_publication_pending",
         "contract_only": False,
         "dependency_artifact_present": False,
-        "publication_workflow_permitted": False,
+        "publication_workflow_permitted": True,
         "image_publication_permitted": False,
         "resident_admission_permitted": False,
         "runtime_reconciliation_permitted": False,
@@ -2871,7 +3139,11 @@ def audit(root: Path) -> None:
         ]
         or dependency_resolution.get("settings_policy")
         != EXPECTED_SETTINGS_POLICY
-        or dependency_resolution.get("external_inputs") != [EXPECTED_BUN_INPUT]
+        or dependency_resolution.get("external_inputs")
+        != [
+            EXPECTED_BUN_INPUT,
+            EXPECTED_PARQUET_SOURCE_REMEDIATION,
+        ]
         or dependency_resolution.get("bun_package_cache")
         != EXPECTED_BUN_PACKAGE_CACHE
         or reactor_outputs.get("repository_path_prefix") != "io/trino/"
@@ -2905,11 +3177,22 @@ def audit(root: Path) -> None:
         "user_credential_fallback": False,
     }:
         _fail("VISIBILITY", "first-publication visibility contract differs")
+    provenance = snapshot.get("authentication", {}).get("provenance", {})
+    if (
+        provenance.get("parquet_source_remediation_resolved_dependency")
+        != EXPECTED_PARQUET_SLSA_RESOLVED_DEPENDENCY
+    ):
+        _fail(
+            "SLSA_SOURCE_REMEDIATION",
+            "Parquet source remediation provenance binding differs",
+        )
     repository_state = admission.get("repository_state", {})
     if (
         admission.get("source_overlay_authorization")
         != EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION
-        or repository_state.get("publication_workflow_permitted") is not False
+        or admission.get("source_remediation_authorization")
+        != EXPECTED_ADMISSION_SOURCE_REMEDIATION_AUTHORIZATION
+        or repository_state.get("publication_workflow_permitted") is not True
         or repository_state.get("dependency_artifact_present") is not False
         or repository_state.get("resident_ledger_permitted") is not False
         or repository_state.get("runtime_manifests_permitted") is not False
@@ -3047,6 +3330,7 @@ def audit_transfer_log(path: Path) -> None:
         if not any(normalized.startswith(prefix) for prefix in allowed):
             _fail("TRANSFER_LOG", f"non-allowlisted Maven transfer: {url}")
         observed += 1
+        observed += 1
     if observed == 0:
         _fail("TRANSFER_LOG", "no Maven repository transfers were observed")
 
@@ -3115,6 +3399,12 @@ def main() -> int:
                 else dt.datetime.now(dt.timezone.utc)
             )
             _validate_authorization(contract, at=instant)
+            _validate_source_overlay_contract(
+                args.root.resolve(),
+                contract,
+                at=instant,
+            )
+            _validate_source_remediation_contract(contract, at=instant)
             if contract.get("lifecycle", {}).get("state") != (
                 "dependency_snapshot_publication_pending"
             ):

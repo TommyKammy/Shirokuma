@@ -2,10 +2,11 @@
 project: Shirokuma
 doc_id: "ADR-0025"
 title: "Keep the Trino 483 Maven closure blocked pending source remediation"
-status: proposed
+status: superseded
 created: 2026-07-28
 updated: 2026-07-28
-version: "0.1"
+version: "0.2"
+superseded_by: "ADR-0026"
 area: "architecture"
 tags: [shirokuma, adr, trino, maven, supply-chain, vulnerability]
 ---
@@ -57,7 +58,7 @@ used for the basename comparison. The short-lived Actions artifact remains
 run identity evidence, but is no longer the only source from which reviewers
 can recompute the 64/40/37 counts.
 
-## Proposed decision
+## Decision at the time
 
 - Keep the Maven dependency publisher fail-closed. Do not publish, sign,
   attest, admit, or consume the failed candidate.
@@ -82,15 +83,18 @@ can recompute the 64/40/37 counts.
   `TommyKammy` must own the expanded source decision, and a different reviewer
   must approve it before merge.
 
-This proposal does not modify ADR-0023 or ADR-0024 and does not constitute the
-required owner authorization. Until that authorization exists, the current
-publisher and admission state remain blocked.
+This decision did not modify ADR-0023 or ADR-0024 and did not itself constitute
+the required owner authorization. ADR-0026 and Issue #63 comment `5105612399`
+now provide the exact owner authorization for the first Parquet Jackson
+remediation boundary. ADR-0026 supersedes only the authorization-pending
+lifecycle; the retained evidence, no-waiver rule, and all verification gates
+in this ADR remain active.
 
 ## Consequences
 
-The Trino PoC remains blocked at the Maven dependency evidence boundary. This
-is slower than weakening the build-closure gate, but avoids converting newly
-disclosed build inputs into an undocumented exception.
+The Trino PoC remained blocked at the Maven dependency evidence boundary until
+ADR-0026. The dependency publisher may now produce reviewed evidence for the
+exact authorized remediation, but runtime admission remains blocked.
 
 Issue #63 remains open. No dependency artifact, image, resident exception,
 Flux object, runtime, or Iceberg query is authorized by this proposal.

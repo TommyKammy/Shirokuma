@@ -705,7 +705,7 @@ REVIEW_PENDING_WORKFLOW_INVENTORY = {
         "3f8c098cf514bf2f38f51ab35c7d5db4437a9b59f73780e8f85221b654f3f5f0"
     ),
     ".github/workflows/trino-maven-dependencies.yml": (
-        "cb9047e4a25587fcb612aa242b7562ca7a3410300a71a03078cb347060b72cb0"
+        "64d4ba3a605f65217090f09841ce13b6c48fc98fca5dbe0f62107c46bae917e8"
     ),
 }
 PENDING_SCRIPT_FILE_INVENTORY = {
@@ -728,10 +728,13 @@ PENDING_SCRIPT_FILE_INVENTORY = {
         "4bd48cf0da86b1406cfe6a9baa9c0f2aefbaed2f590961d800ce479c0db588fe"
     ),
     "scripts/package_trino_maven_dependencies.py": (
-        "88e5bbf0801f32832d7105887136e24de3e162398360816264c47ce1db7c9805"
+        "aa46b00acd1116e987e7546ed39bac3166bd7f375283d79f3e5534e914c8d2a6"
     ),
     "scripts/prepare_trino_bun_input.py": (
         "4af7467ad9ae58f4e7fc150a93fa30d7e76e2563c48075e644819e63fbe55ebe"
+    ),
+    "scripts/remediate_parquet_jackson.py": (
+        "0d18734b909ec7bdad4d93a67aebef269ae373a1312a380feabc3bcd912b3d8c"
     ),
     "scripts/package_polaris_gradle_dependencies.py": (
         POLARIS_DEPENDENCY_PACKAGER_SHA256
@@ -779,7 +782,7 @@ PENDING_SCRIPT_FILE_INVENTORY = {
         "75cee002d5749c0ec91629edb905c27362bee5c0813b0cbefcb59f161734f445"
     ),
     "scripts/verify_trino_dependency_publisher.py": (
-        "307e202c7960604b26174f6fad9e62bee59a1e9cbbe2493cd9a130ba115ee061"
+        "1e95ee6bc0e498ccea4a0cbc394de3caba83ff072085922f4704a34b73a13dcc"
     ),
     "scripts/verify_trusted_image.py": (
         "cc569a5ee10400ad657f7648ccc2c14e8fd21691adfdc9e155212b16dc0afba0"
