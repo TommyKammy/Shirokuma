@@ -440,6 +440,52 @@ EXPECTED_RECORD_TRIVY_CACHE_BLOCK = """\
           candidate="${GITHUB_WORKSPACE}/.trino-candidate"
           trivy version --format json > "${candidate}/trivy-version.json"
 """
+EXPECTED_MAVEN_SCAN_REPORT_BLOCK = """\
+      - name: Scan the dependency closure and record High or Critical findings
+        if: steps.lifecycle.outputs.active == 'true'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.72.0
+          scan-type: sbom
+          scan-ref: .trino-candidate/trino-maven-dependencies-483.cdx.json
+          format: json
+          output: .trino-candidate/trivy-vulnerability.json
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          vuln-type: library
+          list-all-pkgs: true
+          exit-code: 0
+"""
+EXPECTED_MAVEN_FAILURE_DIAGNOSTIC_BLOCK = """\
+      - name: Retain failed Maven vulnerability diagnostics
+        if: >-
+          failure() &&
+          steps.lifecycle.outputs.active == 'true' &&
+          steps.verify_maven_scan.outcome == 'failure'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: >-
+            trino-maven-vulnerability-diagnostics-${{ github.run_id }}-${{
+            github.run_attempt }}
+          include-hidden-files: true
+          path: |
+            .trino-candidate/maven-dependency-manifest.json
+            .trino-candidate/trino-maven-rootfs-483.cdx.json
+            .trino-candidate/trino-maven-dependencies-483.cdx.json
+            .trino-candidate/trivy-vulnerability.json
+          if-no-files-found: error
+          retention-days: 14
+"""
+EXPECTED_CANDIDATE_HIDDEN_UPLOAD_BLOCK = """\
+      - name: Retain the read-only-verified candidate
+        if: steps.lifecycle.outputs.active == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.record.outputs.candidate_artifact_name }}
+          include-hidden-files: true
+          path: |
+"""
 EXPECTED_ORAS_PUSH_BLOCK = """\
           (
             cd "${candidate}"
@@ -570,7 +616,7 @@ DEFAULT_HTTP_BLOCKER = (
 )
 EXPECTED_ACTIONS = {
     "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10": 2,
-    "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02": 2,
+    "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02": 3,
     "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c": 1,
     "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25": 4,
     "sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6": 1,
@@ -589,8 +635,9 @@ EXPECTED_STEPS = {
         "Prove two fresh network-none offline source builds",
         "Generate the raw rootfs Maven JAR inventory",
         "Generate the closure-complete Maven CycloneDX SBOM",
-        "Scan the dependency closure and block High or Critical findings",
-        "Verify the complete Maven JAR scan inventory",
+        "Scan the dependency closure and record High or Critical findings",
+        "Verify and block the complete Maven JAR scan inventory",
+        "Retain failed Maven vulnerability diagnostics",
         "Stage the exact Bun lockfiles for dependency analysis",
         "Generate a CycloneDX Bun dependency SBOM",
         "Retain the raw Bun High or Critical findings",
@@ -2440,6 +2487,21 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
             (
                 "Maven discovery must use the exact repository rootfs and "
                 "the scan must consume its closed SBOM"
+            ),
+        )
+    if (
+        workflow.count(EXPECTED_MAVEN_SCAN_REPORT_BLOCK) != 1
+        or workflow.count(EXPECTED_MAVEN_FAILURE_DIAGNOSTIC_BLOCK) != 1
+        or workflow.count(EXPECTED_CANDIDATE_HIDDEN_UPLOAD_BLOCK) != 1
+        or workflow.count("        id: verify_maven_scan") != 1
+        or lines.count("          include-hidden-files: true") != 2
+    ):
+        _fail(
+            "WORKFLOW_MAVEN_DIAGNOSTICS",
+            (
+                "the report-only Maven scan must feed the explicit blocking "
+                "verifier, and both exact hidden candidate inventories must "
+                "be explicitly retained"
             ),
         )
     if (

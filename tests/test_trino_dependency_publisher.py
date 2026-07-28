@@ -1831,6 +1831,71 @@ class PublisherContractTests(unittest.TestCase):
         ):
             verify._validate_workflow(contract, altered)
 
+    def test_maven_scan_failure_diagnostics_are_exact_and_non_admitting(
+        self,
+    ) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        self.assertEqual(
+            1,
+            workflow.count(verify.EXPECTED_MAVEN_SCAN_REPORT_BLOCK),
+        )
+        self.assertEqual(
+            1,
+            workflow.count(verify.EXPECTED_MAVEN_FAILURE_DIAGNOSTIC_BLOCK),
+        )
+        self.assertEqual(
+            1,
+            workflow.count(verify.EXPECTED_CANDIDATE_HIDDEN_UPLOAD_BLOCK),
+        )
+        self.assertEqual(2, workflow.count("include-hidden-files: true"))
+        mutations = (
+            (
+                verify.EXPECTED_MAVEN_SCAN_REPORT_BLOCK,
+                "          exit-code: 0\n",
+                "          exit-code: 1\n",
+            ),
+            (
+                verify.EXPECTED_MAVEN_FAILURE_DIAGNOSTIC_BLOCK,
+                "          steps.verify_maven_scan.outcome == 'failure'\n",
+                "          always()\n",
+            ),
+            (
+                verify.EXPECTED_MAVEN_FAILURE_DIAGNOSTIC_BLOCK,
+                "          include-hidden-files: true\n",
+                "          include-hidden-files: false\n",
+            ),
+            (
+                verify.EXPECTED_MAVEN_FAILURE_DIAGNOSTIC_BLOCK,
+                "            .trino-candidate/trino-maven-rootfs-483.cdx.json\n",
+                "",
+            ),
+            (
+                verify.EXPECTED_MAVEN_FAILURE_DIAGNOSTIC_BLOCK,
+                "          retention-days: 14\n",
+                "          retention-days: 30\n",
+            ),
+            (
+                verify.EXPECTED_CANDIDATE_HIDDEN_UPLOAD_BLOCK,
+                "          include-hidden-files: true\n",
+                "",
+            ),
+        )
+        for block, original, replacement in mutations:
+            altered = workflow.replace(
+                block,
+                block.replace(original, replacement, 1),
+                1,
+            )
+            with self.subTest(original=original):
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "WORKFLOW_MAVEN_DIAGNOSTICS",
+                ):
+                    verify._validate_workflow(contract, altered)
+
     def test_descriptor_records_the_complete_reviewed_bun_contract(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")

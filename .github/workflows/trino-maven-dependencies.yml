@@ -601,7 +601,7 @@ jobs:
             --rootfs-sbom .trino-candidate/trino-maven-rootfs-483.cdx.json \
             --output .trino-candidate/trino-maven-dependencies-483.cdx.json
 
-      - name: Scan the dependency closure and block High or Critical findings
+      - name: Scan the dependency closure and record High or Critical findings
         if: steps.lifecycle.outputs.active == 'true'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -615,10 +615,11 @@ jobs:
           ignore-unfixed: false
           vuln-type: library
           list-all-pkgs: true
-          exit-code: 1
+          exit-code: 0
 
-      - name: Verify the complete Maven JAR scan inventory
+      - name: Verify and block the complete Maven JAR scan inventory
         if: steps.lifecycle.outputs.active == 'true'
+        id: verify_maven_scan
         shell: bash
         run: |
           set -euo pipefail
@@ -627,6 +628,25 @@ jobs:
             --descriptor .trino-candidate/maven-dependency-manifest.json \
             --sbom .trino-candidate/trino-maven-dependencies-483.cdx.json \
             --report .trino-candidate/trivy-vulnerability.json
+
+      - name: Retain failed Maven vulnerability diagnostics
+        if: >-
+          failure() &&
+          steps.lifecycle.outputs.active == 'true' &&
+          steps.verify_maven_scan.outcome == 'failure'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: >-
+            trino-maven-vulnerability-diagnostics-${{ github.run_id }}-${{
+            github.run_attempt }}
+          include-hidden-files: true
+          path: |
+            .trino-candidate/maven-dependency-manifest.json
+            .trino-candidate/trino-maven-rootfs-483.cdx.json
+            .trino-candidate/trino-maven-dependencies-483.cdx.json
+            .trino-candidate/trivy-vulnerability.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Stage the exact Bun lockfiles for dependency analysis
         if: steps.lifecycle.outputs.active == 'true'
@@ -783,6 +803,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ steps.record.outputs.candidate_artifact_name }}
+          include-hidden-files: true
           path: |
             .trino-candidate/candidate.sha256
             .trino-candidate/bun-dependency-manifest.json
