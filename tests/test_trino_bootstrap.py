@@ -40,6 +40,14 @@ TRINO_PROVISIONAL_SOURCE_ADR = ROOT / (
     "docs/design/07_ADR/"
     "ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md"
 )
+TRINO_MAVEN_VULNERABILITY_CLASSIFICATION = ROOT / (
+    "docs/design/evidence/trino/"
+    "run-30331912718-maven-vulnerability-classification.json"
+)
+TRINO_MAVEN_CLOSURE_BLOCKER_ADR = ROOT / (
+    "docs/design/07_ADR/"
+    "ADR-0025_Keep_Trino_483_Maven_closure_blocked_pending_source_remediation.md"
+)
 TRINO_PROVISIONAL_APPROVAL_WINDOWS = {
     "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5052385803": (
         "2026-07-22T22:43:36Z",
@@ -1324,6 +1332,71 @@ def _trino_artifacts_violate_polaris_prerequisite(
         and postgresql_workloads
     )
     return trino_bootstrap_started and not polaris_runtime_complete
+
+
+class TrinoMavenVulnerabilityClassificationTests(unittest.TestCase):
+    def test_run_bound_classification_remains_fail_closed(self) -> None:
+        record = json.loads(
+            TRINO_MAVEN_VULNERABILITY_CLASSIFICATION.read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(1, record["schema_version"])
+        self.assertEqual(
+            "docs/design/evidence/trino/"
+            "run-30331912718-maven-vulnerability-classification.json",
+            record["record_path"],
+        )
+        self.assertEqual(30331912718, record["subject"]["workflow_run"])
+        self.assertEqual(
+            "9e371dca13b9268dbbcee33540046024843e1510",
+            record["subject"]["head_sha"],
+        )
+        self.assertEqual(
+            "sha256:"
+            "b507ea3df6ac0ff5ebb1676c4fb397852b33a16157522fa905ff7c04c040c819",
+            record["subject"]["diagnostic_artifact"]["digest"],
+        )
+        self.assertEqual(
+            4,
+            record["subject"]["diagnostic_artifact"]["exact_file_count"],
+        )
+        self.assertEqual(
+            {
+                "high_critical_occurrences": 64,
+                "package_version_groups": 40,
+                "physical_jar_paths": 37,
+                "official_trino_483_archive_verbatim_basename_matches": 0,
+            },
+            record["summary"],
+        )
+        self.assertEqual(
+            {
+                "physical_archive_absence_is_not_runtime_non_reachability": True,
+                "vulnerability_waiver_permitted": False,
+                "gate_status": "blocked",
+                "publication_reached": False,
+                "admission_reached": False,
+                "reason": "nonwaivable Maven High/Critical findings remain",
+            },
+            record["classification"],
+        )
+
+        paths = record["affected_paths"]
+        self.assertEqual(37, len(paths))
+        self.assertEqual(sorted(set(paths)), paths)
+        self.assertTrue(all(path.endswith(".jar") for path in paths))
+
+    def test_blocker_adr_cannot_be_mistaken_for_authorization(self) -> None:
+        adr = TRINO_MAVEN_CLOSURE_BLOCKER_ADR.read_text(encoding="utf-8")
+        normalized = " ".join(adr.split())
+
+        self.assertIn("\nstatus: proposed\n", adr)
+        self.assertIn(
+            "does not constitute the required owner authorization", normalized
+        )
+        self.assertIn("Do not add `.trivyignore`", adr)
+        self.assertIn("High=0/Critical=0 without waivers", adr)
+        self.assertIn("Issue #63 remains open", adr)
 
 
 class TrinoWorkloadDetectionTests(unittest.TestCase):
