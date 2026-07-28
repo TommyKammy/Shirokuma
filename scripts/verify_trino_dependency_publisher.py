@@ -468,6 +468,7 @@ EXPECTED_MAVEN_FAILURE_DIAGNOSTIC_BLOCK = """\
           name: >-
             trino-maven-vulnerability-diagnostics-${{ github.run_id }}-${{
             github.run_attempt }}
+          include-hidden-files: true
           path: |
             .trino-candidate/maven-dependency-manifest.json
             .trino-candidate/trino-maven-rootfs-483.cdx.json
@@ -475,6 +476,15 @@ EXPECTED_MAVEN_FAILURE_DIAGNOSTIC_BLOCK = """\
             .trino-candidate/trivy-vulnerability.json
           if-no-files-found: error
           retention-days: 14
+"""
+EXPECTED_CANDIDATE_HIDDEN_UPLOAD_BLOCK = """\
+      - name: Retain the read-only-verified candidate
+        if: steps.lifecycle.outputs.active == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.record.outputs.candidate_artifact_name }}
+          include-hidden-files: true
+          path: |
 """
 EXPECTED_ORAS_PUSH_BLOCK = """\
           (
@@ -2482,13 +2492,16 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
     if (
         workflow.count(EXPECTED_MAVEN_SCAN_REPORT_BLOCK) != 1
         or workflow.count(EXPECTED_MAVEN_FAILURE_DIAGNOSTIC_BLOCK) != 1
+        or workflow.count(EXPECTED_CANDIDATE_HIDDEN_UPLOAD_BLOCK) != 1
         or workflow.count("        id: verify_maven_scan") != 1
+        or lines.count("          include-hidden-files: true") != 2
     ):
         _fail(
             "WORKFLOW_MAVEN_DIAGNOSTICS",
             (
                 "the report-only Maven scan must feed the explicit blocking "
-                "verifier and retain only its exact failure diagnostics"
+                "verifier, and both exact hidden candidate inventories must "
+                "be explicitly retained"
             ),
         )
     if (

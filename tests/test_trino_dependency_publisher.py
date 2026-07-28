@@ -1846,6 +1846,11 @@ class PublisherContractTests(unittest.TestCase):
             1,
             workflow.count(verify.EXPECTED_MAVEN_FAILURE_DIAGNOSTIC_BLOCK),
         )
+        self.assertEqual(
+            1,
+            workflow.count(verify.EXPECTED_CANDIDATE_HIDDEN_UPLOAD_BLOCK),
+        )
+        self.assertEqual(2, workflow.count("include-hidden-files: true"))
         mutations = (
             (
                 verify.EXPECTED_MAVEN_SCAN_REPORT_BLOCK,
@@ -1859,6 +1864,11 @@ class PublisherContractTests(unittest.TestCase):
             ),
             (
                 verify.EXPECTED_MAVEN_FAILURE_DIAGNOSTIC_BLOCK,
+                "          include-hidden-files: true\n",
+                "          include-hidden-files: false\n",
+            ),
+            (
+                verify.EXPECTED_MAVEN_FAILURE_DIAGNOSTIC_BLOCK,
                 "            .trino-candidate/trino-maven-rootfs-483.cdx.json\n",
                 "",
             ),
@@ -1866,6 +1876,11 @@ class PublisherContractTests(unittest.TestCase):
                 verify.EXPECTED_MAVEN_FAILURE_DIAGNOSTIC_BLOCK,
                 "          retention-days: 14\n",
                 "          retention-days: 30\n",
+            ),
+            (
+                verify.EXPECTED_CANDIDATE_HIDDEN_UPLOAD_BLOCK,
+                "          include-hidden-files: true\n",
+                "",
             ),
         )
         for block, original, replacement in mutations:

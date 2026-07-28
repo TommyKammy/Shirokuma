@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-07-28
-version: "1.33"
+version: "1.34"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -1003,7 +1003,10 @@ closure-complete SBOM, and Trivy report for 14 days under a run-scoped
 diagnostic artifact. The publication job still requires the validate job to
 succeed and downloads only the separately named read-only candidate artifact;
 failure diagnostics cannot become publication, admission, image, or runtime
-inputs.
+inputs. Because both exact inventories live below `.trino-candidate`, their
+upload steps explicitly opt into hidden files; each path remains individually
+listed, and the workflow contract rejects removal, false values, extra opt-ins,
+or movement of that setting to another upload.
 
 ## Resident image and SBOM evidence
 

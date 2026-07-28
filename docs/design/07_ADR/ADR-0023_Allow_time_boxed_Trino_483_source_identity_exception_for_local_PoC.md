@@ -5,7 +5,7 @@ title: "Allow a time-boxed Trino 483 source identity exception for the local PoC
 status: accepted
 created: 2026-07-23
 updated: 2026-07-28
-version: "0.8"
+version: "0.9"
 area: "architecture"
 tags: [shirokuma, adr, trino, source, supply-chain, local-poc]
 ---
@@ -247,7 +247,11 @@ High/Critical finding. A failure of that exact verifier may retain only the
 descriptor, raw and closure-complete SBOMs, and vulnerability report for 14
 days as run-scoped diagnostics. The publication job requires validation
 success and cannot download this differently named failure artifact, so the
-change does not waive findings or create dependency evidence.
+change does not waive findings or create dependency evidence. The pinned
+artifact action excludes hidden paths by default, so both the diagnostic and
+normal candidate uploads explicitly include hidden files only alongside their
+closed, individually listed `.trino-candidate` paths. Contract fixtures reject
+removal, disabling, extra opt-ins, or placement on a different upload.
 
 A separate evidence-only PR must review and pin the exact OCI digest and retire
 the publisher. Image publication, resident admission, credentials, Flux
