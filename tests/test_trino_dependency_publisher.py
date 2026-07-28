@@ -1807,6 +1807,47 @@ class PublisherContractTests(unittest.TestCase):
     def test_repository_contract_and_workflow_are_closed(self) -> None:
         verify.audit(ROOT)
 
+    def test_publication_status_is_blocked_and_records_must_agree(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        admission = json.loads(
+            (ROOT / verify.ADMISSION_PATH).read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(
+            "blocked",
+            verify.publication_status(contract, admission),
+        )
+
+        altered = json.loads(json.dumps(contract))
+        altered["publication"]["permitted"] = True
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "publication permission records disagree",
+        ):
+            verify.publication_status(altered, admission)
+
+    def test_workflow_retains_the_blocked_publication_noop(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        marker = (
+            "Trino dependency publication is blocked pending "
+            "owner-authorized source remediation"
+        )
+        self.assertEqual(1, workflow.count(marker))
+
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_REQUIRED",
+        ):
+            verify._validate_workflow(
+                contract,
+                workflow.replace(marker, "publication unexpectedly active", 1),
+            )
+
     def test_maven_sbom_generation_audits_the_exact_scanned_repository(
         self,
     ) -> None:

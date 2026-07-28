@@ -129,6 +129,16 @@ jobs:
               ;;
             push:refs/heads/main)
               test "${GITHUB_SHA}" = "${GITHUB_WORKFLOW_SHA}"
+              publication_status="$(
+                python3 scripts/verify_trino_dependency_publisher.py \
+                  publication-status --root .
+              )"
+              if [[ "${publication_status}" = "blocked" ]]; then
+                printf 'active=false\n' >> "${GITHUB_OUTPUT}"
+                echo "Trino dependency publication is blocked pending owner-authorized source remediation"
+                exit 0
+              fi
+              test "${publication_status}" = "active"
               python3 scripts/verify_trino_dependency_publisher.py authorize --root .
               echo "active=true" >> "${GITHUB_OUTPUT}"
               ;;

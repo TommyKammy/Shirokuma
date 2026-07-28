@@ -45,8 +45,17 @@ Focused experiments kept the complete High=0/Critical=0 gate unchanged:
   and its embedded Jackson 2.21.3 finding cannot be upgraded through a newer
   released Parquet artifact.
 
-The exact classification is retained in
-`docs/design/evidence/trino/run-30331912718-maven-vulnerability-classification.json`.
+The exact classification and the byte-identical raw Trivy report are retained
+in:
+
+- `docs/design/evidence/trino/run-30331912718-maven-vulnerability-classification.json`
+- `docs/design/evidence/trino/run-30331912718-trivy-vulnerability.json`
+
+The classification binds the retained report's SHA-256 and byte length. It
+also binds the official Trino 483 server archive URL, SHA-256, and byte length
+used for the basename comparison. The short-lived Actions artifact remains
+run identity evidence, but is no longer the only source from which reviewers
+can recompute the 64/40/37 counts.
 
 ## Proposed decision
 
@@ -88,12 +97,17 @@ Flux object, runtime, or Iceberg query is authorized by this proposal.
 
 ## Verification
 
-- Verify artifact `8678853700` has the expected digest and exact four files.
+- Verify artifact `8678853700` has the expected digest and exact four files
+  while it remains available; after expiry, verify the retained report against
+  its repository-bound SHA-256 and byte length.
 - Recompute the 64 occurrences, 40 package/version groups, and 37 physical JAR
-  paths from the retained Trivy report.
+  paths from
+  `docs/design/evidence/trino/run-30331912718-trivy-vulnerability.json`.
 - Verify zero verbatim basename matches against the official Trino 483 server
-  archive, while retaining the explicit non-reachability caveat.
+  archive after verifying its bound SHA-256 and byte length, while retaining
+  the explicit non-reachability caveat.
 - `python3 -m json.tool docs/design/evidence/trino/run-30331912718-maven-vulnerability-classification.json`
+- `python3 -m json.tool docs/design/evidence/trino/run-30331912718-trivy-vulnerability.json`
 - `make verify-trino-bootstrap`
 - `make verify`
 
