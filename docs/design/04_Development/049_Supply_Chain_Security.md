@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-07-25
-version: "1.32"
+updated: 2026-07-28
+version: "1.33"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -984,6 +984,26 @@ keyless-signs the anonymous-pull receipt after retrieval. No dependency
 artifact, Trino image,
 resident admission, Flux object, or runtime is admitted until a fresh
 reviewed-main run and separate evidence-only review succeed.
+
+PR #129 merged the rootfs-discovery correction as
+`57189df014afaaca1bbd0a6cac60d6e6ef837d2b`. Reviewed-main run
+[`30312893557`](https://github.com/TommyKammy/Shirokuma/actions/runs/30312893557)
+then completed both independent dependency reconstructions, both fresh
+network-none builds, archive equality, the raw rootfs inventory, and the
+closure-complete Maven SBOM. It failed closed when the exact final scan exposed
+64 High/Critical finding occurrences. Because the blocking Trivy action exited
+before the normal candidate-retention step, the run retained zero artifacts.
+
+The follow-up keeps every High/Critical finding blocking. Trivy records the
+complete JSON report with exit code zero, and the repository-owned
+`verify-maven-scan` command remains the explicit fail-closed gate for malformed
+reports, identity drift, and any High/Critical finding. Only when that exact
+verifier fails does the workflow retain the descriptor, raw rootfs SBOM,
+closure-complete SBOM, and Trivy report for 14 days under a run-scoped
+diagnostic artifact. The publication job still requires the validate job to
+succeed and downloads only the separately named read-only candidate artifact;
+failure diagnostics cannot become publication, admission, image, or runtime
+inputs.
 
 ## Resident image and SBOM evidence
 

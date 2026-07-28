@@ -4,8 +4,8 @@ doc_id: "ADR-0023"
 title: "Allow a time-boxed Trino 483 source identity exception for the local PoC"
 status: accepted
 created: 2026-07-23
-updated: 2026-07-25
-version: "0.7"
+updated: 2026-07-28
+version: "0.8"
 area: "architecture"
 tags: [shirokuma, adr, trino, source, supply-chain, local-poc]
 ---
@@ -233,6 +233,21 @@ complete `(PURL, FilePath)` identity set and fail on every remaining High or
 Critical finding. Local reproduction inventories all 1,731 identities and
 exposes all 64 High/Critical findings, so this correction records scanner
 deduplication without hiding package or vulnerability evidence.
+
+PR #129 merged the correction as
+`57189df014afaaca1bbd0a6cac60d6e6ef837d2b`. Reviewed-main run
+`30312893557` reproduced the closed repositories, both network-none builds,
+archive equality, raw inventory, and closure-complete SBOM before failing on
+the 64 High/Critical occurrences. It retained zero artifacts because the
+blocking scan action stopped before normal candidate retention. The next
+focused change therefore separates report production from the blocking
+decision: Trivy writes the exact report without deciding admission, and the
+repository verifier rejects every malformed report, identity mismatch, or
+High/Critical finding. A failure of that exact verifier may retain only the
+descriptor, raw and closure-complete SBOMs, and vulnerability report for 14
+days as run-scoped diagnostics. The publication job requires validation
+success and cannot download this differently named failure artifact, so the
+change does not waive findings or create dependency evidence.
 
 A separate evidence-only PR must review and pin the exact OCI digest and retire
 the publisher. Image publication, resident admission, credentials, Flux
