@@ -4,10 +4,10 @@
   "version": "483",
   "platform": "linux/arm64",
   "lifecycle": {
-    "state": "source_remediation_authorization_pending",
+    "state": "dependency_snapshot_publication_pending",
     "contract_only": false,
     "dependency_artifact_present": false,
-    "publication_workflow_permitted": false,
+    "publication_workflow_permitted": true,
     "image_publication_permitted": false,
     "resident_admission_permitted": false,
     "runtime_reconciliation_permitted": false
@@ -23,7 +23,7 @@
     },
     {
       "path": "scripts/package_trino_maven_dependencies.py",
-      "sha256": "88e5bbf0801f32832d7105887136e24de3e162398360816264c47ce1db7c9805"
+      "sha256": "aa46b00acd1116e987e7546ed39bac3166bd7f375283d79f3e5534e914c8d2a6"
     },
     {
       "path": "scripts/package_trino_bun_dependencies.py",
@@ -34,16 +34,24 @@
       "sha256": "4af7467ad9ae58f4e7fc150a93fa30d7e76e2563c48075e644819e63fbe55ebe"
     },
     {
+      "path": "scripts/remediate_parquet_jackson.py",
+      "sha256": "0d18734b909ec7bdad4d93a67aebef269ae373a1312a380feabc3bcd912b3d8c"
+    },
+    {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "307e202c7960604b26174f6fad9e62bee59a1e9cbbe2493cd9a130ba115ee061"
+      "sha256": "1e95ee6bc0e498ccea4a0cbc394de3caba83ff072085922f4704a34b73a13dcc"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "8887927bd5372b4d64b1946340878c8705279ad5bd8c2dec89d0aaab222bf013"
+      "sha256": "ade9c22da64dc9d808bde3c18e817e293ad327bba14a6e3f57f42f1a88e17bad"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
       "sha256": "8384529fbc2696c5afe71c3dfa52d5aa73623d33a85944ba89837397c920fe0c"
+    },
+    {
+      "path": "tests/test_parquet_jackson_remediation.py",
+      "sha256": "d764121e172f260d86e9beed563a06fdf0af4a032a6f98fc182b148edf787c42"
     },
     {
       "path": "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch",
@@ -56,6 +64,10 @@
     {
       "path": "docs/design/07_ADR/ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md",
       "sha256": "c91fc14f096d52c5076eef703355dc93e130a3cb623f4457d66da5c9e28905ff"
+    },
+    {
+      "path": "docs/design/07_ADR/ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_source_remediation.md",
+      "sha256": "126d5e01ace79ab44c139576481566a979f1704b3bf7b07e39cdea8ac282fc79"
     }
   ],
   "authorization": {
@@ -274,6 +286,66 @@
       "https://github.com/trinodb/trino/releases/download/483/trino-server-483.tar.gz"
     ]
   },
+  "source_remediation": {
+    "state": "approved_bounded_parquet_jackson_1_17_1",
+    "decision_record": "docs/design/07_ADR/ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_source_remediation.md",
+    "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5105612399",
+    "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
+    "expires_at": "2026-08-21T22:43:36Z",
+    "automatic_renewal": false,
+    "risk_owner": "TommyKammy",
+    "implementation_author": "Codex",
+    "reviewer_must_differ_from_implementation_author": true,
+    "input": {
+      "name": "parquet-jackson-source-remediation",
+      "coordinate": "org.apache.parquet:parquet-jackson:1.17.1",
+      "repository": "https://github.com/apache/parquet-java",
+      "release_tag": "apache-parquet-1.17.1",
+      "release_tag_object": "1f54ba44afb285fecbaf54bde5c0afa259327fc4",
+      "nested_rc_tag": "apache-parquet-1.17.1-rc0",
+      "nested_rc_tag_object": "172d200a7eb81161345bdccaf628af34178fc479",
+      "commit_sha": "78a8d3230eb4769db93de5f2f2e18363c04cae81",
+      "tree_sha": "28b877df95a7a661361b8776f6ebe21d73d8da6d",
+      "permitted_paths": [
+        "pom.xml"
+      ],
+      "preimage": {
+        "path": "pom.xml",
+        "size": 24493,
+        "sha256": "bfe7519b9886e9df51bfef8be52064b3aadcbf9ae21c77402d8a66837aa5442f"
+      },
+      "replacements": [
+        {
+          "from": "<jackson.version>2.21.3</jackson.version>",
+          "to": "<jackson.version>2.21.4</jackson.version>"
+        },
+        {
+          "from": "<jackson-databind.version>2.21.3</jackson-databind.version>",
+          "to": "<jackson-databind.version>2.21.4</jackson-databind.version>"
+        }
+      ],
+      "postimage": {
+        "path": "pom.xml",
+        "size": 24493,
+        "sha256": "e07982c0f114b592c06c2aba1254df9c280b69a2dd27f3a0739421fe84d12efa"
+      },
+      "output_timestamp": "2026-05-08T01:45:35Z",
+      "independent_source_fetches": 2,
+      "independent_builds": 2,
+      "byte_identical_outputs_required": true,
+      "origin_id": "shirokuma-parquet-remediation",
+      "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5105612399",
+      "expires_at": "2026-08-21T22:43:36Z",
+      "automatic_renewal": false
+    },
+    "outputs": [
+      "org/apache/parquet/parquet-jackson/1.17.1/parquet-jackson-1.17.1.jar",
+      "org/apache/parquet/parquet-jackson/1.17.1/parquet-jackson-1.17.1.pom"
+    ],
+    "high_zero_critical_zero_required": true,
+    "vulnerability_waiver_permitted": false,
+    "expiry_action": "fail_closed_before_source_execution_dependency_resolution_or_publication"
+  },
   "toolchain": {
     "builder": {
       "index": "docker.io/library/maven@sha256:7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c",
@@ -317,6 +389,48 @@
         ],
         "redirect_policy": "manual_validate_before_request",
         "maximum_redirects": 5
+      },
+      {
+        "name": "parquet-jackson-source-remediation",
+        "coordinate": "org.apache.parquet:parquet-jackson:1.17.1",
+        "repository": "https://github.com/apache/parquet-java",
+        "release_tag": "apache-parquet-1.17.1",
+        "release_tag_object": "1f54ba44afb285fecbaf54bde5c0afa259327fc4",
+        "nested_rc_tag": "apache-parquet-1.17.1-rc0",
+        "nested_rc_tag_object": "172d200a7eb81161345bdccaf628af34178fc479",
+        "commit_sha": "78a8d3230eb4769db93de5f2f2e18363c04cae81",
+        "tree_sha": "28b877df95a7a661361b8776f6ebe21d73d8da6d",
+        "permitted_paths": [
+          "pom.xml"
+        ],
+        "preimage": {
+          "path": "pom.xml",
+          "size": 24493,
+          "sha256": "bfe7519b9886e9df51bfef8be52064b3aadcbf9ae21c77402d8a66837aa5442f"
+        },
+        "replacements": [
+          {
+            "from": "<jackson.version>2.21.3</jackson.version>",
+            "to": "<jackson.version>2.21.4</jackson.version>"
+          },
+          {
+            "from": "<jackson-databind.version>2.21.3</jackson-databind.version>",
+            "to": "<jackson-databind.version>2.21.4</jackson-databind.version>"
+          }
+        ],
+        "postimage": {
+          "path": "pom.xml",
+          "size": 24493,
+          "sha256": "e07982c0f114b592c06c2aba1254df9c280b69a2dd27f3a0739421fe84d12efa"
+        },
+        "output_timestamp": "2026-05-08T01:45:35Z",
+        "independent_source_fetches": 2,
+        "independent_builds": 2,
+        "byte_identical_outputs_required": true,
+        "origin_id": "shirokuma-parquet-remediation",
+        "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5105612399",
+        "expires_at": "2026-08-21T22:43:36Z",
+        "automatic_renewal": false
       }
     ],
     "bun_package_cache": {
@@ -554,6 +668,20 @@
           },
           "exactly_one_matching_descriptor_required": true,
           "source_checkout_must_match_descriptor": true
+        },
+        "parquet_source_remediation_resolved_dependency": {
+          "claim_path": "predicate.buildDefinition.resolvedDependencies",
+          "required_uri": "git+https://github.com/apache/parquet-java@refs/tags/apache-parquet-1.17.1",
+          "required_digest": {
+            "gitTagObject": "1f54ba44afb285fecbaf54bde5c0afa259327fc4",
+            "gitNestedTagObject": "172d200a7eb81161345bdccaf628af34178fc479",
+            "gitCommit": "78a8d3230eb4769db93de5f2f2e18363c04cae81",
+            "gitTree": "28b877df95a7a661361b8776f6ebe21d73d8da6d",
+            "sourcePreimageSha256": "bfe7519b9886e9df51bfef8be52064b3aadcbf9ae21c77402d8a66837aa5442f",
+            "sourcePostimageSha256": "e07982c0f114b592c06c2aba1254df9c280b69a2dd27f3a0739421fe84d12efa"
+          },
+          "exactly_one_matching_descriptor_required": true,
+          "source_checkout_must_match_descriptor": true
         }
       }
     },
@@ -658,7 +786,7 @@
     ]
   },
   "publication": {
-    "permitted": false,
+    "permitted": true,
     "workflow_present": true,
     "workflow": ".github/workflows/trino-maven-dependencies.yml",
     "allowed_ref": "refs/heads/main",
@@ -667,7 +795,7 @@
     "separate_evidence_only_pr_required": true,
     "image_publisher_permitted_before_evidence_review": false,
     "anonymous_exact_digest_pull_required": true,
-    "pull_request_behavior": "static_read_only_contract_validation",
+    "pull_request_behavior": "static_and_authorized_source_overlay_and_remediation_validation_without_publication",
     "publication_event": "push",
     "runner": "ubuntu-24.04-arm",
     "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",

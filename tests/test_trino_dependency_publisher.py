@@ -37,7 +37,10 @@ class MavenSnapshotTests(unittest.TestCase):
             "sha256": hashlib.sha256(b"bun").hexdigest(),
             "size": 3,
         }
-        package.EXTERNAL_INPUTS = [test_input]
+        package.EXTERNAL_INPUTS = [
+            test_input,
+            package.PARQUET_SOURCE_REMEDIATION,
+        ]
         package.BUN_INPUT = test_input
 
     @classmethod
@@ -87,7 +90,36 @@ class MavenSnapshotTests(unittest.TestCase):
             include_trino_extension=include_trino_extension,
             trino_origin=trino_origin,
         )
+        self._parquet_remediation(repository)
         return repository
+
+    def _parquet_remediation(
+        self,
+        repository: Path,
+        *,
+        origin: str = "shirokuma-parquet-remediation",
+    ) -> Path:
+        directory = (
+            repository
+            / "org/apache/parquet/parquet-jackson/1.17.1"
+        )
+        directory.mkdir(parents=True)
+        for name in (
+            "parquet-jackson-1.17.1.jar",
+            "parquet-jackson-1.17.1.pom",
+        ):
+            (directory / name).write_bytes(name.encode("ascii"))
+        (directory / "_remote.repositories").write_text(
+            "".join(
+                f"{name}>{origin}=\n"
+                for name in (
+                    "parquet-jackson-1.17.1.jar",
+                    "parquet-jackson-1.17.1.pom",
+                )
+            ),
+            encoding="iso-8859-1",
+        )
+        return directory
 
     def _trino_external_dependencies(
         self,
@@ -363,6 +395,52 @@ class MavenSnapshotTests(unittest.TestCase):
                         member.mtime,
                         member.mode,
                     ))
+
+    def test_manifest_requires_exact_parquet_source_remediation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = self._repository(root)
+            remediation = (
+                repository
+                / "org/apache/parquet/parquet-jackson/1.17.1"
+            )
+            (remediation / "parquet-jackson-1.17.1.jar").unlink()
+            with self.assertRaisesRegex(
+                package.SnapshotError,
+                "exact rebuilt parquet-jackson",
+            ):
+                package.build_manifest(repository)
+
+            repository = self._repository(root / "wrong-origin")
+            remediation = (
+                repository
+                / "org/apache/parquet/parquet-jackson/1.17.1"
+            )
+            (remediation / "_remote.repositories").write_text(
+                "parquet-jackson-1.17.1.jar>shirokuma-central=\n"
+                "parquet-jackson-1.17.1.pom>shirokuma-central=\n",
+                encoding="iso-8859-1",
+            )
+            with self.assertRaisesRegex(
+                package.SnapshotError,
+                "source-remediation origin",
+            ):
+                package.build_manifest(repository)
+
+    def test_parquet_source_origin_is_path_scoped(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = self._repository(Path(temporary))
+            artifact = repository / "org/example/demo/1.0"
+            (artifact / "_remote.repositories").write_text(
+                "demo-1.0.jar>shirokuma-parquet-remediation=\n"
+                "demo-1.0.pom>shirokuma-central-fallback=\n",
+                encoding="iso-8859-1",
+            )
+            with self.assertRaisesRegex(
+                package.SnapshotError,
+                "unauthorized path",
+            ):
+                package.build_manifest(repository)
 
     def test_unsafe_repository_entries_fail_closed(self) -> None:
         cases = {}
@@ -1807,7 +1885,7 @@ class PublisherContractTests(unittest.TestCase):
     def test_repository_contract_and_workflow_are_closed(self) -> None:
         verify.audit(ROOT)
 
-    def test_publication_status_is_blocked_and_records_must_agree(self) -> None:
+    def test_publication_status_is_active_and_records_must_agree(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
         )
@@ -1816,12 +1894,12 @@ class PublisherContractTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            "blocked",
+            "active",
             verify.publication_status(contract, admission),
         )
 
         altered = json.loads(json.dumps(contract))
-        altered["publication"]["permitted"] = True
+        altered["publication"]["permitted"] = False
         with self.assertRaisesRegex(
             verify.ContractError,
             "publication permission records disagree",
@@ -1937,7 +2015,7 @@ class PublisherContractTests(unittest.TestCase):
                 ):
                     verify._validate_workflow(contract, altered)
 
-    def test_descriptor_records_the_complete_reviewed_bun_contract(self) -> None:
+    def test_descriptor_records_the_complete_reviewed_external_inputs(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
         )
@@ -1945,7 +2023,13 @@ class PublisherContractTests(unittest.TestCase):
             contract["dependency_resolution"]["external_inputs"],
             package.EXTERNAL_INPUTS,
         )
-        self.assertEqual([verify.EXPECTED_BUN_INPUT], package.EXTERNAL_INPUTS)
+        self.assertEqual(
+            [
+                verify.EXPECTED_BUN_INPUT,
+                verify.EXPECTED_PARQUET_SOURCE_REMEDIATION,
+            ],
+            package.EXTERNAL_INPUTS,
+        )
         self.assertEqual(
             verify.EXPECTED_BUN_PACKAGE_CACHE,
             contract["dependency_resolution"]["bun_package_cache"],
@@ -2177,6 +2261,24 @@ class PublisherContractTests(unittest.TestCase):
         workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
         expected = verify.EXPECTED_SLSA_STATEMENT_ATTESTATION_BLOCK
         self.assertEqual(1, workflow.count(expected))
+        parquet_source = (
+            verify.EXPECTED_PARQUET_SLSA_RESOLVED_DEPENDENCY_BLOCK
+        )
+        self.assertEqual(1, workflow.count(parquet_source))
+        altered_source = workflow.replace(
+            parquet_source,
+            parquet_source.replace(
+                "PARQUET_RC_TAG_OBJECT",
+                "PARQUET_RELEASE_TAG_OBJECT",
+                1,
+            ),
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_SLSA_STATEMENT",
+        ):
+            verify._validate_workflow(contract, altered_source)
         for invalid, error in (
             (
                 expected.replace("cosign attest-blob", "cosign attest", 1),
@@ -2286,21 +2388,21 @@ class PublisherContractTests(unittest.TestCase):
         ):
             verify._validate_workflow(contract, altered)
 
-    def test_each_resolver_command_ignores_transitive_repositories(self) -> None:
+    def test_each_online_maven_command_ignores_transitive_repositories(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
         )
         workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
         option = "              --ignore-transitive-repositories \\\n"
-        self.assertEqual(2, workflow.count(option))
+        self.assertEqual(4, workflow.count(option))
         altered = (
             workflow.replace(option, "", 1)
             + "\n# misleading occurrence: --ignore-transitive-repositories\n"
         )
-        self.assertEqual(4, altered.count("--ignore-transitive-repositories"))
+        self.assertEqual(6, altered.count("--ignore-transitive-repositories"))
         with self.assertRaisesRegex(
             verify.ContractError,
-            "WORKFLOW_RESOLUTION_COMMAND",
+            "WORKFLOW_SOURCE_REMEDIATION|WORKFLOW_RESOLUTION_COMMAND",
         ):
             verify._validate_workflow(contract, altered)
 
@@ -2309,7 +2411,7 @@ class PublisherContractTests(unittest.TestCase):
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
         )
         workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
-        self.assertEqual(2, workflow.count(verify.EXPECTED_PR_SOURCE_CONDITION))
+        self.assertEqual(3, workflow.count(verify.EXPECTED_PR_SOURCE_CONDITION))
         self.assertEqual(1, workflow.count(verify.EXPECTED_PR_BUN_INPUT_BLOCK))
         for marker in verify.EXPECTED_PR_OVERLAY_BUILD_MARKERS:
             self.assertEqual(1, workflow.count(marker), marker)
@@ -2359,7 +2461,7 @@ class PublisherContractTests(unittest.TestCase):
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
         )
         workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
-        self.assertEqual(3, workflow.count("--env CI=true \\"))
+        self.assertEqual(5, workflow.count("--env CI=true \\"))
         self.assertEqual(
             3,
             workflow.count(
@@ -2509,9 +2611,9 @@ class PublisherContractTests(unittest.TestCase):
             verify.EXPECTED_OFFLINE_REPOSITORY_SETTINGS,
             contract["offline_rebuild"]["repository_settings"],
         )
-        self.assertEqual(3, workflow.count(verify.EXPECTED_SETTINGS_MOUNT))
+        self.assertEqual(5, workflow.count(verify.EXPECTED_SETTINGS_MOUNT))
         self.assertEqual(
-            3,
+            5,
             workflow.count(f"{verify.EXPECTED_SETTINGS_ARGUMENT} \\\n"),
         )
         self.assertIn(
@@ -2540,7 +2642,7 @@ class PublisherContractTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(
             verify.ContractError,
-            "WORKFLOW_RESOLUTION_COMMAND",
+            "WORKFLOW_SETTINGS|WORKFLOW_RESOLUTION_COMMAND",
         ):
             verify._validate_workflow(contract, relocated_online_mount)
 
@@ -2553,7 +2655,7 @@ class PublisherContractTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(
             verify.ContractError,
-            "WORKFLOW_OFFLINE_COMMAND",
+            "WORKFLOW_SETTINGS|WORKFLOW_OFFLINE_COMMAND",
         ):
             verify._validate_workflow(contract, relocated_offline_mount)
 
@@ -2703,6 +2805,31 @@ class PublisherContractTests(unittest.TestCase):
         ):
             verify._validate_source_overlay_contract(
                 ROOT,
+                contract,
+                at=dt.datetime(
+                    2026,
+                    8,
+                    21,
+                    22,
+                    43,
+                    36,
+                    tzinfo=dt.timezone.utc,
+                ),
+            )
+
+    def test_source_remediation_authorization_expires_fail_closed(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        verify._validate_source_remediation_contract(
+            contract,
+            at=dt.datetime(2026, 8, 21, 22, 43, 35, tzinfo=dt.timezone.utc),
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "SOURCE_REMEDIATION_EXPIRED",
+        ):
+            verify._validate_source_remediation_contract(
                 contract,
                 at=dt.datetime(
                     2026,

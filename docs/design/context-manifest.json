@@ -32,6 +32,7 @@
     {"source": "07_ADR/ADR-0022_Adopt_Trino_483_repository_source_build.md", "target": "docs/design/07_ADR/ADR-0022_Adopt_Trino_483_repository_source_build.md"},
     {"source": "07_ADR/ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md", "target": "docs/design/07_ADR/ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md"},
     {"source": "07_ADR/ADR-0025_Keep_Trino_483_Maven_closure_blocked_pending_source_remediation.md", "target": "docs/design/07_ADR/ADR-0025_Keep_Trino_483_Maven_closure_blocked_pending_source_remediation.md"},
+    {"source": "07_ADR/ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_source_remediation.md", "target": "docs/design/07_ADR/ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_source_remediation.md"},
     {"source": "08_Runbooks/RB-001_Bootstrap_local_lite_lab.md", "target": "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md"},
     {"source": "08_Runbooks/RB-002_Diagnose_failed_Flux_reconciliation.md", "target": "docs/design/08_Runbooks/RB-002_Diagnose_failed_Flux_reconciliation.md"},
     {"source": "08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo.md", "target": "docs/design/08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo.md"},

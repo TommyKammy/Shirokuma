@@ -1463,14 +1463,16 @@ class TrinoMavenVulnerabilityClassificationTests(unittest.TestCase):
             record["inputs"]["official_trino_483_server_archive"],
         )
 
-    def test_blocker_adr_cannot_be_mistaken_for_authorization(self) -> None:
+    def test_superseded_blocker_adr_preserves_nonwaivable_controls(self) -> None:
         adr = TRINO_MAVEN_CLOSURE_BLOCKER_ADR.read_text(encoding="utf-8")
         normalized = " ".join(adr.split())
 
-        self.assertIn("\nstatus: proposed\n", adr)
+        self.assertIn("\nstatus: superseded\n", adr)
         self.assertIn(
-            "does not constitute the required owner authorization", normalized
+            "did not itself constitute the required owner authorization",
+            normalized,
         )
+        self.assertIn("ADR-0026 supersedes only", normalized)
         self.assertIn("Do not add `.trivyignore`", adr)
         self.assertIn("High=0/Critical=0 without waivers", adr)
         self.assertIn("Issue #63 remains open", adr)
@@ -2902,6 +2904,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "source_authentication",
                 "provisional_source_authorization",
                 "source_overlay_authorization",
+                "source_remediation_authorization",
                 "repository_state",
                 "next_action",
             },
@@ -2997,16 +3000,17 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     },
                     {
                         "control": "repository_source_build",
-                        "status": "source_remediation_authorization_required",
+                        "status": (
+                            "authorized_remediation_publication_evidence_pending"
+                        ),
                         "evidence": (
                             "reviewed-main run 30331912718 failed closed on 64 "
                             "nonwaivable Maven High/Critical occurrences across 40 "
-                            "package/version groups and 37 physical JAR paths; the "
-                            "exact report is retained at docs/design/evidence/trino/"
-                            "run-30331912718-trivy-vulnerability.json and ADR-0025 "
-                            "requires separate owner authorization plus independent "
-                            "review before source remediation or another publication "
-                            "attempt"
+                            "package/version groups and 37 physical JAR paths; "
+                            "ADR-0026 and Issue #63 comment 5105612399 authorize "
+                            "only the exact parquet-jackson 1.17.1 Jackson 2.21.4 "
+                            "source rebuild, while High=0/Critical=0, signature, "
+                            "SLSA, and anonymous exact-digest evidence remain pending"
                         ),
                     },
                 ],
@@ -3017,13 +3021,14 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "for a time-boxed local PoC. ADR-0024 authorizes a four-path Web "
                     "UI dependency overlay and one not_affected OpenVEX assessment "
                     "through the same expiry; it is not a vulnerability risk "
-                    "acceptance. ADR-0025 records the run-bound Maven closure blocker "
-                    "and requires a separate owner-authorized, time-bounded source-"
-                    "remediation contract with independent review. The raw findings "
-                    "remain retained, High=0/Critical=0 without waivers remains "
-                    "mandatory, the upstream image and server asset remain rejected, "
-                    "all image controls remain mandatory, and re-signing untrusted "
-                    "upstream bytes is forbidden."
+                    "acceptance. ADR-0025 records the run-bound Maven closure blocker. "
+                    "ADR-0026 and Issue #63 comment 5105612399 now authorize only "
+                    "the exact parquet-jackson 1.17.1 source remediation through "
+                    "the same expiry and require independent review. The raw "
+                    "findings remain retained, High=0/Critical=0 without waivers "
+                    "remains mandatory, the upstream image and server asset remain "
+                    "rejected, all image controls remain mandatory, and re-signing "
+                    "untrusted upstream bytes is forbidden."
                 ),
             },
             assessment,
@@ -3059,7 +3064,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             admission["source_authentication"],
         )
         self.assertIs(
-            admission["repository_state"]["publication_workflow_permitted"], False
+            admission["repository_state"]["publication_workflow_permitted"], True
         )
 
     def test_provisional_source_authorization_is_bounded_and_fail_closed(self) -> None:
@@ -3229,6 +3234,64 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             authorization["openvex_scope"],
         )
 
+    def test_parquet_source_remediation_is_exact_and_not_a_risk_waiver(
+        self,
+    ) -> None:
+        admission = self._admission()["source_remediation_authorization"]
+        contract = self._trusted_build_contract()["source_remediation"]
+        self.assertEqual("active", admission["status"])
+        self.assertEqual(
+            "time_boxed_bounded_parquet_jackson_source_remediation",
+            admission["authorization_type"],
+        )
+        self.assertEqual(
+            "https://github.com/TommyKammy/Shirokuma/issues/63"
+            "#issuecomment-5105612399",
+            admission["approval_record"],
+        )
+        self.assertEqual(
+            {
+                "repository": "https://github.com/apache/parquet-java",
+                "release_tag": "apache-parquet-1.17.1",
+                "release_tag_object": (
+                    "1f54ba44afb285fecbaf54bde5c0afa259327fc4"
+                ),
+                "nested_rc_tag": "apache-parquet-1.17.1-rc0",
+                "nested_rc_tag_object": (
+                    "172d200a7eb81161345bdccaf628af34178fc479"
+                ),
+                "commit_sha": "78a8d3230eb4769db93de5f2f2e18363c04cae81",
+                "tree_sha": "28b877df95a7a661361b8776f6ebe21d73d8da6d",
+            },
+            admission["source_binding"],
+        )
+        self.assertEqual(["pom.xml"], admission["permitted_paths"])
+        self.assertEqual(
+            "bfe7519b9886e9df51bfef8be52064b3aadcbf9ae21c77402d8a66837aa5442f",
+            admission["preimage_sha256"],
+        )
+        self.assertEqual(
+            "e07982c0f114b592c06c2aba1254df9c280b69a2dd27f3a0739421fe84d12efa",
+            admission["postimage_sha256"],
+        )
+        self.assertEqual(2, admission["independent_source_fetches_required"])
+        self.assertEqual(2, admission["independent_builds_required"])
+        self.assertIs(admission["byte_identical_outputs_required"], True)
+        self.assertIs(admission["vulnerability_risk_accepted"], False)
+        self.assertIs(admission["high_zero_critical_zero_required"], True)
+        self.assertEqual(
+            admission["source_binding"],
+            {
+                key: contract["input"][key]
+                for key in admission["source_binding"]
+            },
+        )
+        self.assertEqual(
+            admission["approval_record"],
+            contract["approval_record"],
+        )
+        self.assertIs(contract["vulnerability_waiver_permitted"], False)
+
     def test_provisional_source_authorization_rejects_preapproval_use(self) -> None:
         self.assertIn(
             "authorization is not yet active",
@@ -3238,13 +3301,13 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             ),
         )
 
-    def test_blocked_candidate_cannot_publish_admit_or_materialize(self) -> None:
+    def test_publication_candidate_cannot_admit_or_materialize_runtime(self) -> None:
         admission = self._admission()
         repository_state = admission["repository_state"]
         self.assertEqual(
             {
                 "dependency_snapshot_contract_permitted": True,
-                "publication_workflow_permitted": False,
+                "publication_workflow_permitted": True,
                 "dependency_artifact_present": False,
                 "resident_ledger_permitted": False,
                 "runtime_manifests_permitted": False,
@@ -3277,6 +3340,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                         "ADR-0025_Keep_Trino_483_Maven_closure_blocked_"
                         "pending_source_remediation.md"
                     ),
+                    (
+                        "docs/design/07_ADR/"
+                        "ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_"
+                        "source_remediation.md"
+                    ),
                     "docs/design/context-manifest.json",
                     (
                         "docs/design/evidence/trino/"
@@ -3289,9 +3357,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "scripts/package_trino_bun_dependencies.py",
                     "scripts/package_trino_maven_dependencies.py",
                     "scripts/prepare_trino_bun_input.py",
+                    "scripts/remediate_parquet_jackson.py",
                     "scripts/verify_polaris_trusted_image.py",
                     "scripts/verify_trino_dependency_publisher.py",
                     "tests/test_trino_bun_dependencies.py",
+                    "tests/test_parquet_jackson_remediation.py",
                     "tests/test_trino_bootstrap.py",
                     "tests/test_trino_dependency_publisher.py",
                     "Makefile",
@@ -3312,7 +3382,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             "runtime_manifests_permitted",
         ):
             self.assertIs(repository_state[key], False)
-        self.assertIs(repository_state["publication_workflow_permitted"], False)
+        self.assertIs(repository_state["publication_workflow_permitted"], True)
         self.assertIs(
             repository_state["dependency_snapshot_contract_permitted"], True
         )
@@ -3408,6 +3478,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "authorization",
                 "policy_files",
                 "source",
+                "source_remediation",
                 "toolchain",
                 "dependency_resolution",
                 "snapshot",
@@ -3741,7 +3812,8 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     ],
                     "redirect_policy": "manual_validate_before_request",
                     "maximum_redirects": 5,
-                }
+                },
+                contract["source_remediation"]["input"],
             ],
             resolution["external_inputs"],
         )
@@ -4078,6 +4150,39 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                         "exactly_one_matching_descriptor_required": True,
                         "source_checkout_must_match_descriptor": True,
                     },
+                    "parquet_source_remediation_resolved_dependency": {
+                        "claim_path": (
+                            "predicate.buildDefinition.resolvedDependencies"
+                        ),
+                        "required_uri": (
+                            "git+https://github.com/apache/parquet-java"
+                            "@refs/tags/apache-parquet-1.17.1"
+                        ),
+                        "required_digest": {
+                            "gitTagObject": (
+                                "1f54ba44afb285fecbaf54bde5c0afa259327fc4"
+                            ),
+                            "gitNestedTagObject": (
+                                "172d200a7eb81161345bdccaf628af34178fc479"
+                            ),
+                            "gitCommit": (
+                                "78a8d3230eb4769db93de5f2f2e18363c04cae81"
+                            ),
+                            "gitTree": (
+                                "28b877df95a7a661361b8776f6ebe21d73d8da6d"
+                            ),
+                            "sourcePreimageSha256": (
+                                "bfe7519b9886e9df51bfef8be52064b3"
+                                "aadcbf9ae21c77402d8a66837aa5442f"
+                            ),
+                            "sourcePostimageSha256": (
+                                "e07982c0f114b592c06c2aba1254df9c"
+                                "280b69a2dd27f3a0739421fe84d12efa"
+                            ),
+                        },
+                        "exactly_one_matching_descriptor_required": True,
+                        "source_checkout_must_match_descriptor": True,
+                    },
                 },
             },
             snapshot["authentication"],
@@ -4097,6 +4202,25 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "gitTree": source["tree_sha"],
             },
             resolved_dependency["required_digest"],
+        )
+        parquet_dependency = snapshot["authentication"]["provenance"][
+            "parquet_source_remediation_resolved_dependency"
+        ]
+        remediation_input = contract["source_remediation"]["input"]
+        self.assertEqual(
+            (
+                f"git+{remediation_input['repository']}@refs/tags/"
+                f"{remediation_input['release_tag']}"
+            ),
+            parquet_dependency["required_uri"],
+        )
+        self.assertEqual(
+            remediation_input["commit_sha"],
+            parquet_dependency["required_digest"]["gitCommit"],
+        )
+        self.assertEqual(
+            remediation_input["tree_sha"],
+            parquet_dependency["required_digest"]["gitTree"],
         )
         self.assertEqual(
             {
@@ -4321,17 +4445,17 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             rebuild["retained_output_evidence"],
         )
 
-    def test_dependency_snapshot_contract_blocks_publication_pending_authorization(
+    def test_dependency_snapshot_contract_allows_reviewed_publication_only(
         self,
     ) -> None:
         contract = self._trusted_build_contract()
         lifecycle = contract["lifecycle"]
         self.assertEqual(
             {
-                "state": "source_remediation_authorization_pending",
+                "state": "dependency_snapshot_publication_pending",
                 "contract_only": False,
                 "dependency_artifact_present": False,
-                "publication_workflow_permitted": False,
+                "publication_workflow_permitted": True,
                 "image_publication_permitted": False,
                 "resident_admission_permitted": False,
                 "runtime_reconciliation_permitted": False,
@@ -4340,7 +4464,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertEqual(
             {
-                "permitted": False,
+                "permitted": True,
                 "workflow_present": True,
                 "workflow": (
                     ".github/workflows/trino-maven-dependencies.yml"
@@ -4351,7 +4475,10 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "separate_evidence_only_pr_required": True,
                 "image_publisher_permitted_before_evidence_review": False,
                 "anonymous_exact_digest_pull_required": True,
-                "pull_request_behavior": "static_read_only_contract_validation",
+                "pull_request_behavior": (
+                    "static_and_authorized_source_overlay_and_remediation_"
+                    "validation_without_publication"
+                ),
                 "publication_event": "push",
                 "runner": "ubuntu-24.04-arm",
                 "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",
@@ -4413,7 +4540,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertTrue((ROOT / contract["publication"]["workflow"]).is_file())
 
-    def test_next_action_requires_owner_source_remediation_authorization(
+    def test_next_action_requires_reviewed_remediation_publication_evidence(
         self,
     ) -> None:
         next_action = self._admission()["next_action"]
@@ -4428,10 +4555,10 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             set(next_action),
         )
         self.assertEqual(
-            "owner-authorized-source-remediation-contract",
+            "publish-reviewed-source-remediated-dependency-snapshot",
             next_action["mode"],
         )
-        self.assertIs(next_action["decision_record_required"], True)
+        self.assertIs(next_action["decision_record_required"], False)
         self.assertEqual(
             [
                 (
@@ -4449,11 +4576,16 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "ADR-0025_Keep_Trino_483_Maven_closure_blocked_"
                     "pending_source_remediation.md"
                 ),
+                (
+                    "docs/design/07_ADR/"
+                    "ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_"
+                    "source_remediation.md"
+                ),
             ],
             next_action["decision_records"],
         )
         self.assertEqual(
-            "source_remediation_authorization_pending",
+            "source_remediation_publication_evidence_pending",
             next_action["phase"],
         )
         self.assertEqual(
@@ -4461,9 +4593,9 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "active and unexpired provisional source authorization bound to the "
                 "exact source repository, tag, commit, and tree",
                 (
-                    "separate owner authorization binding exact remediation "
-                    "repositories, commits, trees, preimages, postimages, permitted "
-                    "paths, dependency replacements, expiry, and rollback"
+                    "active exact owner authorization bound to the Parquet "
+                    "repository, tags, objects, commit, tree, preimage, postimage, "
+                    "permitted path, dependency replacements, expiry, and rollback"
                 ),
                 (
                     "independent reviewer approval distinct from the source-"

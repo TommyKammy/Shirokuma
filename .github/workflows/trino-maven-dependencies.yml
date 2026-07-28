@@ -11,10 +11,13 @@ on:
       - bootstrap/trino/v483/trusted-build-contract.json
       - bootstrap/trino/v483/vex/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json
       - docs/design/07_ADR/ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md
+      - docs/design/07_ADR/ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_source_remediation.md
       - scripts/package_trino_bun_dependencies.py
       - scripts/package_trino_maven_dependencies.py
       - scripts/prepare_trino_bun_input.py
+      - scripts/remediate_parquet_jackson.py
       - scripts/verify_trino_dependency_publisher.py
+      - tests/test_parquet_jackson_remediation.py
       - tests/test_trino_bun_dependencies.py
       - tests/test_trino_dependency_publisher.py
       - Makefile
@@ -30,10 +33,13 @@ on:
       - bootstrap/trino/v483/trusted-build-contract.json
       - bootstrap/trino/v483/vex/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json
       - docs/design/07_ADR/ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md
+      - docs/design/07_ADR/ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_source_remediation.md
       - scripts/package_trino_bun_dependencies.py
       - scripts/package_trino_maven_dependencies.py
       - scripts/prepare_trino_bun_input.py
+      - scripts/remediate_parquet_jackson.py
       - scripts/verify_trino_dependency_publisher.py
+      - tests/test_parquet_jackson_remediation.py
       - tests/test_trino_bun_dependencies.py
       - tests/test_trino_dependency_publisher.py
       - Makefile
@@ -51,6 +57,14 @@ env:
   SOURCE_TAG_OBJECT: 32d4f28e8311ea6f67edca209df59a0493d869fa
   SOURCE_COMMIT: 50b0b50b75abd47f830b7805ee1b51716eb4065e
   SOURCE_TREE: 3b5414292a614b12393bb4605ea2d4c588a5b8ee
+  PARQUET_SOURCE_REPOSITORY: https://github.com/apache/parquet-java
+  PARQUET_RELEASE_TAG: apache-parquet-1.17.1
+  PARQUET_RELEASE_TAG_OBJECT: 1f54ba44afb285fecbaf54bde5c0afa259327fc4
+  PARQUET_RC_TAG: apache-parquet-1.17.1-rc0
+  PARQUET_RC_TAG_OBJECT: 172d200a7eb81161345bdccaf628af34178fc479
+  PARQUET_SOURCE_COMMIT: 78a8d3230eb4769db93de5f2f2e18363c04cae81
+  PARQUET_SOURCE_TREE: 28b877df95a7a661361b8776f6ebe21d73d8da6d
+  PARQUET_OUTPUT_TIMESTAMP: "2026-05-08T01:45:35Z"
   BUILDER_IMAGE: docker.io/library/maven@sha256:7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c
   BUILDER_ARM64_MANIFEST: sha256:5476bfca9d0a6485b7161f6863123f7e6822336de4177273b47b5ec38ffd573a
   BUN_URL: https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-aarch64.zip
@@ -113,6 +127,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 -m unittest -v tests.test_parquet_jackson_remediation
           python3 -m unittest -v tests.test_trino_bun_dependencies
           python3 -m unittest -v tests.test_trino_dependency_publisher
           python3 scripts/verify_trino_dependency_publisher.py audit --root .
@@ -268,6 +283,43 @@ jobs:
             apply-source-overlay \
             --root . --checkout "${RUNNER_TEMP}/trino-source"
 
+      - name: Fetch and prepare the exact Parquet Jackson remediation sources
+        if: >-
+          steps.lifecycle.outputs.active == 'true' ||
+          steps.lifecycle.outputs.source_validation_active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          suffixes=(a)
+          if [[ "${{ steps.lifecycle.outputs.active }}" = "true" ]]; then
+            suffixes+=(b)
+          fi
+          for suffix in "${suffixes[@]}"; do
+            source_dir="${RUNNER_TEMP}/parquet-source-${suffix}"
+            test ! -e "${source_dir}"
+            git init "${source_dir}"
+            git -C "${source_dir}" remote add origin \
+              "${PARQUET_SOURCE_REPOSITORY}"
+            git -C "${source_dir}" fetch --depth=1 origin \
+              "${PARQUET_SOURCE_COMMIT}" \
+              "refs/tags/${PARQUET_RELEASE_TAG}:refs/tags/${PARQUET_RELEASE_TAG}" \
+              "refs/tags/${PARQUET_RC_TAG}:refs/tags/${PARQUET_RC_TAG}"
+            test "$(
+              git -C "${source_dir}" rev-parse \
+                "refs/tags/${PARQUET_RELEASE_TAG}"
+            )" = "${PARQUET_RELEASE_TAG_OBJECT}"
+            test "$(
+              git -C "${source_dir}" rev-parse \
+                "refs/tags/${PARQUET_RC_TAG}"
+            )" = "${PARQUET_RC_TAG_OBJECT}"
+            git -C "${source_dir}" checkout --detach \
+              "${PARQUET_SOURCE_COMMIT}"
+            test "$(git -C "${source_dir}" rev-parse 'HEAD^{tree}')" \
+              = "${PARQUET_SOURCE_TREE}"
+            python3 scripts/remediate_parquet_jackson.py prepare-source \
+              --checkout "${source_dir}"
+          done
+
       - name: Validate the bounded Web UI overlay before merge
         if: steps.lifecycle.outputs.source_validation_active == 'true'
         env:
@@ -308,11 +360,44 @@ jobs:
           set -euo pipefail
           python3 scripts/verify_trino_dependency_publisher.py authorize --root .
           source_dir="${RUNNER_TEMP}/trino-source"
+          parquet_source="${RUNNER_TEMP}/parquet-source-a"
+          parquet_repository="${RUNNER_TEMP}/parquet-maven-repository-a"
           repository="${RUNNER_TEMP}/maven-repository-a"
           bun_cache="${RUNNER_TEMP}/bun-cache-a"
           candidate="${GITHUB_WORKSPACE}/.trino-candidate"
           bun_archive="${RUNNER_TEMP}/bun-linux-aarch64-a.zip"
-          install -d -m 0700 "${repository}" "${bun_cache}" "${candidate}"
+          install -d -m 0700 \
+            "${parquet_repository}" "${repository}" "${bun_cache}" "${candidate}"
+          docker run --rm \
+            --platform linux/arm64 \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp/maven-home \
+            --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
+            --env MAVEN_OPTS= \
+            --env JAVA_TOOL_OPTIONS= \
+            --env CI=true \
+            --volume "${parquet_source}:/workspace" \
+            --volume "${parquet_repository}:/m2" \
+            --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:/policy/.mvn:ro" \
+            --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:/policy/settings.xml:ro" \
+            --workdir /policy \
+            --entrypoint /usr/share/maven/bin/mvn \
+            "${BUILDER_IMAGE}" \
+            --batch-mode --show-version --errors --strict-checksums \
+              --ignore-transitive-repositories \
+              --settings /policy/settings.xml \
+              -Dmaven.repo.local=/m2 \
+              -Dproject.build.outputTimestamp="${PARQUET_OUTPUT_TIMESTAMP}" \
+              --file /workspace/pom.xml \
+              -pl :parquet-jackson -am \
+              clean install -DskipTests \
+            2>&1 | tee "${RUNNER_TEMP}/parquet-maven-transfer-a.log"
+          python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log \
+            --log "${RUNNER_TEMP}/parquet-maven-transfer-a.log"
+          python3 scripts/remediate_parquet_jackson.py stage-artifact \
+            --checkout "${parquet_source}" \
+            --build-repository "${parquet_repository}" \
+            --target-repository "${repository}"
           python3 scripts/prepare_trino_bun_input.py download \
             --url "${BUN_URL}" \
             --archive "${bun_archive}"
@@ -350,6 +435,9 @@ jobs:
             2>&1 | tee "${candidate}/maven-transfer-a.log"
           python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log \
             --log "${candidate}/maven-transfer-a.log"
+          python3 scripts/remediate_parquet_jackson.py seal-artifact \
+            --build-repository "${parquet_repository}" \
+            --target-repository "${repository}"
           python3 scripts/package_trino_maven_dependencies.py \
             prune-reactor-outputs --repository "${repository}"
           python3 scripts/package_trino_maven_dependencies.py create \
@@ -372,6 +460,8 @@ jobs:
           set -euo pipefail
           python3 scripts/verify_trino_dependency_publisher.py authorize --root .
           source_dir="${RUNNER_TEMP}/trino-source-verifier"
+          parquet_source="${RUNNER_TEMP}/parquet-source-b"
+          parquet_repository="${RUNNER_TEMP}/parquet-maven-repository-b"
           repository="${RUNNER_TEMP}/maven-repository-b"
           bun_cache="${RUNNER_TEMP}/bun-cache-b"
           candidate="${GITHUB_WORKSPACE}/.trino-candidate"
@@ -386,7 +476,42 @@ jobs:
           python3 scripts/verify_trino_dependency_publisher.py \
             apply-source-overlay \
             --root . --checkout "${source_dir}"
-          install -d -m 0700 "${repository}" "${bun_cache}"
+          install -d -m 0700 \
+            "${parquet_repository}" "${repository}" "${bun_cache}"
+          docker run --rm \
+            --platform linux/arm64 \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp/maven-home \
+            --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
+            --env MAVEN_OPTS= \
+            --env JAVA_TOOL_OPTIONS= \
+            --env CI=true \
+            --volume "${parquet_source}:/workspace" \
+            --volume "${parquet_repository}:/m2" \
+            --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:/policy/.mvn:ro" \
+            --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:/policy/settings.xml:ro" \
+            --workdir /policy \
+            --entrypoint /usr/share/maven/bin/mvn \
+            "${BUILDER_IMAGE}" \
+            --batch-mode --show-version --errors --strict-checksums \
+              --ignore-transitive-repositories \
+              --settings /policy/settings.xml \
+              -Dmaven.repo.local=/m2 \
+              -Dproject.build.outputTimestamp="${PARQUET_OUTPUT_TIMESTAMP}" \
+              --file /workspace/pom.xml \
+              -pl :parquet-jackson -am \
+              clean install -DskipTests \
+            2>&1 | tee "${RUNNER_TEMP}/parquet-maven-transfer-b.log"
+          python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log \
+            --log "${RUNNER_TEMP}/parquet-maven-transfer-b.log"
+          python3 scripts/remediate_parquet_jackson.py compare-artifacts \
+            --first-repository \
+              "${RUNNER_TEMP}/parquet-maven-repository-a" \
+            --second-repository "${parquet_repository}"
+          python3 scripts/remediate_parquet_jackson.py stage-artifact \
+            --checkout "${parquet_source}" \
+            --build-repository "${parquet_repository}" \
+            --target-repository "${repository}"
           python3 scripts/prepare_trino_bun_input.py download \
             --url "${BUN_URL}" \
             --archive "${bun_archive}"
@@ -424,6 +549,9 @@ jobs:
             2>&1 | tee "${candidate}/maven-transfer-b.log"
           python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log \
             --log "${candidate}/maven-transfer-b.log"
+          python3 scripts/remediate_parquet_jackson.py seal-artifact \
+            --build-repository "${parquet_repository}" \
+            --target-repository "${repository}"
           python3 scripts/package_trino_maven_dependencies.py \
             prune-reactor-outputs --repository "${repository}"
           python3 scripts/package_trino_maven_dependencies.py create \
@@ -1065,6 +1193,32 @@ jobs:
                               "gitTagObject": os.environ["SOURCE_TAG_OBJECT"],
                               "gitCommit": os.environ["SOURCE_COMMIT"],
                               "gitTree": os.environ["SOURCE_TREE"],
+                          },
+                      },
+                      {
+                          "uri": (
+                              "git+https://github.com/apache/parquet-java"
+                              "@refs/tags/apache-parquet-1.17.1"
+                          ),
+                          "digest": {
+                              "gitTagObject": os.environ[
+                                  "PARQUET_RELEASE_TAG_OBJECT"
+                              ],
+                              "gitNestedTagObject": os.environ[
+                                  "PARQUET_RC_TAG_OBJECT"
+                              ],
+                              "gitCommit": os.environ[
+                                  "PARQUET_SOURCE_COMMIT"
+                              ],
+                              "gitTree": os.environ["PARQUET_SOURCE_TREE"],
+                              "sourcePreimageSha256": (
+                                  "bfe7519b9886e9df51bfef8be52064b3"
+                                  "aadcbf9ae21c77402d8a66837aa5442f"
+                              ),
+                              "sourcePostimageSha256": (
+                                  "e07982c0f114b592c06c2aba1254df9c"
+                                  "280b69a2dd27f3a0739421fe84d12efa"
+                              ),
                           },
                       },
                       {
