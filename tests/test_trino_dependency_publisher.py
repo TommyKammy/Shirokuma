@@ -1358,6 +1358,70 @@ class MavenScanEvidenceTests(unittest.TestCase):
         )
         return sbom
 
+    def test_maven_descriptor_scopes_parquet_remediation_origin_to_exact_jar(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            parquet_path = verify.EXPECTED_PARQUET_REMEDIATION_JAR_PATH
+            record = {
+                "mode": "0644",
+                "path": parquet_path,
+                "repository_origin": (
+                    verify.EXPECTED_PARQUET_SOURCE_REMEDIATION["repository"]
+                ),
+                "sha256": hashlib.sha256(parquet_path.encode()).hexdigest(),
+                "size": len(parquet_path),
+            }
+            descriptor = root / "descriptor.json"
+
+            def write_descriptor() -> None:
+                descriptor.write_text(
+                    json.dumps(
+                        {
+                            "schema_version": 2,
+                            "file_count": 1,
+                            "files": [record],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+            write_descriptor()
+            self.assertEqual(
+                {parquet_path},
+                set(verify._maven_jar_records(descriptor)),
+            )
+
+            record["repository_origin"] = (
+                verify.EXPECTED_REPOSITORIES["central"]
+            )
+            write_descriptor()
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "invalid Maven JAR identity",
+            ):
+                verify._maven_jar_records(descriptor)
+
+            record["repository_origin"] = []
+            write_descriptor()
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "invalid Maven JAR identity",
+            ):
+                verify._maven_jar_records(descriptor)
+
+            record["path"] = self.JARS[0]
+            record["repository_origin"] = (
+                verify.EXPECTED_PARQUET_SOURCE_REMEDIATION["repository"]
+            )
+            write_descriptor()
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "invalid Maven JAR identity",
+            ):
+                verify._maven_jar_records(descriptor)
+
     def test_complete_rootfs_maven_inventory_is_required(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
