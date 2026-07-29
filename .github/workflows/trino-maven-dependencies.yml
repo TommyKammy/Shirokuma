@@ -7,11 +7,13 @@ on:
       - bootstrap/trino/v483/admission.json
       - bootstrap/trino/v483/maven-policy/.mvn/jvm.config
       - bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch
+      - bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch
       - bootstrap/trino/v483/settings.xml
       - bootstrap/trino/v483/trusted-build-contract.json
       - bootstrap/trino/v483/vex/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json
       - docs/design/07_ADR/ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md
       - docs/design/07_ADR/ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_source_remediation.md
+      - docs/design/07_ADR/ADR-0027_Authorize_bounded_Trino_483_Iceberg_only_Maven_closure.md
       - scripts/package_trino_bun_dependencies.py
       - scripts/package_trino_maven_dependencies.py
       - scripts/prepare_trino_bun_input.py
@@ -29,11 +31,13 @@ on:
       - bootstrap/trino/v483/admission.json
       - bootstrap/trino/v483/maven-policy/.mvn/jvm.config
       - bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch
+      - bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch
       - bootstrap/trino/v483/settings.xml
       - bootstrap/trino/v483/trusted-build-contract.json
       - bootstrap/trino/v483/vex/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json
       - docs/design/07_ADR/ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md
       - docs/design/07_ADR/ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_source_remediation.md
+      - docs/design/07_ADR/ADR-0027_Authorize_bounded_Trino_483_Iceberg_only_Maven_closure.md
       - scripts/package_trino_bun_dependencies.py
       - scripts/package_trino_maven_dependencies.py
       - scripts/prepare_trino_bun_input.py
@@ -429,9 +433,11 @@ jobs:
               --ignore-transitive-repositories \
               --settings /policy/settings.xml \
               -Dmaven.repo.local=/m2 \
+              -Dproject.build.outputTimestamp=2026-07-18T00:36:39Z \
               --file /workspace/pom.xml \
-              -pl '!:trino-docs' \
-              clean install -DskipTests \
+              -pl ':trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg' \
+              -am clean install -DskipTests \
+              -Dmaven.source.skip=true -Dair.check.skip-all \
             2>&1 | tee "${candidate}/maven-transfer-a.log"
           python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log \
             --log "${candidate}/maven-transfer-a.log"
@@ -543,9 +549,11 @@ jobs:
               --ignore-transitive-repositories \
               --settings /policy/settings.xml \
               -Dmaven.repo.local=/m2 \
+              -Dproject.build.outputTimestamp=2026-07-18T00:36:39Z \
               --file /workspace/pom.xml \
-              -pl '!:trino-docs' \
-              clean install -DskipTests \
+              -pl ':trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg' \
+              -am clean install -DskipTests \
+              -Dmaven.source.skip=true -Dair.check.skip-all \
             2>&1 | tee "${candidate}/maven-transfer-b.log"
           python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log \
             --log "${candidate}/maven-transfer-b.log"
@@ -662,13 +670,18 @@ jobs:
               --settings /policy/settings.xml \
               -Dmaven.repo.local=/workspace/.m2/repository \
               -Dmaven.compiler.debuglevel=source,lines \
-              --file /workspace/pom.xml -pl '!:trino-docs' \
-              clean install -DskipTests
+              -Dproject.build.outputTimestamp=2026-07-18T00:36:39Z \
+              --file /workspace/pom.xml \
+              -pl ':trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg' \
+              -am clean install -DskipTests \
+              -Dmaven.source.skip=true -Dair.check.skip-all
             python3 scripts/package_trino_bun_dependencies.py verify-cache \
               --descriptor "${candidate}/bun-dependency-manifest.json" \
               --cache "${offline_bun_cache}"
             output="${offline_source}/core/trino-server/target/trino-server-483.tar.gz"
             test -s "${output}"
+            python3 scripts/verify_trino_dependency_publisher.py \
+              verify-server-distribution --archive "${output}"
             sha256sum "${output}" | cut -d' ' -f1 \
               > "${candidate}/offline-output-${suffix}.sha256"
             stat --format='%s' "${output}" > "${candidate}/offline-output-${suffix}.size"
@@ -710,9 +723,12 @@ jobs:
                   "--settings /policy/settings.xml "
                   "-Dmaven.repo.local=/workspace/.m2/repository "
                   "-Dmaven.compiler.debuglevel=source,lines "
+                  "-Dproject.build.outputTimestamp=2026-07-18T00:36:39Z "
                   "--file /workspace/pom.xml "
-                  "-pl '!:trino-docs' "
-                  "clean install -DskipTests"
+                  "-pl ':trino-server,:trino-server-core,:trino-server-main,"
+                  ":trino-hdfs,:trino-iceberg' "
+                  "-am clean install -DskipTests "
+                  "-Dmaven.source.skip=true -Dair.check.skip-all"
               ),
               "output": "core/trino-server/target/trino-server-483.tar.gz",
               "output_sha256": digest,

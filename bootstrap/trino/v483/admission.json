@@ -198,6 +198,90 @@
     "high_zero_critical_zero_required": true,
     "expiry_action": "fail_closed_before_source_execution_dependency_resolution_or_publication"
   },
+  "distribution_remediation_authorization": {
+    "status": "active",
+    "authorization_type": "time_boxed_bounded_iceberg_only_maven_closure_remediation",
+    "decision_record": "docs/design/07_ADR/ADR-0027_Authorize_bounded_Trino_483_Iceberg_only_Maven_closure.md",
+    "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5115851323",
+    "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
+    "approved_at": "2026-07-29T09:35:05Z",
+    "expires_at": "2026-08-21T22:43:36Z",
+    "automatic_renewal": false,
+    "risk_owner": "TommyKammy",
+    "implementation_author": "Codex",
+    "reviewer_must_differ_from_implementation_author": true,
+    "source_binding": {
+      "repository": "https://github.com/trinodb/trino",
+      "release_tag": "483",
+      "commit_sha": "50b0b50b75abd47f830b7805ee1b51716eb4065e",
+      "tree_sha": "3b5414292a614b12393bb4605ea2d4c588a5b8ee"
+    },
+    "patch": {
+      "path": "bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch",
+      "sha256": "dd9cd76984c4bd2845aa95e87cdb404f7d24c0cfed65d5a780da32ce4f9d4269"
+    },
+    "permitted_paths": [
+      "pom.xml",
+      "core/trino-spi/pom.xml",
+      "core/trino-server-core/src/main/provisio/trino-core.xml",
+      "core/trino-server/src/main/provisio/trino.xml"
+    ],
+    "preimages": {
+      "pom.xml": "e1ba9a61315097e3a7133238c778ec161ac6097fe77a660fc5455a3e84568820",
+      "core/trino-spi/pom.xml": "9a3ab7c1e730e9534ca575b243865f4ff8ca355d201e5a7aa79f244401806993",
+      "core/trino-server-core/src/main/provisio/trino-core.xml": "0f2e86c7cb0873c43a602a55e8c8827bc3292fbe09868014ca360b61179d6863",
+      "core/trino-server/src/main/provisio/trino.xml": "ca8b95cdd6579da16fe531c2110f5c4d67e63f385b37b5b7ab9a220bee58c323"
+    },
+    "postimages": {
+      "pom.xml": "8d342215a3c748f7965f0a82e847cab13587b94171d9d1422922b665475109c1",
+      "core/trino-spi/pom.xml": "3032163467da8247367e3c0ac60d790ddabc96c632c083448d5b5a7d63f05b2b",
+      "core/trino-server-core/src/main/provisio/trino-core.xml": "585f0b68b6e0c2b1da66f71a0e289b77e776fca3e0451a17d55f35b10e18727a",
+      "core/trino-server/src/main/provisio/trino.xml": "f549d66db97d1bbee1b2505b6b3875ca3db9362a88b0d7402de8cc921bd5c018"
+    },
+    "output_timestamp": "2026-07-18T00:36:39Z",
+    "selected_projects": [
+      ":trino-server",
+      ":trino-server-core",
+      ":trino-server-main",
+      ":trino-hdfs",
+      ":trino-iceberg"
+    ],
+    "also_make_required_projects": true,
+    "distribution_contents": {
+      "server_modules": [
+        "trino-server-core",
+        "trino-server-main"
+      ],
+      "plugins": [
+        "iceberg"
+      ],
+      "iceberg_runtime_dependencies": [
+        "trino-hdfs"
+      ],
+      "other_plugins_permitted": false
+    },
+    "dependency_replacements": {
+      "com.fasterxml.jackson.core:jackson-core": "2.21.4",
+      "com.fasterxml.jackson.core:jackson-databind": "2.21.4",
+      "commons-beanutils:commons-beanutils": "1.11.0",
+      "commons-io:commons-io": "2.22.0",
+      "org.apache.maven:maven-core": "3.9.16",
+      "org.codehaus.plexus:plexus-archiver": "4.12.0",
+      "org.codehaus.plexus:plexus-utils": [
+        "3.6.1",
+        "4.0.3"
+      ],
+      "com.github.eirslett:frontend-maven-plugin": "2.0.2",
+      "ca.vanzyl.provisio.maven.plugins:provisio-maven-plugin": "2.0.0",
+      "org.apache.maven.plugins:maven-jar-plugin": "3.5.1"
+    },
+    "independent_reconstructions_required": 2,
+    "network_none_rebuilds_required": 2,
+    "byte_identical_outputs_required": true,
+    "high_zero_critical_zero_required": true,
+    "vulnerability_waiver_permitted": false,
+    "expiry_action": "fail_closed_before_source_execution_dependency_resolution_or_publication"
+  },
   "repository_state": {
     "dependency_snapshot_contract_permitted": true,
     "publication_workflow_permitted": true,
@@ -209,6 +293,7 @@
       "bootstrap/trino/v483/admission.json",
       "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
       "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch",
+      "bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch",
       "bootstrap/trino/v483/settings.xml",
       "bootstrap/trino/v483/trusted-build-contract.json",
       "bootstrap/trino/v483/vex/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json",
@@ -217,6 +302,7 @@
       "docs/design/07_ADR/ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md",
       "docs/design/07_ADR/ADR-0025_Keep_Trino_483_Maven_closure_blocked_pending_source_remediation.md",
       "docs/design/07_ADR/ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_source_remediation.md",
+      "docs/design/07_ADR/ADR-0027_Authorize_bounded_Trino_483_Iceberg_only_Maven_closure.md",
       "docs/design/context-manifest.json",
       "docs/design/evidence/trino/run-30331912718-maven-vulnerability-classification.json",
       "docs/design/evidence/trino/run-30331912718-trivy-vulnerability.json",
@@ -248,12 +334,14 @@
       "docs/design/07_ADR/ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md",
       "docs/design/07_ADR/ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md",
       "docs/design/07_ADR/ADR-0025_Keep_Trino_483_Maven_closure_blocked_pending_source_remediation.md",
-      "docs/design/07_ADR/ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_source_remediation.md"
+      "docs/design/07_ADR/ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_source_remediation.md",
+      "docs/design/07_ADR/ADR-0027_Authorize_bounded_Trino_483_Iceberg_only_Maven_closure.md"
     ],
     "phase": "source_remediation_publication_evidence_pending",
     "requirements": [
       "active and unexpired provisional source authorization bound to the exact source repository, tag, commit, and tree",
       "active exact owner authorization bound to the Parquet repository, tags, objects, commit, tree, preimage, postimage, permitted path, dependency replacements, expiry, and rollback",
+      "active exact owner authorization bound to the Trino Iceberg-only source paths, patch and preimage/postimage hashes, selected reactor, dependency replacements, expiry, and rollback",
       "independent reviewer approval distinct from the source-remediation author and owner",
       "authenticated closed dependency snapshot",
       "network-none reproducible linux/arm64 build",

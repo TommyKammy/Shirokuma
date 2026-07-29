@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import copy
 import datetime as dt
 import gzip
 import hashlib
@@ -1945,6 +1946,141 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 )
 
 
+class ServerDistributionTests(unittest.TestCase):
+    def _write_archive(
+        self,
+        path: Path,
+        *,
+        extra_plugin: str | None = None,
+        extra_root: str | None = None,
+        omit: str | None = None,
+        required_as_directory: str | None = None,
+        required_as_hardlink: str | None = None,
+        hardlink_target: str = "trino-server-483/lib/hardlink-target.jar",
+        hardlink_target_as_directory: bool = False,
+        unsafe_symlink: bool = False,
+    ) -> None:
+        with tarfile.open(path, mode="w:gz") as archive:
+            root = tarfile.TarInfo("trino-server-483")
+            root.type = tarfile.DIRTYPE
+            archive.addfile(root)
+            if (
+                required_as_hardlink is not None
+                and hardlink_target != root.name
+                and hardlink_target
+                not in verify.EXPECTED_SERVER_DISTRIBUTION_FILES
+            ):
+                payload = b"hardlink target"
+                member = tarfile.TarInfo(hardlink_target)
+                if hardlink_target_as_directory:
+                    member.type = tarfile.DIRTYPE
+                    archive.addfile(member)
+                else:
+                    member.size = len(payload)
+                    archive.addfile(member, io.BytesIO(payload))
+            for name in sorted(verify.EXPECTED_SERVER_DISTRIBUTION_FILES):
+                if name == omit:
+                    continue
+                if name == required_as_directory:
+                    member = tarfile.TarInfo(name)
+                    member.type = tarfile.DIRTYPE
+                    archive.addfile(member)
+                    continue
+                if name == required_as_hardlink:
+                    member = tarfile.TarInfo(name)
+                    member.type = tarfile.LNKTYPE
+                    member.linkname = hardlink_target
+                    archive.addfile(member)
+                    continue
+                payload = name.encode("utf-8")
+                member = tarfile.TarInfo(name)
+                member.size = len(payload)
+                archive.addfile(member, io.BytesIO(payload))
+            if extra_plugin is not None:
+                payload = b"extra"
+                member = tarfile.TarInfo(
+                    f"trino-server-483/plugin/{extra_plugin}/extra.jar"
+                )
+                member.size = len(payload)
+                archive.addfile(member, io.BytesIO(payload))
+            if extra_root is not None:
+                payload = b"extra"
+                member = tarfile.TarInfo(f"trino-server-483/{extra_root}")
+                member.size = len(payload)
+                archive.addfile(member, io.BytesIO(payload))
+            if unsafe_symlink:
+                member = tarfile.TarInfo("trino-server-483/lib/escape")
+                member.type = tarfile.SYMTYPE
+                member.linkname = "../../outside"
+                archive.addfile(member)
+
+    def test_exact_iceberg_only_distribution_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            required = next(iter(verify.EXPECTED_SERVER_DISTRIBUTION_FILES))
+            for name, options in (
+                ("regular", {}),
+                ("hardlink", {"required_as_hardlink": required}),
+            ):
+                with self.subTest(name=name):
+                    path = Path(temporary) / f"{name}.tar.gz"
+                    self._write_archive(path, **options)
+                    verify.verify_server_distribution(path)
+
+    def test_distribution_rejects_plugin_expansion_missing_files_and_links(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            cases = (
+                ("extra", {"extra_plugin": "hive"}, "plugin set differs"),
+                (
+                    "missing",
+                    {"omit": next(iter(verify.EXPECTED_SERVER_DISTRIBUTION_FILES))},
+                    "required members are missing",
+                ),
+                (
+                    "directory",
+                    {
+                        "required_as_directory": next(
+                            iter(verify.EXPECTED_SERVER_DISTRIBUTION_FILES)
+                        )
+                    },
+                    "required members are not regular files",
+                ),
+                (
+                    "hardlink-to-directory",
+                    {
+                        "required_as_hardlink": next(
+                            iter(verify.EXPECTED_SERVER_DISTRIBUTION_FILES)
+                        ),
+                        "hardlink_target": "trino-server-483/lib/target",
+                        "hardlink_target_as_directory": True,
+                    },
+                    "hard link target is not a regular file",
+                ),
+                (
+                    "configuration-plugin",
+                    {
+                        "extra_root": (
+                            "secrets-plugin/keystore-secrets-plugin/plugin.jar"
+                        )
+                    },
+                    "distribution root differs",
+                ),
+                (
+                    "symlink",
+                    {"unsafe_symlink": True},
+                    "unsafe or unexpected member",
+                ),
+            )
+            for name, options, error in cases:
+                with self.subTest(name=name):
+                    path = root / f"{name}.tar.gz"
+                    self._write_archive(path, **options)
+                    with self.assertRaisesRegex(verify.ContractError, error):
+                        verify.verify_server_distribution(path)
+
+
 class PublisherContractTests(unittest.TestCase):
     def test_repository_contract_and_workflow_are_closed(self) -> None:
         verify.audit(ROOT)
@@ -2434,18 +2570,24 @@ class PublisherContractTests(unittest.TestCase):
             verify._resolution_maven_commands(workflow),
         )
 
-    def test_each_resolver_command_requires_the_docs_exclusion(self) -> None:
+    def test_each_resolver_command_requires_exact_iceberg_reactor(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
         )
         workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
-        exclusion = "              -pl '!:trino-docs' \\\n"
-        self.assertEqual(2, workflow.count(exclusion))
-        altered = (
-            workflow.replace(exclusion, "", 1)
-            + "\n# misleading occurrence: -pl '!:trino-docs'\n"
+        selection = (
+            "              -pl "
+            f"'{verify.EXPECTED_PROJECT_SELECTION}' \\\n"
         )
-        self.assertEqual(4, altered.count("-pl '!:trino-docs'"))
+        self.assertEqual(3, workflow.count(selection))
+        altered = (
+            workflow.replace(
+                selection,
+                "              -pl ':trino-server,:trino-iceberg' \\\n",
+                1,
+            )
+            + f"\n# misleading occurrence: {selection.strip()}\n"
+        )
         with self.assertRaisesRegex(
             verify.ContractError,
             "WORKFLOW_RESOLUTION_COMMAND",
@@ -2639,6 +2781,18 @@ class PublisherContractTests(unittest.TestCase):
             1,
             workflow.count(verify.EXPECTED_OFFLINE_DIGEST_COMMAND),
         )
+        distribution_check = (
+            '              verify-server-distribution --archive "${output}"'
+        )
+        self.assertEqual(1, workflow.count(distribution_check))
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_OFFLINE",
+        ):
+            verify._validate_workflow(
+                contract,
+                workflow.replace(distribution_check, "", 1),
+            )
         filename_bound_digest = (
             '            sha256sum "${output}" \\\n'
             '              > "${candidate}/offline-output-${suffix}.sha256"'
@@ -2653,11 +2807,17 @@ class PublisherContractTests(unittest.TestCase):
             "WORKFLOW_OFFLINE",
         ):
             verify._validate_workflow(contract, altered)
-        offline_goal = "              clean install -DskipTests\n"
+        offline_goal = (
+            "              -am clean install -DskipTests \\\n"
+            "              -Dmaven.source.skip=true -Dair.check.skip-all\n"
+        )
         self.assertEqual(1, workflow.count(offline_goal))
         altered = workflow.replace(
             offline_goal,
-            "              clean package -DskipTests\n",
+            (
+                "              -am clean package -DskipTests \\\n"
+                "              -Dmaven.source.skip=true -Dair.check.skip-all\n"
+            ),
             1,
         )
         with self.assertRaisesRegex(
@@ -2927,6 +3087,70 @@ class PublisherContractTests(unittest.TestCase):
                     tzinfo=dt.timezone.utc,
                 ),
             )
+
+    def test_distribution_remediation_is_exact_and_expires_fail_closed(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        verify._validate_distribution_remediation_contract(
+            ROOT,
+            contract,
+            at=dt.datetime(2026, 8, 21, 22, 43, 35, tzinfo=dt.timezone.utc),
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "DISTRIBUTION_REMEDIATION_EXPIRED",
+        ):
+            verify._validate_distribution_remediation_contract(
+                ROOT,
+                contract,
+                at=dt.datetime(
+                    2026,
+                    8,
+                    21,
+                    22,
+                    43,
+                    36,
+                    tzinfo=dt.timezone.utc,
+                ),
+            )
+        expanded = copy.deepcopy(contract)
+        expanded["source"]["distribution_remediation"][
+            "selected_projects"
+        ].append(":trino-hive")
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "DISTRIBUTION_REMEDIATION",
+        ):
+            verify._validate_distribution_remediation_contract(
+                ROOT,
+                expanded,
+                at=None,
+            )
+
+    def test_distribution_patch_is_canonical_zero_context_diff(self) -> None:
+        remediation = verify.EXPECTED_DISTRIBUTION_REMEDIATION
+        patch = ROOT / remediation["patch"]["path"]
+        permitted_paths = set(remediation["permitted_paths"])
+        verify._validate_zero_context_patch(patch, permitted_paths)
+        payload = patch.read_bytes()
+        with tempfile.TemporaryDirectory() as temporary:
+            candidate = Path(temporary) / "candidate.patch"
+            for suffix in (
+                b" \n",
+                b"\nChanges:\n",
+                b"\n[full diff: rtk git diff --no-compact]\n",
+            ):
+                candidate.write_bytes(payload + suffix)
+                with self.subTest(suffix=suffix):
+                    with self.assertRaisesRegex(
+                        verify.ContractError,
+                        "DISTRIBUTION_REMEDIATION_PATCH",
+                    ):
+                        verify._validate_zero_context_patch(
+                            candidate,
+                            permitted_paths,
+                        )
 
     def test_transfer_log_rejects_unknown_repositories_and_credentials(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

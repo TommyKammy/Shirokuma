@@ -4,8 +4,8 @@ doc_id: "ADR-0022"
 title: "Select a conditional repository-owned Trino 483 source build"
 status: accepted
 created: 2026-07-22
-updated: 2026-07-25
-version: "1.1"
+updated: 2026-07-29
+version: "1.2"
 area: "architecture"
 tags: [shirokuma, adr, trino, arm64, maven, supply-chain]
 ---
@@ -148,7 +148,7 @@ so native container smoke remains a mandatory publisher gate.
   to be byte-identical. Online and offline builds set `CI=true`, use the exact
   npm registry and cache location, and therefore exercise Bun's frozen-lockfile
   path. The offline cache is mounted read-only before running
-  `mvn --offline --ignore-transitive-repositories --settings /policy/settings.xml -Dmaven.repo.local=/workspace/.m2/repository -Dmaven.compiler.debuglevel=source,lines --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests`
+  `mvn --offline --ignore-transitive-repositories --settings /policy/settings.xml -Dmaven.repo.local=/workspace/.m2/repository -Dmaven.compiler.debuglevel=source,lines -Dproject.build.outputTimestamp=2026-07-18T00:36:39Z --file /workspace/pom.xml -pl ':trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg' -am clean install -DskipTests -Dmaven.source.skip=true -Dair.check.skip-all`
   in a fresh network-none native-arm64 builder. The output must be exactly
   `core/trino-server/target/trino-server-483.tar.gz`; its hash, size, and
   reproducible-build comparison become retained evidence. The explicit
@@ -163,12 +163,11 @@ so native container smoke remains a mandatory publisher gate.
   `GroupsFraming.class`; the executable bytecode is unchanged, but the random
   debug metadata changes the complete server archive digest. The exact
   `source,lines` policy is contract-bound and may not be broadened to `vars`.
-  The explicit
-  `!:trino-docs` exclusion follows the Trino 483 upstream product-build
-  boundary: that reactor module invokes Sphinx to generate documentation and
-  contributes no Trino server runtime output. Both fresh dependency resolutions
-  and both offline rebuilds must use the same exclusion; all remaining reactor
-  modules stay inside the complete server-build and dependency-closure boundary.
+  ADR-0027 narrows both fresh dependency resolutions and offline rebuilds to
+  the exact server, server-core, server-main, HDFS, and Iceberg project
+  selection with required upstream projects. The selected reactor and
+  Iceberg-only Provisio distribution are hash-bound source changes; expanding
+  either boundary fails closed.
   Maven and Bun layers receive separate CycloneDX documents and fresh
   High=0/Critical=0 scans before publication.
 - Require the verifier workflow to run on a native linux/arm64 host. It must
@@ -236,6 +235,13 @@ High=0/Critical=0 result, identical raw/adjusted package inventory, import
 inventory, expiry, and separate-review controls are closed by ADR-0024. No
 other source path or control in this ADR is relaxed.
 
+ADR-0027 subsequently supersedes the full-reactor/full-distribution boundary.
+Only the exact server, server-core, server-main, HDFS, and Iceberg selected
+reactor and the four hash-bound source paths authorized there may be used.
+The unchanged controls still require two independent dependency
+reconstructions, two network-none clean builds, byte-identical server archives,
+closure-complete evidence, and High=0/Critical=0 without waiver.
+
 ## Consequences
 
 The conditional source-build path avoids laundering an unsigned upstream image
@@ -244,10 +250,10 @@ dependency graph reviewable. It also introduces substantial Actions time,
 registry storage, and review surface; a future publisher PR must measure and
 disclose its actual dependency artifact size before merge.
 
-The build is intentionally full rather than a hand-pruned collection of JARs.
-This preserves the upstream Trino server distribution and Iceberg plugin while
-the later runtime profile controls which catalogs are configured. Reducing the
-distribution or replacing dependencies requires a separate reviewed decision.
+The build is intentionally bounded to the Iceberg PoC distribution authorized
+by ADR-0027. It preserves server core/main, HDFS, and Iceberg while excluding
+unneeded runtime plugins. Any further distribution or dependency change
+requires a separate reviewed decision.
 
 If either allowed repository, the native arm64 builder, the offline rebuild,
 the vulnerability feed, or anonymous registry access is unavailable, the
