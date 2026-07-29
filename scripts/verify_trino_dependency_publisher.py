@@ -374,9 +374,9 @@ EXPECTED_DISTRIBUTION_REMEDIATION = {
     },
     "patch": {
         "path": DISTRIBUTION_REMEDIATION_PATH.as_posix(),
-        "sha256": "c7862378ceaf019cf9ec653b69a9ffb87e77a6b2fe362d7daa6cd4935a362160",
+        "sha256": "dd9cd76984c4bd2845aa95e87cdb404f7d24c0cfed65d5a780da32ce4f9d4269",
     },
-    "apply_arguments": ["--whitespace=error-all"],
+    "apply_arguments": ["--unidiff-zero", "--whitespace=error-all"],
     "permitted_paths": [
         "pom.xml",
         "core/trino-spi/pom.xml",
@@ -1240,8 +1240,13 @@ def _validate_distribution_remediation_contract(
             "exact Iceberg-only Maven closure remediation differs",
         )
     patch = EXPECTED_DISTRIBUTION_REMEDIATION["patch"]
-    if _sha256(root / patch["path"]) != patch["sha256"]:
+    patch_path = root / patch["path"]
+    if _sha256(patch_path) != patch["sha256"]:
         _fail("DISTRIBUTION_REMEDIATION", "source patch SHA-256 differs")
+    _validate_zero_context_patch(
+        patch_path,
+        set(EXPECTED_DISTRIBUTION_REMEDIATION["permitted_paths"]),
+    )
     expires = _parse_time(EXPECTED_DISTRIBUTION_REMEDIATION["expires_at"])
     authorization_expires = _parse_time(contract["authorization"]["expires_at"])
     if expires > authorization_expires:
@@ -1251,6 +1256,62 @@ def _validate_distribution_remediation_contract(
         )
     if at is not None and at >= expires:
         _fail("DISTRIBUTION_REMEDIATION_EXPIRED", expires.isoformat())
+
+
+def _validate_zero_context_patch(
+    path: Path,
+    permitted_paths: set[str],
+) -> None:
+    payload = _read_reviewed_regular_file(
+        path,
+        code="DISTRIBUTION_REMEDIATION_PATCH",
+    )
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as error:
+        _fail("DISTRIBUTION_REMEDIATION_PATCH", str(error))
+    lines = text.splitlines()
+    if (
+        not payload.endswith(b"\n")
+        or b"\r" in payload
+        or any(line.endswith((" ", "\t")) for line in lines)
+        or any(line.startswith(" ") for line in lines)
+        or any(
+            marker in text
+            for marker in (
+                "[full diff:",
+                "Changes:",
+                "... (more changes truncated)",
+            )
+        )
+    ):
+        _fail(
+            "DISTRIBUTION_REMEDIATION_PATCH",
+            "patch must be a canonical zero-context unified diff",
+        )
+    headers: list[tuple[str, str]] = []
+    for line in lines:
+        match = re.fullmatch(r"diff --git a/(.+) b/(.+)", line)
+        if match:
+            headers.append((match.group(1), match.group(2)))
+        if line.startswith("@@") and not re.fullmatch(
+            r"@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@",
+            line,
+        ):
+            _fail(
+                "DISTRIBUTION_REMEDIATION_PATCH",
+                f"noncanonical hunk header: {line}",
+            )
+    observed_paths = [left for left, right in headers if left == right]
+    if (
+        len(headers) != len(permitted_paths)
+        or len(observed_paths) != len(headers)
+        or set(observed_paths) != permitted_paths
+    ):
+        _fail(
+            "DISTRIBUTION_REMEDIATION_PATCH",
+            f"patch paths differ: {headers!r}",
+        )
 
 
 def _validate_react_router_import_inventory(checkout: Path) -> None:

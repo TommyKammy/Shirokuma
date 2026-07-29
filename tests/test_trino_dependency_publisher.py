@@ -3058,6 +3058,30 @@ class PublisherContractTests(unittest.TestCase):
                 at=None,
             )
 
+    def test_distribution_patch_is_canonical_zero_context_diff(self) -> None:
+        remediation = verify.EXPECTED_DISTRIBUTION_REMEDIATION
+        patch = ROOT / remediation["patch"]["path"]
+        permitted_paths = set(remediation["permitted_paths"])
+        verify._validate_zero_context_patch(patch, permitted_paths)
+        payload = patch.read_bytes()
+        with tempfile.TemporaryDirectory() as temporary:
+            candidate = Path(temporary) / "candidate.patch"
+            for suffix in (
+                b" \n",
+                b"\nChanges:\n",
+                b"\n[full diff: rtk git diff --no-compact]\n",
+            ):
+                candidate.write_bytes(payload + suffix)
+                with self.subTest(suffix=suffix):
+                    with self.assertRaisesRegex(
+                        verify.ContractError,
+                        "DISTRIBUTION_REMEDIATION_PATCH",
+                    ):
+                        verify._validate_zero_context_patch(
+                            candidate,
+                            permitted_paths,
+                        )
+
     def test_transfer_log_rejects_unknown_repositories_and_credentials(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "transfer.log"

@@ -32,7 +32,7 @@ still pass the unchanged High=0/Critical=0 and network-none gates.
 Apply
 `bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch`
 with SHA-256
-`c7862378ceaf019cf9ec653b69a9ffb87e77a6b2fe362d7daa6cd4935a362160`
+`dd9cd76984c4bd2845aa95e87cdb404f7d24c0cfed65d5a780da32ce4f9d4269`
 only after verifying the exact Trino 483 source binding:
 
 - repository: `https://github.com/trinodb/trino`
@@ -48,6 +48,11 @@ The only permitted paths and hashes are:
 | `core/trino-spi/pom.xml` | `9a3ab7c1e730e9534ca575b243865f4ff8ca355d201e5a7aa79f244401806993` | `3032163467da8247367e3c0ac60d790ddabc96c632c083448d5b5a7d63f05b2b` |
 | `core/trino-server-core/src/main/provisio/trino-core.xml` | `0f2e86c7cb0873c43a602a55e8c8827bc3292fbe09868014ca360b61179d6863` | `585f0b68b6e0c2b1da66f71a0e289b77e776fca3e0451a17d55f35b10e18727a` |
 | `core/trino-server/src/main/provisio/trino.xml` | `ca8b95cdd6579da16fe531c2110f5c4d67e63f385b37b5b7ab9a220bee58c323` | `f549d66db97d1bbee1b2505b6b3875ca3db9362a88b0d7402de8cc921bd5c018` |
+
+The patch is a canonical zero-context unified diff and must be applied with
+`git apply --unidiff-zero --whitespace=error-all`. This representation avoids
+embedding generator summaries or context-only whitespace while preserving the
+same four postimages.
 
 The online resolution and offline rebuild must select exactly:
 

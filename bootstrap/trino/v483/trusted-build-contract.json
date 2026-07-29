@@ -39,11 +39,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "f8c723b9deef770a2bc6a0e369c5bd8f70dfc1f8bbecb1056bceddc0f042a3ab"
+      "sha256": "5f9d3e5fb52647bb2fa50f7ed2511806d4ba529b198866058234ebe9a13c8c17"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "083ccad445045648f10d5ef9df87b624b09d0f40eaa2275fced4d6aa3336f5a6"
+      "sha256": "a3c0af0a4ff3b51b71c40d238367de5680d7c75e734a1322bd99838d4e20e0d5"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -59,7 +59,7 @@
     },
     {
       "path": "bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch",
-      "sha256": "c7862378ceaf019cf9ec653b69a9ffb87e77a6b2fe362d7daa6cd4935a362160"
+      "sha256": "dd9cd76984c4bd2845aa95e87cdb404f7d24c0cfed65d5a780da32ce4f9d4269"
     },
     {
       "path": "bootstrap/trino/v483/vex/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json",
@@ -75,7 +75,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0027_Authorize_bounded_Trino_483_Iceberg_only_Maven_closure.md",
-      "sha256": "2fec46179f81f776d4f546c5492709076235d897d7e9893e8071a11d33ee2a00"
+      "sha256": "429f9169c5efe8892a5ebd22ae7199aa828a722d3b720c2751f1c7cd1b3d8713"
     }
   ],
   "authorization": {
@@ -307,9 +307,10 @@
       },
       "patch": {
         "path": "bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch",
-        "sha256": "c7862378ceaf019cf9ec653b69a9ffb87e77a6b2fe362d7daa6cd4935a362160"
+        "sha256": "dd9cd76984c4bd2845aa95e87cdb404f7d24c0cfed65d5a780da32ce4f9d4269"
       },
       "apply_arguments": [
+        "--unidiff-zero",
         "--whitespace=error-all"
       ],
       "permitted_paths": [

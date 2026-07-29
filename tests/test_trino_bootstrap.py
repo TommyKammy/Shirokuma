@@ -3317,6 +3317,10 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             admission["patch"],
         )
         self.assertEqual(
+            ["--unidiff-zero", "--whitespace=error-all"],
+            contract["apply_arguments"],
+        )
+        self.assertEqual(
             [
                 ":trino-server",
                 ":trino-server-core",

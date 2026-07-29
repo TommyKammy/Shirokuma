@@ -1,38 +1,16 @@
-.../src/main/provisio/trino-core.xml               |  55 ----
- core/trino-server/src/main/provisio/trino.xml      | 298 ---------------------
- core/trino-spi/pom.xml                             |  30 +++
- pom.xml                                            | 212 ++++++++++++++-
- 4 files changed, 240 insertions(+), 355 deletions(-)
-
 diff --git a/core/trino-server-core/src/main/provisio/trino-core.xml b/core/trino-server-core/src/main/provisio/trino-core.xml
 index fe20911f..0c53e55c 100644
 --- a/core/trino-server-core/src/main/provisio/trino-core.xml
 +++ b/core/trino-server-core/src/main/provisio/trino-core.xml
-@@ -1,8 +1,6 @@
- <runtime>
+@@ -2 +1,0 @@
 -    <!-- Target -->
-     <archive name="${project.artifactId}-${project.version}.tar.gz" hardLinkIncludes="**/*.jar" />
- 
+@@ -5 +3,0 @@
 -    <!-- Notices -->
-     <fileSet to="/">
-         <directory path="${basedir}">
-             <include>NOTICE</include>
-@@ -10,7 +8,6 @@
-         </directory>
-     </fileSet>
- 
+@@ -13 +10,0 @@
 -    <!-- Launcher -->
-     <artifactSet to="bin">
-         <artifact id="io.airlift:launcher:tar.gz:bin:${dep.launcher.version}">
-             <unpack />
-@@ -20,59 +17,7 @@
-         </artifact>
-     </artifactSet>
- 
+@@ -23 +19,0 @@
 -    <!-- Server -->
-     <artifactSet to="lib">
-         <artifact id="${project.groupId}:trino-server-main:${project.version}" />
-     </artifactSet>
+@@ -27,51 +22,0 @@
 -
 -    <!-- Configuration Plugins -->
 -    <artifactSet to="secrets-plugin/keystore-secrets-plugin">
@@ -84,23 +62,15 @@ index fe20911f..0c53e55c 100644
 -        </artifact>
 -    </artifactSet>
 -
- </runtime>
 diff --git a/core/trino-server/src/main/provisio/trino.xml b/core/trino-server/src/main/provisio/trino.xml
 index 7ea29bda..f439a7ec 100644
 --- a/core/trino-server/src/main/provisio/trino.xml
 +++ b/core/trino-server/src/main/provisio/trino.xml
-@@ -1,126 +1,12 @@
- <runtime>
+@@ -2 +1,0 @@
 -    <!-- Target -->
-     <archive name="${project.artifactId}-${project.version}.tar.gz" hardLinkIncludes="**/*.jar" />
- 
+@@ -5 +3,0 @@
 -   <!-- Expand on top of trino-server-core -->
-     <artifactSet to="">
-         <artifact id="${project.groupId}:trino-server-core:tar.gz:${project.version}">
-             <unpack />
-         </artifact>
-     </artifactSet>
- 
+@@ -12,112 +9,0 @@
 -    <!-- Plugins -->
 -    <artifactSet to="plugin/ai-functions">
 -        <artifact id="${project.groupId}:trino-ai-functions:zip:${project.version}">
@@ -213,13 +183,7 @@ index 7ea29bda..f439a7ec 100644
 -        </artifact>
 -    </artifactSet>
 -
-     <artifactSet to="plugin/iceberg">
-         <artifact id="${project.groupId}:trino-iceberg:zip:${project.version}">
-             <unpack />
-@@ -129,188 +15,4 @@
-             <unpack useRoot="true" />
-         </artifact>
-     </artifactSet>
+@@ -132,184 +17,0 @@
 -
 -    <artifactSet to="plugin/ignite">
 -        <artifact id="${project.groupId}:trino-ignite:zip:${project.version}">
@@ -404,15 +368,11 @@ index 7ea29bda..f439a7ec 100644
 -            <unpack />
 -        </artifact>
 -    </artifactSet>
- </runtime>
 diff --git a/core/trino-spi/pom.xml b/core/trino-spi/pom.xml
 index 3d57e6de..5a6ea4e6 100644
 --- a/core/trino-spi/pom.xml
 +++ b/core/trino-spi/pom.xml
-@@ -541,6 +541,36 @@
-                         <artifactId>revapi-java</artifactId>
-                         <version>0.28.4</version>
-                     </dependency>
+@@ -543,0 +544,30 @@
 +                    <dependency>
 +                        <groupId>com.fasterxml.jackson.core</groupId>
 +                        <artifactId>jackson-core</artifactId>
@@ -443,26 +403,14 @@ index 3d57e6de..5a6ea4e6 100644
 +                        <artifactId>plexus-utils</artifactId>
 +                        <version>4.0.3</version>
 +                    </dependency>
-                 </dependencies>
-                 <executions>
-                     <execution>
 diff --git a/pom.xml b/pom.xml
 index 50f3ac15..0104288b 100644
 --- a/pom.xml
 +++ b/pom.xml
-@@ -195,7 +195,7 @@
-         <dep.derby.version>10.17.1.0</dep.derby.version>
-         <dep.docker.images.version>127</dep.docker.images.version>
-         <dep.drift.version>1.24</dep.drift.version>
+@@ -198 +198 @@
 -        <dep.frontend-maven-plugin.version>2.0.1</dep.frontend-maven-plugin.version>
 +        <dep.frontend-maven-plugin.version>2.0.2</dep.frontend-maven-plugin.version>
-         <dep.frontend-bun.version>v1.3.14</dep.frontend-bun.version>
-         <dep.geoapi.version>3.0.2</dep.geoapi.version>
-         <dep.httpcore5.version>5.4.3</dep.httpcore5.version>
-@@ -2372,11 +2372,47 @@
-                     <configuration>
-                         <bunVersion>${dep.frontend-bun.version}</bunVersion>
-                     </configuration>
+@@ -2374,0 +2375,29 @@
 +                    <dependencies>
 +                        <dependency>
 +                            <groupId>org.codehaus.plexus</groupId>
@@ -492,11 +440,7 @@ index 50f3ac15..0104288b 100644
 +                            <version>3.6.1</version>
 +                        </dependency>
 +                    </dependencies>
-                 </plugin>
-                 <plugin>
-                     <groupId>org.antlr</groupId>
-                     <artifactId>antlr4-maven-plugin</artifactId>
-                     <version>${dep.antlr.version}</version>
+@@ -2379,0 +2409,7 @@
 +                    <dependencies>
 +                        <dependency>
 +                            <groupId>org.codehaus.plexus</groupId>
@@ -504,13 +448,7 @@ index 50f3ac15..0104288b 100644
 +                            <version>3.6.1</version>
 +                        </dependency>
 +                    </dependencies>
-                     <configuration>
-                         <visitor>true</visitor>
-                     </configuration>
-@@ -2413,6 +2449,147 @@
-                     <groupId>org.codehaus.mojo</groupId>
-                     <artifactId>exec-maven-plugin</artifactId>
-                     <version>3.6.3</version>
+@@ -2415,0 +2452,141 @@
 +                    <dependencies>
 +                        <dependency>
 +                            <groupId>org.codehaus.plexus</groupId>
@@ -652,13 +590,7 @@ index 50f3ac15..0104288b 100644
 +                            <version>4.0.3</version>
 +                        </dependency>
 +                    </dependencies>
-                 </plugin>
- 
-                 <plugin>
-@@ -2424,6 +2601,13 @@
-                 <plugin>
-                     <groupId>org.gaul</groupId>
-                     <artifactId>modernizer-maven-plugin</artifactId>
+@@ -2426,0 +2604,7 @@
 +                    <dependencies>
 +                        <dependency>
 +                            <groupId>org.codehaus.plexus</groupId>
@@ -666,13 +598,7 @@ index 50f3ac15..0104288b 100644
 +                            <version>4.0.3</version>
 +                        </dependency>
 +                    </dependencies>
-                     <configuration>
-                         <violationsFiles>
-                             <violationsFile>${air.main.basedir}/.mvn/modernizer/violations.xml</violationsFile>
-@@ -2585,12 +2769,36 @@
-                 <plugin>
-                     <groupId>ca.vanzyl.provisio.maven.plugins</groupId>
-                     <artifactId>provisio-maven-plugin</artifactId>
+@@ -2588 +2772,13 @@
 -                    <version>1.1.3</version>
 +                    <version>2.0.0</version>
 +                    <dependencies>
@@ -687,11 +613,7 @@ index 50f3ac15..0104288b 100644
 +                            <version>4.0.3</version>
 +                        </dependency>
 +                    </dependencies>
-                 </plugin>
- 
-                 <plugin>
-                     <groupId>org.basepom.maven</groupId>
-                     <artifactId>duplicate-finder-maven-plugin</artifactId>
+@@ -2593,0 +2790,12 @@
 +                    <dependencies>
 +                        <dependency>
 +                            <groupId>commons-io</groupId>
@@ -704,516 +626,3 @@ index 50f3ac15..0104288b 100644
 +                            <version>4.0.3</version>
 +                        </dependency>
 +                    </dependencies>
-                     <configuration>
-                         <ignoredDependencies>
-                             <ignoredDependency>
-
-Changes:
-
-core/trino-server-core/src/main/provisio/trino-core.xml
-  @@ -1,8 +1,6 @@
-  -    <!-- Target -->
-       <archive name="${project.artifactId}-${project.version}.tar.gz" hardLinkIncludes="**/*.jar" />
-   
-  -    <!-- Notices -->
-       <fileSet to="/">
-           <directory path="${basedir}">
-               <include>NOTICE</include>
-  @@ -10,7 +8,6 @@
-  -    <!-- Launcher -->
-       <artifactSet to="bin">
-           <artifact id="io.airlift:launcher:tar.gz:bin:${dep.launcher.version}">
-               <unpack />
-  @@ -20,59 +17,7 @@
-  -    <!-- Server -->
-       <artifactSet to="lib">
-           <artifact id="${project.groupId}:trino-server-main:${project.version}" />
-       </artifactSet>
-  -
-  -    <!-- Configuration Plugins -->
-  -    <artifactSet to="secrets-plugin/keystore-secrets-plugin">
-  -        <artifact id="io.airlift:secrets-keystore-plugin:zip:${dep.airlift.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <!-- Plugins -->
-  -    <artifactSet to="plugin/exchange-filesystem">
-  -        <artifact id="${project.groupId}:trino-exchange-filesystem:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/functions-python">
-  -        <artifact id="${project.groupId}:trino-functions-python:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/geospatial">
-  -        <artifact id="${project.groupId}:trino-geospatial:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/password-authenticators">
-  -        <artifact id="${project.groupId}:trino-password-authenticators:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/resource-group-managers">
-  -        <artifact id="${project.groupId}:trino-resource-group-managers:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/session-property-managers">
-  -        <artifact id="${project.groupId}:trino-session-property-managers:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/spooling-filesystem">
-  -        <artifact id="${project.groupId}:trino-spooling-filesystem:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-   </runtime>
-  +0 -55
-
-core/trino-server/src/main/provisio/trino.xml
-  @@ -1,126 +1,12 @@
-  -    <!-- Target -->
-       <archive name="${project.artifactId}-${project.version}.tar.gz" hardLinkIncludes="**/*.jar" />
-   
-  -   <!-- Expand on top of trino-server-core -->
-       <artifactSet to="">
-           <artifact id="${project.groupId}:trino-server-core:tar.gz:${project.version}">
-               <unpack />
-           </artifact>
-       </artifactSet>
-   
-  -    <!-- Plugins -->
-  -    <artifactSet to="plugin/ai-functions">
-  -        <artifact id="${project.groupId}:trino-ai-functions:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/bigquery">
-  -        <artifact id="${project.groupId}:trino-bigquery:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/blackhole">
-  -        <artifact id="${project.groupId}:trino-blackhole:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/cassandra">
-  -        <artifact id="${project.groupId}:trino-cassandra:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/clickhouse">
-  -        <artifact id="${project.groupId}:trino-clickhouse:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/datasketches">
-  -        <artifact id="${project.groupId}:trino-datasketches:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/delta-lake">
-  -        <artifact id="${project.groupId}:trino-delta-lake:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -        <artifact id="${project.groupId}:trino-hdfs:zip:${project.version}">
-  -            <unpack useRoot="true" />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/druid">
-  -        <artifact id="${project.groupId}:trino-druid:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/duckdb">
-  -        <artifact id="${project.groupId}:trino-duckdb:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/elasticsearch">
-  -        <artifact id="${project.groupId}:trino-elasticsearch:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/exasol">
-  -        <artifact id="${project.groupId}:trino-exasol:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/exchange-hdfs">
-  -        <artifact id="${project.groupId}:trino-exchange-hdfs:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/faker">
-  -        <artifact id="${project.groupId}:trino-faker:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/google-sheets">
-  -        <artifact id="${project.groupId}:trino-google-sheets:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/hive">
-  -        <artifact id="${project.groupId}:trino-hive:zip:${project.version}">
-  ... (22 lines truncated)
-  @@ -129,188 +15,4 @@
-  -
-  -    <artifactSet to="plugin/ignite">
-  -        <artifact id="${project.groupId}:trino-ignite:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/jmx">
-  -        <artifact id="${project.groupId}:trino-jmx:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/kafka">
-  -        <artifact id="${project.groupId}:trino-kafka:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/kafka-event-listener">
-  -        <artifact id="${project.groupId}:trino-kafka-event-listener:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/lakehouse">
-  -        <artifact id="${project.groupId}:trino-lakehouse:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -        <artifact id="${project.groupId}:trino-hdfs:zip:${project.version}">
-  -            <unpack useRoot="true" />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/loki">
-  -        <artifact id="${project.groupId}:trino-loki:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/ldap-group-provider">
-  -        <artifact id="${project.groupId}:trino-ldap-group-provider:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/mariadb">
-  -        <artifact id="${project.groupId}:trino-mariadb:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/memory">
-  -        <artifact id="${project.groupId}:trino-memory:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/ml">
-  -        <artifact id="${project.groupId}:trino-ml:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/mongodb">
-  -        <artifact id="${project.groupId}:trino-mongodb:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/mysql">
-  -        <artifact id="${project.groupId}:trino-mysql:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/mysql-event-listener">
-  -        <artifact id="${project.groupId}:trino-mysql-event-listener:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/opa">
-  -        <artifact id="${project.groupId}:trino-opa:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/openlineage">
-  -        <artifact id="${project.groupId}:trino-openlineage:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  -    <artifactSet to="plugin/opensearch">
-  -        <artifact id="${project.groupId}:trino-opensearch:zip:${project.version}">
-  -            <unpack />
-  -        </artifact>
-  -    </artifactSet>
-  -
-  ... (84 lines truncated)
-  +0 -298
-
-core/trino-spi/pom.xml
-  @@ -541,6 +541,36 @@
-  +                    <dependency>
-  +                        <groupId>com.fasterxml.jackson.core</groupId>
-  +                        <artifactId>jackson-core</artifactId>
-  +                        <version>2.21.4</version>
-  +                    </dependency>
-  +                    <dependency>
-  +                        <groupId>com.fasterxml.jackson.core</groupId>
-  +                        <artifactId>jackson-databind</artifactId>
-  +                        <version>2.21.4</version>
-  +                    </dependency>
-  +                    <dependency>
-  +                        <groupId>commons-beanutils</groupId>
-  +                        <artifactId>commons-beanutils</artifactId>
-  +                        <version>1.11.0</version>
-  +                    </dependency>
-  +                    <dependency>
-  +                        <groupId>commons-io</groupId>
-  +                        <artifactId>commons-io</artifactId>
-  +                        <version>2.22.0</version>
-  +                    </dependency>
-  +                    <dependency>
-  +                        <groupId>org.apache.maven</groupId>
-  +                        <artifactId>maven-core</artifactId>
-  +                        <version>3.9.16</version>
-  +                    </dependency>
-  +                    <dependency>
-  +                        <groupId>org.codehaus.plexus</groupId>
-  +                        <artifactId>plexus-utils</artifactId>
-  +                        <version>4.0.3</version>
-  +                    </dependency>
-                   </dependencies>
-                   <executions>
-                       <execution>
-  +30 -0
-
-pom.xml
-  @@ -195,7 +195,7 @@
-  -        <dep.frontend-maven-plugin.version>2.0.1</dep.frontend-maven-plugin.version>
-  +        <dep.frontend-maven-plugin.version>2.0.2</dep.frontend-maven-plugin.version>
-           <dep.frontend-bun.version>v1.3.14</dep.frontend-bun.version>
-           <dep.geoapi.version>3.0.2</dep.geoapi.version>
-           <dep.httpcore5.version>5.4.3</dep.httpcore5.version>
-  @@ -2372,11 +2372,47 @@
-  +                    <dependencies>
-  +                        <dependency>
-  +                            <groupId>org.codehaus.plexus</groupId>
-  +                            <artifactId>plexus-utils</artifactId>
-  +                            <version>4.0.3</version>
-  +                        </dependency>
-  +                    </dependencies>
-  +                </plugin>
-  +                <plugin>
-  +                    <groupId>org.apache.maven.plugins</groupId>
-  +                    <artifactId>maven-jar-plugin</artifactId>
-  +                    <version>3.5.1</version>
-  +                    <dependencies>
-  +                        <dependency>
-  +                            <groupId>commons-io</groupId>
-  +                            <artifactId>commons-io</artifactId>
-  +                            <version>2.22.0</version>
-  +                        </dependency>
-  +                        <dependency>
-  +                            <groupId>org.codehaus.plexus</groupId>
-  +                            <artifactId>plexus-archiver</artifactId>
-  +                            <version>4.12.0</version>
-  +                        </dependency>
-  +                        <dependency>
-  +                            <groupId>org.codehaus.plexus</groupId>
-  +                            <artifactId>plexus-utils</artifactId>
-  +                            <version>3.6.1</version>
-  +                        </dependency>
-  +                    </dependencies>
-                   </plugin>
-                   <plugin>
-                       <groupId>org.antlr</groupId>
-                       <artifactId>antlr4-maven-plugin</artifactId>
-                       <version>${dep.antlr.version}</version>
-  +                    <dependencies>
-  +                        <dependency>
-  +                            <groupId>org.codehaus.plexus</groupId>
-  +                            <artifactId>plexus-utils</artifactId>
-  +                            <version>3.6.1</version>
-  +                        </dependency>
-  +                    </dependencies>
-                       <configuration>
-                           <visitor>true</visitor>
-                       </configuration>
-  @@ -2413,6 +2449,147 @@
-  +                    <dependencies>
-  +                        <dependency>
-  +                            <groupId>org.codehaus.plexus</groupId>
-  +                            <artifactId>plexus-utils</artifactId>
-  +                            <version>4.0.3</version>
-  +                        </dependency>
-  +                    </dependencies>
-  +                </plugin>
-  +
-  +                <plugin>
-  +                    <groupId>com.github.os72</groupId>
-  +                    <artifactId>protoc-jar-maven-plugin</artifactId>
-  +                    <dependencies>
-  +                        <dependency>
-  +                            <groupId>commons-io</groupId>
-  +                            <artifactId>commons-io</artifactId>
-  +                            <version>2.22.0</version>
-  +                        </dependency>
-  +                        <dependency>
-  +                            <groupId>org.codehaus.plexus</groupId>
-  +                            <artifactId>plexus-utils</artifactId>
-  +                            <version>3.6.1</version>
-  +                        </dependency>
-  +                    </dependencies>
-  +                </plugin>
-  +
-  +                <plugin>
-  +                    <groupId>io.github.git-commit-id</groupId>
-  +                    <artifactId>git-commit-id-maven-plugin</artifactId>
-  +                    <dependencies>
-  +                        <dependency>
-  +                            <groupId>org.codehaus.plexus</groupId>
-  +                            <artifactId>plexus-utils</artifactId>
-  +                            <version>4.0.3</version>
-  +                        </dependency>
-  +                    </dependencies>
-  +                </plugin>
-  +
-  +                <plugin>
-  +                    <groupId>org.apache.maven.plugins</groupId>
-  +                    <artifactId>maven-compiler-plugin</artifactId>
-  +                    <dependencies>
-  +                        <dependency>
-  +                            <groupId>commons-io</groupId>
-  +                            <artifactId>commons-io</artifactId>
-  +                            <version>2.22.0</version>
-  +                        </dependency>
-  +                        <dependency>
-  +                            <groupId>org.codehaus.plexus</groupId>
-  +                            <artifactId>plexus-utils</artifactId>
-  +                            <version>3.6.1</version>
-  +                        </dependency>
-  +                    </dependencies>
-  +                </plugin>
-  +
-  +                <plugin>
-  +                    <groupId>org.apache.maven.plugins</groupId>
-  +                    <artifactId>maven-dependency-plugin</artifactId>
-  +                    <dependencies>
-  +                        <dependency>
-  +                            <groupId>commons-beanutils</groupId>
-  +                            <artifactId>commons-beanutils</artifactId>
-  +                            <version>1.11.0</version>
-  +                        </dependency>
-  +                        <dependency>
-  +                            <groupId>commons-io</groupId>
-  +                            <artifactId>commons-io</artifactId>
-  +                            <version>2.22.0</version>
-  +                        </dependency>
-  +                        <dependency>
-  +                            <groupId>org.apache.maven</groupId>
-  +                            <artifactId>maven-core</artifactId>
-  +                            <version>3.9.16</version>
-  +                        </dependency>
-  +                        <dependency>
-  +                            <groupId>org.codehaus.plexus</groupId>
-  +                            <artifactId>plexus-archiver</artifactId>
-  +                            <version>4.12.0</version>
-  +                        </dependency>
-  +                        <dependency>
-  +                            <groupId>org.codehaus.plexus</groupId>
-  +                            <artifactId>plexus-utils</artifactId>
-  +                            <version>3.6.1</version>
-  +                        </dependency>
-  +                    </dependencies>
-  +                </plugin>
-  +
-  +                <plugin>
-  +                    <groupId>org.apache.maven.plugins</groupId>
-  +                    <artifactId>maven-resources-plugin</artifactId>
-  +                    <dependencies>
-  +                        <dependency>
-  +                            <groupId>commons-io</groupId>
-  +                            <artifactId>commons-io</artifactId>
-  +                            <version>2.22.0</version>
-  +                        </dependency>
-  +                        <dependency>
-  +                            <groupId>org.codehaus.plexus</groupId>
-  +                            <artifactId>plexus-utils</artifactId>
-  +                            <version>4.0.3</version>
-  ... (41 lines truncated)
-  @@ -2424,6 +2601,13 @@
-  +                    <dependencies>
-  +                        <dependency>
-  +                            <groupId>org.codehaus.plexus</groupId>
-  +                            <artifactId>plexus-utils</artifactId>
-  +                            <version>4.0.3</version>
-  +                        </dependency>
-  +                    </dependencies>
-                       <configuration>
-                           <violationsFiles>
-                               <violationsFile>${air.main.basedir}/.mvn/modernizer/violations.xml</violationsFile>
-  @@ -2585,12 +2769,36 @@
-  -                    <version>1.1.3</version>
-  +                    <version>2.0.0</version>
-  +                    <dependencies>
-  +                        <dependency>
-  +                            <groupId>commons-io</groupId>
-  +                            <artifactId>commons-io</artifactId>
-  +                            <version>2.22.0</version>
-  +                        </dependency>
-  +                        <dependency>
-  +                            <groupId>org.codehaus.plexus</groupId>
-  +                            <artifactId>plexus-utils</artifactId>
-  +                            <version>4.0.3</version>
-  +                        </dependency>
-  +                    </dependencies>
-                   </plugin>
-   
-                   <plugin>
-                       <groupId>org.basepom.maven</groupId>
-                       <artifactId>duplicate-finder-maven-plugin</artifactId>
-  +                    <dependencies>
-
-... (more changes truncated)
-  +199 -2
-[full diff: rtk git diff --no-compact]
