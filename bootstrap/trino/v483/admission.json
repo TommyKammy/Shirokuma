@@ -272,7 +272,7 @@
         "4.0.3"
       ],
       "com.github.eirslett:frontend-maven-plugin": "2.0.2",
-      "io.takari.maven.plugins:provisio-maven-plugin": "2.0.0",
+      "ca.vanzyl.provisio.maven.plugins:provisio-maven-plugin": "2.0.0",
       "org.apache.maven.plugins:maven-jar-plugin": "3.5.1"
     },
     "independent_reconstructions_required": 2,

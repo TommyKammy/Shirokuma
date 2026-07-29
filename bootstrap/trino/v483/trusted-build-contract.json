@@ -39,11 +39,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "5f9d3e5fb52647bb2fa50f7ed2511806d4ba529b198866058234ebe9a13c8c17"
+      "sha256": "ae9a81b0c9d7940819e1f52abba69fa22d2e98e997f690993b5b6d61835811ad"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "a3c0af0a4ff3b51b71c40d238367de5680d7c75e734a1322bd99838d4e20e0d5"
+      "sha256": "3573f167a3eccbc4f11dbf6043e0fbe0715cf7589e11f885e4303553f6589a79"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -75,7 +75,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0027_Authorize_bounded_Trino_483_Iceberg_only_Maven_closure.md",
-      "sha256": "429f9169c5efe8892a5ebd22ae7199aa828a722d3b720c2751f1c7cd1b3d8713"
+      "sha256": "aa4b7a55659a40158a008e266724b0cc10524dca556d900687e65b63444c25d4"
     }
   ],
   "authorization": {
@@ -365,7 +365,7 @@
           "4.0.3"
         ],
         "com.github.eirslett:frontend-maven-plugin": "2.0.2",
-        "io.takari.maven.plugins:provisio-maven-plugin": "2.0.0",
+        "ca.vanzyl.provisio.maven.plugins:provisio-maven-plugin": "2.0.0",
         "org.apache.maven.plugins:maven-jar-plugin": "3.5.1"
       },
       "independent_reconstructions_required": 2,

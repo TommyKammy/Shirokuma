@@ -435,7 +435,7 @@ EXPECTED_DISTRIBUTION_REMEDIATION = {
         "org.codehaus.plexus:plexus-archiver": "4.12.0",
         "org.codehaus.plexus:plexus-utils": ["3.6.1", "4.0.3"],
         "com.github.eirslett:frontend-maven-plugin": "2.0.2",
-        "io.takari.maven.plugins:provisio-maven-plugin": "2.0.0",
+        "ca.vanzyl.provisio.maven.plugins:provisio-maven-plugin": "2.0.0",
         "org.apache.maven.plugins:maven-jar-plugin": "3.5.1",
     },
     "independent_reconstructions_required": 2,
@@ -1033,6 +1033,9 @@ EXPECTED_SERVER_DISTRIBUTION_FILES = frozenset(
             "io.trino_trino-hdfs-483.jar"
         ),
     }
+)
+EXPECTED_SERVER_DISTRIBUTION_ROOTS = frozenset(
+    {"NOTICE", "README.txt", "bin", "lib", "plugin"}
 )
 
 
@@ -3639,6 +3642,7 @@ def verify_server_distribution(path: Path) -> None:
     name_set = set(names)
     if len(names) != len(name_set):
         _fail("SERVER_DISTRIBUTION", "duplicate archive path")
+    members_by_name = {member.name: member for member in members}
     for member in members:
         parts = member.name.split("/")
         if member.name == "trino-server-483" and member.isdir():
@@ -3654,6 +3658,11 @@ def verify_server_distribution(path: Path) -> None:
                 "SERVER_DISTRIBUTION",
                 f"unsafe or unexpected member: {member.name}",
             )
+        if parts[1] not in EXPECTED_SERVER_DISTRIBUTION_ROOTS:
+            _fail(
+                "SERVER_DISTRIBUTION",
+                f"distribution root differs: {parts[1]!r}",
+            )
         if member.islnk() and (
             member.linkname not in name_set
             or not member.linkname.startswith("trino-server-483/")
@@ -3661,6 +3670,26 @@ def verify_server_distribution(path: Path) -> None:
             _fail(
                 "SERVER_DISTRIBUTION",
                 f"hard link escapes archive: {member.name}",
+            )
+
+    def resolves_to_regular_file(name: str) -> bool:
+        visited: set[str] = set()
+        while True:
+            if name in visited:
+                _fail("SERVER_DISTRIBUTION", f"hard link cycle: {name}")
+            visited.add(name)
+            member = members_by_name[name]
+            if member.isfile():
+                return True
+            if not member.islnk():
+                return False
+            name = member.linkname
+
+    for member in members:
+        if member.islnk() and not resolves_to_regular_file(member.name):
+            _fail(
+                "SERVER_DISTRIBUTION",
+                f"hard link target is not a regular file: {member.name}",
             )
     plugins = {
         parts[2]
@@ -3677,6 +3706,19 @@ def verify_server_distribution(path: Path) -> None:
         _fail(
             "SERVER_DISTRIBUTION",
             f"required members are missing: {sorted(missing)!r}",
+        )
+    invalid = {
+        name
+        for name in EXPECTED_SERVER_DISTRIBUTION_FILES
+        if not resolves_to_regular_file(name)
+    }
+    if invalid:
+        _fail(
+            "SERVER_DISTRIBUTION",
+            (
+                "required members are not regular files or validated hard "
+                f"links: {sorted(invalid)!r}"
+            ),
         )
 
 

@@ -1952,15 +1952,45 @@ class ServerDistributionTests(unittest.TestCase):
         path: Path,
         *,
         extra_plugin: str | None = None,
+        extra_root: str | None = None,
         omit: str | None = None,
+        required_as_directory: str | None = None,
+        required_as_hardlink: str | None = None,
+        hardlink_target: str = "trino-server-483/lib/hardlink-target.jar",
+        hardlink_target_as_directory: bool = False,
         unsafe_symlink: bool = False,
     ) -> None:
         with tarfile.open(path, mode="w:gz") as archive:
             root = tarfile.TarInfo("trino-server-483")
             root.type = tarfile.DIRTYPE
             archive.addfile(root)
+            if (
+                required_as_hardlink is not None
+                and hardlink_target != root.name
+                and hardlink_target
+                not in verify.EXPECTED_SERVER_DISTRIBUTION_FILES
+            ):
+                payload = b"hardlink target"
+                member = tarfile.TarInfo(hardlink_target)
+                if hardlink_target_as_directory:
+                    member.type = tarfile.DIRTYPE
+                    archive.addfile(member)
+                else:
+                    member.size = len(payload)
+                    archive.addfile(member, io.BytesIO(payload))
             for name in sorted(verify.EXPECTED_SERVER_DISTRIBUTION_FILES):
                 if name == omit:
+                    continue
+                if name == required_as_directory:
+                    member = tarfile.TarInfo(name)
+                    member.type = tarfile.DIRTYPE
+                    archive.addfile(member)
+                    continue
+                if name == required_as_hardlink:
+                    member = tarfile.TarInfo(name)
+                    member.type = tarfile.LNKTYPE
+                    member.linkname = hardlink_target
+                    archive.addfile(member)
                     continue
                 payload = name.encode("utf-8")
                 member = tarfile.TarInfo(name)
@@ -1973,6 +2003,11 @@ class ServerDistributionTests(unittest.TestCase):
                 )
                 member.size = len(payload)
                 archive.addfile(member, io.BytesIO(payload))
+            if extra_root is not None:
+                payload = b"extra"
+                member = tarfile.TarInfo(f"trino-server-483/{extra_root}")
+                member.size = len(payload)
+                archive.addfile(member, io.BytesIO(payload))
             if unsafe_symlink:
                 member = tarfile.TarInfo("trino-server-483/lib/escape")
                 member.type = tarfile.SYMTYPE
@@ -1981,9 +2016,15 @@ class ServerDistributionTests(unittest.TestCase):
 
     def test_exact_iceberg_only_distribution_is_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / "server.tar.gz"
-            self._write_archive(path)
-            verify.verify_server_distribution(path)
+            required = next(iter(verify.EXPECTED_SERVER_DISTRIBUTION_FILES))
+            for name, options in (
+                ("regular", {}),
+                ("hardlink", {"required_as_hardlink": required}),
+            ):
+                with self.subTest(name=name):
+                    path = Path(temporary) / f"{name}.tar.gz"
+                    self._write_archive(path, **options)
+                    verify.verify_server_distribution(path)
 
     def test_distribution_rejects_plugin_expansion_missing_files_and_links(
         self,
@@ -1996,6 +2037,35 @@ class ServerDistributionTests(unittest.TestCase):
                     "missing",
                     {"omit": next(iter(verify.EXPECTED_SERVER_DISTRIBUTION_FILES))},
                     "required members are missing",
+                ),
+                (
+                    "directory",
+                    {
+                        "required_as_directory": next(
+                            iter(verify.EXPECTED_SERVER_DISTRIBUTION_FILES)
+                        )
+                    },
+                    "required members are not regular files",
+                ),
+                (
+                    "hardlink-to-directory",
+                    {
+                        "required_as_hardlink": next(
+                            iter(verify.EXPECTED_SERVER_DISTRIBUTION_FILES)
+                        ),
+                        "hardlink_target": "trino-server-483/lib/target",
+                        "hardlink_target_as_directory": True,
+                    },
+                    "hard link target is not a regular file",
+                ),
+                (
+                    "configuration-plugin",
+                    {
+                        "extra_root": (
+                            "secrets-plugin/keystore-secrets-plugin/plugin.jar"
+                        )
+                    },
+                    "distribution root differs",
                 ),
                 (
                     "symlink",

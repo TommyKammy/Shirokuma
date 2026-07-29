@@ -4,8 +4,8 @@ doc_id: "ADR-0027"
 title: "Authorize bounded Trino 483 Iceberg-only Maven closure"
 status: accepted
 created: 2026-07-29
-updated: 2026-07-29
-version: "0.1"
+updated: 2026-07-30
+version: "0.2"
 area: "architecture"
 tags: [shirokuma, adr, trino, iceberg, maven, supply-chain, vulnerability]
 ---
@@ -60,15 +60,19 @@ The online resolution and offline rebuild must select exactly:
 -pl ':trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg' -am
 ```
 
-The distribution contains only server core/main and the Iceberg plugin with
-its HDFS runtime dependency. Other Trino plugins are not permitted in the
-archive. The build uses fixed output timestamp `2026-07-18T00:36:39Z`.
+The distribution contains only the `NOTICE`, `README.txt`, `bin`, `lib`, and
+`plugin` top-level roots. `plugin/iceberg` is the only plugin namespace and
+includes its HDFS runtime dependency. Other Trino plugins, including the
+out-of-band `secrets-plugin` configuration root, are not permitted in the
+archive. Required launcher and JAR members must be regular files or hard links
+that resolve within the archive to regular files. The build uses fixed output
+timestamp `2026-07-18T00:36:39Z`.
 
 The reviewed overlay upgrades build plugins and their dependency closure only
 to the exact versions encoded in the patch:
 
 - frontend-maven-plugin `2.0.2`
-- Provisio Maven plugin `2.0.0`
+- `ca.vanzyl.provisio.maven.plugins:provisio-maven-plugin` `2.0.0`
 - Maven JAR plugin `3.5.1`
 - Jackson core/databind `2.21.4`
 - Commons BeanUtils `1.11.0`
