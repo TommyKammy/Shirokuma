@@ -2905,6 +2905,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "provisional_source_authorization",
                 "source_overlay_authorization",
                 "source_remediation_authorization",
+                "distribution_remediation_authorization",
                 "repository_state",
                 "next_action",
             },
@@ -3292,6 +3293,57 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertIs(contract["vulnerability_waiver_permitted"], False)
 
+    def test_iceberg_only_distribution_remediation_is_exact_and_nonwaivable(
+        self,
+    ) -> None:
+        admission = self._admission()[
+            "distribution_remediation_authorization"
+        ]
+        contract = self._trusted_build_contract()["source"][
+            "distribution_remediation"
+        ]
+        self.assertEqual("active", admission["status"])
+        self.assertEqual(
+            "time_boxed_bounded_iceberg_only_maven_closure_remediation",
+            admission["authorization_type"],
+        )
+        self.assertEqual(
+            "https://github.com/TommyKammy/Shirokuma/issues/63"
+            "#issuecomment-5115851323",
+            admission["approval_record"],
+        )
+        self.assertEqual(
+            contract["patch"],
+            admission["patch"],
+        )
+        self.assertEqual(
+            [
+                ":trino-server",
+                ":trino-server-core",
+                ":trino-server-main",
+                ":trino-hdfs",
+                ":trino-iceberg",
+            ],
+            admission["selected_projects"],
+        )
+        self.assertEqual(
+            ["iceberg"],
+            admission["distribution_contents"]["plugins"],
+        )
+        self.assertIs(
+            admission["distribution_contents"]["other_plugins_permitted"],
+            False,
+        )
+        self.assertEqual(
+            contract["dependency_replacements"],
+            admission["dependency_replacements"],
+        )
+        self.assertEqual(2, admission["independent_reconstructions_required"])
+        self.assertEqual(2, admission["network_none_rebuilds_required"])
+        self.assertIs(admission["byte_identical_outputs_required"], True)
+        self.assertIs(admission["high_zero_critical_zero_required"], True)
+        self.assertIs(admission["vulnerability_waiver_permitted"], False)
+
     def test_provisional_source_authorization_rejects_preapproval_use(self) -> None:
         self.assertIn(
             "authorization is not yet active",
@@ -3319,6 +3371,10 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                         "bootstrap/trino/v483/patches/"
                         "0001-shirokuma-web-ui-security.patch"
                     ),
+                    (
+                        "bootstrap/trino/v483/patches/"
+                        "0002-shirokuma-iceberg-only-maven-closure.patch"
+                    ),
                     "bootstrap/trino/v483/settings.xml",
                     "bootstrap/trino/v483/trusted-build-contract.json",
                     (
@@ -3344,6 +3400,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                         "docs/design/07_ADR/"
                         "ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_"
                         "source_remediation.md"
+                    ),
+                    (
+                        "docs/design/07_ADR/"
+                        "ADR-0027_Authorize_bounded_Trino_483_Iceberg_only_"
+                        "Maven_closure.md"
                     ),
                     "docs/design/context-manifest.json",
                     (
@@ -3525,6 +3586,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "pristine_source_required_before_overlay",
                 "preimages",
                 "source_overlay",
+                "distribution_remediation",
                 "forbidden_build_inputs",
             },
             set(source),
@@ -4328,9 +4390,12 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "--settings /policy/settings.xml "
                 "-Dmaven.repo.local=/workspace/.m2/repository "
                 "-Dmaven.compiler.debuglevel=source,lines "
+                "-Dproject.build.outputTimestamp=2026-07-18T00:36:39Z "
                 "--file /workspace/pom.xml "
-                "-pl '!:trino-docs' "
-                "clean install -DskipTests"
+                "-pl ':trino-server,:trino-server-core,:trino-server-main,"
+                ":trino-hdfs,:trino-iceberg' "
+                "-am clean install -DskipTests "
+                "-Dmaven.source.skip=true -Dair.check.skip-all"
             ),
             rebuild["command"],
         )
@@ -4581,6 +4646,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_"
                     "source_remediation.md"
                 ),
+                (
+                    "docs/design/07_ADR/"
+                    "ADR-0027_Authorize_bounded_Trino_483_Iceberg_only_"
+                    "Maven_closure.md"
+                ),
             ],
             next_action["decision_records"],
         )
@@ -4596,6 +4666,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "active exact owner authorization bound to the Parquet "
                     "repository, tags, objects, commit, tree, preimage, postimage, "
                     "permitted path, dependency replacements, expiry, and rollback"
+                ),
+                (
+                    "active exact owner authorization bound to the Trino "
+                    "Iceberg-only source paths, patch and preimage/postimage hashes, "
+                    "selected reactor, dependency replacements, expiry, and rollback"
                 ),
                 (
                     "independent reviewer approval distinct from the source-"

@@ -13,6 +13,7 @@ import os
 import re
 import stat
 import subprocess
+import tarfile
 import textwrap
 import zipfile
 import xml.etree.ElementTree as ET
@@ -39,6 +40,10 @@ PARQUET_REMEDIATION_TEST_PATH = Path(
 SOURCE_OVERLAY_PATH = Path(
     "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch"
 )
+DISTRIBUTION_REMEDIATION_PATH = Path(
+    "bootstrap/trino/v483/patches/"
+    "0002-shirokuma-iceberg-only-maven-closure.patch"
+)
 VEX_PATH = Path(
     "bootstrap/trino/v483/vex/"
     "react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
@@ -50,6 +55,10 @@ OVERLAY_ADR_PATH = Path(
 PARQUET_REMEDIATION_ADR_PATH = Path(
     "docs/design/07_ADR/"
     "ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_source_remediation.md"
+)
+DISTRIBUTION_REMEDIATION_ADR_PATH = Path(
+    "docs/design/07_ADR/"
+    "ADR-0027_Authorize_bounded_Trino_483_Iceberg_only_Maven_closure.md"
 )
 EXPECTED_REPOSITORY = "TommyKammy/Shirokuma"
 EXPECTED_SOURCE_REPOSITORY = "https://github.com/trinodb/trino"
@@ -343,6 +352,101 @@ EXPECTED_SOURCE_OVERLAY = {
         "raw_and_adjusted_package_inventory_must_match": True,
     },
 }
+EXPECTED_DISTRIBUTION_REMEDIATION = {
+    "state": "approved_bounded_iceberg_only_maven_closure",
+    "decision_record": DISTRIBUTION_REMEDIATION_ADR_PATH.as_posix(),
+    "approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5115851323"
+    ),
+    "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
+    "approved_at": "2026-07-29T09:35:05Z",
+    "expires_at": "2026-08-21T22:43:36Z",
+    "automatic_renewal": False,
+    "risk_owner": "TommyKammy",
+    "implementation_author": "Codex",
+    "reviewer_must_differ_from_implementation_author": True,
+    "source_binding": {
+        "repository": EXPECTED_SOURCE_REPOSITORY,
+        "release_tag": EXPECTED_TAG,
+        "commit_sha": EXPECTED_COMMIT,
+        "tree_sha": EXPECTED_TREE,
+    },
+    "patch": {
+        "path": DISTRIBUTION_REMEDIATION_PATH.as_posix(),
+        "sha256": "c7862378ceaf019cf9ec653b69a9ffb87e77a6b2fe362d7daa6cd4935a362160",
+    },
+    "apply_arguments": ["--whitespace=error-all"],
+    "permitted_paths": [
+        "pom.xml",
+        "core/trino-spi/pom.xml",
+        "core/trino-server-core/src/main/provisio/trino-core.xml",
+        "core/trino-server/src/main/provisio/trino.xml",
+    ],
+    "preimages": {
+        "pom.xml": (
+            "e1ba9a61315097e3a7133238c778ec161ac6097fe77a660fc5455a3e84568820"
+        ),
+        "core/trino-spi/pom.xml": (
+            "9a3ab7c1e730e9534ca575b243865f4ff8ca355d201e5a7aa79f244401806993"
+        ),
+        "core/trino-server-core/src/main/provisio/trino-core.xml": (
+            "0f2e86c7cb0873c43a602a55e8c8827bc3292fbe09868014ca360b61179d6863"
+        ),
+        "core/trino-server/src/main/provisio/trino.xml": (
+            "ca8b95cdd6579da16fe531c2110f5c4d67e63f385b37b5b7ab9a220bee58c323"
+        ),
+    },
+    "postimages": {
+        "pom.xml": (
+            "8d342215a3c748f7965f0a82e847cab13587b94171d9d1422922b665475109c1"
+        ),
+        "core/trino-spi/pom.xml": (
+            "3032163467da8247367e3c0ac60d790ddabc96c632c083448d5b5a7d63f05b2b"
+        ),
+        "core/trino-server-core/src/main/provisio/trino-core.xml": (
+            "585f0b68b6e0c2b1da66f71a0e289b77e776fca3e0451a17d55f35b10e18727a"
+        ),
+        "core/trino-server/src/main/provisio/trino.xml": (
+            "f549d66db97d1bbee1b2505b6b3875ca3db9362a88b0d7402de8cc921bd5c018"
+        ),
+    },
+    "output_timestamp": "2026-07-18T00:36:39Z",
+    "selected_projects": [
+        ":trino-server",
+        ":trino-server-core",
+        ":trino-server-main",
+        ":trino-hdfs",
+        ":trino-iceberg",
+    ],
+    "also_make_required_projects": True,
+    "distribution_contents": {
+        "server_modules": ["trino-server-core", "trino-server-main"],
+        "plugins": ["iceberg"],
+        "iceberg_runtime_dependencies": ["trino-hdfs"],
+        "other_plugins_permitted": False,
+    },
+    "dependency_replacements": {
+        "com.fasterxml.jackson.core:jackson-core": "2.21.4",
+        "com.fasterxml.jackson.core:jackson-databind": "2.21.4",
+        "commons-beanutils:commons-beanutils": "1.11.0",
+        "commons-io:commons-io": "2.22.0",
+        "org.apache.maven:maven-core": "3.9.16",
+        "org.codehaus.plexus:plexus-archiver": "4.12.0",
+        "org.codehaus.plexus:plexus-utils": ["3.6.1", "4.0.3"],
+        "com.github.eirslett:frontend-maven-plugin": "2.0.2",
+        "io.takari.maven.plugins:provisio-maven-plugin": "2.0.0",
+        "org.apache.maven.plugins:maven-jar-plugin": "3.5.1",
+    },
+    "independent_reconstructions_required": 2,
+    "network_none_rebuilds_required": 2,
+    "byte_identical_outputs_required": True,
+    "high_zero_critical_zero_required": True,
+    "vulnerability_waiver_permitted": False,
+    "expiry_action": (
+        "fail_closed_before_source_execution_dependency_resolution_or_publication"
+    ),
+}
 EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION = {
     "status": "active",
     "authorization_type": (
@@ -445,6 +549,42 @@ EXPECTED_ADMISSION_SOURCE_REMEDIATION_AUTHORIZATION = {
     "expiry_action": (
         "fail_closed_before_source_execution_dependency_resolution_or_publication"
     ),
+}
+EXPECTED_ADMISSION_DISTRIBUTION_REMEDIATION_AUTHORIZATION = {
+    "status": "active",
+    "authorization_type": (
+        "time_boxed_bounded_iceberg_only_maven_closure_remediation"
+    ),
+    **{
+        key: EXPECTED_DISTRIBUTION_REMEDIATION[key]
+        for key in (
+            "decision_record",
+            "approval_record",
+            "issue",
+            "approved_at",
+            "expires_at",
+            "automatic_renewal",
+            "risk_owner",
+            "implementation_author",
+            "reviewer_must_differ_from_implementation_author",
+            "source_binding",
+            "patch",
+            "permitted_paths",
+            "preimages",
+            "postimages",
+            "output_timestamp",
+            "selected_projects",
+            "also_make_required_projects",
+            "distribution_contents",
+            "dependency_replacements",
+            "independent_reconstructions_required",
+            "network_none_rebuilds_required",
+            "byte_identical_outputs_required",
+            "high_zero_critical_zero_required",
+            "vulnerability_waiver_permitted",
+            "expiry_action",
+        )
+    },
 }
 EXPECTED_PARQUET_SLSA_RESOLVED_DEPENDENCY = {
     "claim_path": "predicate.buildDefinition.resolvedDependencies",
@@ -869,12 +1009,30 @@ MAVEN_TRANSFER_EVENT_PREFIX_RE = re.compile(
     r"^\[INFO\]\s+Download(?:ing|ed) from "
 )
 LOWER_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+EXPECTED_PROJECT_SELECTION = (
+    ":trino-server,:trino-server-core,:trino-server-main,"
+    ":trino-hdfs,:trino-iceberg"
+)
 EXPECTED_RESOLUTION_COMMAND = (
     "mvn --batch-mode --show-version --errors --strict-checksums "
     "--ignore-transitive-repositories "
     "--settings /policy/settings.xml -Dmaven.repo.local=/m2 "
-    "--file /workspace/pom.xml -pl '!:trino-docs' "
-    "clean install -DskipTests"
+    "-Dproject.build.outputTimestamp=2026-07-18T00:36:39Z "
+    "--file /workspace/pom.xml "
+    f"-pl '{EXPECTED_PROJECT_SELECTION}' -am "
+    "clean install -DskipTests -Dmaven.source.skip=true -Dair.check.skip-all"
+)
+EXPECTED_SERVER_DISTRIBUTION_FILES = frozenset(
+    {
+        "trino-server-483/bin/launcher",
+        "trino-server-483/lib/io.trino_trino-server-main-483.jar",
+        "trino-server-483/lib/io.trino_trino-web-ui-483.jar",
+        "trino-server-483/plugin/iceberg/io.trino_trino-iceberg-483.jar",
+        (
+            "trino-server-483/plugin/iceberg/hdfs/"
+            "io.trino_trino-hdfs-483.jar"
+        ),
+    }
 )
 
 
@@ -1067,6 +1225,34 @@ def _validate_source_remediation_contract(
         _fail("SOURCE_REMEDIATION_EXPIRED", expires.isoformat())
 
 
+def _validate_distribution_remediation_contract(
+    root: Path,
+    contract: Mapping[str, Any],
+    *,
+    at: dt.datetime | None,
+) -> None:
+    remediation = contract.get("source", {}).get(
+        "distribution_remediation"
+    )
+    if remediation != EXPECTED_DISTRIBUTION_REMEDIATION:
+        _fail(
+            "DISTRIBUTION_REMEDIATION",
+            "exact Iceberg-only Maven closure remediation differs",
+        )
+    patch = EXPECTED_DISTRIBUTION_REMEDIATION["patch"]
+    if _sha256(root / patch["path"]) != patch["sha256"]:
+        _fail("DISTRIBUTION_REMEDIATION", "source patch SHA-256 differs")
+    expires = _parse_time(EXPECTED_DISTRIBUTION_REMEDIATION["expires_at"])
+    authorization_expires = _parse_time(contract["authorization"]["expires_at"])
+    if expires > authorization_expires:
+        _fail(
+            "DISTRIBUTION_REMEDIATION",
+            "distribution remediation outlives source authorization",
+        )
+    if at is not None and at >= expires:
+        _fail("DISTRIBUTION_REMEDIATION_EXPIRED", expires.isoformat())
+
+
 def _validate_react_router_import_inventory(checkout: Path) -> None:
     source_root = (
         checkout
@@ -1134,42 +1320,50 @@ def apply_source_overlay(root: Path, checkout: Path) -> None:
     contract = _load_json(root / CONTRACT_PATH)
     now = dt.datetime.now(dt.timezone.utc)
     _validate_source_overlay_contract(root, contract, at=now)
+    _validate_distribution_remediation_contract(root, contract, at=now)
     overlay = EXPECTED_SOURCE_OVERLAY
-    permitted = set(overlay["permitted_paths"])
-    if permitted != set(overlay["preimages"]) or permitted != set(
-        overlay["postimages"]
-    ):
-        _fail("SOURCE_OVERLAY", "preimage/postimage path sets differ")
-    for relative, expected in overlay["preimages"].items():
-        payload = _read_reviewed_regular_file(
-            checkout / relative,
-            code="SOURCE_OVERLAY_PREIMAGE",
-        )
-        if hashlib.sha256(payload).hexdigest() != expected:
-            _fail("SOURCE_OVERLAY_PREIMAGE", relative)
+    distribution = EXPECTED_DISTRIBUTION_REMEDIATION
+    permitted: set[str] = set()
+    for boundary in (overlay, distribution):
+        boundary_permitted = set(boundary["permitted_paths"])
+        if boundary_permitted != set(
+            boundary["preimages"]
+        ) or boundary_permitted != set(boundary["postimages"]):
+            _fail("SOURCE_OVERLAY", "preimage/postimage path sets differ")
+        if permitted & boundary_permitted:
+            _fail("SOURCE_OVERLAY", "overlay path boundaries overlap")
+        permitted |= boundary_permitted
+        for relative, expected in boundary["preimages"].items():
+            payload = _read_reviewed_regular_file(
+                checkout / relative,
+                code="SOURCE_OVERLAY_PREIMAGE",
+            )
+            if hashlib.sha256(payload).hexdigest() != expected:
+                _fail("SOURCE_OVERLAY_PREIMAGE", relative)
     _validate_react_router_import_inventory(checkout)
-    patch = root / overlay["patch"]["path"]
-    command = [
-        "git",
-        "apply",
-        *overlay["apply_arguments"],
-        str(patch),
-    ]
     try:
-        subprocess.run(
-            [*command[:2], "--check", *command[2:]],
-            cwd=checkout,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        subprocess.run(
-            command,
-            cwd=checkout,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
+        for boundary in (overlay, distribution):
+            patch = root / boundary["patch"]["path"]
+            command = [
+                "git",
+                "apply",
+                *boundary["apply_arguments"],
+                str(patch),
+            ]
+            subprocess.run(
+                [*command[:2], "--check", *command[2:]],
+                cwd=checkout,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                command,
+                cwd=checkout,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
         changed = set(
             subprocess.run(
                 [
@@ -1200,13 +1394,14 @@ def apply_source_overlay(root: Path, checkout: Path) -> None:
             "SOURCE_OVERLAY_APPLY",
             f"changed={sorted(changed)!r}, untracked={untracked!r}",
         )
-    for relative, expected in overlay["postimages"].items():
-        payload = _read_reviewed_regular_file(
-            checkout / relative,
-            code="SOURCE_OVERLAY_POSTIMAGE",
-        )
-        if hashlib.sha256(payload).hexdigest() != expected:
-            _fail("SOURCE_OVERLAY_POSTIMAGE", relative)
+    for boundary in (overlay, distribution):
+        for relative, expected in boundary["postimages"].items():
+            payload = _read_reviewed_regular_file(
+                checkout / relative,
+                code="SOURCE_OVERLAY_POSTIMAGE",
+            )
+            if hashlib.sha256(payload).hexdigest() != expected:
+                _fail("SOURCE_OVERLAY_POSTIMAGE", relative)
     _validate_react_router_import_inventory(checkout)
 
 
@@ -2630,9 +2825,11 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         BUN_TEST_PATH,
         PARQUET_REMEDIATION_TEST_PATH,
         SOURCE_OVERLAY_PATH,
+        DISTRIBUTION_REMEDIATION_PATH,
         VEX_PATH,
         OVERLAY_ADR_PATH,
         PARQUET_REMEDIATION_ADR_PATH,
+        DISTRIBUTION_REMEDIATION_ADR_PATH,
         Path("Makefile"),
     ):
         if lines.count(f"      - {path.as_posix()}") != 2:
@@ -2919,6 +3116,10 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         or workflow.count('"compiler_debug_level": "source,lines"') != 1
         or workflow.count('"local_variable_debug_table_permitted": False') != 1
         or workflow.count("-Dmaven.compiler.debuglevel=source,lines") != 2
+        or workflow.count(
+            'verify-server-distribution --archive "${output}"'
+        )
+        != 1
         or workflow.count(EXPECTED_OFFLINE_DIGEST_COMMAND) != 1
         or 'sha256sum "${output}" >' in workflow
     ):
@@ -3098,9 +3299,11 @@ def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
         BUN_TEST_PATH,
         PARQUET_REMEDIATION_TEST_PATH,
         SOURCE_OVERLAY_PATH,
+        DISTRIBUTION_REMEDIATION_PATH,
         VEX_PATH,
         OVERLAY_ADR_PATH,
         PARQUET_REMEDIATION_ADR_PATH,
+        DISTRIBUTION_REMEDIATION_ADR_PATH,
     }
     policy_files = contract.get("policy_files")
     if not isinstance(policy_files, list):
@@ -3125,6 +3328,7 @@ def audit(root: Path) -> None:
     _validate_authorization(contract, at=None)
     _validate_source_overlay_contract(root, contract, at=None)
     _validate_source_remediation_contract(contract, at=None)
+    _validate_distribution_remediation_contract(root, contract, at=None)
     lifecycle = contract.get("lifecycle", {})
     if lifecycle != {
         "state": "dependency_snapshot_publication_pending",
@@ -3219,6 +3423,8 @@ def audit(root: Path) -> None:
         != EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION
         or admission.get("source_remediation_authorization")
         != EXPECTED_ADMISSION_SOURCE_REMEDIATION_AUTHORIZATION
+        or admission.get("distribution_remediation_authorization")
+        != EXPECTED_ADMISSION_DISTRIBUTION_REMEDIATION_AUTHORIZATION
         or repository_state.get("publication_workflow_permitted") is not True
         or repository_state.get("dependency_artifact_present") is not False
         or repository_state.get("resident_ledger_permitted") is not False
@@ -3362,6 +3568,57 @@ def audit_transfer_log(path: Path) -> None:
         _fail("TRANSFER_LOG", "no Maven repository transfers were observed")
 
 
+def verify_server_distribution(path: Path) -> None:
+    try:
+        with tarfile.open(path, mode="r:gz") as archive:
+            members = archive.getmembers()
+    except (OSError, tarfile.TarError) as error:
+        _fail("SERVER_DISTRIBUTION", str(error))
+    names = [member.name for member in members]
+    name_set = set(names)
+    if len(names) != len(name_set):
+        _fail("SERVER_DISTRIBUTION", "duplicate archive path")
+    for member in members:
+        parts = member.name.split("/")
+        if member.name == "trino-server-483" and member.isdir():
+            continue
+        if (
+            not member.name.startswith("trino-server-483/")
+            or member.name.startswith("/")
+            or "\\" in member.name
+            or any(part in {"", ".", ".."} for part in parts)
+            or not (member.isdir() or member.isfile() or member.islnk())
+        ):
+            _fail(
+                "SERVER_DISTRIBUTION",
+                f"unsafe or unexpected member: {member.name}",
+            )
+        if member.islnk() and (
+            member.linkname not in name_set
+            or not member.linkname.startswith("trino-server-483/")
+        ):
+            _fail(
+                "SERVER_DISTRIBUTION",
+                f"hard link escapes archive: {member.name}",
+            )
+    plugins = {
+        parts[2]
+        for name in names
+        if len(parts := name.split("/")) > 2 and parts[1] == "plugin"
+    }
+    if plugins != {"iceberg"}:
+        _fail(
+            "SERVER_DISTRIBUTION",
+            f"plugin set differs: {sorted(plugins)!r}",
+        )
+    missing = EXPECTED_SERVER_DISTRIBUTION_FILES - name_set
+    if missing:
+        _fail(
+            "SERVER_DISTRIBUTION",
+            f"required members are missing: {sorted(missing)!r}",
+        )
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
@@ -3382,6 +3639,8 @@ def _parser() -> argparse.ArgumentParser:
     builder_settings.add_argument("--settings", type=Path, required=True)
     transfer = commands.add_parser("audit-transfer-log")
     transfer.add_argument("--log", type=Path, required=True)
+    distribution = commands.add_parser("verify-server-distribution")
+    distribution.add_argument("--archive", type=Path, required=True)
     bun_scan_input = commands.add_parser("stage-bun-scan-input")
     bun_scan_input.add_argument("--checkout", type=Path, required=True)
     bun_scan_input.add_argument("--output", type=Path, required=True)
@@ -3432,6 +3691,11 @@ def main() -> int:
                 at=instant,
             )
             _validate_source_remediation_contract(contract, at=instant)
+            _validate_distribution_remediation_contract(
+                args.root.resolve(),
+                contract,
+                at=instant,
+            )
             if contract.get("lifecycle", {}).get("state") != (
                 "dependency_snapshot_publication_pending"
             ):
@@ -3460,6 +3724,8 @@ def main() -> int:
             audit_builder_settings(args.settings.resolve())
         elif args.command == "audit-transfer-log":
             audit_transfer_log(args.log)
+        elif args.command == "verify-server-distribution":
+            verify_server_distribution(args.archive.resolve())
         elif args.command == "stage-bun-scan-input":
             stage_bun_scan_input(
                 args.checkout.resolve(),

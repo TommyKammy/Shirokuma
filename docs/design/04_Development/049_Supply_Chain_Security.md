@@ -1008,6 +1008,29 @@ upload steps explicitly opt into hidden files; each path remains individually
 listed, and the workflow contract rejects removal, false values, extra opt-ins,
 or movement of that setting to another upload.
 
+ADR-0026 authorized an exact, reproducible rebuild of
+`org.apache.parquet:parquet-jackson:1.17.1` with Jackson 2.21.4; it did not
+waive the remaining Maven closure. PR #134 merged the latest focused closure
+repair as `de7cd8c0c6c20173f9db788cb885b17ce215cdce`. Reviewed-main run
+[`30415622742`](https://github.com/TommyKammy/Shirokuma/actions/runs/30415622742)
+still failed closed at the exact Maven High/Critical gate. No dependency
+snapshot, image, resident admission, Flux object, or runtime was admitted.
+
+ADR-0027 records the owner's subsequent bounded authorization from Issue #63
+comment `5115851323`. It applies a second hash-bound Trino 483 source overlay
+to four paths only, selects the exact server/server-core/server-main/HDFS/
+Iceberg reactor with required projects, packages only server core/main and the
+Iceberg plugin with HDFS, and replaces only the build-plugin dependency
+versions encoded by the reviewed patch. The authorization expires at
+`2026-08-21T22:43:36Z`, cannot renew automatically, and does not permit a
+waiver, ignore rule, OpenVEX expansion, credential, image, resident, Flux, or
+query change. Local pre-merge feasibility completed the 40-module selected
+reactor, scanned its complete Maven repository at High=0/Critical=0, and
+completed a clean `--offline` rebuild with container networking set to
+`none`. Reviewed-main CI must independently reconstruct twice, reproduce two
+network-none builds and byte-identical server archives, and pass the same
+closure-complete evidence gate before publication can proceed.
+
 ## Resident image and SBOM evidence
 
 Every image admitted to a resident profile must have an entry in
