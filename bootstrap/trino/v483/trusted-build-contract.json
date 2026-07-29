@@ -23,7 +23,7 @@
     },
     {
       "path": "scripts/package_trino_maven_dependencies.py",
-      "sha256": "aa46b00acd1116e987e7546ed39bac3166bd7f375283d79f3e5534e914c8d2a6"
+      "sha256": "f922294d7819ed24d09a6877dc60082a0e3cd4ebdf075c3312912dbe6e9f45e2"
     },
     {
       "path": "scripts/package_trino_bun_dependencies.py",
@@ -39,11 +39,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "ae9a81b0c9d7940819e1f52abba69fa22d2e98e997f690993b5b6d61835811ad"
+      "sha256": "a838aa62915eb38ddbb8d442c7783225add6dda2c459e0613a4462fe53c4e986"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "3573f167a3eccbc4f11dbf6043e0fbe0715cf7589e11f885e4303553f6589a79"
+      "sha256": "6a9d30afd430509077f6bc12562c368ae68f6646cb10f1c3e4acc9dfd5c8bf41"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -610,28 +610,17 @@
       "exact_external_maven_inputs": {
         "repository_origin": "https://repo.maven.apache.org/maven2/",
         "required_paths": [
-          "io/trino/benchto/benchto-base/0.34/benchto-base-0.34.pom",
-          "io/trino/benchto/benchto-driver/0.34/benchto-driver-0.34.jar",
-          "io/trino/benchto/benchto-driver/0.34/benchto-driver-0.34.pom",
           "io/trino/coral/coral/2.2.49-1/coral-2.2.49-1.jar",
           "io/trino/coral/coral/2.2.49-1/coral-2.2.49-1.pom",
           "io/trino/hadoop/hadoop-apache/3.3.5-3/hadoop-apache-3.3.5-3.jar",
           "io/trino/hadoop/hadoop-apache/3.3.5-3/hadoop-apache-3.3.5-3.pom",
-          "io/trino/hive/hive-apache-jdbc/0.13.1-10/hive-apache-jdbc-0.13.1-10.jar",
-          "io/trino/hive/hive-apache-jdbc/0.13.1-10/hive-apache-jdbc-0.13.1-10.pom",
           "io/trino/hive/hive-apache/3.1.2-23/hive-apache-3.1.2-23.jar",
           "io/trino/hive/hive-apache/3.1.2-23/hive-apache-3.1.2-23.pom",
           "io/trino/hive/hive-thrift/3/hive-thrift-3.jar",
           "io/trino/hive/hive-thrift/3/hive-thrift-3.pom",
           "io/trino/tempto/tempto-core/204/tempto-core-204.jar",
           "io/trino/tempto/tempto-core/204/tempto-core-204.pom",
-          "io/trino/tempto/tempto-kafka/204/tempto-kafka-204.jar",
-          "io/trino/tempto/tempto-kafka/204/tempto-kafka-204.pom",
-          "io/trino/tempto/tempto-ldap/204/tempto-ldap-204.jar",
-          "io/trino/tempto/tempto-ldap/204/tempto-ldap-204.pom",
           "io/trino/tempto/tempto-root/204/tempto-root-204.pom",
-          "io/trino/tempto/tempto-runner/204/tempto-runner-204.jar",
-          "io/trino/tempto/tempto-runner/204/tempto-runner-204.pom",
           "io/trino/tpcds/tpcds/1.7/tpcds-1.7.jar",
           "io/trino/tpcds/tpcds/1.7/tpcds-1.7.pom",
           "io/trino/tpch/tpch/1.4/tpch-1.4.jar",
@@ -639,14 +628,7 @@
           "io/trino/trino-maven-plugin/20/trino-maven-plugin-20.jar",
           "io/trino/trino-maven-plugin/20/trino-maven-plugin-20.pom",
           "io/trino/trino-re2j/1.7/trino-re2j-1.7.jar",
-          "io/trino/trino-re2j/1.7/trino-re2j-1.7.pom",
-          "io/trino/trino-root/482/trino-root-482.pom",
-          "io/trino/trino-spi/482/trino-spi-482.jar",
-          "io/trino/trino-spi/482/trino-spi-482.pom",
-          "io/trino/trino-spi/maven-metadata-shirokuma-central-fallback.xml",
-          "io/trino/trino-spi/maven-metadata-shirokuma-central.xml",
-          "io/trino/trino-wasm-python/3.13-7/trino-wasm-python-3.13-7.jar",
-          "io/trino/trino-wasm-python/3.13-7/trino-wasm-python-3.13-7.pom"
+          "io/trino/trino-re2j/1.7/trino-re2j-1.7.pom"
         ],
         "unknown_paths_permitted": false,
         "reactor_output": false

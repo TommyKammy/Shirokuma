@@ -4014,9 +4014,9 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             "https://repo.maven.apache.org/maven2/",
             external_maven["repository_origin"],
         )
-        self.assertEqual(37, len(external_maven["required_paths"]))
+        self.assertEqual(19, len(external_maven["required_paths"]))
         self.assertEqual(
-            37, len(set(external_maven["required_paths"]))
+            19, len(set(external_maven["required_paths"]))
         )
         self.assertIn(
             "io/trino/tempto/tempto-core/204/tempto-core-204.jar",
