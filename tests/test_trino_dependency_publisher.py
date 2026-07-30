@@ -1422,6 +1422,64 @@ class MavenScanEvidenceTests(unittest.TestCase):
         )
         self.assertFalse(verify._valid_class_file(malformed_utf8))
 
+    def test_member_descriptors_require_jvm_grammar(self) -> None:
+        for descriptor in (
+            b"I",
+            b"J",
+            b"Ljava/lang/String;",
+            b"[[D",
+            b"[" * 255 + b"I",
+        ):
+            with self.subTest(kind="field", valid=True, descriptor=descriptor):
+                self.assertTrue(verify._valid_field_descriptor(descriptor))
+        for descriptor in (
+            b"",
+            b"V",
+            b"Iextra",
+            b"L;",
+            b"Ljava//lang/String;",
+            b"Ljava.lang.String;",
+            b"[V",
+            b"[" * 256 + b"I",
+        ):
+            with self.subTest(kind="field", valid=False, descriptor=descriptor):
+                self.assertFalse(verify._valid_field_descriptor(descriptor))
+
+        for descriptor in (
+            b"()V",
+            b"(IJLjava/lang/String;[[D)Ljava/lang/Object;",
+            b"(" + b"I" * 255 + b")V",
+        ):
+            with self.subTest(kind="method", valid=True, descriptor=descriptor):
+                self.assertTrue(verify._valid_method_descriptor(descriptor))
+        for descriptor in (
+            b"",
+            b"xxx",
+            b"(V)V",
+            b"(I",
+            b"()",
+            b"()VV",
+            b"(" + b"I" * 256 + b")V",
+        ):
+            with self.subTest(kind="method", valid=False, descriptor=descriptor):
+                self.assertFalse(verify._valid_method_descriptor(descriptor))
+        self.assertFalse(
+            verify._valid_method_descriptor(
+                b"(" + b"I" * 255 + b")V",
+                max_parameter_slots=254,
+            )
+        )
+
+        invalid_constructor_descriptor = self.CLASS_FILE.replace(
+            b"()V",
+            b"xxx",
+            1,
+        )
+        self.assertNotEqual(self.CLASS_FILE, invalid_constructor_descriptor)
+        self.assertFalse(
+            verify._valid_class_file(invalid_constructor_descriptor)
+        )
+
     def test_modified_utf8_validation_matches_class_file_encoding(self) -> None:
         for payload in (
             b"A",

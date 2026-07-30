@@ -2057,6 +2057,71 @@ def _bytecode_instruction_offsets(
     return starts
 
 
+def _field_descriptor_end(
+    payload: bytes,
+    offset: int = 0,
+) -> tuple[int, int] | None:
+    dimensions = 0
+    while offset < len(payload) and payload[offset] == ord("["):
+        dimensions += 1
+        if dimensions > 255:
+            return None
+        offset += 1
+    if offset >= len(payload):
+        return None
+    descriptor_type = payload[offset]
+    if descriptor_type in b"BCFISZ":
+        return offset + 1, 1
+    if descriptor_type in b"DJ":
+        return offset + 1, 1 if dimensions else 2
+    if descriptor_type != ord("L"):
+        return None
+    end = payload.find(b";", offset + 1)
+    if end < 0:
+        return None
+    internal_name = payload[offset + 1 : end]
+    if any(
+        not part
+        or b"." in part
+        or b";" in part
+        or b"[" in part
+        for part in internal_name.split(b"/")
+    ):
+        return None
+    return end + 1, 1
+
+
+def _valid_field_descriptor(payload: bytes) -> bool:
+    parsed = _field_descriptor_end(payload)
+    return parsed is not None and parsed[0] == len(payload)
+
+
+def _valid_method_descriptor(
+    payload: bytes,
+    *,
+    max_parameter_slots: int = 255,
+) -> bool:
+    if not payload.startswith(b"("):
+        return False
+    offset = 1
+    parameter_slots = 0
+    while offset < len(payload) and payload[offset] != ord(")"):
+        parsed = _field_descriptor_end(payload, offset)
+        if parsed is None:
+            return False
+        offset, slots = parsed
+        parameter_slots += slots
+        if parameter_slots > max_parameter_slots:
+            return False
+    if offset >= len(payload) or payload[offset] != ord(")"):
+        return False
+    offset += 1
+    if offset < len(payload) and payload[offset] == ord("V"):
+        return offset + 1 == len(payload)
+    parsed = _field_descriptor_end(payload, offset)
+    return parsed is not None and parsed[0] == len(payload)
+
+
 def _valid_class_file(payload: bytes) -> bool:
     offset = 0
 
@@ -2121,14 +2186,32 @@ def _valid_class_file(payload: bytes) -> bool:
         for pool_index in range(1, constant_pool_count):
             tag = tags[pool_index]
             value = values[pool_index]
-            if tag in {7, 8, 16, 19, 20}:
+            if tag in {7, 8, 19, 20}:
                 if not isinstance(value, tuple) or not has_tag(value[0], 1):
+                    return False
+            elif tag == 16:
+                if (
+                    not isinstance(value, tuple)
+                    or not has_tag(value[0], 1)
+                    or not isinstance(values[value[0]], bytes)
+                    or not _valid_method_descriptor(values[value[0]])
+                ):
                     return False
             elif tag in {9, 10, 11}:
                 if (
                     not isinstance(value, tuple)
                     or not has_tag(value[0], 7)
                     or not has_tag(value[1], 12)
+                ):
+                    return False
+                name_and_type = values[value[1]]
+                if not isinstance(name_and_type, tuple):
+                    return False
+                descriptor = values[name_and_type[1]]
+                if not isinstance(descriptor, bytes) or not (
+                    _valid_field_descriptor(descriptor)
+                    if tag == 9
+                    else _valid_method_descriptor(descriptor)
                 ):
                     return False
             elif tag == 12:
@@ -2176,6 +2259,16 @@ def _valid_class_file(payload: bytes) -> bool:
                     return False
             elif tag in {17, 18}:
                 if not isinstance(value, tuple) or not has_tag(value[1], 12):
+                    return False
+                name_and_type = values[value[1]]
+                if not isinstance(name_and_type, tuple):
+                    return False
+                descriptor = values[name_and_type[1]]
+                if not isinstance(descriptor, bytes) or not (
+                    _valid_field_descriptor(descriptor)
+                    if tag == 17
+                    else _valid_method_descriptor(descriptor)
+                ):
                     return False
 
         read_uint(2)
@@ -2259,9 +2352,25 @@ def _valid_class_file(payload: bytes) -> bool:
         def read_members(*, methods: bool) -> None:
             for _ in range(read_uint(2)):
                 access_flags = read_uint(2)
-                if not has_tag(read_uint(2), 1) or not has_tag(
-                    read_uint(2),
+                name_index = read_uint(2)
+                descriptor_index = read_uint(2)
+                descriptor = values[descriptor_index] if has_tag(
+                    descriptor_index,
                     1,
+                ) else None
+                if (
+                    not has_tag(name_index, 1)
+                    or not isinstance(descriptor, bytes)
+                    or not (
+                        _valid_method_descriptor(
+                            descriptor,
+                            max_parameter_slots=(
+                                255 if access_flags & 0x0008 else 254
+                            ),
+                        )
+                        if methods
+                        else _valid_field_descriptor(descriptor)
+                    )
                 ):
                     raise ValueError("invalid member identity")
                 found_code = read_attributes(allow_code=methods)
