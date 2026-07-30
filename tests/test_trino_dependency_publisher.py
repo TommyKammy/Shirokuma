@@ -1457,6 +1457,29 @@ class MavenScanEvidenceTests(unittest.TestCase):
             bytes.fromhex("00000000B1"),
             1,
         )
+        invalid_category_dup = (
+            self.CLASS_FILE.replace(
+                b"<init>",
+                b"method",
+                1,
+            )
+            .replace(b"()V", b"()J", 1)
+            .replace(
+                b"\x00\x01\x00\x05\x00\x06\x00\x01",
+                b"\x00\x09\x00\x05\x00\x06\x00\x01",
+                1,
+            )
+            .replace(
+                code_header,
+                bytes.fromhex("000000110003000100000005"),
+                1,
+            )
+            .replace(
+                bytes.fromhex("2AB70009B1"),
+                bytes.fromhex("09595700AD"),
+                1,
+            )
+        )
         wrong_return = self.CLASS_FILE.replace(
             b"<init>",
             b"method",
@@ -1500,6 +1523,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
         self.assertFalse(
             verify._valid_class_file(constructor_without_initialization)
         )
+        self.assertFalse(verify._valid_class_file(invalid_category_dup))
         self.assertFalse(verify._valid_class_file(wrong_return))
         self.assertFalse(verify._valid_class_file(wrong_operand_type))
         self.assertFalse(verify._valid_class_file(uninitialized_local))
@@ -2722,6 +2746,64 @@ class MavenScanEvidenceTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 verify.ContractError,
                 "contains unreadable bytecode",
+            ):
+                verify.generate_maven_sbom(
+                    descriptor,
+                    repository,
+                    self._sbom(root, (alpha,)),
+                    root / "generated.json",
+                )
+
+    def test_maven_sbom_rejects_corrupt_unselected_base_member(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            alpha = self.JARS[0]
+            beta = self.JARS[1]
+            resource_path = "org/example/data.txt"
+            repository, descriptor = self._repository_descriptor(
+                root,
+                {
+                    alpha: {"org/example/Alpha.class": b"alpha"},
+                    beta: {
+                        "org/example/Beta.class": self.CLASS_FILE,
+                        (
+                            "META-INF/maven/org.example/beta/"
+                            "pom.properties"
+                        ): (
+                            b"artifactId=beta\n"
+                            b"groupId=org.example\n"
+                            b"version=2.0\n"
+                        ),
+                        resource_path: b"x" * 8192,
+                    },
+                },
+            )
+            candidate = repository / beta
+            payload = bytearray(candidate.read_bytes())
+            with zipfile.ZipFile(candidate) as archive:
+                resource_entry = archive.getinfo(resource_path)
+                data_offset = (
+                    resource_entry.header_offset
+                    + len(resource_entry.FileHeader())
+                )
+                payload[
+                    data_offset + resource_entry.compress_size - 1
+                ] ^= 0xFF
+            candidate.write_bytes(payload)
+            document = json.loads(descriptor.read_text(encoding="utf-8"))
+            beta_record = next(
+                record
+                for record in document["files"]
+                if record["path"] == beta
+            )
+            beta_record["sha256"] = hashlib.sha256(payload).hexdigest()
+            descriptor.write_text(
+                json.dumps(document),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "contains unreadable archive member",
             ):
                 verify.generate_maven_sbom(
                     descriptor,

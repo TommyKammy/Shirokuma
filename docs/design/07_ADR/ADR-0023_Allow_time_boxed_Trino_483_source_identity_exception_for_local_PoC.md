@@ -278,7 +278,9 @@ through valid stores, and merge across normal and exceptional control flow;
 constant loads use their actual constant-pool tags. Constructor receivers remain
 uninitialized until a valid `this()` or `super()` invocation, interface method
 flags follow their class-file version, and bounded local/state-cell counts
-prevent validation-work amplification. Modern class versions reject legacy
+prevent validation-work amplification. Stack-manipulation instructions preserve
+category-1/category-2 value boundaries, and every regular base-JAR member is
+read before the archive is accepted. Modern class versions reject legacy
 `jsr`/`ret` instructions, and interface class evidence cannot declare a
 constructor. Return instructions must match their method descriptors,
 recognized signature/source/marker attributes validate their payloads, and

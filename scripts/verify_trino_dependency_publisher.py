@@ -2786,6 +2786,68 @@ def _valid_operand_stack_flow(
         max_locals - len(initial_local_types)
     )
 
+    def category_one(slot: str) -> bool:
+        return slot not in {"long", "double"}
+
+    def category_two(slots: tuple[str, ...]) -> bool:
+        return (
+            len(slots) == 2
+            and slots[0] == slots[1]
+            and slots[0] in {"long", "double"}
+        )
+
+    def valid_stack_manipulation(
+        opcode: int,
+        stack: tuple[str, ...],
+    ) -> bool:
+        if opcode in {0x57, 0x59}:
+            return bool(stack) and category_one(stack[-1])
+        if opcode in {0x58, 0x5C}:
+            return len(stack) >= 2 and (
+                category_two(stack[-2:])
+                or all(category_one(slot) for slot in stack[-2:])
+            )
+        if opcode in {0x5A, 0x5F}:
+            return len(stack) >= 2 and all(
+                category_one(slot) for slot in stack[-2:]
+            )
+        if opcode == 0x5B:
+            return len(stack) >= 3 and (
+                all(category_one(slot) for slot in stack[-3:])
+                or (
+                    category_two(stack[-3:-1])
+                    and category_one(stack[-1])
+                )
+            )
+        if opcode == 0x5D:
+            return len(stack) >= 3 and (
+                all(category_one(slot) for slot in stack[-3:])
+                or (
+                    category_one(stack[-3])
+                    and category_two(stack[-2:])
+                )
+            )
+        if opcode == 0x5E:
+            if len(stack) < 4:
+                return False
+            values = stack[-4:]
+            return (
+                all(category_one(slot) for slot in values)
+                or (
+                    category_two(values[:2])
+                    and all(category_one(slot) for slot in values[2:])
+                )
+                or (
+                    all(category_one(slot) for slot in values[:2])
+                    and category_two(values[2:])
+                )
+                or (
+                    category_two(values[:2])
+                    and category_two(values[2:])
+                )
+            )
+        return True
+
     def typed_transition(
         instruction_offset: int,
         stack: tuple[str, ...],
@@ -2897,12 +2959,19 @@ def _valid_operand_stack_flow(
                 + element_types[opcode - 0x4F]
             )
         elif opcode == 0x57:
+            if not valid_stack_manipulation(opcode, stack):
+                return None
             expected = ("unknown",)
         elif opcode == 0x58:
+            if not valid_stack_manipulation(opcode, stack):
+                return None
             expected = ("unknown", "unknown")
         elif opcode in range(0x59, 0x5F):
             popped, _ = effects[instruction_offset]
-            if len(stack) < popped:
+            if (
+                len(stack) < popped
+                or not valid_stack_manipulation(opcode, stack)
+            ):
                 return None
             if opcode == 0x59:
                 return stack + stack[-1:], locals_state
@@ -2925,7 +2994,7 @@ def _valid_operand_stack_flow(
                 )
             return stack[:-4] + stack[-2:] + stack[-4:], locals_state
         elif opcode == 0x5F:
-            if len(stack) < 2:
+            if not valid_stack_manipulation(opcode, stack):
                 return None
             return (
                 stack[:-2] + (stack[-1], stack[-2]),
@@ -4398,6 +4467,15 @@ def _validate_rootfs_discovery_omissions(
                         f"{path} contains no bytecode for "
                         "coordinate verification"
                     ),
+                )
+            try:
+                for entry in archive.infolist():
+                    if not entry.is_dir():
+                        archive.read(entry)
+            except (OSError, RuntimeError, zipfile.BadZipFile) as error:
+                _fail(
+                    "MAVEN_SBOM_ROOTFS",
+                    f"{path} contains unreadable archive member: {error}",
                 )
             if base_purl in rootfs_purls:
                 discovery[path] = "manifest-rootfs-purl-deduplicated"
