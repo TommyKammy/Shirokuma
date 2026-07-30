@@ -1452,11 +1452,25 @@ class MavenScanEvidenceTests(unittest.TestCase):
             b"method",
             1,
         ).replace(b"()V", b"()I", 1)
+        wrong_operand_type = (
+            self.CLASS_FILE.replace(
+                b"<init>",
+                b"method",
+                1,
+            )
+            .replace(b"()V", b"()F", 1)
+            .replace(
+                bytes.fromhex("2AB70009B1"),
+                bytes.fromhex("03000000AE"),
+                1,
+            )
+        )
         self.assertFalse(verify._valid_class_file(insufficient_stack))
         self.assertFalse(verify._valid_class_file(insufficient_locals))
         self.assertFalse(verify._valid_class_file(stack_underflow))
         self.assertFalse(verify._valid_class_file(modern_jsr))
         self.assertFalse(verify._valid_class_file(wrong_return))
+        self.assertFalse(verify._valid_class_file(wrong_operand_type))
 
     def test_member_descriptors_require_jvm_grammar(self) -> None:
         for descriptor in (

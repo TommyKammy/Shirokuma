@@ -2208,10 +2208,51 @@ def _method_descriptor_return_opcode(payload: bytes) -> int | None:
     }.get(return_descriptor[0], 0xAC)
 
 
+def _field_descriptor_stack_slots(payload: bytes) -> tuple[str, ...] | None:
+    if not _valid_field_descriptor(payload):
+        return None
+    if payload.startswith((b"L", b"[")):
+        return ("reference",)
+    return {
+        ord("F"): ("float",),
+        ord("J"): ("long", "long"),
+        ord("D"): ("double", "double"),
+    }.get(payload[0], ("int",))
+
+
+def _method_descriptor_stack_slots(
+    payload: bytes,
+) -> tuple[tuple[str, ...], tuple[str, ...]] | None:
+    if not _valid_method_descriptor(payload):
+        return None
+    offset = 1
+    parameters: tuple[str, ...] = ()
+    while payload[offset] != ord(")"):
+        parsed = _field_descriptor_end(payload, offset)
+        if parsed is None:
+            return None
+        end, _ = parsed
+        slots = _field_descriptor_stack_slots(payload[offset:end])
+        if slots is None:
+            return None
+        parameters += slots
+        offset = end
+    return_descriptor = payload[offset + 1 :]
+    if return_descriptor == b"V":
+        return parameters, ()
+    return_slots = _field_descriptor_stack_slots(return_descriptor)
+    return (
+        (parameters, return_slots)
+        if return_slots is not None
+        else None
+    )
+
+
 def _bytecode_resource_requirements(
     payload: bytes,
     *,
     instruction_offsets: set[int],
+    constant_pool_tags: list[int],
     constant_pool_values: list[object],
 ) -> tuple[int, int] | None:
     offsets = sorted(instruction_offsets)
@@ -2427,6 +2468,7 @@ def _valid_operand_stack_flow(
 ) -> bool:
     offsets = sorted(instruction_offsets)
     effects: dict[int, tuple[int, int]] = {}
+    instructions: dict[int, bytes] = {}
     successors: dict[int, set[int]] = {}
     return_opcode = _method_descriptor_return_opcode(method_descriptor)
     if return_opcode is None:
@@ -2458,6 +2500,7 @@ def _valid_operand_stack_flow(
             )
             end = next_offset if next_offset is not None else len(payload)
             instruction = payload[instruction_offset:end]
+            instructions[instruction_offset] = instruction
             opcode = instruction[0]
             if opcode in range(0xAC, 0xB2) and opcode != return_opcode:
                 return False
@@ -2673,6 +2716,312 @@ def _valid_operand_stack_flow(
     except (IndexError, TypeError, ValueError):
         return False
 
+    def consume(
+        stack: tuple[str, ...],
+        expected: tuple[str, ...],
+    ) -> tuple[str, ...] | None:
+        if len(stack) < len(expected):
+            return None
+        actual = stack[len(stack) - len(expected) :] if expected else ()
+        if any(
+            actual_slot != expected_slot
+            and actual_slot != "unknown"
+            and expected_slot != "unknown"
+            for actual_slot, expected_slot in zip(actual, expected)
+        ):
+            return None
+        return stack[: len(stack) - len(expected)] if expected else stack
+
+    def descriptor_slots(index: int) -> tuple[str, ...] | None:
+        descriptor = referenced_descriptor(index)
+        return (
+            _field_descriptor_stack_slots(descriptor)
+            if isinstance(descriptor, bytes)
+            else None
+        )
+
+    def typed_transition(
+        instruction_offset: int,
+        stack: tuple[str, ...],
+    ) -> tuple[str, ...] | None:
+        instruction = instructions[instruction_offset]
+        opcode = instruction[0]
+        expected: tuple[str, ...] = ()
+        pushed_types: tuple[str, ...] = ()
+
+        if opcode == 0x01:
+            pushed_types = ("reference",)
+        elif opcode in set(range(0x02, 0x09)) | {0x10, 0x11}:
+            pushed_types = ("int",)
+        elif opcode in {0x09, 0x0A}:
+            pushed_types = ("long", "long")
+        elif opcode in range(0x0B, 0x0E):
+            pushed_types = ("float",)
+        elif opcode in {0x0E, 0x0F}:
+            pushed_types = ("double", "double")
+        elif opcode in {0x12, 0x13, 0x14}:
+            pool_index = (
+                instruction[1]
+                if opcode == 0x12
+                else int.from_bytes(instruction[1:3], "big")
+            )
+            tag = constant_pool_tags[pool_index]
+            if tag == 3:
+                pushed_types = ("int",)
+            elif tag == 4:
+                pushed_types = ("float",)
+            elif tag == 5:
+                pushed_types = ("long", "long")
+            elif tag == 6:
+                pushed_types = ("double", "double")
+            elif tag == 17:
+                dynamic_slots = descriptor_slots(pool_index)
+                if dynamic_slots is None:
+                    return None
+                pushed_types = dynamic_slots
+            else:
+                pushed_types = ("reference",)
+        elif opcode in range(0x15, 0x1A):
+            pushed_types = {
+                0x15: ("int",),
+                0x16: ("long", "long"),
+                0x17: ("float",),
+                0x18: ("double", "double"),
+                0x19: ("reference",),
+            }[opcode]
+        elif opcode in range(0x1A, 0x2E):
+            pushed_types = (
+                ("int",),
+                ("long", "long"),
+                ("float",),
+                ("double", "double"),
+                ("reference",),
+            )[(opcode - 0x1A) // 4]
+        elif opcode in range(0x2E, 0x36):
+            element_types = (
+                ("int",),
+                ("long", "long"),
+                ("float",),
+                ("double", "double"),
+                ("reference",),
+                ("int",),
+                ("int",),
+                ("int",),
+            )
+            expected = ("reference", "int")
+            pushed_types = element_types[opcode - 0x2E]
+        elif opcode in range(0x36, 0x3B):
+            expected = (
+                ("int",),
+                ("long", "long"),
+                ("float",),
+                ("double", "double"),
+                ("reference",),
+            )[opcode - 0x36]
+        elif opcode in range(0x3B, 0x4F):
+            expected = (
+                ("int",),
+                ("long", "long"),
+                ("float",),
+                ("double", "double"),
+                ("reference",),
+            )[(opcode - 0x3B) // 4]
+        elif opcode in range(0x4F, 0x57):
+            element_types = (
+                ("int",),
+                ("long", "long"),
+                ("float",),
+                ("double", "double"),
+                ("reference",),
+                ("int",),
+                ("int",),
+                ("int",),
+            )
+            expected = (
+                ("reference", "int")
+                + element_types[opcode - 0x4F]
+            )
+        elif opcode == 0x57:
+            expected = ("unknown",)
+        elif opcode == 0x58:
+            expected = ("unknown", "unknown")
+        elif opcode in range(0x59, 0x5F):
+            popped, _ = effects[instruction_offset]
+            if len(stack) < popped:
+                return None
+            if opcode == 0x59:
+                return stack + stack[-1:]
+            if opcode == 0x5A:
+                return stack[:-2] + stack[-1:] + stack[-2:]
+            if opcode == 0x5B:
+                return stack[:-3] + stack[-1:] + stack[-3:]
+            if opcode == 0x5C:
+                return stack + stack[-2:]
+            if opcode == 0x5D:
+                return stack[:-3] + stack[-2:] + stack[-3:]
+            return stack[:-4] + stack[-2:] + stack[-4:]
+        elif opcode == 0x5F:
+            if len(stack) < 2:
+                return None
+            return stack[:-2] + (stack[-1], stack[-2])
+        elif opcode in range(0x60, 0x74):
+            value_type = (
+                ("int",),
+                ("long", "long"),
+                ("float",),
+                ("double", "double"),
+            )[opcode % 4]
+            expected = value_type + value_type
+            pushed_types = value_type
+        elif opcode in range(0x74, 0x78):
+            expected = pushed_types = (
+                ("int",),
+                ("long", "long"),
+                ("float",),
+                ("double", "double"),
+            )[opcode - 0x74]
+        elif opcode in range(0x78, 0x7E):
+            value_type = (
+                ("long", "long")
+                if opcode in {0x79, 0x7B, 0x7D}
+                else ("int",)
+            )
+            expected = value_type + ("int",)
+            pushed_types = value_type
+        elif opcode in range(0x7E, 0x84):
+            value_type = (
+                ("long", "long")
+                if opcode in {0x7F, 0x81, 0x83}
+                else ("int",)
+            )
+            expected = value_type + value_type
+            pushed_types = value_type
+        elif opcode in range(0x85, 0x94):
+            conversions = {
+                0x85: (("int",), ("long", "long")),
+                0x86: (("int",), ("float",)),
+                0x87: (("int",), ("double", "double")),
+                0x88: (("long", "long"), ("int",)),
+                0x89: (("long", "long"), ("float",)),
+                0x8A: (("long", "long"), ("double", "double")),
+                0x8B: (("float",), ("int",)),
+                0x8C: (("float",), ("long", "long")),
+                0x8D: (("float",), ("double", "double")),
+                0x8E: (("double", "double"), ("int",)),
+                0x8F: (("double", "double"), ("long", "long")),
+                0x90: (("double", "double"), ("float",)),
+                0x91: (("int",), ("int",)),
+                0x92: (("int",), ("int",)),
+                0x93: (("int",), ("int",)),
+            }
+            expected, pushed_types = conversions[opcode]
+        elif opcode == 0x94:
+            expected = ("long", "long", "long", "long")
+            pushed_types = ("int",)
+        elif opcode in {0x95, 0x96}:
+            expected = ("float", "float")
+            pushed_types = ("int",)
+        elif opcode in {0x97, 0x98}:
+            expected = ("double", "double", "double", "double")
+            pushed_types = ("int",)
+        elif opcode in set(range(0x99, 0xA5)) | {0xAA, 0xAB}:
+            expected = (
+                ("int", "int")
+                if opcode in range(0x9F, 0xA5)
+                else ("int",)
+            )
+        elif opcode in {0xA5, 0xA6}:
+            expected = ("reference", "reference")
+        elif opcode in {0xAC, 0xAE}:
+            expected = (("int",) if opcode == 0xAC else ("float",))
+        elif opcode in {0xAD, 0xAF}:
+            expected = (
+                ("long", "long")
+                if opcode == 0xAD
+                else ("double", "double")
+            )
+        elif opcode == 0xB0:
+            expected = ("reference",)
+        elif opcode in range(0xB2, 0xB6):
+            field_slots = descriptor_slots(
+                int.from_bytes(instruction[1:3], "big")
+            )
+            if field_slots is None:
+                return None
+            if opcode == 0xB2:
+                pushed_types = field_slots
+            elif opcode == 0xB3:
+                expected = field_slots
+            elif opcode == 0xB4:
+                expected = ("reference",)
+                pushed_types = field_slots
+            else:
+                expected = ("reference",) + field_slots
+        elif opcode in range(0xB6, 0xBB):
+            descriptor = referenced_descriptor(
+                int.from_bytes(instruction[1:3], "big")
+            )
+            signature = (
+                _method_descriptor_stack_slots(descriptor)
+                if isinstance(descriptor, bytes)
+                else None
+            )
+            if signature is None:
+                return None
+            parameters, return_types = signature
+            expected = (
+                ()
+                if opcode in {0xB8, 0xBA}
+                else ("reference",)
+            ) + parameters
+            pushed_types = return_types
+        elif opcode == 0xBB:
+            pushed_types = ("reference",)
+        elif opcode in {0xBC, 0xBD}:
+            expected = ("int",)
+            pushed_types = ("reference",)
+        elif opcode == 0xBE:
+            expected = ("reference",)
+            pushed_types = ("int",)
+        elif opcode == 0xBF:
+            expected = ("reference",)
+        elif opcode == 0xC0:
+            expected = pushed_types = ("reference",)
+        elif opcode == 0xC1:
+            expected = ("reference",)
+            pushed_types = ("int",)
+        elif opcode in {0xC2, 0xC3, 0xC6, 0xC7}:
+            expected = ("reference",)
+        elif opcode == 0xC5:
+            expected = ("int",) * instruction[3]
+            pushed_types = ("reference",)
+        elif opcode == 0xC4:
+            widened_opcode = instruction[1]
+            if widened_opcode in range(0x15, 0x1A):
+                pushed_types = (
+                    ("int",),
+                    ("long", "long"),
+                    ("float",),
+                    ("double", "double"),
+                    ("reference",),
+                )[widened_opcode - 0x15]
+            elif widened_opcode in range(0x36, 0x3B):
+                expected = (
+                    ("int",),
+                    ("long", "long"),
+                    ("float",),
+                    ("double", "double"),
+                    ("reference",),
+                )[widened_opcode - 0x36]
+
+        remaining = consume(stack, expected)
+        if remaining is None:
+            return None
+        result = remaining + pushed_types
+        if opcode in set(range(0xAC, 0xB2)) | {0xBF} and result:
+            return None
+        return result
+
     depths = {0: 0}
     pending = [0]
     for handler_offset in exception_handler_offsets:
@@ -2697,6 +3046,52 @@ def _valid_operand_stack_flow(
                 continue
             depths[target] = next_depth
             pending.append(target)
+
+    typed_stacks: dict[int, tuple[str, ...]] = {0: ()}
+    typed_pending = [0]
+    for handler_offset in exception_handler_offsets:
+        handler_stack = ("reference",)
+        if (
+            handler_offset in typed_stacks
+            and typed_stacks[handler_offset] != handler_stack
+        ):
+            return False
+        if handler_offset not in typed_stacks:
+            typed_stacks[handler_offset] = handler_stack
+            typed_pending.append(handler_offset)
+    while typed_pending:
+        instruction_offset = typed_pending.pop()
+        next_stack = typed_transition(
+            instruction_offset,
+            typed_stacks[instruction_offset],
+        )
+        if next_stack is None:
+            return False
+        for target in successors[instruction_offset]:
+            if target not in typed_stacks:
+                typed_stacks[target] = next_stack
+                typed_pending.append(target)
+                continue
+            current = typed_stacks[target]
+            if len(current) != len(next_stack):
+                return False
+            merged = tuple(
+                current_slot
+                if current_slot == next_slot
+                else next_slot
+                if current_slot == "unknown"
+                else current_slot
+                if next_slot == "unknown"
+                else "reference"
+                if current_slot == next_slot == "reference"
+                else "invalid"
+                for current_slot, next_slot in zip(current, next_stack)
+            )
+            if "invalid" in merged:
+                return False
+            if merged != current:
+                typed_stacks[target] = merged
+                typed_pending.append(target)
     return True
 
 
@@ -3156,6 +3551,7 @@ def _valid_class_file(payload: bytes) -> bool:
                     resource_requirements = _bytecode_resource_requirements(
                         code,
                         instruction_offsets=instruction_offsets,
+                        constant_pool_tags=tags,
                         constant_pool_values=values,
                     )
                     parameter_slots = (
