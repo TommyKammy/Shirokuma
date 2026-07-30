@@ -266,7 +266,8 @@ nested JAR, contains a structurally valid class file, and contains exactly one
 matching Maven `pom.properties`. That manifest-verified base may authorize only
 same-coordinate source-only or test-only classifiers; source entries must be
 read successfully, nonmetadata payloads in a `sources` JAR must use an approved
-source-file suffix, test entries must contain a structurally valid class file,
+Java, Kotlin, Kotlin-script, Scala, or Groovy source-file suffix; test entries
+must contain a structurally valid class file,
 and every other classifier remains rejected. Class evidence also requires each
 method's declared `max_locals` to cover its parameters, receiver, and local
 instructions and its `max_stack` to cover the operands and results required by
@@ -301,9 +302,11 @@ generic catch references can flow through reference locals, and local-only
 `top` merges remain unusable without invalidating an otherwise valid join.
 Declared local `top` entries can discard inferred out-of-scope values, and a
 constructor may write its own fields before its initializing constructor call.
-Modern class versions reject legacy
-`jsr`/`ret` instructions, and interface class evidence cannot declare a
-constructor. Return instructions must match their method descriptors,
+That initializing call must target the current class or direct superclass.
+Modern class versions reject legacy `jsr`/`ret` instructions, while eligible
+older versions propagate and merge return-address targets. Interface class
+evidence cannot declare a constructor. Return instructions must match their
+method descriptors,
 recognized signature/source/marker attributes validate their payloads, and
 exception catch identities cannot be array classes. Test classifiers also
 restrict nonmetadata members to reviewed test-resource formats and read every

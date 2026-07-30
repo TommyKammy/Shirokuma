@@ -2552,6 +2552,8 @@ def _valid_operand_stack_flow(
     method_descriptor: bytes,
     this_name: bytes,
     required_stack_map_offsets: set[int] | None = None,
+    major_version: int = PINNED_JAVA_CLASS_MAJOR_VERSION,
+    super_name: bytes | None = None,
 ) -> (
     dict[int, tuple[tuple[str, ...], tuple[str, ...]]]
     | bool
@@ -2707,8 +2709,10 @@ def _valid_operand_stack_flow(
                     instruction_offset
                     + int.from_bytes(instruction[1:3], "big", signed=True)
                 )
-            elif opcode in {0xA7, 0xC8}:
-                displacement_size = 2 if opcode == 0xA7 else 4
+            elif opcode in {0xA7, 0xA8, 0xC8, 0xC9}:
+                if opcode in {0xA8, 0xC9} and major_version >= 51:
+                    return False
+                displacement_size = 2 if opcode in {0xA7, 0xA8} else 4
                 targets.add(
                     instruction_offset
                     + int.from_bytes(
@@ -2717,11 +2721,15 @@ def _valid_operand_stack_flow(
                         signed=True,
                     )
                 )
+                if opcode in {0xA8, 0xC9}:
+                    pushed = 1
                 terminal = True
-            elif opcode in {0xA8, 0xA9, 0xC9} or (
+            elif opcode == 0xA9 or (
                 opcode == 0xC4 and instruction[1] == 0xA9
             ):
-                return False
+                if major_version >= 51:
+                    return False
+                terminal = True
             elif opcode in {0xAA, 0xAB}:
                 popped = 1
                 cursor = 1 + (4 - ((instruction_offset + 1) % 4)) % 4
@@ -3220,6 +3228,19 @@ def _valid_operand_stack_flow(
             )
         elif opcode in {0xA5, 0xA6}:
             expected = ("reference", "reference")
+        elif opcode in {0xA8, 0xC9}:
+            pushed_types = (
+                f"return_address:{instruction_offset + len(instruction)}",
+            )
+        elif opcode == 0xA9:
+            local_index = instruction[1]
+            if (
+                local_index >= len(locals_state)
+                or not locals_state[local_index].startswith(
+                    "return_address:"
+                )
+            ):
+                return None
         elif opcode in {0xAC, 0xAE}:
             expected = (("int",) if opcode == 0xAC else ("float",))
         elif opcode in {0xAD, 0xAF}:
@@ -3292,6 +3313,16 @@ def _valid_operand_stack_flow(
                     else None
                 )
                 if candidate_receiver == "uninitialized_this":
+                    allowed_owners = {
+                        f"reference:L{this_name.decode('latin-1')};",
+                    }
+                    if super_name is not None:
+                        allowed_owners.add(
+                            "reference:"
+                            f"L{super_name.decode('latin-1')};"
+                        )
+                    if owner_reference not in allowed_owners:
+                        return None
                     receiver_type = candidate_receiver
                     initializes_receiver = True
                     initialized_token = candidate_receiver
@@ -3400,6 +3431,14 @@ def _valid_operand_stack_flow(
                 local_write = local_index, expected
             elif widened_opcode == 0x84:
                 local_increment = local_index
+            elif widened_opcode == 0xA9:
+                if (
+                    local_index >= len(locals_state)
+                    or not locals_state[local_index].startswith(
+                        "return_address:"
+                    )
+                ):
+                    return None
 
         if local_read is not None:
             local_index, local_types = local_read
@@ -3450,6 +3489,7 @@ def _valid_operand_stack_flow(
                 stored_reference == "reference"
                 or stored_reference == "null"
                 or stored_reference.startswith("reference:")
+                or stored_reference.startswith("return_address:")
                 or stored_reference == "uninitialized_this"
                 or stored_reference.startswith("uninitialized:")
             ):
@@ -3567,6 +3607,23 @@ def _valid_operand_stack_flow(
                 "reference:"
             ) and incoming_slot.startswith("reference:"):
                 merged_values.append("reference:Ljava/lang/Object;")
+            elif current_slot.startswith(
+                "return_address:"
+            ) and incoming_slot.startswith("return_address:"):
+                return_offsets = sorted(
+                    {
+                        *current_slot.removeprefix(
+                            "return_address:"
+                        ).split(","),
+                        *incoming_slot.removeprefix(
+                            "return_address:"
+                        ).split(","),
+                    },
+                    key=int,
+                )
+                merged_values.append(
+                    "return_address:" + ",".join(return_offsets)
+                )
             else:
                 merged_values.append("invalid")
         merged = tuple(merged_values)
@@ -3607,7 +3664,26 @@ def _valid_operand_stack_flow(
         if next_state is None:
             return False
         next_stack, next_locals = next_state
-        for target in successors[instruction_offset]:
+        instruction = instructions[instruction_offset]
+        opcode = instruction[0]
+        if opcode == 0xA9 or (
+            opcode == 0xC4 and instruction[1] == 0xA9
+        ):
+            local_index = (
+                instruction[1]
+                if opcode == 0xA9
+                else int.from_bytes(instruction[2:4], "big")
+            )
+            return_address = current_locals[local_index]
+            transition_targets = {
+                int(target)
+                for target in return_address.removeprefix(
+                    "return_address:"
+                ).split(",")
+            }
+        else:
+            transition_targets = successors[instruction_offset]
+        for target in transition_targets:
             if merge_state(target, next_stack, next_locals) is None:
                 return False
         for handler_offset in exceptional_successors[instruction_offset]:
@@ -4321,6 +4397,8 @@ def _valid_class_file(
                             if major_version >= 51
                             else None
                         ),
+                        major_version=major_version,
+                        super_name=super_name,
                     )
                     if not isinstance(computed_states, dict):
                         raise ValueError("invalid operand stack flow")
@@ -4952,7 +5030,9 @@ def _validate_rootfs_discovery_omissions(
                 source_entries = [
                     entry
                     for entry in archive.infolist()
-                    if entry.filename.endswith((".java", ".kt"))
+                    if entry.filename.endswith(
+                        (".java", ".kt", ".kts", ".scala", ".groovy")
+                    )
                 ]
                 unexpected_entries = [
                     entry.filename

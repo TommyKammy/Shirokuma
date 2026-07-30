@@ -1843,6 +1843,60 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 this_name=b"A",
             )
         )
+        unrelated_constructor_tags = [
+            0,
+            7,
+            1,
+            10,
+            12,
+            1,
+            1,
+            7,
+            1,
+        ]
+        unrelated_constructor_values = [
+            None,
+            (2,),
+            b"A",
+            (7, 4),
+            (5, 6),
+            b"<init>",
+            b"()V",
+            (8,),
+            b"Unrelated",
+        ]
+        self.assertFalse(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("2AB70003B1"),
+                instruction_offsets={0, 1, 4},
+                constant_pool_tags=unrelated_constructor_tags,
+                constant_pool_values=unrelated_constructor_values,
+                exception_handlers=[],
+                max_stack=1,
+                max_locals=1,
+                method_access_flags=0,
+                method_name=b"<init>",
+                method_descriptor=b"()V",
+                this_name=b"A",
+                super_name=b"java/lang/Object",
+            )
+        )
+        self.assertTrue(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("A80004B14BA900"),
+                instruction_offsets={0, 3, 4, 5},
+                constant_pool_tags=[0],
+                constant_pool_values=[None],
+                exception_handlers=[],
+                max_stack=1,
+                max_locals=1,
+                method_access_flags=0x0008,
+                method_name=b"method",
+                method_descriptor=b"()V",
+                this_name=b"A",
+                major_version=49,
+            )
+        )
 
     def test_member_descriptors_require_jvm_grammar(self) -> None:
         for descriptor in (
@@ -2712,7 +2766,9 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 root,
                 {
                     alpha: {"org/example/Alpha.class": b"alpha"},
-                    sources: {"org/example/Alpha.java": b"class Alpha {}"},
+                    sources: {
+                        "org/example/Alpha.scala": b"class Alpha {}"
+                    },
                     tests: {
                         "A.class": self.CLASS_FILE,
                     },
