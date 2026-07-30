@@ -300,16 +300,15 @@ class MavenSnapshotTests(unittest.TestCase):
                 ),
                 encoding="iso-8859-1",
             )
-            missing_metadata = self._repository(root / "missing-metadata")
+            missing_parent_pom = self._repository(root / "missing-parent-pom")
             (
-                missing_metadata
-                / "io/trino/trino-spi/"
-                "maven-metadata-shirokuma-central-fallback.xml"
+                missing_parent_pom
+                / "io/trino/tempto/tempto-root/204/tempto-root-204.pom"
             ).unlink()
             for name, repository in (
                 ("missing-artifact", missing_artifact),
                 ("wrong-origin", wrong_origin),
-                ("missing-metadata", missing_metadata),
+                ("missing-parent-pom", missing_parent_pom),
             ):
                 with self.subTest(name=name), self.assertRaises(
                     package.SnapshotError
@@ -2290,20 +2289,31 @@ class PublisherContractTests(unittest.TestCase):
             expected_paths,
             verify.EXPECTED_TRINO_EXTERNAL_MAVEN_INPUTS["required_paths"],
         )
-        self.assertEqual(37, len(expected_paths))
+        self.assertEqual(19, len(expected_paths))
         for required in (
             "io/trino/tempto/tempto-core/204/tempto-core-204.jar",
-            "io/trino/tempto/tempto-kafka/204/tempto-kafka-204.jar",
-            "io/trino/tempto/tempto-ldap/204/tempto-ldap-204.jar",
-            "io/trino/tempto/tempto-runner/204/tempto-runner-204.jar",
-            "io/trino/trino-spi/maven-metadata-shirokuma-central.xml",
-            (
-                "io/trino/trino-spi/"
-                "maven-metadata-shirokuma-central-fallback.xml"
-            ),
+            "io/trino/tempto/tempto-root/204/tempto-root-204.pom",
+            "io/trino/trino-maven-plugin/20/trino-maven-plugin-20.jar",
         ):
             with self.subTest(required=required):
                 self.assertIn(required, expected_paths)
+        for absent_prefix in (
+            "io/trino/benchto/",
+            "io/trino/hive/hive-apache-jdbc/",
+            "io/trino/tempto/tempto-kafka/",
+            "io/trino/tempto/tempto-ldap/",
+            "io/trino/tempto/tempto-runner/",
+            "io/trino/trino-root/",
+            "io/trino/trino-spi/",
+            "io/trino/trino-wasm-python/",
+        ):
+            with self.subTest(absent_prefix=absent_prefix):
+                self.assertFalse(
+                    any(
+                        path.startswith(absent_prefix)
+                        for path in expected_paths
+                    )
+                )
 
     def test_each_fresh_repository_uses_the_bounded_reactor_pruner(self) -> None:
         workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")

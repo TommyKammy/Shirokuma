@@ -126,13 +126,6 @@ TRINO_BUILD_EXTENSION_REQUIRED_PATHS = frozenset(
     for name in TRINO_BUILD_EXTENSION_REQUIRED_FILES
 )
 TRINO_EXTERNAL_ARTIFACTS = {
-    ("io", "trino", "benchto", "benchto-base", "0.34"): (
-        "benchto-base-0.34.pom",
-    ),
-    ("io", "trino", "benchto", "benchto-driver", "0.34"): (
-        "benchto-driver-0.34.jar",
-        "benchto-driver-0.34.pom",
-    ),
     ("io", "trino", "coral", "coral", "2.2.49-1"): (
         "coral-2.2.49-1.jar",
         "coral-2.2.49-1.pom",
@@ -140,10 +133,6 @@ TRINO_EXTERNAL_ARTIFACTS = {
     ("io", "trino", "hadoop", "hadoop-apache", "3.3.5-3"): (
         "hadoop-apache-3.3.5-3.jar",
         "hadoop-apache-3.3.5-3.pom",
-    ),
-    ("io", "trino", "hive", "hive-apache-jdbc", "0.13.1-10"): (
-        "hive-apache-jdbc-0.13.1-10.jar",
-        "hive-apache-jdbc-0.13.1-10.pom",
     ),
     ("io", "trino", "hive", "hive-apache", "3.1.2-23"): (
         "hive-apache-3.1.2-23.jar",
@@ -157,20 +146,8 @@ TRINO_EXTERNAL_ARTIFACTS = {
         "tempto-core-204.jar",
         "tempto-core-204.pom",
     ),
-    ("io", "trino", "tempto", "tempto-kafka", "204"): (
-        "tempto-kafka-204.jar",
-        "tempto-kafka-204.pom",
-    ),
-    ("io", "trino", "tempto", "tempto-ldap", "204"): (
-        "tempto-ldap-204.jar",
-        "tempto-ldap-204.pom",
-    ),
     ("io", "trino", "tempto", "tempto-root", "204"): (
         "tempto-root-204.pom",
-    ),
-    ("io", "trino", "tempto", "tempto-runner", "204"): (
-        "tempto-runner-204.jar",
-        "tempto-runner-204.pom",
     ),
     ("io", "trino", "tpcds", "tpcds", "1.7"): (
         "tpcds-1.7.jar",
@@ -185,29 +162,8 @@ TRINO_EXTERNAL_ARTIFACTS = {
         "trino-re2j-1.7.jar",
         "trino-re2j-1.7.pom",
     ),
-    ("io", "trino", "trino-root", "482"): (
-        "trino-root-482.pom",
-    ),
-    ("io", "trino", "trino-spi", "482"): (
-        "trino-spi-482.jar",
-        "trino-spi-482.pom",
-    ),
-    ("io", "trino", "trino-wasm-python", "3.13-7"): (
-        "trino-wasm-python-3.13-7.jar",
-        "trino-wasm-python-3.13-7.pom",
-    ),
 }
-TRINO_EXTERNAL_METADATA_PATHS = frozenset(
-    {
-        PurePosixPath(
-            "io/trino/trino-spi/maven-metadata-shirokuma-central.xml"
-        ),
-        PurePosixPath(
-            "io/trino/trino-spi/"
-            "maven-metadata-shirokuma-central-fallback.xml"
-        ),
-    }
-)
+TRINO_EXTERNAL_METADATA_PATHS: frozenset[PurePosixPath] = frozenset()
 TRINO_EXTERNAL_REQUIRED_PATHS = frozenset(
     PurePosixPath(*prefix, name)
     for prefix, names in TRINO_EXTERNAL_ARTIFACTS.items()
