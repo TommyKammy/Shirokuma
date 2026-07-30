@@ -281,7 +281,10 @@ uninitialized until a valid `this()` or `super()` invocation, interface method
 flags follow their class-file version, and bounded local/state-cell counts
 prevent validation-work amplification. Stack-manipulation instructions preserve
 category-1/category-2 value boundaries, and every regular base-JAR member is
-read before the archive is accepted. Reference values retain their descriptor
+read before the archive is accepted. Descriptor size is bounded before the
+archive is materialized, and the EOCD member count and central-directory size
+are bounded before the complete member inventory is constructed. Reference
+values retain their descriptor
 identity through parameters, locals, constants, arrays, casts, fields, calls,
 and returns; a value created by `new` remains allocation-offset-specific and
 uninitialized until the matching constructor call. Declared `StackMapTable`
@@ -296,7 +299,9 @@ and the JAR-local superclass graph must be acyclic.
 Java 7+ branch and exception targets require
 matching declared stack-map frames. Dynamic constants must match the selected
 `ldc*` width, `multianewarray` dimensions cannot exceed the referenced array
-rank, and constructors can be invoked only through `invokespecial`. Every
+rank, constructors can be invoked only through `invokespecial`, and ordinary
+`invokespecial` owners are restricted to the current class, eligible
+superclasses, or direct superinterfaces. Every
 regular source-classifier member, including permitted metadata, is consumed
 before acceptance. Exception-handler validation is work-product bounded,
 generic catch references can flow through reference locals, and local-only
@@ -314,13 +319,17 @@ evidence cannot declare a constructor. Return instructions must match their
 method descriptors,
 recognized signature/source/marker attributes validate their payloads, and
 predefined field `ConstantValue` attributes validate their length and
-constant-pool type. Exception handlers retain their declared catch type, and
+constant-pool type; method `Exceptions` attributes validate placement,
+uniqueness, count, size, and class indices. `athrow` operands must be assignable
+to `java/lang/Throwable`. Exception handlers retain their declared catch type,
+and
 known JAR-local catch classes must reach `java/lang/Throwable`; catch identities
 cannot be array classes. Test classifiers also
 restrict nonmetadata members to reviewed test-resource formats and read every
 accepted payload; service-provider exemptions require a direct, UTF-8
 `META-INF/services/<binary-name>` configuration with valid service and provider
-binary names. The subsequent complete
+binary names whose dot-separated components follow Java identifier rules. The
+subsequent complete
 `(PURL, FilePath)` identity and High=0/Critical=0 scan remains mandatory. This
 does not relax source identity, vulnerability, publication, admission, expiry,
 or environment scope.

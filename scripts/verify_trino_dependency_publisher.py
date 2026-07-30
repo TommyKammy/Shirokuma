@@ -15,6 +15,7 @@ import stat
 import subprocess
 import tarfile
 import textwrap
+import unicodedata
 import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -40,6 +41,9 @@ PARQUET_REMEDIATION_TEST_PATH = Path(
 MAX_OMITTED_JAR_MEMBER_BYTES = 64 * 1024 * 1024
 MAX_OMITTED_JAR_EXPANDED_BYTES = 256 * 1024 * 1024
 MAX_OMITTED_JAR_COMPRESSION_RATIO = 200
+MAX_OMITTED_JAR_ARCHIVE_BYTES = 128 * 1024 * 1024
+MAX_OMITTED_JAR_MEMBERS = 100_000
+MAX_OMITTED_JAR_CENTRAL_DIRECTORY_BYTES = 16 * 1024 * 1024
 MAX_OMITTED_CLASS_LOCALS = 1024
 MAX_OMITTED_CLASS_STATE_CELLS = 1_000_000
 PINNED_JAVA_CLASS_MAJOR_VERSION = 69
@@ -1774,7 +1778,52 @@ def _safe_jar_member_type(entry: zipfile.ZipInfo) -> bool:
     return member_type in {0, stat.S_IFREG}
 
 
+def _zip_directory_summary(payload: bytes) -> tuple[int, int] | None:
+    minimum_eocd_size = 22
+    eocd_offset = payload.rfind(
+        b"PK\x05\x06",
+        max(0, len(payload) - minimum_eocd_size - 65535),
+    )
+    if (
+        eocd_offset < 0
+        or eocd_offset + minimum_eocd_size > len(payload)
+    ):
+        return None
+    eocd = payload[eocd_offset : eocd_offset + minimum_eocd_size]
+    disk_number = int.from_bytes(eocd[4:6], "little")
+    directory_disk = int.from_bytes(eocd[6:8], "little")
+    disk_entries = int.from_bytes(eocd[8:10], "little")
+    total_entries = int.from_bytes(eocd[10:12], "little")
+    directory_size = int.from_bytes(eocd[12:16], "little")
+    directory_offset = int.from_bytes(eocd[16:20], "little")
+    comment_size = int.from_bytes(eocd[20:22], "little")
+    if (
+        disk_number != 0
+        or directory_disk != 0
+        or disk_entries != total_entries
+        or total_entries == 0xFFFF
+        or directory_size == 0xFFFFFFFF
+        or directory_offset == 0xFFFFFFFF
+        or eocd_offset + minimum_eocd_size + comment_size != len(payload)
+        or directory_offset + directory_size != eocd_offset
+    ):
+        return None
+    return total_entries, directory_size
+
+
 def _jar_entries(payload: bytes, path: str) -> tuple[zipfile.ZipFile, list[str]]:
+    directory_summary = _zip_directory_summary(payload)
+    if (
+        len(payload) > MAX_OMITTED_JAR_ARCHIVE_BYTES
+        or directory_summary is None
+        or directory_summary[0] > MAX_OMITTED_JAR_MEMBERS
+        or directory_summary[1]
+        > MAX_OMITTED_JAR_CENTRAL_DIRECTORY_BYTES
+    ):
+        _fail(
+            "MAVEN_SBOM_ROOTFS",
+            f"{path} exceeds omitted-JAR archive limits",
+        )
     try:
         archive = zipfile.ZipFile(io.BytesIO(payload))
         entries = archive.infolist()
@@ -1782,7 +1831,8 @@ def _jar_entries(payload: bytes, path: str) -> tuple[zipfile.ZipFile, list[str]]
         _fail("MAVEN_SBOM_ROOTFS", f"{path} is not a valid JAR: {error}")
     names = [entry.filename for entry in entries]
     if (
-        len(names) != len(set(names))
+        len(names) > MAX_OMITTED_JAR_MEMBERS
+        or len(names) != len(set(names))
         or any(
             entry.flag_bits & 0x1
             or entry.filename.startswith("/")
@@ -2558,6 +2608,7 @@ def _valid_operand_stack_flow(
     super_name: bytes | None = None,
     known_class_kinds: Mapping[bytes, bool] | None = None,
     known_superclasses: Mapping[bytes, bytes | None] | None = None,
+    direct_interfaces: set[bytes] | None = None,
 ) -> (
     dict[int, tuple[tuple[str, ...], tuple[str, ...]]]
     | bool
@@ -2892,6 +2943,30 @@ def _valid_operand_stack_flow(
                 actual_name == b"java/lang/Object"
                 and expected_name != b"java/lang/Object"
             ):
+                return False
+            if expected_name == b"java/lang/Throwable":
+                if (
+                    known_class_kinds is not None
+                    and known_class_kinds.get(actual_name) is True
+                ):
+                    return False
+                if (
+                    actual_name is None
+                    or known_superclasses is None
+                    or actual_name not in known_superclasses
+                ):
+                    return True
+                current: bytes | None = actual_name
+                visited: set[bytes] = set()
+                while current is not None and current not in visited:
+                    if current == expected_name:
+                        return True
+                    if current == b"java/lang/Object":
+                        return False
+                    visited.add(current)
+                    if current not in known_superclasses:
+                        return True
+                    current = known_superclasses[current]
                 return False
             if (
                 actual_name is None
@@ -3365,18 +3440,48 @@ def _valid_operand_stack_flow(
                 return None
             parameters, invocation_return_types = signature
             receiver_type = "reference"
+            reference = constant(pool_index)
+            owner_reference = (
+                class_reference(reference[0])
+                if isinstance(reference, tuple)
+                else None
+            )
+            if opcode == 0xB7 and owner_reference is None:
+                return None
+            if opcode == 0xB7 and invocation_name != b"<init>":
+                allowed_owner_names = {
+                    this_name,
+                    *(direct_interfaces or set()),
+                }
+                current_super = super_name
+                visited_supers: set[bytes] = set()
+                while (
+                    current_super is not None
+                    and current_super not in visited_supers
+                ):
+                    allowed_owner_names.add(current_super)
+                    visited_supers.add(current_super)
+                    if (
+                        known_superclasses is None
+                        or current_super not in known_superclasses
+                    ):
+                        break
+                    current_super = known_superclasses[current_super]
+                allowed_owner_references = {
+                    f"reference:L{name.decode('latin-1')};"
+                    for name in allowed_owner_names
+                }
+                if owner_reference not in allowed_owner_references:
+                    return None
+                receiver_type = (
+                    f"reference:L{this_name.decode('latin-1')};"
+                )
             if (
                 opcode == 0xB7
                 and invocation_name == b"<init>"
                 and len(stack) >= len(parameters) + 1
             ):
                 candidate_receiver = stack[-len(parameters) - 1]
-                reference = constant(pool_index)
-                owner_reference = (
-                    class_reference(reference[0])
-                    if isinstance(reference, tuple)
-                    else None
-                )
                 if candidate_receiver == "uninitialized_this":
                     allowed_owners = {
                         f"reference:L{this_name.decode('latin-1')};",
@@ -3451,7 +3556,7 @@ def _valid_operand_stack_flow(
             expected = ("reference",)
             pushed_types = ("int",)
         elif opcode == 0xBF:
-            expected = ("reference",)
+            expected = ("reference:Ljava/lang/Throwable;",)
         elif opcode == 0xC0:
             cast_reference = class_reference(
                 int.from_bytes(instruction[1:3], "big")
@@ -4529,6 +4634,7 @@ def _valid_class_file(
                         super_name=super_name,
                         known_class_kinds=effective_class_kinds,
                         known_superclasses=effective_superclasses,
+                        direct_interfaces=interface_names,
                     )
                     if not isinstance(computed_states, dict):
                         raise ValueError("invalid operand stack flow")
@@ -4762,6 +4868,37 @@ def _valid_class_file(
                     ):
                         raise ValueError("invalid ConstantValue attribute")
                     singleton_attributes.add(b"ConstantValue")
+                elif values[name_index] == b"Exceptions":
+                    exception_count = (
+                        int.from_bytes(attribute[:2], "big")
+                        if len(attribute) >= 2
+                        else -1
+                    )
+                    if (
+                        method_descriptor is None
+                        or b"Exceptions" in singleton_attributes
+                        or len(attribute) < 2
+                        or len(attribute) != 2 + 2 * exception_count
+                        or any(
+                            class_name(
+                                int.from_bytes(
+                                    attribute[
+                                        entry_offset : entry_offset + 2
+                                    ],
+                                    "big",
+                                ),
+                                allow_array=False,
+                            )
+                            is None
+                            for entry_offset in range(
+                                2,
+                                len(attribute),
+                                2,
+                            )
+                        )
+                    ):
+                        raise ValueError("invalid Exceptions attribute")
+                    singleton_attributes.add(b"Exceptions")
                 elif values[name_index] == b"Signature":
                     if (
                         b"Signature" in singleton_attributes
@@ -5153,6 +5290,28 @@ def _maven_properties(payload: bytes, path: str) -> dict[str, str]:
     return properties
 
 
+def _valid_java_binary_name(value: str) -> bool:
+    def valid_start(character: str) -> bool:
+        category = unicodedata.category(character)
+        return (
+            character in {"$", "_"}
+            or category.startswith("L")
+            or category in {"Nl", "Sc", "Pc"}
+        )
+
+    def valid_part(character: str) -> bool:
+        return valid_start(character) or unicodedata.category(
+            character
+        ) in {"Mn", "Mc", "Nd", "Cf"}
+
+    return all(
+        component
+        and valid_start(component[0])
+        and all(valid_part(character) for character in component[1:])
+        for component in value.split(".")
+    )
+
+
 def _valid_service_provider_configuration(
     archive: zipfile.ZipFile,
     entry: zipfile.ZipInfo,
@@ -5164,9 +5323,7 @@ def _valid_service_provider_configuration(
     if (
         not service_name
         or "/" in service_name
-        or not _valid_internal_name(
-            service_name.replace(".", "/").encode("utf-8")
-        )
+        or not _valid_java_binary_name(service_name)
     ):
         return False
     try:
@@ -5175,9 +5332,7 @@ def _valid_service_provider_configuration(
         return False
     return all(
         not provider
-        or _valid_internal_name(
-            provider.replace(".", "/").encode("utf-8")
-        )
+        or _valid_java_binary_name(provider)
         for provider in (
             line.split("#", 1)[0].strip()
             for line in text.splitlines()
@@ -5220,16 +5375,22 @@ def _validate_rootfs_discovery_omissions(
         candidate = repository_root / path
         try:
             resolved_candidate = candidate.resolve(strict=True)
-            candidate_mode = stat.S_IMODE(candidate.lstat().st_mode)
+            candidate_stat = candidate.lstat()
+            candidate_mode = stat.S_IMODE(candidate_stat.st_mode)
         except OSError as error:
             _fail("MAVEN_SBOM_ROOTFS", f"{candidate}: {error}")
         if (
             not resolved_candidate.is_relative_to(repository_root)
             or candidate_mode != int(str(record["mode"]), 8)
+            or candidate_stat.st_size > MAX_OMITTED_JAR_ARCHIVE_BYTES
+            or record["size"] > MAX_OMITTED_JAR_ARCHIVE_BYTES
         ):
             _fail(
                 "MAVEN_SBOM_ROOTFS",
-                f"{path} escapes the repository or has the wrong mode",
+                (
+                    f"{path} escapes the repository, has the wrong mode, "
+                    "or exceeds omitted-JAR archive limits"
+                ),
             )
         payload = _read_reviewed_regular_file(
             candidate,

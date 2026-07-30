@@ -1996,6 +1996,77 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 this_name=b"A",
             )
         )
+        self.assertFalse(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("2ABF"),
+                instruction_offsets={0, 1},
+                constant_pool_tags=[0],
+                constant_pool_values=[None],
+                exception_handlers=[],
+                max_stack=1,
+                max_locals=1,
+                method_access_flags=0x0008,
+                method_name=b"method",
+                method_descriptor=b"(Ljava/lang/Object;)V",
+                this_name=b"A",
+                known_class_kinds={
+                    b"java/lang/Object": False,
+                    b"A": False,
+                },
+                known_superclasses={
+                    b"java/lang/Object": None,
+                    b"A": b"java/lang/Object",
+                },
+            )
+        )
+        special_values = [
+            None,
+            (2, 4),
+            (3,),
+            b"java/lang/Object",
+            (5, 6),
+            b"toString",
+            b"()Ljava/lang/String;",
+        ]
+        special_arguments = {
+            "instruction_offsets": {0, 1, 4, 5},
+            "constant_pool_tags": call_tags,
+            "exception_handlers": [],
+            "max_stack": 1,
+            "max_locals": 1,
+            "method_access_flags": 0,
+            "method_name": b"method",
+            "method_descriptor": b"()V",
+            "this_name": b"A",
+            "super_name": b"java/lang/Object",
+            "known_class_kinds": {
+                b"java/lang/Object": False,
+                b"A": False,
+            },
+            "known_superclasses": {
+                b"java/lang/Object": None,
+                b"A": b"java/lang/Object",
+            },
+        }
+        self.assertTrue(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("2AB7000157B1"),
+                constant_pool_values=special_values,
+                **special_arguments,
+            )
+        )
+        unrelated_special_values = [
+            *special_values[:3],
+            b"java/lang/String",
+            *special_values[4:],
+        ]
+        self.assertFalse(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("2AB7000157B1"),
+                constant_pool_values=unrelated_special_values,
+                **special_arguments,
+            )
+        )
 
     def test_exception_and_constant_value_attributes_are_loadable(
         self,
@@ -2043,6 +2114,47 @@ class MavenScanEvidenceTests(unittest.TestCase):
 
         self.assertTrue(verify._valid_class_file(class_with_catch(0)))
         self.assertFalse(verify._valid_class_file(class_with_catch(2)))
+
+        def class_with_exceptions(attribute: bytes) -> bytes:
+            def exception_utf8(value: str) -> bytes:
+                payload = value.encode("ascii")
+                return (
+                    b"\x01"
+                    + len(payload).to_bytes(2, "big")
+                    + payload
+                )
+
+            return b"".join(
+                (
+                    b"\xca\xfe\xba\xbe\x00\x00\x00\x34\x00\x0a",
+                    exception_utf8("A"),
+                    b"\x07\x00\x01",
+                    exception_utf8("java/lang/Object"),
+                    b"\x07\x00\x03",
+                    exception_utf8("method"),
+                    exception_utf8("()V"),
+                    exception_utf8("Exceptions"),
+                    exception_utf8("java/lang/Throwable"),
+                    b"\x07\x00\x08",
+                    b"\x04\x21\x00\x02\x00\x04\x00\x00\x00\x00",
+                    b"\x00\x01\x04\x01\x00\x05\x00\x06\x00\x01",
+                    b"\x00\x07",
+                    len(attribute).to_bytes(4, "big"),
+                    attribute,
+                    b"\x00\x00",
+                )
+            )
+
+        self.assertTrue(
+            verify._valid_class_file(
+                class_with_exceptions(b"\x00\x01\x00\x09")
+            )
+        )
+        self.assertFalse(
+            verify._valid_class_file(
+                class_with_exceptions(b"\x00\x02\x00\x09")
+            )
+        )
 
         def utf8(value: str) -> bytes:
             payload = value.encode("ascii")
@@ -3221,6 +3333,16 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 {
                     "A.class": self.CLASS_FILE,
                     (
+                        "META-INF/services/java.lang.Runnable"
+                    ): b"9-bad.name\n",
+                },
+                "not a test-only classifier",
+            ),
+            (
+                "org/example/alpha/1.0/alpha-1.0-tests.jar",
+                {
+                    "A.class": self.CLASS_FILE,
+                    (
                         "META-INF/services/native/libalpha.so"
                     ): b"\x7fELF",
                 },
@@ -3704,6 +3826,44 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     self._sbom(root, (alpha,)),
                     root / "generated.json",
                 )
+
+    def test_maven_sbom_bounds_omitted_jar_archive_inventory(
+        self,
+    ) -> None:
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr("A.class", self.CLASS_FILE)
+            archive.writestr("empty.txt", b"")
+        archive_payload = payload.getvalue()
+        summary = verify._zip_directory_summary(archive_payload)
+        self.assertIsNotNone(summary)
+        assert summary is not None
+        self.assertEqual(summary[0], 2)
+        cases = (
+            (
+                "MAX_OMITTED_JAR_ARCHIVE_BYTES",
+                len(archive_payload) - 1,
+            ),
+            ("MAX_OMITTED_JAR_MEMBERS", 1),
+            (
+                "MAX_OMITTED_JAR_CENTRAL_DIRECTORY_BYTES",
+                summary[1] - 1,
+            ),
+        )
+        for limit_name, limit_value in cases:
+            with (
+                self.subTest(limit_name=limit_name),
+                mock.patch.object(
+                    verify,
+                    limit_name,
+                    limit_value,
+                ),
+                self.assertRaisesRegex(
+                    verify.ContractError,
+                    "exceeds omitted-JAR archive limits",
+                ),
+            ):
+                verify._jar_entries(archive_payload, "bounded.jar")
 
     def test_maven_sbom_generation_accepts_rootless_trivy_graph(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
