@@ -1480,6 +1480,142 @@ class MavenScanEvidenceTests(unittest.TestCase):
             verify._valid_class_file(invalid_constructor_descriptor)
         )
 
+    def test_class_identity_version_flags_and_members_are_validated(
+        self,
+    ) -> None:
+        def with_version(minor: int, major: int) -> bytes:
+            return b"".join(
+                (
+                    self.CLASS_FILE[:4],
+                    minor.to_bytes(2, "big"),
+                    major.to_bytes(2, "big"),
+                    self.CLASS_FILE[8:],
+                )
+            )
+
+        self.assertTrue(verify._valid_class_file(with_version(0, 69)))
+        self.assertTrue(verify._valid_class_file(with_version(3, 45)))
+        for minor, major in ((1, 69), (0, 70), (65535, 69), (4, 45)):
+            with self.subTest(minor=minor, major=major):
+                self.assertFalse(
+                    verify._valid_class_file(with_version(minor, major))
+                )
+
+        for access_flags in (0x0411, 0x8000, 0x0002):
+            with self.subTest(access_flags=access_flags):
+                invalid_flags = self.CLASS_FILE.replace(
+                    b"\x00\x21\x00\x02\x00\x04",
+                    access_flags.to_bytes(2, "big")
+                    + b"\x00\x02\x00\x04",
+                    1,
+                )
+                self.assertFalse(verify._valid_class_file(invalid_flags))
+        invalid_interface_flags = self.INTERFACE_CLASS_FILE.replace(
+            b"\x06\x01\x00\x02\x00\x04",
+            b"\x06\x11\x00\x02\x00\x04",
+            1,
+        )
+        self.assertFalse(verify._valid_class_file(invalid_interface_flags))
+
+        invalid_class_name = self.CLASS_FILE.replace(
+            b"\x01\x00\x01A",
+            b"\x01\x00\x01.",
+            1,
+        )
+        self.assertFalse(verify._valid_class_file(invalid_class_name))
+        invalid_method_name = self.CLASS_FILE.replace(
+            b"\x01\x00\x06<init>",
+            b"\x01\x00\x06<bad?>",
+            1,
+        )
+        self.assertFalse(verify._valid_class_file(invalid_method_name))
+        static_constructor = self.CLASS_FILE.replace(
+            b"\x00\x01\x00\x05\x00\x06\x00\x01",
+            b"\x00\x09\x00\x05\x00\x06\x00\x01",
+            1,
+        )
+        self.assertFalse(verify._valid_class_file(static_constructor))
+
+        method_info = bytes.fromhex(
+            "0001000500060001000700000011"
+            "00010001000000052AB70009B100000000"
+        )
+        member_table = b"\x00\x00\x00\x01" + method_info + b"\x00\x00"
+        self.assertIn(member_table, self.CLASS_FILE)
+        duplicate_method = self.CLASS_FILE.replace(
+            member_table,
+            b"\x00\x00\x00\x02"
+            + method_info
+            + method_info
+            + b"\x00\x00",
+            1,
+        )
+        self.assertFalse(verify._valid_class_file(duplicate_method))
+
+    def test_dynamic_constants_require_bound_bootstrap_methods(self) -> None:
+        def dynamic_class(
+            bootstrap_index: int,
+            *,
+            bootstrap_kind: int = 6,
+            bootstrap_reference: int = 9,
+            include_attribute: bool = True,
+        ) -> bytes:
+            def utf8(value: str) -> bytes:
+                payload = value.encode("ascii")
+                return b"\x01" + len(payload).to_bytes(2, "big") + payload
+
+            attribute = (
+                b"\x00\x01"
+                + b"\x00\x0e\x00\x00\x00\x06"
+                + b"\x00\x01"
+                + bootstrap_reference.to_bytes(2, "big")
+                + b"\x00\x00"
+                if include_attribute
+                else b"\x00\x00"
+            )
+            return b"".join(
+                (
+                    b"\xca\xfe\xba\xbe\x00\x00\x00\x37\x00\x0f",
+                    utf8("A"),
+                    b"\x07\x00\x01",
+                    utf8("java/lang/Object"),
+                    b"\x07\x00\x03",
+                    utf8("bootstrap"),
+                    utf8("()V"),
+                    b"\x0c\x00\x05\x00\x06",
+                    b"\x0a\x00\x04\x00\x07",
+                    b"\x0f",
+                    bootstrap_kind.to_bytes(1, "big"),
+                    b"\x00\x08",
+                    utf8("value"),
+                    utf8("I"),
+                    b"\x0c\x00\x0a\x00\x0b",
+                    b"\x11",
+                    bootstrap_index.to_bytes(2, "big"),
+                    b"\x00\x0c",
+                    utf8("BootstrapMethods"),
+                    b"\x00\x21\x00\x02\x00\x04",
+                    b"\x00\x00\x00\x00\x00\x00",
+                    attribute,
+                )
+            )
+
+        self.assertTrue(verify._valid_class_file(dynamic_class(0)))
+        self.assertFalse(verify._valid_class_file(dynamic_class(1)))
+        self.assertFalse(
+            verify._valid_class_file(
+                dynamic_class(0, include_attribute=False)
+            )
+        )
+        self.assertFalse(
+            verify._valid_class_file(
+                dynamic_class(0, bootstrap_reference=2)
+            )
+        )
+        self.assertFalse(
+            verify._valid_class_file(dynamic_class(0, bootstrap_kind=1))
+        )
+
     def test_modified_utf8_validation_matches_class_file_encoding(self) -> None:
         for payload in (
             b"A",

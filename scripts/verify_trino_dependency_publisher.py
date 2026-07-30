@@ -40,6 +40,7 @@ PARQUET_REMEDIATION_TEST_PATH = Path(
 MAX_OMITTED_JAR_MEMBER_BYTES = 64 * 1024 * 1024
 MAX_OMITTED_JAR_EXPANDED_BYTES = 256 * 1024 * 1024
 MAX_OMITTED_JAR_COMPRESSION_RATIO = 200
+PINNED_JAVA_CLASS_MAJOR_VERSION = 69
 SOURCE_OVERLAY_PATH = Path(
     "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch"
 )
@@ -2057,6 +2058,31 @@ def _bytecode_instruction_offsets(
     return starts
 
 
+def _valid_internal_name(payload: bytes) -> bool:
+    return bool(payload) and all(
+        part
+        and b"." not in part
+        and b";" not in part
+        and b"[" not in part
+        for part in payload.split(b"/")
+    )
+
+
+def _valid_unqualified_name(payload: bytes, *, method: bool) -> bool:
+    if (
+        not payload
+        or any(character in payload for character in b".;[/")
+    ):
+        return False
+    if not method:
+        return True
+    return (
+        payload in {b"<init>", b"<clinit>"}
+        or b"<" not in payload
+        and b">" not in payload
+    )
+
+
 def _field_descriptor_end(
     payload: bytes,
     offset: int = 0,
@@ -2080,13 +2106,7 @@ def _field_descriptor_end(
     if end < 0:
         return None
     internal_name = payload[offset + 1 : end]
-    if any(
-        not part
-        or b"." in part
-        or b";" in part
-        or b"[" in part
-        for part in internal_name.split(b"/")
-    ):
+    if not _valid_internal_name(internal_name):
         return None
     return end + 1, 1
 
@@ -2140,9 +2160,15 @@ def _valid_class_file(payload: bytes) -> bool:
     try:
         if read_uint(4) != 0xCAFEBABE:
             return False
-        read_uint(2)
+        minor_version = read_uint(2)
         major_version = read_uint(2)
-        if major_version < 45:
+        if not (
+            (major_version == 45 and minor_version <= 3)
+            or (
+                46 <= major_version <= PINNED_JAVA_CLASS_MAJOR_VERSION
+                and minor_version == 0
+            )
+        ):
             return False
         constant_pool_count = read_uint(2)
         if constant_pool_count < 2:
@@ -2175,6 +2201,12 @@ def _valid_class_file(payload: bytes) -> bool:
                 values[index] = (read_uint(1), read_uint(2))
             else:
                 return False
+            if (
+                (tag in {15, 16, 18} and major_version < 51)
+                or (tag in {19, 20} and major_version < 53)
+                or (tag == 17 and major_version < 55)
+            ):
+                return False
             index += 1
 
         def has_tag(pool_index: int, *expected: int) -> bool:
@@ -2183,10 +2215,39 @@ def _valid_class_file(payload: bytes) -> bool:
                 and tags[pool_index] in expected
             )
 
+        def class_name(
+            pool_index: int,
+            *,
+            allow_array: bool,
+        ) -> bytes | None:
+            if not has_tag(pool_index, 7):
+                return None
+            class_value = values[pool_index]
+            if not isinstance(class_value, tuple) or not has_tag(
+                class_value[0],
+                1,
+            ):
+                return None
+            name = values[class_value[0]]
+            if not isinstance(name, bytes) or not (
+                _valid_internal_name(name)
+                or (
+                    allow_array
+                    and name.startswith(b"[")
+                    and _valid_field_descriptor(name)
+                )
+            ):
+                return None
+            return name
+
+        dynamic_bootstrap_indices: list[int] = []
         for pool_index in range(1, constant_pool_count):
             tag = tags[pool_index]
             value = values[pool_index]
-            if tag in {7, 8, 19, 20}:
+            if tag == 7:
+                if class_name(pool_index, allow_array=True) is None:
+                    return False
+            elif tag in {8, 19, 20}:
                 if not isinstance(value, tuple) or not has_tag(value[0], 1):
                     return False
             elif tag == 16:
@@ -2207,11 +2268,32 @@ def _valid_class_file(payload: bytes) -> bool:
                 name_and_type = values[value[1]]
                 if not isinstance(name_and_type, tuple):
                     return False
+                name = values[name_and_type[0]]
                 descriptor = values[name_and_type[1]]
-                if not isinstance(descriptor, bytes) or not (
-                    _valid_field_descriptor(descriptor)
-                    if tag == 9
-                    else _valid_method_descriptor(descriptor)
+                if (
+                    not isinstance(name, bytes)
+                    or not _valid_unqualified_name(
+                        name,
+                        method=tag != 9,
+                    )
+                    or (
+                        tag in {10, 11}
+                        and name == b"<clinit>"
+                    )
+                    or (
+                        tag == 11
+                        and name == b"<init>"
+                    )
+                    or not isinstance(descriptor, bytes)
+                    or not (
+                        _valid_field_descriptor(descriptor)
+                        if tag == 9
+                        else _valid_method_descriptor(descriptor)
+                    )
+                    or (
+                        name == b"<init>"
+                        and not descriptor.endswith(b")V")
+                    )
                 ):
                     return False
             elif tag == 12:
@@ -2260,29 +2342,101 @@ def _valid_class_file(payload: bytes) -> bool:
             elif tag in {17, 18}:
                 if not isinstance(value, tuple) or not has_tag(value[1], 12):
                     return False
+                dynamic_bootstrap_indices.append(value[0])
                 name_and_type = values[value[1]]
                 if not isinstance(name_and_type, tuple):
                     return False
+                name = values[name_and_type[0]]
                 descriptor = values[name_and_type[1]]
-                if not isinstance(descriptor, bytes) or not (
-                    _valid_field_descriptor(descriptor)
-                    if tag == 17
-                    else _valid_method_descriptor(descriptor)
+                if (
+                    not isinstance(name, bytes)
+                    or not _valid_unqualified_name(
+                        name,
+                        method=tag == 18,
+                    )
+                    or (
+                        tag == 18
+                        and name in {b"<init>", b"<clinit>"}
+                    )
+                    or not isinstance(descriptor, bytes)
+                    or not (
+                        _valid_field_descriptor(descriptor)
+                        if tag == 17
+                        else _valid_method_descriptor(descriptor)
+                    )
                 ):
                     return False
 
-        read_uint(2)
-        this_class = read_uint(2)
-        super_class = read_uint(2)
-        if not has_tag(this_class, 7) or (
-            super_class != 0 and not has_tag(super_class, 7)
+        class_access_flags = read_uint(2)
+        if (
+            class_access_flags & ~0x7631
+            or (
+                class_access_flags & 0x0010
+                and class_access_flags & 0x0400
+            )
+            or (
+                class_access_flags & 0x0200
+                and (
+                    not class_access_flags & 0x0400
+                    or class_access_flags & (0x0010 | 0x0020 | 0x4000)
+                )
+            )
+            or (
+                class_access_flags & 0x2000
+                and not class_access_flags & 0x0200
+            )
         ):
             return False
+        this_class = read_uint(2)
+        super_class = read_uint(2)
+        this_name = class_name(this_class, allow_array=False)
+        super_name = (
+            class_name(super_class, allow_array=False)
+            if super_class != 0
+            else None
+        )
+        if (
+            this_name is None
+            or (
+                super_class == 0
+                and this_name != b"java/lang/Object"
+            )
+            or (
+                super_class != 0
+                and (
+                    super_name is None
+                    or super_name == this_name
+                    or this_name == b"java/lang/Object"
+                )
+            )
+            or (
+                class_access_flags & 0x0200
+                and super_name != b"java/lang/Object"
+            )
+        ):
+            return False
+        interface_names: set[bytes] = set()
         for _ in range(read_uint(2)):
-            if not has_tag(read_uint(2), 7):
+            interface_name = class_name(
+                read_uint(2),
+                allow_array=False,
+            )
+            if (
+                interface_name is None
+                or interface_name == this_name
+                or interface_name in interface_names
+            ):
                 return False
+            interface_names.add(interface_name)
 
-        def read_attributes(*, allow_code: bool) -> bool:
+        bootstrap_method_count: int | None = None
+
+        def read_attributes(
+            *,
+            allow_code: bool,
+            class_level: bool = False,
+        ) -> bool:
+            nonlocal bootstrap_method_count
             found_code = False
             for _ in range(read_uint(2)):
                 name_index = read_uint(2)
@@ -2347,19 +2501,117 @@ def _valid_class_file(payload: bytes) -> bool:
                     if code_offset != len(attribute):
                         raise ValueError("trailing Code attribute data")
                     found_code = True
+                elif values[name_index] == b"BootstrapMethods":
+                    if not class_level or bootstrap_method_count is not None:
+                        raise ValueError(
+                            "invalid BootstrapMethods attribute placement"
+                        )
+                    bootstrap_offset = 0
+
+                    def read_bootstrap_uint(size: int) -> int:
+                        nonlocal bootstrap_offset
+                        end = bootstrap_offset + size
+                        if end > len(attribute):
+                            raise ValueError(
+                                "truncated BootstrapMethods attribute"
+                            )
+                        value = int.from_bytes(
+                            attribute[bootstrap_offset:end],
+                            "big",
+                        )
+                        bootstrap_offset = end
+                        return value
+
+                    bootstrap_method_count = read_bootstrap_uint(2)
+                    for _ in range(bootstrap_method_count):
+                        bootstrap_reference = read_bootstrap_uint(2)
+                        bootstrap_handle = (
+                            values[bootstrap_reference]
+                            if has_tag(bootstrap_reference, 15)
+                            else None
+                        )
+                        if (
+                            not isinstance(bootstrap_handle, tuple)
+                            or bootstrap_handle[0] not in {6, 8}
+                        ):
+                            raise ValueError("invalid bootstrap method")
+                        for _ in range(read_bootstrap_uint(2)):
+                            if not has_tag(
+                                read_bootstrap_uint(2),
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                15,
+                                16,
+                                17,
+                            ):
+                                raise ValueError("invalid bootstrap argument")
+                    if bootstrap_offset != len(attribute):
+                        raise ValueError(
+                            "trailing BootstrapMethods attribute data"
+                        )
             return found_code
 
         def read_members(*, methods: bool) -> None:
+            signatures: set[tuple[bytes, bytes]] = set()
             for _ in range(read_uint(2)):
                 access_flags = read_uint(2)
                 name_index = read_uint(2)
                 descriptor_index = read_uint(2)
+                name = values[name_index] if has_tag(name_index, 1) else None
                 descriptor = values[descriptor_index] if has_tag(
                     descriptor_index,
                     1,
                 ) else None
+                signature = (
+                    (name, descriptor)
+                    if isinstance(name, bytes)
+                    and isinstance(descriptor, bytes)
+                    else None
+                )
+                invalid_access_flags = (
+                    sum(
+                        bool(access_flags & visibility)
+                        for visibility in (0x0001, 0x0002, 0x0004)
+                    )
+                    > 1
+                )
+                if methods:
+                    invalid_access_flags = (
+                        invalid_access_flags
+                        or bool(access_flags & ~0x1DFF)
+                        or bool(
+                            access_flags & 0x0400
+                            and access_flags & 0x093A
+                        )
+                    )
+                else:
+                    invalid_access_flags = (
+                        invalid_access_flags
+                        or bool(access_flags & ~0x50DF)
+                        or bool(
+                            access_flags & 0x0010
+                            and access_flags & 0x0040
+                        )
+                        or bool(
+                            class_access_flags & 0x0200
+                            and (
+                                access_flags & 0x0019 != 0x0019
+                                or access_flags & ~(0x0019 | 0x1000)
+                            )
+                        )
+                    )
                 if (
-                    not has_tag(name_index, 1)
+                    signature is None
+                    or signature in signatures
+                    or invalid_access_flags
+                    or not _valid_unqualified_name(
+                        name,
+                        method=methods,
+                    )
                     or not isinstance(descriptor, bytes)
                     or not (
                         _valid_method_descriptor(
@@ -2371,8 +2623,28 @@ def _valid_class_file(payload: bytes) -> bool:
                         if methods
                         else _valid_field_descriptor(descriptor)
                     )
+                    or (
+                        methods
+                        and name == b"<init>"
+                        and (
+                            access_flags & 0x0578
+                            or not descriptor.endswith(b")V")
+                        )
+                    )
+                    or (
+                        methods
+                        and name == b"<clinit>"
+                        and (
+                            descriptor != b"()V"
+                            or (
+                                major_version >= 51
+                                and not access_flags & 0x0008
+                            )
+                        )
+                    )
                 ):
                     raise ValueError("invalid member identity")
+                signatures.add(signature)
                 found_code = read_attributes(allow_code=methods)
                 if methods and (
                     found_code == bool(access_flags & (0x0100 | 0x0400))
@@ -2381,7 +2653,15 @@ def _valid_class_file(payload: bytes) -> bool:
 
         read_members(methods=False)
         read_members(methods=True)
-        read_attributes(allow_code=False)
+        read_attributes(allow_code=False, class_level=True)
+        if dynamic_bootstrap_indices and (
+            bootstrap_method_count is None
+            or any(
+                index >= bootstrap_method_count
+                for index in dynamic_bootstrap_indices
+            )
+        ):
+            return False
         return offset == len(payload)
     except ValueError:
         return False
