@@ -3736,6 +3736,8 @@ def _valid_operand_stack_flow(
                 else slot
                 for slot in next_locals
             )
+        if opcode == 0xBF:
+            result = ()
         if (
             method_name == b"<init>"
             and opcode in range(0xAC, 0xB2)
@@ -3939,6 +3941,8 @@ def _valid_stack_map_table(
         tuple[tuple[str, ...], tuple[str, ...]],
     ],
     required_frame_offsets: set[int] | None = None,
+    known_class_kinds: Mapping[bytes, bool] | None = None,
+    known_superclasses: Mapping[bytes, bytes | None] | None = None,
 ) -> bool:
     offset = 0
 
@@ -4038,6 +4042,51 @@ def _valid_stack_map_table(
     def flatten(entries: list[tuple[str, ...]]) -> tuple[str, ...]:
         return tuple(slot for entry in entries for slot in entry)
 
+    def reference_assignable(
+        computed_slot: str,
+        declared_slot: str,
+    ) -> bool:
+        if computed_slot == "null":
+            return declared_slot.startswith("reference:")
+        if not (
+            computed_slot.startswith("reference:")
+            and declared_slot.startswith("reference:")
+        ):
+            return False
+        if declared_slot == "reference:Ljava/lang/Object;":
+            return True
+
+        def class_name(slot: str) -> bytes | None:
+            descriptor = slot.removeprefix("reference:")
+            if descriptor.startswith("L") and descriptor.endswith(";"):
+                return descriptor[1:-1].encode("latin-1")
+            return None
+
+        computed_name = class_name(computed_slot)
+        declared_name = class_name(declared_slot)
+        if (
+            computed_name is None
+            or declared_name is None
+            or known_class_kinds is None
+            or known_superclasses is None
+            or declared_name not in known_class_kinds
+            or known_class_kinds.get(declared_name) is True
+            or computed_name not in known_superclasses
+        ):
+            return True
+        current: bytes | None = computed_name
+        visited: set[bytes] = set()
+        while (
+            current is not None
+            and current in known_superclasses
+            and current not in visited
+        ):
+            if current == declared_name:
+                return True
+            visited.add(current)
+            current = known_superclasses[current]
+        return current == declared_name
+
     def states_match(
         declared: tuple[str, ...],
         computed: tuple[str, ...],
@@ -4048,6 +4097,7 @@ def _valid_stack_map_table(
             return False
         return all(
             declared_slot == computed_slot
+            or reference_assignable(computed_slot, declared_slot)
             or (
                 computed_slot == "merged_reference"
                 and declared_slot.startswith("reference:")
@@ -4697,6 +4747,12 @@ def _valid_class_file(
                                         if major_version >= 51
                                         else None
                                     ),
+                                    known_class_kinds=(
+                                        effective_class_kinds
+                                    ),
+                                    known_superclasses=(
+                                        effective_superclasses
+                                    ),
                                 )
                             ):
                                 raise ValueError("invalid StackMapTable")
@@ -5306,14 +5362,22 @@ def _class_identity_and_kind(
 def _jar_local_hierarchy_acyclic(
     superclasses: Mapping[bytes, bytes | None],
 ) -> bool:
+    completed: set[bytes] = set()
     for start in superclasses:
-        visited: set[bytes] = set()
+        active: set[bytes] = set()
+        path: list[bytes] = []
         current: bytes | None = start
-        while current is not None and current in superclasses:
-            if current in visited:
+        while (
+            current is not None
+            and current in superclasses
+            and current not in completed
+        ):
+            if current in active:
                 return False
-            visited.add(current)
+            active.add(current)
+            path.append(current)
             current = superclasses[current]
+        completed.update(path)
     return True
 
 

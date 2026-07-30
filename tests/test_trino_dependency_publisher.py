@@ -1487,6 +1487,27 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 {b"A": b"B", b"B": b"A"}
             )
         )
+
+        class CountingHierarchy(dict):
+            reads = 0
+
+            def __getitem__(self, key: bytes):
+                self.reads += 1
+                return super().__getitem__(key)
+
+        hierarchy = CountingHierarchy(
+            {
+                f"C{index}".encode(): (
+                    f"C{index + 1}".encode()
+                    if index < 99
+                    else b"java/lang/Object"
+                )
+                for index in range(100)
+            }
+        )
+        self.assertTrue(verify._jar_local_hierarchy_acyclic(hierarchy))
+        self.assertLessEqual(hierarchy.reads, len(hierarchy))
+
         matching_jar = io.BytesIO()
         with zipfile.ZipFile(matching_jar, "w") as archive:
             archive.writestr(
@@ -2017,6 +2038,24 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     b"java/lang/Object": None,
                     b"A": b"java/lang/Object",
                 },
+            )
+        )
+        self.assertTrue(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("2A2BBF"),
+                instruction_offsets={0, 1, 2},
+                constant_pool_tags=[0],
+                constant_pool_values=[None],
+                exception_handlers=[],
+                max_stack=2,
+                max_locals=2,
+                method_access_flags=0x0008,
+                method_name=b"method",
+                method_descriptor=(
+                    b"(Ljava/lang/Object;"
+                    b"Ljava/lang/Throwable;)V"
+                ),
+                this_name=b"A",
             )
         )
         for descriptor, valid in (
@@ -2693,7 +2732,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 computed_states=computed_states,
             )
         )
-        self.assertFalse(
+        self.assertTrue(
             verify._valid_stack_map_table(
                 widened_frame,
                 code=bytes.fromhex("2AB0"),

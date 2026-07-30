@@ -295,7 +295,8 @@ class evidence validates interface-table names and rejects `Object` or a
 JAR-local ordinary class while permitting structurally unresolved external
 interfaces; a JAR-local interface cannot be used as a superclass. Only the
 highest active multi-release entry for each logical class path is evidence,
-and the JAR-local superclass graph must be acyclic.
+and the JAR-local superclass graph must be acyclic; completed hierarchy paths
+are memoized so cycle detection is linear in the graph size.
 Java 7+ branch and exception targets require
 matching declared stack-map frames. Dynamic constants must match the selected
 `ldc*` width, `multianewarray` dimensions cannot exceed the referenced array
@@ -310,6 +311,9 @@ Distinct reference identities at a join retain a declared common stack-map
 reference type rather than being forced to `java/lang/Object`. Concrete
 reference operands accept unresolved external subtype relationships while
 rejecting relationships disproved by the JAR-local superclass graph.
+Declared stack-map reference slots likewise accept assignable computed
+subtypes. `athrow` consumes its Throwable-compatible top operand and discards
+any lower operands on the terminating path.
 Primitive and reference array loads/stores require an opcode-compatible array
 descriptor, and instance-field receivers must be assignable to the symbolic
 field owner.
