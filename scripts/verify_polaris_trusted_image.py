@@ -782,7 +782,7 @@ PENDING_SCRIPT_FILE_INVENTORY = {
         "75cee002d5749c0ec91629edb905c27362bee5c0813b0cbefcb59f161734f445"
     ),
     "scripts/verify_trino_dependency_publisher.py": (
-        "60f61dc70c414412f721946b48b8a4912dc64ce40d49aa5e8e814908de32a003"
+        "7e8c55cd93035b0f05222c08cc657eb16e81951bfaac0cb7b59cb4b18b1632a9"
     ),
     "scripts/verify_trusted_image.py": (
         "cc569a5ee10400ad657f7648ccc2c14e8fd21691adfdc9e155212b16dc0afba0"

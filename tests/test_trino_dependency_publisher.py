@@ -1409,11 +1409,47 @@ class MavenScanEvidenceTests(unittest.TestCase):
         self.assertFalse(
             verify._valid_class_file(self.CLASS_FILE, expected_name=b"Fake")
         )
+        class_with_ordinary_interface = self.CLASS_FILE.replace(
+            bytes.fromhex("0021000200040000"),
+            bytes.fromhex("00210002000400010004"),
+            1,
+        )
+        self.assertFalse(
+            verify._valid_class_file(class_with_ordinary_interface)
+        )
         matching_jar = io.BytesIO()
         with zipfile.ZipFile(matching_jar, "w") as archive:
+            archive.writestr(
+                "META-INF/MANIFEST.MF",
+                b"Manifest-Version: 1.0\r\nMulti-Release: true\r\n\r\n",
+            )
             archive.writestr("META-INF/versions/25/A.class", self.CLASS_FILE)
         with zipfile.ZipFile(matching_jar) as archive:
             self.assertTrue(verify._jar_contains_bytecode(archive, "match.jar"))
+        inactive_multi_release_jar = io.BytesIO()
+        with zipfile.ZipFile(inactive_multi_release_jar, "w") as archive:
+            archive.writestr(
+                "META-INF/versions/25/A.class",
+                self.CLASS_FILE,
+            )
+        with zipfile.ZipFile(inactive_multi_release_jar) as archive:
+            self.assertFalse(
+                verify._jar_contains_bytecode(archive, "inactive.jar")
+            )
+        out_of_range_multi_release_jar = io.BytesIO()
+        with zipfile.ZipFile(out_of_range_multi_release_jar, "w") as archive:
+            archive.writestr(
+                "META-INF/MANIFEST.MF",
+                b"Manifest-Version: 1.0\r\nMulti-Release: true\r\n\r\n",
+            )
+            archive.writestr(
+                "META-INF/versions/26/A.class",
+                self.CLASS_FILE,
+            )
+        with zipfile.ZipFile(out_of_range_multi_release_jar) as archive:
+            self.assertFalse(
+                verify._jar_contains_bytecode(archive, "future.jar")
+            )
         mismatched_jar = io.BytesIO()
         with zipfile.ZipFile(mismatched_jar, "w") as archive:
             archive.writestr("Fake.class", self.CLASS_FILE)

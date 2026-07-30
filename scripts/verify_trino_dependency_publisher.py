@@ -4128,19 +4128,8 @@ def _valid_class_file(
             )
         ):
             return False
-        interface_names: set[bytes] = set()
-        for _ in range(read_uint(2)):
-            interface_name = class_name(
-                read_uint(2),
-                allow_array=False,
-            )
-            if (
-                interface_name is None
-                or interface_name == this_name
-                or interface_name in interface_names
-            ):
-                return False
-            interface_names.add(interface_name)
+        if read_uint(2) != 0:
+            return False
 
         bootstrap_method_count: int | None = None
 
@@ -4644,8 +4633,43 @@ def _valid_class_file(
         return False
 
 
+def _multi_release_jar_enabled(archive: zipfile.ZipFile) -> bool:
+    try:
+        payload = archive.read("META-INF/MANIFEST.MF")
+    except KeyError:
+        return False
+    physical_lines = payload.splitlines()
+    logical_lines: list[bytes] = []
+    for line in physical_lines:
+        if not line:
+            break
+        if line.startswith(b" "):
+            if not logical_lines:
+                return False
+            logical_lines[-1] += line[1:]
+        else:
+            logical_lines.append(line)
+    attributes: dict[bytes, bytes] = {}
+    for line in logical_lines:
+        if b": " not in line:
+            return False
+        name, value = line.split(b": ", 1)
+        try:
+            normalized_name = name.decode("ascii").casefold().encode("ascii")
+        except UnicodeDecodeError:
+            return False
+        if normalized_name in attributes:
+            return False
+        attributes[normalized_name] = value
+    return (
+        attributes.get(b"manifest-version") == b"1.0"
+        and attributes.get(b"multi-release", b"").lower() == b"true"
+    )
+
+
 def _jar_contains_bytecode(archive: zipfile.ZipFile, path: str) -> bool:
     try:
+        multi_release_enabled: bool | None = None
         for entry in archive.infolist():
             if not entry.filename.endswith(".class"):
                 continue
@@ -4653,6 +4677,20 @@ def _jar_contains_bytecode(archive: zipfile.ZipFile, path: str) -> bool:
             if class_path.startswith("META-INF/versions/"):
                 parts = class_path.split("/", 3)
                 if len(parts) != 4 or not parts[2].isdigit():
+                    continue
+                version = int(parts[2])
+                if (
+                    str(version) != parts[2]
+                    or not 9
+                    <= version
+                    <= PINNED_JAVA_CLASS_MAJOR_VERSION - 44
+                ):
+                    continue
+                if multi_release_enabled is None:
+                    multi_release_enabled = _multi_release_jar_enabled(
+                        archive
+                    )
+                if not multi_release_enabled:
                     continue
                 class_path = parts[3]
             if _valid_class_file(
