@@ -976,8 +976,9 @@ dependency evidence.
 The repair keeps the publisher active, switches the Maven repository scan to
 Trivy rootfs mode, requires exact equality between the 1,470 descriptor JAR
 paths and both Trivy/CycloneDX inventories, requires every descriptor JAR to be
-discovered by the rootfs scan, preserves every rootfs-discovered
-top-level and embedded component in the final scan graph, re-roots each
+represented by either a Trivy file-path identity or a closed audited omission,
+preserves every rootfs-discovered top-level and embedded component in the final
+scan graph, re-roots each
 CycloneDX dependency graph at the immutable OCI subject (creating a root edge
 during Maven generation or immutable-subject rebinding when Trivy omitted
 one), compares Maven scan identities by both PURL and file
@@ -1035,6 +1036,30 @@ completed a clean `--offline` rebuild with container networking set to
 `none`. Reviewed-main CI must independently reconstruct twice, reproduce two
 network-none builds and byte-identical server archives, and pass the same
 closure-complete evidence gate before publication can proceed.
+
+Reviewed-main run
+[`30517632888`](https://github.com/TommyKammy/Shirokuma/actions/runs/30517632888)
+completed both independent closed-repository reconstructions, both network-none
+builds, byte-identical server archives, and the raw Trivy rootfs inventory. It
+then failed closed because Trivy 0.72.0 did not emit a component for
+`dev.failsafe:failsafe:3.3.2`, even though the exact descriptor-bound JAR
+contains bytecode and one matching `META-INF/maven/.../pom.properties`.
+Publication and all later evidence steps were skipped, and the run retained no
+artifact.
+
+The focused omission contract does not treat a missing Trivy component as a
+waiver. An omitted unclassified JAR is added to the closure-complete SBOM only
+after its regular-file mode, size, SHA-256, repository path, safe ZIP structure,
+absence of nested JARs, bytecode presence, unique Maven properties path, and
+exact group/artifact/version properties all match the closed descriptor. That
+manifest-verified base coordinate may authorize only source-only or test-only
+classifier JARs for the same coordinate; every other classifier remains
+rejected. Generated components retain the exact PURL, file path, hash, origin,
+and discovery mode, and `verify-maven-scan` still requires the final Trivy SBOM
+scan to contain every descriptor PURL/path identity and zero High/Critical
+findings. Missing bytecode, missing or mismatched properties, nested JARs,
+unsafe ZIP entries, unknown classifiers, origin drift, or final-scan omission
+continues to fail closed.
 
 ## Resident image and SBOM evidence
 

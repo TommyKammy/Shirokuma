@@ -1524,6 +1524,10 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 "1",
                 metadata["shirokuma:rootfs-purl-deduplicated-jars"],
             )
+            self.assertEqual(
+                "0",
+                metadata["shirokuma:manifest-coordinate-verified-jars"],
+            )
             modes = {
                 path: prop["value"]
                 for component in result["components"]
@@ -1536,6 +1540,88 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     sources: "manifest-supplemental-sources",
                     tests: "manifest-supplemental-tests",
                     beta: "manifest-rootfs-purl-deduplicated",
+                },
+                modes,
+            )
+            identities = tuple(
+                (path, component["purl"])
+                for component in result["components"]
+                for path in verify._component_file_paths(component)
+            )
+            verify.verify_maven_scan(
+                descriptor,
+                generated,
+                self._report(root, paths=(), extra_packages=identities),
+            )
+
+    def test_maven_sbom_audits_manifest_verified_trivy_omission(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            alpha = self.JARS[0]
+            failsafe = (
+                "dev/failsafe/failsafe/3.3.2/failsafe-3.3.2.jar"
+            )
+            failsafe_sources = (
+                "dev/failsafe/failsafe/3.3.2/"
+                "failsafe-3.3.2-sources.jar"
+            )
+            repository, descriptor = self._repository_descriptor(
+                root,
+                {
+                    alpha: {"org/example/Alpha.class": b"alpha"},
+                    failsafe: {
+                        "dev/failsafe/Failsafe.class": b"bytecode",
+                        (
+                            "META-INF/maven/dev.failsafe/failsafe/"
+                            "pom.properties"
+                        ): (
+                            b"artifactId=failsafe\n"
+                            b"groupId=dev.failsafe\n"
+                            b"version=3.3.2\n"
+                        ),
+                    },
+                    failsafe_sources: {
+                        "dev/failsafe/Failsafe.java": b"class Failsafe {}",
+                    },
+                },
+            )
+            generated = root / "generated.json"
+            verify.generate_maven_sbom(
+                descriptor,
+                repository,
+                self._sbom(root, (alpha,)),
+                generated,
+            )
+            result = json.loads(generated.read_text(encoding="utf-8"))
+            metadata = {
+                prop["name"]: prop["value"]
+                for prop in result["metadata"]["properties"]
+            }
+            self.assertEqual("1", metadata["shirokuma:rootfs-discovered-jars"])
+            self.assertEqual("2", metadata["shirokuma:rootfs-audited-omissions"])
+            self.assertEqual(
+                "1",
+                metadata["shirokuma:rootfs-audited-supplemental-jars"],
+            )
+            self.assertEqual(
+                "0",
+                metadata["shirokuma:rootfs-purl-deduplicated-jars"],
+            )
+            self.assertEqual(
+                "1",
+                metadata["shirokuma:manifest-coordinate-verified-jars"],
+            )
+            modes = {
+                path: prop["value"]
+                for component in result["components"]
+                for path in verify._component_file_paths(component)
+                for prop in component.get("properties", [])
+                if prop.get("name") == "shirokuma:rootfs-discovery"
+            }
+            self.assertEqual(
+                {
+                    failsafe: "manifest-coordinate-verified",
+                    failsafe_sources: "manifest-supplemental-sources",
                 },
                 modes,
             )
@@ -1571,9 +1657,13 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 "undiscovered nested JAR",
             ),
             (
+                "org/example/beta/2.0/beta-2.0-sources.jar",
+                {"org/example/Beta.java": b"class Beta {}"},
+                "no rootfs-discovered or manifest-verified base coordinate",
+            ),
+            (
                 "org/example/beta/2.0/beta-2.0.jar",
                 {
-                    "org/example/Beta.class": b"beta",
                     (
                         "META-INF/maven/org.example/beta/"
                         "pom.properties"
@@ -1583,7 +1673,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
                         b"version=2.0\n"
                     ),
                 },
-                "no rootfs-discovered base coordinate",
+                "contains no bytecode for manifest-only coordinate verification",
             ),
         )
         for path, entries, error in cases:

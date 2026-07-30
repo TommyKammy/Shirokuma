@@ -1831,8 +1831,12 @@ def _validate_rootfs_discovery_omissions(
         for component in rootfs_components
         if isinstance(component.get("purl"), str) and component["purl"]
     }
+    manifest_verified_base_purls: set[str] = set()
     discovery: dict[str, str] = {}
-    for path in sorted(missing_paths):
+    for path in sorted(
+        missing_paths,
+        key=lambda item: (bool(_maven_classifier(item)), item),
+    ):
         record = records[path]
         candidate = repository_root / path
         try:
@@ -1863,10 +1867,17 @@ def _validate_rootfs_discovery_omissions(
         classifier = _maven_classifier(path)
         purl = _maven_purl(path)
         base_purl = purl.split("?classifier=", 1)[0]
-        if base_purl not in rootfs_purls:
+        if (
+            classifier
+            and base_purl not in rootfs_purls
+            and base_purl not in manifest_verified_base_purls
+        ):
             _fail(
                 "MAVEN_SBOM_ROOTFS",
-                f"{path} has no rootfs-discovered base coordinate",
+                (
+                    f"{path} has no rootfs-discovered or "
+                    "manifest-verified base coordinate"
+                ),
             )
         archive, names = _jar_entries(payload, path)
         try:
@@ -1918,7 +1929,19 @@ def _validate_rootfs_discovery_omissions(
                     "MAVEN_SBOM_ROOTFS",
                     f"{path} pom.properties coordinates differ",
                 )
-            discovery[path] = "manifest-rootfs-purl-deduplicated"
+            if base_purl in rootfs_purls:
+                discovery[path] = "manifest-rootfs-purl-deduplicated"
+            else:
+                if not any(name.endswith(".class") for name in names):
+                    _fail(
+                        "MAVEN_SBOM_ROOTFS",
+                        (
+                            f"{path} contains no bytecode for manifest-only "
+                            "coordinate verification"
+                        ),
+                    )
+                manifest_verified_base_purls.add(base_purl)
+                discovery[path] = "manifest-coordinate-verified"
         finally:
             archive.close()
     return discovery
@@ -2167,6 +2190,15 @@ def generate_maven_sbom(
                     "value": str(
                         sum(
                             mode == "manifest-rootfs-purl-deduplicated"
+                            for mode in discovery_omissions.values()
+                        )
+                    ),
+                },
+                {
+                    "name": "shirokuma:manifest-coordinate-verified-jars",
+                    "value": str(
+                        sum(
+                            mode == "manifest-coordinate-verified"
                             for mode in discovery_omissions.values()
                         )
                     ),
