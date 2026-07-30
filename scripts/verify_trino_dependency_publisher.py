@@ -1806,12 +1806,184 @@ def _jar_entries(payload: bytes, path: str) -> tuple[zipfile.ZipFile, list[str]]
     return archive, names
 
 
+def _class_file_contains_code(payload: bytes) -> bool:
+    offset = 0
+
+    def read(size: int) -> bytes:
+        nonlocal offset
+        end = offset + size
+        if end > len(payload):
+            raise ValueError("truncated class file")
+        chunk = payload[offset:end]
+        offset = end
+        return chunk
+
+    def read_uint(size: int) -> int:
+        return int.from_bytes(read(size), "big")
+
+    try:
+        if read_uint(4) != 0xCAFEBABE:
+            return False
+        read_uint(2)
+        if read_uint(2) < 45:
+            return False
+        constant_pool_count = read_uint(2)
+        if constant_pool_count < 2:
+            return False
+        tags = [0] * constant_pool_count
+        values: list[bytes | tuple[int, ...] | None] = [
+            None
+        ] * constant_pool_count
+        index = 1
+        while index < constant_pool_count:
+            tag = read_uint(1)
+            tags[index] = tag
+            if tag == 1:
+                values[index] = read(read_uint(2))
+            elif tag in {3, 4}:
+                read(4)
+            elif tag in {5, 6}:
+                read(8)
+                if index + 1 >= constant_pool_count:
+                    return False
+                index += 1
+            elif tag in {7, 8, 16, 19, 20}:
+                values[index] = (read_uint(2),)
+            elif tag in {9, 10, 11, 12, 17, 18}:
+                values[index] = (read_uint(2), read_uint(2))
+            elif tag == 15:
+                values[index] = (read_uint(1), read_uint(2))
+            else:
+                return False
+            index += 1
+
+        def has_tag(pool_index: int, *expected: int) -> bool:
+            return (
+                0 < pool_index < constant_pool_count
+                and tags[pool_index] in expected
+            )
+
+        for pool_index in range(1, constant_pool_count):
+            tag = tags[pool_index]
+            value = values[pool_index]
+            if tag in {7, 8, 16, 19, 20}:
+                if not isinstance(value, tuple) or not has_tag(value[0], 1):
+                    return False
+            elif tag in {9, 10, 11}:
+                if (
+                    not isinstance(value, tuple)
+                    or not has_tag(value[0], 7)
+                    or not has_tag(value[1], 12)
+                ):
+                    return False
+            elif tag == 12:
+                if (
+                    not isinstance(value, tuple)
+                    or not has_tag(value[0], 1)
+                    or not has_tag(value[1], 1)
+                ):
+                    return False
+            elif tag == 15:
+                if (
+                    not isinstance(value, tuple)
+                    or value[0] not in range(1, 10)
+                    or not has_tag(value[1], 9, 10, 11)
+                ):
+                    return False
+            elif tag in {17, 18}:
+                if not isinstance(value, tuple) or not has_tag(value[1], 12):
+                    return False
+
+        read_uint(2)
+        this_class = read_uint(2)
+        super_class = read_uint(2)
+        if not has_tag(this_class, 7) or (
+            super_class != 0 and not has_tag(super_class, 7)
+        ):
+            return False
+        for _ in range(read_uint(2)):
+            if not has_tag(read_uint(2), 7):
+                return False
+
+        def read_attributes(*, inspect_code: bool) -> bool:
+            found_code = False
+            for _ in range(read_uint(2)):
+                name_index = read_uint(2)
+                if not has_tag(name_index, 1):
+                    raise ValueError("invalid attribute name")
+                attribute = read(read_uint(4))
+                if inspect_code and values[name_index] == b"Code":
+                    code_offset = 0
+
+                    def read_code(size: int) -> bytes:
+                        nonlocal code_offset
+                        end = code_offset + size
+                        if end > len(attribute):
+                            raise ValueError("truncated Code attribute")
+                        chunk = attribute[code_offset:end]
+                        code_offset = end
+                        return chunk
+
+                    def read_code_uint(size: int) -> int:
+                        return int.from_bytes(read_code(size), "big")
+
+                    read_code_uint(2)
+                    read_code_uint(2)
+                    code_length = read_code_uint(4)
+                    if not 0 < code_length <= 65535:
+                        raise ValueError("invalid bytecode length")
+                    read_code(code_length)
+                    for _ in range(read_code_uint(2)):
+                        start_pc = read_code_uint(2)
+                        end_pc = read_code_uint(2)
+                        handler_pc = read_code_uint(2)
+                        catch_type = read_code_uint(2)
+                        if (
+                            start_pc >= end_pc
+                            or end_pc > code_length
+                            or handler_pc >= code_length
+                            or (
+                                catch_type != 0
+                                and not has_tag(catch_type, 7)
+                            )
+                        ):
+                            raise ValueError("invalid exception table")
+                    for _ in range(read_code_uint(2)):
+                        nested_name = read_code_uint(2)
+                        if not has_tag(nested_name, 1):
+                            raise ValueError("invalid Code attribute name")
+                        read_code(read_code_uint(4))
+                    if code_offset != len(attribute):
+                        raise ValueError("trailing Code attribute data")
+                    found_code = True
+            return found_code
+
+        def read_members(*, inspect_code: bool) -> bool:
+            found_code = False
+            for _ in range(read_uint(2)):
+                read_uint(2)
+                if not has_tag(read_uint(2), 1) or not has_tag(
+                    read_uint(2),
+                    1,
+                ):
+                    raise ValueError("invalid member identity")
+                found_code |= read_attributes(inspect_code=inspect_code)
+            return found_code
+
+        read_members(inspect_code=False)
+        found_code = read_members(inspect_code=True)
+        read_attributes(inspect_code=False)
+        return offset == len(payload) and found_code
+    except ValueError:
+        return False
+
+
 def _jar_contains_bytecode(archive: zipfile.ZipFile, path: str) -> bool:
     try:
         for entry in archive.infolist():
             if not entry.filename.endswith(".class"):
                 continue
-            if archive.read(entry).startswith(b"\xca\xfe\xba\xbe"):
+            if _class_file_contains_code(archive.read(entry)):
                 return True
         return False
     except (OSError, RuntimeError, zipfile.BadZipFile) as error:
@@ -1964,17 +2136,17 @@ def _validate_rootfs_discovery_omissions(
                     "MAVEN_SBOM_ROOTFS",
                     f"{path} pom.properties coordinates differ",
                 )
+            if not _jar_contains_bytecode(archive, path):
+                _fail(
+                    "MAVEN_SBOM_ROOTFS",
+                    (
+                        f"{path} contains no bytecode for "
+                        "coordinate verification"
+                    ),
+                )
             if base_purl in rootfs_purls:
                 discovery[path] = "manifest-rootfs-purl-deduplicated"
             else:
-                if not _jar_contains_bytecode(archive, path):
-                    _fail(
-                        "MAVEN_SBOM_ROOTFS",
-                        (
-                            f"{path} contains no bytecode for manifest-only "
-                            "coordinate verification"
-                        ),
-                    )
                 manifest_verified_base_purls.add(base_purl)
                 discovery[path] = "manifest-coordinate-verified"
         finally:

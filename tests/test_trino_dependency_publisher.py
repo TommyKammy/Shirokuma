@@ -1204,7 +1204,22 @@ class BunScanEvidenceTests(unittest.TestCase):
 
 
 class MavenScanEvidenceTests(unittest.TestCase):
-    CLASS_FILE = b"\xca\xfe\xba\xbe\x00\x00\x00\x34"
+    CLASS_FILE = bytes.fromhex(
+        "CAFEBABE00000034000A"
+        "01000141"
+        "070001"
+        "0100106A6176612F6C616E672F4F626A656374"
+        "070003"
+        "0100063C696E69743E"
+        "010003282956"
+        "010004436F6465"
+        "0C00050006"
+        "0A00040008"
+        "002100020004000000000001"
+        "0001000500060001000700000011"
+        "00010001000000052AB70009B100000000"
+        "0000"
+    )
     JARS = (
         "org/example/alpha/1.0/alpha-1.0.jar",
         "org/example/beta/2.0/beta-2.0.jar",
@@ -1366,6 +1381,21 @@ class MavenScanEvidenceTests(unittest.TestCase):
         )
         return sbom
 
+    def test_class_file_structure_requires_complete_code(self) -> None:
+        self.assertTrue(
+            verify._class_file_contains_code(self.CLASS_FILE)
+        )
+        for length in range(len(self.CLASS_FILE)):
+            with self.subTest(length=length):
+                self.assertFalse(
+                    verify._class_file_contains_code(
+                        self.CLASS_FILE[:length]
+                    )
+                )
+        self.assertFalse(
+            verify._class_file_contains_code(self.CLASS_FILE + b"\x00")
+        )
+
     def test_maven_descriptor_scopes_parquet_remediation_origin_to_exact_jar(
         self,
     ) -> None:
@@ -1477,7 +1507,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
                         "org/example/AlphaTest.class": self.CLASS_FILE,
                     },
                     beta: {
-                        "org/example/Beta.class": b"beta",
+                        "org/example/Beta.class": self.CLASS_FILE,
                         (
                             "META-INF/maven/org.example/beta/"
                             "pom.properties"
@@ -1563,6 +1593,61 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 generated,
                 self._report(root, paths=(), extra_packages=identities),
             )
+
+    def test_maven_sbom_rejects_bytecode_free_purl_deduplication(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            alpha, beta = self.JARS
+            repository, descriptor = self._repository_descriptor(
+                root,
+                {
+                    alpha: {"org/example/Alpha.class": b"alpha"},
+                    beta: {
+                        (
+                            "META-INF/maven/org.example/beta/"
+                            "pom.properties"
+                        ): (
+                            b"artifactId=beta\n"
+                            b"groupId=org.example\n"
+                            b"version=2.0\n"
+                        ),
+                    },
+                },
+            )
+            rootfs = self._sbom(root, (alpha,))
+            document = json.loads(rootfs.read_text(encoding="utf-8"))
+            beta_ref = "urn:test:rootfs-deduplicated-beta"
+            document["components"].append(
+                {
+                    "bom-ref": beta_ref,
+                    "type": "library",
+                    "name": "beta",
+                    "purl": verify._maven_purl(beta),
+                    "properties": [
+                        {
+                            "name": "aquasecurity:trivy:FilePath",
+                            "value": (
+                                f"{alpha}!/META-INF/lib/beta-2.0.jar"
+                            ),
+                        }
+                    ],
+                }
+            )
+            document["dependencies"][0]["dependsOn"].append(beta_ref)
+            document["dependencies"].append(
+                {"ref": beta_ref, "dependsOn": []}
+            )
+            rootfs.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "contains no bytecode for coordinate verification",
+            ):
+                verify.generate_maven_sbom(
+                    descriptor,
+                    repository,
+                    rootfs,
+                    root / "generated.json",
+                )
 
     def test_maven_sbom_audits_manifest_verified_trivy_omission(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1709,7 +1794,9 @@ class MavenScanEvidenceTests(unittest.TestCase):
             (
                 "org/example/beta/2.0/beta-2.0.jar",
                 {
-                    "org/example/Beta.class": b"not-bytecode",
+                    "org/example/Beta.class": (
+                        b"\xca\xfe\xba\xbe\x00\x00\x00\x34"
+                    ),
                     (
                         "META-INF/maven/org.example/beta/"
                         "pom.properties"
@@ -1719,7 +1806,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
                         b"version=2.0\n"
                     ),
                 },
-                "contains no bytecode for manifest-only coordinate verification",
+                "contains no bytecode for coordinate verification",
             ),
             (
                 "org/example/beta/2.0/beta-2.0.jar",
@@ -1769,7 +1856,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
                         b"version=2.0\n"
                     ),
                 },
-                "contains no bytecode for manifest-only coordinate verification",
+                "contains no bytecode for coordinate verification",
             ),
         )
         for path, entries, error in cases:
@@ -1807,7 +1894,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     alpha: {"org/example/Alpha.class": b"alpha"},
                     beta: {
                         class_path: (
-                            b"\xca\xfe\xba\xbe" + b"\x00" * 8192
+                            self.CLASS_FILE + b"\x00" * 8192
                         ),
                         (
                             "META-INF/maven/org.example/beta/"
