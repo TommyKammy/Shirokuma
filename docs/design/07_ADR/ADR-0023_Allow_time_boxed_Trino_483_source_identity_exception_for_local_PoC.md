@@ -287,13 +287,17 @@ uninitialized until the matching constructor call. Declared `StackMapTable`
 locals and stacks must reconcile with the computed state at every frame, and
 each declared `this_class` must match its JAR entry path after removing any
 active Java 9-25 multi-release prefix backed by a valid manifest. Standalone
-class evidence with unresolved interface-table entries fails closed. Java 7+
-branch and exception targets require
+class evidence validates interface-table names and rejects `Object` or a
+JAR-local ordinary class while permitting structurally unresolved external
+interfaces. Java 7+ branch and exception targets require
 matching declared stack-map frames. Dynamic constants must match the selected
 `ldc*` width, `multianewarray` dimensions cannot exceed the referenced array
 rank, and constructors can be invoked only through `invokespecial`. Every
 regular source-classifier member, including permitted metadata, is consumed
-before acceptance. Modern class versions reject legacy
+before acceptance. Exception-handler validation is work-product bounded,
+generic catch references can flow through reference locals, and local-only
+`top` merges remain unusable without invalidating an otherwise valid join.
+Modern class versions reject legacy
 `jsr`/`ret` instructions, and interface class evidence cannot declare a
 constructor. Return instructions must match their method descriptors,
 recognized signature/source/marker attributes validate their payloads, and

@@ -1417,6 +1417,48 @@ class MavenScanEvidenceTests(unittest.TestCase):
         self.assertFalse(
             verify._valid_class_file(class_with_ordinary_interface)
         )
+        class_body_offset = self.CLASS_FILE.index(
+            bytes.fromhex("0021000200040000")
+        )
+        old_constant_pool_count = int.from_bytes(
+            self.CLASS_FILE[8:10],
+            "big",
+        )
+        runnable_name = b"java/lang/Runnable"
+        runnable_utf8 = (
+            b"\x01"
+            + len(runnable_name).to_bytes(2, "big")
+            + runnable_name
+        )
+        runnable_class_index = old_constant_pool_count + 1
+        runnable_class = (
+            b"\x07" + old_constant_pool_count.to_bytes(2, "big")
+        )
+        runnable_implementation = b"".join(
+            (
+                self.CLASS_FILE[:8],
+                (old_constant_pool_count + 2).to_bytes(2, "big"),
+                self.CLASS_FILE[10:class_body_offset],
+                runnable_utf8,
+                runnable_class,
+                bytes.fromhex("0021000200040001"),
+                runnable_class_index.to_bytes(2, "big"),
+                self.CLASS_FILE[class_body_offset + 8 :],
+            )
+        )
+        self.assertTrue(
+            verify._valid_class_file(
+                runnable_implementation,
+                known_class_kinds={runnable_name: True},
+            )
+        )
+        runnable_jar = io.BytesIO()
+        with zipfile.ZipFile(runnable_jar, "w") as archive:
+            archive.writestr("A.class", runnable_implementation)
+        with zipfile.ZipFile(runnable_jar) as archive:
+            self.assertTrue(
+                verify._jar_contains_bytecode(archive, "runnable.jar")
+            )
         matching_jar = io.BytesIO()
         with zipfile.ZipFile(matching_jar, "w") as archive:
             archive.writestr(
@@ -1700,6 +1742,41 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 this_name=b"A",
             )
         )
+        self.assertTrue(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("A700044BB1"),
+                instruction_offsets={0, 3, 4},
+                constant_pool_tags=[0],
+                constant_pool_values=[None],
+                exception_handlers=[(0, 3, 3)],
+                max_stack=1,
+                max_locals=1,
+                method_access_flags=0x0008,
+                method_name=b"method",
+                method_descriptor=b"()V",
+                this_name=b"A",
+            )
+        )
+        with mock.patch.object(
+            verify,
+            "MAX_OMITTED_CLASS_STATE_CELLS",
+            1,
+        ):
+            self.assertFalse(
+                verify._valid_operand_stack_flow(
+                    bytes.fromhex("00B1"),
+                    instruction_offsets={0, 1},
+                    constant_pool_tags=[0],
+                    constant_pool_values=[None],
+                    exception_handlers=[(0, 1, 1)],
+                    max_stack=1,
+                    max_locals=0,
+                    method_access_flags=0x0008,
+                    method_name=b"method",
+                    method_descriptor=b"()V",
+                    this_name=b"A",
+                )
+            )
 
     def test_member_descriptors_require_jvm_grammar(self) -> None:
         for descriptor in (

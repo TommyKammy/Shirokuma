@@ -2561,6 +2561,8 @@ def _valid_operand_stack_flow(
         max_locals > MAX_OMITTED_CLASS_LOCALS
         or max_locals * len(offsets)
         > MAX_OMITTED_CLASS_STATE_CELLS
+        or len(exception_handlers) * len(offsets)
+        > MAX_OMITTED_CLASS_STATE_CELLS
     ):
         return False
     exception_handler_offsets = {
@@ -3426,7 +3428,8 @@ def _valid_operand_stack_flow(
                 return None
             stored_reference = stack[-1]
             if not (
-                stored_reference == "null"
+                stored_reference == "reference"
+                or stored_reference == "null"
                 or stored_reference.startswith("reference:")
                 or stored_reference == "uninitialized_this"
                 or stored_reference.startswith("uninitialized:")
@@ -3515,6 +3518,8 @@ def _valid_operand_stack_flow(
     def merge_types(
         current: tuple[str, ...],
         incoming: tuple[str, ...],
+        *,
+        locals_state: bool = False,
     ) -> tuple[str, ...] | None:
         if len(current) != len(incoming):
             return None
@@ -3526,6 +3531,11 @@ def _valid_operand_stack_flow(
                 merged_values.append(incoming_slot)
             elif incoming_slot == "unknown":
                 merged_values.append(current_slot)
+            elif locals_state and (
+                current_slot == "uninitialized"
+                or incoming_slot == "uninitialized"
+            ):
+                merged_values.append("uninitialized")
             elif current_slot == "null" and incoming_slot.startswith(
                 "reference:"
             ):
@@ -3554,7 +3564,11 @@ def _valid_operand_stack_flow(
             return True
         current_stack, current_locals = typed_states[target]
         merged_stack = merge_types(current_stack, incoming_stack)
-        merged_locals = merge_types(current_locals, incoming_locals)
+        merged_locals = merge_types(
+            current_locals,
+            incoming_locals,
+            locals_state=True,
+        )
         if merged_stack is None or merged_locals is None:
             return None
         merged_state = merged_stack, merged_locals
@@ -3816,6 +3830,7 @@ def _valid_class_file(
     payload: bytes,
     *,
     expected_name: bytes | None = None,
+    known_class_kinds: Mapping[bytes, bool] | None = None,
 ) -> bool:
     offset = 0
 
@@ -4128,8 +4143,24 @@ def _valid_class_file(
             )
         ):
             return False
-        if read_uint(2) != 0:
-            return False
+        interface_names: set[bytes] = set()
+        for _ in range(read_uint(2)):
+            interface_name = class_name(
+                read_uint(2),
+                allow_array=False,
+            )
+            if (
+                interface_name is None
+                or interface_name == this_name
+                or interface_name in interface_names
+                or interface_name == b"java/lang/Object"
+                or (
+                    known_class_kinds is not None
+                    and known_class_kinds.get(interface_name) is False
+                )
+            ):
+                return False
+            interface_names.add(interface_name)
 
         bootstrap_method_count: int | None = None
 
@@ -4667,9 +4698,71 @@ def _multi_release_jar_enabled(archive: zipfile.ZipFile) -> bool:
     )
 
 
+def _class_identity_and_kind(payload: bytes) -> tuple[bytes, bool] | None:
+    offset = 0
+
+    def read(size: int) -> bytes:
+        nonlocal offset
+        end = offset + size
+        if end > len(payload):
+            raise ValueError("truncated class header")
+        value = payload[offset:end]
+        offset = end
+        return value
+
+    def read_uint(size: int) -> int:
+        return int.from_bytes(read(size), "big")
+
+    try:
+        if read_uint(4) != 0xCAFEBABE:
+            return None
+        read(4)
+        constant_pool_count = read_uint(2)
+        values: list[object | None] = [None] * constant_pool_count
+        index = 1
+        while index < constant_pool_count:
+            tag = read_uint(1)
+            if tag == 1:
+                values[index] = read(read_uint(2))
+            elif tag in {3, 4}:
+                read(4)
+            elif tag in {5, 6}:
+                read(8)
+                index += 1
+            elif tag in {7, 8, 16, 19, 20}:
+                values[index] = (read_uint(2),)
+            elif tag in {9, 10, 11, 12, 17, 18}:
+                read(4)
+            elif tag == 15:
+                read(3)
+            else:
+                return None
+            index += 1
+        access_flags = read_uint(2)
+        this_class = read_uint(2)
+        if not 0 < this_class < len(values):
+            return None
+        class_value = values[this_class]
+        if not isinstance(class_value, tuple) or len(class_value) != 1:
+            return None
+        name_index = class_value[0]
+        if (
+            not isinstance(name_index, int)
+            or not 0 < name_index < len(values)
+        ):
+            return None
+        name = values[name_index]
+        if not isinstance(name, bytes):
+            return None
+        return name, bool(access_flags & 0x0200)
+    except ValueError:
+        return None
+
+
 def _jar_contains_bytecode(archive: zipfile.ZipFile, path: str) -> bool:
     try:
         multi_release_enabled: bool | None = None
+        active_classes: list[tuple[zipfile.ZipInfo, str]] = []
         for entry in archive.infolist():
             if not entry.filename.endswith(".class"):
                 continue
@@ -4693,9 +4786,27 @@ def _jar_contains_bytecode(archive: zipfile.ZipFile, path: str) -> bool:
                 if not multi_release_enabled:
                     continue
                 class_path = parts[3]
+            active_classes.append((entry, class_path))
+        known_class_kinds: dict[bytes, bool] = {
+            b"java/lang/Object": False,
+        }
+        class_payloads: list[tuple[bytes, str]] = []
+        for entry, class_path in active_classes:
+            class_payload = archive.read(entry)
+            class_payloads.append((class_payload, class_path))
+            identity = _class_identity_and_kind(class_payload)
+            if identity is None:
+                continue
+            name, is_interface = identity
+            previous_kind = known_class_kinds.get(name)
+            if previous_kind is not None and previous_kind != is_interface:
+                return False
+            known_class_kinds[name] = is_interface
+        for class_payload, class_path in class_payloads:
             if _valid_class_file(
-                archive.read(entry),
+                class_payload,
                 expected_name=class_path.encode("utf-8"),
+                known_class_kinds=known_class_kinds,
             ):
                 return True
         return False
