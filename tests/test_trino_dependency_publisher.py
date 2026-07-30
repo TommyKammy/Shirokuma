@@ -1671,6 +1671,14 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 "undiscovered nested JAR",
             ),
             (
+                "org/example/alpha/1.0/alpha-1.0-sources.jar",
+                {
+                    "org/example/Alpha.java": b"class Alpha {}",
+                    "lib/nested.JAR": b"nested",
+                },
+                "undiscovered nested JAR",
+            ),
+            (
                 "org/example/beta/2.0/beta-2.0-sources.jar",
                 {"org/example/Beta.java": b"class Beta {}"},
                 "no rootfs-discovered or manifest-verified base coordinate",
@@ -1786,6 +1794,65 @@ class MavenScanEvidenceTests(unittest.TestCase):
                             self._sbom(root, (alpha,)),
                             root / "generated.json",
                         )
+
+    def test_maven_sbom_rejects_corrupt_class_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            alpha = self.JARS[0]
+            beta = self.JARS[1]
+            class_path = "org/example/Beta.class"
+            repository, descriptor = self._repository_descriptor(
+                root,
+                {
+                    alpha: {"org/example/Alpha.class": b"alpha"},
+                    beta: {
+                        class_path: (
+                            b"\xca\xfe\xba\xbe" + b"\x00" * 8192
+                        ),
+                        (
+                            "META-INF/maven/org.example/beta/"
+                            "pom.properties"
+                        ): (
+                            b"artifactId=beta\n"
+                            b"groupId=org.example\n"
+                            b"version=2.0\n"
+                        ),
+                    },
+                },
+            )
+            candidate = repository / beta
+            payload = bytearray(candidate.read_bytes())
+            with zipfile.ZipFile(candidate) as archive:
+                class_entry = archive.getinfo(class_path)
+                data_offset = (
+                    class_entry.header_offset
+                    + len(class_entry.FileHeader())
+                )
+                payload[
+                    data_offset + class_entry.compress_size - 1
+                ] ^= 0xFF
+            candidate.write_bytes(payload)
+            document = json.loads(descriptor.read_text(encoding="utf-8"))
+            beta_record = next(
+                record
+                for record in document["files"]
+                if record["path"] == beta
+            )
+            beta_record["sha256"] = hashlib.sha256(payload).hexdigest()
+            descriptor.write_text(
+                json.dumps(document),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "contains unreadable bytecode",
+            ):
+                verify.generate_maven_sbom(
+                    descriptor,
+                    repository,
+                    self._sbom(root, (alpha,)),
+                    root / "generated.json",
+                )
 
     def test_maven_sbom_generation_accepts_rootless_trivy_graph(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

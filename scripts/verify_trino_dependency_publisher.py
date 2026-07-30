@@ -1797,7 +1797,7 @@ def _jar_entries(payload: bytes, path: str) -> tuple[zipfile.ZipFile, list[str]]
                 "or special entries"
             ),
         )
-    if any(name.endswith(".jar") for name in names):
+    if any(name.casefold().endswith(".jar") for name in names):
         archive.close()
         _fail(
             "MAVEN_SBOM_ROOTFS",
@@ -1811,9 +1811,8 @@ def _jar_contains_bytecode(archive: zipfile.ZipFile, path: str) -> bool:
         for entry in archive.infolist():
             if not entry.filename.endswith(".class"):
                 continue
-            with archive.open(entry) as class_file:
-                if class_file.read(4) == b"\xca\xfe\xba\xbe":
-                    return True
+            if archive.read(entry).startswith(b"\xca\xfe\xba\xbe"):
+                return True
         return False
     except (OSError, RuntimeError, zipfile.BadZipFile) as error:
         _fail(
