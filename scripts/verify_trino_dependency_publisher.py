@@ -2868,10 +2868,13 @@ def _valid_operand_stack_flow(
             if expected_slot == "reference":
                 return (
                     actual_slot == "null"
+                    or actual_slot == "merged_reference"
                     or actual_slot.startswith("reference:")
                 )
             if expected_slot.startswith("reference:"):
                 if actual_slot == "null":
+                    return True
+                if actual_slot == "merged_reference":
                     return True
                 if not actual_slot.startswith("reference:"):
                     return False
@@ -3455,6 +3458,8 @@ def _valid_operand_stack_flow(
                         and (
                             actual_local_types[0] == "null"
                             or actual_local_types[0]
+                            == "merged_reference"
+                            or actual_local_types[0]
                             .startswith("reference:")
                             or actual_local_types[0]
                             == "uninitialized_this"
@@ -3488,6 +3493,7 @@ def _valid_operand_stack_flow(
             if not (
                 stored_reference == "reference"
                 or stored_reference == "null"
+                or stored_reference == "merged_reference"
                 or stored_reference.startswith("reference:")
                 or stored_reference.startswith("return_address:")
                 or stored_reference == "uninitialized_this"
@@ -3603,10 +3609,24 @@ def _valid_operand_stack_flow(
                 "reference:"
             ):
                 merged_values.append(current_slot)
+            elif (
+                current_slot == "merged_reference"
+                and (
+                    incoming_slot == "null"
+                    or incoming_slot.startswith("reference:")
+                )
+            ) or (
+                incoming_slot == "merged_reference"
+                and (
+                    current_slot == "null"
+                    or current_slot.startswith("reference:")
+                )
+            ):
+                merged_values.append("merged_reference")
             elif current_slot.startswith(
                 "reference:"
             ) and incoming_slot.startswith("reference:"):
-                merged_values.append("reference:Ljava/lang/Object;")
+                merged_values.append("merged_reference")
             elif current_slot.startswith(
                 "return_address:"
             ) and incoming_slot.startswith("return_address:"):
@@ -3820,6 +3840,10 @@ def _valid_stack_map_table(
             return False
         return all(
             declared_slot == computed_slot
+            or (
+                computed_slot == "merged_reference"
+                and declared_slot.startswith("reference:")
+            )
             or (
                 locals_state
                 and declared_slot == "uninitialized"
@@ -4809,7 +4833,9 @@ def _multi_release_jar_enabled(archive: zipfile.ZipFile) -> bool:
     )
 
 
-def _class_identity_and_kind(payload: bytes) -> tuple[bytes, bool] | None:
+def _class_identity_and_kind(
+    payload: bytes,
+) -> tuple[bytes, bool, bytes | None] | None:
     offset = 0
 
     def read(size: int) -> bytes:
@@ -4851,6 +4877,7 @@ def _class_identity_and_kind(payload: bytes) -> tuple[bytes, bool] | None:
             index += 1
         access_flags = read_uint(2)
         this_class = read_uint(2)
+        super_class = read_uint(2)
         if not 0 < this_class < len(values):
             return None
         class_value = values[this_class]
@@ -4865,9 +4892,40 @@ def _class_identity_and_kind(payload: bytes) -> tuple[bytes, bool] | None:
         name = values[name_index]
         if not isinstance(name, bytes):
             return None
-        return name, bool(access_flags & 0x0200)
+        if super_class == 0:
+            super_name = None
+        else:
+            if not 0 < super_class < len(values):
+                return None
+            super_value = values[super_class]
+            if not isinstance(super_value, tuple) or len(super_value) != 1:
+                return None
+            super_name_index = super_value[0]
+            if (
+                not isinstance(super_name_index, int)
+                or not 0 < super_name_index < len(values)
+            ):
+                return None
+            super_name = values[super_name_index]
+            if not isinstance(super_name, bytes):
+                return None
+        return name, bool(access_flags & 0x0200), super_name
     except ValueError:
         return None
+
+
+def _jar_local_hierarchy_acyclic(
+    superclasses: Mapping[bytes, bytes | None],
+) -> bool:
+    for start in superclasses:
+        visited: set[bytes] = set()
+        current: bytes | None = start
+        while current is not None and current in superclasses:
+            if current in visited:
+                return False
+            visited.add(current)
+            current = superclasses[current]
+    return True
 
 
 def _jar_contains_bytecode(archive: zipfile.ZipFile, path: str) -> bool:
@@ -4904,6 +4962,7 @@ def _jar_contains_bytecode(archive: zipfile.ZipFile, path: str) -> bool:
         known_class_kinds: dict[bytes, bool] = {
             b"java/lang/Object": False,
         }
+        known_superclasses: dict[bytes, bytes | None] = {}
         class_payloads: list[tuple[bytes, str]] = []
         for class_path, (_, entry) in active_classes.items():
             class_payload = archive.read(entry)
@@ -4911,11 +4970,14 @@ def _jar_contains_bytecode(archive: zipfile.ZipFile, path: str) -> bool:
             identity = _class_identity_and_kind(class_payload)
             if identity is None:
                 continue
-            name, is_interface = identity
+            name, is_interface, declared_super_name = identity
             previous_kind = known_class_kinds.get(name)
             if previous_kind is not None and previous_kind != is_interface:
                 return False
             known_class_kinds[name] = is_interface
+            known_superclasses[name] = declared_super_name
+        if not _jar_local_hierarchy_acyclic(known_superclasses):
+            return False
         for class_payload, class_path in class_payloads:
             if _valid_class_file(
                 class_payload,
@@ -4949,6 +5011,38 @@ def _maven_properties(payload: bytes, path: str) -> dict[str, str]:
             _fail("MAVEN_SBOM_ROOTFS", f"{path} repeats {key!r}")
         properties[key] = value
     return properties
+
+
+def _valid_service_provider_configuration(
+    archive: zipfile.ZipFile,
+    entry: zipfile.ZipInfo,
+) -> bool:
+    prefix = "META-INF/services/"
+    if not entry.filename.startswith(prefix):
+        return False
+    service_name = entry.filename.removeprefix(prefix)
+    if (
+        not service_name
+        or "/" in service_name
+        or not _valid_internal_name(
+            service_name.replace(".", "/").encode("utf-8")
+        )
+    ):
+        return False
+    try:
+        text = archive.read(entry).decode("utf-8")
+    except (OSError, RuntimeError, UnicodeDecodeError, zipfile.BadZipFile):
+        return False
+    return all(
+        not provider
+        or _valid_internal_name(
+            provider.replace(".", "/").encode("utf-8")
+        )
+        for provider in (
+            line.split("#", 1)[0].strip()
+            for line in text.splitlines()
+        )
+    )
 
 
 def _validate_rootfs_discovery_omissions(
@@ -5097,7 +5191,10 @@ def _validate_rootfs_discovery_omissions(
                         entry.filename
                     )
                     is None
-                    and not entry.filename.startswith("META-INF/services/")
+                    and not _valid_service_provider_configuration(
+                        archive,
+                        entry,
+                    )
                 ]
                 if not _jar_contains_bytecode(archive, path):
                     _fail(

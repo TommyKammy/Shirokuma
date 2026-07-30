@@ -1477,6 +1477,16 @@ class MavenScanEvidenceTests(unittest.TestCase):
             self.assertTrue(
                 verify._jar_contains_bytecode(archive, "runnable.jar")
             )
+        self.assertTrue(
+            verify._jar_local_hierarchy_acyclic(
+                {b"A": b"B", b"B": b"java/lang/Object"}
+            )
+        )
+        self.assertFalse(
+            verify._jar_local_hierarchy_acyclic(
+                {b"A": b"B", b"B": b"A"}
+            )
+        )
         matching_jar = io.BytesIO()
         with zipfile.ZipFile(matching_jar, "w") as archive:
             archive.writestr(
@@ -2318,6 +2328,18 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 computed_states=computed_states,
             )
         )
+        self.assertTrue(
+            verify._valid_stack_map_table(
+                matching_frame,
+                code=bytes.fromhex("2AB0"),
+                constant_pool_tags=stack_map_tags,
+                constant_pool_values=stack_map_values,
+                instruction_offsets={0, 1},
+                computed_states={
+                    0: ((), ("merged_reference",)),
+                },
+            )
+        )
 
     def test_modified_utf8_validation_matches_class_file_encoding(self) -> None:
         for payload in (
@@ -2771,6 +2793,9 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     },
                     tests: {
                         "A.class": self.CLASS_FILE,
+                        (
+                            "META-INF/services/java.lang.Runnable"
+                        ): b"org.example.Provider\n",
                     },
                     beta: {
                         "A.class": self.CLASS_FILE,
@@ -3018,6 +3043,16 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 {
                     "A.class": self.CLASS_FILE,
                     "native/libalpha.so": b"\x7fELF",
+                },
+                "not a test-only classifier",
+            ),
+            (
+                "org/example/alpha/1.0/alpha-1.0-tests.jar",
+                {
+                    "A.class": self.CLASS_FILE,
+                    (
+                        "META-INF/services/native/libalpha.so"
+                    ): b"\x7fELF",
                 },
                 "not a test-only classifier",
             ),

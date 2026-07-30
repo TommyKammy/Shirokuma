@@ -291,7 +291,8 @@ active Java 9-25 multi-release prefix backed by a valid manifest. Standalone
 class evidence validates interface-table names and rejects `Object` or a
 JAR-local ordinary class while permitting structurally unresolved external
 interfaces; a JAR-local interface cannot be used as a superclass. Only the
-highest active multi-release entry for each logical class path is evidence.
+highest active multi-release entry for each logical class path is evidence,
+and the JAR-local superclass graph must be acyclic.
 Java 7+ branch and exception targets require
 matching declared stack-map frames. Dynamic constants must match the selected
 `ldc*` width, `multianewarray` dimensions cannot exceed the referenced array
@@ -300,6 +301,8 @@ regular source-classifier member, including permitted metadata, is consumed
 before acceptance. Exception-handler validation is work-product bounded,
 generic catch references can flow through reference locals, and local-only
 `top` merges remain unusable without invalidating an otherwise valid join.
+Distinct reference identities at a join retain a declared common stack-map
+reference type rather than being forced to `java/lang/Object`.
 Declared local `top` entries can discard inferred out-of-scope values, and a
 constructor may write its own fields before its initializing constructor call.
 That initializing call must target the current class or direct superclass.
@@ -310,7 +313,9 @@ method descriptors,
 recognized signature/source/marker attributes validate their payloads, and
 exception catch identities cannot be array classes. Test classifiers also
 restrict nonmetadata members to reviewed test-resource formats and read every
-accepted payload. The subsequent complete
+accepted payload; service-provider exemptions require a direct, UTF-8
+`META-INF/services/<binary-name>` configuration with valid service and provider
+binary names. The subsequent complete
 `(PURL, FilePath)` identity and High=0/Critical=0 scan remains mandatory. This
 does not relax source identity, vulnerability, publication, admission, expiry,
 or environment scope.
