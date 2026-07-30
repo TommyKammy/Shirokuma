@@ -1873,6 +1873,7 @@ def _bytecode_instruction_offsets(
     payload: bytes,
     *,
     constant_pool_tags: list[int] | None = None,
+    constant_pool_values: list[object] | None = None,
     invokeinterface_counts: Mapping[int, int] | None = None,
     major_version: int = 52,
 ) -> set[int] | None:
@@ -1920,6 +1921,59 @@ def _bytecode_instruction_offsets(
             )
         )
 
+    def dynamic_constant_slots(pool_index: int) -> int | None:
+        if (
+            constant_pool_tags is None
+            or constant_pool_values is None
+            or not 0 < pool_index < len(constant_pool_tags)
+            or constant_pool_tags[pool_index] != 17
+        ):
+            return None
+        dynamic = constant_pool_values[pool_index]
+        if not isinstance(dynamic, tuple) or len(dynamic) != 2:
+            return None
+        name_and_type_index = dynamic[1]
+        if (
+            not isinstance(name_and_type_index, int)
+            or not 0 < name_and_type_index < len(constant_pool_values)
+        ):
+            return None
+        name_and_type = constant_pool_values[name_and_type_index]
+        if not isinstance(name_and_type, tuple) or len(name_and_type) != 2:
+            return None
+        descriptor_index = name_and_type[1]
+        if (
+            not isinstance(descriptor_index, int)
+            or not 0 < descriptor_index < len(constant_pool_values)
+        ):
+            return None
+        descriptor = constant_pool_values[descriptor_index]
+        slots = (
+            _field_descriptor_stack_slots(descriptor)
+            if isinstance(descriptor, bytes)
+            else None
+        )
+        return len(slots) if slots is not None else None
+
+    def class_array_dimensions(pool_index: int) -> int | None:
+        if constant_pool_values is None:
+            return None
+        if not 0 < pool_index < len(constant_pool_values):
+            return None
+        class_value = constant_pool_values[pool_index]
+        if not isinstance(class_value, tuple) or len(class_value) != 1:
+            return None
+        name_index = class_value[0]
+        if (
+            not isinstance(name_index, int)
+            or not 0 < name_index < len(constant_pool_values)
+        ):
+            return None
+        name = constant_pool_values[name_index]
+        if not isinstance(name, bytes):
+            return None
+        return len(name) - len(name.lstrip(b"["))
+
     try:
         while offset < len(payload):
             instruction_offset = offset
@@ -1942,6 +1996,14 @@ def _bytecode_instruction_offsets(
                     15,
                     16,
                     17,
+                ):
+                    return None
+                if (
+                    opcode == 0x12
+                    and constant_pool_tags is not None
+                    and constant_pool_values is not None
+                    and constant_pool_tags[operand] == 17
+                    and dynamic_constant_slots(operand) != 1
                 ):
                     return None
                 continue
@@ -1972,6 +2034,15 @@ def _bytecode_instruction_offsets(
                     if expected_tags is not None and not has_constant_tag(
                         operand,
                         *expected_tags,
+                    ):
+                        return None
+                    if (
+                        opcode in {0x13, 0x14}
+                        and constant_pool_tags is not None
+                        and constant_pool_values is not None
+                        and constant_pool_tags[operand] == 17
+                        and dynamic_constant_slots(operand)
+                        != (2 if opcode == 0x14 else 1)
                     ):
                         return None
                 continue
@@ -2006,12 +2077,21 @@ def _bytecode_instruction_offsets(
                 continue
             if opcode == 0xC5:
                 operands = read(3)
+                pool_index = int.from_bytes(operands[:2], "big")
+                dimensions = class_array_dimensions(pool_index)
                 if (
                     not has_constant_tag(
-                        int.from_bytes(operands[:2], "big"),
+                        pool_index,
                         7,
                     )
                     or operands[2] == 0
+                    or (
+                        constant_pool_values is not None
+                        and (
+                            dimensions is None
+                            or dimensions < operands[2]
+                        )
+                    )
                 ):
                     return None
                 continue
@@ -2471,6 +2551,7 @@ def _valid_operand_stack_flow(
     method_name: bytes,
     method_descriptor: bytes,
     this_name: bytes,
+    required_stack_map_offsets: set[int] | None = None,
 ) -> (
     dict[int, tuple[tuple[str, ...], tuple[str, ...]]]
     | bool
@@ -2485,6 +2566,8 @@ def _valid_operand_stack_flow(
     exception_handler_offsets = {
         handler_pc for _, _, handler_pc in exception_handlers
     }
+    if required_stack_map_offsets is not None:
+        required_stack_map_offsets.update(exception_handler_offsets)
     effects: dict[int, tuple[int, int]] = {}
     instructions: dict[int, bytes] = {}
     successors: dict[int, set[int]] = {}
@@ -2745,6 +2828,10 @@ def _valid_operand_stack_flow(
                 elif widened_opcode in range(0x36, 0x3B):
                     popped = 2 if widened_opcode in {0x37, 0x39} else 1
 
+            if required_stack_map_offsets is not None:
+                required_stack_map_offsets.update(
+                    target for target in targets if target != 0
+                )
             if not terminal:
                 if next_offset is None:
                     return False
@@ -3159,6 +3246,9 @@ def _valid_operand_stack_flow(
         elif opcode in range(0xB6, 0xBB):
             pool_index = int.from_bytes(instruction[1:3], "big")
             descriptor = referenced_descriptor(pool_index)
+            invocation_name = referenced_name(pool_index)
+            if invocation_name == b"<init>" and opcode != 0xB7:
+                return None
             signature = (
                 _method_descriptor_stack_slots(descriptor)
                 if isinstance(descriptor, bytes)
@@ -3170,7 +3260,7 @@ def _valid_operand_stack_flow(
             receiver_type = "reference"
             if (
                 opcode == 0xB7
-                and referenced_name(pool_index) == b"<init>"
+                and invocation_name == b"<init>"
                 and len(stack) >= len(parameters) + 1
             ):
                 candidate_receiver = stack[-len(parameters) - 1]
@@ -3511,6 +3601,7 @@ def _valid_stack_map_table(
         int,
         tuple[tuple[str, ...], tuple[str, ...]],
     ],
+    required_frame_offsets: set[int] | None = None,
 ) -> bool:
     offset = 0
 
@@ -3636,6 +3727,7 @@ def _valid_stack_map_table(
         if frame_locals is None:
             return False
         previous_frame_offset = -1
+        declared_frame_offsets: set[int] = set()
         for _ in range(read_uint(2)):
             frame_type = read_uint(1)
             frame_stack: list[tuple[str, ...]] = []
@@ -3707,8 +3799,15 @@ def _valid_stack_map_table(
                 and states_match(declared_locals, computed_locals)
             ):
                 return False
+            declared_frame_offsets.add(frame_offset)
             previous_frame_offset = frame_offset
-        return offset == len(payload)
+        return (
+            offset == len(payload)
+            and (
+                required_frame_offsets is None
+                or required_frame_offsets <= declared_frame_offsets
+            )
+        )
     except ValueError:
         return False
 
@@ -4087,6 +4186,7 @@ def _valid_class_file(
                     instruction_offsets = _bytecode_instruction_offsets(
                         code,
                         constant_pool_tags=tags,
+                        constant_pool_values=values,
                         invokeinterface_counts=invokeinterface_counts,
                         major_version=major_version,
                     )
@@ -4150,6 +4250,7 @@ def _valid_class_file(
                         exception_handlers.append(
                             (start_pc, end_pc, handler_pc)
                         )
+                    required_stack_map_offsets: set[int] = set()
                     computed_states = _valid_operand_stack_flow(
                         code,
                         instruction_offsets=instruction_offsets,
@@ -4162,6 +4263,11 @@ def _valid_class_file(
                         method_name=method_name,
                         method_descriptor=method_descriptor,
                         this_name=this_name,
+                        required_stack_map_offsets=(
+                            required_stack_map_offsets
+                            if major_version >= 51
+                            else None
+                        ),
                     )
                     if not isinstance(computed_states, dict):
                         raise ValueError("invalid operand stack flow")
@@ -4181,6 +4287,11 @@ def _valid_class_file(
                                     constant_pool_values=values,
                                     instruction_offsets=instruction_offsets,
                                     computed_states=computed_states,
+                                    required_frame_offsets=(
+                                        required_stack_map_offsets
+                                        if major_version >= 51
+                                        else None
+                                    ),
                                 )
                             ):
                                 raise ValueError("invalid StackMapTable")
@@ -4297,6 +4408,12 @@ def _valid_class_file(
                             raise ValueError(
                                 "invalid nested Code attribute placement"
                             )
+                    if (
+                        major_version >= 51
+                        and required_stack_map_offsets
+                        and not found_stack_map_table
+                    ):
+                        raise ValueError("missing StackMapTable")
                     if code_offset != len(attribute):
                         raise ValueError("trailing Code attribute data")
                     found_code = True
@@ -4672,8 +4789,9 @@ def _validate_rootfs_discovery_omissions(
                         f"{path} is not a source-only classifier JAR",
                     )
                 try:
-                    for entry in source_entries:
-                        archive.read(entry)
+                    for entry in archive.infolist():
+                        if not entry.is_dir():
+                            archive.read(entry)
                 except (OSError, RuntimeError, zipfile.BadZipFile) as error:
                     _fail(
                         "MAVEN_SBOM_ROOTFS",

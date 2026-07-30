@@ -286,7 +286,12 @@ and returns; a value created by `new` remains allocation-offset-specific and
 uninitialized until the matching constructor call. Declared `StackMapTable`
 locals and stacks must reconcile with the computed state at every frame, and
 each declared `this_class` must match its JAR entry path after removing any
-valid multi-release prefix. Modern class versions reject legacy
+valid multi-release prefix. Java 7+ branch and exception targets require
+matching declared stack-map frames. Dynamic constants must match the selected
+`ldc*` width, `multianewarray` dimensions cannot exceed the referenced array
+rank, and constructors can be invoked only through `invokespecial`. Every
+regular source-classifier member, including permitted metadata, is consumed
+before acceptance. Modern class versions reject legacy
 `jsr`/`ret` instructions, and interface class evidence cannot declare a
 constructor. Return instructions must match their method descriptors,
 recognized signature/source/marker attributes validate their payloads, and

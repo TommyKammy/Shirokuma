@@ -1649,6 +1649,21 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 this_name=b"A",
             )
         )
+        self.assertFalse(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("2AB60003B1"),
+                instruction_offsets={0, 1, 4},
+                constant_pool_tags=constructor_pool_tags,
+                constant_pool_values=constructor_pool_values,
+                exception_handlers=[],
+                max_stack=1,
+                max_locals=1,
+                method_access_flags=0x0008,
+                method_name=b"method",
+                method_descriptor=b"(LA;)V",
+                this_name=b"A",
+            )
+        )
 
     def test_member_descriptors_require_jvm_grammar(self) -> None:
         for descriptor in (
@@ -1992,6 +2007,38 @@ class MavenScanEvidenceTests(unittest.TestCase):
 
         self.assertTrue(verify._valid_class_file(class_with_stack_map(b"\x00\x00")))
         self.assertFalse(verify._valid_class_file(class_with_stack_map(b"\x00")))
+        branch_code = bytes.fromhex("2AB70009A70003B1")
+        branch_code_attribute = b"".join(
+            (
+                b"\x00\x01\x00\x01",
+                len(branch_code).to_bytes(4, "big"),
+                branch_code,
+                b"\x00\x00\x00\x00",
+            )
+        )
+        branch_method = b"".join(
+            (
+                b"\x00\x01\x00\x05\x00\x06\x00\x01",
+                b"\x00\x07",
+                len(branch_code_attribute).to_bytes(4, "big"),
+                branch_code_attribute,
+            )
+        )
+        branch_without_stack_map = b"".join(
+            (
+                self.CLASS_FILE[:8],
+                b"\x00\x0b",
+                constant_pool,
+                stack_map_name,
+                b"\x00\x21\x00\x02\x00\x04",
+                b"\x00\x00\x00\x00\x00\x01",
+                branch_method,
+                b"\x00\x00",
+            )
+        )
+        self.assertFalse(
+            verify._valid_class_file(branch_without_stack_map)
+        )
         computed_states = {
             0: ((), ("reference:Ljava/lang/String;",)),
         }
@@ -2309,6 +2356,54 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 b"\xb9\x00\x01\x02\x00\xb1",
                 constant_pool_tags=interface_tags,
                 invokeinterface_counts={1: 1},
+            )
+        )
+        dynamic_tags = [0, 17, 12, 1, 1]
+        dynamic_values = [None, (0, 2), (3, 4), b"value", b"J"]
+        self.assertIsNone(
+            verify._bytecode_instruction_offsets(
+                b"\x12\x01\xad",
+                constant_pool_tags=dynamic_tags,
+                constant_pool_values=dynamic_values,
+            )
+        )
+        self.assertIsNotNone(
+            verify._bytecode_instruction_offsets(
+                b"\x14\x00\x01\xad",
+                constant_pool_tags=dynamic_tags,
+                constant_pool_values=dynamic_values,
+            )
+        )
+        dynamic_values[-1] = b"I"
+        self.assertIsNone(
+            verify._bytecode_instruction_offsets(
+                b"\x14\x00\x01\xac",
+                constant_pool_tags=dynamic_tags,
+                constant_pool_values=dynamic_values,
+            )
+        )
+        array_tags = [0, 7, 1]
+        array_values = [None, (2,), b"[[I"]
+        self.assertIsNotNone(
+            verify._bytecode_instruction_offsets(
+                b"\xc5\x00\x01\x02\xb0",
+                constant_pool_tags=array_tags,
+                constant_pool_values=array_values,
+            )
+        )
+        self.assertIsNone(
+            verify._bytecode_instruction_offsets(
+                b"\xc5\x00\x01\x03\xb0",
+                constant_pool_tags=array_tags,
+                constant_pool_values=array_values,
+            )
+        )
+        array_values[-1] = b"java/lang/Object"
+        self.assertIsNone(
+            verify._bytecode_instruction_offsets(
+                b"\xc5\x00\x01\x01\xb0",
+                constant_pool_tags=array_tags,
+                constant_pool_values=array_values,
             )
         )
 
@@ -2980,6 +3075,56 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 )
                 payload[
                     data_offset + source_entry.compress_size - 1
+                ] ^= 0xFF
+            candidate.write_bytes(payload)
+            document = json.loads(descriptor.read_text(encoding="utf-8"))
+            source_record = next(
+                record
+                for record in document["files"]
+                if record["path"] == sources
+            )
+            source_record["sha256"] = hashlib.sha256(payload).hexdigest()
+            descriptor.write_text(
+                json.dumps(document),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "contains unreadable source",
+            ):
+                verify.generate_maven_sbom(
+                    descriptor,
+                    repository,
+                    self._sbom(root, (alpha,)),
+                    root / "generated.json",
+                )
+
+    def test_maven_sbom_rejects_corrupt_source_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            alpha = self.JARS[0]
+            sources = "org/example/alpha/1.0/alpha-1.0-sources.jar"
+            metadata_path = "META-INF/NOTICE"
+            repository, descriptor = self._repository_descriptor(
+                root,
+                {
+                    alpha: {"org/example/Alpha.class": b"alpha"},
+                    sources: {
+                        "org/example/Alpha.java": b"class Alpha {}\n",
+                        metadata_path: b"x" * 8192,
+                    },
+                },
+            )
+            candidate = repository / sources
+            payload = bytearray(candidate.read_bytes())
+            with zipfile.ZipFile(candidate) as archive:
+                metadata_entry = archive.getinfo(metadata_path)
+                data_offset = (
+                    metadata_entry.header_offset
+                    + len(metadata_entry.FileHeader())
+                )
+                payload[
+                    data_offset + metadata_entry.compress_size - 1
                 ] ^= 0xFF
             candidate.write_bytes(payload)
             document = json.loads(descriptor.read_text(encoding="utf-8"))
