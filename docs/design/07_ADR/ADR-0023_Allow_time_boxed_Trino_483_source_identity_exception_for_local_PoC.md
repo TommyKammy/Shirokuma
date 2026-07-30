@@ -279,7 +279,10 @@ through valid stores, and merge across normal and exceptional control flow;
 constant loads use their actual constant-pool tags. Constructor receivers remain
 uninitialized until a valid `this()` or `super()` invocation, interface method
 flags follow their class-file version, and bounded local/state-cell counts
-prevent validation-work amplification. Stack-manipulation instructions preserve
+prevent validation-work amplification, including the product of declared
+operand-stack depth and instruction count. Legal nonzero minor versions remain
+eligible for legacy class-file majors 46-55 while newer majors remain
+zero-minor-only. Stack-manipulation instructions preserve
 category-1/category-2 value boundaries, and every regular base-JAR member is
 read before the archive is accepted. Descriptor size is bounded before the
 archive is materialized, and the EOCD member count and central-directory size
@@ -299,6 +302,7 @@ interfaces; a JAR-local interface cannot be used as a superclass. Only the
 highest active multi-release entry for each logical class path is evidence,
 and the JAR-local superclass graph must be acyclic; completed hierarchy paths
 are memoized so cycle detection is linear in the graph size.
+JAR-local inheritance edges targeting a final class are rejected.
 Java 7+ branch and exception targets require
 matching declared stack-map frames. Dynamic constants must match the selected
 `ldc*` width, `multianewarray` dimensions cannot exceed the referenced array
@@ -348,6 +352,10 @@ component with the same PURL is insufficient. The subsequent complete
 `(PURL, FilePath)` identity and High=0/Critical=0 scan remains mandatory. This
 does not relax source identity, vulnerability, publication, admission, expiry,
 or environment scope.
+
+Manifest coordinate evidence parses the Java properties separators,
+continuations, and escapes accepted by standard `pom.properties` files before
+comparing the required group, artifact, and version values.
 
 A separate evidence-only PR must review and pin the exact OCI digest and retire
 the publisher. Image publication, resident admission, credentials, Flux

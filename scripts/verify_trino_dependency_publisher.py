@@ -2652,6 +2652,8 @@ def _valid_operand_stack_flow(
         max_locals > MAX_OMITTED_CLASS_LOCALS
         or max_locals * len(offsets)
         > MAX_OMITTED_CLASS_STATE_CELLS
+        or max_stack * len(offsets)
+        > MAX_OMITTED_CLASS_STATE_CELLS
         or len(exception_handlers) * len(offsets)
         > MAX_OMITTED_CLASS_STATE_CELLS
     ):
@@ -4270,8 +4272,9 @@ def _valid_class_file(
         major_version = read_uint(2)
         if not (
             (major_version == 45 and minor_version <= 3)
+            or (46 <= major_version <= 55)
             or (
-                46 <= major_version <= PINNED_JAVA_CLASS_MAJOR_VERSION
+                56 <= major_version <= PINNED_JAVA_CLASS_MAJOR_VERSION
                 and minor_version == 0
             )
         ):
@@ -5431,7 +5434,7 @@ def _multi_release_jar_enabled(archive: zipfile.ZipFile) -> bool:
 
 def _class_identity_and_kind(
     payload: bytes,
-) -> tuple[bytes, bool, bytes | None] | None:
+) -> tuple[bytes, bool, bytes | None, bool] | None:
     offset = 0
 
     def read(size: int) -> bytes:
@@ -5505,7 +5508,12 @@ def _class_identity_and_kind(
             super_name = values[super_name_index]
             if not isinstance(super_name, bytes):
                 return None
-        return name, bool(access_flags & 0x0200), super_name
+        return (
+            name,
+            bool(access_flags & 0x0200),
+            super_name,
+            bool(access_flags & 0x0010),
+        )
     except ValueError:
         return None
 
@@ -5567,6 +5575,7 @@ def _jar_contains_bytecode(archive: zipfile.ZipFile, path: str) -> bool:
             b"java/lang/Object": False,
         }
         known_superclasses: dict[bytes, bytes | None] = {}
+        known_final_classes: set[bytes] = set()
         class_payloads: list[tuple[bytes, str]] = []
         for class_path, (_, entry) in active_classes.items():
             class_payload = archive.read(entry)
@@ -5574,13 +5583,22 @@ def _jar_contains_bytecode(archive: zipfile.ZipFile, path: str) -> bool:
             identity = _class_identity_and_kind(class_payload)
             if identity is None:
                 continue
-            name, is_interface, declared_super_name = identity
+            name, is_interface, declared_super_name, is_final = identity
             previous_kind = known_class_kinds.get(name)
             if previous_kind is not None and previous_kind != is_interface:
                 return False
             known_class_kinds[name] = is_interface
             known_superclasses[name] = declared_super_name
-        if not _jar_local_hierarchy_acyclic(known_superclasses):
+            if is_final:
+                known_final_classes.add(name)
+        if (
+            any(
+                super_name in known_final_classes
+                for super_name in known_superclasses.values()
+                if super_name is not None
+            )
+            or not _jar_local_hierarchy_acyclic(known_superclasses)
+        ):
             return False
         for class_payload, class_path in class_payloads:
             if _valid_class_file(
@@ -5603,15 +5621,104 @@ def _maven_properties(payload: bytes, path: str) -> dict[str, str]:
         text = payload.decode("utf-8")
     except UnicodeDecodeError as error:
         _fail("MAVEN_SBOM_ROOTFS", f"{path} has non-UTF-8 pom.properties: {error}")
+
+    def unescape(value: str) -> str:
+        result: list[str] = []
+        offset = 0
+        while offset < len(value):
+            if value[offset] != "\\":
+                result.append(value[offset])
+                offset += 1
+                continue
+            offset += 1
+            if offset >= len(value):
+                _fail(
+                    "MAVEN_SBOM_ROOTFS",
+                    f"{path} has malformed pom.properties escape",
+                )
+            escaped = value[offset]
+            if escaped == "u":
+                digits = value[offset + 1 : offset + 5]
+                if len(digits) != 4 or any(
+                    character not in "0123456789abcdefABCDEF"
+                    for character in digits
+                ):
+                    _fail(
+                        "MAVEN_SBOM_ROOTFS",
+                        f"{path} has malformed pom.properties escape",
+                    )
+                result.append(chr(int(digits, 16)))
+                offset += 5
+                continue
+            result.append(
+                {
+                    "t": "\t",
+                    "n": "\n",
+                    "r": "\r",
+                    "f": "\f",
+                }.get(escaped, escaped)
+            )
+            offset += 1
+        return "".join(result)
+
+    logical_lines: list[str] = []
+    pending = ""
+    for physical_line in text.splitlines():
+        line = (
+            pending + physical_line.lstrip(" \t\f")
+            if pending
+            else physical_line
+        )
+        trailing_backslashes = len(line) - len(line.rstrip("\\"))
+        if trailing_backslashes % 2:
+            pending = line[:-1]
+            continue
+        logical_lines.append(line)
+        pending = ""
+    if pending:
+        logical_lines.append(pending)
+
     properties: dict[str, str] = {}
-    for line in text.splitlines():
+    for line in logical_lines:
         content = line.lstrip(" \t\f")
         if not content or content.startswith(("#", "!")):
             continue
-        if "=" not in content:
-            _fail("MAVEN_SBOM_ROOTFS", f"{path} has malformed pom.properties")
-        key, value = content.split("=", 1)
-        key = key.strip(" \t\f")
+        escaped = False
+        separator_offset = len(content)
+        whitespace_separator = False
+        for offset, character in enumerate(content):
+            if escaped:
+                escaped = False
+                continue
+            if character == "\\":
+                escaped = True
+                continue
+            if character in "=:" or character in " \t\f":
+                separator_offset = offset
+                whitespace_separator = character in " \t\f"
+                break
+        value_offset = separator_offset
+        if separator_offset < len(content):
+            if whitespace_separator:
+                while (
+                    value_offset < len(content)
+                    and content[value_offset] in " \t\f"
+                ):
+                    value_offset += 1
+                if (
+                    value_offset < len(content)
+                    and content[value_offset] in "=:"
+                ):
+                    value_offset += 1
+            else:
+                value_offset += 1
+            while (
+                value_offset < len(content)
+                and content[value_offset] in " \t\f"
+            ):
+                value_offset += 1
+        key = unescape(content[:separator_offset])
+        value = unescape(content[value_offset:])
         if not key or key in properties:
             _fail("MAVEN_SBOM_ROOTFS", f"{path} repeats {key!r}")
         properties[key] = value

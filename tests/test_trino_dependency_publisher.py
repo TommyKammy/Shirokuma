@@ -1403,6 +1403,18 @@ class MavenScanEvidenceTests(unittest.TestCase):
 
     def test_class_file_structure_requires_complete_payload(self) -> None:
         self.assertTrue(verify._valid_class_file(self.CLASS_FILE))
+        legacy_minor = (
+            self.CLASS_FILE[:4]
+            + b"\x00\x01"
+            + self.CLASS_FILE[6:]
+        )
+        self.assertTrue(verify._valid_class_file(legacy_minor))
+        modern_minor = (
+            self.CLASS_FILE[:4]
+            + b"\x00\x01\x00\x38"
+            + self.CLASS_FILE[8:]
+        )
+        self.assertFalse(verify._valid_class_file(modern_minor))
         self.assertTrue(
             verify._valid_class_file(self.CLASS_FILE, expected_name=b"A")
         )
@@ -1531,6 +1543,30 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 verify._jar_contains_bytecode(
                     archive,
                     "supplementary.jar",
+                )
+            )
+        final_class = self.CLASS_FILE.replace(
+            bytes.fromhex("002100020004"),
+            bytes.fromhex("003100020004"),
+            1,
+        )
+        subclass = bytes.fromhex(
+            "CAFEBABE000000340005"
+            "01000142"
+            "070001"
+            "01000141"
+            "070003"
+            "0021000200040000000000000000"
+        )
+        final_hierarchy_jar = io.BytesIO()
+        with zipfile.ZipFile(final_hierarchy_jar, "w") as archive:
+            archive.writestr("A.class", final_class)
+            archive.writestr("B.class", subclass)
+        with zipfile.ZipFile(final_hierarchy_jar) as archive:
+            self.assertFalse(
+                verify._jar_contains_bytecode(
+                    archive,
+                    "final-hierarchy.jar",
                 )
             )
 
@@ -2896,6 +2932,25 @@ class MavenScanEvidenceTests(unittest.TestCase):
         ):
             with self.subTest(payload=payload):
                 self.assertFalse(verify._valid_modified_utf8(payload))
+
+    def test_maven_properties_accept_java_separators_and_escapes(
+        self,
+    ) -> None:
+        self.assertEqual(
+            {
+                "artifactId": "failsafe",
+                "groupId": "dev.failsafe",
+                "version": "1.0 final",
+            },
+            verify._maven_properties(
+                (
+                    b"artifactId failsafe\n"
+                    b"groupId:dev.failsafe\n"
+                    b"version=1.0\\ final\n"
+                ),
+                "pom.properties",
+            ),
+        )
 
     def test_method_handle_kinds_require_exact_reference_tags(self) -> None:
         def class_with_method_handle(
