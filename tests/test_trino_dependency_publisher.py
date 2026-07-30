@@ -1619,6 +1619,88 @@ class MavenScanEvidenceTests(unittest.TestCase):
         )
         self.assertFalse(verify._valid_class_file(reserved_opcode))
 
+    def test_bytecode_stream_requires_compatible_constant_pool_tags(self) -> None:
+        tags = [0] * 20
+        tags[2] = 9
+        tags[3] = 10
+        tags[4] = 11
+        tags[5] = 11
+        tags[6] = 18
+        tags[7] = 7
+        tags[8] = 3
+        tags[9] = 5
+        bytecode = b"".join(
+            (
+                b"\x12\x08",
+                b"\x14\x00\x09",
+                b"\xb2\x00\x02",
+                b"\xb6\x00\x03",
+                b"\xb7\x00\x03",
+                b"\xb8\x00\x04",
+                b"\xb9\x00\x05\x01\x00",
+                b"\xba\x00\x06\x00\x00",
+                b"\xbb\x00\x07",
+                b"\xbd\x00\x07",
+                b"\xc0\x00\x07",
+                b"\xc1\x00\x07",
+                b"\xc5\x00\x07\x01",
+                b"\xb1",
+            )
+        )
+        self.assertIsNotNone(
+            verify._bytecode_instruction_offsets(
+                bytecode,
+                constant_pool_tags=tags,
+            )
+        )
+
+        invalid_cases = (
+            (b"\x12\x01\xb1", 1),
+            (b"\x14\x00\x01\xb1", 3),
+            (b"\xb2\x00\x01\xb1", 10),
+            (b"\xb6\x00\x01\xb1", 9),
+            (b"\xb7\x00\x01\xb1", 1),
+            (b"\xb9\x00\x01\x01\x00\xb1", 10),
+            (b"\xba\x00\x01\x00\x00\xb1", 17),
+            (b"\xbb\x00\x01\xb1", 1),
+            (b"\xc5\x00\x01\x01\xb1", 1),
+        )
+        for invalid_bytecode, invalid_tag in invalid_cases:
+            with self.subTest(
+                bytecode=invalid_bytecode,
+                constant_pool_tag=invalid_tag,
+            ):
+                invalid_tags = [0, invalid_tag]
+                self.assertIsNone(
+                    verify._bytecode_instruction_offsets(
+                        invalid_bytecode,
+                        constant_pool_tags=invalid_tags,
+                    )
+                )
+
+        interface_tags = [0, 11]
+        self.assertIsNotNone(
+            verify._bytecode_instruction_offsets(
+                b"\xb7\x00\x01\xb1",
+                constant_pool_tags=interface_tags,
+                major_version=52,
+            )
+        )
+        self.assertIsNone(
+            verify._bytecode_instruction_offsets(
+                b"\xb7\x00\x01\xb1",
+                constant_pool_tags=interface_tags,
+                major_version=51,
+            )
+        )
+
+        invalid_invokespecial = self.CLASS_FILE.replace(
+            b"\x2a\xb7\x00\x09\xb1",
+            b"\x2a\xb7\x00\x01\xb1",
+            1,
+        )
+        self.assertFalse(verify._valid_class_file(invalid_invokespecial))
+
     def test_maven_descriptor_scopes_parquet_remediation_origin_to_exact_jar(
         self,
     ) -> None:

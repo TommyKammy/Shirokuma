@@ -1866,7 +1866,12 @@ def _valid_modified_utf8(payload: bytes) -> bool:
     return True
 
 
-def _bytecode_instruction_offsets(payload: bytes) -> set[int] | None:
+def _bytecode_instruction_offsets(
+    payload: bytes,
+    *,
+    constant_pool_tags: list[int] | None = None,
+    major_version: int = 52,
+) -> set[int] | None:
     zero_operand = (
         set(range(0x00, 0x10))
         | set(range(0x1A, 0x36))
@@ -1902,6 +1907,15 @@ def _bytecode_instruction_offsets(payload: bytes) -> set[int] | None:
     def read_signed(size: int) -> int:
         return int.from_bytes(read(size), "big", signed=True)
 
+    def has_constant_tag(pool_index: int, *expected: int) -> bool:
+        return (
+            constant_pool_tags is None
+            or (
+                0 < pool_index < len(constant_pool_tags)
+                and constant_pool_tags[pool_index] in expected
+            )
+        )
+
     try:
         while offset < len(payload):
             instruction_offset = offset
@@ -1913,6 +1927,17 @@ def _bytecode_instruction_offsets(payload: bytes) -> set[int] | None:
                 operand = read(1)[0]
                 if opcode == 0xBC and operand not in range(4, 12):
                     return None
+                if opcode == 0x12 and not has_constant_tag(
+                    operand,
+                    3,
+                    4,
+                    7,
+                    8,
+                    15,
+                    16,
+                    17,
+                ):
+                    return None
                 continue
             if opcode in two_operands:
                 if opcode in branch_16:
@@ -1920,20 +1945,60 @@ def _bytecode_instruction_offsets(payload: bytes) -> set[int] | None:
                         instruction_offset + read_signed(2)
                     )
                 else:
-                    read(2)
+                    operand = int.from_bytes(read(2), "big")
+                    expected_tags: tuple[int, ...] | None = None
+                    if opcode == 0x13:
+                        expected_tags = (3, 4, 7, 8, 15, 16, 17)
+                    elif opcode == 0x14:
+                        expected_tags = (5, 6, 17)
+                    elif opcode in range(0xB2, 0xB6):
+                        expected_tags = (9,)
+                    elif opcode == 0xB6:
+                        expected_tags = (10,)
+                    elif opcode in {0xB7, 0xB8}:
+                        expected_tags = (
+                            (10, 11) if major_version >= 52 else (10,)
+                        )
+                    elif opcode in {0xBB, 0xBD, 0xC0, 0xC1}:
+                        expected_tags = (7,)
+                    if expected_tags is not None and not has_constant_tag(
+                        operand,
+                        *expected_tags,
+                    ):
+                        return None
                 continue
             if opcode == 0xB9:
                 operands = read(4)
-                if operands[2] == 0 or operands[3] != 0:
+                if (
+                    not has_constant_tag(
+                        int.from_bytes(operands[:2], "big"),
+                        11,
+                    )
+                    or operands[2] == 0
+                    or operands[3] != 0
+                ):
                     return None
                 continue
             if opcode == 0xBA:
-                if read(4)[2:] != b"\x00\x00":
+                operands = read(4)
+                if (
+                    not has_constant_tag(
+                        int.from_bytes(operands[:2], "big"),
+                        18,
+                    )
+                    or operands[2:] != b"\x00\x00"
+                ):
                     return None
                 continue
             if opcode == 0xC5:
                 operands = read(3)
-                if operands[2] == 0:
+                if (
+                    not has_constant_tag(
+                        int.from_bytes(operands[:2], "big"),
+                        7,
+                    )
+                    or operands[2] == 0
+                ):
                     return None
                 continue
             if opcode in {0xC8, 0xC9}:
@@ -2154,7 +2219,9 @@ def _valid_class_file(payload: bytes) -> bool:
                     if not 0 < code_length <= 65535:
                         raise ValueError("invalid bytecode length")
                     instruction_offsets = _bytecode_instruction_offsets(
-                        read_code(code_length)
+                        read_code(code_length),
+                        constant_pool_tags=tags,
+                        major_version=major_version,
                     )
                     if instruction_offsets is None:
                         raise ValueError("invalid bytecode instructions")
