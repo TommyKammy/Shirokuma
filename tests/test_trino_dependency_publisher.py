@@ -1220,6 +1220,26 @@ class MavenScanEvidenceTests(unittest.TestCase):
         "00010001000000052AB70009B100000000"
         "0000"
     )
+    INTERFACE_CLASS_FILE = bytes.fromhex(
+        "CAFEBABE000000340005"
+        "01000149"
+        "070001"
+        "0100106A6176612F6C616E672F4F626A656374"
+        "070003"
+        "0601000200040000000000000000"
+    )
+    CONCRETE_CLASS_WITHOUT_CODE = bytes.fromhex(
+        "CAFEBABE000000340007"
+        "01000141"
+        "070001"
+        "0100106A6176612F6C616E672F4F626A656374"
+        "070003"
+        "0100016D"
+        "010003282956"
+        "002100020004000000000001"
+        "0001000500060000"
+        "0000"
+    )
     JARS = (
         "org/example/alpha/1.0/alpha-1.0.jar",
         "org/example/beta/2.0/beta-2.0.jar",
@@ -1381,19 +1401,19 @@ class MavenScanEvidenceTests(unittest.TestCase):
         )
         return sbom
 
-    def test_class_file_structure_requires_complete_code(self) -> None:
-        self.assertTrue(
-            verify._class_file_contains_code(self.CLASS_FILE)
+    def test_class_file_structure_requires_complete_payload(self) -> None:
+        self.assertTrue(verify._valid_class_file(self.CLASS_FILE))
+        self.assertTrue(verify._valid_class_file(self.INTERFACE_CLASS_FILE))
+        self.assertFalse(
+            verify._valid_class_file(self.CONCRETE_CLASS_WITHOUT_CODE)
         )
         for length in range(len(self.CLASS_FILE)):
             with self.subTest(length=length):
                 self.assertFalse(
-                    verify._class_file_contains_code(
-                        self.CLASS_FILE[:length]
-                    )
+                    verify._valid_class_file(self.CLASS_FILE[:length])
                 )
         self.assertFalse(
-            verify._class_file_contains_code(self.CLASS_FILE + b"\x00")
+            verify._valid_class_file(self.CLASS_FILE + b"\x00")
         )
 
     def test_maven_descriptor_scopes_parquet_remediation_origin_to_exact_jar(
@@ -1933,6 +1953,57 @@ class MavenScanEvidenceTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 verify.ContractError,
                 "contains unreadable bytecode",
+            ):
+                verify.generate_maven_sbom(
+                    descriptor,
+                    repository,
+                    self._sbom(root, (alpha,)),
+                    root / "generated.json",
+                )
+
+    def test_maven_sbom_rejects_corrupt_source_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            alpha = self.JARS[0]
+            sources = "org/example/alpha/1.0/alpha-1.0-sources.jar"
+            source_path = "org/example/Alpha.java"
+            repository, descriptor = self._repository_descriptor(
+                root,
+                {
+                    alpha: {"org/example/Alpha.class": b"alpha"},
+                    sources: {
+                        source_path: (
+                            b"class Alpha {}\n" + b"x" * 8192
+                        ),
+                    },
+                },
+            )
+            candidate = repository / sources
+            payload = bytearray(candidate.read_bytes())
+            with zipfile.ZipFile(candidate) as archive:
+                source_entry = archive.getinfo(source_path)
+                data_offset = (
+                    source_entry.header_offset
+                    + len(source_entry.FileHeader())
+                )
+                payload[
+                    data_offset + source_entry.compress_size - 1
+                ] ^= 0xFF
+            candidate.write_bytes(payload)
+            document = json.loads(descriptor.read_text(encoding="utf-8"))
+            source_record = next(
+                record
+                for record in document["files"]
+                if record["path"] == sources
+            )
+            source_record["sha256"] = hashlib.sha256(payload).hexdigest()
+            descriptor.write_text(
+                json.dumps(document),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "contains unreadable source",
             ):
                 verify.generate_maven_sbom(
                     descriptor,

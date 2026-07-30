@@ -1806,7 +1806,7 @@ def _jar_entries(payload: bytes, path: str) -> tuple[zipfile.ZipFile, list[str]]
     return archive, names
 
 
-def _class_file_contains_code(payload: bytes) -> bool:
+def _valid_class_file(payload: bytes) -> bool:
     offset = 0
 
     def read(size: int) -> bytes:
@@ -1905,14 +1905,16 @@ def _class_file_contains_code(payload: bytes) -> bool:
             if not has_tag(read_uint(2), 7):
                 return False
 
-        def read_attributes(*, inspect_code: bool) -> bool:
+        def read_attributes(*, allow_code: bool) -> bool:
             found_code = False
             for _ in range(read_uint(2)):
                 name_index = read_uint(2)
                 if not has_tag(name_index, 1):
                     raise ValueError("invalid attribute name")
                 attribute = read(read_uint(4))
-                if inspect_code and values[name_index] == b"Code":
+                if values[name_index] == b"Code":
+                    if not allow_code or found_code:
+                        raise ValueError("invalid Code attribute placement")
                     code_offset = 0
 
                     def read_code(size: int) -> bytes:
@@ -1958,22 +1960,24 @@ def _class_file_contains_code(payload: bytes) -> bool:
                     found_code = True
             return found_code
 
-        def read_members(*, inspect_code: bool) -> bool:
-            found_code = False
+        def read_members(*, methods: bool) -> None:
             for _ in range(read_uint(2)):
-                read_uint(2)
+                access_flags = read_uint(2)
                 if not has_tag(read_uint(2), 1) or not has_tag(
                     read_uint(2),
                     1,
                 ):
                     raise ValueError("invalid member identity")
-                found_code |= read_attributes(inspect_code=inspect_code)
-            return found_code
+                found_code = read_attributes(allow_code=methods)
+                if methods and (
+                    found_code == bool(access_flags & (0x0100 | 0x0400))
+                ):
+                    raise ValueError("invalid method Code attribute")
 
-        read_members(inspect_code=False)
-        found_code = read_members(inspect_code=True)
-        read_attributes(inspect_code=False)
-        return offset == len(payload) and found_code
+        read_members(methods=False)
+        read_members(methods=True)
+        read_attributes(allow_code=False)
+        return offset == len(payload)
     except ValueError:
         return False
 
@@ -1983,7 +1987,7 @@ def _jar_contains_bytecode(archive: zipfile.ZipFile, path: str) -> bool:
         for entry in archive.infolist():
             if not entry.filename.endswith(".class"):
                 continue
-            if _class_file_contains_code(archive.read(entry)):
+            if _valid_class_file(archive.read(entry)):
                 return True
         return False
     except (OSError, RuntimeError, zipfile.BadZipFile) as error:
@@ -2080,13 +2084,26 @@ def _validate_rootfs_discovery_omissions(
         archive, names = _jar_entries(payload, path)
         try:
             if classifier == "sources":
+                source_entries = [
+                    entry
+                    for entry in archive.infolist()
+                    if entry.filename.endswith((".java", ".kt"))
+                ]
                 if (
                     any(name.endswith(".class") for name in names)
-                    or not any(name.endswith((".java", ".kt")) for name in names)
+                    or not source_entries
                 ):
                     _fail(
                         "MAVEN_SBOM_ROOTFS",
                         f"{path} is not a source-only classifier JAR",
+                    )
+                try:
+                    for entry in source_entries:
+                        archive.read(entry)
+                except (OSError, RuntimeError, zipfile.BadZipFile) as error:
+                    _fail(
+                        "MAVEN_SBOM_ROOTFS",
+                        f"{path} contains unreadable source: {error}",
                     )
                 discovery[path] = "manifest-supplemental-sources"
                 continue

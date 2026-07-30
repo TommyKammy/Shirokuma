@@ -4,8 +4,8 @@ doc_id: "ADR-0023"
 title: "Allow a time-boxed Trino 483 source identity exception for the local PoC"
 status: accepted
 created: 2026-07-23
-updated: 2026-07-28
-version: "0.9"
+updated: 2026-07-30
+version: "1.0"
 area: "architecture"
 tags: [shirokuma, adr, trino, source, supply-chain, local-poc]
 ---
@@ -252,6 +252,24 @@ artifact action excludes hidden paths by default, so both the diagnostic and
 normal candidate uploads explicitly include hidden files only alongside their
 closed, individually listed `.trino-candidate` paths. Contract fixtures reject
 removal, disabling, extra opt-ins, or placement on a different upload.
+
+Reviewed-main run
+[`30517632888`](https://github.com/TommyKammy/Shirokuma/actions/runs/30517632888)
+later reproduced the closed repositories, both network-none builds, archive
+equality, and the raw rootfs inventory, then failed closed because Trivy 0.72.0
+omitted the exact descriptor-bound `dev.failsafe:failsafe:3.3.2` JAR without
+retaining a rootfs PURL for that coordinate. This accepted decision therefore
+refines only the scanner-omission evidence mechanics: an omitted unclassified
+JAR may establish its base coordinate without a rootfs PURL only when the exact
+reviewed regular file matches the closed descriptor, has a safe archive with no
+nested JAR, contains a structurally valid class file, and contains exactly one
+matching Maven `pom.properties`. That manifest-verified base may authorize only
+same-coordinate source-only or test-only classifiers; source entries must be
+read successfully, test entries must contain a structurally valid class file,
+and every other classifier remains rejected. The subsequent complete
+`(PURL, FilePath)` identity and High=0/Critical=0 scan remains mandatory. This
+does not relax source identity, vulnerability, publication, admission, expiry,
+or environment scope.
 
 A separate evidence-only PR must review and pin the exact OCI digest and retire
 the publisher. Image publication, resident admission, credentials, Flux
