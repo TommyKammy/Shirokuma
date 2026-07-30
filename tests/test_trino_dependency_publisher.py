@@ -1204,6 +1204,7 @@ class BunScanEvidenceTests(unittest.TestCase):
 
 
 class MavenScanEvidenceTests(unittest.TestCase):
+    CLASS_FILE = b"\xca\xfe\xba\xbe\x00\x00\x00\x34"
     JARS = (
         "org/example/alpha/1.0/alpha-1.0.jar",
         "org/example/beta/2.0/beta-2.0.jar",
@@ -1236,7 +1237,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
     def _repository_descriptor(
         self,
         root: Path,
-        archives: dict[str, dict[str, bytes]],
+        archives: dict[str, dict[str, bytes | tuple[bytes, int]]],
     ) -> tuple[Path, Path]:
         repository = root / "repository"
         records = []
@@ -1245,7 +1246,14 @@ class MavenScanEvidenceTests(unittest.TestCase):
             destination.parent.mkdir(parents=True, exist_ok=True)
             with zipfile.ZipFile(destination, "w") as archive:
                 for name, payload in entries.items():
-                    archive.writestr(name, payload)
+                    if isinstance(payload, tuple):
+                        payload, mode = payload
+                        entry = zipfile.ZipInfo(name)
+                        entry.create_system = 3
+                        entry.external_attr = mode << 16
+                        archive.writestr(entry, payload)
+                    else:
+                        archive.writestr(name, payload)
             destination.chmod(0o644)
             payload = destination.read_bytes()
             records.append(
@@ -1465,7 +1473,9 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 {
                     alpha: {"org/example/Alpha.class": b"alpha"},
                     sources: {"org/example/Alpha.java": b"class Alpha {}"},
-                    tests: {"org/example/AlphaTest.class": b"test"},
+                    tests: {
+                        "org/example/AlphaTest.class": self.CLASS_FILE,
+                    },
                     beta: {
                         "org/example/Beta.class": b"beta",
                         (
@@ -1570,7 +1580,11 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 {
                     alpha: {"org/example/Alpha.class": b"alpha"},
                     failsafe: {
-                        "dev/failsafe/Failsafe.class": b"bytecode",
+                        "META-INF/": (
+                            b"",
+                            stat.S_IFDIR | 0o755,
+                        ),
+                        "dev/failsafe/Failsafe.class": self.CLASS_FILE,
                         (
                             "META-INF/maven/dev.failsafe/failsafe/"
                             "pom.properties"
@@ -1664,7 +1678,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
             (
                 "org/example/beta/2.0/beta-2.0.jar",
                 {
-                    "org/example/Beta.class": b"bytecode",
+                    "org/example/Beta.class": self.CLASS_FILE,
                     (
                         "META-INF/maven/org.example/beta/"
                         "pom.properties"
@@ -1683,6 +1697,57 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     ),
                 },
                 "does not contain exactly its Maven pom.properties",
+            ),
+            (
+                "org/example/beta/2.0/beta-2.0.jar",
+                {
+                    "org/example/Beta.class": b"not-bytecode",
+                    (
+                        "META-INF/maven/org.example/beta/"
+                        "pom.properties"
+                    ): (
+                        b"artifactId=beta\n"
+                        b"groupId=org.example\n"
+                        b"version=2.0\n"
+                    ),
+                },
+                "contains no bytecode for manifest-only coordinate verification",
+            ),
+            (
+                "org/example/beta/2.0/beta-2.0.jar",
+                {
+                    "org/example/Beta.class": self.CLASS_FILE,
+                    (
+                        "META-INF/maven/org.example/beta/"
+                        "pom.properties"
+                    ): (
+                        (
+                            b"artifactId=beta\n"
+                            b"groupId=org.example\n"
+                            b"version=2.0\n"
+                        ),
+                        stat.S_IFLNK | 0o777,
+                    ),
+                },
+                "contains unsafe, encrypted, duplicate, or special entries",
+            ),
+            (
+                "org/example/beta/2.0/beta-2.0.jar",
+                {
+                    "org/example/Beta.class": (
+                        self.CLASS_FILE,
+                        stat.S_IFIFO | 0o644,
+                    ),
+                    (
+                        "META-INF/maven/org.example/beta/"
+                        "pom.properties"
+                    ): (
+                        b"artifactId=beta\n"
+                        b"groupId=org.example\n"
+                        b"version=2.0\n"
+                    ),
+                },
+                "contains unsafe, encrypted, duplicate, or special entries",
             ),
             (
                 "org/example/beta/2.0/beta-2.0.jar",

@@ -1761,6 +1761,13 @@ def _maven_classifier(path: str) -> str:
     return filename[len(prefix) : -4].removeprefix("-")
 
 
+def _safe_jar_member_type(entry: zipfile.ZipInfo) -> bool:
+    member_type = stat.S_IFMT(entry.external_attr >> 16)
+    if entry.is_dir():
+        return member_type in {0, stat.S_IFDIR}
+    return member_type in {0, stat.S_IFREG}
+
+
 def _jar_entries(payload: bytes, path: str) -> tuple[zipfile.ZipFile, list[str]]:
     try:
         archive = zipfile.ZipFile(io.BytesIO(payload))
@@ -1774,6 +1781,7 @@ def _jar_entries(payload: bytes, path: str) -> tuple[zipfile.ZipFile, list[str]]
             entry.flag_bits & 0x1
             or entry.filename.startswith("/")
             or "\\" in entry.filename
+            or not _safe_jar_member_type(entry)
             or any(
                 part in {"", ".", ".."}
                 for part in entry.filename.rstrip("/").split("/")
@@ -1784,7 +1792,10 @@ def _jar_entries(payload: bytes, path: str) -> tuple[zipfile.ZipFile, list[str]]
         archive.close()
         _fail(
             "MAVEN_SBOM_ROOTFS",
-            f"{path} contains unsafe, encrypted, or duplicate entries",
+            (
+                f"{path} contains unsafe, encrypted, duplicate, "
+                "or special entries"
+            ),
         )
     if any(name.endswith(".jar") for name in names):
         archive.close()
@@ -1793,6 +1804,22 @@ def _jar_entries(payload: bytes, path: str) -> tuple[zipfile.ZipFile, list[str]]
             f"{path} contains an undiscovered nested JAR",
         )
     return archive, names
+
+
+def _jar_contains_bytecode(archive: zipfile.ZipFile, path: str) -> bool:
+    try:
+        for entry in archive.infolist():
+            if not entry.filename.endswith(".class"):
+                continue
+            with archive.open(entry) as class_file:
+                if class_file.read(4) == b"\xca\xfe\xba\xbe":
+                    return True
+        return False
+    except (OSError, RuntimeError, zipfile.BadZipFile) as error:
+        _fail(
+            "MAVEN_SBOM_ROOTFS",
+            f"{path} contains unreadable bytecode: {error}",
+        )
 
 
 def _maven_properties(payload: bytes, path: str) -> dict[str, str]:
@@ -1893,7 +1920,7 @@ def _validate_rootfs_discovery_omissions(
                 discovery[path] = "manifest-supplemental-sources"
                 continue
             if classifier == "tests":
-                if not any(name.endswith(".class") for name in names):
+                if not _jar_contains_bytecode(archive, path):
                     _fail(
                         "MAVEN_SBOM_ROOTFS",
                         f"{path} contains no test bytecode",
@@ -1941,7 +1968,7 @@ def _validate_rootfs_discovery_omissions(
             if base_purl in rootfs_purls:
                 discovery[path] = "manifest-rootfs-purl-deduplicated"
             else:
-                if not any(name.endswith(".class") for name in names):
+                if not _jar_contains_bytecode(archive, path):
                     _fail(
                         "MAVEN_SBOM_ROOTFS",
                         (
