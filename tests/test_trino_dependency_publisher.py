@@ -1447,10 +1447,16 @@ class MavenScanEvidenceTests(unittest.TestCase):
             bytes.fromhex("A8000400B1"),
             1,
         )
+        wrong_return = self.CLASS_FILE.replace(
+            b"<init>",
+            b"method",
+            1,
+        ).replace(b"()V", b"()I", 1)
         self.assertFalse(verify._valid_class_file(insufficient_stack))
         self.assertFalse(verify._valid_class_file(insufficient_locals))
         self.assertFalse(verify._valid_class_file(stack_underflow))
         self.assertFalse(verify._valid_class_file(modern_jsr))
+        self.assertFalse(verify._valid_class_file(wrong_return))
 
     def test_member_descriptors_require_jvm_grammar(self) -> None:
         for descriptor in (
@@ -1552,6 +1558,50 @@ class MavenScanEvidenceTests(unittest.TestCase):
             1,
         )
         self.assertFalse(verify._valid_class_file(interface_constructor))
+
+        class_body_offset = self.CLASS_FILE.index(
+            b"\x00\x21\x00\x02\x00\x04"
+        )
+        signature_name = b"\x01\x00\x09Signature"
+        invalid_signature = b"".join(
+            (
+                self.CLASS_FILE[:8],
+                b"\x00\x0b",
+                self.CLASS_FILE[10:class_body_offset],
+                signature_name,
+                self.CLASS_FILE[class_body_offset:-2],
+                b"\x00\x01\x00\x0a\x00\x00\x00\x02\x00\x02",
+            )
+        )
+        self.assertFalse(verify._valid_class_file(invalid_signature))
+
+        array_name = b"[Ljava/lang/String;"
+        array_catch = b"".join(
+            (
+                self.CLASS_FILE[:8],
+                b"\x00\x0c",
+                self.CLASS_FILE[10:class_body_offset],
+                b"\x01",
+                len(array_name).to_bytes(2, "big"),
+                array_name,
+                b"\x07\x00\x0a",
+                self.CLASS_FILE[class_body_offset:],
+            )
+        )
+        original_code = bytes.fromhex(
+            "00070000001100010001000000052AB70009B100000000"
+        )
+        code_with_array_catch = bytes.fromhex(
+            "00070000001B00010001000000072AB70009B157B1"
+            "0001000000040005000B0000"
+        )
+        self.assertIn(original_code, array_catch)
+        array_catch = array_catch.replace(
+            original_code,
+            code_with_array_catch,
+            1,
+        )
+        self.assertFalse(verify._valid_class_file(array_catch))
 
         invalid_class_name = self.CLASS_FILE.replace(
             b"\x01\x00\x01A",
@@ -2380,6 +2430,14 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 "org/example/alpha/1.0/alpha-1.0-sources.jar",
                 {"org/example/Alpha.class": b"bytecode"},
                 "not a source-only classifier",
+            ),
+            (
+                "org/example/alpha/1.0/alpha-1.0-tests.jar",
+                {
+                    "org/example/AlphaTest.class": self.CLASS_FILE,
+                    "native/libalpha.so": b"\x7fELF",
+                },
+                "not a test-only classifier",
             ),
             (
                 "org/example/alpha/1.0/alpha-1.0-sources.jar",

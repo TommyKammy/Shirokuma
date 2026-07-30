@@ -2190,6 +2190,24 @@ def _method_descriptor_return_slots(payload: bytes) -> int | None:
     )
 
 
+def _method_descriptor_return_opcode(payload: bytes) -> int | None:
+    closing = payload.find(b")")
+    if closing < 0 or closing + 1 >= len(payload):
+        return None
+    return_descriptor = payload[closing + 1 :]
+    if return_descriptor == b"V":
+        return 0xB1
+    if not _valid_field_descriptor(return_descriptor):
+        return None
+    if return_descriptor.startswith((b"L", b"[")):
+        return 0xB0
+    return {
+        ord("J"): 0xAD,
+        ord("F"): 0xAE,
+        ord("D"): 0xAF,
+    }.get(return_descriptor[0], 0xAC)
+
+
 def _bytecode_resource_requirements(
     payload: bytes,
     *,
@@ -2405,10 +2423,14 @@ def _valid_operand_stack_flow(
     constant_pool_values: list[object],
     exception_handler_offsets: set[int],
     max_stack: int,
+    method_descriptor: bytes,
 ) -> bool:
     offsets = sorted(instruction_offsets)
     effects: dict[int, tuple[int, int]] = {}
     successors: dict[int, set[int]] = {}
+    return_opcode = _method_descriptor_return_opcode(method_descriptor)
+    if return_opcode is None:
+        return False
 
     def constant(index: int) -> object | None:
         return (
@@ -2437,6 +2459,8 @@ def _valid_operand_stack_flow(
             end = next_offset if next_offset is not None else len(payload)
             instruction = payload[instruction_offset:end]
             opcode = instruction[0]
+            if opcode in range(0xAC, 0xB2) and opcode != return_opcode:
+                return False
             popped = 0
             pushed = 0
             terminal = opcode in set(range(0xAC, 0xB2)) | {0xBF}
@@ -3092,6 +3116,7 @@ def _valid_class_file(payload: bytes) -> bool:
         ) -> bool:
             nonlocal bootstrap_method_count
             found_code = False
+            singleton_attributes: set[bytes] = set()
             for _ in range(read_uint(2)):
                 name_index = read_uint(2)
                 if not has_tag(name_index, 1):
@@ -3174,7 +3199,11 @@ def _valid_class_file(payload: bytes) -> bool:
                             or handler_pc not in instruction_offsets
                             or (
                                 catch_type != 0
-                                and not has_tag(catch_type, 7)
+                                and class_name(
+                                    catch_type,
+                                    allow_array=False,
+                                )
+                                is None
                             )
                         ):
                             raise ValueError("invalid exception table")
@@ -3185,6 +3214,7 @@ def _valid_class_file(payload: bytes) -> bool:
                         constant_pool_values=values,
                         exception_handler_offsets=exception_handler_offsets,
                         max_stack=max_stack,
+                        method_descriptor=method_descriptor,
                     ):
                         raise ValueError("invalid operand stack flow")
                     found_stack_map_table = False
@@ -3372,6 +3402,37 @@ def _valid_class_file(payload: bytes) -> bool:
                         raise ValueError(
                             "trailing BootstrapMethods attribute data"
                         )
+                elif values[name_index] == b"Signature":
+                    if (
+                        b"Signature" in singleton_attributes
+                        or len(attribute) != 2
+                        or not has_tag(
+                            int.from_bytes(attribute, "big"),
+                            1,
+                        )
+                    ):
+                        raise ValueError("invalid Signature attribute")
+                    singleton_attributes.add(b"Signature")
+                elif values[name_index] == b"SourceFile":
+                    if (
+                        not class_level
+                        or b"SourceFile" in singleton_attributes
+                        or len(attribute) != 2
+                        or not has_tag(
+                            int.from_bytes(attribute, "big"),
+                            1,
+                        )
+                    ):
+                        raise ValueError("invalid SourceFile attribute")
+                    singleton_attributes.add(b"SourceFile")
+                elif values[name_index] in {b"Synthetic", b"Deprecated"}:
+                    attribute_kind = values[name_index]
+                    if (
+                        attribute_kind in singleton_attributes
+                        or attribute
+                    ):
+                        raise ValueError("invalid marker attribute")
+                    singleton_attributes.add(attribute_kind)
             return found_code
 
         def read_members(*, methods: bool) -> None:
@@ -3545,6 +3606,14 @@ def _validate_rootfs_discovery_omissions(
     }
     manifest_verified_base_purls: set[str] = set()
     discovery: dict[str, str] = {}
+    permitted_classifier_metadata = re.compile(
+        r"META-INF/(?:"
+        r"MANIFEST\.MF|"
+        r"(?:LICENSE|NOTICE)(?:\.[^/]*)?|"
+        r"DEPENDENCIES|"
+        r"maven/[^/]+/[^/]+/pom\.(?:xml|properties)"
+        r")\Z"
+    )
     for path in sorted(
         missing_paths,
         key=lambda item: (bool(_maven_classifier(item)), item),
@@ -3599,20 +3668,15 @@ def _validate_rootfs_discovery_omissions(
                     for entry in archive.infolist()
                     if entry.filename.endswith((".java", ".kt"))
                 ]
-                permitted_metadata = re.compile(
-                    r"META-INF/(?:"
-                    r"MANIFEST\.MF|"
-                    r"(?:LICENSE|NOTICE)(?:\.[^/]*)?|"
-                    r"DEPENDENCIES|"
-                    r"maven/[^/]+/[^/]+/pom\.(?:xml|properties)"
-                    r")\Z"
-                )
                 unexpected_entries = [
                     entry.filename
                     for entry in archive.infolist()
                     if not entry.is_dir()
                     and entry not in source_entries
-                    and permitted_metadata.fullmatch(entry.filename) is None
+                    and permitted_classifier_metadata.fullmatch(
+                        entry.filename
+                    )
+                    is None
                 ]
                 if (
                     any(name.endswith(".class") for name in names)
@@ -3634,10 +3698,58 @@ def _validate_rootfs_discovery_omissions(
                 discovery[path] = "manifest-supplemental-sources"
                 continue
             if classifier == "tests":
+                permitted_test_suffixes = (
+                    ".class",
+                    ".java",
+                    ".kt",
+                    ".kts",
+                    ".scala",
+                    ".groovy",
+                    ".properties",
+                    ".xml",
+                    ".json",
+                    ".yaml",
+                    ".yml",
+                    ".txt",
+                    ".csv",
+                    ".sql",
+                    ".conf",
+                    ".config",
+                    ".html",
+                    ".js",
+                    ".css",
+                    ".proto",
+                    ".avsc",
+                )
+                unexpected_entries = [
+                    entry.filename
+                    for entry in archive.infolist()
+                    if not entry.is_dir()
+                    and not entry.filename.endswith(permitted_test_suffixes)
+                    and permitted_classifier_metadata.fullmatch(
+                        entry.filename
+                    )
+                    is None
+                    and not entry.filename.startswith("META-INF/services/")
+                ]
                 if not _jar_contains_bytecode(archive, path):
                     _fail(
                         "MAVEN_SBOM_ROOTFS",
                         f"{path} contains no test bytecode",
+                    )
+                if unexpected_entries:
+                    _fail(
+                        "MAVEN_SBOM_ROOTFS",
+                        f"{path} is not a test-only classifier JAR",
+                    )
+                try:
+                    for entry in archive.infolist():
+                        if not entry.is_dir():
+                            archive.read(entry)
+                except (OSError, RuntimeError, zipfile.BadZipFile) as error:
+                    _fail(
+                        "MAVEN_SBOM_ROOTFS",
+                        f"{path} contains unreadable test payload: {error}",
                     )
                 discovery[path] = "manifest-supplemental-tests"
                 continue

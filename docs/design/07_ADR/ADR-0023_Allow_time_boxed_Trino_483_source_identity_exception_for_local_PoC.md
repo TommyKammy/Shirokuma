@@ -273,7 +273,11 @@ instructions and its `max_stack` to cover the operands and results required by
 every instruction; operand-stack depth must remain consistent and nonnegative
 across control-flow joins and exception handlers. Modern class versions reject
 legacy `jsr`/`ret` instructions, and interface class evidence cannot declare a
-constructor. The subsequent complete
+constructor. Return instructions must match their method descriptors,
+recognized signature/source/marker attributes validate their payloads, and
+exception catch identities cannot be array classes. Test classifiers also
+restrict nonmetadata members to reviewed test-resource formats and read every
+accepted payload. The subsequent complete
 `(PURL, FilePath)` identity and High=0/Critical=0 scan remains mandatory. This
 does not relax source identity, vulnerability, publication, admission, expiry,
 or environment scope.
