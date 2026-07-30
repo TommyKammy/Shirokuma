@@ -1554,6 +1554,71 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     )
                 )
 
+    def test_bytecode_stream_requires_valid_instruction_boundaries(self) -> None:
+        self.assertEqual(
+            {0, 1, 4},
+            verify._bytecode_instruction_offsets(
+                b"\x2a\xb7\x00\x09\xb1"
+            ),
+        )
+        table_switch = b"".join(
+            (
+                b"\xaa\x00\x00\x00",
+                (20).to_bytes(4, "big", signed=True),
+                (0).to_bytes(4, "big", signed=True),
+                (0).to_bytes(4, "big", signed=True),
+                (20).to_bytes(4, "big", signed=True),
+                b"\xb1",
+            )
+        )
+        self.assertEqual(
+            {0, 20},
+            verify._bytecode_instruction_offsets(table_switch),
+        )
+        lookup_switch = b"".join(
+            (
+                b"\xab\x00\x00\x00",
+                (20).to_bytes(4, "big", signed=True),
+                (1).to_bytes(4, "big", signed=True),
+                (7).to_bytes(4, "big", signed=True),
+                (20).to_bytes(4, "big", signed=True),
+                b"\xb1",
+            )
+        )
+        self.assertEqual(
+            {0, 20},
+            verify._bytecode_instruction_offsets(lookup_switch),
+        )
+        self.assertEqual(
+            {0, 6},
+            verify._bytecode_instruction_offsets(
+                b"\xc4\x84\x00\x01\x00\x01\xb1"
+            ),
+        )
+        for bytecode in (
+            b"\xcb",
+            b"\xca",
+            b"\x10",
+            b"\xa7\x00\x01",
+            b"\xbc\x03",
+            b"\xb9\x00\x01\x00\x00",
+            b"\xba\x00\x01\x00\x01",
+            b"\xc4\xb1",
+            table_switch[:19],
+            lookup_switch[:19],
+        ):
+            with self.subTest(bytecode=bytecode):
+                self.assertIsNone(
+                    verify._bytecode_instruction_offsets(bytecode)
+                )
+
+        reserved_opcode = self.CLASS_FILE.replace(
+            b"\x2a\xb7\x00\x09\xb1",
+            b"\xcb\xb7\x00\x09\xb1",
+            1,
+        )
+        self.assertFalse(verify._valid_class_file(reserved_opcode))
+
     def test_maven_descriptor_scopes_parquet_remediation_origin_to_exact_jar(
         self,
     ) -> None:

@@ -1866,6 +1866,132 @@ def _valid_modified_utf8(payload: bytes) -> bool:
     return True
 
 
+def _bytecode_instruction_offsets(payload: bytes) -> set[int] | None:
+    zero_operand = (
+        set(range(0x00, 0x10))
+        | set(range(0x1A, 0x36))
+        | set(range(0x3B, 0x84))
+        | set(range(0x85, 0x99))
+        | set(range(0xAC, 0xB2))
+        | {0xBE, 0xBF, 0xC2, 0xC3}
+    )
+    one_operand = (
+        {0x10, 0x12, 0xA9, 0xBC}
+        | set(range(0x15, 0x1A))
+        | set(range(0x36, 0x3B))
+    )
+    two_operands = (
+        {0x11, 0x13, 0x14, 0x84, 0xBB, 0xBD, 0xC0, 0xC1, 0xC6, 0xC7}
+        | set(range(0x99, 0xA9))
+        | set(range(0xB2, 0xB9))
+    )
+    branch_16 = set(range(0x99, 0xA9)) | {0xC6, 0xC7}
+    starts: set[int] = set()
+    branch_targets: list[int] = []
+    offset = 0
+
+    def read(size: int) -> bytes:
+        nonlocal offset
+        end = offset + size
+        if end > len(payload):
+            raise ValueError("truncated bytecode instruction")
+        value = payload[offset:end]
+        offset = end
+        return value
+
+    def read_signed(size: int) -> int:
+        return int.from_bytes(read(size), "big", signed=True)
+
+    try:
+        while offset < len(payload):
+            instruction_offset = offset
+            starts.add(instruction_offset)
+            opcode = read(1)[0]
+            if opcode in zero_operand:
+                continue
+            if opcode in one_operand:
+                operand = read(1)[0]
+                if opcode == 0xBC and operand not in range(4, 12):
+                    return None
+                continue
+            if opcode in two_operands:
+                if opcode in branch_16:
+                    branch_targets.append(
+                        instruction_offset + read_signed(2)
+                    )
+                else:
+                    read(2)
+                continue
+            if opcode == 0xB9:
+                operands = read(4)
+                if operands[2] == 0 or operands[3] != 0:
+                    return None
+                continue
+            if opcode == 0xBA:
+                if read(4)[2:] != b"\x00\x00":
+                    return None
+                continue
+            if opcode == 0xC5:
+                operands = read(3)
+                if operands[2] == 0:
+                    return None
+                continue
+            if opcode in {0xC8, 0xC9}:
+                branch_targets.append(
+                    instruction_offset + read_signed(4)
+                )
+                continue
+            if opcode == 0xC4:
+                widened_opcode = read(1)[0]
+                if widened_opcode == 0x84:
+                    read(4)
+                elif widened_opcode in (
+                    set(range(0x15, 0x1A))
+                    | set(range(0x36, 0x3B))
+                    | {0xA9}
+                ):
+                    read(2)
+                else:
+                    return None
+                continue
+            if opcode in {0xAA, 0xAB}:
+                padding_size = (4 - (offset % 4)) % 4
+                if read(padding_size) != b"\x00" * padding_size:
+                    return None
+                branch_targets.append(
+                    instruction_offset + read_signed(4)
+                )
+                if opcode == 0xAA:
+                    low = read_signed(4)
+                    high = read_signed(4)
+                    if high < low:
+                        return None
+                    for _ in range(high - low + 1):
+                        branch_targets.append(
+                            instruction_offset + read_signed(4)
+                        )
+                else:
+                    pair_count = read_signed(4)
+                    if pair_count < 0:
+                        return None
+                    previous_key: int | None = None
+                    for _ in range(pair_count):
+                        key = read_signed(4)
+                        if previous_key is not None and key <= previous_key:
+                            return None
+                        previous_key = key
+                        branch_targets.append(
+                            instruction_offset + read_signed(4)
+                        )
+                continue
+            return None
+    except ValueError:
+        return None
+    if any(target not in starts for target in branch_targets):
+        return None
+    return starts
+
+
 def _valid_class_file(payload: bytes) -> bool:
     offset = 0
 
@@ -2027,7 +2153,11 @@ def _valid_class_file(payload: bytes) -> bool:
                     code_length = read_code_uint(4)
                     if not 0 < code_length <= 65535:
                         raise ValueError("invalid bytecode length")
-                    read_code(code_length)
+                    instruction_offsets = _bytecode_instruction_offsets(
+                        read_code(code_length)
+                    )
+                    if instruction_offsets is None:
+                        raise ValueError("invalid bytecode instructions")
                     for _ in range(read_code_uint(2)):
                         start_pc = read_code_uint(2)
                         end_pc = read_code_uint(2)
@@ -2037,6 +2167,12 @@ def _valid_class_file(payload: bytes) -> bool:
                             start_pc >= end_pc
                             or end_pc > code_length
                             or handler_pc >= code_length
+                            or start_pc not in instruction_offsets
+                            or (
+                                end_pc != code_length
+                                and end_pc not in instruction_offsets
+                            )
+                            or handler_pc not in instruction_offsets
                             or (
                                 catch_type != 0
                                 and not has_tag(catch_type, 7)
