@@ -1415,6 +1415,33 @@ class MavenScanEvidenceTests(unittest.TestCase):
         self.assertFalse(
             verify._valid_class_file(self.CLASS_FILE + b"\x00")
         )
+        malformed_utf8 = self.CLASS_FILE.replace(
+            b"\x01\x00\x01A",
+            b"\x01\x00\x01\x00",
+            1,
+        )
+        self.assertFalse(verify._valid_class_file(malformed_utf8))
+
+    def test_modified_utf8_validation_matches_class_file_encoding(self) -> None:
+        for payload in (
+            b"A",
+            b"\xc0\x80",
+            b"\xc2\x80",
+            b"\xe0\xa0\x80",
+            b"\xed\xa0\x80",
+        ):
+            with self.subTest(payload=payload):
+                self.assertTrue(verify._valid_modified_utf8(payload))
+        for payload in (
+            b"\x00",
+            b"\xc0\x81",
+            b"\xc1\x80",
+            b"\xe0\x80\x80",
+            b"\xf0\x90\x80\x80",
+            b"\x80",
+        ):
+            with self.subTest(payload=payload):
+                self.assertFalse(verify._valid_modified_utf8(payload))
 
     def test_maven_descriptor_scopes_parquet_remediation_origin_to_exact_jar(
         self,
@@ -1836,6 +1863,21 @@ class MavenScanEvidenceTests(unittest.TestCase):
                         "META-INF/maven/org.example/beta/"
                         "pom.properties"
                     ): (
+                        b"artifactId=beta\n"
+                        b"groupId=org.example \n"
+                        b"version=2.0\n"
+                    ),
+                },
+                "pom.properties coordinates differ",
+            ),
+            (
+                "org/example/beta/2.0/beta-2.0.jar",
+                {
+                    "org/example/Beta.class": self.CLASS_FILE,
+                    (
+                        "META-INF/maven/org.example/beta/"
+                        "pom.properties"
+                    ): (
                         (
                             b"artifactId=beta\n"
                             b"groupId=org.example\n"
@@ -2004,6 +2046,109 @@ class MavenScanEvidenceTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 verify.ContractError,
                 "contains unreadable source",
+            ):
+                verify.generate_maven_sbom(
+                    descriptor,
+                    repository,
+                    self._sbom(root, (alpha,)),
+                    root / "generated.json",
+                )
+
+    def test_maven_sbom_bounds_omitted_jar_decompression(self) -> None:
+        alpha = self.JARS[0]
+        sources = "org/example/alpha/1.0/alpha-1.0-sources.jar"
+        cases = (
+            (
+                {"org/example/Alpha.java": b"x" * 65},
+                {
+                    "MAX_OMITTED_JAR_MEMBER_BYTES": 64,
+                    "MAX_OMITTED_JAR_EXPANDED_BYTES": 128,
+                    "MAX_OMITTED_JAR_COMPRESSION_RATIO": 200,
+                },
+            ),
+            (
+                {
+                    "org/example/Alpha.java": b"x" * 60,
+                    "org/example/Beta.java": b"y" * 60,
+                },
+                {
+                    "MAX_OMITTED_JAR_MEMBER_BYTES": 64,
+                    "MAX_OMITTED_JAR_EXPANDED_BYTES": 100,
+                    "MAX_OMITTED_JAR_COMPRESSION_RATIO": 200,
+                },
+            ),
+            (
+                {"org/example/Alpha.java": b"x" * 32},
+                {
+                    "MAX_OMITTED_JAR_MEMBER_BYTES": 64,
+                    "MAX_OMITTED_JAR_EXPANDED_BYTES": 128,
+                    "MAX_OMITTED_JAR_COMPRESSION_RATIO": 0,
+                },
+            ),
+        )
+        for entries, limits in cases:
+            with self.subTest(limits=limits):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    repository, descriptor = self._repository_descriptor(
+                        root,
+                        {
+                            alpha: {
+                                "org/example/Alpha.class": b"alpha",
+                            },
+                            sources: entries,
+                        },
+                    )
+                    patches = [
+                        mock.patch.object(verify, name, value)
+                        for name, value in limits.items()
+                    ]
+                    for patch in patches:
+                        patch.start()
+                    try:
+                        with self.assertRaisesRegex(
+                            verify.ContractError,
+                            "exceeds omitted-JAR decompression limits",
+                        ):
+                            verify.generate_maven_sbom(
+                                descriptor,
+                                repository,
+                                self._sbom(root, (alpha,)),
+                                root / "generated.json",
+                            )
+                    finally:
+                        for patch in reversed(patches):
+                            patch.stop()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            beta = self.JARS[1]
+            repository, descriptor = self._repository_descriptor(
+                root,
+                {
+                    alpha: {"org/example/Alpha.class": b"alpha"},
+                    beta: {
+                        "org/example/Beta.class": self.CLASS_FILE,
+                        (
+                            "META-INF/maven/org.example/beta/"
+                            "pom.properties"
+                        ): (
+                            b"artifactId=beta\n"
+                            b"groupId=org.example\n"
+                            b"version=2.0\n"
+                        ),
+                    },
+                },
+            )
+            with (
+                mock.patch.object(
+                    verify,
+                    "MAX_OMITTED_JAR_MEMBER_BYTES",
+                    len(self.CLASS_FILE) - 1,
+                ),
+                self.assertRaisesRegex(
+                    verify.ContractError,
+                    "exceeds omitted-JAR decompression limits",
+                ),
             ):
                 verify.generate_maven_sbom(
                     descriptor,

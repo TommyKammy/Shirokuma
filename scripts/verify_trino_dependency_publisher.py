@@ -37,6 +37,9 @@ BUN_TEST_PATH = Path("tests/test_trino_bun_dependencies.py")
 PARQUET_REMEDIATION_TEST_PATH = Path(
     "tests/test_parquet_jackson_remediation.py"
 )
+MAX_OMITTED_JAR_MEMBER_BYTES = 64 * 1024 * 1024
+MAX_OMITTED_JAR_EXPANDED_BYTES = 256 * 1024 * 1024
+MAX_OMITTED_JAR_COMPRESSION_RATIO = 200
 SOURCE_OVERLAY_PATH = Path(
     "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch"
 )
@@ -1803,7 +1806,64 @@ def _jar_entries(payload: bytes, path: str) -> tuple[zipfile.ZipFile, list[str]]
             "MAVEN_SBOM_ROOTFS",
             f"{path} contains an undiscovered nested JAR",
         )
+    expanded_size = 0
+    for entry in entries:
+        expanded_size += entry.file_size
+        if (
+            entry.file_size > MAX_OMITTED_JAR_MEMBER_BYTES
+            or expanded_size > MAX_OMITTED_JAR_EXPANDED_BYTES
+            or (
+                entry.file_size > 0
+                and (
+                    entry.compress_size <= 0
+                    or entry.file_size
+                    > entry.compress_size * MAX_OMITTED_JAR_COMPRESSION_RATIO
+                )
+            )
+        ):
+            archive.close()
+            _fail(
+                "MAVEN_SBOM_ROOTFS",
+                f"{path} exceeds omitted-JAR decompression limits",
+            )
     return archive, names
+
+
+def _valid_modified_utf8(payload: bytes) -> bool:
+    offset = 0
+    while offset < len(payload):
+        first = payload[offset]
+        if 0x01 <= first <= 0x7F:
+            offset += 1
+            continue
+        if first == 0xC0:
+            if offset + 1 >= len(payload) or payload[offset + 1] != 0x80:
+                return False
+            offset += 2
+            continue
+        if 0xC2 <= first <= 0xDF:
+            if (
+                offset + 1 >= len(payload)
+                or not 0x80 <= payload[offset + 1] <= 0xBF
+            ):
+                return False
+            offset += 2
+            continue
+        if 0xE0 <= first <= 0xEF:
+            if offset + 2 >= len(payload):
+                return False
+            second = payload[offset + 1]
+            third = payload[offset + 2]
+            if (
+                (first == 0xE0 and not 0xA0 <= second <= 0xBF)
+                or (first != 0xE0 and not 0x80 <= second <= 0xBF)
+                or not 0x80 <= third <= 0xBF
+            ):
+                return False
+            offset += 3
+            continue
+        return False
+    return True
 
 
 def _valid_class_file(payload: bytes) -> bool:
@@ -1839,7 +1899,10 @@ def _valid_class_file(payload: bytes) -> bool:
             tag = read_uint(1)
             tags[index] = tag
             if tag == 1:
-                values[index] = read(read_uint(2))
+                value = read(read_uint(2))
+                if not _valid_modified_utf8(value):
+                    return False
+                values[index] = value
             elif tag in {3, 4}:
                 read(4)
             elif tag in {5, 6}:
@@ -2004,13 +2067,14 @@ def _maven_properties(payload: bytes, path: str) -> dict[str, str]:
         _fail("MAVEN_SBOM_ROOTFS", f"{path} has non-UTF-8 pom.properties: {error}")
     properties: dict[str, str] = {}
     for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith(("#", "!")):
+        content = line.lstrip(" \t\f")
+        if not content or content.startswith(("#", "!")):
             continue
-        if "=" not in stripped:
+        if "=" not in content:
             _fail("MAVEN_SBOM_ROOTFS", f"{path} has malformed pom.properties")
-        key, value = stripped.split("=", 1)
-        if key in properties:
+        key, value = content.split("=", 1)
+        key = key.strip(" \t\f")
+        if not key or key in properties:
             _fail("MAVEN_SBOM_ROOTFS", f"{path} repeats {key!r}")
         properties[key] = value
     return properties
