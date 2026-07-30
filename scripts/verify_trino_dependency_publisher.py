@@ -2252,7 +2252,6 @@ def _bytecode_resource_requirements(
     payload: bytes,
     *,
     instruction_offsets: set[int],
-    constant_pool_tags: list[int],
     constant_pool_values: list[object],
 ) -> tuple[int, int] | None:
     offsets = sorted(instruction_offsets)
@@ -2461,12 +2460,18 @@ def _valid_operand_stack_flow(
     payload: bytes,
     *,
     instruction_offsets: set[int],
+    constant_pool_tags: list[int],
     constant_pool_values: list[object],
-    exception_handler_offsets: set[int],
+    exception_handlers: list[tuple[int, int, int]],
     max_stack: int,
+    max_locals: int,
+    method_access_flags: int,
     method_descriptor: bytes,
 ) -> bool:
     offsets = sorted(instruction_offsets)
+    exception_handler_offsets = {
+        handler_pc for _, _, handler_pc in exception_handlers
+    }
     effects: dict[int, tuple[int, int]] = {}
     instructions: dict[int, bytes] = {}
     successors: dict[int, set[int]] = {}
@@ -2740,14 +2745,32 @@ def _valid_operand_stack_flow(
             else None
         )
 
+    method_signature = _method_descriptor_stack_slots(method_descriptor)
+    if method_signature is None:
+        return False
+    parameter_types, _ = method_signature
+    initial_local_types = (
+        (() if method_access_flags & 0x0008 else ("reference",))
+        + parameter_types
+    )
+    if len(initial_local_types) > max_locals:
+        return False
+    initial_locals = initial_local_types + ("uninitialized",) * (
+        max_locals - len(initial_local_types)
+    )
+
     def typed_transition(
         instruction_offset: int,
         stack: tuple[str, ...],
-    ) -> tuple[str, ...] | None:
+        locals_state: tuple[str, ...],
+    ) -> tuple[tuple[str, ...], tuple[str, ...]] | None:
         instruction = instructions[instruction_offset]
         opcode = instruction[0]
         expected: tuple[str, ...] = ()
         pushed_types: tuple[str, ...] = ()
+        local_read: tuple[int, tuple[str, ...]] | None = None
+        local_write: tuple[int, tuple[str, ...]] | None = None
+        local_increment: int | None = None
 
         if opcode == 0x01:
             pushed_types = ("reference",)
@@ -2789,6 +2812,7 @@ def _valid_operand_stack_flow(
                 0x18: ("double", "double"),
                 0x19: ("reference",),
             }[opcode]
+            local_read = instruction[1], pushed_types
         elif opcode in range(0x1A, 0x2E):
             pushed_types = (
                 ("int",),
@@ -2797,6 +2821,7 @@ def _valid_operand_stack_flow(
                 ("double", "double"),
                 ("reference",),
             )[(opcode - 0x1A) // 4]
+            local_read = (opcode - 0x1A) % 4, pushed_types
         elif opcode in range(0x2E, 0x36):
             element_types = (
                 ("int",),
@@ -2818,6 +2843,7 @@ def _valid_operand_stack_flow(
                 ("double", "double"),
                 ("reference",),
             )[opcode - 0x36]
+            local_write = instruction[1], expected
         elif opcode in range(0x3B, 0x4F):
             expected = (
                 ("int",),
@@ -2826,6 +2852,7 @@ def _valid_operand_stack_flow(
                 ("double", "double"),
                 ("reference",),
             )[(opcode - 0x3B) // 4]
+            local_write = (opcode - 0x3B) % 4, expected
         elif opcode in range(0x4F, 0x57):
             element_types = (
                 ("int",),
@@ -2850,20 +2877,32 @@ def _valid_operand_stack_flow(
             if len(stack) < popped:
                 return None
             if opcode == 0x59:
-                return stack + stack[-1:]
+                return stack + stack[-1:], locals_state
             if opcode == 0x5A:
-                return stack[:-2] + stack[-1:] + stack[-2:]
+                return (
+                    stack[:-2] + stack[-1:] + stack[-2:],
+                    locals_state,
+                )
             if opcode == 0x5B:
-                return stack[:-3] + stack[-1:] + stack[-3:]
+                return (
+                    stack[:-3] + stack[-1:] + stack[-3:],
+                    locals_state,
+                )
             if opcode == 0x5C:
-                return stack + stack[-2:]
+                return stack + stack[-2:], locals_state
             if opcode == 0x5D:
-                return stack[:-3] + stack[-2:] + stack[-3:]
-            return stack[:-4] + stack[-2:] + stack[-4:]
+                return (
+                    stack[:-3] + stack[-2:] + stack[-3:],
+                    locals_state,
+                )
+            return stack[:-4] + stack[-2:] + stack[-4:], locals_state
         elif opcode == 0x5F:
             if len(stack) < 2:
                 return None
-            return stack[:-2] + (stack[-1], stack[-2])
+            return (
+                stack[:-2] + (stack[-1], stack[-2]),
+                locals_state,
+            )
         elif opcode in range(0x60, 0x74):
             value_type = (
                 ("int",),
@@ -2896,6 +2935,8 @@ def _valid_operand_stack_flow(
             )
             expected = value_type + value_type
             pushed_types = value_type
+        elif opcode == 0x84:
+            local_increment = instruction[1]
         elif opcode in range(0x85, 0x94):
             conversions = {
                 0x85: (("int",), ("long", "long")),
@@ -2997,6 +3038,7 @@ def _valid_operand_stack_flow(
             pushed_types = ("reference",)
         elif opcode == 0xC4:
             widened_opcode = instruction[1]
+            local_index = int.from_bytes(instruction[2:4], "big")
             if widened_opcode in range(0x15, 0x1A):
                 pushed_types = (
                     ("int",),
@@ -3005,6 +3047,7 @@ def _valid_operand_stack_flow(
                     ("double", "double"),
                     ("reference",),
                 )[widened_opcode - 0x15]
+                local_read = local_index, pushed_types
             elif widened_opcode in range(0x36, 0x3B):
                 expected = (
                     ("int",),
@@ -3013,14 +3056,45 @@ def _valid_operand_stack_flow(
                     ("double", "double"),
                     ("reference",),
                 )[widened_opcode - 0x36]
+                local_write = local_index, expected
+            elif widened_opcode == 0x84:
+                local_increment = local_index
 
+        if local_read is not None:
+            local_index, local_types = local_read
+            if (
+                local_index + len(local_types) > len(locals_state)
+                or locals_state[
+                    local_index : local_index + len(local_types)
+                ]
+                != local_types
+            ):
+                return None
+        if (
+            local_increment is not None
+            and (
+                local_increment >= len(locals_state)
+                or locals_state[local_increment] != "int"
+            )
+        ):
+            return None
         remaining = consume(stack, expected)
         if remaining is None:
             return None
+        next_locals = locals_state
+        if local_write is not None:
+            local_index, local_types = local_write
+            if local_index + len(local_types) > len(locals_state):
+                return None
+            local_values = list(locals_state)
+            local_values[
+                local_index : local_index + len(local_types)
+            ] = local_types
+            next_locals = tuple(local_values)
         result = remaining + pushed_types
         if opcode in set(range(0xAC, 0xB2)) | {0xBF} and result:
             return None
-        return result
+        return result, next_locals
 
     depths = {0: 0}
     pending = [0]
@@ -3047,51 +3121,84 @@ def _valid_operand_stack_flow(
             depths[target] = next_depth
             pending.append(target)
 
-    typed_stacks: dict[int, tuple[str, ...]] = {0: ()}
+    exceptional_successors: dict[int, set[int]] = {
+        instruction_offset: {
+            handler_pc
+            for start_pc, end_pc, handler_pc in exception_handlers
+            if start_pc <= instruction_offset < end_pc
+        }
+        for instruction_offset in offsets
+    }
+    typed_states: dict[
+        int,
+        tuple[tuple[str, ...], tuple[str, ...]],
+    ] = {0: ((), initial_locals)}
     typed_pending = [0]
-    for handler_offset in exception_handler_offsets:
-        handler_stack = ("reference",)
-        if (
-            handler_offset in typed_stacks
-            and typed_stacks[handler_offset] != handler_stack
-        ):
-            return False
-        if handler_offset not in typed_stacks:
-            typed_stacks[handler_offset] = handler_stack
-            typed_pending.append(handler_offset)
+
+    def merge_types(
+        current: tuple[str, ...],
+        incoming: tuple[str, ...],
+    ) -> tuple[str, ...] | None:
+        if len(current) != len(incoming):
+            return None
+        merged = tuple(
+            current_slot
+            if current_slot == incoming_slot
+            else incoming_slot
+            if current_slot == "unknown"
+            else current_slot
+            if incoming_slot == "unknown"
+            else "reference"
+            if current_slot == incoming_slot == "reference"
+            else "invalid"
+            for current_slot, incoming_slot in zip(current, incoming)
+        )
+        return None if "invalid" in merged else merged
+
+    def merge_state(
+        target: int,
+        incoming_stack: tuple[str, ...],
+        incoming_locals: tuple[str, ...],
+    ) -> bool | None:
+        if target not in typed_states:
+            typed_states[target] = (incoming_stack, incoming_locals)
+            typed_pending.append(target)
+            return True
+        current_stack, current_locals = typed_states[target]
+        merged_stack = merge_types(current_stack, incoming_stack)
+        merged_locals = merge_types(current_locals, incoming_locals)
+        if merged_stack is None or merged_locals is None:
+            return None
+        merged_state = merged_stack, merged_locals
+        if merged_state != typed_states[target]:
+            typed_states[target] = merged_state
+            typed_pending.append(target)
+        return True
+
     while typed_pending:
         instruction_offset = typed_pending.pop()
-        next_stack = typed_transition(
+        current_stack, current_locals = typed_states[instruction_offset]
+        next_state = typed_transition(
             instruction_offset,
-            typed_stacks[instruction_offset],
+            current_stack,
+            current_locals,
         )
-        if next_stack is None:
+        if next_state is None:
             return False
+        next_stack, next_locals = next_state
         for target in successors[instruction_offset]:
-            if target not in typed_stacks:
-                typed_stacks[target] = next_stack
-                typed_pending.append(target)
-                continue
-            current = typed_stacks[target]
-            if len(current) != len(next_stack):
+            if merge_state(target, next_stack, next_locals) is None:
                 return False
-            merged = tuple(
-                current_slot
-                if current_slot == next_slot
-                else next_slot
-                if current_slot == "unknown"
-                else current_slot
-                if next_slot == "unknown"
-                else "reference"
-                if current_slot == next_slot == "reference"
-                else "invalid"
-                for current_slot, next_slot in zip(current, next_stack)
-            )
-            if "invalid" in merged:
+        for handler_offset in exceptional_successors[instruction_offset]:
+            if (
+                merge_state(
+                    handler_offset,
+                    ("reference",),
+                    current_locals,
+                )
+                is None
+            ):
                 return False
-            if merged != current:
-                typed_stacks[target] = merged
-                typed_pending.append(target)
     return True
 
 
@@ -3551,7 +3658,6 @@ def _valid_class_file(payload: bytes) -> bool:
                     resource_requirements = _bytecode_resource_requirements(
                         code,
                         instruction_offsets=instruction_offsets,
-                        constant_pool_tags=tags,
                         constant_pool_values=values,
                     )
                     parameter_slots = (
@@ -3575,7 +3681,7 @@ def _valid_class_file(payload: bytes) -> bool:
                     ):
                         raise ValueError("invalid Code resource limits")
                     exception_table_length = read_code_uint(2)
-                    exception_handler_offsets: set[int] = set()
+                    exception_handlers: list[tuple[int, int, int]] = []
                     if exception_table_length and max_stack < 1:
                         raise ValueError("invalid Code resource limits")
                     for _ in range(exception_table_length):
@@ -3603,13 +3709,18 @@ def _valid_class_file(payload: bytes) -> bool:
                             )
                         ):
                             raise ValueError("invalid exception table")
-                        exception_handler_offsets.add(handler_pc)
+                        exception_handlers.append(
+                            (start_pc, end_pc, handler_pc)
+                        )
                     if not _valid_operand_stack_flow(
                         code,
                         instruction_offsets=instruction_offsets,
+                        constant_pool_tags=tags,
                         constant_pool_values=values,
-                        exception_handler_offsets=exception_handler_offsets,
+                        exception_handlers=exception_handlers,
                         max_stack=max_stack,
+                        max_locals=max_locals,
+                        method_access_flags=method_access_flags,
                         method_descriptor=method_descriptor,
                     ):
                         raise ValueError("invalid operand stack flow")

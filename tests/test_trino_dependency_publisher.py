@@ -1465,12 +1465,43 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 1,
             )
         )
+        uninitialized_local = (
+            self.CLASS_FILE.replace(
+                b"<init>",
+                b"method",
+                1,
+            )
+            .replace(
+                b"\x00\x01\x00\x05\x00\x06\x00\x01",
+                b"\x00\x09\x00\x05\x00\x06\x00\x01",
+                1,
+            )
+            .replace(
+                bytes.fromhex("2AB70009B1"),
+                bytes.fromhex("2A570000B1"),
+                1,
+            )
+        )
         self.assertFalse(verify._valid_class_file(insufficient_stack))
         self.assertFalse(verify._valid_class_file(insufficient_locals))
         self.assertFalse(verify._valid_class_file(stack_underflow))
         self.assertFalse(verify._valid_class_file(modern_jsr))
         self.assertFalse(verify._valid_class_file(wrong_return))
         self.assertFalse(verify._valid_class_file(wrong_operand_type))
+        self.assertFalse(verify._valid_class_file(uninitialized_local))
+        self.assertTrue(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("1201AC"),
+                instruction_offsets={0, 2},
+                constant_pool_tags=[0, 3],
+                constant_pool_values=[None, 0],
+                exception_handlers=[],
+                max_stack=1,
+                max_locals=0,
+                method_access_flags=0x0008,
+                method_descriptor=b"()I",
+            )
+        )
 
     def test_member_descriptors_require_jvm_grammar(self) -> None:
         for descriptor in (
