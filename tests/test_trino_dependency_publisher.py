@@ -1664,6 +1664,29 @@ class MavenScanEvidenceTests(unittest.TestCase):
             (
                 "org/example/beta/2.0/beta-2.0.jar",
                 {
+                    "org/example/Beta.class": b"bytecode",
+                    (
+                        "META-INF/maven/org.example/beta/"
+                        "pom.properties"
+                    ): (
+                        b"artifactId=beta\n"
+                        b"groupId=org.example\n"
+                        b"version=2.0\n"
+                    ),
+                    (
+                        "META-INF/maven/org.example/other/"
+                        "pom.properties"
+                    ): (
+                        b"artifactId=other\n"
+                        b"groupId=org.example\n"
+                        b"version=2.0\n"
+                    ),
+                },
+                "does not contain exactly its Maven pom.properties",
+            ),
+            (
+                "org/example/beta/2.0/beta-2.0.jar",
+                {
                     (
                         "META-INF/maven/org.example/beta/"
                         "pom.properties"

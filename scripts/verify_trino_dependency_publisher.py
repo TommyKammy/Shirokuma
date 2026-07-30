@@ -1911,10 +1911,19 @@ def _validate_rootfs_discovery_omissions(
                 "META-INF/maven/"
                 f"{group}/{artifact}/pom.properties"
             )
-            if names.count(properties_path) != 1:
+            coordinate_properties_paths = [
+                name
+                for name in names
+                if name.startswith("META-INF/maven/")
+                and name.endswith("/pom.properties")
+            ]
+            if coordinate_properties_paths != [properties_path]:
                 _fail(
                     "MAVEN_SBOM_ROOTFS",
-                    f"{path} does not contain its exact pom.properties",
+                    (
+                        f"{path} does not contain exactly its Maven "
+                        "pom.properties"
+                    ),
                 )
             properties = _maven_properties(
                 archive.read(properties_path),
