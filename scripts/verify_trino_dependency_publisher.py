@@ -1004,14 +1004,27 @@ EXPECTED_RESOLUTION_COMMAND = (
     f"-pl '{EXPECTED_PROJECT_SELECTION}' -am "
     "clean install -DskipTests -Dmaven.source.skip=true -Dair.check.skip-all"
 )
+EXPECTED_SERVER_DISTRIBUTION_ROOT = "trino-server-483"
+EXPECTED_SERVER_DISTRIBUTION_EMPTY_DIRECTORIES = frozenset(
+    {f"{EXPECTED_SERVER_DISTRIBUTION_ROOT}/trino-server-core-483"}
+)
 EXPECTED_SERVER_DISTRIBUTION_FILES = frozenset(
     {
-        "trino-server-483/bin/launcher",
-        "trino-server-483/lib/io.trino_trino-server-main-483.jar",
-        "trino-server-483/lib/io.trino_trino-web-ui-483.jar",
-        "trino-server-483/plugin/iceberg/io.trino_trino-iceberg-483.jar",
+        f"{EXPECTED_SERVER_DISTRIBUTION_ROOT}/bin/launcher",
         (
-            "trino-server-483/plugin/iceberg/hdfs/"
+            f"{EXPECTED_SERVER_DISTRIBUTION_ROOT}/lib/"
+            "io.trino_trino-server-main-483.jar"
+        ),
+        (
+            f"{EXPECTED_SERVER_DISTRIBUTION_ROOT}/lib/"
+            "io.trino_trino-web-ui-483.jar"
+        ),
+        (
+            f"{EXPECTED_SERVER_DISTRIBUTION_ROOT}/plugin/iceberg/"
+            "io.trino_trino-iceberg-483.jar"
+        ),
+        (
+            f"{EXPECTED_SERVER_DISTRIBUTION_ROOT}/plugin/iceberg/hdfs/"
             "io.trino_trino-hdfs-483.jar"
         ),
     }
@@ -3625,12 +3638,16 @@ def verify_server_distribution(path: Path) -> None:
     if len(names) != len(name_set):
         _fail("SERVER_DISTRIBUTION", "duplicate archive path")
     members_by_name = {member.name: member for member in members}
+    distribution_prefix = f"{EXPECTED_SERVER_DISTRIBUTION_ROOT}/"
     for member in members:
         parts = member.name.split("/")
-        if member.name == "trino-server-483" and member.isdir():
+        if (
+            member.name == EXPECTED_SERVER_DISTRIBUTION_ROOT
+            and member.isdir()
+        ):
             continue
         if (
-            not member.name.startswith("trino-server-483/")
+            not member.name.startswith(distribution_prefix)
             or member.name.startswith("/")
             or "\\" in member.name
             or any(part in {"", ".", ".."} for part in parts)
@@ -3641,13 +3658,17 @@ def verify_server_distribution(path: Path) -> None:
                 f"unsafe or unexpected member: {member.name}",
             )
         if parts[1] not in EXPECTED_SERVER_DISTRIBUTION_ROOTS:
-            _fail(
-                "SERVER_DISTRIBUTION",
-                f"distribution root differs: {parts[1]!r}",
-            )
+            if (
+                member.name not in EXPECTED_SERVER_DISTRIBUTION_EMPTY_DIRECTORIES
+                or not member.isdir()
+            ):
+                _fail(
+                    "SERVER_DISTRIBUTION",
+                    f"distribution root differs: {parts[1]!r}",
+                )
         if member.islnk() and (
             member.linkname not in name_set
-            or not member.linkname.startswith("trino-server-483/")
+            or not member.linkname.startswith(distribution_prefix)
         ):
             _fail(
                 "SERVER_DISTRIBUTION",
@@ -3682,6 +3703,17 @@ def verify_server_distribution(path: Path) -> None:
         _fail(
             "SERVER_DISTRIBUTION",
             f"plugin set differs: {sorted(plugins)!r}",
+        )
+    missing_directories = (
+        EXPECTED_SERVER_DISTRIBUTION_EMPTY_DIRECTORIES - name_set
+    )
+    if missing_directories:
+        _fail(
+            "SERVER_DISTRIBUTION",
+            (
+                "required empty directories are missing: "
+                f"{sorted(missing_directories)!r}"
+            ),
         )
     missing = EXPECTED_SERVER_DISTRIBUTION_FILES - name_set
     if missing:

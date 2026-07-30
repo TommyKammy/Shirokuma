@@ -1955,14 +1955,36 @@ class ServerDistributionTests(unittest.TestCase):
         omit: str | None = None,
         required_as_directory: str | None = None,
         required_as_hardlink: str | None = None,
-        hardlink_target: str = "trino-server-483/lib/hardlink-target.jar",
+        hardlink_target: str | None = None,
         hardlink_target_as_directory: bool = False,
         unsafe_symlink: bool = False,
+        archive_root: str = verify.EXPECTED_SERVER_DISTRIBUTION_ROOT,
+        omit_core_marker: bool = False,
+        nested_core_member: bool = False,
     ) -> None:
+        if hardlink_target is None:
+            hardlink_target = f"{archive_root}/lib/hardlink-target.jar"
+
+        def archive_name(expected_name: str) -> str:
+            _, separator, relative = expected_name.partition("/")
+            if not separator:
+                return archive_root
+            return f"{archive_root}/{relative}"
+
         with tarfile.open(path, mode="w:gz") as archive:
-            root = tarfile.TarInfo("trino-server-483")
+            root = tarfile.TarInfo(archive_root)
             root.type = tarfile.DIRTYPE
             archive.addfile(root)
+            core_marker = f"{archive_root}/trino-server-core-483"
+            if not omit_core_marker:
+                marker = tarfile.TarInfo(core_marker)
+                marker.type = tarfile.DIRTYPE
+                archive.addfile(marker)
+            if nested_core_member:
+                payload = b"nested"
+                member = tarfile.TarInfo(f"{core_marker}/bin/launcher")
+                member.size = len(payload)
+                archive.addfile(member, io.BytesIO(payload))
             if (
                 required_as_hardlink is not None
                 and hardlink_target != root.name
@@ -1977,7 +1999,10 @@ class ServerDistributionTests(unittest.TestCase):
                 else:
                     member.size = len(payload)
                     archive.addfile(member, io.BytesIO(payload))
-            for name in sorted(verify.EXPECTED_SERVER_DISTRIBUTION_FILES):
+            for expected_name in sorted(
+                verify.EXPECTED_SERVER_DISTRIBUTION_FILES
+            ):
+                name = archive_name(expected_name)
                 if name == omit:
                     continue
                 if name == required_as_directory:
@@ -1998,17 +2023,17 @@ class ServerDistributionTests(unittest.TestCase):
             if extra_plugin is not None:
                 payload = b"extra"
                 member = tarfile.TarInfo(
-                    f"trino-server-483/plugin/{extra_plugin}/extra.jar"
+                    f"{archive_root}/plugin/{extra_plugin}/extra.jar"
                 )
                 member.size = len(payload)
                 archive.addfile(member, io.BytesIO(payload))
             if extra_root is not None:
                 payload = b"extra"
-                member = tarfile.TarInfo(f"trino-server-483/{extra_root}")
+                member = tarfile.TarInfo(f"{archive_root}/{extra_root}")
                 member.size = len(payload)
                 archive.addfile(member, io.BytesIO(payload))
             if unsafe_symlink:
-                member = tarfile.TarInfo("trino-server-483/lib/escape")
+                member = tarfile.TarInfo(f"{archive_root}/lib/escape")
                 member.type = tarfile.SYMTYPE
                 member.linkname = "../../outside"
                 archive.addfile(member)
@@ -2052,7 +2077,10 @@ class ServerDistributionTests(unittest.TestCase):
                         "required_as_hardlink": next(
                             iter(verify.EXPECTED_SERVER_DISTRIBUTION_FILES)
                         ),
-                        "hardlink_target": "trino-server-483/lib/target",
+                        "hardlink_target": (
+                            f"{verify.EXPECTED_SERVER_DISTRIBUTION_ROOT}/"
+                            "lib/target"
+                        ),
                         "hardlink_target_as_directory": True,
                     },
                     "hard link target is not a regular file",
@@ -2071,6 +2099,16 @@ class ServerDistributionTests(unittest.TestCase):
                     {"unsafe_symlink": True},
                     "unsafe or unexpected member",
                 ),
+                (
+                    "missing-core-marker",
+                    {"omit_core_marker": True},
+                    "required empty directories are missing",
+                ),
+                (
+                    "nested-core-payload",
+                    {"nested_core_member": True},
+                    "distribution root differs",
+                ),
             )
             for name, options, error in cases:
                 with self.subTest(name=name):
@@ -2078,6 +2116,16 @@ class ServerDistributionTests(unittest.TestCase):
                     self._write_archive(path, **options)
                     with self.assertRaisesRegex(verify.ContractError, error):
                         verify.verify_server_distribution(path)
+
+    def test_distribution_rejects_a_different_archive_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "wrong-root.tar.gz"
+            self._write_archive(path, archive_root="trino-server-core-483")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "unsafe or unexpected member",
+            ):
+                verify.verify_server_distribution(path)
 
 
 class PublisherContractTests(unittest.TestCase):
