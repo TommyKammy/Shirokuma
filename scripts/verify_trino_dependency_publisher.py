@@ -1885,7 +1885,8 @@ def _valid_class_file(payload: bytes) -> bool:
         if read_uint(4) != 0xCAFEBABE:
             return False
         read_uint(2)
-        if read_uint(2) < 45:
+        major_version = read_uint(2)
+        if major_version < 45:
             return False
         constant_pool_count = read_uint(2)
         if constant_pool_count < 2:
@@ -1947,10 +1948,39 @@ def _valid_class_file(payload: bytes) -> bool:
                 ):
                     return False
             elif tag == 15:
+                reference_kind, reference_index = value
+                if reference_kind in {1, 2, 3, 4}:
+                    expected_reference_tags = (9,)
+                elif reference_kind in {5, 8}:
+                    expected_reference_tags = (10,)
+                elif reference_kind in {6, 7}:
+                    expected_reference_tags = (
+                        (10, 11) if major_version >= 52 else (10,)
+                    )
+                else:
+                    expected_reference_tags = (11,)
                 if (
                     not isinstance(value, tuple)
-                    or value[0] not in range(1, 10)
-                    or not has_tag(value[1], 9, 10, 11)
+                    or reference_kind not in range(1, 10)
+                    or not has_tag(
+                        reference_index,
+                        *expected_reference_tags,
+                    )
+                ):
+                    return False
+                reference = values[reference_index]
+                if not isinstance(reference, tuple):
+                    return False
+                name_and_type = values[reference[1]]
+                if not isinstance(name_and_type, tuple):
+                    return False
+                method_name = values[name_and_type[0]]
+                if (
+                    reference_kind == 8
+                    and method_name != b"<init>"
+                ) or (
+                    reference_kind in {5, 6, 7, 9}
+                    and method_name in {b"<init>", b"<clinit>"}
                 ):
                     return False
             elif tag in {17, 18}:

@@ -1443,6 +1443,117 @@ class MavenScanEvidenceTests(unittest.TestCase):
             with self.subTest(payload=payload):
                 self.assertFalse(verify._valid_modified_utf8(payload))
 
+    def test_method_handle_kinds_require_exact_reference_tags(self) -> None:
+        def class_with_method_handle(
+            reference_kind: int,
+            reference_tag: int,
+            *,
+            name: str,
+            descriptor: str,
+            major_version: int = 52,
+        ) -> bytes:
+            def utf8(value: str) -> bytes:
+                payload = value.encode("ascii")
+                return b"\x01" + len(payload).to_bytes(2, "big") + payload
+
+            target_class = 2 if reference_tag == 11 else 4
+            return b"".join(
+                (
+                    b"\xca\xfe\xba\xbe\x00\x00",
+                    major_version.to_bytes(2, "big"),
+                    b"\x00\x0a",
+                    utf8("I"),
+                    b"\x07\x00\x01",
+                    utf8("java/lang/Object"),
+                    b"\x07\x00\x03",
+                    utf8(name),
+                    utf8(descriptor),
+                    b"\x0c\x00\x05\x00\x06",
+                    bytes((reference_tag,)),
+                    target_class.to_bytes(2, "big"),
+                    b"\x00\x07",
+                    b"\x0f",
+                    bytes((reference_kind,)),
+                    b"\x00\x08",
+                    b"\x06\x01\x00\x02\x00\x04",
+                    b"\x00\x00\x00\x00\x00\x00\x00\x00",
+                )
+            )
+
+        valid = (
+            (1, 9, "f", "I"),
+            (2, 9, "f", "I"),
+            (3, 9, "f", "I"),
+            (4, 9, "f", "I"),
+            (5, 10, "m", "()V"),
+            (6, 10, "m", "()V"),
+            (6, 11, "m", "()V"),
+            (7, 10, "m", "()V"),
+            (7, 11, "m", "()V"),
+            (8, 10, "<init>", "()V"),
+            (9, 11, "m", "()V"),
+        )
+        for reference_kind, reference_tag, name, descriptor in valid:
+            with self.subTest(
+                valid=True,
+                reference_kind=reference_kind,
+                reference_tag=reference_tag,
+            ):
+                self.assertTrue(
+                    verify._valid_class_file(
+                        class_with_method_handle(
+                            reference_kind,
+                            reference_tag,
+                            name=name,
+                            descriptor=descriptor,
+                        )
+                    )
+                )
+
+        invalid = (
+            (1, 10, "m", "()V", 52),
+            (2, 10, "m", "()V", 52),
+            (3, 10, "m", "()V", 52),
+            (4, 10, "m", "()V", 52),
+            (5, 9, "f", "I", 52),
+            (6, 9, "f", "I", 52),
+            (7, 9, "f", "I", 52),
+            (8, 11, "<init>", "()V", 52),
+            (9, 10, "m", "()V", 52),
+            (6, 11, "m", "()V", 51),
+            (7, 11, "m", "()V", 51),
+            (8, 10, "m", "()V", 52),
+            (5, 10, "<init>", "()V", 52),
+            (6, 10, "<clinit>", "()V", 52),
+            (7, 10, "<init>", "()V", 52),
+            (9, 11, "<init>", "()V", 52),
+        )
+        for (
+            reference_kind,
+            reference_tag,
+            name,
+            descriptor,
+            major_version,
+        ) in invalid:
+            with self.subTest(
+                valid=False,
+                reference_kind=reference_kind,
+                reference_tag=reference_tag,
+                name=name,
+                major_version=major_version,
+            ):
+                self.assertFalse(
+                    verify._valid_class_file(
+                        class_with_method_handle(
+                            reference_kind,
+                            reference_tag,
+                            name=name,
+                            descriptor=descriptor,
+                            major_version=major_version,
+                        )
+                    )
+                )
+
     def test_maven_descriptor_scopes_parquet_remediation_origin_to_exact_jar(
         self,
     ) -> None:
