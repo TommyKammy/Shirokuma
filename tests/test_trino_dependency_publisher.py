@@ -1422,6 +1422,24 @@ class MavenScanEvidenceTests(unittest.TestCase):
         )
         self.assertFalse(verify._valid_class_file(malformed_utf8))
 
+    def test_code_resource_limits_cover_parameters_and_instructions(
+        self,
+    ) -> None:
+        code_header = bytes.fromhex("000000110001000100000005")
+        self.assertIn(code_header, self.CLASS_FILE)
+        insufficient_stack = self.CLASS_FILE.replace(
+            code_header,
+            bytes.fromhex("000000110000000100000005"),
+            1,
+        )
+        insufficient_locals = self.CLASS_FILE.replace(
+            code_header,
+            bytes.fromhex("000000110001000000000005"),
+            1,
+        )
+        self.assertFalse(verify._valid_class_file(insufficient_stack))
+        self.assertFalse(verify._valid_class_file(insufficient_locals))
+
     def test_member_descriptors_require_jvm_grammar(self) -> None:
         for descriptor in (
             b"I",
@@ -2343,6 +2361,14 @@ class MavenScanEvidenceTests(unittest.TestCase):
             (
                 "org/example/alpha/1.0/alpha-1.0-sources.jar",
                 {"org/example/Alpha.class": b"bytecode"},
+                "not a source-only classifier",
+            ),
+            (
+                "org/example/alpha/1.0/alpha-1.0-sources.jar",
+                {
+                    "org/example/Alpha.java": b"class Alpha {}",
+                    "native/libalpha.so": b"\x7fELF",
+                },
                 "not a source-only classifier",
             ),
             (

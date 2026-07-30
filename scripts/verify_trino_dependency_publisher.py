@@ -2167,6 +2167,229 @@ def _valid_method_descriptor(
     )
 
 
+def _method_descriptor_return_slots(payload: bytes) -> int | None:
+    closing = payload.find(b")")
+    if closing < 0 or closing + 1 >= len(payload):
+        return None
+    return_descriptor = payload[closing + 1 :]
+    if return_descriptor == b"V":
+        return 0
+    parsed = _field_descriptor_end(return_descriptor)
+    return (
+        parsed[1]
+        if parsed is not None and parsed[0] == len(return_descriptor)
+        else None
+    )
+
+
+def _bytecode_resource_requirements(
+    payload: bytes,
+    *,
+    instruction_offsets: set[int],
+    constant_pool_values: list[object],
+) -> tuple[int, int] | None:
+    offsets = sorted(instruction_offsets)
+    minimum_stack = 0
+    minimum_locals = 0
+
+    def require_stack(*depths: int) -> None:
+        nonlocal minimum_stack
+        minimum_stack = max(minimum_stack, *depths)
+
+    def require_local(index: int, slots: int) -> None:
+        nonlocal minimum_locals
+        minimum_locals = max(minimum_locals, index + slots)
+
+    def constant(index: int) -> object | None:
+        return (
+            constant_pool_values[index]
+            if 0 < index < len(constant_pool_values)
+            else None
+        )
+
+    def referenced_descriptor(index: int) -> bytes | None:
+        reference = constant(index)
+        if not isinstance(reference, tuple) or len(reference) != 2:
+            return None
+        name_and_type = constant(reference[1])
+        if not isinstance(name_and_type, tuple) or len(name_and_type) != 2:
+            return None
+        descriptor = constant(name_and_type[1])
+        return descriptor if isinstance(descriptor, bytes) else None
+
+    try:
+        for position, instruction_offset in enumerate(offsets):
+            end = (
+                offsets[position + 1]
+                if position + 1 < len(offsets)
+                else len(payload)
+            )
+            instruction = payload[instruction_offset:end]
+            opcode = instruction[0]
+
+            if opcode in {0x09, 0x0A, 0x0E, 0x0F}:
+                require_stack(2)
+            elif opcode in set(range(0x01, 0x09)) | set(range(0x0B, 0x0E)):
+                require_stack(1)
+            elif opcode in {0x10, 0x11, 0x12, 0x13}:
+                require_stack(1)
+            elif opcode == 0x14:
+                require_stack(2)
+            elif opcode in range(0x15, 0x1A):
+                slots = 2 if opcode in {0x16, 0x18} else 1
+                require_local(instruction[1], slots)
+                require_stack(slots)
+            elif opcode in range(0x1A, 0x2E):
+                group = (opcode - 0x1A) // 4
+                slots = 2 if group in {1, 3} else 1
+                require_local((opcode - 0x1A) % 4, slots)
+                require_stack(slots)
+            elif opcode in range(0x2E, 0x36):
+                slots = 2 if opcode in {0x2F, 0x31} else 1
+                require_stack(2, slots)
+            elif opcode in range(0x36, 0x3B):
+                slots = 2 if opcode in {0x37, 0x39} else 1
+                require_local(instruction[1], slots)
+                require_stack(slots)
+            elif opcode in range(0x3B, 0x4F):
+                group = (opcode - 0x3B) // 4
+                slots = 2 if group in {1, 3} else 1
+                require_local((opcode - 0x3B) % 4, slots)
+                require_stack(slots)
+            elif opcode in range(0x4F, 0x57):
+                slots = 2 if opcode in {0x50, 0x52} else 1
+                require_stack(2 + slots)
+            elif opcode == 0x57:
+                require_stack(1)
+            elif opcode == 0x58:
+                require_stack(2)
+            elif opcode == 0x59:
+                require_stack(2)
+            elif opcode == 0x5A:
+                require_stack(3)
+            elif opcode == 0x5B:
+                require_stack(4)
+            elif opcode == 0x5C:
+                require_stack(4)
+            elif opcode == 0x5D:
+                require_stack(5)
+            elif opcode == 0x5E:
+                require_stack(6)
+            elif opcode == 0x5F:
+                require_stack(2)
+            elif opcode in (
+                set(range(0x60, 0x74))
+                | set(range(0x78, 0x7E))
+                | set(range(0x7E, 0x84))
+            ):
+                if opcode in {
+                    0x61,
+                    0x63,
+                    0x65,
+                    0x67,
+                    0x69,
+                    0x6B,
+                    0x6D,
+                    0x6F,
+                    0x71,
+                    0x73,
+                    0x75,
+                    0x77,
+                    0x7F,
+                    0x81,
+                    0x83,
+                }:
+                    require_stack(4)
+                elif opcode in {0x79, 0x7B, 0x7D}:
+                    require_stack(3)
+                else:
+                    require_stack(2)
+            elif opcode in range(0x74, 0x78):
+                require_stack(2 if opcode in {0x75, 0x77} else 1)
+            elif opcode == 0x84:
+                require_local(instruction[1], 1)
+            elif opcode in {0x85, 0x87, 0x8C, 0x8D, 0x8F, 0x90}:
+                require_stack(2)
+            elif opcode in {0x86, 0x8B, 0x91, 0x92, 0x93}:
+                require_stack(1)
+            elif opcode in {0x88, 0x89, 0x8A, 0x8E}:
+                require_stack(2)
+            elif opcode == 0x94 or opcode in {0x97, 0x98}:
+                require_stack(4)
+            elif opcode in {0x95, 0x96}:
+                require_stack(2)
+            elif opcode in set(range(0x99, 0x9F)) | {0xAA, 0xAB, 0xAC, 0xAE, 0xB0, 0xBF, 0xC2, 0xC3, 0xC6, 0xC7}:
+                require_stack(1)
+            elif opcode in set(range(0x9F, 0xA7)):
+                require_stack(2)
+            elif opcode in {0xA8, 0xC9}:
+                require_stack(1)
+            elif opcode == 0xA9:
+                require_local(instruction[1], 1)
+            elif opcode in {0xAD, 0xAF}:
+                require_stack(2)
+            elif opcode in range(0xB2, 0xB6):
+                descriptor = referenced_descriptor(
+                    int.from_bytes(instruction[1:3], "big")
+                )
+                parsed = (
+                    _field_descriptor_end(descriptor)
+                    if isinstance(descriptor, bytes)
+                    else None
+                )
+                if parsed is None or parsed[0] != len(descriptor):
+                    return None
+                slots = parsed[1]
+                if opcode == 0xB2:
+                    require_stack(slots)
+                elif opcode == 0xB3:
+                    require_stack(slots)
+                elif opcode == 0xB4:
+                    require_stack(1, slots)
+                else:
+                    require_stack(1 + slots)
+            elif opcode in range(0xB6, 0xBB):
+                descriptor = referenced_descriptor(
+                    int.from_bytes(instruction[1:3], "big")
+                )
+                parameter_slots = (
+                    _method_descriptor_parameter_slots(descriptor)
+                    if isinstance(descriptor, bytes)
+                    else None
+                )
+                return_slots = (
+                    _method_descriptor_return_slots(descriptor)
+                    if isinstance(descriptor, bytes)
+                    else None
+                )
+                if parameter_slots is None or return_slots is None:
+                    return None
+                receiver_slots = 0 if opcode in {0xB8, 0xBA} else 1
+                require_stack(
+                    parameter_slots + receiver_slots,
+                    return_slots,
+                )
+            elif opcode == 0xBB:
+                require_stack(1)
+            elif opcode in {0xBC, 0xBD, 0xBE, 0xC0, 0xC1}:
+                require_stack(1)
+            elif opcode == 0xC4:
+                widened_opcode = instruction[1]
+                index = int.from_bytes(instruction[2:4], "big")
+                slots = 2 if widened_opcode in {0x16, 0x18, 0x37, 0x39} else 1
+                require_local(index, slots)
+                if widened_opcode in range(0x15, 0x1A):
+                    require_stack(slots)
+                elif widened_opcode in range(0x36, 0x3B):
+                    require_stack(slots)
+            elif opcode == 0xC5:
+                dimensions = instruction[3]
+                require_stack(dimensions, 1)
+    except (IndexError, TypeError, ValueError):
+        return None
+    return minimum_stack, minimum_locals
+
+
 def _valid_stack_map_table(
     payload: bytes,
     *,
@@ -2578,6 +2801,8 @@ def _valid_class_file(payload: bytes) -> bool:
             *,
             allow_code: bool,
             class_level: bool = False,
+            method_access_flags: int | None = None,
+            method_descriptor: bytes | None = None,
         ) -> bool:
             nonlocal bootstrap_method_count
             found_code = False
@@ -2603,7 +2828,7 @@ def _valid_class_file(payload: bytes) -> bool:
                     def read_code_uint(size: int) -> int:
                         return int.from_bytes(read_code(size), "big")
 
-                    read_code_uint(2)
+                    max_stack = read_code_uint(2)
                     max_locals = read_code_uint(2)
                     code_length = read_code_uint(4)
                     if not 0 < code_length <= 65535:
@@ -2617,7 +2842,35 @@ def _valid_class_file(payload: bytes) -> bool:
                     )
                     if instruction_offsets is None:
                         raise ValueError("invalid bytecode instructions")
-                    for _ in range(read_code_uint(2)):
+                    resource_requirements = _bytecode_resource_requirements(
+                        code,
+                        instruction_offsets=instruction_offsets,
+                        constant_pool_values=values,
+                    )
+                    parameter_slots = (
+                        _method_descriptor_parameter_slots(
+                            method_descriptor,
+                        )
+                        if isinstance(method_descriptor, bytes)
+                        else None
+                    )
+                    if (
+                        resource_requirements is None
+                        or parameter_slots is None
+                        or method_access_flags is None
+                        or max_stack < resource_requirements[0]
+                        or max_locals
+                        < max(
+                            resource_requirements[1],
+                            parameter_slots
+                            + (0 if method_access_flags & 0x0008 else 1),
+                        )
+                    ):
+                        raise ValueError("invalid Code resource limits")
+                    exception_table_length = read_code_uint(2)
+                    if exception_table_length and max_stack < 1:
+                        raise ValueError("invalid Code resource limits")
+                    for _ in range(exception_table_length):
                         start_pc = read_code_uint(2)
                         end_pc = read_code_uint(2)
                         handler_pc = read_code_uint(2)
@@ -2915,7 +3168,11 @@ def _valid_class_file(payload: bytes) -> bool:
                 ):
                     raise ValueError("invalid member identity")
                 signatures.add(signature)
-                found_code = read_attributes(allow_code=methods)
+                found_code = read_attributes(
+                    allow_code=methods,
+                    method_access_flags=access_flags if methods else None,
+                    method_descriptor=descriptor if methods else None,
+                )
                 if methods and (
                     found_code == bool(access_flags & (0x0100 | 0x0400))
                 ):
@@ -3045,9 +3302,25 @@ def _validate_rootfs_discovery_omissions(
                     for entry in archive.infolist()
                     if entry.filename.endswith((".java", ".kt"))
                 ]
+                permitted_metadata = re.compile(
+                    r"META-INF/(?:"
+                    r"MANIFEST\.MF|"
+                    r"(?:LICENSE|NOTICE)(?:\.[^/]*)?|"
+                    r"DEPENDENCIES|"
+                    r"maven/[^/]+/[^/]+/pom\.(?:xml|properties)"
+                    r")\Z"
+                )
+                unexpected_entries = [
+                    entry.filename
+                    for entry in archive.infolist()
+                    if not entry.is_dir()
+                    and entry not in source_entries
+                    and permitted_metadata.fullmatch(entry.filename) is None
+                ]
                 if (
                     any(name.endswith(".class") for name in names)
                     or not source_entries
+                    or unexpected_entries
                 ):
                     _fail(
                         "MAVEN_SBOM_ROOTFS",

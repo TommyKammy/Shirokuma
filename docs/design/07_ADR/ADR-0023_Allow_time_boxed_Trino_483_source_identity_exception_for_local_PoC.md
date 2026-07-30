@@ -265,8 +265,12 @@ reviewed regular file matches the closed descriptor, has a safe archive with no
 nested JAR, contains a structurally valid class file, and contains exactly one
 matching Maven `pom.properties`. That manifest-verified base may authorize only
 same-coordinate source-only or test-only classifiers; source entries must be
-read successfully, test entries must contain a structurally valid class file,
-and every other classifier remains rejected. The subsequent complete
+read successfully, nonmetadata payloads in a `sources` JAR must use an approved
+source-file suffix, test entries must contain a structurally valid class file,
+and every other classifier remains rejected. Class evidence also requires each
+method's declared `max_locals` to cover its parameters, receiver, and local
+instructions and its `max_stack` to cover the operands and results required by
+every instruction. The subsequent complete
 `(PURL, FilePath)` identity and High=0/Critical=0 scan remains mandatory. This
 does not relax source identity, vulnerability, publication, admission, expiry,
 or environment scope.
