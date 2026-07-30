@@ -906,7 +906,12 @@ manifest/archive pair to be byte-identical, and then
 performs two fresh network-none native-arm64 source builds from the exact
 snapshot. Their sole expected output,
 `core/trino-server/target/trino-server-483.tar.gz`, must match by digest and
-size. Symlinks, hard links, special files, partial files, cache-control lock
+size. The Provisio 2.0.0 archive members must use the exact internal root
+`trino-server-483`. Its staged root-stripping behavior leaves the one required
+empty assembly marker `trino-server-483/trino-server-core-483/`; descendants
+under that marker fail closed, and all payload remains under the reviewed
+`NOTICE`, `README.txt`, `bin`, `lib`, and `plugin` roots. Symlinks, hard links,
+special files, partial files, cache-control lock
 files, unknown origins, duplicate paths, and repository-produced
 `io/trino/**` reactor outputs fail closed, except for the Bun cache's closed
 absolute `/bun-cache/` alias symlink contract and exact reviewed package
