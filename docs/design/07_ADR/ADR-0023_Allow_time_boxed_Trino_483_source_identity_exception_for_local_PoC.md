@@ -280,7 +280,13 @@ uninitialized until a valid `this()` or `super()` invocation, interface method
 flags follow their class-file version, and bounded local/state-cell counts
 prevent validation-work amplification. Stack-manipulation instructions preserve
 category-1/category-2 value boundaries, and every regular base-JAR member is
-read before the archive is accepted. Modern class versions reject legacy
+read before the archive is accepted. Reference values retain their descriptor
+identity through parameters, locals, constants, arrays, casts, fields, calls,
+and returns; a value created by `new` remains allocation-offset-specific and
+uninitialized until the matching constructor call. Declared `StackMapTable`
+locals and stacks must reconcile with the computed state at every frame, and
+each declared `this_class` must match its JAR entry path after removing any
+valid multi-release prefix. Modern class versions reject legacy
 `jsr`/`ret` instructions, and interface class evidence cannot declare a
 constructor. Return instructions must match their method descriptors,
 recognized signature/source/marker attributes validate their payloads, and

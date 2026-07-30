@@ -1403,6 +1403,24 @@ class MavenScanEvidenceTests(unittest.TestCase):
 
     def test_class_file_structure_requires_complete_payload(self) -> None:
         self.assertTrue(verify._valid_class_file(self.CLASS_FILE))
+        self.assertTrue(
+            verify._valid_class_file(self.CLASS_FILE, expected_name=b"A")
+        )
+        self.assertFalse(
+            verify._valid_class_file(self.CLASS_FILE, expected_name=b"Fake")
+        )
+        matching_jar = io.BytesIO()
+        with zipfile.ZipFile(matching_jar, "w") as archive:
+            archive.writestr("META-INF/versions/25/A.class", self.CLASS_FILE)
+        with zipfile.ZipFile(matching_jar) as archive:
+            self.assertTrue(verify._jar_contains_bytecode(archive, "match.jar"))
+        mismatched_jar = io.BytesIO()
+        with zipfile.ZipFile(mismatched_jar, "w") as archive:
+            archive.writestr("Fake.class", self.CLASS_FILE)
+        with zipfile.ZipFile(mismatched_jar) as archive:
+            self.assertFalse(
+                verify._jar_contains_bytecode(archive, "mismatch.jar")
+            )
         self.assertTrue(verify._valid_class_file(self.INTERFACE_CLASS_FILE))
         self.assertFalse(
             verify._valid_class_file(self.CONCRETE_CLASS_WITHOUT_CODE)
@@ -1539,6 +1557,96 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 method_access_flags=0x0008,
                 method_name=b"method",
                 method_descriptor=b"()I",
+                this_name=b"A",
+            )
+        )
+        self.assertFalse(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("2AB0"),
+                instruction_offsets={0, 1},
+                constant_pool_tags=[0],
+                constant_pool_values=[None],
+                exception_handlers=[],
+                max_stack=1,
+                max_locals=1,
+                method_access_flags=0x0008,
+                method_name=b"method",
+                method_descriptor=(
+                    b"(Ljava/lang/Object;)Ljava/lang/String;"
+                ),
+                this_name=b"A",
+            )
+        )
+        self.assertTrue(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("2A4C2BB0"),
+                instruction_offsets={0, 1, 2, 3},
+                constant_pool_tags=[0],
+                constant_pool_values=[None],
+                exception_handlers=[],
+                max_stack=1,
+                max_locals=2,
+                method_access_flags=0x0008,
+                method_name=b"method",
+                method_descriptor=(
+                    b"(Ljava/lang/String;)Ljava/lang/String;"
+                ),
+                this_name=b"A",
+            )
+        )
+        self.assertFalse(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("BB000159570000B0"),
+                instruction_offsets={0, 3, 4, 5, 6, 7},
+                constant_pool_tags=[0, 7, 1],
+                constant_pool_values=[None, (2,), b"A"],
+                exception_handlers=[],
+                max_stack=2,
+                max_locals=0,
+                method_access_flags=0x0008,
+                method_name=b"method",
+                method_descriptor=b"()LA;",
+                this_name=b"A",
+            )
+        )
+        constructor_pool_tags = [0, 7, 1, 10, 12, 1, 1]
+        constructor_pool_values = [
+            None,
+            (2,),
+            b"A",
+            (1, 4),
+            (5, 6),
+            b"<init>",
+            b"()V",
+        ]
+        self.assertTrue(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("BB000159B70003B0"),
+                instruction_offsets={0, 3, 4, 7},
+                constant_pool_tags=constructor_pool_tags,
+                constant_pool_values=constructor_pool_values,
+                exception_handlers=[],
+                max_stack=2,
+                max_locals=0,
+                method_access_flags=0x0008,
+                method_name=b"method",
+                method_descriptor=b"()LA;",
+                this_name=b"A",
+            )
+        )
+        self.assertFalse(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("BB000159B70003B70003B0"),
+                instruction_offsets={0, 3, 4, 7, 10},
+                constant_pool_tags=constructor_pool_tags,
+                constant_pool_values=constructor_pool_values,
+                exception_handlers=[],
+                max_stack=2,
+                max_locals=0,
+                method_access_flags=0x0008,
+                method_name=b"method",
+                method_descriptor=b"()LA;",
+                this_name=b"A",
             )
         )
 
@@ -1884,6 +1992,39 @@ class MavenScanEvidenceTests(unittest.TestCase):
 
         self.assertTrue(verify._valid_class_file(class_with_stack_map(b"\x00\x00")))
         self.assertFalse(verify._valid_class_file(class_with_stack_map(b"\x00")))
+        computed_states = {
+            0: ((), ("reference:Ljava/lang/String;",)),
+        }
+        matching_frame = bytes.fromhex("0001FF000000010700010000")
+        widened_frame = bytes.fromhex("0001FF000000010700030000")
+        stack_map_tags = [0, 7, 1, 7, 1]
+        stack_map_values = [
+            None,
+            (2,),
+            b"java/lang/String",
+            (4,),
+            b"java/lang/Object",
+        ]
+        self.assertTrue(
+            verify._valid_stack_map_table(
+                matching_frame,
+                code=bytes.fromhex("2AB0"),
+                constant_pool_tags=stack_map_tags,
+                constant_pool_values=stack_map_values,
+                instruction_offsets={0, 1},
+                computed_states=computed_states,
+            )
+        )
+        self.assertFalse(
+            verify._valid_stack_map_table(
+                widened_frame,
+                code=bytes.fromhex("2AB0"),
+                constant_pool_tags=stack_map_tags,
+                constant_pool_values=stack_map_values,
+                instruction_offsets={0, 1},
+                computed_states=computed_states,
+            )
+        )
 
     def test_modified_utf8_validation_matches_class_file_encoding(self) -> None:
         for payload in (
@@ -2286,10 +2427,10 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     alpha: {"org/example/Alpha.class": b"alpha"},
                     sources: {"org/example/Alpha.java": b"class Alpha {}"},
                     tests: {
-                        "org/example/AlphaTest.class": self.CLASS_FILE,
+                        "A.class": self.CLASS_FILE,
                     },
                     beta: {
-                        "org/example/Beta.class": self.CLASS_FILE,
+                        "A.class": self.CLASS_FILE,
                         (
                             "META-INF/maven/org.example/beta/"
                             "pom.properties"
@@ -2451,7 +2592,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
                             b"",
                             stat.S_IFDIR | 0o755,
                         ),
-                        "dev/failsafe/Failsafe.class": self.CLASS_FILE,
+                        "A.class": self.CLASS_FILE,
                         (
                             "META-INF/maven/dev.failsafe/failsafe/"
                             "pom.properties"
@@ -2532,7 +2673,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
             (
                 "org/example/alpha/1.0/alpha-1.0-tests.jar",
                 {
-                    "org/example/AlphaTest.class": self.CLASS_FILE,
+                    "A.class": self.CLASS_FILE,
                     "native/libalpha.so": b"\x7fELF",
                 },
                 "not a test-only classifier",
@@ -2569,7 +2710,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
             (
                 "org/example/beta/2.0/beta-2.0.jar",
                 {
-                    "org/example/Beta.class": self.CLASS_FILE,
+                    "A.class": self.CLASS_FILE,
                     (
                         "META-INF/maven/org.example/beta/"
                         "pom.properties"
@@ -2609,7 +2750,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
             (
                 "org/example/beta/2.0/beta-2.0.jar",
                 {
-                    "org/example/Beta.class": self.CLASS_FILE,
+                    "A.class": self.CLASS_FILE,
                     (
                         "META-INF/maven/org.example/beta/"
                         "pom.properties"
@@ -2624,7 +2765,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
             (
                 "org/example/beta/2.0/beta-2.0.jar",
                 {
-                    "org/example/Beta.class": self.CLASS_FILE,
+                    "A.class": self.CLASS_FILE,
                     (
                         "META-INF/maven/org.example/beta/"
                         "pom.properties"
@@ -2700,7 +2841,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
             root = Path(temporary)
             alpha = self.JARS[0]
             beta = self.JARS[1]
-            class_path = "org/example/Beta.class"
+            class_path = "A.class"
             repository, descriptor = self._repository_descriptor(
                 root,
                 {
@@ -2765,7 +2906,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 {
                     alpha: {"org/example/Alpha.class": b"alpha"},
                     beta: {
-                        "org/example/Beta.class": self.CLASS_FILE,
+                        "A.class": self.CLASS_FILE,
                         (
                             "META-INF/maven/org.example/beta/"
                             "pom.properties"
@@ -2936,7 +3077,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 {
                     alpha: {"org/example/Alpha.class": b"alpha"},
                     beta: {
-                        "org/example/Beta.class": self.CLASS_FILE,
+                        "A.class": self.CLASS_FILE,
                         (
                             "META-INF/maven/org.example/beta/"
                             "pom.properties"

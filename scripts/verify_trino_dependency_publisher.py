@@ -2214,7 +2214,7 @@ def _field_descriptor_stack_slots(payload: bytes) -> tuple[str, ...] | None:
     if not _valid_field_descriptor(payload):
         return None
     if payload.startswith((b"L", b"[")):
-        return ("reference",)
+        return (f"reference:{payload.decode('latin-1')}",)
     return {
         ord("F"): ("float",),
         ord("J"): ("long", "long"),
@@ -2470,7 +2470,11 @@ def _valid_operand_stack_flow(
     method_access_flags: int,
     method_name: bytes,
     method_descriptor: bytes,
-) -> bool:
+    this_name: bytes,
+) -> (
+    dict[int, tuple[tuple[str, ...], tuple[str, ...]]]
+    | bool
+):
     offsets = sorted(instruction_offsets)
     if (
         max_locals > MAX_OMITTED_CLASS_LOCALS
@@ -2514,6 +2518,16 @@ def _valid_operand_stack_flow(
             return None
         name = constant(name_and_type[0])
         return name if isinstance(name, bytes) else None
+
+    def class_reference(index: int) -> str | None:
+        class_value = constant(index)
+        if not isinstance(class_value, tuple) or len(class_value) != 1:
+            return None
+        name = constant(class_value[0])
+        if not isinstance(name, bytes):
+            return None
+        descriptor = name if name.startswith(b"[") else b"L" + name + b";"
+        return f"reference:{descriptor.decode('latin-1')}"
 
     try:
         for position, instruction_offset in enumerate(offsets):
@@ -2747,10 +2761,31 @@ def _valid_operand_stack_flow(
         if len(stack) < len(expected):
             return None
         actual = stack[len(stack) - len(expected) :] if expected else ()
+        def assignable(actual_slot: str, expected_slot: str) -> bool:
+            if (
+                actual_slot == expected_slot
+                or actual_slot == "unknown"
+                or expected_slot == "unknown"
+            ):
+                return True
+            if expected_slot == "reference":
+                return (
+                    actual_slot == "null"
+                    or actual_slot.startswith("reference:")
+                )
+            if expected_slot.startswith("reference:"):
+                if actual_slot == "null":
+                    return True
+                if not actual_slot.startswith("reference:"):
+                    return False
+                return (
+                    actual_slot == expected_slot
+                    or expected_slot
+                    == "reference:Ljava/lang/Object;"
+                )
+            return False
         if any(
-            actual_slot != expected_slot
-            and actual_slot != "unknown"
-            and expected_slot != "unknown"
+            not assignable(actual_slot, expected_slot)
             for actual_slot, expected_slot in zip(actual, expected)
         ):
             return None
@@ -2767,7 +2802,7 @@ def _valid_operand_stack_flow(
     method_signature = _method_descriptor_stack_slots(method_descriptor)
     if method_signature is None:
         return False
-    parameter_types, _ = method_signature
+    parameter_types, return_types = method_signature
     initial_local_types = (
         (
             ()
@@ -2775,7 +2810,7 @@ def _valid_operand_stack_flow(
             else (
                 "uninitialized_this"
                 if method_name == b"<init>"
-                else "reference",
+                else f"reference:L{this_name.decode('latin-1')};",
             )
         )
         + parameter_types
@@ -2861,9 +2896,11 @@ def _valid_operand_stack_flow(
         local_write: tuple[int, tuple[str, ...]] | None = None
         local_increment: int | None = None
         initializes_receiver = False
+        initialized_token: str | None = None
+        initialized_reference: str | None = None
 
         if opcode == 0x01:
-            pushed_types = ("reference",)
+            pushed_types = ("null",)
         elif opcode in set(range(0x02, 0x09)) | {0x10, 0x11}:
             pushed_types = ("int",)
         elif opcode in {0x09, 0x0A}:
@@ -2892,6 +2929,18 @@ def _valid_operand_stack_flow(
                 if dynamic_slots is None:
                     return None
                 pushed_types = dynamic_slots
+            elif tag == 8:
+                pushed_types = ("reference:Ljava/lang/String;",)
+            elif tag == 7:
+                pushed_types = ("reference:Ljava/lang/Class;",)
+            elif tag == 15:
+                pushed_types = (
+                    "reference:Ljava/lang/invoke/MethodHandle;",
+                )
+            elif tag == 16:
+                pushed_types = (
+                    "reference:Ljava/lang/invoke/MethodType;",
+                )
             else:
                 pushed_types = ("reference",)
         elif opcode in range(0x15, 0x1A):
@@ -2925,6 +2974,18 @@ def _valid_operand_stack_flow(
             )
             expected = ("reference", "int")
             pushed_types = element_types[opcode - 0x2E]
+            if (
+                opcode == 0x32
+                and len(stack) >= 2
+                and stack[-2].startswith("reference:[")
+            ):
+                array_descriptor = stack[-2].removeprefix("reference:")
+                component = array_descriptor[1:]
+                pushed_types = (
+                    component
+                    if component.startswith("reference:")
+                    else f"reference:{component}",
+                )
         elif opcode in range(0x36, 0x3B):
             expected = (
                 ("int",),
@@ -3079,7 +3140,7 @@ def _valid_operand_stack_flow(
                 else ("double", "double")
             )
         elif opcode == 0xB0:
-            expected = ("reference",)
+            expected = return_types
         elif opcode in range(0xB2, 0xB6):
             field_slots = descriptor_slots(
                 int.from_bytes(instruction[1:3], "big")
@@ -3105,35 +3166,93 @@ def _valid_operand_stack_flow(
             )
             if signature is None:
                 return None
-            parameters, return_types = signature
+            parameters, invocation_return_types = signature
             receiver_type = "reference"
             if (
                 opcode == 0xB7
                 and referenced_name(pool_index) == b"<init>"
                 and len(stack) >= len(parameters) + 1
-                and stack[-len(parameters) - 1]
-                == "uninitialized_this"
             ):
-                receiver_type = "uninitialized_this"
-                initializes_receiver = True
+                candidate_receiver = stack[-len(parameters) - 1]
+                reference = constant(pool_index)
+                owner_reference = (
+                    class_reference(reference[0])
+                    if isinstance(reference, tuple)
+                    else None
+                )
+                if candidate_receiver == "uninitialized_this":
+                    receiver_type = candidate_receiver
+                    initializes_receiver = True
+                    initialized_token = candidate_receiver
+                    initialized_reference = (
+                        f"reference:L{this_name.decode('latin-1')};"
+                    )
+                elif candidate_receiver.startswith("uninitialized:"):
+                    allocation_reference = candidate_receiver.split(
+                        ":", 2
+                    )[2]
+                    if owner_reference != allocation_reference:
+                        return None
+                    receiver_type = candidate_receiver
+                    initializes_receiver = True
+                    initialized_token = candidate_receiver
+                    initialized_reference = allocation_reference
+                else:
+                    return None
             expected = (
                 ()
                 if opcode in {0xB8, 0xBA}
                 else (receiver_type,)
             ) + parameters
-            pushed_types = return_types
+            pushed_types = invocation_return_types
         elif opcode == 0xBB:
-            pushed_types = ("reference",)
+            allocation_reference = class_reference(
+                int.from_bytes(instruction[1:3], "big")
+            )
+            if (
+                allocation_reference is None
+                or allocation_reference.startswith("reference:[")
+            ):
+                return None
+            pushed_types = (
+                f"uninitialized:{instruction_offset}:"
+                f"{allocation_reference}",
+            )
         elif opcode in {0xBC, 0xBD}:
             expected = ("int",)
-            pushed_types = ("reference",)
+            if opcode == 0xBC:
+                primitive = {
+                    4: "Z",
+                    5: "C",
+                    6: "F",
+                    7: "D",
+                    8: "B",
+                    9: "S",
+                    10: "I",
+                    11: "J",
+                }[instruction[1]]
+                pushed_types = (f"reference:[{primitive}",)
+            else:
+                component_reference = class_reference(
+                    int.from_bytes(instruction[1:3], "big")
+                )
+                if component_reference is None:
+                    return None
+                component = component_reference.removeprefix("reference:")
+                pushed_types = (f"reference:[{component}",)
         elif opcode == 0xBE:
             expected = ("reference",)
             pushed_types = ("int",)
         elif opcode == 0xBF:
             expected = ("reference",)
         elif opcode == 0xC0:
-            expected = pushed_types = ("reference",)
+            cast_reference = class_reference(
+                int.from_bytes(instruction[1:3], "big")
+            )
+            if cast_reference is None:
+                return None
+            expected = ("reference",)
+            pushed_types = (cast_reference,)
         elif opcode == 0xC1:
             expected = ("reference",)
             pushed_types = ("int",)
@@ -3141,7 +3260,12 @@ def _valid_operand_stack_flow(
             expected = ("reference",)
         elif opcode == 0xC5:
             expected = ("int",) * instruction[3]
-            pushed_types = ("reference",)
+            array_reference = class_reference(
+                int.from_bytes(instruction[1:3], "big")
+            )
+            if array_reference is None:
+                return None
+            pushed_types = (array_reference,)
         elif opcode == 0xC4:
             widened_opcode = instruction[1]
             local_index = int.from_bytes(instruction[2:4], "big")
@@ -3178,12 +3302,23 @@ def _valid_operand_stack_flow(
                     and not (
                         local_types == ("reference",)
                         and actual_local_types
-                        == ("uninitialized_this",)
+                        and (
+                            actual_local_types[0] == "null"
+                            or actual_local_types[0]
+                            .startswith("reference:")
+                            or actual_local_types[0]
+                            == "uninitialized_this"
+                            or actual_local_types[0]
+                            .startswith("uninitialized:")
+                        )
                     )
                 )
             ):
                 return None
-            if actual_local_types == ("uninitialized_this",):
+            if (
+                local_types == ("reference",)
+                and actual_local_types
+            ):
                 pushed_types = actual_local_types
         if (
             local_increment is not None
@@ -3193,6 +3328,22 @@ def _valid_operand_stack_flow(
             )
         ):
             return None
+        if (
+            local_write is not None
+            and local_write[1] == ("reference",)
+        ):
+            if not stack:
+                return None
+            stored_reference = stack[-1]
+            if not (
+                stored_reference == "null"
+                or stored_reference.startswith("reference:")
+                or stored_reference == "uninitialized_this"
+                or stored_reference.startswith("uninitialized:")
+            ):
+                return None
+            expected = (stored_reference,)
+            local_write = (local_write[0], expected)
         remaining = consume(stack, expected)
         if remaining is None:
             return None
@@ -3208,15 +3359,17 @@ def _valid_operand_stack_flow(
             next_locals = tuple(local_values)
         result = remaining + pushed_types
         if initializes_receiver:
+            if initialized_token is None or initialized_reference is None:
+                return None
             result = tuple(
-                "reference"
-                if slot == "uninitialized_this"
+                initialized_reference
+                if slot == initialized_token
                 else slot
                 for slot in result
             )
             next_locals = tuple(
-                "reference"
-                if slot == "uninitialized_this"
+                initialized_reference
+                if slot == initialized_token
                 else slot
                 for slot in next_locals
             )
@@ -3275,18 +3428,29 @@ def _valid_operand_stack_flow(
     ) -> tuple[str, ...] | None:
         if len(current) != len(incoming):
             return None
-        merged = tuple(
-            current_slot
-            if current_slot == incoming_slot
-            else incoming_slot
-            if current_slot == "unknown"
-            else current_slot
-            if incoming_slot == "unknown"
-            else "reference"
-            if current_slot == incoming_slot == "reference"
-            else "invalid"
-            for current_slot, incoming_slot in zip(current, incoming)
-        )
+        merged_values: list[str] = []
+        for current_slot, incoming_slot in zip(current, incoming):
+            if current_slot == incoming_slot:
+                merged_values.append(current_slot)
+            elif current_slot == "unknown":
+                merged_values.append(incoming_slot)
+            elif incoming_slot == "unknown":
+                merged_values.append(current_slot)
+            elif current_slot == "null" and incoming_slot.startswith(
+                "reference:"
+            ):
+                merged_values.append(incoming_slot)
+            elif incoming_slot == "null" and current_slot.startswith(
+                "reference:"
+            ):
+                merged_values.append(current_slot)
+            elif current_slot.startswith(
+                "reference:"
+            ) and incoming_slot.startswith("reference:"):
+                merged_values.append("reference:Ljava/lang/Object;")
+            else:
+                merged_values.append("invalid")
+        merged = tuple(merged_values)
         return None if "invalid" in merged else merged
 
     def merge_state(
@@ -3333,7 +3497,7 @@ def _valid_operand_stack_flow(
                 is None
             ):
                 return False
-    return True
+    return typed_states
 
 
 def _valid_stack_map_table(
@@ -3341,7 +3505,12 @@ def _valid_stack_map_table(
     *,
     code: bytes,
     constant_pool_tags: list[int],
+    constant_pool_values: list[object],
     instruction_offsets: set[int],
+    computed_states: dict[
+        int,
+        tuple[tuple[str, ...], tuple[str, ...]],
+    ],
 ) -> bool:
     offset = 0
 
@@ -3354,53 +3523,163 @@ def _valid_stack_map_table(
         offset = end
         return value
 
-    def read_verification_type() -> bool:
+    def class_reference(index: int) -> str | None:
+        if (
+            not 0 < index < len(constant_pool_tags)
+            or constant_pool_tags[index] != 7
+        ):
+            return None
+        class_value = constant_pool_values[index]
+        if not isinstance(class_value, tuple) or len(class_value) != 1:
+            return None
+        name_index = class_value[0]
+        if (
+            not isinstance(name_index, int)
+            or not 0 < name_index < len(constant_pool_values)
+        ):
+            return None
+        name = constant_pool_values[name_index]
+        if not isinstance(name, bytes):
+            return None
+        descriptor = name if name.startswith(b"[") else b"L" + name + b";"
+        return f"reference:{descriptor.decode('latin-1')}"
+
+    def read_verification_type() -> tuple[str, ...] | None:
         tag = read_uint(1)
-        if tag in range(7):
-            return True
+        if tag == 0:
+            return ("uninitialized",)
+        if tag == 1:
+            return ("int",)
+        if tag == 2:
+            return ("float",)
+        if tag == 3:
+            return ("double", "double")
+        if tag == 4:
+            return ("long", "long")
+        if tag == 5:
+            return ("null",)
+        if tag == 6:
+            return ("uninitialized_this",)
         if tag == 7:
             pool_index = read_uint(2)
-            return (
-                0 < pool_index < len(constant_pool_tags)
-                and constant_pool_tags[pool_index] == 7
-            )
+            reference = class_reference(pool_index)
+            return (reference,) if reference is not None else None
         if tag == 8:
             code_offset = read_uint(2)
-            return (
-                code_offset in instruction_offsets
-                and code[code_offset] == 0xBB
+            if (
+                code_offset not in instruction_offsets
+                or code[code_offset] != 0xBB
+                or code_offset + 3 > len(code)
+            ):
+                return None
+            reference = class_reference(
+                int.from_bytes(code[code_offset + 1 : code_offset + 3], "big")
             )
-        return False
+            return (
+                (
+                    f"uninitialized:{code_offset}:{reference}",
+                )
+                if reference is not None
+                else None
+            )
+        return None
+
+    def stack_slots_to_entries(
+        slots: tuple[str, ...],
+    ) -> list[tuple[str, ...]] | None:
+        trimmed = list(slots)
+        while trimmed and trimmed[-1] == "uninitialized":
+            trimmed.pop()
+        entries: list[tuple[str, ...]] = []
+        slot_offset = 0
+        while slot_offset < len(trimmed):
+            slot = trimmed[slot_offset]
+            if slot in {"long", "double"}:
+                if (
+                    slot_offset + 1 >= len(trimmed)
+                    or trimmed[slot_offset + 1] != slot
+                ):
+                    return None
+                entries.append((slot, slot))
+                slot_offset += 2
+            else:
+                entries.append((slot,))
+                slot_offset += 1
+        return entries
+
+    def flatten(entries: list[tuple[str, ...]]) -> tuple[str, ...]:
+        return tuple(slot for entry in entries for slot in entry)
+
+    def states_match(
+        declared: tuple[str, ...],
+        computed: tuple[str, ...],
+    ) -> bool:
+        if len(declared) != len(computed):
+            return False
+        return all(
+            declared_slot == computed_slot
+            or (
+                computed_slot == "reference"
+                and (
+                    declared_slot == "null"
+                    or declared_slot.startswith("reference:")
+                )
+            )
+            for declared_slot, computed_slot in zip(declared, computed)
+        )
 
     try:
+        initial_state = computed_states.get(0)
+        if initial_state is None:
+            return False
+        frame_locals = stack_slots_to_entries(initial_state[1])
+        if frame_locals is None:
+            return False
         previous_frame_offset = -1
         for _ in range(read_uint(2)):
             frame_type = read_uint(1)
+            frame_stack: list[tuple[str, ...]] = []
             if frame_type <= 63:
                 offset_delta = frame_type
             elif frame_type <= 127:
                 offset_delta = frame_type - 64
-                if not read_verification_type():
+                stack_type = read_verification_type()
+                if stack_type is None:
                     return False
+                frame_stack.append(stack_type)
             elif frame_type == 247:
                 offset_delta = read_uint(2)
-                if not read_verification_type():
+                stack_type = read_verification_type()
+                if stack_type is None:
                     return False
+                frame_stack.append(stack_type)
             elif 248 <= frame_type <= 251:
                 offset_delta = read_uint(2)
+                if frame_type < 251:
+                    chopped = 251 - frame_type
+                    if chopped > len(frame_locals):
+                        return False
+                    frame_locals = frame_locals[:-chopped]
             elif 252 <= frame_type <= 254:
                 offset_delta = read_uint(2)
                 for _ in range(frame_type - 251):
-                    if not read_verification_type():
+                    local_type = read_verification_type()
+                    if local_type is None:
                         return False
+                    frame_locals.append(local_type)
             elif frame_type == 255:
                 offset_delta = read_uint(2)
+                frame_locals = []
                 for _ in range(read_uint(2)):
-                    if not read_verification_type():
+                    local_type = read_verification_type()
+                    if local_type is None:
                         return False
+                    frame_locals.append(local_type)
                 for _ in range(read_uint(2)):
-                    if not read_verification_type():
+                    stack_type = read_verification_type()
+                    if stack_type is None:
                         return False
+                    frame_stack.append(stack_type)
             else:
                 return False
             frame_offset = (
@@ -3413,13 +3692,32 @@ def _valid_stack_map_table(
                 or frame_offset >= len(code)
             ):
                 return False
+            computed_state = computed_states.get(frame_offset)
+            if computed_state is None:
+                return False
+            computed_stack, computed_locals = computed_state
+            declared_locals = flatten(frame_locals)
+            if len(declared_locals) > len(computed_locals):
+                return False
+            declared_locals += ("uninitialized",) * (
+                len(computed_locals) - len(declared_locals)
+            )
+            if not (
+                states_match(flatten(frame_stack), computed_stack)
+                and states_match(declared_locals, computed_locals)
+            ):
+                return False
             previous_frame_offset = frame_offset
         return offset == len(payload)
     except ValueError:
         return False
 
 
-def _valid_class_file(payload: bytes) -> bool:
+def _valid_class_file(
+    payload: bytes,
+    *,
+    expected_name: bytes | None = None,
+) -> bool:
     offset = 0
 
     def read(size: int) -> bytes:
@@ -3710,6 +4008,10 @@ def _valid_class_file(payload: bytes) -> bool:
         if (
             this_name is None
             or (
+                expected_name is not None
+                and this_name != expected_name
+            )
+            or (
                 super_class == 0
                 and this_name != b"java/lang/Object"
             )
@@ -3848,7 +4150,7 @@ def _valid_class_file(payload: bytes) -> bool:
                         exception_handlers.append(
                             (start_pc, end_pc, handler_pc)
                         )
-                    if not _valid_operand_stack_flow(
+                    computed_states = _valid_operand_stack_flow(
                         code,
                         instruction_offsets=instruction_offsets,
                         constant_pool_tags=tags,
@@ -3859,7 +4161,9 @@ def _valid_class_file(payload: bytes) -> bool:
                         method_access_flags=method_access_flags,
                         method_name=method_name,
                         method_descriptor=method_descriptor,
-                    ):
+                        this_name=this_name,
+                    )
+                    if not isinstance(computed_states, dict):
                         raise ValueError("invalid operand stack flow")
                     found_stack_map_table = False
                     for _ in range(read_code_uint(2)):
@@ -3874,7 +4178,9 @@ def _valid_class_file(payload: bytes) -> bool:
                                     nested_attribute,
                                     code=code,
                                     constant_pool_tags=tags,
+                                    constant_pool_values=values,
                                     instruction_offsets=instruction_offsets,
+                                    computed_states=computed_states,
                                 )
                             ):
                                 raise ValueError("invalid StackMapTable")
@@ -4226,7 +4532,16 @@ def _jar_contains_bytecode(archive: zipfile.ZipFile, path: str) -> bool:
         for entry in archive.infolist():
             if not entry.filename.endswith(".class"):
                 continue
-            if _valid_class_file(archive.read(entry)):
+            class_path = entry.filename[:-6]
+            if class_path.startswith("META-INF/versions/"):
+                parts = class_path.split("/", 3)
+                if len(parts) != 4 or not parts[2].isdigit():
+                    continue
+                class_path = parts[3]
+            if _valid_class_file(
+                archive.read(entry),
+                expected_name=class_path.encode("utf-8"),
+            ):
                 return True
         return False
     except (OSError, RuntimeError, zipfile.BadZipFile) as error:
