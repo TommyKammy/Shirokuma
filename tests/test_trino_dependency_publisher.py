@@ -1437,8 +1437,20 @@ class MavenScanEvidenceTests(unittest.TestCase):
             bytes.fromhex("000000110001000000000005"),
             1,
         )
+        stack_underflow = self.CLASS_FILE.replace(
+            bytes.fromhex("2AB70009B1"),
+            bytes.fromhex("57000000B1"),
+            1,
+        )
+        modern_jsr = self.CLASS_FILE.replace(
+            bytes.fromhex("2AB70009B1"),
+            bytes.fromhex("A8000400B1"),
+            1,
+        )
         self.assertFalse(verify._valid_class_file(insufficient_stack))
         self.assertFalse(verify._valid_class_file(insufficient_locals))
+        self.assertFalse(verify._valid_class_file(stack_underflow))
+        self.assertFalse(verify._valid_class_file(modern_jsr))
 
     def test_member_descriptors_require_jvm_grammar(self) -> None:
         for descriptor in (
@@ -1534,6 +1546,12 @@ class MavenScanEvidenceTests(unittest.TestCase):
             1,
         )
         self.assertFalse(verify._valid_class_file(invalid_interface_flags))
+        interface_constructor = self.CLASS_FILE.replace(
+            b"\x00\x21\x00\x02\x00\x04",
+            b"\x06\x01\x00\x02\x00\x04",
+            1,
+        )
+        self.assertFalse(verify._valid_class_file(interface_constructor))
 
         invalid_class_name = self.CLASS_FILE.replace(
             b"\x01\x00\x01A",

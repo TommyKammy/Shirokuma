@@ -1927,6 +1927,8 @@ def _bytecode_instruction_offsets(
                 continue
             if opcode in one_operand:
                 operand = read(1)[0]
+                if opcode == 0xA9 and major_version >= 51:
+                    return None
                 if opcode == 0xBC and operand not in range(4, 12):
                     return None
                 if opcode == 0x12 and not has_constant_tag(
@@ -1943,6 +1945,8 @@ def _bytecode_instruction_offsets(
                 continue
             if opcode in two_operands:
                 if opcode in branch_16:
+                    if opcode == 0xA8 and major_version >= 51:
+                        return None
                     branch_targets.append(
                         instruction_offset + read_signed(2)
                     )
@@ -2010,12 +2014,16 @@ def _bytecode_instruction_offsets(
                     return None
                 continue
             if opcode in {0xC8, 0xC9}:
+                if opcode == 0xC9 and major_version >= 51:
+                    return None
                 branch_targets.append(
                     instruction_offset + read_signed(4)
                 )
                 continue
             if opcode == 0xC4:
                 widened_opcode = read(1)[0]
+                if widened_opcode == 0xA9 and major_version >= 51:
+                    return None
                 if widened_opcode == 0x84:
                     read(4)
                 elif widened_opcode in (
@@ -2388,6 +2396,284 @@ def _bytecode_resource_requirements(
     except (IndexError, TypeError, ValueError):
         return None
     return minimum_stack, minimum_locals
+
+
+def _valid_operand_stack_flow(
+    payload: bytes,
+    *,
+    instruction_offsets: set[int],
+    constant_pool_values: list[object],
+    exception_handler_offsets: set[int],
+    max_stack: int,
+) -> bool:
+    offsets = sorted(instruction_offsets)
+    effects: dict[int, tuple[int, int]] = {}
+    successors: dict[int, set[int]] = {}
+
+    def constant(index: int) -> object | None:
+        return (
+            constant_pool_values[index]
+            if 0 < index < len(constant_pool_values)
+            else None
+        )
+
+    def referenced_descriptor(index: int) -> bytes | None:
+        reference = constant(index)
+        if not isinstance(reference, tuple) or len(reference) != 2:
+            return None
+        name_and_type = constant(reference[1])
+        if not isinstance(name_and_type, tuple) or len(name_and_type) != 2:
+            return None
+        descriptor = constant(name_and_type[1])
+        return descriptor if isinstance(descriptor, bytes) else None
+
+    try:
+        for position, instruction_offset in enumerate(offsets):
+            next_offset = (
+                offsets[position + 1]
+                if position + 1 < len(offsets)
+                else None
+            )
+            end = next_offset if next_offset is not None else len(payload)
+            instruction = payload[instruction_offset:end]
+            opcode = instruction[0]
+            popped = 0
+            pushed = 0
+            terminal = opcode in set(range(0xAC, 0xB2)) | {0xBF}
+            targets: set[int] = set()
+
+            if opcode in {0x09, 0x0A, 0x0E, 0x0F, 0x14}:
+                pushed = 2
+            elif opcode in (
+                set(range(0x01, 0x09))
+                | set(range(0x0B, 0x0E))
+                | {0x10, 0x11, 0x12, 0x13, 0xBB}
+            ):
+                pushed = 1
+            elif opcode in range(0x15, 0x1A):
+                pushed = 2 if opcode in {0x16, 0x18} else 1
+            elif opcode in range(0x1A, 0x2E):
+                pushed = 2 if (opcode - 0x1A) // 4 in {1, 3} else 1
+            elif opcode in range(0x2E, 0x36):
+                popped = 2
+                pushed = 2 if opcode in {0x2F, 0x31} else 1
+            elif opcode in range(0x36, 0x3B):
+                popped = 2 if opcode in {0x37, 0x39} else 1
+            elif opcode in range(0x3B, 0x4F):
+                popped = 2 if (opcode - 0x3B) // 4 in {1, 3} else 1
+            elif opcode in range(0x4F, 0x57):
+                popped = 4 if opcode in {0x50, 0x52} else 3
+            elif opcode == 0x57:
+                popped = 1
+            elif opcode == 0x58:
+                popped = 2
+            elif opcode == 0x59:
+                popped, pushed = 1, 2
+            elif opcode == 0x5A:
+                popped, pushed = 2, 3
+            elif opcode == 0x5B:
+                popped, pushed = 3, 4
+            elif opcode == 0x5C:
+                popped, pushed = 2, 4
+            elif opcode == 0x5D:
+                popped, pushed = 3, 5
+            elif opcode == 0x5E:
+                popped, pushed = 4, 6
+            elif opcode == 0x5F:
+                popped, pushed = 2, 2
+            elif opcode in range(0x60, 0x74):
+                category_two = opcode % 4 in {1, 3}
+                popped, pushed = (4, 2) if category_two else (2, 1)
+            elif opcode in range(0x74, 0x78):
+                popped = pushed = 2 if opcode in {0x75, 0x77} else 1
+            elif opcode in range(0x78, 0x7E):
+                popped, pushed = (
+                    (3, 2) if opcode in {0x79, 0x7B, 0x7D} else (2, 1)
+                )
+            elif opcode in range(0x7E, 0x84):
+                category_two = opcode in {0x7F, 0x81, 0x83}
+                popped, pushed = (4, 2) if category_two else (2, 1)
+            elif opcode in {0x85, 0x87, 0x8C, 0x8D}:
+                popped, pushed = 1, 2
+            elif opcode in {0x86, 0x8B, 0x91, 0x92, 0x93}:
+                popped = pushed = 1
+            elif opcode in {0x88, 0x89, 0x8E, 0x90}:
+                popped, pushed = 2, 1
+            elif opcode in {0x8A, 0x8F}:
+                popped = pushed = 2
+            elif opcode == 0x94 or opcode in {0x97, 0x98}:
+                popped, pushed = 4, 1
+            elif opcode in {0x95, 0x96}:
+                popped, pushed = 2, 1
+            elif opcode in set(range(0x99, 0x9F)) | {0xC6, 0xC7}:
+                popped = 1
+                targets.add(
+                    instruction_offset
+                    + int.from_bytes(instruction[1:3], "big", signed=True)
+                )
+            elif opcode in range(0x9F, 0xA7):
+                popped = 2
+                targets.add(
+                    instruction_offset
+                    + int.from_bytes(instruction[1:3], "big", signed=True)
+                )
+            elif opcode in {0xA7, 0xC8}:
+                displacement_size = 2 if opcode == 0xA7 else 4
+                targets.add(
+                    instruction_offset
+                    + int.from_bytes(
+                        instruction[1 : 1 + displacement_size],
+                        "big",
+                        signed=True,
+                    )
+                )
+                terminal = True
+            elif opcode in {0xA8, 0xA9, 0xC9} or (
+                opcode == 0xC4 and instruction[1] == 0xA9
+            ):
+                return False
+            elif opcode in {0xAA, 0xAB}:
+                popped = 1
+                cursor = 1 + (4 - ((instruction_offset + 1) % 4)) % 4
+                targets.add(
+                    instruction_offset
+                    + int.from_bytes(
+                        instruction[cursor : cursor + 4],
+                        "big",
+                        signed=True,
+                    )
+                )
+                cursor += 4
+                if opcode == 0xAA:
+                    low = int.from_bytes(
+                        instruction[cursor : cursor + 4],
+                        "big",
+                        signed=True,
+                    )
+                    high = int.from_bytes(
+                        instruction[cursor + 4 : cursor + 8],
+                        "big",
+                        signed=True,
+                    )
+                    cursor += 8
+                    branch_count = high - low + 1
+                    stride = 4
+                else:
+                    branch_count = int.from_bytes(
+                        instruction[cursor : cursor + 4],
+                        "big",
+                        signed=True,
+                    )
+                    cursor += 4
+                    stride = 8
+                for branch in range(branch_count):
+                    displacement_offset = cursor + branch * stride
+                    if opcode == 0xAB:
+                        displacement_offset += 4
+                    targets.add(
+                        instruction_offset
+                        + int.from_bytes(
+                            instruction[
+                                displacement_offset : displacement_offset + 4
+                            ],
+                            "big",
+                            signed=True,
+                        )
+                    )
+                terminal = True
+            elif opcode in {0xAC, 0xAE, 0xB0, 0xBF, 0xC2, 0xC3}:
+                popped = 1
+            elif opcode in {0xAD, 0xAF}:
+                popped = 2
+            elif opcode in range(0xB2, 0xB6):
+                descriptor = referenced_descriptor(
+                    int.from_bytes(instruction[1:3], "big")
+                )
+                parsed = (
+                    _field_descriptor_end(descriptor)
+                    if isinstance(descriptor, bytes)
+                    else None
+                )
+                if parsed is None or parsed[0] != len(descriptor):
+                    return False
+                slots = parsed[1]
+                if opcode == 0xB2:
+                    pushed = slots
+                elif opcode == 0xB3:
+                    popped = slots
+                elif opcode == 0xB4:
+                    popped, pushed = 1, slots
+                else:
+                    popped = 1 + slots
+            elif opcode in range(0xB6, 0xBB):
+                descriptor = referenced_descriptor(
+                    int.from_bytes(instruction[1:3], "big")
+                )
+                parameter_slots = (
+                    _method_descriptor_parameter_slots(descriptor)
+                    if isinstance(descriptor, bytes)
+                    else None
+                )
+                return_slots = (
+                    _method_descriptor_return_slots(descriptor)
+                    if isinstance(descriptor, bytes)
+                    else None
+                )
+                if parameter_slots is None or return_slots is None:
+                    return False
+                popped = parameter_slots + (
+                    0 if opcode in {0xB8, 0xBA} else 1
+                )
+                pushed = return_slots
+            elif opcode in {0xBC, 0xBD}:
+                popped = pushed = 1
+            elif opcode == 0xBE:
+                popped = pushed = 1
+            elif opcode in {0xC0, 0xC1}:
+                popped = pushed = 1
+            elif opcode == 0xC5:
+                popped, pushed = instruction[3], 1
+            elif opcode == 0xC4:
+                widened_opcode = instruction[1]
+                if widened_opcode in range(0x15, 0x1A):
+                    pushed = 2 if widened_opcode in {0x16, 0x18} else 1
+                elif widened_opcode in range(0x36, 0x3B):
+                    popped = 2 if widened_opcode in {0x37, 0x39} else 1
+
+            if not terminal:
+                if next_offset is None:
+                    return False
+                targets.add(next_offset)
+            effects[instruction_offset] = (popped, pushed)
+            successors[instruction_offset] = targets
+    except (IndexError, TypeError, ValueError):
+        return False
+
+    depths = {0: 0}
+    pending = [0]
+    for handler_offset in exception_handler_offsets:
+        if handler_offset in depths and depths[handler_offset] != 1:
+            return False
+        if handler_offset not in depths:
+            depths[handler_offset] = 1
+            pending.append(handler_offset)
+    while pending:
+        instruction_offset = pending.pop()
+        depth = depths[instruction_offset]
+        popped, pushed = effects[instruction_offset]
+        if depth < popped:
+            return False
+        next_depth = depth - popped + pushed
+        if depth > max_stack or next_depth > max_stack:
+            return False
+        for target in successors[instruction_offset]:
+            if target in depths:
+                if depths[target] != next_depth:
+                    return False
+                continue
+            depths[target] = next_depth
+            pending.append(target)
+    return True
 
 
 def _valid_stack_map_table(
@@ -2868,6 +3154,7 @@ def _valid_class_file(payload: bytes) -> bool:
                     ):
                         raise ValueError("invalid Code resource limits")
                     exception_table_length = read_code_uint(2)
+                    exception_handler_offsets: set[int] = set()
                     if exception_table_length and max_stack < 1:
                         raise ValueError("invalid Code resource limits")
                     for _ in range(exception_table_length):
@@ -2891,6 +3178,15 @@ def _valid_class_file(payload: bytes) -> bool:
                             )
                         ):
                             raise ValueError("invalid exception table")
+                        exception_handler_offsets.add(handler_pc)
+                    if not _valid_operand_stack_flow(
+                        code,
+                        instruction_offsets=instruction_offsets,
+                        constant_pool_values=values,
+                        exception_handler_offsets=exception_handler_offsets,
+                        max_stack=max_stack,
+                    ):
+                        raise ValueError("invalid operand stack flow")
                     found_stack_map_table = False
                     for _ in range(read_code_uint(2)):
                         nested_name = read_code_uint(2)
@@ -3150,7 +3446,8 @@ def _valid_class_file(payload: bytes) -> bool:
                         methods
                         and name == b"<init>"
                         and (
-                            access_flags & 0x0578
+                            class_access_flags & 0x0200
+                            or access_flags & 0x0578
                             or not descriptor.endswith(b")V")
                         )
                     )
