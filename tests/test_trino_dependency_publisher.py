@@ -1452,6 +1452,24 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 known_class_kinds={runnable_name: True},
             )
         )
+        interface_superclass = runnable_implementation.replace(
+            (
+                bytes.fromhex("0021000200040001")
+                + runnable_class_index.to_bytes(2, "big")
+            ),
+            (
+                bytes.fromhex("00210002")
+                + runnable_class_index.to_bytes(2, "big")
+                + b"\x00\x00"
+            ),
+            1,
+        )
+        self.assertFalse(
+            verify._valid_class_file(
+                interface_superclass,
+                known_class_kinds={runnable_name: True},
+            )
+        )
         runnable_jar = io.BytesIO()
         with zipfile.ZipFile(runnable_jar, "w") as archive:
             archive.writestr("A.class", runnable_implementation)
@@ -1491,6 +1509,25 @@ class MavenScanEvidenceTests(unittest.TestCase):
         with zipfile.ZipFile(out_of_range_multi_release_jar) as archive:
             self.assertFalse(
                 verify._jar_contains_bytecode(archive, "future.jar")
+            )
+        overridden_multi_release_jar = io.BytesIO()
+        with zipfile.ZipFile(overridden_multi_release_jar, "w") as archive:
+            archive.writestr(
+                "META-INF/MANIFEST.MF",
+                b"Manifest-Version: 1.0\r\nMulti-Release: true\r\n\r\n",
+            )
+            archive.writestr("A.class", self.CLASS_FILE)
+            archive.writestr(
+                "META-INF/versions/25/A.class",
+                self.CLASS_FILE.replace(
+                    b"\x01\x00\x01A",
+                    b"\x01\x00\x01B",
+                    1,
+                ),
+            )
+        with zipfile.ZipFile(overridden_multi_release_jar) as archive:
+            self.assertFalse(
+                verify._jar_contains_bytecode(archive, "overridden.jar")
             )
         mismatched_jar = io.BytesIO()
         with zipfile.ZipFile(mismatched_jar, "w") as archive:
@@ -1777,6 +1814,35 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     this_name=b"A",
                 )
             )
+        field_pool_tags = [0, 7, 1, 10, 12, 1, 1, 9, 12, 1, 1]
+        field_pool_values = [
+            None,
+            (2,),
+            b"A",
+            (1, 4),
+            (5, 6),
+            b"<init>",
+            b"()V",
+            (1, 8),
+            (9, 10),
+            b"value",
+            b"I",
+        ]
+        self.assertTrue(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("2A04B500072AB70003B1"),
+                instruction_offsets={0, 1, 2, 5, 6, 9},
+                constant_pool_tags=field_pool_tags,
+                constant_pool_values=field_pool_values,
+                exception_handlers=[],
+                max_stack=2,
+                max_locals=1,
+                method_access_flags=0,
+                method_name=b"<init>",
+                method_descriptor=b"()V",
+                this_name=b"A",
+            )
+        )
 
     def test_member_descriptors_require_jvm_grammar(self) -> None:
         for descriptor in (
@@ -2178,6 +2244,19 @@ class MavenScanEvidenceTests(unittest.TestCase):
         self.assertFalse(
             verify._valid_stack_map_table(
                 widened_frame,
+                code=bytes.fromhex("2AB0"),
+                constant_pool_tags=stack_map_tags,
+                constant_pool_values=stack_map_values,
+                instruction_offsets={0, 1},
+                computed_states=computed_states,
+            )
+        )
+        chopped_to_top_frame = bytes.fromhex(
+            "0001FF00000001000000"
+        )
+        self.assertTrue(
+            verify._valid_stack_map_table(
+                chopped_to_top_frame,
                 code=bytes.fromhex("2AB0"),
                 constant_pool_tags=stack_map_tags,
                 constant_pool_values=stack_map_values,

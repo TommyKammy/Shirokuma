@@ -3244,7 +3244,26 @@ def _valid_operand_stack_flow(
                 expected = ("reference",)
                 pushed_types = field_slots
             else:
-                expected = ("reference",) + field_slots
+                receiver_type = "reference"
+                if (
+                    method_name == b"<init>"
+                    and len(stack) >= len(field_slots) + 1
+                    and stack[-len(field_slots) - 1]
+                    == "uninitialized_this"
+                ):
+                    reference = constant(
+                        int.from_bytes(instruction[1:3], "big")
+                    )
+                    owner_reference = (
+                        class_reference(reference[0])
+                        if isinstance(reference, tuple)
+                        else None
+                    )
+                    if owner_reference == (
+                        f"reference:L{this_name.decode('latin-1')};"
+                    ):
+                        receiver_type = "uninitialized_this"
+                expected = (receiver_type,) + field_slots
         elif opcode in range(0xB6, 0xBB):
             pool_index = int.from_bytes(instruction[1:3], "big")
             descriptor = referenced_descriptor(pool_index)
@@ -3718,11 +3737,17 @@ def _valid_stack_map_table(
     def states_match(
         declared: tuple[str, ...],
         computed: tuple[str, ...],
+        *,
+        locals_state: bool = False,
     ) -> bool:
         if len(declared) != len(computed):
             return False
         return all(
             declared_slot == computed_slot
+            or (
+                locals_state
+                and declared_slot == "uninitialized"
+            )
             or (
                 computed_slot == "reference"
                 and (
@@ -3810,7 +3835,11 @@ def _valid_stack_map_table(
             )
             if not (
                 states_match(flatten(frame_stack), computed_stack)
-                and states_match(declared_locals, computed_locals)
+                and states_match(
+                    declared_locals,
+                    computed_locals,
+                    locals_state=True,
+                )
             ):
                 return False
             declared_frame_offsets.add(frame_offset)
@@ -4135,6 +4164,10 @@ def _valid_class_file(
                     super_name is None
                     or super_name == this_name
                     or this_name == b"java/lang/Object"
+                    or (
+                        known_class_kinds is not None
+                        and known_class_kinds.get(super_name) is True
+                    )
                 )
             )
             or (
@@ -4762,11 +4795,12 @@ def _class_identity_and_kind(payload: bytes) -> tuple[bytes, bool] | None:
 def _jar_contains_bytecode(archive: zipfile.ZipFile, path: str) -> bool:
     try:
         multi_release_enabled: bool | None = None
-        active_classes: list[tuple[zipfile.ZipInfo, str]] = []
+        active_classes: dict[str, tuple[int, zipfile.ZipInfo]] = {}
         for entry in archive.infolist():
             if not entry.filename.endswith(".class"):
                 continue
             class_path = entry.filename[:-6]
+            version = 0
             if class_path.startswith("META-INF/versions/"):
                 parts = class_path.split("/", 3)
                 if len(parts) != 4 or not parts[2].isdigit():
@@ -4786,12 +4820,14 @@ def _jar_contains_bytecode(archive: zipfile.ZipFile, path: str) -> bool:
                 if not multi_release_enabled:
                     continue
                 class_path = parts[3]
-            active_classes.append((entry, class_path))
+            selected = active_classes.get(class_path)
+            if selected is None or version > selected[0]:
+                active_classes[class_path] = (version, entry)
         known_class_kinds: dict[bytes, bool] = {
             b"java/lang/Object": False,
         }
         class_payloads: list[tuple[bytes, str]] = []
-        for entry, class_path in active_classes:
+        for class_path, (_, entry) in active_classes.items():
             class_payload = archive.read(entry)
             class_payloads.append((class_payload, class_path))
             identity = _class_identity_and_kind(class_payload)

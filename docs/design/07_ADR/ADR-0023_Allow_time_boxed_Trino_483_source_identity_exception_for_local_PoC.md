@@ -289,7 +289,9 @@ each declared `this_class` must match its JAR entry path after removing any
 active Java 9-25 multi-release prefix backed by a valid manifest. Standalone
 class evidence validates interface-table names and rejects `Object` or a
 JAR-local ordinary class while permitting structurally unresolved external
-interfaces. Java 7+ branch and exception targets require
+interfaces; a JAR-local interface cannot be used as a superclass. Only the
+highest active multi-release entry for each logical class path is evidence.
+Java 7+ branch and exception targets require
 matching declared stack-map frames. Dynamic constants must match the selected
 `ldc*` width, `multianewarray` dimensions cannot exceed the referenced array
 rank, and constructors can be invoked only through `invokespecial`. Every
@@ -297,6 +299,8 @@ regular source-classifier member, including permitted metadata, is consumed
 before acceptance. Exception-handler validation is work-product bounded,
 generic catch references can flow through reference locals, and local-only
 `top` merges remain unusable without invalidating an otherwise valid join.
+Declared local `top` entries can discard inferred out-of-scope values, and a
+constructor may write its own fields before its initializing constructor call.
 Modern class versions reject legacy
 `jsr`/`ret` instructions, and interface class evidence cannot declare a
 constructor. Return instructions must match their method descriptors,
