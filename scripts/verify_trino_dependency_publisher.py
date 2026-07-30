@@ -40,6 +40,8 @@ PARQUET_REMEDIATION_TEST_PATH = Path(
 MAX_OMITTED_JAR_MEMBER_BYTES = 64 * 1024 * 1024
 MAX_OMITTED_JAR_EXPANDED_BYTES = 256 * 1024 * 1024
 MAX_OMITTED_JAR_COMPRESSION_RATIO = 200
+MAX_OMITTED_CLASS_LOCALS = 1024
+MAX_OMITTED_CLASS_STATE_CELLS = 1_000_000
 PINNED_JAVA_CLASS_MAJOR_VERSION = 69
 SOURCE_OVERLAY_PATH = Path(
     "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch"
@@ -2466,9 +2468,16 @@ def _valid_operand_stack_flow(
     max_stack: int,
     max_locals: int,
     method_access_flags: int,
+    method_name: bytes,
     method_descriptor: bytes,
 ) -> bool:
     offsets = sorted(instruction_offsets)
+    if (
+        max_locals > MAX_OMITTED_CLASS_LOCALS
+        or max_locals * len(offsets)
+        > MAX_OMITTED_CLASS_STATE_CELLS
+    ):
+        return False
     exception_handler_offsets = {
         handler_pc for _, _, handler_pc in exception_handlers
     }
@@ -2495,6 +2504,16 @@ def _valid_operand_stack_flow(
             return None
         descriptor = constant(name_and_type[1])
         return descriptor if isinstance(descriptor, bytes) else None
+
+    def referenced_name(index: int) -> bytes | None:
+        reference = constant(index)
+        if not isinstance(reference, tuple) or len(reference) != 2:
+            return None
+        name_and_type = constant(reference[1])
+        if not isinstance(name_and_type, tuple) or len(name_and_type) != 2:
+            return None
+        name = constant(name_and_type[0])
+        return name if isinstance(name, bytes) else None
 
     try:
         for position, instruction_offset in enumerate(offsets):
@@ -2750,7 +2769,15 @@ def _valid_operand_stack_flow(
         return False
     parameter_types, _ = method_signature
     initial_local_types = (
-        (() if method_access_flags & 0x0008 else ("reference",))
+        (
+            ()
+            if method_access_flags & 0x0008
+            else (
+                "uninitialized_this"
+                if method_name == b"<init>"
+                else "reference",
+            )
+        )
         + parameter_types
     )
     if len(initial_local_types) > max_locals:
@@ -2771,6 +2798,7 @@ def _valid_operand_stack_flow(
         local_read: tuple[int, tuple[str, ...]] | None = None
         local_write: tuple[int, tuple[str, ...]] | None = None
         local_increment: int | None = None
+        initializes_receiver = False
 
         if opcode == 0x01:
             pushed_types = ("reference",)
@@ -2999,9 +3027,8 @@ def _valid_operand_stack_flow(
             else:
                 expected = ("reference",) + field_slots
         elif opcode in range(0xB6, 0xBB):
-            descriptor = referenced_descriptor(
-                int.from_bytes(instruction[1:3], "big")
-            )
+            pool_index = int.from_bytes(instruction[1:3], "big")
+            descriptor = referenced_descriptor(pool_index)
             signature = (
                 _method_descriptor_stack_slots(descriptor)
                 if isinstance(descriptor, bytes)
@@ -3010,10 +3037,20 @@ def _valid_operand_stack_flow(
             if signature is None:
                 return None
             parameters, return_types = signature
+            receiver_type = "reference"
+            if (
+                opcode == 0xB7
+                and referenced_name(pool_index) == b"<init>"
+                and len(stack) >= len(parameters) + 1
+                and stack[-len(parameters) - 1]
+                == "uninitialized_this"
+            ):
+                receiver_type = "uninitialized_this"
+                initializes_receiver = True
             expected = (
                 ()
                 if opcode in {0xB8, 0xBA}
-                else ("reference",)
+                else (receiver_type,)
             ) + parameters
             pushed_types = return_types
         elif opcode == 0xBB:
@@ -3062,14 +3099,23 @@ def _valid_operand_stack_flow(
 
         if local_read is not None:
             local_index, local_types = local_read
+            actual_local_types = locals_state[
+                local_index : local_index + len(local_types)
+            ]
             if (
                 local_index + len(local_types) > len(locals_state)
-                or locals_state[
-                    local_index : local_index + len(local_types)
-                ]
-                != local_types
+                or (
+                    actual_local_types != local_types
+                    and not (
+                        local_types == ("reference",)
+                        and actual_local_types
+                        == ("uninitialized_this",)
+                    )
+                )
             ):
                 return None
+            if actual_local_types == ("uninitialized_this",):
+                pushed_types = actual_local_types
         if (
             local_increment is not None
             and (
@@ -3092,6 +3138,25 @@ def _valid_operand_stack_flow(
             ] = local_types
             next_locals = tuple(local_values)
         result = remaining + pushed_types
+        if initializes_receiver:
+            result = tuple(
+                "reference"
+                if slot == "uninitialized_this"
+                else slot
+                for slot in result
+            )
+            next_locals = tuple(
+                "reference"
+                if slot == "uninitialized_this"
+                else slot
+                for slot in next_locals
+            )
+        if (
+            method_name == b"<init>"
+            and opcode in range(0xAC, 0xB2)
+            and "uninitialized_this" in next_locals
+        ):
+            return None
         if opcode in set(range(0xAC, 0xB2)) | {0xBF} and result:
             return None
         return result, next_locals
@@ -3614,6 +3679,7 @@ def _valid_class_file(payload: bytes) -> bool:
             allow_code: bool,
             class_level: bool = False,
             method_access_flags: int | None = None,
+            method_name: bytes | None = None,
             method_descriptor: bytes | None = None,
         ) -> bool:
             nonlocal bootstrap_method_count
@@ -3671,6 +3737,7 @@ def _valid_class_file(payload: bytes) -> bool:
                         resource_requirements is None
                         or parameter_slots is None
                         or method_access_flags is None
+                        or method_name is None
                         or max_stack < resource_requirements[0]
                         or max_locals
                         < max(
@@ -3721,6 +3788,7 @@ def _valid_class_file(payload: bytes) -> bool:
                         max_stack=max_stack,
                         max_locals=max_locals,
                         method_access_flags=method_access_flags,
+                        method_name=method_name,
                         method_descriptor=method_descriptor,
                     ):
                         raise ValueError("invalid operand stack flow")
@@ -3975,6 +4043,30 @@ def _valid_class_file(payload: bytes) -> bool:
                             and access_flags & 0x093A
                         )
                     )
+                    if (
+                        class_access_flags & 0x0200
+                        and name != b"<clinit>"
+                    ):
+                        invalid_access_flags = (
+                            invalid_access_flags
+                            or bool(
+                                access_flags
+                                & (0x0004 | 0x0010 | 0x0020 | 0x0100)
+                            )
+                            or (
+                                major_version < 52
+                                and not access_flags & 0x0400
+                            )
+                            or (
+                                major_version < 53
+                                and not access_flags & 0x0001
+                            )
+                            or (
+                                major_version >= 53
+                                and bool(access_flags & 0x0001)
+                                == bool(access_flags & 0x0002)
+                            )
+                        )
                 else:
                     invalid_access_flags = (
                         invalid_access_flags
@@ -4036,6 +4128,7 @@ def _valid_class_file(payload: bytes) -> bool:
                 found_code = read_attributes(
                     allow_code=methods,
                     method_access_flags=access_flags if methods else None,
+                    method_name=name if methods else None,
                     method_descriptor=descriptor if methods else None,
                 )
                 if methods and (

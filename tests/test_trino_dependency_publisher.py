@@ -1437,6 +1437,11 @@ class MavenScanEvidenceTests(unittest.TestCase):
             bytes.fromhex("000000110001000000000005"),
             1,
         )
+        excessive_locals = self.CLASS_FILE.replace(
+            code_header,
+            bytes.fromhex("000000110001FFFF00000005"),
+            1,
+        )
         stack_underflow = self.CLASS_FILE.replace(
             bytes.fromhex("2AB70009B1"),
             bytes.fromhex("57000000B1"),
@@ -1445,6 +1450,11 @@ class MavenScanEvidenceTests(unittest.TestCase):
         modern_jsr = self.CLASS_FILE.replace(
             bytes.fromhex("2AB70009B1"),
             bytes.fromhex("A8000400B1"),
+            1,
+        )
+        constructor_without_initialization = self.CLASS_FILE.replace(
+            bytes.fromhex("2AB70009B1"),
+            bytes.fromhex("00000000B1"),
             1,
         )
         wrong_return = self.CLASS_FILE.replace(
@@ -1484,8 +1494,12 @@ class MavenScanEvidenceTests(unittest.TestCase):
         )
         self.assertFalse(verify._valid_class_file(insufficient_stack))
         self.assertFalse(verify._valid_class_file(insufficient_locals))
+        self.assertFalse(verify._valid_class_file(excessive_locals))
         self.assertFalse(verify._valid_class_file(stack_underflow))
         self.assertFalse(verify._valid_class_file(modern_jsr))
+        self.assertFalse(
+            verify._valid_class_file(constructor_without_initialization)
+        )
         self.assertFalse(verify._valid_class_file(wrong_return))
         self.assertFalse(verify._valid_class_file(wrong_operand_type))
         self.assertFalse(verify._valid_class_file(uninitialized_local))
@@ -1499,6 +1513,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 max_stack=1,
                 max_locals=0,
                 method_access_flags=0x0008,
+                method_name=b"method",
                 method_descriptor=b"()I",
             )
         )
@@ -1603,6 +1618,20 @@ class MavenScanEvidenceTests(unittest.TestCase):
             1,
         )
         self.assertFalse(verify._valid_class_file(interface_constructor))
+        protected_interface_method = (
+            self.CONCRETE_CLASS_WITHOUT_CODE.replace(
+                b"\x00\x21\x00\x02\x00\x04",
+                b"\x06\x01\x00\x02\x00\x04",
+                1,
+            ).replace(
+                b"\x00\x01\x00\x05\x00\x06\x00\x00",
+                b"\x04\x04\x00\x05\x00\x06\x00\x00",
+                1,
+            )
+        )
+        self.assertFalse(
+            verify._valid_class_file(protected_interface_method)
+        )
 
         class_body_offset = self.CLASS_FILE.index(
             b"\x00\x21\x00\x02\x00\x04"

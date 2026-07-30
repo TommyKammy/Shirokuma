@@ -275,9 +275,12 @@ across control-flow joins and exception handlers, and propagated JVM operand
 types must match every consuming instruction and merge consistently. Local
 variable types begin from the receiver and descriptor parameters, change only
 through valid stores, and merge across normal and exceptional control flow;
-constant loads use their actual constant-pool tags. Modern class versions
-reject legacy `jsr`/`ret` instructions, and interface class evidence cannot
-declare a constructor. Return instructions must match their method descriptors,
+constant loads use their actual constant-pool tags. Constructor receivers remain
+uninitialized until a valid `this()` or `super()` invocation, interface method
+flags follow their class-file version, and bounded local/state-cell counts
+prevent validation-work amplification. Modern class versions reject legacy
+`jsr`/`ret` instructions, and interface class evidence cannot declare a
+constructor. Return instructions must match their method descriptors,
 recognized signature/source/marker attributes validate their payloads, and
 exception catch identities cannot be array classes. Test classifiers also
 restrict nonmetadata members to reviewed test-resource formats and read every
