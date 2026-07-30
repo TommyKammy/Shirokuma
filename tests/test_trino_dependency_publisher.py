@@ -1508,6 +1508,32 @@ class MavenScanEvidenceTests(unittest.TestCase):
         self.assertTrue(verify._jar_local_hierarchy_acyclic(hierarchy))
         self.assertLessEqual(hierarchy.reads, len(hierarchy))
 
+        supplementary_name = "\U00010400"
+        modified_name = verify._encode_modified_utf8(supplementary_name)
+        supplementary_class = self.CLASS_FILE.replace(
+            b"\x01\x00\x01A",
+            (
+                b"\x01"
+                + len(modified_name).to_bytes(2, "big")
+                + modified_name
+            ),
+            1,
+        )
+        self.assertTrue(verify._valid_class_file(supplementary_class))
+        supplementary_jar = io.BytesIO()
+        with zipfile.ZipFile(supplementary_jar, "w") as archive:
+            archive.writestr(
+                f"{supplementary_name}.class",
+                supplementary_class,
+            )
+        with zipfile.ZipFile(supplementary_jar) as archive:
+            self.assertTrue(
+                verify._jar_contains_bytecode(
+                    archive,
+                    "supplementary.jar",
+                )
+            )
+
         matching_jar = io.BytesIO()
         with zipfile.ZipFile(matching_jar, "w") as archive:
             archive.writestr(
@@ -2122,6 +2148,47 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     ),
                     valid,
                 )
+        virtual_tags = [0, 10, 7, 1, 12, 1, 1]
+        virtual_values = [
+            None,
+            (2, 4),
+            (3,),
+            b"java/lang/String",
+            (5, 6),
+            b"length",
+            b"()I",
+        ]
+        for descriptor, valid in (
+            (b"(Ljava/lang/String;)I", True),
+            (b"(Ljava/lang/Object;)I", False),
+        ):
+            with self.subTest(virtual_receiver=descriptor):
+                self.assertEqual(
+                    bool(
+                        verify._valid_operand_stack_flow(
+                            bytes.fromhex("2AB60001AC"),
+                            instruction_offsets={0, 1, 4},
+                            constant_pool_tags=virtual_tags,
+                            constant_pool_values=virtual_values,
+                            exception_handlers=[],
+                            max_stack=1,
+                            max_locals=1,
+                            method_access_flags=0x0008,
+                            method_name=b"method",
+                            method_descriptor=descriptor,
+                            this_name=b"A",
+                            known_class_kinds={
+                                b"java/lang/Object": False,
+                                b"java/lang/String": False,
+                            },
+                            known_superclasses={
+                                b"java/lang/Object": None,
+                                b"java/lang/String": b"java/lang/Object",
+                            },
+                        )
+                    ),
+                    valid,
+                )
         special_values = [
             None,
             (2, 4),
@@ -2297,6 +2364,47 @@ class MavenScanEvidenceTests(unittest.TestCase):
             verify._valid_class_file(
                 class_with_inner_classes(
                     b"\x00\x02" + inner_entry[2:]
+                )
+            )
+        )
+
+        def class_with_record(attribute: bytes) -> bytes:
+            def record_utf8(value: str) -> bytes:
+                payload = value.encode("ascii")
+                return (
+                    b"\x01"
+                    + len(payload).to_bytes(2, "big")
+                    + payload
+                )
+
+            return b"".join(
+                (
+                    b"\xca\xfe\xba\xbe\x00\x00\x00\x3c\x00\x08",
+                    record_utf8("A"),
+                    b"\x07\x00\x01",
+                    record_utf8("java/lang/Object"),
+                    b"\x07\x00\x03",
+                    record_utf8("Record"),
+                    record_utf8("value"),
+                    record_utf8("I"),
+                    b"\x00\x21\x00\x02\x00\x04",
+                    b"\x00\x00\x00\x00\x00\x00\x00\x01",
+                    b"\x00\x05",
+                    len(attribute).to_bytes(4, "big"),
+                    attribute,
+                )
+            )
+
+        record_component = b"\x00\x01\x00\x06\x00\x07\x00\x00"
+        self.assertTrue(
+            verify._valid_class_file(
+                class_with_record(record_component)
+            )
+        )
+        self.assertFalse(
+            verify._valid_class_file(
+                class_with_record(
+                    b"\x00\x63" + record_component[2:]
                 )
             )
         )

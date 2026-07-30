@@ -1919,6 +1919,31 @@ def _valid_modified_utf8(payload: bytes) -> bool:
     return True
 
 
+def _encode_modified_utf8(value: str) -> bytes:
+    encoded = bytearray()
+    utf16 = value.encode("utf-16-be", "surrogatepass")
+    for offset in range(0, len(utf16), 2):
+        code_unit = int.from_bytes(utf16[offset : offset + 2], "big")
+        if 0x01 <= code_unit <= 0x7F:
+            encoded.append(code_unit)
+        elif code_unit <= 0x07FF:
+            encoded.extend(
+                (
+                    0xC0 | code_unit >> 6,
+                    0x80 | code_unit & 0x3F,
+                )
+            )
+        else:
+            encoded.extend(
+                (
+                    0xE0 | code_unit >> 12,
+                    0x80 | code_unit >> 6 & 0x3F,
+                    0x80 | code_unit & 0x3F,
+                )
+            )
+    return bytes(encoded)
+
+
 def _bytecode_instruction_offsets(
     payload: bytes,
     *,
@@ -3484,6 +3509,10 @@ def _valid_operand_stack_flow(
                 if isinstance(reference, tuple)
                 else None
             )
+            if opcode in {0xB6, 0xB9}:
+                if owner_reference is None:
+                    return None
+                receiver_type = owner_reference
             if opcode == 0xB7 and owner_reference is None:
                 return None
             if opcode == 0xB7 and invocation_name != b"<init>":
@@ -5068,6 +5097,128 @@ def _valid_class_file(
                                 "invalid InnerClasses attribute"
                             )
                     singleton_attributes.add(b"InnerClasses")
+                elif values[name_index] == b"Record":
+                    if (
+                        not class_level
+                        or major_version < 60
+                        or b"Record" in singleton_attributes
+                        or len(attribute) < 2
+                    ):
+                        raise ValueError("invalid Record attribute")
+                    record_offset = 0
+
+                    def read_record_uint(size: int) -> int:
+                        nonlocal record_offset
+                        end = record_offset + size
+                        if end > len(attribute):
+                            raise ValueError("truncated Record attribute")
+                        value = int.from_bytes(
+                            attribute[record_offset:end],
+                            "big",
+                        )
+                        record_offset = end
+                        return value
+
+                    component_signatures: set[
+                        tuple[bytes, bytes]
+                    ] = set()
+                    for _ in range(read_record_uint(2)):
+                        component_name_index = read_record_uint(2)
+                        component_descriptor_index = read_record_uint(2)
+                        component_name = (
+                            values[component_name_index]
+                            if has_tag(component_name_index, 1)
+                            else None
+                        )
+                        component_descriptor = (
+                            values[component_descriptor_index]
+                            if has_tag(component_descriptor_index, 1)
+                            else None
+                        )
+                        component_signature = (
+                            (component_name, component_descriptor)
+                            if isinstance(component_name, bytes)
+                            and isinstance(component_descriptor, bytes)
+                            else None
+                        )
+                        if (
+                            component_signature is None
+                            or component_signature
+                            in component_signatures
+                            or not _valid_unqualified_name(
+                                component_name,
+                                method=False,
+                            )
+                            or not _valid_field_descriptor(
+                                component_descriptor
+                            )
+                        ):
+                            raise ValueError(
+                                "invalid Record component"
+                            )
+                        component_signatures.add(component_signature)
+                        component_attributes: set[bytes] = set()
+                        for _ in range(read_record_uint(2)):
+                            component_attribute_name_index = (
+                                read_record_uint(2)
+                            )
+                            if not has_tag(
+                                component_attribute_name_index,
+                                1,
+                            ):
+                                raise ValueError(
+                                    "invalid Record component attribute"
+                                )
+                            component_attribute_length = (
+                                read_record_uint(4)
+                            )
+                            component_attribute_end = (
+                                record_offset
+                                + component_attribute_length
+                            )
+                            if component_attribute_end > len(attribute):
+                                raise ValueError(
+                                    "truncated Record component attribute"
+                                )
+                            component_attribute = attribute[
+                                record_offset:component_attribute_end
+                            ]
+                            record_offset = component_attribute_end
+                            component_attribute_name = values[
+                                component_attribute_name_index
+                            ]
+                            if component_attribute_name == b"Signature":
+                                if (
+                                    b"Signature"
+                                    in component_attributes
+                                    or len(component_attribute) != 2
+                                    or not has_tag(
+                                        int.from_bytes(
+                                            component_attribute,
+                                            "big",
+                                        ),
+                                        1,
+                                    )
+                                ):
+                                    raise ValueError(
+                                        "invalid Record component Signature"
+                                    )
+                                component_attributes.add(b"Signature")
+                            elif component_attribute_name in {
+                                b"Code",
+                                b"ConstantValue",
+                                b"Exceptions",
+                                b"InnerClasses",
+                                b"Record",
+                                b"BootstrapMethods",
+                                b"SourceFile",
+                            }:
+                                raise ValueError(
+                                    "invalid Record component attribute"
+                                )
+                    if record_offset != len(attribute):
+                        raise ValueError("trailing Record attribute data")
+                    singleton_attributes.add(b"Record")
                 elif values[name_index] == b"Signature":
                     if (
                         b"Signature" in singleton_attributes
@@ -5434,7 +5585,7 @@ def _jar_contains_bytecode(archive: zipfile.ZipFile, path: str) -> bool:
         for class_payload, class_path in class_payloads:
             if _valid_class_file(
                 class_payload,
-                expected_name=class_path.encode("utf-8"),
+                expected_name=_encode_modified_utf8(class_path),
                 known_class_kinds=known_class_kinds,
                 known_superclasses=known_superclasses,
             ):

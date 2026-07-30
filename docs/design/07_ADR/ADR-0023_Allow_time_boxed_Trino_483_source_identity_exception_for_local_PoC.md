@@ -290,7 +290,9 @@ and returns; a value created by `new` remains allocation-offset-specific and
 uninitialized until the matching constructor call. Declared `StackMapTable`
 locals and stacks must reconcile with the computed state at every frame, and
 each declared `this_class` must match its JAR entry path after removing any
-active Java 9-25 multi-release prefix backed by a valid manifest. Standalone
+active Java 9-25 multi-release prefix backed by a valid manifest; the path is
+encoded as JVM modified UTF-8 so supplementary-plane identifiers compare
+correctly. Standalone
 class evidence validates interface-table names and rejects `Object` or a
 JAR-local ordinary class while permitting structurally unresolved external
 interfaces; a JAR-local interface cannot be used as a superclass. Only the
@@ -316,7 +318,8 @@ subtypes. `athrow` consumes its Throwable-compatible top operand and discards
 any lower operands on the terminating path.
 Primitive and reference array loads/stores require an opcode-compatible array
 descriptor, and instance-field receivers must be assignable to the symbolic
-field owner.
+field owner. Virtual and interface-call receivers must likewise be assignable
+to their symbolic method owner.
 Declared local `top` entries can discard inferred out-of-scope values, and a
 constructor may write its own fields before its initializing constructor call.
 That initializing call must target the current class or direct superclass.
@@ -330,7 +333,9 @@ constant-pool type; method `Exceptions` attributes validate placement,
 uniqueness, count, size, and class indices. `athrow` operands must be assignable
 to `java/lang/Throwable`. Class-level `InnerClasses` attributes validate
 placement, uniqueness, count, size, references, names, and flags. Exception
-handlers retain their declared catch type, and
+handlers retain their declared catch type, and class-level `Record` attributes
+validate placement, uniqueness, component count, bounds, identities,
+descriptors, and nested attribute structure.
 known JAR-local catch classes must reach `java/lang/Throwable`; catch identities
 cannot be array classes. Test classifiers also
 restrict nonmetadata members to reviewed test-resource formats and read every
