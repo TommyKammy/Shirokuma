@@ -340,6 +340,9 @@ placement, uniqueness, count, size, references, names, and flags. Exception
 handlers retain their declared catch type, and class-level `Record` attributes
 validate placement, uniqueness, component count, bounds, identities,
 descriptors, and nested attribute structure.
+Method-level `MethodParameters` attributes validate placement, uniqueness,
+descriptor arity, length, name indices, and flags. Local stores invalidate the
+adjacent half of any category-2 value they overlap.
 known JAR-local catch classes must reach `java/lang/Throwable`; catch identities
 cannot be array classes. Test classifiers also
 restrict nonmetadata members to reviewed test-resource formats and read every

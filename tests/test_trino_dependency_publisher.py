@@ -1907,6 +1907,26 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     this_name=b"A",
                 )
             )
+        for store_opcode, valid in ((0x41, True), (0x40, False)):
+            with self.subTest(category_two_store=store_opcode):
+                self.assertEqual(
+                    bool(
+                        verify._valid_operand_stack_flow(
+                            bytes((0x09, store_opcode, 0x1E, 0xAD)),
+                            instruction_offsets={0, 1, 2, 3},
+                            constant_pool_tags=[0],
+                            constant_pool_values=[None],
+                            exception_handlers=[],
+                            max_stack=2,
+                            max_locals=4,
+                            method_access_flags=0x0008,
+                            method_name=b"method",
+                            method_descriptor=b"(J)J",
+                            this_name=b"A",
+                        )
+                    ),
+                    valid,
+                )
         field_pool_tags = [0, 7, 1, 10, 12, 1, 1, 9, 12, 1, 1]
         field_pool_values = [
             None,
@@ -2359,6 +2379,50 @@ class MavenScanEvidenceTests(unittest.TestCase):
         self.assertFalse(
             verify._valid_class_file(
                 class_with_exceptions(b"\x00\x02\x00\x09")
+            )
+        )
+
+        def class_with_method_parameters(attribute: bytes) -> bytes:
+            def parameter_utf8(value: str) -> bytes:
+                payload = value.encode("ascii")
+                return (
+                    b"\x01"
+                    + len(payload).to_bytes(2, "big")
+                    + payload
+                )
+
+            return b"".join(
+                (
+                    b"\xca\xfe\xba\xbe\x00\x00\x00\x34\x00\x09",
+                    parameter_utf8("A"),
+                    b"\x07\x00\x01",
+                    parameter_utf8("java/lang/Object"),
+                    b"\x07\x00\x03",
+                    parameter_utf8("method"),
+                    parameter_utf8("(I)V"),
+                    parameter_utf8("MethodParameters"),
+                    parameter_utf8("value"),
+                    b"\x04\x21\x00\x02\x00\x04\x00\x00\x00\x00",
+                    b"\x00\x01\x04\x01\x00\x05\x00\x06\x00\x01",
+                    b"\x00\x07",
+                    len(attribute).to_bytes(4, "big"),
+                    attribute,
+                    b"\x00\x00",
+                )
+            )
+
+        self.assertTrue(
+            verify._valid_class_file(
+                class_with_method_parameters(
+                    b"\x01\x00\x08\x00\x10"
+                )
+            )
+        )
+        self.assertFalse(
+            verify._valid_class_file(
+                class_with_method_parameters(
+                    b"\x63\x00\x08\x00\x10"
+                )
             )
         )
 

@@ -2318,6 +2318,20 @@ def _method_descriptor_parameter_slots(
     )
 
 
+def _method_descriptor_parameter_count(payload: bytes) -> int | None:
+    if _method_descriptor_parameter_slots(payload) is None:
+        return None
+    offset = 1
+    parameter_count = 0
+    while payload[offset] != ord(")"):
+        parsed = _field_descriptor_end(payload, offset)
+        if parsed is None:
+            return None
+        offset = parsed[0]
+        parameter_count += 1
+    return parameter_count
+
+
 def _valid_method_descriptor(
     payload: bytes,
     *,
@@ -3747,8 +3761,25 @@ def _valid_operand_stack_flow(
             if local_index + len(local_types) > len(locals_state):
                 return None
             local_values = list(locals_state)
+            local_end = local_index + len(local_types)
+            if (
+                local_index > 0
+                and local_values[local_index - 1]
+                in {"long", "double"}
+                and local_values[local_index - 1]
+                == local_values[local_index]
+            ):
+                local_values[local_index - 1] = "uninitialized"
+            if (
+                local_end < len(local_values)
+                and local_values[local_end - 1]
+                in {"long", "double"}
+                and local_values[local_end - 1]
+                == local_values[local_end]
+            ):
+                local_values[local_end] = "uninitialized"
             local_values[
-                local_index : local_index + len(local_types)
+                local_index:local_end
             ] = local_types
             next_locals = tuple(local_values)
         result = remaining + pushed_types
@@ -5025,6 +5056,53 @@ def _valid_class_file(
                     ):
                         raise ValueError("invalid Exceptions attribute")
                     singleton_attributes.add(b"Exceptions")
+                elif values[name_index] == b"MethodParameters":
+                    parameter_count = (
+                        attribute[0] if attribute else -1
+                    )
+                    descriptor_parameter_count = (
+                        _method_descriptor_parameter_count(
+                            method_descriptor
+                        )
+                        if isinstance(method_descriptor, bytes)
+                        else None
+                    )
+                    if (
+                        method_descriptor is None
+                        or b"MethodParameters" in singleton_attributes
+                        or not attribute
+                        or descriptor_parameter_count is None
+                        or parameter_count != descriptor_parameter_count
+                        or len(attribute) != 1 + 4 * parameter_count
+                    ):
+                        raise ValueError(
+                            "invalid MethodParameters attribute"
+                        )
+                    for entry_offset in range(
+                        1,
+                        len(attribute),
+                        4,
+                    ):
+                        parameter_name_index = int.from_bytes(
+                            attribute[
+                                entry_offset : entry_offset + 2
+                            ],
+                            "big",
+                        )
+                        parameter_access_flags = int.from_bytes(
+                            attribute[
+                                entry_offset + 2 : entry_offset + 4
+                            ],
+                            "big",
+                        )
+                        if (
+                            parameter_name_index != 0
+                            and not has_tag(parameter_name_index, 1)
+                        ) or parameter_access_flags & ~0x9010:
+                            raise ValueError(
+                                "invalid MethodParameters attribute"
+                            )
+                    singleton_attributes.add(b"MethodParameters")
                 elif values[name_index] == b"InnerClasses":
                     inner_class_count = (
                         int.from_bytes(attribute[:2], "big")
