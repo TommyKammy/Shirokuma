@@ -302,7 +302,9 @@ before acceptance. Exception-handler validation is work-product bounded,
 generic catch references can flow through reference locals, and local-only
 `top` merges remain unusable without invalidating an otherwise valid join.
 Distinct reference identities at a join retain a declared common stack-map
-reference type rather than being forced to `java/lang/Object`.
+reference type rather than being forced to `java/lang/Object`. Concrete
+reference operands accept unresolved external subtype relationships while
+rejecting relationships disproved by the JAR-local superclass graph.
 Declared local `top` entries can discard inferred out-of-scope values, and a
 constructor may write its own fields before its initializing constructor call.
 That initializing call must target the current class or direct superclass.
@@ -311,7 +313,10 @@ older versions propagate and merge return-address targets. Interface class
 evidence cannot declare a constructor. Return instructions must match their
 method descriptors,
 recognized signature/source/marker attributes validate their payloads, and
-exception catch identities cannot be array classes. Test classifiers also
+predefined field `ConstantValue` attributes validate their length and
+constant-pool type. Exception handlers retain their declared catch type, and
+known JAR-local catch classes must reach `java/lang/Throwable`; catch identities
+cannot be array classes. Test classifiers also
 restrict nonmetadata members to reviewed test-resource formats and read every
 accepted payload; service-provider exemptions require a direct, UTF-8
 `META-INF/services/<binary-name>` configuration with valid service and provider

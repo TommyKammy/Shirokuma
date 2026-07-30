@@ -1908,6 +1908,176 @@ class MavenScanEvidenceTests(unittest.TestCase):
             )
         )
 
+    def test_reference_assignability_and_exception_types_follow_hierarchy(
+        self,
+    ) -> None:
+        call_tags = [0, 10, 7, 1, 12, 1, 1]
+        call_values = [
+            None,
+            (2, 4),
+            (3,),
+            b"Owner",
+            (5, 6),
+            b"take",
+            b"(Ljava/lang/CharSequence;)V",
+        ]
+        self.assertTrue(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("2AB80001B1"),
+                instruction_offsets={0, 1, 4},
+                constant_pool_tags=call_tags,
+                constant_pool_values=call_values,
+                exception_handlers=[],
+                max_stack=1,
+                max_locals=1,
+                method_access_flags=0x0008,
+                method_name=b"method",
+                method_descriptor=b"(Ljava/lang/String;)V",
+                this_name=b"A",
+            )
+        )
+        unrelated_values = [
+            *call_values[:6],
+            b"(LB;)V",
+        ]
+        self.assertFalse(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("2AB80001B1"),
+                instruction_offsets={0, 1, 4},
+                constant_pool_tags=call_tags,
+                constant_pool_values=unrelated_values,
+                exception_handlers=[],
+                max_stack=1,
+                max_locals=1,
+                method_access_flags=0x0008,
+                method_name=b"method",
+                method_descriptor=b"(LA;)V",
+                this_name=b"A",
+                known_class_kinds={
+                    b"java/lang/Object": False,
+                    b"A": False,
+                    b"B": False,
+                },
+                known_superclasses={
+                    b"java/lang/Object": None,
+                    b"A": b"java/lang/Object",
+                    b"B": b"java/lang/Object",
+                },
+            )
+        )
+        throwable_values = [
+            None,
+            (2, 4),
+            (3,),
+            b"java/lang/Throwable",
+            (5, 6),
+            b"fillInStackTrace",
+            b"()Ljava/lang/Throwable;",
+        ]
+        self.assertTrue(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("B14B2AB6000157B1"),
+                instruction_offsets={0, 1, 2, 3, 6, 7},
+                constant_pool_tags=call_tags,
+                constant_pool_values=throwable_values,
+                exception_handlers=[
+                    (
+                        0,
+                        1,
+                        1,
+                        "reference:Ljava/lang/Throwable;",
+                    )
+                ],
+                max_stack=1,
+                max_locals=1,
+                method_access_flags=0x0008,
+                method_name=b"method",
+                method_descriptor=b"()V",
+                this_name=b"A",
+            )
+        )
+
+    def test_exception_and_constant_value_attributes_are_loadable(
+        self,
+    ) -> None:
+        class_body_offset = self.CLASS_FILE.index(
+            b"\x00\x21\x00\x02\x00\x04"
+        )
+        constant_pool = self.CLASS_FILE[10:class_body_offset].replace(
+            b"<init>",
+            b"method",
+            1,
+        )
+
+        def class_with_catch(catch_type: int) -> bytes:
+            code = bytes.fromhex("B14BB1")
+            code_attribute = b"".join(
+                (
+                    b"\x00\x01\x00\x01",
+                    len(code).to_bytes(4, "big"),
+                    code,
+                    b"\x00\x01",
+                    b"\x00\x00\x00\x01\x00\x01",
+                    catch_type.to_bytes(2, "big"),
+                    b"\x00\x00",
+                )
+            )
+            method = b"".join(
+                (
+                    b"\x00\x09\x00\x05\x00\x06\x00\x01",
+                    b"\x00\x07",
+                    len(code_attribute).to_bytes(4, "big"),
+                    code_attribute,
+                )
+            )
+            return b"".join(
+                (
+                    b"\xca\xfe\xba\xbe\x00\x00\x00\x31\x00\x0a",
+                    constant_pool,
+                    b"\x00\x21\x00\x02\x00\x04",
+                    b"\x00\x00\x00\x00\x00\x01",
+                    method,
+                    b"\x00\x00",
+                )
+            )
+
+        self.assertTrue(verify._valid_class_file(class_with_catch(0)))
+        self.assertFalse(verify._valid_class_file(class_with_catch(2)))
+
+        def utf8(value: str) -> bytes:
+            payload = value.encode("ascii")
+            return b"\x01" + len(payload).to_bytes(2, "big") + payload
+
+        def class_with_constant_value(attribute: bytes) -> bytes:
+            return b"".join(
+                (
+                    b"\xca\xfe\xba\xbe\x00\x00\x00\x34\x00\x09",
+                    utf8("A"),
+                    b"\x07\x00\x01",
+                    utf8("java/lang/Object"),
+                    b"\x07\x00\x03",
+                    utf8("value"),
+                    utf8("I"),
+                    utf8("ConstantValue"),
+                    b"\x03\x00\x00\x00\x01",
+                    b"\x00\x21\x00\x02\x00\x04\x00\x00",
+                    b"\x00\x01\x00\x19\x00\x05\x00\x06\x00\x01",
+                    b"\x00\x07",
+                    len(attribute).to_bytes(4, "big"),
+                    attribute,
+                    b"\x00\x00\x00\x00",
+                )
+            )
+
+        self.assertTrue(
+            verify._valid_class_file(class_with_constant_value(b"\x00\x08"))
+        )
+        self.assertFalse(
+            verify._valid_class_file(
+                class_with_constant_value(b"\x00\x08\x00\x00")
+            )
+        )
+
     def test_member_descriptors_require_jvm_grammar(self) -> None:
         for descriptor in (
             b"I",

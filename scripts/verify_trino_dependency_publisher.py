@@ -2544,7 +2544,9 @@ def _valid_operand_stack_flow(
     instruction_offsets: set[int],
     constant_pool_tags: list[int],
     constant_pool_values: list[object],
-    exception_handlers: list[tuple[int, int, int]],
+    exception_handlers: list[
+        tuple[int, int, int] | tuple[int, int, int, str]
+    ],
     max_stack: int,
     max_locals: int,
     method_access_flags: int,
@@ -2554,11 +2556,22 @@ def _valid_operand_stack_flow(
     required_stack_map_offsets: set[int] | None = None,
     major_version: int = PINNED_JAVA_CLASS_MAJOR_VERSION,
     super_name: bytes | None = None,
+    known_class_kinds: Mapping[bytes, bool] | None = None,
+    known_superclasses: Mapping[bytes, bytes | None] | None = None,
 ) -> (
     dict[int, tuple[tuple[str, ...], tuple[str, ...]]]
     | bool
 ):
     offsets = sorted(instruction_offsets)
+    typed_exception_handlers = [
+        (
+            handler[0],
+            handler[1],
+            handler[2],
+            handler[3] if len(handler) == 4 else "reference",
+        )
+        for handler in exception_handlers
+    ]
     if (
         max_locals > MAX_OMITTED_CLASS_LOCALS
         or max_locals * len(offsets)
@@ -2568,7 +2581,8 @@ def _valid_operand_stack_flow(
     ):
         return False
     exception_handler_offsets = {
-        handler_pc for _, _, handler_pc in exception_handlers
+        handler_pc
+        for _, _, handler_pc, _ in typed_exception_handlers
     }
     if required_stack_map_offsets is not None:
         required_stack_map_offsets.update(exception_handler_offsets)
@@ -2858,6 +2872,50 @@ def _valid_operand_stack_flow(
         if len(stack) < len(expected):
             return None
         actual = stack[len(stack) - len(expected) :] if expected else ()
+
+        def reference_name(slot: str) -> bytes | None:
+            descriptor = slot.removeprefix("reference:")
+            if (
+                descriptor.startswith("L")
+                and descriptor.endswith(";")
+            ):
+                return descriptor[1:-1].encode("latin-1")
+            return None
+
+        def known_reference_assignable(
+            actual_slot: str,
+            expected_slot: str,
+        ) -> bool:
+            actual_name = reference_name(actual_slot)
+            expected_name = reference_name(expected_slot)
+            if (
+                actual_name == b"java/lang/Object"
+                and expected_name != b"java/lang/Object"
+            ):
+                return False
+            if (
+                actual_name is None
+                or expected_name is None
+                or known_class_kinds is None
+                or known_superclasses is None
+                or expected_name not in known_class_kinds
+                or known_class_kinds.get(expected_name) is True
+                or actual_name not in known_superclasses
+            ):
+                return True
+            current: bytes | None = actual_name
+            visited: set[bytes] = set()
+            while (
+                current is not None
+                and current in known_superclasses
+                and current not in visited
+            ):
+                if current == expected_name:
+                    return True
+                visited.add(current)
+                current = known_superclasses[current]
+            return current == expected_name
+
         def assignable(actual_slot: str, expected_slot: str) -> bool:
             if (
                 actual_slot == expected_slot
@@ -2882,6 +2940,10 @@ def _valid_operand_stack_flow(
                     actual_slot == expected_slot
                     or expected_slot
                     == "reference:Ljava/lang/Object;"
+                    or known_reference_assignable(
+                        actual_slot,
+                        expected_slot,
+                    )
                 )
             return False
         if any(
@@ -3566,10 +3628,11 @@ def _valid_operand_stack_flow(
             depths[target] = next_depth
             pending.append(target)
 
-    exceptional_successors: dict[int, set[int]] = {
+    exceptional_successors: dict[int, set[tuple[int, str]]] = {
         instruction_offset: {
-            handler_pc
-            for start_pc, end_pc, handler_pc in exception_handlers
+            (handler_pc, catch_slot)
+            for start_pc, end_pc, handler_pc, catch_slot
+            in typed_exception_handlers
             if start_pc <= instruction_offset < end_pc
         }
         for instruction_offset in offsets
@@ -3706,11 +3769,13 @@ def _valid_operand_stack_flow(
         for target in transition_targets:
             if merge_state(target, next_stack, next_locals) is None:
                 return False
-        for handler_offset in exceptional_successors[instruction_offset]:
+        for handler_offset, catch_slot in exceptional_successors[
+            instruction_offset
+        ]:
             if (
                 merge_state(
                     handler_offset,
-                    ("reference",),
+                    (catch_slot,),
                     current_locals,
                 )
                 is None
@@ -3960,6 +4025,7 @@ def _valid_class_file(
     *,
     expected_name: bytes | None = None,
     known_class_kinds: Mapping[bytes, bool] | None = None,
+    known_superclasses: Mapping[bytes, bytes | None] | None = None,
 ) -> bool:
     offset = 0
 
@@ -4276,6 +4342,33 @@ def _valid_class_file(
             )
         ):
             return False
+        effective_class_kinds = dict(known_class_kinds or {})
+        effective_class_kinds.setdefault(b"java/lang/Object", False)
+        effective_class_kinds[this_name] = bool(
+            class_access_flags & 0x0200
+        )
+        effective_superclasses = dict(known_superclasses or {})
+        effective_superclasses[this_name] = super_name
+
+        def valid_catch_class(catch_name: bytes) -> bool:
+            if (
+                catch_name == b"java/lang/Object"
+                or effective_class_kinds.get(catch_name) is True
+            ):
+                return False
+            current: bytes | None = catch_name
+            visited: set[bytes] = set()
+            while current is not None and current not in visited:
+                if current == b"java/lang/Throwable":
+                    return True
+                if current == b"java/lang/Object":
+                    return False
+                visited.add(current)
+                if current not in effective_superclasses:
+                    return True
+                current = effective_superclasses[current]
+            return False
+
         interface_names: set[bytes] = set()
         for _ in range(read_uint(2)):
             interface_name = class_name(
@@ -4304,6 +4397,7 @@ def _valid_class_file(
             method_access_flags: int | None = None,
             method_name: bytes | None = None,
             method_descriptor: bytes | None = None,
+            field_descriptor: bytes | None = None,
         ) -> bool:
             nonlocal bootstrap_method_count
             found_code = False
@@ -4372,7 +4466,9 @@ def _valid_class_file(
                     ):
                         raise ValueError("invalid Code resource limits")
                     exception_table_length = read_code_uint(2)
-                    exception_handlers: list[tuple[int, int, int]] = []
+                    exception_handlers: list[
+                        tuple[int, int, int, str]
+                    ] = []
                     if exception_table_length and max_stack < 1:
                         raise ValueError("invalid Code resource limits")
                     for _ in range(exception_table_length):
@@ -4380,6 +4476,14 @@ def _valid_class_file(
                         end_pc = read_code_uint(2)
                         handler_pc = read_code_uint(2)
                         catch_type = read_code_uint(2)
+                        catch_name = (
+                            class_name(
+                                catch_type,
+                                allow_array=False,
+                            )
+                            if catch_type != 0
+                            else b"java/lang/Throwable"
+                        )
                         if (
                             start_pc >= end_pc
                             or end_pc > code_length
@@ -4390,18 +4494,18 @@ def _valid_class_file(
                                 and end_pc not in instruction_offsets
                             )
                             or handler_pc not in instruction_offsets
-                            or (
-                                catch_type != 0
-                                and class_name(
-                                    catch_type,
-                                    allow_array=False,
-                                )
-                                is None
-                            )
+                            or catch_name is None
+                            or not valid_catch_class(catch_name)
                         ):
                             raise ValueError("invalid exception table")
                         exception_handlers.append(
-                            (start_pc, end_pc, handler_pc)
+                            (
+                                start_pc,
+                                end_pc,
+                                handler_pc,
+                                "reference:"
+                                f"L{catch_name.decode('latin-1')};",
+                            )
                         )
                     required_stack_map_offsets: set[int] = set()
                     computed_states = _valid_operand_stack_flow(
@@ -4423,6 +4527,8 @@ def _valid_class_file(
                         ),
                         major_version=major_version,
                         super_name=super_name,
+                        known_class_kinds=effective_class_kinds,
+                        known_superclasses=effective_superclasses,
                     )
                     if not isinstance(computed_states, dict):
                         raise ValueError("invalid operand stack flow")
@@ -4624,6 +4730,38 @@ def _valid_class_file(
                         raise ValueError(
                             "trailing BootstrapMethods attribute data"
                         )
+                elif values[name_index] == b"ConstantValue":
+                    expected_tag = (
+                        3
+                        if field_descriptor in {
+                            b"B",
+                            b"C",
+                            b"I",
+                            b"S",
+                            b"Z",
+                        }
+                        else 4
+                        if field_descriptor == b"F"
+                        else 5
+                        if field_descriptor == b"J"
+                        else 6
+                        if field_descriptor == b"D"
+                        else 8
+                        if field_descriptor == b"Ljava/lang/String;"
+                        else None
+                    )
+                    if (
+                        field_descriptor is None
+                        or b"ConstantValue" in singleton_attributes
+                        or len(attribute) != 2
+                        or expected_tag is None
+                        or not has_tag(
+                            int.from_bytes(attribute, "big"),
+                            expected_tag,
+                        )
+                    ):
+                        raise ValueError("invalid ConstantValue attribute")
+                    singleton_attributes.add(b"ConstantValue")
                 elif values[name_index] == b"Signature":
                     if (
                         b"Signature" in singleton_attributes
@@ -4777,6 +4915,7 @@ def _valid_class_file(
                     method_access_flags=access_flags if methods else None,
                     method_name=name if methods else None,
                     method_descriptor=descriptor if methods else None,
+                    field_descriptor=descriptor if not methods else None,
                 )
                 if methods and (
                     found_code == bool(access_flags & (0x0100 | 0x0400))
@@ -4983,6 +5122,7 @@ def _jar_contains_bytecode(archive: zipfile.ZipFile, path: str) -> bool:
                 class_payload,
                 expected_name=class_path.encode("utf-8"),
                 known_class_kinds=known_class_kinds,
+                known_superclasses=known_superclasses,
             ):
                 return True
         return False
