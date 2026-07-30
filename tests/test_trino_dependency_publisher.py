@@ -1616,6 +1616,91 @@ class MavenScanEvidenceTests(unittest.TestCase):
             verify._valid_class_file(dynamic_class(0, bootstrap_kind=1))
         )
 
+    def test_constant_pool_rejects_module_and_invalid_unused_name_and_type(
+        self,
+    ) -> None:
+        def utf8(value: str) -> bytes:
+            payload = value.encode("ascii")
+            return b"\x01" + len(payload).to_bytes(2, "big") + payload
+
+        class_body = (
+            b"\x00\x21\x00\x02\x00\x04"
+            b"\x00\x00\x00\x00\x00\x00\x00\x00"
+        )
+        module_constant = b"".join(
+            (
+                b"\xca\xfe\xba\xbe\x00\x00\x00\x35\x00\x06",
+                utf8("A"),
+                b"\x07\x00\x01",
+                utf8("java/lang/Object"),
+                b"\x07\x00\x03",
+                b"\x13\x00\x01",
+                class_body,
+            )
+        )
+        self.assertFalse(verify._valid_class_file(module_constant))
+
+        invalid_name_and_type = b"".join(
+            (
+                b"\xca\xfe\xba\xbe\x00\x00\x00\x34\x00\x08",
+                utf8("A"),
+                b"\x07\x00\x01",
+                utf8("java/lang/Object"),
+                b"\x07\x00\x03",
+                utf8("<bad>"),
+                utf8("xxx"),
+                b"\x0c\x00\x05\x00\x06",
+                class_body,
+            )
+        )
+        self.assertFalse(verify._valid_class_file(invalid_name_and_type))
+
+    def test_code_nested_attributes_require_valid_structure(self) -> None:
+        class_body_offset = self.CLASS_FILE.index(
+            b"\x00\x21\x00\x02\x00\x04"
+        )
+        constant_pool = self.CLASS_FILE[10:class_body_offset]
+        stack_map_name = b"\x01\x00\x0dStackMapTable"
+
+        def class_with_stack_map(payload: bytes) -> bytes:
+            code = b"\x2a\xb7\x00\x09\xb1"
+            code_attribute = b"".join(
+                (
+                    b"\x00\x01",
+                    b"\x00\x01",
+                    len(code).to_bytes(4, "big"),
+                    code,
+                    b"\x00\x00",
+                    b"\x00\x01",
+                    b"\x00\x0a",
+                    len(payload).to_bytes(4, "big"),
+                    payload,
+                )
+            )
+            method_info = b"".join(
+                (
+                    b"\x00\x01\x00\x05\x00\x06\x00\x01",
+                    b"\x00\x07",
+                    len(code_attribute).to_bytes(4, "big"),
+                    code_attribute,
+                )
+            )
+            return b"".join(
+                (
+                    self.CLASS_FILE[:8],
+                    b"\x00\x0b",
+                    constant_pool,
+                    stack_map_name,
+                    b"\x00\x21\x00\x02\x00\x04",
+                    b"\x00\x00\x00\x00\x00\x01",
+                    method_info,
+                    b"\x00\x00",
+                )
+            )
+
+        self.assertTrue(verify._valid_class_file(class_with_stack_map(b"\x00\x00")))
+        self.assertFalse(verify._valid_class_file(class_with_stack_map(b"\x00")))
+
     def test_modified_utf8_validation_matches_class_file_encoding(self) -> None:
         for payload in (
             b"A",
@@ -1885,6 +1970,20 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 b"\xb7\x00\x01\xb1",
                 constant_pool_tags=interface_tags,
                 major_version=51,
+            )
+        )
+        self.assertIsNotNone(
+            verify._bytecode_instruction_offsets(
+                b"\xb9\x00\x01\x01\x00\xb1",
+                constant_pool_tags=interface_tags,
+                invokeinterface_counts={1: 1},
+            )
+        )
+        self.assertIsNone(
+            verify._bytecode_instruction_offsets(
+                b"\xb9\x00\x01\x02\x00\xb1",
+                constant_pool_tags=interface_tags,
+                invokeinterface_counts={1: 1},
             )
         )
 

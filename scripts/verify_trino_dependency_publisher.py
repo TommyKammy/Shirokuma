@@ -1871,6 +1871,7 @@ def _bytecode_instruction_offsets(
     payload: bytes,
     *,
     constant_pool_tags: list[int] | None = None,
+    invokeinterface_counts: Mapping[int, int] | None = None,
     major_version: int = 52,
 ) -> set[int] | None:
     zero_operand = (
@@ -1970,13 +1971,19 @@ def _bytecode_instruction_offsets(
                 continue
             if opcode == 0xB9:
                 operands = read(4)
+                pool_index = int.from_bytes(operands[:2], "big")
                 if (
                     not has_constant_tag(
-                        int.from_bytes(operands[:2], "big"),
+                        pool_index,
                         11,
                     )
                     or operands[2] == 0
                     or operands[3] != 0
+                    or (
+                        invokeinterface_counts is not None
+                        and invokeinterface_counts.get(pool_index)
+                        != operands[2]
+                    )
                 ):
                     return None
                 continue
@@ -2116,30 +2123,131 @@ def _valid_field_descriptor(payload: bytes) -> bool:
     return parsed is not None and parsed[0] == len(payload)
 
 
-def _valid_method_descriptor(
+def _method_descriptor_parameter_slots(
     payload: bytes,
     *,
     max_parameter_slots: int = 255,
-) -> bool:
+) -> int | None:
     if not payload.startswith(b"("):
-        return False
+        return None
     offset = 1
     parameter_slots = 0
     while offset < len(payload) and payload[offset] != ord(")"):
         parsed = _field_descriptor_end(payload, offset)
         if parsed is None:
-            return False
+            return None
         offset, slots = parsed
         parameter_slots += slots
         if parameter_slots > max_parameter_slots:
-            return False
+            return None
     if offset >= len(payload) or payload[offset] != ord(")"):
-        return False
+        return None
     offset += 1
     if offset < len(payload) and payload[offset] == ord("V"):
-        return offset + 1 == len(payload)
-    parsed = _field_descriptor_end(payload, offset)
-    return parsed is not None and parsed[0] == len(payload)
+        return parameter_slots if offset + 1 == len(payload) else None
+    return_type = _field_descriptor_end(payload, offset)
+    return (
+        parameter_slots
+        if return_type is not None and return_type[0] == len(payload)
+        else None
+    )
+
+
+def _valid_method_descriptor(
+    payload: bytes,
+    *,
+    max_parameter_slots: int = 255,
+) -> bool:
+    return (
+        _method_descriptor_parameter_slots(
+            payload,
+            max_parameter_slots=max_parameter_slots,
+        )
+        is not None
+    )
+
+
+def _valid_stack_map_table(
+    payload: bytes,
+    *,
+    code: bytes,
+    constant_pool_tags: list[int],
+    instruction_offsets: set[int],
+) -> bool:
+    offset = 0
+
+    def read_uint(size: int) -> int:
+        nonlocal offset
+        end = offset + size
+        if end > len(payload):
+            raise ValueError("truncated StackMapTable")
+        value = int.from_bytes(payload[offset:end], "big")
+        offset = end
+        return value
+
+    def read_verification_type() -> bool:
+        tag = read_uint(1)
+        if tag in range(7):
+            return True
+        if tag == 7:
+            pool_index = read_uint(2)
+            return (
+                0 < pool_index < len(constant_pool_tags)
+                and constant_pool_tags[pool_index] == 7
+            )
+        if tag == 8:
+            code_offset = read_uint(2)
+            return (
+                code_offset in instruction_offsets
+                and code[code_offset] == 0xBB
+            )
+        return False
+
+    try:
+        previous_frame_offset = -1
+        for _ in range(read_uint(2)):
+            frame_type = read_uint(1)
+            if frame_type <= 63:
+                offset_delta = frame_type
+            elif frame_type <= 127:
+                offset_delta = frame_type - 64
+                if not read_verification_type():
+                    return False
+            elif frame_type == 247:
+                offset_delta = read_uint(2)
+                if not read_verification_type():
+                    return False
+            elif 248 <= frame_type <= 251:
+                offset_delta = read_uint(2)
+            elif 252 <= frame_type <= 254:
+                offset_delta = read_uint(2)
+                for _ in range(frame_type - 251):
+                    if not read_verification_type():
+                        return False
+            elif frame_type == 255:
+                offset_delta = read_uint(2)
+                for _ in range(read_uint(2)):
+                    if not read_verification_type():
+                        return False
+                for _ in range(read_uint(2)):
+                    if not read_verification_type():
+                        return False
+            else:
+                return False
+            frame_offset = (
+                offset_delta
+                if previous_frame_offset < 0
+                else previous_frame_offset + offset_delta + 1
+            )
+            if (
+                frame_offset not in instruction_offsets
+                or frame_offset >= len(code)
+            ):
+                return False
+            previous_frame_offset = frame_offset
+        return offset == len(payload)
+    except ValueError:
+        return False
 
 
 def _valid_class_file(payload: bytes) -> bool:
@@ -2241,15 +2349,18 @@ def _valid_class_file(payload: bytes) -> bool:
             return name
 
         dynamic_bootstrap_indices: list[int] = []
+        invokeinterface_counts: dict[int, int] = {}
         for pool_index in range(1, constant_pool_count):
             tag = tags[pool_index]
             value = values[pool_index]
             if tag == 7:
                 if class_name(pool_index, allow_array=True) is None:
                     return False
-            elif tag in {8, 19, 20}:
+            elif tag == 8:
                 if not isinstance(value, tuple) or not has_tag(value[0], 1):
                     return False
+            elif tag in {19, 20}:
+                return False
             elif tag == 16:
                 if (
                     not isinstance(value, tuple)
@@ -2296,12 +2407,44 @@ def _valid_class_file(payload: bytes) -> bool:
                     )
                 ):
                     return False
+                if tag == 11:
+                    parameter_slots = _method_descriptor_parameter_slots(
+                        descriptor
+                    )
+                    if parameter_slots is None:
+                        return False
+                    invokeinterface_counts[pool_index] = parameter_slots + 1
             elif tag == 12:
                 if (
                     not isinstance(value, tuple)
                     or not has_tag(value[0], 1)
                     or not has_tag(value[1], 1)
                 ):
+                    return False
+                name = values[value[0]]
+                descriptor = values[value[1]]
+                if not isinstance(name, bytes) or not isinstance(
+                    descriptor,
+                    bytes,
+                ):
+                    return False
+                field_identity = (
+                    _valid_unqualified_name(name, method=False)
+                    and _valid_field_descriptor(descriptor)
+                )
+                method_identity = (
+                    _valid_unqualified_name(name, method=True)
+                    and _valid_method_descriptor(descriptor)
+                    and (
+                        name != b"<init>"
+                        or descriptor.endswith(b")V")
+                    )
+                    and (
+                        name != b"<clinit>"
+                        or descriptor == b"()V"
+                    )
+                )
+                if not field_identity and not method_identity:
                     return False
             elif tag == 15:
                 reference_kind, reference_index = value
@@ -2461,13 +2604,15 @@ def _valid_class_file(payload: bytes) -> bool:
                         return int.from_bytes(read_code(size), "big")
 
                     read_code_uint(2)
-                    read_code_uint(2)
+                    max_locals = read_code_uint(2)
                     code_length = read_code_uint(4)
                     if not 0 < code_length <= 65535:
                         raise ValueError("invalid bytecode length")
+                    code = read_code(code_length)
                     instruction_offsets = _bytecode_instruction_offsets(
-                        read_code(code_length),
+                        code,
                         constant_pool_tags=tags,
+                        invokeinterface_counts=invokeinterface_counts,
                         major_version=major_version,
                     )
                     if instruction_offsets is None:
@@ -2493,11 +2638,136 @@ def _valid_class_file(payload: bytes) -> bool:
                             )
                         ):
                             raise ValueError("invalid exception table")
+                    found_stack_map_table = False
                     for _ in range(read_code_uint(2)):
                         nested_name = read_code_uint(2)
                         if not has_tag(nested_name, 1):
                             raise ValueError("invalid Code attribute name")
-                        read_code(read_code_uint(4))
+                        nested_attribute = read_code(read_code_uint(4))
+                        nested_kind = values[nested_name]
+                        if nested_kind == b"StackMapTable":
+                            if found_stack_map_table or not (
+                                _valid_stack_map_table(
+                                    nested_attribute,
+                                    code=code,
+                                    constant_pool_tags=tags,
+                                    instruction_offsets=instruction_offsets,
+                                )
+                            ):
+                                raise ValueError("invalid StackMapTable")
+                            found_stack_map_table = True
+                        elif nested_kind == b"LineNumberTable":
+                            if len(nested_attribute) < 2:
+                                raise ValueError("invalid LineNumberTable")
+                            entry_count = int.from_bytes(
+                                nested_attribute[:2],
+                                "big",
+                            )
+                            if len(nested_attribute) != 2 + 4 * entry_count:
+                                raise ValueError("invalid LineNumberTable")
+                            for entry_offset in range(
+                                2,
+                                len(nested_attribute),
+                                4,
+                            ):
+                                start_pc = int.from_bytes(
+                                    nested_attribute[
+                                        entry_offset : entry_offset + 2
+                                    ],
+                                    "big",
+                                )
+                                if start_pc not in instruction_offsets:
+                                    raise ValueError(
+                                        "invalid LineNumberTable"
+                                    )
+                        elif nested_kind in {
+                            b"LocalVariableTable",
+                            b"LocalVariableTypeTable",
+                        }:
+                            if len(nested_attribute) < 2:
+                                raise ValueError(
+                                    "invalid local variable table"
+                                )
+                            entry_count = int.from_bytes(
+                                nested_attribute[:2],
+                                "big",
+                            )
+                            if len(nested_attribute) != 2 + 10 * entry_count:
+                                raise ValueError(
+                                    "invalid local variable table"
+                                )
+                            for entry_offset in range(
+                                2,
+                                len(nested_attribute),
+                                10,
+                            ):
+                                start_pc = int.from_bytes(
+                                    nested_attribute[
+                                        entry_offset : entry_offset + 2
+                                    ],
+                                    "big",
+                                )
+                                variable_length = int.from_bytes(
+                                    nested_attribute[
+                                        entry_offset + 2 : entry_offset + 4
+                                    ],
+                                    "big",
+                                )
+                                variable_end = start_pc + variable_length
+                                variable_name = int.from_bytes(
+                                    nested_attribute[
+                                        entry_offset + 4 : entry_offset + 6
+                                    ],
+                                    "big",
+                                )
+                                variable_type = int.from_bytes(
+                                    nested_attribute[
+                                        entry_offset + 6 : entry_offset + 8
+                                    ],
+                                    "big",
+                                )
+                                variable_index = int.from_bytes(
+                                    nested_attribute[
+                                        entry_offset + 8 : entry_offset + 10
+                                    ],
+                                    "big",
+                                )
+                                descriptor = (
+                                    values[variable_type]
+                                    if has_tag(variable_type, 1)
+                                    else None
+                                )
+                                descriptor_slots = (
+                                    _field_descriptor_end(descriptor)[1]
+                                    if nested_kind
+                                    == b"LocalVariableTable"
+                                    and isinstance(descriptor, bytes)
+                                    and _valid_field_descriptor(descriptor)
+                                    else 1
+                                )
+                                if (
+                                    start_pc not in instruction_offsets
+                                    or variable_end > code_length
+                                    or (
+                                        variable_end != code_length
+                                        and variable_end
+                                        not in instruction_offsets
+                                    )
+                                    or not has_tag(variable_name, 1)
+                                    or not has_tag(variable_type, 1)
+                                    or variable_index + descriptor_slots
+                                    > max_locals
+                                ):
+                                    raise ValueError(
+                                        "invalid local variable table"
+                                    )
+                        elif nested_kind in {
+                            b"Code",
+                            b"BootstrapMethods",
+                        }:
+                            raise ValueError(
+                                "invalid nested Code attribute placement"
+                            )
                     if code_offset != len(attribute):
                         raise ValueError("trailing Code attribute data")
                     found_code = True
