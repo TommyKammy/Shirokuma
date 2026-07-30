@@ -310,6 +310,9 @@ Distinct reference identities at a join retain a declared common stack-map
 reference type rather than being forced to `java/lang/Object`. Concrete
 reference operands accept unresolved external subtype relationships while
 rejecting relationships disproved by the JAR-local superclass graph.
+Primitive and reference array loads/stores require an opcode-compatible array
+descriptor, and instance-field receivers must be assignable to the symbolic
+field owner.
 Declared local `top` entries can discard inferred out-of-scope values, and a
 constructor may write its own fields before its initializing constructor call.
 That initializing call must target the current class or direct superclass.
@@ -321,15 +324,18 @@ recognized signature/source/marker attributes validate their payloads, and
 predefined field `ConstantValue` attributes validate their length and
 constant-pool type; method `Exceptions` attributes validate placement,
 uniqueness, count, size, and class indices. `athrow` operands must be assignable
-to `java/lang/Throwable`. Exception handlers retain their declared catch type,
-and
+to `java/lang/Throwable`. Class-level `InnerClasses` attributes validate
+placement, uniqueness, count, size, references, names, and flags. Exception
+handlers retain their declared catch type, and
 known JAR-local catch classes must reach `java/lang/Throwable`; catch identities
 cannot be array classes. Test classifiers also
 restrict nonmetadata members to reviewed test-resource formats and read every
 accepted payload; service-provider exemptions require a direct, UTF-8
 `META-INF/services/<binary-name>` configuration with valid service and provider
 binary names whose dot-separated components follow Java identifier rules. The
-subsequent complete
+classifier's base JAR must also be present in the descriptor and bound to an
+exact top-level rootfs identity or independently manifest-verified; a nested
+component with the same PURL is insufficient. The subsequent complete
 `(PURL, FilePath)` identity and High=0/Critical=0 scan remains mandatory. This
 does not relax source identity, vulnerability, publication, admission, expiry,
 or environment scope.

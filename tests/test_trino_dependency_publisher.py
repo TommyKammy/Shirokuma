@@ -2019,6 +2019,70 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 },
             )
         )
+        for descriptor, valid in (
+            (b"([II)I", True),
+            (b"([FI)I", False),
+        ):
+            with self.subTest(array_descriptor=descriptor):
+                self.assertEqual(
+                    bool(
+                        verify._valid_operand_stack_flow(
+                            bytes.fromhex("2A1B2EAC"),
+                            instruction_offsets={0, 1, 2, 3},
+                            constant_pool_tags=[0],
+                            constant_pool_values=[None],
+                            exception_handlers=[],
+                            max_stack=2,
+                            max_locals=2,
+                            method_access_flags=0x0008,
+                            method_name=b"method",
+                            method_descriptor=descriptor,
+                            this_name=b"A",
+                        )
+                    ),
+                    valid,
+                )
+        field_tags = [0, 9, 7, 1, 12, 1, 1]
+        field_values = [
+            None,
+            (2, 4),
+            (3,),
+            b"Fld",
+            (5, 6),
+            b"value",
+            b"I",
+        ]
+        for descriptor, valid in (
+            (b"(LFld;)I", True),
+            (b"(Ljava/lang/Object;)I", False),
+        ):
+            with self.subTest(field_receiver=descriptor):
+                self.assertEqual(
+                    bool(
+                        verify._valid_operand_stack_flow(
+                            bytes.fromhex("2AB40001AC"),
+                            instruction_offsets={0, 1, 4},
+                            constant_pool_tags=field_tags,
+                            constant_pool_values=field_values,
+                            exception_handlers=[],
+                            max_stack=1,
+                            max_locals=1,
+                            method_access_flags=0x0008,
+                            method_name=b"method",
+                            method_descriptor=descriptor,
+                            this_name=b"A",
+                            known_class_kinds={
+                                b"java/lang/Object": False,
+                                b"Fld": False,
+                            },
+                            known_superclasses={
+                                b"java/lang/Object": None,
+                                b"Fld": b"java/lang/Object",
+                            },
+                        )
+                    ),
+                    valid,
+                )
         special_values = [
             None,
             (2, 4),
@@ -2153,6 +2217,48 @@ class MavenScanEvidenceTests(unittest.TestCase):
         self.assertFalse(
             verify._valid_class_file(
                 class_with_exceptions(b"\x00\x02\x00\x09")
+            )
+        )
+
+        def class_with_inner_classes(attribute: bytes) -> bytes:
+            def inner_utf8(value: str) -> bytes:
+                payload = value.encode("ascii")
+                return (
+                    b"\x01"
+                    + len(payload).to_bytes(2, "big")
+                    + payload
+                )
+
+            return b"".join(
+                (
+                    b"\xca\xfe\xba\xbe\x00\x00\x00\x34\x00\x09",
+                    inner_utf8("A"),
+                    b"\x07\x00\x01",
+                    inner_utf8("java/lang/Object"),
+                    b"\x07\x00\x03",
+                    inner_utf8("InnerClasses"),
+                    inner_utf8("A$Inner"),
+                    b"\x07\x00\x06",
+                    inner_utf8("Inner"),
+                    b"\x00\x21\x00\x02\x00\x04",
+                    b"\x00\x00\x00\x00\x00\x00\x00\x01",
+                    b"\x00\x05",
+                    len(attribute).to_bytes(4, "big"),
+                    attribute,
+                )
+            )
+
+        inner_entry = b"\x00\x01\x00\x07\x00\x02\x00\x08\x00\x01"
+        self.assertTrue(
+            verify._valid_class_file(
+                class_with_inner_classes(inner_entry)
+            )
+        )
+        self.assertFalse(
+            verify._valid_class_file(
+                class_with_inner_classes(
+                    b"\x00\x02" + inner_entry[2:]
+                )
             )
         )
 
@@ -3058,6 +3164,59 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     root / "generated-sbom.json",
                 )
 
+    def test_classifier_requires_descriptor_bound_top_level_base(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            alpha = self.JARS[0]
+            beta_sources = (
+                "org/example/beta/2.0/beta-2.0-sources.jar"
+            )
+            repository, descriptor = self._repository_descriptor(
+                root,
+                {
+                    alpha: {"org/example/Alpha.class": b"alpha"},
+                    beta_sources: {
+                        "org/example/Beta.java": b"class Beta {}",
+                    },
+                },
+            )
+            rootfs = self._sbom(root, (alpha,))
+            document = json.loads(rootfs.read_text(encoding="utf-8"))
+            nested_ref = "urn:test:nested-beta-only"
+            document["components"].append(
+                {
+                    "bom-ref": nested_ref,
+                    "type": "library",
+                    "name": "beta",
+                    "purl": verify._maven_purl(self.JARS[1]),
+                    "properties": [
+                        {
+                            "name": "aquasecurity:trivy:FilePath",
+                            "value": (
+                                f"{alpha}!/META-INF/lib/beta-2.0.jar"
+                            ),
+                        }
+                    ],
+                }
+            )
+            document["dependencies"][0]["dependsOn"].append(nested_ref)
+            document["dependencies"].append(
+                {"ref": nested_ref, "dependsOn": []}
+            )
+            rootfs.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "descriptor-bound top-level",
+            ):
+                verify.generate_maven_sbom(
+                    descriptor,
+                    repository,
+                    rootfs,
+                    root / "generated.json",
+                )
+
     def test_maven_sbom_audits_only_known_rootfs_omissions(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -3134,11 +3293,11 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 metadata["shirokuma:rootfs-audited-supplemental-jars"],
             )
             self.assertEqual(
-                "1",
+                "0",
                 metadata["shirokuma:rootfs-purl-deduplicated-jars"],
             )
             self.assertEqual(
-                "0",
+                "1",
                 metadata["shirokuma:manifest-coordinate-verified-jars"],
             )
             modes = {
@@ -3152,7 +3311,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 {
                     sources: "manifest-supplemental-sources",
                     tests: "manifest-supplemental-tests",
-                    beta: "manifest-rootfs-purl-deduplicated",
+                    beta: "manifest-coordinate-verified",
                 },
                 modes,
             )
@@ -3375,7 +3534,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
             (
                 "org/example/beta/2.0/beta-2.0-sources.jar",
                 {"org/example/Beta.java": b"class Beta {}"},
-                "no rootfs-discovered or manifest-verified base coordinate",
+                "no descriptor-bound top-level rootfs or manifest-verified",
             ),
             (
                 "org/example/beta/2.0/beta-2.0.jar",

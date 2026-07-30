@@ -3136,6 +3136,31 @@ def _valid_operand_stack_flow(
         initialized_token: str | None = None
         initialized_reference: str | None = None
 
+        def valid_array_operand(slot: str, array_opcode: int) -> bool:
+            if slot == "null":
+                return True
+            if not slot.startswith("reference:["):
+                return False
+            descriptor = slot.removeprefix("reference:")
+            element_index = (
+                array_opcode - 0x2E
+                if array_opcode < 0x4F
+                else array_opcode - 0x4F
+            )
+            if element_index == 4:
+                return descriptor.startswith(("[L", "[["))
+            expected_descriptors = (
+                {"[I"},
+                {"[J"},
+                {"[F"},
+                {"[D"},
+                set(),
+                {"[B", "[Z"},
+                {"[C"},
+                {"[S"},
+            )
+            return descriptor in expected_descriptors[element_index]
+
         if opcode == 0x01:
             pushed_types = ("null",)
         elif opcode in set(range(0x02, 0x09)) | {0x10, 0x11}:
@@ -3209,6 +3234,11 @@ def _valid_operand_stack_flow(
                 ("int",),
                 ("int",),
             )
+            if (
+                len(stack) < 2
+                or not valid_array_operand(stack[-2], opcode)
+            ):
+                return None
             expected = ("reference", "int")
             pushed_types = element_types[opcode - 0x2E]
             if (
@@ -3252,9 +3282,18 @@ def _valid_operand_stack_flow(
                 ("int",),
                 ("int",),
             )
+            element_type = element_types[opcode - 0x4F]
+            if (
+                len(stack) < 2 + len(element_type)
+                or not valid_array_operand(
+                    stack[-2 - len(element_type)],
+                    opcode,
+                )
+            ):
+                return None
             expected = (
                 ("reference", "int")
-                + element_types[opcode - 0x4F]
+                + element_type
             )
         elif opcode == 0x57:
             if not valid_stack_manipulation(opcode, stack):
@@ -3392,34 +3431,33 @@ def _valid_operand_stack_flow(
         elif opcode == 0xB0:
             expected = return_types
         elif opcode in range(0xB2, 0xB6):
-            field_slots = descriptor_slots(
-                int.from_bytes(instruction[1:3], "big")
-            )
+            field_index = int.from_bytes(instruction[1:3], "big")
+            field_slots = descriptor_slots(field_index)
             if field_slots is None:
+                return None
+            field_reference = constant(field_index)
+            owner_reference = (
+                class_reference(field_reference[0])
+                if isinstance(field_reference, tuple)
+                else None
+            )
+            if owner_reference is None:
                 return None
             if opcode == 0xB2:
                 pushed_types = field_slots
             elif opcode == 0xB3:
                 expected = field_slots
             elif opcode == 0xB4:
-                expected = ("reference",)
+                expected = (owner_reference,)
                 pushed_types = field_slots
             else:
-                receiver_type = "reference"
+                receiver_type = owner_reference
                 if (
                     method_name == b"<init>"
                     and len(stack) >= len(field_slots) + 1
                     and stack[-len(field_slots) - 1]
                     == "uninitialized_this"
                 ):
-                    reference = constant(
-                        int.from_bytes(instruction[1:3], "big")
-                    )
-                    owner_reference = (
-                        class_reference(reference[0])
-                        if isinstance(reference, tuple)
-                        else None
-                    )
                     if owner_reference == (
                         f"reference:L{this_name.decode('latin-1')};"
                     ):
@@ -4899,6 +4937,81 @@ def _valid_class_file(
                     ):
                         raise ValueError("invalid Exceptions attribute")
                     singleton_attributes.add(b"Exceptions")
+                elif values[name_index] == b"InnerClasses":
+                    inner_class_count = (
+                        int.from_bytes(attribute[:2], "big")
+                        if len(attribute) >= 2
+                        else -1
+                    )
+                    if (
+                        not class_level
+                        or b"InnerClasses" in singleton_attributes
+                        or len(attribute) < 2
+                        or len(attribute) != 2 + 8 * inner_class_count
+                    ):
+                        raise ValueError("invalid InnerClasses attribute")
+                    for entry_offset in range(
+                        2,
+                        len(attribute),
+                        8,
+                    ):
+                        inner_class_index = int.from_bytes(
+                            attribute[entry_offset : entry_offset + 2],
+                            "big",
+                        )
+                        outer_class_index = int.from_bytes(
+                            attribute[
+                                entry_offset + 2 : entry_offset + 4
+                            ],
+                            "big",
+                        )
+                        inner_name_index = int.from_bytes(
+                            attribute[
+                                entry_offset + 4 : entry_offset + 6
+                            ],
+                            "big",
+                        )
+                        inner_access_flags = int.from_bytes(
+                            attribute[
+                                entry_offset + 6 : entry_offset + 8
+                            ],
+                            "big",
+                        )
+                        inner_name = (
+                            values[inner_name_index]
+                            if has_tag(inner_name_index, 1)
+                            else None
+                        )
+                        if (
+                            class_name(
+                                inner_class_index,
+                                allow_array=False,
+                            )
+                            is None
+                            or (
+                                outer_class_index != 0
+                                and class_name(
+                                    outer_class_index,
+                                    allow_array=False,
+                                )
+                                is None
+                            )
+                            or (
+                                inner_name_index != 0
+                                and (
+                                    not isinstance(inner_name, bytes)
+                                    or not _valid_unqualified_name(
+                                        inner_name,
+                                        method=False,
+                                    )
+                                )
+                            )
+                            or inner_access_flags & ~0x761F
+                        ):
+                            raise ValueError(
+                                "invalid InnerClasses attribute"
+                            )
+                    singleton_attributes.add(b"InnerClasses")
                 elif values[name_index] == b"Signature":
                     if (
                         b"Signature" in singleton_attributes
@@ -5352,10 +5465,12 @@ def _validate_rootfs_discovery_omissions(
         _fail("MAVEN_SBOM_ROOTFS", f"{repository_path}: {error}")
     if not repository_root.is_dir():
         _fail("MAVEN_SBOM_ROOTFS", f"{repository_path} is not a directory")
-    rootfs_purls = {
-        component["purl"]
+    rootfs_identities = {
+        (component["purl"], file_path)
         for component in rootfs_components
-        if isinstance(component.get("purl"), str) and component["purl"]
+        if isinstance(component.get("purl"), str)
+        and component["purl"]
+        for file_path in _component_file_paths(component)
     }
     manifest_verified_base_purls: set[str] = set()
     discovery: dict[str, str] = {}
@@ -5407,16 +5522,24 @@ def _validate_rootfs_discovery_omissions(
         classifier = _maven_classifier(path)
         purl = _maven_purl(path)
         base_purl = purl.split("?classifier=", 1)[0]
+        artifact, version = path.split("/")[-3:-1]
+        base_path = (
+            path.rsplit("/", 1)[0]
+            + f"/{artifact}-{version}.jar"
+        )
         if (
             classifier
-            and base_purl not in rootfs_purls
+            and (
+                base_path not in records
+                or (base_purl, base_path) not in rootfs_identities
+            )
             and base_purl not in manifest_verified_base_purls
         ):
             _fail(
                 "MAVEN_SBOM_ROOTFS",
                 (
-                    f"{path} has no rootfs-discovered or "
-                    "manifest-verified base coordinate"
+                    f"{path} has no descriptor-bound top-level "
+                    "rootfs or manifest-verified base coordinate"
                 ),
             )
         archive, names = _jar_entries(payload, path)
@@ -5573,7 +5696,7 @@ def _validate_rootfs_discovery_omissions(
                     "MAVEN_SBOM_ROOTFS",
                     f"{path} contains unreadable archive member: {error}",
                 )
-            if base_purl in rootfs_purls:
+            if (base_purl, path) in rootfs_identities:
                 discovery[path] = "manifest-rootfs-purl-deduplicated"
             else:
                 manifest_verified_base_purls.add(base_purl)
