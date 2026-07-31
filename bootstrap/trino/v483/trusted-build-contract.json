@@ -39,11 +39,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "2856746595734fa0759dd6e159c5c8cec2821b5a59ad04b033ffc2e1ec7a9126"
+      "sha256": "2861514b51808ae3d2c8eecf84429e1b5c5bc4893085bef9dd3892646a60e29a"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "5c90cb60b1cef13b376f2a04a4c60209bdfaf96c8f221607494af728264189d3"
+      "sha256": "8d3195de40ea67a34a6ee901b85baf31043bd76b4cb121730854fc2008788ae0"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -676,6 +676,67 @@
       "maximum_total_bytes": 8589934592,
       "canonical_paths_required": true,
       "sorted_unique_paths_required": true
+    },
+    "trivy_rootfs_omission_contract": {
+      "schema_version": 1,
+      "unknown_omissions_permitted": false,
+      "reviewed_omissions": [
+        {
+          "path": "com/squareup/okhttp3/logging-interceptor/5.4.0/logging-interceptor-5.4.0-sources.jar",
+          "purl": "pkg:maven/com.squareup.okhttp3/logging-interceptor@5.4.0?classifier=sources",
+          "role": "supplemental-sources"
+        },
+        {
+          "path": "com/squareup/okhttp3/okhttp-java-net-cookiejar/5.4.0/okhttp-java-net-cookiejar-5.4.0-sources.jar",
+          "purl": "pkg:maven/com.squareup.okhttp3/okhttp-java-net-cookiejar@5.4.0?classifier=sources",
+          "role": "supplemental-sources"
+        },
+        {
+          "path": "com/squareup/okhttp3/okhttp-jvm/5.4.0/okhttp-jvm-5.4.0-sources.jar",
+          "purl": "pkg:maven/com.squareup.okhttp3/okhttp-jvm@5.4.0?classifier=sources",
+          "role": "supplemental-sources"
+        },
+        {
+          "path": "com/squareup/okhttp3/okhttp-urlconnection/5.4.0/okhttp-urlconnection-5.4.0-sources.jar",
+          "purl": "pkg:maven/com.squareup.okhttp3/okhttp-urlconnection@5.4.0?classifier=sources",
+          "role": "supplemental-sources"
+        },
+        {
+          "path": "com/squareup/okio/okio-jvm/3.17.0/okio-jvm-3.17.0-sources.jar",
+          "purl": "pkg:maven/com.squareup.okio/okio-jvm@3.17.0?classifier=sources",
+          "role": "supplemental-sources"
+        },
+        {
+          "path": "dev/failsafe/failsafe/3.3.2/failsafe-3.3.2-sources.jar",
+          "purl": "pkg:maven/dev.failsafe/failsafe@3.3.2?classifier=sources",
+          "role": "supplemental-sources"
+        },
+        {
+          "path": "dev/failsafe/failsafe/3.3.2/failsafe-3.3.2.jar",
+          "purl": "pkg:maven/dev.failsafe/failsafe@3.3.2",
+          "role": "base-coordinate"
+        },
+        {
+          "path": "io/opentelemetry/instrumentation/opentelemetry-okhttp-3.0/2.29.0-alpha/opentelemetry-okhttp-3.0-2.29.0-alpha-sources.jar",
+          "purl": "pkg:maven/io.opentelemetry.instrumentation/opentelemetry-okhttp-3.0@2.29.0-alpha?classifier=sources",
+          "role": "supplemental-sources"
+        },
+        {
+          "path": "org/apache/iceberg/iceberg-core/1.11.0/iceberg-core-1.11.0-tests.jar",
+          "purl": "pkg:maven/org.apache.iceberg/iceberg-core@1.11.0?classifier=tests",
+          "role": "supplemental-tests"
+        },
+        {
+          "path": "org/jetbrains/kotlin/kotlin-stdlib/2.4.0/kotlin-stdlib-2.4.0-sources.jar",
+          "purl": "pkg:maven/org.jetbrains.kotlin/kotlin-stdlib@2.4.0?classifier=sources",
+          "role": "supplemental-sources"
+        },
+        {
+          "path": "org/jspecify/jspecify/1.0.0/jspecify-1.0.0-sources.jar",
+          "purl": "pkg:maven/org.jspecify/jspecify@1.0.0?classifier=sources",
+          "role": "supplemental-sources"
+        }
+      ]
     },
     "bun_cache": {
       "descriptor_media_type": "application/vnd.shirokuma.bun-dependency-manifest.v1+json",

@@ -4040,6 +4040,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "archive_filename",
                 "manifest_filename",
                 "manifest",
+                "trivy_rootfs_omission_contract",
                 "bun_cache",
                 "maven_archive",
                 "maven_forbidden_entries",
@@ -4108,6 +4109,57 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         self.assertIs(snapshot["manifest"]["canonical_paths_required"], True)
         self.assertIs(
             snapshot["manifest"]["sorted_unique_paths_required"], True
+        )
+        omission_contract = snapshot["trivy_rootfs_omission_contract"]
+        self.assertEqual(
+            {
+                "schema_version",
+                "unknown_omissions_permitted",
+                "reviewed_omissions",
+            },
+            set(omission_contract),
+        )
+        self.assertEqual(1, omission_contract["schema_version"])
+        self.assertIs(
+            omission_contract["unknown_omissions_permitted"],
+            False,
+        )
+        reviewed_omissions = omission_contract["reviewed_omissions"]
+        self.assertEqual(11, len(reviewed_omissions))
+        self.assertEqual(
+            11,
+            len({entry["path"] for entry in reviewed_omissions}),
+        )
+        self.assertEqual(
+            11,
+            len({entry["purl"] for entry in reviewed_omissions}),
+        )
+        self.assertEqual(
+            {
+                "supplemental-sources": 9,
+                "supplemental-tests": 1,
+                "base-coordinate": 1,
+            },
+            {
+                role: sum(
+                    entry["role"] == role
+                    for entry in reviewed_omissions
+                )
+                for role in {
+                    entry["role"] for entry in reviewed_omissions
+                }
+            },
+        )
+        self.assertIn(
+            {
+                "path": (
+                    "dev/failsafe/failsafe/3.3.2/"
+                    "failsafe-3.3.2.jar"
+                ),
+                "purl": "pkg:maven/dev.failsafe/failsafe@3.3.2",
+                "role": "base-coordinate",
+            },
+            reviewed_omissions,
         )
         self.assertEqual(
             {
