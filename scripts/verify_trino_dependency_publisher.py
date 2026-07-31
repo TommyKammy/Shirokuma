@@ -2202,10 +2202,37 @@ def generate_maven_sbom(
                 f"unexpected={sorted(unexpected_rootfs)!r}"
             ),
         )
+    rootfs_identities = {
+        (component.get("purl"), path)
+        for component in rootfs_components
+        for path in _component_file_paths(component)
+        if _is_top_level_jar_path(path)
+    }
+    misattributed_rootfs = sorted(
+        (
+            (path, purl)
+            for purl, path in rootfs_identities
+            if path in expected_paths and purl != _maven_purl(path)
+        ),
+        key=lambda item: (item[0], repr(item[1])),
+    )
+    if misattributed_rootfs:
+        _fail(
+            "MAVEN_SBOM_ROOTFS",
+            (
+                "rootfs discovery misattributes closed JAR paths: "
+                f"{misattributed_rootfs!r}"
+            ),
+        )
+    discovered_paths = {
+        path
+        for purl, path in rootfs_identities
+        if path in expected_paths and purl == _maven_purl(path)
+    }
     discovery_omissions = _validate_rootfs_discovery_omissions(
         repository_path,
         records,
-        expected_paths - observed_rootfs,
+        expected_paths - discovered_paths,
         rootfs_components,
     )
     components = copy.deepcopy(rootfs_components)

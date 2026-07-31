@@ -1460,6 +1460,33 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     root / "generated-sbom.json",
                 )
 
+    def test_maven_sbom_rejects_rootfs_path_purl_misattribution(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self._descriptor(root)
+            rootfs = self._sbom(root)
+            document = json.loads(rootfs.read_text(encoding="utf-8"))
+            beta_path = self.JARS[1]
+            beta_component = next(
+                component
+                for component in document["components"]
+                if beta_path in verify._component_file_paths(component)
+            )
+            beta_component["purl"] = "pkg:maven/org.example/wrong@2.0"
+            rootfs.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "misattributes closed JAR paths",
+            ):
+                verify.generate_maven_sbom(
+                    descriptor,
+                    root,
+                    rootfs,
+                    root / "generated-sbom.json",
+                )
+
     def test_maven_sbom_rejects_omissions_outside_reviewed_contract(
         self,
     ) -> None:
