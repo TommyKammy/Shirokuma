@@ -37,6 +37,12 @@ BUN_TEST_PATH = Path("tests/test_trino_bun_dependencies.py")
 PARQUET_REMEDIATION_TEST_PATH = Path(
     "tests/test_parquet_jackson_remediation.py"
 )
+MAX_OMITTED_JAR_MEMBER_BYTES = 64 * 1024 * 1024
+MAX_OMITTED_JAR_EXPANDED_BYTES = 256 * 1024 * 1024
+MAX_OMITTED_JAR_COMPRESSION_RATIO = 200
+MAX_OMITTED_JAR_ARCHIVE_BYTES = 128 * 1024 * 1024
+MAX_OMITTED_JAR_MEMBERS = 100_000
+MAX_OMITTED_JAR_CENTRAL_DIRECTORY_BYTES = 16 * 1024 * 1024
 SOURCE_OVERLAY_PATH = Path(
     "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch"
 )
@@ -74,6 +80,120 @@ EXPECTED_REPOSITORIES = {
     "central": "https://repo.maven.apache.org/maven2/",
     "confluent": "https://packages.confluent.io/maven/",
 }
+EXPECTED_TRIVY_ROOTFS_OMISSIONS = [
+    {
+        "path": (
+            "com/squareup/okhttp3/logging-interceptor/5.4.0/"
+            "logging-interceptor-5.4.0-sources.jar"
+        ),
+        "purl": (
+            "pkg:maven/com.squareup.okhttp3/logging-interceptor@5.4.0"
+            "?classifier=sources"
+        ),
+        "role": "supplemental-sources",
+    },
+    {
+        "path": (
+            "com/squareup/okhttp3/okhttp-java-net-cookiejar/5.4.0/"
+            "okhttp-java-net-cookiejar-5.4.0-sources.jar"
+        ),
+        "purl": (
+            "pkg:maven/com.squareup.okhttp3/okhttp-java-net-cookiejar@5.4.0"
+            "?classifier=sources"
+        ),
+        "role": "supplemental-sources",
+    },
+    {
+        "path": (
+            "com/squareup/okhttp3/okhttp-jvm/5.4.0/"
+            "okhttp-jvm-5.4.0-sources.jar"
+        ),
+        "purl": (
+            "pkg:maven/com.squareup.okhttp3/okhttp-jvm@5.4.0"
+            "?classifier=sources"
+        ),
+        "role": "supplemental-sources",
+    },
+    {
+        "path": (
+            "com/squareup/okhttp3/okhttp-urlconnection/5.4.0/"
+            "okhttp-urlconnection-5.4.0-sources.jar"
+        ),
+        "purl": (
+            "pkg:maven/com.squareup.okhttp3/okhttp-urlconnection@5.4.0"
+            "?classifier=sources"
+        ),
+        "role": "supplemental-sources",
+    },
+    {
+        "path": (
+            "com/squareup/okio/okio-jvm/3.17.0/"
+            "okio-jvm-3.17.0-sources.jar"
+        ),
+        "purl": (
+            "pkg:maven/com.squareup.okio/okio-jvm@3.17.0"
+            "?classifier=sources"
+        ),
+        "role": "supplemental-sources",
+    },
+    {
+        "path": (
+            "dev/failsafe/failsafe/3.3.2/"
+            "failsafe-3.3.2-sources.jar"
+        ),
+        "purl": "pkg:maven/dev.failsafe/failsafe@3.3.2?classifier=sources",
+        "role": "supplemental-sources",
+    },
+    {
+        "path": "dev/failsafe/failsafe/3.3.2/failsafe-3.3.2.jar",
+        "purl": "pkg:maven/dev.failsafe/failsafe@3.3.2",
+        "role": "base-coordinate",
+    },
+    {
+        "path": (
+            "io/opentelemetry/instrumentation/opentelemetry-okhttp-3.0/"
+            "2.29.0-alpha/"
+            "opentelemetry-okhttp-3.0-2.29.0-alpha-sources.jar"
+        ),
+        "purl": (
+            "pkg:maven/io.opentelemetry.instrumentation/"
+            "opentelemetry-okhttp-3.0@2.29.0-alpha?classifier=sources"
+        ),
+        "role": "supplemental-sources",
+    },
+    {
+        "path": (
+            "org/apache/iceberg/iceberg-core/1.11.0/"
+            "iceberg-core-1.11.0-tests.jar"
+        ),
+        "purl": (
+            "pkg:maven/org.apache.iceberg/iceberg-core@1.11.0"
+            "?classifier=tests"
+        ),
+        "role": "supplemental-tests",
+    },
+    {
+        "path": (
+            "org/jetbrains/kotlin/kotlin-stdlib/2.4.0/"
+            "kotlin-stdlib-2.4.0-sources.jar"
+        ),
+        "purl": (
+            "pkg:maven/org.jetbrains.kotlin/kotlin-stdlib@2.4.0"
+            "?classifier=sources"
+        ),
+        "role": "supplemental-sources",
+    },
+    {
+        "path": (
+            "org/jspecify/jspecify/1.0.0/"
+            "jspecify-1.0.0-sources.jar"
+        ),
+        "purl": (
+            "pkg:maven/org.jspecify/jspecify@1.0.0?classifier=sources"
+        ),
+        "role": "supplemental-sources",
+    },
+]
 EXPECTED_BUN_INPUT = {
     "name": "bun-linux-aarch64",
     "version": "v1.3.14",
@@ -1747,7 +1867,13 @@ def _maven_purl(path: str) -> str:
     prefix = f"{artifact}-{version}"
     if not filename.startswith(prefix):
         _fail("MAVEN_SBOM", f"JAR does not match Maven coordinates: {path}")
-    classifier = filename[len(prefix) : -4].removeprefix("-")
+    classifier_suffix = filename[len(prefix) : -4]
+    if classifier_suffix and (
+        not classifier_suffix.startswith("-")
+        or classifier_suffix == "-"
+    ):
+        _fail("MAVEN_SBOM", f"invalid Maven JAR filename: {path}")
+    classifier = classifier_suffix.removeprefix("-")
     qualifier = f"?classifier={quote(classifier, safe='')}" if classifier else ""
     return (
         f"pkg:maven/{quote(group, safe='.')}/{quote(artifact, safe='')}"
@@ -1761,7 +1887,66 @@ def _maven_classifier(path: str) -> str:
     return filename[len(prefix) : -4].removeprefix("-")
 
 
+def _safe_jar_member_type(entry: zipfile.ZipInfo) -> bool:
+    member_type = stat.S_IFMT(entry.external_attr >> 16)
+    if entry.is_dir():
+        return member_type in {0, stat.S_IFDIR}
+    return member_type in {0, stat.S_IFREG}
+
+
+def _zip_directory_summary(payload: bytes) -> tuple[int, int] | None:
+    minimum_eocd_size = 22
+    search_start = max(
+        0,
+        len(payload) - minimum_eocd_size - 65535,
+    )
+    search_end = len(payload)
+    while True:
+        eocd_offset = payload.rfind(
+            b"PK\x05\x06",
+            search_start,
+            search_end,
+        )
+        if eocd_offset < 0:
+            return None
+        search_end = eocd_offset
+        if eocd_offset + minimum_eocd_size > len(payload):
+            continue
+        eocd = payload[eocd_offset : eocd_offset + minimum_eocd_size]
+        disk_number = int.from_bytes(eocd[4:6], "little")
+        directory_disk = int.from_bytes(eocd[6:8], "little")
+        disk_entries = int.from_bytes(eocd[8:10], "little")
+        total_entries = int.from_bytes(eocd[10:12], "little")
+        directory_size = int.from_bytes(eocd[12:16], "little")
+        directory_offset = int.from_bytes(eocd[16:20], "little")
+        comment_size = int.from_bytes(eocd[20:22], "little")
+        if (
+            disk_number == 0
+            and directory_disk == 0
+            and disk_entries == total_entries
+            and total_entries != 0xFFFF
+            and directory_size != 0xFFFFFFFF
+            and directory_offset != 0xFFFFFFFF
+            and eocd_offset + minimum_eocd_size + comment_size
+            == len(payload)
+            and directory_offset + directory_size == eocd_offset
+        ):
+            return total_entries, directory_size
+
+
 def _jar_entries(payload: bytes, path: str) -> tuple[zipfile.ZipFile, list[str]]:
+    directory_summary = _zip_directory_summary(payload)
+    if (
+        len(payload) > MAX_OMITTED_JAR_ARCHIVE_BYTES
+        or directory_summary is None
+        or directory_summary[0] > MAX_OMITTED_JAR_MEMBERS
+        or directory_summary[1]
+        > MAX_OMITTED_JAR_CENTRAL_DIRECTORY_BYTES
+    ):
+        _fail(
+            "MAVEN_SBOM_ROOTFS",
+            f"{path} exceeds omitted-JAR archive limits",
+        )
     try:
         archive = zipfile.ZipFile(io.BytesIO(payload))
         entries = archive.infolist()
@@ -1769,11 +1954,13 @@ def _jar_entries(payload: bytes, path: str) -> tuple[zipfile.ZipFile, list[str]]
         _fail("MAVEN_SBOM_ROOTFS", f"{path} is not a valid JAR: {error}")
     names = [entry.filename for entry in entries]
     if (
-        len(names) != len(set(names))
+        len(names) > MAX_OMITTED_JAR_MEMBERS
+        or len(names) != len(set(names))
         or any(
             entry.flag_bits & 0x1
             or entry.filename.startswith("/")
             or "\\" in entry.filename
+            or not _safe_jar_member_type(entry)
             or any(
                 part in {"", ".", ".."}
                 for part in entry.filename.rstrip("/").split("/")
@@ -1784,34 +1971,46 @@ def _jar_entries(payload: bytes, path: str) -> tuple[zipfile.ZipFile, list[str]]
         archive.close()
         _fail(
             "MAVEN_SBOM_ROOTFS",
-            f"{path} contains unsafe, encrypted, or duplicate entries",
+            (
+                f"{path} contains unsafe, encrypted, duplicate, "
+                "or special entries"
+            ),
         )
-    if any(name.endswith(".jar") for name in names):
+    if any(name.casefold().endswith(".jar") for name in names):
         archive.close()
         _fail(
             "MAVEN_SBOM_ROOTFS",
             f"{path} contains an undiscovered nested JAR",
         )
+    expanded_size = 0
+    for entry in entries:
+        expanded_size += entry.file_size
+        if (
+            entry.file_size > MAX_OMITTED_JAR_MEMBER_BYTES
+            or expanded_size > MAX_OMITTED_JAR_EXPANDED_BYTES
+            or (
+                entry.file_size > 0
+                and (
+                    entry.compress_size <= 0
+                    or entry.file_size
+                    > entry.compress_size * MAX_OMITTED_JAR_COMPRESSION_RATIO
+                )
+            )
+        ):
+            archive.close()
+            _fail(
+                "MAVEN_SBOM_ROOTFS",
+                f"{path} exceeds omitted-JAR decompression limits",
+            )
     return archive, names
 
 
-def _maven_properties(payload: bytes, path: str) -> dict[str, str]:
-    try:
-        text = payload.decode("utf-8")
-    except UnicodeDecodeError as error:
-        _fail("MAVEN_SBOM_ROOTFS", f"{path} has non-UTF-8 pom.properties: {error}")
-    properties: dict[str, str] = {}
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith(("#", "!")):
-            continue
-        if "=" not in stripped:
-            _fail("MAVEN_SBOM_ROOTFS", f"{path} has malformed pom.properties")
-        key, value = stripped.split("=", 1)
-        if key in properties:
-            _fail("MAVEN_SBOM_ROOTFS", f"{path} repeats {key!r}")
-        properties[key] = value
-    return properties
+def _archive_contains_nested_zip(archive: zipfile.ZipFile) -> bool:
+    return any(
+        not entry.is_dir()
+        and zipfile.is_zipfile(io.BytesIO(archive.read(entry)))
+        for entry in archive.infolist()
+    )
 
 
 def _validate_rootfs_discovery_omissions(
@@ -1820,36 +2019,86 @@ def _validate_rootfs_discovery_omissions(
     missing_paths: set[str],
     rootfs_components: list[dict[str, Any]],
 ) -> dict[str, str]:
+    omission_contract = {
+        entry["path"]: entry
+        for entry in EXPECTED_TRIVY_ROOTFS_OMISSIONS
+    }
+    unknown_paths = sorted(missing_paths - set(omission_contract))
+    if unknown_paths:
+        _fail(
+            "MAVEN_SBOM_ROOTFS",
+            (
+                "rootfs discovery omitted JARs outside the reviewed "
+                f"closed set: {unknown_paths!r}"
+            ),
+        )
     try:
         repository_root = repository_path.resolve(strict=True)
     except OSError as error:
         _fail("MAVEN_SBOM_ROOTFS", f"{repository_path}: {error}")
     if not repository_root.is_dir():
         _fail("MAVEN_SBOM_ROOTFS", f"{repository_path} is not a directory")
-    rootfs_purls = {
-        component["purl"]
+    rootfs_identities = {
+        (component["purl"], file_path)
         for component in rootfs_components
-        if isinstance(component.get("purl"), str) and component["purl"]
+        if isinstance(component.get("purl"), str)
+        and component["purl"]
+        for file_path in _component_file_paths(component)
     }
+    manifest_verified_base_purls: set[str] = set()
     discovery: dict[str, str] = {}
-    for path in sorted(missing_paths):
+    for path in sorted(
+        missing_paths,
+        key=lambda item: (bool(_maven_classifier(item)), item),
+    ):
         record = records[path]
-        candidate = repository_root / path
-        try:
-            resolved_candidate = candidate.resolve(strict=True)
-            candidate_mode = stat.S_IMODE(candidate.lstat().st_mode)
-        except OSError as error:
-            _fail("MAVEN_SBOM_ROOTFS", f"{candidate}: {error}")
+        contract_entry = omission_contract[path]
+        purl = _maven_purl(path)
+        role = contract_entry["role"]
+        classifier = _maven_classifier(path)
         if (
-            not resolved_candidate.is_relative_to(repository_root)
-            or candidate_mode != int(str(record["mode"]), 8)
+            role
+            not in {
+                "supplemental-sources",
+                "supplemental-tests",
+                "base-coordinate",
+            }
+            or purl != contract_entry["purl"]
+            or (
+                role == "supplemental-sources"
+                and classifier != "sources"
+            )
+            or (
+                role == "supplemental-tests"
+                and classifier != "tests"
+            )
+            or (role == "base-coordinate" and classifier)
         ):
             _fail(
                 "MAVEN_SBOM_ROOTFS",
-                f"{path} escapes the repository or has the wrong mode",
+                f"{path} differs from its reviewed omission identity",
+            )
+        try:
+            resolved_candidate = (repository_root / path).resolve(strict=True)
+            candidate_stat = (repository_root / path).lstat()
+            candidate_mode = stat.S_IMODE(candidate_stat.st_mode)
+        except OSError as error:
+            _fail("MAVEN_SBOM_ROOTFS", f"{path}: {error}")
+        if (
+            not resolved_candidate.is_relative_to(repository_root)
+            or candidate_mode != int(str(record["mode"]), 8)
+            or candidate_stat.st_size > MAX_OMITTED_JAR_ARCHIVE_BYTES
+            or record["size"] > MAX_OMITTED_JAR_ARCHIVE_BYTES
+        ):
+            _fail(
+                "MAVEN_SBOM_ROOTFS",
+                (
+                    f"{path} escapes the repository, has the wrong mode, "
+                    "or exceeds omitted-JAR archive limits"
+                ),
             )
         payload = _read_reviewed_regular_file(
-            candidate,
+            repository_root / path,
             code="MAVEN_SBOM_ROOTFS",
         )
         if (
@@ -1860,67 +2109,69 @@ def _validate_rootfs_discovery_omissions(
                 "MAVEN_SBOM_ROOTFS",
                 f"{path} differs from the closed Maven descriptor",
             )
-        classifier = _maven_classifier(path)
-        purl = _maven_purl(path)
+
         base_purl = purl.split("?classifier=", 1)[0]
-        if base_purl not in rootfs_purls:
+        artifact, version = path.split("/")[-3:-1]
+        base_path = path.rsplit("/", 1)[0] + f"/{artifact}-{version}.jar"
+        if (
+            classifier
+            and (
+                base_path not in records
+                or (base_purl, base_path) not in rootfs_identities
+            )
+            and base_purl not in manifest_verified_base_purls
+        ):
             _fail(
                 "MAVEN_SBOM_ROOTFS",
-                f"{path} has no rootfs-discovered base coordinate",
+                (
+                    f"{path} has no descriptor-bound top-level "
+                    "rootfs or contract-authorized base coordinate"
+                ),
             )
+
         archive, names = _jar_entries(payload, path)
         try:
-            if classifier == "sources":
-                if (
-                    any(name.endswith(".class") for name in names)
-                    or not any(name.endswith((".java", ".kt")) for name in names)
-                ):
-                    _fail(
-                        "MAVEN_SBOM_ROOTFS",
-                        f"{path} is not a source-only classifier JAR",
-                    )
-                discovery[path] = "manifest-supplemental-sources"
-                continue
-            if classifier == "tests":
-                if not any(name.endswith(".class") for name in names):
-                    _fail(
-                        "MAVEN_SBOM_ROOTFS",
-                        f"{path} contains no test bytecode",
-                    )
-                discovery[path] = "manifest-supplemental-tests"
-                continue
-            if classifier:
+            if not any(not entry.is_dir() for entry in archive.infolist()):
+                _fail("MAVEN_SBOM_ROOTFS", f"{path} is an empty JAR")
+            if role == "supplemental-sources" and not any(
+                name.endswith(
+                    (".java", ".kt", ".kts", ".scala", ".groovy")
+                )
+                for name in names
+            ):
                 _fail(
                     "MAVEN_SBOM_ROOTFS",
-                    f"{path} uses an unreviewed omitted classifier",
+                    f"{path} contains no source payload",
                 )
-            group = ".".join(path.split("/")[:-3])
-            artifact, version = path.split("/")[-3:-1]
-            properties_path = (
-                "META-INF/maven/"
-                f"{group}/{artifact}/pom.properties"
-            )
-            if names.count(properties_path) != 1:
+            if role == "supplemental-tests" and not any(
+                name.endswith(".class") for name in names
+            ):
                 _fail(
                     "MAVEN_SBOM_ROOTFS",
-                    f"{path} does not contain its exact pom.properties",
+                    f"{path} contains no test class payload",
                 )
-            properties = _maven_properties(
-                archive.read(properties_path),
-                path,
-            )
-            if properties != {
-                "artifactId": artifact,
-                "groupId": group,
-                "version": version,
-            }:
+            try:
+                contains_nested_zip = _archive_contains_nested_zip(archive)
+            except (OSError, RuntimeError, zipfile.BadZipFile) as error:
                 _fail(
                     "MAVEN_SBOM_ROOTFS",
-                    f"{path} pom.properties coordinates differ",
+                    f"{path} contains an unreadable member: {error}",
                 )
-            discovery[path] = "manifest-rootfs-purl-deduplicated"
+            if contains_nested_zip:
+                _fail(
+                    "MAVEN_SBOM_ROOTFS",
+                    f"{path} contains an undiscovered nested archive",
+                )
         finally:
             archive.close()
+
+        if role == "base-coordinate":
+            manifest_verified_base_purls.add(base_purl)
+            discovery[path] = "contract-base-coordinate"
+        elif role == "supplemental-sources":
+            discovery[path] = "contract-supplemental-sources"
+        else:
+            discovery[path] = "contract-supplemental-tests"
     return discovery
 
 
@@ -1951,10 +2202,37 @@ def generate_maven_sbom(
                 f"unexpected={sorted(unexpected_rootfs)!r}"
             ),
         )
+    rootfs_identities = {
+        (component.get("purl"), path)
+        for component in rootfs_components
+        for path in _component_file_paths(component)
+        if _is_top_level_jar_path(path)
+    }
+    misattributed_rootfs = sorted(
+        (
+            (path, purl)
+            for purl, path in rootfs_identities
+            if path in expected_paths and purl != _maven_purl(path)
+        ),
+        key=lambda item: (item[0], repr(item[1])),
+    )
+    if misattributed_rootfs:
+        _fail(
+            "MAVEN_SBOM_ROOTFS",
+            (
+                "rootfs discovery misattributes closed JAR paths: "
+                f"{misattributed_rootfs!r}"
+            ),
+        )
+    discovered_paths = {
+        path
+        for purl, path in rootfs_identities
+        if path in expected_paths and purl == _maven_purl(path)
+    }
     discovery_omissions = _validate_rootfs_discovery_omissions(
         repository_path,
         records,
-        expected_paths - observed_rootfs,
+        expected_paths - discovered_paths,
         rootfs_components,
     )
     components = copy.deepcopy(rootfs_components)
@@ -2150,23 +2428,18 @@ def generate_maven_sbom(
                     "value": str(len(added_refs)),
                 },
                 {
-                    "name": "shirokuma:rootfs-audited-omissions",
+                    "name": (
+                        "shirokuma:rootfs-contract-authorized-omissions"
+                    ),
                     "value": str(len(discovery_omissions)),
                 },
                 {
-                    "name": "shirokuma:rootfs-audited-supplemental-jars",
-                    "value": str(
-                        sum(
-                            mode.startswith("manifest-supplemental-")
-                            for mode in discovery_omissions.values()
-                        )
+                    "name": (
+                        "shirokuma:rootfs-contract-supplemental-jars"
                     ),
-                },
-                {
-                    "name": "shirokuma:rootfs-purl-deduplicated-jars",
                     "value": str(
                         sum(
-                            mode == "manifest-rootfs-purl-deduplicated"
+                            mode.startswith("contract-supplemental-")
                             for mode in discovery_omissions.values()
                         )
                     ),
@@ -3451,6 +3724,12 @@ def audit(root: Path) -> None:
         or snapshot.get("descriptor_media_type")
         != EXPECTED_DESCRIPTOR_MEDIA_TYPE
         or snapshot.get("manifest", {}).get("schema_version") != 2
+        or snapshot.get("trivy_rootfs_omission_contract")
+        != {
+            "schema_version": 1,
+            "unknown_omissions_permitted": False,
+            "reviewed_omissions": EXPECTED_TRIVY_ROOTFS_OMISSIONS,
+        }
         or snapshot.get("bun_cache")
         != {
             "descriptor_media_type": EXPECTED_BUN_DESCRIPTOR_MEDIA_TYPE,

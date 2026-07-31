@@ -976,8 +976,9 @@ dependency evidence.
 The repair keeps the publisher active, switches the Maven repository scan to
 Trivy rootfs mode, requires exact equality between the 1,470 descriptor JAR
 paths and both Trivy/CycloneDX inventories, requires every descriptor JAR to be
-discovered by the rootfs scan, preserves every rootfs-discovered
-top-level and embedded component in the final scan graph, re-roots each
+represented by either a Trivy file-path identity or a closed contract-authorized omission,
+preserves every rootfs-discovered top-level and embedded component in the final
+scan graph, re-roots each
 CycloneDX dependency graph at the immutable OCI subject (creating a root edge
 during Maven generation or immutable-subject rebinding when Trivy omitted
 one), compares Maven scan identities by both PURL and file
@@ -1035,6 +1036,33 @@ completed a clean `--offline` rebuild with container networking set to
 `none`. Reviewed-main CI must independently reconstruct twice, reproduce two
 network-none builds and byte-identical server archives, and pass the same
 closure-complete evidence gate before publication can proceed.
+
+Reviewed-main run
+[`30517632888`](https://github.com/TommyKammy/Shirokuma/actions/runs/30517632888)
+completed both independent closed-repository reconstructions, both network-none
+builds, byte-identical server archives, and the raw Trivy rootfs inventory. It
+then failed closed because Trivy 0.72.0 did not emit a component for
+`dev.failsafe:failsafe:3.3.2`, even though the exact descriptor-bound JAR
+contains bytecode and one matching `META-INF/maven/.../pom.properties`.
+Publication and all later evidence steps were skipped, and the run retained no
+artifact.
+
+The omission contract does not treat a missing Trivy component as a waiver.
+It enumerates the exact 11 paths observed in run `30306042009`, their derived
+PURLs, and their source, test, or base-coordinate roles. SBOM generation may
+supplement only a subset of those reviewed identities; every other omitted
+path fails closed. Each permitted file must match the closed descriptor's
+repository origin, mode, size, and SHA-256 and must pass bounded, full-member
+ZIP safety checks, including rejection of nested archives. The verifier does
+not infer authorization from arbitrary JVM bytecode or reimplement JVM
+loadability rules: artifact bytes and Maven identity are already fixed by the
+closed descriptor and explicit path/PURL/role contract. Generated components
+retain that exact identity and contract discovery mode, and
+`verify-maven-scan` still requires the final Trivy SBOM scan to contain every
+descriptor PURL/path identity and zero High/Critical findings. Any new path,
+coordinate, version, role, origin, byte sequence, unsafe archive, or final-scan
+omission continues to fail closed and requires a separately reviewed contract
+change.
 
 ## Resident image and SBOM evidence
 

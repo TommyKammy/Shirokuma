@@ -1236,7 +1236,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
     def _repository_descriptor(
         self,
         root: Path,
-        archives: dict[str, dict[str, bytes]],
+        archives: dict[str, dict[str, bytes | tuple[bytes, int]]],
     ) -> tuple[Path, Path]:
         repository = root / "repository"
         records = []
@@ -1245,7 +1245,14 @@ class MavenScanEvidenceTests(unittest.TestCase):
             destination.parent.mkdir(parents=True, exist_ok=True)
             with zipfile.ZipFile(destination, "w") as archive:
                 for name, payload in entries.items():
-                    archive.writestr(name, payload)
+                    if isinstance(payload, tuple):
+                        payload, mode = payload
+                        entry = zipfile.ZipInfo(name)
+                        entry.create_system = 3
+                        entry.external_attr = mode << 16
+                        archive.writestr(entry, payload)
+                    else:
+                        archive.writestr(name, payload)
             destination.chmod(0o644)
             payload = destination.read_bytes()
             records.append(
@@ -1358,6 +1365,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
         )
         return sbom
 
+
     def test_maven_descriptor_scopes_parquet_remediation_origin_to_exact_jar(
         self,
     ) -> None:
@@ -1452,61 +1460,94 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     root / "generated-sbom.json",
                 )
 
-    def test_maven_sbom_audits_only_known_rootfs_omissions(self) -> None:
+    def test_maven_sbom_rejects_rootfs_path_purl_misattribution(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            alpha, beta = self.JARS
-            sources = (
+            descriptor = self._descriptor(root)
+            rootfs = self._sbom(root)
+            document = json.loads(rootfs.read_text(encoding="utf-8"))
+            beta_path = self.JARS[1]
+            beta_component = next(
+                component
+                for component in document["components"]
+                if beta_path in verify._component_file_paths(component)
+            )
+            beta_component["purl"] = "pkg:maven/org.example/wrong@2.0"
+            rootfs.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "misattributes closed JAR paths",
+            ):
+                verify.generate_maven_sbom(
+                    descriptor,
+                    root,
+                    rootfs,
+                    root / "generated-sbom.json",
+                )
+
+    def test_maven_sbom_rejects_omissions_outside_reviewed_contract(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            alpha = self.JARS[0]
+            unknown_sources = (
                 "org/example/alpha/1.0/alpha-1.0-sources.jar"
             )
-            tests = "org/example/alpha/1.0/alpha-1.0-tests.jar"
             repository, descriptor = self._repository_descriptor(
                 root,
                 {
                     alpha: {"org/example/Alpha.class": b"alpha"},
-                    sources: {"org/example/Alpha.java": b"class Alpha {}"},
-                    tests: {"org/example/AlphaTest.class": b"test"},
-                    beta: {
-                        "org/example/Beta.class": b"beta",
-                        (
-                            "META-INF/maven/org.example/beta/"
-                            "pom.properties"
-                        ): (
-                            b"artifactId=beta\n"
-                            b"groupId=org.example\n"
-                            b"version=2.0\n"
-                        ),
+                    unknown_sources: {
+                        "org/example/Alpha.java": b"class Alpha {}",
                     },
                 },
             )
-            rootfs = self._sbom(root, (alpha,))
-            document = json.loads(rootfs.read_text(encoding="utf-8"))
-            nested_beta = f"{alpha}!/META-INF/lib/beta-2.0.jar"
-            beta_ref = "urn:test:rootfs-deduplicated-beta"
-            document["components"].append(
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "outside the reviewed closed set",
+            ):
+                verify.generate_maven_sbom(
+                    descriptor,
+                    repository,
+                    self._sbom(root, (alpha,)),
+                    root / "generated.json",
+                )
+
+    def test_maven_sbom_authorizes_exact_reviewed_omission_subset(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            alpha = self.JARS[0]
+            failsafe = (
+                "dev/failsafe/failsafe/3.3.2/failsafe-3.3.2.jar"
+            )
+            failsafe_sources = (
+                "dev/failsafe/failsafe/3.3.2/"
+                "failsafe-3.3.2-sources.jar"
+            )
+            repository, descriptor = self._repository_descriptor(
+                root,
                 {
-                    "bom-ref": beta_ref,
-                    "type": "library",
-                    "name": "beta",
-                    "purl": verify._maven_purl(beta),
-                    "properties": [
-                        {
-                            "name": "aquasecurity:trivy:FilePath",
-                            "value": nested_beta,
-                        }
-                    ],
-                }
+                    alpha: {"org/example/Alpha.class": b"alpha"},
+                    failsafe: {
+                        "dev/failsafe/Failsafe.class": (
+                            b"descriptor-bound opaque class payload"
+                        ),
+                    },
+                    failsafe_sources: {
+                        "dev/failsafe/Failsafe.java": b"class Failsafe {}",
+                    },
+                },
             )
-            document["dependencies"][0]["dependsOn"].append(beta_ref)
-            document["dependencies"].append(
-                {"ref": beta_ref, "dependsOn": []}
-            )
-            rootfs.write_text(json.dumps(document), encoding="utf-8")
             generated = root / "generated.json"
             verify.generate_maven_sbom(
                 descriptor,
                 repository,
-                rootfs,
+                self._sbom(root, (alpha,)),
                 generated,
             )
             result = json.loads(generated.read_text(encoding="utf-8"))
@@ -1514,15 +1555,15 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 prop["name"]: prop["value"]
                 for prop in result["metadata"]["properties"]
             }
-            self.assertEqual("1", metadata["shirokuma:rootfs-discovered-jars"])
-            self.assertEqual("3", metadata["shirokuma:rootfs-audited-omissions"])
             self.assertEqual(
                 "2",
-                metadata["shirokuma:rootfs-audited-supplemental-jars"],
+                metadata[
+                    "shirokuma:rootfs-contract-authorized-omissions"
+                ],
             )
             self.assertEqual(
                 "1",
-                metadata["shirokuma:rootfs-purl-deduplicated-jars"],
+                metadata["shirokuma:rootfs-contract-supplemental-jars"],
             )
             modes = {
                 path: prop["value"]
@@ -1533,9 +1574,8 @@ class MavenScanEvidenceTests(unittest.TestCase):
             }
             self.assertEqual(
                 {
-                    sources: "manifest-supplemental-sources",
-                    tests: "manifest-supplemental-tests",
-                    beta: "manifest-rootfs-purl-deduplicated",
+                    failsafe: "contract-base-coordinate",
+                    failsafe_sources: "contract-supplemental-sources",
                 },
                 modes,
             )
@@ -1550,64 +1590,101 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 self._report(root, paths=(), extra_packages=identities),
             )
 
-    def test_maven_sbom_rejects_unsafe_rootfs_omission_evidence(self) -> None:
+    def test_reviewed_omission_identity_is_derived_from_exact_path(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            alpha = self.JARS[0]
+            failsafe = (
+                "dev/failsafe/failsafe/3.3.2/failsafe-3.3.2.jar"
+            )
+            repository, descriptor = self._repository_descriptor(
+                root,
+                {
+                    alpha: {"org/example/Alpha.class": b"alpha"},
+                    failsafe: {"dev/failsafe/Failsafe.class": b"opaque"},
+                },
+            )
+            altered = [
+                dict(entry)
+                for entry in verify.EXPECTED_TRIVY_ROOTFS_OMISSIONS
+                if entry["path"] == failsafe
+            ]
+            altered[0]["purl"] = "pkg:maven/dev.failsafe/other@3.3.2"
+            with (
+                mock.patch.object(
+                    verify,
+                    "EXPECTED_TRIVY_ROOTFS_OMISSIONS",
+                    altered,
+                ),
+                self.assertRaisesRegex(
+                    verify.ContractError,
+                    "differs from its reviewed omission identity",
+                ),
+            ):
+                verify.generate_maven_sbom(
+                    descriptor,
+                    repository,
+                    self._sbom(root, (alpha,)),
+                    root / "generated.json",
+                )
+
+    def test_maven_sbom_bounds_omitted_jar_decompression(self) -> None:
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr("payload.bin", b"x" * 65)
+        with (
+            mock.patch.object(
+                verify,
+                "MAX_OMITTED_JAR_MEMBER_BYTES",
+                64,
+            ),
+            self.assertRaisesRegex(
+                verify.ContractError,
+                "exceeds omitted-JAR decompression limits",
+            ),
+        ):
+            verify._jar_entries(payload.getvalue(), "bounded.jar")
+
+    def test_maven_sbom_bounds_omitted_jar_archive_inventory(
+        self,
+    ) -> None:
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w") as archive:
+            archive.writestr("A.class", b"opaque class payload")
+            archive.writestr("empty.txt", b"")
+            archive.comment = b"reviewed-PK\x05\x06-comment"
+        archive_payload = payload.getvalue()
+        summary = verify._zip_directory_summary(archive_payload)
+        self.assertIsNotNone(summary)
+        assert summary is not None
+        self.assertEqual(summary[0], 2)
         cases = (
             (
-                "org/example/alpha/1.0/alpha-1.0-javadoc.jar",
-                {"org/example/Alpha.html": b"docs"},
-                "unreviewed omitted classifier",
+                "MAX_OMITTED_JAR_ARCHIVE_BYTES",
+                len(archive_payload) - 1,
             ),
+            ("MAX_OMITTED_JAR_MEMBERS", 1),
             (
-                "org/example/alpha/1.0/alpha-1.0-sources.jar",
-                {"org/example/Alpha.class": b"bytecode"},
-                "not a source-only classifier",
-            ),
-            (
-                "org/example/alpha/1.0/alpha-1.0-sources.jar",
-                {
-                    "org/example/Alpha.java": b"class Alpha {}",
-                    "lib/nested.jar": b"nested",
-                },
-                "undiscovered nested JAR",
-            ),
-            (
-                "org/example/beta/2.0/beta-2.0.jar",
-                {
-                    "org/example/Beta.class": b"beta",
-                    (
-                        "META-INF/maven/org.example/beta/"
-                        "pom.properties"
-                    ): (
-                        b"artifactId=beta\n"
-                        b"groupId=org.example\n"
-                        b"version=2.0\n"
-                    ),
-                },
-                "no rootfs-discovered base coordinate",
+                "MAX_OMITTED_JAR_CENTRAL_DIRECTORY_BYTES",
+                summary[1] - 1,
             ),
         )
-        for path, entries, error in cases:
-            with self.subTest(path=path, error=error):
-                with tempfile.TemporaryDirectory() as temporary:
-                    root = Path(temporary)
-                    alpha = self.JARS[0]
-                    repository, descriptor = self._repository_descriptor(
-                        root,
-                        {
-                            alpha: {"org/example/Alpha.class": b"alpha"},
-                            path: entries,
-                        },
-                    )
-                    with self.assertRaisesRegex(
-                        verify.ContractError,
-                        error,
-                    ):
-                        verify.generate_maven_sbom(
-                            descriptor,
-                            repository,
-                            self._sbom(root, (alpha,)),
-                            root / "generated.json",
-                        )
+        for limit_name, limit_value in cases:
+            with (
+                self.subTest(limit_name=limit_name),
+                mock.patch.object(
+                    verify,
+                    limit_name,
+                    limit_value,
+                ),
+                self.assertRaisesRegex(
+                    verify.ContractError,
+                    "exceeds omitted-JAR archive limits",
+                ),
+            ):
+                verify._jar_entries(archive_payload, "bounded.jar")
 
     def test_maven_sbom_generation_accepts_rootless_trivy_graph(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

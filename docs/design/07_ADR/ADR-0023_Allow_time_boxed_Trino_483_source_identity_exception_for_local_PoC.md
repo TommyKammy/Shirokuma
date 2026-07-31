@@ -4,8 +4,8 @@ doc_id: "ADR-0023"
 title: "Allow a time-boxed Trino 483 source identity exception for the local PoC"
 status: accepted
 created: 2026-07-23
-updated: 2026-07-28
-version: "0.9"
+updated: 2026-07-30
+version: "1.0"
 area: "architecture"
 tags: [shirokuma, adr, trino, source, supply-chain, local-poc]
 ---
@@ -252,6 +252,50 @@ artifact action excludes hidden paths by default, so both the diagnostic and
 normal candidate uploads explicitly include hidden files only alongside their
 closed, individually listed `.trino-candidate` paths. Contract fixtures reject
 removal, disabling, extra opt-ins, or placement on a different upload.
+
+Reviewed-main run
+[`30517632888`](https://github.com/TommyKammy/Shirokuma/actions/runs/30517632888)
+later reproduced the closed repositories, both network-none builds, archive
+equality, and the raw rootfs inventory, then failed closed because Trivy 0.72.0
+omitted the exact descriptor-bound `dev.failsafe:failsafe:3.3.2` JAR without
+retaining a rootfs PURL for that coordinate.
+
+Subsequent review exposed an architectural problem in the first repair. It
+attempted to decide whether arbitrary omitted JARs were acceptable by
+reimplementing an increasingly complete JVM class-file verifier in Python.
+Each local correction revealed another class-file, bytecode, stack-map,
+inheritance, or version rule. JVM loadability is not the authorization fact
+needed here: the security gate must prove which exact repository bytes Trivy
+omitted and preserve their exact Maven identities in the closure-complete SBOM.
+
+The accepted design therefore replaces open-ended semantic recognition with a
+closed, reviewed omission contract. The contract enumerates exactly the 11
+paths observed in run `30306042009`, together with each derived PURL and one
+of three roles: nine `supplemental-sources`, one
+`supplemental-tests`, and the single
+`dev.failsafe:failsafe:3.3.2` `base-coordinate`. The verifier pins that
+entire list and fails policy validation if the repository contract drifts.
+During SBOM generation it permits any subset of those entries, so a later Trivy
+release may begin discovering an entry without causing a false failure, but it
+rejects every omitted path outside the reviewed set.
+
+Every contract-authorized omission must still be a regular repository file
+whose origin, mode, size, and SHA-256 match the closed descriptor. Its path must
+derive the contract PURL and classifier role exactly. The JAR parser retains
+bounded archive size, member count, central-directory size, per-member and
+expanded size, compression-ratio, canonical-path, duplicate, encryption,
+special-file, full-member-read, and nested-archive checks. Source and test roles
+also require their expected source or class payload shape, and classifier
+entries remain linked to a descriptor-bound base coordinate. No class-file
+semantics are used as authorization evidence.
+
+The closure-complete CycloneDX document labels every such entry as
+contract-authorized. The subsequent Trivy SBOM scan must still contain the
+exact complete `(PURL, FilePath)` identity set and must fail on every remaining
+High or Critical finding. A coordinate, version, path, role, repository origin,
+or artifact-byte change therefore requires a separately reviewed contract
+change; it cannot be generalized from JAR contents. This does not relax source
+identity, vulnerability, publication, admission, expiry, or environment scope.
 
 A separate evidence-only PR must review and pin the exact OCI digest and retire
 the publisher. Image publication, resident admission, credentials, Flux
