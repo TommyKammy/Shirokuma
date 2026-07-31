@@ -2509,6 +2509,52 @@ class MavenScanEvidenceTests(unittest.TestCase):
             )
         )
 
+        def class_with_enclosing_method(attribute: bytes) -> bytes:
+            def enclosing_utf8(value: str) -> bytes:
+                payload = value.encode("ascii")
+                return (
+                    b"\x01"
+                    + len(payload).to_bytes(2, "big")
+                    + payload
+                )
+
+            return b"".join(
+                (
+                    b"\xca\xfe\xba\xbe\x00\x00\x00\x34\x00\x0b",
+                    enclosing_utf8("A"),
+                    b"\x07\x00\x01",
+                    enclosing_utf8("java/lang/Object"),
+                    b"\x07\x00\x03",
+                    enclosing_utf8("EnclosingMethod"),
+                    enclosing_utf8("method"),
+                    enclosing_utf8("()V"),
+                    b"\x0c\x00\x06\x00\x07",
+                    enclosing_utf8("Outer"),
+                    b"\x07\x00\x09",
+                    b"\x00\x21\x00\x02\x00\x04",
+                    b"\x00\x00\x00\x00\x00\x00\x00\x01",
+                    b"\x00\x05",
+                    len(attribute).to_bytes(4, "big"),
+                    attribute,
+                )
+            )
+
+        self.assertTrue(
+            verify._valid_class_file(
+                class_with_enclosing_method(b"\x00\x0a\x00\x08")
+            )
+        )
+        self.assertFalse(
+            verify._valid_class_file(
+                class_with_enclosing_method(b"\x00\x00\x00\x08")
+            )
+        )
+        self.assertFalse(
+            verify._valid_class_file(
+                class_with_enclosing_method(b"\x00\x0a\x00\x0a")
+            )
+        )
+
         def utf8(value: str) -> bytes:
             payload = value.encode("ascii")
             return b"\x01" + len(payload).to_bytes(2, "big") + payload
@@ -3734,6 +3780,9 @@ class MavenScanEvidenceTests(unittest.TestCase):
             )
 
     def test_maven_sbom_rejects_unsafe_rootfs_omission_evidence(self) -> None:
+        nested_archive = io.BytesIO()
+        with zipfile.ZipFile(nested_archive, "w") as archive:
+            archive.writestr("Nested.class", self.CLASS_FILE)
         cases = (
             (
                 "org/example/alpha/1.0/alpha-1.0-javadoc.jar",
@@ -3796,6 +3845,37 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     "lib/nested.JAR": b"nested",
                 },
                 "undiscovered nested JAR",
+            ),
+            (
+                "org/example/beta/2.0/beta-2.0.jar",
+                {
+                    "A.class": self.CLASS_FILE,
+                    "lib/payload.bin": nested_archive.getvalue(),
+                    (
+                        "META-INF/maven/org.example/beta/"
+                        "pom.properties"
+                    ): (
+                        b"artifactId=beta\n"
+                        b"groupId=org.example\n"
+                        b"version=2.0\n"
+                    ),
+                },
+                "undiscovered nested JAR",
+            ),
+            (
+                "org/example/beta/2.0/beta-2.0-.jar",
+                {
+                    "A.class": self.CLASS_FILE,
+                    (
+                        "META-INF/maven/org.example/beta/"
+                        "pom.properties"
+                    ): (
+                        b"artifactId=beta\n"
+                        b"groupId=org.example\n"
+                        b"version=2.0\n"
+                    ),
+                },
+                "invalid Maven JAR filename",
             ),
             (
                 "org/example/beta/2.0/beta-2.0-sources.jar",
@@ -4259,6 +4339,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
         with zipfile.ZipFile(payload, "w") as archive:
             archive.writestr("A.class", self.CLASS_FILE)
             archive.writestr("empty.txt", b"")
+            archive.comment = b"reviewed-PK\x05\x06-comment"
         archive_payload = payload.getvalue()
         summary = verify._zip_directory_summary(archive_payload)
         self.assertIsNotNone(summary)

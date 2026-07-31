@@ -343,8 +343,14 @@ descriptors, and nested attribute structure.
 Method-level `MethodParameters` attributes validate placement, uniqueness,
 descriptor arity, length, name indices, and flags. Local stores invalidate the
 adjacent half of any category-2 value they overlap.
-known JAR-local catch classes must reach `java/lang/Throwable`; catch identities
-cannot be array classes. Test classifiers also
+Class-level `EnclosingMethod` attributes validate placement, uniqueness, exact
+length, the enclosing class, and the optional method identity. Empty
+classifiers are valid only for the exact canonical base-JAR filename. EOCD
+discovery skips signature-shaped bytes inside legal ZIP comments and accepts
+only a candidate record whose encoded comment reaches EOF. Every regular member
+is also content-probed, and any nested ZIP is rejected regardless of its
+filename. Known JAR-local catch classes must reach `java/lang/Throwable`; catch
+identities cannot be array classes. Test classifiers also
 restrict nonmetadata members to reviewed test-resource formats and read every
 accepted payload; service-provider exemptions require a direct, UTF-8
 `META-INF/services/<binary-name>` configuration with valid service and provider

@@ -1757,7 +1757,13 @@ def _maven_purl(path: str) -> str:
     prefix = f"{artifact}-{version}"
     if not filename.startswith(prefix):
         _fail("MAVEN_SBOM", f"JAR does not match Maven coordinates: {path}")
-    classifier = filename[len(prefix) : -4].removeprefix("-")
+    classifier_suffix = filename[len(prefix) : -4]
+    if classifier_suffix and (
+        not classifier_suffix.startswith("-")
+        or classifier_suffix == "-"
+    ):
+        _fail("MAVEN_SBOM", f"invalid Maven JAR filename: {path}")
+    classifier = classifier_suffix.removeprefix("-")
     qualifier = f"?classifier={quote(classifier, safe='')}" if classifier else ""
     return (
         f"pkg:maven/{quote(group, safe='.')}/{quote(artifact, safe='')}"
@@ -1780,35 +1786,42 @@ def _safe_jar_member_type(entry: zipfile.ZipInfo) -> bool:
 
 def _zip_directory_summary(payload: bytes) -> tuple[int, int] | None:
     minimum_eocd_size = 22
-    eocd_offset = payload.rfind(
-        b"PK\x05\x06",
-        max(0, len(payload) - minimum_eocd_size - 65535),
+    search_start = max(
+        0,
+        len(payload) - minimum_eocd_size - 65535,
     )
-    if (
-        eocd_offset < 0
-        or eocd_offset + minimum_eocd_size > len(payload)
-    ):
-        return None
-    eocd = payload[eocd_offset : eocd_offset + minimum_eocd_size]
-    disk_number = int.from_bytes(eocd[4:6], "little")
-    directory_disk = int.from_bytes(eocd[6:8], "little")
-    disk_entries = int.from_bytes(eocd[8:10], "little")
-    total_entries = int.from_bytes(eocd[10:12], "little")
-    directory_size = int.from_bytes(eocd[12:16], "little")
-    directory_offset = int.from_bytes(eocd[16:20], "little")
-    comment_size = int.from_bytes(eocd[20:22], "little")
-    if (
-        disk_number != 0
-        or directory_disk != 0
-        or disk_entries != total_entries
-        or total_entries == 0xFFFF
-        or directory_size == 0xFFFFFFFF
-        or directory_offset == 0xFFFFFFFF
-        or eocd_offset + minimum_eocd_size + comment_size != len(payload)
-        or directory_offset + directory_size != eocd_offset
-    ):
-        return None
-    return total_entries, directory_size
+    search_end = len(payload)
+    while True:
+        eocd_offset = payload.rfind(
+            b"PK\x05\x06",
+            search_start,
+            search_end,
+        )
+        if eocd_offset < 0:
+            return None
+        search_end = eocd_offset
+        if eocd_offset + minimum_eocd_size > len(payload):
+            continue
+        eocd = payload[eocd_offset : eocd_offset + minimum_eocd_size]
+        disk_number = int.from_bytes(eocd[4:6], "little")
+        directory_disk = int.from_bytes(eocd[6:8], "little")
+        disk_entries = int.from_bytes(eocd[8:10], "little")
+        total_entries = int.from_bytes(eocd[10:12], "little")
+        directory_size = int.from_bytes(eocd[12:16], "little")
+        directory_offset = int.from_bytes(eocd[16:20], "little")
+        comment_size = int.from_bytes(eocd[20:22], "little")
+        if (
+            disk_number == 0
+            and directory_disk == 0
+            and disk_entries == total_entries
+            and total_entries != 0xFFFF
+            and directory_size != 0xFFFFFFFF
+            and directory_offset != 0xFFFFFFFF
+            and eocd_offset + minimum_eocd_size + comment_size
+            == len(payload)
+            and directory_offset + directory_size == eocd_offset
+        ):
+            return total_entries, directory_size
 
 
 def _jar_entries(payload: bytes, path: str) -> tuple[zipfile.ZipFile, list[str]]:
@@ -1880,6 +1893,14 @@ def _jar_entries(payload: bytes, path: str) -> tuple[zipfile.ZipFile, list[str]]
                 f"{path} exceeds omitted-JAR decompression limits",
             )
     return archive, names
+
+
+def _archive_contains_nested_zip(archive: zipfile.ZipFile) -> bool:
+    return any(
+        not entry.is_dir()
+        and zipfile.is_zipfile(io.BytesIO(archive.read(entry)))
+        for entry in archive.infolist()
+    )
 
 
 def _valid_modified_utf8(payload: bytes) -> bool:
@@ -5300,6 +5321,66 @@ def _valid_class_file(
                     if record_offset != len(attribute):
                         raise ValueError("trailing Record attribute data")
                     singleton_attributes.add(b"Record")
+                elif values[name_index] == b"EnclosingMethod":
+                    enclosing_class_index = (
+                        int.from_bytes(attribute[:2], "big")
+                        if len(attribute) == 4
+                        else 0
+                    )
+                    enclosing_method_index = (
+                        int.from_bytes(attribute[2:], "big")
+                        if len(attribute) == 4
+                        else -1
+                    )
+                    enclosing_method = (
+                        values[enclosing_method_index]
+                        if has_tag(enclosing_method_index, 12)
+                        else None
+                    )
+                    enclosing_method_name = (
+                        values[enclosing_method[0]]
+                        if isinstance(enclosing_method, tuple)
+                        and has_tag(enclosing_method[0], 1)
+                        else None
+                    )
+                    enclosing_method_descriptor = (
+                        values[enclosing_method[1]]
+                        if isinstance(enclosing_method, tuple)
+                        and has_tag(enclosing_method[1], 1)
+                        else None
+                    )
+                    if (
+                        not class_level
+                        or b"EnclosingMethod" in singleton_attributes
+                        or len(attribute) != 4
+                        or class_name(
+                            enclosing_class_index,
+                            allow_array=False,
+                        )
+                        is None
+                        or (
+                            enclosing_method_index != 0
+                            and (
+                                not isinstance(
+                                    enclosing_method_name,
+                                    bytes,
+                                )
+                                or not isinstance(
+                                    enclosing_method_descriptor,
+                                    bytes,
+                                )
+                                or not _valid_unqualified_name(
+                                    enclosing_method_name,
+                                    method=True,
+                                )
+                                or not _valid_method_descriptor(
+                                    enclosing_method_descriptor
+                                )
+                            )
+                        )
+                    ):
+                        raise ValueError("invalid EnclosingMethod attribute")
+                    singleton_attributes.add(b"EnclosingMethod")
                 elif values[name_index] == b"Signature":
                     if (
                         b"Signature" in singleton_attributes
@@ -5972,13 +6053,18 @@ def _validate_rootfs_discovery_omissions(
                         f"{path} is not a source-only classifier JAR",
                     )
                 try:
-                    for entry in archive.infolist():
-                        if not entry.is_dir():
-                            archive.read(entry)
+                    contains_nested_zip = _archive_contains_nested_zip(
+                        archive
+                    )
                 except (OSError, RuntimeError, zipfile.BadZipFile) as error:
                     _fail(
                         "MAVEN_SBOM_ROOTFS",
                         f"{path} contains unreadable source: {error}",
+                    )
+                if contains_nested_zip:
+                    _fail(
+                        "MAVEN_SBOM_ROOTFS",
+                        f"{path} contains an undiscovered nested JAR",
                     )
                 discovery[path] = "manifest-supplemental-sources"
                 continue
@@ -6031,13 +6117,18 @@ def _validate_rootfs_discovery_omissions(
                         f"{path} is not a test-only classifier JAR",
                     )
                 try:
-                    for entry in archive.infolist():
-                        if not entry.is_dir():
-                            archive.read(entry)
+                    contains_nested_zip = _archive_contains_nested_zip(
+                        archive
+                    )
                 except (OSError, RuntimeError, zipfile.BadZipFile) as error:
                     _fail(
                         "MAVEN_SBOM_ROOTFS",
                         f"{path} contains unreadable test payload: {error}",
+                    )
+                if contains_nested_zip:
+                    _fail(
+                        "MAVEN_SBOM_ROOTFS",
+                        f"{path} contains an undiscovered nested JAR",
                     )
                 discovery[path] = "manifest-supplemental-tests"
                 continue
@@ -6088,13 +6179,18 @@ def _validate_rootfs_discovery_omissions(
                     ),
                 )
             try:
-                for entry in archive.infolist():
-                    if not entry.is_dir():
-                        archive.read(entry)
+                contains_nested_zip = _archive_contains_nested_zip(
+                    archive
+                )
             except (OSError, RuntimeError, zipfile.BadZipFile) as error:
                 _fail(
                     "MAVEN_SBOM_ROOTFS",
                     f"{path} contains unreadable archive member: {error}",
+                )
+            if contains_nested_zip:
+                _fail(
+                    "MAVEN_SBOM_ROOTFS",
+                    f"{path} contains an undiscovered nested JAR",
                 )
             if (base_purl, path) in rootfs_identities:
                 discovery[path] = "manifest-rootfs-purl-deduplicated"
