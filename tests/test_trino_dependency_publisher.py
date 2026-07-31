@@ -1768,6 +1768,31 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 this_name=b"A",
             )
         )
+        arraylength_arguments = {
+            "instruction_offsets": {0, 1, 2},
+            "constant_pool_tags": [0],
+            "constant_pool_values": [None],
+            "exception_handlers": [],
+            "max_stack": 1,
+            "max_locals": 1,
+            "method_access_flags": 0x0008,
+            "method_name": b"method",
+            "this_name": b"A",
+        }
+        self.assertTrue(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("2ABEAC"),
+                method_descriptor=b"([I)I",
+                **arraylength_arguments,
+            )
+        )
+        self.assertFalse(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("2ABEAC"),
+                method_descriptor=b"(Ljava/lang/Object;)I",
+                **arraylength_arguments,
+            )
+        )
         self.assertFalse(
             verify._valid_operand_stack_flow(
                 bytes.fromhex("2AB0"),
@@ -2553,6 +2578,43 @@ class MavenScanEvidenceTests(unittest.TestCase):
             verify._valid_class_file(
                 class_with_enclosing_method(b"\x00\x0a\x00\x0a")
             )
+        )
+
+        def class_with_nest_host(attribute: bytes) -> bytes:
+            def nest_utf8(value: str) -> bytes:
+                payload = value.encode("ascii")
+                return (
+                    b"\x01"
+                    + len(payload).to_bytes(2, "big")
+                    + payload
+                )
+
+            return b"".join(
+                (
+                    b"\xca\xfe\xba\xbe\x00\x00\x00\x37\x00\x08",
+                    nest_utf8("A"),
+                    b"\x07\x00\x01",
+                    nest_utf8("java/lang/Object"),
+                    b"\x07\x00\x03",
+                    nest_utf8("NestHost"),
+                    nest_utf8("Host"),
+                    b"\x07\x00\x06",
+                    b"\x00\x21\x00\x02\x00\x04",
+                    b"\x00\x00\x00\x00\x00\x00\x00\x01",
+                    b"\x00\x05",
+                    len(attribute).to_bytes(4, "big"),
+                    attribute,
+                )
+            )
+
+        self.assertTrue(
+            verify._valid_class_file(class_with_nest_host(b"\x00\x07"))
+        )
+        self.assertFalse(
+            verify._valid_class_file(class_with_nest_host(b"\x00\x00"))
+        )
+        self.assertFalse(
+            verify._valid_class_file(class_with_nest_host(b"\x00\x02"))
         )
 
         def utf8(value: str) -> bytes:

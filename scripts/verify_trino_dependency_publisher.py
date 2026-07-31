@@ -3054,6 +3054,11 @@ def _valid_operand_stack_flow(
             return current == expected_name
 
         def assignable(actual_slot: str, expected_slot: str) -> bool:
+            if expected_slot == "array_reference":
+                return (
+                    actual_slot == "null"
+                    or actual_slot.startswith("reference:[")
+                )
             if (
                 actual_slot == expected_slot
                 or actual_slot == "unknown"
@@ -3657,7 +3662,7 @@ def _valid_operand_stack_flow(
                 component = component_reference.removeprefix("reference:")
                 pushed_types = (f"reference:[{component}",)
         elif opcode == 0xBE:
-            expected = ("reference",)
+            expected = ("array_reference",)
             pushed_types = ("int",)
         elif opcode == 0xBF:
             expected = ("reference:Ljava/lang/Throwable;",)
@@ -5381,6 +5386,26 @@ def _valid_class_file(
                     ):
                         raise ValueError("invalid EnclosingMethod attribute")
                     singleton_attributes.add(b"EnclosingMethod")
+                elif values[name_index] == b"NestHost":
+                    nest_host_index = (
+                        int.from_bytes(attribute, "big")
+                        if len(attribute) == 2
+                        else 0
+                    )
+                    nest_host_name = class_name(
+                        nest_host_index,
+                        allow_array=False,
+                    )
+                    if (
+                        not class_level
+                        or major_version < 55
+                        or b"NestHost" in singleton_attributes
+                        or len(attribute) != 2
+                        or nest_host_name is None
+                        or nest_host_name == this_name
+                    ):
+                        raise ValueError("invalid NestHost attribute")
+                    singleton_attributes.add(b"NestHost")
                 elif values[name_index] == b"Signature":
                     if (
                         b"Signature" in singleton_attributes

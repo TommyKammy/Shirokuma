@@ -350,8 +350,11 @@ discovery skips signature-shaped bytes inside legal ZIP comments and accepts
 only a candidate record whose encoded comment reaches EOF. Every regular member
 is also content-probed, and any nested ZIP is rejected regardless of its
 filename. Known JAR-local catch classes must reach `java/lang/Throwable`; catch
-identities cannot be array classes. Test classifiers also
-restrict nonmetadata members to reviewed test-resource formats and read every
+identities cannot be array classes.
+`arraylength` requires a known array descriptor, and class-level `NestHost`
+attributes validate version, placement, uniqueness, exact length, and a
+different non-array host class. Test classifiers also restrict nonmetadata
+members to reviewed test-resource formats and read every
 accepted payload; service-provider exemptions require a direct, UTF-8
 `META-INF/services/<binary-name>` configuration with valid service and provider
 binary names whose dot-separated components follow Java identifier rules. The
