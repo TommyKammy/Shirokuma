@@ -2617,6 +2617,51 @@ class MavenScanEvidenceTests(unittest.TestCase):
             verify._valid_class_file(class_with_nest_host(b"\x00\x02"))
         )
 
+        def class_with_nest_members(attribute: bytes) -> bytes:
+            def member_utf8(value: str) -> bytes:
+                payload = value.encode("ascii")
+                return (
+                    b"\x01"
+                    + len(payload).to_bytes(2, "big")
+                    + payload
+                )
+
+            return b"".join(
+                (
+                    b"\xca\xfe\xba\xbe\x00\x00\x00\x37\x00\x0a",
+                    member_utf8("A"),
+                    b"\x07\x00\x01",
+                    member_utf8("java/lang/Object"),
+                    b"\x07\x00\x03",
+                    member_utf8("NestMembers"),
+                    member_utf8("A$One"),
+                    b"\x07\x00\x06",
+                    member_utf8("A$Two"),
+                    b"\x07\x00\x08",
+                    b"\x00\x21\x00\x02\x00\x04",
+                    b"\x00\x00\x00\x00\x00\x00\x00\x01",
+                    b"\x00\x05",
+                    len(attribute).to_bytes(4, "big"),
+                    attribute,
+                )
+            )
+
+        self.assertTrue(
+            verify._valid_class_file(
+                class_with_nest_members(b"\x00\x02\x00\x07\x00\x09")
+            )
+        )
+        self.assertFalse(
+            verify._valid_class_file(
+                class_with_nest_members(b"\x00\x63\x00\x07")
+            )
+        )
+        self.assertFalse(
+            verify._valid_class_file(
+                class_with_nest_members(b"\x00\x02\x00\x07\x00\x07")
+            )
+        )
+
         def utf8(value: str) -> bytes:
             payload = value.encode("ascii")
             return b"\x01" + len(payload).to_bytes(2, "big") + payload

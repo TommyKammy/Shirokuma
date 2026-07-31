@@ -5406,6 +5406,40 @@ def _valid_class_file(
                     ):
                         raise ValueError("invalid NestHost attribute")
                     singleton_attributes.add(b"NestHost")
+                elif values[name_index] == b"NestMembers":
+                    nest_member_count = (
+                        int.from_bytes(attribute[:2], "big")
+                        if len(attribute) >= 2
+                        else -1
+                    )
+                    nest_member_names = [
+                        class_name(
+                            int.from_bytes(
+                                attribute[
+                                    entry_offset : entry_offset + 2
+                                ],
+                                "big",
+                            ),
+                            allow_array=False,
+                        )
+                        for entry_offset in range(2, len(attribute), 2)
+                    ]
+                    if (
+                        not class_level
+                        or major_version < 55
+                        or b"NestMembers" in singleton_attributes
+                        or len(attribute) < 2
+                        or len(attribute) != 2 + 2 * nest_member_count
+                        or any(
+                            member_name is None
+                            or member_name == this_name
+                            for member_name in nest_member_names
+                        )
+                        or len(nest_member_names)
+                        != len(set(nest_member_names))
+                    ):
+                        raise ValueError("invalid NestMembers attribute")
+                    singleton_attributes.add(b"NestMembers")
                 elif values[name_index] == b"Signature":
                     if (
                         b"Signature" in singleton_attributes

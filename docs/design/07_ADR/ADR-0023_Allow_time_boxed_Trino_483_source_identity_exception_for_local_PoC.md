@@ -353,7 +353,9 @@ filename. Known JAR-local catch classes must reach `java/lang/Throwable`; catch
 identities cannot be array classes.
 `arraylength` requires a known array descriptor, and class-level `NestHost`
 attributes validate version, placement, uniqueness, exact length, and a
-different non-array host class. Test classifiers also restrict nonmetadata
+different non-array host class. `NestMembers` attributes additionally validate
+their bounded count, exact length, unique non-array class references, and
+exclusion of the declaring class. Test classifiers also restrict nonmetadata
 members to reviewed test-resource formats and read every
 accepted payload; service-provider exemptions require a direct, UTF-8
 `META-INF/services/<binary-name>` configuration with valid service and provider
