@@ -1793,6 +1793,58 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 **arraylength_arguments,
             )
         )
+        required_frames: set[int] = set()
+        self.assertTrue(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("A70004B1B1"),
+                instruction_offsets={0, 3, 4},
+                constant_pool_tags=[0],
+                constant_pool_values=[None],
+                exception_handlers=[],
+                max_stack=0,
+                max_locals=0,
+                method_access_flags=0x0008,
+                method_name=b"method",
+                method_descriptor=b"()V",
+                this_name=b"A",
+                major_version=52,
+                required_stack_map_offsets=required_frames,
+            )
+        )
+        self.assertEqual({3, 4}, required_frames)
+        local_constructor_values = [
+            None,
+            (2,),
+            b"Foo",
+            None,
+            (1, 5),
+            (6, 7),
+            b"<init>",
+            b"()V",
+        ]
+        self.assertFalse(
+            verify._valid_operand_stack_flow(
+                bytes.fromhex("BB000159B70004B0"),
+                instruction_offsets={0, 3, 4, 7},
+                constant_pool_tags=[0, 7, 1, 0, 10, 12, 1, 1],
+                constant_pool_values=local_constructor_values,
+                exception_handlers=[],
+                max_stack=2,
+                max_locals=0,
+                method_access_flags=0x0008,
+                method_name=b"method",
+                method_descriptor=b"()Ljava/lang/String;",
+                this_name=b"A",
+                known_class_kinds={
+                    b"java/lang/Object": False,
+                    b"Foo": False,
+                },
+                known_superclasses={
+                    b"java/lang/Object": None,
+                    b"Foo": b"java/lang/Object",
+                },
+            )
+        )
         self.assertFalse(
             verify._valid_operand_stack_flow(
                 bytes.fromhex("2AB0"),
@@ -2659,6 +2711,44 @@ class MavenScanEvidenceTests(unittest.TestCase):
         self.assertFalse(
             verify._valid_class_file(
                 class_with_nest_members(b"\x00\x02\x00\x07\x00\x07")
+            )
+        )
+
+        def class_with_permitted_subclasses(attribute: bytes) -> bytes:
+            def permitted_utf8(value: str) -> bytes:
+                payload = value.encode("ascii")
+                return (
+                    b"\x01"
+                    + len(payload).to_bytes(2, "big")
+                    + payload
+                )
+
+            return b"".join(
+                (
+                    b"\xca\xfe\xba\xbe\x00\x00\x00\x3d\x00\x08",
+                    permitted_utf8("A"),
+                    b"\x07\x00\x01",
+                    permitted_utf8("java/lang/Object"),
+                    b"\x07\x00\x03",
+                    permitted_utf8("PermittedSubclasses"),
+                    permitted_utf8("Child"),
+                    b"\x07\x00\x06",
+                    b"\x00\x21\x00\x02\x00\x04",
+                    b"\x00\x00\x00\x00\x00\x00\x00\x01",
+                    b"\x00\x05",
+                    len(attribute).to_bytes(4, "big"),
+                    attribute,
+                )
+            )
+
+        self.assertTrue(
+            verify._valid_class_file(
+                class_with_permitted_subclasses(b"\x00\x01\x00\x07")
+            )
+        )
+        self.assertFalse(
+            verify._valid_class_file(
+                class_with_permitted_subclasses(b"\x00\x63\x00\x07")
             )
         )
 

@@ -2969,6 +2969,8 @@ def _valid_operand_stack_flow(
                 required_stack_map_offsets.update(
                     target for target in targets if target != 0
                 )
+                if terminal and next_offset is not None:
+                    required_stack_map_offsets.add(next_offset)
             if not terminal:
                 if next_offset is None:
                     return False
@@ -3035,23 +3037,20 @@ def _valid_operand_stack_flow(
                 or expected_name is None
                 or known_class_kinds is None
                 or known_superclasses is None
-                or expected_name not in known_class_kinds
                 or known_class_kinds.get(expected_name) is True
                 or actual_name not in known_superclasses
             ):
                 return True
             current: bytes | None = actual_name
             visited: set[bytes] = set()
-            while (
-                current is not None
-                and current in known_superclasses
-                and current not in visited
-            ):
+            while current is not None and current not in visited:
                 if current == expected_name:
                     return True
                 visited.add(current)
+                if current not in known_superclasses:
+                    return True
                 current = known_superclasses[current]
-            return current == expected_name
+            return False
 
         def assignable(actual_slot: str, expected_slot: str) -> bool:
             if expected_slot == "array_reference":
@@ -5440,6 +5439,41 @@ def _valid_class_file(
                     ):
                         raise ValueError("invalid NestMembers attribute")
                     singleton_attributes.add(b"NestMembers")
+                elif values[name_index] == b"PermittedSubclasses":
+                    subclass_count = (
+                        int.from_bytes(attribute[:2], "big")
+                        if len(attribute) >= 2
+                        else -1
+                    )
+                    subclass_names = [
+                        class_name(
+                            int.from_bytes(
+                                attribute[
+                                    entry_offset : entry_offset + 2
+                                ],
+                                "big",
+                            ),
+                            allow_array=False,
+                        )
+                        for entry_offset in range(2, len(attribute), 2)
+                    ]
+                    if (
+                        not class_level
+                        or major_version < 61
+                        or b"PermittedSubclasses" in singleton_attributes
+                        or len(attribute) < 2
+                        or len(attribute) != 2 + 2 * subclass_count
+                        or any(
+                            subclass_name is None
+                            or subclass_name == this_name
+                            for subclass_name in subclass_names
+                        )
+                        or len(subclass_names) != len(set(subclass_names))
+                    ):
+                        raise ValueError(
+                            "invalid PermittedSubclasses attribute"
+                        )
+                    singleton_attributes.add(b"PermittedSubclasses")
                 elif values[name_index] == b"Signature":
                     if (
                         b"Signature" in singleton_attributes

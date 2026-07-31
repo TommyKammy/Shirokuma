@@ -355,7 +355,11 @@ identities cannot be array classes.
 attributes validate version, placement, uniqueness, exact length, and a
 different non-array host class. `NestMembers` attributes additionally validate
 their bounded count, exact length, unique non-array class references, and
-exclusion of the declaring class. Test classifiers also restrict nonmetadata
+exclusion of the declaring class. `PermittedSubclasses` attributes receive the
+same structural checks with their Java-version gate. Complete JAR-local
+superclass chains can disprove assignment to unresolved external classes, and
+modern stack maps require a frame after unconditional transfers when another
+instruction follows. Test classifiers also restrict nonmetadata
 members to reviewed test-resource formats and read every
 accepted payload; service-provider exemptions require a direct, UTF-8
 `META-INF/services/<binary-name>` configuration with valid service and provider
