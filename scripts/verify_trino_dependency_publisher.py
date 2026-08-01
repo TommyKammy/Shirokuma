@@ -201,6 +201,12 @@ EXPECTED_BLOCKER_CLASSIFICATION = {
     ),
 }
 EXPECTED_BLOCKER_FEASIBILITY_VALIDATION = {
+    "evidence_status": (
+        "local_observation_not_retained_not_authorization_evidence"
+    ),
+    "authorization_use_permitted": False,
+    "revalidation_required_before_authorization": True,
+    "reproducible_inputs_retained": False,
     "builder": (
         "docker.io/library/maven@sha256:"
         "7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c"
@@ -210,18 +216,25 @@ EXPECTED_BLOCKER_FEASIBILITY_VALIDATION = {
         ":trino-hdfs,:trino-iceberg"
     ),
     "goal": "dependency:resolve-plugins -DskipTests",
-    "online_resolution": "success",
-    "network_none_not_claimed": True,
-    "offline_replay": "success",
-    "vulnerable_coordinate_lines": 0,
-    "full_clean_install_not_run": True,
-    "fresh_closure_sbom_and_scan_not_run": True,
+    "reported_observations": {
+        "online_resolution": "success",
+        "network_none_not_claimed": True,
+        "offline_replay": "success",
+        "vulnerable_coordinate_lines": 0,
+    },
+    "limitations": {
+        "command_output_retained": False,
+        "offline_repository_retained": False,
+        "full_clean_install_not_run": True,
+        "fresh_closure_sbom_and_scan_not_run": True,
+    },
 }
 EXPECTED_BLOCKER_NEXT_ACTION = {
     "state": "owner_authorization_required",
     "required_decision": (
         "Approve or reject the exact candidate pom.xml-only overlay bound to "
-        "the retained patch and postimage hashes. Approval must preserve "
+        "the retained patch and postimage hashes. Approval requires a new "
+        "retained and reproducible validation record and must preserve "
         "High=0/Critical=0 without waiver, the current expiry, and reviewer "
         "separation before any active publisher patch or publication retry."
     ),

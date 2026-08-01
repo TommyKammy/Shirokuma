@@ -311,6 +311,7 @@
       "docs/design/evidence/trino/run-30693677356-maven-dependency-manifest.json",
       "docs/design/evidence/trino/run-30693677356-maven-rootfs.cdx.json",
       "docs/design/evidence/trino/run-30693677356-maven-vulnerability-classification.json",
+      "docs/design/evidence/trino/run-30693677356-post-adr-0027-pom.xml.gz",
       "docs/design/evidence/trino/run-30693677356-proposed-source-overlay.patch",
       "docs/design/evidence/trino/run-30693677356-trivy-vulnerability.json",
       "scripts/package_trino_bun_dependencies.py",

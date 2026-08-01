@@ -3445,6 +3445,10 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     ),
                     (
                         "docs/design/evidence/trino/"
+                        "run-30693677356-post-adr-0027-pom.xml.gz"
+                    ),
+                    (
+                        "docs/design/evidence/trino/"
                         "run-30693677356-proposed-source-overlay.patch"
                     ),
                     (
@@ -3489,6 +3493,30 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             if path.is_file() or path.is_symlink()
         }
         allowed_paths = set(repository_state["allowed_paths"])
+        blocker_classification_path = (
+            "docs/design/evidence/trino/"
+            "run-30693677356-maven-vulnerability-classification.json"
+        )
+        blocker_classification = json.loads(
+            (ROOT / blocker_classification_path).read_text(encoding="utf-8")
+        )
+        blocker_evidence_paths = {
+            blocker_classification_path,
+            *(
+                record["path"]
+                for record in blocker_classification["inputs"].values()
+            ),
+            blocker_classification["focused_feasibility"]["baseline"][
+                "retained_path"
+            ],
+            blocker_classification["focused_feasibility"]["candidate"][
+                "patch_path"
+            ],
+        }
+        self.assertLessEqual(blocker_evidence_paths, allowed_paths)
+        self.assertTrue(
+            all((ROOT / path).is_file() for path in blocker_evidence_paths)
+        )
         self.assertTrue(
             all(
                 path in allowed_paths

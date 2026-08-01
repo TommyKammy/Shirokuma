@@ -2461,6 +2461,17 @@ class PublisherContractTests(unittest.TestCase):
             ):
                 verify._validate_blocker_evidence(temporary_root)
 
+            altered = copy.deepcopy(classification)
+            altered["focused_feasibility"]["validation"][
+                "authorization_use_permitted"
+            ] = True
+            path.write_text(json.dumps(altered), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "feasibility boundary differs",
+            ):
+                verify._validate_blocker_evidence(temporary_root)
+
     def test_retained_blocker_evidence_binds_snapshot_closure(self) -> None:
         paths = [
             verify.BLOCKER_CLASSIFICATION_PATH,

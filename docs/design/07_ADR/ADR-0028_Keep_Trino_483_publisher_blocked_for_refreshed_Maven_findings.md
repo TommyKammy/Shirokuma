@@ -77,11 +77,12 @@ ADR-0027 overlay:
 - candidate patch bytes: `6633`
 
 The candidate adds Velocity Engine Core 2.4.1 and Plexus Utils 4.0.3 as direct
-dependencies in the affected inherited Maven plugin realms. Exact
-`dependency:resolve-plugins` validation with the digest-pinned native arm64
-builder passed online and offline, and no `velocity-engine-core 2.3` or
-`plexus-utils 4.0.0` through `4.0.2` coordinate remained in the selected
-reactor plugin graph.
+dependencies in the affected inherited Maven plugin realms. A local
+`dependency:resolve-plugins` run reported online and offline success with no
+vulnerable coordinate in the selected reactor, but neither its command output
+nor its offline repository was retained. Those observations are therefore not
+authorization evidence and must be reproduced into a retained, independently
+reviewable validation record before approval.
 
 This is feasibility evidence only. It does not activate the candidate patch,
 authorize a new source postimage, permit another publisher run, or claim a
@@ -99,6 +100,8 @@ exact candidate boundary. Approval must bind:
 - Velocity Engine Core 2.4.1 and Plexus Utils 4.0.3 as the only new dependency
   replacements;
 - the unchanged selected reactor and digest-pinned builder;
+- a new retained and reproducible validation record proving the exact online
+  and offline commands and vulnerable-coordinate result;
 - the existing expiry `2026-08-21T22:43:36Z`, with no automatic renewal;
 - independent reviewer approval distinct from implementation author `Codex`;
   and
@@ -130,9 +133,10 @@ the Trino artifact has not passed resident admission or runtime acceptance.
 - Apply the candidate patch to the exact post-ADR-0027 `pom.xml` with
   `git apply --unidiff-zero --whitespace=error-all` and verify the candidate
   postimage hash.
-- Run `dependency:resolve-plugins` online and offline with the exact selected
-  reactor and digest-pinned native arm64 builder; require the vulnerable
-  coordinate set to be empty.
+- Before authorization, rerun `dependency:resolve-plugins` online and offline
+  with the exact selected reactor and digest-pinned native arm64 builder;
+  retain the command, exit status, output, and reproducible offline inputs,
+  and require the vulnerable coordinate set to be empty.
 - `python3 -m unittest tests.test_trino_dependency_publisher`
 - `python3 scripts/verify_trino_dependency_publisher.py audit --root .`
 - `make verify-trino-bootstrap`
