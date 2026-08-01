@@ -473,6 +473,7 @@ def audit_workflow(root: Path) -> None:
         f"BUILDER_IMAGE: {EXPECTED_BUILDER}",
         "--network none",
         '"${repository}:/m2:ro"',
+        "--tmpfs /m2/.locks:rw,noexec,nosuid,size=16m",
         EXPECTED_SELECTED_REACTOR,
         "dependency:resolve-plugins -DskipTests",
         "retention-days: 30",

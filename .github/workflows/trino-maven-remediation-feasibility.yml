@@ -219,6 +219,7 @@ jobs:
             --env JAVA_TOOL_OPTIONS= \
             --volume "${source_dir}:/workspace" \
             --volume "${repository}:/m2:ro" \
+            --tmpfs /m2/.locks:rw,noexec,nosuid,size=16m \
             --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:/policy/.mvn:ro" \
             --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:/policy/settings.xml:ro" \
             --workdir /policy \
