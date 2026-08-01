@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import copy
 import datetime as dt
+import gzip
 import hashlib
 import io
 import json
@@ -14,6 +15,7 @@ import re
 import stat
 import subprocess
 import tarfile
+import tempfile
 import textwrap
 import zipfile
 import xml.etree.ElementTree as ET
@@ -66,6 +68,225 @@ DISTRIBUTION_REMEDIATION_ADR_PATH = Path(
     "docs/design/07_ADR/"
     "ADR-0027_Authorize_bounded_Trino_483_Iceberg_only_Maven_closure.md"
 )
+BLOCKER_ADR_PATH = Path(
+    "docs/design/07_ADR/"
+    "ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md"
+)
+BLOCKER_CLASSIFICATION_PATH = Path(
+    "docs/design/evidence/trino/"
+    "run-30693677356-maven-vulnerability-classification.json"
+)
+BLOCKER_BASELINE_PATH = Path(
+    "docs/design/evidence/trino/"
+    "run-30693677356-post-adr-0027-pom.xml.gz"
+)
+EXPECTED_BLOCKER_SUBJECT = {
+    "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
+    "workflow_run": (
+        "https://github.com/TommyKammy/Shirokuma/actions/runs/30693677356"
+    ),
+    "run_id": 30693677356,
+    "run_attempt": 1,
+    "reviewed_main_commit": "7d3301ccdf06e42b3bf1300d813e45887193c2be",
+    "workflow": "Trino 483 build dependency snapshot",
+    "failed_job": "validate",
+    "failed_step": "Verify and block the complete Maven JAR scan inventory",
+    "failure_code": "MAVEN_SCAN_FINDING",
+    "diagnostic_artifact": {
+        "name": "trino-maven-vulnerability-diagnostics-30693677356-1",
+        "artifact_id": 8816735183,
+        "zip_sha256": (
+            "6478db69e063c0bde104a023ac4bbd430ce607bfd61f566327dc90f9ccfb3bbe"
+        ),
+        "expires_at": "2026-08-15T09:45:13Z",
+    },
+}
+EXPECTED_BLOCKER_INPUTS = {
+    "raw_trivy_report": {
+        "path": (
+            "docs/design/evidence/trino/"
+            "run-30693677356-trivy-vulnerability.json"
+        ),
+        "sha256": (
+            "e2d843dee383b619eabb915a5568b4478bb197f38a3097d32bf39bc5c7f462f2"
+        ),
+        "bytes": 526660,
+    },
+    "closure_complete_sbom": {
+        "path": (
+            "docs/design/evidence/trino/"
+            "run-30693677356-maven-closure.cdx.json"
+        ),
+        "sha256": (
+            "6ccb4a7ea44d8067094c378d7cf71893cacc091957b2a53b23fd1414c82b04ba"
+        ),
+        "bytes": 804639,
+    },
+    "run_scoped_maven_manifest": {
+        "path": (
+            "docs/design/evidence/trino/"
+            "run-30693677356-maven-dependency-manifest.json"
+        ),
+        "sha256": (
+            "1d1c88ffdcca88befae8b276611b83e70131b32be4520fbdb660094277323f69"
+        ),
+        "bytes": 1758953,
+    },
+    "raw_rootfs_sbom": {
+        "path": (
+            "docs/design/evidence/trino/"
+            "run-30693677356-maven-rootfs.cdx.json"
+        ),
+        "sha256": (
+            "405c2c8cd6cab23f5783c29ef3e818cc4e32de8aa52c65ebd5720592b150f55e"
+        ),
+        "bytes": 858534,
+    },
+}
+EXPECTED_BLOCKER_SUMMARY = {
+    "high_occurrences": 3,
+    "critical_occurrences": 0,
+    "vulnerability_ids": 2,
+    "package_version_groups": 3,
+    "physical_jar_paths": 3,
+    "publication_reached": False,
+    "dependency_artifact_produced": False,
+    "admission_reached": False,
+    "runtime_state_changed": False,
+}
+EXPECTED_BLOCKER_BASELINE = {
+    "source_path": "pom.xml",
+    "post_adr_0027_sha256": (
+        "8d342215a3c748f7965f0a82e847cab13587b94171d9d1422922b665475109c1"
+    ),
+    "retained_path": BLOCKER_BASELINE_PATH.as_posix(),
+    "retained_sha256": (
+        "dc5cfc5cd0ef38f2960926b364c32f476c1c94e949e0fa43711f17d951eb9b75"
+    ),
+    "retained_bytes": 13_531,
+    "compression": "gzip",
+}
+EXPECTED_BLOCKER_CANDIDATE = {
+    "source_path": "pom.xml",
+    "postimage_sha256": (
+        "8d66505ee8ad90d11bf887dfe25a355d815f904d9ea90184b2089b0b68869626"
+    ),
+    "patch_path": (
+        "docs/design/evidence/trino/"
+        "run-30693677356-proposed-source-overlay.patch"
+    ),
+    "patch_sha256": (
+        "7bb92a92ee492fbf1fc238c5e1ec6a90c4b3088f98f3d05652853f7b874221d8"
+    ),
+    "patch_bytes": 6633,
+    "application": "git apply --unidiff-zero --whitespace=error-all",
+    "changed_paths": ["pom.xml"],
+    "dependency_replacements": {
+        "org.apache.velocity:velocity-engine-core": "2.4.1",
+        "org.codehaus.plexus:plexus-utils": "4.0.3",
+    },
+}
+EXPECTED_BLOCKER_CLASSIFICATION = {
+    "gate_status": "blocked",
+    "vulnerability_waiver_permitted": False,
+    "openvex_expansion_permitted": False,
+    "scanner_suppression_permitted": False,
+    "existing_distribution_authorization_covers_change": False,
+    "reason": (
+        "ADR-0027 fixes the active source-overlay patch SHA-256, pom.xml "
+        "postimage, and allowed dependency versions. The retained findings "
+        "require a different patch and postimage, including a new Velocity "
+        "version, so publication must remain blocked pending separate exact "
+        "owner authorization and independent review."
+    ),
+}
+EXPECTED_BLOCKER_FEASIBILITY_VALIDATION = {
+    "evidence_status": (
+        "local_observation_not_retained_not_authorization_evidence"
+    ),
+    "authorization_use_permitted": False,
+    "revalidation_required_before_authorization": True,
+    "reproducible_inputs_retained": False,
+    "builder": (
+        "docker.io/library/maven@sha256:"
+        "7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c"
+    ),
+    "selected_reactor": (
+        ":trino-server,:trino-server-core,:trino-server-main,"
+        ":trino-hdfs,:trino-iceberg"
+    ),
+    "goal": "dependency:resolve-plugins -DskipTests",
+    "reported_observations": {
+        "online_resolution": "success",
+        "network_none_not_claimed": True,
+        "offline_replay": "success",
+        "vulnerable_coordinate_lines": 0,
+    },
+    "limitations": {
+        "command_output_retained": False,
+        "offline_repository_retained": False,
+        "full_clean_install_not_run": True,
+        "fresh_closure_sbom_and_scan_not_run": True,
+    },
+}
+EXPECTED_BLOCKER_NEXT_ACTION = {
+    "state": "owner_authorization_required",
+    "required_decision": (
+        "Approve or reject the exact candidate pom.xml-only overlay bound to "
+        "the retained patch and postimage hashes. Approval requires a new "
+        "retained and reproducible validation record and must preserve "
+        "High=0/Critical=0 without waiver, the current expiry, and reviewer "
+        "separation before any active publisher patch or publication retry."
+    ),
+}
+EXPECTED_BLOCKER_FINDING_POLICY = [
+    {
+        "vulnerability_id": "CVE-2024-47554",
+        "purl": "pkg:maven/commons-io/commons-io@2.8.0",
+        "installed_version": "2.8.0",
+        "physical_path": (
+            "org/apache/velocity/velocity-engine-core/2.3/"
+            "velocity-engine-core-2.3.jar"
+        ),
+        "classification": "embedded_shaded_component",
+        "dependency_sources": ["org.revapi:revapi-maven-plugin:0.15.1"],
+    },
+    {
+        "vulnerability_id": "CVE-2025-67030",
+        "purl": "pkg:maven/org.codehaus.plexus/plexus-utils@4.0.1",
+        "installed_version": "4.0.1",
+        "physical_path": (
+            "org/codehaus/plexus/plexus-utils/4.0.1/"
+            "plexus-utils-4.0.1.jar"
+        ),
+        "classification": "top_level_maven_plugin_dependency",
+        "dependency_sources": [
+            "org.apache.maven.plugins:maven-checkstyle-plugin:3.6.0",
+            "org.apache.maven.plugins:maven-deploy-plugin:3.1.4",
+            "org.apache.maven.plugins:maven-install-plugin:3.1.4",
+        ],
+    },
+    {
+        "vulnerability_id": "CVE-2025-67030",
+        "purl": "pkg:maven/org.codehaus.plexus/plexus-utils@4.0.2",
+        "installed_version": "4.0.2",
+        "physical_path": (
+            "org/codehaus/plexus/plexus-utils/4.0.2/"
+            "plexus-utils-4.0.2.jar"
+        ),
+        "classification": "top_level_maven_plugin_dependency",
+        "dependency_sources": [
+            "com.mycila:license-maven-plugin:5.0.0",
+            "org.apache.maven.plugins:maven-assembly-plugin:3.8.0",
+            "org.apache.maven.plugins:maven-clean-plugin:3.5.0",
+            "org.apache.maven.plugins:maven-javadoc-plugin:3.12.0",
+            "org.apache.maven.plugins:maven-pmd-plugin:3.28.0",
+            "org.apache.maven.plugins:maven-release-plugin:3.3.1",
+            "org.apache.maven.plugins:maven-scm-plugin:2.2.1",
+            "org.apache.maven.plugins:maven-wrapper-plugin:3.3.4",
+        ],
+    },
+]
 EXPECTED_REPOSITORY = "TommyKammy/Shirokuma"
 EXPECTED_SOURCE_REPOSITORY = "https://github.com/trinodb/trino"
 EXPECTED_TAG = "483"
@@ -1432,6 +1653,286 @@ def _validate_zero_context_patch(
         )
 
 
+def _validate_blocker_evidence(root: Path) -> None:
+    record = _load_json(root / BLOCKER_CLASSIFICATION_PATH)
+    if (
+        record.get("schema_version") != 1
+        or record.get("record_path") != BLOCKER_CLASSIFICATION_PATH.as_posix()
+        or record.get("subject") != EXPECTED_BLOCKER_SUBJECT
+        or record.get("summary") != EXPECTED_BLOCKER_SUMMARY
+    ):
+        _fail("BLOCKER_EVIDENCE", "classification identity or summary differs")
+    if (
+        record.get("classification") != EXPECTED_BLOCKER_CLASSIFICATION
+        or record.get("next_action") != EXPECTED_BLOCKER_NEXT_ACTION
+    ):
+        _fail("BLOCKER_EVIDENCE", "owner-facing policy boundary differs")
+
+    inputs = record.get("inputs")
+    if not isinstance(inputs, dict) or set(inputs) != set(EXPECTED_BLOCKER_INPUTS):
+        _fail("BLOCKER_EVIDENCE", "retained input inventory differs")
+    loaded_inputs: dict[str, dict[str, Any]] = {}
+    for name, expected in EXPECTED_BLOCKER_INPUTS.items():
+        observed = inputs.get(name)
+        if not isinstance(observed, dict) or any(
+            observed.get(field) != value for field, value in expected.items()
+        ):
+            _fail("BLOCKER_EVIDENCE", f"{name} record differs")
+        if name in {"run_scoped_maven_manifest", "raw_rootfs_sbom"} and (
+            observed.get("retained_in_actions_artifact") is not True
+            or observed.get("retained_in_repository") is not True
+        ):
+            _fail("BLOCKER_EVIDENCE", f"{name} retention differs")
+        evidence_path = root / expected["path"]
+        payload = _read_reviewed_regular_file(
+            evidence_path,
+            code="BLOCKER_EVIDENCE",
+        )
+        if (
+            len(payload) != expected["bytes"]
+            or hashlib.sha256(payload).hexdigest() != expected["sha256"]
+        ):
+            _fail("BLOCKER_EVIDENCE", f"{name} bytes or hash differ")
+        loaded_inputs[name] = _load_json(evidence_path)
+
+    report_record = inputs["raw_trivy_report"]
+    report = loaded_inputs["raw_trivy_report"]
+    if (
+        report.get("ReportID") != report_record.get("report_id")
+        or report.get("CreatedAt") != report_record.get("created_at")
+        or report.get("Trivy", {}).get("Version")
+        != report_record.get("trivy_version")
+    ):
+        _fail("BLOCKER_EVIDENCE", "Trivy report metadata differs")
+    for name in ("closure_complete_sbom", "raw_rootfs_sbom"):
+        if loaded_inputs[name].get("bomFormat") != "CycloneDX":
+            _fail("BLOCKER_EVIDENCE", f"{name} is not CycloneDX")
+
+    manifest_path = (
+        root / EXPECTED_BLOCKER_INPUTS["run_scoped_maven_manifest"]["path"]
+    )
+    closure_path = (
+        root / EXPECTED_BLOCKER_INPUTS["closure_complete_sbom"]["path"]
+    )
+    rootfs_path = root / EXPECTED_BLOCKER_INPUTS["raw_rootfs_sbom"]["path"]
+    report_path = root / EXPECTED_BLOCKER_INPUTS["raw_trivy_report"]["path"]
+    verify_maven_scan(
+        manifest_path,
+        closure_path,
+        report_path,
+        allow_high_critical=True,
+    )
+
+    def components_by_ref(
+        name: str,
+        path: Path,
+    ) -> dict[str, dict[str, Any]]:
+        components = _cyclonedx_components(loaded_inputs[name], path)
+        observed = {
+            component.get("bom-ref"): component
+            for component in components
+            if isinstance(component.get("bom-ref"), str)
+            and component["bom-ref"]
+        }
+        if len(observed) != len(components):
+            _fail("BLOCKER_EVIDENCE", f"{name} bom-ref closure differs")
+        return observed
+
+    rootfs_components = components_by_ref("raw_rootfs_sbom", rootfs_path)
+    closure_components = components_by_ref(
+        "closure_complete_sbom",
+        closure_path,
+    )
+    mismatched_rootfs_refs = sorted(
+        reference
+        for reference, component in rootfs_components.items()
+        if closure_components.get(reference) != component
+    )
+    if mismatched_rootfs_refs:
+        _fail(
+            "BLOCKER_EVIDENCE",
+            "closure SBOM does not retain the exact rootfs component set: "
+            f"{mismatched_rootfs_refs!r}",
+        )
+
+    vulnerabilities: list[dict[str, Any]] = []
+    results = report.get("Results")
+    if not isinstance(results, list):
+        _fail("BLOCKER_EVIDENCE", "Trivy Results must be a list")
+    for result in results:
+        if not isinstance(result, dict):
+            _fail("BLOCKER_EVIDENCE", "Trivy result must be an object")
+        findings = result.get("Vulnerabilities") or []
+        if not isinstance(findings, list) or not all(
+            isinstance(finding, dict) for finding in findings
+        ):
+            _fail("BLOCKER_EVIDENCE", "Trivy vulnerabilities differ")
+        vulnerabilities.extend(findings)
+
+    high = [v for v in vulnerabilities if v.get("Severity") == "HIGH"]
+    critical = [
+        v for v in vulnerabilities if v.get("Severity") == "CRITICAL"
+    ]
+    recomputed = {
+        "high_occurrences": len(high),
+        "critical_occurrences": len(critical),
+        "vulnerability_ids": len(
+            {v.get("VulnerabilityID") for v in vulnerabilities}
+        ),
+        "package_version_groups": len(
+            {
+                (v.get("PkgName"), v.get("InstalledVersion"))
+                for v in vulnerabilities
+            }
+        ),
+        "physical_jar_paths": len(
+            {v.get("PkgPath") for v in vulnerabilities}
+        ),
+        "publication_reached": False,
+        "dependency_artifact_produced": False,
+        "admission_reached": False,
+        "runtime_state_changed": False,
+    }
+    if recomputed != EXPECTED_BLOCKER_SUMMARY:
+        _fail("BLOCKER_EVIDENCE", f"recomputed summary differs: {recomputed!r}")
+
+    def normalized_fixed_versions(value: Any) -> tuple[str, ...]:
+        if isinstance(value, list):
+            versions = value
+        elif isinstance(value, str):
+            versions = value.split(",")
+        else:
+            versions = []
+        return tuple(sorted(version.strip() for version in versions if version.strip()))
+
+    observed_findings = sorted(
+        (
+            finding.get("VulnerabilityID"),
+            finding.get("Severity"),
+            finding.get("PkgIdentifier", {}).get("PURL"),
+            finding.get("InstalledVersion"),
+            normalized_fixed_versions(finding.get("FixedVersion")),
+            finding.get("PkgPath"),
+        )
+        for finding in vulnerabilities
+    )
+    classified = record.get("findings")
+    if not isinstance(classified, list) or not all(
+        isinstance(finding, dict) for finding in classified
+    ):
+        _fail("BLOCKER_EVIDENCE", "classified findings must be objects")
+    classified_findings = sorted(
+        (
+            finding.get("vulnerability_id"),
+            finding.get("severity"),
+            finding.get("purl"),
+            finding.get("installed_version"),
+            normalized_fixed_versions(
+                finding.get(
+                    "fixed_versions",
+                    finding.get("fixed_version"),
+                )
+            ),
+            finding.get("physical_path"),
+        )
+        for finding in classified
+    )
+    if classified_findings != observed_findings:
+        _fail("BLOCKER_EVIDENCE", "classified findings differ from Trivy report")
+    finding_policy_fields = tuple(EXPECTED_BLOCKER_FINDING_POLICY[0])
+    observed_finding_policy = [
+        {field: finding.get(field) for field in finding_policy_fields}
+        for finding in classified
+    ]
+    if observed_finding_policy != EXPECTED_BLOCKER_FINDING_POLICY:
+        _fail("BLOCKER_EVIDENCE", "finding policy classification differs")
+
+    feasibility = record.get("focused_feasibility")
+    expected_feasibility = {
+        "status": "candidate_only_not_authorized_not_active",
+        "baseline": EXPECTED_BLOCKER_BASELINE,
+        "candidate": EXPECTED_BLOCKER_CANDIDATE,
+        "validation": EXPECTED_BLOCKER_FEASIBILITY_VALIDATION,
+    }
+    if feasibility != expected_feasibility:
+        _fail("BLOCKER_EVIDENCE", "feasibility boundary differs")
+    candidate_path = root / EXPECTED_BLOCKER_CANDIDATE["patch_path"]
+    candidate_payload = _read_reviewed_regular_file(
+        candidate_path,
+        code="BLOCKER_EVIDENCE",
+    )
+    if (
+        len(candidate_payload) != EXPECTED_BLOCKER_CANDIDATE["patch_bytes"]
+        or hashlib.sha256(candidate_payload).hexdigest()
+        != EXPECTED_BLOCKER_CANDIDATE["patch_sha256"]
+    ):
+        _fail("BLOCKER_EVIDENCE", "candidate patch bytes or hash differ")
+    _validate_zero_context_patch(candidate_path, {"pom.xml"})
+
+    baseline_payload = _read_reviewed_regular_file(
+        root / BLOCKER_BASELINE_PATH,
+        code="BLOCKER_EVIDENCE",
+    )
+    if (
+        len(baseline_payload) != EXPECTED_BLOCKER_BASELINE["retained_bytes"]
+        or hashlib.sha256(baseline_payload).hexdigest()
+        != EXPECTED_BLOCKER_BASELINE["retained_sha256"]
+    ):
+        _fail("BLOCKER_EVIDENCE", "candidate baseline bytes or hash differ")
+    try:
+        baseline = gzip.decompress(baseline_payload)
+    except (OSError, EOFError) as error:
+        _fail("BLOCKER_EVIDENCE", f"candidate baseline gzip differs: {error}")
+    if (
+        hashlib.sha256(baseline).hexdigest()
+        != EXPECTED_BLOCKER_BASELINE["post_adr_0027_sha256"]
+    ):
+        _fail("BLOCKER_EVIDENCE", "candidate baseline preimage differs")
+    try:
+        with tempfile.TemporaryDirectory() as temporary:
+            checkout = Path(temporary)
+            (checkout / "pom.xml").write_bytes(baseline)
+            subprocess.run(
+                ["git", "init", "--quiet"],
+                cwd=checkout,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            apply_command = [
+                "git",
+                "apply",
+                "--unidiff-zero",
+                "--whitespace=error-all",
+                str(candidate_path.resolve()),
+            ]
+            subprocess.run(
+                [*apply_command[:2], "--check", *apply_command[2:]],
+                cwd=checkout,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                apply_command,
+                cwd=checkout,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            postimage = _read_reviewed_regular_file(
+                checkout / "pom.xml",
+                code="BLOCKER_EVIDENCE",
+            )
+    except (OSError, subprocess.CalledProcessError) as error:
+        _fail("BLOCKER_EVIDENCE", f"candidate patch application failed: {error}")
+    if (
+        hashlib.sha256(postimage).hexdigest()
+        != EXPECTED_BLOCKER_CANDIDATE["postimage_sha256"]
+    ):
+        _fail("BLOCKER_EVIDENCE", "candidate patch postimage differs")
+
+
 def _validate_react_router_import_inventory(checkout: Path) -> None:
     source_root = (
         checkout
@@ -2461,7 +2962,11 @@ def generate_maven_sbom(
     )
 
 
-def _trivy_package_identities(report_path: Path) -> set[tuple[str, str]]:
+def _trivy_package_identities(
+    report_path: Path,
+    *,
+    allow_high_critical: bool = False,
+) -> set[tuple[str, str]]:
     report = _load_json(report_path)
     results = report.get("Results")
     if not isinstance(results, list) or not results:
@@ -2487,7 +2992,7 @@ def _trivy_package_identities(report_path: Path) -> set[tuple[str, str]]:
         vulnerabilities = result.get("Vulnerabilities", [])
         if not isinstance(vulnerabilities, list):
             _fail("MAVEN_SCAN_REPORT", "Trivy vulnerabilities are malformed")
-        if any(
+        if not allow_high_critical and any(
             isinstance(finding, dict)
             and finding.get("Severity") in {"HIGH", "CRITICAL"}
             for finding in vulnerabilities
@@ -2566,6 +3071,8 @@ def verify_maven_scan(
     descriptor_path: Path,
     sbom_path: Path,
     report_path: Path,
+    *,
+    allow_high_critical: bool = False,
 ) -> None:
     expected_paths = _maven_jar_paths(descriptor_path)
     sbom = _load_json(sbom_path)
@@ -2597,7 +3104,10 @@ def verify_maven_scan(
         expected_identities.update(
             (component["purl"], path) for path in paths
         )
-    observed_identities = _trivy_package_identities(report_path)
+    observed_identities = _trivy_package_identities(
+        report_path,
+        allow_high_critical=allow_high_critical,
+    )
     if observed_identities != expected_identities:
         _fail(
             "MAVEN_SCAN_CLOSURE",
@@ -3168,6 +3678,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         OVERLAY_ADR_PATH,
         PARQUET_REMEDIATION_ADR_PATH,
         DISTRIBUTION_REMEDIATION_ADR_PATH,
+        BLOCKER_ADR_PATH,
         Path("Makefile"),
     ):
         if lines.count(f"      - {path.as_posix()}") != 2:
@@ -3585,17 +4096,14 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
     publication = contract.get("publication", {})
     if (
-        publication.get("permitted") is not True
+        publication.get("permitted") is not False
         or publication.get("workflow_present") is not True
         or publication.get("workflow") != WORKFLOW_PATH.as_posix()
         or publication.get("allowed_ref") != "refs/heads/main"
         or publication.get("artifact_role") != "review_pending_dependency_evidence"
         or publication.get("retire_in_evidence_review_pr") is not True
         or publication.get("pull_request_behavior")
-        != (
-            "static_and_authorized_source_overlay_and_remediation_"
-            "validation_without_publication"
-        )
+        != "static_read_only_contract_validation"
         or publication.get("evidence_review_inventory_policy")
         != {
             "recursive_closed_world_required": True,
@@ -3642,6 +4150,8 @@ def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
         OVERLAY_ADR_PATH,
         PARQUET_REMEDIATION_ADR_PATH,
         DISTRIBUTION_REMEDIATION_ADR_PATH,
+        BLOCKER_ADR_PATH,
+        BLOCKER_CLASSIFICATION_PATH,
     }
     policy_files = contract.get("policy_files")
     if not isinstance(policy_files, list):
@@ -3667,12 +4177,13 @@ def audit(root: Path) -> None:
     _validate_source_overlay_contract(root, contract, at=None)
     _validate_source_remediation_contract(contract, at=None)
     _validate_distribution_remediation_contract(root, contract, at=None)
+    _validate_blocker_evidence(root)
     lifecycle = contract.get("lifecycle", {})
     if lifecycle != {
-        "state": "dependency_snapshot_publication_pending",
+        "state": "source_remediation_authorization_pending",
         "contract_only": False,
         "dependency_artifact_present": False,
-        "publication_workflow_permitted": True,
+        "publication_workflow_permitted": False,
         "image_publication_permitted": False,
         "resident_admission_permitted": False,
         "runtime_reconciliation_permitted": False,
@@ -3769,7 +4280,7 @@ def audit(root: Path) -> None:
         != EXPECTED_ADMISSION_SOURCE_REMEDIATION_AUTHORIZATION
         or admission.get("distribution_remediation_authorization")
         != EXPECTED_ADMISSION_DISTRIBUTION_REMEDIATION_AUTHORIZATION
-        or repository_state.get("publication_workflow_permitted") is not True
+        or repository_state.get("publication_workflow_permitted") is not False
         or repository_state.get("dependency_artifact_present") is not False
         or repository_state.get("resident_ledger_permitted") is not False
         or repository_state.get("runtime_manifests_permitted") is not False

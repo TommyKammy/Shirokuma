@@ -4,10 +4,10 @@
   "version": "483",
   "platform": "linux/arm64",
   "lifecycle": {
-    "state": "dependency_snapshot_publication_pending",
+    "state": "source_remediation_authorization_pending",
     "contract_only": false,
     "dependency_artifact_present": false,
-    "publication_workflow_permitted": true,
+    "publication_workflow_permitted": false,
     "image_publication_permitted": false,
     "resident_admission_permitted": false,
     "runtime_reconciliation_permitted": false
@@ -39,11 +39,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "dc3a85d0a7e89b9d1834de962fff23c791215b0b47ecada0237010e0f37161aa"
+      "sha256": "692c37f4e7b34e51db86bfb20e3848367174b0e7a5c43809784c4698141cdef4"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "5d4f430488cc11a07073a8eef0db8a7e5b6098fbd5bba661ad604bd50ac7fba6"
+      "sha256": "164fb564a85b871d704443afba12f91f1e1f6025aa1454243b743a974bbbc917"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -76,6 +76,14 @@
     {
       "path": "docs/design/07_ADR/ADR-0027_Authorize_bounded_Trino_483_Iceberg_only_Maven_closure.md",
       "sha256": "aa4b7a55659a40158a008e266724b0cc10524dca556d900687e65b63444c25d4"
+    },
+    {
+      "path": "docs/design/07_ADR/ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md",
+      "sha256": "9a675fa9c5d7589080b828e14c3b9fafa47d039b2ac393a28c19678d18c2004b"
+    },
+    {
+      "path": "docs/design/evidence/trino/run-30693677356-maven-vulnerability-classification.json",
+      "sha256": "03589726c4671df46513bac4824adfb012ae0ccf4dd02049654b0ae24b6770f1"
     }
   ],
   "authorization": {
@@ -924,7 +932,7 @@
     ]
   },
   "publication": {
-    "permitted": true,
+    "permitted": false,
     "workflow_present": true,
     "workflow": ".github/workflows/trino-maven-dependencies.yml",
     "allowed_ref": "refs/heads/main",
@@ -933,7 +941,7 @@
     "separate_evidence_only_pr_required": true,
     "image_publisher_permitted_before_evidence_review": false,
     "anonymous_exact_digest_pull_required": true,
-    "pull_request_behavior": "static_and_authorized_source_overlay_and_remediation_validation_without_publication",
+    "pull_request_behavior": "static_read_only_contract_validation",
     "publication_event": "push",
     "runner": "ubuntu-24.04-arm",
     "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",
