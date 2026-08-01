@@ -27,6 +27,9 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
         metadata = repository / "org/example/demo/1.0/demo-1.0.pom"
         metadata.parent.mkdir(parents=True)
         metadata.write_text("<project/>\n", encoding="utf-8")
+        (repository / "org.example.index").write_text(
+            "prefix ordering sentinel\n", encoding="utf-8"
+        )
         return repository
 
     def _successful_log(self, path: Path) -> None:
@@ -105,7 +108,7 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             manifest = json.loads(
                 (first / feasibility.MANIFEST_NAME).read_text(encoding="utf-8")
             )
-            self.assertEqual(manifest["file_count"], 3)
+            self.assertEqual(manifest["file_count"], 4)
             self.assertEqual(
                 [record["path"] for record in manifest["files"]],
                 sorted(record["path"] for record in manifest["files"]),

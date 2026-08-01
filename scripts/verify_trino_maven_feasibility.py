@@ -191,6 +191,7 @@ def _repository_entries(repository: Path) -> list[dict[str, Any]]:
                 "bytes": status.st_size,
             }
         )
+    entries.sort(key=lambda entry: entry["path"])
     if not entries:
         _fail("OFFLINE_INPUT", "repository is empty")
     observed = {entry["path"] for entry in entries}
