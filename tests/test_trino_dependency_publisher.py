@@ -2356,6 +2356,7 @@ class PublisherContractTests(unittest.TestCase):
                 for record in verify.EXPECTED_BLOCKER_INPUTS.values()
             ),
             Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
+            verify.BLOCKER_BASELINE_PATH,
         ]
         originals = {
             path: (ROOT / path).read_bytes()
@@ -2420,6 +2421,150 @@ class PublisherContractTests(unittest.TestCase):
                     noncanonical,
                     {"pom.xml"},
                 )
+
+    def test_retained_blocker_policy_fields_are_closed(self) -> None:
+        paths = [
+            verify.BLOCKER_CLASSIFICATION_PATH,
+            *(
+                Path(record["path"])
+                for record in verify.EXPECTED_BLOCKER_INPUTS.values()
+            ),
+            Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
+            verify.BLOCKER_BASELINE_PATH,
+        ]
+        originals = {path: (ROOT / path).read_bytes() for path in paths}
+        classification = json.loads(
+            originals[verify.BLOCKER_CLASSIFICATION_PATH]
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = Path(temporary)
+            for evidence_path, payload in originals.items():
+                copied = temporary_root / evidence_path
+                copied.parent.mkdir(parents=True, exist_ok=True)
+                copied.write_bytes(payload)
+            path = temporary_root / verify.BLOCKER_CLASSIFICATION_PATH
+            altered = copy.deepcopy(classification)
+            altered["classification"]["vulnerability_waiver_permitted"] = True
+            path.write_text(json.dumps(altered), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "owner-facing policy boundary differs",
+            ):
+                verify._validate_blocker_evidence(temporary_root)
+
+            altered = copy.deepcopy(classification)
+            altered["findings"][0]["dependency_sources"] = []
+            path.write_text(json.dumps(altered), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "finding policy classification differs",
+            ):
+                verify._validate_blocker_evidence(temporary_root)
+
+    def test_retained_blocker_evidence_binds_snapshot_closure(self) -> None:
+        paths = [
+            verify.BLOCKER_CLASSIFICATION_PATH,
+            *(
+                Path(record["path"])
+                for record in verify.EXPECTED_BLOCKER_INPUTS.values()
+            ),
+            Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
+            verify.BLOCKER_BASELINE_PATH,
+        ]
+        originals = {path: (ROOT / path).read_bytes() for path in paths}
+
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = Path(temporary)
+            for path, payload in originals.items():
+                copied = temporary_root / path
+                copied.parent.mkdir(parents=True, exist_ok=True)
+                copied.write_bytes(payload)
+
+            rootfs_record = verify.EXPECTED_BLOCKER_INPUTS["raw_rootfs_sbom"]
+            rootfs_path = temporary_root / rootfs_record["path"]
+            rootfs = json.loads(rootfs_path.read_text(encoding="utf-8"))
+            rootfs["components"][0]["purl"] += ".different-snapshot"
+            rootfs_path.write_text(json.dumps(rootfs), encoding="utf-8")
+            rootfs_payload = rootfs_path.read_bytes()
+            rootfs_identity = {
+                "sha256": hashlib.sha256(rootfs_payload).hexdigest(),
+                "bytes": len(rootfs_payload),
+            }
+            classification_path = (
+                temporary_root / verify.BLOCKER_CLASSIFICATION_PATH
+            )
+            classification = json.loads(
+                classification_path.read_text(encoding="utf-8")
+            )
+            classification["inputs"]["raw_rootfs_sbom"].update(
+                rootfs_identity
+            )
+            classification_path.write_text(
+                json.dumps(classification),
+                encoding="utf-8",
+            )
+            with mock.patch.dict(rootfs_record, rootfs_identity):
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "exact rootfs component set",
+                ):
+                    verify._validate_blocker_evidence(temporary_root)
+
+    def test_retained_blocker_candidate_is_bound_to_postimage(self) -> None:
+        paths = [
+            verify.BLOCKER_CLASSIFICATION_PATH,
+            *(
+                Path(record["path"])
+                for record in verify.EXPECTED_BLOCKER_INPUTS.values()
+            ),
+            Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
+            verify.BLOCKER_BASELINE_PATH,
+        ]
+        originals = {path: (ROOT / path).read_bytes() for path in paths}
+
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = Path(temporary)
+            for path, payload in originals.items():
+                copied = temporary_root / path
+                copied.parent.mkdir(parents=True, exist_ok=True)
+                copied.write_bytes(payload)
+
+            patch_path = (
+                temporary_root
+                / verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]
+            )
+            patch_payload = patch_path.read_bytes().replace(
+                b"2.4.1",
+                b"2.4.2",
+                1,
+            )
+            patch_path.write_bytes(patch_payload)
+            patch_identity = {
+                "patch_sha256": hashlib.sha256(patch_payload).hexdigest(),
+                "patch_bytes": len(patch_payload),
+            }
+            classification_path = (
+                temporary_root / verify.BLOCKER_CLASSIFICATION_PATH
+            )
+            classification = json.loads(
+                classification_path.read_text(encoding="utf-8")
+            )
+            classification["focused_feasibility"]["candidate"].update(
+                patch_identity
+            )
+            classification_path.write_text(
+                json.dumps(classification),
+                encoding="utf-8",
+            )
+            with mock.patch.dict(
+                verify.EXPECTED_BLOCKER_CANDIDATE,
+                patch_identity,
+            ):
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "candidate patch postimage differs",
+                ):
+                    verify._validate_blocker_evidence(temporary_root)
 
     def test_publication_status_is_blocked_and_records_must_agree(self) -> None:
         contract = json.loads(

@@ -45,15 +45,20 @@ Keep dependency publication blocked and restore lifecycle state
 - `docs/design/evidence/trino/run-30693677356-maven-closure.cdx.json`
 - `docs/design/evidence/trino/run-30693677356-maven-dependency-manifest.json`
 - `docs/design/evidence/trino/run-30693677356-maven-rootfs.cdx.json`
+- `docs/design/evidence/trino/run-30693677356-post-adr-0027-pom.xml.gz`
 - `docs/design/evidence/trino/run-30693677356-maven-vulnerability-classification.json`
 
 The retained classification binds the Actions artifact, raw report,
 closure-complete SBOM, run-scoped manifest, and raw rootfs SBOM hashes and
 sizes. All four diagnostic inputs are retained in the repository beyond the
 Actions artifact expiry. The repository verifier compares their exact bytes
-and hashes, recomputes the Trivy finding summary and identities, and validates
-the feasibility patch as a canonical single-path zero-context diff. No
-vulnerability is waived, ignored, suppressed, or reclassified through OpenVEX.
+and hashes, proves the manifest-to-closure, rootfs-to-closure, and
+closure-to-report identities, recomputes the Trivy finding summary and
+identities, and binds the policy classifications and required next action. It
+then validates the feasibility patch as a canonical single-path zero-context
+diff and applies it to the hash-bound retained baseline before checking the
+postimage hash. No vulnerability is waived, ignored, suppressed, or
+reclassified through OpenVEX.
 
 A non-active feasibility patch is retained at
 `docs/design/evidence/trino/run-30693677356-proposed-source-overlay.patch`.
@@ -62,6 +67,9 @@ ADR-0027 overlay:
 
 - baseline `pom.xml` SHA-256:
   `8d342215a3c748f7965f0a82e847cab13587b94171d9d1422922b665475109c1`
+- retained gzip SHA-256:
+  `dc5cfc5cd0ef38f2960926b364c32f476c1c94e949e0fa43711f17d951eb9b75`
+- retained gzip bytes: `13531`
 - candidate `pom.xml` SHA-256:
   `8d66505ee8ad90d11bf887dfe25a355d815f904d9ea90184b2089b0b68869626`
 - candidate patch SHA-256:
@@ -113,9 +121,12 @@ the Trino artifact has not passed resident admission or runtime acceptance.
 
 ## Verification
 
-- Verify the retained raw report and closure SBOM hashes and byte lengths.
+- Verify every retained input and baseline hash and byte length, then prove
+  the manifest, raw rootfs SBOM, closure SBOM, and report describe one closed
+  package snapshot.
 - Recompute three High findings, zero Critical findings, two CVE IDs, three
-  package/version groups, and three physical JAR paths.
+  package/version groups, and three physical JAR paths; require the exact
+  fail-closed classifications, dependency sources, and owner next action.
 - Apply the candidate patch to the exact post-ADR-0027 `pom.xml` with
   `git apply --unidiff-zero --whitespace=error-all` and verify the candidate
   postimage hash.
