@@ -1460,7 +1460,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     root / "generated-sbom.json",
                 )
 
-    def test_maven_sbom_rejects_rootfs_path_purl_misattribution(
+    def test_maven_sbom_treats_wrong_only_rootfs_purl_as_omission(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1478,7 +1478,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
             rootfs.write_text(json.dumps(document), encoding="utf-8")
             with self.assertRaisesRegex(
                 verify.ContractError,
-                "misattributes closed JAR paths",
+                "outside the reviewed closed set",
             ):
                 verify.generate_maven_sbom(
                     descriptor,
@@ -1486,6 +1486,59 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     rootfs,
                     root / "generated-sbom.json",
                 )
+
+    def test_maven_sbom_preserves_embedded_purl_on_top_level_path(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            descriptor = self._descriptor(root)
+            rootfs = self._sbom(root)
+            document = json.loads(rootfs.read_text(encoding="utf-8"))
+            beta_path = self.JARS[1]
+            beta_component = next(
+                component
+                for component in document["components"]
+                if beta_path in verify._component_file_paths(component)
+            )
+            embedded_ref = "urn:test:embedded-on-beta-path"
+            embedded_component = json.loads(json.dumps(beta_component))
+            embedded_component["bom-ref"] = embedded_ref
+            embedded_component["purl"] = (
+                "pkg:maven/org.example/embedded@3.0"
+            )
+            document["components"].append(embedded_component)
+            root_ref = document["metadata"]["component"]["bom-ref"]
+            root_dependency = next(
+                dependency
+                for dependency in document["dependencies"]
+                if dependency["ref"] == root_ref
+            )
+            root_dependency["dependsOn"].append(embedded_ref)
+            document["dependencies"].append(
+                {"ref": embedded_ref, "dependsOn": []}
+            )
+            rootfs.write_text(json.dumps(document), encoding="utf-8")
+            generated = root / "generated-sbom.json"
+            verify.generate_maven_sbom(
+                descriptor,
+                root,
+                rootfs,
+                generated,
+            )
+            result = json.loads(generated.read_text(encoding="utf-8"))
+            self.assertEqual(
+                {
+                    verify._maven_purl(beta_path),
+                    "pkg:maven/org.example/embedded@3.0",
+                },
+                {
+                    component["purl"]
+                    for component in result["components"]
+                    if beta_path
+                    in verify._component_file_paths(component)
+                },
+            )
 
     def test_maven_sbom_rejects_omissions_outside_reviewed_contract(
         self,

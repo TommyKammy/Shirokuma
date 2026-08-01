@@ -297,6 +297,14 @@ or artifact-byte change therefore requires a separately reviewed contract
 change; it cannot be generalized from JAR contents. This does not relax source
 identity, vulnerability, publication, admission, expiry, or environment scope.
 
+Fresh reviewed-main run `30672778826` showed that Trivy can associate an outer
+top-level JAR `FilePath` with additional embedded or shaded component PURLs.
+Those component identities remain valid SBOM evidence and are preserved. The
+publisher counts a descriptor JAR as rootfs-discovered only when Trivy reports
+its exact derived `(PURL, FilePath)` identity. A path reported only under a
+different PURL is therefore still an omission and must match the exact reviewed
+11-entry omission contract; otherwise generation fails closed.
+
 A separate evidence-only PR must review and pin the exact OCI digest and retire
 the publisher. Image publication, resident admission, credentials, Flux
 objects, and runtime activation remain forbidden until their own later

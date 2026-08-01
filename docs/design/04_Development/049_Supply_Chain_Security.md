@@ -1064,6 +1064,15 @@ coordinate, version, role, origin, byte sequence, unsafe archive, or final-scan
 omission continues to fail closed and requires a separately reviewed contract
 change.
 
+Trivy may also report embedded or shaded Maven components against the outer
+top-level JAR path. These alternate PURLs are preserved in the CycloneDX
+evidence, but they do not prove discovery of the descriptor artifact itself.
+Rootfs discovery therefore requires the exact derived `(PURL, FilePath)` pair;
+a wrong-only PURL is handled as an omission and remains bounded by the same
+reviewed 11-entry contract. This distinction was exercised by fresh
+reviewed-main run `30672778826` and prevents either embedded evidence loss or a
+path-only authorization bypass.
+
 ## Resident image and SBOM evidence
 
 Every image admitted to a resident profile must have an entry in
