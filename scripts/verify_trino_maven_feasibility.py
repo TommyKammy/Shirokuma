@@ -317,7 +317,8 @@ def finalize_record(
             ),
             "run_id": run_id,
             "run_attempt": run_attempt,
-            "reviewed_commit": os.environ["GITHUB_SHA"],
+            "reviewed_commit": os.environ["REVIEWED_COMMIT"],
+            "workflow_execution_commit": os.environ["GITHUB_SHA"],
             "workflow": os.environ["GITHUB_WORKFLOW"],
             "workflow_ref": os.environ["GITHUB_WORKFLOW_REF"],
         },
@@ -397,6 +398,33 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
         "status"
     ) != "passed":
         _fail("EVIDENCE_RECORD", "unexpected record envelope")
+    subject = record.get("subject", {})
+    run_id = subject.get("run_id")
+    run_attempt = subject.get("run_attempt")
+    sha_fields = (
+        subject.get("reviewed_commit"),
+        subject.get("workflow_execution_commit"),
+    )
+    if (
+        subject.get("issue")
+        != "https://github.com/TommyKammy/Shirokuma/issues/63"
+        or not isinstance(run_id, int)
+        or run_id < 1
+        or not isinstance(run_attempt, int)
+        or run_attempt < 1
+        or any(
+            not isinstance(value, str)
+            or len(value) != 40
+            or any(character not in "0123456789abcdef" for character in value)
+            for value in sha_fields
+        )
+        or not subject.get("workflow_run", "").endswith(f"/actions/runs/{run_id}")
+        or subject.get("workflow")
+        != "Trino 483 Maven remediation feasibility"
+        or ".github/workflows/trino-maven-remediation-feasibility.yml@"
+        not in subject.get("workflow_ref", "")
+    ):
+        _fail("EVIDENCE_SUBJECT", "workflow subject identity differs")
     boundary = record.get("boundary")
     if boundary != {
         "state": "preauthorization_feasibility_only",

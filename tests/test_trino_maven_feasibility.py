@@ -135,6 +135,7 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                 "GITHUB_RUN_ATTEMPT": "1",
                 "GITHUB_SERVER_URL": "https://github.com",
                 "GITHUB_SHA": "a" * 40,
+                "REVIEWED_COMMIT": "b" * 40,
                 "GITHUB_WORKFLOW": "Trino 483 Maven remediation feasibility",
                 "GITHUB_WORKFLOW_REF": (
                     "TommyKammy/Shirokuma/.github/workflows/"
@@ -156,6 +157,10 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             )
             self.assertTrue(
                 record["offline_inputs"]["reproducible_inputs_retained"]
+            )
+            self.assertEqual(record["subject"]["reviewed_commit"], "b" * 40)
+            self.assertEqual(
+                record["subject"]["workflow_execution_commit"], "a" * 40
             )
             self.assertFalse(record["boundary"]["publication_permitted"])
             self.assertTrue(record["result"]["owner_decision_still_required"])

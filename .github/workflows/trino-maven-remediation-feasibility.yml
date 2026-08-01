@@ -28,6 +28,7 @@ env:
   SOURCE_TAG_OBJECT: 32d4f28e8311ea6f67edca209df59a0493d869fa
   SOURCE_COMMIT: 50b0b50b75abd47f830b7805ee1b51716eb4065e
   SOURCE_TREE: 3b5414292a614b12393bb4605ea2d4c588a5b8ee
+  REVIEWED_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
   BUILDER_IMAGE: docker.io/library/maven@sha256:7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c
   BUILDER_ARM64_MANIFEST: sha256:5476bfca9d0a6485b7161f6863123f7e6822336de4177273b47b5ec38ffd573a
   SELECTED_REACTOR: :trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg
