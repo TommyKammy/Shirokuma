@@ -1077,6 +1077,23 @@ still rejects unrelated PURLs. Base JARs, new paths, and all other omissions
 remain bounded by the reviewed 11-entry contract, preventing a general
 path-only authorization bypass.
 
+Reviewed-main run
+[`30693677356`](https://github.com/TommyKammy/Shirokuma/actions/runs/30693677356)
+then proved that the classifier repair reaches the unchanged final Maven
+High/Critical gate. Both closed repository reconstructions, both network-none
+builds, raw rootfs inventory, and closure-complete CycloneDX generation passed;
+the gate failed closed on three High findings: embedded `commons-io 2.8.0`
+inside `velocity-engine-core 2.3`, plus top-level `plexus-utils 4.0.1` and
+`4.0.2`. The run retained only the diagnostic artifact and produced no
+dependency publication, image admission, Flux object, or runtime state.
+ADR-0028 therefore returns the lifecycle to
+`source_remediation_authorization_pending`. It retains the exact report, SBOM,
+classification, and a hash-bound feasibility patch, but does not activate that
+patch or alter ADR-0027's exact source postimage. Publication remains false
+until the risk owner explicitly approves or rejects the new Velocity 2.4.1 and
+Plexus Utils 4.0.3 boundary and an independent reviewer accepts its
+implementation.
+
 ## Resident image and SBOM evidence
 
 Every image admitted to a resident profile must have an entry in
