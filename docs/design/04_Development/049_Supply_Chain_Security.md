@@ -1092,7 +1092,11 @@ classification, and a hash-bound feasibility patch, but does not activate that
 patch or alter ADR-0027's exact source postimage. Publication remains false
 until the risk owner explicitly approves or rejects the new Velocity 2.4.1 and
 Plexus Utils 4.0.3 boundary and an independent reviewer accepts its
-implementation.
+implementation. The run-scoped manifest and raw rootfs SBOM are retained
+alongside the report and closure SBOM beyond the Actions artifact expiry. The
+repository audit checks every retained file's exact hash and size, recomputes
+the three finding identities and summary, and requires the feasibility patch
+to use the canonical single-path zero-context format.
 
 ## Resident image and SBOM evidence
 

@@ -2347,6 +2347,80 @@ class PublisherContractTests(unittest.TestCase):
     def test_repository_contract_and_workflow_are_closed(self) -> None:
         verify.audit(ROOT)
 
+    def test_retained_blocker_evidence_is_hash_bound_and_recomputed(self) -> None:
+        verify._validate_blocker_evidence(ROOT)
+        paths = [
+            verify.BLOCKER_CLASSIFICATION_PATH,
+            *(
+                Path(record["path"])
+                for record in verify.EXPECTED_BLOCKER_INPUTS.values()
+            ),
+            Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
+        ]
+        originals = {
+            path: (ROOT / path).read_bytes()
+            for path in paths
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = Path(temporary)
+            for path, payload in originals.items():
+                candidate = temporary_root / path
+                candidate.parent.mkdir(parents=True, exist_ok=True)
+                candidate.write_bytes(payload)
+
+            report_path = (
+                temporary_root
+                / verify.EXPECTED_BLOCKER_INPUTS["raw_trivy_report"]["path"]
+            )
+            report_path.write_bytes(report_path.read_bytes() + b"\n")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "raw_trivy_report bytes or hash differ",
+            ):
+                verify._validate_blocker_evidence(temporary_root)
+            report_path.write_bytes(
+                originals[
+                    Path(
+                        verify.EXPECTED_BLOCKER_INPUTS[
+                            "raw_trivy_report"
+                        ]["path"]
+                    )
+                ]
+            )
+
+            classification_path = (
+                temporary_root / verify.BLOCKER_CLASSIFICATION_PATH
+            )
+            classification = json.loads(
+                classification_path.read_text(encoding="utf-8")
+            )
+            classification["summary"]["high_occurrences"] = 4
+            classification_path.write_text(
+                json.dumps(classification),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "classification identity or summary differs",
+            ):
+                verify._validate_blocker_evidence(temporary_root)
+
+        patch = ROOT / verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]
+        verify._validate_zero_context_patch(patch, {"pom.xml"})
+        with tempfile.TemporaryDirectory() as temporary:
+            noncanonical = Path(temporary) / "candidate.patch"
+            noncanonical.write_bytes(
+                patch.read_bytes().split(b"\n", 1)[1]
+            )
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "patch paths differ",
+            ):
+                verify._validate_zero_context_patch(
+                    noncanonical,
+                    {"pom.xml"},
+                )
+
     def test_publication_status_is_blocked_and_records_must_agree(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")

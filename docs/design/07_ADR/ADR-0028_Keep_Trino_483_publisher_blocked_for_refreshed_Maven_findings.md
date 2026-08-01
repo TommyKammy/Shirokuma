@@ -5,7 +5,7 @@ title: "Keep Trino 483 publisher blocked for refreshed Maven findings"
 status: accepted
 created: 2026-08-01
 updated: 2026-08-01
-version: "0.1"
+version: "0.2"
 area: "architecture"
 tags: [shirokuma, adr, trino, maven, supply-chain, vulnerability]
 ---
@@ -43,11 +43,17 @@ Keep dependency publication blocked and restore lifecycle state
 
 - `docs/design/evidence/trino/run-30693677356-trivy-vulnerability.json`
 - `docs/design/evidence/trino/run-30693677356-maven-closure.cdx.json`
+- `docs/design/evidence/trino/run-30693677356-maven-dependency-manifest.json`
+- `docs/design/evidence/trino/run-30693677356-maven-rootfs.cdx.json`
 - `docs/design/evidence/trino/run-30693677356-maven-vulnerability-classification.json`
 
-The retained classification binds the Actions artifact, raw report, SBOM,
-run-scoped manifest, and raw rootfs SBOM hashes and sizes. No vulnerability is
-waived, ignored, suppressed, or reclassified through OpenVEX.
+The retained classification binds the Actions artifact, raw report,
+closure-complete SBOM, run-scoped manifest, and raw rootfs SBOM hashes and
+sizes. All four diagnostic inputs are retained in the repository beyond the
+Actions artifact expiry. The repository verifier compares their exact bytes
+and hashes, recomputes the Trivy finding summary and identities, and validates
+the feasibility patch as a canonical single-path zero-context diff. No
+vulnerability is waived, ignored, suppressed, or reclassified through OpenVEX.
 
 A non-active feasibility patch is retained at
 `docs/design/evidence/trino/run-30693677356-proposed-source-overlay.patch`.
@@ -59,8 +65,8 @@ ADR-0027 overlay:
 - candidate `pom.xml` SHA-256:
   `8d66505ee8ad90d11bf887dfe25a355d815f904d9ea90184b2089b0b68869626`
 - candidate patch SHA-256:
-  `86c3002f41ec1ee3bb3b097e64f933ca1cffa584b2e699db182506e74abb020a`
-- candidate patch bytes: `6602`
+  `7bb92a92ee492fbf1fc238c5e1ec6a90c4b3088f98f3d05652853f7b874221d8`
+- candidate patch bytes: `6633`
 
 The candidate adds Velocity Engine Core 2.4.1 and Plexus Utils 4.0.3 as direct
 dependencies in the affected inherited Maven plugin realms. Exact

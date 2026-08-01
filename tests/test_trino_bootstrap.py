@@ -3433,6 +3433,14 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     ),
                     (
                         "docs/design/evidence/trino/"
+                        "run-30693677356-maven-dependency-manifest.json"
+                    ),
+                    (
+                        "docs/design/evidence/trino/"
+                        "run-30693677356-maven-rootfs.cdx.json"
+                    ),
+                    (
+                        "docs/design/evidence/trino/"
                         "run-30693677356-maven-vulnerability-classification.json"
                     ),
                     (
