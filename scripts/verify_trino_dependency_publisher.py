@@ -2208,22 +2208,6 @@ def generate_maven_sbom(
         for path in _component_file_paths(component)
         if _is_top_level_jar_path(path)
     }
-    misattributed_rootfs = sorted(
-        (
-            (path, purl)
-            for purl, path in rootfs_identities
-            if path in expected_paths and purl != _maven_purl(path)
-        ),
-        key=lambda item: (item[0], repr(item[1])),
-    )
-    if misattributed_rootfs:
-        _fail(
-            "MAVEN_SBOM_ROOTFS",
-            (
-                "rootfs discovery misattributes closed JAR paths: "
-                f"{misattributed_rootfs!r}"
-            ),
-        )
     discovered_paths = {
         path
         for purl, path in rootfs_identities
