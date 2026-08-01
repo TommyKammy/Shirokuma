@@ -57,7 +57,9 @@ EXPECTED_ONLINE_COMMAND = (
 EXPECTED_OFFLINE_COMMAND = (
     "mvn --offline --batch-mode --show-version --errors --strict-checksums "
     "--ignore-transitive-repositories --settings /policy/settings.xml "
-    "-Dmaven.repo.local=/m2 --file /workspace/pom.xml "
+    "-Dmaven.repo.local=/m2 "
+    "-Daether.syncContext.named.basedir.locksDir=/tmp/maven-locks "
+    "--file /workspace/pom.xml "
     f"-pl '{EXPECTED_SELECTED_REACTOR}' -am {EXPECTED_GOAL}"
 )
 EXPECTED_REPLACEMENT_INPUTS = (
@@ -473,7 +475,7 @@ def audit_workflow(root: Path) -> None:
         f"BUILDER_IMAGE: {EXPECTED_BUILDER}",
         "--network none",
         '"${repository}:/m2:ro"',
-        "--tmpfs /m2/.locks:rw,noexec,nosuid,size=16m",
+        "-Daether.syncContext.named.basedir.locksDir=/tmp/maven-locks",
         EXPECTED_SELECTED_REACTOR,
         "dependency:resolve-plugins -DskipTests",
         "retention-days: 30",
