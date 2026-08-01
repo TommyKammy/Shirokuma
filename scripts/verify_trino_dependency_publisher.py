@@ -1887,6 +1887,13 @@ def _maven_classifier(path: str) -> str:
     return filename[len(prefix) : -4].removeprefix("-")
 
 
+def _maven_rootfs_discovery_purls(path: str) -> set[str]:
+    purl = _maven_purl(path)
+    if not _maven_classifier(path):
+        return {purl}
+    return {purl, purl.split("?classifier=", 1)[0]}
+
+
 def _safe_jar_member_type(entry: zipfile.ZipInfo) -> bool:
     member_type = stat.S_IFMT(entry.external_attr >> 16)
     if entry.is_dir():
@@ -2211,7 +2218,15 @@ def generate_maven_sbom(
     discovered_paths = {
         path
         for purl, path in rootfs_identities
-        if path in expected_paths and purl == _maven_purl(path)
+        if path in expected_paths
+        and purl in _maven_rootfs_discovery_purls(path)
+    }
+    classifier_erased_discovery = {
+        path
+        for purl, path in rootfs_identities
+        if path in expected_paths
+        and _maven_classifier(path)
+        and purl == _maven_purl(path).split("?classifier=", 1)[0]
     }
     discovery_omissions = _validate_rootfs_discovery_omissions(
         repository_path,
@@ -2294,6 +2309,13 @@ def generate_maven_sbom(
                 {
                     "name": "shirokuma:rootfs-discovery",
                     "value": discovery_omissions[path],
+                }
+            )
+        elif path in classifier_erased_discovery:
+            properties.append(
+                {
+                    "name": "shirokuma:rootfs-discovery",
+                    "value": "trivy-classifier-erased-purl",
                 }
             )
         components.append(

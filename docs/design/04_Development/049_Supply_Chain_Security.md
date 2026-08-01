@@ -1067,10 +1067,14 @@ change.
 Trivy may also report embedded or shaded Maven components against the outer
 top-level JAR path. These alternate PURLs are preserved in the CycloneDX
 evidence, but they do not prove discovery of the descriptor artifact itself.
-Rootfs discovery therefore requires the exact derived `(PURL, FilePath)` pair;
-a wrong-only PURL is handled as an omission and remains bounded by the same
-reviewed 11-entry contract. This distinction was exercised by fresh
-reviewed-main run `30672778826` and prevents either embedded evidence loss or a
+Rootfs discovery therefore normally requires the exact derived
+`(PURL, FilePath)` pair. Runs `30672778826` and `30684596946` established one
+narrow scanner exception: for an exact classifier-bearing descriptor path,
+Trivy may report the same Maven group/artifact/version PURL without its
+classifier. The generator preserves that scanner component, supplements the
+exact classifier identity with `trivy-classifier-erased-purl` provenance, and
+still rejects unrelated PURLs. Base JARs, new paths, and all other omissions
+remain bounded by the reviewed 11-entry contract, preventing a general
 path-only authorization bypass.
 
 ## Resident image and SBOM evidence

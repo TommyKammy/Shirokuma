@@ -1540,6 +1540,91 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 },
             )
 
+    def test_maven_sbom_supplements_classifier_erased_trivy_purl(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            classifier_path = (
+                "org/example/beta/2.0/beta-2.0-linux-aarch_64.jar"
+            )
+            repository, descriptor = self._repository_descriptor(
+                root,
+                {classifier_path: {"native.bin": b"classifier payload"}},
+            )
+            rootfs = self._sbom(root, (classifier_path,))
+            document = json.loads(rootfs.read_text(encoding="utf-8"))
+            exact_purl = verify._maven_purl(classifier_path)
+            base_purl = exact_purl.split("?classifier=", 1)[0]
+            component = document["components"][0]
+            component["bom-ref"] = base_purl
+            component["purl"] = base_purl
+            for dependency in document["dependencies"]:
+                if dependency["ref"] == exact_purl:
+                    dependency["ref"] = base_purl
+                dependency["dependsOn"] = [
+                    base_purl if ref == exact_purl else ref
+                    for ref in dependency["dependsOn"]
+                ]
+            rootfs.write_text(json.dumps(document), encoding="utf-8")
+            generated = root / "generated-sbom.json"
+            verify.generate_maven_sbom(
+                descriptor,
+                repository,
+                rootfs,
+                generated,
+            )
+            result = json.loads(generated.read_text(encoding="utf-8"))
+            path_components = [
+                component
+                for component in result["components"]
+                if classifier_path
+                in verify._component_file_paths(component)
+            ]
+            self.assertEqual(
+                {base_purl, exact_purl},
+                {component["purl"] for component in path_components},
+            )
+            canonical = next(
+                component
+                for component in path_components
+                if component["purl"] == exact_purl
+            )
+            self.assertIn(
+                {
+                    "name": "shirokuma:rootfs-discovery",
+                    "value": "trivy-classifier-erased-purl",
+                },
+                canonical["properties"],
+            )
+
+    def test_maven_sbom_rejects_unrelated_classifier_purl(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            classifier_path = (
+                "org/example/beta/2.0/beta-2.0-linux-aarch_64.jar"
+            )
+            repository, descriptor = self._repository_descriptor(
+                root,
+                {classifier_path: {"native.bin": b"classifier payload"}},
+            )
+            rootfs = self._sbom(root, (classifier_path,))
+            document = json.loads(rootfs.read_text(encoding="utf-8"))
+            document["components"][0]["purl"] = (
+                "pkg:maven/org.example/unrelated@2.0"
+            )
+            rootfs.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "outside the reviewed closed set",
+            ):
+                verify.generate_maven_sbom(
+                    descriptor,
+                    repository,
+                    rootfs,
+                    root / "generated-sbom.json",
+                )
+
     def test_maven_sbom_rejects_omissions_outside_reviewed_contract(
         self,
     ) -> None:

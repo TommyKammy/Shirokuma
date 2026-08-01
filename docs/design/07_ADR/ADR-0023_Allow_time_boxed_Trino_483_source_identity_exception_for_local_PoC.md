@@ -300,10 +300,16 @@ identity, vulnerability, publication, admission, expiry, or environment scope.
 Fresh reviewed-main run `30672778826` showed that Trivy can associate an outer
 top-level JAR `FilePath` with additional embedded or shaded component PURLs.
 Those component identities remain valid SBOM evidence and are preserved. The
-publisher counts a descriptor JAR as rootfs-discovered only when Trivy reports
-its exact derived `(PURL, FilePath)` identity. A path reported only under a
-different PURL is therefore still an omission and must match the exact reviewed
-11-entry omission contract; otherwise generation fails closed.
+publisher normally counts a descriptor JAR as rootfs-discovered only when
+Trivy reports its exact derived `(PURL, FilePath)` identity. Fresh reviewed-main
+run `30684596946` then showed a narrower scanner limitation: Trivy removes the
+Maven classifier from the PURL for native, `classes`, and shaded classifier
+JARs while retaining their exact outer path. For a classifier-bearing path in
+the closed descriptor only, the matching base-coordinate PURL is accepted as
+scanner discovery evidence and the exact classifier component is supplemented
+with `trivy-classifier-erased-purl` provenance. Unrelated PURLs and unreviewed
+paths remain omissions and must match the exact reviewed 11-entry omission
+contract; otherwise generation fails closed.
 
 A separate evidence-only PR must review and pin the exact OCI digest and retire
 the publisher. Image publication, resident admission, credentials, Flux
