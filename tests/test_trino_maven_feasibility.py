@@ -320,8 +320,11 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                 (ROOT / feasibility.publisher.BLOCKER_BASELINE_PATH).read_bytes()
             )
             (checkout / "pom.xml").write_bytes(baseline)
+            child = checkout / "module/pom.xml"
+            child.parent.mkdir()
+            child.write_text("<project/>\n", encoding="utf-8")
             subprocess.run(["git", "init"], cwd=checkout, check=True)
-            subprocess.run(["git", "add", "pom.xml"], cwd=checkout, check=True)
+            subprocess.run(["git", "add", "."], cwd=checkout, check=True)
             subprocess.run(
                 [
                     "git",
@@ -362,6 +365,13 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                 ["pom.xml"],
             )
             feasibility.verify_candidate(checkout)
+            child.write_text("<project><tampered/></project>\n", encoding="utf-8")
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "CANDIDATE_SOURCE",
+            ):
+                feasibility.verify_candidate(checkout)
+            child.write_text("<project/>\n", encoding="utf-8")
             (checkout / "pom.xml").write_text(
                 candidate.replace("2.4.1", "2.4.0", 1),
                 encoding="utf-8",

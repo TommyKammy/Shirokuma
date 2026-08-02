@@ -256,6 +256,23 @@ def verify_candidate(checkout: Path) -> None:
     pom = checkout / "pom.xml"
     if _sha256(pom) != EXPECTED_POSTIMAGE_SHA256:
         _fail("CANDIDATE_POSTIMAGE", "candidate pom.xml hash differs")
+    tracked = subprocess.run(
+        [
+            "git",
+            "diff",
+            "--name-only",
+            "--no-ext-diff",
+            "--ignore-submodules=none",
+            "HEAD",
+            "--",
+        ],
+        cwd=checkout,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    if tracked != ["pom.xml"]:
+        _fail("CANDIDATE_SOURCE", f"tracked source changes differ: {tracked}")
     if subprocess.run(
         ["git", "ls-files", "--others", "--exclude-standard"],
         cwd=checkout,
