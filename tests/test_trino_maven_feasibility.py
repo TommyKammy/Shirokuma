@@ -40,6 +40,54 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def _finalized_evidence(self, root: Path) -> Path:
+        evidence = root / "evidence"
+        feasibility.capture_repository(self._repository(root), evidence)
+        online = root / "online.log"
+        offline = root / "offline.log"
+        self._successful_log(online)
+        self._successful_log(offline)
+        toolchain = root / "toolchain-source.json"
+        toolchain.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "result": "passed",
+                    "runner_os": "Linux",
+                    "runner_arch": "ARM64",
+                    "container_architecture": "aarch64",
+                    "native_execution": True,
+                    "qemu_binfmt_handlers": [],
+                    "builder_index": feasibility.EXPECTED_BUILDER,
+                    "builder_arm64_manifest": (
+                        feasibility.EXPECTED_BUILDER_ARM64_MANIFEST
+                    ),
+                    "maven_version_output_sha256": "c" * 64,
+                    "global_settings_sha256": "d" * 64,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        environment = {
+            "GITHUB_REPOSITORY": "TommyKammy/Shirokuma",
+            "GITHUB_RUN_ID": "123456",
+            "GITHUB_RUN_ATTEMPT": "1",
+            "GITHUB_SERVER_URL": "https://github.com",
+            "GITHUB_SHA": "a" * 40,
+            "REVIEWED_COMMIT": "b" * 40,
+            "GITHUB_WORKFLOW": "Trino 483 Maven remediation feasibility",
+            "GITHUB_WORKFLOW_REF": (
+                "TommyKammy/Shirokuma/.github/workflows/"
+                "trino-maven-remediation-feasibility.yml@refs/pull/1/merge"
+            ),
+            "RUNNER_ARCH": "ARM64",
+            "RUNNER_OS": "Linux",
+        }
+        with mock.patch.dict(os.environ, environment, clear=False):
+            feasibility.finalize_record(evidence, online, offline, toolchain)
+        return evidence
+
     def test_workflow_is_read_only_and_fail_closed(self) -> None:
         feasibility.audit_workflow(ROOT)
 
@@ -117,40 +165,7 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
     def test_finalize_retains_online_offline_and_input_identities(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            repository = self._repository(root)
-            evidence = root / "evidence"
-            feasibility.capture_repository(repository, evidence)
-            online = root / "online.log"
-            offline = root / "offline.log"
-            self._successful_log(online)
-            self._successful_log(offline)
-            toolchain = root / "toolchain.json"
-            toolchain.write_text(
-                json.dumps({"schema_version": 1, "result": "passed"}) + "\n",
-                encoding="utf-8",
-            )
-            environment = {
-                "GITHUB_REPOSITORY": "TommyKammy/Shirokuma",
-                "GITHUB_RUN_ID": "123456",
-                "GITHUB_RUN_ATTEMPT": "1",
-                "GITHUB_SERVER_URL": "https://github.com",
-                "GITHUB_SHA": "a" * 40,
-                "REVIEWED_COMMIT": "b" * 40,
-                "GITHUB_WORKFLOW": "Trino 483 Maven remediation feasibility",
-                "GITHUB_WORKFLOW_REF": (
-                    "TommyKammy/Shirokuma/.github/workflows/"
-                    "trino-maven-remediation-feasibility.yml@refs/pull/1/merge"
-                ),
-                "RUNNER_ARCH": "ARM64",
-                "RUNNER_OS": "Linux",
-            }
-            with mock.patch.dict(os.environ, environment, clear=False):
-                feasibility.finalize_record(
-                    evidence,
-                    online,
-                    offline,
-                    toolchain,
-                )
+            evidence = self._finalized_evidence(root)
             feasibility.audit_evidence(evidence, require_archive=True)
             record = json.loads(
                 (evidence / feasibility.RECORD_NAME).read_text(encoding="utf-8")
@@ -176,6 +191,26 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             )
             self.assertTrue(feasibility._vulnerable_lines(path))
 
+            path.write_text(
+                "[INFO] org.apache.velocity:velocity-engine-core:jar:2.3\n"
+                "[INFO] BUILD SUCCESS\n",
+                encoding="utf-8",
+            )
+            self.assertTrue(feasibility._vulnerable_lines(path))
+
+    def test_vulnerable_velocity_jar_in_repository_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = self._repository(root)
+            vulnerable = repository / feasibility.VULNERABLE_INPUTS[0]
+            vulnerable.parent.mkdir(parents=True, exist_ok=True)
+            vulnerable.write_bytes(b"velocity 2.3")
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "VULNERABLE_INPUT",
+            ):
+                feasibility.capture_repository(repository, root / "evidence")
+
     def test_archive_or_manifest_tamper_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -187,6 +222,61 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             archive = evidence / feasibility.ARCHIVE_NAME
             archive.write_bytes(archive.read_bytes() + b"tamper")
             self.assertNotEqual(original, feasibility._sha256(archive))
+
+    def test_archive_contents_must_match_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence = self._finalized_evidence(root)
+            attacker_root = root / "attacker"
+            repository = self._repository(attacker_root)
+            (repository / "org.example.index").write_text(
+                "different retained input\n",
+                encoding="utf-8",
+            )
+            attacker = attacker_root / "evidence"
+            feasibility.capture_repository(repository, attacker)
+            archive = evidence / feasibility.ARCHIVE_NAME
+            archive.write_bytes(
+                (attacker / feasibility.ARCHIVE_NAME).read_bytes()
+            )
+            record_path = evidence / feasibility.RECORD_NAME
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            record["offline_inputs"]["archive"] = feasibility._identity(archive)
+            record_path.write_text(
+                json.dumps(record, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "OFFLINE_ARCHIVE",
+            ):
+                feasibility.audit_evidence(evidence, require_archive=True)
+
+    def test_toolchain_record_is_revalidated_during_audit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = self._finalized_evidence(Path(temporary))
+            toolchain_path = evidence / feasibility.TOOLCHAIN_NAME
+            toolchain = json.loads(toolchain_path.read_text(encoding="utf-8"))
+            toolchain["result"] = "failed"
+            toolchain_path.write_text(
+                json.dumps(toolchain, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            record_path = evidence / feasibility.RECORD_NAME
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            record["execution"]["toolchain"]["result"] = "failed"
+            record["execution"]["toolchain"]["record"] = feasibility._identity(
+                toolchain_path
+            )
+            record_path.write_text(
+                json.dumps(record, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "TOOLCHAIN_RECORD",
+            ):
+                feasibility.audit_evidence(evidence, require_archive=True)
 
 
 if __name__ == "__main__":

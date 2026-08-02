@@ -13,7 +13,7 @@ import stat
 import subprocess
 import sys
 import tarfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import verify_trino_dependency_publisher as publisher
@@ -70,8 +70,14 @@ EXPECTED_REPLACEMENT_INPUTS = (
 VULNERABLE_COORDINATES = (
     re.compile(r"commons-io:commons-io:(?:jar:)?2\.8\.0(?:[:\s]|$)"),
     re.compile(
+        r"org\.apache\.velocity:velocity-engine-core:(?:jar:)?2\.3(?:[:\s]|$)"
+    ),
+    re.compile(
         r"org\.codehaus\.plexus:plexus-utils:(?:jar:)?4\.0\.[12](?:[:\s]|$)"
     ),
+)
+VULNERABLE_INPUTS = (
+    "org/apache/velocity/velocity-engine-core/2.3/velocity-engine-core-2.3.jar",
 )
 RECORD_NAME = "validation-record.json"
 MANIFEST_NAME = "offline-input-manifest.json"
@@ -195,6 +201,9 @@ def _repository_entries(repository: Path) -> list[dict[str, Any]]:
     if not entries:
         _fail("OFFLINE_INPUT", "repository is empty")
     observed = {entry["path"] for entry in entries}
+    vulnerable = sorted(set(VULNERABLE_INPUTS) & observed)
+    if vulnerable:
+        _fail("VULNERABLE_INPUT", f"blocked inputs retained: {vulnerable}")
     missing = sorted(set(EXPECTED_REPLACEMENT_INPUTS) - observed)
     if missing:
         _fail("OFFLINE_INPUT", f"replacement inputs missing: {missing}")
@@ -391,6 +400,139 @@ def _verify_identity(directory: Path, identity: object) -> None:
         _fail("EVIDENCE_IDENTITY", f"identity differs: {path}")
 
 
+def _manifest_files(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    files = manifest.get("files")
+    if not isinstance(files, list) or not files:
+        _fail("OFFLINE_INPUT", "manifest files are missing")
+    expected_keys = {"path", "mode", "sha256", "bytes"}
+    for entry in files:
+        if not isinstance(entry, dict) or set(entry) != expected_keys:
+            _fail("OFFLINE_INPUT", f"malformed manifest entry: {entry!r}")
+        path = entry["path"]
+        normalized = PurePosixPath(path) if isinstance(path, str) else None
+        if (
+            normalized is None
+            or not path
+            or normalized.is_absolute()
+            or ".." in normalized.parts
+            or normalized.as_posix() != path
+            or not isinstance(entry["mode"], str)
+            or re.fullmatch(r"[0-7]{4}", entry["mode"]) is None
+            or not isinstance(entry["sha256"], str)
+            or re.fullmatch(r"[0-9a-f]{64}", entry["sha256"]) is None
+            or type(entry["bytes"]) is not int
+            or entry["bytes"] < 0
+        ):
+            _fail("OFFLINE_INPUT", f"invalid manifest entry: {entry!r}")
+    if files != sorted(files, key=lambda item: item["path"]) or len(
+        {item["path"] for item in files}
+    ) != len(files):
+        _fail("OFFLINE_INPUT", "manifest files are not canonical")
+    observed = {item["path"] for item in files}
+    vulnerable = sorted(set(VULNERABLE_INPUTS) & observed)
+    if vulnerable:
+        _fail("VULNERABLE_INPUT", f"blocked inputs retained: {vulnerable}")
+    return files
+
+
+def _archive_entries(
+    archive: Path,
+    expected_files: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    expected = {entry["path"]: entry for entry in expected_files}
+    observed: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    try:
+        with tarfile.open(archive, mode="r:gz") as retained:
+            for member in retained:
+                if (
+                    not member.isfile()
+                    or member.name in seen
+                    or member.name not in expected
+                ):
+                    _fail("OFFLINE_ARCHIVE", f"unexpected member: {member.name}")
+                reference = expected[member.name]
+                mode = f"{stat.S_IMODE(member.mode):04o}"
+                if member.size != reference["bytes"] or mode != reference["mode"]:
+                    _fail(
+                        "OFFLINE_ARCHIVE",
+                        f"member metadata differs: {member.name}",
+                    )
+                payload = retained.extractfile(member)
+                if payload is None:
+                    _fail("OFFLINE_ARCHIVE", f"member unreadable: {member.name}")
+                digest = hashlib.sha256()
+                total = 0
+                for chunk in iter(lambda: payload.read(1024 * 1024), b""):
+                    digest.update(chunk)
+                    total += len(chunk)
+                entry = {
+                    "path": member.name,
+                    "mode": mode,
+                    "sha256": digest.hexdigest(),
+                    "bytes": total,
+                }
+                if entry != reference:
+                    _fail("OFFLINE_ARCHIVE", f"member differs: {member.name}")
+                seen.add(member.name)
+                observed.append(entry)
+    except (OSError, tarfile.TarError) as error:
+        _fail("OFFLINE_ARCHIVE", f"{archive}: {error}")
+    observed.sort(key=lambda entry: entry["path"])
+    if observed != expected_files:
+        missing = sorted(set(expected) - seen)
+        _fail("OFFLINE_ARCHIVE", f"archive manifest differs; missing={missing}")
+    return observed
+
+
+def _verify_toolchain_record(evidence: Path, execution: dict[str, Any]) -> None:
+    toolchain = execution.get("toolchain")
+    if not isinstance(toolchain, dict):
+        _fail("TOOLCHAIN_RECORD", "toolchain result is missing")
+    identity = toolchain.get("record")
+    _verify_identity(evidence, identity)
+    retained = _read_json(evidence / identity["path"])
+    embedded = {key: value for key, value in toolchain.items() if key != "record"}
+    if retained != embedded:
+        _fail("TOOLCHAIN_RECORD", "retained and embedded records differ")
+    expected_keys = {
+        "schema_version",
+        "result",
+        "runner_os",
+        "runner_arch",
+        "container_architecture",
+        "native_execution",
+        "qemu_binfmt_handlers",
+        "builder_index",
+        "builder_arm64_manifest",
+        "maven_version_output_sha256",
+        "global_settings_sha256",
+    }
+    hashes = (
+        retained.get("maven_version_output_sha256"),
+        retained.get("global_settings_sha256"),
+    )
+    if (
+        set(retained) != expected_keys
+        or retained.get("schema_version") != 1
+        or retained.get("result") != "passed"
+        or retained.get("runner_os") != execution.get("runner_os")
+        or retained.get("runner_arch") != execution.get("runner_arch")
+        or retained.get("container_architecture") != "aarch64"
+        or retained.get("native_execution") is not True
+        or retained.get("qemu_binfmt_handlers") != []
+        or retained.get("builder_index") != EXPECTED_BUILDER
+        or retained.get("builder_arm64_manifest")
+        != EXPECTED_BUILDER_ARM64_MANIFEST
+        or any(
+            not isinstance(value, str)
+            or re.fullmatch(r"[0-9a-f]{64}", value) is None
+            for value in hashes
+        )
+    ):
+        _fail("TOOLCHAIN_RECORD", "toolchain identity differs")
+
+
 def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
     evidence = evidence.resolve()
     record = _read_json(evidence / RECORD_NAME)
@@ -439,6 +581,8 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
     execution = record.get("execution", {})
     if (
         execution.get("platform") != "linux/arm64"
+        or execution.get("runner_os") != "Linux"
+        or execution.get("runner_arch") != "ARM64"
         or execution.get("native_execution") is not True
         or execution.get("builder") != EXPECTED_BUILDER
         or execution.get("builder_arm64_manifest")
@@ -446,6 +590,7 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
         or execution.get("selected_reactor") != EXPECTED_SELECTED_REACTOR
     ):
         _fail("EVIDENCE_EXECUTION", "execution identity differs")
+    _verify_toolchain_record(evidence, execution)
     for name, command, network in (
         ("online", EXPECTED_ONLINE_COMMAND, "allowlisted Maven endpoints only"),
         ("offline", EXPECTED_OFFLINE_COMMAND, "none"),
@@ -476,11 +621,14 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
         or manifest.get("unknown_files_permitted") is not False
     ):
         _fail("OFFLINE_INPUT", "manifest summary differs")
-    files = manifest.get("files")
-    if not isinstance(files, list) or files != sorted(
-        files, key=lambda item: item["path"]
+    files = _manifest_files(manifest)
+    if manifest["file_count"] != len(files) or manifest["total_bytes"] != sum(
+        entry["bytes"] for entry in files
     ):
-        _fail("OFFLINE_INPUT", "manifest files are not canonical")
+        _fail("OFFLINE_INPUT", "manifest aggregate differs")
+    if require_archive:
+        archive = evidence / offline_inputs["archive"]["path"]
+        _archive_entries(archive, files)
     observed = {item["path"] for item in files}
     if not set(EXPECTED_REPLACEMENT_INPUTS).issubset(observed):
         _fail("OFFLINE_INPUT", "replacement inputs differ")
