@@ -171,6 +171,49 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
     def test_workflow_is_read_only_and_fail_closed(self) -> None:
         feasibility.audit_workflow(ROOT)
 
+    def test_workflow_closes_triggers_steps_and_policy_mounts(self) -> None:
+        workflow = (ROOT / feasibility.WORKFLOW_PATH).read_text(
+            encoding="utf-8"
+        )
+        mutations = (
+            (
+                workflow.replace("  pull_request:\n", "  push:\n", 1),
+                "workflow triggers differ",
+            ),
+            (
+                workflow.replace(
+                    "      - name: Verify the native arm64 builder substrate\n",
+                    "      - name: Replace the reviewed verifier\n"
+                    "        shell: bash\n"
+                    "        run: true\n\n"
+                    "      - name: Verify the native arm64 builder substrate\n",
+                    1,
+                ),
+                "validation steps differ",
+            ),
+            (
+                workflow.replace(
+                    "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:"
+                    "/policy/.mvn:ro",
+                    "${RUNNER_TEMP}/maven-policy:/policy/.mvn:ro",
+                    1,
+                ),
+                "Maven Docker execution controls differ",
+            ),
+        )
+        for mutated, error in mutations:
+            with self.subTest(error=error):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    target = root / feasibility.WORKFLOW_PATH
+                    target.parent.mkdir(parents=True)
+                    target.write_text(mutated, encoding="utf-8")
+                    with self.assertRaisesRegex(
+                        feasibility.EvidenceError,
+                        error,
+                    ):
+                        feasibility.audit_workflow(root)
+
     def test_workflow_binds_controls_to_offline_docker_invocation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

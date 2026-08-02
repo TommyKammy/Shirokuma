@@ -60,6 +60,40 @@ EXPECTED_WORKFLOW_REF_PREFIX = (
     "TommyKammy/Shirokuma/.github/workflows/"
     "trino-maven-remediation-feasibility.yml@"
 )
+EXPECTED_WORKFLOW_TRIGGER_BLOCK = """on:
+  pull_request:
+    paths:
+      - .github/workflows/trino-maven-remediation-feasibility.yml
+      - bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch
+      - bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch
+      - bootstrap/trino/v483/maven-policy/.mvn/jvm.config
+      - bootstrap/trino/v483/settings.xml
+      - bootstrap/trino/v483/trusted-build-contract.json
+      - docs/design/07_ADR/ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md
+      - docs/design/evidence/trino/run-30693677356-post-adr-0027-pom.xml.gz
+      - docs/design/evidence/trino/run-30693677356-proposed-source-overlay.patch
+      - docs/design/evidence/trino/run-30693677356-maven-vulnerability-classification.json
+      - docs/design/evidence/trino/run-30731801825-maven-feasibility-validation.json
+      - docs/design/evidence/trino/run-30731801825-maven-feasibility-artifact-receipt.json
+      - scripts/verify_trino_dependency_publisher.py
+      - scripts/verify_trino_maven_feasibility.py
+      - tests/test_trino_dependency_publisher.py
+      - tests/test_trino_maven_feasibility.py
+  workflow_dispatch:
+"""
+EXPECTED_WORKFLOW_STEPS = (
+    "Check out the reviewed feasibility policy",
+    "Validate the fail-closed preauthorization contract",
+    "Verify the native arm64 builder substrate",
+    "Fetch and prepare the exact candidate source",
+    "Resolve the selected plugin closure online",
+    "Replay the selected plugin closure with no network",
+    "Finalize and audit the retained validation record",
+    "Retain the review-only feasibility inputs and outputs",
+)
+EXPECTED_WORKFLOW_SHA256 = (
+    "a3b681040ef4aae01e555b95734415e990268304101aaca4cc68f98431f2614c"
+)
 EXPECTED_ONLINE_NETWORK = "unrestricted; Maven transfers audited separately"
 EXPECTED_ONLINE_COMMAND = (
     "mvn --batch-mode --show-version --errors --strict-checksums "
@@ -1173,6 +1207,22 @@ def _audit_workflow_jobs(workflow: str) -> None:
         "      contents: read"
     ]:
         _fail("WORKFLOW", "validate permissions differ")
+    step_heads = re.findall(r"(?m)^      - ([^\n]+)$", validate)
+    expected_heads = [f"name: {name}" for name in EXPECTED_WORKFLOW_STEPS]
+    if step_heads != expected_heads:
+        _fail("WORKFLOW", f"validation steps differ: {step_heads}")
+
+
+def _audit_workflow_triggers(workflow: str) -> None:
+    markers = list(re.finditer(r"(?m)^on:\s*$", workflow))
+    start = markers[0].start() if len(markers) == 1 else -1
+    end = workflow.find("\nconcurrency:\n", start + 1)
+    if (
+        start < 0
+        or end < 0
+        or workflow[start:end] != EXPECTED_WORKFLOW_TRIGGER_BLOCK
+    ):
+        _fail("WORKFLOW", "workflow triggers differ")
 
 
 def _audit_candidate_application(workflow: str, step_name: str) -> None:
@@ -1251,6 +1301,7 @@ def audit_workflow(root: Path) -> None:
         "verify_trino_maven_feasibility.py finalize-record",
         "verify_trino_maven_feasibility.py audit-evidence",
         "verify_trino_maven_feasibility.py verify-candidate",
+        "--allow-expired-feasibility-refresh",
         "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
         "docs/design/evidence/trino/"
         "run-30693677356-maven-vulnerability-classification.json",
@@ -1273,6 +1324,7 @@ def audit_workflow(root: Path) -> None:
     present = [marker for marker in forbidden if marker in workflow]
     if missing or present:
         _fail("WORKFLOW", f"missing={missing}, forbidden={present}")
+    _audit_workflow_triggers(workflow)
     _audit_workflow_jobs(workflow)
     for step_name in (
         "Fetch and prepare the exact candidate source",
@@ -1294,24 +1346,37 @@ def audit_workflow(root: Path) -> None:
         _audit_candidate_postimage_before_docker(workflow, step_name)
     if _option_values(online, "--network"):
         _fail("WORKFLOW", "online Docker network must remain unrestricted")
+    expected_policy_volumes = [
+        (
+            "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:"
+            "/policy/.mvn:ro"
+        ),
+        (
+            "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:"
+            "/policy/settings.xml:ro"
+        ),
+    ]
     if (
-        _option_values(online, "--volume").count("${repository}:/m2") != 1
-        or _option_values(online, "--volume").count(
-            "${source_dir}:/workspace:ro"
-        )
-        != 1
+        _option_values(online, "--volume")
+        != [
+            "${source_dir}:/workspace:ro",
+            "${repository}:/m2",
+            *expected_policy_volumes,
+        ]
         or _option_values(offline, "--network") != ["none"]
-        or _option_values(offline, "--volume").count(
-            "${source_dir}:/workspace:ro"
-        )
-        != 1
-        or _option_values(offline, "--volume").count("${repository}:/m2:ro")
-        != 1
+        or _option_values(offline, "--volume")
+        != [
+            "${source_dir}:/workspace:ro",
+            "${repository}:/m2:ro",
+            *expected_policy_volumes,
+        ]
         or offline.count("${RUNNER_TEMP}/offline-resolve-plugins.log") != 1
     ):
         _fail("WORKFLOW", "Maven Docker execution controls differ")
     if workflow.count("jobs:") != 1 or workflow.count("  validate:") != 1:
         _fail("WORKFLOW", "workflow must contain one validation job")
+    if _sha256(workflow_path) != EXPECTED_WORKFLOW_SHA256:
+        _fail("WORKFLOW", "workflow identity differs")
 
 
 def main(argv: list[str] | None = None) -> int:

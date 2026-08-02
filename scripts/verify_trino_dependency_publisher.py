@@ -103,13 +103,13 @@ EXPECTED_FEASIBILITY_REAUDIT = {
     "artifact_digest": (
         "sha256:cf0272447ec1a6afd4bda304fefeb6176ee4240d4fc6339a32de65acf015fe8d"
     ),
-    "audited_at": "2026-08-02T06:16:58Z",
+    "audited_at": "2026-08-02T06:40:17Z",
     "result": "passed",
     "scope": "complete retained artifact including bounded archive expansion",
     "verifier": {
         "path": FEASIBILITY_VERIFIER_PATH.as_posix(),
         "sha256": (
-            "496cc60cb1378e923b36bbad5d5e877b9534bc3097bf7e677f617c33bc727c39"
+            "e6f66db783aa6c135c40ff6d907caaa0ad5a1c41192941e58f5d267958e2317d"
         ),
     },
 }
@@ -123,7 +123,7 @@ EXPECTED_BLOCKER_FEASIBILITY_FILES = {
     BLOCKER_FEASIBILITY_RECEIPT_PATH: {
         "bytes": 1340,
         "sha256": (
-            "4abcc5a0723a1e1dca1ac686524f923f30baacafcbafd10e6021e6517774ae38"
+            "ea849b973b74404061f666219ca3b2452083dee05d0101d566f18ffb094a5096"
         ),
     },
 }
@@ -1762,7 +1762,10 @@ def _validate_zero_context_patch(
 
 
 def _validate_blocker_evidence(
-    root: Path, *, at: dt.datetime | None = None
+    root: Path,
+    *,
+    at: dt.datetime | None = None,
+    allow_expired_for_refresh: bool = False,
 ) -> None:
     record = _load_json(root / BLOCKER_CLASSIFICATION_PATH)
     if (
@@ -1970,7 +1973,7 @@ def _validate_blocker_evidence(
     expires = _parse_time(
         EXPECTED_BLOCKER_FEASIBILITY_VALIDATION["artifact_expires_at"]
     )
-    if instant >= expires:
+    if instant >= expires and not allow_expired_for_refresh:
         _fail(
             "BLOCKER_FEASIBILITY_EXPIRED",
             f"{instant.isoformat()} is at or after {expires.isoformat()}",
@@ -4336,14 +4339,19 @@ def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
         _fail("POLICY_FILE", f"policy file set differs: {observed!r}")
 
 
-def audit(root: Path) -> None:
+def audit(
+    root: Path, *, allow_expired_feasibility_refresh: bool = False
+) -> None:
     contract = _load_json(root / CONTRACT_PATH)
     admission = _load_json(root / ADMISSION_PATH)
     _validate_authorization(contract, at=None)
     _validate_source_overlay_contract(root, contract, at=None)
     _validate_source_remediation_contract(contract, at=None)
     _validate_distribution_remediation_contract(root, contract, at=None)
-    _validate_blocker_evidence(root)
+    _validate_blocker_evidence(
+        root,
+        allow_expired_for_refresh=allow_expired_feasibility_refresh,
+    )
     lifecycle = contract.get("lifecycle", {})
     if lifecycle != {
         "state": "source_remediation_authorization_pending",
@@ -4703,6 +4711,10 @@ def _parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     audit_parser = commands.add_parser("audit")
     audit_parser.add_argument("--root", type=Path, default=Path("."))
+    audit_parser.add_argument(
+        "--allow-expired-feasibility-refresh",
+        action="store_true",
+    )
     authorize = commands.add_parser("authorize")
     authorize.add_argument("--root", type=Path, default=Path("."))
     authorize.add_argument("--at")
@@ -4755,7 +4767,12 @@ def main() -> int:
     args = _parser().parse_args()
     try:
         if args.command == "audit":
-            audit(args.root.resolve())
+            audit(
+                args.root.resolve(),
+                allow_expired_feasibility_refresh=(
+                    args.allow_expired_feasibility_refresh
+                ),
+            )
         elif args.command == "authorize":
             contract = _load_json(args.root.resolve() / CONTRACT_PATH)
             instant = (
