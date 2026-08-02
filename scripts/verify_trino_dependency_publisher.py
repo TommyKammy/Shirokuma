@@ -96,6 +96,23 @@ BLOCKER_FEASIBILITY_RECEIPT_PATH = Path(
     "docs/design/evidence/trino/"
     "run-30731801825-maven-feasibility-artifact-receipt.json"
 )
+FEASIBILITY_VERIFIER_PATH = Path(
+    "scripts/verify_trino_maven_feasibility.py"
+)
+EXPECTED_FEASIBILITY_REAUDIT = {
+    "artifact_digest": (
+        "sha256:cf0272447ec1a6afd4bda304fefeb6176ee4240d4fc6339a32de65acf015fe8d"
+    ),
+    "audited_at": "2026-08-02T06:16:58Z",
+    "result": "passed",
+    "scope": "complete retained artifact including bounded archive expansion",
+    "verifier": {
+        "path": FEASIBILITY_VERIFIER_PATH.as_posix(),
+        "sha256": (
+            "496cc60cb1378e923b36bbad5d5e877b9534bc3097bf7e677f617c33bc727c39"
+        ),
+    },
+}
 EXPECTED_BLOCKER_FEASIBILITY_FILES = {
     BLOCKER_FEASIBILITY_RECORD_PATH: {
         "bytes": 5793,
@@ -104,9 +121,9 @@ EXPECTED_BLOCKER_FEASIBILITY_FILES = {
         ),
     },
     BLOCKER_FEASIBILITY_RECEIPT_PATH: {
-        "bytes": 899,
+        "bytes": 1340,
         "sha256": (
-            "fcc1ba5aff55d06fb35f13a22cc74f4c9af8752c16ffd9a44c9385f1230bdb69"
+            "4abcc5a0723a1e1dca1ac686524f923f30baacafcbafd10e6021e6517774ae38"
         ),
     },
 }
@@ -291,6 +308,7 @@ EXPECTED_BLOCKER_FEASIBILITY_VALIDATION = {
         "sha256:cf0272447ec1a6afd4bda304fefeb6176ee4240d4fc6339a32de65acf015fe8d"
     ),
     "artifact_expires_at": "2026-09-01T04:08:14Z",
+    "independent_reaudit": EXPECTED_FEASIBILITY_REAUDIT,
     "builder": (
         "docker.io/library/maven@sha256:"
         "7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c"
@@ -1989,6 +2007,10 @@ def _validate_blocker_evidence(
             "publication_permitted": False,
             "source_remediation_activated": False,
         }
+        or receipt.get("independent_reaudit")
+        != EXPECTED_FEASIBILITY_REAUDIT
+        or _sha256(root / FEASIBILITY_VERIFIER_PATH)
+        != EXPECTED_FEASIBILITY_REAUDIT["verifier"]["sha256"]
         or validation.get("result", {}).get("authorization_use_permitted")
         is not False
         or validation.get("result", {}).get("owner_decision_still_required")

@@ -165,6 +165,12 @@ TOOLCHAIN_NAME = "toolchain.json"
 BUILDER_INDEX_NAME = "builder-index.json"
 MAVEN_VERSION_NAME = "maven-version.txt"
 GLOBAL_SETTINGS_NAME = "maven-global-settings.xml"
+MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
+MAX_ARCHIVE_MEMBERS = 10_000
+MAX_ARCHIVE_MEMBER_BYTES = 64 * 1024 * 1024
+MAX_ARCHIVE_FILE_BYTES = 512 * 1024 * 1024
+MAX_ARCHIVE_EXPANDED_BYTES = 640 * 1024 * 1024
+MAX_ARCHIVE_COMPRESSION_RATIO = 100
 
 
 class EvidenceError(RuntimeError):
@@ -730,44 +736,110 @@ def _archive_entries(
     archive: Path,
     expected_files: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
+    try:
+        archive_status = archive.lstat()
+    except OSError as error:
+        _fail("OFFLINE_ARCHIVE", f"{archive}: {error}")
+    if (
+        not stat.S_ISREG(archive_status.st_mode)
+        or archive_status.st_nlink != 1
+        or not 0 < archive_status.st_size <= MAX_ARCHIVE_BYTES
+    ):
+        _fail("OFFLINE_ARCHIVE", "compressed archive bounds differ")
+    expected_total = sum(entry["bytes"] for entry in expected_files)
+    if (
+        len(expected_files) > MAX_ARCHIVE_MEMBERS
+        or any(
+            entry["bytes"] > MAX_ARCHIVE_MEMBER_BYTES
+            for entry in expected_files
+        )
+        or expected_total > MAX_ARCHIVE_FILE_BYTES
+    ):
+        _fail("OFFLINE_ARCHIVE", "manifest archive bounds exceeded")
     expected = {entry["path"]: entry for entry in expected_files}
     observed: list[dict[str, Any]] = []
     seen: set[str] = set()
+    expanded_limit = min(
+        MAX_ARCHIVE_EXPANDED_BYTES,
+        archive_status.st_size * MAX_ARCHIVE_COMPRESSION_RATIO,
+    )
+
+    class BoundedReader:
+        def __init__(self, source: Any, maximum_bytes: int) -> None:
+            self.source = source
+            self.maximum_bytes = maximum_bytes
+            self.bytes_read = 0
+
+        def read(self, size: int = -1) -> bytes:
+            remaining = self.maximum_bytes - self.bytes_read
+            request = remaining + 1
+            if size >= 0:
+                request = min(size, request)
+            payload = self.source.read(request)
+            self.bytes_read += len(payload)
+            if self.bytes_read > self.maximum_bytes:
+                _fail("OFFLINE_ARCHIVE", "expanded archive bounds exceeded")
+            return payload
+
     try:
-        with tarfile.open(archive, mode="r:gz") as retained:
-            for member in retained:
-                if (
-                    not member.isfile()
-                    or member.name in seen
-                    or member.name not in expected
-                ):
-                    _fail("OFFLINE_ARCHIVE", f"unexpected member: {member.name}")
-                reference = expected[member.name]
-                mode = f"{stat.S_IMODE(member.mode):04o}"
-                if member.size != reference["bytes"] or mode != reference["mode"]:
-                    _fail(
-                        "OFFLINE_ARCHIVE",
-                        f"member metadata differs: {member.name}",
-                    )
-                payload = retained.extractfile(member)
-                if payload is None:
-                    _fail("OFFLINE_ARCHIVE", f"member unreadable: {member.name}")
-                digest = hashlib.sha256()
-                total = 0
-                for chunk in iter(lambda: payload.read(1024 * 1024), b""):
-                    digest.update(chunk)
-                    total += len(chunk)
-                entry = {
-                    "path": member.name,
-                    "mode": mode,
-                    "sha256": digest.hexdigest(),
-                    "bytes": total,
-                }
-                if entry != reference:
-                    _fail("OFFLINE_ARCHIVE", f"member differs: {member.name}")
-                seen.add(member.name)
-                observed.append(entry)
-    except (OSError, tarfile.TarError) as error:
+        with archive.open("rb") as raw:
+            with gzip.GzipFile(fileobj=raw, mode="rb") as zipped:
+                bounded = BoundedReader(zipped, expanded_limit)
+                with tarfile.open(fileobj=bounded, mode="r|") as retained:
+                    for member in retained:
+                        if (
+                            len(observed) >= MAX_ARCHIVE_MEMBERS
+                            or member.size > MAX_ARCHIVE_MEMBER_BYTES
+                            or not member.isfile()
+                            or member.name in seen
+                            or member.name not in expected
+                        ):
+                            _fail(
+                                "OFFLINE_ARCHIVE",
+                                f"unexpected member: {member.name}",
+                            )
+                        reference = expected[member.name]
+                        mode = f"{stat.S_IMODE(member.mode):04o}"
+                        if (
+                            member.size != reference["bytes"]
+                            or mode != reference["mode"]
+                        ):
+                            _fail(
+                                "OFFLINE_ARCHIVE",
+                                f"member metadata differs: {member.name}",
+                            )
+                        payload = retained.extractfile(member)
+                        if payload is None:
+                            _fail(
+                                "OFFLINE_ARCHIVE",
+                                f"member unreadable: {member.name}",
+                            )
+                        digest = hashlib.sha256()
+                        total = 0
+                        for chunk in iter(
+                            lambda: payload.read(1024 * 1024), b""
+                        ):
+                            digest.update(chunk)
+                            total += len(chunk)
+                            if total > MAX_ARCHIVE_MEMBER_BYTES:
+                                _fail(
+                                    "OFFLINE_ARCHIVE",
+                                    f"member bounds exceeded: {member.name}",
+                                )
+                        entry = {
+                            "path": member.name,
+                            "mode": mode,
+                            "sha256": digest.hexdigest(),
+                            "bytes": total,
+                        }
+                        if entry != reference:
+                            _fail(
+                                "OFFLINE_ARCHIVE",
+                                f"member differs: {member.name}",
+                            )
+                        seen.add(member.name)
+                        observed.append(entry)
+    except (OSError, EOFError, tarfile.TarError) as error:
         _fail("OFFLINE_ARCHIVE", f"{archive}: {error}")
     observed.sort(key=lambda entry: entry["path"])
     if observed != expected_files:

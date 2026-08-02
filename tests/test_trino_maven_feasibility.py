@@ -438,6 +438,36 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                 sorted(record["path"] for record in manifest["files"]),
             )
 
+    def test_archive_audit_enforces_resource_bounds(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = self._repository(root)
+            entries = feasibility._repository_entries(repository)
+            archive = root / feasibility.ARCHIVE_NAME
+            feasibility._write_archive(repository, archive, entries)
+            feasibility._archive_entries(archive, entries)
+            bounds = (
+                ("MAX_ARCHIVE_BYTES", archive.stat().st_size - 1),
+                ("MAX_ARCHIVE_MEMBERS", len(entries) - 1),
+                (
+                    "MAX_ARCHIVE_MEMBER_BYTES",
+                    max(entry["bytes"] for entry in entries) - 1,
+                ),
+                (
+                    "MAX_ARCHIVE_FILE_BYTES",
+                    sum(entry["bytes"] for entry in entries) - 1,
+                ),
+                ("MAX_ARCHIVE_COMPRESSION_RATIO", 1),
+            )
+            for constant, maximum in bounds:
+                with self.subTest(constant=constant):
+                    with mock.patch.object(feasibility, constant, maximum):
+                        with self.assertRaisesRegex(
+                            feasibility.EvidenceError,
+                            "OFFLINE_ARCHIVE",
+                        ):
+                            feasibility._archive_entries(archive, entries)
+
     def test_finalize_retains_online_offline_and_input_identities(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
