@@ -73,14 +73,16 @@ ADR-0027 overlay:
   `dc5cfc5cd0ef38f2960926b364c32f476c1c94e949e0fa43711f17d951eb9b75`
 - retained gzip bytes: `13531`
 - candidate `pom.xml` SHA-256:
-  `0b23a8f4834bddb129e1d76c2cc63823f8691cf39d8fda02a3853d6fce79fbd3`
+  `b4a80ce8c0d0407b7951b485e03832556a8d4662f7210e03caa55c37d56b6f28`
 - candidate patch SHA-256:
-  `3c31e06c240196c3f141b55cb34ba1f26e71cdee003b6687b8e5acd16304a25f`
-- candidate patch bytes: `7179`
+  `6fde439a203404eb189618bd2601e62aa087cd5ab2413c7d3a311b8928507b11`
+- candidate patch bytes: `7131`
 
-The candidate adds Velocity Engine Core 2.4.1 and Plexus Utils 4.0.3 as direct
-dependencies in the affected inherited Maven plugin realms, including the
-Gitflow Incremental Builder extension realm. Run `30724152120` is superseded:
+The candidate adds Velocity Engine Core 2.4.1 in the affected inherited Maven
+plugin realm, disables Gitflow Incremental Builder as a build extension, and
+pins Plexus Utils 4.0.3 on that plugin definition. The extension is an optional
+incremental-build optimization; the candidate instead exercises the selected
+reactor through Maven's normal lifecycle. Run `30724152120` is superseded:
 hardened review found that its retained repository still contained
 `plexus-utils-4.0.2.jar`, and its verifier did not bind the archive contents or
 retained toolchain inputs. It cannot support authorization. Fresh native arm64

@@ -1,19 +1,7 @@
 diff --git a/pom.xml b/pom.xml
 --- a/pom.xml
 +++ b/pom.xml
-@@ -2594,0 +2595,161 @@
-+                <plugin>
-+                    <groupId>io.github.gitflow-incremental-builder</groupId>
-+                    <artifactId>gitflow-incremental-builder</artifactId>
-+                    <dependencies>
-+                        <dependency>
-+                            <groupId>org.codehaus.plexus</groupId>
-+                            <artifactId>plexus-utils</artifactId>
-+                            <version>4.0.3</version>
-+                        </dependency>
-+                    </dependencies>
-+                </plugin>
-+
+@@ -2594,0 +2595,149 @@
 +                <plugin>
 +                    <groupId>org.revapi</groupId>
 +                    <artifactId>revapi-maven-plugin</artifactId>
@@ -163,3 +151,13 @@ diff --git a/pom.xml b/pom.xml
 +                    </dependencies>
 +                </plugin>
 +
+@@ -3138 +3287,8 @@
+-                        <extensions>true</extensions>
++                        <extensions>false</extensions>
++                        <dependencies>
++                            <dependency>
++                                <groupId>org.codehaus.plexus</groupId>
++                                <artifactId>plexus-utils</artifactId>
++                                <version>4.0.3</version>
++                            </dependency>
++                        </dependencies>
