@@ -80,6 +80,28 @@ BLOCKER_BASELINE_PATH = Path(
     "docs/design/evidence/trino/"
     "run-30693677356-post-adr-0027-pom.xml.gz"
 )
+BLOCKER_FEASIBILITY_RECORD_PATH = Path(
+    "docs/design/evidence/trino/"
+    "run-30724152120-maven-feasibility-validation.json"
+)
+BLOCKER_FEASIBILITY_RECEIPT_PATH = Path(
+    "docs/design/evidence/trino/"
+    "run-30724152120-maven-feasibility-artifact-receipt.json"
+)
+EXPECTED_BLOCKER_FEASIBILITY_FILES = {
+    BLOCKER_FEASIBILITY_RECORD_PATH: {
+        "bytes": 4675,
+        "sha256": (
+            "a26e2a839003897583a82349e7d36a637b2d34856e776f2c91e2aa7e208147c7"
+        ),
+    },
+    BLOCKER_FEASIBILITY_RECEIPT_PATH: {
+        "bytes": 899,
+        "sha256": (
+            "181604f862e41c51041b3df950a175faf7a6f7bc74530ef0ae0bc9434e49e854"
+        ),
+    },
+}
 EXPECTED_BLOCKER_SUBJECT = {
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
     "workflow_run": (
@@ -201,12 +223,21 @@ EXPECTED_BLOCKER_CLASSIFICATION = {
     ),
 }
 EXPECTED_BLOCKER_FEASIBILITY_VALIDATION = {
-    "evidence_status": (
-        "local_observation_not_retained_not_authorization_evidence"
-    ),
+    "evidence_status": "retained_reproducible_preauthorization_feasibility_passed",
     "authorization_use_permitted": False,
-    "revalidation_required_before_authorization": True,
-    "reproducible_inputs_retained": False,
+    "revalidation_required_before_authorization": False,
+    "reproducible_inputs_retained": True,
+    "validation_record": BLOCKER_FEASIBILITY_RECORD_PATH.as_posix(),
+    "artifact_receipt": BLOCKER_FEASIBILITY_RECEIPT_PATH.as_posix(),
+    "workflow_run": (
+        "https://github.com/TommyKammy/Shirokuma/actions/runs/30724152120"
+    ),
+    "reviewed_commit": "edca178854f23a2e8e61a35cd2b5eb629f4eb339",
+    "artifact_id": 8825789672,
+    "artifact_digest": (
+        "sha256:64ef89b27a5dc088a905a4da3f3594ac949925e482185893d2a5ca592515cad1"
+    ),
+    "artifact_expires_at": "2026-08-31T23:53:46Z",
     "builder": (
         "docker.io/library/maven@sha256:"
         "7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c"
@@ -218,13 +249,14 @@ EXPECTED_BLOCKER_FEASIBILITY_VALIDATION = {
     "goal": "dependency:resolve-plugins -DskipTests",
     "reported_observations": {
         "online_resolution": "success",
-        "network_none_not_claimed": True,
+        "network_none_offline_replay": True,
         "offline_replay": "success",
         "vulnerable_coordinate_lines": 0,
     },
     "limitations": {
-        "command_output_retained": False,
-        "offline_repository_retained": False,
+        "command_output_retained": True,
+        "offline_repository_retained_in_actions_artifact": True,
+        "artifact_retention_is_time_bounded": True,
         "full_clean_install_not_run": True,
         "fresh_closure_sbom_and_scan_not_run": True,
     },
@@ -233,8 +265,9 @@ EXPECTED_BLOCKER_NEXT_ACTION = {
     "state": "owner_authorization_required",
     "required_decision": (
         "Approve or reject the exact candidate pom.xml-only overlay bound to "
-        "the retained patch and postimage hashes. Approval requires a new "
-        "retained and reproducible validation record and must preserve "
+        "the retained patch and postimage hashes after reviewing run "
+        "30724152120. The retained reproducible feasibility prerequisite is "
+        "satisfied, but it is not authorization. Approval must preserve "
         "High=0/Critical=0 without waiver, the current expiry, and reviewer "
         "separation before any active publisher patch or publication retry."
     ),
@@ -1856,6 +1889,47 @@ def _validate_blocker_evidence(root: Path) -> None:
     }
     if feasibility != expected_feasibility:
         _fail("BLOCKER_EVIDENCE", "feasibility boundary differs")
+    retained_feasibility: dict[Path, dict[str, Any]] = {}
+    for path, expected in EXPECTED_BLOCKER_FEASIBILITY_FILES.items():
+        payload = _read_reviewed_regular_file(
+            root / path,
+            code="BLOCKER_EVIDENCE",
+        )
+        if (
+            len(payload) != expected["bytes"]
+            or hashlib.sha256(payload).hexdigest() != expected["sha256"]
+        ):
+            _fail("BLOCKER_EVIDENCE", f"feasibility evidence differs: {path}")
+        retained_feasibility[path] = _load_json(root / path)
+    receipt = retained_feasibility[BLOCKER_FEASIBILITY_RECEIPT_PATH]
+    validation = retained_feasibility[BLOCKER_FEASIBILITY_RECORD_PATH]
+    if (
+        receipt.get("validation_record")
+        != {
+            "bytes": EXPECTED_BLOCKER_FEASIBILITY_FILES[
+                BLOCKER_FEASIBILITY_RECORD_PATH
+            ]["bytes"],
+            "path": BLOCKER_FEASIBILITY_RECORD_PATH.as_posix(),
+            "sha256": EXPECTED_BLOCKER_FEASIBILITY_FILES[
+                BLOCKER_FEASIBILITY_RECORD_PATH
+            ]["sha256"],
+        }
+        or receipt.get("boundary")
+        != {
+            "authorization_use_permitted": False,
+            "owner_decision_still_required": True,
+            "publication_permitted": False,
+            "source_remediation_activated": False,
+        }
+        or validation.get("result", {}).get("authorization_use_permitted")
+        is not False
+        or validation.get("result", {}).get("owner_decision_still_required")
+        is not True
+        or validation.get("boundary", {}).get("source_remediation_activated")
+        is not False
+        or validation.get("boundary", {}).get("publication_permitted") is not False
+    ):
+        _fail("BLOCKER_EVIDENCE", "retained feasibility receipt differs")
     candidate_path = root / EXPECTED_BLOCKER_CANDIDATE["patch_path"]
     candidate_payload = _read_reviewed_regular_file(
         candidate_path,

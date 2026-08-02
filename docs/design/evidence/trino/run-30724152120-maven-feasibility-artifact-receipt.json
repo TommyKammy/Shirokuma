@@ -1,0 +1,24 @@
+{
+  "artifact": {
+    "api_url": "https://api.github.com/repos/TommyKammy/Shirokuma/actions/artifacts/8825789672",
+    "digest": "sha256:64ef89b27a5dc088a905a4da3f3594ac949925e482185893d2a5ca592515cad1",
+    "expires_at": "2026-08-31T23:53:46Z",
+    "id": 8825789672,
+    "name": "trino-maven-feasibility-30724152120-1",
+    "retention_days": 30,
+    "size_in_bytes": 249200536
+  },
+  "boundary": {
+    "authorization_use_permitted": false,
+    "owner_decision_still_required": true,
+    "publication_permitted": false,
+    "source_remediation_activated": false
+  },
+  "schema_version": 1,
+  "validation_record": {
+    "bytes": 4675,
+    "path": "docs/design/evidence/trino/run-30724152120-maven-feasibility-validation.json",
+    "sha256": "a26e2a839003897583a82349e7d36a637b2d34856e776f2c91e2aa7e208147c7"
+  },
+  "workflow_run": "https://github.com/TommyKammy/Shirokuma/actions/runs/30724152120"
+}

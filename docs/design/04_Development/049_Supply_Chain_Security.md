@@ -1098,6 +1098,21 @@ repository audit checks every retained file's exact hash and size, recomputes
 the three finding identities and summary, and requires the feasibility patch
 to use the canonical single-path zero-context format.
 
+Preauthorization run
+[`30724152120`](https://github.com/TommyKammy/Shirokuma/actions/runs/30724152120)
+then resolved the exact selected reactor on native arm64 with the digest-pinned
+Maven builder and replayed the complete closure with container networking set
+to `none` and the repository mounted read-only. Both phases exited zero and
+reported zero vulnerable-coordinate lines. Artifact `8825789672`, digest
+`sha256:64ef89b27a5dc088a905a4da3f3594ac949925e482185893d2a5ca592515cad1`,
+retains the 4,880-file, 273,806,075-byte reproducible repository, logs,
+manifest, toolchain, and validation record until `2026-08-31T23:53:46Z`.
+The repository retains the validation record and artifact receipt. This
+satisfies ADR-0028's retained feasibility prerequisite only; it neither
+authorizes nor activates the candidate, publishes an artifact, admits an
+image, or changes runtime state. The explicit owner approve/reject decision
+and independent implementation review remain mandatory.
+
 ## Resident image and SBOM evidence
 
 Every image admitted to a resident profile must have an entry in

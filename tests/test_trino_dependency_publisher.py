@@ -2357,6 +2357,7 @@ class PublisherContractTests(unittest.TestCase):
             ),
             Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
             verify.BLOCKER_BASELINE_PATH,
+            *verify.EXPECTED_BLOCKER_FEASIBILITY_FILES,
         ]
         originals = {
             path: (ROOT / path).read_bytes()
@@ -2406,6 +2407,19 @@ class PublisherContractTests(unittest.TestCase):
             ):
                 verify._validate_blocker_evidence(temporary_root)
 
+            classification_path.write_bytes(
+                originals[verify.BLOCKER_CLASSIFICATION_PATH]
+            )
+            receipt_path = (
+                temporary_root / verify.BLOCKER_FEASIBILITY_RECEIPT_PATH
+            )
+            receipt_path.write_bytes(receipt_path.read_bytes() + b"\n")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "feasibility evidence differs",
+            ):
+                verify._validate_blocker_evidence(temporary_root)
+
         patch = ROOT / verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]
         verify._validate_zero_context_patch(patch, {"pom.xml"})
         with tempfile.TemporaryDirectory() as temporary:
@@ -2431,6 +2445,7 @@ class PublisherContractTests(unittest.TestCase):
             ),
             Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
             verify.BLOCKER_BASELINE_PATH,
+            *verify.EXPECTED_BLOCKER_FEASIBILITY_FILES,
         ]
         originals = {path: (ROOT / path).read_bytes() for path in paths}
         classification = json.loads(
@@ -2481,6 +2496,7 @@ class PublisherContractTests(unittest.TestCase):
             ),
             Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
             verify.BLOCKER_BASELINE_PATH,
+            *verify.EXPECTED_BLOCKER_FEASIBILITY_FILES,
         ]
         originals = {path: (ROOT / path).read_bytes() for path in paths}
 
@@ -2530,6 +2546,7 @@ class PublisherContractTests(unittest.TestCase):
             ),
             Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
             verify.BLOCKER_BASELINE_PATH,
+            *verify.EXPECTED_BLOCKER_FEASIBILITY_FILES,
         ]
         originals = {path: (ROOT / path).read_bytes() for path in paths}
 

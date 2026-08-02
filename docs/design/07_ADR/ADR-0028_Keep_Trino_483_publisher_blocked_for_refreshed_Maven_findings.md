@@ -47,6 +47,8 @@ Keep dependency publication blocked and restore lifecycle state
 - `docs/design/evidence/trino/run-30693677356-maven-rootfs.cdx.json`
 - `docs/design/evidence/trino/run-30693677356-post-adr-0027-pom.xml.gz`
 - `docs/design/evidence/trino/run-30693677356-maven-vulnerability-classification.json`
+- `docs/design/evidence/trino/run-30724152120-maven-feasibility-validation.json`
+- `docs/design/evidence/trino/run-30724152120-maven-feasibility-artifact-receipt.json`
 
 The retained classification binds the Actions artifact, raw report,
 closure-complete SBOM, run-scoped manifest, and raw rootfs SBOM hashes and
@@ -77,12 +79,14 @@ ADR-0027 overlay:
 - candidate patch bytes: `6633`
 
 The candidate adds Velocity Engine Core 2.4.1 and Plexus Utils 4.0.3 as direct
-dependencies in the affected inherited Maven plugin realms. A local
-`dependency:resolve-plugins` run reported online and offline success with no
-vulnerable coordinate in the selected reactor, but neither its command output
-nor its offline repository was retained. Those observations are therefore not
-authorization evidence and must be reproduced into a retained, independently
-reviewable validation record before approval.
+dependencies in the affected inherited Maven plugin realms. Native arm64
+Actions run `30724152120` reproduced the exact selected reactor with the
+digest-pinned Maven builder. Online resolution and a second replay with
+networking disabled both exited zero, the offline repository was mounted
+read-only, and neither log contained a vulnerable coordinate. The canonical
+4,880-file, 273,806,075-byte repository closure and both logs are retained in
+artifact `8825789672` until `2026-08-31T23:53:46Z`; the repository retains the
+validation record and artifact receipt with their exact hashes.
 
 This is feasibility evidence only. It does not activate the candidate patch,
 authorize a new source postimage, permit another publisher run, or claim a
@@ -133,10 +137,10 @@ the Trino artifact has not passed resident admission or runtime acceptance.
 - Apply the candidate patch to the exact post-ADR-0027 `pom.xml` with
   `git apply --unidiff-zero --whitespace=error-all` and verify the candidate
   postimage hash.
-- Before authorization, rerun `dependency:resolve-plugins` online and offline
-  with the exact selected reactor and digest-pinned native arm64 builder;
-  retain the command, exit status, output, and reproducible offline inputs,
-  and require the vulnerable coordinate set to be empty.
+- Reverify run `30724152120`, artifact `8825789672`, the retained validation
+  record, and the artifact receipt; require online and network-none offline
+  exit status zero, a read-only offline repository, reproducible inputs, and
+  an empty vulnerable-coordinate set before the separate owner decision.
 - `python3 -m unittest tests.test_trino_dependency_publisher`
 - `python3 scripts/verify_trino_dependency_publisher.py audit --root .`
 - `make verify-trino-bootstrap`
