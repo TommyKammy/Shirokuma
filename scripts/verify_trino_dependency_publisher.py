@@ -1743,7 +1743,9 @@ def _validate_zero_context_patch(
         )
 
 
-def _validate_blocker_evidence(root: Path) -> None:
+def _validate_blocker_evidence(
+    root: Path, *, at: dt.datetime | None = None
+) -> None:
     record = _load_json(root / BLOCKER_CLASSIFICATION_PATH)
     if (
         record.get("schema_version") != 1
@@ -1946,6 +1948,15 @@ def _validate_blocker_evidence(root: Path) -> None:
     }
     if feasibility != expected_feasibility:
         _fail("BLOCKER_EVIDENCE", "feasibility boundary differs")
+    instant = at or dt.datetime.now(dt.timezone.utc)
+    expires = _parse_time(
+        EXPECTED_BLOCKER_FEASIBILITY_VALIDATION["artifact_expires_at"]
+    )
+    if instant >= expires:
+        _fail(
+            "BLOCKER_FEASIBILITY_EXPIRED",
+            f"{instant.isoformat()} is at or after {expires.isoformat()}",
+        )
     retained_feasibility: dict[Path, dict[str, Any]] = {}
     for path, expected in EXPECTED_BLOCKER_FEASIBILITY_FILES.items():
         payload = _read_reviewed_regular_file(

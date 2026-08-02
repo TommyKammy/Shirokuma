@@ -2347,6 +2347,36 @@ class PublisherContractTests(unittest.TestCase):
     def test_repository_contract_and_workflow_are_closed(self) -> None:
         verify.audit(ROOT)
 
+    def test_retained_feasibility_expires_fail_closed(self) -> None:
+        verify._validate_blocker_evidence(
+            ROOT,
+            at=dt.datetime(
+                2026,
+                9,
+                1,
+                4,
+                8,
+                13,
+                tzinfo=dt.timezone.utc,
+            ),
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "BLOCKER_FEASIBILITY_EXPIRED",
+        ):
+            verify._validate_blocker_evidence(
+                ROOT,
+                at=dt.datetime(
+                    2026,
+                    9,
+                    1,
+                    4,
+                    8,
+                    14,
+                    tzinfo=dt.timezone.utc,
+                ),
+            )
+
     def test_retained_blocker_evidence_is_hash_bound_and_recomputed(self) -> None:
         verify._validate_blocker_evidence(ROOT)
         paths = [
