@@ -6,6 +6,7 @@ on:
       - .github/workflows/trino-maven-remediation-feasibility.yml
       - bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch
       - bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch
+      - bootstrap/trino/v483/maven-policy/.mvn/jvm.config
       - bootstrap/trino/v483/settings.xml
       - bootstrap/trino/v483/trusted-build-contract.json
       - docs/design/07_ADR/ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md

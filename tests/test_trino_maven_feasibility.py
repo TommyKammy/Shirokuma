@@ -198,18 +198,23 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             )
             self.assertTrue(feasibility._vulnerable_lines(path))
 
-    def test_vulnerable_velocity_jar_in_repository_fails(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            repository = self._repository(root)
-            vulnerable = repository / feasibility.VULNERABLE_INPUTS[0]
-            vulnerable.parent.mkdir(parents=True, exist_ok=True)
-            vulnerable.write_bytes(b"velocity 2.3")
-            with self.assertRaisesRegex(
-                feasibility.EvidenceError,
-                "VULNERABLE_INPUT",
-            ):
-                feasibility.capture_repository(repository, root / "evidence")
+    def test_vulnerable_classified_jars_in_repository_fail(self) -> None:
+        for relative in feasibility.VULNERABLE_INPUTS:
+            with self.subTest(relative=relative):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    repository = self._repository(root)
+                    vulnerable = repository / relative
+                    vulnerable.parent.mkdir(parents=True, exist_ok=True)
+                    vulnerable.write_bytes(relative.encode("utf-8"))
+                    with self.assertRaisesRegex(
+                        feasibility.EvidenceError,
+                        "VULNERABLE_INPUT",
+                    ):
+                        feasibility.capture_repository(
+                            repository,
+                            root / "evidence",
+                        )
 
     def test_archive_or_manifest_tamper_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -275,6 +280,22 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 feasibility.EvidenceError,
                 "TOOLCHAIN_RECORD",
+            ):
+                feasibility.audit_evidence(evidence, require_archive=True)
+
+    def test_offline_repository_mount_must_remain_read_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = self._finalized_evidence(Path(temporary))
+            record_path = evidence / feasibility.RECORD_NAME
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            record["execution"]["offline"]["repository_mount"] = "read-write"
+            record_path.write_text(
+                json.dumps(record, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "EVIDENCE_EXECUTION",
             ):
                 feasibility.audit_evidence(evidence, require_archive=True)
 

@@ -78,6 +78,8 @@ VULNERABLE_COORDINATES = (
 )
 VULNERABLE_INPUTS = (
     "org/apache/velocity/velocity-engine-core/2.3/velocity-engine-core-2.3.jar",
+    "org/codehaus/plexus/plexus-utils/4.0.1/plexus-utils-4.0.1.jar",
+    "org/codehaus/plexus/plexus-utils/4.0.2/plexus-utils-4.0.2.jar",
 )
 RECORD_NAME = "validation-record.json"
 MANIFEST_NAME = "offline-input-manifest.json"
@@ -601,6 +603,10 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
             or phase.get("network") != network
             or phase.get("exit_status") != 0
             or phase.get("vulnerable_coordinate_lines") != 0
+            or (
+                name == "offline"
+                and phase.get("repository_mount") != "read-only"
+            )
         ):
             _fail("EVIDENCE_EXECUTION", f"{name} result differs")
         _verify_identity(evidence, phase.get("log"))
@@ -660,6 +666,7 @@ def audit_workflow(root: Path) -> None:
         "verify_trino_maven_feasibility.py capture-repository",
         "verify_trino_maven_feasibility.py finalize-record",
         "verify_trino_maven_feasibility.py audit-evidence",
+        "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
     )
     missing = [marker for marker in required if marker not in workflow]
     forbidden = (
