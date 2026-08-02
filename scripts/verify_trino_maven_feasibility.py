@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import stat
 import subprocess
 import sys
@@ -48,6 +49,12 @@ EXPECTED_SELECTED_REACTOR = (
     ":trino-hdfs,:trino-iceberg"
 )
 EXPECTED_GOAL = "dependency:resolve-plugins -DskipTests"
+EXPECTED_GITHUB_REPOSITORY = "TommyKammy/Shirokuma"
+EXPECTED_GITHUB_SERVER_URL = "https://github.com"
+EXPECTED_WORKFLOW_REF_PREFIX = (
+    "TommyKammy/Shirokuma/.github/workflows/"
+    "trino-maven-remediation-feasibility.yml@"
+)
 EXPECTED_ONLINE_NETWORK = "unrestricted; Maven transfers audited separately"
 EXPECTED_ONLINE_COMMAND = (
     "mvn --batch-mode --show-version --errors --strict-checksums "
@@ -305,6 +312,12 @@ def finalize_record(
     global_settings: Path,
 ) -> None:
     evidence = evidence.resolve()
+    try:
+        same_log = os.path.samefile(online_log, offline_log)
+    except OSError as error:
+        _fail("EVIDENCE_FILE", f"cannot compare Maven logs: {error}")
+    if same_log:
+        _fail("EVIDENCE_FILE", "online and offline Maven logs must be distinct")
     for source, name in (
         (online_log, ONLINE_LOG_NAME),
         (offline_log, OFFLINE_LOG_NAME),
@@ -331,6 +344,7 @@ def finalize_record(
         "GITHUB_RUN_ATTEMPT",
         "GITHUB_SERVER_URL",
         "GITHUB_SHA",
+        "REVIEWED_COMMIT",
         "GITHUB_WORKFLOW",
         "GITHUB_WORKFLOW_REF",
         "RUNNER_ARCH",
@@ -344,6 +358,14 @@ def finalize_record(
     run_id = int(os.environ["GITHUB_RUN_ID"])
     run_attempt = int(os.environ["GITHUB_RUN_ATTEMPT"])
     repository = os.environ["GITHUB_REPOSITORY"]
+    if (
+        repository != EXPECTED_GITHUB_REPOSITORY
+        or os.environ["GITHUB_SERVER_URL"] != EXPECTED_GITHUB_SERVER_URL
+        or not os.environ["GITHUB_WORKFLOW_REF"].startswith(
+            EXPECTED_WORKFLOW_REF_PREFIX
+        )
+    ):
+        _fail("RUN_IDENTITY", "workflow repository identity differs")
     record = {
         "schema_version": 1,
         "record_path": (
@@ -652,11 +674,16 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
             or any(character not in "0123456789abcdef" for character in value)
             for value in sha_fields
         )
-        or not subject.get("workflow_run", "").endswith(f"/actions/runs/{run_id}")
+        or subject.get("workflow_run")
+        != (
+            f"{EXPECTED_GITHUB_SERVER_URL}/{EXPECTED_GITHUB_REPOSITORY}"
+            f"/actions/runs/{run_id}"
+        )
         or subject.get("workflow")
         != "Trino 483 Maven remediation feasibility"
-        or ".github/workflows/trino-maven-remediation-feasibility.yml@"
-        not in subject.get("workflow_ref", "")
+        or not subject.get("workflow_ref", "").startswith(
+            EXPECTED_WORKFLOW_REF_PREFIX
+        )
     ):
         _fail("EVIDENCE_SUBJECT", "workflow subject identity differs")
     boundary = record.get("boundary")
@@ -683,11 +710,18 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
     ):
         _fail("EVIDENCE_EXECUTION", "execution identity differs")
     _verify_toolchain_record(evidence, execution)
-    for name, command, network in (
-        ("online", EXPECTED_ONLINE_COMMAND, EXPECTED_ONLINE_NETWORK),
-        ("offline", EXPECTED_OFFLINE_COMMAND, "none"),
+    phase_logs: dict[str, dict[str, Any]] = {}
+    for name, command, network, expected_log_name in (
+        (
+            "online",
+            EXPECTED_ONLINE_COMMAND,
+            EXPECTED_ONLINE_NETWORK,
+            ONLINE_LOG_NAME,
+        ),
+        ("offline", EXPECTED_OFFLINE_COMMAND, "none", OFFLINE_LOG_NAME),
     ):
         phase = execution.get(name, {})
+        log_identity = phase.get("log")
         if (
             phase.get("command") != command
             or phase.get("network") != network
@@ -697,11 +731,16 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
                 name == "offline"
                 and phase.get("repository_mount") != "read-only"
             )
+            or not isinstance(log_identity, dict)
+            or log_identity.get("path") != expected_log_name
         ):
             _fail("EVIDENCE_EXECUTION", f"{name} result differs")
-        _verify_identity(evidence, phase.get("log"))
-        if _vulnerable_lines(evidence / phase["log"]["path"]):
+        _verify_identity(evidence, log_identity)
+        phase_logs[name] = log_identity
+        if _vulnerable_lines(evidence / log_identity["path"]):
             _fail("VULNERABLE_COORDINATE", f"{name} log differs")
+    if phase_logs["online"] == phase_logs["offline"]:
+        _fail("EVIDENCE_EXECUTION", "online and offline log identities coincide")
     offline_inputs = record.get("offline_inputs", {})
     if offline_inputs.get("reproducible_inputs_retained") is not True:
         _fail("OFFLINE_INPUT", "reproducible inputs are not retained")
@@ -739,6 +778,51 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
         _fail("EVIDENCE_RESULT", "result boundary differs")
 
 
+def _workflow_step_run(workflow: str, step_name: str) -> str:
+    marker = f"      - name: {step_name}\n"
+    if workflow.count(marker) != 1:
+        _fail("WORKFLOW", f"step identity differs: {step_name}")
+    step_start = workflow.index(marker)
+    next_step = workflow.find("\n      - name: ", step_start + len(marker))
+    step = workflow[step_start:] if next_step < 0 else workflow[step_start:next_step]
+    run_marker = "        run: |\n"
+    if step.count(run_marker) != 1:
+        _fail("WORKFLOW", f"step run block differs: {step_name}")
+    body = step.split(run_marker, 1)[1]
+    lines = body.splitlines()
+    if any(line and not line.startswith("          ") for line in lines):
+        _fail("WORKFLOW", f"step indentation differs: {step_name}")
+    return "\n".join(line[10:] if line else "" for line in lines)
+
+
+def _workflow_docker_run(workflow: str, step_name: str) -> list[str]:
+    body = _workflow_step_run(workflow, step_name)
+    logical = re.sub(r"\\\n[ \t]*", " ", body)
+    invocations = [
+        line.strip()
+        for line in logical.splitlines()
+        if line.lstrip().startswith("docker run ")
+    ]
+    if len(invocations) != 1:
+        _fail("WORKFLOW", f"Docker invocation differs: {step_name}")
+    try:
+        return shlex.split(invocations[0], posix=True)
+    except ValueError as error:
+        _fail("WORKFLOW", f"Docker invocation cannot be parsed: {error}")
+
+
+def _option_values(tokens: list[str], option: str) -> list[str]:
+    values: list[str] = []
+    for index, token in enumerate(tokens):
+        if token == option:
+            if index + 1 >= len(tokens):
+                _fail("WORKFLOW", f"Docker option has no value: {option}")
+            values.append(tokens[index + 1])
+        elif token.startswith(f"{option}="):
+            values.append(token.split("=", 1)[1])
+    return values
+
+
 def audit_workflow(root: Path) -> None:
     workflow_path = root.resolve() / WORKFLOW_PATH
     workflow = workflow_path.read_text(encoding="utf-8")
@@ -746,8 +830,6 @@ def audit_workflow(root: Path) -> None:
         "runs-on: ubuntu-24.04-arm",
         "permissions:\n      contents: read",
         f"BUILDER_IMAGE: {EXPECTED_BUILDER}",
-        "--network none",
-        '"${repository}:/m2:ro"',
         "-Daether.syncContext.named.basedir.locksDir=/tmp/maven-locks",
         EXPECTED_SELECTED_REACTOR,
         "dependency:resolve-plugins -DskipTests",
@@ -774,6 +856,24 @@ def audit_workflow(root: Path) -> None:
     present = [marker for marker in forbidden if marker in workflow]
     if missing or present:
         _fail("WORKFLOW", f"missing={missing}, forbidden={present}")
+    online = _workflow_docker_run(
+        workflow,
+        "Resolve the selected plugin closure online",
+    )
+    offline = _workflow_docker_run(
+        workflow,
+        "Replay the selected plugin closure with no network",
+    )
+    if _option_values(online, "--network"):
+        _fail("WORKFLOW", "online Docker network must remain unrestricted")
+    if (
+        _option_values(online, "--volume").count("${repository}:/m2") != 1
+        or _option_values(offline, "--network") != ["none"]
+        or _option_values(offline, "--volume").count("${repository}:/m2:ro")
+        != 1
+        or offline.count("${RUNNER_TEMP}/offline-resolve-plugins.log") != 1
+    ):
+        _fail("WORKFLOW", "Maven Docker execution controls differ")
     if workflow.count("jobs:") != 1 or workflow.count("  validate:") != 1:
         _fail("WORKFLOW", "workflow must contain one validation job")
 

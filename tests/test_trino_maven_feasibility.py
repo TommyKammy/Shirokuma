@@ -154,6 +154,29 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
     def test_workflow_is_read_only_and_fail_closed(self) -> None:
         feasibility.audit_workflow(ROOT)
 
+    def test_workflow_binds_controls_to_offline_docker_invocation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / feasibility.WORKFLOW_PATH
+            target.parent.mkdir(parents=True)
+            workflow = (ROOT / feasibility.WORKFLOW_PATH).read_text(
+                encoding="utf-8"
+            )
+            workflow = workflow.replace(
+                "            --network none \\\n",
+                "",
+                1,
+            )
+            target.write_text(
+                workflow + "\n# unrelated --network none marker\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "WORKFLOW",
+            ):
+                feasibility.audit_workflow(root)
+
     def test_candidate_applies_only_to_the_retained_pom_baseline(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             temporary_root = Path(temporary)
@@ -252,6 +275,73 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                 ],
                 feasibility.BUILDER_INDEX_NAME,
             )
+
+    def test_finalize_rejects_the_same_log_for_both_phases(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            log = root / "resolve.log"
+            self._successful_log(log)
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "online and offline Maven logs must be distinct",
+            ):
+                feasibility.finalize_record(
+                    root / "evidence",
+                    log,
+                    log,
+                    log,
+                    log,
+                    log,
+                    log,
+                )
+
+    def test_audit_binds_logs_to_distinct_phase_filenames(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = self._finalized_evidence(Path(temporary))
+            record_path = evidence / feasibility.RECORD_NAME
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            record["execution"]["offline"]["log"] = record["execution"][
+                "online"
+            ]["log"]
+            record_path.write_text(
+                json.dumps(record, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "EVIDENCE_EXECUTION",
+            ):
+                feasibility.audit_evidence(evidence, require_archive=True)
+
+    def test_audit_binds_subject_to_official_repository(self) -> None:
+        mutations = {
+            "workflow_run": "https://evil.invalid/attacker/fork/actions/runs/123456",
+            "workflow_ref": (
+                "attacker/fork/.github/workflows/"
+                "trino-maven-remediation-feasibility.yml@refs/heads/main"
+            ),
+        }
+        for field, value in mutations.items():
+            with self.subTest(field=field):
+                with tempfile.TemporaryDirectory() as temporary:
+                    evidence = self._finalized_evidence(Path(temporary))
+                    record_path = evidence / feasibility.RECORD_NAME
+                    record = json.loads(
+                        record_path.read_text(encoding="utf-8")
+                    )
+                    record["subject"][field] = value
+                    record_path.write_text(
+                        json.dumps(record, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    with self.assertRaisesRegex(
+                        feasibility.EvidenceError,
+                        "EVIDENCE_SUBJECT",
+                    ):
+                        feasibility.audit_evidence(
+                            evidence,
+                            require_archive=True,
+                        )
 
     def test_vulnerable_coordinate_in_either_log_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
