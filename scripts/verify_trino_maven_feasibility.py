@@ -604,14 +604,21 @@ def finalize_record(
     audit_evidence(evidence, require_archive=True)
 
 
-def _verify_identity(directory: Path, identity: object) -> None:
+def _verify_identity(
+    directory: Path, identity: object, *, expected_name: str
+) -> None:
     if not isinstance(identity, dict) or set(identity) != {
         "path",
         "sha256",
         "bytes",
     }:
         _fail("EVIDENCE_IDENTITY", f"malformed identity: {identity!r}")
-    path = directory / identity["path"]
+    if identity["path"] != expected_name:
+        _fail(
+            "EVIDENCE_IDENTITY",
+            f"identity path differs: {identity['path']!r}",
+        )
+    path = directory / expected_name
     if _identity(path) != identity:
         _fail("EVIDENCE_IDENTITY", f"identity differs: {path}")
 
@@ -706,18 +713,24 @@ def _verify_toolchain_record(evidence: Path, execution: dict[str, Any]) -> None:
     toolchain = execution.get("toolchain")
     if not isinstance(toolchain, dict):
         _fail("TOOLCHAIN_RECORD", "toolchain result is missing")
-    attachment_keys = {
-        "record",
-        "builder_index_document",
-        "maven_version_output",
-        "global_settings",
+    attachment_names = {
+        "record": TOOLCHAIN_NAME,
+        "builder_index_document": BUILDER_INDEX_NAME,
+        "maven_version_output": MAVEN_VERSION_NAME,
+        "global_settings": GLOBAL_SETTINGS_NAME,
     }
-    for key in attachment_keys:
-        _verify_identity(evidence, toolchain.get(key))
+    for key, expected_name in attachment_names.items():
+        _verify_identity(
+            evidence,
+            toolchain.get(key),
+            expected_name=expected_name,
+        )
     identity = toolchain["record"]
     retained = _read_json(evidence / identity["path"])
     embedded = {
-        key: value for key, value in toolchain.items() if key not in attachment_keys
+        key: value
+        for key, value in toolchain.items()
+        if key not in attachment_names
     }
     if retained != embedded:
         _fail("TOOLCHAIN_RECORD", "retained and embedded records differ")
@@ -892,7 +905,11 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
             or log_identity.get("path") != expected_log_name
         ):
             _fail("EVIDENCE_EXECUTION", f"{name} result differs")
-        _verify_identity(evidence, log_identity)
+        _verify_identity(
+            evidence,
+            log_identity,
+            expected_name=expected_log_name,
+        )
         phase_logs[name] = log_identity
         if _vulnerable_lines(evidence / log_identity["path"]):
             _fail("VULNERABLE_COORDINATE", f"{name} log differs")
@@ -905,9 +922,17 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
         != sorted(EXPECTED_HARDENED_METADATA)
     ):
         _fail("OFFLINE_INPUT", "reproducible inputs are not retained")
-    _verify_identity(evidence, offline_inputs.get("manifest"))
+    _verify_identity(
+        evidence,
+        offline_inputs.get("manifest"),
+        expected_name=MANIFEST_NAME,
+    )
     if require_archive:
-        _verify_identity(evidence, offline_inputs.get("archive"))
+        _verify_identity(
+            evidence,
+            offline_inputs.get("archive"),
+            expected_name=ARCHIVE_NAME,
+        )
     manifest = _read_json(evidence / offline_inputs["manifest"]["path"])
     if (
         manifest.get("schema_version") != EXPECTED_MANIFEST_SCHEMA_VERSION

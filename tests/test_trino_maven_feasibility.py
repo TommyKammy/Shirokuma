@@ -466,6 +466,92 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                             require_archive=True,
                         )
 
+    def test_audit_confines_all_identity_paths_to_evidence(self) -> None:
+        cases = (
+            (
+                "online_log",
+                lambda record: record["execution"]["online"]["log"],
+                feasibility.ONLINE_LOG_NAME,
+                False,
+            ),
+            (
+                "offline_log",
+                lambda record: record["execution"]["offline"]["log"],
+                feasibility.OFFLINE_LOG_NAME,
+                False,
+            ),
+            (
+                "toolchain",
+                lambda record: record["execution"]["toolchain"]["record"],
+                feasibility.TOOLCHAIN_NAME,
+                False,
+            ),
+            (
+                "builder_index",
+                lambda record: record["execution"]["toolchain"][
+                    "builder_index_document"
+                ],
+                feasibility.BUILDER_INDEX_NAME,
+                False,
+            ),
+            (
+                "maven_version",
+                lambda record: record["execution"]["toolchain"][
+                    "maven_version_output"
+                ],
+                feasibility.MAVEN_VERSION_NAME,
+                False,
+            ),
+            (
+                "global_settings",
+                lambda record: record["execution"]["toolchain"][
+                    "global_settings"
+                ],
+                feasibility.GLOBAL_SETTINGS_NAME,
+                False,
+            ),
+            (
+                "manifest",
+                lambda record: record["offline_inputs"]["manifest"],
+                feasibility.MANIFEST_NAME,
+                False,
+            ),
+            (
+                "archive_absolute",
+                lambda record: record["offline_inputs"]["archive"],
+                feasibility.ARCHIVE_NAME,
+                True,
+            ),
+        )
+        for label, select, expected_name, absolute in cases:
+            with self.subTest(label=label):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    evidence = self._finalized_evidence(root)
+                    outside = root / f"outside-{expected_name}"
+                    outside.write_bytes((evidence / expected_name).read_bytes())
+                    record_path = evidence / feasibility.RECORD_NAME
+                    record = json.loads(
+                        record_path.read_text(encoding="utf-8")
+                    )
+                    select(record)["path"] = (
+                        str(outside.resolve())
+                        if absolute
+                        else f"../{outside.name}"
+                    )
+                    record_path.write_text(
+                        json.dumps(record, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    with self.assertRaisesRegex(
+                        feasibility.EvidenceError,
+                        "EVIDENCE_(?:IDENTITY|EXECUTION)",
+                    ):
+                        feasibility.audit_evidence(
+                            evidence,
+                            require_archive=True,
+                        )
+
     def test_finalize_rejects_the_same_log_for_both_phases(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
