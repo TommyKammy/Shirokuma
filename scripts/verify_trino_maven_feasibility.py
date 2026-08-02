@@ -41,6 +41,9 @@ EXPECTED_BUILDER = (
     "docker.io/library/maven@sha256:"
     "7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c"
 )
+EXPECTED_BUILDER_INDEX_SHA256 = (
+    "7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c"
+)
 EXPECTED_BUILDER_ARM64_MANIFEST = (
     "sha256:5476bfca9d0a6485b7161f6863123f7e6822336de4177273b47b5ec38ffd573a"
 )
@@ -109,11 +112,26 @@ EXPECTED_OFFLINE_COMMAND = (
     "--file /workspace/pom.xml "
     f"-pl '{EXPECTED_SELECTED_REACTOR}' -am {EXPECTED_GOAL}"
 )
-EXPECTED_REPLACEMENT_INPUTS = (
-    "org/apache/velocity/velocity-engine-core/2.4.1/"
-    "velocity-engine-core-2.4.1.jar",
-    "org/codehaus/plexus/plexus-utils/4.0.3/plexus-utils-4.0.3.jar",
-)
+EXPECTED_REPLACEMENT_METADATA = {
+    (
+        "org/apache/velocity/velocity-engine-core/2.4.1/"
+        "velocity-engine-core-2.4.1.jar"
+    ): {
+        "mode": "0644",
+        "sha256": (
+            "1c19157d1171d560088e485be97c93a7a2f7e9f56e517f0a30273c5c39df6231"
+        ),
+        "bytes": 515658,
+    },
+    "org/codehaus/plexus/plexus-utils/4.0.3/plexus-utils-4.0.3.jar": {
+        "mode": "0644",
+        "sha256": (
+            "421ff6ed146c53a9d4eaade8f629b52b12af7187101f1bd06c2c64e904019f3c"
+        ),
+        "bytes": 193088,
+    },
+}
+EXPECTED_REPLACEMENT_INPUTS = tuple(EXPECTED_REPLACEMENT_METADATA)
 HARDENED_SCM_POM_SOURCE = Path(
     "bootstrap/trino/v483/maven-scm-provider-gitexe-2.2.1-hardened.pom"
 )
@@ -400,8 +418,19 @@ def _repository_entries(repository: Path) -> list[dict[str, Any]]:
     missing = sorted(set(EXPECTED_REPLACEMENT_INPUTS) - observed)
     if missing:
         _fail("OFFLINE_INPUT", f"replacement inputs missing: {missing}")
+    _verify_replacement_metadata(entries)
     _verify_hardened_metadata(entries)
     return entries
+
+
+def _verify_replacement_metadata(entries: list[dict[str, Any]]) -> None:
+    observed = {entry["path"]: entry for entry in entries}
+    for path, expected in EXPECTED_REPLACEMENT_METADATA.items():
+        entry = observed.get(path)
+        if entry is None or {
+            key: entry.get(key) for key in ("mode", "sha256", "bytes")
+        } != expected:
+            _fail("REPLACEMENT_INPUT", f"identity differs: {path}")
 
 
 def _verify_hardened_metadata(entries: list[dict[str, Any]]) -> None:
@@ -762,6 +791,7 @@ def _manifest_files(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     vulnerable = sorted(set(VULNERABLE_INPUTS) & observed)
     if vulnerable:
         _fail("VULNERABLE_INPUT", f"blocked inputs retained: {vulnerable}")
+    _verify_replacement_metadata(files)
     _verify_hardened_metadata(files)
     return files
 
@@ -936,6 +966,8 @@ def _verify_toolchain_record(evidence: Path, execution: dict[str, Any]) -> None:
         or retained.get("native_execution") is not True
         or retained.get("qemu_binfmt_handlers") != []
         or retained.get("builder_index") != EXPECTED_BUILDER
+        or retained.get("builder_index_document_sha256")
+        != EXPECTED_BUILDER_INDEX_SHA256
         or retained.get("builder_arm64_manifest")
         != EXPECTED_BUILDER_ARM64_MANIFEST
         or any(

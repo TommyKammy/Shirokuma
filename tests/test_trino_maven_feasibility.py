@@ -19,12 +19,61 @@ import verify_trino_maven_feasibility as feasibility  # noqa: E402
 
 
 class TrinoMavenFeasibilityTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.replacement_payloads = {
+            path: f"reviewed fixture: {path}\n".encode("utf-8")
+            for path in feasibility.EXPECTED_REPLACEMENT_INPUTS
+        }
+        replacement_metadata = {
+            path: {
+                "mode": "0644",
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "bytes": len(payload),
+            }
+            for path, payload in self.replacement_payloads.items()
+        }
+        self.builder_index_text = (
+            json.dumps(
+                {
+                    "schemaVersion": 2,
+                    "manifests": [
+                        {
+                            "digest": feasibility.EXPECTED_BUILDER_ARM64_MANIFEST,
+                            "platform": {
+                                "os": "linux",
+                                "architecture": "arm64",
+                            },
+                        }
+                    ],
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        patches = (
+            mock.patch.object(
+                feasibility,
+                "EXPECTED_REPLACEMENT_METADATA",
+                replacement_metadata,
+            ),
+            mock.patch.object(
+                feasibility,
+                "EXPECTED_BUILDER_INDEX_SHA256",
+                hashlib.sha256(
+                    self.builder_index_text.encode("utf-8")
+                ).hexdigest(),
+            ),
+        )
+        for patcher in patches:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     def _repository(self, root: Path) -> Path:
         repository = root / "repository"
         for relative in feasibility.EXPECTED_REPLACEMENT_INPUTS:
             target = repository / relative
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(relative.encode("utf-8"))
+            target.write_bytes(self.replacement_payloads[relative])
         metadata = repository / "org/example/demo/1.0/demo-1.0.pom"
         metadata.parent.mkdir(parents=True)
         metadata.write_text("<project/>\n", encoding="utf-8")
@@ -65,25 +114,7 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
         self._successful_log(online)
         self._successful_log(offline)
         builder_index = root / "builder-index-source.json"
-        builder_index.write_text(
-            json.dumps(
-                {
-                    "schemaVersion": 2,
-                    "manifests": [
-                        {
-                            "digest": feasibility.EXPECTED_BUILDER_ARM64_MANIFEST,
-                            "platform": {
-                                "os": "linux",
-                                "architecture": "arm64",
-                            },
-                        }
-                    ],
-                },
-                sort_keys=True,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
+        builder_index.write_text(self.builder_index_text, encoding="utf-8")
         maven_version = root / "maven-version-source.txt"
         maven_version.write_text(
             "Apache Maven 3.9.16\n"
@@ -480,6 +511,18 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                 [record["path"] for record in manifest["files"]],
                 sorted(record["path"] for record in manifest["files"]),
             )
+
+    def test_capture_rejects_unreviewed_replacement_jar_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = self._repository(root)
+            replacement = repository / feasibility.EXPECTED_REPLACEMENT_INPUTS[0]
+            replacement.write_bytes(replacement.read_bytes() + b"tamper")
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "REPLACEMENT_INPUT",
+            ):
+                feasibility.capture_repository(repository, root / "evidence")
 
     def test_archive_audit_enforces_resource_bounds(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -889,6 +932,44 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             record["execution"]["toolchain"]["record"] = feasibility._identity(
                 toolchain_path
             )
+            record_path.write_text(
+                json.dumps(record, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "TOOLCHAIN_RECORD",
+            ):
+                feasibility.audit_evidence(evidence, require_archive=True)
+
+    def test_toolchain_index_document_is_bound_to_builder_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = self._finalized_evidence(Path(temporary))
+            index_path = evidence / feasibility.BUILDER_INDEX_NAME
+            index = json.loads(index_path.read_text(encoding="utf-8"))
+            index["attacker_annotation"] = "different index"
+            index_path.write_text(
+                json.dumps(index, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            index_sha256 = feasibility._sha256(index_path)
+
+            toolchain_path = evidence / feasibility.TOOLCHAIN_NAME
+            toolchain = json.loads(toolchain_path.read_text(encoding="utf-8"))
+            toolchain["builder_index_document_sha256"] = index_sha256
+            toolchain_path.write_text(
+                json.dumps(toolchain, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            record_path = evidence / feasibility.RECORD_NAME
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            embedded = record["execution"]["toolchain"]
+            embedded["builder_index_document_sha256"] = index_sha256
+            embedded["builder_index_document"] = feasibility._identity(
+                index_path
+            )
+            embedded["record"] = feasibility._identity(toolchain_path)
             record_path.write_text(
                 json.dumps(record, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8",
