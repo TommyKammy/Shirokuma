@@ -28,14 +28,14 @@ CANDIDATE_PATCH_PATH = Path(
     "run-30693677356-proposed-source-overlay.patch"
 )
 EXPECTED_CANDIDATE_PATCH_SHA256 = (
-    "4844e5913592420688046ef04244f771cdc6063978c0e09795692056f2b39314"
+    "731e76f296a725d34ea9e226a1815782168cae3890424e69f76a05530afc15be"
 )
-EXPECTED_CANDIDATE_PATCH_BYTES = 8230
+EXPECTED_CANDIDATE_PATCH_BYTES = 8163
 EXPECTED_BASELINE_SHA256 = (
     "8d342215a3c748f7965f0a82e847cab13587b94171d9d1422922b665475109c1"
 )
 EXPECTED_POSTIMAGE_SHA256 = (
-    "7424b41c8c5ec8139e2b6a1fd836f6cb31d53bc5cc7a6362e0a183724bc242a7"
+    "871c6b21cf9fc70c455d21b64d24dd4501a8b5943242418edc2b2f5cfe14fab8"
 )
 EXPECTED_BUILDER = (
     "docker.io/library/maven@sha256:"
@@ -75,6 +75,68 @@ EXPECTED_REPLACEMENT_INPUTS = (
     "velocity-engine-core-2.4.1.jar",
     "org/codehaus/plexus/plexus-utils/4.0.3/plexus-utils-4.0.3.jar",
 )
+HARDENED_SCM_POM_SOURCE = Path(
+    "bootstrap/trino/v483/maven-scm-provider-gitexe-2.2.1-hardened.pom"
+)
+SCM_POM_PATH = (
+    "org/apache/maven/scm/maven-scm-provider-gitexe/2.2.1/"
+    "maven-scm-provider-gitexe-2.2.1.pom"
+)
+SCM_POM_CHECKSUM_PATH = f"{SCM_POM_PATH}.sha1"
+SCM_POM_PREIMAGE_SHA256 = (
+    "81521b7b72ca795c95ef5f377e410e7d2644d2ffbce03e34eeea73246847be08"
+)
+SCM_POM_PREIMAGE_BYTES = 2689
+SCM_POM_PREIMAGE_SHA1 = b"84e3adebd5bcda593e6b9bfd7bb5e3b3d9d17796"
+SCM_POM_POSTIMAGE_SHA256 = (
+    "0652487bb3cd532ce6ba9fd841c7f2346c1192b3271996a06ddd50f3052186a6"
+)
+SCM_POM_POSTIMAGE_BYTES = 2720
+SCM_POM_POSTIMAGE_SHA1 = b"a8630355e52d9c81dbd6ec117820bb58b6355f4a"
+HARDENED_SCM_MANAGER_POM_SOURCE = Path(
+    "bootstrap/trino/v483/maven-scm-manager-plexus-2.2.1-hardened.pom"
+)
+SCM_MANAGER_POM_PATH = (
+    "org/apache/maven/scm/maven-scm-manager-plexus/2.2.1/"
+    "maven-scm-manager-plexus-2.2.1.pom"
+)
+SCM_MANAGER_POM_CHECKSUM_PATH = f"{SCM_MANAGER_POM_PATH}.sha1"
+SCM_MANAGER_POM_PREIMAGE_SHA256 = (
+    "7e1458bc8212c430c269c3d59063640b2164e6750f23539e6d6ca89d7207b3c5"
+)
+SCM_MANAGER_POM_PREIMAGE_BYTES = 1802
+SCM_MANAGER_POM_PREIMAGE_SHA1 = b"7ce2798686f27b4d5056ca967625002fe24fbfb8"
+SCM_MANAGER_POM_POSTIMAGE_SHA256 = (
+    "4e7b25d9f3dfd21b874593edf794270888c8ef13bc29394b0da1c1cbefa41c43"
+)
+SCM_MANAGER_POM_POSTIMAGE_BYTES = 1957
+SCM_MANAGER_POM_POSTIMAGE_SHA1 = b"eb1b7ab169dc923806b0040631a45dc83d0b83e8"
+EXPECTED_HARDENED_METADATA = {
+    SCM_POM_PATH: {
+        "mode": "0644",
+        "sha256": SCM_POM_POSTIMAGE_SHA256,
+        "bytes": SCM_POM_POSTIMAGE_BYTES,
+    },
+    SCM_POM_CHECKSUM_PATH: {
+        "mode": "0644",
+        "sha256": (
+            "a9a85b2193053267f68dfacb62896caa532afe49bafa4540134df7a6abed5beb"
+        ),
+        "bytes": 40,
+    },
+    SCM_MANAGER_POM_PATH: {
+        "mode": "0644",
+        "sha256": SCM_MANAGER_POM_POSTIMAGE_SHA256,
+        "bytes": SCM_MANAGER_POM_POSTIMAGE_BYTES,
+    },
+    SCM_MANAGER_POM_CHECKSUM_PATH: {
+        "mode": "0644",
+        "sha256": (
+            "8f04dcac652c18121420956ca62c7efb0166eefaa24400129d2a01433133de63"
+        ),
+        "bytes": 40,
+    },
+}
 VULNERABLE_COORDINATES = (
     re.compile(r"commons-io:commons-io:(?:jar:)?2\.8\.0(?:[:\s]|$)"),
     re.compile(
@@ -220,13 +282,87 @@ def _repository_entries(repository: Path) -> list[dict[str, Any]]:
     missing = sorted(set(EXPECTED_REPLACEMENT_INPUTS) - observed)
     if missing:
         _fail("OFFLINE_INPUT", f"replacement inputs missing: {missing}")
+    _verify_hardened_metadata(entries)
     return entries
 
 
-def prune_vulnerable_inputs(repository: Path) -> None:
+def _verify_hardened_metadata(entries: list[dict[str, Any]]) -> None:
+    observed = {entry["path"]: entry for entry in entries}
+    for path, expected in EXPECTED_HARDENED_METADATA.items():
+        entry = observed.get(path)
+        if entry is None or {
+            key: entry.get(key) for key in ("mode", "sha256", "bytes")
+        } != expected:
+            _fail("HARDENED_METADATA", f"identity differs: {path}")
+
+
+def prune_vulnerable_inputs(repository: Path, root: Path = Path(".")) -> None:
     repository = repository.resolve()
+    root = root.resolve()
     if not repository.is_dir():
         _fail("OFFLINE_INPUT", f"repository not found: {repository}")
+    remediations = (
+        (
+            HARDENED_SCM_POM_SOURCE,
+            SCM_POM_PATH,
+            SCM_POM_CHECKSUM_PATH,
+            SCM_POM_PREIMAGE_SHA256,
+            SCM_POM_PREIMAGE_BYTES,
+            SCM_POM_PREIMAGE_SHA1,
+            SCM_POM_POSTIMAGE_SHA256,
+            SCM_POM_POSTIMAGE_BYTES,
+            SCM_POM_POSTIMAGE_SHA1,
+        ),
+        (
+            HARDENED_SCM_MANAGER_POM_SOURCE,
+            SCM_MANAGER_POM_PATH,
+            SCM_MANAGER_POM_CHECKSUM_PATH,
+            SCM_MANAGER_POM_PREIMAGE_SHA256,
+            SCM_MANAGER_POM_PREIMAGE_BYTES,
+            SCM_MANAGER_POM_PREIMAGE_SHA1,
+            SCM_MANAGER_POM_POSTIMAGE_SHA256,
+            SCM_MANAGER_POM_POSTIMAGE_BYTES,
+            SCM_MANAGER_POM_POSTIMAGE_SHA1,
+        ),
+    )
+    for (
+        source_path,
+        pom_path,
+        checksum_path,
+        preimage_sha256,
+        preimage_bytes,
+        preimage_sha1,
+        postimage_sha256,
+        postimage_bytes,
+        postimage_sha1,
+    ) in remediations:
+        reviewed = root / source_path
+        target_pom = repository / pom_path
+        target_checksum = repository / checksum_path
+        files = (reviewed, target_pom, target_checksum)
+        if any(
+            path.is_symlink()
+            or not path.is_file()
+            or path.stat().st_nlink != 1
+            for path in files
+        ):
+            _fail("HARDENED_METADATA", f"unsafe remediation input: {pom_path}")
+        if (
+            _sha256(reviewed) != postimage_sha256
+            or reviewed.stat().st_size != postimage_bytes
+            or _sha256(target_pom) != preimage_sha256
+            or target_pom.stat().st_size != preimage_bytes
+            or target_checksum.read_bytes() != preimage_sha1
+        ):
+            _fail("HARDENED_METADATA", f"preimage differs: {pom_path}")
+        target_pom.write_bytes(reviewed.read_bytes())
+        target_checksum.write_bytes(postimage_sha1)
+        if (
+            _sha256(target_pom) != postimage_sha256
+            or target_pom.stat().st_size != postimage_bytes
+            or target_checksum.read_bytes() != postimage_sha1
+        ):
+            _fail("HARDENED_METADATA", f"postimage differs: {pom_path}")
     removed: list[str] = []
     for relative in VULNERABLE_INPUTS:
         target = repository / relative
@@ -239,7 +375,15 @@ def prune_vulnerable_inputs(repository: Path) -> None:
             _fail("VULNERABLE_INPUT", f"unsafe blocked input: {relative}")
         target.unlink()
         removed.append(relative)
-    print(json.dumps({"removed_vulnerable_inputs": removed}, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "hardened_metadata": sorted(EXPECTED_HARDENED_METADATA),
+                "removed_vulnerable_inputs": removed,
+            },
+            sort_keys=True,
+        )
+    )
 
 
 def _write_archive(
@@ -435,6 +579,7 @@ def finalize_record(
             "file_count": manifest["file_count"],
             "total_bytes": manifest["total_bytes"],
             "replacement_inputs": list(EXPECTED_REPLACEMENT_INPUTS),
+            "hardened_metadata": sorted(EXPECTED_HARDENED_METADATA),
         },
         "result": {
             "status": "passed",
@@ -492,6 +637,7 @@ def _manifest_files(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     vulnerable = sorted(set(VULNERABLE_INPUTS) & observed)
     if vulnerable:
         _fail("VULNERABLE_INPUT", f"blocked inputs retained: {vulnerable}")
+    _verify_hardened_metadata(files)
     return files
 
 
@@ -742,7 +888,11 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
     if phase_logs["online"] == phase_logs["offline"]:
         _fail("EVIDENCE_EXECUTION", "online and offline log identities coincide")
     offline_inputs = record.get("offline_inputs", {})
-    if offline_inputs.get("reproducible_inputs_retained") is not True:
+    if (
+        offline_inputs.get("reproducible_inputs_retained") is not True
+        or offline_inputs.get("hardened_metadata")
+        != sorted(EXPECTED_HARDENED_METADATA)
+    ):
         _fail("OFFLINE_INPUT", "reproducible inputs are not retained")
     _verify_identity(evidence, offline_inputs.get("manifest"))
     if require_archive:
@@ -889,6 +1039,7 @@ def main(argv: list[str] | None = None) -> int:
     capture.add_argument("--evidence", type=Path, required=True)
     prune = commands.add_parser("prune-vulnerable-inputs")
     prune.add_argument("--repository", type=Path, required=True)
+    prune.add_argument("--root", type=Path, default=Path("."))
     finalize = commands.add_parser("finalize-record")
     finalize.add_argument("--evidence", type=Path, required=True)
     finalize.add_argument("--online-log", type=Path, required=True)
@@ -907,7 +1058,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "apply-candidate":
             apply_candidate(args.root, args.checkout)
         elif args.command == "prune-vulnerable-inputs":
-            prune_vulnerable_inputs(args.repository)
+            prune_vulnerable_inputs(args.repository, args.root)
         elif args.command == "capture-repository":
             capture_repository(args.repository, args.evidence)
         elif args.command == "finalize-record":

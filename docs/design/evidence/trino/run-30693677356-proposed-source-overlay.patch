@@ -1,9 +1,7 @@
 diff --git a/pom.xml b/pom.xml
 --- a/pom.xml
 +++ b/pom.xml
-@@ -2365,0 +2366 @@
-+        <extensions combine.self="override"/>
-@@ -2594,0 +2596,149 @@
+@@ -2594,0 +2595,149 @@
 +                <plugin>
 +                    <groupId>org.revapi</groupId>
 +                    <artifactId>revapi-maven-plugin</artifactId>
@@ -153,7 +151,7 @@ diff --git a/pom.xml b/pom.xml
 +                    </dependencies>
 +                </plugin>
 +
-@@ -3134,20 +3284,0 @@
+@@ -3134,20 +3283,0 @@
 -                    <plugin>
 -                        <groupId>io.github.gitflow-incremental-builder</groupId>
 -                        <artifactId>gitflow-incremental-builder</artifactId>

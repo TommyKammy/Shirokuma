@@ -80,6 +80,14 @@ BLOCKER_BASELINE_PATH = Path(
     "docs/design/evidence/trino/"
     "run-30693677356-post-adr-0027-pom.xml.gz"
 )
+BLOCKER_HARDENED_SCM_POM_PATH = Path(
+    "bootstrap/trino/v483/"
+    "maven-scm-provider-gitexe-2.2.1-hardened.pom"
+)
+BLOCKER_HARDENED_SCM_MANAGER_POM_PATH = Path(
+    "bootstrap/trino/v483/"
+    "maven-scm-manager-plexus-2.2.1-hardened.pom"
+)
 BLOCKER_FEASIBILITY_RECORD_PATH = Path(
     "docs/design/evidence/trino/"
     "run-30724152120-maven-feasibility-validation.json"
@@ -191,16 +199,16 @@ EXPECTED_BLOCKER_BASELINE = {
 EXPECTED_BLOCKER_CANDIDATE = {
     "source_path": "pom.xml",
     "postimage_sha256": (
-        "7424b41c8c5ec8139e2b6a1fd836f6cb31d53bc5cc7a6362e0a183724bc242a7"
+        "871c6b21cf9fc70c455d21b64d24dd4501a8b5943242418edc2b2f5cfe14fab8"
     ),
     "patch_path": (
         "docs/design/evidence/trino/"
         "run-30693677356-proposed-source-overlay.patch"
     ),
     "patch_sha256": (
-        "4844e5913592420688046ef04244f771cdc6063978c0e09795692056f2b39314"
+        "731e76f296a725d34ea9e226a1815782168cae3890424e69f76a05530afc15be"
     ),
-    "patch_bytes": 8230,
+    "patch_bytes": 8163,
     "application": "git apply --unidiff-zero --whitespace=error-all",
     "changed_paths": ["pom.xml"],
     "dependency_replacements": {
@@ -211,8 +219,47 @@ EXPECTED_BLOCKER_CANDIDATE = {
         "io.github.gitflow-incremental-builder:gitflow-incremental-builder": (
             "removed_for_candidate"
         ),
-        "inherited_build_extensions": "cleared_for_candidate",
     },
+    "repository_metadata_remediation": [
+        {
+            "reviewed_source": (
+                "bootstrap/trino/v483/"
+                "maven-scm-provider-gitexe-2.2.1-hardened.pom"
+            ),
+            "target_path": (
+                "org/apache/maven/scm/maven-scm-provider-gitexe/2.2.1/"
+                "maven-scm-provider-gitexe-2.2.1.pom"
+            ),
+            "preimage_sha256": (
+                "81521b7b72ca795c95ef5f377e410e7d2644d2ffbce03e34eeea73246847be08"
+            ),
+            "preimage_bytes": 2689,
+            "postimage_sha256": (
+                "0652487bb3cd532ce6ba9fd841c7f2346c1192b3271996a06ddd50f3052186a6"
+            ),
+            "postimage_bytes": 2720,
+            "postimage_sha1": "a8630355e52d9c81dbd6ec117820bb58b6355f4a",
+        },
+        {
+            "reviewed_source": (
+                "bootstrap/trino/v483/"
+                "maven-scm-manager-plexus-2.2.1-hardened.pom"
+            ),
+            "target_path": (
+                "org/apache/maven/scm/maven-scm-manager-plexus/2.2.1/"
+                "maven-scm-manager-plexus-2.2.1.pom"
+            ),
+            "preimage_sha256": (
+                "7e1458bc8212c430c269c3d59063640b2164e6750f23539e6d6ca89d7207b3c5"
+            ),
+            "preimage_bytes": 1802,
+            "postimage_sha256": (
+                "4e7b25d9f3dfd21b874593edf794270888c8ef13bc29394b0da1c1cbefa41c43"
+            ),
+            "postimage_bytes": 1957,
+            "postimage_sha1": "eb1b7ab169dc923806b0040631a45dc83d0b83e8",
+        },
+    ],
 }
 EXPECTED_BLOCKER_CLASSIFICATION = {
     "gate_status": "blocked",
@@ -4236,6 +4283,8 @@ def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
         DISTRIBUTION_REMEDIATION_ADR_PATH,
         BLOCKER_ADR_PATH,
         BLOCKER_CLASSIFICATION_PATH,
+        BLOCKER_HARDENED_SCM_POM_PATH,
+        BLOCKER_HARDENED_SCM_MANAGER_POM_PATH,
     }
     policy_files = contract.get("policy_files")
     if not isinstance(policy_files, list):

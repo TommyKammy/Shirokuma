@@ -73,18 +73,25 @@ ADR-0027 overlay:
   `dc5cfc5cd0ef38f2960926b364c32f476c1c94e949e0fa43711f17d951eb9b75`
 - retained gzip bytes: `13531`
 - candidate `pom.xml` SHA-256:
-  `7424b41c8c5ec8139e2b6a1fd836f6cb31d53bc5cc7a6362e0a183724bc242a7`
+  `871c6b21cf9fc70c455d21b64d24dd4501a8b5943242418edc2b2f5cfe14fab8`
 - candidate patch SHA-256:
-  `4844e5913592420688046ef04244f771cdc6063978c0e09795692056f2b39314`
-- candidate patch bytes: `8230`
+  `731e76f296a725d34ea9e226a1815782168cae3890424e69f76a05530afc15be`
+- candidate patch bytes: `8163`
 
 The candidate adds Velocity Engine Core 2.4.1 and Plexus Utils 4.0.3 in the
-affected inherited Maven plugin realms, clears the parent's inherited build
-extensions, and removes the Gitflow Incremental Builder plugin declaration from
-its optional incremental-build profile. This excludes the inherited Maven SCM
-Git provider that requires Plexus Utils 4.0.2, while the candidate exercises the
-selected reactor through Maven's normal lifecycle. Run `30724152120` is
-superseded:
+affected inherited Maven plugin realms and removes the Gitflow Incremental
+Builder plugin declaration from its optional incremental-build profile. The
+parent still contributes Maven SCM build extensions, so the feasibility
+repository replaces only the official `maven-scm-provider-gitexe-2.2.1.pom`
+and `maven-scm-manager-plexus-2.2.1.pom` preimages with reviewed metadata
+postimages. Their respective SHA-256 transitions are
+`81521b7b72ca795c95ef5f377e410e7d2644d2ffbce03e34eeea73246847be08`
+to `0652487bb3cd532ce6ba9fd841c7f2346c1192b3271996a06ddd50f3052186a6`
+and `7e1458bc8212c430c269c3d59063640b2164e6750f23539e6d6ca89d7207b3c5`
+to `4e7b25d9f3dfd21b874593edf794270888c8ef13bc29394b0da1c1cbefa41c43`.
+The sole semantic change in each POM pins Plexus Utils to 4.0.3; matching SHA-1
+sidecars and all four identities are manifest-audited.
+Run `30724152120` is superseded:
 hardened review found that its retained repository still contained
 `plexus-utils-4.0.2.jar`, and its verifier did not bind the archive contents or
 retained toolchain inputs. It cannot support authorization. Fresh native arm64

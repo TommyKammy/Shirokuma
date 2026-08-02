@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 import os
 import subprocess
@@ -29,6 +30,22 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
         metadata.write_text("<project/>\n", encoding="utf-8")
         (repository / "org.example.index").write_text(
             "prefix ordering sentinel\n", encoding="utf-8"
+        )
+        scm_pom = repository / feasibility.SCM_POM_PATH
+        scm_pom.parent.mkdir(parents=True, exist_ok=True)
+        scm_pom.write_bytes(
+            (ROOT / feasibility.HARDENED_SCM_POM_SOURCE).read_bytes()
+        )
+        (repository / feasibility.SCM_POM_CHECKSUM_PATH).write_bytes(
+            feasibility.SCM_POM_POSTIMAGE_SHA1
+        )
+        manager_pom = repository / feasibility.SCM_MANAGER_POM_PATH
+        manager_pom.parent.mkdir(parents=True, exist_ok=True)
+        manager_pom.write_bytes(
+            (ROOT / feasibility.HARDENED_SCM_MANAGER_POM_SOURCE).read_bytes()
+        )
+        (repository / feasibility.SCM_MANAGER_POM_CHECKSUM_PATH).write_bytes(
+            feasibility.SCM_MANAGER_POM_POSTIMAGE_SHA1
         )
         return repository
 
@@ -213,7 +230,6 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                 feasibility.EXPECTED_POSTIMAGE_SHA256,
             )
             candidate = (checkout / "pom.xml").read_text(encoding="utf-8")
-            self.assertIn('<extensions combine.self="override"/>', candidate)
             self.assertNotIn(
                 "<artifactId>gitflow-incremental-builder</artifactId>",
                 candidate,
@@ -248,7 +264,7 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             manifest = json.loads(
                 (first / feasibility.MANIFEST_NAME).read_text(encoding="utf-8")
             )
-            self.assertEqual(manifest["file_count"], 4)
+            self.assertEqual(manifest["file_count"], 8)
             self.assertEqual(
                 [record["path"] for record in manifest["files"]],
                 sorted(record["path"] for record in manifest["files"]),
@@ -389,6 +405,44 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             repository = self._repository(root)
+            hardened = (
+                ROOT / feasibility.HARDENED_SCM_POM_SOURCE
+            ).read_bytes()
+            preimage = hardened.replace(
+                b"      <version>4.0.3</version>\n",
+                b"",
+                1,
+            )
+            self.assertEqual(
+                hashlib.sha256(preimage).hexdigest(),
+                feasibility.SCM_POM_PREIMAGE_SHA256,
+            )
+            (repository / feasibility.SCM_POM_PATH).write_bytes(preimage)
+            (repository / feasibility.SCM_POM_CHECKSUM_PATH).write_bytes(
+                feasibility.SCM_POM_PREIMAGE_SHA1
+            )
+            manager_hardened = (
+                ROOT / feasibility.HARDENED_SCM_MANAGER_POM_SOURCE
+            ).read_bytes()
+            manager_preimage = manager_hardened.replace(
+                b"    <dependency>\n"
+                b"      <groupId>org.codehaus.plexus</groupId>\n"
+                b"      <artifactId>plexus-utils</artifactId>\n"
+                b"      <version>4.0.3</version>\n"
+                b"    </dependency>\n",
+                b"",
+                1,
+            )
+            self.assertEqual(
+                hashlib.sha256(manager_preimage).hexdigest(),
+                feasibility.SCM_MANAGER_POM_PREIMAGE_SHA256,
+            )
+            (repository / feasibility.SCM_MANAGER_POM_PATH).write_bytes(
+                manager_preimage
+            )
+            (
+                repository / feasibility.SCM_MANAGER_POM_CHECKSUM_PATH
+            ).write_bytes(feasibility.SCM_MANAGER_POM_PREIMAGE_SHA1)
             for relative in feasibility.VULNERABLE_INPUTS:
                 vulnerable = repository / relative
                 vulnerable.parent.mkdir(parents=True, exist_ok=True)
@@ -396,13 +450,17 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             sentinel = repository / "org/example/keep/1.0/keep-1.0.jar"
             sentinel.parent.mkdir(parents=True, exist_ok=True)
             sentinel.write_bytes(b"keep")
-            feasibility.prune_vulnerable_inputs(repository)
+            feasibility.prune_vulnerable_inputs(repository, ROOT)
             self.assertTrue(sentinel.is_file())
             self.assertFalse(
                 any(
                     (repository / relative).exists()
                     for relative in feasibility.VULNERABLE_INPUTS
                 )
+            )
+            self.assertEqual(
+                feasibility._sha256(repository / feasibility.SCM_POM_PATH),
+                feasibility.SCM_POM_POSTIMAGE_SHA256,
             )
             feasibility.capture_repository(repository, root / "evidence")
 

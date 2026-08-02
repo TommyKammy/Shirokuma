@@ -3375,6 +3375,14 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "bootstrap/trino/v483/admission.json",
                     "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
                     (
+                        "bootstrap/trino/v483/"
+                        "maven-scm-manager-plexus-2.2.1-hardened.pom"
+                    ),
+                    (
+                        "bootstrap/trino/v483/"
+                        "maven-scm-provider-gitexe-2.2.1-hardened.pom"
+                    ),
+                    (
                         "bootstrap/trino/v483/patches/"
                         "0001-shirokuma-web-ui-security.patch"
                     ),
