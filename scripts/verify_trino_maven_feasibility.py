@@ -212,6 +212,25 @@ def _repository_entries(repository: Path) -> list[dict[str, Any]]:
     return entries
 
 
+def prune_vulnerable_inputs(repository: Path) -> None:
+    repository = repository.resolve()
+    if not repository.is_dir():
+        _fail("OFFLINE_INPUT", f"repository not found: {repository}")
+    removed: list[str] = []
+    for relative in VULNERABLE_INPUTS:
+        target = repository / relative
+        if target.is_symlink():
+            _fail("VULNERABLE_INPUT", f"unsafe blocked input: {relative}")
+        if not target.exists():
+            continue
+        status = target.stat()
+        if not stat.S_ISREG(status.st_mode) or status.st_nlink != 1:
+            _fail("VULNERABLE_INPUT", f"unsafe blocked input: {relative}")
+        target.unlink()
+        removed.append(relative)
+    print(json.dumps({"removed_vulnerable_inputs": removed}, sort_keys=True))
+
+
 def _write_archive(
     repository: Path,
     archive: Path,
@@ -664,6 +683,7 @@ def audit_workflow(root: Path) -> None:
         "retention-days: 30",
         "include-hidden-files: false",
         "verify_trino_maven_feasibility.py capture-repository",
+        "verify_trino_maven_feasibility.py prune-vulnerable-inputs",
         "verify_trino_maven_feasibility.py finalize-record",
         "verify_trino_maven_feasibility.py audit-evidence",
         "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
@@ -695,6 +715,8 @@ def main(argv: list[str] | None = None) -> int:
     capture = commands.add_parser("capture-repository")
     capture.add_argument("--repository", type=Path, required=True)
     capture.add_argument("--evidence", type=Path, required=True)
+    prune = commands.add_parser("prune-vulnerable-inputs")
+    prune.add_argument("--repository", type=Path, required=True)
     finalize = commands.add_parser("finalize-record")
     finalize.add_argument("--evidence", type=Path, required=True)
     finalize.add_argument("--online-log", type=Path, required=True)
@@ -709,6 +731,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "apply-candidate":
             apply_candidate(args.root, args.checkout)
+        elif args.command == "prune-vulnerable-inputs":
+            prune_vulnerable_inputs(args.repository)
         elif args.command == "capture-repository":
             capture_repository(args.repository, args.evidence)
         elif args.command == "finalize-record":

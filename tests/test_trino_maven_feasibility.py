@@ -216,6 +216,27 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                             root / "evidence",
                         )
 
+    def test_prune_removes_only_classified_jars_before_capture(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = self._repository(root)
+            for relative in feasibility.VULNERABLE_INPUTS:
+                vulnerable = repository / relative
+                vulnerable.parent.mkdir(parents=True, exist_ok=True)
+                vulnerable.write_bytes(relative.encode("utf-8"))
+            sentinel = repository / "org/example/keep/1.0/keep-1.0.jar"
+            sentinel.parent.mkdir(parents=True, exist_ok=True)
+            sentinel.write_bytes(b"keep")
+            feasibility.prune_vulnerable_inputs(repository)
+            self.assertTrue(sentinel.is_file())
+            self.assertFalse(
+                any(
+                    (repository / relative).exists()
+                    for relative in feasibility.VULNERABLE_INPUTS
+                )
+            )
+            feasibility.capture_repository(repository, root / "evidence")
+
     def test_archive_or_manifest_tamper_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
