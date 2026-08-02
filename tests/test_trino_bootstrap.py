@@ -3466,6 +3466,14 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     ),
                     (
                         "docs/design/evidence/trino/"
+                        "run-30724152120-maven-feasibility-artifact-receipt.json"
+                    ),
+                    (
+                        "docs/design/evidence/trino/"
+                        "run-30724152120-maven-feasibility-validation.json"
+                    ),
+                    (
+                        "docs/design/evidence/trino/"
                         "run-30731801825-maven-feasibility-artifact-receipt.json"
                     ),
                     (
@@ -3537,6 +3545,14 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             validation["validation_record"],
             validation["artifact_receipt"],
             validation["independent_reaudit"]["verifier"]["path"],
+            (
+                "docs/design/evidence/trino/"
+                "run-30724152120-maven-feasibility-artifact-receipt.json"
+            ),
+            (
+                "docs/design/evidence/trino/"
+                "run-30724152120-maven-feasibility-validation.json"
+            ),
             ".github/workflows/trino-maven-remediation-feasibility.yml",
             "tests/test_trino_maven_feasibility.py",
         }

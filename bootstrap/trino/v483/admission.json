@@ -317,6 +317,8 @@
       "docs/design/evidence/trino/run-30693677356-post-adr-0027-pom.xml.gz",
       "docs/design/evidence/trino/run-30693677356-proposed-source-overlay.patch",
       "docs/design/evidence/trino/run-30693677356-trivy-vulnerability.json",
+      "docs/design/evidence/trino/run-30724152120-maven-feasibility-artifact-receipt.json",
+      "docs/design/evidence/trino/run-30724152120-maven-feasibility-validation.json",
       "docs/design/evidence/trino/run-30731801825-maven-feasibility-artifact-receipt.json",
       "docs/design/evidence/trino/run-30731801825-maven-feasibility-validation.json",
       "scripts/package_trino_bun_dependencies.py",
