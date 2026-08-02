@@ -212,9 +212,11 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                 feasibility._sha256(checkout / "pom.xml"),
                 feasibility.EXPECTED_POSTIMAGE_SHA256,
             )
+            candidate = (checkout / "pom.xml").read_text(encoding="utf-8")
+            self.assertIn('<extensions combine.self="override"/>', candidate)
             self.assertNotIn(
                 "<artifactId>gitflow-incremental-builder</artifactId>",
-                (checkout / "pom.xml").read_text(encoding="utf-8"),
+                candidate,
             )
             self.assertEqual(
                 subprocess.run(

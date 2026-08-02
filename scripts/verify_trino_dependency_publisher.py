@@ -191,16 +191,16 @@ EXPECTED_BLOCKER_BASELINE = {
 EXPECTED_BLOCKER_CANDIDATE = {
     "source_path": "pom.xml",
     "postimage_sha256": (
-        "871c6b21cf9fc70c455d21b64d24dd4501a8b5943242418edc2b2f5cfe14fab8"
+        "7424b41c8c5ec8139e2b6a1fd836f6cb31d53bc5cc7a6362e0a183724bc242a7"
     ),
     "patch_path": (
         "docs/design/evidence/trino/"
         "run-30693677356-proposed-source-overlay.patch"
     ),
     "patch_sha256": (
-        "731e76f296a725d34ea9e226a1815782168cae3890424e69f76a05530afc15be"
+        "4844e5913592420688046ef04244f771cdc6063978c0e09795692056f2b39314"
     ),
-    "patch_bytes": 8163,
+    "patch_bytes": 8230,
     "application": "git apply --unidiff-zero --whitespace=error-all",
     "changed_paths": ["pom.xml"],
     "dependency_replacements": {
@@ -211,6 +211,7 @@ EXPECTED_BLOCKER_CANDIDATE = {
         "io.github.gitflow-incremental-builder:gitflow-incremental-builder": (
             "removed_for_candidate"
         ),
+        "inherited_build_extensions": "cleared_for_candidate",
     },
 }
 EXPECTED_BLOCKER_CLASSIFICATION = {
