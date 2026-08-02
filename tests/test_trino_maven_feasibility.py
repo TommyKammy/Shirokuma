@@ -554,6 +554,28 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                         ):
                             feasibility._archive_entries(archive, entries)
 
+    def test_archive_audit_rejects_trailing_data(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = self._repository(root)
+            entries = feasibility._repository_entries(repository)
+            archive = root / feasibility.ARCHIVE_NAME
+            feasibility._write_archive(repository, archive, entries)
+            original = archive.read_bytes()
+            trailers = (
+                b"unaudited trailer",
+                b"\0" * 8,
+                gzip.compress(b"concatenated gzip member", mtime=0),
+            )
+            for trailer in trailers:
+                with self.subTest(trailer=trailer[:16]):
+                    archive.write_bytes(original + trailer)
+                    with self.assertRaisesRegex(
+                        feasibility.EvidenceError,
+                        "OFFLINE_ARCHIVE",
+                    ):
+                        feasibility._archive_entries(archive, entries)
+
     def test_finalize_retains_online_offline_and_input_identities(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

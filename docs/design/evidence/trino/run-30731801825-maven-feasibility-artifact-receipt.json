@@ -16,12 +16,12 @@
   },
   "independent_reaudit": {
     "artifact_digest": "sha256:cf0272447ec1a6afd4bda304fefeb6176ee4240d4fc6339a32de65acf015fe8d",
-    "audited_at": "2026-08-02T08:48:23Z",
+    "audited_at": "2026-08-02T14:05:21Z",
     "result": "passed",
     "scope": "complete retained artifact including bounded archive expansion",
     "verifier": {
       "path": "scripts/verify_trino_maven_feasibility.py",
-      "sha256": "336e94ce0775a4352f4584971373bf5dba53c64e570ae5327296e9e75e9b5551"
+      "sha256": "b8b9065959ca57a11ae8ae0968574b8177c840f000b71531b8b74b51766b89b1"
     }
   },
   "schema_version": 1,

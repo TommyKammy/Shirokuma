@@ -14,6 +14,8 @@ import stat
 import subprocess
 import sys
 import tarfile
+import tempfile
+import zlib
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -70,6 +72,8 @@ EXPECTED_WORKFLOW_TRIGGER_BLOCK = """on:
       - bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch
       - bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch
       - bootstrap/trino/v483/maven-policy/.mvn/jvm.config
+      - bootstrap/trino/v483/maven-scm-manager-plexus-2.2.1-hardened.pom
+      - bootstrap/trino/v483/maven-scm-provider-gitexe-2.2.1-hardened.pom
       - bootstrap/trino/v483/settings.xml
       - bootstrap/trino/v483/trusted-build-contract.json
       - docs/design/07_ADR/ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md
@@ -95,7 +99,7 @@ EXPECTED_WORKFLOW_STEPS = (
     "Retain the review-only feasibility inputs and outputs",
 )
 EXPECTED_WORKFLOW_SHA256 = (
-    "a3b681040ef4aae01e555b95734415e990268304101aaca4cc68f98431f2614c"
+    "cf603ed53a3043a78be385e62db59c0141948dfd47e12937bc3b504c733933e5"
 )
 EXPECTED_ONLINE_NETWORK = "unrestricted; Maven transfers audited separately"
 EXPECTED_ONLINE_COMMAND = (
@@ -204,6 +208,7 @@ VULNERABLE_COORDINATES = (
     ),
 )
 VULNERABLE_INPUTS = (
+    "commons-io/commons-io/2.8.0/commons-io-2.8.0.jar",
     "org/apache/velocity/velocity-engine-core/2.3/velocity-engine-core-2.3.jar",
     "org/codehaus/plexus/plexus-utils/4.0.1/plexus-utils-4.0.1.jar",
     "org/codehaus/plexus/plexus-utils/4.0.2/plexus-utils-4.0.2.jar",
@@ -828,82 +833,105 @@ def _archive_entries(
         archive_status.st_size * MAX_ARCHIVE_COMPRESSION_RATIO,
     )
 
-    class BoundedReader:
-        def __init__(self, source: Any, maximum_bytes: int) -> None:
-            self.source = source
-            self.maximum_bytes = maximum_bytes
-            self.bytes_read = 0
-
-        def read(self, size: int = -1) -> bytes:
-            remaining = self.maximum_bytes - self.bytes_read
-            request = remaining + 1
-            if size >= 0:
-                request = min(size, request)
-            payload = self.source.read(request)
-            self.bytes_read += len(payload)
-            if self.bytes_read > self.maximum_bytes:
-                _fail("OFFLINE_ARCHIVE", "expanded archive bounds exceeded")
-            return payload
-
     try:
-        with archive.open("rb") as raw:
-            with gzip.GzipFile(fileobj=raw, mode="rb") as zipped:
-                bounded = BoundedReader(zipped, expanded_limit)
-                with tarfile.open(fileobj=bounded, mode="r|") as retained:
-                    for member in retained:
+        with archive.open("rb") as raw, tempfile.TemporaryFile() as expanded:
+            decompressor = zlib.decompressobj(wbits=16 + zlib.MAX_WBITS)
+            expanded_bytes = 0
+            for compressed in iter(lambda: raw.read(1024 * 1024), b""):
+                if decompressor.eof:
+                    _fail("OFFLINE_ARCHIVE", "compressed archive has trailing data")
+                payload = decompressor.decompress(
+                    compressed,
+                    expanded_limit - expanded_bytes + 1,
+                )
+                expanded_bytes += len(payload)
+                if (
+                    expanded_bytes > expanded_limit
+                    or decompressor.unconsumed_tail
+                ):
+                    _fail("OFFLINE_ARCHIVE", "expanded archive bounds exceeded")
+                if decompressor.unused_data:
+                    _fail("OFFLINE_ARCHIVE", "compressed archive has trailing data")
+                expanded.write(payload)
+            payload = decompressor.flush(expanded_limit - expanded_bytes + 1)
+            expanded_bytes += len(payload)
+            if expanded_bytes > expanded_limit:
+                _fail("OFFLINE_ARCHIVE", "expanded archive bounds exceeded")
+            if not decompressor.eof or decompressor.unused_data:
+                _fail("OFFLINE_ARCHIVE", "compressed archive is not canonical")
+            expanded.write(payload)
+            expanded.seek(0)
+            with tarfile.open(fileobj=expanded, mode="r:") as retained:
+                for member in retained:
+                    if (
+                        len(observed) >= MAX_ARCHIVE_MEMBERS
+                        or member.size > MAX_ARCHIVE_MEMBER_BYTES
+                        or not member.isfile()
+                        or member.name in seen
+                        or member.name not in expected
+                    ):
+                        _fail(
+                            "OFFLINE_ARCHIVE",
+                            f"unexpected member: {member.name}",
+                        )
+                    reference = expected[member.name]
+                    mode = f"{stat.S_IMODE(member.mode):04o}"
+                    if (
+                        member.size != reference["bytes"]
+                        or mode != reference["mode"]
+                    ):
+                        _fail(
+                            "OFFLINE_ARCHIVE",
+                            f"member metadata differs: {member.name}",
+                        )
+                    payload = retained.extractfile(member)
+                    if payload is None:
+                        _fail(
+                            "OFFLINE_ARCHIVE",
+                            f"member unreadable: {member.name}",
+                        )
+                    digest = hashlib.sha256()
+                    total = 0
+                    for chunk in iter(
+                        lambda: payload.read(1024 * 1024), b""
+                    ):
+                        digest.update(chunk)
+                        total += len(chunk)
                         if (
-                            len(observed) >= MAX_ARCHIVE_MEMBERS
-                            or member.size > MAX_ARCHIVE_MEMBER_BYTES
-                            or not member.isfile()
-                            or member.name in seen
-                            or member.name not in expected
+                            total > MAX_ARCHIVE_MEMBER_BYTES
                         ):
                             _fail(
                                 "OFFLINE_ARCHIVE",
-                                f"unexpected member: {member.name}",
+                                f"member bounds exceeded: {member.name}",
                             )
-                        reference = expected[member.name]
-                        mode = f"{stat.S_IMODE(member.mode):04o}"
-                        if (
-                            member.size != reference["bytes"]
-                            or mode != reference["mode"]
-                        ):
-                            _fail(
-                                "OFFLINE_ARCHIVE",
-                                f"member metadata differs: {member.name}",
-                            )
-                        payload = retained.extractfile(member)
-                        if payload is None:
-                            _fail(
-                                "OFFLINE_ARCHIVE",
-                                f"member unreadable: {member.name}",
-                            )
-                        digest = hashlib.sha256()
-                        total = 0
-                        for chunk in iter(
-                            lambda: payload.read(1024 * 1024), b""
-                        ):
-                            digest.update(chunk)
-                            total += len(chunk)
-                            if total > MAX_ARCHIVE_MEMBER_BYTES:
-                                _fail(
-                                    "OFFLINE_ARCHIVE",
-                                    f"member bounds exceeded: {member.name}",
-                                )
-                        entry = {
-                            "path": member.name,
-                            "mode": mode,
-                            "sha256": digest.hexdigest(),
-                            "bytes": total,
-                        }
-                        if entry != reference:
-                            _fail(
-                                "OFFLINE_ARCHIVE",
-                                f"member differs: {member.name}",
-                            )
-                        seen.add(member.name)
-                        observed.append(entry)
-    except (OSError, EOFError, tarfile.TarError) as error:
+                    entry = {
+                        "path": member.name,
+                        "mode": mode,
+                        "sha256": digest.hexdigest(),
+                        "bytes": total,
+                    }
+                    if entry != reference:
+                        _fail(
+                            "OFFLINE_ARCHIVE",
+                            f"member differs: {member.name}",
+                        )
+                    seen.add(member.name)
+                    observed.append(entry)
+                logical_end = retained.offset
+            canonical_size = (
+                (
+                    logical_end
+                    + 2 * tarfile.BLOCKSIZE
+                    + tarfile.RECORDSIZE
+                    - 1
+                )
+                // tarfile.RECORDSIZE
+            ) * tarfile.RECORDSIZE
+            expanded.seek(logical_end)
+            trailer = expanded.read()
+            if expanded_bytes != canonical_size or any(trailer):
+                _fail("OFFLINE_ARCHIVE", "tar archive has trailing data")
+    except (OSError, EOFError, tarfile.TarError, zlib.error) as error:
         _fail("OFFLINE_ARCHIVE", f"{archive}: {error}")
     observed.sort(key=lambda entry: entry["path"])
     if observed != expected_files:
