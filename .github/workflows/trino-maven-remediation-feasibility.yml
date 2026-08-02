@@ -190,6 +190,8 @@ jobs:
           source_dir="${RUNNER_TEMP}/trino-source"
           repository="${RUNNER_TEMP}/maven-feasibility-repository"
           install -d -m 0700 "${repository}"
+          python3 scripts/verify_trino_maven_feasibility.py verify-candidate \
+            --checkout "${source_dir}"
           docker run --rm \
             --platform linux/arm64 \
             --user "$(id -u):$(id -g)" \
@@ -197,7 +199,7 @@ jobs:
             --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
             --env MAVEN_OPTS= \
             --env JAVA_TOOL_OPTIONS= \
-            --volume "${source_dir}:/workspace" \
+            --volume "${source_dir}:/workspace:ro" \
             --volume "${repository}:/m2" \
             --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:/policy/.mvn:ro" \
             --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:/policy/settings.xml:ro" \
@@ -233,6 +235,8 @@ jobs:
           git -C "${source_dir}" checkout --detach "${SOURCE_COMMIT}"
           python3 scripts/verify_trino_maven_feasibility.py apply-candidate \
             --root . --checkout "${source_dir}"
+          python3 scripts/verify_trino_maven_feasibility.py verify-candidate \
+            --checkout "${source_dir}"
           docker run --rm \
             --platform linux/arm64 \
             --network none \
@@ -241,7 +245,7 @@ jobs:
             --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
             --env MAVEN_OPTS= \
             --env JAVA_TOOL_OPTIONS= \
-            --volume "${source_dir}:/workspace" \
+            --volume "${source_dir}:/workspace:ro" \
             --volume "${repository}:/m2:ro" \
             --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:/policy/.mvn:ro" \
             --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:/policy/settings.xml:ro" \

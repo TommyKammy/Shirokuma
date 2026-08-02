@@ -248,6 +248,12 @@ def apply_candidate(root: Path, checkout: Path) -> None:
         )
     except (OSError, subprocess.CalledProcessError) as error:
         _fail("CANDIDATE_APPLY", str(error))
+    verify_candidate(checkout)
+
+
+def verify_candidate(checkout: Path) -> None:
+    checkout = checkout.resolve()
+    pom = checkout / "pom.xml"
     if _sha256(pom) != EXPECTED_POSTIMAGE_SHA256:
         _fail("CANDIDATE_POSTIMAGE", "candidate pom.xml hash differs")
     if subprocess.run(
@@ -1033,6 +1039,36 @@ def _audit_candidate_application(workflow: str, step_name: str) -> None:
         _fail("WORKFLOW", f"candidate application differs: {step_name}")
 
 
+def _audit_candidate_postimage_before_docker(
+    workflow: str, step_name: str
+) -> None:
+    body = _workflow_step_run(workflow, step_name)
+    logical = re.sub(r"\\\n[ \t]*", " ", body)
+    lines = [line.strip() for line in logical.splitlines() if line.strip()]
+    prefix = "python3 scripts/verify_trino_maven_feasibility.py verify-candidate"
+    checks = [index for index, line in enumerate(lines) if line.startswith(prefix)]
+    docker = [
+        index for index, line in enumerate(lines) if line.startswith("docker run ")
+    ]
+    expected = [
+        "python3",
+        "scripts/verify_trino_maven_feasibility.py",
+        "verify-candidate",
+        "--checkout",
+        "${source_dir}",
+    ]
+    try:
+        parsed = [shlex.split(lines[index], posix=True) for index in checks]
+    except ValueError as error:
+        _fail("WORKFLOW", f"candidate postimage check cannot be parsed: {error}")
+    if (
+        parsed != [expected]
+        or len(docker) != 1
+        or checks[0] + 1 != docker[0]
+    ):
+        _fail("WORKFLOW", f"candidate postimage check differs: {step_name}")
+
+
 def audit_workflow(root: Path) -> None:
     workflow_path = root.resolve() / WORKFLOW_PATH
     workflow = workflow_path.read_text(encoding="utf-8")
@@ -1050,6 +1086,7 @@ def audit_workflow(root: Path) -> None:
         "verify_trino_maven_feasibility.py prune-vulnerable-inputs",
         "verify_trino_maven_feasibility.py finalize-record",
         "verify_trino_maven_feasibility.py audit-evidence",
+        "verify_trino_maven_feasibility.py verify-candidate",
         "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
         "docs/design/evidence/trino/"
         "run-30693677356-maven-vulnerability-classification.json",
@@ -1086,11 +1123,24 @@ def audit_workflow(root: Path) -> None:
         workflow,
         "Replay the selected plugin closure with no network",
     )
+    for step_name in (
+        "Resolve the selected plugin closure online",
+        "Replay the selected plugin closure with no network",
+    ):
+        _audit_candidate_postimage_before_docker(workflow, step_name)
     if _option_values(online, "--network"):
         _fail("WORKFLOW", "online Docker network must remain unrestricted")
     if (
         _option_values(online, "--volume").count("${repository}:/m2") != 1
+        or _option_values(online, "--volume").count(
+            "${source_dir}:/workspace:ro"
+        )
+        != 1
         or _option_values(offline, "--network") != ["none"]
+        or _option_values(offline, "--volume").count(
+            "${source_dir}:/workspace:ro"
+        )
+        != 1
         or _option_values(offline, "--volume").count("${repository}:/m2:ro")
         != 1
         or offline.count("${RUNNER_TEMP}/offline-resolve-plugins.log") != 1
@@ -1106,6 +1156,8 @@ def main(argv: list[str] | None = None) -> int:
     apply = commands.add_parser("apply-candidate")
     apply.add_argument("--root", type=Path, default=Path("."))
     apply.add_argument("--checkout", type=Path, required=True)
+    verify = commands.add_parser("verify-candidate")
+    verify.add_argument("--checkout", type=Path, required=True)
     capture = commands.add_parser("capture-repository")
     capture.add_argument("--repository", type=Path, required=True)
     capture.add_argument("--evidence", type=Path, required=True)
@@ -1129,6 +1181,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "apply-candidate":
             apply_candidate(args.root, args.checkout)
+        elif args.command == "verify-candidate":
+            verify_candidate(args.checkout)
         elif args.command == "prune-vulnerable-inputs":
             prune_vulnerable_inputs(args.repository, args.root)
         elif args.command == "capture-repository":

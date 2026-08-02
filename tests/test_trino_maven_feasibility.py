@@ -256,6 +256,61 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                     ):
                         feasibility.audit_workflow(root)
 
+    def test_workflow_rechecks_candidate_immediately_before_maven(self) -> None:
+        verification = (
+            "          python3 scripts/verify_trino_maven_feasibility.py "
+            "verify-candidate \\\n"
+            '            --checkout "${source_dir}"'
+        )
+        workflow = (ROOT / feasibility.WORKFLOW_PATH).read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(workflow.count(verification), 2)
+        first = workflow.find(verification)
+        positions = [first, workflow.find(verification, first + 1)]
+        for index, position in enumerate(positions):
+            with self.subTest(execution=index):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    target = root / feasibility.WORKFLOW_PATH
+                    target.parent.mkdir(parents=True)
+                    insertion = position + len(verification)
+                    mutated = (
+                        workflow[:insertion]
+                        + "\n          sed -i.bak 's/2.4.1/2.4.0/' "
+                        + '"${source_dir}/pom.xml"'
+                        + workflow[insertion:]
+                    )
+                    target.write_text(mutated, encoding="utf-8")
+                    with self.assertRaisesRegex(
+                        feasibility.EvidenceError,
+                        "candidate postimage check differs",
+                    ):
+                        feasibility.audit_workflow(root)
+
+    def test_workflow_mounts_candidate_source_read_only(self) -> None:
+        workflow = (ROOT / feasibility.WORKFLOW_PATH).read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(workflow.count('${source_dir}:/workspace:ro'), 2)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / feasibility.WORKFLOW_PATH
+            target.parent.mkdir(parents=True)
+            target.write_text(
+                workflow.replace(
+                    '${source_dir}:/workspace:ro',
+                    '${source_dir}:/workspace',
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "Maven Docker execution controls differ",
+            ):
+                feasibility.audit_workflow(root)
+
     def test_candidate_applies_only_to_the_retained_pom_baseline(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             temporary_root = Path(temporary)
@@ -306,6 +361,16 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                 ).stdout.splitlines(),
                 ["pom.xml"],
             )
+            feasibility.verify_candidate(checkout)
+            (checkout / "pom.xml").write_text(
+                candidate.replace("2.4.1", "2.4.0", 1),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "CANDIDATE_POSTIMAGE",
+            ):
+                feasibility.verify_candidate(checkout)
 
     def test_capture_repository_is_complete_and_deterministic(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
