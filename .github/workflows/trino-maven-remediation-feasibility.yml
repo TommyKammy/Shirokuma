@@ -89,6 +89,8 @@ jobs:
             test -z "$(find /proc/sys/fs/binfmt_misc -maxdepth 1 -type f -name 'qemu-*' -print -quit)"
           fi
           docker pull --platform linux/arm64 "${BUILDER_IMAGE}"
+          docker buildx imagetools inspect --raw "${BUILDER_IMAGE}" \
+            > "${RUNNER_TEMP}/builder-index.json"
           test "$(docker image inspect "${BUILDER_IMAGE}" --format '{{.Architecture}}')" = "arm64"
           container_arch="$(
             docker run --rm --platform linux/arm64 "${BUILDER_IMAGE}" uname -m
@@ -120,6 +122,18 @@ jobs:
 
           version = Path(os.environ["RUNNER_TEMP"], "maven-version.txt")
           settings = Path(os.environ["RUNNER_TEMP"], "maven-global-settings.xml")
+          index_path = Path(os.environ["RUNNER_TEMP"], "builder-index.json")
+          index = json.loads(index_path.read_text(encoding="utf-8"))
+          arm64 = [
+              descriptor
+              for descriptor in index.get("manifests", [])
+              if descriptor.get("platform", {}).get("os") == "linux"
+              and descriptor.get("platform", {}).get("architecture") == "arm64"
+          ]
+          if len(arm64) != 1 or arm64[0].get("digest") != os.environ[
+              "BUILDER_ARM64_MANIFEST"
+          ]:
+              raise SystemExit("builder arm64 manifest differs")
           record = {
               "schema_version": 1,
               "result": "passed",
@@ -130,6 +144,9 @@ jobs:
               "qemu_binfmt_handlers": [],
               "builder_index": os.environ["BUILDER_IMAGE"],
               "builder_arm64_manifest": os.environ["BUILDER_ARM64_MANIFEST"],
+              "builder_index_document_sha256": hashlib.sha256(
+                  index_path.read_bytes()
+              ).hexdigest(),
               "maven_version_output_sha256": hashlib.sha256(
                   version.read_bytes()
               ).hexdigest(),
@@ -247,7 +264,10 @@ jobs:
             --evidence "${evidence}" \
             --online-log "${RUNNER_TEMP}/online-resolve-plugins.log" \
             --offline-log "${RUNNER_TEMP}/offline-resolve-plugins.log" \
-            --toolchain "${RUNNER_TEMP}/toolchain.json"
+            --toolchain "${RUNNER_TEMP}/toolchain.json" \
+            --builder-index "${RUNNER_TEMP}/builder-index.json" \
+            --maven-version "${RUNNER_TEMP}/maven-version.txt" \
+            --global-settings "${RUNNER_TEMP}/maven-global-settings.xml"
           python3 scripts/verify_trino_maven_feasibility.py audit-evidence \
             --evidence "${evidence}" --require-archive
 

@@ -48,6 +48,7 @@ EXPECTED_SELECTED_REACTOR = (
     ":trino-hdfs,:trino-iceberg"
 )
 EXPECTED_GOAL = "dependency:resolve-plugins -DskipTests"
+EXPECTED_ONLINE_NETWORK = "unrestricted; Maven transfers audited separately"
 EXPECTED_ONLINE_COMMAND = (
     "mvn --batch-mode --show-version --errors --strict-checksums "
     "--ignore-transitive-repositories --settings /policy/settings.xml "
@@ -87,6 +88,9 @@ ARCHIVE_NAME = "offline-maven-repository.tar.gz"
 ONLINE_LOG_NAME = "online-resolve-plugins.log"
 OFFLINE_LOG_NAME = "offline-resolve-plugins.log"
 TOOLCHAIN_NAME = "toolchain.json"
+BUILDER_INDEX_NAME = "builder-index.json"
+MAVEN_VERSION_NAME = "maven-version.txt"
+GLOBAL_SETTINGS_NAME = "maven-global-settings.xml"
 
 
 class EvidenceError(RuntimeError):
@@ -296,12 +300,18 @@ def finalize_record(
     online_log: Path,
     offline_log: Path,
     toolchain: Path,
+    builder_index: Path,
+    maven_version: Path,
+    global_settings: Path,
 ) -> None:
     evidence = evidence.resolve()
     for source, name in (
         (online_log, ONLINE_LOG_NAME),
         (offline_log, OFFLINE_LOG_NAME),
         (toolchain, TOOLCHAIN_NAME),
+        (builder_index, BUILDER_INDEX_NAME),
+        (maven_version, MAVEN_VERSION_NAME),
+        (global_settings, GLOBAL_SETTINGS_NAME),
     ):
         target = evidence / name
         if target.exists():
@@ -371,7 +381,7 @@ def finalize_record(
             "selected_reactor": EXPECTED_SELECTED_REACTOR,
             "online": {
                 "command": EXPECTED_ONLINE_COMMAND,
-                "network": "allowlisted Maven endpoints only",
+                "network": EXPECTED_ONLINE_NETWORK,
                 "exit_status": 0,
                 "vulnerable_coordinate_lines": 0,
                 "log": _identity(online),
@@ -387,6 +397,13 @@ def finalize_record(
             "toolchain": {
                 **toolchain_record,
                 "record": _identity(evidence / TOOLCHAIN_NAME),
+                "builder_index_document": _identity(
+                    evidence / BUILDER_INDEX_NAME
+                ),
+                "maven_version_output": _identity(
+                    evidence / MAVEN_VERSION_NAME
+                ),
+                "global_settings": _identity(evidence / GLOBAL_SETTINGS_NAME),
             },
         },
         "offline_inputs": {
@@ -510,10 +527,19 @@ def _verify_toolchain_record(evidence: Path, execution: dict[str, Any]) -> None:
     toolchain = execution.get("toolchain")
     if not isinstance(toolchain, dict):
         _fail("TOOLCHAIN_RECORD", "toolchain result is missing")
-    identity = toolchain.get("record")
-    _verify_identity(evidence, identity)
+    attachment_keys = {
+        "record",
+        "builder_index_document",
+        "maven_version_output",
+        "global_settings",
+    }
+    for key in attachment_keys:
+        _verify_identity(evidence, toolchain.get(key))
+    identity = toolchain["record"]
     retained = _read_json(evidence / identity["path"])
-    embedded = {key: value for key, value in toolchain.items() if key != "record"}
+    embedded = {
+        key: value for key, value in toolchain.items() if key not in attachment_keys
+    }
     if retained != embedded:
         _fail("TOOLCHAIN_RECORD", "retained and embedded records differ")
     expected_keys = {
@@ -526,10 +552,12 @@ def _verify_toolchain_record(evidence: Path, execution: dict[str, Any]) -> None:
         "qemu_binfmt_handlers",
         "builder_index",
         "builder_arm64_manifest",
+        "builder_index_document_sha256",
         "maven_version_output_sha256",
         "global_settings_sha256",
     }
     hashes = (
+        retained.get("builder_index_document_sha256"),
         retained.get("maven_version_output_sha256"),
         retained.get("global_settings_sha256"),
     )
@@ -552,6 +580,49 @@ def _verify_toolchain_record(evidence: Path, execution: dict[str, Any]) -> None:
         )
     ):
         _fail("TOOLCHAIN_RECORD", "toolchain identity differs")
+    attachments = (
+        ("builder_index_document", "builder_index_document_sha256"),
+        ("maven_version_output", "maven_version_output_sha256"),
+        ("global_settings", "global_settings_sha256"),
+    )
+    if any(
+        toolchain[identity_name]["sha256"] != retained[hash_name]
+        for identity_name, hash_name in attachments
+    ):
+        _fail("TOOLCHAIN_RECORD", "toolchain attachment hash differs")
+    index = _read_json(evidence / toolchain["builder_index_document"]["path"])
+    manifests = index.get("manifests")
+    arm64 = (
+        [
+            descriptor
+            for descriptor in manifests
+            if isinstance(descriptor, dict)
+            and descriptor.get("platform", {}).get("os") == "linux"
+            and descriptor.get("platform", {}).get("architecture") == "arm64"
+        ]
+        if isinstance(manifests, list)
+        else []
+    )
+    if len(arm64) != 1 or arm64[0].get(
+        "digest"
+    ) != EXPECTED_BUILDER_ARM64_MANIFEST:
+        _fail("TOOLCHAIN_RECORD", "builder arm64 descriptor differs")
+    version_path = evidence / toolchain["maven_version_output"]["path"]
+    try:
+        version = version_path.read_text(encoding="utf-8", errors="strict")
+    except (OSError, UnicodeDecodeError) as error:
+        _fail("TOOLCHAIN_RECORD", f"{version_path}: {error}")
+    version_markers = (
+        "Apache Maven 3.9.16",
+        "Java version: 25",
+        "vendor: Eclipse Adoptium",
+        'arch: "aarch64"',
+    )
+    if any(marker not in version for marker in version_markers):
+        _fail("TOOLCHAIN_RECORD", "Maven version output differs")
+    publisher.audit_builder_settings(
+        evidence / toolchain["global_settings"]["path"]
+    )
 
 
 def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
@@ -613,7 +684,7 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
         _fail("EVIDENCE_EXECUTION", "execution identity differs")
     _verify_toolchain_record(evidence, execution)
     for name, command, network in (
-        ("online", EXPECTED_ONLINE_COMMAND, "allowlisted Maven endpoints only"),
+        ("online", EXPECTED_ONLINE_COMMAND, EXPECTED_ONLINE_NETWORK),
         ("offline", EXPECTED_OFFLINE_COMMAND, "none"),
     ):
         phase = execution.get(name, {})
@@ -682,6 +753,7 @@ def audit_workflow(root: Path) -> None:
         "dependency:resolve-plugins -DskipTests",
         "retention-days: 30",
         "include-hidden-files: false",
+        "docker buildx imagetools inspect --raw",
         "verify_trino_maven_feasibility.py capture-repository",
         "verify_trino_maven_feasibility.py prune-vulnerable-inputs",
         "verify_trino_maven_feasibility.py finalize-record",
@@ -722,6 +794,9 @@ def main(argv: list[str] | None = None) -> int:
     finalize.add_argument("--online-log", type=Path, required=True)
     finalize.add_argument("--offline-log", type=Path, required=True)
     finalize.add_argument("--toolchain", type=Path, required=True)
+    finalize.add_argument("--builder-index", type=Path, required=True)
+    finalize.add_argument("--maven-version", type=Path, required=True)
+    finalize.add_argument("--global-settings", type=Path, required=True)
     audit = commands.add_parser("audit-evidence")
     audit.add_argument("--evidence", type=Path, required=True)
     audit.add_argument("--require-archive", action="store_true")
@@ -741,6 +816,9 @@ def main(argv: list[str] | None = None) -> int:
                 args.online_log,
                 args.offline_log,
                 args.toolchain,
+                args.builder_index,
+                args.maven_version,
+                args.global_settings,
             )
         elif args.command == "audit-evidence":
             audit_evidence(args.evidence, require_archive=args.require_archive)

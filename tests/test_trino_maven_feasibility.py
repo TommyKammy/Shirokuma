@@ -47,6 +47,54 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
         offline = root / "offline.log"
         self._successful_log(online)
         self._successful_log(offline)
+        builder_index = root / "builder-index-source.json"
+        builder_index.write_text(
+            json.dumps(
+                {
+                    "schemaVersion": 2,
+                    "manifests": [
+                        {
+                            "digest": feasibility.EXPECTED_BUILDER_ARM64_MANIFEST,
+                            "platform": {
+                                "os": "linux",
+                                "architecture": "arm64",
+                            },
+                        }
+                    ],
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        maven_version = root / "maven-version-source.txt"
+        maven_version.write_text(
+            "Apache Maven 3.9.16\n"
+            "Java version: 25, vendor: Eclipse Adoptium\n"
+            'Default locale: en, platform encoding: UTF-8, OS name: "linux", '
+            'version: "test", arch: "aarch64", family: "unix"\n',
+            encoding="utf-8",
+        )
+        global_settings = root / "maven-global-settings-source.xml"
+        global_settings.write_text(
+            '<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">\n'
+            "  <pluginGroups/>\n"
+            "  <proxies/>\n"
+            "  <servers/>\n"
+            "  <mirrors>\n"
+            "    <mirror>\n"
+            "      <id>maven-default-http-blocker</id>\n"
+            "      <mirrorOf>external:http:*</mirrorOf>\n"
+            "      <name>Pseudo repository to mirror external repositories "
+            "initially using HTTP.</name>\n"
+            "      <url>http://0.0.0.0/</url>\n"
+            "      <blocked>true</blocked>\n"
+            "    </mirror>\n"
+            "  </mirrors>\n"
+            "  <profiles/>\n"
+            "</settings>\n",
+            encoding="utf-8",
+        )
         toolchain = root / "toolchain-source.json"
         toolchain.write_text(
             json.dumps(
@@ -62,8 +110,15 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                     "builder_arm64_manifest": (
                         feasibility.EXPECTED_BUILDER_ARM64_MANIFEST
                     ),
-                    "maven_version_output_sha256": "c" * 64,
-                    "global_settings_sha256": "d" * 64,
+                    "builder_index_document_sha256": feasibility._sha256(
+                        builder_index
+                    ),
+                    "maven_version_output_sha256": feasibility._sha256(
+                        maven_version
+                    ),
+                    "global_settings_sha256": feasibility._sha256(
+                        global_settings
+                    ),
                 }
             )
             + "\n",
@@ -85,7 +140,15 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             "RUNNER_OS": "Linux",
         }
         with mock.patch.dict(os.environ, environment, clear=False):
-            feasibility.finalize_record(evidence, online, offline, toolchain)
+            feasibility.finalize_record(
+                evidence,
+                online,
+                offline,
+                toolchain,
+                builder_index,
+                maven_version,
+                global_settings,
+            )
         return evidence
 
     def test_workflow_is_read_only_and_fail_closed(self) -> None:
@@ -179,6 +242,16 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             )
             self.assertFalse(record["boundary"]["publication_permitted"])
             self.assertTrue(record["result"]["owner_decision_still_required"])
+            self.assertEqual(
+                record["execution"]["online"]["network"],
+                feasibility.EXPECTED_ONLINE_NETWORK,
+            )
+            self.assertEqual(
+                record["execution"]["toolchain"]["builder_index_document"][
+                    "path"
+                ],
+                feasibility.BUILDER_INDEX_NAME,
+            )
 
     def test_vulnerable_coordinate_in_either_log_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
