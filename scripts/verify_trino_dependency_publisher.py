@@ -90,23 +90,23 @@ BLOCKER_HARDENED_SCM_MANAGER_POM_PATH = Path(
 )
 BLOCKER_FEASIBILITY_RECORD_PATH = Path(
     "docs/design/evidence/trino/"
-    "run-30724152120-maven-feasibility-validation.json"
+    "run-30731801825-maven-feasibility-validation.json"
 )
 BLOCKER_FEASIBILITY_RECEIPT_PATH = Path(
     "docs/design/evidence/trino/"
-    "run-30724152120-maven-feasibility-artifact-receipt.json"
+    "run-30731801825-maven-feasibility-artifact-receipt.json"
 )
 EXPECTED_BLOCKER_FEASIBILITY_FILES = {
     BLOCKER_FEASIBILITY_RECORD_PATH: {
-        "bytes": 4675,
+        "bytes": 5793,
         "sha256": (
-            "a26e2a839003897583a82349e7d36a637b2d34856e776f2c91e2aa7e208147c7"
+            "7f87f42ee02960729cacd8dbaea5e6b73e7714b46293149b4bdb9bd8d19f6015"
         ),
     },
     BLOCKER_FEASIBILITY_RECEIPT_PATH: {
         "bytes": 899,
         "sha256": (
-            "181604f862e41c51041b3df950a175faf7a6f7bc74530ef0ae0bc9434e49e854"
+            "fcc1ba5aff55d06fb35f13a22cc74f4c9af8752c16ffd9a44c9385f1230bdb69"
         ),
     },
 }
@@ -276,21 +276,21 @@ EXPECTED_BLOCKER_CLASSIFICATION = {
     ),
 }
 EXPECTED_BLOCKER_FEASIBILITY_VALIDATION = {
-    "evidence_status": "superseded_hardened_revalidation_required",
+    "evidence_status": "passed_hardened_pre_authorization",
     "authorization_use_permitted": False,
-    "revalidation_required_before_authorization": True,
+    "revalidation_required_before_authorization": False,
     "reproducible_inputs_retained": True,
     "validation_record": BLOCKER_FEASIBILITY_RECORD_PATH.as_posix(),
     "artifact_receipt": BLOCKER_FEASIBILITY_RECEIPT_PATH.as_posix(),
     "workflow_run": (
-        "https://github.com/TommyKammy/Shirokuma/actions/runs/30724152120"
+        "https://github.com/TommyKammy/Shirokuma/actions/runs/30731801825"
     ),
-    "reviewed_commit": "edca178854f23a2e8e61a35cd2b5eb629f4eb339",
-    "artifact_id": 8825789672,
+    "reviewed_commit": "3ceae605187b9e08f4f6e3a1d547f5623cfb111f",
+    "artifact_id": 8828209533,
     "artifact_digest": (
-        "sha256:64ef89b27a5dc088a905a4da3f3594ac949925e482185893d2a5ca592515cad1"
+        "sha256:cf0272447ec1a6afd4bda304fefeb6176ee4240d4fc6339a32de65acf015fe8d"
     ),
-    "artifact_expires_at": "2026-08-31T23:53:46Z",
+    "artifact_expires_at": "2026-09-01T04:08:14Z",
     "builder": (
         "docker.io/library/maven@sha256:"
         "7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c"
@@ -304,29 +304,29 @@ EXPECTED_BLOCKER_FEASIBILITY_VALIDATION = {
         "online_resolution": "success",
         "network_none_offline_replay": True,
         "offline_replay": "success",
+        "offline_repository_mount": "read-only",
+        "archive_manifest_audit": "passed",
+        "physical_vulnerable_jars": 0,
         "vulnerable_coordinate_lines": 0,
+        "toolchain_inputs_retained": True,
     },
     "limitations": {
         "command_output_retained": True,
         "offline_repository_retained_in_actions_artifact": True,
         "artifact_retention_is_time_bounded": True,
-        "hardened_audit_passed": False,
-        "retained_vulnerable_jar_detected": (
-            "org/codehaus/plexus/plexus-utils/4.0.2/"
-            "plexus-utils-4.0.2.jar"
-        ),
+        "hardened_audit_passed": True,
+        "retained_vulnerable_jar_detected": None,
         "full_clean_install_not_run": True,
         "fresh_closure_sbom_and_scan_not_run": True,
     },
 }
 EXPECTED_BLOCKER_NEXT_ACTION = {
-    "state": "fresh_hardened_feasibility_required",
+    "state": "owner_authorization_decision_required",
     "required_decision": (
-        "Do not authorize from run 30724152120. Produce fresh hardened "
-        "evidence for the revised exact candidate, including physical "
-        "vulnerable-JAR absence, archive-to-manifest comparison, retained "
-        "toolchain inputs, and read-only network-none replay, before the risk "
-        "owner approves or rejects the candidate."
+        "Review run 30731801825 and approve or reject the exact candidate. "
+        "Do not activate the source remediation or publish an image until "
+        "the risk owner separately authorizes the candidate and independent "
+        "review is complete."
     ),
 }
 EXPECTED_BLOCKER_FINDING_POLICY = [

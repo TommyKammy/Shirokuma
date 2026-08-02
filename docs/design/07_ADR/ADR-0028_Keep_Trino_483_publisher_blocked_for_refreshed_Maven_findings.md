@@ -49,6 +49,8 @@ Keep dependency publication blocked and restore lifecycle state
 - `docs/design/evidence/trino/run-30693677356-maven-vulnerability-classification.json`
 - `docs/design/evidence/trino/run-30724152120-maven-feasibility-validation.json`
 - `docs/design/evidence/trino/run-30724152120-maven-feasibility-artifact-receipt.json`
+- `docs/design/evidence/trino/run-30731801825-maven-feasibility-validation.json`
+- `docs/design/evidence/trino/run-30731801825-maven-feasibility-artifact-receipt.json`
 
 The retained classification binds the Actions artifact, raw report,
 closure-complete SBOM, run-scoped manifest, and raw rootfs SBOM hashes and
@@ -100,6 +102,15 @@ absence, retain and validate the builder index, Maven version output, and global
 settings, and replay the pruned repository with networking disabled and a
 read-only mount.
 
+Run `30731801825` supplies that fresh evidence for reviewed commit
+`3ceae605187b9e08f4f6e3a1d547f5623cfb111f`. The native arm64 online resolution
+and network-none, read-only offline replay both passed. Independent repository
+audit confirms that the 4,879-file archive exactly matches its manifest, that no
+denied vulnerable JAR is physically present, and that the builder index, Maven
+version output, global settings, and hardened SCM metadata are retained and
+bound by hash. This closes the feasibility revalidation requirement only; it
+does not authorize activation or publication.
+
 This is feasibility evidence only. It does not activate the candidate patch,
 authorize a new source postimage, permit another publisher run, or claim a
 successful full `clean install`, network-none reconstruction, fresh SBOM, or
@@ -149,7 +160,7 @@ the Trino artifact has not passed resident admission or runtime acceptance.
 - Apply the candidate patch to the exact post-ADR-0027 `pom.xml` with
   `git apply --unidiff-zero --whitespace=error-all` and verify the candidate
   postimage hash.
-- Reverify run `30724152120`, artifact `8825789672`, the retained validation
+- Reverify run `30731801825`, artifact `8828209533`, the retained validation
   record, and the artifact receipt; require online and network-none offline
   exit status zero, a read-only offline repository, reproducible inputs, and
   an empty vulnerable-coordinate set before the separate owner decision.

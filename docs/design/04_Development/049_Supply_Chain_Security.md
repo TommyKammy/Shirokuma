@@ -1099,15 +1099,17 @@ the three finding identities and summary, and requires the feasibility patch
 to use the canonical single-path zero-context format.
 
 Preauthorization run
-[`30724152120`](https://github.com/TommyKammy/Shirokuma/actions/runs/30724152120)
-then resolved the exact selected reactor on native arm64 with the digest-pinned
+[`30731801825`](https://github.com/TommyKammy/Shirokuma/actions/runs/30731801825)
+resolved the revised exact candidate on native arm64 with the digest-pinned
 Maven builder and replayed the complete closure with container networking set
 to `none` and the repository mounted read-only. Both phases exited zero and
-reported zero vulnerable-coordinate lines. Artifact `8825789672`, digest
-`sha256:64ef89b27a5dc088a905a4da3f3594ac949925e482185893d2a5ca592515cad1`,
-retains the 4,880-file, 273,806,075-byte reproducible repository, logs,
-manifest, toolchain, and validation record until `2026-08-31T23:53:46Z`.
-The repository retains the validation record and artifact receipt. This
+reported zero vulnerable-coordinate lines. Independent audit also proves that
+the 4,879-file archive exactly matches its manifest and contains no denied
+vulnerable JAR. Artifact `8828209533`, digest
+`sha256:cf0272447ec1a6afd4bda304fefeb6176ee4240d4fc6339a32de65acf015fe8d`,
+retains the 273,613,724-byte reproducible repository, logs, manifest, toolchain,
+and validation record until `2026-09-01T04:08:14Z`. The repository retains the
+validation record and artifact receipt. This
 satisfies ADR-0028's retained feasibility prerequisite only; it neither
 authorizes nor activates the candidate, publishes an artifact, admits an
 image, or changes runtime state. The explicit owner approve/reject decision
