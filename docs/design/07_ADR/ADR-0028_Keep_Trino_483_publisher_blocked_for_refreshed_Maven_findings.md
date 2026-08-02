@@ -73,20 +73,21 @@ ADR-0027 overlay:
   `dc5cfc5cd0ef38f2960926b364c32f476c1c94e949e0fa43711f17d951eb9b75`
 - retained gzip bytes: `13531`
 - candidate `pom.xml` SHA-256:
-  `8d66505ee8ad90d11bf887dfe25a355d815f904d9ea90184b2089b0b68869626`
+  `0b23a8f4834bddb129e1d76c2cc63823f8691cf39d8fda02a3853d6fce79fbd3`
 - candidate patch SHA-256:
-  `7bb92a92ee492fbf1fc238c5e1ec6a90c4b3088f98f3d05652853f7b874221d8`
-- candidate patch bytes: `6633`
+  `3c31e06c240196c3f141b55cb34ba1f26e71cdee003b6687b8e5acd16304a25f`
+- candidate patch bytes: `7179`
 
 The candidate adds Velocity Engine Core 2.4.1 and Plexus Utils 4.0.3 as direct
-dependencies in the affected inherited Maven plugin realms. Native arm64
-Actions run `30724152120` reproduced the exact selected reactor with the
-digest-pinned Maven builder. Online resolution and a second replay with
-networking disabled both exited zero, the offline repository was mounted
-read-only, and neither log contained a vulnerable coordinate. The canonical
-4,880-file, 273,806,075-byte repository closure and both logs are retained in
-artifact `8825789672` until `2026-08-31T23:53:46Z`; the repository retains the
-validation record and artifact receipt with their exact hashes.
+dependencies in the affected inherited Maven plugin realms, including the
+Gitflow Incremental Builder extension realm. Run `30724152120` is superseded:
+hardened review found that its retained repository still contained
+`plexus-utils-4.0.2.jar`, and its verifier did not bind the archive contents or
+retained toolchain inputs. It cannot support authorization. Fresh native arm64
+evidence for the revised exact candidate must prove physical vulnerable-JAR
+absence, retain and validate the builder index, Maven version output, and global
+settings, and replay the pruned repository with networking disabled and a
+read-only mount.
 
 This is feasibility evidence only. It does not activate the candidate patch,
 authorize a new source postimage, permit another publisher run, or claim a

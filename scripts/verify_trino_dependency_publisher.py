@@ -191,16 +191,16 @@ EXPECTED_BLOCKER_BASELINE = {
 EXPECTED_BLOCKER_CANDIDATE = {
     "source_path": "pom.xml",
     "postimage_sha256": (
-        "8d66505ee8ad90d11bf887dfe25a355d815f904d9ea90184b2089b0b68869626"
+        "0b23a8f4834bddb129e1d76c2cc63823f8691cf39d8fda02a3853d6fce79fbd3"
     ),
     "patch_path": (
         "docs/design/evidence/trino/"
         "run-30693677356-proposed-source-overlay.patch"
     ),
     "patch_sha256": (
-        "7bb92a92ee492fbf1fc238c5e1ec6a90c4b3088f98f3d05652853f7b874221d8"
+        "3c31e06c240196c3f141b55cb34ba1f26e71cdee003b6687b8e5acd16304a25f"
     ),
-    "patch_bytes": 6633,
+    "patch_bytes": 7179,
     "application": "git apply --unidiff-zero --whitespace=error-all",
     "changed_paths": ["pom.xml"],
     "dependency_replacements": {
@@ -223,9 +223,9 @@ EXPECTED_BLOCKER_CLASSIFICATION = {
     ),
 }
 EXPECTED_BLOCKER_FEASIBILITY_VALIDATION = {
-    "evidence_status": "retained_reproducible_preauthorization_feasibility_passed",
+    "evidence_status": "superseded_hardened_revalidation_required",
     "authorization_use_permitted": False,
-    "revalidation_required_before_authorization": False,
+    "revalidation_required_before_authorization": True,
     "reproducible_inputs_retained": True,
     "validation_record": BLOCKER_FEASIBILITY_RECORD_PATH.as_posix(),
     "artifact_receipt": BLOCKER_FEASIBILITY_RECEIPT_PATH.as_posix(),
@@ -257,19 +257,23 @@ EXPECTED_BLOCKER_FEASIBILITY_VALIDATION = {
         "command_output_retained": True,
         "offline_repository_retained_in_actions_artifact": True,
         "artifact_retention_is_time_bounded": True,
+        "hardened_audit_passed": False,
+        "retained_vulnerable_jar_detected": (
+            "org/codehaus/plexus/plexus-utils/4.0.2/"
+            "plexus-utils-4.0.2.jar"
+        ),
         "full_clean_install_not_run": True,
         "fresh_closure_sbom_and_scan_not_run": True,
     },
 }
 EXPECTED_BLOCKER_NEXT_ACTION = {
-    "state": "owner_authorization_required",
+    "state": "fresh_hardened_feasibility_required",
     "required_decision": (
-        "Approve or reject the exact candidate pom.xml-only overlay bound to "
-        "the retained patch and postimage hashes after reviewing run "
-        "30724152120. The retained reproducible feasibility prerequisite is "
-        "satisfied, but it is not authorization. Approval must preserve "
-        "High=0/Critical=0 without waiver, the current expiry, and reviewer "
-        "separation before any active publisher patch or publication retry."
+        "Do not authorize from run 30724152120. Produce fresh hardened "
+        "evidence for the revised exact candidate, including physical "
+        "vulnerable-JAR absence, archive-to-manifest comparison, retained "
+        "toolchain inputs, and read-only network-none replay, before the risk "
+        "owner approves or rejects the candidate."
     ),
 }
 EXPECTED_BLOCKER_FINDING_POLICY = [
