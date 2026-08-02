@@ -194,6 +194,68 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             ):
                 feasibility.audit_workflow(root)
 
+    def test_workflow_binds_both_candidate_applications(self) -> None:
+        application = (
+            "          python3 scripts/verify_trino_maven_feasibility.py "
+            "apply-candidate \\\n"
+            '            --root . --checkout "${source_dir}"'
+        )
+        workflow = (ROOT / feasibility.WORKFLOW_PATH).read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(workflow.count(application), 2)
+        positions = [
+            workflow.find(application),
+            workflow.find(application, workflow.find(application) + 1),
+        ]
+        for index, position in enumerate(positions):
+            with self.subTest(application=index):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    target = root / feasibility.WORKFLOW_PATH
+                    target.parent.mkdir(parents=True)
+                    mutated = (
+                        workflow[:position]
+                        + "          true"
+                        + workflow[position + len(application) :]
+                    )
+                    target.write_text(mutated, encoding="utf-8")
+                    with self.assertRaisesRegex(
+                        feasibility.EvidenceError,
+                        "candidate application differs",
+                    ):
+                        feasibility.audit_workflow(root)
+
+    def test_workflow_rejects_additional_jobs_and_permissions(self) -> None:
+        workflow = (ROOT / feasibility.WORKFLOW_PATH).read_text(
+            encoding="utf-8"
+        )
+        mutations = {
+            "job": workflow
+            + "\n  mutate:\n"
+            + "    runs-on: ubuntu-latest\n"
+            + "    permissions:\n"
+            + "      issues: write\n"
+            + "    steps: []\n",
+            "permission": workflow.replace(
+                "    permissions:\n      contents: read\n",
+                "    permissions:\n      contents: read\n      issues: read\n",
+                1,
+            ),
+        }
+        for label, mutated in mutations.items():
+            with self.subTest(label=label):
+                with tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    target = root / feasibility.WORKFLOW_PATH
+                    target.parent.mkdir(parents=True)
+                    target.write_text(mutated, encoding="utf-8")
+                    with self.assertRaisesRegex(
+                        feasibility.EvidenceError,
+                        "WORKFLOW",
+                    ):
+                        feasibility.audit_workflow(root)
+
     def test_candidate_applies_only_to_the_retained_pom_baseline(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             temporary_root = Path(temporary)
@@ -297,6 +359,47 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                 ],
                 feasibility.BUILDER_INDEX_NAME,
             )
+
+    def test_audit_binds_manifest_envelope(self) -> None:
+        mutations = {
+            "schema_version": 2,
+            "media_type": "application/json",
+            "repository_layout": "flat",
+        }
+        for field, value in mutations.items():
+            with self.subTest(field=field):
+                with tempfile.TemporaryDirectory() as temporary:
+                    evidence = self._finalized_evidence(Path(temporary))
+                    manifest_path = evidence / feasibility.MANIFEST_NAME
+                    manifest = json.loads(
+                        manifest_path.read_text(encoding="utf-8")
+                    )
+                    manifest[field] = value
+                    manifest_path.write_text(
+                        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    record_path = evidence / feasibility.RECORD_NAME
+                    record = json.loads(
+                        record_path.read_text(encoding="utf-8")
+                    )
+                    record["offline_inputs"]["manifest"] = {
+                        "path": feasibility.MANIFEST_NAME,
+                        "bytes": manifest_path.stat().st_size,
+                        "sha256": feasibility._sha256(manifest_path),
+                    }
+                    record_path.write_text(
+                        json.dumps(record, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    with self.assertRaisesRegex(
+                        feasibility.EvidenceError,
+                        "manifest summary differs",
+                    ):
+                        feasibility.audit_evidence(
+                            evidence,
+                            require_archive=True,
+                        )
 
     def test_finalize_rejects_the_same_log_for_both_phases(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

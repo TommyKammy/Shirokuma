@@ -49,6 +49,11 @@ EXPECTED_SELECTED_REACTOR = (
     ":trino-hdfs,:trino-iceberg"
 )
 EXPECTED_GOAL = "dependency:resolve-plugins -DskipTests"
+EXPECTED_MANIFEST_SCHEMA_VERSION = 1
+EXPECTED_MANIFEST_MEDIA_TYPE = (
+    "application/vnd.shirokuma.maven-feasibility-inputs.v1+json"
+)
+EXPECTED_REPOSITORY_LAYOUT = "maven2"
 EXPECTED_GITHUB_REPOSITORY = "TommyKammy/Shirokuma"
 EXPECTED_GITHUB_SERVER_URL = "https://github.com"
 EXPECTED_WORKFLOW_REF_PREFIX = (
@@ -418,9 +423,9 @@ def capture_repository(repository: Path, evidence: Path) -> None:
     evidence.mkdir(parents=True, exist_ok=False)
     entries = _repository_entries(repository)
     manifest = {
-        "schema_version": 1,
-        "media_type": "application/vnd.shirokuma.maven-feasibility-inputs.v1+json",
-        "repository_layout": "maven2",
+        "schema_version": EXPECTED_MANIFEST_SCHEMA_VERSION,
+        "media_type": EXPECTED_MANIFEST_MEDIA_TYPE,
+        "repository_layout": EXPECTED_REPOSITORY_LAYOUT,
         "selected_reactor": EXPECTED_SELECTED_REACTOR,
         "goal": EXPECTED_GOAL,
         "files": entries,
@@ -899,7 +904,10 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
         _verify_identity(evidence, offline_inputs.get("archive"))
     manifest = _read_json(evidence / offline_inputs["manifest"]["path"])
     if (
-        manifest.get("file_count") != offline_inputs.get("file_count")
+        manifest.get("schema_version") != EXPECTED_MANIFEST_SCHEMA_VERSION
+        or manifest.get("media_type") != EXPECTED_MANIFEST_MEDIA_TYPE
+        or manifest.get("repository_layout") != EXPECTED_REPOSITORY_LAYOUT
+        or manifest.get("file_count") != offline_inputs.get("file_count")
         or manifest.get("total_bytes") != offline_inputs.get("total_bytes")
         or manifest.get("selected_reactor") != EXPECTED_SELECTED_REACTOR
         or manifest.get("goal") != EXPECTED_GOAL
@@ -973,6 +981,58 @@ def _option_values(tokens: list[str], option: str) -> list[str]:
     return values
 
 
+def _audit_workflow_jobs(workflow: str) -> None:
+    jobs_match = re.search(r"(?m)^jobs:\s*$", workflow)
+    if jobs_match is None or re.search(r"(?m)^permissions:\s*", workflow):
+        _fail("WORKFLOW", "top-level jobs or permissions differ")
+    jobs_body = workflow[jobs_match.end() :]
+    next_top_level = re.search(r"(?m)^\S[^\n]*:\s*$", jobs_body)
+    if next_top_level is not None:
+        jobs_body = jobs_body[: next_top_level.start()]
+    job_matches = list(
+        re.finditer(r"(?m)^  ([A-Za-z0-9_-]+):\s*$", jobs_body)
+    )
+    if [match.group(1) for match in job_matches] != ["validate"]:
+        _fail("WORKFLOW", "jobs map differs")
+    validate = jobs_body[job_matches[0].end() :]
+    permissions = re.search(
+        r"(?m)^    permissions:\s*\n((?:      [^\n]*\n?)*)",
+        validate,
+    )
+    if permissions is None or permissions.group(1).splitlines() != [
+        "      contents: read"
+    ]:
+        _fail("WORKFLOW", "validate permissions differ")
+
+
+def _audit_candidate_application(workflow: str, step_name: str) -> None:
+    body = _workflow_step_run(workflow, step_name)
+    logical = re.sub(r"\\\n[ \t]*", " ", body)
+    prefix = "python3 scripts/verify_trino_maven_feasibility.py apply-candidate"
+    invocations = [
+        line.strip()
+        for line in logical.splitlines()
+        if line.strip().startswith(prefix)
+    ]
+    expected = [
+        "python3",
+        "scripts/verify_trino_maven_feasibility.py",
+        "apply-candidate",
+        "--root",
+        ".",
+        "--checkout",
+        "${source_dir}",
+    ]
+    try:
+        parsed = [
+            shlex.split(invocation, posix=True) for invocation in invocations
+        ]
+    except ValueError as error:
+        _fail("WORKFLOW", f"candidate application cannot be parsed: {error}")
+    if parsed != [expected]:
+        _fail("WORKFLOW", f"candidate application differs: {step_name}")
+
+
 def audit_workflow(root: Path) -> None:
     workflow_path = root.resolve() / WORKFLOW_PATH
     workflow = workflow_path.read_text(encoding="utf-8")
@@ -991,6 +1051,12 @@ def audit_workflow(root: Path) -> None:
         "verify_trino_maven_feasibility.py finalize-record",
         "verify_trino_maven_feasibility.py audit-evidence",
         "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
+        "docs/design/evidence/trino/"
+        "run-30693677356-maven-vulnerability-classification.json",
+        "docs/design/evidence/trino/"
+        "run-30731801825-maven-feasibility-validation.json",
+        "docs/design/evidence/trino/"
+        "run-30731801825-maven-feasibility-artifact-receipt.json",
     )
     missing = [marker for marker in required if marker not in workflow]
     forbidden = (
@@ -1006,6 +1072,12 @@ def audit_workflow(root: Path) -> None:
     present = [marker for marker in forbidden if marker in workflow]
     if missing or present:
         _fail("WORKFLOW", f"missing={missing}, forbidden={present}")
+    _audit_workflow_jobs(workflow)
+    for step_name in (
+        "Fetch and prepare the exact candidate source",
+        "Replay the selected plugin closure with no network",
+    ):
+        _audit_candidate_application(workflow, step_name)
     online = _workflow_docker_run(
         workflow,
         "Resolve the selected plugin closure online",
