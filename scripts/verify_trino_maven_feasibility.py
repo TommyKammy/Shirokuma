@@ -251,11 +251,51 @@ def apply_candidate(root: Path, checkout: Path) -> None:
     verify_candidate(checkout)
 
 
+def _expected_candidate_source_postimages() -> dict[str, str]:
+    expected: dict[str, str] = {}
+    for name, boundary in (
+        ("source overlay", publisher.EXPECTED_SOURCE_OVERLAY),
+        (
+            "distribution remediation",
+            publisher.EXPECTED_DISTRIBUTION_REMEDIATION,
+        ),
+    ):
+        permitted = boundary.get("permitted_paths")
+        postimages = boundary.get("postimages")
+        if (
+            not isinstance(permitted, list)
+            or not all(isinstance(path, str) for path in permitted)
+            or not isinstance(postimages, dict)
+            or not all(
+                isinstance(path, str) and isinstance(digest, str)
+                for path, digest in postimages.items()
+            )
+            or len(permitted) != len(set(permitted))
+            or set(permitted) != set(postimages)
+        ):
+            _fail("CANDIDATE_SOURCE", f"{name} path identities differ")
+        overlap = set(expected) & set(postimages)
+        if overlap:
+            _fail(
+                "CANDIDATE_SOURCE",
+                f"authorized source boundaries overlap: {sorted(overlap)}",
+            )
+        expected.update(postimages)
+    if expected.get("pom.xml") != EXPECTED_BASELINE_SHA256:
+        _fail(
+            "CANDIDATE_SOURCE",
+            "candidate preimage is not the authorized overlay postimage",
+        )
+    expected["pom.xml"] = EXPECTED_POSTIMAGE_SHA256
+    return expected
+
+
 def verify_candidate(checkout: Path) -> None:
     checkout = checkout.resolve()
     pom = checkout / "pom.xml"
     if _sha256(pom) != EXPECTED_POSTIMAGE_SHA256:
         _fail("CANDIDATE_POSTIMAGE", "candidate pom.xml hash differs")
+    expected = _expected_candidate_source_postimages()
     tracked = subprocess.run(
         [
             "git",
@@ -271,8 +311,18 @@ def verify_candidate(checkout: Path) -> None:
         capture_output=True,
         text=True,
     ).stdout.splitlines()
-    if tracked != ["pom.xml"]:
+    if set(tracked) != set(expected) or len(tracked) != len(expected):
         _fail("CANDIDATE_SOURCE", f"tracked source changes differ: {tracked}")
+    for relative, digest in expected.items():
+        path = checkout / relative
+        try:
+            status = path.lstat()
+        except OSError as error:
+            _fail("CANDIDATE_SOURCE", f"{relative}: {error}")
+        if not stat.S_ISREG(status.st_mode) or status.st_nlink != 1:
+            _fail("CANDIDATE_SOURCE", f"not a regular source file: {relative}")
+        if _sha256(path) != digest:
+            _fail("CANDIDATE_SOURCE", f"source postimage differs: {relative}")
     if subprocess.run(
         ["git", "ls-files", "--others", "--exclude-standard"],
         cwd=checkout,

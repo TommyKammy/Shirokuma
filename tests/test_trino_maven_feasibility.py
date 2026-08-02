@@ -311,7 +311,7 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             ):
                 feasibility.audit_workflow(root)
 
-    def test_candidate_applies_only_to_the_retained_pom_baseline(self) -> None:
+    def test_candidate_binds_complete_authorized_source_postimages(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             temporary_root = Path(temporary)
             checkout = temporary_root / "checkout"
@@ -340,47 +340,78 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                 check=True,
                 capture_output=True,
             )
-            with mock.patch.object(
-                feasibility.publisher,
-                "apply_source_overlay",
+            overlay = "<project><overlay/></project>\n"
+            child.write_text(overlay, encoding="utf-8")
+            source_boundary = {
+                "permitted_paths": ["module/pom.xml"],
+                "postimages": {
+                    "module/pom.xml": hashlib.sha256(
+                        overlay.encode("utf-8")
+                    ).hexdigest()
+                },
+            }
+            distribution_boundary = {
+                "permitted_paths": ["pom.xml"],
+                "postimages": {
+                    "pom.xml": feasibility.EXPECTED_BASELINE_SHA256
+                },
+            }
+            with (
+                mock.patch.object(
+                    feasibility.publisher,
+                    "apply_source_overlay",
+                ),
+                mock.patch.object(
+                    feasibility.publisher,
+                    "EXPECTED_SOURCE_OVERLAY",
+                    source_boundary,
+                ),
+                mock.patch.object(
+                    feasibility.publisher,
+                    "EXPECTED_DISTRIBUTION_REMEDIATION",
+                    distribution_boundary,
+                ),
             ):
                 feasibility.apply_candidate(ROOT, checkout)
-            self.assertEqual(
-                feasibility._sha256(checkout / "pom.xml"),
-                feasibility.EXPECTED_POSTIMAGE_SHA256,
-            )
-            candidate = (checkout / "pom.xml").read_text(encoding="utf-8")
-            self.assertNotIn(
-                "<artifactId>gitflow-incremental-builder</artifactId>",
-                candidate,
-            )
-            self.assertEqual(
-                subprocess.run(
-                    ["git", "diff", "--name-only", "HEAD"],
-                    cwd=checkout,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                ).stdout.splitlines(),
-                ["pom.xml"],
-            )
-            feasibility.verify_candidate(checkout)
-            child.write_text("<project><tampered/></project>\n", encoding="utf-8")
-            with self.assertRaisesRegex(
-                feasibility.EvidenceError,
-                "CANDIDATE_SOURCE",
-            ):
                 feasibility.verify_candidate(checkout)
-            child.write_text("<project/>\n", encoding="utf-8")
-            (checkout / "pom.xml").write_text(
-                candidate.replace("2.4.1", "2.4.0", 1),
-                encoding="utf-8",
-            )
-            with self.assertRaisesRegex(
-                feasibility.EvidenceError,
-                "CANDIDATE_POSTIMAGE",
-            ):
-                feasibility.verify_candidate(checkout)
+                self.assertEqual(
+                    feasibility._sha256(checkout / "pom.xml"),
+                    feasibility.EXPECTED_POSTIMAGE_SHA256,
+                )
+                candidate = (checkout / "pom.xml").read_text(encoding="utf-8")
+                self.assertNotIn(
+                    "<artifactId>gitflow-incremental-builder</artifactId>",
+                    candidate,
+                )
+                self.assertEqual(
+                    subprocess.run(
+                        ["git", "diff", "--name-only", "HEAD"],
+                        cwd=checkout,
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    ).stdout.splitlines(),
+                    ["module/pom.xml", "pom.xml"],
+                )
+                child.write_text(
+                    "<project><tampered/></project>\n",
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(
+                    feasibility.EvidenceError,
+                    "CANDIDATE_SOURCE",
+                ):
+                    feasibility.verify_candidate(checkout)
+                child.write_text(overlay, encoding="utf-8")
+                (checkout / "pom.xml").write_text(
+                    candidate.replace("2.4.1", "2.4.0", 1),
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(
+                    feasibility.EvidenceError,
+                    "CANDIDATE_POSTIMAGE",
+                ):
+                    feasibility.verify_candidate(checkout)
 
     def test_capture_repository_is_complete_and_deterministic(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
