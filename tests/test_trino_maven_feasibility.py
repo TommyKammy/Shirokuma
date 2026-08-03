@@ -107,7 +107,13 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-    def _finalized_evidence(self, root: Path) -> Path:
+    def _finalized_evidence(
+        self,
+        root: Path,
+        *,
+        github_ref: str = "refs/pull/1/merge",
+        workflow_ref: str | None = None,
+    ) -> Path:
         evidence = root / "evidence"
         feasibility.capture_repository(self._repository(root), evidence)
         online = root / "online.log"
@@ -179,12 +185,11 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             "GITHUB_RUN_ATTEMPT": "1",
             "GITHUB_SERVER_URL": "https://github.com",
             "GITHUB_SHA": "a" * 40,
+            "GITHUB_REF": github_ref,
             "REVIEWED_COMMIT": "b" * 40,
             "GITHUB_WORKFLOW": "Trino 483 Maven remediation feasibility",
-            "GITHUB_WORKFLOW_REF": (
-                "TommyKammy/Shirokuma/.github/workflows/"
-                "trino-maven-remediation-feasibility.yml@refs/pull/1/merge"
-            ),
+            "GITHUB_WORKFLOW_REF": workflow_ref
+            or feasibility.EXPECTED_WORKFLOW_REF_PREFIX + github_ref,
             "RUNNER_ARCH": "ARM64",
             "RUNNER_OS": "Linux",
         }
@@ -202,6 +207,42 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
 
     def test_workflow_is_read_only_and_fail_closed(self) -> None:
         feasibility.audit_workflow(ROOT)
+
+    def test_record_generation_requires_the_execution_pull_request_ref(
+        self,
+    ) -> None:
+        invalid_refs = (
+            feasibility.EXPECTED_WORKFLOW_REF_PREFIX,
+            feasibility.EXPECTED_WORKFLOW_REF_PREFIX
+            + "refs/pull/0/merge",
+            feasibility.EXPECTED_WORKFLOW_REF_PREFIX + "refs/heads/main",
+            feasibility.EXPECTED_WORKFLOW_REF_PREFIX
+            + "refs/pull/1/merge\nrefs/heads/main",
+        )
+        for workflow_ref in invalid_refs:
+            with self.subTest(workflow_ref=workflow_ref):
+                with tempfile.TemporaryDirectory() as temporary:
+                    with self.assertRaisesRegex(
+                        feasibility.EvidenceError,
+                        "RUN_IDENTITY",
+                    ):
+                        self._finalized_evidence(
+                            Path(temporary),
+                            workflow_ref=workflow_ref,
+                        )
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "RUN_IDENTITY",
+            ):
+                self._finalized_evidence(
+                    Path(temporary),
+                    github_ref="refs/pull/1/merge",
+                    workflow_ref=(
+                        feasibility.EXPECTED_WORKFLOW_REF_PREFIX
+                        + "refs/pull/2/merge"
+                    ),
+                )
 
     def test_workflow_closes_triggers_steps_and_policy_mounts(self) -> None:
         workflow = (ROOT / feasibility.WORKFLOW_PATH).read_text(
@@ -795,6 +836,29 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                             require_archive=True,
                         )
 
+    def test_audit_rejects_duplicate_json_object_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = self._finalized_evidence(Path(temporary))
+            record_path = evidence / feasibility.RECORD_NAME
+            record_text = record_path.read_text(encoding="utf-8")
+            record_path.write_text(
+                record_text.replace(
+                    '"publication_permitted": false,',
+                    '"publication_permitted": true,\n'
+                    '    "publication_permitted": false,',
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "duplicate object key: publication_permitted",
+            ):
+                feasibility.audit_evidence(
+                    evidence,
+                    require_archive=True,
+                )
+
     def test_audit_rejects_unmanifested_evidence_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             evidence = self._finalized_evidence(Path(temporary))
@@ -1020,6 +1084,39 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                         record_path.read_text(encoding="utf-8")
                     )
                     record["subject"][field] = value
+                    record_path.write_text(
+                        json.dumps(record, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    with self.assertRaisesRegex(
+                        feasibility.EvidenceError,
+                        "EVIDENCE_SUBJECT",
+                    ):
+                        feasibility.audit_evidence(
+                            evidence,
+                            require_archive=True,
+                        )
+
+    def test_audit_requires_a_canonical_pull_request_workflow_ref(
+        self,
+    ) -> None:
+        invalid_refs = (
+            feasibility.EXPECTED_WORKFLOW_REF_PREFIX,
+            feasibility.EXPECTED_WORKFLOW_REF_PREFIX
+            + "refs/pull/0/merge",
+            feasibility.EXPECTED_WORKFLOW_REF_PREFIX + "refs/heads/main",
+            feasibility.EXPECTED_WORKFLOW_REF_PREFIX
+            + "refs/pull/1/merge\nrefs/heads/main",
+        )
+        for workflow_ref in invalid_refs:
+            with self.subTest(workflow_ref=workflow_ref):
+                with tempfile.TemporaryDirectory() as temporary:
+                    evidence = self._finalized_evidence(Path(temporary))
+                    record_path = evidence / feasibility.RECORD_NAME
+                    record = json.loads(
+                        record_path.read_text(encoding="utf-8")
+                    )
+                    record["subject"]["workflow_ref"] = workflow_ref
                     record_path.write_text(
                         json.dumps(record, indent=2, sort_keys=True) + "\n",
                         encoding="utf-8",

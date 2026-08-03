@@ -65,6 +65,11 @@ EXPECTED_WORKFLOW_REF_PREFIX = (
     "TommyKammy/Shirokuma/.github/workflows/"
     "trino-maven-remediation-feasibility.yml@"
 )
+EXPECTED_WORKFLOW_REF_PATTERN = re.compile(
+    re.escape(EXPECTED_WORKFLOW_REF_PREFIX)
+    + r"refs/pull/[1-9][0-9]*/merge",
+    flags=re.ASCII,
+)
 EXPECTED_WORKFLOW_TRIGGER_BLOCK = """on:
   pull_request:
     paths:
@@ -313,6 +318,17 @@ def _read_bounded_file(path: Path, *, code: str, max_bytes: int) -> bytes:
         os.close(descriptor)
 
 
+def _reject_duplicate_json_keys(
+    pairs: list[tuple[str, Any]],
+) -> dict[str, Any]:
+    document: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in document:
+            _fail("EVIDENCE_JSON", f"duplicate object key: {key}")
+        document[key] = value
+    return document
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     try:
         document = json.loads(
@@ -320,7 +336,8 @@ def _read_json(path: Path) -> dict[str, Any]:
                 path,
                 code="EVIDENCE_JSON",
                 max_bytes=MAX_JSON_BYTES,
-            )
+            ),
+            object_pairs_hook=_reject_duplicate_json_keys,
         )
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         _fail("EVIDENCE_JSON", f"{path}: {error}")
@@ -725,6 +742,7 @@ def finalize_record(
         "GITHUB_RUN_ATTEMPT",
         "GITHUB_SERVER_URL",
         "GITHUB_SHA",
+        "GITHUB_REF",
         "REVIEWED_COMMIT",
         "GITHUB_WORKFLOW",
         "GITHUB_WORKFLOW_REF",
@@ -739,12 +757,13 @@ def finalize_record(
     run_id = int(os.environ["GITHUB_RUN_ID"])
     run_attempt = int(os.environ["GITHUB_RUN_ATTEMPT"])
     repository = os.environ["GITHUB_REPOSITORY"]
+    workflow_ref = os.environ["GITHUB_WORKFLOW_REF"]
     if (
         repository != EXPECTED_GITHUB_REPOSITORY
         or os.environ["GITHUB_SERVER_URL"] != EXPECTED_GITHUB_SERVER_URL
-        or not os.environ["GITHUB_WORKFLOW_REF"].startswith(
-            EXPECTED_WORKFLOW_REF_PREFIX
-        )
+        or EXPECTED_WORKFLOW_REF_PATTERN.fullmatch(workflow_ref) is None
+        or workflow_ref
+        != EXPECTED_WORKFLOW_REF_PREFIX + os.environ["GITHUB_REF"]
     ):
         _fail("RUN_IDENTITY", "workflow repository identity differs")
     record = {
@@ -763,7 +782,7 @@ def finalize_record(
             "reviewed_commit": os.environ["REVIEWED_COMMIT"],
             "workflow_execution_commit": os.environ["GITHUB_SHA"],
             "workflow": os.environ["GITHUB_WORKFLOW"],
-            "workflow_ref": os.environ["GITHUB_WORKFLOW_REF"],
+            "workflow_ref": workflow_ref,
         },
         "boundary": {
             "state": "preauthorization_feasibility_only",
@@ -1247,9 +1266,9 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
         )
         or subject.get("workflow")
         != "Trino 483 Maven remediation feasibility"
-        or not subject.get("workflow_ref", "").startswith(
-            EXPECTED_WORKFLOW_REF_PREFIX
-        )
+        or not isinstance(subject.get("workflow_ref"), str)
+        or EXPECTED_WORKFLOW_REF_PATTERN.fullmatch(subject["workflow_ref"])
+        is None
     ):
         _fail("EVIDENCE_SUBJECT", "workflow subject identity differs")
     if record.get("record_path") != (
