@@ -692,6 +692,31 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             ):
                 feasibility._archive_entries(archive, entries)
 
+    def test_archive_audit_rejects_nonzero_member_padding(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = self._repository(root)
+            entries = feasibility._repository_entries(repository)
+            archive = root / feasibility.ARCHIVE_NAME
+            feasibility._write_archive(repository, archive, entries)
+            expanded = bytearray(gzip.decompress(archive.read_bytes()))
+            first_padding = tarfile.BLOCKSIZE + entries[0]["bytes"]
+            self.assertNotEqual(first_padding % tarfile.BLOCKSIZE, 0)
+            expanded[first_padding] = 1
+            with archive.open("wb") as raw:
+                with gzip.GzipFile(
+                    filename="",
+                    mode="wb",
+                    fileobj=raw,
+                    mtime=0,
+                ) as canonical_gzip:
+                    canonical_gzip.write(expanded)
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "archive bytes are not canonical",
+            ):
+                feasibility._archive_entries(archive, entries)
+
     def test_validation_record_path_is_bound_to_the_run(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             evidence = self._finalized_evidence(Path(temporary))
@@ -710,6 +735,33 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                     evidence,
                     require_archive=True,
                 )
+
+    def test_validation_record_nested_objects_are_closed_world(self) -> None:
+        cases = (
+            ("subject", lambda record: record["subject"]),
+            ("execution", lambda record: record["execution"]),
+            ("online", lambda record: record["execution"]["online"]),
+            ("offline", lambda record: record["execution"]["offline"]),
+            ("offline_inputs", lambda record: record["offline_inputs"]),
+        )
+        for label, select in cases:
+            with self.subTest(label=label):
+                with tempfile.TemporaryDirectory() as temporary:
+                    evidence = self._finalized_evidence(Path(temporary))
+                    record_path = evidence / feasibility.RECORD_NAME
+                    record = json.loads(
+                        record_path.read_text(encoding="utf-8")
+                    )
+                    select(record)["unreviewed_claim"] = True
+                    record_path.write_text(
+                        json.dumps(record, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    with self.assertRaises(feasibility.EvidenceError):
+                        feasibility.audit_evidence(
+                            evidence,
+                            require_archive=True,
+                        )
 
     def test_audit_rejects_unmanifested_evidence_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

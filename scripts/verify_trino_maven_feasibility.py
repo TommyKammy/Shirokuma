@@ -919,6 +919,9 @@ def _archive_entries(
         MAX_ARCHIVE_EXPANDED_BYTES,
         archive_status.st_size * MAX_ARCHIVE_COMPRESSION_RATIO,
     )
+    canonical_temporary = tempfile.TemporaryDirectory()
+    canonical_root = Path(canonical_temporary.name) / "repository"
+    canonical_root.mkdir()
 
     try:
         with archive.open("rb") as raw, tempfile.TemporaryFile() as expanded:
@@ -997,18 +1000,20 @@ def _archive_entries(
                         )
                     digest = hashlib.sha256()
                     total = 0
-                    for chunk in iter(
-                        lambda: payload.read(1024 * 1024), b""
-                    ):
-                        digest.update(chunk)
-                        total += len(chunk)
-                        if (
-                            total > MAX_ARCHIVE_MEMBER_BYTES
+                    canonical_path = canonical_root / member.name
+                    canonical_path.parent.mkdir(parents=True, exist_ok=True)
+                    with canonical_path.open("xb") as canonical_payload:
+                        for chunk in iter(
+                            lambda: payload.read(1024 * 1024), b""
                         ):
-                            _fail(
-                                "OFFLINE_ARCHIVE",
-                                f"member bounds exceeded: {member.name}",
-                            )
+                            digest.update(chunk)
+                            canonical_payload.write(chunk)
+                            total += len(chunk)
+                            if total > MAX_ARCHIVE_MEMBER_BYTES:
+                                _fail(
+                                    "OFFLINE_ARCHIVE",
+                                    f"member bounds exceeded: {member.name}",
+                                )
                     entry = {
                         "path": member.name,
                         "mode": mode,
@@ -1036,8 +1041,17 @@ def _archive_entries(
             trailer = expanded.read()
             if expanded_bytes != canonical_size or any(trailer):
                 _fail("OFFLINE_ARCHIVE", "tar archive has trailing data")
+        canonical_archive = Path(canonical_temporary.name) / ARCHIVE_NAME
+        _write_archive(canonical_root, canonical_archive, expected_files)
+        if (
+            canonical_archive.stat().st_size != archive_status.st_size
+            or _sha256(canonical_archive) != _sha256(archive)
+        ):
+            _fail("OFFLINE_ARCHIVE", "archive bytes are not canonical")
     except (OSError, EOFError, tarfile.TarError, zlib.error) as error:
         _fail("OFFLINE_ARCHIVE", f"{archive}: {error}")
+    finally:
+        canonical_temporary.cleanup()
     observed.sort(key=lambda entry: entry["path"])
     if observed != expected_files:
         missing = sorted(set(expected) - seen)
@@ -1194,6 +1208,8 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
     ):
         _fail("EVIDENCE_RECORD", "unexpected record envelope")
     subject = record.get("subject", {})
+    if not isinstance(subject, dict):
+        _fail("EVIDENCE_SUBJECT", "workflow subject is not an object")
     run_id = subject.get("run_id")
     run_attempt = subject.get("run_attempt")
     sha_fields = (
@@ -1201,7 +1217,18 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
         subject.get("workflow_execution_commit"),
     )
     if (
-        subject.get("issue")
+        set(subject)
+        != {
+            "issue",
+            "workflow_run",
+            "run_id",
+            "run_attempt",
+            "reviewed_commit",
+            "workflow_execution_commit",
+            "workflow",
+            "workflow_ref",
+        }
+        or subject.get("issue")
         != "https://github.com/TommyKammy/Shirokuma/issues/63"
         or not isinstance(run_id, int)
         or run_id < 1
@@ -1242,8 +1269,23 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
     }:
         _fail("EVIDENCE_BOUNDARY", "feasibility boundary differs")
     execution = record.get("execution", {})
+    if not isinstance(execution, dict):
+        _fail("EVIDENCE_EXECUTION", "execution result is not an object")
     if (
-        execution.get("platform") != "linux/arm64"
+        set(execution)
+        != {
+            "platform",
+            "runner_os",
+            "runner_arch",
+            "native_execution",
+            "builder",
+            "builder_arm64_manifest",
+            "selected_reactor",
+            "online",
+            "offline",
+            "toolchain",
+        }
+        or execution.get("platform") != "linux/arm64"
         or execution.get("runner_os") != "Linux"
         or execution.get("runner_arch") != "ARM64"
         or execution.get("native_execution") is not True
@@ -1265,9 +1307,21 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
         ("offline", EXPECTED_OFFLINE_COMMAND, "none", OFFLINE_LOG_NAME),
     ):
         phase = execution.get(name, {})
+        if not isinstance(phase, dict):
+            _fail("EVIDENCE_EXECUTION", f"{name} result is not an object")
         log_identity = phase.get("log")
+        expected_phase_keys = {
+            "command",
+            "network",
+            "exit_status",
+            "vulnerable_coordinate_lines",
+            "log",
+        }
+        if name == "offline":
+            expected_phase_keys.add("repository_mount")
         if (
-            phase.get("command") != command
+            set(phase) != expected_phase_keys
+            or phase.get("command") != command
             or phase.get("network") != network
             or phase.get("exit_status") != 0
             or phase.get("vulnerable_coordinate_lines") != 0
@@ -1290,8 +1344,20 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
     if phase_logs["online"] == phase_logs["offline"]:
         _fail("EVIDENCE_EXECUTION", "online and offline log identities coincide")
     offline_inputs = record.get("offline_inputs", {})
+    if not isinstance(offline_inputs, dict):
+        _fail("OFFLINE_INPUT", "offline inputs are not an object")
     if (
-        offline_inputs.get("reproducible_inputs_retained") is not True
+        set(offline_inputs)
+        != {
+            "reproducible_inputs_retained",
+            "manifest",
+            "archive",
+            "file_count",
+            "total_bytes",
+            "replacement_inputs",
+            "hardened_metadata",
+        }
+        or offline_inputs.get("reproducible_inputs_retained") is not True
         or offline_inputs.get("hardened_metadata")
         != sorted(EXPECTED_HARDENED_METADATA)
     ):
@@ -1309,7 +1375,19 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
         )
     manifest = _read_json(evidence / offline_inputs["manifest"]["path"])
     if (
-        manifest.get("schema_version") != EXPECTED_MANIFEST_SCHEMA_VERSION
+        set(manifest)
+        != {
+            "schema_version",
+            "media_type",
+            "repository_layout",
+            "selected_reactor",
+            "goal",
+            "file_count",
+            "total_bytes",
+            "unknown_files_permitted",
+            "files",
+        }
+        or manifest.get("schema_version") != EXPECTED_MANIFEST_SCHEMA_VERSION
         or manifest.get("media_type") != EXPECTED_MANIFEST_MEDIA_TYPE
         or manifest.get("repository_layout") != EXPECTED_REPOSITORY_LAYOUT
         or manifest.get("file_count") != offline_inputs.get("file_count")
