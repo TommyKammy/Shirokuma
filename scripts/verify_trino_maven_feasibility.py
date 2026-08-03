@@ -109,9 +109,13 @@ EXPECTED_WORKFLOW_STEPS = (
     "Retain the review-only feasibility inputs and outputs",
 )
 EXPECTED_WORKFLOW_SHA256 = (
-    "21490d715ae2dedd859d7b44241b17074a51b2a42581f7bab48680150efa60ef"
+    "5771b674ea7b60e6c8fa89fb22cd140357de7745cde850efe30e737669b486fc"
 )
 EXPECTED_MAVEN_BASEDIR = "/policy"
+EXPECTED_POLICY_SOURCE = "bootstrap/trino/v483/maven-policy/.mvn"
+EXPECTED_POLICY_MOUNT = (
+    "${GITHUB_WORKSPACE}/" + EXPECTED_POLICY_SOURCE + ":/policy/.mvn:ro"
+)
 EXPECTED_ONLINE_NETWORK = "unrestricted; Maven transfers audited separately"
 EXPECTED_ONLINE_COMMAND = (
     "mvn --batch-mode --show-version --errors --strict-checksums "
@@ -211,7 +215,7 @@ EXPECTED_HARDENED_METADATA = {
 }
 EXPECTED_POLICY_EXECUTION = {
     "workflow_sha256": EXPECTED_WORKFLOW_SHA256,
-    "configuration_source": "reviewed_policy_directory",
+    "configuration_source": EXPECTED_POLICY_SOURCE,
     "maven_basedir": EXPECTED_MAVEN_BASEDIR,
     "source_mounts": {"online": "read-only", "offline": "read-only"},
     "policy_mounts": {"online": "read-only", "offline": "read-only"},
@@ -274,6 +278,10 @@ class EvidenceError(RuntimeError):
 
 def _fail(code: str, detail: str) -> None:
     raise EvidenceError(f"{code}: {detail}")
+
+
+def _is_exact_int(value: object, *, expected: int | None = None) -> bool:
+    return type(value) is int and (expected is None or value == expected)
 
 
 def _sha256(path: Path) -> str:
@@ -1177,7 +1185,7 @@ def _verify_toolchain_record(evidence: Path, execution: dict[str, Any]) -> None:
     )
     if (
         set(retained) != expected_keys
-        or retained.get("schema_version") != 1
+        or not _is_exact_int(retained.get("schema_version"), expected=1)
         or retained.get("result") != "passed"
         or retained.get("runner_os") != execution.get("runner_os")
         or retained.get("runner_arch") != execution.get("runner_arch")
@@ -1276,6 +1284,7 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
             "offline_inputs",
             "result",
         }
+        or not _is_exact_int(schema_version)
         or schema_version
         not in {
             LEGACY_EVIDENCE_SCHEMA_VERSION,
@@ -1307,9 +1316,9 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
         }
         or subject.get("issue")
         != "https://github.com/TommyKammy/Shirokuma/issues/63"
-        or type(run_id) is not int
+        or not _is_exact_int(run_id)
         or run_id < 1
-        or type(run_attempt) is not int
+        or not _is_exact_int(run_attempt)
         or run_attempt < 1
         or any(
             not isinstance(value, str)
@@ -1469,7 +1478,10 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
             "unknown_files_permitted",
             "files",
         }
-        or manifest.get("schema_version") != EXPECTED_MANIFEST_SCHEMA_VERSION
+        or not _is_exact_int(
+            manifest.get("schema_version"),
+            expected=EXPECTED_MANIFEST_SCHEMA_VERSION,
+        )
         or manifest.get("media_type") != EXPECTED_MANIFEST_MEDIA_TYPE
         or manifest.get("repository_layout") != EXPECTED_REPOSITORY_LAYOUT
         or manifest.get("file_count") != offline_inputs.get("file_count")
@@ -1711,10 +1723,7 @@ def audit_workflow(root: Path) -> None:
     if _option_values(online, "--network"):
         _fail("WORKFLOW", "online Docker network must remain unrestricted")
     expected_policy_volumes = [
-        (
-            "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:"
-            "/policy/.mvn:ro"
-        ),
+        EXPECTED_POLICY_MOUNT,
         (
             "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:"
             "/policy/settings.xml:ro"

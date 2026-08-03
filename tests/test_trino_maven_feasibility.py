@@ -277,6 +277,11 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertEqual(workflow.count("--env MAVEN_BASEDIR=/policy"), 2)
+        self.assertEqual(workflow.count(feasibility.EXPECTED_POLICY_MOUNT), 2)
+        self.assertNotIn(
+            "bootstrap/trino/v483/maven-policy:/policy/.mvn:ro",
+            workflow,
+        )
         mutations = (
             (
                 workflow.replace("  pull_request:\n", "  push:\n", 1),
@@ -295,8 +300,7 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             ),
             (
                 workflow.replace(
-                    "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:"
-                    "/policy/.mvn:ro",
+                    feasibility.EXPECTED_POLICY_MOUNT,
                     "${RUNNER_TEMP}/maven-policy:/policy/.mvn:ro",
                     1,
                 ),
@@ -924,6 +928,74 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             )
             feasibility.audit_evidence(evidence, require_archive=True)
 
+    def test_all_schema_discriminators_require_exact_integers(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = self._finalized_evidence(Path(temporary))
+            record_path = evidence / feasibility.RECORD_NAME
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            record["schema_version"] = True
+            del record["execution"]["policy"]
+            record_path.write_text(
+                json.dumps(record, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "EVIDENCE_RECORD",
+            ):
+                feasibility.audit_evidence(evidence, require_archive=True)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = self._finalized_evidence(Path(temporary))
+            manifest_path = evidence / feasibility.MANIFEST_NAME
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["schema_version"] = True
+            manifest_path.write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            record_path = evidence / feasibility.RECORD_NAME
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            record["offline_inputs"]["manifest"] = feasibility._identity(
+                manifest_path
+            )
+            record_path.write_text(
+                json.dumps(record, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "OFFLINE_INPUT",
+            ):
+                feasibility.audit_evidence(evidence, require_archive=True)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = self._finalized_evidence(Path(temporary))
+            toolchain_path = evidence / feasibility.TOOLCHAIN_NAME
+            toolchain = json.loads(
+                toolchain_path.read_text(encoding="utf-8")
+            )
+            toolchain["schema_version"] = True
+            toolchain_path.write_text(
+                json.dumps(toolchain, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            record_path = evidence / feasibility.RECORD_NAME
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            record["execution"]["toolchain"]["schema_version"] = True
+            record["execution"]["toolchain"]["record"] = (
+                feasibility._identity(toolchain_path)
+            )
+            record_path.write_text(
+                json.dumps(record, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "TOOLCHAIN_RECORD",
+            ):
+                feasibility.audit_evidence(evidence, require_archive=True)
+
     def test_audit_rejects_duplicate_json_object_keys(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             evidence = self._finalized_evidence(Path(temporary))
@@ -983,6 +1055,10 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             self.assertEqual(
                 record["execution"]["online"]["network"],
                 feasibility.EXPECTED_ONLINE_NETWORK,
+            )
+            self.assertEqual(
+                record["execution"]["policy"]["configuration_source"],
+                feasibility.EXPECTED_POLICY_SOURCE,
             )
             self.assertEqual(
                 record["execution"]["toolchain"]["builder_index_document"][

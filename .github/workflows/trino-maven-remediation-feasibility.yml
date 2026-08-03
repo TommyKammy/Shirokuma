@@ -208,7 +208,7 @@ jobs:
             --env JAVA_TOOL_OPTIONS= \
             --volume "${source_dir}:/workspace:ro" \
             --volume "${repository}:/m2" \
-            --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:/policy/.mvn:ro" \
+            --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy/.mvn:/policy/.mvn:ro" \
             --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:/policy/settings.xml:ro" \
             --workdir /policy \
             --entrypoint /usr/share/maven/bin/mvn \
@@ -256,7 +256,7 @@ jobs:
             --env JAVA_TOOL_OPTIONS= \
             --volume "${source_dir}:/workspace:ro" \
             --volume "${repository}:/m2:ro" \
-            --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:/policy/.mvn:ro" \
+            --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy/.mvn:/policy/.mvn:ro" \
             --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:/policy/settings.xml:ro" \
             --workdir /policy \
             --entrypoint /usr/share/maven/bin/mvn \
