@@ -222,6 +222,18 @@ TOOLCHAIN_NAME = "toolchain.json"
 BUILDER_INDEX_NAME = "builder-index.json"
 MAVEN_VERSION_NAME = "maven-version.txt"
 GLOBAL_SETTINGS_NAME = "maven-global-settings.xml"
+EXPECTED_EVIDENCE_FILES = {
+    RECORD_NAME,
+    MANIFEST_NAME,
+    ARCHIVE_NAME,
+    ONLINE_LOG_NAME,
+    OFFLINE_LOG_NAME,
+    TOOLCHAIN_NAME,
+    BUILDER_INDEX_NAME,
+    MAVEN_VERSION_NAME,
+    GLOBAL_SETTINGS_NAME,
+}
+EXPECTED_GZIP_HEADER = b"\x1f\x8b\x08\x00\x00\x00\x00\x00\x02\xff"
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 MAX_ARCHIVE_MEMBERS = 10_000
 MAX_ARCHIVE_MEMBER_BYTES = 64 * 1024 * 1024
@@ -910,6 +922,9 @@ def _archive_entries(
 
     try:
         with archive.open("rb") as raw, tempfile.TemporaryFile() as expanded:
+            if raw.read(len(EXPECTED_GZIP_HEADER)) != EXPECTED_GZIP_HEADER:
+                _fail("OFFLINE_ARCHIVE", "gzip header is not canonical")
+            raw.seek(0)
             decompressor = zlib.decompressobj(wbits=16 + zlib.MAX_WBITS)
             expanded_bytes = 0
             for compressed in iter(lambda: raw.read(1024 * 1024), b""):
@@ -1146,6 +1161,22 @@ def _verify_toolchain_record(evidence: Path, execution: dict[str, Any]) -> None:
 
 def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
     evidence = evidence.resolve()
+    expected_files = set(EXPECTED_EVIDENCE_FILES)
+    if not require_archive:
+        expected_files.remove(ARCHIVE_NAME)
+    try:
+        retained = list(evidence.iterdir())
+    except OSError as error:
+        _fail("EVIDENCE_DIRECTORY", f"{evidence}: {error}")
+    if {path.name for path in retained} != expected_files:
+        _fail("EVIDENCE_DIRECTORY", "retained evidence file set differs")
+    for path in retained:
+        try:
+            status = path.lstat()
+        except OSError as error:
+            _fail("EVIDENCE_DIRECTORY", f"{path}: {error}")
+        if not stat.S_ISREG(status.st_mode) or status.st_nlink != 1:
+            _fail("EVIDENCE_DIRECTORY", f"unsafe retained file: {path}")
     record = _read_json(evidence / RECORD_NAME)
     if (
         set(record)

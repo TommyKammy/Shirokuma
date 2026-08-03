@@ -670,6 +670,28 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             ):
                 feasibility._archive_entries(archive, entries)
 
+    def test_archive_audit_rejects_noncanonical_gzip_headers(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = self._repository(root)
+            entries = feasibility._repository_entries(repository)
+            archive = root / feasibility.ARCHIVE_NAME
+            feasibility._write_archive(repository, archive, entries)
+            expanded = gzip.decompress(archive.read_bytes())
+            with archive.open("wb") as raw:
+                with gzip.GzipFile(
+                    filename="unmanifested-name",
+                    mode="wb",
+                    fileobj=raw,
+                    mtime=0,
+                ) as noncanonical:
+                    noncanonical.write(expanded)
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "gzip header is not canonical",
+            ):
+                feasibility._archive_entries(archive, entries)
+
     def test_validation_record_path_is_bound_to_the_run(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             evidence = self._finalized_evidence(Path(temporary))
@@ -683,6 +705,22 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 feasibility.EvidenceError,
                 "EVIDENCE_RECORD",
+            ):
+                feasibility.audit_evidence(
+                    evidence,
+                    require_archive=True,
+                )
+
+    def test_audit_rejects_unmanifested_evidence_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = self._finalized_evidence(Path(temporary))
+            (evidence / "unmanifested-secret.txt").write_text(
+                "not part of the retained artifact\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "EVIDENCE_DIRECTORY",
             ):
                 feasibility.audit_evidence(
                     evidence,
