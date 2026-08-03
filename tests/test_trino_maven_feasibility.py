@@ -208,19 +208,19 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
     def test_workflow_is_read_only_and_fail_closed(self) -> None:
         feasibility.audit_workflow(ROOT)
 
-    def test_record_generation_requires_the_execution_pull_request_ref(
+    def test_record_generation_requires_the_execution_ref(
         self,
     ) -> None:
-        invalid_refs = (
-            feasibility.EXPECTED_WORKFLOW_REF_PREFIX,
-            feasibility.EXPECTED_WORKFLOW_REF_PREFIX
-            + "refs/pull/0/merge",
-            feasibility.EXPECTED_WORKFLOW_REF_PREFIX + "refs/heads/main",
-            feasibility.EXPECTED_WORKFLOW_REF_PREFIX
-            + "refs/pull/1/merge\nrefs/heads/main",
+        invalid_execution_refs = (
+            "",
+            "refs/pull/0/merge",
+            "refs/heads/.hidden",
+            "refs/heads/topic..name",
+            "refs/tags/release.lock",
+            "refs/pull/1/merge\nrefs/heads/main",
         )
-        for workflow_ref in invalid_refs:
-            with self.subTest(workflow_ref=workflow_ref):
+        for github_ref in invalid_execution_refs:
+            with self.subTest(github_ref=github_ref):
                 with tempfile.TemporaryDirectory() as temporary:
                     with self.assertRaisesRegex(
                         feasibility.EvidenceError,
@@ -228,7 +228,11 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                     ):
                         self._finalized_evidence(
                             Path(temporary),
-                            workflow_ref=workflow_ref,
+                            github_ref=github_ref,
+                            workflow_ref=(
+                                feasibility.EXPECTED_WORKFLOW_REF_PREFIX
+                                + github_ref
+                            ),
                         )
         with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaisesRegex(
@@ -243,6 +247,25 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                         + "refs/pull/2/merge"
                     ),
                 )
+
+    def test_record_generation_supports_canonical_manual_dispatch_refs(
+        self,
+    ) -> None:
+        for github_ref in (
+            "refs/heads/main",
+            "refs/heads/feature/evidence-refresh",
+            "refs/tags/v1.2.3",
+        ):
+            with self.subTest(github_ref=github_ref):
+                with tempfile.TemporaryDirectory() as temporary:
+                    evidence = self._finalized_evidence(
+                        Path(temporary),
+                        github_ref=github_ref,
+                    )
+                    feasibility.audit_evidence(
+                        evidence,
+                        require_archive=True,
+                    )
 
     def test_workflow_closes_triggers_steps_and_policy_mounts(self) -> None:
         workflow = (ROOT / feasibility.WORKFLOW_PATH).read_text(
@@ -1097,14 +1120,19 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                             require_archive=True,
                         )
 
-    def test_audit_requires_a_canonical_pull_request_workflow_ref(
+    def test_audit_requires_a_canonical_execution_workflow_ref(
         self,
     ) -> None:
         invalid_refs = (
             feasibility.EXPECTED_WORKFLOW_REF_PREFIX,
             feasibility.EXPECTED_WORKFLOW_REF_PREFIX
             + "refs/pull/0/merge",
-            feasibility.EXPECTED_WORKFLOW_REF_PREFIX + "refs/heads/main",
+            feasibility.EXPECTED_WORKFLOW_REF_PREFIX
+            + "refs/heads/.hidden",
+            feasibility.EXPECTED_WORKFLOW_REF_PREFIX
+            + "refs/heads/topic..name",
+            feasibility.EXPECTED_WORKFLOW_REF_PREFIX
+            + "refs/tags/release.lock",
             feasibility.EXPECTED_WORKFLOW_REF_PREFIX
             + "refs/pull/1/merge\nrefs/heads/main",
         )

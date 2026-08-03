@@ -65,10 +65,12 @@ EXPECTED_WORKFLOW_REF_PREFIX = (
     "TommyKammy/Shirokuma/.github/workflows/"
     "trino-maven-remediation-feasibility.yml@"
 )
-EXPECTED_WORKFLOW_REF_PATTERN = re.compile(
-    re.escape(EXPECTED_WORKFLOW_REF_PREFIX)
-    + r"refs/pull/[1-9][0-9]*/merge",
+EXPECTED_PULL_REQUEST_REF_PATTERN = re.compile(
+    r"refs/pull/[1-9][0-9]*/merge",
     flags=re.ASCII,
+)
+INVALID_GIT_REF_CHARACTER_PATTERN = re.compile(
+    r"[\x00-\x20\x7f~^:?*\[\\]",
 )
 EXPECTED_WORKFLOW_TRIGGER_BLOCK = """on:
   pull_request:
@@ -327,6 +329,42 @@ def _reject_duplicate_json_keys(
             _fail("EVIDENCE_JSON", f"duplicate object key: {key}")
         document[key] = value
     return document
+
+
+def _is_canonical_execution_ref(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    if EXPECTED_PULL_REQUEST_REF_PATTERN.fullmatch(value) is not None:
+        return True
+    ref_name = None
+    for prefix in ("refs/heads/", "refs/tags/"):
+        if value.startswith(prefix):
+            ref_name = value.removeprefix(prefix)
+            break
+    if (
+        not ref_name
+        or value.endswith(".")
+        or ".." in ref_name
+        or "@{" in ref_name
+        or INVALID_GIT_REF_CHARACTER_PATTERN.search(ref_name) is not None
+    ):
+        return False
+    return all(
+        component
+        and not component.startswith(".")
+        and not component.endswith(".lock")
+        for component in ref_name.split("/")
+    )
+
+
+def _is_canonical_workflow_ref(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and value.startswith(EXPECTED_WORKFLOW_REF_PREFIX)
+        and _is_canonical_execution_ref(
+            value.removeprefix(EXPECTED_WORKFLOW_REF_PREFIX)
+        )
+    )
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -761,7 +799,7 @@ def finalize_record(
     if (
         repository != EXPECTED_GITHUB_REPOSITORY
         or os.environ["GITHUB_SERVER_URL"] != EXPECTED_GITHUB_SERVER_URL
-        or EXPECTED_WORKFLOW_REF_PATTERN.fullmatch(workflow_ref) is None
+        or not _is_canonical_execution_ref(os.environ["GITHUB_REF"])
         or workflow_ref
         != EXPECTED_WORKFLOW_REF_PREFIX + os.environ["GITHUB_REF"]
     ):
@@ -1266,9 +1304,7 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
         )
         or subject.get("workflow")
         != "Trino 483 Maven remediation feasibility"
-        or not isinstance(subject.get("workflow_ref"), str)
-        or EXPECTED_WORKFLOW_REF_PATTERN.fullmatch(subject["workflow_ref"])
-        is None
+        or not _is_canonical_workflow_ref(subject.get("workflow_ref"))
     ):
         _fail("EVIDENCE_SUBJECT", "workflow subject identity differs")
     if record.get("record_path") != (
