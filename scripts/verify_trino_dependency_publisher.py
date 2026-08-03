@@ -163,13 +163,13 @@ EXPECTED_FEASIBILITY_REAUDIT = {
     "artifact_digest": (
         "sha256:cf0272447ec1a6afd4bda304fefeb6176ee4240d4fc6339a32de65acf015fe8d"
     ),
-    "audited_at": "2026-08-03T11:52:15Z",
+    "audited_at": "2026-08-03T12:08:02Z",
     "result": "passed",
     "scope": "complete retained artifact including bounded archive expansion",
     "verifier": {
         "path": FEASIBILITY_VERIFIER_PATH.as_posix(),
         "sha256": (
-            "a70bfdd93ad1dddf6878ba2bc22c9fe7a7d84a395a15b9aaa22980b65cd9c249"
+            "9d21e69a5fd53c38426cc9761235e3a2b683c6adcf591badee3b164cd4e445dd"
         ),
     },
 }
@@ -195,7 +195,7 @@ EXPECTED_BLOCKER_FEASIBILITY_FILES = {
     BLOCKER_FEASIBILITY_RECEIPT_PATH: {
         "bytes": 1340,
         "sha256": (
-            "fb1024f2cd18623813355854f7e89885bc838716f5b69aef59bb66330219256d"
+            "5444db166a18687ce66e1f0a0f51c36d9a65ed2bdaa549668ea6d72272534ccc"
         ),
     },
 }

@@ -1230,9 +1230,9 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
         }
         or subject.get("issue")
         != "https://github.com/TommyKammy/Shirokuma/issues/63"
-        or not isinstance(run_id, int)
+        or type(run_id) is not int
         or run_id < 1
-        or not isinstance(run_attempt, int)
+        or type(run_attempt) is not int
         or run_attempt < 1
         or any(
             not isinstance(value, str)

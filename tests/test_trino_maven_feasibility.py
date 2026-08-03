@@ -736,6 +736,38 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                     require_archive=True,
                 )
 
+    def test_validation_record_run_identifiers_are_exact_integers(self) -> None:
+        for field in ("run_id", "run_attempt"):
+            with self.subTest(field=field):
+                with tempfile.TemporaryDirectory() as temporary:
+                    evidence = self._finalized_evidence(Path(temporary))
+                    record_path = evidence / feasibility.RECORD_NAME
+                    record = json.loads(
+                        record_path.read_text(encoding="utf-8")
+                    )
+                    record["subject"][field] = True
+                    if field == "run_id":
+                        record["subject"]["workflow_run"] = (
+                            "https://github.com/TommyKammy/Shirokuma/"
+                            "actions/runs/True"
+                        )
+                        record["record_path"] = (
+                            "docs/design/evidence/trino/"
+                            "run-True-maven-feasibility-validation.json"
+                        )
+                    record_path.write_text(
+                        json.dumps(record, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    with self.assertRaisesRegex(
+                        feasibility.EvidenceError,
+                        "EVIDENCE_SUBJECT",
+                    ):
+                        feasibility.audit_evidence(
+                            evidence,
+                            require_archive=True,
+                        )
+
     def test_validation_record_nested_objects_are_closed_world(self) -> None:
         cases = (
             ("subject", lambda record: record["subject"]),
