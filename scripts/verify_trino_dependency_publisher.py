@@ -96,6 +96,14 @@ BLOCKER_FEASIBILITY_RECEIPT_PATH = Path(
     "docs/design/evidence/trino/"
     "run-30731801825-maven-feasibility-artifact-receipt.json"
 )
+SUPERSEDED_FEASIBILITY_RECORD_PATH = Path(
+    "docs/design/evidence/trino/"
+    "run-30724152120-maven-feasibility-validation.json"
+)
+SUPERSEDED_FEASIBILITY_RECEIPT_PATH = Path(
+    "docs/design/evidence/trino/"
+    "run-30724152120-maven-feasibility-artifact-receipt.json"
+)
 FEASIBILITY_VERIFIER_PATH = Path(
     "scripts/verify_trino_maven_feasibility.py"
 )
@@ -103,17 +111,29 @@ EXPECTED_FEASIBILITY_REAUDIT = {
     "artifact_digest": (
         "sha256:cf0272447ec1a6afd4bda304fefeb6176ee4240d4fc6339a32de65acf015fe8d"
     ),
-    "audited_at": "2026-08-02T14:05:21Z",
+    "audited_at": "2026-08-03T09:59:22Z",
     "result": "passed",
     "scope": "complete retained artifact including bounded archive expansion",
     "verifier": {
         "path": FEASIBILITY_VERIFIER_PATH.as_posix(),
         "sha256": (
-            "b8b9065959ca57a11ae8ae0968574b8177c840f000b71531b8b74b51766b89b1"
+            "45abc9c110bc425ea823e19ebf7b08d7ecdd3930dc9a6effea5f9000bb6bf295"
         ),
     },
 }
 EXPECTED_BLOCKER_FEASIBILITY_FILES = {
+    SUPERSEDED_FEASIBILITY_RECORD_PATH: {
+        "bytes": 4675,
+        "sha256": (
+            "a26e2a839003897583a82349e7d36a637b2d34856e776f2c91e2aa7e208147c7"
+        ),
+    },
+    SUPERSEDED_FEASIBILITY_RECEIPT_PATH: {
+        "bytes": 899,
+        "sha256": (
+            "181604f862e41c51041b3df950a175faf7a6f7bc74530ef0ae0bc9434e49e854"
+        ),
+    },
     BLOCKER_FEASIBILITY_RECORD_PATH: {
         "bytes": 5793,
         "sha256": (
@@ -123,7 +143,7 @@ EXPECTED_BLOCKER_FEASIBILITY_FILES = {
     BLOCKER_FEASIBILITY_RECEIPT_PATH: {
         "bytes": 1340,
         "sha256": (
-            "828f14ec33f527ebb461d1e9e81e584b2ec010d3e4601028dcf788f47bd359e2"
+            "b6f8e62423831d38c013497715fc9fc1ec8017909f531951a7e65dfc69fabd71"
         ),
     },
 }

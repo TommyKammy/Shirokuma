@@ -2466,6 +2466,20 @@ class PublisherContractTests(unittest.TestCase):
             receipt_path.write_bytes(
                 originals[verify.BLOCKER_FEASIBILITY_RECEIPT_PATH]
             )
+            superseded_path = (
+                temporary_root / verify.SUPERSEDED_FEASIBILITY_RECORD_PATH
+            )
+            superseded_path.write_bytes(
+                superseded_path.read_bytes() + b"\n"
+            )
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "feasibility evidence differs",
+            ):
+                verify._validate_blocker_evidence(temporary_root)
+            superseded_path.write_bytes(
+                originals[verify.SUPERSEDED_FEASIBILITY_RECORD_PATH]
+            )
             verifier_path = temporary_root / verify.FEASIBILITY_VERIFIER_PATH
             verifier_path.write_bytes(verifier_path.read_bytes() + b"\n")
             with self.assertRaisesRegex(

@@ -809,6 +809,21 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             )
             self.assertTrue(feasibility._vulnerable_lines(path))
 
+    def test_resolution_log_size_is_bounded_before_scanning(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "online.log"
+            self._successful_log(path)
+            with mock.patch.object(
+                feasibility,
+                "MAX_LOG_BYTES",
+                path.stat().st_size - 1,
+            ):
+                with self.assertRaisesRegex(
+                    feasibility.EvidenceError,
+                    "RESOLUTION_LOG",
+                ):
+                    feasibility._vulnerable_lines(path)
+
             path.write_text(
                 "[INFO] org.apache.velocity:velocity-engine-core:jar:2.3\n"
                 "[INFO] BUILD SUCCESS\n",

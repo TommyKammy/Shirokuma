@@ -228,6 +228,7 @@ MAX_ARCHIVE_MEMBER_BYTES = 64 * 1024 * 1024
 MAX_ARCHIVE_FILE_BYTES = 512 * 1024 * 1024
 MAX_ARCHIVE_EXPANDED_BYTES = 640 * 1024 * 1024
 MAX_ARCHIVE_COMPRESSION_RATIO = 100
+MAX_LOG_BYTES = 16 * 1024 * 1024
 
 
 class EvidenceError(RuntimeError):
@@ -586,16 +587,34 @@ def capture_repository(repository: Path, evidence: Path) -> None:
 
 def _vulnerable_lines(path: Path) -> list[str]:
     try:
-        text = path.read_text(encoding="utf-8", errors="strict")
+        status = path.lstat()
     except (OSError, UnicodeDecodeError) as error:
         _fail("RESOLUTION_LOG", f"{path}: {error}")
-    if "BUILD SUCCESS" not in text or "BUILD FAILURE" in text:
+    if (
+        not stat.S_ISREG(status.st_mode)
+        or status.st_nlink != 1
+        or not 0 < status.st_size <= MAX_LOG_BYTES
+    ):
+        _fail("RESOLUTION_LOG", f"log bounds differ: {path}")
+    success = False
+    failure = False
+    vulnerable: list[str] = []
+    try:
+        with path.open(
+            "r",
+            encoding="utf-8",
+            errors="strict",
+        ) as source:
+            for line in source:
+                success = success or "BUILD SUCCESS" in line
+                failure = failure or "BUILD FAILURE" in line
+                if any(pattern.search(line) for pattern in VULNERABLE_COORDINATES):
+                    vulnerable.append(line.rstrip("\r\n"))
+    except (OSError, UnicodeDecodeError) as error:
+        _fail("RESOLUTION_LOG", f"{path}: {error}")
+    if not success or failure:
         _fail("RESOLUTION_LOG", f"successful Maven result missing: {path}")
-    return [
-        line
-        for line in text.splitlines()
-        if any(pattern.search(line) for pattern in VULNERABLE_COORDINATES)
-    ]
+    return vulnerable
 
 
 def finalize_record(
@@ -625,6 +644,10 @@ def finalize_record(
         target = evidence / name
         if target.exists():
             _fail("EVIDENCE_FILE", f"target already exists: {target}")
+        if name in {ONLINE_LOG_NAME, OFFLINE_LOG_NAME} and _vulnerable_lines(
+            source
+        ):
+            _fail("VULNERABLE_COORDINATE", f"candidate log differs: {source}")
         target.write_bytes(source.read_bytes())
     online = evidence / ONLINE_LOG_NAME
     offline = evidence / OFFLINE_LOG_NAME
