@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import gzip
 import hashlib
 import json
@@ -54,6 +55,8 @@ EXPECTED_SELECTED_REACTOR = (
     ":trino-hdfs,:trino-iceberg"
 )
 EXPECTED_GOAL = "dependency:resolve-plugins -DskipTests"
+LEGACY_EVIDENCE_SCHEMA_VERSION = 1
+EXPECTED_EVIDENCE_SCHEMA_VERSION = 2
 EXPECTED_MANIFEST_SCHEMA_VERSION = 1
 EXPECTED_MANIFEST_MEDIA_TYPE = (
     "application/vnd.shirokuma.maven-feasibility-inputs.v1+json"
@@ -106,8 +109,9 @@ EXPECTED_WORKFLOW_STEPS = (
     "Retain the review-only feasibility inputs and outputs",
 )
 EXPECTED_WORKFLOW_SHA256 = (
-    "7b234bd5e435b681ea837db800c35fda43b2a234ae49b95a1fe7057555ef6d73"
+    "21490d715ae2dedd859d7b44241b17074a51b2a42581f7bab48680150efa60ef"
 )
+EXPECTED_MAVEN_BASEDIR = "/policy"
 EXPECTED_ONLINE_NETWORK = "unrestricted; Maven transfers audited separately"
 EXPECTED_ONLINE_COMMAND = (
     "mvn --batch-mode --show-version --errors --strict-checksums "
@@ -204,6 +208,18 @@ EXPECTED_HARDENED_METADATA = {
         ),
         "bytes": 40,
     },
+}
+EXPECTED_POLICY_EXECUTION = {
+    "workflow_sha256": EXPECTED_WORKFLOW_SHA256,
+    "configuration_source": "reviewed_policy_directory",
+    "maven_basedir": EXPECTED_MAVEN_BASEDIR,
+    "source_mounts": {"online": "read-only", "offline": "read-only"},
+    "policy_mounts": {"online": "read-only", "offline": "read-only"},
+}
+EXPECTED_OFFLINE_INPUT_CLAIMS = {
+    "reproducible_inputs_retained": True,
+    "replacement_inputs": list(EXPECTED_REPLACEMENT_INPUTS),
+    "hardened_metadata": sorted(EXPECTED_HARDENED_METADATA),
 }
 VULNERABLE_COORDINATES = (
     re.compile(r"commons-io:commons-io:(?:jar:)?2\.8\.0(?:[:\s]|$)"),
@@ -805,7 +821,7 @@ def finalize_record(
     ):
         _fail("RUN_IDENTITY", "workflow repository identity differs")
     record = {
-        "schema_version": 1,
+        "schema_version": EXPECTED_EVIDENCE_SCHEMA_VERSION,
         "record_path": (
             "docs/design/evidence/trino/"
             f"run-{run_id}-maven-feasibility-validation.json"
@@ -839,6 +855,7 @@ def finalize_record(
             "builder": EXPECTED_BUILDER,
             "builder_arm64_manifest": EXPECTED_BUILDER_ARM64_MANIFEST,
             "selected_reactor": EXPECTED_SELECTED_REACTOR,
+            "policy": copy.deepcopy(EXPECTED_POLICY_EXECUTION),
             "online": {
                 "command": EXPECTED_ONLINE_COMMAND,
                 "network": EXPECTED_ONLINE_NETWORK,
@@ -867,13 +884,11 @@ def finalize_record(
             },
         },
         "offline_inputs": {
-            "reproducible_inputs_retained": True,
+            **copy.deepcopy(EXPECTED_OFFLINE_INPUT_CLAIMS),
             "manifest": _identity(manifest_path),
             "archive": _identity(archive_path),
             "file_count": manifest["file_count"],
             "total_bytes": manifest["total_bytes"],
-            "replacement_inputs": list(EXPECTED_REPLACEMENT_INPUTS),
-            "hardened_metadata": sorted(EXPECTED_HARDENED_METADATA),
         },
         "result": {
             "status": "passed",
@@ -1249,6 +1264,7 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
         if not stat.S_ISREG(status.st_mode) or status.st_nlink != 1:
             _fail("EVIDENCE_DIRECTORY", f"unsafe retained file: {path}")
     record = _read_json(evidence / RECORD_NAME)
+    schema_version = record.get("schema_version")
     if (
         set(record)
         != {
@@ -1260,7 +1276,11 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
             "offline_inputs",
             "result",
         }
-        or record.get("schema_version") != 1
+        or schema_version
+        not in {
+            LEGACY_EVIDENCE_SCHEMA_VERSION,
+            EXPECTED_EVIDENCE_SCHEMA_VERSION,
+        }
         or record.get("result", {}).get("status") != "passed"
     ):
         _fail("EVIDENCE_RECORD", "unexpected record envelope")
@@ -1326,20 +1346,22 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
     execution = record.get("execution", {})
     if not isinstance(execution, dict):
         _fail("EVIDENCE_EXECUTION", "execution result is not an object")
+    expected_execution_keys = {
+        "platform",
+        "runner_os",
+        "runner_arch",
+        "native_execution",
+        "builder",
+        "builder_arm64_manifest",
+        "selected_reactor",
+        "online",
+        "offline",
+        "toolchain",
+    }
+    if schema_version == EXPECTED_EVIDENCE_SCHEMA_VERSION:
+        expected_execution_keys.add("policy")
     if (
-        set(execution)
-        != {
-            "platform",
-            "runner_os",
-            "runner_arch",
-            "native_execution",
-            "builder",
-            "builder_arm64_manifest",
-            "selected_reactor",
-            "online",
-            "offline",
-            "toolchain",
-        }
+        set(execution) != expected_execution_keys
         or execution.get("platform") != "linux/arm64"
         or execution.get("runner_os") != "Linux"
         or execution.get("runner_arch") != "ARM64"
@@ -1348,6 +1370,10 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
         or execution.get("builder_arm64_manifest")
         != EXPECTED_BUILDER_ARM64_MANIFEST
         or execution.get("selected_reactor") != EXPECTED_SELECTED_REACTOR
+        or (
+            schema_version == EXPECTED_EVIDENCE_SCHEMA_VERSION
+            and execution.get("policy") != EXPECTED_POLICY_EXECUTION
+        )
     ):
         _fail("EVIDENCE_EXECUTION", "execution identity differs")
     _verify_toolchain_record(evidence, execution)
@@ -1396,8 +1422,8 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
         phase_logs[name] = log_identity
         if _vulnerable_lines(evidence / log_identity["path"]):
             _fail("VULNERABLE_COORDINATE", f"{name} log differs")
-    if phase_logs["online"] == phase_logs["offline"]:
-        _fail("EVIDENCE_EXECUTION", "online and offline log identities coincide")
+    if phase_logs["online"]["sha256"] == phase_logs["offline"]["sha256"]:
+        _fail("EVIDENCE_EXECUTION", "online and offline log payloads coincide")
     offline_inputs = record.get("offline_inputs", {})
     if not isinstance(offline_inputs, dict):
         _fail("OFFLINE_INPUT", "offline inputs are not an object")
@@ -1412,9 +1438,10 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
             "replacement_inputs",
             "hardened_metadata",
         }
-        or offline_inputs.get("reproducible_inputs_retained") is not True
-        or offline_inputs.get("hardened_metadata")
-        != sorted(EXPECTED_HARDENED_METADATA)
+        or any(
+            offline_inputs.get(field) != expected
+            for field, expected in EXPECTED_OFFLINE_INPUT_CLAIMS.items()
+        )
     ):
         _fail("OFFLINE_INPUT", "reproducible inputs are not retained")
     _verify_identity(
@@ -1629,6 +1656,7 @@ def audit_workflow(root: Path) -> None:
         "-Daether.syncContext.named.basedir.locksDir=/tmp/maven-locks",
         EXPECTED_SELECTED_REACTOR,
         "dependency:resolve-plugins -DskipTests",
+        "--env MAVEN_BASEDIR=/policy",
         "retention-days: 30",
         "include-hidden-files: false",
         "docker buildx imagetools inspect --raw",
@@ -1692,8 +1720,17 @@ def audit_workflow(root: Path) -> None:
             "/policy/settings.xml:ro"
         ),
     ]
+    expected_maven_environment = [
+        "HOME=/tmp/maven-home",
+        f"MAVEN_BASEDIR={EXPECTED_MAVEN_BASEDIR}",
+        "MAVEN_CONFIG=/tmp/maven-home/.m2",
+        "MAVEN_OPTS=",
+        "JAVA_TOOL_OPTIONS=",
+    ]
     if (
-        _option_values(online, "--volume")
+        _option_values(online, "--env") != expected_maven_environment
+        or _option_values(offline, "--env") != expected_maven_environment
+        or _option_values(online, "--volume")
         != [
             "${source_dir}:/workspace:ro",
             "${repository}:/m2",

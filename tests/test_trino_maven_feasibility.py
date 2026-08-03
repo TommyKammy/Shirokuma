@@ -120,6 +120,11 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
         offline = root / "offline.log"
         self._successful_log(online)
         self._successful_log(offline)
+        offline.write_text(
+            offline.read_text(encoding="utf-8")
+            + "[INFO] Offline replay completed from retained inputs\n",
+            encoding="utf-8",
+        )
         builder_index = root / "builder-index-source.json"
         builder_index.write_text(self.builder_index_text, encoding="utf-8")
         maven_version = root / "maven-version-source.txt"
@@ -271,6 +276,7 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
         workflow = (ROOT / feasibility.WORKFLOW_PATH).read_text(
             encoding="utf-8"
         )
+        self.assertEqual(workflow.count("--env MAVEN_BASEDIR=/policy"), 2)
         mutations = (
             (
                 workflow.replace("  pull_request:\n", "  push:\n", 1),
@@ -836,6 +842,7 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
         cases = (
             ("subject", lambda record: record["subject"]),
             ("execution", lambda record: record["execution"]),
+            ("policy", lambda record: record["execution"]["policy"]),
             ("online", lambda record: record["execution"]["online"]),
             ("offline", lambda record: record["execution"]["offline"]),
             ("offline_inputs", lambda record: record["offline_inputs"]),
@@ -858,6 +865,64 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                             evidence,
                             require_archive=True,
                         )
+
+    def test_current_schema_binds_execution_policy_and_offline_claims(
+        self,
+    ) -> None:
+        mutations = (
+            (
+                lambda record: record["execution"]["policy"].__setitem__(
+                    "maven_basedir", "/workspace"
+                ),
+                "EVIDENCE_EXECUTION",
+            ),
+            (
+                lambda record: record["offline_inputs"].__setitem__(
+                    "replacement_inputs",
+                    [
+                        "commons-io:commons-io:jar:2.8.0 -> "
+                        "commons-io:commons-io:jar:2.21.0"
+                    ],
+                ),
+                "OFFLINE_INPUT",
+            ),
+        )
+        for mutate, error in mutations:
+            with self.subTest(error=error):
+                with tempfile.TemporaryDirectory() as temporary:
+                    evidence = self._finalized_evidence(Path(temporary))
+                    record_path = evidence / feasibility.RECORD_NAME
+                    record = json.loads(
+                        record_path.read_text(encoding="utf-8")
+                    )
+                    mutate(record)
+                    record_path.write_text(
+                        json.dumps(record, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    with self.assertRaisesRegex(
+                        feasibility.EvidenceError,
+                        error,
+                    ):
+                        feasibility.audit_evidence(
+                            evidence,
+                            require_archive=True,
+                        )
+
+    def test_legacy_schema_remains_auditable_without_current_policy_claim(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = self._finalized_evidence(Path(temporary))
+            record_path = evidence / feasibility.RECORD_NAME
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            record["schema_version"] = feasibility.LEGACY_EVIDENCE_SCHEMA_VERSION
+            del record["execution"]["policy"]
+            record_path.write_text(
+                json.dumps(record, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            feasibility.audit_evidence(evidence, require_archive=True)
 
     def test_audit_rejects_duplicate_json_object_keys(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1087,6 +1152,29 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 feasibility.EvidenceError,
                 "EVIDENCE_EXECUTION",
+            ):
+                feasibility.audit_evidence(evidence, require_archive=True)
+
+    def test_audit_requires_distinct_online_and_offline_log_payloads(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = self._finalized_evidence(Path(temporary))
+            online_path = evidence / feasibility.ONLINE_LOG_NAME
+            offline_path = evidence / feasibility.OFFLINE_LOG_NAME
+            offline_path.write_bytes(online_path.read_bytes())
+            record_path = evidence / feasibility.RECORD_NAME
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            record["execution"]["offline"]["log"] = feasibility._identity(
+                offline_path
+            )
+            record_path.write_text(
+                json.dumps(record, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "log payloads coincide",
             ):
                 feasibility.audit_evidence(evidence, require_archive=True)
 

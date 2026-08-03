@@ -163,13 +163,16 @@ EXPECTED_FEASIBILITY_REAUDIT = {
     "artifact_digest": (
         "sha256:cf0272447ec1a6afd4bda304fefeb6176ee4240d4fc6339a32de65acf015fe8d"
     ),
-    "audited_at": "2026-08-03T12:54:12Z",
-    "result": "passed",
-    "scope": "complete retained artifact including bounded archive expansion",
+    "audited_at": "2026-08-03T13:57:14Z",
+    "result": "passed_integrity_only",
+    "scope": (
+        "complete retained artifact structural and content integrity; "
+        "execution controls are not retroactively proven"
+    ),
     "verifier": {
         "path": FEASIBILITY_VERIFIER_PATH.as_posix(),
         "sha256": (
-            "ba80cf866d8162bea6fb14f9a25ae9e8f3c2480dd350fdab410fc8e5bfa3a9f2"
+            "2ec40f3c833dbbf20fee1b37aad885cad6b8d98398295e24f257a1798d192d59"
         ),
     },
 }
@@ -193,9 +196,9 @@ EXPECTED_BLOCKER_FEASIBILITY_FILES = {
         ),
     },
     BLOCKER_FEASIBILITY_RECEIPT_PATH: {
-        "bytes": 1340,
+        "bytes": 1401,
         "sha256": (
-            "161a167f1346feb1082fc01eced8962edc31b27befbd34090b828597111fa94a"
+            "2982250f96168721614d7b890b885ddd0f02be9689630ac6f76e44a0bf147c1f"
         ),
     },
 }
@@ -358,16 +361,17 @@ EXPECTED_BLOCKER_CLASSIFICATION = {
     "existing_distribution_authorization_covers_change": False,
     "reason": (
         "ADR-0027 fixes the active source-overlay patch SHA-256, pom.xml "
-        "postimage, and allowed dependency versions. The retained findings "
-        "require a different patch and postimage, including a new Velocity "
-        "version, so publication must remain blocked pending separate exact "
-        "owner authorization and independent review."
+        "postimage, and allowed dependency versions. The retained feasibility "
+        "artifact predates the current authorization checkpoints, read-only "
+        "source mounts, and effective Maven policy basedir binding. Publication "
+        "must remain blocked pending a fresh hardened validation run, separate "
+        "exact owner authorization, and independent review."
     ),
 }
 EXPECTED_BLOCKER_FEASIBILITY_VALIDATION = {
-    "evidence_status": "passed_hardened_pre_authorization",
+    "evidence_status": "passed_integrity_reaudit_pre_hardening_execution",
     "authorization_use_permitted": False,
-    "revalidation_required_before_authorization": False,
+    "revalidation_required_before_authorization": True,
     "reproducible_inputs_retained": True,
     "validation_record": BLOCKER_FEASIBILITY_RECORD_PATH.as_posix(),
     "artifact_receipt": BLOCKER_FEASIBILITY_RECEIPT_PATH.as_posix(),
@@ -404,19 +408,23 @@ EXPECTED_BLOCKER_FEASIBILITY_VALIDATION = {
         "command_output_retained": True,
         "offline_repository_retained_in_actions_artifact": True,
         "artifact_retention_is_time_bounded": True,
-        "hardened_audit_passed": True,
+        "hardened_integrity_reaudit_passed": True,
+        "current_workflow_controls_proven": False,
+        "read_only_source_mounts_proven": False,
+        "effective_policy_basedir_proven": False,
         "retained_vulnerable_jar_detected": None,
         "full_clean_install_not_run": True,
         "fresh_closure_sbom_and_scan_not_run": True,
     },
 }
 EXPECTED_BLOCKER_NEXT_ACTION = {
-    "state": "owner_authorization_decision_required",
+    "state": "hardened_revalidation_required_before_owner_authorization",
     "required_decision": (
-        "Review run 30731801825 and approve or reject the exact candidate. "
-        "Do not activate the source remediation or publish an image until "
-        "the risk owner separately authorizes the candidate and independent "
-        "review is complete."
+        "Generate a fresh artifact with the current hardened workflow, then "
+        "review and approve or reject the exact candidate. Do not activate "
+        "the source remediation or publish an image until hardened "
+        "revalidation, separate risk-owner authorization, and independent "
+        "review are complete."
     ),
 }
 EXPECTED_BLOCKER_FINDING_POLICY = [
