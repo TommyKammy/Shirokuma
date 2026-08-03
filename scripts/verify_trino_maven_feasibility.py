@@ -99,7 +99,7 @@ EXPECTED_WORKFLOW_STEPS = (
     "Retain the review-only feasibility inputs and outputs",
 )
 EXPECTED_WORKFLOW_SHA256 = (
-    "cf603ed53a3043a78be385e62db59c0141948dfd47e12937bc3b504c733933e5"
+    "3c2d52047477311835529b59af4df21fa2dddd89b75d59a8662bd8cd18bcaeb6"
 )
 EXPECTED_ONLINE_NETWORK = "unrestricted; Maven transfers audited separately"
 EXPECTED_ONLINE_COMMAND = (
@@ -228,6 +228,7 @@ MAX_ARCHIVE_MEMBER_BYTES = 64 * 1024 * 1024
 MAX_ARCHIVE_FILE_BYTES = 512 * 1024 * 1024
 MAX_ARCHIVE_EXPANDED_BYTES = 640 * 1024 * 1024
 MAX_ARCHIVE_COMPRESSION_RATIO = 100
+MAX_JSON_BYTES = 16 * 1024 * 1024
 MAX_LOG_BYTES = 16 * 1024 * 1024
 
 
@@ -266,7 +267,24 @@ def _write_json(path: Path, document: object) -> None:
 
 def _read_json(path: Path) -> dict[str, Any]:
     try:
-        document = json.loads(path.read_text(encoding="utf-8"))
+        status = path.lstat()
+    except OSError as error:
+        _fail("EVIDENCE_JSON", f"{path}: {error}")
+    if (
+        not stat.S_ISREG(status.st_mode)
+        or status.st_nlink != 1
+        or not 0 < status.st_size <= MAX_JSON_BYTES
+    ):
+        _fail(
+            "EVIDENCE_JSON",
+            f"unsafe or oversized JSON file: {path}",
+        )
+    try:
+        with path.open("rb") as source:
+            payload = source.read(MAX_JSON_BYTES + 1)
+        if len(payload) != status.st_size or len(payload) > MAX_JSON_BYTES:
+            _fail("EVIDENCE_JSON", f"JSON file changed while reading: {path}")
+        document = json.loads(payload)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         _fail("EVIDENCE_JSON", f"{path}: {error}")
     if not isinstance(document, dict):
@@ -791,6 +809,8 @@ def _manifest_files(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     files = manifest.get("files")
     if not isinstance(files, list) or not files:
         _fail("OFFLINE_INPUT", "manifest files are missing")
+    if len(files) > MAX_ARCHIVE_MEMBERS:
+        _fail("OFFLINE_INPUT", "manifest file count exceeds limit")
     expected_keys = {"path", "mode", "sha256", "bytes"}
     for entry in files:
         if not isinstance(entry, dict) or set(entry) != expected_keys:

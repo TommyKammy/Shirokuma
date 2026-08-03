@@ -554,6 +554,37 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                         ):
                             feasibility._archive_entries(archive, entries)
 
+    def test_evidence_json_and_manifest_counts_are_bounded_before_decode(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "record.json"
+            path.write_text('{"status": "passed"}\n', encoding="utf-8")
+            with mock.patch.object(
+                feasibility,
+                "MAX_JSON_BYTES",
+                path.stat().st_size - 1,
+            ):
+                with self.assertRaisesRegex(
+                    feasibility.EvidenceError,
+                    "EVIDENCE_JSON",
+                ):
+                    feasibility._read_json(path)
+
+            files = [
+                {
+                    "path": f"artifact-{index}.jar",
+                    "mode": "0644",
+                    "sha256": "0" * 64,
+                    "bytes": 1,
+                }
+                for index in range(2)
+            ]
+            with mock.patch.object(feasibility, "MAX_ARCHIVE_MEMBERS", 1):
+                with self.assertRaisesRegex(
+                    feasibility.EvidenceError,
+                    "OFFLINE_INPUT",
+                ):
+                    feasibility._manifest_files({"files": files})
+
     def test_archive_audit_rejects_trailing_data(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -111,13 +111,13 @@ EXPECTED_FEASIBILITY_REAUDIT = {
     "artifact_digest": (
         "sha256:cf0272447ec1a6afd4bda304fefeb6176ee4240d4fc6339a32de65acf015fe8d"
     ),
-    "audited_at": "2026-08-03T09:59:22Z",
+    "audited_at": "2026-08-03T10:20:04Z",
     "result": "passed",
     "scope": "complete retained artifact including bounded archive expansion",
     "verifier": {
         "path": FEASIBILITY_VERIFIER_PATH.as_posix(),
         "sha256": (
-            "45abc9c110bc425ea823e19ebf7b08d7ecdd3930dc9a6effea5f9000bb6bf295"
+            "8c36e0084d79b5d452ab5905a8777f9bb1c5187b7292aefb9433ea8b7b4e5b56"
         ),
     },
 }
@@ -143,7 +143,7 @@ EXPECTED_BLOCKER_FEASIBILITY_FILES = {
     BLOCKER_FEASIBILITY_RECEIPT_PATH: {
         "bytes": 1340,
         "sha256": (
-            "b6f8e62423831d38c013497715fc9fc1ec8017909f531951a7e65dfc69fabd71"
+            "6be1ff44a130e94b23cb3ac40766c05dab89f7e820c744d6f9623bc866958389"
         ),
     },
 }
@@ -3564,6 +3564,14 @@ def _validate_authorization(
         or approved >= expires
     ):
         _fail("AUTHORIZATION", "time-boxed Issue #63 authorization differs")
+    if authorization.get("validation_points") != [
+        "before_source_fetch",
+        "before_source_execution",
+        "before_dependency_resolution",
+        "before_dependency_publication",
+        "before_evidence_review",
+    ]:
+        _fail("AUTHORIZATION", "authorization validation points differ")
     review = authorization.get("review", {})
     if (
         review.get("required_before_merge") is not True
@@ -3575,6 +3583,14 @@ def _validate_authorization(
             "AUTHORIZATION_EXPIRED",
             f"{at.isoformat()} is outside [{approved.isoformat()}, {expires.isoformat()})",
         )
+
+
+def authorize_source_fetch(
+    root: Path, *, at: dt.datetime | None = None
+) -> None:
+    contract = _load_json(root / CONTRACT_PATH)
+    instant = at or dt.datetime.now(dt.timezone.utc)
+    _validate_authorization(contract, at=instant)
 
 
 def _workflow_jobs_and_steps(workflow: str) -> tuple[list[str], dict[str, list[str]]]:
@@ -4738,6 +4754,9 @@ def _parser() -> argparse.ArgumentParser:
     authorize = commands.add_parser("authorize")
     authorize.add_argument("--root", type=Path, default=Path("."))
     authorize.add_argument("--at")
+    source_fetch = commands.add_parser("authorize-source-fetch")
+    source_fetch.add_argument("--root", type=Path, default=Path("."))
+    source_fetch.add_argument("--at")
     publication_status = commands.add_parser("publication-status")
     publication_status.add_argument("--root", type=Path, default=Path("."))
     source = commands.add_parser("audit-source")
@@ -4824,6 +4843,11 @@ def main() -> int:
                 or contract.get("publication", {}).get("permitted") is not True
             ):
                 _fail("LIFECYCLE", "publication is not permitted")
+        elif args.command == "authorize-source-fetch":
+            authorize_source_fetch(
+                args.root.resolve(),
+                at=_parse_time(args.at) if args.at else None,
+            )
         elif args.command == "publication-status":
             root = args.root.resolve()
             contract = _load_json(root / CONTRACT_PATH)

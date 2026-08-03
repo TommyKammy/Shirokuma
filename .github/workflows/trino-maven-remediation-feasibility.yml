@@ -170,6 +170,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py \
+            authorize-source-fetch --root .
           source_dir="${RUNNER_TEMP}/trino-source"
           test ! -e "${source_dir}"
           git init "${source_dir}"

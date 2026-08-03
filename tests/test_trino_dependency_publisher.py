@@ -2347,6 +2347,45 @@ class PublisherContractTests(unittest.TestCase):
     def test_repository_contract_and_workflow_are_closed(self) -> None:
         verify.audit(ROOT)
 
+    def test_source_fetch_authorization_is_current_and_precedes_fetch(self) -> None:
+        verify.authorize_source_fetch(
+            ROOT,
+            at=dt.datetime(
+                2026,
+                8,
+                21,
+                22,
+                43,
+                35,
+                tzinfo=dt.timezone.utc,
+            ),
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "AUTHORIZATION_EXPIRED",
+        ):
+            verify.authorize_source_fetch(
+                ROOT,
+                at=dt.datetime(
+                    2026,
+                    8,
+                    21,
+                    22,
+                    43,
+                    36,
+                    tzinfo=dt.timezone.utc,
+                ),
+            )
+
+        workflow = (
+            ROOT
+            / ".github/workflows/trino-maven-remediation-feasibility.yml"
+        ).read_text(encoding="utf-8")
+        self.assertLess(
+            workflow.index("authorize-source-fetch --root ."),
+            workflow.index("git -C \"${source_dir}\" fetch --depth=1 origin"),
+        )
+
     def test_retained_feasibility_expires_fail_closed(self) -> None:
         verify._validate_blocker_evidence(
             ROOT,
