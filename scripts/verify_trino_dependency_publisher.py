@@ -45,6 +45,7 @@ MAX_OMITTED_JAR_COMPRESSION_RATIO = 200
 MAX_OMITTED_JAR_ARCHIVE_BYTES = 128 * 1024 * 1024
 MAX_OMITTED_JAR_MEMBERS = 100_000
 MAX_OMITTED_JAR_CENTRAL_DIRECTORY_BYTES = 16 * 1024 * 1024
+MAX_BUILDER_SETTINGS_BYTES = 1024 * 1024
 SOURCE_OVERLAY_PATH = Path(
     "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch"
 )
@@ -111,13 +112,13 @@ EXPECTED_FEASIBILITY_REAUDIT = {
     "artifact_digest": (
         "sha256:cf0272447ec1a6afd4bda304fefeb6176ee4240d4fc6339a32de65acf015fe8d"
     ),
-    "audited_at": "2026-08-03T10:20:04Z",
+    "audited_at": "2026-08-03T10:42:50Z",
     "result": "passed",
     "scope": "complete retained artifact including bounded archive expansion",
     "verifier": {
         "path": FEASIBILITY_VERIFIER_PATH.as_posix(),
         "sha256": (
-            "8c36e0084d79b5d452ab5905a8777f9bb1c5187b7292aefb9433ea8b7b4e5b56"
+            "f33ad4f854b91e9e03e0fb82b50d51902f689abbc4b1a6eb42925ed9f7fcb64e"
         ),
     },
 }
@@ -143,7 +144,7 @@ EXPECTED_BLOCKER_FEASIBILITY_FILES = {
     BLOCKER_FEASIBILITY_RECEIPT_PATH: {
         "bytes": 1340,
         "sha256": (
-            "6be1ff44a130e94b23cb3ac40766c05dab89f7e820c744d6f9623bc866958389"
+            "4e3d8e4fa0d93b08dc1a965e13f22f66a662afad494c266939b8cd8072ef884b"
         ),
     },
 }
@@ -1528,12 +1529,21 @@ def _sha256(path: Path) -> str:
         _fail("POLICY_FILE", f"{path}: {error}")
 
 
-def _read_reviewed_regular_file(path: Path, *, code: str) -> bytes:
+def _read_reviewed_regular_file(
+    path: Path, *, code: str, max_bytes: int | None = None
+) -> bytes:
     try:
         expected = path.lstat()
     except OSError as error:
         _fail(code, f"{path}: {error}")
-    if not stat.S_ISREG(expected.st_mode) or expected.st_nlink != 1:
+    if (
+        not stat.S_ISREG(expected.st_mode)
+        or expected.st_nlink != 1
+        or (
+            max_bytes is not None
+            and not 0 < expected.st_size <= max_bytes
+        )
+    ):
         _fail(code, f"{path} must be one regular, non-hard-linked file")
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     try:
@@ -1551,8 +1561,10 @@ def _read_reviewed_regular_file(path: Path, *, code: str) -> bytes:
         ):
             _fail(code, f"{path} changed while it was opened")
         with os.fdopen(descriptor, "rb", closefd=False) as source:
-            payload = source.read()
-        if len(payload) != observed.st_size:
+            payload = source.read(max_bytes + 1) if max_bytes else source.read()
+        if len(payload) != observed.st_size or (
+            max_bytes is not None and len(payload) > max_bytes
+        ):
             _fail(code, f"{path} changed while it was read")
         return payload
     finally:
@@ -2186,6 +2198,7 @@ def apply_source_overlay(root: Path, checkout: Path) -> None:
     audit_source(root, checkout)
     contract = _load_json(root / CONTRACT_PATH)
     now = dt.datetime.now(dt.timezone.utc)
+    _validate_authorization(contract, at=now)
     _validate_source_overlay_contract(root, contract, at=now)
     _validate_distribution_remediation_contract(root, contract, at=now)
     overlay = EXPECTED_SOURCE_OVERLAY
@@ -3585,12 +3598,20 @@ def _validate_authorization(
         )
 
 
-def authorize_source_fetch(
-    root: Path, *, at: dt.datetime | None = None
+def authorize_use(
+    root: Path,
+    *,
+    validation_point: str,
+    at: dt.datetime | None = None,
 ) -> None:
     contract = _load_json(root / CONTRACT_PATH)
     instant = at or dt.datetime.now(dt.timezone.utc)
     _validate_authorization(contract, at=instant)
+    if validation_point not in contract["authorization"]["validation_points"]:
+        _fail(
+            "AUTHORIZATION",
+            f"unrecognized validation point: {validation_point}",
+        )
 
 
 def _workflow_jobs_and_steps(workflow: str) -> tuple[list[str], dict[str, list[str]]]:
@@ -3746,8 +3767,14 @@ def audit_builder_settings(path: Path) -> None:
     """Accept only inert containers and Maven's exact default HTTP blocker."""
     namespace = "http://maven.apache.org/SETTINGS/1.2.0"
     try:
-        root = ET.parse(path).getroot()
-    except (OSError, ET.ParseError) as error:
+        root = ET.fromstring(
+            _read_reviewed_regular_file(
+                path,
+                code="BUILDER_SETTINGS",
+                max_bytes=MAX_BUILDER_SETTINGS_BYTES,
+            )
+        )
+    except ET.ParseError as error:
         _fail("BUILDER_SETTINGS", str(error))
     if root.tag != f"{{{namespace}}}settings":
         _fail("BUILDER_SETTINGS", f"unexpected root element: {root.tag}")
@@ -4754,9 +4781,10 @@ def _parser() -> argparse.ArgumentParser:
     authorize = commands.add_parser("authorize")
     authorize.add_argument("--root", type=Path, default=Path("."))
     authorize.add_argument("--at")
-    source_fetch = commands.add_parser("authorize-source-fetch")
-    source_fetch.add_argument("--root", type=Path, default=Path("."))
-    source_fetch.add_argument("--at")
+    authorize_use_parser = commands.add_parser("authorize-use")
+    authorize_use_parser.add_argument("--root", type=Path, default=Path("."))
+    authorize_use_parser.add_argument("--validation-point", required=True)
+    authorize_use_parser.add_argument("--at")
     publication_status = commands.add_parser("publication-status")
     publication_status.add_argument("--root", type=Path, default=Path("."))
     source = commands.add_parser("audit-source")
@@ -4843,9 +4871,10 @@ def main() -> int:
                 or contract.get("publication", {}).get("permitted") is not True
             ):
                 _fail("LIFECYCLE", "publication is not permitted")
-        elif args.command == "authorize-source-fetch":
-            authorize_source_fetch(
+        elif args.command == "authorize-use":
+            authorize_use(
                 args.root.resolve(),
+                validation_point=args.validation_point,
                 at=_parse_time(args.at) if args.at else None,
             )
         elif args.command == "publication-status":

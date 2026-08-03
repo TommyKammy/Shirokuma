@@ -2347,9 +2347,10 @@ class PublisherContractTests(unittest.TestCase):
     def test_repository_contract_and_workflow_are_closed(self) -> None:
         verify.audit(ROOT)
 
-    def test_source_fetch_authorization_is_current_and_precedes_fetch(self) -> None:
-        verify.authorize_source_fetch(
+    def test_authorization_is_current_at_each_declared_use_point(self) -> None:
+        verify.authorize_use(
             ROOT,
+            validation_point="before_source_fetch",
             at=dt.datetime(
                 2026,
                 8,
@@ -2364,8 +2365,9 @@ class PublisherContractTests(unittest.TestCase):
             verify.ContractError,
             "AUTHORIZATION_EXPIRED",
         ):
-            verify.authorize_source_fetch(
+            verify.authorize_use(
                 ROOT,
+                validation_point="before_dependency_resolution",
                 at=dt.datetime(
                     2026,
                     8,
@@ -2382,8 +2384,26 @@ class PublisherContractTests(unittest.TestCase):
             / ".github/workflows/trino-maven-remediation-feasibility.yml"
         ).read_text(encoding="utf-8")
         self.assertLess(
-            workflow.index("authorize-source-fetch --root ."),
+            workflow.index("--validation-point before_source_fetch"),
             workflow.index("git -C \"${source_dir}\" fetch --depth=1 origin"),
+        )
+        online = workflow.split(
+            "- name: Resolve the selected plugin closure online",
+            1,
+        )[1].split("- name: Replay the selected plugin closure", 1)[0]
+        offline = workflow.split(
+            "- name: Replay the selected plugin closure",
+            1,
+        )[1].split("- name: Finalize and audit", 1)[0]
+        for phase in (online, offline):
+            self.assertLess(
+                phase.index("--authorization-root ."),
+                phase.index("docker run --rm"),
+            )
+        review = workflow.split("- name: Finalize and audit", 1)[1]
+        self.assertLess(
+            review.index("--validation-point before_evidence_review"),
+            review.index("finalize-record"),
         )
 
     def test_retained_feasibility_expires_fail_closed(self) -> None:
@@ -3563,6 +3583,16 @@ class PublisherContractTests(unittest.TestCase):
                 "</settings>\n"
             )
             path.write_text(safe_settings, encoding="utf-8")
+            with mock.patch.object(
+                verify,
+                "MAX_BUILDER_SETTINGS_BYTES",
+                path.stat().st_size - 1,
+            ):
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "BUILDER_SETTINGS",
+                ):
+                    verify.audit_builder_settings(path)
             verify.audit_builder_settings(path)
             workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
             self.assertNotIn('"global_settings_active_sections": []', workflow)

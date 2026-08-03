@@ -170,8 +170,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/verify_trino_dependency_publisher.py \
-            authorize-source-fetch --root .
+          python3 scripts/verify_trino_dependency_publisher.py authorize-use \
+            --root . --validation-point before_source_fetch
           source_dir="${RUNNER_TEMP}/trino-source"
           test ! -e "${source_dir}"
           git init "${source_dir}"
@@ -196,6 +196,7 @@ jobs:
           repository="${RUNNER_TEMP}/maven-feasibility-repository"
           install -d -m 0700 "${repository}"
           python3 scripts/verify_trino_maven_feasibility.py verify-candidate \
+            --authorization-root . \
             --checkout "${source_dir}"
           docker run --rm \
             --platform linux/arm64 \
@@ -241,6 +242,7 @@ jobs:
           python3 scripts/verify_trino_maven_feasibility.py apply-candidate \
             --root . --checkout "${source_dir}"
           python3 scripts/verify_trino_maven_feasibility.py verify-candidate \
+            --authorization-root . \
             --checkout "${source_dir}"
           docker run --rm \
             --platform linux/arm64 \
@@ -272,6 +274,8 @@ jobs:
         run: |
           set -euo pipefail
           evidence="${GITHUB_WORKSPACE}/trino-feasibility-evidence"
+          python3 scripts/verify_trino_dependency_publisher.py authorize-use \
+            --root . --validation-point before_evidence_review
           python3 scripts/verify_trino_maven_feasibility.py finalize-record \
             --evidence "${evidence}" \
             --online-log "${RUNNER_TEMP}/online-resolve-plugins.log" \

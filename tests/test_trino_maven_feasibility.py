@@ -334,6 +334,7 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
         verification = (
             "          python3 scripts/verify_trino_maven_feasibility.py "
             "verify-candidate \\\n"
+            "            --authorization-root . \\\n"
             '            --checkout "${source_dir}"'
         )
         workflow = (ROOT / feasibility.WORKFLOW_PATH).read_text(
@@ -584,6 +585,24 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                     "OFFLINE_INPUT",
                 ):
                     feasibility._manifest_files({"files": files})
+
+    def test_maven_version_attachment_is_bounded_before_decode(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = self._finalized_evidence(Path(temporary))
+            version = evidence / feasibility.MAVEN_VERSION_NAME
+            with mock.patch.object(
+                feasibility,
+                "MAX_MAVEN_VERSION_BYTES",
+                version.stat().st_size - 1,
+            ):
+                with self.assertRaisesRegex(
+                    feasibility.EvidenceError,
+                    "TOOLCHAIN_RECORD",
+                ):
+                    feasibility.audit_evidence(
+                        evidence,
+                        require_archive=True,
+                    )
 
     def test_archive_audit_rejects_trailing_data(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

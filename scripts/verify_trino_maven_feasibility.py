@@ -99,7 +99,7 @@ EXPECTED_WORKFLOW_STEPS = (
     "Retain the review-only feasibility inputs and outputs",
 )
 EXPECTED_WORKFLOW_SHA256 = (
-    "3c2d52047477311835529b59af4df21fa2dddd89b75d59a8662bd8cd18bcaeb6"
+    "7b234bd5e435b681ea837db800c35fda43b2a234ae49b95a1fe7057555ef6d73"
 )
 EXPECTED_ONLINE_NETWORK = "unrestricted; Maven transfers audited separately"
 EXPECTED_ONLINE_COMMAND = (
@@ -230,6 +230,7 @@ MAX_ARCHIVE_EXPANDED_BYTES = 640 * 1024 * 1024
 MAX_ARCHIVE_COMPRESSION_RATIO = 100
 MAX_JSON_BYTES = 16 * 1024 * 1024
 MAX_LOG_BYTES = 16 * 1024 * 1024
+MAX_MAVEN_VERSION_BYTES = 64 * 1024
 
 
 class EvidenceError(RuntimeError):
@@ -265,27 +266,51 @@ def _write_json(path: Path, document: object) -> None:
     )
 
 
+def _read_bounded_file(path: Path, *, code: str, max_bytes: int) -> bytes:
+    try:
+        expected = path.lstat()
+    except OSError as error:
+        _fail(code, f"{path}: {error}")
+    if (
+        not stat.S_ISREG(expected.st_mode)
+        or expected.st_nlink != 1
+        or not 0 < expected.st_size <= max_bytes
+    ):
+        _fail(code, f"unsafe or oversized file: {path}")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        _fail(code, f"{path}: {error}")
+    try:
+        observed = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(observed.st_mode)
+            or observed.st_nlink != 1
+            or observed.st_dev != expected.st_dev
+            or observed.st_ino != expected.st_ino
+            or observed.st_size != expected.st_size
+        ):
+            _fail(code, f"file changed while opening: {path}")
+        with os.fdopen(descriptor, "rb", closefd=False) as source:
+            payload = source.read(max_bytes + 1)
+        if len(payload) != observed.st_size or len(payload) > max_bytes:
+            _fail(code, f"file changed while reading: {path}")
+        return payload
+    finally:
+        os.close(descriptor)
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     try:
-        status = path.lstat()
-    except OSError as error:
-        _fail("EVIDENCE_JSON", f"{path}: {error}")
-    if (
-        not stat.S_ISREG(status.st_mode)
-        or status.st_nlink != 1
-        or not 0 < status.st_size <= MAX_JSON_BYTES
-    ):
-        _fail(
-            "EVIDENCE_JSON",
-            f"unsafe or oversized JSON file: {path}",
+        document = json.loads(
+            _read_bounded_file(
+                path,
+                code="EVIDENCE_JSON",
+                max_bytes=MAX_JSON_BYTES,
+            )
         )
-    try:
-        with path.open("rb") as source:
-            payload = source.read(MAX_JSON_BYTES + 1)
-        if len(payload) != status.st_size or len(payload) > MAX_JSON_BYTES:
-            _fail("EVIDENCE_JSON", f"JSON file changed while reading: {path}")
-        document = json.loads(payload)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
         _fail("EVIDENCE_JSON", f"{path}: {error}")
     if not isinstance(document, dict):
         _fail("EVIDENCE_JSON", f"top level must be an object: {path}")
@@ -372,7 +397,9 @@ def _expected_candidate_source_postimages() -> dict[str, str]:
     return expected
 
 
-def verify_candidate(checkout: Path) -> None:
+def verify_candidate(
+    checkout: Path, *, authorization_root: Path | None = None
+) -> None:
     checkout = checkout.resolve()
     pom = checkout / "pom.xml"
     if _sha256(pom) != EXPECTED_POSTIMAGE_SHA256:
@@ -413,6 +440,11 @@ def verify_candidate(checkout: Path) -> None:
         text=True,
     ).stdout.splitlines():
         _fail("CANDIDATE_APPLY", "candidate created untracked source files")
+    if authorization_root is not None:
+        publisher.authorize_use(
+            authorization_root.resolve(),
+            validation_point="before_dependency_resolution",
+        )
 
 
 def _repository_entries(repository: Path) -> list[dict[str, Any]]:
@@ -1077,8 +1109,12 @@ def _verify_toolchain_record(evidence: Path, execution: dict[str, Any]) -> None:
         _fail("TOOLCHAIN_RECORD", "builder arm64 descriptor differs")
     version_path = evidence / toolchain["maven_version_output"]["path"]
     try:
-        version = version_path.read_text(encoding="utf-8", errors="strict")
-    except (OSError, UnicodeDecodeError) as error:
+        version = _read_bounded_file(
+            version_path,
+            code="TOOLCHAIN_RECORD",
+            max_bytes=MAX_MAVEN_VERSION_BYTES,
+        ).decode("utf-8", errors="strict")
+    except UnicodeDecodeError as error:
         _fail("TOOLCHAIN_RECORD", f"{version_path}: {error}")
     version_markers = (
         "Apache Maven 3.9.16",
@@ -1371,6 +1407,8 @@ def _audit_candidate_postimage_before_docker(
         "python3",
         "scripts/verify_trino_maven_feasibility.py",
         "verify-candidate",
+        "--authorization-root",
+        ".",
         "--checkout",
         "${source_dir}",
     ]
@@ -1489,6 +1527,7 @@ def main(argv: list[str] | None = None) -> int:
     apply.add_argument("--root", type=Path, default=Path("."))
     apply.add_argument("--checkout", type=Path, required=True)
     verify = commands.add_parser("verify-candidate")
+    verify.add_argument("--authorization-root", type=Path)
     verify.add_argument("--checkout", type=Path, required=True)
     capture = commands.add_parser("capture-repository")
     capture.add_argument("--repository", type=Path, required=True)
@@ -1514,7 +1553,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "apply-candidate":
             apply_candidate(args.root, args.checkout)
         elif args.command == "verify-candidate":
-            verify_candidate(args.checkout)
+            verify_candidate(
+                args.checkout,
+                authorization_root=args.authorization_root,
+            )
         elif args.command == "prune-vulnerable-inputs":
             prune_vulnerable_inputs(args.repository, args.root)
         elif args.command == "capture-repository":
