@@ -2406,6 +2406,26 @@ class PublisherContractTests(unittest.TestCase):
             review.index("finalize-record"),
         )
 
+    def test_authorization_dates_are_bound_to_the_approval_record(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        contract["authorization"]["approved_at"] = "2027-01-01T00:00:00Z"
+        contract["authorization"]["expires_at"] = "2027-01-31T00:00:00Z"
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "AUTHORIZATION",
+        ):
+            verify._validate_authorization(
+                contract,
+                at=dt.datetime(
+                    2027,
+                    1,
+                    15,
+                    tzinfo=dt.timezone.utc,
+                ),
+            )
+
     def test_retained_feasibility_expires_fail_closed(self) -> None:
         verify._validate_blocker_evidence(
             ROOT,

@@ -46,6 +46,57 @@ MAX_OMITTED_JAR_ARCHIVE_BYTES = 128 * 1024 * 1024
 MAX_OMITTED_JAR_MEMBERS = 100_000
 MAX_OMITTED_JAR_CENTRAL_DIRECTORY_BYTES = 16 * 1024 * 1024
 MAX_BUILDER_SETTINGS_BYTES = 1024 * 1024
+EXPECTED_AUTHORIZATION = {
+    "type": "time_boxed_source_identity_risk_acceptance",
+    "decision_record": (
+        "docs/design/07_ADR/"
+        "ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md"
+    ),
+    "approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/"
+        "issues/63#issuecomment-5052385803"
+    ),
+    "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
+    "approved_at": "2026-07-22T22:43:36Z",
+    "expires_at": "2026-08-21T22:43:36Z",
+    "maximum_duration_days": 30,
+    "automatic_renewal": False,
+    "risk_owner": "TommyKammy",
+    "implementation_author": "Codex",
+    "review": {
+        "required_before_merge": True,
+        "reviewer_must_differ_from_implementation_author": True,
+        "enforcement": "required_pull_request_review_before_merge",
+    },
+    "validation_points": [
+        "before_source_fetch",
+        "before_source_execution",
+        "before_dependency_resolution",
+        "before_dependency_publication",
+        "before_evidence_review",
+    ],
+    "scope": {
+        "profile": "mac-studio-solo/local-lite",
+        "purpose": "non-production-poc",
+        "data_classification": ["synthetic", "poc"],
+        "public_service_or_ingress_permitted": False,
+        "source_binding": {
+            "repository": "https://github.com/trinodb/trino",
+            "release_tag": "483",
+            "commit_sha": "50b0b50b75abd47f830b7805ee1b51716eb4065e",
+            "tree_sha": "3b5414292a614b12393bb4605ea2d4c588a5b8ee",
+        },
+    },
+    "accepted_risk": (
+        "the exact source binding lacks a qualifying upstream publisher "
+        "signature or provenance statement"
+    ),
+    "stacked_vulnerability_exception_permitted": False,
+    "expiry_action": (
+        "fail_closed_before_dependency_or_image_publication_"
+        "resident_admission_or_runtime_reconciliation"
+    ),
+}
 SOURCE_OVERLAY_PATH = Path(
     "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch"
 )
@@ -3560,37 +3611,12 @@ def _validate_authorization(
     contract: Mapping[str, Any], *, at: dt.datetime | None
 ) -> None:
     authorization = contract.get("authorization")
-    if not isinstance(authorization, dict):
-        _fail("AUTHORIZATION", "authorization record is missing")
+    if authorization != EXPECTED_AUTHORIZATION:
+        _fail("AUTHORIZATION", "Issue #63 authorization record differs")
     approved = _parse_time(authorization.get("approved_at", ""))
     expires = _parse_time(authorization.get("expires_at", ""))
-    if (
-        authorization.get("type")
-        != "time_boxed_source_identity_risk_acceptance"
-        or authorization.get("issue")
-        != "https://github.com/TommyKammy/Shirokuma/issues/63"
-        or authorization.get("maximum_duration_days") != 30
-        or authorization.get("automatic_renewal") is not False
-        or authorization.get("risk_owner") != "TommyKammy"
-        or authorization.get("implementation_author") != "Codex"
-        or expires - approved > dt.timedelta(days=30)
-        or approved >= expires
-    ):
+    if expires - approved > dt.timedelta(days=30) or approved >= expires:
         _fail("AUTHORIZATION", "time-boxed Issue #63 authorization differs")
-    if authorization.get("validation_points") != [
-        "before_source_fetch",
-        "before_source_execution",
-        "before_dependency_resolution",
-        "before_dependency_publication",
-        "before_evidence_review",
-    ]:
-        _fail("AUTHORIZATION", "authorization validation points differ")
-    review = authorization.get("review", {})
-    if (
-        review.get("required_before_merge") is not True
-        or review.get("reviewer_must_differ_from_implementation_author") is not True
-    ):
-        _fail("AUTHORIZATION", "owner/reviewer separation is missing")
     if at is not None and not approved <= at < expires:
         _fail(
             "AUTHORIZATION_EXPIRED",
