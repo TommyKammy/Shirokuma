@@ -938,12 +938,27 @@ def _archive_entries(
             expanded.seek(0)
             with tarfile.open(fileobj=expanded, mode="r:") as retained:
                 for member in retained:
+                    expected_pax_headers = (
+                        {"path": member.name}
+                        if len(member.name.encode("utf-8")) > tarfile.LENGTH_NAME
+                        else {}
+                    )
                     if (
                         len(observed) >= MAX_ARCHIVE_MEMBERS
                         or member.size > MAX_ARCHIVE_MEMBER_BYTES
                         or not member.isfile()
                         or member.name in seen
                         or member.name not in expected
+                        or member.uid != 0
+                        or member.gid != 0
+                        or member.uname != ""
+                        or member.gname != ""
+                        or member.mtime != 0
+                        or member.type != tarfile.REGTYPE
+                        or member.linkname != ""
+                        or member.devmajor != 0
+                        or member.devminor != 0
+                        or member.pax_headers != expected_pax_headers
                     ):
                         _fail(
                             "OFFLINE_ARCHIVE",
@@ -1132,9 +1147,20 @@ def _verify_toolchain_record(evidence: Path, execution: dict[str, Any]) -> None:
 def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
     evidence = evidence.resolve()
     record = _read_json(evidence / RECORD_NAME)
-    if record.get("schema_version") != 1 or record.get("result", {}).get(
-        "status"
-    ) != "passed":
+    if (
+        set(record)
+        != {
+            "schema_version",
+            "record_path",
+            "subject",
+            "boundary",
+            "execution",
+            "offline_inputs",
+            "result",
+        }
+        or record.get("schema_version") != 1
+        or record.get("result", {}).get("status") != "passed"
+    ):
         _fail("EVIDENCE_RECORD", "unexpected record envelope")
     subject = record.get("subject", {})
     run_id = subject.get("run_id")
@@ -1168,6 +1194,11 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
         )
     ):
         _fail("EVIDENCE_SUBJECT", "workflow subject identity differs")
+    if record.get("record_path") != (
+        "docs/design/evidence/trino/"
+        f"run-{run_id}-maven-feasibility-validation.json"
+    ):
+        _fail("EVIDENCE_RECORD", "validation record path differs")
     boundary = record.get("boundary")
     if boundary != {
         "state": "preauthorization_feasibility_only",

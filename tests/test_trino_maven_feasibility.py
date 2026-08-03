@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -625,6 +626,68 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                         "OFFLINE_ARCHIVE",
                     ):
                         feasibility._archive_entries(archive, entries)
+
+    def test_archive_audit_rejects_unmanifested_pax_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = self._repository(root)
+            entries = feasibility._repository_entries(repository)
+            archive = root / feasibility.ARCHIVE_NAME
+            with archive.open("wb") as raw:
+                with gzip.GzipFile(
+                    filename="",
+                    mode="wb",
+                    fileobj=raw,
+                    mtime=0,
+                ) as zipped:
+                    with tarfile.open(
+                        fileobj=zipped,
+                        mode="w",
+                        format=tarfile.PAX_FORMAT,
+                    ) as retained:
+                        for index, entry in enumerate(entries):
+                            source = repository / entry["path"]
+                            info = retained.gettarinfo(
+                                str(source),
+                                arcname=entry["path"],
+                            )
+                            info.uid = 0
+                            info.gid = 0
+                            info.uname = ""
+                            info.gname = ""
+                            info.mtime = 0
+                            info.mode = int(entry["mode"], 8)
+                            info.pax_headers = (
+                                {"comment": "unmanifested"}
+                                if index == 0
+                                else {}
+                            )
+                            with source.open("rb") as payload:
+                                retained.addfile(info, payload)
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "OFFLINE_ARCHIVE",
+            ):
+                feasibility._archive_entries(archive, entries)
+
+    def test_validation_record_path_is_bound_to_the_run(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = self._finalized_evidence(Path(temporary))
+            record_path = evidence / feasibility.RECORD_NAME
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            record["record_path"] = "../../false.json"
+            record_path.write_text(
+                json.dumps(record, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "EVIDENCE_RECORD",
+            ):
+                feasibility.audit_evidence(
+                    evidence,
+                    require_archive=True,
+                )
 
     def test_finalize_retains_online_offline_and_input_identities(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
