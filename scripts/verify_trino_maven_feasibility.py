@@ -284,6 +284,24 @@ def _is_exact_int(value: object, *, expected: int | None = None) -> bool:
     return type(value) is int and (expected is None or value == expected)
 
 
+def _matches_exact_json(value: object, expected: object) -> bool:
+    if type(value) is not type(expected):
+        return False
+    if isinstance(expected, dict):
+        assert isinstance(value, dict)
+        return set(value) == set(expected) and all(
+            _matches_exact_json(value[key], expected_item)
+            for key, expected_item in expected.items()
+        )
+    if isinstance(expected, list):
+        assert isinstance(value, list)
+        return len(value) == len(expected) and all(
+            _matches_exact_json(value_item, expected_item)
+            for value_item, expected_item in zip(value, expected)
+        )
+    return value == expected
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
@@ -1399,15 +1417,18 @@ def audit_evidence(
     ):
         _fail("EVIDENCE_RECORD", "validation record path differs")
     boundary = record.get("boundary")
-    if boundary != {
-        "state": "preauthorization_feasibility_only",
-        "source_remediation_activated": False,
-        "publication_permitted": False,
-        "dependency_artifact_produced": False,
-        "image_or_runtime_change_permitted": False,
-        "candidate_patch_sha256": EXPECTED_CANDIDATE_PATCH_SHA256,
-        "candidate_postimage_sha256": EXPECTED_POSTIMAGE_SHA256,
-    }:
+    if not _matches_exact_json(
+        boundary,
+        {
+            "state": "preauthorization_feasibility_only",
+            "source_remediation_activated": False,
+            "publication_permitted": False,
+            "dependency_artifact_produced": False,
+            "image_or_runtime_change_permitted": False,
+            "candidate_patch_sha256": EXPECTED_CANDIDATE_PATCH_SHA256,
+            "candidate_postimage_sha256": EXPECTED_POSTIMAGE_SHA256,
+        },
+    ):
         _fail("EVIDENCE_BOUNDARY", "feasibility boundary differs")
     execution = record.get("execution", {})
     if not isinstance(execution, dict):
@@ -1438,7 +1459,9 @@ def audit_evidence(
         or execution.get("selected_reactor") != EXPECTED_SELECTED_REACTOR
         or (
             schema_version == EXPECTED_EVIDENCE_SCHEMA_VERSION
-            and execution.get("policy") != EXPECTED_POLICY_EXECUTION
+            and not _matches_exact_json(
+                execution.get("policy"), EXPECTED_POLICY_EXECUTION
+            )
         )
     ):
         _fail("EVIDENCE_EXECUTION", "execution identity differs")
@@ -1507,7 +1530,7 @@ def audit_evidence(
             "hardened_metadata",
         }
         or any(
-            offline_inputs.get(field) != expected
+            not _matches_exact_json(offline_inputs.get(field), expected)
             for field, expected in EXPECTED_OFFLINE_INPUT_CLAIMS.items()
         )
         or not _is_exact_int(offline_inputs.get("file_count"))
@@ -1575,13 +1598,16 @@ def audit_evidence(
     if not set(EXPECTED_REPLACEMENT_INPUTS).issubset(observed):
         _fail("OFFLINE_INPUT", "replacement inputs differ")
     result = record.get("result")
-    if result != {
-        "status": "passed",
-        "authorization_use_permitted": False,
-        "owner_decision_still_required": True,
-        "full_clean_install_not_run": True,
-        "fresh_closure_sbom_and_scan_not_run": True,
-    }:
+    if not _matches_exact_json(
+        result,
+        {
+            "status": "passed",
+            "authorization_use_permitted": False,
+            "owner_decision_still_required": True,
+            "full_clean_install_not_run": True,
+            "fresh_closure_sbom_and_scan_not_run": True,
+        },
+    ):
         _fail("EVIDENCE_RESULT", "result boundary differs")
 
 

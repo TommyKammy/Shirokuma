@@ -1116,6 +1116,37 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                 feasibility.BUILDER_INDEX_NAME,
             )
 
+    def test_audit_requires_exact_boolean_claim_types(self) -> None:
+        mutations = (
+            ("boundary", "source_remediation_activated", 0),
+            ("boundary", "publication_permitted", 0),
+            ("boundary", "dependency_artifact_produced", 0),
+            ("boundary", "image_or_runtime_change_permitted", 0),
+            ("offline_inputs", "reproducible_inputs_retained", 1),
+            ("result", "authorization_use_permitted", 0),
+            ("result", "owner_decision_still_required", 1),
+            ("result", "full_clean_install_not_run", 1),
+            ("result", "fresh_closure_sbom_and_scan_not_run", 1),
+        )
+        for section, field, value in mutations:
+            with self.subTest(section=section, field=field):
+                with tempfile.TemporaryDirectory() as temporary:
+                    evidence = self._finalized_evidence(Path(temporary))
+                    record_path = evidence / feasibility.RECORD_NAME
+                    record = json.loads(
+                        record_path.read_text(encoding="utf-8")
+                    )
+                    record[section][field] = value
+                    record_path.write_text(
+                        json.dumps(record, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    with self.assertRaises(feasibility.EvidenceError):
+                        feasibility.audit_evidence(
+                            evidence,
+                            require_archive=True,
+                        )
+
     def test_audit_binds_manifest_envelope(self) -> None:
         mutations = {
             "schema_version": 2,

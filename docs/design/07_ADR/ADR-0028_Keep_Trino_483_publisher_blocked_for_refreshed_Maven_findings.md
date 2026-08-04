@@ -102,14 +102,19 @@ absence, retain and validate the builder index, Maven version output, and global
 settings, and replay the pruned repository with networking disabled and a
 read-only mount.
 
-Run `30731801825` supplies that fresh evidence for reviewed commit
+Run `30731801825` supplies bounded historical evidence for reviewed commit
 `3ceae605187b9e08f4f6e3a1d547f5623cfb111f`. The native arm64 online resolution
 and network-none, read-only offline replay both passed. Independent repository
 audit confirms that the 4,879-file archive exactly matches its manifest, that no
 denied vulnerable JAR is physically present, and that the builder index, Maven
 version output, global settings, and hardened SCM metadata are retained and
-bound by hash. This closes the feasibility revalidation requirement only; it
-does not authorize activation or publication.
+bound by hash. However, that run predates the authorization checkpoints,
+read-only source mounts, and effective Maven policy binding now enforced by the
+workflow. The retained classification therefore keeps
+`revalidation_required_before_authorization: true`: a fresh hardened run and
+independent artifact audit are required before the owner authorization decision.
+Run `30731801825` does not close revalidation or authorize activation or
+publication.
 
 This is feasibility evidence only. It does not activate the candidate patch,
 authorize a new source postimage, permit another publisher run, or claim a
@@ -161,9 +166,11 @@ the Trino artifact has not passed resident admission or runtime acceptance.
   `git apply --unidiff-zero --whitespace=error-all` and verify the candidate
   postimage hash.
 - Reverify run `30731801825`, artifact `8828209533`, the retained validation
-  record, and the artifact receipt; require online and network-none offline
-  exit status zero, a read-only offline repository, reproducible inputs, and
-  an empty vulnerable-coordinate set before the separate owner decision.
+  record, and the artifact receipt as bounded historical evidence.
+- Before the owner decision, execute and independently audit a fresh hardened
+  run for the reviewed commit; require the authorization checkpoints,
+  read-only source and offline-repository mounts, effective Maven policy
+  binding, reproducible inputs, and an empty vulnerable-coordinate set.
 - `python3 -m unittest tests.test_trino_dependency_publisher`
 - `python3 scripts/verify_trino_dependency_publisher.py audit --root .`
 - `make verify-trino-bootstrap`
