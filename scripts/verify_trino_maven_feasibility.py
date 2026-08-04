@@ -109,7 +109,7 @@ EXPECTED_WORKFLOW_STEPS = (
     "Retain the review-only feasibility inputs and outputs",
 )
 EXPECTED_WORKFLOW_SHA256 = (
-    "5771b674ea7b60e6c8fa89fb22cd140357de7745cde850efe30e737669b486fc"
+    "42e3806f4ba13efd1062efd07a74c39332c19326c3997bf32f38c23b5b75865a"
 )
 EXPECTED_MAVEN_BASEDIR = "/policy"
 EXPECTED_POLICY_SOURCE = "bootstrap/trino/v483/maven-policy/.mvn"
@@ -907,7 +907,13 @@ def finalize_record(
         },
     }
     _write_json(evidence / RECORD_NAME, record)
-    audit_evidence(evidence, require_archive=True)
+    audit_evidence(
+        evidence,
+        require_archive=True,
+        trusted_reviewed_commit=os.environ["REVIEWED_COMMIT"],
+        trusted_workflow_execution_commit=os.environ["GITHUB_SHA"],
+        require_subject_binding=True,
+    )
 
 
 def _verify_identity(
@@ -1253,7 +1259,14 @@ def _verify_toolchain_record(evidence: Path, execution: dict[str, Any]) -> None:
     )
 
 
-def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
+def audit_evidence(
+    evidence: Path,
+    *,
+    require_archive: bool,
+    trusted_reviewed_commit: str | None = None,
+    trusted_workflow_execution_commit: str | None = None,
+    require_subject_binding: bool = False,
+) -> None:
     evidence = evidence.resolve()
     expected_files = set(EXPECTED_EVIDENCE_FILES)
     if not require_archive:
@@ -1336,6 +1349,38 @@ def audit_evidence(evidence: Path, *, require_archive: bool) -> None:
         or not _is_canonical_workflow_ref(subject.get("workflow_ref"))
     ):
         _fail("EVIDENCE_SUBJECT", "workflow subject identity differs")
+    trusted_commits = (
+        trusted_reviewed_commit,
+        trusted_workflow_execution_commit,
+    )
+    if (
+        require_subject_binding
+        and schema_version == EXPECTED_EVIDENCE_SCHEMA_VERSION
+        and any(value is None for value in trusted_commits)
+    ):
+        _fail(
+            "EVIDENCE_PROVENANCE",
+            "current evidence requires externally trusted commit bindings",
+        )
+    if any(value is not None for value in trusted_commits):
+        if (
+            any(
+                not isinstance(value, str)
+                or len(value) != 40
+                or any(
+                    character not in "0123456789abcdef"
+                    for character in value
+                )
+                for value in trusted_commits
+            )
+            or subject.get("reviewed_commit") != trusted_reviewed_commit
+            or subject.get("workflow_execution_commit")
+            != trusted_workflow_execution_commit
+        ):
+            _fail(
+                "EVIDENCE_PROVENANCE",
+                "workflow subject differs from trusted commit bindings",
+            )
     if record.get("record_path") != (
         "docs/design/evidence/trino/"
         f"run-{run_id}-maven-feasibility-validation.json"
@@ -1658,6 +1703,38 @@ def _audit_candidate_postimage_before_docker(
         _fail("WORKFLOW", f"candidate postimage check differs: {step_name}")
 
 
+def _audit_authenticated_evidence_invocation(workflow: str) -> None:
+    body = _workflow_step_run(
+        workflow,
+        "Finalize and audit the retained validation record",
+    )
+    logical = re.sub(r"\\\n[ \t]*", " ", body)
+    prefix = "python3 scripts/verify_trino_maven_feasibility.py audit-evidence"
+    invocations = [
+        line.strip()
+        for line in logical.splitlines()
+        if line.strip().startswith(prefix)
+    ]
+    expected = [
+        "python3",
+        "scripts/verify_trino_maven_feasibility.py",
+        "audit-evidence",
+        "--evidence",
+        "${evidence}",
+        "--require-archive",
+        "--trusted-reviewed-commit",
+        "${REVIEWED_COMMIT}",
+        "--trusted-workflow-execution-commit",
+        "${GITHUB_SHA}",
+    ]
+    try:
+        parsed = [shlex.split(invocation, posix=True) for invocation in invocations]
+    except ValueError as error:
+        _fail("WORKFLOW", f"evidence audit cannot be parsed: {error}")
+    if parsed != [expected]:
+        _fail("WORKFLOW", "authenticated evidence audit differs")
+
+
 def audit_workflow(root: Path) -> None:
     workflow_path = root.resolve() / WORKFLOW_PATH
     workflow = workflow_path.read_text(encoding="utf-8")
@@ -1707,6 +1784,7 @@ def audit_workflow(root: Path) -> None:
         "Replay the selected plugin closure with no network",
     ):
         _audit_candidate_application(workflow, step_name)
+    _audit_authenticated_evidence_invocation(workflow)
     online = _workflow_docker_run(
         workflow,
         "Resolve the selected plugin closure online",
@@ -1787,6 +1865,8 @@ def main(argv: list[str] | None = None) -> int:
     audit = commands.add_parser("audit-evidence")
     audit.add_argument("--evidence", type=Path, required=True)
     audit.add_argument("--require-archive", action="store_true")
+    audit.add_argument("--trusted-reviewed-commit")
+    audit.add_argument("--trusted-workflow-execution-commit")
     workflow = commands.add_parser("audit-workflow")
     workflow.add_argument("--root", type=Path, default=Path("."))
     args = parser.parse_args(argv)
@@ -1813,7 +1893,15 @@ def main(argv: list[str] | None = None) -> int:
                 args.global_settings,
             )
         elif args.command == "audit-evidence":
-            audit_evidence(args.evidence, require_archive=args.require_archive)
+            audit_evidence(
+                args.evidence,
+                require_archive=args.require_archive,
+                trusted_reviewed_commit=args.trusted_reviewed_commit,
+                trusted_workflow_execution_commit=(
+                    args.trusted_workflow_execution_commit
+                ),
+                require_subject_binding=True,
+            )
         elif args.command == "audit-workflow":
             audit_workflow(args.root)
         else:  # pragma: no cover

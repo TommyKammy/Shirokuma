@@ -306,6 +306,15 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                 ),
                 "Maven Docker execution controls differ",
             ),
+            (
+                workflow.replace(
+                    "            --trusted-reviewed-commit "
+                    '"${REVIEWED_COMMIT}" \\\n',
+                    "",
+                    1,
+                ),
+                "authenticated evidence audit differs",
+            ),
         )
         for mutated, error in mutations:
             with self.subTest(error=error):
@@ -927,6 +936,46 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                 encoding="utf-8",
             )
             feasibility.audit_evidence(evidence, require_archive=True)
+            self.assertEqual(
+                feasibility.main(
+                    [
+                        "audit-evidence",
+                        "--evidence",
+                        str(evidence),
+                        "--require-archive",
+                    ]
+                ),
+                0,
+            )
+
+    def test_current_cli_audit_requires_external_subject_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = self._finalized_evidence(Path(temporary))
+            base_args = [
+                "audit-evidence",
+                "--evidence",
+                str(evidence),
+                "--require-archive",
+            ]
+            trusted_args = [
+                *base_args,
+                "--trusted-reviewed-commit",
+                "b" * 40,
+                "--trusted-workflow-execution-commit",
+                "a" * 40,
+            ]
+            self.assertEqual(feasibility.main(base_args), 1)
+            self.assertEqual(feasibility.main(trusted_args), 0)
+
+            record_path = evidence / feasibility.RECORD_NAME
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            record["subject"]["reviewed_commit"] = "c" * 40
+            record["subject"]["workflow_execution_commit"] = "d" * 40
+            record_path.write_text(
+                json.dumps(record, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(feasibility.main(trusted_args), 1)
 
     def test_all_schema_discriminators_require_exact_integers(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

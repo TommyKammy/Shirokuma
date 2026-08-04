@@ -287,7 +287,9 @@ jobs:
             --maven-version "${RUNNER_TEMP}/maven-version.txt" \
             --global-settings "${RUNNER_TEMP}/maven-global-settings.xml"
           python3 scripts/verify_trino_maven_feasibility.py audit-evidence \
-            --evidence "${evidence}" --require-archive
+            --evidence "${evidence}" --require-archive \
+            --trusted-reviewed-commit "${REVIEWED_COMMIT}" \
+            --trusted-workflow-execution-commit "${GITHUB_SHA}"
 
       - name: Retain the review-only feasibility inputs and outputs
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
