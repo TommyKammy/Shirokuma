@@ -916,9 +916,7 @@ def finalize_record(
     )
 
 
-def _verify_identity(
-    directory: Path, identity: object, *, expected_name: str
-) -> None:
+def _validate_identity(identity: object, *, expected_name: str) -> None:
     if not isinstance(identity, dict) or set(identity) != {
         "path",
         "sha256",
@@ -930,6 +928,20 @@ def _verify_identity(
             "EVIDENCE_IDENTITY",
             f"identity path differs: {identity['path']!r}",
         )
+    if (
+        not isinstance(identity["sha256"], str)
+        or re.fullmatch(r"[0-9a-f]{64}", identity["sha256"]) is None
+        or not _is_exact_int(identity["bytes"])
+        or identity["bytes"] < 0
+    ):
+        _fail("EVIDENCE_IDENTITY", f"malformed identity: {identity!r}")
+
+
+def _verify_identity(
+    directory: Path, identity: object, *, expected_name: str
+) -> None:
+    _validate_identity(identity, expected_name=expected_name)
+    assert isinstance(identity, dict)
     path = directory / expected_name
     if _identity(path) != identity:
         _fail("EVIDENCE_IDENTITY", f"identity differs: {path}")
@@ -957,7 +969,7 @@ def _manifest_files(manifest: dict[str, Any]) -> list[dict[str, Any]]:
             or re.fullmatch(r"[0-7]{4}", entry["mode"]) is None
             or not isinstance(entry["sha256"], str)
             or re.fullmatch(r"[0-9a-f]{64}", entry["sha256"]) is None
-            or type(entry["bytes"]) is not int
+            or not _is_exact_int(entry["bytes"])
             or entry["bytes"] < 0
         ):
             _fail("OFFLINE_INPUT", f"invalid manifest entry: {entry!r}")
@@ -1458,8 +1470,10 @@ def audit_evidence(
             set(phase) != expected_phase_keys
             or phase.get("command") != command
             or phase.get("network") != network
-            or phase.get("exit_status") != 0
-            or phase.get("vulnerable_coordinate_lines") != 0
+            or not _is_exact_int(phase.get("exit_status"), expected=0)
+            or not _is_exact_int(
+                phase.get("vulnerable_coordinate_lines"), expected=0
+            )
             or (
                 name == "offline"
                 and phase.get("repository_mount") != "read-only"
@@ -1496,6 +1510,10 @@ def audit_evidence(
             offline_inputs.get(field) != expected
             for field, expected in EXPECTED_OFFLINE_INPUT_CLAIMS.items()
         )
+        or not _is_exact_int(offline_inputs.get("file_count"))
+        or offline_inputs.get("file_count", -1) < 0
+        or not _is_exact_int(offline_inputs.get("total_bytes"))
+        or offline_inputs.get("total_bytes", -1) < 0
     ):
         _fail("OFFLINE_INPUT", "reproducible inputs are not retained")
     _verify_identity(
@@ -1506,6 +1524,11 @@ def audit_evidence(
     if require_archive:
         _verify_identity(
             evidence,
+            offline_inputs.get("archive"),
+            expected_name=ARCHIVE_NAME,
+        )
+    else:
+        _validate_identity(
             offline_inputs.get("archive"),
             expected_name=ARCHIVE_NAME,
         )
@@ -1529,6 +1552,10 @@ def audit_evidence(
         )
         or manifest.get("media_type") != EXPECTED_MANIFEST_MEDIA_TYPE
         or manifest.get("repository_layout") != EXPECTED_REPOSITORY_LAYOUT
+        or not _is_exact_int(manifest.get("file_count"))
+        or manifest.get("file_count", -1) < 0
+        or not _is_exact_int(manifest.get("total_bytes"))
+        or manifest.get("total_bytes", -1) < 0
         or manifest.get("file_count") != offline_inputs.get("file_count")
         or manifest.get("total_bytes") != offline_inputs.get("total_bytes")
         or manifest.get("selected_reactor") != EXPECTED_SELECTED_REACTOR

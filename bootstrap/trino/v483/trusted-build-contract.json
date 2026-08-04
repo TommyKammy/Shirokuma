@@ -47,7 +47,7 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "23d788af7b0c95404f7e199594a1ca48a2e3f97c84b6eef4afd940d31a3d5805"
+      "sha256": "8395faf5a24e0a4edabfc4f7f249a6eca8ded11c688c9249eee1ce952f8dcde9"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
@@ -91,7 +91,7 @@
     },
     {
       "path": "docs/design/evidence/trino/run-30693677356-maven-vulnerability-classification.json",
-      "sha256": "78231a9e6de0a3a43148bfcc63476dca714597549d10bbb05202501e78fd1786"
+      "sha256": "3cb109867a34852762911522b7ec688c4312be58bd06aee58f7c3145ec00c3fd"
     }
   ],
   "authorization": {

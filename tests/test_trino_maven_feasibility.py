@@ -1280,6 +1280,69 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             ):
                 feasibility.audit_evidence(evidence, require_archive=True)
 
+    def test_audit_requires_exact_integer_phase_results(self) -> None:
+        for phase in ("online", "offline"):
+            for field in ("exit_status", "vulnerable_coordinate_lines"):
+                with self.subTest(phase=phase, field=field):
+                    with tempfile.TemporaryDirectory() as temporary:
+                        evidence = self._finalized_evidence(Path(temporary))
+                        record_path = evidence / feasibility.RECORD_NAME
+                        record = json.loads(
+                            record_path.read_text(encoding="utf-8")
+                        )
+                        record["execution"][phase][field] = False
+                        record_path.write_text(
+                            json.dumps(record, indent=2, sort_keys=True) + "\n",
+                            encoding="utf-8",
+                        )
+                        with self.assertRaisesRegex(
+                            feasibility.EvidenceError,
+                            "EVIDENCE_EXECUTION",
+                        ):
+                            feasibility.audit_evidence(
+                                evidence,
+                                require_archive=True,
+                            )
+
+    def test_audit_requires_exact_integer_aggregate_counts(self) -> None:
+        for target in ("record", "manifest"):
+            for field in ("file_count", "total_bytes"):
+                with self.subTest(target=target, field=field):
+                    with tempfile.TemporaryDirectory() as temporary:
+                        evidence = self._finalized_evidence(Path(temporary))
+                        record_path = evidence / feasibility.RECORD_NAME
+                        record = json.loads(
+                            record_path.read_text(encoding="utf-8")
+                        )
+                        if target == "record":
+                            record["offline_inputs"][field] = False
+                        else:
+                            manifest_path = evidence / feasibility.MANIFEST_NAME
+                            manifest = json.loads(
+                                manifest_path.read_text(encoding="utf-8")
+                            )
+                            manifest[field] = False
+                            manifest_path.write_text(
+                                json.dumps(manifest, indent=2, sort_keys=True)
+                                + "\n",
+                                encoding="utf-8",
+                            )
+                            record["offline_inputs"]["manifest"] = (
+                                feasibility._identity(manifest_path)
+                            )
+                        record_path.write_text(
+                            json.dumps(record, indent=2, sort_keys=True) + "\n",
+                            encoding="utf-8",
+                        )
+                        with self.assertRaisesRegex(
+                            feasibility.EvidenceError,
+                            "OFFLINE_INPUT",
+                        ):
+                            feasibility.audit_evidence(
+                                evidence,
+                                require_archive=True,
+                            )
+
     def test_audit_requires_distinct_online_and_offline_log_payloads(
         self,
     ) -> None:
@@ -1525,6 +1588,45 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                 "OFFLINE_ARCHIVE",
             ):
                 feasibility.audit_evidence(evidence, require_archive=True)
+
+    def test_audit_validates_archive_identity_when_payload_is_omitted(
+        self,
+    ) -> None:
+        mutations = {
+            "path": "../../not-an-archive",
+            "sha256": True,
+            "bytes": -1,
+        }
+        for field, value in mutations.items():
+            with self.subTest(field=field):
+                with tempfile.TemporaryDirectory() as temporary:
+                    evidence = self._finalized_evidence(Path(temporary))
+                    (evidence / feasibility.ARCHIVE_NAME).unlink()
+                    record_path = evidence / feasibility.RECORD_NAME
+                    record = json.loads(
+                        record_path.read_text(encoding="utf-8")
+                    )
+                    record["offline_inputs"]["archive"][field] = value
+                    record_path.write_text(
+                        json.dumps(record, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    with self.assertRaisesRegex(
+                        feasibility.EvidenceError,
+                        "EVIDENCE_IDENTITY",
+                    ):
+                        feasibility.audit_evidence(
+                            evidence,
+                            require_archive=False,
+                        )
+
+    def test_audit_allows_omitted_archive_with_valid_recorded_identity(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = self._finalized_evidence(Path(temporary))
+            (evidence / feasibility.ARCHIVE_NAME).unlink()
+            feasibility.audit_evidence(evidence, require_archive=False)
 
     def test_toolchain_record_is_revalidated_during_audit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
