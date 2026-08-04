@@ -1659,6 +1659,40 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             (evidence / feasibility.ARCHIVE_NAME).unlink()
             feasibility.audit_evidence(evidence, require_archive=False)
 
+    def test_audit_rejects_empty_archive_identity_with_or_without_payload(
+        self,
+    ) -> None:
+        for require_archive in (False, True):
+            with self.subTest(require_archive=require_archive):
+                with tempfile.TemporaryDirectory() as temporary:
+                    evidence = self._finalized_evidence(Path(temporary))
+                    archive_path = evidence / feasibility.ARCHIVE_NAME
+                    if require_archive:
+                        archive_path.write_bytes(b"")
+                    else:
+                        archive_path.unlink()
+                    record_path = evidence / feasibility.RECORD_NAME
+                    record = json.loads(
+                        record_path.read_text(encoding="utf-8")
+                    )
+                    record["offline_inputs"]["archive"] = {
+                        "path": feasibility.ARCHIVE_NAME,
+                        "sha256": hashlib.sha256(b"").hexdigest(),
+                        "bytes": 0,
+                    }
+                    record_path.write_text(
+                        json.dumps(record, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    with self.assertRaisesRegex(
+                        feasibility.EvidenceError,
+                        "EVIDENCE_IDENTITY",
+                    ):
+                        feasibility.audit_evidence(
+                            evidence,
+                            require_archive=require_archive,
+                        )
+
     def test_toolchain_record_is_revalidated_during_audit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             evidence = self._finalized_evidence(Path(temporary))

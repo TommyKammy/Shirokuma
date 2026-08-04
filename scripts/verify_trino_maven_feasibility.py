@@ -934,7 +934,9 @@ def finalize_record(
     )
 
 
-def _validate_identity(identity: object, *, expected_name: str) -> None:
+def _validate_identity(
+    identity: object, *, expected_name: str, minimum_bytes: int = 0
+) -> None:
     if not isinstance(identity, dict) or set(identity) != {
         "path",
         "sha256",
@@ -950,15 +952,23 @@ def _validate_identity(identity: object, *, expected_name: str) -> None:
         not isinstance(identity["sha256"], str)
         or re.fullmatch(r"[0-9a-f]{64}", identity["sha256"]) is None
         or not _is_exact_int(identity["bytes"])
-        or identity["bytes"] < 0
+        or identity["bytes"] < minimum_bytes
     ):
         _fail("EVIDENCE_IDENTITY", f"malformed identity: {identity!r}")
 
 
 def _verify_identity(
-    directory: Path, identity: object, *, expected_name: str
+    directory: Path,
+    identity: object,
+    *,
+    expected_name: str,
+    minimum_bytes: int = 0,
 ) -> None:
-    _validate_identity(identity, expected_name=expected_name)
+    _validate_identity(
+        identity,
+        expected_name=expected_name,
+        minimum_bytes=minimum_bytes,
+    )
     assert isinstance(identity, dict)
     path = directory / expected_name
     if _identity(path) != identity:
@@ -1549,11 +1559,13 @@ def audit_evidence(
             evidence,
             offline_inputs.get("archive"),
             expected_name=ARCHIVE_NAME,
+            minimum_bytes=1,
         )
     else:
         _validate_identity(
             offline_inputs.get("archive"),
             expected_name=ARCHIVE_NAME,
+            minimum_bytes=1,
         )
     manifest = _read_json(evidence / offline_inputs["manifest"]["path"])
     if (
