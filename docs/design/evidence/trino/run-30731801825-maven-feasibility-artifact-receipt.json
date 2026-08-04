@@ -16,12 +16,12 @@
   },
   "independent_reaudit": {
     "artifact_digest": "sha256:cf0272447ec1a6afd4bda304fefeb6176ee4240d4fc6339a32de65acf015fe8d",
-    "audited_at": "2026-08-04T11:07:18Z",
+    "audited_at": "2026-08-04T23:14:31Z",
     "result": "passed_integrity_only",
     "scope": "complete retained artifact structural and content integrity; execution controls are not retroactively proven",
     "verifier": {
       "path": "scripts/verify_trino_maven_feasibility.py",
-      "sha256": "8c2a06d9ad7d99b680ef1318c039d30a0b80efe576355e478b12a21a24978c97"
+      "sha256": "3efd82afd543e8661ff6fbffd91e891cb7b72c8d8ede859ae81453ed7b4f9e0f"
     }
   },
   "schema_version": 1,

@@ -1015,6 +1015,24 @@ def _manifest_files(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     return files
 
 
+def _minimum_compressed_archive_bytes(
+    files: list[dict[str, Any]],
+) -> int:
+    expanded_bytes = tarfile.BLOCKSIZE * 2
+    for entry in files:
+        payload_blocks = (
+            entry["bytes"] + tarfile.BLOCKSIZE - 1
+        ) // tarfile.BLOCKSIZE
+        expanded_bytes += tarfile.BLOCKSIZE * (1 + payload_blocks)
+    expanded_records = (
+        expanded_bytes + tarfile.RECORDSIZE - 1
+    ) // tarfile.RECORDSIZE
+    expanded_lower_bound = expanded_records * tarfile.RECORDSIZE
+    return (
+        expanded_lower_bound + MAX_ARCHIVE_COMPRESSION_RATIO - 1
+    ) // MAX_ARCHIVE_COMPRESSION_RATIO
+
+
 def _archive_entries(
     archive: Path,
     expected_files: list[dict[str, Any]],
@@ -1604,6 +1622,11 @@ def audit_evidence(
         entry["bytes"] for entry in files
     ):
         _fail("OFFLINE_INPUT", "manifest aggregate differs")
+    _validate_identity(
+        offline_inputs.get("archive"),
+        expected_name=ARCHIVE_NAME,
+        minimum_bytes=_minimum_compressed_archive_bytes(files),
+    )
     if require_archive:
         archive = evidence / offline_inputs["archive"]["path"]
         _archive_entries(archive, files)

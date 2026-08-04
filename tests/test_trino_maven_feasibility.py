@@ -1663,14 +1663,28 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
         self,
     ) -> None:
         for require_archive in (False, True):
-            for archive_bytes in (0, feasibility.MIN_GZIP_MEMBER_BYTES - 1):
+            for lower_bound in ("gzip", "manifest"):
                 with self.subTest(
                     require_archive=require_archive,
-                    archive_bytes=archive_bytes,
+                    lower_bound=lower_bound,
                 ):
-                    archive_payload = b"x" * archive_bytes
                     with tempfile.TemporaryDirectory() as temporary:
                         evidence = self._finalized_evidence(Path(temporary))
+                        manifest = json.loads(
+                            (evidence / feasibility.MANIFEST_NAME).read_text(
+                                encoding="utf-8"
+                            )
+                        )
+                        files = feasibility._manifest_files(manifest)
+                        minimum_bytes = (
+                            feasibility.MIN_GZIP_MEMBER_BYTES
+                            if lower_bound == "gzip"
+                            else feasibility._minimum_compressed_archive_bytes(
+                                files
+                            )
+                        )
+                        archive_bytes = minimum_bytes - 1
+                        archive_payload = b"x" * archive_bytes
                         archive_path = evidence / feasibility.ARCHIVE_NAME
                         if require_archive:
                             archive_path.write_bytes(archive_payload)
