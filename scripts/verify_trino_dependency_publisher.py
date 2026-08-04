@@ -163,7 +163,7 @@ EXPECTED_FEASIBILITY_REAUDIT = {
     "artifact_digest": (
         "sha256:cf0272447ec1a6afd4bda304fefeb6176ee4240d4fc6339a32de65acf015fe8d"
     ),
-    "audited_at": "2026-08-04T06:10:18Z",
+    "audited_at": "2026-08-04T11:07:18Z",
     "result": "passed_integrity_only",
     "scope": (
         "complete retained artifact structural and content integrity; "
@@ -172,7 +172,7 @@ EXPECTED_FEASIBILITY_REAUDIT = {
     "verifier": {
         "path": FEASIBILITY_VERIFIER_PATH.as_posix(),
         "sha256": (
-            "2a7df0553c95749b79b776c8669ab204160a0715387f109b8634f8a8af580d18"
+            "8c2a06d9ad7d99b680ef1318c039d30a0b80efe576355e478b12a21a24978c97"
         ),
     },
 }
@@ -198,7 +198,7 @@ EXPECTED_BLOCKER_FEASIBILITY_FILES = {
     BLOCKER_FEASIBILITY_RECEIPT_PATH: {
         "bytes": 1401,
         "sha256": (
-            "0b79cc8db76cc7b59f913a6a3e6460b93d5426812983ff2b9803e86cb4282c8f"
+            "372ab41ce7153e4b065540ee6d537991155ee3a4b1749ec2ac00f9d1d5ee9cf1"
         ),
     },
 }

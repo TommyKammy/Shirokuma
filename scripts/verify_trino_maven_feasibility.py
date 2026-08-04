@@ -243,6 +243,7 @@ VULNERABLE_INPUTS = (
 RECORD_NAME = "validation-record.json"
 MANIFEST_NAME = "offline-input-manifest.json"
 ARCHIVE_NAME = "offline-maven-repository.tar.gz"
+MIN_GZIP_MEMBER_BYTES = 20
 ONLINE_LOG_NAME = "online-resolve-plugins.log"
 OFFLINE_LOG_NAME = "offline-resolve-plugins.log"
 TOOLCHAIN_NAME = "toolchain.json"
@@ -1559,13 +1560,13 @@ def audit_evidence(
             evidence,
             offline_inputs.get("archive"),
             expected_name=ARCHIVE_NAME,
-            minimum_bytes=1,
+            minimum_bytes=MIN_GZIP_MEMBER_BYTES,
         )
     else:
         _validate_identity(
             offline_inputs.get("archive"),
             expected_name=ARCHIVE_NAME,
-            minimum_bytes=1,
+            minimum_bytes=MIN_GZIP_MEMBER_BYTES,
         )
     manifest = _read_json(evidence / offline_inputs["manifest"]["path"])
     if (
