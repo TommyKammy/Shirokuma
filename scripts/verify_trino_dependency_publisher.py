@@ -1581,6 +1581,24 @@ def _load_json(path: Path) -> dict[str, Any]:
     return value
 
 
+def _matches_exact_json(value: object, expected: object) -> bool:
+    if type(value) is not type(expected):
+        return False
+    if isinstance(expected, dict):
+        assert isinstance(value, dict)
+        return set(value) == set(expected) and all(
+            _matches_exact_json(value[key], expected_item)
+            for key, expected_item in expected.items()
+        )
+    if isinstance(expected, list):
+        assert isinstance(value, list)
+        return len(value) == len(expected) and all(
+            _matches_exact_json(value_item, expected_item)
+            for value_item, expected_item in zip(value, expected)
+        )
+    return value == expected
+
+
 def _sha256(path: Path) -> str:
     try:
         return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -1719,7 +1737,7 @@ def _validate_openvex(root: Path) -> None:
             }
         ],
     }
-    if document != expected_document:
+    if not _matches_exact_json(document, expected_document):
         _fail("SOURCE_VEX", "OpenVEX document differs")
 
 
@@ -1730,7 +1748,7 @@ def _validate_source_overlay_contract(
     at: dt.datetime | None,
 ) -> None:
     overlay = contract.get("source", {}).get("source_overlay")
-    if overlay != EXPECTED_SOURCE_OVERLAY:
+    if not _matches_exact_json(overlay, EXPECTED_SOURCE_OVERLAY):
         _fail("SOURCE_OVERLAY", "bounded Web UI overlay contract differs")
     patch = EXPECTED_SOURCE_OVERLAY["patch"]
     if _sha256(root / patch["path"]) != patch["sha256"]:
@@ -1750,7 +1768,7 @@ def _validate_source_remediation_contract(
     at: dt.datetime | None,
 ) -> None:
     remediation = contract.get("source_remediation")
-    if remediation != EXPECTED_SOURCE_REMEDIATION:
+    if not _matches_exact_json(remediation, EXPECTED_SOURCE_REMEDIATION):
         _fail("SOURCE_REMEDIATION", "exact Parquet source remediation differs")
     expires = _parse_time(EXPECTED_SOURCE_REMEDIATION["expires_at"])
     authorization_expires = _parse_time(contract["authorization"]["expires_at"])
@@ -1772,7 +1790,10 @@ def _validate_distribution_remediation_contract(
     remediation = contract.get("source", {}).get(
         "distribution_remediation"
     )
-    if remediation != EXPECTED_DISTRIBUTION_REMEDIATION:
+    if not _matches_exact_json(
+        remediation,
+        EXPECTED_DISTRIBUTION_REMEDIATION,
+    ):
         _fail(
             "DISTRIBUTION_REMEDIATION",
             "exact Iceberg-only Maven closure remediation differs",
@@ -1859,15 +1880,27 @@ def _validate_blocker_evidence(
 ) -> None:
     record = _load_json(root / BLOCKER_CLASSIFICATION_PATH)
     if (
-        record.get("schema_version") != 1
+        not _matches_exact_json(record.get("schema_version"), 1)
         or record.get("record_path") != BLOCKER_CLASSIFICATION_PATH.as_posix()
-        or record.get("subject") != EXPECTED_BLOCKER_SUBJECT
-        or record.get("summary") != EXPECTED_BLOCKER_SUMMARY
+        or not _matches_exact_json(
+            record.get("subject"),
+            EXPECTED_BLOCKER_SUBJECT,
+        )
+        or not _matches_exact_json(
+            record.get("summary"),
+            EXPECTED_BLOCKER_SUMMARY,
+        )
     ):
         _fail("BLOCKER_EVIDENCE", "classification identity or summary differs")
     if (
-        record.get("classification") != EXPECTED_BLOCKER_CLASSIFICATION
-        or record.get("next_action") != EXPECTED_BLOCKER_NEXT_ACTION
+        not _matches_exact_json(
+            record.get("classification"),
+            EXPECTED_BLOCKER_CLASSIFICATION,
+        )
+        or not _matches_exact_json(
+            record.get("next_action"),
+            EXPECTED_BLOCKER_NEXT_ACTION,
+        )
     ):
         _fail("BLOCKER_EVIDENCE", "owner-facing policy boundary differs")
 
@@ -1878,7 +1911,8 @@ def _validate_blocker_evidence(
     for name, expected in EXPECTED_BLOCKER_INPUTS.items():
         observed = inputs.get(name)
         if not isinstance(observed, dict) or any(
-            observed.get(field) != value for field, value in expected.items()
+            not _matches_exact_json(observed.get(field), value)
+            for field, value in expected.items()
         ):
             _fail("BLOCKER_EVIDENCE", f"{name} record differs")
         if name in {"run_scoped_maven_manifest", "raw_rootfs_sbom"} and (
@@ -2047,7 +2081,10 @@ def _validate_blocker_evidence(
         {field: finding.get(field) for field in finding_policy_fields}
         for finding in classified
     ]
-    if observed_finding_policy != EXPECTED_BLOCKER_FINDING_POLICY:
+    if not _matches_exact_json(
+        observed_finding_policy,
+        EXPECTED_BLOCKER_FINDING_POLICY,
+    ):
         _fail("BLOCKER_EVIDENCE", "finding policy classification differs")
 
     feasibility = record.get("focused_feasibility")
@@ -2057,7 +2094,7 @@ def _validate_blocker_evidence(
         "candidate": EXPECTED_BLOCKER_CANDIDATE,
         "validation": EXPECTED_BLOCKER_FEASIBILITY_VALIDATION,
     }
-    if feasibility != expected_feasibility:
+    if not _matches_exact_json(feasibility, expected_feasibility):
         _fail("BLOCKER_EVIDENCE", "feasibility boundary differs")
     expires = _parse_time(
         EXPECTED_BLOCKER_FEASIBILITY_VALIDATION["artifact_expires_at"]
@@ -2082,25 +2119,31 @@ def _validate_blocker_evidence(
     receipt = retained_feasibility[BLOCKER_FEASIBILITY_RECEIPT_PATH]
     validation = retained_feasibility[BLOCKER_FEASIBILITY_RECORD_PATH]
     if (
-        receipt.get("validation_record")
-        != {
-            "bytes": EXPECTED_BLOCKER_FEASIBILITY_FILES[
-                BLOCKER_FEASIBILITY_RECORD_PATH
-            ]["bytes"],
-            "path": BLOCKER_FEASIBILITY_RECORD_PATH.as_posix(),
-            "sha256": EXPECTED_BLOCKER_FEASIBILITY_FILES[
-                BLOCKER_FEASIBILITY_RECORD_PATH
-            ]["sha256"],
-        }
-        or receipt.get("boundary")
-        != {
-            "authorization_use_permitted": False,
-            "owner_decision_still_required": True,
-            "publication_permitted": False,
-            "source_remediation_activated": False,
-        }
-        or receipt.get("independent_reaudit")
-        != EXPECTED_FEASIBILITY_REAUDIT
+        not _matches_exact_json(
+            receipt.get("validation_record"),
+            {
+                "bytes": EXPECTED_BLOCKER_FEASIBILITY_FILES[
+                    BLOCKER_FEASIBILITY_RECORD_PATH
+                ]["bytes"],
+                "path": BLOCKER_FEASIBILITY_RECORD_PATH.as_posix(),
+                "sha256": EXPECTED_BLOCKER_FEASIBILITY_FILES[
+                    BLOCKER_FEASIBILITY_RECORD_PATH
+                ]["sha256"],
+            },
+        )
+        or not _matches_exact_json(
+            receipt.get("boundary"),
+            {
+                "authorization_use_permitted": False,
+                "owner_decision_still_required": True,
+                "publication_permitted": False,
+                "source_remediation_activated": False,
+            },
+        )
+        or not _matches_exact_json(
+            receipt.get("independent_reaudit"),
+            EXPECTED_FEASIBILITY_REAUDIT,
+        )
         or _sha256(root / FEASIBILITY_VERIFIER_PATH)
         != EXPECTED_FEASIBILITY_REAUDIT["verifier"]["sha256"]
         or validation.get("result", {}).get("authorization_use_permitted")
@@ -2380,7 +2423,7 @@ def _bun_scan_report(
 ) -> tuple[dict[str, list[dict[str, Any]]], list[tuple[str, dict[str, Any]]]]:
     report = _load_json(report_path)
     if (
-        report.get("SchemaVersion") != 2
+        not _matches_exact_json(report.get("SchemaVersion"), 2)
         or report.get("ArtifactType") != "filesystem"
     ):
         _fail("BUN_SCAN_REPORT", "unexpected Trivy report envelope")
@@ -2553,9 +2596,9 @@ def _maven_jar_records(
     descriptor = _load_json(descriptor_path)
     files = descriptor.get("files")
     if (
-        descriptor.get("schema_version") != 2
+        not _matches_exact_json(descriptor.get("schema_version"), 2)
         or not isinstance(files, list)
-        or descriptor.get("file_count") != len(files)
+        or not _matches_exact_json(descriptor.get("file_count"), len(files))
     ):
         _fail("MAVEN_SCAN_DESCRIPTOR", "closed Maven descriptor differs")
     records: dict[str, Mapping[str, Any]] = {}
@@ -2591,14 +2634,14 @@ def _maven_jar_records(
                     "MAVEN_SCAN_DESCRIPTOR",
                     f"unsafe or duplicate Maven JAR path: {path}",
                 )
+            mode = record.get("mode")
+            digest = record.get("sha256")
             if (
-                re.fullmatch(r"0[0-7]{3}", str(record.get("mode"))) is None
-                or re.fullmatch(
-                    r"[0-9a-f]{64}",
-                    str(record.get("sha256")),
-                )
-                is None
-                or not isinstance(record.get("size"), int)
+                not isinstance(mode, str)
+                or re.fullmatch(r"0[0-7]{3}", mode) is None
+                or not isinstance(digest, str)
+                or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+                or type(record.get("size")) is not int
                 or record["size"] <= 0
                 or not origin_is_expected
             ):
@@ -3476,7 +3519,7 @@ def _bind_cyclonedx(path: Path, reference: str, digest_hex: str) -> None:
 
 def _bind_trivy_report(path: Path, reference: str, digest: str) -> None:
     document = _load_json(path)
-    if document.get("SchemaVersion") != 2:
+    if not _matches_exact_json(document.get("SchemaVersion"), 2):
         _fail("ARTIFACT_SCAN", f"{path} is not a Trivy v2 report")
     previous = document.get("ArtifactName")
     metadata = document.get("Metadata")
@@ -3617,7 +3660,7 @@ def _validate_authorization(
     contract: Mapping[str, Any], *, at: dt.datetime | None
 ) -> None:
     authorization = contract.get("authorization")
-    if authorization != EXPECTED_AUTHORIZATION:
+    if not _matches_exact_json(authorization, EXPECTED_AUTHORIZATION):
         _fail("AUTHORIZATION", "Issue #63 authorization record differs")
     approved = _parse_time(authorization.get("approved_at", ""))
     expires = _parse_time(authorization.get("expires_at", ""))
@@ -4191,11 +4234,18 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
     if not isinstance(expected_offline_command, str):
         _fail("WORKFLOW_OFFLINE_COMMAND", "contract command is missing")
     if (
-        offline_rebuild.get("repository_settings")
-        != EXPECTED_OFFLINE_REPOSITORY_SETTINGS
-        or offline_rebuild.get("bun_cache") != EXPECTED_OFFLINE_BUN_CACHE
-        or offline_rebuild.get("compiler_debug_information")
-        != EXPECTED_OFFLINE_COMPILER_DEBUG
+        not _matches_exact_json(
+            offline_rebuild.get("repository_settings"),
+            EXPECTED_OFFLINE_REPOSITORY_SETTINGS,
+        )
+        or not _matches_exact_json(
+            offline_rebuild.get("bun_cache"),
+            EXPECTED_OFFLINE_BUN_CACHE,
+        )
+        or not _matches_exact_json(
+            offline_rebuild.get("compiler_debug_information"),
+            EXPECTED_OFFLINE_COMPILER_DEBUG,
+        )
     ):
         _fail(
             "WORKFLOW_SETTINGS",
@@ -4366,12 +4416,14 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         or publication.get("retire_in_evidence_review_pr") is not True
         or publication.get("pull_request_behavior")
         != "static_read_only_contract_validation"
-        or publication.get("evidence_review_inventory_policy")
-        != {
-            "recursive_closed_world_required": True,
-            "regular_files_only": True,
-            "directories_and_symlinks_rejected": True,
-        }
+        or not _matches_exact_json(
+            publication.get("evidence_review_inventory_policy"),
+            {
+                "recursive_closed_world_required": True,
+                "regular_files_only": True,
+                "directories_and_symlinks_rejected": True,
+            },
+        )
     ):
         _fail("PUBLICATION", "blocked publication lifecycle differs")
     failed = contract.get("failed_publications")
@@ -4443,15 +4495,18 @@ def audit(root: Path) -> None:
     _validate_distribution_remediation_contract(root, contract, at=None)
     _validate_blocker_evidence(root)
     lifecycle = contract.get("lifecycle", {})
-    if lifecycle != {
-        "state": "source_remediation_authorization_pending",
-        "contract_only": False,
-        "dependency_artifact_present": False,
-        "publication_workflow_permitted": False,
-        "image_publication_permitted": False,
-        "resident_admission_permitted": False,
-        "runtime_reconciliation_permitted": False,
-    }:
+    if not _matches_exact_json(
+        lifecycle,
+        {
+            "state": "source_remediation_authorization_pending",
+            "contract_only": False,
+            "dependency_artifact_present": False,
+            "publication_workflow_permitted": False,
+            "image_publication_permitted": False,
+            "resident_admission_permitted": False,
+            "runtime_reconciliation_permitted": False,
+        },
+    ):
         _fail("LIFECYCLE", f"unexpected lifecycle: {lifecycle!r}")
     source = contract.get("source", {})
     if (
@@ -4463,40 +4518,57 @@ def audit(root: Path) -> None:
         or source.get("pristine_source_required_before_overlay") is not True
     ):
         _fail("SOURCE", "exact Trino source binding differs")
-    if contract.get("toolchain", {}).get("builder", {}).get("index") != EXPECTED_BUILDER:
+    if not _matches_exact_json(
+        contract.get("toolchain", {}).get("builder", {}).get("index"),
+        EXPECTED_BUILDER,
+    ):
         _fail("BUILDER", "builder index differs")
     dependency_resolution = contract.get("dependency_resolution", {})
     reactor_outputs = dependency_resolution.get("reactor_outputs", {})
     if (
-        dependency_resolution.get("repositories")
-        != list(EXPECTED_REPOSITORIES.values())
+        not _matches_exact_json(
+            dependency_resolution.get("repositories"),
+            list(EXPECTED_REPOSITORIES.values()),
+        )
         or dependency_resolution.get("transitive_dependency_repositories_ignored")
         is not True
-        or dependency_resolution.get("repository_mirrors")
-        != [
-            {
-                "id": values[0][1],
-                "mirror_of": values[1][1],
-                "url": values[3][1],
-            }
-            for values in EXPECTED_REPOSITORY_MIRRORS
-        ]
-        or dependency_resolution.get("settings_policy")
-        != EXPECTED_SETTINGS_POLICY
-        or dependency_resolution.get("external_inputs")
-        != [
-            EXPECTED_BUN_INPUT,
-            EXPECTED_PARQUET_SOURCE_REMEDIATION,
-        ]
-        or dependency_resolution.get("bun_package_cache")
-        != EXPECTED_BUN_PACKAGE_CACHE
+        or not _matches_exact_json(
+            dependency_resolution.get("repository_mirrors"),
+            [
+                {
+                    "id": values[0][1],
+                    "mirror_of": values[1][1],
+                    "url": values[3][1],
+                }
+                for values in EXPECTED_REPOSITORY_MIRRORS
+            ],
+        )
+        or not _matches_exact_json(
+            dependency_resolution.get("settings_policy"),
+            EXPECTED_SETTINGS_POLICY,
+        )
+        or not _matches_exact_json(
+            dependency_resolution.get("external_inputs"),
+            [
+                EXPECTED_BUN_INPUT,
+                EXPECTED_PARQUET_SOURCE_REMEDIATION,
+            ],
+        )
+        or not _matches_exact_json(
+            dependency_resolution.get("bun_package_cache"),
+            EXPECTED_BUN_PACKAGE_CACHE,
+        )
         or reactor_outputs.get("repository_path_prefix") != "io/trino/"
         or reactor_outputs.get("dependency_input_permitted") is not False
         or reactor_outputs.get("rebuild_from_reviewed_source_required") is not True
-        or reactor_outputs.get("exact_external_build_extension")
-        != EXPECTED_TRINO_BUILD_EXTENSION
-        or reactor_outputs.get("exact_external_maven_inputs")
-        != EXPECTED_TRINO_EXTERNAL_MAVEN_INPUTS
+        or not _matches_exact_json(
+            reactor_outputs.get("exact_external_build_extension"),
+            EXPECTED_TRINO_BUILD_EXTENSION,
+        )
+        or not _matches_exact_json(
+            reactor_outputs.get("exact_external_maven_inputs"),
+            EXPECTED_TRINO_EXTERNAL_MAVEN_INPUTS,
+        )
     ):
         _fail("REPOSITORIES", "contract repository allowlist differs")
     snapshot = contract.get("snapshot", {})
@@ -4504,33 +4576,43 @@ def audit(root: Path) -> None:
         snapshot.get("artifact_type") != EXPECTED_ARTIFACT_TYPE
         or snapshot.get("descriptor_media_type")
         != EXPECTED_DESCRIPTOR_MEDIA_TYPE
-        or snapshot.get("manifest", {}).get("schema_version") != 2
-        or snapshot.get("trivy_rootfs_omission_contract")
-        != {
-            "schema_version": 1,
-            "unknown_omissions_permitted": False,
-            "reviewed_omissions": EXPECTED_TRIVY_ROOTFS_OMISSIONS,
-        }
-        or snapshot.get("bun_cache")
-        != {
-            "descriptor_media_type": EXPECTED_BUN_DESCRIPTOR_MEDIA_TYPE,
-            "archive_media_type": EXPECTED_BUN_ARCHIVE_MEDIA_TYPE,
-            "manifest_schema_version": 1,
-        }
+        or not _matches_exact_json(
+            snapshot.get("manifest", {}).get("schema_version"),
+            2,
+        )
+        or not _matches_exact_json(
+            snapshot.get("trivy_rootfs_omission_contract"),
+            {
+                "schema_version": 1,
+                "unknown_omissions_permitted": False,
+                "reviewed_omissions": EXPECTED_TRIVY_ROOTFS_OMISSIONS,
+            },
+        )
+        or not _matches_exact_json(
+            snapshot.get("bun_cache"),
+            {
+                "descriptor_media_type": EXPECTED_BUN_DESCRIPTOR_MEDIA_TYPE,
+                "archive_media_type": EXPECTED_BUN_ARCHIVE_MEDIA_TYPE,
+                "manifest_schema_version": 1,
+            },
+        )
     ):
         _fail("SNAPSHOT_FORMAT", "dependency snapshot v2 contract differs")
-    if snapshot.get("visibility_bootstrap") != {
-        "required_visibility": "public",
-        "sign_and_attest_before_anonymous_pull": True,
-        "owner_action_on_first_private_run": "set-package-public-and-rerun",
-        "failed_attempt_admitted": False,
-        "user_credential_fallback": False,
-    }:
+    if not _matches_exact_json(
+        snapshot.get("visibility_bootstrap"),
+        {
+            "required_visibility": "public",
+            "sign_and_attest_before_anonymous_pull": True,
+            "owner_action_on_first_private_run": "set-package-public-and-rerun",
+            "failed_attempt_admitted": False,
+            "user_credential_fallback": False,
+        },
+    ):
         _fail("VISIBILITY", "first-publication visibility contract differs")
     provenance = snapshot.get("authentication", {}).get("provenance", {})
-    if (
-        provenance.get("parquet_source_remediation_resolved_dependency")
-        != EXPECTED_PARQUET_SLSA_RESOLVED_DEPENDENCY
+    if not _matches_exact_json(
+        provenance.get("parquet_source_remediation_resolved_dependency"),
+        EXPECTED_PARQUET_SLSA_RESOLVED_DEPENDENCY,
     ):
         _fail(
             "SLSA_SOURCE_REMEDIATION",
@@ -4538,12 +4620,18 @@ def audit(root: Path) -> None:
         )
     repository_state = admission.get("repository_state", {})
     if (
-        admission.get("source_overlay_authorization")
-        != EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION
-        or admission.get("source_remediation_authorization")
-        != EXPECTED_ADMISSION_SOURCE_REMEDIATION_AUTHORIZATION
-        or admission.get("distribution_remediation_authorization")
-        != EXPECTED_ADMISSION_DISTRIBUTION_REMEDIATION_AUTHORIZATION
+        not _matches_exact_json(
+            admission.get("source_overlay_authorization"),
+            EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION,
+        )
+        or not _matches_exact_json(
+            admission.get("source_remediation_authorization"),
+            EXPECTED_ADMISSION_SOURCE_REMEDIATION_AUTHORIZATION,
+        )
+        or not _matches_exact_json(
+            admission.get("distribution_remediation_authorization"),
+            EXPECTED_ADMISSION_DISTRIBUTION_REMEDIATION_AUTHORIZATION,
+        )
         or repository_state.get("publication_workflow_permitted") is not False
         or repository_state.get("dependency_artifact_present") is not False
         or repository_state.get("resident_ledger_permitted") is not False
@@ -4560,16 +4648,16 @@ def audit(root: Path) -> None:
 
 
 def publication_status(contract: dict[str, Any], admission: dict[str, Any]) -> str:
-    permissions = {
+    permissions = [
         contract.get("lifecycle", {}).get("publication_workflow_permitted"),
         contract.get("publication", {}).get("permitted"),
         admission.get("repository_state", {}).get(
             "publication_workflow_permitted"
         ),
-    }
-    if permissions == {True}:
+    ]
+    if _matches_exact_json(permissions, [True, True, True]):
         return "active"
-    if permissions == {False}:
+    if _matches_exact_json(permissions, [False, False, False]):
         return "blocked"
     _fail("LIFECYCLE", "publication permission records disagree")
 

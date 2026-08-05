@@ -4979,6 +4979,28 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             context["documents"],
         )
 
+    def test_make_verify_runs_maven_feasibility_unit_tests(self) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        phony_targets = makefile.split(".PHONY:", 1)[1].splitlines()[0].split()
+        verify_target = next(
+            line
+            for line in makefile.splitlines()
+            if line.startswith("verify-trino-bootstrap:")
+        )
+        feasibility_target = makefile.split(
+            "\ntest-trino-maven-feasibility:\n", 1
+        )[1].split("\n\n", 1)[0]
+
+        self.assertIn("test-trino-maven-feasibility", phony_targets)
+        self.assertIn(
+            "test-trino-maven-feasibility",
+            verify_target.split(":", 1)[1].split(),
+        )
+        self.assertIn(
+            "$(PYTHON) -m unittest -v tests.test_trino_maven_feasibility",
+            feasibility_target,
+        )
+
 
 class TrinoBootstrapPrerequisiteTests(unittest.TestCase):
     def test_polaris_only_change_does_not_trigger_trino_gate(self) -> None:

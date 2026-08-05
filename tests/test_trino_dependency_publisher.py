@@ -1053,6 +1053,19 @@ class BunScanEvidenceTests(unittest.TestCase):
         )
         return report
 
+    def test_bun_scan_report_schema_version_is_an_exact_integer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            report = self._report(Path(temporary), "raw.json")
+            document = json.loads(report.read_text(encoding="utf-8"))
+            document["SchemaVersion"] = 2.0
+            report.write_text(json.dumps(document), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "unexpected Trivy report envelope",
+            ):
+                verify._bun_scan_report(report)
+
     def test_stage_bun_scan_input_copies_only_hash_bound_lockfiles(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -1364,6 +1377,42 @@ class MavenScanEvidenceTests(unittest.TestCase):
             encoding="utf-8",
         )
         return sbom
+
+    def test_maven_descriptor_identity_types_are_exact(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            descriptor = self._descriptor(Path(temporary))
+            original = json.loads(descriptor.read_text(encoding="utf-8"))
+            for field, replacement in (
+                ("schema_version", 2.0),
+                ("file_count", float(original["file_count"])),
+            ):
+                altered = copy.deepcopy(original)
+                altered[field] = replacement
+                descriptor.write_text(json.dumps(altered), encoding="utf-8")
+                with self.subTest(field=field):
+                    with self.assertRaisesRegex(
+                        verify.ContractError,
+                        "closed Maven descriptor differs",
+                    ):
+                        verify._maven_jar_records(descriptor)
+
+            altered = copy.deepcopy(original)
+            altered["files"][0]["size"] = True
+            descriptor.write_text(json.dumps(altered), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "invalid Maven JAR identity",
+            ):
+                verify._maven_jar_records(descriptor)
+
+            altered = copy.deepcopy(original)
+            altered["files"][0]["sha256"] = int("1" * 64)
+            descriptor.write_text(json.dumps(altered), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "invalid Maven JAR identity",
+            ):
+                verify._maven_jar_records(descriptor)
 
 
     def test_maven_descriptor_scopes_parquet_remediation_origin_to_exact_jar(
@@ -2159,6 +2208,20 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     "a" * 64,
                 )
 
+    def test_binding_requires_an_exact_trivy_schema_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            report = self._report(Path(temporary))
+            document = json.loads(report.read_text(encoding="utf-8"))
+            document["SchemaVersion"] = 2.0
+            report.write_text(json.dumps(document), encoding="utf-8")
+
+            with self.assertRaisesRegex(verify.ContractError, "ARTIFACT_SCAN"):
+                verify._bind_trivy_report(
+                    report,
+                    "ghcr.io/example/image@sha256:" + "a" * 64,
+                    "sha256:" + "a" * 64,
+                )
+
 
 class ServerDistributionTests(unittest.TestCase):
     def _write_archive(
@@ -2347,6 +2410,21 @@ class PublisherContractTests(unittest.TestCase):
     def test_repository_contract_and_workflow_are_closed(self) -> None:
         verify.audit(ROOT)
 
+    def test_repository_audit_rejects_json_number_boolean_aliases(self) -> None:
+        contract_path = ROOT / verify.CONTRACT_PATH
+        original_load_json = verify._load_json
+        contract = original_load_json(contract_path)
+        contract["source"]["source_overlay"]["automatic_renewal"] = 0
+
+        def load_json(path: Path) -> dict[str, object]:
+            if path == contract_path:
+                return contract
+            return original_load_json(path)
+
+        with mock.patch.object(verify, "_load_json", side_effect=load_json):
+            with self.assertRaisesRegex(verify.ContractError, "SOURCE_OVERLAY"):
+                verify.audit(ROOT)
+
     def test_authorization_is_current_at_each_declared_use_point(self) -> None:
         verify.authorize_use(
             ROOT,
@@ -2425,6 +2503,28 @@ class PublisherContractTests(unittest.TestCase):
                     tzinfo=dt.timezone.utc,
                 ),
             )
+
+    def test_authorization_rejects_json_number_boolean_aliases(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        aliases = (
+            (("automatic_renewal",), 0),
+            (("review", "required_before_merge"), 1),
+            (("maximum_duration_days",), 30.0),
+        )
+        for path, replacement in aliases:
+            altered = copy.deepcopy(contract)
+            target = altered["authorization"]
+            for field in path[:-1]:
+                target = target[field]
+            target[path[-1]] = replacement
+            with self.subTest(path=path, replacement=replacement):
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "AUTHORIZATION",
+                ):
+                    verify._validate_authorization(altered, at=None)
 
     def test_retained_feasibility_expiry_is_an_explicit_freshness_check(
         self,
@@ -2612,6 +2712,17 @@ class PublisherContractTests(unittest.TestCase):
                 verify._validate_blocker_evidence(temporary_root)
 
             altered = copy.deepcopy(classification)
+            altered["classification"][
+                "vulnerability_waiver_permitted"
+            ] = 0
+            path.write_text(json.dumps(altered), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "owner-facing policy boundary differs",
+            ):
+                verify._validate_blocker_evidence(temporary_root)
+
+            altered = copy.deepcopy(classification)
             altered["findings"][0]["dependency_sources"] = []
             path.write_text(json.dumps(altered), encoding="utf-8")
             with self.assertRaisesRegex(
@@ -2624,6 +2735,17 @@ class PublisherContractTests(unittest.TestCase):
             altered["focused_feasibility"]["validation"][
                 "authorization_use_permitted"
             ] = True
+            path.write_text(json.dumps(altered), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "feasibility boundary differs",
+            ):
+                verify._validate_blocker_evidence(temporary_root)
+
+            altered = copy.deepcopy(classification)
+            altered["focused_feasibility"]["validation"][
+                "authorization_use_permitted"
+            ] = 0
             path.write_text(json.dumps(altered), encoding="utf-8")
             with self.assertRaisesRegex(
                 verify.ContractError,
@@ -2771,6 +2893,26 @@ class PublisherContractTests(unittest.TestCase):
             "publication permission records disagree",
         ):
             verify.publication_status(altered, admission)
+
+        for alias in (0, 1):
+            aliased_contract = copy.deepcopy(contract)
+            aliased_admission = copy.deepcopy(admission)
+            aliased_contract["lifecycle"][
+                "publication_workflow_permitted"
+            ] = alias
+            aliased_contract["publication"]["permitted"] = alias
+            aliased_admission["repository_state"][
+                "publication_workflow_permitted"
+            ] = alias
+            with self.subTest(alias=alias):
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "publication permission records disagree",
+                ):
+                    verify.publication_status(
+                        aliased_contract,
+                        aliased_admission,
+                    )
 
     def test_workflow_retains_the_blocked_publication_noop(self) -> None:
         contract = json.loads(
