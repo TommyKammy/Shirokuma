@@ -785,7 +785,7 @@ PENDING_SCRIPT_FILE_INVENTORY = {
         "75cee002d5749c0ec91629edb905c27362bee5c0813b0cbefcb59f161734f445"
     ),
     "scripts/verify_trino_dependency_publisher.py": (
-        "62de069f93d5de3b3a9d17271ece56ab7b3e03c0d12e27f66ea518b3c3a57a45"
+        "0e738adc730b84766ba252ef97253f5400b6f9d2277803a67b7a93f723b9b6dc"
     ),
     "scripts/verify_trino_maven_feasibility.py": (
         "3231b841f85e720ee75d3ffe6833ef4c852ee5937955b017f3a3b0b621e9fd10"

@@ -2410,6 +2410,47 @@ class PublisherContractTests(unittest.TestCase):
     def test_repository_contract_and_workflow_are_closed(self) -> None:
         verify.audit(ROOT)
 
+    def test_maven_policy_directory_inventory_is_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            policy_directory = root / verify.JVM_CONFIG_PATH.parent
+            policy_directory.mkdir(parents=True)
+            jvm_config = root / verify.JVM_CONFIG_PATH
+            jvm_config.write_text("-Xmx8192m\n", encoding="utf-8")
+            verify._validate_maven_policy_inventory(root)
+
+            for relative in (
+                "maven.config",
+                "extensions.xml",
+                ".unreviewed",
+                "nested",
+            ):
+                extra = policy_directory / relative
+                if relative == "nested":
+                    extra.mkdir()
+                else:
+                    extra.write_text("unreviewed\n", encoding="utf-8")
+                with self.subTest(relative=relative):
+                    with self.assertRaisesRegex(
+                        verify.ContractError,
+                        "must contain only jvm.config",
+                    ):
+                        verify._validate_maven_policy_inventory(root)
+                if extra.is_dir():
+                    extra.rmdir()
+                else:
+                    extra.unlink()
+
+            target = root / "jvm.config"
+            target.write_text("-Xmx8192m\n", encoding="utf-8")
+            jvm_config.unlink()
+            jvm_config.symlink_to(target)
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "must be one regular",
+            ):
+                verify._validate_maven_policy_inventory(root)
+
     def test_repository_audit_rejects_json_number_boolean_aliases(self) -> None:
         contract_path = ROOT / verify.CONTRACT_PATH
         original_load_json = verify._load_json

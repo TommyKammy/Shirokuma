@@ -4446,7 +4446,28 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         _fail("PUBLICATION", "failed publication record differs")
 
 
+def _validate_maven_policy_inventory(root: Path) -> None:
+    directory = root / JVM_CONFIG_PATH.parent
+    try:
+        metadata = directory.lstat()
+    except OSError as error:
+        _fail("POLICY_FILE", f"{directory}: {error}")
+    if not stat.S_ISDIR(metadata.st_mode):
+        _fail("POLICY_FILE", f"{directory} must be one real directory")
+    try:
+        entries = sorted(directory.iterdir(), key=lambda path: path.name)
+    except OSError as error:
+        _fail("POLICY_FILE", f"{directory}: {error}")
+    if [entry.name for entry in entries] != [JVM_CONFIG_PATH.name]:
+        _fail(
+            "POLICY_FILE",
+            "Maven policy directory must contain only jvm.config",
+        )
+    _read_reviewed_regular_file(entries[0], code="POLICY_FILE")
+
+
 def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
+    _validate_maven_policy_inventory(root)
     expected_paths = {
         SETTINGS_PATH,
         JVM_CONFIG_PATH,
