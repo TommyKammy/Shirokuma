@@ -2426,7 +2426,16 @@ class PublisherContractTests(unittest.TestCase):
                 ),
             )
 
-    def test_retained_feasibility_expires_fail_closed(self) -> None:
+    def test_retained_feasibility_expiry_is_an_explicit_freshness_check(
+        self,
+    ) -> None:
+        class RejectWallClock(dt.datetime):
+            @classmethod
+            def now(cls, tz: dt.tzinfo | None = None) -> dt.datetime:
+                raise AssertionError("static evidence audit read the wall clock")
+
+        with mock.patch.object(verify.dt, "datetime", RejectWallClock):
+            verify._validate_blocker_evidence(ROOT)
         verify._validate_blocker_evidence(
             ROOT,
             at=dt.datetime(
@@ -2455,19 +2464,6 @@ class PublisherContractTests(unittest.TestCase):
                     tzinfo=dt.timezone.utc,
                 ),
             )
-        verify._validate_blocker_evidence(
-            ROOT,
-            at=dt.datetime(
-                2026,
-                9,
-                1,
-                4,
-                8,
-                14,
-                tzinfo=dt.timezone.utc,
-            ),
-            allow_expired_for_refresh=True,
-        )
 
     def test_retained_blocker_evidence_is_hash_bound_and_recomputed(self) -> None:
         verify._validate_blocker_evidence(ROOT)

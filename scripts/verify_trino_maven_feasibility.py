@@ -72,16 +72,13 @@ EXPECTED_PULL_REQUEST_REF_PATTERN = re.compile(
     r"refs/pull/[1-9][0-9]*/merge",
     flags=re.ASCII,
 )
-INVALID_GIT_REF_CHARACTER_PATTERN = re.compile(
-    r"[\x00-\x20\x7f~^:?*\[\\]",
-)
 EXPECTED_WORKFLOW_TRIGGER_BLOCK = """on:
   pull_request:
     paths:
       - .github/workflows/trino-maven-remediation-feasibility.yml
       - bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch
       - bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch
-      - bootstrap/trino/v483/maven-policy/.mvn/jvm.config
+      - bootstrap/trino/v483/maven-policy/.mvn/**
       - bootstrap/trino/v483/maven-scm-manager-plexus-2.2.1-hardened.pom
       - bootstrap/trino/v483/maven-scm-provider-gitexe-2.2.1-hardened.pom
       - bootstrap/trino/v483/settings.xml
@@ -96,7 +93,6 @@ EXPECTED_WORKFLOW_TRIGGER_BLOCK = """on:
       - scripts/verify_trino_maven_feasibility.py
       - tests/test_trino_dependency_publisher.py
       - tests/test_trino_maven_feasibility.py
-  workflow_dispatch:
 """
 EXPECTED_WORKFLOW_STEPS = (
     "Check out the reviewed feasibility policy",
@@ -109,7 +105,7 @@ EXPECTED_WORKFLOW_STEPS = (
     "Retain the review-only feasibility inputs and outputs",
 )
 EXPECTED_WORKFLOW_SHA256 = (
-    "42e3806f4ba13efd1062efd07a74c39332c19326c3997bf32f38c23b5b75865a"
+    "aef04ec24a47fd19ea2859f90cbf8352b6cfde13afafd438218e201e58afeee2"
 )
 EXPECTED_MAVEN_BASEDIR = "/policy"
 EXPECTED_POLICY_SOURCE = "bootstrap/trino/v483/maven-policy/.mvn"
@@ -375,28 +371,9 @@ def _reject_duplicate_json_keys(
 
 
 def _is_canonical_execution_ref(value: Any) -> bool:
-    if not isinstance(value, str):
-        return False
-    if EXPECTED_PULL_REQUEST_REF_PATTERN.fullmatch(value) is not None:
-        return True
-    ref_name = None
-    for prefix in ("refs/heads/", "refs/tags/"):
-        if value.startswith(prefix):
-            ref_name = value.removeprefix(prefix)
-            break
-    if (
-        not ref_name
-        or value.endswith(".")
-        or ".." in ref_name
-        or "@{" in ref_name
-        or INVALID_GIT_REF_CHARACTER_PATTERN.search(ref_name) is not None
-    ):
-        return False
-    return all(
-        component
-        and not component.startswith(".")
-        and not component.endswith(".lock")
-        for component in ref_name.split("/")
+    return (
+        isinstance(value, str)
+        and EXPECTED_PULL_REQUEST_REF_PATTERN.fullmatch(value) is not None
     )
 
 
@@ -1843,8 +1820,7 @@ def audit_workflow(root: Path) -> None:
         "verify_trino_maven_feasibility.py finalize-record",
         "verify_trino_maven_feasibility.py audit-evidence",
         "verify_trino_maven_feasibility.py verify-candidate",
-        "--allow-expired-feasibility-refresh",
-        "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
+        "bootstrap/trino/v483/maven-policy/.mvn/**",
         "docs/design/evidence/trino/"
         "run-30693677356-maven-vulnerability-classification.json",
         "docs/design/evidence/trino/"

@@ -219,8 +219,11 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
         invalid_execution_refs = (
             "",
             "refs/pull/0/merge",
+            "refs/heads/main",
+            "refs/heads/feature/evidence-refresh",
             "refs/heads/.hidden",
             "refs/heads/topic..name",
+            "refs/tags/v1.2.3",
             "refs/tags/release.lock",
             "refs/pull/1/merge\nrefs/heads/main",
         )
@@ -253,24 +256,18 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                     ),
                 )
 
-    def test_record_generation_supports_canonical_manual_dispatch_refs(
+    def test_record_generation_supports_pull_request_merge_refs(
         self,
     ) -> None:
-        for github_ref in (
-            "refs/heads/main",
-            "refs/heads/feature/evidence-refresh",
-            "refs/tags/v1.2.3",
-        ):
-            with self.subTest(github_ref=github_ref):
-                with tempfile.TemporaryDirectory() as temporary:
-                    evidence = self._finalized_evidence(
-                        Path(temporary),
-                        github_ref=github_ref,
-                    )
-                    feasibility.audit_evidence(
-                        evidence,
-                        require_archive=True,
-                    )
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = self._finalized_evidence(
+                Path(temporary),
+                github_ref="refs/pull/142/merge",
+            )
+            feasibility.audit_evidence(
+                evidence,
+                require_archive=True,
+            )
 
     def test_workflow_closes_triggers_steps_and_policy_mounts(self) -> None:
         workflow = (ROOT / feasibility.WORKFLOW_PATH).read_text(
@@ -286,6 +283,14 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             (
                 workflow.replace("  pull_request:\n", "  push:\n", 1),
                 "workflow triggers differ",
+            ),
+            (
+                workflow.replace(
+                    "bootstrap/trino/v483/maven-policy/.mvn/**",
+                    "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
+                    1,
+                ),
+                "WORKFLOW",
             ),
             (
                 workflow.replace(
@@ -1435,9 +1440,15 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             feasibility.EXPECTED_WORKFLOW_REF_PREFIX
             + "refs/pull/0/merge",
             feasibility.EXPECTED_WORKFLOW_REF_PREFIX
+            + "refs/heads/main",
+            feasibility.EXPECTED_WORKFLOW_REF_PREFIX
+            + "refs/heads/feature/evidence-refresh",
+            feasibility.EXPECTED_WORKFLOW_REF_PREFIX
             + "refs/heads/.hidden",
             feasibility.EXPECTED_WORKFLOW_REF_PREFIX
             + "refs/heads/topic..name",
+            feasibility.EXPECTED_WORKFLOW_REF_PREFIX
+            + "refs/tags/v1.2.3",
             feasibility.EXPECTED_WORKFLOW_REF_PREFIX
             + "refs/tags/release.lock",
             feasibility.EXPECTED_WORKFLOW_REF_PREFIX
