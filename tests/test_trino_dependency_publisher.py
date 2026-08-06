@@ -2525,6 +2525,37 @@ class PublisherContractTests(unittest.TestCase):
             review.index("finalize-record"),
         )
 
+    def test_authorization_rejects_duplicate_json_keys(self) -> None:
+        contract = (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        contract = contract.replace(
+            '"authorization": {',
+            '"authorization": {"automatic_renewal": true},\n'
+            '  "authorization": {',
+            1,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            contract_path = root / verify.CONTRACT_PATH
+            contract_path.parent.mkdir(parents=True)
+            contract_path.write_text(contract, encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "JSON: duplicate object key: authorization",
+            ):
+                verify.authorize_use(
+                    root,
+                    validation_point="before_source_fetch",
+                    at=dt.datetime(
+                        2026,
+                        8,
+                        21,
+                        22,
+                        43,
+                        35,
+                        tzinfo=dt.timezone.utc,
+                    ),
+                )
+
     def test_authorization_dates_are_bound_to_the_approval_record(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")

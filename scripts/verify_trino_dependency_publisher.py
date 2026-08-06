@@ -1571,9 +1571,23 @@ def _fail(code: str, detail: str) -> None:
     raise ContractError(f"{code}: {detail}")
 
 
+def _reject_duplicate_json_keys(
+    pairs: list[tuple[str, Any]],
+) -> dict[str, Any]:
+    document: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in document:
+            _fail("JSON", f"duplicate object key: {key}")
+        document[key] = value
+    return document
+
+
 def _load_json(path: Path) -> dict[str, Any]:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        value = json.loads(
+            path.read_text(encoding="utf-8"),
+            object_pairs_hook=_reject_duplicate_json_keys,
+        )
     except (OSError, json.JSONDecodeError) as error:
         _fail("JSON", f"{path}: {error}")
     if not isinstance(value, dict):
