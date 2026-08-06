@@ -1,0 +1,300 @@
+name: Trino 483 Maven remediation feasibility
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/trino-maven-remediation-feasibility.yml
+      - bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch
+      - bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch
+      - bootstrap/trino/v483/maven-policy/.mvn/**
+      - bootstrap/trino/v483/maven-scm-manager-plexus-2.2.1-hardened.pom
+      - bootstrap/trino/v483/maven-scm-provider-gitexe-2.2.1-hardened.pom
+      - bootstrap/trino/v483/settings.xml
+      - bootstrap/trino/v483/trusted-build-contract.json
+      - docs/design/07_ADR/ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md
+      - docs/design/evidence/trino/run-30693677356-post-adr-0027-pom.xml.gz
+      - docs/design/evidence/trino/run-30693677356-proposed-source-overlay.patch
+      - docs/design/evidence/trino/run-30693677356-maven-vulnerability-classification.json
+      - docs/design/evidence/trino/run-30731801825-maven-feasibility-validation.json
+      - docs/design/evidence/trino/run-30731801825-maven-feasibility-artifact-receipt.json
+      - scripts/verify_trino_dependency_publisher.py
+      - scripts/verify_trino_maven_feasibility.py
+      - tests/test_trino_dependency_publisher.py
+      - tests/test_trino_maven_feasibility.py
+
+concurrency:
+  group: trino-483-maven-feasibility-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SOURCE_REPOSITORY_OWNER: trinodb
+  SOURCE_REPOSITORY_NAME: trino
+  SOURCE_TAG: "483"
+  SOURCE_TAG_OBJECT: 32d4f28e8311ea6f67edca209df59a0493d869fa
+  SOURCE_COMMIT: 50b0b50b75abd47f830b7805ee1b51716eb4065e
+  SOURCE_TREE: 3b5414292a614b12393bb4605ea2d4c588a5b8ee
+  REVIEWED_COMMIT: ${{ github.event.pull_request.head.sha }}
+  BUILDER_IMAGE: docker.io/library/maven@sha256:7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c
+  BUILDER_ARM64_MANIFEST: sha256:5476bfca9d0a6485b7161f6863123f7e6822336de4177273b47b5ec38ffd573a
+  SELECTED_REACTOR: :trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg
+
+jobs:
+  validate:
+    if: github.repository == 'TommyKammy/Shirokuma'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out the reviewed feasibility policy
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate the fail-closed preauthorization contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest -v tests.test_trino_maven_feasibility
+          python3 scripts/verify_trino_dependency_publisher.py audit --root .
+          python3 scripts/verify_trino_maven_feasibility.py audit-workflow --root .
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          contract = json.loads(
+              Path("bootstrap/trino/v483/trusted-build-contract.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          expected = {
+              "state": "source_remediation_authorization_pending",
+              "contract_only": False,
+              "dependency_artifact_present": False,
+              "publication_workflow_permitted": False,
+              "image_publication_permitted": False,
+              "resident_admission_permitted": False,
+              "runtime_reconciliation_permitted": False,
+          }
+          if contract["lifecycle"] != expected:
+              raise SystemExit("unexpected Trino lifecycle")
+          PY
+
+      - name: Verify the native arm64 builder substrate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_OS}" = "Linux"
+          test "${RUNNER_ARCH}" = "ARM64"
+          test "$(uname -s)" = "Linux"
+          test "$(uname -m)" = "aarch64"
+          if test -d /proc/sys/fs/binfmt_misc; then
+            test -z "$(find /proc/sys/fs/binfmt_misc -maxdepth 1 -type f -name 'qemu-*' -print -quit)"
+          fi
+          docker pull --platform linux/arm64 "${BUILDER_IMAGE}"
+          docker buildx imagetools inspect --raw "${BUILDER_IMAGE}" \
+            > "${RUNNER_TEMP}/builder-index.json"
+          test "$(docker image inspect "${BUILDER_IMAGE}" --format '{{.Architecture}}')" = "arm64"
+          container_arch="$(
+            docker run --rm --platform linux/arm64 "${BUILDER_IMAGE}" uname -m
+          )"
+          test "${container_arch}" = "aarch64"
+          docker run --rm --platform linux/arm64 \
+            --env HOME=/tmp/maven-home \
+            --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
+            --env MAVEN_OPTS= \
+            --env JAVA_TOOL_OPTIONS= \
+            --entrypoint /usr/share/maven/bin/mvn \
+            "${BUILDER_IMAGE}" --version \
+            > "${RUNNER_TEMP}/maven-version.txt"
+          grep -F 'Apache Maven 3.9.16' "${RUNNER_TEMP}/maven-version.txt"
+          grep -F 'Java version: 25' "${RUNNER_TEMP}/maven-version.txt"
+          grep -F 'vendor: Eclipse Adoptium' "${RUNNER_TEMP}/maven-version.txt"
+          grep -F 'arch: "aarch64"' "${RUNNER_TEMP}/maven-version.txt"
+          docker run --rm --platform linux/arm64 \
+            --entrypoint /bin/cat \
+            "${BUILDER_IMAGE}" /usr/share/maven/conf/settings.xml \
+            > "${RUNNER_TEMP}/maven-global-settings.xml"
+          python3 scripts/verify_trino_dependency_publisher.py audit-builder-settings \
+            --settings "${RUNNER_TEMP}/maven-global-settings.xml"
+          CONTAINER_ARCH="${container_arch}" python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          version = Path(os.environ["RUNNER_TEMP"], "maven-version.txt")
+          settings = Path(os.environ["RUNNER_TEMP"], "maven-global-settings.xml")
+          index_path = Path(os.environ["RUNNER_TEMP"], "builder-index.json")
+          index = json.loads(index_path.read_text(encoding="utf-8"))
+          arm64 = [
+              descriptor
+              for descriptor in index.get("manifests", [])
+              if descriptor.get("platform", {}).get("os") == "linux"
+              and descriptor.get("platform", {}).get("architecture") == "arm64"
+          ]
+          if len(arm64) != 1 or arm64[0].get("digest") != os.environ[
+              "BUILDER_ARM64_MANIFEST"
+          ]:
+              raise SystemExit("builder arm64 manifest differs")
+          record = {
+              "schema_version": 1,
+              "result": "passed",
+              "runner_os": os.environ["RUNNER_OS"],
+              "runner_arch": os.environ["RUNNER_ARCH"],
+              "container_architecture": os.environ["CONTAINER_ARCH"],
+              "native_execution": True,
+              "qemu_binfmt_handlers": [],
+              "builder_index": os.environ["BUILDER_IMAGE"],
+              "builder_arm64_manifest": os.environ["BUILDER_ARM64_MANIFEST"],
+              "builder_index_document_sha256": hashlib.sha256(
+                  index_path.read_bytes()
+              ).hexdigest(),
+              "maven_version_output_sha256": hashlib.sha256(
+                  version.read_bytes()
+              ).hexdigest(),
+              "global_settings_sha256": hashlib.sha256(
+                  settings.read_bytes()
+              ).hexdigest(),
+          }
+          Path(os.environ["RUNNER_TEMP"], "toolchain.json").write_text(
+              json.dumps(record, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Fetch and prepare the exact candidate source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py authorize-use \
+            --root . --validation-point before_source_fetch
+          source_dir="${RUNNER_TEMP}/trino-source"
+          test ! -e "${source_dir}"
+          git init "${source_dir}"
+          git -C "${source_dir}" remote add origin \
+            "https://github.com/${SOURCE_REPOSITORY_OWNER}/${SOURCE_REPOSITORY_NAME}"
+          git -C "${source_dir}" fetch --depth=1 origin \
+            "${SOURCE_COMMIT}" "refs/tags/${SOURCE_TAG}:refs/tags/${SOURCE_TAG}"
+          test "$(git -C "${source_dir}" rev-parse "refs/tags/${SOURCE_TAG}")" \
+            = "${SOURCE_TAG_OBJECT}"
+          test "$(git -C "${source_dir}" rev-parse "refs/tags/${SOURCE_TAG}^{}")" \
+            = "${SOURCE_COMMIT}"
+          git -C "${source_dir}" checkout --detach "${SOURCE_COMMIT}"
+          test "$(git -C "${source_dir}" rev-parse 'HEAD^{tree}')" = "${SOURCE_TREE}"
+          python3 scripts/verify_trino_maven_feasibility.py apply-candidate \
+            --root . --checkout "${source_dir}"
+
+      - name: Resolve the selected plugin closure online
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_dir="${RUNNER_TEMP}/trino-source"
+          repository="${RUNNER_TEMP}/maven-feasibility-repository"
+          install -d -m 0700 "${repository}"
+          python3 scripts/verify_trino_maven_feasibility.py verify-candidate \
+            --authorization-root . \
+            --checkout "${source_dir}"
+          docker run --rm \
+            --platform linux/arm64 \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp/maven-home \
+            --env MAVEN_BASEDIR=/policy \
+            --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
+            --env MAVEN_OPTS= \
+            --env JAVA_TOOL_OPTIONS= \
+            --volume "${source_dir}:/workspace:ro" \
+            --volume "${repository}:/m2" \
+            --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy/.mvn:/policy/.mvn:ro" \
+            --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:/policy/settings.xml:ro" \
+            --workdir /policy \
+            --entrypoint /usr/share/maven/bin/mvn \
+            "${BUILDER_IMAGE}" \
+            --batch-mode --show-version --errors --strict-checksums \
+              --ignore-transitive-repositories \
+              --settings /policy/settings.xml \
+              -Dmaven.repo.local=/m2 \
+              --file /workspace/pom.xml \
+              -pl "${SELECTED_REACTOR}" -am \
+              dependency:resolve-plugins -DskipTests \
+            2>&1 | tee "${RUNNER_TEMP}/online-resolve-plugins.log"
+          python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log \
+            --log "${RUNNER_TEMP}/online-resolve-plugins.log"
+          python3 scripts/verify_trino_maven_feasibility.py prune-vulnerable-inputs \
+            --repository "${repository}" --root .
+          python3 scripts/verify_trino_maven_feasibility.py capture-repository \
+            --repository "${repository}" \
+            --evidence "${GITHUB_WORKSPACE}/trino-feasibility-evidence"
+
+      - name: Replay the selected plugin closure with no network
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_dir="${RUNNER_TEMP}/trino-source-offline"
+          repository="${RUNNER_TEMP}/maven-feasibility-repository"
+          git clone --no-local --no-checkout \
+            "${RUNNER_TEMP}/trino-source" "${source_dir}"
+          git -C "${source_dir}" remote set-url origin \
+            "https://github.com/${SOURCE_REPOSITORY_OWNER}/${SOURCE_REPOSITORY_NAME}"
+          git -C "${source_dir}" checkout --detach "${SOURCE_COMMIT}"
+          python3 scripts/verify_trino_maven_feasibility.py apply-candidate \
+            --root . --checkout "${source_dir}"
+          python3 scripts/verify_trino_maven_feasibility.py verify-candidate \
+            --authorization-root . \
+            --checkout "${source_dir}"
+          docker run --rm \
+            --platform linux/arm64 \
+            --network none \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp/maven-home \
+            --env MAVEN_BASEDIR=/policy \
+            --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
+            --env MAVEN_OPTS= \
+            --env JAVA_TOOL_OPTIONS= \
+            --volume "${source_dir}:/workspace:ro" \
+            --volume "${repository}:/m2:ro" \
+            --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy/.mvn:/policy/.mvn:ro" \
+            --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:/policy/settings.xml:ro" \
+            --workdir /policy \
+            --entrypoint /usr/share/maven/bin/mvn \
+            "${BUILDER_IMAGE}" \
+            --offline --batch-mode --show-version --errors --strict-checksums \
+              --ignore-transitive-repositories \
+              --settings /policy/settings.xml \
+              -Dmaven.repo.local=/m2 \
+              -Daether.syncContext.named.basedir.locksDir=/tmp/maven-locks \
+              --file /workspace/pom.xml \
+              -pl "${SELECTED_REACTOR}" -am \
+              dependency:resolve-plugins -DskipTests \
+            2>&1 | tee "${RUNNER_TEMP}/offline-resolve-plugins.log"
+
+      - name: Finalize and audit the retained validation record
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="${GITHUB_WORKSPACE}/trino-feasibility-evidence"
+          python3 scripts/verify_trino_dependency_publisher.py authorize-use \
+            --root . --validation-point before_evidence_review
+          python3 scripts/verify_trino_maven_feasibility.py finalize-record \
+            --evidence "${evidence}" \
+            --online-log "${RUNNER_TEMP}/online-resolve-plugins.log" \
+            --offline-log "${RUNNER_TEMP}/offline-resolve-plugins.log" \
+            --toolchain "${RUNNER_TEMP}/toolchain.json" \
+            --builder-index "${RUNNER_TEMP}/builder-index.json" \
+            --maven-version "${RUNNER_TEMP}/maven-version.txt" \
+            --global-settings "${RUNNER_TEMP}/maven-global-settings.xml"
+          python3 scripts/verify_trino_maven_feasibility.py audit-evidence \
+            --evidence "${evidence}" --require-archive \
+            --trusted-reviewed-commit "${REVIEWED_COMMIT}" \
+            --trusted-workflow-execution-commit "${GITHUB_SHA}"
+
+      - name: Retain the review-only feasibility inputs and outputs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: trino-maven-feasibility-${{ github.run_id }}-${{ github.run_attempt }}
+          path: trino-feasibility-evidence
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 30
+          compression-level: 0

@@ -3372,8 +3372,17 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "runtime_manifests_permitted": False,
                 "allowed_paths": [
                     ".github/workflows/trino-maven-dependencies.yml",
+                    ".github/workflows/trino-maven-remediation-feasibility.yml",
                     "bootstrap/trino/v483/admission.json",
                     "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
+                    (
+                        "bootstrap/trino/v483/"
+                        "maven-scm-manager-plexus-2.2.1-hardened.pom"
+                    ),
+                    (
+                        "bootstrap/trino/v483/"
+                        "maven-scm-provider-gitexe-2.2.1-hardened.pom"
+                    ),
                     (
                         "bootstrap/trino/v483/patches/"
                         "0001-shirokuma-web-ui-security.patch"
@@ -3455,16 +3464,34 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                         "docs/design/evidence/trino/"
                         "run-30693677356-trivy-vulnerability.json"
                     ),
+                    (
+                        "docs/design/evidence/trino/"
+                        "run-30724152120-maven-feasibility-artifact-receipt.json"
+                    ),
+                    (
+                        "docs/design/evidence/trino/"
+                        "run-30724152120-maven-feasibility-validation.json"
+                    ),
+                    (
+                        "docs/design/evidence/trino/"
+                        "run-30731801825-maven-feasibility-artifact-receipt.json"
+                    ),
+                    (
+                        "docs/design/evidence/trino/"
+                        "run-30731801825-maven-feasibility-validation.json"
+                    ),
                     "scripts/package_trino_bun_dependencies.py",
                     "scripts/package_trino_maven_dependencies.py",
                     "scripts/prepare_trino_bun_input.py",
                     "scripts/remediate_parquet_jackson.py",
                     "scripts/verify_polaris_trusted_image.py",
                     "scripts/verify_trino_dependency_publisher.py",
+                    "scripts/verify_trino_maven_feasibility.py",
                     "tests/test_trino_bun_dependencies.py",
                     "tests/test_parquet_jackson_remediation.py",
                     "tests/test_trino_bootstrap.py",
                     "tests/test_trino_dependency_publisher.py",
+                    "tests/test_trino_maven_feasibility.py",
                     "Makefile",
                 ],
                 "forbidden_paths": [
@@ -3500,6 +3527,9 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         blocker_classification = json.loads(
             (ROOT / blocker_classification_path).read_text(encoding="utf-8")
         )
+        validation = blocker_classification["focused_feasibility"][
+            "validation"
+        ]
         blocker_evidence_paths = {
             blocker_classification_path,
             *(
@@ -3512,6 +3542,19 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             blocker_classification["focused_feasibility"]["candidate"][
                 "patch_path"
             ],
+            validation["validation_record"],
+            validation["artifact_receipt"],
+            validation["independent_reaudit"]["verifier"]["path"],
+            (
+                "docs/design/evidence/trino/"
+                "run-30724152120-maven-feasibility-artifact-receipt.json"
+            ),
+            (
+                "docs/design/evidence/trino/"
+                "run-30724152120-maven-feasibility-validation.json"
+            ),
+            ".github/workflows/trino-maven-remediation-feasibility.yml",
+            "tests/test_trino_maven_feasibility.py",
         }
         self.assertLessEqual(blocker_evidence_paths, allowed_paths)
         self.assertTrue(
@@ -4934,6 +4977,28 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 ),
             },
             context["documents"],
+        )
+
+    def test_make_verify_runs_maven_feasibility_unit_tests(self) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        phony_targets = makefile.split(".PHONY:", 1)[1].splitlines()[0].split()
+        verify_target = next(
+            line
+            for line in makefile.splitlines()
+            if line.startswith("verify-trino-bootstrap:")
+        )
+        feasibility_target = makefile.split(
+            "\ntest-trino-maven-feasibility:\n", 1
+        )[1].split("\n\n", 1)[0]
+
+        self.assertIn("test-trino-maven-feasibility", phony_targets)
+        self.assertIn(
+            "test-trino-maven-feasibility",
+            verify_target.split(":", 1)[1].split(),
+        )
+        self.assertIn(
+            "$(PYTHON) -m unittest -v tests.test_trino_maven_feasibility",
+            feasibility_target,
         )
 
 

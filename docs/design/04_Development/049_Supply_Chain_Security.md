@@ -1098,6 +1098,27 @@ repository audit checks every retained file's exact hash and size, recomputes
 the three finding identities and summary, and requires the feasibility patch
 to use the canonical single-path zero-context format.
 
+Preauthorization run
+[`30731801825`](https://github.com/TommyKammy/Shirokuma/actions/runs/30731801825)
+resolved the revised exact candidate on native arm64 with the digest-pinned
+Maven builder and replayed the complete closure with container networking set
+to `none` and the repository mounted read-only. Both phases exited zero and
+reported zero vulnerable-coordinate lines. Independent audit also proves that
+the 4,879-file archive exactly matches its manifest and contains no denied
+vulnerable JAR. Artifact `8828209533`, digest
+`sha256:cf0272447ec1a6afd4bda304fefeb6176ee4240d4fc6339a32de65acf015fe8d`,
+retains the 273,613,724-byte reproducible repository, logs, manifest, toolchain,
+and validation record until `2026-09-01T04:08:14Z`. The repository retains the
+validation record and artifact receipt. This is bounded historical feasibility
+evidence, but the run predates the current authorization checkpoints, read-only
+source mounts, and effective Maven policy binding. It therefore does not
+satisfy ADR-0028's current revalidation prerequisite: the retained
+classification requires a fresh hardened run and independent artifact audit
+before owner authorization. It neither authorizes nor activates the candidate,
+publishes an artifact, admits an image, or changes runtime state. The explicit
+owner approve/reject decision and independent implementation review remain
+mandatory.
+
 ## Resident image and SBOM evidence
 
 Every image admitted to a resident profile must have an entry in

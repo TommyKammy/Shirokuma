@@ -1,0 +1,34 @@
+{
+  "artifact": {
+    "api_url": "https://api.github.com/repos/TommyKammy/Shirokuma/actions/artifacts/8828209533",
+    "digest": "sha256:cf0272447ec1a6afd4bda304fefeb6176ee4240d4fc6339a32de65acf015fe8d",
+    "expires_at": "2026-09-01T04:08:14Z",
+    "id": 8828209533,
+    "name": "trino-maven-feasibility-30731801825-1",
+    "retention_days": 30,
+    "size_in_bytes": 249043272
+  },
+  "boundary": {
+    "authorization_use_permitted": false,
+    "owner_decision_still_required": true,
+    "publication_permitted": false,
+    "source_remediation_activated": false
+  },
+  "independent_reaudit": {
+    "artifact_digest": "sha256:cf0272447ec1a6afd4bda304fefeb6176ee4240d4fc6339a32de65acf015fe8d",
+    "audited_at": "2026-08-05T03:43:58Z",
+    "result": "passed_integrity_only",
+    "scope": "complete retained artifact structural and content integrity; execution controls are not retroactively proven",
+    "verifier": {
+      "path": "scripts/verify_trino_maven_feasibility.py",
+      "sha256": "3231b841f85e720ee75d3ffe6833ef4c852ee5937955b017f3a3b0b621e9fd10"
+    }
+  },
+  "schema_version": 1,
+  "validation_record": {
+    "bytes": 5793,
+    "path": "docs/design/evidence/trino/run-30731801825-maven-feasibility-validation.json",
+    "sha256": "7f87f42ee02960729cacd8dbaea5e6b73e7714b46293149b4bdb9bd8d19f6015"
+  },
+  "workflow_run": "https://github.com/TommyKammy/Shirokuma/actions/runs/30731801825"
+}

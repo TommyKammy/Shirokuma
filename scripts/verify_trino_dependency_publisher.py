@@ -45,6 +45,58 @@ MAX_OMITTED_JAR_COMPRESSION_RATIO = 200
 MAX_OMITTED_JAR_ARCHIVE_BYTES = 128 * 1024 * 1024
 MAX_OMITTED_JAR_MEMBERS = 100_000
 MAX_OMITTED_JAR_CENTRAL_DIRECTORY_BYTES = 16 * 1024 * 1024
+MAX_BUILDER_SETTINGS_BYTES = 1024 * 1024
+EXPECTED_AUTHORIZATION = {
+    "type": "time_boxed_source_identity_risk_acceptance",
+    "decision_record": (
+        "docs/design/07_ADR/"
+        "ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md"
+    ),
+    "approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/"
+        "issues/63#issuecomment-5052385803"
+    ),
+    "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
+    "approved_at": "2026-07-22T22:43:36Z",
+    "expires_at": "2026-08-21T22:43:36Z",
+    "maximum_duration_days": 30,
+    "automatic_renewal": False,
+    "risk_owner": "TommyKammy",
+    "implementation_author": "Codex",
+    "review": {
+        "required_before_merge": True,
+        "reviewer_must_differ_from_implementation_author": True,
+        "enforcement": "required_pull_request_review_before_merge",
+    },
+    "validation_points": [
+        "before_source_fetch",
+        "before_source_execution",
+        "before_dependency_resolution",
+        "before_dependency_publication",
+        "before_evidence_review",
+    ],
+    "scope": {
+        "profile": "mac-studio-solo/local-lite",
+        "purpose": "non-production-poc",
+        "data_classification": ["synthetic", "poc"],
+        "public_service_or_ingress_permitted": False,
+        "source_binding": {
+            "repository": "https://github.com/trinodb/trino",
+            "release_tag": "483",
+            "commit_sha": "50b0b50b75abd47f830b7805ee1b51716eb4065e",
+            "tree_sha": "3b5414292a614b12393bb4605ea2d4c588a5b8ee",
+        },
+    },
+    "accepted_risk": (
+        "the exact source binding lacks a qualifying upstream publisher "
+        "signature or provenance statement"
+    ),
+    "stacked_vulnerability_exception_permitted": False,
+    "expiry_action": (
+        "fail_closed_before_dependency_or_image_publication_"
+        "resident_admission_or_runtime_reconciliation"
+    ),
+}
 SOURCE_OVERLAY_PATH = Path(
     "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch"
 )
@@ -80,6 +132,76 @@ BLOCKER_BASELINE_PATH = Path(
     "docs/design/evidence/trino/"
     "run-30693677356-post-adr-0027-pom.xml.gz"
 )
+BLOCKER_HARDENED_SCM_POM_PATH = Path(
+    "bootstrap/trino/v483/"
+    "maven-scm-provider-gitexe-2.2.1-hardened.pom"
+)
+BLOCKER_HARDENED_SCM_MANAGER_POM_PATH = Path(
+    "bootstrap/trino/v483/"
+    "maven-scm-manager-plexus-2.2.1-hardened.pom"
+)
+BLOCKER_FEASIBILITY_RECORD_PATH = Path(
+    "docs/design/evidence/trino/"
+    "run-30731801825-maven-feasibility-validation.json"
+)
+BLOCKER_FEASIBILITY_RECEIPT_PATH = Path(
+    "docs/design/evidence/trino/"
+    "run-30731801825-maven-feasibility-artifact-receipt.json"
+)
+SUPERSEDED_FEASIBILITY_RECORD_PATH = Path(
+    "docs/design/evidence/trino/"
+    "run-30724152120-maven-feasibility-validation.json"
+)
+SUPERSEDED_FEASIBILITY_RECEIPT_PATH = Path(
+    "docs/design/evidence/trino/"
+    "run-30724152120-maven-feasibility-artifact-receipt.json"
+)
+FEASIBILITY_VERIFIER_PATH = Path(
+    "scripts/verify_trino_maven_feasibility.py"
+)
+EXPECTED_FEASIBILITY_REAUDIT = {
+    "artifact_digest": (
+        "sha256:cf0272447ec1a6afd4bda304fefeb6176ee4240d4fc6339a32de65acf015fe8d"
+    ),
+    "audited_at": "2026-08-05T03:43:58Z",
+    "result": "passed_integrity_only",
+    "scope": (
+        "complete retained artifact structural and content integrity; "
+        "execution controls are not retroactively proven"
+    ),
+    "verifier": {
+        "path": FEASIBILITY_VERIFIER_PATH.as_posix(),
+        "sha256": (
+            "3231b841f85e720ee75d3ffe6833ef4c852ee5937955b017f3a3b0b621e9fd10"
+        ),
+    },
+}
+EXPECTED_BLOCKER_FEASIBILITY_FILES = {
+    SUPERSEDED_FEASIBILITY_RECORD_PATH: {
+        "bytes": 4675,
+        "sha256": (
+            "a26e2a839003897583a82349e7d36a637b2d34856e776f2c91e2aa7e208147c7"
+        ),
+    },
+    SUPERSEDED_FEASIBILITY_RECEIPT_PATH: {
+        "bytes": 899,
+        "sha256": (
+            "181604f862e41c51041b3df950a175faf7a6f7bc74530ef0ae0bc9434e49e854"
+        ),
+    },
+    BLOCKER_FEASIBILITY_RECORD_PATH: {
+        "bytes": 5793,
+        "sha256": (
+            "7f87f42ee02960729cacd8dbaea5e6b73e7714b46293149b4bdb9bd8d19f6015"
+        ),
+    },
+    BLOCKER_FEASIBILITY_RECEIPT_PATH: {
+        "bytes": 1401,
+        "sha256": (
+            "d336848e80052ae194c68320bd646978758017361df18dd213989c462026a046"
+        ),
+    },
+}
 EXPECTED_BLOCKER_SUBJECT = {
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
     "workflow_run": (
@@ -169,22 +291,67 @@ EXPECTED_BLOCKER_BASELINE = {
 EXPECTED_BLOCKER_CANDIDATE = {
     "source_path": "pom.xml",
     "postimage_sha256": (
-        "8d66505ee8ad90d11bf887dfe25a355d815f904d9ea90184b2089b0b68869626"
+        "871c6b21cf9fc70c455d21b64d24dd4501a8b5943242418edc2b2f5cfe14fab8"
     ),
     "patch_path": (
         "docs/design/evidence/trino/"
         "run-30693677356-proposed-source-overlay.patch"
     ),
     "patch_sha256": (
-        "7bb92a92ee492fbf1fc238c5e1ec6a90c4b3088f98f3d05652853f7b874221d8"
+        "731e76f296a725d34ea9e226a1815782168cae3890424e69f76a05530afc15be"
     ),
-    "patch_bytes": 6633,
+    "patch_bytes": 8163,
     "application": "git apply --unidiff-zero --whitespace=error-all",
     "changed_paths": ["pom.xml"],
     "dependency_replacements": {
         "org.apache.velocity:velocity-engine-core": "2.4.1",
         "org.codehaus.plexus:plexus-utils": "4.0.3",
     },
+    "extension_policy": {
+        "io.github.gitflow-incremental-builder:gitflow-incremental-builder": (
+            "removed_for_candidate"
+        ),
+    },
+    "repository_metadata_remediation": [
+        {
+            "reviewed_source": (
+                "bootstrap/trino/v483/"
+                "maven-scm-provider-gitexe-2.2.1-hardened.pom"
+            ),
+            "target_path": (
+                "org/apache/maven/scm/maven-scm-provider-gitexe/2.2.1/"
+                "maven-scm-provider-gitexe-2.2.1.pom"
+            ),
+            "preimage_sha256": (
+                "81521b7b72ca795c95ef5f377e410e7d2644d2ffbce03e34eeea73246847be08"
+            ),
+            "preimage_bytes": 2689,
+            "postimage_sha256": (
+                "0652487bb3cd532ce6ba9fd841c7f2346c1192b3271996a06ddd50f3052186a6"
+            ),
+            "postimage_bytes": 2720,
+            "postimage_sha1": "a8630355e52d9c81dbd6ec117820bb58b6355f4a",
+        },
+        {
+            "reviewed_source": (
+                "bootstrap/trino/v483/"
+                "maven-scm-manager-plexus-2.2.1-hardened.pom"
+            ),
+            "target_path": (
+                "org/apache/maven/scm/maven-scm-manager-plexus/2.2.1/"
+                "maven-scm-manager-plexus-2.2.1.pom"
+            ),
+            "preimage_sha256": (
+                "7e1458bc8212c430c269c3d59063640b2164e6750f23539e6d6ca89d7207b3c5"
+            ),
+            "preimage_bytes": 1802,
+            "postimage_sha256": (
+                "4e7b25d9f3dfd21b874593edf794270888c8ef13bc29394b0da1c1cbefa41c43"
+            ),
+            "postimage_bytes": 1957,
+            "postimage_sha1": "eb1b7ab169dc923806b0040631a45dc83d0b83e8",
+        },
+    ],
 }
 EXPECTED_BLOCKER_CLASSIFICATION = {
     "gate_status": "blocked",
@@ -194,19 +361,30 @@ EXPECTED_BLOCKER_CLASSIFICATION = {
     "existing_distribution_authorization_covers_change": False,
     "reason": (
         "ADR-0027 fixes the active source-overlay patch SHA-256, pom.xml "
-        "postimage, and allowed dependency versions. The retained findings "
-        "require a different patch and postimage, including a new Velocity "
-        "version, so publication must remain blocked pending separate exact "
-        "owner authorization and independent review."
+        "postimage, and allowed dependency versions. The retained feasibility "
+        "artifact predates the current authorization checkpoints, read-only "
+        "source mounts, and effective Maven policy basedir binding. Publication "
+        "must remain blocked pending a fresh hardened validation run, separate "
+        "exact owner authorization, and independent review."
     ),
 }
 EXPECTED_BLOCKER_FEASIBILITY_VALIDATION = {
-    "evidence_status": (
-        "local_observation_not_retained_not_authorization_evidence"
-    ),
+    "evidence_status": "passed_integrity_reaudit_pre_hardening_execution",
     "authorization_use_permitted": False,
     "revalidation_required_before_authorization": True,
-    "reproducible_inputs_retained": False,
+    "reproducible_inputs_retained": True,
+    "validation_record": BLOCKER_FEASIBILITY_RECORD_PATH.as_posix(),
+    "artifact_receipt": BLOCKER_FEASIBILITY_RECEIPT_PATH.as_posix(),
+    "workflow_run": (
+        "https://github.com/TommyKammy/Shirokuma/actions/runs/30731801825"
+    ),
+    "reviewed_commit": "3ceae605187b9e08f4f6e3a1d547f5623cfb111f",
+    "artifact_id": 8828209533,
+    "artifact_digest": (
+        "sha256:cf0272447ec1a6afd4bda304fefeb6176ee4240d4fc6339a32de65acf015fe8d"
+    ),
+    "artifact_expires_at": "2026-09-01T04:08:14Z",
+    "independent_reaudit": EXPECTED_FEASIBILITY_REAUDIT,
     "builder": (
         "docker.io/library/maven@sha256:"
         "7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c"
@@ -218,25 +396,35 @@ EXPECTED_BLOCKER_FEASIBILITY_VALIDATION = {
     "goal": "dependency:resolve-plugins -DskipTests",
     "reported_observations": {
         "online_resolution": "success",
-        "network_none_not_claimed": True,
+        "network_none_offline_replay": True,
         "offline_replay": "success",
+        "offline_repository_mount": "read-only",
+        "archive_manifest_audit": "passed",
+        "physical_vulnerable_jars": 0,
         "vulnerable_coordinate_lines": 0,
+        "toolchain_inputs_retained": True,
     },
     "limitations": {
-        "command_output_retained": False,
-        "offline_repository_retained": False,
+        "command_output_retained": True,
+        "offline_repository_retained_in_actions_artifact": True,
+        "artifact_retention_is_time_bounded": True,
+        "hardened_integrity_reaudit_passed": True,
+        "current_workflow_controls_proven": False,
+        "read_only_source_mounts_proven": False,
+        "effective_policy_basedir_proven": False,
+        "retained_vulnerable_jar_detected": None,
         "full_clean_install_not_run": True,
         "fresh_closure_sbom_and_scan_not_run": True,
     },
 }
 EXPECTED_BLOCKER_NEXT_ACTION = {
-    "state": "owner_authorization_required",
+    "state": "hardened_revalidation_required_before_owner_authorization",
     "required_decision": (
-        "Approve or reject the exact candidate pom.xml-only overlay bound to "
-        "the retained patch and postimage hashes. Approval requires a new "
-        "retained and reproducible validation record and must preserve "
-        "High=0/Critical=0 without waiver, the current expiry, and reviewer "
-        "separation before any active publisher patch or publication retry."
+        "Generate a fresh artifact with the current hardened workflow, then "
+        "review and approve or reject the exact candidate. Do not activate "
+        "the source remediation or publish an image until hardened "
+        "revalidation, separate risk-owner authorization, and independent "
+        "review are complete."
     ),
 }
 EXPECTED_BLOCKER_FINDING_POLICY = [
@@ -1383,14 +1571,46 @@ def _fail(code: str, detail: str) -> None:
     raise ContractError(f"{code}: {detail}")
 
 
+def _reject_duplicate_json_keys(
+    pairs: list[tuple[str, Any]],
+) -> dict[str, Any]:
+    document: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in document:
+            _fail("JSON", f"duplicate object key: {key}")
+        document[key] = value
+    return document
+
+
 def _load_json(path: Path) -> dict[str, Any]:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        value = json.loads(
+            path.read_text(encoding="utf-8"),
+            object_pairs_hook=_reject_duplicate_json_keys,
+        )
     except (OSError, json.JSONDecodeError) as error:
         _fail("JSON", f"{path}: {error}")
     if not isinstance(value, dict):
         _fail("JSON", f"{path} root must be an object")
     return value
+
+
+def _matches_exact_json(value: object, expected: object) -> bool:
+    if type(value) is not type(expected):
+        return False
+    if isinstance(expected, dict):
+        assert isinstance(value, dict)
+        return set(value) == set(expected) and all(
+            _matches_exact_json(value[key], expected_item)
+            for key, expected_item in expected.items()
+        )
+    if isinstance(expected, list):
+        assert isinstance(value, list)
+        return len(value) == len(expected) and all(
+            _matches_exact_json(value_item, expected_item)
+            for value_item, expected_item in zip(value, expected)
+        )
+    return value == expected
 
 
 def _sha256(path: Path) -> str:
@@ -1400,12 +1620,21 @@ def _sha256(path: Path) -> str:
         _fail("POLICY_FILE", f"{path}: {error}")
 
 
-def _read_reviewed_regular_file(path: Path, *, code: str) -> bytes:
+def _read_reviewed_regular_file(
+    path: Path, *, code: str, max_bytes: int | None = None
+) -> bytes:
     try:
         expected = path.lstat()
     except OSError as error:
         _fail(code, f"{path}: {error}")
-    if not stat.S_ISREG(expected.st_mode) or expected.st_nlink != 1:
+    if (
+        not stat.S_ISREG(expected.st_mode)
+        or expected.st_nlink != 1
+        or (
+            max_bytes is not None
+            and not 0 < expected.st_size <= max_bytes
+        )
+    ):
         _fail(code, f"{path} must be one regular, non-hard-linked file")
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     try:
@@ -1423,8 +1652,10 @@ def _read_reviewed_regular_file(path: Path, *, code: str) -> bytes:
         ):
             _fail(code, f"{path} changed while it was opened")
         with os.fdopen(descriptor, "rb", closefd=False) as source:
-            payload = source.read()
-        if len(payload) != observed.st_size:
+            payload = source.read(max_bytes + 1) if max_bytes else source.read()
+        if len(payload) != observed.st_size or (
+            max_bytes is not None and len(payload) > max_bytes
+        ):
             _fail(code, f"{path} changed while it was read")
         return payload
     finally:
@@ -1520,7 +1751,7 @@ def _validate_openvex(root: Path) -> None:
             }
         ],
     }
-    if document != expected_document:
+    if not _matches_exact_json(document, expected_document):
         _fail("SOURCE_VEX", "OpenVEX document differs")
 
 
@@ -1531,7 +1762,7 @@ def _validate_source_overlay_contract(
     at: dt.datetime | None,
 ) -> None:
     overlay = contract.get("source", {}).get("source_overlay")
-    if overlay != EXPECTED_SOURCE_OVERLAY:
+    if not _matches_exact_json(overlay, EXPECTED_SOURCE_OVERLAY):
         _fail("SOURCE_OVERLAY", "bounded Web UI overlay contract differs")
     patch = EXPECTED_SOURCE_OVERLAY["patch"]
     if _sha256(root / patch["path"]) != patch["sha256"]:
@@ -1551,7 +1782,7 @@ def _validate_source_remediation_contract(
     at: dt.datetime | None,
 ) -> None:
     remediation = contract.get("source_remediation")
-    if remediation != EXPECTED_SOURCE_REMEDIATION:
+    if not _matches_exact_json(remediation, EXPECTED_SOURCE_REMEDIATION):
         _fail("SOURCE_REMEDIATION", "exact Parquet source remediation differs")
     expires = _parse_time(EXPECTED_SOURCE_REMEDIATION["expires_at"])
     authorization_expires = _parse_time(contract["authorization"]["expires_at"])
@@ -1573,7 +1804,10 @@ def _validate_distribution_remediation_contract(
     remediation = contract.get("source", {}).get(
         "distribution_remediation"
     )
-    if remediation != EXPECTED_DISTRIBUTION_REMEDIATION:
+    if not _matches_exact_json(
+        remediation,
+        EXPECTED_DISTRIBUTION_REMEDIATION,
+    ):
         _fail(
             "DISTRIBUTION_REMEDIATION",
             "exact Iceberg-only Maven closure remediation differs",
@@ -1653,18 +1887,34 @@ def _validate_zero_context_patch(
         )
 
 
-def _validate_blocker_evidence(root: Path) -> None:
+def _validate_blocker_evidence(
+    root: Path,
+    *,
+    at: dt.datetime | None = None,
+) -> None:
     record = _load_json(root / BLOCKER_CLASSIFICATION_PATH)
     if (
-        record.get("schema_version") != 1
+        not _matches_exact_json(record.get("schema_version"), 1)
         or record.get("record_path") != BLOCKER_CLASSIFICATION_PATH.as_posix()
-        or record.get("subject") != EXPECTED_BLOCKER_SUBJECT
-        or record.get("summary") != EXPECTED_BLOCKER_SUMMARY
+        or not _matches_exact_json(
+            record.get("subject"),
+            EXPECTED_BLOCKER_SUBJECT,
+        )
+        or not _matches_exact_json(
+            record.get("summary"),
+            EXPECTED_BLOCKER_SUMMARY,
+        )
     ):
         _fail("BLOCKER_EVIDENCE", "classification identity or summary differs")
     if (
-        record.get("classification") != EXPECTED_BLOCKER_CLASSIFICATION
-        or record.get("next_action") != EXPECTED_BLOCKER_NEXT_ACTION
+        not _matches_exact_json(
+            record.get("classification"),
+            EXPECTED_BLOCKER_CLASSIFICATION,
+        )
+        or not _matches_exact_json(
+            record.get("next_action"),
+            EXPECTED_BLOCKER_NEXT_ACTION,
+        )
     ):
         _fail("BLOCKER_EVIDENCE", "owner-facing policy boundary differs")
 
@@ -1675,7 +1925,8 @@ def _validate_blocker_evidence(root: Path) -> None:
     for name, expected in EXPECTED_BLOCKER_INPUTS.items():
         observed = inputs.get(name)
         if not isinstance(observed, dict) or any(
-            observed.get(field) != value for field, value in expected.items()
+            not _matches_exact_json(observed.get(field), value)
+            for field, value in expected.items()
         ):
             _fail("BLOCKER_EVIDENCE", f"{name} record differs")
         if name in {"run_scoped_maven_manifest", "raw_rootfs_sbom"} and (
@@ -1844,7 +2095,10 @@ def _validate_blocker_evidence(root: Path) -> None:
         {field: finding.get(field) for field in finding_policy_fields}
         for finding in classified
     ]
-    if observed_finding_policy != EXPECTED_BLOCKER_FINDING_POLICY:
+    if not _matches_exact_json(
+        observed_finding_policy,
+        EXPECTED_BLOCKER_FINDING_POLICY,
+    ):
         _fail("BLOCKER_EVIDENCE", "finding policy classification differs")
 
     feasibility = record.get("focused_feasibility")
@@ -1854,8 +2108,67 @@ def _validate_blocker_evidence(root: Path) -> None:
         "candidate": EXPECTED_BLOCKER_CANDIDATE,
         "validation": EXPECTED_BLOCKER_FEASIBILITY_VALIDATION,
     }
-    if feasibility != expected_feasibility:
+    if not _matches_exact_json(feasibility, expected_feasibility):
         _fail("BLOCKER_EVIDENCE", "feasibility boundary differs")
+    expires = _parse_time(
+        EXPECTED_BLOCKER_FEASIBILITY_VALIDATION["artifact_expires_at"]
+    )
+    if at is not None and at >= expires:
+        _fail(
+            "BLOCKER_FEASIBILITY_EXPIRED",
+            f"{at.isoformat()} is at or after {expires.isoformat()}",
+        )
+    retained_feasibility: dict[Path, dict[str, Any]] = {}
+    for path, expected in EXPECTED_BLOCKER_FEASIBILITY_FILES.items():
+        payload = _read_reviewed_regular_file(
+            root / path,
+            code="BLOCKER_EVIDENCE",
+        )
+        if (
+            len(payload) != expected["bytes"]
+            or hashlib.sha256(payload).hexdigest() != expected["sha256"]
+        ):
+            _fail("BLOCKER_EVIDENCE", f"feasibility evidence differs: {path}")
+        retained_feasibility[path] = _load_json(root / path)
+    receipt = retained_feasibility[BLOCKER_FEASIBILITY_RECEIPT_PATH]
+    validation = retained_feasibility[BLOCKER_FEASIBILITY_RECORD_PATH]
+    if (
+        not _matches_exact_json(
+            receipt.get("validation_record"),
+            {
+                "bytes": EXPECTED_BLOCKER_FEASIBILITY_FILES[
+                    BLOCKER_FEASIBILITY_RECORD_PATH
+                ]["bytes"],
+                "path": BLOCKER_FEASIBILITY_RECORD_PATH.as_posix(),
+                "sha256": EXPECTED_BLOCKER_FEASIBILITY_FILES[
+                    BLOCKER_FEASIBILITY_RECORD_PATH
+                ]["sha256"],
+            },
+        )
+        or not _matches_exact_json(
+            receipt.get("boundary"),
+            {
+                "authorization_use_permitted": False,
+                "owner_decision_still_required": True,
+                "publication_permitted": False,
+                "source_remediation_activated": False,
+            },
+        )
+        or not _matches_exact_json(
+            receipt.get("independent_reaudit"),
+            EXPECTED_FEASIBILITY_REAUDIT,
+        )
+        or _sha256(root / FEASIBILITY_VERIFIER_PATH)
+        != EXPECTED_FEASIBILITY_REAUDIT["verifier"]["sha256"]
+        or validation.get("result", {}).get("authorization_use_permitted")
+        is not False
+        or validation.get("result", {}).get("owner_decision_still_required")
+        is not True
+        or validation.get("boundary", {}).get("source_remediation_activated")
+        is not False
+        or validation.get("boundary", {}).get("publication_permitted") is not False
+    ):
+        _fail("BLOCKER_EVIDENCE", "retained feasibility receipt differs")
     candidate_path = root / EXPECTED_BLOCKER_CANDIDATE["patch_path"]
     candidate_payload = _read_reviewed_regular_file(
         candidate_path,
@@ -1999,6 +2312,7 @@ def apply_source_overlay(root: Path, checkout: Path) -> None:
     audit_source(root, checkout)
     contract = _load_json(root / CONTRACT_PATH)
     now = dt.datetime.now(dt.timezone.utc)
+    _validate_authorization(contract, at=now)
     _validate_source_overlay_contract(root, contract, at=now)
     _validate_distribution_remediation_contract(root, contract, at=now)
     overlay = EXPECTED_SOURCE_OVERLAY
@@ -2123,7 +2437,7 @@ def _bun_scan_report(
 ) -> tuple[dict[str, list[dict[str, Any]]], list[tuple[str, dict[str, Any]]]]:
     report = _load_json(report_path)
     if (
-        report.get("SchemaVersion") != 2
+        not _matches_exact_json(report.get("SchemaVersion"), 2)
         or report.get("ArtifactType") != "filesystem"
     ):
         _fail("BUN_SCAN_REPORT", "unexpected Trivy report envelope")
@@ -2296,9 +2610,9 @@ def _maven_jar_records(
     descriptor = _load_json(descriptor_path)
     files = descriptor.get("files")
     if (
-        descriptor.get("schema_version") != 2
+        not _matches_exact_json(descriptor.get("schema_version"), 2)
         or not isinstance(files, list)
-        or descriptor.get("file_count") != len(files)
+        or not _matches_exact_json(descriptor.get("file_count"), len(files))
     ):
         _fail("MAVEN_SCAN_DESCRIPTOR", "closed Maven descriptor differs")
     records: dict[str, Mapping[str, Any]] = {}
@@ -2334,14 +2648,14 @@ def _maven_jar_records(
                     "MAVEN_SCAN_DESCRIPTOR",
                     f"unsafe or duplicate Maven JAR path: {path}",
                 )
+            mode = record.get("mode")
+            digest = record.get("sha256")
             if (
-                re.fullmatch(r"0[0-7]{3}", str(record.get("mode"))) is None
-                or re.fullmatch(
-                    r"[0-9a-f]{64}",
-                    str(record.get("sha256")),
-                )
-                is None
-                or not isinstance(record.get("size"), int)
+                not isinstance(mode, str)
+                or re.fullmatch(r"0[0-7]{3}", mode) is None
+                or not isinstance(digest, str)
+                or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+                or type(record.get("size")) is not int
                 or record["size"] <= 0
                 or not origin_is_expected
             ):
@@ -3219,7 +3533,7 @@ def _bind_cyclonedx(path: Path, reference: str, digest_hex: str) -> None:
 
 def _bind_trivy_report(path: Path, reference: str, digest: str) -> None:
     document = _load_json(path)
-    if document.get("SchemaVersion") != 2:
+    if not _matches_exact_json(document.get("SchemaVersion"), 2):
         _fail("ARTIFACT_SCAN", f"{path} is not a Trivy v2 report")
     previous = document.get("ArtifactName")
     metadata = document.get("Metadata")
@@ -3360,33 +3674,32 @@ def _validate_authorization(
     contract: Mapping[str, Any], *, at: dt.datetime | None
 ) -> None:
     authorization = contract.get("authorization")
-    if not isinstance(authorization, dict):
-        _fail("AUTHORIZATION", "authorization record is missing")
+    if not _matches_exact_json(authorization, EXPECTED_AUTHORIZATION):
+        _fail("AUTHORIZATION", "Issue #63 authorization record differs")
     approved = _parse_time(authorization.get("approved_at", ""))
     expires = _parse_time(authorization.get("expires_at", ""))
-    if (
-        authorization.get("type")
-        != "time_boxed_source_identity_risk_acceptance"
-        or authorization.get("issue")
-        != "https://github.com/TommyKammy/Shirokuma/issues/63"
-        or authorization.get("maximum_duration_days") != 30
-        or authorization.get("automatic_renewal") is not False
-        or authorization.get("risk_owner") != "TommyKammy"
-        or authorization.get("implementation_author") != "Codex"
-        or expires - approved > dt.timedelta(days=30)
-        or approved >= expires
-    ):
+    if expires - approved > dt.timedelta(days=30) or approved >= expires:
         _fail("AUTHORIZATION", "time-boxed Issue #63 authorization differs")
-    review = authorization.get("review", {})
-    if (
-        review.get("required_before_merge") is not True
-        or review.get("reviewer_must_differ_from_implementation_author") is not True
-    ):
-        _fail("AUTHORIZATION", "owner/reviewer separation is missing")
     if at is not None and not approved <= at < expires:
         _fail(
             "AUTHORIZATION_EXPIRED",
             f"{at.isoformat()} is outside [{approved.isoformat()}, {expires.isoformat()})",
+        )
+
+
+def authorize_use(
+    root: Path,
+    *,
+    validation_point: str,
+    at: dt.datetime | None = None,
+) -> None:
+    contract = _load_json(root / CONTRACT_PATH)
+    instant = at or dt.datetime.now(dt.timezone.utc)
+    _validate_authorization(contract, at=instant)
+    if validation_point not in contract["authorization"]["validation_points"]:
+        _fail(
+            "AUTHORIZATION",
+            f"unrecognized validation point: {validation_point}",
         )
 
 
@@ -3543,8 +3856,14 @@ def audit_builder_settings(path: Path) -> None:
     """Accept only inert containers and Maven's exact default HTTP blocker."""
     namespace = "http://maven.apache.org/SETTINGS/1.2.0"
     try:
-        root = ET.parse(path).getroot()
-    except (OSError, ET.ParseError) as error:
+        root = ET.fromstring(
+            _read_reviewed_regular_file(
+                path,
+                code="BUILDER_SETTINGS",
+                max_bytes=MAX_BUILDER_SETTINGS_BYTES,
+            )
+        )
+    except ET.ParseError as error:
         _fail("BUILDER_SETTINGS", str(error))
     if root.tag != f"{{{namespace}}}settings":
         _fail("BUILDER_SETTINGS", f"unexpected root element: {root.tag}")
@@ -3929,11 +4248,18 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
     if not isinstance(expected_offline_command, str):
         _fail("WORKFLOW_OFFLINE_COMMAND", "contract command is missing")
     if (
-        offline_rebuild.get("repository_settings")
-        != EXPECTED_OFFLINE_REPOSITORY_SETTINGS
-        or offline_rebuild.get("bun_cache") != EXPECTED_OFFLINE_BUN_CACHE
-        or offline_rebuild.get("compiler_debug_information")
-        != EXPECTED_OFFLINE_COMPILER_DEBUG
+        not _matches_exact_json(
+            offline_rebuild.get("repository_settings"),
+            EXPECTED_OFFLINE_REPOSITORY_SETTINGS,
+        )
+        or not _matches_exact_json(
+            offline_rebuild.get("bun_cache"),
+            EXPECTED_OFFLINE_BUN_CACHE,
+        )
+        or not _matches_exact_json(
+            offline_rebuild.get("compiler_debug_information"),
+            EXPECTED_OFFLINE_COMPILER_DEBUG,
+        )
     ):
         _fail(
             "WORKFLOW_SETTINGS",
@@ -4104,12 +4430,14 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         or publication.get("retire_in_evidence_review_pr") is not True
         or publication.get("pull_request_behavior")
         != "static_read_only_contract_validation"
-        or publication.get("evidence_review_inventory_policy")
-        != {
-            "recursive_closed_world_required": True,
-            "regular_files_only": True,
-            "directories_and_symlinks_rejected": True,
-        }
+        or not _matches_exact_json(
+            publication.get("evidence_review_inventory_policy"),
+            {
+                "recursive_closed_world_required": True,
+                "regular_files_only": True,
+                "directories_and_symlinks_rejected": True,
+            },
+        )
     ):
         _fail("PUBLICATION", "blocked publication lifecycle differs")
     failed = contract.get("failed_publications")
@@ -4132,7 +4460,28 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         _fail("PUBLICATION", "failed publication record differs")
 
 
+def _validate_maven_policy_inventory(root: Path) -> None:
+    directory = root / JVM_CONFIG_PATH.parent
+    try:
+        metadata = directory.lstat()
+    except OSError as error:
+        _fail("POLICY_FILE", f"{directory}: {error}")
+    if not stat.S_ISDIR(metadata.st_mode):
+        _fail("POLICY_FILE", f"{directory} must be one real directory")
+    try:
+        entries = sorted(directory.iterdir(), key=lambda path: path.name)
+    except OSError as error:
+        _fail("POLICY_FILE", f"{directory}: {error}")
+    if [entry.name for entry in entries] != [JVM_CONFIG_PATH.name]:
+        _fail(
+            "POLICY_FILE",
+            "Maven policy directory must contain only jvm.config",
+        )
+    _read_reviewed_regular_file(entries[0], code="POLICY_FILE")
+
+
 def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
+    _validate_maven_policy_inventory(root)
     expected_paths = {
         SETTINGS_PATH,
         JVM_CONFIG_PATH,
@@ -4152,6 +4501,8 @@ def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
         DISTRIBUTION_REMEDIATION_ADR_PATH,
         BLOCKER_ADR_PATH,
         BLOCKER_CLASSIFICATION_PATH,
+        BLOCKER_HARDENED_SCM_POM_PATH,
+        BLOCKER_HARDENED_SCM_MANAGER_POM_PATH,
     }
     policy_files = contract.get("policy_files")
     if not isinstance(policy_files, list):
@@ -4179,15 +4530,18 @@ def audit(root: Path) -> None:
     _validate_distribution_remediation_contract(root, contract, at=None)
     _validate_blocker_evidence(root)
     lifecycle = contract.get("lifecycle", {})
-    if lifecycle != {
-        "state": "source_remediation_authorization_pending",
-        "contract_only": False,
-        "dependency_artifact_present": False,
-        "publication_workflow_permitted": False,
-        "image_publication_permitted": False,
-        "resident_admission_permitted": False,
-        "runtime_reconciliation_permitted": False,
-    }:
+    if not _matches_exact_json(
+        lifecycle,
+        {
+            "state": "source_remediation_authorization_pending",
+            "contract_only": False,
+            "dependency_artifact_present": False,
+            "publication_workflow_permitted": False,
+            "image_publication_permitted": False,
+            "resident_admission_permitted": False,
+            "runtime_reconciliation_permitted": False,
+        },
+    ):
         _fail("LIFECYCLE", f"unexpected lifecycle: {lifecycle!r}")
     source = contract.get("source", {})
     if (
@@ -4199,40 +4553,57 @@ def audit(root: Path) -> None:
         or source.get("pristine_source_required_before_overlay") is not True
     ):
         _fail("SOURCE", "exact Trino source binding differs")
-    if contract.get("toolchain", {}).get("builder", {}).get("index") != EXPECTED_BUILDER:
+    if not _matches_exact_json(
+        contract.get("toolchain", {}).get("builder", {}).get("index"),
+        EXPECTED_BUILDER,
+    ):
         _fail("BUILDER", "builder index differs")
     dependency_resolution = contract.get("dependency_resolution", {})
     reactor_outputs = dependency_resolution.get("reactor_outputs", {})
     if (
-        dependency_resolution.get("repositories")
-        != list(EXPECTED_REPOSITORIES.values())
+        not _matches_exact_json(
+            dependency_resolution.get("repositories"),
+            list(EXPECTED_REPOSITORIES.values()),
+        )
         or dependency_resolution.get("transitive_dependency_repositories_ignored")
         is not True
-        or dependency_resolution.get("repository_mirrors")
-        != [
-            {
-                "id": values[0][1],
-                "mirror_of": values[1][1],
-                "url": values[3][1],
-            }
-            for values in EXPECTED_REPOSITORY_MIRRORS
-        ]
-        or dependency_resolution.get("settings_policy")
-        != EXPECTED_SETTINGS_POLICY
-        or dependency_resolution.get("external_inputs")
-        != [
-            EXPECTED_BUN_INPUT,
-            EXPECTED_PARQUET_SOURCE_REMEDIATION,
-        ]
-        or dependency_resolution.get("bun_package_cache")
-        != EXPECTED_BUN_PACKAGE_CACHE
+        or not _matches_exact_json(
+            dependency_resolution.get("repository_mirrors"),
+            [
+                {
+                    "id": values[0][1],
+                    "mirror_of": values[1][1],
+                    "url": values[3][1],
+                }
+                for values in EXPECTED_REPOSITORY_MIRRORS
+            ],
+        )
+        or not _matches_exact_json(
+            dependency_resolution.get("settings_policy"),
+            EXPECTED_SETTINGS_POLICY,
+        )
+        or not _matches_exact_json(
+            dependency_resolution.get("external_inputs"),
+            [
+                EXPECTED_BUN_INPUT,
+                EXPECTED_PARQUET_SOURCE_REMEDIATION,
+            ],
+        )
+        or not _matches_exact_json(
+            dependency_resolution.get("bun_package_cache"),
+            EXPECTED_BUN_PACKAGE_CACHE,
+        )
         or reactor_outputs.get("repository_path_prefix") != "io/trino/"
         or reactor_outputs.get("dependency_input_permitted") is not False
         or reactor_outputs.get("rebuild_from_reviewed_source_required") is not True
-        or reactor_outputs.get("exact_external_build_extension")
-        != EXPECTED_TRINO_BUILD_EXTENSION
-        or reactor_outputs.get("exact_external_maven_inputs")
-        != EXPECTED_TRINO_EXTERNAL_MAVEN_INPUTS
+        or not _matches_exact_json(
+            reactor_outputs.get("exact_external_build_extension"),
+            EXPECTED_TRINO_BUILD_EXTENSION,
+        )
+        or not _matches_exact_json(
+            reactor_outputs.get("exact_external_maven_inputs"),
+            EXPECTED_TRINO_EXTERNAL_MAVEN_INPUTS,
+        )
     ):
         _fail("REPOSITORIES", "contract repository allowlist differs")
     snapshot = contract.get("snapshot", {})
@@ -4240,33 +4611,43 @@ def audit(root: Path) -> None:
         snapshot.get("artifact_type") != EXPECTED_ARTIFACT_TYPE
         or snapshot.get("descriptor_media_type")
         != EXPECTED_DESCRIPTOR_MEDIA_TYPE
-        or snapshot.get("manifest", {}).get("schema_version") != 2
-        or snapshot.get("trivy_rootfs_omission_contract")
-        != {
-            "schema_version": 1,
-            "unknown_omissions_permitted": False,
-            "reviewed_omissions": EXPECTED_TRIVY_ROOTFS_OMISSIONS,
-        }
-        or snapshot.get("bun_cache")
-        != {
-            "descriptor_media_type": EXPECTED_BUN_DESCRIPTOR_MEDIA_TYPE,
-            "archive_media_type": EXPECTED_BUN_ARCHIVE_MEDIA_TYPE,
-            "manifest_schema_version": 1,
-        }
+        or not _matches_exact_json(
+            snapshot.get("manifest", {}).get("schema_version"),
+            2,
+        )
+        or not _matches_exact_json(
+            snapshot.get("trivy_rootfs_omission_contract"),
+            {
+                "schema_version": 1,
+                "unknown_omissions_permitted": False,
+                "reviewed_omissions": EXPECTED_TRIVY_ROOTFS_OMISSIONS,
+            },
+        )
+        or not _matches_exact_json(
+            snapshot.get("bun_cache"),
+            {
+                "descriptor_media_type": EXPECTED_BUN_DESCRIPTOR_MEDIA_TYPE,
+                "archive_media_type": EXPECTED_BUN_ARCHIVE_MEDIA_TYPE,
+                "manifest_schema_version": 1,
+            },
+        )
     ):
         _fail("SNAPSHOT_FORMAT", "dependency snapshot v2 contract differs")
-    if snapshot.get("visibility_bootstrap") != {
-        "required_visibility": "public",
-        "sign_and_attest_before_anonymous_pull": True,
-        "owner_action_on_first_private_run": "set-package-public-and-rerun",
-        "failed_attempt_admitted": False,
-        "user_credential_fallback": False,
-    }:
+    if not _matches_exact_json(
+        snapshot.get("visibility_bootstrap"),
+        {
+            "required_visibility": "public",
+            "sign_and_attest_before_anonymous_pull": True,
+            "owner_action_on_first_private_run": "set-package-public-and-rerun",
+            "failed_attempt_admitted": False,
+            "user_credential_fallback": False,
+        },
+    ):
         _fail("VISIBILITY", "first-publication visibility contract differs")
     provenance = snapshot.get("authentication", {}).get("provenance", {})
-    if (
-        provenance.get("parquet_source_remediation_resolved_dependency")
-        != EXPECTED_PARQUET_SLSA_RESOLVED_DEPENDENCY
+    if not _matches_exact_json(
+        provenance.get("parquet_source_remediation_resolved_dependency"),
+        EXPECTED_PARQUET_SLSA_RESOLVED_DEPENDENCY,
     ):
         _fail(
             "SLSA_SOURCE_REMEDIATION",
@@ -4274,12 +4655,18 @@ def audit(root: Path) -> None:
         )
     repository_state = admission.get("repository_state", {})
     if (
-        admission.get("source_overlay_authorization")
-        != EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION
-        or admission.get("source_remediation_authorization")
-        != EXPECTED_ADMISSION_SOURCE_REMEDIATION_AUTHORIZATION
-        or admission.get("distribution_remediation_authorization")
-        != EXPECTED_ADMISSION_DISTRIBUTION_REMEDIATION_AUTHORIZATION
+        not _matches_exact_json(
+            admission.get("source_overlay_authorization"),
+            EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION,
+        )
+        or not _matches_exact_json(
+            admission.get("source_remediation_authorization"),
+            EXPECTED_ADMISSION_SOURCE_REMEDIATION_AUTHORIZATION,
+        )
+        or not _matches_exact_json(
+            admission.get("distribution_remediation_authorization"),
+            EXPECTED_ADMISSION_DISTRIBUTION_REMEDIATION_AUTHORIZATION,
+        )
         or repository_state.get("publication_workflow_permitted") is not False
         or repository_state.get("dependency_artifact_present") is not False
         or repository_state.get("resident_ledger_permitted") is not False
@@ -4296,16 +4683,16 @@ def audit(root: Path) -> None:
 
 
 def publication_status(contract: dict[str, Any], admission: dict[str, Any]) -> str:
-    permissions = {
+    permissions = [
         contract.get("lifecycle", {}).get("publication_workflow_permitted"),
         contract.get("publication", {}).get("permitted"),
         admission.get("repository_state", {}).get(
             "publication_workflow_permitted"
         ),
-    }
-    if permissions == {True}:
+    ]
+    if _matches_exact_json(permissions, [True, True, True]):
         return "active"
-    if permissions == {False}:
+    if _matches_exact_json(permissions, [False, False, False]):
         return "blocked"
     _fail("LIFECYCLE", "publication permission records disagree")
 
@@ -4540,6 +4927,10 @@ def _parser() -> argparse.ArgumentParser:
     authorize = commands.add_parser("authorize")
     authorize.add_argument("--root", type=Path, default=Path("."))
     authorize.add_argument("--at")
+    authorize_use_parser = commands.add_parser("authorize-use")
+    authorize_use_parser.add_argument("--root", type=Path, default=Path("."))
+    authorize_use_parser.add_argument("--validation-point", required=True)
+    authorize_use_parser.add_argument("--at")
     publication_status = commands.add_parser("publication-status")
     publication_status.add_argument("--root", type=Path, default=Path("."))
     source = commands.add_parser("audit-source")
@@ -4621,6 +5012,12 @@ def main() -> int:
                 or contract.get("publication", {}).get("permitted") is not True
             ):
                 _fail("LIFECYCLE", "publication is not permitted")
+        elif args.command == "authorize-use":
+            authorize_use(
+                args.root.resolve(),
+                validation_point=args.validation_point,
+                at=_parse_time(args.at) if args.at else None,
+            )
         elif args.command == "publication-status":
             root = args.root.resolve()
             contract = _load_json(root / CONTRACT_PATH)

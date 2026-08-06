@@ -47,6 +47,10 @@ Keep dependency publication blocked and restore lifecycle state
 - `docs/design/evidence/trino/run-30693677356-maven-rootfs.cdx.json`
 - `docs/design/evidence/trino/run-30693677356-post-adr-0027-pom.xml.gz`
 - `docs/design/evidence/trino/run-30693677356-maven-vulnerability-classification.json`
+- `docs/design/evidence/trino/run-30724152120-maven-feasibility-validation.json`
+- `docs/design/evidence/trino/run-30724152120-maven-feasibility-artifact-receipt.json`
+- `docs/design/evidence/trino/run-30731801825-maven-feasibility-validation.json`
+- `docs/design/evidence/trino/run-30731801825-maven-feasibility-artifact-receipt.json`
 
 The retained classification binds the Actions artifact, raw report,
 closure-complete SBOM, run-scoped manifest, and raw rootfs SBOM hashes and
@@ -71,18 +75,46 @@ ADR-0027 overlay:
   `dc5cfc5cd0ef38f2960926b364c32f476c1c94e949e0fa43711f17d951eb9b75`
 - retained gzip bytes: `13531`
 - candidate `pom.xml` SHA-256:
-  `8d66505ee8ad90d11bf887dfe25a355d815f904d9ea90184b2089b0b68869626`
+  `871c6b21cf9fc70c455d21b64d24dd4501a8b5943242418edc2b2f5cfe14fab8`
 - candidate patch SHA-256:
-  `7bb92a92ee492fbf1fc238c5e1ec6a90c4b3088f98f3d05652853f7b874221d8`
-- candidate patch bytes: `6633`
+  `731e76f296a725d34ea9e226a1815782168cae3890424e69f76a05530afc15be`
+- candidate patch bytes: `8163`
 
-The candidate adds Velocity Engine Core 2.4.1 and Plexus Utils 4.0.3 as direct
-dependencies in the affected inherited Maven plugin realms. A local
-`dependency:resolve-plugins` run reported online and offline success with no
-vulnerable coordinate in the selected reactor, but neither its command output
-nor its offline repository was retained. Those observations are therefore not
-authorization evidence and must be reproduced into a retained, independently
-reviewable validation record before approval.
+The candidate adds Velocity Engine Core 2.4.1 and Plexus Utils 4.0.3 in the
+affected inherited Maven plugin realms and removes the Gitflow Incremental
+Builder plugin declaration from its optional incremental-build profile. The
+parent still contributes Maven SCM build extensions, so the feasibility
+repository replaces only the official `maven-scm-provider-gitexe-2.2.1.pom`
+and `maven-scm-manager-plexus-2.2.1.pom` preimages with reviewed metadata
+postimages. Their respective SHA-256 transitions are
+`81521b7b72ca795c95ef5f377e410e7d2644d2ffbce03e34eeea73246847be08`
+to `0652487bb3cd532ce6ba9fd841c7f2346c1192b3271996a06ddd50f3052186a6`
+and `7e1458bc8212c430c269c3d59063640b2164e6750f23539e6d6ca89d7207b3c5`
+to `4e7b25d9f3dfd21b874593edf794270888c8ef13bc29394b0da1c1cbefa41c43`.
+The sole semantic change in each POM pins Plexus Utils to 4.0.3; matching SHA-1
+sidecars and all four identities are manifest-audited.
+Run `30724152120` is superseded:
+hardened review found that its retained repository still contained
+`plexus-utils-4.0.2.jar`, and its verifier did not bind the archive contents or
+retained toolchain inputs. It cannot support authorization. Fresh native arm64
+evidence for the revised exact candidate must prove physical vulnerable-JAR
+absence, retain and validate the builder index, Maven version output, and global
+settings, and replay the pruned repository with networking disabled and a
+read-only mount.
+
+Run `30731801825` supplies bounded historical evidence for reviewed commit
+`3ceae605187b9e08f4f6e3a1d547f5623cfb111f`. The native arm64 online resolution
+and network-none, read-only offline replay both passed. Independent repository
+audit confirms that the 4,879-file archive exactly matches its manifest, that no
+denied vulnerable JAR is physically present, and that the builder index, Maven
+version output, global settings, and hardened SCM metadata are retained and
+bound by hash. However, that run predates the authorization checkpoints,
+read-only source mounts, and effective Maven policy binding now enforced by the
+workflow. The retained classification therefore keeps
+`revalidation_required_before_authorization: true`: a fresh hardened run and
+independent artifact audit are required before the owner authorization decision.
+Run `30731801825` does not close revalidation or authorize activation or
+publication.
 
 This is feasibility evidence only. It does not activate the candidate patch,
 authorize a new source postimage, permit another publisher run, or claim a
@@ -133,10 +165,12 @@ the Trino artifact has not passed resident admission or runtime acceptance.
 - Apply the candidate patch to the exact post-ADR-0027 `pom.xml` with
   `git apply --unidiff-zero --whitespace=error-all` and verify the candidate
   postimage hash.
-- Before authorization, rerun `dependency:resolve-plugins` online and offline
-  with the exact selected reactor and digest-pinned native arm64 builder;
-  retain the command, exit status, output, and reproducible offline inputs,
-  and require the vulnerable coordinate set to be empty.
+- Reverify run `30731801825`, artifact `8828209533`, the retained validation
+  record, and the artifact receipt as bounded historical evidence.
+- Before the owner decision, execute and independently audit a fresh hardened
+  run for the reviewed commit; require the authorization checkpoints,
+  read-only source and offline-repository mounts, effective Maven policy
+  binding, reproducible inputs, and an empty vulnerable-coordinate set.
 - `python3 -m unittest tests.test_trino_dependency_publisher`
 - `python3 scripts/verify_trino_dependency_publisher.py audit --root .`
 - `make verify-trino-bootstrap`

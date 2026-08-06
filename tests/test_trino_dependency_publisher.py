@@ -1053,6 +1053,19 @@ class BunScanEvidenceTests(unittest.TestCase):
         )
         return report
 
+    def test_bun_scan_report_schema_version_is_an_exact_integer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            report = self._report(Path(temporary), "raw.json")
+            document = json.loads(report.read_text(encoding="utf-8"))
+            document["SchemaVersion"] = 2.0
+            report.write_text(json.dumps(document), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "unexpected Trivy report envelope",
+            ):
+                verify._bun_scan_report(report)
+
     def test_stage_bun_scan_input_copies_only_hash_bound_lockfiles(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -1364,6 +1377,42 @@ class MavenScanEvidenceTests(unittest.TestCase):
             encoding="utf-8",
         )
         return sbom
+
+    def test_maven_descriptor_identity_types_are_exact(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            descriptor = self._descriptor(Path(temporary))
+            original = json.loads(descriptor.read_text(encoding="utf-8"))
+            for field, replacement in (
+                ("schema_version", 2.0),
+                ("file_count", float(original["file_count"])),
+            ):
+                altered = copy.deepcopy(original)
+                altered[field] = replacement
+                descriptor.write_text(json.dumps(altered), encoding="utf-8")
+                with self.subTest(field=field):
+                    with self.assertRaisesRegex(
+                        verify.ContractError,
+                        "closed Maven descriptor differs",
+                    ):
+                        verify._maven_jar_records(descriptor)
+
+            altered = copy.deepcopy(original)
+            altered["files"][0]["size"] = True
+            descriptor.write_text(json.dumps(altered), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "invalid Maven JAR identity",
+            ):
+                verify._maven_jar_records(descriptor)
+
+            altered = copy.deepcopy(original)
+            altered["files"][0]["sha256"] = int("1" * 64)
+            descriptor.write_text(json.dumps(altered), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "invalid Maven JAR identity",
+            ):
+                verify._maven_jar_records(descriptor)
 
 
     def test_maven_descriptor_scopes_parquet_remediation_origin_to_exact_jar(
@@ -2159,6 +2208,20 @@ class MavenScanEvidenceTests(unittest.TestCase):
                     "a" * 64,
                 )
 
+    def test_binding_requires_an_exact_trivy_schema_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            report = self._report(Path(temporary))
+            document = json.loads(report.read_text(encoding="utf-8"))
+            document["SchemaVersion"] = 2.0
+            report.write_text(json.dumps(document), encoding="utf-8")
+
+            with self.assertRaisesRegex(verify.ContractError, "ARTIFACT_SCAN"):
+                verify._bind_trivy_report(
+                    report,
+                    "ghcr.io/example/image@sha256:" + "a" * 64,
+                    "sha256:" + "a" * 64,
+                )
+
 
 class ServerDistributionTests(unittest.TestCase):
     def _write_archive(
@@ -2347,6 +2410,233 @@ class PublisherContractTests(unittest.TestCase):
     def test_repository_contract_and_workflow_are_closed(self) -> None:
         verify.audit(ROOT)
 
+    def test_maven_policy_directory_inventory_is_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            policy_directory = root / verify.JVM_CONFIG_PATH.parent
+            policy_directory.mkdir(parents=True)
+            jvm_config = root / verify.JVM_CONFIG_PATH
+            jvm_config.write_text("-Xmx8192m\n", encoding="utf-8")
+            verify._validate_maven_policy_inventory(root)
+
+            for relative in (
+                "maven.config",
+                "extensions.xml",
+                ".unreviewed",
+                "nested",
+            ):
+                extra = policy_directory / relative
+                if relative == "nested":
+                    extra.mkdir()
+                else:
+                    extra.write_text("unreviewed\n", encoding="utf-8")
+                with self.subTest(relative=relative):
+                    with self.assertRaisesRegex(
+                        verify.ContractError,
+                        "must contain only jvm.config",
+                    ):
+                        verify._validate_maven_policy_inventory(root)
+                if extra.is_dir():
+                    extra.rmdir()
+                else:
+                    extra.unlink()
+
+            target = root / "jvm.config"
+            target.write_text("-Xmx8192m\n", encoding="utf-8")
+            jvm_config.unlink()
+            jvm_config.symlink_to(target)
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "must be one regular",
+            ):
+                verify._validate_maven_policy_inventory(root)
+
+    def test_repository_audit_rejects_json_number_boolean_aliases(self) -> None:
+        contract_path = ROOT / verify.CONTRACT_PATH
+        original_load_json = verify._load_json
+        contract = original_load_json(contract_path)
+        contract["source"]["source_overlay"]["automatic_renewal"] = 0
+
+        def load_json(path: Path) -> dict[str, object]:
+            if path == contract_path:
+                return contract
+            return original_load_json(path)
+
+        with mock.patch.object(verify, "_load_json", side_effect=load_json):
+            with self.assertRaisesRegex(verify.ContractError, "SOURCE_OVERLAY"):
+                verify.audit(ROOT)
+
+    def test_authorization_is_current_at_each_declared_use_point(self) -> None:
+        verify.authorize_use(
+            ROOT,
+            validation_point="before_source_fetch",
+            at=dt.datetime(
+                2026,
+                8,
+                21,
+                22,
+                43,
+                35,
+                tzinfo=dt.timezone.utc,
+            ),
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "AUTHORIZATION_EXPIRED",
+        ):
+            verify.authorize_use(
+                ROOT,
+                validation_point="before_dependency_resolution",
+                at=dt.datetime(
+                    2026,
+                    8,
+                    21,
+                    22,
+                    43,
+                    36,
+                    tzinfo=dt.timezone.utc,
+                ),
+            )
+
+        workflow = (
+            ROOT
+            / ".github/workflows/trino-maven-remediation-feasibility.yml"
+        ).read_text(encoding="utf-8")
+        self.assertLess(
+            workflow.index("--validation-point before_source_fetch"),
+            workflow.index("git -C \"${source_dir}\" fetch --depth=1 origin"),
+        )
+        online = workflow.split(
+            "- name: Resolve the selected plugin closure online",
+            1,
+        )[1].split("- name: Replay the selected plugin closure", 1)[0]
+        offline = workflow.split(
+            "- name: Replay the selected plugin closure",
+            1,
+        )[1].split("- name: Finalize and audit", 1)[0]
+        for phase in (online, offline):
+            self.assertLess(
+                phase.index("--authorization-root ."),
+                phase.index("docker run --rm"),
+            )
+        review = workflow.split("- name: Finalize and audit", 1)[1]
+        self.assertLess(
+            review.index("--validation-point before_evidence_review"),
+            review.index("finalize-record"),
+        )
+
+    def test_authorization_rejects_duplicate_json_keys(self) -> None:
+        contract = (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        contract = contract.replace(
+            '"authorization": {',
+            '"authorization": {"automatic_renewal": true},\n'
+            '  "authorization": {',
+            1,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            contract_path = root / verify.CONTRACT_PATH
+            contract_path.parent.mkdir(parents=True)
+            contract_path.write_text(contract, encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "JSON: duplicate object key: authorization",
+            ):
+                verify.authorize_use(
+                    root,
+                    validation_point="before_source_fetch",
+                    at=dt.datetime(
+                        2026,
+                        8,
+                        21,
+                        22,
+                        43,
+                        35,
+                        tzinfo=dt.timezone.utc,
+                    ),
+                )
+
+    def test_authorization_dates_are_bound_to_the_approval_record(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        contract["authorization"]["approved_at"] = "2027-01-01T00:00:00Z"
+        contract["authorization"]["expires_at"] = "2027-01-31T00:00:00Z"
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "AUTHORIZATION",
+        ):
+            verify._validate_authorization(
+                contract,
+                at=dt.datetime(
+                    2027,
+                    1,
+                    15,
+                    tzinfo=dt.timezone.utc,
+                ),
+            )
+
+    def test_authorization_rejects_json_number_boolean_aliases(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        aliases = (
+            (("automatic_renewal",), 0),
+            (("review", "required_before_merge"), 1),
+            (("maximum_duration_days",), 30.0),
+        )
+        for path, replacement in aliases:
+            altered = copy.deepcopy(contract)
+            target = altered["authorization"]
+            for field in path[:-1]:
+                target = target[field]
+            target[path[-1]] = replacement
+            with self.subTest(path=path, replacement=replacement):
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "AUTHORIZATION",
+                ):
+                    verify._validate_authorization(altered, at=None)
+
+    def test_retained_feasibility_expiry_is_an_explicit_freshness_check(
+        self,
+    ) -> None:
+        class RejectWallClock(dt.datetime):
+            @classmethod
+            def now(cls, tz: dt.tzinfo | None = None) -> dt.datetime:
+                raise AssertionError("static evidence audit read the wall clock")
+
+        with mock.patch.object(verify.dt, "datetime", RejectWallClock):
+            verify._validate_blocker_evidence(ROOT)
+        verify._validate_blocker_evidence(
+            ROOT,
+            at=dt.datetime(
+                2026,
+                9,
+                1,
+                4,
+                8,
+                13,
+                tzinfo=dt.timezone.utc,
+            ),
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "BLOCKER_FEASIBILITY_EXPIRED",
+        ):
+            verify._validate_blocker_evidence(
+                ROOT,
+                at=dt.datetime(
+                    2026,
+                    9,
+                    1,
+                    4,
+                    8,
+                    14,
+                    tzinfo=dt.timezone.utc,
+                ),
+            )
+
     def test_retained_blocker_evidence_is_hash_bound_and_recomputed(self) -> None:
         verify._validate_blocker_evidence(ROOT)
         paths = [
@@ -2357,6 +2647,8 @@ class PublisherContractTests(unittest.TestCase):
             ),
             Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
             verify.BLOCKER_BASELINE_PATH,
+            *verify.EXPECTED_BLOCKER_FEASIBILITY_FILES,
+            verify.FEASIBILITY_VERIFIER_PATH,
         ]
         originals = {
             path: (ROOT / path).read_bytes()
@@ -2406,6 +2698,43 @@ class PublisherContractTests(unittest.TestCase):
             ):
                 verify._validate_blocker_evidence(temporary_root)
 
+            classification_path.write_bytes(
+                originals[verify.BLOCKER_CLASSIFICATION_PATH]
+            )
+            receipt_path = (
+                temporary_root / verify.BLOCKER_FEASIBILITY_RECEIPT_PATH
+            )
+            receipt_path.write_bytes(receipt_path.read_bytes() + b"\n")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "feasibility evidence differs",
+            ):
+                verify._validate_blocker_evidence(temporary_root)
+            receipt_path.write_bytes(
+                originals[verify.BLOCKER_FEASIBILITY_RECEIPT_PATH]
+            )
+            superseded_path = (
+                temporary_root / verify.SUPERSEDED_FEASIBILITY_RECORD_PATH
+            )
+            superseded_path.write_bytes(
+                superseded_path.read_bytes() + b"\n"
+            )
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "feasibility evidence differs",
+            ):
+                verify._validate_blocker_evidence(temporary_root)
+            superseded_path.write_bytes(
+                originals[verify.SUPERSEDED_FEASIBILITY_RECORD_PATH]
+            )
+            verifier_path = temporary_root / verify.FEASIBILITY_VERIFIER_PATH
+            verifier_path.write_bytes(verifier_path.read_bytes() + b"\n")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "retained feasibility receipt differs",
+            ):
+                verify._validate_blocker_evidence(temporary_root)
+
         patch = ROOT / verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]
         verify._validate_zero_context_patch(patch, {"pom.xml"})
         with tempfile.TemporaryDirectory() as temporary:
@@ -2431,6 +2760,8 @@ class PublisherContractTests(unittest.TestCase):
             ),
             Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
             verify.BLOCKER_BASELINE_PATH,
+            *verify.EXPECTED_BLOCKER_FEASIBILITY_FILES,
+            verify.FEASIBILITY_VERIFIER_PATH,
         ]
         originals = {path: (ROOT / path).read_bytes() for path in paths}
         classification = json.loads(
@@ -2445,6 +2776,17 @@ class PublisherContractTests(unittest.TestCase):
             path = temporary_root / verify.BLOCKER_CLASSIFICATION_PATH
             altered = copy.deepcopy(classification)
             altered["classification"]["vulnerability_waiver_permitted"] = True
+            path.write_text(json.dumps(altered), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "owner-facing policy boundary differs",
+            ):
+                verify._validate_blocker_evidence(temporary_root)
+
+            altered = copy.deepcopy(classification)
+            altered["classification"][
+                "vulnerability_waiver_permitted"
+            ] = 0
             path.write_text(json.dumps(altered), encoding="utf-8")
             with self.assertRaisesRegex(
                 verify.ContractError,
@@ -2472,6 +2814,28 @@ class PublisherContractTests(unittest.TestCase):
             ):
                 verify._validate_blocker_evidence(temporary_root)
 
+            altered = copy.deepcopy(classification)
+            altered["focused_feasibility"]["validation"][
+                "authorization_use_permitted"
+            ] = 0
+            path.write_text(json.dumps(altered), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "feasibility boundary differs",
+            ):
+                verify._validate_blocker_evidence(temporary_root)
+
+            altered = copy.deepcopy(classification)
+            altered["focused_feasibility"]["validation"][
+                "revalidation_required_before_authorization"
+            ] = False
+            path.write_text(json.dumps(altered), encoding="utf-8")
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "feasibility boundary differs",
+            ):
+                verify._validate_blocker_evidence(temporary_root)
+
     def test_retained_blocker_evidence_binds_snapshot_closure(self) -> None:
         paths = [
             verify.BLOCKER_CLASSIFICATION_PATH,
@@ -2481,6 +2845,8 @@ class PublisherContractTests(unittest.TestCase):
             ),
             Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
             verify.BLOCKER_BASELINE_PATH,
+            *verify.EXPECTED_BLOCKER_FEASIBILITY_FILES,
+            verify.FEASIBILITY_VERIFIER_PATH,
         ]
         originals = {path: (ROOT / path).read_bytes() for path in paths}
 
@@ -2530,6 +2896,8 @@ class PublisherContractTests(unittest.TestCase):
             ),
             Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
             verify.BLOCKER_BASELINE_PATH,
+            *verify.EXPECTED_BLOCKER_FEASIBILITY_FILES,
+            verify.FEASIBILITY_VERIFIER_PATH,
         ]
         originals = {path: (ROOT / path).read_bytes() for path in paths}
 
@@ -2597,6 +2965,26 @@ class PublisherContractTests(unittest.TestCase):
             "publication permission records disagree",
         ):
             verify.publication_status(altered, admission)
+
+        for alias in (0, 1):
+            aliased_contract = copy.deepcopy(contract)
+            aliased_admission = copy.deepcopy(admission)
+            aliased_contract["lifecycle"][
+                "publication_workflow_permitted"
+            ] = alias
+            aliased_contract["publication"]["permitted"] = alias
+            aliased_admission["repository_state"][
+                "publication_workflow_permitted"
+            ] = alias
+            with self.subTest(alias=alias):
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "publication permission records disagree",
+                ):
+                    verify.publication_status(
+                        aliased_contract,
+                        aliased_admission,
+                    )
 
     def test_workflow_retains_the_blocked_publication_noop(self) -> None:
         contract = json.loads(
@@ -3436,6 +3824,16 @@ class PublisherContractTests(unittest.TestCase):
                 "</settings>\n"
             )
             path.write_text(safe_settings, encoding="utf-8")
+            with mock.patch.object(
+                verify,
+                "MAX_BUILDER_SETTINGS_BYTES",
+                path.stat().st_size - 1,
+            ):
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "BUILDER_SETTINGS",
+                ):
+                    verify.audit_builder_settings(path)
             verify.audit_builder_settings(path)
             workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
             self.assertNotIn('"global_settings_active_sections": []', workflow)

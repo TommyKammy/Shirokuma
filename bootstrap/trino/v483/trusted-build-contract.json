@@ -22,6 +22,14 @@
       "sha256": "46b658da8d190179af6f8c1328e44388f0ff2807507bf580e236e31580c73d48"
     },
     {
+      "path": "bootstrap/trino/v483/maven-scm-provider-gitexe-2.2.1-hardened.pom",
+      "sha256": "0652487bb3cd532ce6ba9fd841c7f2346c1192b3271996a06ddd50f3052186a6"
+    },
+    {
+      "path": "bootstrap/trino/v483/maven-scm-manager-plexus-2.2.1-hardened.pom",
+      "sha256": "4e7b25d9f3dfd21b874593edf794270888c8ef13bc29394b0da1c1cbefa41c43"
+    },
+    {
       "path": "scripts/package_trino_maven_dependencies.py",
       "sha256": "f922294d7819ed24d09a6877dc60082a0e3cd4ebdf075c3312912dbe6e9f45e2"
     },
@@ -39,11 +47,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "692c37f4e7b34e51db86bfb20e3848367174b0e7a5c43809784c4698141cdef4"
+      "sha256": "59415caa36b5e0d3ee2d85fe76160b77f6b4591a231282ef5fd4a0b9ef161934"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "164fb564a85b871d704443afba12f91f1e1f6025aa1454243b743a974bbbc917"
+      "sha256": "854cbce953ddfc7b7a4e3826d69cbe1376d17480ce9685055afcf709f64841db"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -79,11 +87,11 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md",
-      "sha256": "9a675fa9c5d7589080b828e14c3b9fafa47d039b2ac393a28c19678d18c2004b"
+      "sha256": "4d54f00147bb3b33f63520f0dec73b693f45652581e9a09c864a0bfcbfd19cfd"
     },
     {
       "path": "docs/design/evidence/trino/run-30693677356-maven-vulnerability-classification.json",
-      "sha256": "03589726c4671df46513bac4824adfb012ae0ccf4dd02049654b0ae24b6770f1"
+      "sha256": "2c5f1629de9bf630462977a0095e46e741acb0b5cc3f259e68ba8f6e7b8947d8"
     }
   ],
   "authorization": {
