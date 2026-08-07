@@ -104,7 +104,7 @@ EXPECTED_AUTHORIZATION = {
 EXPECTED_PUBLICATION_ATTEMPT = {
     "event_name": "push",
     "ref": "refs/heads/main",
-    "before_sha": "ffbb4997420d4b66abf04ec4dfaa579aff2ce965",
+    "before_sha": "6f557abc42713629510090db10d03630043364d7",
     "run_attempt": "1",
 }
 EXPECTED_INDEPENDENT_REVIEW = {
@@ -116,6 +116,38 @@ EXPECTED_INDEPENDENT_REVIEW = {
     "reviewer_must_differ_from_implementation_author": True,
     "approval_must_match_final_head_sha": True,
     "publication_enforcement": "exact_merged_pull_request_review_query",
+}
+EXPECTED_PUBLICATION_REAUTHORIZATION = {
+    "sequence": 2,
+    "status": "active",
+    "approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5221869732"
+    ),
+    "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
+    "approved_at": "2026-08-07T20:49:55Z",
+    "expires_at": "2026-08-21T22:43:36Z",
+    "automatic_renewal": False,
+    "risk_owner": "TommyKammy",
+    "same_candidate_required": True,
+    "publication_authorized_after_independent_review": True,
+    "previous_attempt": {
+        "run_id": "31163679280",
+        "run_attempt": "1",
+        "source_sha": "27a313fca0aa080db8bd8f1d67744c68b1b0ab4f",
+        "result": "failed_closed_before_publication",
+        "reason": "jgit_user_home_created_untracked_source_path",
+        "dependency_artifact_published": False,
+        "consumed": True,
+    },
+    "repair": {
+        "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/144",
+        "merge_commit": "6f557abc42713629510090db10d03630043364d7",
+        "maven_opts": "-Duser.home=/tmp/maven-home",
+        "untracked_source_rejection_retained": True,
+    },
+    "failure_consumes_attempt": True,
+    "rerun_permitted": False,
 }
 SOURCE_OVERLAY_PATH = Path(
     "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch"
@@ -4077,9 +4109,16 @@ def _validate_publication_attempt(
     environment: Mapping[str, str] | None = None,
 ) -> None:
     publication = contract.get("publication")
-    if not isinstance(publication, Mapping) or not _matches_exact_json(
-        publication.get("authorized_attempt"),
-        EXPECTED_PUBLICATION_ATTEMPT,
+    if (
+        not isinstance(publication, Mapping)
+        or not _matches_exact_json(
+            publication.get("reauthorization"),
+            EXPECTED_PUBLICATION_REAUTHORIZATION,
+        )
+        or not _matches_exact_json(
+            publication.get("authorized_attempt"),
+            EXPECTED_PUBLICATION_ATTEMPT,
+        )
     ):
         _fail(
             "PUBLICATION_ATTEMPT",
@@ -5023,14 +5062,17 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
     publication = contract.get("publication", {})
     if (
-        publication.get("permitted") is not False
+        publication.get("permitted") is not True
         or publication.get("workflow_present") is not True
         or publication.get("workflow") != WORKFLOW_PATH.as_posix()
         or publication.get("allowed_ref") != "refs/heads/main"
         or publication.get("artifact_role") != "review_pending_dependency_evidence"
         or publication.get("retire_in_evidence_review_pr") is not True
         or publication.get("pull_request_behavior")
-        != "static_read_only_contract_validation"
+        != (
+            "static_and_authorized_source_overlay_and_remediation_"
+            "validation_without_publication"
+        )
         or not _matches_exact_json(
             publication.get("evidence_review_inventory_policy"),
             {
@@ -5139,10 +5181,10 @@ def audit(root: Path) -> None:
     if not _matches_exact_json(
         lifecycle,
         {
-            "state": "dependency_snapshot_publication_reauthorization_pending",
+            "state": "dependency_snapshot_publication_pending",
             "contract_only": False,
             "dependency_artifact_present": False,
-            "publication_workflow_permitted": False,
+            "publication_workflow_permitted": True,
             "image_publication_permitted": False,
             "resident_admission_permitted": False,
             "runtime_reconciliation_permitted": False,
@@ -5278,7 +5320,11 @@ def audit(root: Path) -> None:
             admission.get("build_plugin_remediation_authorization"),
             EXPECTED_ADMISSION_BUILD_PLUGIN_REMEDIATION_AUTHORIZATION,
         )
-        or repository_state.get("publication_workflow_permitted") is not False
+        or not _matches_exact_json(
+            admission.get("dependency_snapshot_publication_reauthorization"),
+            EXPECTED_PUBLICATION_REAUTHORIZATION,
+        )
+        or repository_state.get("publication_workflow_permitted") is not True
         or repository_state.get("dependency_artifact_present") is not False
         or repository_state.get("resident_ledger_permitted") is not False
         or repository_state.get("runtime_manifests_permitted") is not False

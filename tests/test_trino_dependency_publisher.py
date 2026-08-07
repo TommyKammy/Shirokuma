@@ -2643,7 +2643,7 @@ class PublisherContractTests(unittest.TestCase):
         )
 
     def test_publication_authorization_is_bound_to_one_main_attempt(self) -> None:
-        instant = dt.datetime(2026, 8, 7, 2, 0, tzinfo=dt.timezone.utc)
+        instant = dt.datetime(2026, 8, 7, 21, 0, tzinfo=dt.timezone.utc)
         environment = {
             "GITHUB_EVENT_NAME": verify.EXPECTED_PUBLICATION_ATTEMPT["event_name"],
             "GITHUB_REF": verify.EXPECTED_PUBLICATION_ATTEMPT["ref"],
@@ -2702,6 +2702,24 @@ class PublisherContractTests(unittest.TestCase):
                 validation_point="before_dependency_publication",
                 at=instant,
             )
+
+    def test_second_publication_reauthorization_record_is_exact(self) -> None:
+        contract = verify._load_json(ROOT / verify.CONTRACT_PATH)
+        self.assertEqual(
+            verify.EXPECTED_PUBLICATION_REAUTHORIZATION,
+            contract["publication"]["reauthorization"],
+        )
+
+        altered = copy.deepcopy(contract)
+        altered["publication"]["reauthorization"]["approval_record"] = (
+            "https://github.com/TommyKammy/Shirokuma/issues/63"
+            "#issuecomment-5210182460"
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "PUBLICATION_ATTEMPT",
+        ):
+            verify._validate_publication_attempt(altered)
 
     def test_main_publisher_revalidates_and_prunes_each_build(self) -> None:
         workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
@@ -3327,7 +3345,7 @@ class PublisherContractTests(unittest.TestCase):
                 ):
                     verify._validate_blocker_evidence(temporary_root)
 
-    def test_publication_status_is_blocked_and_records_must_agree(self) -> None:
+    def test_publication_status_is_active_and_records_must_agree(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
         )
@@ -3336,12 +3354,12 @@ class PublisherContractTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            "blocked",
+            "active",
             verify.publication_status(contract, admission),
         )
 
         altered = json.loads(json.dumps(contract))
-        altered["publication"]["permitted"] = True
+        altered["publication"]["permitted"] = False
         with self.assertRaisesRegex(
             verify.ContractError,
             "publication permission records disagree",

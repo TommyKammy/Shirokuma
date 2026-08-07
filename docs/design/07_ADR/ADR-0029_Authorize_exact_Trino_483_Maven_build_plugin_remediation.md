@@ -3,8 +3,8 @@ doc_id: ADR-0029
 title: Authorize exact Trino 483 Maven build-plugin remediation
 status: accepted
 created: 2026-08-07
-updated: 2026-08-07
-version: "1.0.6"
+updated: 2026-08-08
+version: "1.1.0"
 area: architecture
 tags: [adr, trino, maven, supply-chain, arm64]
 ---
@@ -29,6 +29,13 @@ execution commit `f404219ce0a189336dbcc2a48fd881064edc3780`.
 Risk owner `TommyKammy` approved the exact candidate in Issue #63 comment
 [`5210182460`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5210182460)
 at `2026-08-07T00:08:48Z`.
+
+After the first authorized attempt failed closed before publication and PR #144
+contained the JGit `user.home` write, the risk owner reauthorized exactly one
+second attempt in Issue #63 comment
+[`5221869732`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5221869732)
+at `2026-08-07T20:49:55Z`. The reauthorization retains the same candidate,
+expiry, evidence gates, and downstream prohibitions.
 
 ## Decision
 
@@ -109,10 +116,21 @@ corrective change sets `MAVEN_OPTS=-Duser.home=/tmp/maven-home` on every Maven
 container invocation while retaining the untracked-file rejection, but it does
 not authorize another publisher run. Rebinding any later `main` transition or
 rerunning the failed attempt requires a new explicit owner authorization and
-independent review. Until that decision is recorded, the lifecycle is
-`dependency_snapshot_publication_reauthorization_pending` and the contract,
-publication, and admission permission records are all false, so pull requests
-and later `main` pushes follow the static blocked no-op path.
+independent review.
+
+Issue #63 comment `5221869732` records that new decision and permits exactly
+one second attempt. The activation is bound to the protected-main transition
+whose preceding commit is `6f557abc42713629510090db10d03630043364d7` and to
+GitHub run attempt `1`. The lifecycle is therefore
+`dependency_snapshot_publication_pending`, and the contract, publication, and
+admission permission records are true only for that exact transition. Pull
+requests remain validation-only. The activation pull request must pass CI and
+receive a current `APPROVED` review from a human user different from both risk
+owner and implementation author, with the review commit equal to the final
+pull-request head. If the protected-main predecessor changes, the run attempt
+is rerun, or the authorized run fails before completing the closed publication
+evidence boundary, the second attempt is consumed and publication fails closed
+until another explicit owner decision and independent review.
 
 The write-capable publish job must independently repeat the attempt check and
 query the exact merged pull request before registry authentication. At least

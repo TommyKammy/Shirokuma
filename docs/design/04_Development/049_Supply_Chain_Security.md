@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-08-07
-version: "1.38"
+updated: 2026-08-08
+version: "1.39"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -1171,6 +1171,21 @@ retained without an allowlist or cleanup exception. The failed run published
 nothing and consumed ADR-0029's one-shot authorization. Any rerun or later
 reviewed-main publication attempt requires a new explicit owner authorization;
 the corrective pull request is validation-only.
+
+PR #144 merged the JGit containment as
+`6f557abc42713629510090db10d03630043364d7`; its main workflow confirmed the
+blocked publisher path with `validate=success` and `publish=skipped`. Issue #63
+comment
+[`5221869732`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5221869732)
+then reauthorized exactly one second reviewed-main attempt using the unchanged
+ADR-0029 candidate. That activation is bound to the protected-main transition
+after `6f557abc42713629510090db10d03630043364d7` and run attempt `1`, retains the
+same `2026-08-21T22:43:36Z` expiry, and still requires a current independent
+human approval on the final activation PR head. Failure, a rerun, a different
+main predecessor, or any candidate drift consumes or rejects the attempt and
+returns publication to fail-closed reauthorization pending. No dependency
+artifact, image, admission, Flux/runtime state, credential, public exposure,
+or Issue #63 closure is authorized by this reauthorization.
 
 ## Resident image and SBOM evidence
 
