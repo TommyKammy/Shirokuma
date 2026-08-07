@@ -486,6 +486,45 @@ class MavenSnapshotTests(unittest.TestCase):
             ):
                 package.build_manifest(repository)
 
+    def test_manifest_verification_scopes_scm_metadata_remediation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = self._repository(root)
+            manifest = package.build_manifest(repository)
+            unrelated = next(
+                record
+                for record in manifest["files"]
+                if record["path"].endswith("demo-1.0.jar")
+            )
+            unrelated["repository_origin"] = package.SCM_METADATA_REMEDIATION[
+                "repository"
+            ]
+            descriptor = root / "unauthorized-origin.json"
+            descriptor.write_bytes(package._manifest_bytes(manifest))
+            with self.assertRaisesRegex(
+                package.SnapshotError,
+                "unauthorized path",
+            ):
+                package._load_manifest(descriptor)
+
+            manifest = package.build_manifest(repository)
+            hardened = next(
+                record
+                for record in manifest["files"]
+                if record["path"]
+                == package.SCM_METADATA_REMEDIATION["files"][0]["path"]
+            )
+            hardened["repository_origin"] = package.ALLOWED_REPOSITORIES[
+                "central"
+            ]
+            descriptor = root / "missing-remediation-origin.json"
+            descriptor.write_bytes(package._manifest_bytes(manifest))
+            with self.assertRaisesRegex(
+                package.SnapshotError,
+                "exact SCM metadata remediation set differs",
+            ):
+                package._load_manifest(descriptor)
+
     def test_unsafe_repository_entries_fail_closed(self) -> None:
         cases = {}
         with tempfile.TemporaryDirectory() as temporary:

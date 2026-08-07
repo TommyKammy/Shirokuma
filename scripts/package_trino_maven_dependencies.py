@@ -170,6 +170,10 @@ ALLOWED_ORIGIN_IDS = {
     ],
 }
 ALLOWED_ORIGINS = frozenset(ALLOWED_ORIGIN_IDS.values())
+SCM_METADATA_REMEDIATION_REQUIRED_RECORDS = {
+    PurePosixPath(record["path"]): (record["size"], record["sha256"])
+    for record in SCM_METADATA_REMEDIATION["files"]
+}
 TRINO_GROUP_PREFIX = ("io", "trino")
 TRINO_BUILD_EXTENSION_PREFIX = (
     "io",
@@ -515,6 +519,13 @@ def _validate_parquet_remediation_records(
         )
 
 
+def _validate_scm_metadata_remediation_records(
+    records: Mapping[PurePosixPath, tuple[int, str]],
+) -> None:
+    if records != SCM_METADATA_REMEDIATION_REQUIRED_RECORDS:
+        _fail("exact SCM metadata remediation set differs")
+
+
 def prune_reactor_outputs(repository: Path) -> None:
     files = _repository_files(repository)
     for path in files:
@@ -589,10 +600,6 @@ def build_manifest(repository: Path) -> dict[str, Any]:
     trino_build_extension_records: dict[PurePosixPath, str] = {}
     parquet_remediation_records: dict[PurePosixPath, str] = {}
     scm_remediation_records: dict[PurePosixPath, tuple[int, str]] = {}
-    expected_scm_remediation = {
-        PurePosixPath(record["path"]): (record["size"], record["sha256"])
-        for record in SCM_METADATA_REMEDIATION["files"]
-    }
     total_bytes = 0
     for path in files:
         relative = _canonical_relative(path.relative_to(repository).as_posix())
@@ -626,7 +633,7 @@ def build_manifest(repository: Path) -> dict[str, Any]:
                 f"an unauthorized path: {relative}"
             )
         if origin == SCM_METADATA_REMEDIATION["repository"]:
-            expected = expected_scm_remediation.get(relative)
+            expected = SCM_METADATA_REMEDIATION_REQUIRED_RECORDS.get(relative)
             if expected is None:
                 _fail(
                     "SCM metadata-remediation origin is forbidden for "
@@ -659,8 +666,7 @@ def build_manifest(repository: Path) -> dict[str, Any]:
         _fail("Maven dependency snapshot must not be empty")
     _validate_trino_external_dependency_records(trino_build_extension_records)
     _validate_parquet_remediation_records(parquet_remediation_records)
-    if scm_remediation_records != expected_scm_remediation:
-        _fail("exact SCM metadata remediation set differs")
+    _validate_scm_metadata_remediation_records(scm_remediation_records)
     if not bun_input_seen:
         _fail("Maven dependency snapshot is missing the exact Bun toolchain input")
     return {
@@ -780,6 +786,7 @@ def _load_manifest(path: Path) -> dict[str, Any]:
     bun_input_seen = False
     trino_build_extension_records: dict[PurePosixPath, str] = {}
     parquet_remediation_records: dict[PurePosixPath, str] = {}
+    scm_remediation_records: dict[PurePosixPath, tuple[int, str]] = {}
     for record in records:
         if not isinstance(record, dict) or set(record) != expected_record_keys:
             _fail("Maven manifest file record is not closed-world")
@@ -824,6 +831,20 @@ def _load_manifest(path: Path) -> dict[str, Any]:
                 "for an unauthorized path"
             )
         if (
+            record["repository_origin"]
+            == SCM_METADATA_REMEDIATION["repository"]
+        ):
+            expected = SCM_METADATA_REMEDIATION_REQUIRED_RECORDS.get(relative)
+            observed = (record["size"], record["sha256"])
+            if expected is None:
+                _fail(
+                    "Maven manifest uses the SCM metadata-remediation origin "
+                    "for an unauthorized path"
+                )
+            if observed != expected:
+                _fail(f"Maven manifest SCM remediation differs: {relative}")
+            scm_remediation_records[relative] = observed
+        if (
             record["repository_origin"] == BUN_INPUT["url"]
             and relative.as_posix() != BUN_INPUT["cache_path"]
         ):
@@ -840,6 +861,7 @@ def _load_manifest(path: Path) -> dict[str, Any]:
         total_bytes += record["size"]
     _validate_trino_external_dependency_records(trino_build_extension_records)
     _validate_parquet_remediation_records(parquet_remediation_records)
+    _validate_scm_metadata_remediation_records(scm_remediation_records)
     if not bun_input_seen:
         _fail("Maven manifest is missing the exact Bun toolchain input")
     if total_bytes != manifest["total_bytes"] or total_bytes > MAX_TOTAL_BYTES:

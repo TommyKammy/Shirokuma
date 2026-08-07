@@ -4,7 +4,7 @@ title: Authorize exact Trino 483 Maven build-plugin remediation
 status: accepted
 created: 2026-08-07
 updated: 2026-08-07
-version: "1.0.4"
+version: "1.0.5"
 area: architecture
 tags: [adr, trino, maven, supply-chain, arm64]
 ---
@@ -72,8 +72,9 @@ network-none `clean install` must be followed by complete candidate postimage
 revalidation before its repository or server archive can be consumed.
 The replacement POMs and checksum sidecars must be rebound from their original
 Central markers to the dedicated `shirokuma-scm-remediation` origin. The
-packager accepts that origin only for the four exact reviewed postimages and
-records the Shirokuma remediation repository in the closed manifest.
+packager accepts that origin only for the four exact reviewed postimages in
+both manifest creation and offline verification, and records the Shirokuma
+remediation repository in the closed manifest.
 Pruning each blocked vulnerable JAR must also remove every Maven checksum
 sidecar and any matching `_remote.repositories` entries before packaging.
 
