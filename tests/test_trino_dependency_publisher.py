@@ -2634,6 +2634,139 @@ class PublisherContractTests(unittest.TestCase):
             offline.index('output="${offline_source}/core/trino-server/target/'),
         )
 
+    def test_publish_job_rechecks_attempt_and_independent_review(self) -> None:
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        self.assertEqual(
+            2,
+            workflow.count("--validation-point before_dependency_publication"),
+        )
+        self.assertEqual(1, workflow.count("verify-independent-review --root ."))
+        self.assertEqual(1, workflow.count("GITHUB_TOKEN: ${{ github.token }}"))
+        for path in (
+            verify.FEASIBILITY_VERIFIER_PATH,
+            verify.FEASIBILITY_TEST_PATH,
+        ):
+            self.assertEqual(2, workflow.splitlines().count(f"      - {path}"))
+
+        publish = workflow.split("  publish:", 1)[1]
+        attempt = publish.index("--validation-point before_dependency_publication")
+        review = publish.index("verify-independent-review --root .")
+        auth = publish.index("oras login ghcr.io")
+        self.assertLess(attempt, review)
+        self.assertLess(review, auth)
+
+    def test_independent_review_requires_non_risk_owner_human_approval(
+        self,
+    ) -> None:
+        contract = verify._load_json(ROOT / verify.CONTRACT_PATH)
+        commit = "a" * 40
+        pulls = [
+            {
+                "number": 143,
+                "state": "closed",
+                "merged_at": "2026-08-07T03:00:00Z",
+                "merge_commit_sha": commit,
+                "base": {"ref": "main"},
+            }
+        ]
+        owner_review = {
+            "id": 1,
+            "state": "APPROVED",
+            "user": {"login": "TommyKammy", "type": "User"},
+        }
+        independent_review = {
+            "id": 2,
+            "state": "APPROVED",
+            "user": {"login": "IndependentHuman", "type": "User"},
+        }
+        self.assertEqual(
+            "IndependentHuman",
+            verify._select_independent_review(
+                contract,
+                pulls,
+                [owner_review, independent_review],
+                commit=commit,
+            )["reviewer"],
+        )
+        with self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"):
+            verify._select_independent_review(
+                contract,
+                pulls,
+                [owner_review],
+                commit=commit,
+            )
+
+        changed_request = {
+            "id": 3,
+            "state": "CHANGES_REQUESTED",
+            "user": {"login": "IndependentHuman", "type": "User"},
+        }
+        with self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"):
+            verify._select_independent_review(
+                contract,
+                pulls,
+                [independent_review, changed_request],
+                commit=commit,
+            )
+
+    def test_independent_review_query_is_bounded_and_commit_scoped(self) -> None:
+        commit = "b" * 40
+        pulls = [
+            {
+                "number": 143,
+                "state": "closed",
+                "merged_at": "2026-08-07T03:00:00Z",
+                "merge_commit_sha": commit,
+                "base": {"ref": "main"},
+            }
+        ]
+        reviews = [
+            {
+                "id": 9,
+                "state": "APPROVED",
+                "user": {"login": "IndependentHuman", "type": "User"},
+            }
+        ]
+
+        class Response:
+            status = 200
+
+            def __init__(self, payload: object) -> None:
+                self.payload = json.dumps(payload).encode()
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                self.assert_limit = limit
+                return self.payload
+
+        stdout = io.StringIO()
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                side_effect=[Response(pulls), Response(reviews)],
+            ) as request,
+            contextlib.redirect_stdout(stdout),
+        ):
+            verify.verify_independent_review(
+                ROOT,
+                repository="TommyKammy/Shirokuma",
+                commit=commit,
+                token="ephemeral-token",
+            )
+        receipt = json.loads(stdout.getvalue())
+        self.assertEqual(143, receipt["pull_request"])
+        self.assertEqual("IndependentHuman", receipt["reviewer"])
+        self.assertEqual(2, request.call_count)
+        requested_urls = [call.args[0].full_url for call in request.call_args_list]
+        self.assertIn(f"/commits/{commit}/pulls?per_page=100", requested_urls[0])
+        self.assertIn("/pulls/143/reviews?per_page=100", requested_urls[1])
+
     def test_authorization_rejects_duplicate_json_keys(self) -> None:
         contract = (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
         contract = contract.replace(

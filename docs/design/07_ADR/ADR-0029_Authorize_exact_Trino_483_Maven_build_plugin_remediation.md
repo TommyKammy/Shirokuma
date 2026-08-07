@@ -4,7 +4,7 @@ title: Authorize exact Trino 483 Maven build-plugin remediation
 status: accepted
 created: 2026-08-07
 updated: 2026-08-07
-version: "1.0.1"
+version: "1.0.2"
 area: architecture
 tags: [adr, trino, maven, supply-chain, arm64]
 ---
@@ -87,6 +87,12 @@ commit is `ffbb4997420d4b66abf04ec4dfaa579aff2ce965` and to GitHub run attempt
 `1`. A rerun or any later main push fails closed and requires a new explicit
 owner authorization; changing this binding in the activation PR also requires
 re-review before merge.
+
+The write-capable publish job must independently repeat the attempt check and
+query the exact merged pull request before registry authentication. At least
+one current `APPROVED` review from a human GitHub user different from risk
+owner `TommyKammy` and implementation author `Codex` is required. CODEOWNERS
+approval by the risk owner alone cannot satisfy this boundary.
 
 Dependency artifact presence, dependency evidence admission, Trino image
 publication, resident-image admission, Flux runtime reconciliation, public

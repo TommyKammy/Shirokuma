@@ -21,7 +21,9 @@ import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Mapping
+from urllib.error import URLError
 from urllib.parse import quote, urlsplit
+from urllib.request import Request, urlopen
 
 
 CONTRACT_PATH = Path("bootstrap/trino/v483/trusted-build-contract.json")
@@ -34,7 +36,9 @@ BUN_PACKAGER_PATH = Path("scripts/package_trino_bun_dependencies.py")
 BUN_PREPARER_PATH = Path("scripts/prepare_trino_bun_input.py")
 PARQUET_REMEDIATION_PATH = Path("scripts/remediate_parquet_jackson.py")
 VERIFIER_PATH = Path("scripts/verify_trino_dependency_publisher.py")
+FEASIBILITY_VERIFIER_PATH = Path("scripts/verify_trino_maven_feasibility.py")
 TEST_PATH = Path("tests/test_trino_dependency_publisher.py")
+FEASIBILITY_TEST_PATH = Path("tests/test_trino_maven_feasibility.py")
 BUN_TEST_PATH = Path("tests/test_trino_bun_dependencies.py")
 PARQUET_REMEDIATION_TEST_PATH = Path(
     "tests/test_parquet_jackson_remediation.py"
@@ -102,6 +106,15 @@ EXPECTED_PUBLICATION_ATTEMPT = {
     "ref": "refs/heads/main",
     "before_sha": "ffbb4997420d4b66abf04ec4dfaa579aff2ce965",
     "run_attempt": "1",
+}
+EXPECTED_INDEPENDENT_REVIEW = {
+    "required_before_merge": True,
+    "required_before_publication": True,
+    "minimum_approved_reviews": 1,
+    "human_user_type": "User",
+    "reviewer_must_differ_from_risk_owner": True,
+    "reviewer_must_differ_from_implementation_author": True,
+    "publication_enforcement": "exact_merged_pull_request_review_query",
 }
 SOURCE_OVERLAY_PATH = Path(
     "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch"
@@ -1016,6 +1029,7 @@ EXPECTED_BUILD_PLUGIN_REMEDIATION = {
     "risk_owner": "TommyKammy",
     "implementation_author": "Codex",
     "reviewer_must_differ_from_implementation_author": True,
+    "reviewer_must_differ_from_risk_owner": True,
     "source_binding": {
         "repository": EXPECTED_SOURCE_REPOSITORY,
         "release_tag": EXPECTED_TAG,
@@ -1268,6 +1282,7 @@ EXPECTED_ADMISSION_BUILD_PLUGIN_REMEDIATION_AUTHORIZATION = {
             "risk_owner",
             "implementation_author",
             "reviewer_must_differ_from_implementation_author",
+            "reviewer_must_differ_from_risk_owner",
             "source_binding",
             "patch",
             "permitted_paths",
@@ -4029,6 +4044,157 @@ def _validate_publication_attempt(
         )
 
 
+def _validate_independent_review_contract(contract: Mapping[str, Any]) -> None:
+    publication = contract.get("publication")
+    if not isinstance(publication, Mapping) or not _matches_exact_json(
+        publication.get("independent_review"),
+        EXPECTED_INDEPENDENT_REVIEW,
+    ):
+        _fail(
+            "INDEPENDENT_REVIEW",
+            "independent human review contract differs",
+        )
+
+
+def _github_api_list(url: str, *, token: str) -> list[Any]:
+    if not token:
+        _fail("INDEPENDENT_REVIEW", "GitHub token is missing")
+    request = Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "shirokuma-independent-review-verifier",
+        },
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            if getattr(response, "status", None) != 200:
+                _fail(
+                    "INDEPENDENT_REVIEW",
+                    f"GitHub API status differs: {response.status}",
+                )
+            payload = response.read(1_048_577)
+    except URLError as error:
+        _fail("INDEPENDENT_REVIEW", f"GitHub API request failed: {error}")
+    if len(payload) > 1_048_576:
+        _fail("INDEPENDENT_REVIEW", "GitHub API response is too large")
+    try:
+        result = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        _fail("INDEPENDENT_REVIEW", f"GitHub API JSON is invalid: {error}")
+    if not isinstance(result, list):
+        _fail("INDEPENDENT_REVIEW", "GitHub API response must be a list")
+    if len(result) >= 100:
+        _fail("INDEPENDENT_REVIEW", "GitHub API result may be truncated")
+    return result
+
+
+def _select_independent_review(
+    contract: Mapping[str, Any],
+    pulls: list[Any],
+    reviews: list[Any],
+    *,
+    commit: str,
+) -> dict[str, Any]:
+    _validate_independent_review_contract(contract)
+    if re.fullmatch(r"[0-9a-f]{40}", commit) is None:
+        _fail("INDEPENDENT_REVIEW", "publisher commit is not an exact SHA")
+    matching_pulls = [
+        pull
+        for pull in pulls
+        if isinstance(pull, Mapping)
+        and pull.get("state") == "closed"
+        and pull.get("merged_at")
+        and pull.get("merge_commit_sha") == commit
+        and isinstance(pull.get("base"), Mapping)
+        and pull["base"].get("ref") == "main"
+        and isinstance(pull.get("number"), int)
+    ]
+    if len(matching_pulls) != 1:
+        _fail(
+            "INDEPENDENT_REVIEW",
+            f"exact merged pull request count differs: {len(matching_pulls)}",
+        )
+
+    latest_by_reviewer: dict[str, Mapping[str, Any]] = {}
+    for review in reviews:
+        if not isinstance(review, Mapping):
+            _fail("INDEPENDENT_REVIEW", "review entry must be an object")
+        user = review.get("user")
+        if not isinstance(user, Mapping) or not isinstance(user.get("login"), str):
+            _fail("INDEPENDENT_REVIEW", "review user identity is missing")
+        if review.get("state") not in {"COMMENTED", "PENDING"}:
+            latest_by_reviewer[user["login"].casefold()] = review
+
+    remediation = contract.get("source", {}).get("build_plugin_remediation", {})
+    risk_owner = str(remediation.get("risk_owner", "")).casefold()
+    implementation_author = str(
+        remediation.get("implementation_author", "")
+    ).casefold()
+    qualified = []
+    for login, review in latest_by_reviewer.items():
+        user = review["user"]
+        if (
+            review.get("state") == "APPROVED"
+            and user.get("type") == EXPECTED_INDEPENDENT_REVIEW["human_user_type"]
+            and login not in {risk_owner, implementation_author}
+            and isinstance(review.get("id"), int)
+        ):
+            qualified.append(review)
+    if len(qualified) < EXPECTED_INDEPENDENT_REVIEW["minimum_approved_reviews"]:
+        _fail(
+            "INDEPENDENT_REVIEW",
+            "no current human approval differs from the risk owner and author",
+        )
+    selected = sorted(qualified, key=lambda review: int(review["id"]))[0]
+    return {
+        "pull_request": matching_pulls[0]["number"],
+        "review_id": selected["id"],
+        "reviewer": selected["user"]["login"],
+        "commit": commit,
+    }
+
+
+def verify_independent_review(
+    root: Path,
+    *,
+    repository: str,
+    commit: str,
+    token: str,
+) -> None:
+    root = root.resolve()
+    if repository != "TommyKammy/Shirokuma":
+        _fail("INDEPENDENT_REVIEW", "repository identity differs")
+    contract = _load_json(root / CONTRACT_PATH)
+    base = "https://api.github.com/repos/TommyKammy/Shirokuma"
+    pulls = _github_api_list(
+        f"{base}/commits/{quote(commit, safe='')}/pulls?per_page=100",
+        token=token,
+    )
+    matching = [
+        pull for pull in pulls if isinstance(pull, Mapping) and pull.get("number")
+    ]
+    if len(matching) != 1 or not isinstance(matching[0]["number"], int):
+        _fail("INDEPENDENT_REVIEW", "associated pull request is ambiguous")
+    reviews = _github_api_list(
+        f"{base}/pulls/{matching[0]['number']}/reviews?per_page=100",
+        token=token,
+    )
+    print(
+        json.dumps(
+            _select_independent_review(
+                contract,
+                pulls,
+                reviews,
+                commit=commit,
+            ),
+            sort_keys=True,
+        )
+    )
+
+
 def _workflow_jobs_and_steps(workflow: str) -> tuple[list[str], dict[str, list[str]]]:
     jobs: list[str] = []
     steps: dict[str, list[str]] = {}
@@ -4257,6 +4423,7 @@ def audit_builder_settings(path: Path) -> None:
 
 def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
     _validate_publication_attempt(contract)
+    _validate_independent_review_contract(contract)
     jobs, steps = _workflow_jobs_and_steps(workflow)
     lines = workflow.splitlines()
     if jobs != ["validate", "publish"] or steps != EXPECTED_STEPS:
@@ -4274,7 +4441,10 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         or workflow.count(
             "--validation-point before_dependency_publication"
         )
-        != 1
+        != 2
+        or workflow.count("GITHUB_TOKEN: ${{ github.token }}") != 1
+        or workflow.count("verify-independent-review --root .") != 1
+        or lines.count("      pull-requests: read") != 1
     ):
         _fail(
             "WORKFLOW_PUBLICATION_ATTEMPT",
@@ -4326,7 +4496,9 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         BUN_PREPARER_PATH,
         PARQUET_REMEDIATION_PATH,
         VERIFIER_PATH,
+        FEASIBILITY_VERIFIER_PATH,
         TEST_PATH,
+        FEASIBILITY_TEST_PATH,
         BUN_TEST_PATH,
         PARQUET_REMEDIATION_TEST_PATH,
         SOURCE_OVERLAY_PATH,
@@ -4371,6 +4543,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "--file /workspace/pom.xml",
         "python3 scripts/verify_trino_dependency_publisher.py authorize",
         "python3 scripts/verify_trino_dependency_publisher.py authorize-use",
+        "verify-independent-review --root .",
         "python3 scripts/verify_trino_maven_feasibility.py verify-candidate",
         "python3 scripts/verify_trino_maven_feasibility.py prune-vulnerable-inputs",
         "publication-status --root .",
@@ -5303,6 +5476,10 @@ def _parser() -> argparse.ArgumentParser:
     authorize_use_parser.add_argument("--root", type=Path, default=Path("."))
     authorize_use_parser.add_argument("--validation-point", required=True)
     authorize_use_parser.add_argument("--at")
+    independent_review = commands.add_parser("verify-independent-review")
+    independent_review.add_argument("--root", type=Path, default=Path("."))
+    independent_review.add_argument("--repository", required=True)
+    independent_review.add_argument("--commit", required=True)
     publication_status = commands.add_parser("publication-status")
     publication_status.add_argument("--root", type=Path, default=Path("."))
     source = commands.add_parser("audit-source")
@@ -5389,6 +5566,13 @@ def main() -> int:
                 args.root.resolve(),
                 validation_point=args.validation_point,
                 at=_parse_time(args.at) if args.at else None,
+            )
+        elif args.command == "verify-independent-review":
+            verify_independent_review(
+                args.root.resolve(),
+                repository=args.repository,
+                commit=args.commit,
+                token=os.environ.get("GITHUB_TOKEN", ""),
             )
         elif args.command == "publication-status":
             root = args.root.resolve()

@@ -4734,6 +4734,17 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     ),
                     "run_attempt": "1",
                 },
+                "independent_review": {
+                    "required_before_merge": True,
+                    "required_before_publication": True,
+                    "minimum_approved_reviews": 1,
+                    "human_user_type": "User",
+                    "reviewer_must_differ_from_risk_owner": True,
+                    "reviewer_must_differ_from_implementation_author": True,
+                    "publication_enforcement": (
+                        "exact_merged_pull_request_review_query"
+                    ),
+                },
                 "evidence_review_inventory_policy": {
                     "recursive_closed_world_required": True,
                     "regular_files_only": True,

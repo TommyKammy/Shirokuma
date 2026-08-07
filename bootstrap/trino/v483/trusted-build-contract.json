@@ -47,11 +47,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "f5478bb3893b519dbb59e7273444694c865a91afcb4385c054d75f7a60fe387a"
+      "sha256": "804b335a4063f090b4c5ee19eef248fefd12bc347497043602be5e90c1452446"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "e1e79c5b8150da3b6627c799bc35b1688d57286e1609c29c2ec7469d29412200"
+      "sha256": "2378f973e564cce243b41b66c227ef467a27ee63a40b8a41d790582473a2f5ad"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -95,7 +95,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md",
-      "sha256": "aef209cdfa7104b54cd6591eea0b75ccd60f284c6e3df553fdc248bd6c6cb2a1"
+      "sha256": "e97c801e3ddba2c33bf992e463ff7ccca3dca5d70660866379cebc214be9a02c"
     },
     {
       "path": "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",
@@ -418,6 +418,7 @@
       "risk_owner": "TommyKammy",
       "implementation_author": "Codex",
       "reviewer_must_differ_from_implementation_author": true,
+      "reviewer_must_differ_from_risk_owner": true,
       "source_binding": {
         "repository": "https://github.com/trinodb/trino",
         "release_tag": "483",
@@ -1051,6 +1052,15 @@
       "ref": "refs/heads/main",
       "before_sha": "ffbb4997420d4b66abf04ec4dfaa579aff2ce965",
       "run_attempt": "1"
+    },
+    "independent_review": {
+      "required_before_merge": true,
+      "required_before_publication": true,
+      "minimum_approved_reviews": 1,
+      "human_user_type": "User",
+      "reviewer_must_differ_from_risk_owner": true,
+      "reviewer_must_differ_from_implementation_author": true,
+      "publication_enforcement": "exact_merged_pull_request_review_query"
     },
     "evidence_review_inventory_policy": {
       "recursive_closed_world_required": true,

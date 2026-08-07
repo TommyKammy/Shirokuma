@@ -24,9 +24,11 @@ on:
       - scripts/prepare_trino_bun_input.py
       - scripts/remediate_parquet_jackson.py
       - scripts/verify_trino_dependency_publisher.py
+      - scripts/verify_trino_maven_feasibility.py
       - tests/test_parquet_jackson_remediation.py
       - tests/test_trino_bun_dependencies.py
       - tests/test_trino_dependency_publisher.py
+      - tests/test_trino_maven_feasibility.py
       - Makefile
   push:
     branches:
@@ -53,9 +55,11 @@ on:
       - scripts/prepare_trino_bun_input.py
       - scripts/remediate_parquet_jackson.py
       - scripts/verify_trino_dependency_publisher.py
+      - scripts/verify_trino_maven_feasibility.py
       - tests/test_parquet_jackson_remediation.py
       - tests/test_trino_bun_dependencies.py
       - tests/test_trino_dependency_publisher.py
+      - tests/test_trino_maven_feasibility.py
       - Makefile
 
 permissions:
@@ -1031,6 +1035,7 @@ jobs:
       contents: read
       id-token: write
       packages: write
+      pull-requests: read
 
     steps:
       - name: Enforce the main-source trust boundary
@@ -1056,12 +1061,19 @@ jobs:
           persist-credentials: false
 
       - name: Revalidate the write-capable publication boundary
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
           python3 scripts/verify_trino_dependency_publisher.py audit --root .
           python3 scripts/verify_trino_dependency_publisher.py authorize --root .
+          python3 scripts/verify_trino_dependency_publisher.py authorize-use \
+            --root . --validation-point before_dependency_publication
+          python3 scripts/verify_trino_dependency_publisher.py \
+            verify-independent-review --root . \
+            --repository "${GITHUB_REPOSITORY}" --commit "${GITHUB_SHA}"
 
       - name: Download the exact read-only-verified candidate
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
