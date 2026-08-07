@@ -4,7 +4,7 @@ title: Authorize exact Trino 483 Maven build-plugin remediation
 status: accepted
 created: 2026-08-07
 updated: 2026-08-07
-version: "1.0.3"
+version: "1.0.4"
 area: architecture
 tags: [adr, trino, maven, supply-chain, arm64]
 ---
@@ -74,6 +74,8 @@ The replacement POMs and checksum sidecars must be rebound from their original
 Central markers to the dedicated `shirokuma-scm-remediation` origin. The
 packager accepts that origin only for the four exact reviewed postimages and
 records the Shirokuma remediation repository in the closed manifest.
+Pruning each blocked vulnerable JAR must also remove every Maven checksum
+sidecar and any matching `_remote.repositories` entries before packaging.
 
 Authorization expires at `2026-08-21T22:43:36Z`, has no automatic renewal,
 and requires a reviewer different from implementation author `Codex` and the

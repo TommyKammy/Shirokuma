@@ -1145,6 +1145,8 @@ markers to the dedicated `shirokuma-scm-remediation` origin, which is accepted
 only for the four exact hash-bound postimages. Every online and network-none
 Trino `clean install` must then revalidate the complete authorized source
 postimages before any resulting repository or server archive is consumed.
+Pruning a blocked JAR also removes all checksum sidecars and matching Maven
+origin-marker entries so the sealed repository cannot retain orphan metadata.
 The write-capable publish job repeats the one-attempt check and queries the
 exact merged pull request before registry authentication. Publication requires
 at least one current `APPROVED` review from a human GitHub user different from

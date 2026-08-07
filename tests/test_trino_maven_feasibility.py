@@ -1623,7 +1623,17 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             for relative in feasibility.VULNERABLE_INPUTS:
                 vulnerable = repository / relative
                 vulnerable.parent.mkdir(parents=True, exist_ok=True)
-                vulnerable.write_bytes(relative.encode("utf-8"))
+                payload = relative.encode("utf-8")
+                vulnerable.write_bytes(payload)
+                vulnerable.with_name(f"{vulnerable.name}.sha1").write_text(
+                    hashlib.sha1(payload, usedforsecurity=False).hexdigest(),
+                    encoding="ascii",
+                )
+                (vulnerable.parent / "_remote.repositories").write_text(
+                    f"{vulnerable.name}>shirokuma-central=\n"
+                    f"{vulnerable.name}.sha1>shirokuma-central=\n",
+                    encoding="iso-8859-1",
+                )
             sentinel = repository / "org/example/keep/1.0/keep-1.0.jar"
             sentinel.parent.mkdir(parents=True, exist_ok=True)
             sentinel.write_bytes(b"keep")
@@ -1635,6 +1645,16 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                     for relative in feasibility.VULNERABLE_INPUTS
                 )
             )
+            for relative in feasibility.VULNERABLE_INPUTS:
+                vulnerable = repository / relative
+                self.assertFalse(
+                    vulnerable.with_name(f"{vulnerable.name}.sha1").exists()
+                )
+                marker = vulnerable.parent / "_remote.repositories"
+                self.assertNotIn(
+                    vulnerable.name,
+                    marker.read_text(encoding="iso-8859-1"),
+                )
             self.assertEqual(
                 feasibility._sha256(repository / feasibility.SCM_POM_PATH),
                 feasibility.SCM_POM_POSTIMAGE_SHA256,

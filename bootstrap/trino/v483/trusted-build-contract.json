@@ -95,7 +95,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md",
-      "sha256": "cc64e32b21fa597fac489393693ed851e3d5a29170c574861eee662186f8ac51"
+      "sha256": "c30f1807441eadf1d55015b6244044f51028ee9b35ad7bf2a8f3732c5aca5d17"
     },
     {
       "path": "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",

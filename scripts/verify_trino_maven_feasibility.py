@@ -192,6 +192,7 @@ SCM_REMEDIATION_ORIGIN_ID = "shirokuma-scm-remediation"
 SCM_ALLOWED_PREIMAGE_ORIGIN_IDS = frozenset(
     {"central", "shirokuma-central", "shirokuma-central-fallback"}
 )
+MAVEN_CHECKSUM_SUFFIXES = (".md5", ".sha1", ".sha256", ".sha512")
 EXPECTED_HARDENED_METADATA = {
     SCM_POM_PATH: {
         "mode": "0644",
@@ -618,6 +619,50 @@ def _bind_hardened_metadata_origin(repository: Path, pom_path: str) -> None:
         _fail("HARDENED_METADATA", f"origin marker postimage differs: {marker}")
 
 
+def _remove_vulnerable_marker_entries(
+    directory: Path,
+    filenames: set[str],
+) -> list[str]:
+    marker = directory / "_remote.repositories"
+    if not marker.exists() and not marker.is_symlink():
+        return []
+    if (
+        marker.is_symlink()
+        or not marker.is_file()
+        or marker.stat().st_nlink != 1
+        or marker.stat().st_size > 1_048_576
+    ):
+        _fail("VULNERABLE_INPUT", f"unsafe origin marker: {marker}")
+    try:
+        lines = marker.read_text(encoding="iso-8859-1").splitlines()
+    except OSError as error:
+        _fail("VULNERABLE_INPUT", f"cannot read origin marker: {error}")
+    rewritten: list[str] = []
+    removed: list[str] = []
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            rewritten.append(raw)
+            continue
+        match = re.fullmatch(r"([^<>=\r\n]+)(?:[<>])([^=\r\n]*)=", line)
+        if match is None:
+            _fail("VULNERABLE_INPUT", f"invalid origin marker entry: {raw!r}")
+        filename = match.group(1)
+        if filename in filenames:
+            removed.append(filename)
+            continue
+        rewritten.append(line)
+    postimage = "\n".join(rewritten) + ("\n" if rewritten else "")
+    try:
+        marker.write_text(postimage, encoding="iso-8859-1")
+        observed = marker.read_text(encoding="iso-8859-1")
+    except OSError as error:
+        _fail("VULNERABLE_INPUT", f"cannot update origin marker: {error}")
+    if observed != postimage:
+        _fail("VULNERABLE_INPUT", f"origin marker postimage differs: {marker}")
+    return removed
+
+
 def prune_vulnerable_inputs(repository: Path, root: Path = Path(".")) -> None:
     repository = repository.resolve()
     root = root.resolve()
@@ -687,23 +732,56 @@ def prune_vulnerable_inputs(repository: Path, root: Path = Path(".")) -> None:
             _fail("HARDENED_METADATA", f"postimage differs: {pom_path}")
         _bind_hardened_metadata_origin(repository, pom_path)
     removed: list[str] = []
+    removed_sidecars: list[str] = []
+    removed_marker_entries: list[str] = []
     for relative in VULNERABLE_INPUTS:
         target = repository / relative
-        if target.is_symlink():
-            _fail("VULNERABLE_INPUT", f"unsafe blocked input: {relative}")
-        if not target.exists():
-            continue
-        status = target.stat()
-        if not stat.S_ISREG(status.st_mode) or status.st_nlink != 1:
-            _fail("VULNERABLE_INPUT", f"unsafe blocked input: {relative}")
-        target.unlink()
-        removed.append(relative)
+        candidates = [
+            (target, relative, removed),
+            *[
+                (
+                    target.with_name(f"{target.name}{suffix}"),
+                    f"{relative}{suffix}",
+                    removed_sidecars,
+                )
+                for suffix in MAVEN_CHECKSUM_SUFFIXES
+            ],
+        ]
+        for candidate, candidate_relative, inventory in candidates:
+            if candidate.is_symlink():
+                _fail(
+                    "VULNERABLE_INPUT",
+                    f"unsafe blocked input: {candidate_relative}",
+                )
+            if not candidate.exists():
+                continue
+            status = candidate.stat()
+            if not stat.S_ISREG(status.st_mode) or status.st_nlink != 1:
+                _fail(
+                    "VULNERABLE_INPUT",
+                    f"unsafe blocked input: {candidate_relative}",
+                )
+            candidate.unlink()
+            inventory.append(candidate_relative)
+        marker_names = {
+            target.name,
+            *(f"{target.name}{suffix}" for suffix in MAVEN_CHECKSUM_SUFFIXES),
+        }
+        removed_marker_entries.extend(
+            f"{target.parent.relative_to(repository).as_posix()}/{filename}"
+            for filename in _remove_vulnerable_marker_entries(
+                target.parent,
+                marker_names,
+            )
+        )
     print(
         json.dumps(
             {
                 "hardened_metadata": sorted(EXPECTED_HARDENED_METADATA),
                 "hardened_metadata_origin": SCM_REMEDIATION_ORIGIN_ID,
                 "removed_vulnerable_inputs": removed,
+                "removed_vulnerable_sidecars": removed_sidecars,
+                "removed_vulnerable_marker_entries": removed_marker_entries,
             },
             sort_keys=True,
         )
