@@ -4,10 +4,10 @@
   "version": "483",
   "platform": "linux/arm64",
   "lifecycle": {
-    "state": "dependency_snapshot_publication_pending",
+    "state": "dependency_snapshot_publication_reauthorization_pending",
     "contract_only": false,
     "dependency_artifact_present": false,
-    "publication_workflow_permitted": true,
+    "publication_workflow_permitted": false,
     "image_publication_permitted": false,
     "resident_admission_permitted": false,
     "runtime_reconciliation_permitted": false
@@ -47,11 +47,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "2d220243d677a7b1702ba4b2f536c1422db045f3353823fb2c95c70202b1a0f1"
+      "sha256": "bfa473800c0556240ec8cc3cb4f741ddf15dd52a1a9e81ac096eb4ee2a23d6fd"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "a93e3b255ab3ed389bf1286f5804ec3bf6d7300cf8588e5c5b90c896d6bacee0"
+      "sha256": "a342bb0d397a931af11770f8bf406e3aaf5685df1d4197206c176a75d46a1111"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -95,7 +95,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md",
-      "sha256": "2395b207f35da731345183368d10d1d4bb09461710b1fad1404a690e7887aeb5"
+      "sha256": "69cb895d773dfd5e9856d3b3ab0baab402db748b6f7fffe66bb76b82da0e9dad"
     },
     {
       "path": "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",
@@ -1065,7 +1065,7 @@
     ]
   },
   "publication": {
-    "permitted": true,
+    "permitted": false,
     "workflow_present": true,
     "workflow": ".github/workflows/trino-maven-dependencies.yml",
     "allowed_ref": "refs/heads/main",
@@ -1074,7 +1074,7 @@
     "separate_evidence_only_pr_required": true,
     "image_publisher_permitted_before_evidence_review": false,
     "anonymous_exact_digest_pull_required": true,
-    "pull_request_behavior": "static_and_authorized_source_overlay_and_remediation_validation_without_publication",
+    "pull_request_behavior": "static_read_only_contract_validation",
     "publication_event": "push",
     "runner": "ubuntu-24.04-arm",
     "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",

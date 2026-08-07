@@ -3062,7 +3062,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             admission["source_authentication"],
         )
         self.assertIs(
-            admission["repository_state"]["publication_workflow_permitted"], True
+            admission["repository_state"]["publication_workflow_permitted"], False
         )
 
     def test_provisional_source_authorization_is_bounded_and_fail_closed(self) -> None:
@@ -3360,7 +3360,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         self.assertEqual(
             {
                 "dependency_snapshot_contract_permitted": True,
-                "publication_workflow_permitted": True,
+                "publication_workflow_permitted": False,
                 "dependency_artifact_present": False,
                 "resident_ledger_permitted": False,
                 "runtime_manifests_permitted": False,
@@ -3525,7 +3525,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             "runtime_manifests_permitted",
         ):
             self.assertIs(repository_state[key], False)
-        self.assertIs(repository_state["publication_workflow_permitted"], True)
+        self.assertIs(repository_state["publication_workflow_permitted"], False)
         self.assertIs(
             repository_state["dependency_snapshot_contract_permitted"], True
         )
@@ -4728,17 +4728,17 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             rebuild["retained_output_evidence"],
         )
 
-    def test_dependency_snapshot_contract_authorizes_publication_only(
+    def test_dependency_snapshot_contract_blocks_consumed_publication_attempt(
         self,
     ) -> None:
         contract = self._trusted_build_contract()
         lifecycle = contract["lifecycle"]
         self.assertEqual(
             {
-                "state": "dependency_snapshot_publication_pending",
+                "state": "dependency_snapshot_publication_reauthorization_pending",
                 "contract_only": False,
                 "dependency_artifact_present": False,
-                "publication_workflow_permitted": True,
+                "publication_workflow_permitted": False,
                 "image_publication_permitted": False,
                 "resident_admission_permitted": False,
                 "runtime_reconciliation_permitted": False,
@@ -4747,7 +4747,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertEqual(
             {
-                "permitted": True,
+                "permitted": False,
                 "workflow_present": True,
                 "workflow": (
                     ".github/workflows/trino-maven-dependencies.yml"
@@ -4758,10 +4758,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "separate_evidence_only_pr_required": True,
                 "image_publisher_permitted_before_evidence_review": False,
                 "anonymous_exact_digest_pull_required": True,
-                "pull_request_behavior": (
-                    "static_and_authorized_source_overlay_and_remediation_"
-                    "validation_without_publication"
-                ),
+                "pull_request_behavior": "static_read_only_contract_validation",
                 "publication_event": "push",
                 "runner": "ubuntu-24.04-arm",
                 "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",

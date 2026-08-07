@@ -110,7 +110,7 @@ EXPECTED_WORKFLOW_STEPS = (
     "Retain the review-only feasibility inputs and outputs",
 )
 EXPECTED_WORKFLOW_SHA256 = (
-    "1c0cd0b37b6151a691061177c131e0ba991f768740bdb67afe4a244f343020da"
+    "6b79945a29fa4a7acbce1588b3feab5a0b859c6c78d05571e3ec934a63009416"
 )
 EXPECTED_MAVEN_BASEDIR = "/policy"
 EXPECTED_POLICY_SOURCE = "bootstrap/trino/v483/maven-policy/.mvn"
@@ -1984,7 +1984,7 @@ def audit_workflow(root: Path) -> None:
         "HOME=/tmp/maven-home",
         f"MAVEN_BASEDIR={EXPECTED_MAVEN_BASEDIR}",
         "MAVEN_CONFIG=/tmp/maven-home/.m2",
-        "MAVEN_OPTS=",
+        "MAVEN_OPTS=-Duser.home=/tmp/maven-home",
         "JAVA_TOOL_OPTIONS=",
     ]
     if (

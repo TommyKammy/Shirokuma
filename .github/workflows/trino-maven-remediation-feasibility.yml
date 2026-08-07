@@ -74,10 +74,10 @@ jobs:
               )
           )
           expected = {
-              "state": "dependency_snapshot_publication_pending",
+              "state": "dependency_snapshot_publication_reauthorization_pending",
               "contract_only": False,
               "dependency_artifact_present": False,
-              "publication_workflow_permitted": True,
+              "publication_workflow_permitted": False,
               "image_publication_permitted": False,
               "resident_admission_permitted": False,
               "runtime_reconciliation_permitted": False,
@@ -108,7 +108,7 @@ jobs:
           docker run --rm --platform linux/arm64 \
             --env HOME=/tmp/maven-home \
             --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
-            --env MAVEN_OPTS= \
+            --env MAVEN_OPTS=-Duser.home=/tmp/maven-home \
             --env JAVA_TOOL_OPTIONS= \
             --entrypoint /usr/share/maven/bin/mvn \
             "${BUILDER_IMAGE}" --version \
@@ -207,7 +207,7 @@ jobs:
             --env HOME=/tmp/maven-home \
             --env MAVEN_BASEDIR=/policy \
             --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
-            --env MAVEN_OPTS= \
+            --env MAVEN_OPTS=-Duser.home=/tmp/maven-home \
             --env JAVA_TOOL_OPTIONS= \
             --volume "${source_dir}:/workspace:ro" \
             --volume "${repository}:/m2" \
@@ -255,7 +255,7 @@ jobs:
             --env HOME=/tmp/maven-home \
             --env MAVEN_BASEDIR=/policy \
             --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
-            --env MAVEN_OPTS= \
+            --env MAVEN_OPTS=-Duser.home=/tmp/maven-home \
             --env JAVA_TOOL_OPTIONS= \
             --volume "${source_dir}:/workspace:ro" \
             --volume "${repository}:/m2:ro" \

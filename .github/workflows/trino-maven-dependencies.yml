@@ -178,7 +178,7 @@ jobs:
               echo "source_validation_active=false" >> "${GITHUB_OUTPUT}"
               if [[ "${publication_status}" = "blocked" ]]; then
                 printf 'active=false\n' >> "${GITHUB_OUTPUT}"
-                echo "Trino dependency publication is blocked pending owner-authorized source remediation"
+                echo "Trino dependency publication is blocked pending new explicit owner authorization"
                 exit 0
               fi
               test "${publication_status}" = "active"
@@ -215,7 +215,7 @@ jobs:
           docker run --rm --platform linux/arm64 \
             --env HOME=/tmp/maven-home \
             --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
-            --env MAVEN_OPTS= \
+            --env MAVEN_OPTS=-Duser.home=/tmp/maven-home \
             --env JAVA_TOOL_OPTIONS= \
             --entrypoint /usr/share/maven/bin/mvn \
             "${BUILDER_IMAGE}" --version \
@@ -397,7 +397,7 @@ jobs:
             --user "$(id -u):$(id -g)" \
             --env HOME=/tmp/maven-home \
             --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
-            --env MAVEN_OPTS= \
+            --env MAVEN_OPTS=-Duser.home=/tmp/maven-home \
             --env JAVA_TOOL_OPTIONS= \
             --env CI=true \
             --volume "${parquet_source}:/workspace" \
@@ -436,7 +436,7 @@ jobs:
             --user "$(id -u):$(id -g)" \
             --env HOME=/tmp/maven-home \
             --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
-            --env MAVEN_OPTS= \
+            --env MAVEN_OPTS=-Duser.home=/tmp/maven-home \
             --env JAVA_TOOL_OPTIONS= \
             --env CI=true \
             --env BUN_INSTALL_CACHE_DIR="${BUN_CACHE_DIRECTORY}" \
@@ -513,7 +513,7 @@ jobs:
             --user "$(id -u):$(id -g)" \
             --env HOME=/tmp/maven-home \
             --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
-            --env MAVEN_OPTS= \
+            --env MAVEN_OPTS=-Duser.home=/tmp/maven-home \
             --env JAVA_TOOL_OPTIONS= \
             --env CI=true \
             --volume "${parquet_source}:/workspace" \
@@ -556,7 +556,7 @@ jobs:
             --user "$(id -u):$(id -g)" \
             --env HOME=/tmp/maven-home \
             --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
-            --env MAVEN_OPTS= \
+            --env MAVEN_OPTS=-Duser.home=/tmp/maven-home \
             --env JAVA_TOOL_OPTIONS= \
             --env CI=true \
             --env BUN_INSTALL_CACHE_DIR="${BUN_CACHE_DIRECTORY}" \
@@ -682,7 +682,7 @@ jobs:
               --user "$(id -u):$(id -g)" \
               --env HOME=/tmp/maven-home \
               --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
-              --env MAVEN_OPTS= \
+              --env MAVEN_OPTS=-Duser.home=/tmp/maven-home \
               --env JAVA_TOOL_OPTIONS= \
               --env CI=true \
               --env BUN_INSTALL_CACHE_DIR="${BUN_CACHE_DIRECTORY}" \
