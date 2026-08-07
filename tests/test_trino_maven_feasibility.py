@@ -508,6 +508,11 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             child.write_text(overlay, encoding="utf-8")
             source_boundary = {
                 "permitted_paths": ["module/pom.xml"],
+                "preimages": {
+                    "module/pom.xml": hashlib.sha256(
+                        b"<project/>\n"
+                    ).hexdigest()
+                },
                 "postimages": {
                     "module/pom.xml": hashlib.sha256(
                         overlay.encode("utf-8")
@@ -516,15 +521,43 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             }
             distribution_boundary = {
                 "permitted_paths": ["pom.xml"],
+                "preimages": {
+                    "pom.xml": feasibility.EXPECTED_BASELINE_SHA256
+                },
                 "postimages": {
                     "pom.xml": feasibility.EXPECTED_BASELINE_SHA256
                 },
             }
+            build_plugin_boundary = {
+                "permitted_paths": ["pom.xml"],
+                "preimages": {
+                    "pom.xml": feasibility.EXPECTED_BASELINE_SHA256
+                },
+                "postimages": {
+                    "pom.xml": feasibility.EXPECTED_POSTIMAGE_SHA256
+                },
+            }
+
+            def apply_authorized_overlay(root: Path, source: Path) -> None:
+                subprocess.run(
+                    [
+                        "git",
+                        "apply",
+                        "--unidiff-zero",
+                        "--whitespace=error-all",
+                        str(root / feasibility.CANDIDATE_PATCH_PATH),
+                    ],
+                    cwd=source,
+                    check=True,
+                    capture_output=True,
+                )
+
             with (
                 mock.patch.object(
                     feasibility.publisher,
                     "apply_source_overlay",
-                ),
+                    side_effect=apply_authorized_overlay,
+                ) as apply_overlay,
                 mock.patch.object(
                     feasibility.publisher,
                     "EXPECTED_SOURCE_OVERLAY",
@@ -535,9 +568,18 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                     "EXPECTED_DISTRIBUTION_REMEDIATION",
                     distribution_boundary,
                 ),
+                mock.patch.object(
+                    feasibility.publisher,
+                    "EXPECTED_BUILD_PLUGIN_REMEDIATION",
+                    build_plugin_boundary,
+                ),
             ):
                 feasibility.apply_candidate(ROOT, checkout)
                 feasibility.verify_candidate(checkout)
+                apply_overlay.assert_called_once_with(
+                    ROOT.resolve(),
+                    checkout.resolve(),
+                )
                 self.assertEqual(
                     feasibility._sha256(checkout / "pom.xml"),
                     feasibility.EXPECTED_POSTIMAGE_SHA256,

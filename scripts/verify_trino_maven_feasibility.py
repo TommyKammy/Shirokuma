@@ -413,40 +413,6 @@ def apply_candidate(root: Path, checkout: Path) -> None:
     root = root.resolve()
     checkout = checkout.resolve()
     publisher.apply_source_overlay(root, checkout)
-    pom = checkout / "pom.xml"
-    if _sha256(pom) != EXPECTED_BASELINE_SHA256:
-        _fail("CANDIDATE_PREIMAGE", "post-ADR-0027 pom.xml hash differs")
-    patch = root / CANDIDATE_PATCH_PATH
-    if (
-        _sha256(patch) != EXPECTED_CANDIDATE_PATCH_SHA256
-        or patch.stat().st_size != EXPECTED_CANDIDATE_PATCH_BYTES
-    ):
-        _fail("CANDIDATE_PATCH", "candidate patch identity differs")
-    publisher._validate_zero_context_patch(patch, {"pom.xml"})
-    command = [
-        "git",
-        "apply",
-        "--unidiff-zero",
-        "--whitespace=error-all",
-        str(patch),
-    ]
-    try:
-        subprocess.run(
-            [*command[:2], "--check", *command[2:]],
-            cwd=checkout,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        subprocess.run(
-            command,
-            cwd=checkout,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except (OSError, subprocess.CalledProcessError) as error:
-        _fail("CANDIDATE_APPLY", str(error))
     verify_candidate(checkout)
 
 
@@ -458,34 +424,44 @@ def _expected_candidate_source_postimages() -> dict[str, str]:
             "distribution remediation",
             publisher.EXPECTED_DISTRIBUTION_REMEDIATION,
         ),
+        (
+            "build-plugin remediation",
+            publisher.EXPECTED_BUILD_PLUGIN_REMEDIATION,
+        ),
     ):
         permitted = boundary.get("permitted_paths")
+        preimages = boundary.get("preimages")
         postimages = boundary.get("postimages")
         if (
             not isinstance(permitted, list)
             or not all(isinstance(path, str) for path in permitted)
+            or not isinstance(preimages, dict)
+            or not all(
+                isinstance(path, str) and isinstance(digest, str)
+                for path, digest in preimages.items()
+            )
             or not isinstance(postimages, dict)
             or not all(
                 isinstance(path, str) and isinstance(digest, str)
                 for path, digest in postimages.items()
             )
             or len(permitted) != len(set(permitted))
+            or set(permitted) != set(preimages)
             or set(permitted) != set(postimages)
         ):
             _fail("CANDIDATE_SOURCE", f"{name} path identities differ")
-        overlap = set(expected) & set(postimages)
-        if overlap:
-            _fail(
-                "CANDIDATE_SOURCE",
-                f"authorized source boundaries overlap: {sorted(overlap)}",
-            )
+        for path in set(expected) & set(postimages):
+            if preimages[path] != expected[path]:
+                _fail(
+                    "CANDIDATE_SOURCE",
+                    f"{name} preimage does not continue authorized chain: {path}",
+                )
         expected.update(postimages)
-    if expected.get("pom.xml") != EXPECTED_BASELINE_SHA256:
+    if expected.get("pom.xml") != EXPECTED_POSTIMAGE_SHA256:
         _fail(
             "CANDIDATE_SOURCE",
-            "candidate preimage is not the authorized overlay postimage",
+            "candidate postimage is not the activated overlay postimage",
         )
-    expected["pom.xml"] = EXPECTED_POSTIMAGE_SHA256
     return expected
 
 
