@@ -1,0 +1,134 @@
+{
+  "boundary": {
+    "candidate_patch_sha256": "731e76f296a725d34ea9e226a1815782168cae3890424e69f76a05530afc15be",
+    "candidate_postimage_sha256": "871c6b21cf9fc70c455d21b64d24dd4501a8b5943242418edc2b2f5cfe14fab8",
+    "dependency_artifact_produced": false,
+    "image_or_runtime_change_permitted": false,
+    "publication_permitted": false,
+    "source_remediation_activated": false,
+    "state": "preauthorization_feasibility_only"
+  },
+  "execution": {
+    "builder": "docker.io/library/maven@sha256:7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c",
+    "builder_arm64_manifest": "sha256:5476bfca9d0a6485b7161f6863123f7e6822336de4177273b47b5ec38ffd573a",
+    "native_execution": true,
+    "offline": {
+      "command": "mvn --offline --batch-mode --show-version --errors --strict-checksums --ignore-transitive-repositories --settings /policy/settings.xml -Dmaven.repo.local=/m2 -Daether.syncContext.named.basedir.locksDir=/tmp/maven-locks --file /workspace/pom.xml -pl ':trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg' -am dependency:resolve-plugins -DskipTests",
+      "exit_status": 0,
+      "log": {
+        "bytes": 2323200,
+        "path": "offline-resolve-plugins.log",
+        "sha256": "0519c6df1e52fe7faa6ed85906ed40b5954aeff0085dce44109f3923309e1d1f"
+      },
+      "network": "none",
+      "repository_mount": "read-only",
+      "vulnerable_coordinate_lines": 0
+    },
+    "online": {
+      "command": "mvn --batch-mode --show-version --errors --strict-checksums --ignore-transitive-repositories --settings /policy/settings.xml -Dmaven.repo.local=/m2 --file /workspace/pom.xml -pl ':trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg' -am dependency:resolve-plugins -DskipTests",
+      "exit_status": 0,
+      "log": {
+        "bytes": 2920384,
+        "path": "online-resolve-plugins.log",
+        "sha256": "fc3946fc528adc45e7efb615da1b0f104ff27c083ef538c8d1d85f5a826cab02"
+      },
+      "network": "unrestricted; Maven transfers audited separately",
+      "vulnerable_coordinate_lines": 0
+    },
+    "platform": "linux/arm64",
+    "policy": {
+      "configuration_source": "bootstrap/trino/v483/maven-policy/.mvn",
+      "maven_basedir": "/policy",
+      "policy_mounts": {
+        "offline": "read-only",
+        "online": "read-only"
+      },
+      "source_mounts": {
+        "offline": "read-only",
+        "online": "read-only"
+      },
+      "workflow_sha256": "aef04ec24a47fd19ea2859f90cbf8352b6cfde13afafd438218e201e58afeee2"
+    },
+    "runner_arch": "ARM64",
+    "runner_os": "Linux",
+    "selected_reactor": ":trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg",
+    "toolchain": {
+      "builder_arm64_manifest": "sha256:5476bfca9d0a6485b7161f6863123f7e6822336de4177273b47b5ec38ffd573a",
+      "builder_index": "docker.io/library/maven@sha256:7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c",
+      "builder_index_document": {
+        "bytes": 6649,
+        "path": "builder-index.json",
+        "sha256": "7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c"
+      },
+      "builder_index_document_sha256": "7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c",
+      "container_architecture": "aarch64",
+      "global_settings": {
+        "bytes": 10528,
+        "path": "maven-global-settings.xml",
+        "sha256": "2f552325aedd9a9c9268df520be22cfe3aa86260b76a0f830d2796d2f0e22bd4"
+      },
+      "global_settings_sha256": "2f552325aedd9a9c9268df520be22cfe3aa86260b76a0f830d2796d2f0e22bd4",
+      "maven_version_output": {
+        "bytes": 295,
+        "path": "maven-version.txt",
+        "sha256": "c48d1d6beec3aeeecfee6da1895ab1e11d2ad0c9e41e442d05ca32b60bc4d982"
+      },
+      "maven_version_output_sha256": "c48d1d6beec3aeeecfee6da1895ab1e11d2ad0c9e41e442d05ca32b60bc4d982",
+      "native_execution": true,
+      "qemu_binfmt_handlers": [],
+      "record": {
+        "bytes": 716,
+        "path": "toolchain.json",
+        "sha256": "30fc10bd068b4ec1a794a1e5b624951cef02aba666057fccd0709d9bb49d0a91"
+      },
+      "result": "passed",
+      "runner_arch": "ARM64",
+      "runner_os": "Linux",
+      "schema_version": 1
+    }
+  },
+  "offline_inputs": {
+    "archive": {
+      "bytes": 242729683,
+      "path": "offline-maven-repository.tar.gz",
+      "sha256": "b12debf4e760e3042fe34bd9946c2ed96d0ead4eb7959d8491fe63f3240c208a"
+    },
+    "file_count": 5036,
+    "hardened_metadata": [
+      "org/apache/maven/scm/maven-scm-manager-plexus/2.2.1/maven-scm-manager-plexus-2.2.1.pom",
+      "org/apache/maven/scm/maven-scm-manager-plexus/2.2.1/maven-scm-manager-plexus-2.2.1.pom.sha1",
+      "org/apache/maven/scm/maven-scm-provider-gitexe/2.2.1/maven-scm-provider-gitexe-2.2.1.pom",
+      "org/apache/maven/scm/maven-scm-provider-gitexe/2.2.1/maven-scm-provider-gitexe-2.2.1.pom.sha1"
+    ],
+    "manifest": {
+      "bytes": 1138259,
+      "path": "offline-input-manifest.json",
+      "sha256": "6667d7b8275c0b24ec4f8ec7070173a57a888ab425d8697e0b261f49fc347ea4"
+    },
+    "replacement_inputs": [
+      "org/apache/velocity/velocity-engine-core/2.4.1/velocity-engine-core-2.4.1.jar",
+      "org/codehaus/plexus/plexus-utils/4.0.3/plexus-utils-4.0.3.jar"
+    ],
+    "reproducible_inputs_retained": true,
+    "total_bytes": 274217334
+  },
+  "record_path": "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",
+  "result": {
+    "authorization_use_permitted": false,
+    "fresh_closure_sbom_and_scan_not_run": true,
+    "full_clean_install_not_run": true,
+    "owner_decision_still_required": true,
+    "status": "passed"
+  },
+  "schema_version": 2,
+  "subject": {
+    "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
+    "reviewed_commit": "864da7ea3eb93c976691836630cb91775d5074af",
+    "run_attempt": 1,
+    "run_id": 31072144404,
+    "workflow": "Trino 483 Maven remediation feasibility",
+    "workflow_execution_commit": "f404219ce0a189336dbcc2a48fd881064edc3780",
+    "workflow_ref": "TommyKammy/Shirokuma/.github/workflows/trino-maven-remediation-feasibility.yml@refs/pull/142/merge",
+    "workflow_run": "https://github.com/TommyKammy/Shirokuma/actions/runs/31072144404"
+  }
+}

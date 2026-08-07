@@ -104,6 +104,10 @@ DISTRIBUTION_REMEDIATION_PATH = Path(
     "bootstrap/trino/v483/patches/"
     "0002-shirokuma-iceberg-only-maven-closure.patch"
 )
+BUILD_PLUGIN_REMEDIATION_PATH = Path(
+    "bootstrap/trino/v483/patches/"
+    "0003-shirokuma-maven-build-plugin-closure.patch"
+)
 VEX_PATH = Path(
     "bootstrap/trino/v483/vex/"
     "react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
@@ -123,6 +127,18 @@ DISTRIBUTION_REMEDIATION_ADR_PATH = Path(
 BLOCKER_ADR_PATH = Path(
     "docs/design/07_ADR/"
     "ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md"
+)
+BUILD_PLUGIN_REMEDIATION_ADR_PATH = Path(
+    "docs/design/07_ADR/"
+    "ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md"
+)
+AUTHORIZED_FEASIBILITY_RECORD_PATH = Path(
+    "docs/design/evidence/trino/"
+    "run-31072144404-maven-feasibility-validation.json"
+)
+AUTHORIZED_FEASIBILITY_RECEIPT_PATH = Path(
+    "docs/design/evidence/trino/"
+    "run-31072144404-maven-feasibility-artifact-receipt.json"
 )
 BLOCKER_CLASSIFICATION_PATH = Path(
     "docs/design/evidence/trino/"
@@ -976,6 +992,118 @@ EXPECTED_DISTRIBUTION_REMEDIATION = {
         "fail_closed_before_source_execution_dependency_resolution_or_publication"
     ),
 }
+EXPECTED_BUILD_PLUGIN_REMEDIATION = {
+    "state": "approved_exact_maven_build_plugin_closure",
+    "decision_record": BUILD_PLUGIN_REMEDIATION_ADR_PATH.as_posix(),
+    "approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5210182460"
+    ),
+    "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
+    "approved_at": "2026-08-07T00:08:48Z",
+    "expires_at": "2026-08-21T22:43:36Z",
+    "automatic_renewal": False,
+    "risk_owner": "TommyKammy",
+    "implementation_author": "Codex",
+    "reviewer_must_differ_from_implementation_author": True,
+    "source_binding": {
+        "repository": EXPECTED_SOURCE_REPOSITORY,
+        "release_tag": EXPECTED_TAG,
+        "commit_sha": EXPECTED_COMMIT,
+        "tree_sha": EXPECTED_TREE,
+    },
+    "patch": {
+        "path": BUILD_PLUGIN_REMEDIATION_PATH.as_posix(),
+        "sha256": (
+            "731e76f296a725d34ea9e226a1815782168cae3890424e69f76a05530afc15be"
+        ),
+    },
+    "apply_arguments": ["--unidiff-zero", "--whitespace=error-all"],
+    "permitted_paths": ["pom.xml"],
+    "preimages": {
+        "pom.xml": (
+            "8d342215a3c748f7965f0a82e847cab13587b94171d9d1422922b665475109c1"
+        ),
+    },
+    "postimages": {
+        "pom.xml": (
+            "871c6b21cf9fc70c455d21b64d24dd4501a8b5943242418edc2b2f5cfe14fab8"
+        ),
+    },
+    "replacement_inputs": [
+        (
+            "org/apache/velocity/velocity-engine-core/2.4.1/"
+            "velocity-engine-core-2.4.1.jar"
+        ),
+        (
+            "org/codehaus/plexus/plexus-utils/4.0.3/"
+            "plexus-utils-4.0.3.jar"
+        ),
+    ],
+    "removed_build_extension": (
+        "io.github.gitflow-incremental-builder:"
+        "gitflow-incremental-builder:4.6.0"
+    ),
+    "hardened_maven_metadata": [
+        {
+            "path": (
+                "org/apache/maven/scm/maven-scm-provider-gitexe/2.2.1/"
+                "maven-scm-provider-gitexe-2.2.1.pom"
+            ),
+            "sha256": (
+                "0652487bb3cd532ce6ba9fd841c7f2346c1192b3271996a06ddd50f3052186a6"
+            ),
+            "sha1": "a8630355e52d9c81dbd6ec117820bb58b6355f4a",
+        },
+        {
+            "path": (
+                "org/apache/maven/scm/maven-scm-manager-plexus/2.2.1/"
+                "maven-scm-manager-plexus-2.2.1.pom"
+            ),
+            "sha256": (
+                "4e7b25d9f3dfd21b874593edf794270888c8ef13bc29394b0da1c1cbefa41c43"
+            ),
+            "sha1": "eb1b7ab169dc923806b0040631a45dc83d0b83e8",
+        },
+    ],
+    "selected_projects": [
+        ":trino-server",
+        ":trino-server-core",
+        ":trino-server-main",
+        ":trino-hdfs",
+        ":trino-iceberg",
+    ],
+    "feasibility_evidence": {
+        "workflow_run": (
+            "https://github.com/TommyKammy/Shirokuma/actions/runs/31072144404"
+        ),
+        "reviewed_commit": "864da7ea3eb93c976691836630cb91775d5074af",
+        "workflow_execution_commit": (
+            "f404219ce0a189336dbcc2a48fd881064edc3780"
+        ),
+        "artifact_id": 8956062532,
+        "artifact_digest": (
+            "sha256:46c1ea610e0cb24df43b93cd954c05222573562f9b1677d3d8f7fd0ba65814da"
+        ),
+        "artifact_expires_at": "2026-09-05T04:48:07Z",
+        "validation_record": AUTHORIZED_FEASIBILITY_RECORD_PATH.as_posix(),
+        "artifact_receipt": AUTHORIZED_FEASIBILITY_RECEIPT_PATH.as_posix(),
+        "archive_sha256": (
+            "b12debf4e760e3042fe34bd9946c2ed96d0ead4eb7959d8491fe63f3240c208a"
+        ),
+        "archive_bytes": 242_729_683,
+        "manifest_sha256": (
+            "6667d7b8275c0b24ec4f8ec7070173a57a888ab425d8697e0b261f49fc347ea4"
+        ),
+        "manifest_file_count": 5_036,
+        "independent_reaudit": "passed_complete_hardened_feasibility",
+    },
+    "high_zero_critical_zero_required": True,
+    "vulnerability_waiver_permitted": False,
+    "expiry_action": (
+        "fail_closed_before_source_execution_dependency_resolution_or_publication"
+    ),
+}
 EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION = {
     "status": "active",
     "authorization_type": (
@@ -1109,6 +1237,36 @@ EXPECTED_ADMISSION_DISTRIBUTION_REMEDIATION_AUTHORIZATION = {
             "independent_reconstructions_required",
             "network_none_rebuilds_required",
             "byte_identical_outputs_required",
+            "high_zero_critical_zero_required",
+            "vulnerability_waiver_permitted",
+            "expiry_action",
+        )
+    },
+}
+EXPECTED_ADMISSION_BUILD_PLUGIN_REMEDIATION_AUTHORIZATION = {
+    "status": "active",
+    "authorization_type": "time_boxed_exact_maven_build_plugin_closure",
+    **{
+        key: EXPECTED_BUILD_PLUGIN_REMEDIATION[key]
+        for key in (
+            "decision_record",
+            "approval_record",
+            "issue",
+            "approved_at",
+            "expires_at",
+            "automatic_renewal",
+            "risk_owner",
+            "implementation_author",
+            "reviewer_must_differ_from_implementation_author",
+            "source_binding",
+            "patch",
+            "permitted_paths",
+            "preimages",
+            "postimages",
+            "replacement_inputs",
+            "removed_build_extension",
+            "selected_projects",
+            "feasibility_evidence",
             "high_zero_critical_zero_required",
             "vulnerability_waiver_permitted",
             "expiry_action",
@@ -1831,6 +1989,125 @@ def _validate_distribution_remediation_contract(
         _fail("DISTRIBUTION_REMEDIATION_EXPIRED", expires.isoformat())
 
 
+def _validate_build_plugin_remediation_contract(
+    root: Path,
+    contract: Mapping[str, Any],
+    *,
+    at: dt.datetime | None,
+) -> None:
+    remediation = contract.get("source", {}).get("build_plugin_remediation")
+    if not _matches_exact_json(remediation, EXPECTED_BUILD_PLUGIN_REMEDIATION):
+        _fail(
+            "BUILD_PLUGIN_REMEDIATION",
+            "exact Maven build-plugin remediation differs",
+        )
+    patch = EXPECTED_BUILD_PLUGIN_REMEDIATION["patch"]
+    patch_path = root / patch["path"]
+    if _sha256(patch_path) != patch["sha256"]:
+        _fail("BUILD_PLUGIN_REMEDIATION", "source patch SHA-256 differs")
+    _validate_zero_context_patch(
+        patch_path,
+        set(EXPECTED_BUILD_PLUGIN_REMEDIATION["permitted_paths"]),
+    )
+    expires = _parse_time(EXPECTED_BUILD_PLUGIN_REMEDIATION["expires_at"])
+    authorization_expires = _parse_time(contract["authorization"]["expires_at"])
+    if expires > authorization_expires:
+        _fail(
+            "BUILD_PLUGIN_REMEDIATION",
+            "build-plugin remediation outlives source authorization",
+        )
+    if at is not None and at >= expires:
+        _fail("BUILD_PLUGIN_REMEDIATION_EXPIRED", expires.isoformat())
+
+    evidence = EXPECTED_BUILD_PLUGIN_REMEDIATION["feasibility_evidence"]
+    validation = _load_json(root / AUTHORIZED_FEASIBILITY_RECORD_PATH)
+    if not _matches_exact_json(
+        {
+            "boundary": validation.get("boundary"),
+            "offline_inputs": validation.get("offline_inputs"),
+            "result": validation.get("result"),
+            "subject": validation.get("subject"),
+        },
+        {
+            "boundary": {
+                "candidate_patch_sha256": patch["sha256"],
+                "candidate_postimage_sha256": (
+                    EXPECTED_BUILD_PLUGIN_REMEDIATION["postimages"]["pom.xml"]
+                ),
+                "dependency_artifact_produced": False,
+                "image_or_runtime_change_permitted": False,
+                "publication_permitted": False,
+                "source_remediation_activated": False,
+                "state": "preauthorization_feasibility_only",
+            },
+            "offline_inputs": validation.get("offline_inputs"),
+            "result": {
+                "authorization_use_permitted": False,
+                "fresh_closure_sbom_and_scan_not_run": True,
+                "full_clean_install_not_run": True,
+                "owner_decision_still_required": True,
+                "status": "passed",
+            },
+            "subject": {
+                "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
+                "reviewed_commit": evidence["reviewed_commit"],
+                "run_attempt": 1,
+                "run_id": 31072144404,
+                "workflow": "Trino 483 Maven remediation feasibility",
+                "workflow_execution_commit": evidence[
+                    "workflow_execution_commit"
+                ],
+                "workflow_ref": (
+                    "TommyKammy/Shirokuma/.github/workflows/"
+                    "trino-maven-remediation-feasibility.yml@refs/pull/142/merge"
+                ),
+                "workflow_run": evidence["workflow_run"],
+            },
+        },
+    ):
+        _fail(
+            "BUILD_PLUGIN_REMEDIATION_EVIDENCE",
+            "retained validation record differs",
+        )
+    offline_inputs = validation.get("offline_inputs", {})
+    if (
+        offline_inputs.get("archive", {}).get("sha256")
+        != evidence["archive_sha256"]
+        or offline_inputs.get("archive", {}).get("bytes")
+        != evidence["archive_bytes"]
+        or offline_inputs.get("manifest", {}).get("sha256")
+        != evidence["manifest_sha256"]
+        or offline_inputs.get("file_count")
+        != evidence["manifest_file_count"]
+        or offline_inputs.get("reproducible_inputs_retained") is not True
+    ):
+        _fail(
+            "BUILD_PLUGIN_REMEDIATION_EVIDENCE",
+            "retained archive identity differs",
+        )
+    receipt = _load_json(root / AUTHORIZED_FEASIBILITY_RECEIPT_PATH)
+    if (
+        receipt.get("artifact", {}).get("id") != evidence["artifact_id"]
+        or receipt.get("artifact", {}).get("digest")
+        != evidence["artifact_digest"]
+        or receipt.get("artifact", {}).get("expires_at")
+        != evidence["artifact_expires_at"]
+        or receipt.get("boundary", {}).get("authorization_use_permitted")
+        is not True
+        or receipt.get("boundary", {}).get("owner_decision_record")
+        != EXPECTED_BUILD_PLUGIN_REMEDIATION["approval_record"]
+        or receipt.get("independent_reaudit", {}).get("result")
+        != evidence["independent_reaudit"]
+        or receipt.get("validation_record", {}).get("path")
+        != AUTHORIZED_FEASIBILITY_RECORD_PATH.as_posix()
+        or receipt.get("workflow_run") != evidence["workflow_run"]
+    ):
+        _fail(
+            "BUILD_PLUGIN_REMEDIATION_EVIDENCE",
+            "independent artifact receipt differs",
+        )
+
+
 def _validate_zero_context_patch(
     path: Path,
     permitted_paths: set[str],
@@ -2315,28 +2592,29 @@ def apply_source_overlay(root: Path, checkout: Path) -> None:
     _validate_authorization(contract, at=now)
     _validate_source_overlay_contract(root, contract, at=now)
     _validate_distribution_remediation_contract(root, contract, at=now)
+    _validate_build_plugin_remediation_contract(root, contract, at=now)
     overlay = EXPECTED_SOURCE_OVERLAY
     distribution = EXPECTED_DISTRIBUTION_REMEDIATION
+    build_plugin = EXPECTED_BUILD_PLUGIN_REMEDIATION
+    boundaries = (overlay, distribution, build_plugin)
     permitted: set[str] = set()
-    for boundary in (overlay, distribution):
+    for boundary in boundaries:
         boundary_permitted = set(boundary["permitted_paths"])
         if boundary_permitted != set(
             boundary["preimages"]
         ) or boundary_permitted != set(boundary["postimages"]):
             _fail("SOURCE_OVERLAY", "preimage/postimage path sets differ")
-        if permitted & boundary_permitted:
-            _fail("SOURCE_OVERLAY", "overlay path boundaries overlap")
         permitted |= boundary_permitted
-        for relative, expected in boundary["preimages"].items():
-            payload = _read_reviewed_regular_file(
-                checkout / relative,
-                code="SOURCE_OVERLAY_PREIMAGE",
-            )
-            if hashlib.sha256(payload).hexdigest() != expected:
-                _fail("SOURCE_OVERLAY_PREIMAGE", relative)
     _validate_react_router_import_inventory(checkout)
     try:
-        for boundary in (overlay, distribution):
+        for boundary in boundaries:
+            for relative, expected in boundary["preimages"].items():
+                payload = _read_reviewed_regular_file(
+                    checkout / relative,
+                    code="SOURCE_OVERLAY_PREIMAGE",
+                )
+                if hashlib.sha256(payload).hexdigest() != expected:
+                    _fail("SOURCE_OVERLAY_PREIMAGE", relative)
             patch = root / boundary["patch"]["path"]
             command = [
                 "git",
@@ -2351,6 +2629,13 @@ def apply_source_overlay(root: Path, checkout: Path) -> None:
                 capture_output=True,
                 text=True,
             )
+            for relative, expected in boundary["postimages"].items():
+                payload = _read_reviewed_regular_file(
+                    checkout / relative,
+                    code="SOURCE_OVERLAY_POSTIMAGE",
+                )
+                if hashlib.sha256(payload).hexdigest() != expected:
+                    _fail("SOURCE_OVERLAY_POSTIMAGE", relative)
             subprocess.run(
                 command,
                 cwd=checkout,
@@ -2388,14 +2673,6 @@ def apply_source_overlay(root: Path, checkout: Path) -> None:
             "SOURCE_OVERLAY_APPLY",
             f"changed={sorted(changed)!r}, untracked={untracked!r}",
         )
-    for boundary in (overlay, distribution):
-        for relative, expected in boundary["postimages"].items():
-            payload = _read_reviewed_regular_file(
-                checkout / relative,
-                code="SOURCE_OVERLAY_POSTIMAGE",
-            )
-            if hashlib.sha256(payload).hexdigest() != expected:
-                _fail("SOURCE_OVERLAY_POSTIMAGE", relative)
     _validate_react_router_import_inventory(checkout)
 
 
@@ -3993,11 +4270,15 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         PARQUET_REMEDIATION_TEST_PATH,
         SOURCE_OVERLAY_PATH,
         DISTRIBUTION_REMEDIATION_PATH,
+        BUILD_PLUGIN_REMEDIATION_PATH,
         VEX_PATH,
         OVERLAY_ADR_PATH,
         PARQUET_REMEDIATION_ADR_PATH,
         DISTRIBUTION_REMEDIATION_ADR_PATH,
         BLOCKER_ADR_PATH,
+        BUILD_PLUGIN_REMEDIATION_ADR_PATH,
+        AUTHORIZED_FEASIBILITY_RECORD_PATH,
+        AUTHORIZED_FEASIBILITY_RECEIPT_PATH,
         Path("Makefile"),
     ):
         if lines.count(f"      - {path.as_posix()}") != 2:
@@ -4422,14 +4703,14 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
     publication = contract.get("publication", {})
     if (
-        publication.get("permitted") is not False
+        publication.get("permitted") is not True
         or publication.get("workflow_present") is not True
         or publication.get("workflow") != WORKFLOW_PATH.as_posix()
         or publication.get("allowed_ref") != "refs/heads/main"
         or publication.get("artifact_role") != "review_pending_dependency_evidence"
         or publication.get("retire_in_evidence_review_pr") is not True
         or publication.get("pull_request_behavior")
-        != "static_read_only_contract_validation"
+        != "static_and_authorized_source_overlay_and_remediation_validation_without_publication"
         or not _matches_exact_json(
             publication.get("evidence_review_inventory_policy"),
             {
@@ -4439,7 +4720,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
             },
         )
     ):
-        _fail("PUBLICATION", "blocked publication lifecycle differs")
+        _fail("PUBLICATION", "authorized publication lifecycle differs")
     failed = contract.get("failed_publications")
     if (
         not isinstance(failed, list)
@@ -4495,11 +4776,15 @@ def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
         PARQUET_REMEDIATION_TEST_PATH,
         SOURCE_OVERLAY_PATH,
         DISTRIBUTION_REMEDIATION_PATH,
+        BUILD_PLUGIN_REMEDIATION_PATH,
         VEX_PATH,
         OVERLAY_ADR_PATH,
         PARQUET_REMEDIATION_ADR_PATH,
         DISTRIBUTION_REMEDIATION_ADR_PATH,
         BLOCKER_ADR_PATH,
+        BUILD_PLUGIN_REMEDIATION_ADR_PATH,
+        AUTHORIZED_FEASIBILITY_RECORD_PATH,
+        AUTHORIZED_FEASIBILITY_RECEIPT_PATH,
         BLOCKER_CLASSIFICATION_PATH,
         BLOCKER_HARDENED_SCM_POM_PATH,
         BLOCKER_HARDENED_SCM_MANAGER_POM_PATH,
@@ -4528,15 +4813,16 @@ def audit(root: Path) -> None:
     _validate_source_overlay_contract(root, contract, at=None)
     _validate_source_remediation_contract(contract, at=None)
     _validate_distribution_remediation_contract(root, contract, at=None)
+    _validate_build_plugin_remediation_contract(root, contract, at=None)
     _validate_blocker_evidence(root)
     lifecycle = contract.get("lifecycle", {})
     if not _matches_exact_json(
         lifecycle,
         {
-            "state": "source_remediation_authorization_pending",
+            "state": "dependency_snapshot_publication_pending",
             "contract_only": False,
             "dependency_artifact_present": False,
-            "publication_workflow_permitted": False,
+            "publication_workflow_permitted": True,
             "image_publication_permitted": False,
             "resident_admission_permitted": False,
             "runtime_reconciliation_permitted": False,
@@ -4667,7 +4953,11 @@ def audit(root: Path) -> None:
             admission.get("distribution_remediation_authorization"),
             EXPECTED_ADMISSION_DISTRIBUTION_REMEDIATION_AUTHORIZATION,
         )
-        or repository_state.get("publication_workflow_permitted") is not False
+        or not _matches_exact_json(
+            admission.get("build_plugin_remediation_authorization"),
+            EXPECTED_ADMISSION_BUILD_PLUGIN_REMEDIATION_AUTHORIZATION,
+        )
+        or repository_state.get("publication_workflow_permitted") is not True
         or repository_state.get("dependency_artifact_present") is not False
         or repository_state.get("resident_ledger_permitted") is not False
         or repository_state.get("runtime_manifests_permitted") is not False

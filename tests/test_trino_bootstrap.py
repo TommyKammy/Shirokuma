@@ -2906,6 +2906,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "source_overlay_authorization",
                 "source_remediation_authorization",
                 "distribution_remediation_authorization",
+                "build_plugin_remediation_authorization",
                 "repository_state",
                 "next_action",
             },
@@ -3001,18 +3002,15 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     },
                     {
                         "control": "repository_source_build",
-                        "status": "source_remediation_authorization_required",
+                        "status": (
+                            "source_remediation_authorized_"
+                            "publication_evidence_pending"
+                        ),
                         "evidence": (
-                            "reviewed-main run 30693677356 passed both closed "
-                            "reconstructions, both network-none builds, and closure-"
-                            "complete SBOM generation before failing closed on three "
-                            "nonwaivable Maven High findings across three package/"
-                            "version groups and three physical JAR paths; the exact "
-                            "report, SBOM, classification, and non-active feasibility "
-                            "patch are retained under docs/design/evidence/trino/"
-                            "run-30693677356-*, and ADR-0028 requires separate exact "
-                            "owner authorization plus independent review before source "
-                            "remediation or another publication attempt"
+                            "ADR-0029 and Issue #63 comment 5210182460 authorize "
+                            "the exact third patch after hardened run 31072144404 "
+                            "and independent artifact audit; no dependency artifact, "
+                            "image admission, Flux object, or runtime state exists yet"
                         ),
                     },
                 ],
@@ -3020,17 +3018,13 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "ADR-0019 does not waive source identity, image signature, "
                     "transparency-log, provenance, or evidence requirements. ADR-0023 "
                     "separately accepts only the exact Trino 483 source-identity risk "
-                    "for a time-boxed local PoC. ADR-0024 authorizes a four-path Web "
-                    "UI dependency overlay and one not_affected OpenVEX assessment "
-                    "through the same expiry; it is not a vulnerability risk "
-                    "acceptance. ADR-0025 records the first run-bound Maven closure "
-                    "blocker. ADR-0026 and ADR-0027 retain their exact authorized "
-                    "source-remediation boundaries, but neither authorizes the "
-                    "different patch hash, pom.xml postimage, or Velocity version "
-                    "required by run 30693677356. ADR-0028 therefore restores "
-                    "source-remediation authorization pending. The raw "
-                    "findings remain retained, High=0/Critical=0 without waivers "
-                    "remains mandatory, the upstream image and server asset remain "
+                    "for a time-boxed local PoC. ADR-0024, ADR-0026, and ADR-0027 "
+                    "retain their exact bounded source remediations. ADR-0028 retained "
+                    "the Maven blocker and feasibility candidate. ADR-0029 activates "
+                    "only the exact hash-bound third patch after hardened run "
+                    "31072144404 and independent audit. High=0/Critical=0 without "
+                    "waivers remains mandatory; the dependency artifact is review-"
+                    "pending if produced, the upstream image and server asset remain "
                     "rejected, all image controls remain mandatory, and re-signing "
                     "untrusted upstream bytes is forbidden."
                 ),
@@ -3068,7 +3062,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             admission["source_authentication"],
         )
         self.assertIs(
-            admission["repository_state"]["publication_workflow_permitted"], False
+            admission["repository_state"]["publication_workflow_permitted"], True
         )
 
     def test_provisional_source_authorization_is_bounded_and_fail_closed(self) -> None:
@@ -3366,7 +3360,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         self.assertEqual(
             {
                 "dependency_snapshot_contract_permitted": True,
-                "publication_workflow_permitted": False,
+                "publication_workflow_permitted": True,
                 "dependency_artifact_present": False,
                 "resident_ledger_permitted": False,
                 "runtime_manifests_permitted": False,
@@ -3390,6 +3384,10 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     (
                         "bootstrap/trino/v483/patches/"
                         "0002-shirokuma-iceberg-only-maven-closure.patch"
+                    ),
+                    (
+                        "bootstrap/trino/v483/patches/"
+                        "0003-shirokuma-maven-build-plugin-closure.patch"
                     ),
                     "bootstrap/trino/v483/settings.xml",
                     "bootstrap/trino/v483/trusted-build-contract.json",
@@ -3426,6 +3424,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                         "docs/design/07_ADR/"
                         "ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_"
                         "Maven_findings.md"
+                    ),
+                    (
+                        "docs/design/07_ADR/"
+                        "ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_"
+                        "remediation.md"
                     ),
                     "docs/design/context-manifest.json",
                     (
@@ -3480,6 +3483,14 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                         "docs/design/evidence/trino/"
                         "run-30731801825-maven-feasibility-validation.json"
                     ),
+                    (
+                        "docs/design/evidence/trino/"
+                        "run-31072144404-maven-feasibility-artifact-receipt.json"
+                    ),
+                    (
+                        "docs/design/evidence/trino/"
+                        "run-31072144404-maven-feasibility-validation.json"
+                    ),
                     "scripts/package_trino_bun_dependencies.py",
                     "scripts/package_trino_maven_dependencies.py",
                     "scripts/prepare_trino_bun_input.py",
@@ -3510,7 +3521,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             "runtime_manifests_permitted",
         ):
             self.assertIs(repository_state[key], False)
-        self.assertIs(repository_state["publication_workflow_permitted"], False)
+        self.assertIs(repository_state["publication_workflow_permitted"], True)
         self.assertIs(
             repository_state["dependency_snapshot_contract_permitted"], True
         )
@@ -3694,6 +3705,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "preimages",
                 "source_overlay",
                 "distribution_remediation",
+                "build_plugin_remediation",
                 "forbidden_build_inputs",
             },
             set(source),
@@ -4669,17 +4681,17 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             rebuild["retained_output_evidence"],
         )
 
-    def test_dependency_snapshot_contract_blocks_pending_owner_authorization(
+    def test_dependency_snapshot_contract_authorizes_publication_only(
         self,
     ) -> None:
         contract = self._trusted_build_contract()
         lifecycle = contract["lifecycle"]
         self.assertEqual(
             {
-                "state": "source_remediation_authorization_pending",
+                "state": "dependency_snapshot_publication_pending",
                 "contract_only": False,
                 "dependency_artifact_present": False,
-                "publication_workflow_permitted": False,
+                "publication_workflow_permitted": True,
                 "image_publication_permitted": False,
                 "resident_admission_permitted": False,
                 "runtime_reconciliation_permitted": False,
@@ -4688,7 +4700,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertEqual(
             {
-                "permitted": False,
+                "permitted": True,
                 "workflow_present": True,
                 "workflow": (
                     ".github/workflows/trino-maven-dependencies.yml"
@@ -4699,7 +4711,10 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "separate_evidence_only_pr_required": True,
                 "image_publisher_permitted_before_evidence_review": False,
                 "anonymous_exact_digest_pull_required": True,
-                "pull_request_behavior": "static_read_only_contract_validation",
+                "pull_request_behavior": (
+                    "static_and_authorized_source_overlay_and_remediation_"
+                    "validation_without_publication"
+                ),
                 "publication_event": "push",
                 "runner": "ubuntu-24.04-arm",
                 "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",
@@ -4761,7 +4776,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertTrue((ROOT / contract["publication"]["workflow"]).is_file())
 
-    def test_next_action_requires_exact_owner_authorization(
+    def test_next_action_requires_exact_publication_evidence(
         self,
     ) -> None:
         next_action = self._admission()["next_action"]
@@ -4776,10 +4791,10 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             set(next_action),
         )
         self.assertEqual(
-            "owner-authorized-source-remediation-contract",
+            "publish-reviewed-source-remediated-dependency-snapshot",
             next_action["mode"],
         )
-        self.assertIs(next_action["decision_record_required"], True)
+        self.assertIs(next_action["decision_record_required"], False)
         self.assertEqual(
             [
                 (
@@ -4812,11 +4827,16 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_"
                     "Maven_findings.md"
                 ),
+                (
+                    "docs/design/07_ADR/"
+                    "ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_"
+                    "remediation.md"
+                ),
             ],
             next_action["decision_records"],
         )
         self.assertEqual(
-            "source_remediation_authorization_pending",
+            "source_remediation_publication_evidence_pending",
             next_action["phase"],
         )
         self.assertEqual(
@@ -4834,10 +4854,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "selected reactor, dependency replacements, expiry, and rollback"
                 ),
                 (
-                    "separate exact owner authorization bound to the retained post-"
+                    "active exact owner authorization bound to the retained post-"
                     "ADR-0027 pom.xml feasibility patch, patch and preimage/postimage "
                     "hashes, Velocity Engine Core 2.4.1 and Plexus Utils 4.0.3 "
-                    "replacements, unchanged selected reactor, expiry, and rollback"
+                    "replacements, unchanged selected reactor, hardened run and "
+                    "independent audit, expiry, and rollback"
                 ),
                 (
                     "independent reviewer approval distinct from the source-"

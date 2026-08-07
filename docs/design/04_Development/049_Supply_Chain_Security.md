@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-07-28
-version: "1.34"
+updated: 2026-08-07
+version: "1.35"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -1118,6 +1118,28 @@ before owner authorization. It neither authorizes nor activates the candidate,
 publishes an artifact, admits an image, or changes runtime state. The explicit
 owner approve/reject decision and independent implementation review remain
 mandatory.
+
+Fresh hardened feasibility run
+[`31072144404`](https://github.com/TommyKammy/Shirokuma/actions/runs/31072144404)
+then completed the exact selected reactor on native linux/arm64, replayed the
+closed repository with networking disabled, and retained artifact
+`8956062532`. Independent audit verified all 5,036 files, the
+242,729,683-byte archive
+`sha256:b12debf4e760e3042fe34bd9946c2ed96d0ead4eb7959d8491fe63f3240c208a`,
+and closed manifest
+`sha256:6667d7b8275c0b24ec4f8ec7070173a57a888ab425d8697e0b261f49fc347ea4`.
+Issue #63 comment
+[`5210182460`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5210182460)
+records the risk owner's exact approval at `2026-08-07T00:08:48Z`.
+ADR-0029 therefore activates only the hash-bound third `pom.xml` patch after
+the two previously authorized patches and permits one reviewed-main dependency
+publication attempt. The authorization expires at
+`2026-08-21T22:43:36Z`, cannot renew automatically, and requires a human
+reviewer different from both the implementation author and risk owner.
+Pull-request execution remains validation-only. A resulting dependency
+candidate remains review-pending: image publication, resident admission,
+Flux/runtime resources, credentials, public exposure, query acceptance, and
+Issue #63 closure all remain false and require separate evidence gates.
 
 ## Resident image and SBOM evidence
 

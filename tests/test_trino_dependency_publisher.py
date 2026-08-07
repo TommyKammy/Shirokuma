@@ -2945,7 +2945,7 @@ class PublisherContractTests(unittest.TestCase):
                 ):
                     verify._validate_blocker_evidence(temporary_root)
 
-    def test_publication_status_is_blocked_and_records_must_agree(self) -> None:
+    def test_publication_status_is_active_and_records_must_agree(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
         )
@@ -2954,12 +2954,12 @@ class PublisherContractTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            "blocked",
+            "active",
             verify.publication_status(contract, admission),
         )
 
         altered = json.loads(json.dumps(contract))
-        altered["publication"]["permitted"] = True
+        altered["publication"]["permitted"] = False
         with self.assertRaisesRegex(
             verify.ContractError,
             "publication permission records disagree",
@@ -2985,6 +2985,48 @@ class PublisherContractTests(unittest.TestCase):
                         aliased_contract,
                         aliased_admission,
                     )
+
+    def test_exact_build_plugin_remediation_authorization_is_bound(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        admission = json.loads(
+            (ROOT / verify.ADMISSION_PATH).read_text(encoding="utf-8")
+        )
+
+        verify._validate_build_plugin_remediation_contract(
+            ROOT,
+            contract,
+            at=verify._parse_time("2026-08-07T00:08:49Z"),
+        )
+        self.assertEqual(
+            verify.EXPECTED_ADMISSION_BUILD_PLUGIN_REMEDIATION_AUTHORIZATION,
+            admission["build_plugin_remediation_authorization"],
+        )
+
+        altered = copy.deepcopy(contract)
+        altered["source"]["build_plugin_remediation"]["patch"]["sha256"] = (
+            "0" * 64
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "exact Maven build-plugin remediation differs",
+        ):
+            verify._validate_build_plugin_remediation_contract(
+                ROOT,
+                altered,
+                at=None,
+            )
+
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "BUILD_PLUGIN_REMEDIATION_EXPIRED",
+        ):
+            verify._validate_build_plugin_remediation_contract(
+                ROOT,
+                contract,
+                at=verify._parse_time("2026-08-21T22:43:36Z"),
+            )
 
     def test_workflow_retains_the_blocked_publication_noop(self) -> None:
         contract = json.loads(
