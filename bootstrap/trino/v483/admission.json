@@ -293,8 +293,9 @@
     "automatic_renewal": false,
     "risk_owner": "TommyKammy",
     "implementation_author": "Codex",
-    "reviewer_must_differ_from_implementation_author": true,
-    "reviewer_must_differ_from_risk_owner": true,
+      "reviewer_must_differ_from_implementation_author": true,
+      "reviewer_must_differ_from_risk_owner": true,
+      "approval_must_match_final_head_sha": true,
     "source_binding": {
       "repository": "https://github.com/trinodb/trino",
       "release_tag": "483",

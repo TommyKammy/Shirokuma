@@ -4,7 +4,7 @@ title: Authorize exact Trino 483 Maven build-plugin remediation
 status: accepted
 created: 2026-08-07
 updated: 2026-08-07
-version: "1.0.2"
+version: "1.0.3"
 area: architecture
 tags: [adr, trino, maven, supply-chain, arm64]
 ---
@@ -70,6 +70,10 @@ with their exact hardened postimages and remove the closed vulnerable-input
 inventory before sealing or packaging either repository. Every online and
 network-none `clean install` must be followed by complete candidate postimage
 revalidation before its repository or server archive can be consumed.
+The replacement POMs and checksum sidecars must be rebound from their original
+Central markers to the dedicated `shirokuma-scm-remediation` origin. The
+packager accepts that origin only for the four exact reviewed postimages and
+records the Shirokuma remediation repository in the closed manifest.
 
 Authorization expires at `2026-08-21T22:43:36Z`, has no automatic renewal,
 and requires a reviewer different from implementation author `Codex` and the
@@ -92,7 +96,9 @@ The write-capable publish job must independently repeat the attempt check and
 query the exact merged pull request before registry authentication. At least
 one current `APPROVED` review from a human GitHub user different from risk
 owner `TommyKammy` and implementation author `Codex` is required. CODEOWNERS
-approval by the risk owner alone cannot satisfy this boundary.
+approval by the risk owner alone cannot satisfy this boundary. The qualifying
+review's `commit_id` must equal the exact final pull-request `head.sha`; an
+approval of an earlier revision cannot authorize publication.
 
 Dependency artifact presence, dependency evidence admission, Trino image
 publication, resident-image admission, Flux runtime reconciliation, public

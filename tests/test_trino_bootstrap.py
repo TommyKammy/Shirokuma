@@ -4004,7 +4004,46 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 },
                 contract["source_remediation"]["input"],
             ],
-            resolution["external_inputs"],
+            resolution["external_inputs"][:2],
+        )
+        scm_metadata = resolution["external_inputs"][2]
+        self.assertEqual(
+            {
+                "name",
+                "repository",
+                "origin_id",
+                "files",
+                "approval_record",
+                "expires_at",
+                "automatic_renewal",
+            },
+            set(scm_metadata),
+        )
+        self.assertEqual(
+            "maven-scm-reviewed-metadata-remediation",
+            scm_metadata["name"],
+        )
+        self.assertEqual(
+            "https://github.com/TommyKammy/Shirokuma",
+            scm_metadata["repository"],
+        )
+        self.assertEqual(
+            "shirokuma-scm-remediation",
+            scm_metadata["origin_id"],
+        )
+        self.assertEqual(4, len(scm_metadata["files"]))
+        self.assertEqual(
+            {
+                entry["path"]
+                for entry in scm_metadata["files"]
+            },
+            {
+                path
+                for metadata in contract["source"]["build_plugin_remediation"][
+                    "hardened_maven_metadata"
+                ]
+                for path in (metadata["path"], f"{metadata['path']}.sha1")
+            },
         )
         self.assertEqual(
             {
@@ -4741,6 +4780,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "human_user_type": "User",
                     "reviewer_must_differ_from_risk_owner": True,
                     "reviewer_must_differ_from_implementation_author": True,
+                    "approval_must_match_final_head_sha": True,
                     "publication_enforcement": (
                         "exact_merged_pull_request_review_query"
                     ),

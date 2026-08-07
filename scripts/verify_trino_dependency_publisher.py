@@ -114,6 +114,7 @@ EXPECTED_INDEPENDENT_REVIEW = {
     "human_user_type": "User",
     "reviewer_must_differ_from_risk_owner": True,
     "reviewer_must_differ_from_implementation_author": True,
+    "approval_must_match_final_head_sha": True,
     "publication_enforcement": "exact_merged_pull_request_review_query",
 }
 SOURCE_OVERLAY_PATH = Path(
@@ -713,6 +714,59 @@ EXPECTED_PARQUET_SOURCE_REMEDIATION = {
     "expires_at": "2026-08-21T22:43:36Z",
     "automatic_renewal": False,
 }
+EXPECTED_SCM_METADATA_REMEDIATION = {
+    "name": "maven-scm-reviewed-metadata-remediation",
+    "repository": "https://github.com/TommyKammy/Shirokuma",
+    "origin_id": "shirokuma-scm-remediation",
+    "files": [
+        {
+            "path": (
+                "org/apache/maven/scm/maven-scm-provider-gitexe/2.2.1/"
+                "maven-scm-provider-gitexe-2.2.1.pom"
+            ),
+            "size": 2_720,
+            "sha256": (
+                "0652487bb3cd532ce6ba9fd841c7f2346c1192b3271996a06ddd50f3052186a6"
+            ),
+        },
+        {
+            "path": (
+                "org/apache/maven/scm/maven-scm-provider-gitexe/2.2.1/"
+                "maven-scm-provider-gitexe-2.2.1.pom.sha1"
+            ),
+            "size": 40,
+            "sha256": (
+                "a9a85b2193053267f68dfacb62896caa532afe49bafa4540134df7a6abed5beb"
+            ),
+        },
+        {
+            "path": (
+                "org/apache/maven/scm/maven-scm-manager-plexus/2.2.1/"
+                "maven-scm-manager-plexus-2.2.1.pom"
+            ),
+            "size": 1_957,
+            "sha256": (
+                "4e7b25d9f3dfd21b874593edf794270888c8ef13bc29394b0da1c1cbefa41c43"
+            ),
+        },
+        {
+            "path": (
+                "org/apache/maven/scm/maven-scm-manager-plexus/2.2.1/"
+                "maven-scm-manager-plexus-2.2.1.pom.sha1"
+            ),
+            "size": 40,
+            "sha256": (
+                "8f04dcac652c18121420956ca62c7efb0166eefaa24400129d2a01433133de63"
+            ),
+        },
+    ],
+    "approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5210182460"
+    ),
+    "expires_at": "2026-08-21T22:43:36Z",
+    "automatic_renewal": False,
+}
 EXPECTED_PARQUET_REMEDIATION_JAR_PATH = (
     "org/apache/parquet/parquet-jackson/1.17.1/"
     "parquet-jackson-1.17.1.jar"
@@ -1030,6 +1084,7 @@ EXPECTED_BUILD_PLUGIN_REMEDIATION = {
     "implementation_author": "Codex",
     "reviewer_must_differ_from_implementation_author": True,
     "reviewer_must_differ_from_risk_owner": True,
+    "approval_must_match_final_head_sha": True,
     "source_binding": {
         "repository": EXPECTED_SOURCE_REPOSITORY,
         "release_tag": EXPECTED_TAG,
@@ -1283,6 +1338,7 @@ EXPECTED_ADMISSION_BUILD_PLUGIN_REMEDIATION_AUTHORIZATION = {
             "implementation_author",
             "reviewer_must_differ_from_implementation_author",
             "reviewer_must_differ_from_risk_owner",
+            "approval_must_match_final_head_sha",
             "source_binding",
             "patch",
             "permitted_paths",
@@ -4117,6 +4173,13 @@ def _select_independent_review(
             "INDEPENDENT_REVIEW",
             f"exact merged pull request count differs: {len(matching_pulls)}",
         )
+    pull = matching_pulls[0]
+    head = pull.get("head")
+    final_head = head.get("sha") if isinstance(head, Mapping) else None
+    if not isinstance(final_head, str) or re.fullmatch(
+        r"[0-9a-f]{40}", final_head
+    ) is None:
+        _fail("INDEPENDENT_REVIEW", "final pull request head is not exact")
 
     latest_by_reviewer: dict[str, Mapping[str, Any]] = {}
     for review in reviews:
@@ -4141,6 +4204,7 @@ def _select_independent_review(
             and user.get("type") == EXPECTED_INDEPENDENT_REVIEW["human_user_type"]
             and login not in {risk_owner, implementation_author}
             and isinstance(review.get("id"), int)
+            and review.get("commit_id") == final_head
         ):
             qualified.append(review)
     if len(qualified) < EXPECTED_INDEPENDENT_REVIEW["minimum_approved_reviews"]:
@@ -4150,9 +4214,10 @@ def _select_independent_review(
         )
     selected = sorted(qualified, key=lambda review: int(review["id"]))[0]
     return {
-        "pull_request": matching_pulls[0]["number"],
+        "pull_request": pull["number"],
         "review_id": selected["id"],
         "reviewer": selected["user"]["login"],
+        "reviewed_head": final_head,
         "commit": commit,
     }
 
@@ -5128,6 +5193,7 @@ def audit(root: Path) -> None:
             [
                 EXPECTED_BUN_INPUT,
                 EXPECTED_PARQUET_SOURCE_REMEDIATION,
+                EXPECTED_SCM_METADATA_REMEDIATION,
             ],
         )
         or not _matches_exact_json(

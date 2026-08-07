@@ -1140,14 +1140,17 @@ The attempt is bound to the protected-main transition after commit
 `ffbb4997420d4b66abf04ec4dfaa579aff2ce965` and to run attempt `1`; reruns and
 later pushes fail closed. Both independent online repositories must receive
 the exact hardened Maven SCM metadata and vulnerable-input pruning before
-packaging. Every online and network-none Trino `clean install` must then
-revalidate the complete authorized source postimages before any resulting
-repository or server archive is consumed.
+packaging. Their two POMs and checksum sidecars are rebound from the Central
+markers to the dedicated `shirokuma-scm-remediation` origin, which is accepted
+only for the four exact hash-bound postimages. Every online and network-none
+Trino `clean install` must then revalidate the complete authorized source
+postimages before any resulting repository or server archive is consumed.
 The write-capable publish job repeats the one-attempt check and queries the
 exact merged pull request before registry authentication. Publication requires
 at least one current `APPROVED` review from a human GitHub user different from
 both risk owner `TommyKammy` and implementation author `Codex`; risk-owner-only
-CODEOWNERS review fails closed.
+CODEOWNERS review fails closed. The approval must target the exact final pull
+request head SHA; an approval for an earlier revision fails closed.
 Pull-request execution remains validation-only. A resulting dependency
 candidate remains review-pending: image publication, resident admission,
 Flux/runtime resources, credentials, public exposure, query acceptance, and

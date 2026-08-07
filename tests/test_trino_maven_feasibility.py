@@ -1611,6 +1611,15 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             (
                 repository / feasibility.SCM_MANAGER_POM_CHECKSUM_PATH
             ).write_bytes(feasibility.SCM_MANAGER_POM_PREIMAGE_SHA1)
+            for pom_path in (
+                feasibility.SCM_POM_PATH,
+                feasibility.SCM_MANAGER_POM_PATH,
+            ):
+                pom = repository / pom_path
+                (pom.parent / "_remote.repositories").write_text(
+                    f"{pom.name}>shirokuma-central=\n",
+                    encoding="iso-8859-1",
+                )
             for relative in feasibility.VULNERABLE_INPUTS:
                 vulnerable = repository / relative
                 vulnerable.parent.mkdir(parents=True, exist_ok=True)
@@ -1630,7 +1639,30 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                 feasibility._sha256(repository / feasibility.SCM_POM_PATH),
                 feasibility.SCM_POM_POSTIMAGE_SHA256,
             )
+            for pom_path in (
+                feasibility.SCM_POM_PATH,
+                feasibility.SCM_MANAGER_POM_PATH,
+            ):
+                pom = repository / pom_path
+                self.assertEqual(
+                    f"{pom.name}>{feasibility.SCM_REMEDIATION_ORIGIN_ID}=\n",
+                    (pom.parent / "_remote.repositories").read_text(
+                        encoding="iso-8859-1"
+                    ),
+                )
             feasibility.capture_repository(repository, root / "evidence")
+
+    def test_hardened_metadata_origin_requires_remote_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = self._repository(Path(temporary))
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "HARDENED_METADATA",
+            ):
+                feasibility._bind_hardened_metadata_origin(
+                    repository,
+                    feasibility.SCM_POM_PATH,
+                )
 
     def test_archive_or_manifest_tamper_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

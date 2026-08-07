@@ -31,7 +31,7 @@
     },
     {
       "path": "scripts/package_trino_maven_dependencies.py",
-      "sha256": "f922294d7819ed24d09a6877dc60082a0e3cd4ebdf075c3312912dbe6e9f45e2"
+      "sha256": "e00ec721d1c6043d7c07041d5155a17f6c9ab69f259e170e12f46c7ce885b61f"
     },
     {
       "path": "scripts/package_trino_bun_dependencies.py",
@@ -47,11 +47,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "804b335a4063f090b4c5ee19eef248fefd12bc347497043602be5e90c1452446"
+      "sha256": "2d220243d677a7b1702ba4b2f536c1422db045f3353823fb2c95c70202b1a0f1"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "2378f973e564cce243b41b66c227ef467a27ee63a40b8a41d790582473a2f5ad"
+      "sha256": "f4ee91dfdf255da31b74ac1405388bf78dcbe594b271121eb30ebe8dc8d81ec1"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -95,7 +95,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md",
-      "sha256": "e97c801e3ddba2c33bf992e463ff7ccca3dca5d70660866379cebc214be9a02c"
+      "sha256": "cc64e32b21fa597fac489393693ed851e3d5a29170c574861eee662186f8ac51"
     },
     {
       "path": "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",
@@ -419,6 +419,7 @@
       "implementation_author": "Codex",
       "reviewer_must_differ_from_implementation_author": true,
       "reviewer_must_differ_from_risk_owner": true,
+      "approval_must_match_final_head_sha": true,
       "source_binding": {
         "repository": "https://github.com/trinodb/trino",
         "release_tag": "483",
@@ -634,6 +635,36 @@
         "byte_identical_outputs_required": true,
         "origin_id": "shirokuma-parquet-remediation",
         "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5105612399",
+        "expires_at": "2026-08-21T22:43:36Z",
+        "automatic_renewal": false
+      },
+      {
+        "name": "maven-scm-reviewed-metadata-remediation",
+        "repository": "https://github.com/TommyKammy/Shirokuma",
+        "origin_id": "shirokuma-scm-remediation",
+        "files": [
+          {
+            "path": "org/apache/maven/scm/maven-scm-provider-gitexe/2.2.1/maven-scm-provider-gitexe-2.2.1.pom",
+            "size": 2720,
+            "sha256": "0652487bb3cd532ce6ba9fd841c7f2346c1192b3271996a06ddd50f3052186a6"
+          },
+          {
+            "path": "org/apache/maven/scm/maven-scm-provider-gitexe/2.2.1/maven-scm-provider-gitexe-2.2.1.pom.sha1",
+            "size": 40,
+            "sha256": "a9a85b2193053267f68dfacb62896caa532afe49bafa4540134df7a6abed5beb"
+          },
+          {
+            "path": "org/apache/maven/scm/maven-scm-manager-plexus/2.2.1/maven-scm-manager-plexus-2.2.1.pom",
+            "size": 1957,
+            "sha256": "4e7b25d9f3dfd21b874593edf794270888c8ef13bc29394b0da1c1cbefa41c43"
+          },
+          {
+            "path": "org/apache/maven/scm/maven-scm-manager-plexus/2.2.1/maven-scm-manager-plexus-2.2.1.pom.sha1",
+            "size": 40,
+            "sha256": "8f04dcac652c18121420956ca62c7efb0166eefaa24400129d2a01433133de63"
+          }
+        ],
+        "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5210182460",
         "expires_at": "2026-08-21T22:43:36Z",
         "automatic_renewal": false
       }
@@ -1060,6 +1091,7 @@
       "human_user_type": "User",
       "reviewer_must_differ_from_risk_owner": true,
       "reviewer_must_differ_from_implementation_author": true,
+      "approval_must_match_final_head_sha": true,
       "publication_enforcement": "exact_merged_pull_request_review_query"
     },
     "evidence_review_inventory_policy": {

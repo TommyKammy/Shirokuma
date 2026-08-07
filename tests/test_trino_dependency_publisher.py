@@ -42,6 +42,7 @@ class MavenSnapshotTests(unittest.TestCase):
         package.EXTERNAL_INPUTS = [
             test_input,
             package.PARQUET_SOURCE_REMEDIATION,
+            package.SCM_METADATA_REMEDIATION,
         ]
         package.BUN_INPUT = test_input
 
@@ -93,6 +94,33 @@ class MavenSnapshotTests(unittest.TestCase):
             trino_origin=trino_origin,
         )
         self._parquet_remediation(repository)
+        scm_payloads = {
+            package.SCM_METADATA_REMEDIATION["files"][0]["path"]: (
+                ROOT
+                / "bootstrap/trino/v483/"
+                "maven-scm-provider-gitexe-2.2.1-hardened.pom"
+            ).read_bytes(),
+            package.SCM_METADATA_REMEDIATION["files"][1]["path"]: (
+                b"a8630355e52d9c81dbd6ec117820bb58b6355f4a"
+            ),
+            package.SCM_METADATA_REMEDIATION["files"][2]["path"]: (
+                ROOT
+                / "bootstrap/trino/v483/"
+                "maven-scm-manager-plexus-2.2.1-hardened.pom"
+            ).read_bytes(),
+            package.SCM_METADATA_REMEDIATION["files"][3]["path"]: (
+                b"eb1b7ab169dc923806b0040631a45dc83d0b83e8"
+            ),
+        }
+        for relative, payload in scm_payloads.items():
+            target = repository / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(payload)
+            if target.suffix == ".pom":
+                (target.parent / "_remote.repositories").write_text(
+                    f"{target.name}>shirokuma-scm-remediation=\n",
+                    encoding="iso-8859-1",
+                )
         return repository
 
     def _parquet_remediation(
@@ -434,6 +462,21 @@ class MavenSnapshotTests(unittest.TestCase):
             artifact = repository / "org/example/demo/1.0"
             (artifact / "_remote.repositories").write_text(
                 "demo-1.0.jar>shirokuma-parquet-remediation=\n"
+                "demo-1.0.pom>shirokuma-central-fallback=\n",
+                encoding="iso-8859-1",
+            )
+            with self.assertRaisesRegex(
+                package.SnapshotError,
+                "unauthorized path",
+            ):
+                package.build_manifest(repository)
+
+    def test_scm_metadata_remediation_origin_is_path_scoped(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = self._repository(Path(temporary))
+            artifact = repository / "org/example/demo/1.0"
+            (artifact / "_remote.repositories").write_text(
+                "demo-1.0.jar>shirokuma-scm-remediation=\n"
                 "demo-1.0.pom>shirokuma-central-fallback=\n",
                 encoding="iso-8859-1",
             )
@@ -2660,6 +2703,7 @@ class PublisherContractTests(unittest.TestCase):
     ) -> None:
         contract = verify._load_json(ROOT / verify.CONTRACT_PATH)
         commit = "a" * 40
+        final_head = "c" * 40
         pulls = [
             {
                 "number": 143,
@@ -2667,17 +2711,20 @@ class PublisherContractTests(unittest.TestCase):
                 "merged_at": "2026-08-07T03:00:00Z",
                 "merge_commit_sha": commit,
                 "base": {"ref": "main"},
+                "head": {"sha": final_head},
             }
         ]
         owner_review = {
             "id": 1,
             "state": "APPROVED",
             "user": {"login": "TommyKammy", "type": "User"},
+            "commit_id": final_head,
         }
         independent_review = {
             "id": 2,
             "state": "APPROVED",
             "user": {"login": "IndependentHuman", "type": "User"},
+            "commit_id": final_head,
         }
         self.assertEqual(
             "IndependentHuman",
@@ -2700,6 +2747,7 @@ class PublisherContractTests(unittest.TestCase):
             "id": 3,
             "state": "CHANGES_REQUESTED",
             "user": {"login": "IndependentHuman", "type": "User"},
+            "commit_id": final_head,
         }
         with self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"):
             verify._select_independent_review(
@@ -2709,8 +2757,22 @@ class PublisherContractTests(unittest.TestCase):
                 commit=commit,
             )
 
+        stale_approval = {
+            **independent_review,
+            "id": 4,
+            "commit_id": "d" * 40,
+        }
+        with self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"):
+            verify._select_independent_review(
+                contract,
+                pulls,
+                [stale_approval],
+                commit=commit,
+            )
+
     def test_independent_review_query_is_bounded_and_commit_scoped(self) -> None:
         commit = "b" * 40
+        final_head = "c" * 40
         pulls = [
             {
                 "number": 143,
@@ -2718,6 +2780,7 @@ class PublisherContractTests(unittest.TestCase):
                 "merged_at": "2026-08-07T03:00:00Z",
                 "merge_commit_sha": commit,
                 "base": {"ref": "main"},
+                "head": {"sha": final_head},
             }
         ]
         reviews = [
@@ -2725,6 +2788,7 @@ class PublisherContractTests(unittest.TestCase):
                 "id": 9,
                 "state": "APPROVED",
                 "user": {"login": "IndependentHuman", "type": "User"},
+                "commit_id": final_head,
             }
         ]
 
@@ -2762,6 +2826,7 @@ class PublisherContractTests(unittest.TestCase):
         receipt = json.loads(stdout.getvalue())
         self.assertEqual(143, receipt["pull_request"])
         self.assertEqual("IndependentHuman", receipt["reviewer"])
+        self.assertEqual(final_head, receipt["reviewed_head"])
         self.assertEqual(2, request.call_count)
         requested_urls = [call.args[0].full_url for call in request.call_args_list]
         self.assertIn(f"/commits/{commit}/pulls?per_page=100", requested_urls[0])
@@ -3393,6 +3458,7 @@ class PublisherContractTests(unittest.TestCase):
             [
                 verify.EXPECTED_BUN_INPUT,
                 verify.EXPECTED_PARQUET_SOURCE_REMEDIATION,
+                verify.EXPECTED_SCM_METADATA_REMEDIATION,
             ],
             package.EXTERNAL_INPUTS,
         )
