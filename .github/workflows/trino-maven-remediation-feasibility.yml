@@ -108,7 +108,7 @@ jobs:
           docker run --rm --platform linux/arm64 \
             --env HOME=/tmp/maven-home \
             --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
-            --env MAVEN_OPTS= \
+            --env MAVEN_OPTS=-Duser.home=/tmp/maven-home \
             --env JAVA_TOOL_OPTIONS= \
             --entrypoint /usr/share/maven/bin/mvn \
             "${BUILDER_IMAGE}" --version \
@@ -207,7 +207,7 @@ jobs:
             --env HOME=/tmp/maven-home \
             --env MAVEN_BASEDIR=/policy \
             --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
-            --env MAVEN_OPTS= \
+            --env MAVEN_OPTS=-Duser.home=/tmp/maven-home \
             --env JAVA_TOOL_OPTIONS= \
             --volume "${source_dir}:/workspace:ro" \
             --volume "${repository}:/m2" \
@@ -255,7 +255,7 @@ jobs:
             --env HOME=/tmp/maven-home \
             --env MAVEN_BASEDIR=/policy \
             --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
-            --env MAVEN_OPTS= \
+            --env MAVEN_OPTS=-Duser.home=/tmp/maven-home \
             --env JAVA_TOOL_OPTIONS= \
             --volume "${source_dir}:/workspace:ro" \
             --volume "${repository}:/m2:ro" \

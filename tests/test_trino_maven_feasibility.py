@@ -273,6 +273,18 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
         workflow = (ROOT / feasibility.WORKFLOW_PATH).read_text(
             encoding="utf-8"
         )
+        self.assertEqual(
+            workflow.count(
+                "--env MAVEN_OPTS=-Duser.home=/tmp/maven-home"
+            ),
+            workflow.count("--entrypoint /usr/share/maven/bin/mvn"),
+        )
+        self.assertEqual(
+            3,
+            workflow.count(
+                "--env MAVEN_OPTS=-Duser.home=/tmp/maven-home"
+            ),
+        )
         self.assertEqual(workflow.count("--env MAVEN_BASEDIR=/policy"), 2)
         self.assertEqual(workflow.count(feasibility.EXPECTED_POLICY_MOUNT), 2)
         self.assertNotIn(
@@ -616,6 +628,21 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                 with self.assertRaisesRegex(
                     feasibility.EvidenceError,
                     "CANDIDATE_POSTIMAGE",
+                ):
+                    feasibility.verify_candidate(checkout)
+                (checkout / "pom.xml").write_text(
+                    candidate,
+                    encoding="utf-8",
+                )
+                jgit_config = checkout / ".config/jgit/config"
+                jgit_config.parent.mkdir(parents=True)
+                jgit_config.write_text(
+                    "[filesystem]\n  timestampResolution = 1 microseconds\n",
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(
+                    feasibility.EvidenceError,
+                    "CANDIDATE_APPLY: candidate created untracked source files",
                 ):
                     feasibility.verify_candidate(checkout)
 

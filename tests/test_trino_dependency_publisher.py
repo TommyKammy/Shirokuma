@@ -4170,6 +4170,18 @@ class PublisherContractTests(unittest.TestCase):
         )
         workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
         self.assertEqual(
+            workflow.count(
+                "--env MAVEN_OPTS=-Duser.home=/tmp/maven-home"
+            ),
+            workflow.count("--entrypoint /usr/share/maven/bin/mvn"),
+        )
+        self.assertEqual(
+            6,
+            workflow.count(
+                "--env MAVEN_OPTS=-Duser.home=/tmp/maven-home"
+            ),
+        )
+        self.assertEqual(
             verify.EXPECTED_OFFLINE_REPOSITORY_SETTINGS,
             contract["offline_rebuild"]["repository_settings"],
         )

@@ -85,16 +85,31 @@ owner before merge.
 
 ## Consequences
 
-The reviewed `main` publisher may perform one run-scoped dependency-snapshot
-attempt using the three exact ordered patches. Pull requests remain
-validation-only and cannot publish. The produced dependency candidate remains
-review-pending and cannot authorize image publication.
+The authorization permitted one reviewed-`main`, run-scoped
+dependency-snapshot attempt using the three exact ordered patches. Pull
+requests remain validation-only and cannot publish. A produced dependency
+candidate remains review-pending and cannot authorize image publication.
 
 That single attempt is bound to the protected-main transition whose preceding
 commit is `ffbb4997420d4b66abf04ec4dfaa579aff2ce965` and to GitHub run attempt
 `1`. A rerun or any later main push fails closed and requires a new explicit
 owner authorization; changing this binding in the activation PR also requires
 re-review before merge.
+
+That attempt executed as GitHub Actions run
+[`31163679280`](https://github.com/TommyKammy/Shirokuma/actions/runs/31163679280)
+at `main` commit `27a313fca0aa080db8bd8f1d67744c68b1b0ab4f`. Both fresh
+online dependency reconstructions and the first network-none Maven build
+completed, but the post-build candidate check failed closed with
+`CANDIDATE_APPLY: candidate created untracked source files`. JGit had written
+`.config/jgit/config` under the source checkout because the container's
+`HOME=/tmp/maven-home` did not change the JVM `user.home` property. No
+dependency artifact was published. The single attempt is consumed: this
+corrective change sets `MAVEN_OPTS=-Duser.home=/tmp/maven-home` on every Maven
+container invocation while retaining the untracked-file rejection, but it does
+not authorize another publisher run. Rebinding any later `main` transition or
+rerunning the failed attempt requires a new explicit owner authorization and
+independent review.
 
 The write-capable publish job must independently repeat the attempt check and
 query the exact merged pull request before registry authentication. At least

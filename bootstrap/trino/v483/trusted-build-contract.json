@@ -51,7 +51,7 @@
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "a93e3b255ab3ed389bf1286f5804ec3bf6d7300cf8588e5c5b90c896d6bacee0"
+      "sha256": "122728ace99a7197b548ac6ecb0eb1e35efee2525cacd94f175dd6653badfa80"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -95,7 +95,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md",
-      "sha256": "2395b207f35da731345183368d10d1d4bb09461710b1fad1404a690e7887aeb5"
+      "sha256": "ab3598959cdf3ac4356a83453740e67a242d1a632599de994faf96fbed0636c4"
     },
     {
       "path": "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",

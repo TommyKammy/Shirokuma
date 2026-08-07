@@ -705,10 +705,10 @@ REVIEW_PENDING_WORKFLOW_INVENTORY = {
         "3f8c098cf514bf2f38f51ab35c7d5db4437a9b59f73780e8f85221b654f3f5f0"
     ),
     ".github/workflows/trino-maven-dependencies.yml": (
-        "d0a340d5c0042f16f66f88f2efa9d8e6910b2a90aa8d9720dac21958a2dc682e"
+        "2d1e4e127e33ce9117e95aa6f6161c7b14b5d380362151a8166609b7856003e7"
     ),
     ".github/workflows/trino-maven-remediation-feasibility.yml": (
-        "1c0cd0b37b6151a691061177c131e0ba991f768740bdb67afe4a244f343020da"
+        "4ab01b0f4fe1ff2f3ea34c3338e9d754225179ac032bcbfd6256a27375db7fb4"
     ),
 }
 PENDING_SCRIPT_FILE_INVENTORY = {
@@ -788,7 +788,7 @@ PENDING_SCRIPT_FILE_INVENTORY = {
         "2d220243d677a7b1702ba4b2f536c1422db045f3353823fb2c95c70202b1a0f1"
     ),
     "scripts/verify_trino_maven_feasibility.py": (
-        "f49867e3ae7005d710f49c152168e229f610a512b9e6911c89b76bdba3a7da19"
+        "61c435410866830ebbfa72fe7080ac27d528bdea98620f637db8c606fc27b9fa"
     ),
     "scripts/verify_trusted_image.py": (
         "cc569a5ee10400ad657f7648ccc2c14e8fd21691adfdc9e155212b16dc0afba0"

@@ -1159,6 +1159,19 @@ candidate remains review-pending: image publication, resident admission,
 Flux/runtime resources, credentials, public exposure, query acceptance, and
 Issue #63 closure all remain false and require separate evidence gates.
 
+The authorized reviewed-main attempt ran as
+[`31163679280`](https://github.com/TommyKammy/Shirokuma/actions/runs/31163679280)
+at `27a313fca0aa080db8bd8f1d67744c68b1b0ab4f`. Two fresh online closure
+reconstructions and the first network-none Maven build succeeded, after which
+the candidate postimage verifier failed closed because JGit created the
+untracked source path `.config/jgit/config`. Setting the container `HOME` did
+not set Java's `user.home`; every Maven container must therefore receive
+`MAVEN_OPTS=-Duser.home=/tmp/maven-home`. The untracked-source rejection is
+retained without an allowlist or cleanup exception. The failed run published
+nothing and consumed ADR-0029's one-shot authorization. Any rerun or later
+reviewed-main publication attempt requires a new explicit owner authorization;
+the corrective pull request is validation-only.
+
 ## Resident image and SBOM evidence
 
 Every image admitted to a resident profile must have an entry in
