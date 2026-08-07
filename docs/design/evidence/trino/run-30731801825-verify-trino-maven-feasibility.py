@@ -78,22 +78,17 @@ EXPECTED_WORKFLOW_TRIGGER_BLOCK = """on:
       - .github/workflows/trino-maven-remediation-feasibility.yml
       - bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch
       - bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch
-      - bootstrap/trino/v483/patches/0003-shirokuma-maven-build-plugin-closure.patch
       - bootstrap/trino/v483/maven-policy/.mvn/**
       - bootstrap/trino/v483/maven-scm-manager-plexus-2.2.1-hardened.pom
       - bootstrap/trino/v483/maven-scm-provider-gitexe-2.2.1-hardened.pom
       - bootstrap/trino/v483/settings.xml
       - bootstrap/trino/v483/trusted-build-contract.json
       - docs/design/07_ADR/ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md
-      - docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md
       - docs/design/evidence/trino/run-30693677356-post-adr-0027-pom.xml.gz
       - docs/design/evidence/trino/run-30693677356-proposed-source-overlay.patch
       - docs/design/evidence/trino/run-30693677356-maven-vulnerability-classification.json
       - docs/design/evidence/trino/run-30731801825-maven-feasibility-validation.json
       - docs/design/evidence/trino/run-30731801825-maven-feasibility-artifact-receipt.json
-      - docs/design/evidence/trino/run-30731801825-verify-trino-maven-feasibility.py
-      - docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json
-      - docs/design/evidence/trino/run-31072144404-maven-feasibility-artifact-receipt.json
       - scripts/verify_trino_dependency_publisher.py
       - scripts/verify_trino_maven_feasibility.py
       - tests/test_trino_dependency_publisher.py
@@ -110,7 +105,7 @@ EXPECTED_WORKFLOW_STEPS = (
     "Retain the review-only feasibility inputs and outputs",
 )
 EXPECTED_WORKFLOW_SHA256 = (
-    "1c0cd0b37b6151a691061177c131e0ba991f768740bdb67afe4a244f343020da"
+    "aef04ec24a47fd19ea2859f90cbf8352b6cfde13afafd438218e201e58afeee2"
 )
 EXPECTED_MAVEN_BASEDIR = "/policy"
 EXPECTED_POLICY_SOURCE = "bootstrap/trino/v483/maven-policy/.mvn"

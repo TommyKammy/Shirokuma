@@ -385,6 +385,7 @@
       "docs/design/evidence/trino/run-30724152120-maven-feasibility-validation.json",
       "docs/design/evidence/trino/run-30731801825-maven-feasibility-artifact-receipt.json",
       "docs/design/evidence/trino/run-30731801825-maven-feasibility-validation.json",
+      "docs/design/evidence/trino/run-30731801825-verify-trino-maven-feasibility.py",
       "docs/design/evidence/trino/run-31072144404-maven-feasibility-artifact-receipt.json",
       "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",
       "scripts/package_trino_bun_dependencies.py",

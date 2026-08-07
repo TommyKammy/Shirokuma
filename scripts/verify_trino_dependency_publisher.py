@@ -175,6 +175,10 @@ SUPERSEDED_FEASIBILITY_RECEIPT_PATH = Path(
 FEASIBILITY_VERIFIER_PATH = Path(
     "scripts/verify_trino_maven_feasibility.py"
 )
+FEASIBILITY_RETAINED_VERIFIER_PATH = Path(
+    "docs/design/evidence/trino/"
+    "run-30731801825-verify-trino-maven-feasibility.py"
+)
 EXPECTED_FEASIBILITY_REAUDIT = {
     "artifact_digest": (
         "sha256:cf0272447ec1a6afd4bda304fefeb6176ee4240d4fc6339a32de65acf015fe8d"
@@ -2435,7 +2439,7 @@ def _validate_blocker_evidence(
             receipt.get("independent_reaudit"),
             EXPECTED_FEASIBILITY_REAUDIT,
         )
-        or _sha256(root / FEASIBILITY_VERIFIER_PATH)
+        or _sha256(root / FEASIBILITY_RETAINED_VERIFIER_PATH)
         != EXPECTED_FEASIBILITY_REAUDIT["verifier"]["sha256"]
         or validation.get("result", {}).get("authorization_use_permitted")
         is not False
@@ -2608,41 +2612,7 @@ def apply_source_overlay(root: Path, checkout: Path) -> None:
     _validate_react_router_import_inventory(checkout)
     try:
         for boundary in boundaries:
-            for relative, expected in boundary["preimages"].items():
-                payload = _read_reviewed_regular_file(
-                    checkout / relative,
-                    code="SOURCE_OVERLAY_PREIMAGE",
-                )
-                if hashlib.sha256(payload).hexdigest() != expected:
-                    _fail("SOURCE_OVERLAY_PREIMAGE", relative)
-            patch = root / boundary["patch"]["path"]
-            command = [
-                "git",
-                "apply",
-                *boundary["apply_arguments"],
-                str(patch),
-            ]
-            subprocess.run(
-                [*command[:2], "--check", *command[2:]],
-                cwd=checkout,
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            for relative, expected in boundary["postimages"].items():
-                payload = _read_reviewed_regular_file(
-                    checkout / relative,
-                    code="SOURCE_OVERLAY_POSTIMAGE",
-                )
-                if hashlib.sha256(payload).hexdigest() != expected:
-                    _fail("SOURCE_OVERLAY_POSTIMAGE", relative)
-            subprocess.run(
-                command,
-                cwd=checkout,
-                check=True,
-                capture_output=True,
-                text=True,
-            )
+            _apply_source_overlay_boundary(root, checkout, boundary)
         changed = set(
             subprocess.run(
                 [
@@ -2674,6 +2644,48 @@ def apply_source_overlay(root: Path, checkout: Path) -> None:
             f"changed={sorted(changed)!r}, untracked={untracked!r}",
         )
     _validate_react_router_import_inventory(checkout)
+
+
+def _apply_source_overlay_boundary(
+    root: Path,
+    checkout: Path,
+    boundary: Mapping[str, Any],
+) -> None:
+    for relative, expected in boundary["preimages"].items():
+        payload = _read_reviewed_regular_file(
+            checkout / relative,
+            code="SOURCE_OVERLAY_PREIMAGE",
+        )
+        if hashlib.sha256(payload).hexdigest() != expected:
+            _fail("SOURCE_OVERLAY_PREIMAGE", relative)
+    patch = root / boundary["patch"]["path"]
+    command = [
+        "git",
+        "apply",
+        *boundary["apply_arguments"],
+        str(patch),
+    ]
+    subprocess.run(
+        [*command[:2], "--check", *command[2:]],
+        cwd=checkout,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        command,
+        cwd=checkout,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    for relative, expected in boundary["postimages"].items():
+        payload = _read_reviewed_regular_file(
+            checkout / relative,
+            code="SOURCE_OVERLAY_POSTIMAGE",
+        )
+        if hashlib.sha256(payload).hexdigest() != expected:
+            _fail("SOURCE_OVERLAY_POSTIMAGE", relative)
 
 
 def stage_bun_scan_input(checkout: Path, output: Path) -> None:

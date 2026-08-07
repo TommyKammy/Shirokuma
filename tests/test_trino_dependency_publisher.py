@@ -9,6 +9,7 @@ import io
 import json
 import os
 import stat
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -2648,7 +2649,7 @@ class PublisherContractTests(unittest.TestCase):
             Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
             verify.BLOCKER_BASELINE_PATH,
             *verify.EXPECTED_BLOCKER_FEASIBILITY_FILES,
-            verify.FEASIBILITY_VERIFIER_PATH,
+            verify.FEASIBILITY_RETAINED_VERIFIER_PATH,
         ]
         originals = {
             path: (ROOT / path).read_bytes()
@@ -2727,7 +2728,9 @@ class PublisherContractTests(unittest.TestCase):
             superseded_path.write_bytes(
                 originals[verify.SUPERSEDED_FEASIBILITY_RECORD_PATH]
             )
-            verifier_path = temporary_root / verify.FEASIBILITY_VERIFIER_PATH
+            verifier_path = (
+                temporary_root / verify.FEASIBILITY_RETAINED_VERIFIER_PATH
+            )
             verifier_path.write_bytes(verifier_path.read_bytes() + b"\n")
             with self.assertRaisesRegex(
                 verify.ContractError,
@@ -2761,7 +2764,7 @@ class PublisherContractTests(unittest.TestCase):
             Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
             verify.BLOCKER_BASELINE_PATH,
             *verify.EXPECTED_BLOCKER_FEASIBILITY_FILES,
-            verify.FEASIBILITY_VERIFIER_PATH,
+            verify.FEASIBILITY_RETAINED_VERIFIER_PATH,
         ]
         originals = {path: (ROOT / path).read_bytes() for path in paths}
         classification = json.loads(
@@ -2846,7 +2849,7 @@ class PublisherContractTests(unittest.TestCase):
             Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
             verify.BLOCKER_BASELINE_PATH,
             *verify.EXPECTED_BLOCKER_FEASIBILITY_FILES,
-            verify.FEASIBILITY_VERIFIER_PATH,
+            verify.FEASIBILITY_RETAINED_VERIFIER_PATH,
         ]
         originals = {path: (ROOT / path).read_bytes() for path in paths}
 
@@ -2897,7 +2900,7 @@ class PublisherContractTests(unittest.TestCase):
             Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
             verify.BLOCKER_BASELINE_PATH,
             *verify.EXPECTED_BLOCKER_FEASIBILITY_FILES,
-            verify.FEASIBILITY_VERIFIER_PATH,
+            verify.FEASIBILITY_RETAINED_VERIFIER_PATH,
         ]
         originals = {path: (ROOT / path).read_bytes() for path in paths}
 
@@ -3958,6 +3961,60 @@ class PublisherContractTests(unittest.TestCase):
         self.assertEqual(1, workflow.count('"file:trivy-version.json"'))
         self.assertIn("statement == expected_statement", workflow)
         self.assertIn('"digest": {"sha256": digest}', workflow)
+
+    def test_source_overlay_boundary_applies_before_postimage_check(
+        self,
+    ) -> None:
+        preimage = b"reviewed preimage\n"
+        postimage = b"reviewed postimage\n"
+        boundary = {
+            "apply_arguments": ["--whitespace=nowarn"],
+            "patch": {"path": "candidate.patch"},
+            "preimages": {"pom.xml": hashlib.sha256(preimage).hexdigest()},
+            "postimages": {"pom.xml": hashlib.sha256(postimage).hexdigest()},
+        }
+        events: list[str] = []
+        state = {"applied": False}
+
+        def read_reviewed_file(path: Path, *, code: str) -> bytes:
+            self.assertEqual(Path("/checkout/pom.xml"), path)
+            events.append(code)
+            return postimage if state["applied"] else preimage
+
+        def run_git(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            self.assertEqual(Path("/checkout"), kwargs["cwd"])
+            if "--check" in command:
+                self.assertIs(state["applied"], False)
+                events.append("git apply --check")
+            else:
+                self.assertIs(state["applied"], False)
+                state["applied"] = True
+                events.append("git apply")
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        with (
+            mock.patch.object(
+                verify,
+                "_read_reviewed_regular_file",
+                side_effect=read_reviewed_file,
+            ),
+            mock.patch.object(verify.subprocess, "run", side_effect=run_git),
+        ):
+            verify._apply_source_overlay_boundary(
+                Path("/policy"),
+                Path("/checkout"),
+                boundary,
+            )
+
+        self.assertEqual(
+            [
+                "SOURCE_OVERLAY_PREIMAGE",
+                "git apply --check",
+                "git apply",
+                "SOURCE_OVERLAY_POSTIMAGE",
+            ],
+            events,
+        )
 
     def test_authorization_is_half_open_and_expires_fail_closed(self) -> None:
         contract = json.loads(
