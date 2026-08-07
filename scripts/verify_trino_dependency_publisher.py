@@ -97,6 +97,12 @@ EXPECTED_AUTHORIZATION = {
         "resident_admission_or_runtime_reconciliation"
     ),
 }
+EXPECTED_PUBLICATION_ATTEMPT = {
+    "event_name": "push",
+    "ref": "refs/heads/main",
+    "before_sha": "ffbb4997420d4b66abf04ec4dfaa579aff2ce965",
+    "run_attempt": "1",
+}
 SOURCE_OVERLAY_PATH = Path(
     "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch"
 )
@@ -3990,6 +3996,37 @@ def authorize_use(
             "AUTHORIZATION",
             f"unrecognized validation point: {validation_point}",
         )
+    if validation_point == "before_dependency_publication":
+        _validate_publication_attempt(contract, environment=os.environ)
+
+
+def _validate_publication_attempt(
+    contract: Mapping[str, Any],
+    *,
+    environment: Mapping[str, str] | None = None,
+) -> None:
+    publication = contract.get("publication")
+    if not isinstance(publication, Mapping) or not _matches_exact_json(
+        publication.get("authorized_attempt"),
+        EXPECTED_PUBLICATION_ATTEMPT,
+    ):
+        _fail(
+            "PUBLICATION_ATTEMPT",
+            "single authorized publication attempt binding differs",
+        )
+    if environment is None:
+        return
+    observed = {
+        "event_name": environment.get("GITHUB_EVENT_NAME"),
+        "ref": environment.get("GITHUB_REF"),
+        "before_sha": environment.get("GITHUB_EVENT_BEFORE"),
+        "run_attempt": environment.get("GITHUB_RUN_ATTEMPT"),
+    }
+    if not _matches_exact_json(observed, EXPECTED_PUBLICATION_ATTEMPT):
+        _fail(
+            "PUBLICATION_ATTEMPT",
+            f"workflow attempt is not authorized: {observed!r}",
+        )
 
 
 def _workflow_jobs_and_steps(workflow: str) -> tuple[list[str], dict[str, list[str]]]:
@@ -4054,7 +4091,7 @@ def _offline_maven_command(workflow: str) -> str:
         workflow,
         (
             "            python3 scripts/"
-            "package_trino_bun_dependencies.py verify-cache \\"
+            "verify_trino_maven_feasibility.py verify-candidate \\"
         ),
         code="WORKFLOW_OFFLINE_COMMAND",
         network_none=True,
@@ -4219,6 +4256,7 @@ def audit_builder_settings(path: Path) -> None:
 
 
 def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
+    _validate_publication_attempt(contract)
     jobs, steps = _workflow_jobs_and_steps(workflow)
     lines = workflow.splitlines()
     if jobs != ["validate", "publish"] or steps != EXPECTED_STEPS:
@@ -4231,6 +4269,17 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         or "workflow_dispatch" in workflow
     ):
         _fail("WORKFLOW_TRIGGER", "only PR validation and main push are allowed")
+    if (
+        workflow.count("GITHUB_EVENT_BEFORE: ${{ github.event.before }}") != 1
+        or workflow.count(
+            "--validation-point before_dependency_publication"
+        )
+        != 1
+    ):
+        _fail(
+            "WORKFLOW_PUBLICATION_ATTEMPT",
+            "main publication must consume the single exact push attempt",
+        )
     if (
         workflow.count(EXPECTED_PR_SOURCE_CONDITION) != 3
         or workflow.count(EXPECTED_PR_BUN_INPUT_BLOCK) != 1
@@ -4321,6 +4370,9 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "--workdir /policy",
         "--file /workspace/pom.xml",
         "python3 scripts/verify_trino_dependency_publisher.py authorize",
+        "python3 scripts/verify_trino_dependency_publisher.py authorize-use",
+        "python3 scripts/verify_trino_maven_feasibility.py verify-candidate",
+        "python3 scripts/verify_trino_maven_feasibility.py prune-vulnerable-inputs",
         "publication-status --root .",
         (
             "Trino dependency publication is blocked pending "
@@ -4520,6 +4572,24 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         _fail(
             "WORKFLOW_REACTOR_PRUNE",
             "each fresh repository must use the bounded reactor-output pruner",
+        )
+    if (
+        workflow.count(
+            "python3 scripts/verify_trino_maven_feasibility.py verify-candidate"
+        )
+        != 4
+        or workflow.count(
+            "python3 scripts/verify_trino_maven_feasibility.py "
+            "prune-vulnerable-inputs"
+        )
+        != 2
+    ):
+        _fail(
+            "WORKFLOW_REMEDIATION_BOUNDARY",
+            (
+                "each Trino build must revalidate source postimages and each "
+                "online repository must apply the hardened metadata pruning"
+            ),
         )
     for forbidden in (
         "./mvnw",

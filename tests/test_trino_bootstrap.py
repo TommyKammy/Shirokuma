@@ -4726,6 +4726,14 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "publication_event": "push",
                 "runner": "ubuntu-24.04-arm",
                 "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",
+                "authorized_attempt": {
+                    "event_name": "push",
+                    "ref": "refs/heads/main",
+                    "before_sha": (
+                        "ffbb4997420d4b66abf04ec4dfaa579aff2ce965"
+                    ),
+                    "run_attempt": "1",
+                },
                 "evidence_review_inventory_policy": {
                     "recursive_closed_world_required": True,
                     "regular_files_only": True,

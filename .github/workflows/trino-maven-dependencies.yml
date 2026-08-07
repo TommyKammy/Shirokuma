@@ -66,6 +66,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  GITHUB_EVENT_BEFORE: ${{ github.event.before }}
   SOURCE_REPOSITORY: https://github.com/trinodb/trino
   SOURCE_TAG: "483"
   SOURCE_TAG_OBJECT: 32d4f28e8311ea6f67edca209df59a0493d869fa
@@ -178,6 +179,8 @@ jobs:
               fi
               test "${publication_status}" = "active"
               python3 scripts/verify_trino_dependency_publisher.py authorize --root .
+              python3 scripts/verify_trino_dependency_publisher.py authorize-use \
+                --root . --validation-point before_dependency_publication
               echo "active=true" >> "${GITHUB_OUTPUT}"
               ;;
             *)
@@ -296,6 +299,9 @@ jobs:
           python3 scripts/verify_trino_dependency_publisher.py \
             apply-source-overlay \
             --root . --checkout "${RUNNER_TEMP}/trino-source"
+          python3 scripts/verify_trino_maven_feasibility.py verify-candidate \
+            --authorization-root . \
+            --checkout "${RUNNER_TEMP}/trino-source"
 
       - name: Fetch and prepare the exact Parquet Jackson remediation sources
         if: >-
@@ -451,6 +457,10 @@ jobs:
             2>&1 | tee "${candidate}/maven-transfer-a.log"
           python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log \
             --log "${candidate}/maven-transfer-a.log"
+          python3 scripts/verify_trino_maven_feasibility.py verify-candidate \
+            --checkout "${source_dir}"
+          python3 scripts/verify_trino_maven_feasibility.py prune-vulnerable-inputs \
+            --repository "${repository}" --root .
           python3 scripts/remediate_parquet_jackson.py seal-artifact \
             --build-repository "${parquet_repository}" \
             --target-repository "${repository}"
@@ -567,6 +577,10 @@ jobs:
             2>&1 | tee "${candidate}/maven-transfer-b.log"
           python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log \
             --log "${candidate}/maven-transfer-b.log"
+          python3 scripts/verify_trino_maven_feasibility.py verify-candidate \
+            --checkout "${source_dir}"
+          python3 scripts/verify_trino_maven_feasibility.py prune-vulnerable-inputs \
+            --repository "${repository}" --root .
           python3 scripts/remediate_parquet_jackson.py seal-artifact \
             --build-repository "${parquet_repository}" \
             --target-repository "${repository}"
@@ -685,6 +699,9 @@ jobs:
               -pl ':trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg' \
               -am clean install -DskipTests \
               -Dmaven.source.skip=true -Dair.check.skip-all
+
+            python3 scripts/verify_trino_maven_feasibility.py verify-candidate \
+              --checkout "${offline_source}"
             python3 scripts/package_trino_bun_dependencies.py verify-cache \
               --descriptor "${candidate}/bun-dependency-manifest.json" \
               --cache "${offline_bun_cache}"

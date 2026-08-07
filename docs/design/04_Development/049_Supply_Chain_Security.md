@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-08-07
-version: "1.35"
+version: "1.36"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -1136,6 +1136,13 @@ the two previously authorized patches and permits one reviewed-main dependency
 publication attempt. The authorization expires at
 `2026-08-21T22:43:36Z`, cannot renew automatically, and requires a human
 reviewer different from both the implementation author and risk owner.
+The attempt is bound to the protected-main transition after commit
+`ffbb4997420d4b66abf04ec4dfaa579aff2ce965` and to run attempt `1`; reruns and
+later pushes fail closed. Both independent online repositories must receive
+the exact hardened Maven SCM metadata and vulnerable-input pruning before
+packaging. Every online and network-none Trino `clean install` must then
+revalidate the complete authorized source postimages before any resulting
+repository or server archive is consumed.
 Pull-request execution remains validation-only. A resulting dependency
 candidate remains review-pending: image publication, resident admission,
 Flux/runtime resources, credentials, public exposure, query acceptance, and

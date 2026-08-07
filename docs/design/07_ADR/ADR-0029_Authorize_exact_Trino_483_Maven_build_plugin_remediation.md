@@ -4,7 +4,7 @@ title: Authorize exact Trino 483 Maven build-plugin remediation
 status: accepted
 created: 2026-08-07
 updated: 2026-08-07
-version: "1.0.0"
+version: "1.0.1"
 area: architecture
 tags: [adr, trino, maven, supply-chain, arm64]
 ---
@@ -65,6 +65,12 @@ The publisher must preserve native linux/arm64 execution, read-only source and
 policy mounts, network-none independent reconstruction, closure-complete SBOM,
 raw vulnerability evidence, and High=0/Critical=0 without waiver.
 
+The two online reconstructions must replace the two authorized Maven SCM POMs
+with their exact hardened postimages and remove the closed vulnerable-input
+inventory before sealing or packaging either repository. Every online and
+network-none `clean install` must be followed by complete candidate postimage
+revalidation before its repository or server archive can be consumed.
+
 Authorization expires at `2026-08-21T22:43:36Z`, has no automatic renewal,
 and requires a reviewer different from implementation author `Codex` and the
 owner before merge.
@@ -75,6 +81,12 @@ The reviewed `main` publisher may perform one run-scoped dependency-snapshot
 attempt using the three exact ordered patches. Pull requests remain
 validation-only and cannot publish. The produced dependency candidate remains
 review-pending and cannot authorize image publication.
+
+That single attempt is bound to the protected-main transition whose preceding
+commit is `ffbb4997420d4b66abf04ec4dfaa579aff2ce965` and to GitHub run attempt
+`1`. A rerun or any later main push fails closed and requires a new explicit
+owner authorization; changing this binding in the activation PR also requires
+re-review before merge.
 
 Dependency artifact presence, dependency evidence admission, Trino image
 publication, resident-image admission, Flux runtime reconciliation, public

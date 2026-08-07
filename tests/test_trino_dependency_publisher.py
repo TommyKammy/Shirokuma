@@ -2526,6 +2526,114 @@ class PublisherContractTests(unittest.TestCase):
             review.index("finalize-record"),
         )
 
+    def test_publication_authorization_is_bound_to_one_main_attempt(self) -> None:
+        instant = dt.datetime(2026, 8, 7, 2, 0, tzinfo=dt.timezone.utc)
+        environment = {
+            "GITHUB_EVENT_NAME": verify.EXPECTED_PUBLICATION_ATTEMPT["event_name"],
+            "GITHUB_REF": verify.EXPECTED_PUBLICATION_ATTEMPT["ref"],
+            "GITHUB_EVENT_BEFORE": verify.EXPECTED_PUBLICATION_ATTEMPT[
+                "before_sha"
+            ],
+            "GITHUB_RUN_ATTEMPT": verify.EXPECTED_PUBLICATION_ATTEMPT[
+                "run_attempt"
+            ],
+        }
+        with mock.patch.dict(os.environ, environment, clear=False):
+            verify.authorize_use(
+                ROOT,
+                validation_point="before_dependency_publication",
+                at=instant,
+            )
+
+        for key, replacement in (
+            ("GITHUB_EVENT_NAME", "workflow_dispatch"),
+            ("GITHUB_REF", "refs/heads/other"),
+            ("GITHUB_EVENT_BEFORE", "0" * 40),
+            ("GITHUB_RUN_ATTEMPT", "2"),
+        ):
+            with self.subTest(key=key):
+                altered = {**environment, key: replacement}
+                with (
+                    mock.patch.dict(os.environ, altered, clear=False),
+                    self.assertRaisesRegex(
+                        verify.ContractError,
+                        "PUBLICATION_ATTEMPT",
+                    ),
+                ):
+                    verify.authorize_use(
+                        ROOT,
+                        validation_point="before_dependency_publication",
+                        at=instant,
+                    )
+
+        contract_path = ROOT / verify.CONTRACT_PATH
+        original_load_json = verify._load_json
+        contract = original_load_json(contract_path)
+        contract["publication"]["authorized_attempt"]["run_attempt"] = "2"
+
+        def load_json(path: Path) -> dict[str, object]:
+            if path == contract_path:
+                return contract
+            return original_load_json(path)
+
+        with (
+            mock.patch.object(verify, "_load_json", side_effect=load_json),
+            mock.patch.dict(os.environ, environment, clear=False),
+            self.assertRaisesRegex(verify.ContractError, "PUBLICATION_ATTEMPT"),
+        ):
+            verify.authorize_use(
+                ROOT,
+                validation_point="before_dependency_publication",
+                at=instant,
+            )
+
+    def test_main_publisher_revalidates_and_prunes_each_build(self) -> None:
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        self.assertEqual(
+            4,
+            workflow.count(
+                "python3 scripts/verify_trino_maven_feasibility.py verify-candidate"
+            ),
+        )
+        self.assertEqual(
+            2,
+            workflow.count(
+                "python3 scripts/verify_trino_maven_feasibility.py "
+                "prune-vulnerable-inputs"
+            ),
+        )
+        for start, end in (
+            (
+                "- name: Resolve and package the first closed Maven repository",
+                "- name: Independently reconstruct the closed Maven repository",
+            ),
+            (
+                "- name: Independently reconstruct the closed Maven repository",
+                "- name: Prove two fresh network-none offline source builds",
+            ),
+        ):
+            phase = workflow.split(start, 1)[1].split(end, 1)[0]
+            trino_build = phase.rindex("-am clean install -DskipTests")
+            revalidate = phase.index("verify-candidate", trino_build)
+            prune = phase.index("prune-vulnerable-inputs", revalidate)
+            seal = phase.index("seal-artifact", prune)
+            self.assertLess(trino_build, revalidate)
+            self.assertLess(revalidate, prune)
+            self.assertLess(prune, seal)
+
+        offline = workflow.split(
+            "- name: Prove two fresh network-none offline source builds",
+            1,
+        )[1].split("- name: Verify both closed dependency inventories", 1)[0]
+        self.assertLess(
+            offline.index("-am clean install -DskipTests"),
+            offline.index("verify-candidate"),
+        )
+        self.assertLess(
+            offline.index("verify-candidate"),
+            offline.index('output="${offline_source}/core/trino-server/target/'),
+        )
+
     def test_authorization_rejects_duplicate_json_keys(self) -> None:
         contract = (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
         contract = contract.replace(

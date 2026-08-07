@@ -47,11 +47,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "7b61263c1e160af718200f43934ba42331cd1efec64e6143d6a486ea06b9dd0a"
+      "sha256": "f5478bb3893b519dbb59e7273444694c865a91afcb4385c054d75f7a60fe387a"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "0782cce302fc719e77bba162b7440d1b4e53a27150af19740c7d6ba1da84701f"
+      "sha256": "e1e79c5b8150da3b6627c799bc35b1688d57286e1609c29c2ec7469d29412200"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -95,7 +95,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md",
-      "sha256": "1c53cc1fd5cbd510e55bfeae377fa1012ea4056cff3082746b3fef000eab55b0"
+      "sha256": "aef209cdfa7104b54cd6591eea0b75ccd60f284c6e3df553fdc248bd6c6cb2a1"
     },
     {
       "path": "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",
@@ -1046,6 +1046,12 @@
     "publication_event": "push",
     "runner": "ubuntu-24.04-arm",
     "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",
+    "authorized_attempt": {
+      "event_name": "push",
+      "ref": "refs/heads/main",
+      "before_sha": "ffbb4997420d4b66abf04ec4dfaa579aff2ce965",
+      "run_attempt": "1"
+    },
     "evidence_review_inventory_policy": {
       "recursive_closed_world_required": true,
       "regular_files_only": true,
