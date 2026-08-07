@@ -109,7 +109,10 @@ corrective change sets `MAVEN_OPTS=-Duser.home=/tmp/maven-home` on every Maven
 container invocation while retaining the untracked-file rejection, but it does
 not authorize another publisher run. Rebinding any later `main` transition or
 rerunning the failed attempt requires a new explicit owner authorization and
-independent review.
+independent review. Until that decision is recorded, the lifecycle is
+`dependency_snapshot_publication_reauthorization_pending` and the contract,
+publication, and admission permission records are all false, so pull requests
+and later `main` pushes follow the static blocked no-op path.
 
 The write-capable publish job must independently repeat the attempt check and
 query the exact merged pull request before registry authentication. At least

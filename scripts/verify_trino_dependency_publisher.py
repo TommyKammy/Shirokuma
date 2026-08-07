@@ -4614,7 +4614,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "publication-status --root .",
         (
             "Trino dependency publication is blocked pending "
-            "owner-authorized source remediation"
+            "new explicit owner authorization"
         ),
         "python3 scripts/verify_trino_dependency_publisher.py audit-builder-settings",
         "python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log",
@@ -5023,14 +5023,14 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
     publication = contract.get("publication", {})
     if (
-        publication.get("permitted") is not True
+        publication.get("permitted") is not False
         or publication.get("workflow_present") is not True
         or publication.get("workflow") != WORKFLOW_PATH.as_posix()
         or publication.get("allowed_ref") != "refs/heads/main"
         or publication.get("artifact_role") != "review_pending_dependency_evidence"
         or publication.get("retire_in_evidence_review_pr") is not True
         or publication.get("pull_request_behavior")
-        != "static_and_authorized_source_overlay_and_remediation_validation_without_publication"
+        != "static_read_only_contract_validation"
         or not _matches_exact_json(
             publication.get("evidence_review_inventory_policy"),
             {
@@ -5139,10 +5139,10 @@ def audit(root: Path) -> None:
     if not _matches_exact_json(
         lifecycle,
         {
-            "state": "dependency_snapshot_publication_pending",
+            "state": "dependency_snapshot_publication_reauthorization_pending",
             "contract_only": False,
             "dependency_artifact_present": False,
-            "publication_workflow_permitted": True,
+            "publication_workflow_permitted": False,
             "image_publication_permitted": False,
             "resident_admission_permitted": False,
             "runtime_reconciliation_permitted": False,
@@ -5278,7 +5278,7 @@ def audit(root: Path) -> None:
             admission.get("build_plugin_remediation_authorization"),
             EXPECTED_ADMISSION_BUILD_PLUGIN_REMEDIATION_AUTHORIZATION,
         )
-        or repository_state.get("publication_workflow_permitted") is not True
+        or repository_state.get("publication_workflow_permitted") is not False
         or repository_state.get("dependency_artifact_present") is not False
         or repository_state.get("resident_ledger_permitted") is not False
         or repository_state.get("runtime_manifests_permitted") is not False

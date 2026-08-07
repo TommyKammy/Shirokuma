@@ -3327,7 +3327,7 @@ class PublisherContractTests(unittest.TestCase):
                 ):
                     verify._validate_blocker_evidence(temporary_root)
 
-    def test_publication_status_is_active_and_records_must_agree(self) -> None:
+    def test_publication_status_is_blocked_and_records_must_agree(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
         )
@@ -3336,12 +3336,12 @@ class PublisherContractTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            "active",
+            "blocked",
             verify.publication_status(contract, admission),
         )
 
         altered = json.loads(json.dumps(contract))
-        altered["publication"]["permitted"] = False
+        altered["publication"]["permitted"] = True
         with self.assertRaisesRegex(
             verify.ContractError,
             "publication permission records disagree",
@@ -3417,7 +3417,7 @@ class PublisherContractTests(unittest.TestCase):
         workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
         marker = (
             "Trino dependency publication is blocked pending "
-            "owner-authorized source remediation"
+            "new explicit owner authorization"
         )
         self.assertEqual(1, workflow.count(marker))
 

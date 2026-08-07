@@ -178,7 +178,7 @@ jobs:
               echo "source_validation_active=false" >> "${GITHUB_OUTPUT}"
               if [[ "${publication_status}" = "blocked" ]]; then
                 printf 'active=false\n' >> "${GITHUB_OUTPUT}"
-                echo "Trino dependency publication is blocked pending owner-authorized source remediation"
+                echo "Trino dependency publication is blocked pending new explicit owner authorization"
                 exit 0
               fi
               test "${publication_status}" = "active"
