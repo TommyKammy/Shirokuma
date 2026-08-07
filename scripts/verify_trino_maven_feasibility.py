@@ -572,7 +572,7 @@ def _verify_hardened_metadata(entries: list[dict[str, Any]]) -> None:
             _fail("HARDENED_METADATA", f"identity differs: {path}")
 
 
-def _bind_hardened_metadata_origin(repository: Path, pom_path: str) -> None:
+def _validate_hardened_metadata_origin(repository: Path, pom_path: str) -> None:
     target_name = Path(pom_path).name
     allowed_names = {target_name, f"{target_name}.sha1"}
     marker = (repository / pom_path).parent / "_remote.repositories"
@@ -587,17 +587,15 @@ def _bind_hardened_metadata_origin(repository: Path, pom_path: str) -> None:
         lines = marker.read_text(encoding="iso-8859-1").splitlines()
     except OSError as error:
         _fail("HARDENED_METADATA", f"cannot read origin marker: {error}")
-    rewritten: list[str] = []
     observed: set[str] = set()
     for raw in lines:
         line = raw.strip()
         if not line or line.startswith("#"):
-            rewritten.append(raw)
             continue
         match = re.fullmatch(r"([^<>=\r\n]+)([<>])([^=\r\n]*)=", line)
         if match is None:
             _fail("HARDENED_METADATA", f"invalid origin marker entry: {raw!r}")
-        filename, separator, repository_id = match.groups()
+        filename, _separator, repository_id = match.groups()
         if filename in allowed_names:
             if filename in observed:
                 _fail(
@@ -610,13 +608,8 @@ def _bind_hardened_metadata_origin(repository: Path, pom_path: str) -> None:
                     f"unexpected origin for reviewed metadata: {filename}",
                 )
             observed.add(filename)
-            line = f"{filename}{separator}{SCM_REMEDIATION_ORIGIN_ID}="
-        rewritten.append(line)
     if target_name not in observed:
         _fail("HARDENED_METADATA", f"missing origin marker: {target_name}")
-    marker.write_text("\n".join(rewritten) + "\n", encoding="iso-8859-1")
-    if marker.read_text(encoding="iso-8859-1") != "\n".join(rewritten) + "\n":
-        _fail("HARDENED_METADATA", f"origin marker postimage differs: {marker}")
 
 
 def _remove_vulnerable_marker_entries(
@@ -730,7 +723,7 @@ def prune_vulnerable_inputs(repository: Path, root: Path = Path(".")) -> None:
             or target_checksum.read_bytes() != postimage_sha1
         ):
             _fail("HARDENED_METADATA", f"postimage differs: {pom_path}")
-        _bind_hardened_metadata_origin(repository, pom_path)
+        _validate_hardened_metadata_origin(repository, pom_path)
     removed: list[str] = []
     removed_sidecars: list[str] = []
     removed_marker_entries: list[str] = []
@@ -778,7 +771,10 @@ def prune_vulnerable_inputs(repository: Path, root: Path = Path(".")) -> None:
         json.dumps(
             {
                 "hardened_metadata": sorted(EXPECTED_HARDENED_METADATA),
-                "hardened_metadata_origin": SCM_REMEDIATION_ORIGIN_ID,
+                "hardened_metadata_manifest_origin": SCM_REMEDIATION_ORIGIN_ID,
+                "hardened_metadata_resolver_origin_ids": sorted(
+                    SCM_ALLOWED_PREIMAGE_ORIGIN_IDS
+                ),
                 "removed_vulnerable_inputs": removed,
                 "removed_vulnerable_sidecars": removed_sidecars,
                 "removed_vulnerable_marker_entries": removed_marker_entries,

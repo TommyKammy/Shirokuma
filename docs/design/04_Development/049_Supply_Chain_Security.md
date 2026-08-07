@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-08-07
-version: "1.37"
+version: "1.38"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -1140,9 +1140,10 @@ The attempt is bound to the protected-main transition after commit
 `ffbb4997420d4b66abf04ec4dfaa579aff2ce965` and to run attempt `1`; reruns and
 later pushes fail closed. Both independent online repositories must receive
 the exact hardened Maven SCM metadata and vulnerable-input pruning before
-packaging. Their two POMs and checksum sidecars are rebound from the Central
-markers to the dedicated `shirokuma-scm-remediation` origin, which is accepted
-only for the four exact hash-bound postimages. Every online and network-none
+packaging. Their two POMs and checksum sidecars retain Maven-resolvable Central
+markers, while the closed manifest separately records the dedicated
+`shirokuma-scm-remediation` provenance only for the four exact hash-bound
+postimages. Every online and network-none
 Trino `clean install` must then revalidate the complete authorized source
 postimages before any resulting repository or server archive is consumed.
 Pruning a blocked JAR also removes all checksum sidecars and matching Maven

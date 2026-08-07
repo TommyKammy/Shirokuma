@@ -118,7 +118,7 @@ class MavenSnapshotTests(unittest.TestCase):
             target.write_bytes(payload)
             if target.suffix == ".pom":
                 (target.parent / "_remote.repositories").write_text(
-                    f"{target.name}>shirokuma-scm-remediation=\n",
+                    f"{target.name}>shirokuma-central=\n",
                     encoding="iso-8859-1",
                 )
         return repository
@@ -471,7 +471,7 @@ class MavenSnapshotTests(unittest.TestCase):
             ):
                 package.build_manifest(repository)
 
-    def test_scm_metadata_remediation_origin_is_path_scoped(self) -> None:
+    def test_scm_remediation_is_not_a_maven_resolver_origin(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repository = self._repository(Path(temporary))
             artifact = repository / "org/example/demo/1.0"
@@ -482,7 +482,23 @@ class MavenSnapshotTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(
                 package.SnapshotError,
-                "unauthorized path",
+                "unknown Maven repository id",
+            ):
+                package.build_manifest(repository)
+
+    def test_scm_metadata_requires_central_resolver_origin(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = self._repository(Path(temporary))
+            for record in package.SCM_METADATA_REMEDIATION["files"]:
+                target = repository / record["path"]
+                if target.suffix == ".pom":
+                    (target.parent / "_remote.repositories").write_text(
+                        f"{target.name}>shirokuma-confluent=\n",
+                        encoding="iso-8859-1",
+                    )
+            with self.assertRaisesRegex(
+                package.SnapshotError,
+                "must retain the Maven Central resolver origin",
             ):
                 package.build_manifest(repository)
 
@@ -491,6 +507,24 @@ class MavenSnapshotTests(unittest.TestCase):
             root = Path(temporary)
             repository = self._repository(root)
             manifest = package.build_manifest(repository)
+            scm_records = {
+                record["path"]: record["repository_origin"]
+                for record in manifest["files"]
+                if record["path"]
+                in {
+                    expected["path"]
+                    for expected in package.SCM_METADATA_REMEDIATION["files"]
+                }
+            }
+            self.assertEqual(
+                scm_records,
+                {
+                    expected["path"]: package.SCM_METADATA_REMEDIATION[
+                        "repository"
+                    ]
+                    for expected in package.SCM_METADATA_REMEDIATION["files"]
+                },
+            )
             unrelated = next(
                 record
                 for record in manifest["files"]

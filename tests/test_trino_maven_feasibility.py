@@ -1665,7 +1665,7 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             ):
                 pom = repository / pom_path
                 self.assertEqual(
-                    f"{pom.name}>{feasibility.SCM_REMEDIATION_ORIGIN_ID}=\n",
+                    f"{pom.name}>shirokuma-central=\n",
                     (pom.parent / "_remote.repositories").read_text(
                         encoding="iso-8859-1"
                     ),
@@ -1679,7 +1679,7 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                 feasibility.EvidenceError,
                 "HARDENED_METADATA",
             ):
-                feasibility._bind_hardened_metadata_origin(
+                feasibility._validate_hardened_metadata_origin(
                     repository,
                     feasibility.SCM_POM_PATH,
                 )

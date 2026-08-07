@@ -31,7 +31,7 @@
     },
     {
       "path": "scripts/package_trino_maven_dependencies.py",
-      "sha256": "29a48cd069c07327cb237be0b21f4bb49c027501142d8996b0f0422c80149dc2"
+      "sha256": "d545e770be51a83f1ee422a54c29128ead5ba9746cfb20f3c5ec503186d45e53"
     },
     {
       "path": "scripts/package_trino_bun_dependencies.py",
@@ -51,7 +51,7 @@
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "a6e532eb531d95f447f0151ddeebeb05ba58abe4e324ee5c6e750ffdf744220c"
+      "sha256": "a93e3b255ab3ed389bf1286f5804ec3bf6d7300cf8588e5c5b90c896d6bacee0"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -95,7 +95,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md",
-      "sha256": "0515ea3d70e9a0efc6f56bba291422de5bd2689e40eb195ab832c43619c861ae"
+      "sha256": "2395b207f35da731345183368d10d1d4bb09461710b1fad1404a690e7887aeb5"
     },
     {
       "path": "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",

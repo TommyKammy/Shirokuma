@@ -165,11 +165,13 @@ ALLOWED_ORIGIN_IDS = {
     PARQUET_SOURCE_REMEDIATION["origin_id"]: PARQUET_SOURCE_REMEDIATION[
         "repository"
     ],
-    SCM_METADATA_REMEDIATION["origin_id"]: SCM_METADATA_REMEDIATION[
-        "repository"
-    ],
 }
-ALLOWED_ORIGINS = frozenset(ALLOWED_ORIGIN_IDS.values())
+ALLOWED_ORIGINS = frozenset(
+    {
+        *ALLOWED_ORIGIN_IDS.values(),
+        SCM_METADATA_REMEDIATION["repository"],
+    }
+)
 SCM_METADATA_REMEDIATION_REQUIRED_RECORDS = {
     PurePosixPath(record["path"]): (record["size"], record["sha256"])
     for record in SCM_METADATA_REMEDIATION["files"]
@@ -632,16 +634,17 @@ def build_manifest(repository: Path) -> dict[str, Any]:
                 "Parquet source-remediation origin is forbidden for "
                 f"an unauthorized path: {relative}"
             )
-        if origin == SCM_METADATA_REMEDIATION["repository"]:
+        if relative in SCM_METADATA_REMEDIATION_REQUIRED_RECORDS:
             expected = SCM_METADATA_REMEDIATION_REQUIRED_RECORDS.get(relative)
-            if expected is None:
+            if origin != ALLOWED_REPOSITORIES["central"]:
                 _fail(
-                    "SCM metadata-remediation origin is forbidden for "
-                    f"an unauthorized path: {relative}"
+                    "SCM metadata remediation must retain the Maven Central "
+                    f"resolver origin: {relative}"
                 )
             if (metadata.st_size, digest) != expected:
                 _fail(f"SCM metadata remediation differs: {relative}")
             scm_remediation_records[relative] = (metadata.st_size, digest)
+            origin = SCM_METADATA_REMEDIATION["repository"]
         if origin == BUN_INPUT["url"] and relative.as_posix() != BUN_INPUT["cache_path"]:
             _fail(f"Bun release origin is forbidden for non-Bun input: {relative}")
         if relative.as_posix() == BUN_INPUT["cache_path"]:
