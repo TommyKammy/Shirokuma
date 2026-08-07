@@ -78,22 +78,17 @@ EXPECTED_WORKFLOW_TRIGGER_BLOCK = """on:
       - .github/workflows/trino-maven-remediation-feasibility.yml
       - bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch
       - bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch
-      - bootstrap/trino/v483/patches/0003-shirokuma-maven-build-plugin-closure.patch
       - bootstrap/trino/v483/maven-policy/.mvn/**
       - bootstrap/trino/v483/maven-scm-manager-plexus-2.2.1-hardened.pom
       - bootstrap/trino/v483/maven-scm-provider-gitexe-2.2.1-hardened.pom
       - bootstrap/trino/v483/settings.xml
       - bootstrap/trino/v483/trusted-build-contract.json
       - docs/design/07_ADR/ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md
-      - docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md
       - docs/design/evidence/trino/run-30693677356-post-adr-0027-pom.xml.gz
       - docs/design/evidence/trino/run-30693677356-proposed-source-overlay.patch
       - docs/design/evidence/trino/run-30693677356-maven-vulnerability-classification.json
       - docs/design/evidence/trino/run-30731801825-maven-feasibility-validation.json
       - docs/design/evidence/trino/run-30731801825-maven-feasibility-artifact-receipt.json
-      - docs/design/evidence/trino/run-30731801825-verify-trino-maven-feasibility.py
-      - docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json
-      - docs/design/evidence/trino/run-31072144404-maven-feasibility-artifact-receipt.json
       - scripts/verify_trino_dependency_publisher.py
       - scripts/verify_trino_maven_feasibility.py
       - tests/test_trino_dependency_publisher.py
@@ -110,7 +105,7 @@ EXPECTED_WORKFLOW_STEPS = (
     "Retain the review-only feasibility inputs and outputs",
 )
 EXPECTED_WORKFLOW_SHA256 = (
-    "1c0cd0b37b6151a691061177c131e0ba991f768740bdb67afe4a244f343020da"
+    "aef04ec24a47fd19ea2859f90cbf8352b6cfde13afafd438218e201e58afeee2"
 )
 EXPECTED_MAVEN_BASEDIR = "/policy"
 EXPECTED_POLICY_SOURCE = "bootstrap/trino/v483/maven-policy/.mvn"
@@ -188,11 +183,6 @@ SCM_MANAGER_POM_POSTIMAGE_SHA256 = (
 )
 SCM_MANAGER_POM_POSTIMAGE_BYTES = 1957
 SCM_MANAGER_POM_POSTIMAGE_SHA1 = b"eb1b7ab169dc923806b0040631a45dc83d0b83e8"
-SCM_REMEDIATION_ORIGIN_ID = "shirokuma-scm-remediation"
-SCM_ALLOWED_PREIMAGE_ORIGIN_IDS = frozenset(
-    {"central", "shirokuma-central", "shirokuma-central-fallback"}
-)
-MAVEN_CHECKSUM_SUFFIXES = (".md5", ".sha1", ".sha256", ".sha512")
 EXPECTED_HARDENED_METADATA = {
     SCM_POM_PATH: {
         "mode": "0644",
@@ -418,6 +408,40 @@ def apply_candidate(root: Path, checkout: Path) -> None:
     root = root.resolve()
     checkout = checkout.resolve()
     publisher.apply_source_overlay(root, checkout)
+    pom = checkout / "pom.xml"
+    if _sha256(pom) != EXPECTED_BASELINE_SHA256:
+        _fail("CANDIDATE_PREIMAGE", "post-ADR-0027 pom.xml hash differs")
+    patch = root / CANDIDATE_PATCH_PATH
+    if (
+        _sha256(patch) != EXPECTED_CANDIDATE_PATCH_SHA256
+        or patch.stat().st_size != EXPECTED_CANDIDATE_PATCH_BYTES
+    ):
+        _fail("CANDIDATE_PATCH", "candidate patch identity differs")
+    publisher._validate_zero_context_patch(patch, {"pom.xml"})
+    command = [
+        "git",
+        "apply",
+        "--unidiff-zero",
+        "--whitespace=error-all",
+        str(patch),
+    ]
+    try:
+        subprocess.run(
+            [*command[:2], "--check", *command[2:]],
+            cwd=checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            command,
+            cwd=checkout,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        _fail("CANDIDATE_APPLY", str(error))
     verify_candidate(checkout)
 
 
@@ -429,44 +453,34 @@ def _expected_candidate_source_postimages() -> dict[str, str]:
             "distribution remediation",
             publisher.EXPECTED_DISTRIBUTION_REMEDIATION,
         ),
-        (
-            "build-plugin remediation",
-            publisher.EXPECTED_BUILD_PLUGIN_REMEDIATION,
-        ),
     ):
         permitted = boundary.get("permitted_paths")
-        preimages = boundary.get("preimages")
         postimages = boundary.get("postimages")
         if (
             not isinstance(permitted, list)
             or not all(isinstance(path, str) for path in permitted)
-            or not isinstance(preimages, dict)
-            or not all(
-                isinstance(path, str) and isinstance(digest, str)
-                for path, digest in preimages.items()
-            )
             or not isinstance(postimages, dict)
             or not all(
                 isinstance(path, str) and isinstance(digest, str)
                 for path, digest in postimages.items()
             )
             or len(permitted) != len(set(permitted))
-            or set(permitted) != set(preimages)
             or set(permitted) != set(postimages)
         ):
             _fail("CANDIDATE_SOURCE", f"{name} path identities differ")
-        for path in set(expected) & set(postimages):
-            if preimages[path] != expected[path]:
-                _fail(
-                    "CANDIDATE_SOURCE",
-                    f"{name} preimage does not continue authorized chain: {path}",
-                )
+        overlap = set(expected) & set(postimages)
+        if overlap:
+            _fail(
+                "CANDIDATE_SOURCE",
+                f"authorized source boundaries overlap: {sorted(overlap)}",
+            )
         expected.update(postimages)
-    if expected.get("pom.xml") != EXPECTED_POSTIMAGE_SHA256:
+    if expected.get("pom.xml") != EXPECTED_BASELINE_SHA256:
         _fail(
             "CANDIDATE_SOURCE",
-            "candidate postimage is not the activated overlay postimage",
+            "candidate preimage is not the authorized overlay postimage",
         )
+    expected["pom.xml"] = EXPECTED_POSTIMAGE_SHA256
     return expected
 
 
@@ -572,90 +586,6 @@ def _verify_hardened_metadata(entries: list[dict[str, Any]]) -> None:
             _fail("HARDENED_METADATA", f"identity differs: {path}")
 
 
-def _validate_hardened_metadata_origin(repository: Path, pom_path: str) -> None:
-    target_name = Path(pom_path).name
-    allowed_names = {target_name, f"{target_name}.sha1"}
-    marker = (repository / pom_path).parent / "_remote.repositories"
-    if (
-        marker.is_symlink()
-        or not marker.is_file()
-        or marker.stat().st_nlink != 1
-        or marker.stat().st_size > 1_048_576
-    ):
-        _fail("HARDENED_METADATA", f"unsafe origin marker: {marker}")
-    try:
-        lines = marker.read_text(encoding="iso-8859-1").splitlines()
-    except OSError as error:
-        _fail("HARDENED_METADATA", f"cannot read origin marker: {error}")
-    observed: set[str] = set()
-    for raw in lines:
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        match = re.fullmatch(r"([^<>=\r\n]+)([<>])([^=\r\n]*)=", line)
-        if match is None:
-            _fail("HARDENED_METADATA", f"invalid origin marker entry: {raw!r}")
-        filename, _separator, repository_id = match.groups()
-        if filename in allowed_names:
-            if filename in observed:
-                _fail(
-                    "HARDENED_METADATA",
-                    f"duplicate origin marker entry: {filename}",
-                )
-            if repository_id not in SCM_ALLOWED_PREIMAGE_ORIGIN_IDS:
-                _fail(
-                    "HARDENED_METADATA",
-                    f"unexpected origin for reviewed metadata: {filename}",
-                )
-            observed.add(filename)
-    if target_name not in observed:
-        _fail("HARDENED_METADATA", f"missing origin marker: {target_name}")
-
-
-def _remove_vulnerable_marker_entries(
-    directory: Path,
-    filenames: set[str],
-) -> list[str]:
-    marker = directory / "_remote.repositories"
-    if not marker.exists() and not marker.is_symlink():
-        return []
-    if (
-        marker.is_symlink()
-        or not marker.is_file()
-        or marker.stat().st_nlink != 1
-        or marker.stat().st_size > 1_048_576
-    ):
-        _fail("VULNERABLE_INPUT", f"unsafe origin marker: {marker}")
-    try:
-        lines = marker.read_text(encoding="iso-8859-1").splitlines()
-    except OSError as error:
-        _fail("VULNERABLE_INPUT", f"cannot read origin marker: {error}")
-    rewritten: list[str] = []
-    removed: list[str] = []
-    for raw in lines:
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            rewritten.append(raw)
-            continue
-        match = re.fullmatch(r"([^<>=\r\n]+)(?:[<>])([^=\r\n]*)=", line)
-        if match is None:
-            _fail("VULNERABLE_INPUT", f"invalid origin marker entry: {raw!r}")
-        filename = match.group(1)
-        if filename in filenames:
-            removed.append(filename)
-            continue
-        rewritten.append(line)
-    postimage = "\n".join(rewritten) + ("\n" if rewritten else "")
-    try:
-        marker.write_text(postimage, encoding="iso-8859-1")
-        observed = marker.read_text(encoding="iso-8859-1")
-    except OSError as error:
-        _fail("VULNERABLE_INPUT", f"cannot update origin marker: {error}")
-    if observed != postimage:
-        _fail("VULNERABLE_INPUT", f"origin marker postimage differs: {marker}")
-    return removed
-
-
 def prune_vulnerable_inputs(repository: Path, root: Path = Path(".")) -> None:
     repository = repository.resolve()
     root = root.resolve()
@@ -723,61 +653,23 @@ def prune_vulnerable_inputs(repository: Path, root: Path = Path(".")) -> None:
             or target_checksum.read_bytes() != postimage_sha1
         ):
             _fail("HARDENED_METADATA", f"postimage differs: {pom_path}")
-        _validate_hardened_metadata_origin(repository, pom_path)
     removed: list[str] = []
-    removed_sidecars: list[str] = []
-    removed_marker_entries: list[str] = []
     for relative in VULNERABLE_INPUTS:
         target = repository / relative
-        candidates = [
-            (target, relative, removed),
-            *[
-                (
-                    target.with_name(f"{target.name}{suffix}"),
-                    f"{relative}{suffix}",
-                    removed_sidecars,
-                )
-                for suffix in MAVEN_CHECKSUM_SUFFIXES
-            ],
-        ]
-        for candidate, candidate_relative, inventory in candidates:
-            if candidate.is_symlink():
-                _fail(
-                    "VULNERABLE_INPUT",
-                    f"unsafe blocked input: {candidate_relative}",
-                )
-            if not candidate.exists():
-                continue
-            status = candidate.stat()
-            if not stat.S_ISREG(status.st_mode) or status.st_nlink != 1:
-                _fail(
-                    "VULNERABLE_INPUT",
-                    f"unsafe blocked input: {candidate_relative}",
-                )
-            candidate.unlink()
-            inventory.append(candidate_relative)
-        marker_names = {
-            target.name,
-            *(f"{target.name}{suffix}" for suffix in MAVEN_CHECKSUM_SUFFIXES),
-        }
-        removed_marker_entries.extend(
-            f"{target.parent.relative_to(repository).as_posix()}/{filename}"
-            for filename in _remove_vulnerable_marker_entries(
-                target.parent,
-                marker_names,
-            )
-        )
+        if target.is_symlink():
+            _fail("VULNERABLE_INPUT", f"unsafe blocked input: {relative}")
+        if not target.exists():
+            continue
+        status = target.stat()
+        if not stat.S_ISREG(status.st_mode) or status.st_nlink != 1:
+            _fail("VULNERABLE_INPUT", f"unsafe blocked input: {relative}")
+        target.unlink()
+        removed.append(relative)
     print(
         json.dumps(
             {
                 "hardened_metadata": sorted(EXPECTED_HARDENED_METADATA),
-                "hardened_metadata_manifest_origin": SCM_REMEDIATION_ORIGIN_ID,
-                "hardened_metadata_resolver_origin_ids": sorted(
-                    SCM_ALLOWED_PREIMAGE_ORIGIN_IDS
-                ),
                 "removed_vulnerable_inputs": removed,
-                "removed_vulnerable_sidecars": removed_sidecars,
-                "removed_vulnerable_marker_entries": removed_marker_entries,
             },
             sort_keys=True,
         )

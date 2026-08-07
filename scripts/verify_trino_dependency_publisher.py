@@ -21,7 +21,9 @@ import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Mapping
+from urllib.error import URLError
 from urllib.parse import quote, urlsplit
+from urllib.request import Request, urlopen
 
 
 CONTRACT_PATH = Path("bootstrap/trino/v483/trusted-build-contract.json")
@@ -34,7 +36,9 @@ BUN_PACKAGER_PATH = Path("scripts/package_trino_bun_dependencies.py")
 BUN_PREPARER_PATH = Path("scripts/prepare_trino_bun_input.py")
 PARQUET_REMEDIATION_PATH = Path("scripts/remediate_parquet_jackson.py")
 VERIFIER_PATH = Path("scripts/verify_trino_dependency_publisher.py")
+FEASIBILITY_VERIFIER_PATH = Path("scripts/verify_trino_maven_feasibility.py")
 TEST_PATH = Path("tests/test_trino_dependency_publisher.py")
+FEASIBILITY_TEST_PATH = Path("tests/test_trino_maven_feasibility.py")
 BUN_TEST_PATH = Path("tests/test_trino_bun_dependencies.py")
 PARQUET_REMEDIATION_TEST_PATH = Path(
     "tests/test_parquet_jackson_remediation.py"
@@ -97,12 +101,32 @@ EXPECTED_AUTHORIZATION = {
         "resident_admission_or_runtime_reconciliation"
     ),
 }
+EXPECTED_PUBLICATION_ATTEMPT = {
+    "event_name": "push",
+    "ref": "refs/heads/main",
+    "before_sha": "ffbb4997420d4b66abf04ec4dfaa579aff2ce965",
+    "run_attempt": "1",
+}
+EXPECTED_INDEPENDENT_REVIEW = {
+    "required_before_merge": True,
+    "required_before_publication": True,
+    "minimum_approved_reviews": 1,
+    "human_user_type": "User",
+    "reviewer_must_differ_from_risk_owner": True,
+    "reviewer_must_differ_from_implementation_author": True,
+    "approval_must_match_final_head_sha": True,
+    "publication_enforcement": "exact_merged_pull_request_review_query",
+}
 SOURCE_OVERLAY_PATH = Path(
     "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch"
 )
 DISTRIBUTION_REMEDIATION_PATH = Path(
     "bootstrap/trino/v483/patches/"
     "0002-shirokuma-iceberg-only-maven-closure.patch"
+)
+BUILD_PLUGIN_REMEDIATION_PATH = Path(
+    "bootstrap/trino/v483/patches/"
+    "0003-shirokuma-maven-build-plugin-closure.patch"
 )
 VEX_PATH = Path(
     "bootstrap/trino/v483/vex/"
@@ -123,6 +147,18 @@ DISTRIBUTION_REMEDIATION_ADR_PATH = Path(
 BLOCKER_ADR_PATH = Path(
     "docs/design/07_ADR/"
     "ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md"
+)
+BUILD_PLUGIN_REMEDIATION_ADR_PATH = Path(
+    "docs/design/07_ADR/"
+    "ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md"
+)
+AUTHORIZED_FEASIBILITY_RECORD_PATH = Path(
+    "docs/design/evidence/trino/"
+    "run-31072144404-maven-feasibility-validation.json"
+)
+AUTHORIZED_FEASIBILITY_RECEIPT_PATH = Path(
+    "docs/design/evidence/trino/"
+    "run-31072144404-maven-feasibility-artifact-receipt.json"
 )
 BLOCKER_CLASSIFICATION_PATH = Path(
     "docs/design/evidence/trino/"
@@ -158,6 +194,10 @@ SUPERSEDED_FEASIBILITY_RECEIPT_PATH = Path(
 )
 FEASIBILITY_VERIFIER_PATH = Path(
     "scripts/verify_trino_maven_feasibility.py"
+)
+FEASIBILITY_RETAINED_VERIFIER_PATH = Path(
+    "docs/design/evidence/trino/"
+    "run-30731801825-verify-trino-maven-feasibility.py"
 )
 EXPECTED_FEASIBILITY_REAUDIT = {
     "artifact_digest": (
@@ -674,6 +714,59 @@ EXPECTED_PARQUET_SOURCE_REMEDIATION = {
     "expires_at": "2026-08-21T22:43:36Z",
     "automatic_renewal": False,
 }
+EXPECTED_SCM_METADATA_REMEDIATION = {
+    "name": "maven-scm-reviewed-metadata-remediation",
+    "repository": "https://github.com/TommyKammy/Shirokuma",
+    "origin_id": "shirokuma-scm-remediation",
+    "files": [
+        {
+            "path": (
+                "org/apache/maven/scm/maven-scm-provider-gitexe/2.2.1/"
+                "maven-scm-provider-gitexe-2.2.1.pom"
+            ),
+            "size": 2_720,
+            "sha256": (
+                "0652487bb3cd532ce6ba9fd841c7f2346c1192b3271996a06ddd50f3052186a6"
+            ),
+        },
+        {
+            "path": (
+                "org/apache/maven/scm/maven-scm-provider-gitexe/2.2.1/"
+                "maven-scm-provider-gitexe-2.2.1.pom.sha1"
+            ),
+            "size": 40,
+            "sha256": (
+                "a9a85b2193053267f68dfacb62896caa532afe49bafa4540134df7a6abed5beb"
+            ),
+        },
+        {
+            "path": (
+                "org/apache/maven/scm/maven-scm-manager-plexus/2.2.1/"
+                "maven-scm-manager-plexus-2.2.1.pom"
+            ),
+            "size": 1_957,
+            "sha256": (
+                "4e7b25d9f3dfd21b874593edf794270888c8ef13bc29394b0da1c1cbefa41c43"
+            ),
+        },
+        {
+            "path": (
+                "org/apache/maven/scm/maven-scm-manager-plexus/2.2.1/"
+                "maven-scm-manager-plexus-2.2.1.pom.sha1"
+            ),
+            "size": 40,
+            "sha256": (
+                "8f04dcac652c18121420956ca62c7efb0166eefaa24400129d2a01433133de63"
+            ),
+        },
+    ],
+    "approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5210182460"
+    ),
+    "expires_at": "2026-08-21T22:43:36Z",
+    "automatic_renewal": False,
+}
 EXPECTED_PARQUET_REMEDIATION_JAR_PATH = (
     "org/apache/parquet/parquet-jackson/1.17.1/"
     "parquet-jackson-1.17.1.jar"
@@ -976,6 +1069,120 @@ EXPECTED_DISTRIBUTION_REMEDIATION = {
         "fail_closed_before_source_execution_dependency_resolution_or_publication"
     ),
 }
+EXPECTED_BUILD_PLUGIN_REMEDIATION = {
+    "state": "approved_exact_maven_build_plugin_closure",
+    "decision_record": BUILD_PLUGIN_REMEDIATION_ADR_PATH.as_posix(),
+    "approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5210182460"
+    ),
+    "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
+    "approved_at": "2026-08-07T00:08:48Z",
+    "expires_at": "2026-08-21T22:43:36Z",
+    "automatic_renewal": False,
+    "risk_owner": "TommyKammy",
+    "implementation_author": "Codex",
+    "reviewer_must_differ_from_implementation_author": True,
+    "reviewer_must_differ_from_risk_owner": True,
+    "approval_must_match_final_head_sha": True,
+    "source_binding": {
+        "repository": EXPECTED_SOURCE_REPOSITORY,
+        "release_tag": EXPECTED_TAG,
+        "commit_sha": EXPECTED_COMMIT,
+        "tree_sha": EXPECTED_TREE,
+    },
+    "patch": {
+        "path": BUILD_PLUGIN_REMEDIATION_PATH.as_posix(),
+        "sha256": (
+            "731e76f296a725d34ea9e226a1815782168cae3890424e69f76a05530afc15be"
+        ),
+    },
+    "apply_arguments": ["--unidiff-zero", "--whitespace=error-all"],
+    "permitted_paths": ["pom.xml"],
+    "preimages": {
+        "pom.xml": (
+            "8d342215a3c748f7965f0a82e847cab13587b94171d9d1422922b665475109c1"
+        ),
+    },
+    "postimages": {
+        "pom.xml": (
+            "871c6b21cf9fc70c455d21b64d24dd4501a8b5943242418edc2b2f5cfe14fab8"
+        ),
+    },
+    "replacement_inputs": [
+        (
+            "org/apache/velocity/velocity-engine-core/2.4.1/"
+            "velocity-engine-core-2.4.1.jar"
+        ),
+        (
+            "org/codehaus/plexus/plexus-utils/4.0.3/"
+            "plexus-utils-4.0.3.jar"
+        ),
+    ],
+    "removed_build_extension": (
+        "io.github.gitflow-incremental-builder:"
+        "gitflow-incremental-builder:4.6.0"
+    ),
+    "hardened_maven_metadata": [
+        {
+            "path": (
+                "org/apache/maven/scm/maven-scm-provider-gitexe/2.2.1/"
+                "maven-scm-provider-gitexe-2.2.1.pom"
+            ),
+            "sha256": (
+                "0652487bb3cd532ce6ba9fd841c7f2346c1192b3271996a06ddd50f3052186a6"
+            ),
+            "sha1": "a8630355e52d9c81dbd6ec117820bb58b6355f4a",
+        },
+        {
+            "path": (
+                "org/apache/maven/scm/maven-scm-manager-plexus/2.2.1/"
+                "maven-scm-manager-plexus-2.2.1.pom"
+            ),
+            "sha256": (
+                "4e7b25d9f3dfd21b874593edf794270888c8ef13bc29394b0da1c1cbefa41c43"
+            ),
+            "sha1": "eb1b7ab169dc923806b0040631a45dc83d0b83e8",
+        },
+    ],
+    "selected_projects": [
+        ":trino-server",
+        ":trino-server-core",
+        ":trino-server-main",
+        ":trino-hdfs",
+        ":trino-iceberg",
+    ],
+    "feasibility_evidence": {
+        "workflow_run": (
+            "https://github.com/TommyKammy/Shirokuma/actions/runs/31072144404"
+        ),
+        "reviewed_commit": "864da7ea3eb93c976691836630cb91775d5074af",
+        "workflow_execution_commit": (
+            "f404219ce0a189336dbcc2a48fd881064edc3780"
+        ),
+        "artifact_id": 8956062532,
+        "artifact_digest": (
+            "sha256:46c1ea610e0cb24df43b93cd954c05222573562f9b1677d3d8f7fd0ba65814da"
+        ),
+        "artifact_expires_at": "2026-09-05T04:48:07Z",
+        "validation_record": AUTHORIZED_FEASIBILITY_RECORD_PATH.as_posix(),
+        "artifact_receipt": AUTHORIZED_FEASIBILITY_RECEIPT_PATH.as_posix(),
+        "archive_sha256": (
+            "b12debf4e760e3042fe34bd9946c2ed96d0ead4eb7959d8491fe63f3240c208a"
+        ),
+        "archive_bytes": 242_729_683,
+        "manifest_sha256": (
+            "6667d7b8275c0b24ec4f8ec7070173a57a888ab425d8697e0b261f49fc347ea4"
+        ),
+        "manifest_file_count": 5_036,
+        "independent_reaudit": "passed_complete_hardened_feasibility",
+    },
+    "high_zero_critical_zero_required": True,
+    "vulnerability_waiver_permitted": False,
+    "expiry_action": (
+        "fail_closed_before_source_execution_dependency_resolution_or_publication"
+    ),
+}
 EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION = {
     "status": "active",
     "authorization_type": (
@@ -1109,6 +1316,38 @@ EXPECTED_ADMISSION_DISTRIBUTION_REMEDIATION_AUTHORIZATION = {
             "independent_reconstructions_required",
             "network_none_rebuilds_required",
             "byte_identical_outputs_required",
+            "high_zero_critical_zero_required",
+            "vulnerability_waiver_permitted",
+            "expiry_action",
+        )
+    },
+}
+EXPECTED_ADMISSION_BUILD_PLUGIN_REMEDIATION_AUTHORIZATION = {
+    "status": "active",
+    "authorization_type": "time_boxed_exact_maven_build_plugin_closure",
+    **{
+        key: EXPECTED_BUILD_PLUGIN_REMEDIATION[key]
+        for key in (
+            "decision_record",
+            "approval_record",
+            "issue",
+            "approved_at",
+            "expires_at",
+            "automatic_renewal",
+            "risk_owner",
+            "implementation_author",
+            "reviewer_must_differ_from_implementation_author",
+            "reviewer_must_differ_from_risk_owner",
+            "approval_must_match_final_head_sha",
+            "source_binding",
+            "patch",
+            "permitted_paths",
+            "preimages",
+            "postimages",
+            "replacement_inputs",
+            "removed_build_extension",
+            "selected_projects",
+            "feasibility_evidence",
             "high_zero_critical_zero_required",
             "vulnerability_waiver_permitted",
             "expiry_action",
@@ -1831,6 +2070,125 @@ def _validate_distribution_remediation_contract(
         _fail("DISTRIBUTION_REMEDIATION_EXPIRED", expires.isoformat())
 
 
+def _validate_build_plugin_remediation_contract(
+    root: Path,
+    contract: Mapping[str, Any],
+    *,
+    at: dt.datetime | None,
+) -> None:
+    remediation = contract.get("source", {}).get("build_plugin_remediation")
+    if not _matches_exact_json(remediation, EXPECTED_BUILD_PLUGIN_REMEDIATION):
+        _fail(
+            "BUILD_PLUGIN_REMEDIATION",
+            "exact Maven build-plugin remediation differs",
+        )
+    patch = EXPECTED_BUILD_PLUGIN_REMEDIATION["patch"]
+    patch_path = root / patch["path"]
+    if _sha256(patch_path) != patch["sha256"]:
+        _fail("BUILD_PLUGIN_REMEDIATION", "source patch SHA-256 differs")
+    _validate_zero_context_patch(
+        patch_path,
+        set(EXPECTED_BUILD_PLUGIN_REMEDIATION["permitted_paths"]),
+    )
+    expires = _parse_time(EXPECTED_BUILD_PLUGIN_REMEDIATION["expires_at"])
+    authorization_expires = _parse_time(contract["authorization"]["expires_at"])
+    if expires > authorization_expires:
+        _fail(
+            "BUILD_PLUGIN_REMEDIATION",
+            "build-plugin remediation outlives source authorization",
+        )
+    if at is not None and at >= expires:
+        _fail("BUILD_PLUGIN_REMEDIATION_EXPIRED", expires.isoformat())
+
+    evidence = EXPECTED_BUILD_PLUGIN_REMEDIATION["feasibility_evidence"]
+    validation = _load_json(root / AUTHORIZED_FEASIBILITY_RECORD_PATH)
+    if not _matches_exact_json(
+        {
+            "boundary": validation.get("boundary"),
+            "offline_inputs": validation.get("offline_inputs"),
+            "result": validation.get("result"),
+            "subject": validation.get("subject"),
+        },
+        {
+            "boundary": {
+                "candidate_patch_sha256": patch["sha256"],
+                "candidate_postimage_sha256": (
+                    EXPECTED_BUILD_PLUGIN_REMEDIATION["postimages"]["pom.xml"]
+                ),
+                "dependency_artifact_produced": False,
+                "image_or_runtime_change_permitted": False,
+                "publication_permitted": False,
+                "source_remediation_activated": False,
+                "state": "preauthorization_feasibility_only",
+            },
+            "offline_inputs": validation.get("offline_inputs"),
+            "result": {
+                "authorization_use_permitted": False,
+                "fresh_closure_sbom_and_scan_not_run": True,
+                "full_clean_install_not_run": True,
+                "owner_decision_still_required": True,
+                "status": "passed",
+            },
+            "subject": {
+                "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
+                "reviewed_commit": evidence["reviewed_commit"],
+                "run_attempt": 1,
+                "run_id": 31072144404,
+                "workflow": "Trino 483 Maven remediation feasibility",
+                "workflow_execution_commit": evidence[
+                    "workflow_execution_commit"
+                ],
+                "workflow_ref": (
+                    "TommyKammy/Shirokuma/.github/workflows/"
+                    "trino-maven-remediation-feasibility.yml@refs/pull/142/merge"
+                ),
+                "workflow_run": evidence["workflow_run"],
+            },
+        },
+    ):
+        _fail(
+            "BUILD_PLUGIN_REMEDIATION_EVIDENCE",
+            "retained validation record differs",
+        )
+    offline_inputs = validation.get("offline_inputs", {})
+    if (
+        offline_inputs.get("archive", {}).get("sha256")
+        != evidence["archive_sha256"]
+        or offline_inputs.get("archive", {}).get("bytes")
+        != evidence["archive_bytes"]
+        or offline_inputs.get("manifest", {}).get("sha256")
+        != evidence["manifest_sha256"]
+        or offline_inputs.get("file_count")
+        != evidence["manifest_file_count"]
+        or offline_inputs.get("reproducible_inputs_retained") is not True
+    ):
+        _fail(
+            "BUILD_PLUGIN_REMEDIATION_EVIDENCE",
+            "retained archive identity differs",
+        )
+    receipt = _load_json(root / AUTHORIZED_FEASIBILITY_RECEIPT_PATH)
+    if (
+        receipt.get("artifact", {}).get("id") != evidence["artifact_id"]
+        or receipt.get("artifact", {}).get("digest")
+        != evidence["artifact_digest"]
+        or receipt.get("artifact", {}).get("expires_at")
+        != evidence["artifact_expires_at"]
+        or receipt.get("boundary", {}).get("authorization_use_permitted")
+        is not True
+        or receipt.get("boundary", {}).get("owner_decision_record")
+        != EXPECTED_BUILD_PLUGIN_REMEDIATION["approval_record"]
+        or receipt.get("independent_reaudit", {}).get("result")
+        != evidence["independent_reaudit"]
+        or receipt.get("validation_record", {}).get("path")
+        != AUTHORIZED_FEASIBILITY_RECORD_PATH.as_posix()
+        or receipt.get("workflow_run") != evidence["workflow_run"]
+    ):
+        _fail(
+            "BUILD_PLUGIN_REMEDIATION_EVIDENCE",
+            "independent artifact receipt differs",
+        )
+
+
 def _validate_zero_context_patch(
     path: Path,
     permitted_paths: set[str],
@@ -2158,7 +2516,7 @@ def _validate_blocker_evidence(
             receipt.get("independent_reaudit"),
             EXPECTED_FEASIBILITY_REAUDIT,
         )
-        or _sha256(root / FEASIBILITY_VERIFIER_PATH)
+        or _sha256(root / FEASIBILITY_RETAINED_VERIFIER_PATH)
         != EXPECTED_FEASIBILITY_REAUDIT["verifier"]["sha256"]
         or validation.get("result", {}).get("authorization_use_permitted")
         is not False
@@ -2315,49 +2673,23 @@ def apply_source_overlay(root: Path, checkout: Path) -> None:
     _validate_authorization(contract, at=now)
     _validate_source_overlay_contract(root, contract, at=now)
     _validate_distribution_remediation_contract(root, contract, at=now)
+    _validate_build_plugin_remediation_contract(root, contract, at=now)
     overlay = EXPECTED_SOURCE_OVERLAY
     distribution = EXPECTED_DISTRIBUTION_REMEDIATION
+    build_plugin = EXPECTED_BUILD_PLUGIN_REMEDIATION
+    boundaries = (overlay, distribution, build_plugin)
     permitted: set[str] = set()
-    for boundary in (overlay, distribution):
+    for boundary in boundaries:
         boundary_permitted = set(boundary["permitted_paths"])
         if boundary_permitted != set(
             boundary["preimages"]
         ) or boundary_permitted != set(boundary["postimages"]):
             _fail("SOURCE_OVERLAY", "preimage/postimage path sets differ")
-        if permitted & boundary_permitted:
-            _fail("SOURCE_OVERLAY", "overlay path boundaries overlap")
         permitted |= boundary_permitted
-        for relative, expected in boundary["preimages"].items():
-            payload = _read_reviewed_regular_file(
-                checkout / relative,
-                code="SOURCE_OVERLAY_PREIMAGE",
-            )
-            if hashlib.sha256(payload).hexdigest() != expected:
-                _fail("SOURCE_OVERLAY_PREIMAGE", relative)
     _validate_react_router_import_inventory(checkout)
     try:
-        for boundary in (overlay, distribution):
-            patch = root / boundary["patch"]["path"]
-            command = [
-                "git",
-                "apply",
-                *boundary["apply_arguments"],
-                str(patch),
-            ]
-            subprocess.run(
-                [*command[:2], "--check", *command[2:]],
-                cwd=checkout,
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            subprocess.run(
-                command,
-                cwd=checkout,
-                check=True,
-                capture_output=True,
-                text=True,
-            )
+        for boundary in boundaries:
+            _apply_source_overlay_boundary(root, checkout, boundary)
         changed = set(
             subprocess.run(
                 [
@@ -2388,15 +2720,49 @@ def apply_source_overlay(root: Path, checkout: Path) -> None:
             "SOURCE_OVERLAY_APPLY",
             f"changed={sorted(changed)!r}, untracked={untracked!r}",
         )
-    for boundary in (overlay, distribution):
-        for relative, expected in boundary["postimages"].items():
-            payload = _read_reviewed_regular_file(
-                checkout / relative,
-                code="SOURCE_OVERLAY_POSTIMAGE",
-            )
-            if hashlib.sha256(payload).hexdigest() != expected:
-                _fail("SOURCE_OVERLAY_POSTIMAGE", relative)
     _validate_react_router_import_inventory(checkout)
+
+
+def _apply_source_overlay_boundary(
+    root: Path,
+    checkout: Path,
+    boundary: Mapping[str, Any],
+) -> None:
+    for relative, expected in boundary["preimages"].items():
+        payload = _read_reviewed_regular_file(
+            checkout / relative,
+            code="SOURCE_OVERLAY_PREIMAGE",
+        )
+        if hashlib.sha256(payload).hexdigest() != expected:
+            _fail("SOURCE_OVERLAY_PREIMAGE", relative)
+    patch = root / boundary["patch"]["path"]
+    command = [
+        "git",
+        "apply",
+        *boundary["apply_arguments"],
+        str(patch),
+    ]
+    subprocess.run(
+        [*command[:2], "--check", *command[2:]],
+        cwd=checkout,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        command,
+        cwd=checkout,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    for relative, expected in boundary["postimages"].items():
+        payload = _read_reviewed_regular_file(
+            checkout / relative,
+            code="SOURCE_OVERLAY_POSTIMAGE",
+        )
+        if hashlib.sha256(payload).hexdigest() != expected:
+            _fail("SOURCE_OVERLAY_POSTIMAGE", relative)
 
 
 def stage_bun_scan_input(checkout: Path, output: Path) -> None:
@@ -3701,6 +4067,197 @@ def authorize_use(
             "AUTHORIZATION",
             f"unrecognized validation point: {validation_point}",
         )
+    if validation_point == "before_dependency_publication":
+        _validate_publication_attempt(contract, environment=os.environ)
+
+
+def _validate_publication_attempt(
+    contract: Mapping[str, Any],
+    *,
+    environment: Mapping[str, str] | None = None,
+) -> None:
+    publication = contract.get("publication")
+    if not isinstance(publication, Mapping) or not _matches_exact_json(
+        publication.get("authorized_attempt"),
+        EXPECTED_PUBLICATION_ATTEMPT,
+    ):
+        _fail(
+            "PUBLICATION_ATTEMPT",
+            "single authorized publication attempt binding differs",
+        )
+    if environment is None:
+        return
+    observed = {
+        "event_name": environment.get("GITHUB_EVENT_NAME"),
+        "ref": environment.get("GITHUB_REF"),
+        "before_sha": environment.get("GITHUB_EVENT_BEFORE"),
+        "run_attempt": environment.get("GITHUB_RUN_ATTEMPT"),
+    }
+    if not _matches_exact_json(observed, EXPECTED_PUBLICATION_ATTEMPT):
+        _fail(
+            "PUBLICATION_ATTEMPT",
+            f"workflow attempt is not authorized: {observed!r}",
+        )
+
+
+def _validate_independent_review_contract(contract: Mapping[str, Any]) -> None:
+    publication = contract.get("publication")
+    if not isinstance(publication, Mapping) or not _matches_exact_json(
+        publication.get("independent_review"),
+        EXPECTED_INDEPENDENT_REVIEW,
+    ):
+        _fail(
+            "INDEPENDENT_REVIEW",
+            "independent human review contract differs",
+        )
+
+
+def _github_api_list(url: str, *, token: str) -> list[Any]:
+    if not token:
+        _fail("INDEPENDENT_REVIEW", "GitHub token is missing")
+    request = Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "shirokuma-independent-review-verifier",
+        },
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            if getattr(response, "status", None) != 200:
+                _fail(
+                    "INDEPENDENT_REVIEW",
+                    f"GitHub API status differs: {response.status}",
+                )
+            payload = response.read(1_048_577)
+    except URLError as error:
+        _fail("INDEPENDENT_REVIEW", f"GitHub API request failed: {error}")
+    if len(payload) > 1_048_576:
+        _fail("INDEPENDENT_REVIEW", "GitHub API response is too large")
+    try:
+        result = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        _fail("INDEPENDENT_REVIEW", f"GitHub API JSON is invalid: {error}")
+    if not isinstance(result, list):
+        _fail("INDEPENDENT_REVIEW", "GitHub API response must be a list")
+    if len(result) >= 100:
+        _fail("INDEPENDENT_REVIEW", "GitHub API result may be truncated")
+    return result
+
+
+def _select_independent_review(
+    contract: Mapping[str, Any],
+    pulls: list[Any],
+    reviews: list[Any],
+    *,
+    commit: str,
+) -> dict[str, Any]:
+    _validate_independent_review_contract(contract)
+    if re.fullmatch(r"[0-9a-f]{40}", commit) is None:
+        _fail("INDEPENDENT_REVIEW", "publisher commit is not an exact SHA")
+    matching_pulls = [
+        pull
+        for pull in pulls
+        if isinstance(pull, Mapping)
+        and pull.get("state") == "closed"
+        and pull.get("merged_at")
+        and pull.get("merge_commit_sha") == commit
+        and isinstance(pull.get("base"), Mapping)
+        and pull["base"].get("ref") == "main"
+        and isinstance(pull.get("number"), int)
+    ]
+    if len(matching_pulls) != 1:
+        _fail(
+            "INDEPENDENT_REVIEW",
+            f"exact merged pull request count differs: {len(matching_pulls)}",
+        )
+    pull = matching_pulls[0]
+    head = pull.get("head")
+    final_head = head.get("sha") if isinstance(head, Mapping) else None
+    if not isinstance(final_head, str) or re.fullmatch(
+        r"[0-9a-f]{40}", final_head
+    ) is None:
+        _fail("INDEPENDENT_REVIEW", "final pull request head is not exact")
+
+    latest_by_reviewer: dict[str, Mapping[str, Any]] = {}
+    for review in reviews:
+        if not isinstance(review, Mapping):
+            _fail("INDEPENDENT_REVIEW", "review entry must be an object")
+        user = review.get("user")
+        if not isinstance(user, Mapping) or not isinstance(user.get("login"), str):
+            _fail("INDEPENDENT_REVIEW", "review user identity is missing")
+        if review.get("state") not in {"COMMENTED", "PENDING"}:
+            latest_by_reviewer[user["login"].casefold()] = review
+
+    remediation = contract.get("source", {}).get("build_plugin_remediation", {})
+    risk_owner = str(remediation.get("risk_owner", "")).casefold()
+    implementation_author = str(
+        remediation.get("implementation_author", "")
+    ).casefold()
+    qualified = []
+    for login, review in latest_by_reviewer.items():
+        user = review["user"]
+        if (
+            review.get("state") == "APPROVED"
+            and user.get("type") == EXPECTED_INDEPENDENT_REVIEW["human_user_type"]
+            and login not in {risk_owner, implementation_author}
+            and isinstance(review.get("id"), int)
+            and review.get("commit_id") == final_head
+        ):
+            qualified.append(review)
+    if len(qualified) < EXPECTED_INDEPENDENT_REVIEW["minimum_approved_reviews"]:
+        _fail(
+            "INDEPENDENT_REVIEW",
+            "no current human approval differs from the risk owner and author",
+        )
+    selected = sorted(qualified, key=lambda review: int(review["id"]))[0]
+    return {
+        "pull_request": pull["number"],
+        "review_id": selected["id"],
+        "reviewer": selected["user"]["login"],
+        "reviewed_head": final_head,
+        "commit": commit,
+    }
+
+
+def verify_independent_review(
+    root: Path,
+    *,
+    repository: str,
+    commit: str,
+    token: str,
+) -> None:
+    root = root.resolve()
+    if repository != "TommyKammy/Shirokuma":
+        _fail("INDEPENDENT_REVIEW", "repository identity differs")
+    contract = _load_json(root / CONTRACT_PATH)
+    base = "https://api.github.com/repos/TommyKammy/Shirokuma"
+    pulls = _github_api_list(
+        f"{base}/commits/{quote(commit, safe='')}/pulls?per_page=100",
+        token=token,
+    )
+    matching = [
+        pull for pull in pulls if isinstance(pull, Mapping) and pull.get("number")
+    ]
+    if len(matching) != 1 or not isinstance(matching[0]["number"], int):
+        _fail("INDEPENDENT_REVIEW", "associated pull request is ambiguous")
+    reviews = _github_api_list(
+        f"{base}/pulls/{matching[0]['number']}/reviews?per_page=100",
+        token=token,
+    )
+    print(
+        json.dumps(
+            _select_independent_review(
+                contract,
+                pulls,
+                reviews,
+                commit=commit,
+            ),
+            sort_keys=True,
+        )
+    )
 
 
 def _workflow_jobs_and_steps(workflow: str) -> tuple[list[str], dict[str, list[str]]]:
@@ -3765,7 +4322,7 @@ def _offline_maven_command(workflow: str) -> str:
         workflow,
         (
             "            python3 scripts/"
-            "package_trino_bun_dependencies.py verify-cache \\"
+            "verify_trino_maven_feasibility.py verify-candidate \\"
         ),
         code="WORKFLOW_OFFLINE_COMMAND",
         network_none=True,
@@ -3930,6 +4487,8 @@ def audit_builder_settings(path: Path) -> None:
 
 
 def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
+    _validate_publication_attempt(contract)
+    _validate_independent_review_contract(contract)
     jobs, steps = _workflow_jobs_and_steps(workflow)
     lines = workflow.splitlines()
     if jobs != ["validate", "publish"] or steps != EXPECTED_STEPS:
@@ -3942,6 +4501,20 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         or "workflow_dispatch" in workflow
     ):
         _fail("WORKFLOW_TRIGGER", "only PR validation and main push are allowed")
+    if (
+        workflow.count("GITHUB_EVENT_BEFORE: ${{ github.event.before }}") != 1
+        or workflow.count(
+            "--validation-point before_dependency_publication"
+        )
+        != 2
+        or workflow.count("GITHUB_TOKEN: ${{ github.token }}") != 1
+        or workflow.count("verify-independent-review --root .") != 1
+        or lines.count("      pull-requests: read") != 1
+    ):
+        _fail(
+            "WORKFLOW_PUBLICATION_ATTEMPT",
+            "main publication must consume the single exact push attempt",
+        )
     if (
         workflow.count(EXPECTED_PR_SOURCE_CONDITION) != 3
         or workflow.count(EXPECTED_PR_BUN_INPUT_BLOCK) != 1
@@ -3988,16 +4561,22 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         BUN_PREPARER_PATH,
         PARQUET_REMEDIATION_PATH,
         VERIFIER_PATH,
+        FEASIBILITY_VERIFIER_PATH,
         TEST_PATH,
+        FEASIBILITY_TEST_PATH,
         BUN_TEST_PATH,
         PARQUET_REMEDIATION_TEST_PATH,
         SOURCE_OVERLAY_PATH,
         DISTRIBUTION_REMEDIATION_PATH,
+        BUILD_PLUGIN_REMEDIATION_PATH,
         VEX_PATH,
         OVERLAY_ADR_PATH,
         PARQUET_REMEDIATION_ADR_PATH,
         DISTRIBUTION_REMEDIATION_ADR_PATH,
         BLOCKER_ADR_PATH,
+        BUILD_PLUGIN_REMEDIATION_ADR_PATH,
+        AUTHORIZED_FEASIBILITY_RECORD_PATH,
+        AUTHORIZED_FEASIBILITY_RECEIPT_PATH,
         Path("Makefile"),
     ):
         if lines.count(f"      - {path.as_posix()}") != 2:
@@ -4028,6 +4607,10 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "--workdir /policy",
         "--file /workspace/pom.xml",
         "python3 scripts/verify_trino_dependency_publisher.py authorize",
+        "python3 scripts/verify_trino_dependency_publisher.py authorize-use",
+        "verify-independent-review --root .",
+        "python3 scripts/verify_trino_maven_feasibility.py verify-candidate",
+        "python3 scripts/verify_trino_maven_feasibility.py prune-vulnerable-inputs",
         "publication-status --root .",
         (
             "Trino dependency publication is blocked pending "
@@ -4228,6 +4811,24 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
             "WORKFLOW_REACTOR_PRUNE",
             "each fresh repository must use the bounded reactor-output pruner",
         )
+    if (
+        workflow.count(
+            "python3 scripts/verify_trino_maven_feasibility.py verify-candidate"
+        )
+        != 4
+        or workflow.count(
+            "python3 scripts/verify_trino_maven_feasibility.py "
+            "prune-vulnerable-inputs"
+        )
+        != 2
+    ):
+        _fail(
+            "WORKFLOW_REMEDIATION_BOUNDARY",
+            (
+                "each Trino build must revalidate source postimages and each "
+                "online repository must apply the hardened metadata pruning"
+            ),
+        )
     for forbidden in (
         "./mvnw",
         "maven-wrapper.jar",
@@ -4422,14 +5023,14 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
     publication = contract.get("publication", {})
     if (
-        publication.get("permitted") is not False
+        publication.get("permitted") is not True
         or publication.get("workflow_present") is not True
         or publication.get("workflow") != WORKFLOW_PATH.as_posix()
         or publication.get("allowed_ref") != "refs/heads/main"
         or publication.get("artifact_role") != "review_pending_dependency_evidence"
         or publication.get("retire_in_evidence_review_pr") is not True
         or publication.get("pull_request_behavior")
-        != "static_read_only_contract_validation"
+        != "static_and_authorized_source_overlay_and_remediation_validation_without_publication"
         or not _matches_exact_json(
             publication.get("evidence_review_inventory_policy"),
             {
@@ -4439,7 +5040,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
             },
         )
     ):
-        _fail("PUBLICATION", "blocked publication lifecycle differs")
+        _fail("PUBLICATION", "authorized publication lifecycle differs")
     failed = contract.get("failed_publications")
     if (
         not isinstance(failed, list)
@@ -4495,11 +5096,15 @@ def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
         PARQUET_REMEDIATION_TEST_PATH,
         SOURCE_OVERLAY_PATH,
         DISTRIBUTION_REMEDIATION_PATH,
+        BUILD_PLUGIN_REMEDIATION_PATH,
         VEX_PATH,
         OVERLAY_ADR_PATH,
         PARQUET_REMEDIATION_ADR_PATH,
         DISTRIBUTION_REMEDIATION_ADR_PATH,
         BLOCKER_ADR_PATH,
+        BUILD_PLUGIN_REMEDIATION_ADR_PATH,
+        AUTHORIZED_FEASIBILITY_RECORD_PATH,
+        AUTHORIZED_FEASIBILITY_RECEIPT_PATH,
         BLOCKER_CLASSIFICATION_PATH,
         BLOCKER_HARDENED_SCM_POM_PATH,
         BLOCKER_HARDENED_SCM_MANAGER_POM_PATH,
@@ -4528,15 +5133,16 @@ def audit(root: Path) -> None:
     _validate_source_overlay_contract(root, contract, at=None)
     _validate_source_remediation_contract(contract, at=None)
     _validate_distribution_remediation_contract(root, contract, at=None)
+    _validate_build_plugin_remediation_contract(root, contract, at=None)
     _validate_blocker_evidence(root)
     lifecycle = contract.get("lifecycle", {})
     if not _matches_exact_json(
         lifecycle,
         {
-            "state": "source_remediation_authorization_pending",
+            "state": "dependency_snapshot_publication_pending",
             "contract_only": False,
             "dependency_artifact_present": False,
-            "publication_workflow_permitted": False,
+            "publication_workflow_permitted": True,
             "image_publication_permitted": False,
             "resident_admission_permitted": False,
             "runtime_reconciliation_permitted": False,
@@ -4587,6 +5193,7 @@ def audit(root: Path) -> None:
             [
                 EXPECTED_BUN_INPUT,
                 EXPECTED_PARQUET_SOURCE_REMEDIATION,
+                EXPECTED_SCM_METADATA_REMEDIATION,
             ],
         )
         or not _matches_exact_json(
@@ -4667,7 +5274,11 @@ def audit(root: Path) -> None:
             admission.get("distribution_remediation_authorization"),
             EXPECTED_ADMISSION_DISTRIBUTION_REMEDIATION_AUTHORIZATION,
         )
-        or repository_state.get("publication_workflow_permitted") is not False
+        or not _matches_exact_json(
+            admission.get("build_plugin_remediation_authorization"),
+            EXPECTED_ADMISSION_BUILD_PLUGIN_REMEDIATION_AUTHORIZATION,
+        )
+        or repository_state.get("publication_workflow_permitted") is not True
         or repository_state.get("dependency_artifact_present") is not False
         or repository_state.get("resident_ledger_permitted") is not False
         or repository_state.get("runtime_manifests_permitted") is not False
@@ -4931,6 +5542,10 @@ def _parser() -> argparse.ArgumentParser:
     authorize_use_parser.add_argument("--root", type=Path, default=Path("."))
     authorize_use_parser.add_argument("--validation-point", required=True)
     authorize_use_parser.add_argument("--at")
+    independent_review = commands.add_parser("verify-independent-review")
+    independent_review.add_argument("--root", type=Path, default=Path("."))
+    independent_review.add_argument("--repository", required=True)
+    independent_review.add_argument("--commit", required=True)
     publication_status = commands.add_parser("publication-status")
     publication_status.add_argument("--root", type=Path, default=Path("."))
     source = commands.add_parser("audit-source")
@@ -5017,6 +5632,13 @@ def main() -> int:
                 args.root.resolve(),
                 validation_point=args.validation_point,
                 at=_parse_time(args.at) if args.at else None,
+            )
+        elif args.command == "verify-independent-review":
+            verify_independent_review(
+                args.root.resolve(),
+                repository=args.repository,
+                commit=args.commit,
+                token=os.environ.get("GITHUB_TOKEN", ""),
             )
         elif args.command == "publication-status":
             root = args.root.resolve()

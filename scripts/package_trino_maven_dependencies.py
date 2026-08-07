@@ -98,7 +98,64 @@ PARQUET_SOURCE_REMEDIATION = {
     "expires_at": "2026-08-21T22:43:36Z",
     "automatic_renewal": False,
 }
-EXTERNAL_INPUTS = [BUN_INPUT, PARQUET_SOURCE_REMEDIATION]
+SCM_METADATA_REMEDIATION = {
+    "name": "maven-scm-reviewed-metadata-remediation",
+    "repository": "https://github.com/TommyKammy/Shirokuma",
+    "origin_id": "shirokuma-scm-remediation",
+    "files": [
+        {
+            "path": (
+                "org/apache/maven/scm/maven-scm-provider-gitexe/2.2.1/"
+                "maven-scm-provider-gitexe-2.2.1.pom"
+            ),
+            "size": 2_720,
+            "sha256": (
+                "0652487bb3cd532ce6ba9fd841c7f2346c1192b3271996a06ddd50f3052186a6"
+            ),
+        },
+        {
+            "path": (
+                "org/apache/maven/scm/maven-scm-provider-gitexe/2.2.1/"
+                "maven-scm-provider-gitexe-2.2.1.pom.sha1"
+            ),
+            "size": 40,
+            "sha256": (
+                "a9a85b2193053267f68dfacb62896caa532afe49bafa4540134df7a6abed5beb"
+            ),
+        },
+        {
+            "path": (
+                "org/apache/maven/scm/maven-scm-manager-plexus/2.2.1/"
+                "maven-scm-manager-plexus-2.2.1.pom"
+            ),
+            "size": 1_957,
+            "sha256": (
+                "4e7b25d9f3dfd21b874593edf794270888c8ef13bc29394b0da1c1cbefa41c43"
+            ),
+        },
+        {
+            "path": (
+                "org/apache/maven/scm/maven-scm-manager-plexus/2.2.1/"
+                "maven-scm-manager-plexus-2.2.1.pom.sha1"
+            ),
+            "size": 40,
+            "sha256": (
+                "8f04dcac652c18121420956ca62c7efb0166eefaa24400129d2a01433133de63"
+            ),
+        },
+    ],
+    "approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5210182460"
+    ),
+    "expires_at": "2026-08-21T22:43:36Z",
+    "automatic_renewal": False,
+}
+EXTERNAL_INPUTS = [
+    BUN_INPUT,
+    PARQUET_SOURCE_REMEDIATION,
+    SCM_METADATA_REMEDIATION,
+]
 ALLOWED_ORIGIN_IDS = {
     **ALLOWED_REPOSITORIES,
     "shirokuma-central": ALLOWED_REPOSITORIES["central"],
@@ -109,7 +166,16 @@ ALLOWED_ORIGIN_IDS = {
         "repository"
     ],
 }
-ALLOWED_ORIGINS = frozenset(ALLOWED_ORIGIN_IDS.values())
+ALLOWED_ORIGINS = frozenset(
+    {
+        *ALLOWED_ORIGIN_IDS.values(),
+        SCM_METADATA_REMEDIATION["repository"],
+    }
+)
+SCM_METADATA_REMEDIATION_REQUIRED_RECORDS = {
+    PurePosixPath(record["path"]): (record["size"], record["sha256"])
+    for record in SCM_METADATA_REMEDIATION["files"]
+}
 TRINO_GROUP_PREFIX = ("io", "trino")
 TRINO_BUILD_EXTENSION_PREFIX = (
     "io",
@@ -455,6 +521,13 @@ def _validate_parquet_remediation_records(
         )
 
 
+def _validate_scm_metadata_remediation_records(
+    records: Mapping[PurePosixPath, tuple[int, str]],
+) -> None:
+    if records != SCM_METADATA_REMEDIATION_REQUIRED_RECORDS:
+        _fail("exact SCM metadata remediation set differs")
+
+
 def prune_reactor_outputs(repository: Path) -> None:
     files = _repository_files(repository)
     for path in files:
@@ -528,6 +601,7 @@ def build_manifest(repository: Path) -> dict[str, Any]:
     bun_input_seen = False
     trino_build_extension_records: dict[PurePosixPath, str] = {}
     parquet_remediation_records: dict[PurePosixPath, str] = {}
+    scm_remediation_records: dict[PurePosixPath, tuple[int, str]] = {}
     total_bytes = 0
     for path in files:
         relative = _canonical_relative(path.relative_to(repository).as_posix())
@@ -560,6 +634,17 @@ def build_manifest(repository: Path) -> dict[str, Any]:
                 "Parquet source-remediation origin is forbidden for "
                 f"an unauthorized path: {relative}"
             )
+        if relative in SCM_METADATA_REMEDIATION_REQUIRED_RECORDS:
+            expected = SCM_METADATA_REMEDIATION_REQUIRED_RECORDS.get(relative)
+            if origin != ALLOWED_REPOSITORIES["central"]:
+                _fail(
+                    "SCM metadata remediation must retain the Maven Central "
+                    f"resolver origin: {relative}"
+                )
+            if (metadata.st_size, digest) != expected:
+                _fail(f"SCM metadata remediation differs: {relative}")
+            scm_remediation_records[relative] = (metadata.st_size, digest)
+            origin = SCM_METADATA_REMEDIATION["repository"]
         if origin == BUN_INPUT["url"] and relative.as_posix() != BUN_INPUT["cache_path"]:
             _fail(f"Bun release origin is forbidden for non-Bun input: {relative}")
         if relative.as_posix() == BUN_INPUT["cache_path"]:
@@ -584,6 +669,7 @@ def build_manifest(repository: Path) -> dict[str, Any]:
         _fail("Maven dependency snapshot must not be empty")
     _validate_trino_external_dependency_records(trino_build_extension_records)
     _validate_parquet_remediation_records(parquet_remediation_records)
+    _validate_scm_metadata_remediation_records(scm_remediation_records)
     if not bun_input_seen:
         _fail("Maven dependency snapshot is missing the exact Bun toolchain input")
     return {
@@ -703,6 +789,7 @@ def _load_manifest(path: Path) -> dict[str, Any]:
     bun_input_seen = False
     trino_build_extension_records: dict[PurePosixPath, str] = {}
     parquet_remediation_records: dict[PurePosixPath, str] = {}
+    scm_remediation_records: dict[PurePosixPath, tuple[int, str]] = {}
     for record in records:
         if not isinstance(record, dict) or set(record) != expected_record_keys:
             _fail("Maven manifest file record is not closed-world")
@@ -747,6 +834,20 @@ def _load_manifest(path: Path) -> dict[str, Any]:
                 "for an unauthorized path"
             )
         if (
+            record["repository_origin"]
+            == SCM_METADATA_REMEDIATION["repository"]
+        ):
+            expected = SCM_METADATA_REMEDIATION_REQUIRED_RECORDS.get(relative)
+            observed = (record["size"], record["sha256"])
+            if expected is None:
+                _fail(
+                    "Maven manifest uses the SCM metadata-remediation origin "
+                    "for an unauthorized path"
+                )
+            if observed != expected:
+                _fail(f"Maven manifest SCM remediation differs: {relative}")
+            scm_remediation_records[relative] = observed
+        if (
             record["repository_origin"] == BUN_INPUT["url"]
             and relative.as_posix() != BUN_INPUT["cache_path"]
         ):
@@ -763,6 +864,7 @@ def _load_manifest(path: Path) -> dict[str, Any]:
         total_bytes += record["size"]
     _validate_trino_external_dependency_records(trino_build_extension_records)
     _validate_parquet_remediation_records(parquet_remediation_records)
+    _validate_scm_metadata_remediation_records(scm_remediation_records)
     if not bun_input_seen:
         _fail("Maven manifest is missing the exact Bun toolchain input")
     if total_bytes != manifest["total_bytes"] or total_bytes > MAX_TOTAL_BYTES:

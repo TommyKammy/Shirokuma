@@ -9,6 +9,7 @@ import io
 import json
 import os
 import stat
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -41,6 +42,7 @@ class MavenSnapshotTests(unittest.TestCase):
         package.EXTERNAL_INPUTS = [
             test_input,
             package.PARQUET_SOURCE_REMEDIATION,
+            package.SCM_METADATA_REMEDIATION,
         ]
         package.BUN_INPUT = test_input
 
@@ -92,6 +94,33 @@ class MavenSnapshotTests(unittest.TestCase):
             trino_origin=trino_origin,
         )
         self._parquet_remediation(repository)
+        scm_payloads = {
+            package.SCM_METADATA_REMEDIATION["files"][0]["path"]: (
+                ROOT
+                / "bootstrap/trino/v483/"
+                "maven-scm-provider-gitexe-2.2.1-hardened.pom"
+            ).read_bytes(),
+            package.SCM_METADATA_REMEDIATION["files"][1]["path"]: (
+                b"a8630355e52d9c81dbd6ec117820bb58b6355f4a"
+            ),
+            package.SCM_METADATA_REMEDIATION["files"][2]["path"]: (
+                ROOT
+                / "bootstrap/trino/v483/"
+                "maven-scm-manager-plexus-2.2.1-hardened.pom"
+            ).read_bytes(),
+            package.SCM_METADATA_REMEDIATION["files"][3]["path"]: (
+                b"eb1b7ab169dc923806b0040631a45dc83d0b83e8"
+            ),
+        }
+        for relative, payload in scm_payloads.items():
+            target = repository / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(payload)
+            if target.suffix == ".pom":
+                (target.parent / "_remote.repositories").write_text(
+                    f"{target.name}>shirokuma-central=\n",
+                    encoding="iso-8859-1",
+                )
         return repository
 
     def _parquet_remediation(
@@ -441,6 +470,94 @@ class MavenSnapshotTests(unittest.TestCase):
                 "unauthorized path",
             ):
                 package.build_manifest(repository)
+
+    def test_scm_remediation_is_not_a_maven_resolver_origin(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = self._repository(Path(temporary))
+            artifact = repository / "org/example/demo/1.0"
+            (artifact / "_remote.repositories").write_text(
+                "demo-1.0.jar>shirokuma-scm-remediation=\n"
+                "demo-1.0.pom>shirokuma-central-fallback=\n",
+                encoding="iso-8859-1",
+            )
+            with self.assertRaisesRegex(
+                package.SnapshotError,
+                "unknown Maven repository id",
+            ):
+                package.build_manifest(repository)
+
+    def test_scm_metadata_requires_central_resolver_origin(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = self._repository(Path(temporary))
+            for record in package.SCM_METADATA_REMEDIATION["files"]:
+                target = repository / record["path"]
+                if target.suffix == ".pom":
+                    (target.parent / "_remote.repositories").write_text(
+                        f"{target.name}>shirokuma-confluent=\n",
+                        encoding="iso-8859-1",
+                    )
+            with self.assertRaisesRegex(
+                package.SnapshotError,
+                "must retain the Maven Central resolver origin",
+            ):
+                package.build_manifest(repository)
+
+    def test_manifest_verification_scopes_scm_metadata_remediation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = self._repository(root)
+            manifest = package.build_manifest(repository)
+            scm_records = {
+                record["path"]: record["repository_origin"]
+                for record in manifest["files"]
+                if record["path"]
+                in {
+                    expected["path"]
+                    for expected in package.SCM_METADATA_REMEDIATION["files"]
+                }
+            }
+            self.assertEqual(
+                scm_records,
+                {
+                    expected["path"]: package.SCM_METADATA_REMEDIATION[
+                        "repository"
+                    ]
+                    for expected in package.SCM_METADATA_REMEDIATION["files"]
+                },
+            )
+            unrelated = next(
+                record
+                for record in manifest["files"]
+                if record["path"].endswith("demo-1.0.jar")
+            )
+            unrelated["repository_origin"] = package.SCM_METADATA_REMEDIATION[
+                "repository"
+            ]
+            descriptor = root / "unauthorized-origin.json"
+            descriptor.write_bytes(package._manifest_bytes(manifest))
+            with self.assertRaisesRegex(
+                package.SnapshotError,
+                "unauthorized path",
+            ):
+                package._load_manifest(descriptor)
+
+            manifest = package.build_manifest(repository)
+            hardened = next(
+                record
+                for record in manifest["files"]
+                if record["path"]
+                == package.SCM_METADATA_REMEDIATION["files"][0]["path"]
+            )
+            hardened["repository_origin"] = package.ALLOWED_REPOSITORIES[
+                "central"
+            ]
+            descriptor = root / "missing-remediation-origin.json"
+            descriptor.write_bytes(package._manifest_bytes(manifest))
+            with self.assertRaisesRegex(
+                package.SnapshotError,
+                "exact SCM metadata remediation set differs",
+            ):
+                package._load_manifest(descriptor)
 
     def test_unsafe_repository_entries_fail_closed(self) -> None:
         cases = {}
@@ -2525,6 +2642,269 @@ class PublisherContractTests(unittest.TestCase):
             review.index("finalize-record"),
         )
 
+    def test_publication_authorization_is_bound_to_one_main_attempt(self) -> None:
+        instant = dt.datetime(2026, 8, 7, 2, 0, tzinfo=dt.timezone.utc)
+        environment = {
+            "GITHUB_EVENT_NAME": verify.EXPECTED_PUBLICATION_ATTEMPT["event_name"],
+            "GITHUB_REF": verify.EXPECTED_PUBLICATION_ATTEMPT["ref"],
+            "GITHUB_EVENT_BEFORE": verify.EXPECTED_PUBLICATION_ATTEMPT[
+                "before_sha"
+            ],
+            "GITHUB_RUN_ATTEMPT": verify.EXPECTED_PUBLICATION_ATTEMPT[
+                "run_attempt"
+            ],
+        }
+        with mock.patch.dict(os.environ, environment, clear=False):
+            verify.authorize_use(
+                ROOT,
+                validation_point="before_dependency_publication",
+                at=instant,
+            )
+
+        for key, replacement in (
+            ("GITHUB_EVENT_NAME", "workflow_dispatch"),
+            ("GITHUB_REF", "refs/heads/other"),
+            ("GITHUB_EVENT_BEFORE", "0" * 40),
+            ("GITHUB_RUN_ATTEMPT", "2"),
+        ):
+            with self.subTest(key=key):
+                altered = {**environment, key: replacement}
+                with (
+                    mock.patch.dict(os.environ, altered, clear=False),
+                    self.assertRaisesRegex(
+                        verify.ContractError,
+                        "PUBLICATION_ATTEMPT",
+                    ),
+                ):
+                    verify.authorize_use(
+                        ROOT,
+                        validation_point="before_dependency_publication",
+                        at=instant,
+                    )
+
+        contract_path = ROOT / verify.CONTRACT_PATH
+        original_load_json = verify._load_json
+        contract = original_load_json(contract_path)
+        contract["publication"]["authorized_attempt"]["run_attempt"] = "2"
+
+        def load_json(path: Path) -> dict[str, object]:
+            if path == contract_path:
+                return contract
+            return original_load_json(path)
+
+        with (
+            mock.patch.object(verify, "_load_json", side_effect=load_json),
+            mock.patch.dict(os.environ, environment, clear=False),
+            self.assertRaisesRegex(verify.ContractError, "PUBLICATION_ATTEMPT"),
+        ):
+            verify.authorize_use(
+                ROOT,
+                validation_point="before_dependency_publication",
+                at=instant,
+            )
+
+    def test_main_publisher_revalidates_and_prunes_each_build(self) -> None:
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        self.assertEqual(
+            4,
+            workflow.count(
+                "python3 scripts/verify_trino_maven_feasibility.py verify-candidate"
+            ),
+        )
+        self.assertEqual(
+            2,
+            workflow.count(
+                "python3 scripts/verify_trino_maven_feasibility.py "
+                "prune-vulnerable-inputs"
+            ),
+        )
+        for start, end in (
+            (
+                "- name: Resolve and package the first closed Maven repository",
+                "- name: Independently reconstruct the closed Maven repository",
+            ),
+            (
+                "- name: Independently reconstruct the closed Maven repository",
+                "- name: Prove two fresh network-none offline source builds",
+            ),
+        ):
+            phase = workflow.split(start, 1)[1].split(end, 1)[0]
+            trino_build = phase.rindex("-am clean install -DskipTests")
+            revalidate = phase.index("verify-candidate", trino_build)
+            prune = phase.index("prune-vulnerable-inputs", revalidate)
+            seal = phase.index("seal-artifact", prune)
+            self.assertLess(trino_build, revalidate)
+            self.assertLess(revalidate, prune)
+            self.assertLess(prune, seal)
+
+        offline = workflow.split(
+            "- name: Prove two fresh network-none offline source builds",
+            1,
+        )[1].split("- name: Verify both closed dependency inventories", 1)[0]
+        self.assertLess(
+            offline.index("-am clean install -DskipTests"),
+            offline.index("verify-candidate"),
+        )
+        self.assertLess(
+            offline.index("verify-candidate"),
+            offline.index('output="${offline_source}/core/trino-server/target/'),
+        )
+
+    def test_publish_job_rechecks_attempt_and_independent_review(self) -> None:
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        self.assertEqual(
+            2,
+            workflow.count("--validation-point before_dependency_publication"),
+        )
+        self.assertEqual(1, workflow.count("verify-independent-review --root ."))
+        self.assertEqual(1, workflow.count("GITHUB_TOKEN: ${{ github.token }}"))
+        for path in (
+            verify.FEASIBILITY_VERIFIER_PATH,
+            verify.FEASIBILITY_TEST_PATH,
+        ):
+            self.assertEqual(2, workflow.splitlines().count(f"      - {path}"))
+
+        publish = workflow.split("  publish:", 1)[1]
+        attempt = publish.index("--validation-point before_dependency_publication")
+        review = publish.index("verify-independent-review --root .")
+        auth = publish.index("oras login ghcr.io")
+        self.assertLess(attempt, review)
+        self.assertLess(review, auth)
+
+    def test_independent_review_requires_non_risk_owner_human_approval(
+        self,
+    ) -> None:
+        contract = verify._load_json(ROOT / verify.CONTRACT_PATH)
+        commit = "a" * 40
+        final_head = "c" * 40
+        pulls = [
+            {
+                "number": 143,
+                "state": "closed",
+                "merged_at": "2026-08-07T03:00:00Z",
+                "merge_commit_sha": commit,
+                "base": {"ref": "main"},
+                "head": {"sha": final_head},
+            }
+        ]
+        owner_review = {
+            "id": 1,
+            "state": "APPROVED",
+            "user": {"login": "TommyKammy", "type": "User"},
+            "commit_id": final_head,
+        }
+        independent_review = {
+            "id": 2,
+            "state": "APPROVED",
+            "user": {"login": "IndependentHuman", "type": "User"},
+            "commit_id": final_head,
+        }
+        self.assertEqual(
+            "IndependentHuman",
+            verify._select_independent_review(
+                contract,
+                pulls,
+                [owner_review, independent_review],
+                commit=commit,
+            )["reviewer"],
+        )
+        with self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"):
+            verify._select_independent_review(
+                contract,
+                pulls,
+                [owner_review],
+                commit=commit,
+            )
+
+        changed_request = {
+            "id": 3,
+            "state": "CHANGES_REQUESTED",
+            "user": {"login": "IndependentHuman", "type": "User"},
+            "commit_id": final_head,
+        }
+        with self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"):
+            verify._select_independent_review(
+                contract,
+                pulls,
+                [independent_review, changed_request],
+                commit=commit,
+            )
+
+        stale_approval = {
+            **independent_review,
+            "id": 4,
+            "commit_id": "d" * 40,
+        }
+        with self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"):
+            verify._select_independent_review(
+                contract,
+                pulls,
+                [stale_approval],
+                commit=commit,
+            )
+
+    def test_independent_review_query_is_bounded_and_commit_scoped(self) -> None:
+        commit = "b" * 40
+        final_head = "c" * 40
+        pulls = [
+            {
+                "number": 143,
+                "state": "closed",
+                "merged_at": "2026-08-07T03:00:00Z",
+                "merge_commit_sha": commit,
+                "base": {"ref": "main"},
+                "head": {"sha": final_head},
+            }
+        ]
+        reviews = [
+            {
+                "id": 9,
+                "state": "APPROVED",
+                "user": {"login": "IndependentHuman", "type": "User"},
+                "commit_id": final_head,
+            }
+        ]
+
+        class Response:
+            status = 200
+
+            def __init__(self, payload: object) -> None:
+                self.payload = json.dumps(payload).encode()
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                self.assert_limit = limit
+                return self.payload
+
+        stdout = io.StringIO()
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                side_effect=[Response(pulls), Response(reviews)],
+            ) as request,
+            contextlib.redirect_stdout(stdout),
+        ):
+            verify.verify_independent_review(
+                ROOT,
+                repository="TommyKammy/Shirokuma",
+                commit=commit,
+                token="ephemeral-token",
+            )
+        receipt = json.loads(stdout.getvalue())
+        self.assertEqual(143, receipt["pull_request"])
+        self.assertEqual("IndependentHuman", receipt["reviewer"])
+        self.assertEqual(final_head, receipt["reviewed_head"])
+        self.assertEqual(2, request.call_count)
+        requested_urls = [call.args[0].full_url for call in request.call_args_list]
+        self.assertIn(f"/commits/{commit}/pulls?per_page=100", requested_urls[0])
+        self.assertIn("/pulls/143/reviews?per_page=100", requested_urls[1])
+
     def test_authorization_rejects_duplicate_json_keys(self) -> None:
         contract = (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
         contract = contract.replace(
@@ -2648,7 +3028,7 @@ class PublisherContractTests(unittest.TestCase):
             Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
             verify.BLOCKER_BASELINE_PATH,
             *verify.EXPECTED_BLOCKER_FEASIBILITY_FILES,
-            verify.FEASIBILITY_VERIFIER_PATH,
+            verify.FEASIBILITY_RETAINED_VERIFIER_PATH,
         ]
         originals = {
             path: (ROOT / path).read_bytes()
@@ -2727,7 +3107,9 @@ class PublisherContractTests(unittest.TestCase):
             superseded_path.write_bytes(
                 originals[verify.SUPERSEDED_FEASIBILITY_RECORD_PATH]
             )
-            verifier_path = temporary_root / verify.FEASIBILITY_VERIFIER_PATH
+            verifier_path = (
+                temporary_root / verify.FEASIBILITY_RETAINED_VERIFIER_PATH
+            )
             verifier_path.write_bytes(verifier_path.read_bytes() + b"\n")
             with self.assertRaisesRegex(
                 verify.ContractError,
@@ -2761,7 +3143,7 @@ class PublisherContractTests(unittest.TestCase):
             Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
             verify.BLOCKER_BASELINE_PATH,
             *verify.EXPECTED_BLOCKER_FEASIBILITY_FILES,
-            verify.FEASIBILITY_VERIFIER_PATH,
+            verify.FEASIBILITY_RETAINED_VERIFIER_PATH,
         ]
         originals = {path: (ROOT / path).read_bytes() for path in paths}
         classification = json.loads(
@@ -2846,7 +3228,7 @@ class PublisherContractTests(unittest.TestCase):
             Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
             verify.BLOCKER_BASELINE_PATH,
             *verify.EXPECTED_BLOCKER_FEASIBILITY_FILES,
-            verify.FEASIBILITY_VERIFIER_PATH,
+            verify.FEASIBILITY_RETAINED_VERIFIER_PATH,
         ]
         originals = {path: (ROOT / path).read_bytes() for path in paths}
 
@@ -2897,7 +3279,7 @@ class PublisherContractTests(unittest.TestCase):
             Path(verify.EXPECTED_BLOCKER_CANDIDATE["patch_path"]),
             verify.BLOCKER_BASELINE_PATH,
             *verify.EXPECTED_BLOCKER_FEASIBILITY_FILES,
-            verify.FEASIBILITY_VERIFIER_PATH,
+            verify.FEASIBILITY_RETAINED_VERIFIER_PATH,
         ]
         originals = {path: (ROOT / path).read_bytes() for path in paths}
 
@@ -2945,7 +3327,7 @@ class PublisherContractTests(unittest.TestCase):
                 ):
                     verify._validate_blocker_evidence(temporary_root)
 
-    def test_publication_status_is_blocked_and_records_must_agree(self) -> None:
+    def test_publication_status_is_active_and_records_must_agree(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
         )
@@ -2954,12 +3336,12 @@ class PublisherContractTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            "blocked",
+            "active",
             verify.publication_status(contract, admission),
         )
 
         altered = json.loads(json.dumps(contract))
-        altered["publication"]["permitted"] = True
+        altered["publication"]["permitted"] = False
         with self.assertRaisesRegex(
             verify.ContractError,
             "publication permission records disagree",
@@ -2985,6 +3367,48 @@ class PublisherContractTests(unittest.TestCase):
                         aliased_contract,
                         aliased_admission,
                     )
+
+    def test_exact_build_plugin_remediation_authorization_is_bound(self) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        admission = json.loads(
+            (ROOT / verify.ADMISSION_PATH).read_text(encoding="utf-8")
+        )
+
+        verify._validate_build_plugin_remediation_contract(
+            ROOT,
+            contract,
+            at=verify._parse_time("2026-08-07T00:08:49Z"),
+        )
+        self.assertEqual(
+            verify.EXPECTED_ADMISSION_BUILD_PLUGIN_REMEDIATION_AUTHORIZATION,
+            admission["build_plugin_remediation_authorization"],
+        )
+
+        altered = copy.deepcopy(contract)
+        altered["source"]["build_plugin_remediation"]["patch"]["sha256"] = (
+            "0" * 64
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "exact Maven build-plugin remediation differs",
+        ):
+            verify._validate_build_plugin_remediation_contract(
+                ROOT,
+                altered,
+                at=None,
+            )
+
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "BUILD_PLUGIN_REMEDIATION_EXPIRED",
+        ):
+            verify._validate_build_plugin_remediation_contract(
+                ROOT,
+                contract,
+                at=verify._parse_time("2026-08-21T22:43:36Z"),
+            )
 
     def test_workflow_retains_the_blocked_publication_noop(self) -> None:
         contract = json.loads(
@@ -3107,6 +3531,7 @@ class PublisherContractTests(unittest.TestCase):
             [
                 verify.EXPECTED_BUN_INPUT,
                 verify.EXPECTED_PARQUET_SOURCE_REMEDIATION,
+                verify.EXPECTED_SCM_METADATA_REMEDIATION,
             ],
             package.EXTERNAL_INPUTS,
         )
@@ -3916,6 +4341,60 @@ class PublisherContractTests(unittest.TestCase):
         self.assertEqual(1, workflow.count('"file:trivy-version.json"'))
         self.assertIn("statement == expected_statement", workflow)
         self.assertIn('"digest": {"sha256": digest}', workflow)
+
+    def test_source_overlay_boundary_applies_before_postimage_check(
+        self,
+    ) -> None:
+        preimage = b"reviewed preimage\n"
+        postimage = b"reviewed postimage\n"
+        boundary = {
+            "apply_arguments": ["--whitespace=nowarn"],
+            "patch": {"path": "candidate.patch"},
+            "preimages": {"pom.xml": hashlib.sha256(preimage).hexdigest()},
+            "postimages": {"pom.xml": hashlib.sha256(postimage).hexdigest()},
+        }
+        events: list[str] = []
+        state = {"applied": False}
+
+        def read_reviewed_file(path: Path, *, code: str) -> bytes:
+            self.assertEqual(Path("/checkout/pom.xml"), path)
+            events.append(code)
+            return postimage if state["applied"] else preimage
+
+        def run_git(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            self.assertEqual(Path("/checkout"), kwargs["cwd"])
+            if "--check" in command:
+                self.assertIs(state["applied"], False)
+                events.append("git apply --check")
+            else:
+                self.assertIs(state["applied"], False)
+                state["applied"] = True
+                events.append("git apply")
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        with (
+            mock.patch.object(
+                verify,
+                "_read_reviewed_regular_file",
+                side_effect=read_reviewed_file,
+            ),
+            mock.patch.object(verify.subprocess, "run", side_effect=run_git),
+        ):
+            verify._apply_source_overlay_boundary(
+                Path("/policy"),
+                Path("/checkout"),
+                boundary,
+            )
+
+        self.assertEqual(
+            [
+                "SOURCE_OVERLAY_PREIMAGE",
+                "git apply --check",
+                "git apply",
+                "SOURCE_OVERLAY_POSTIMAGE",
+            ],
+            events,
+        )
 
     def test_authorization_is_half_open_and_expires_fail_closed(self) -> None:
         contract = json.loads(

@@ -508,6 +508,11 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             child.write_text(overlay, encoding="utf-8")
             source_boundary = {
                 "permitted_paths": ["module/pom.xml"],
+                "preimages": {
+                    "module/pom.xml": hashlib.sha256(
+                        b"<project/>\n"
+                    ).hexdigest()
+                },
                 "postimages": {
                     "module/pom.xml": hashlib.sha256(
                         overlay.encode("utf-8")
@@ -516,15 +521,43 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             }
             distribution_boundary = {
                 "permitted_paths": ["pom.xml"],
+                "preimages": {
+                    "pom.xml": feasibility.EXPECTED_BASELINE_SHA256
+                },
                 "postimages": {
                     "pom.xml": feasibility.EXPECTED_BASELINE_SHA256
                 },
             }
+            build_plugin_boundary = {
+                "permitted_paths": ["pom.xml"],
+                "preimages": {
+                    "pom.xml": feasibility.EXPECTED_BASELINE_SHA256
+                },
+                "postimages": {
+                    "pom.xml": feasibility.EXPECTED_POSTIMAGE_SHA256
+                },
+            }
+
+            def apply_authorized_overlay(root: Path, source: Path) -> None:
+                subprocess.run(
+                    [
+                        "git",
+                        "apply",
+                        "--unidiff-zero",
+                        "--whitespace=error-all",
+                        str(root / feasibility.CANDIDATE_PATCH_PATH),
+                    ],
+                    cwd=source,
+                    check=True,
+                    capture_output=True,
+                )
+
             with (
                 mock.patch.object(
                     feasibility.publisher,
                     "apply_source_overlay",
-                ),
+                    side_effect=apply_authorized_overlay,
+                ) as apply_overlay,
                 mock.patch.object(
                     feasibility.publisher,
                     "EXPECTED_SOURCE_OVERLAY",
@@ -535,9 +568,18 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                     "EXPECTED_DISTRIBUTION_REMEDIATION",
                     distribution_boundary,
                 ),
+                mock.patch.object(
+                    feasibility.publisher,
+                    "EXPECTED_BUILD_PLUGIN_REMEDIATION",
+                    build_plugin_boundary,
+                ),
             ):
                 feasibility.apply_candidate(ROOT, checkout)
                 feasibility.verify_candidate(checkout)
+                apply_overlay.assert_called_once_with(
+                    ROOT.resolve(),
+                    checkout.resolve(),
+                )
                 self.assertEqual(
                     feasibility._sha256(checkout / "pom.xml"),
                     feasibility.EXPECTED_POSTIMAGE_SHA256,
@@ -1569,10 +1611,29 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             (
                 repository / feasibility.SCM_MANAGER_POM_CHECKSUM_PATH
             ).write_bytes(feasibility.SCM_MANAGER_POM_PREIMAGE_SHA1)
+            for pom_path in (
+                feasibility.SCM_POM_PATH,
+                feasibility.SCM_MANAGER_POM_PATH,
+            ):
+                pom = repository / pom_path
+                (pom.parent / "_remote.repositories").write_text(
+                    f"{pom.name}>shirokuma-central=\n",
+                    encoding="iso-8859-1",
+                )
             for relative in feasibility.VULNERABLE_INPUTS:
                 vulnerable = repository / relative
                 vulnerable.parent.mkdir(parents=True, exist_ok=True)
-                vulnerable.write_bytes(relative.encode("utf-8"))
+                payload = relative.encode("utf-8")
+                vulnerable.write_bytes(payload)
+                vulnerable.with_name(f"{vulnerable.name}.sha1").write_text(
+                    hashlib.sha1(payload, usedforsecurity=False).hexdigest(),
+                    encoding="ascii",
+                )
+                (vulnerable.parent / "_remote.repositories").write_text(
+                    f"{vulnerable.name}>shirokuma-central=\n"
+                    f"{vulnerable.name}.sha1>shirokuma-central=\n",
+                    encoding="iso-8859-1",
+                )
             sentinel = repository / "org/example/keep/1.0/keep-1.0.jar"
             sentinel.parent.mkdir(parents=True, exist_ok=True)
             sentinel.write_bytes(b"keep")
@@ -1584,11 +1645,44 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
                     for relative in feasibility.VULNERABLE_INPUTS
                 )
             )
+            for relative in feasibility.VULNERABLE_INPUTS:
+                vulnerable = repository / relative
+                self.assertFalse(
+                    vulnerable.with_name(f"{vulnerable.name}.sha1").exists()
+                )
+                marker = vulnerable.parent / "_remote.repositories"
+                self.assertNotIn(
+                    vulnerable.name,
+                    marker.read_text(encoding="iso-8859-1"),
+                )
             self.assertEqual(
                 feasibility._sha256(repository / feasibility.SCM_POM_PATH),
                 feasibility.SCM_POM_POSTIMAGE_SHA256,
             )
+            for pom_path in (
+                feasibility.SCM_POM_PATH,
+                feasibility.SCM_MANAGER_POM_PATH,
+            ):
+                pom = repository / pom_path
+                self.assertEqual(
+                    f"{pom.name}>shirokuma-central=\n",
+                    (pom.parent / "_remote.repositories").read_text(
+                        encoding="iso-8859-1"
+                    ),
+                )
             feasibility.capture_repository(repository, root / "evidence")
+
+    def test_hardened_metadata_origin_requires_remote_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = self._repository(Path(temporary))
+            with self.assertRaisesRegex(
+                feasibility.EvidenceError,
+                "HARDENED_METADATA",
+            ):
+                feasibility._validate_hardened_metadata_origin(
+                    repository,
+                    feasibility.SCM_POM_PATH,
+                )
 
     def test_archive_or_manifest_tamper_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
