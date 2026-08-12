@@ -5485,7 +5485,7 @@ class PublisherContractTests(unittest.TestCase):
             1,
             workflow.count(verify.EXPECTED_CANDIDATE_HIDDEN_UPLOAD_BLOCK),
         )
-        self.assertEqual(2, workflow.count("include-hidden-files: true"))
+        self.assertEqual(3, workflow.count("include-hidden-files: true"))
         mutations = (
             (
                 verify.EXPECTED_MAVEN_SCAN_REPORT_BLOCK,
@@ -5530,6 +5530,215 @@ class PublisherContractTests(unittest.TestCase):
                     "WORKFLOW_MAVEN_DIAGNOSTICS",
                 ):
                     verify._validate_workflow(contract, altered)
+
+    def test_bun_scan_failure_diagnostics_are_exact_and_non_admitting(
+        self,
+    ) -> None:
+        contract = json.loads(
+            (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        stage = verify.EXPECTED_BUN_SCAN_STAGE_BLOCK
+        scan = verify.EXPECTED_BUN_ADJUSTED_SCAN_REPORT_BLOCK
+        gate = verify.EXPECTED_BUN_SCAN_GATE_BLOCK
+        diagnostic = verify.EXPECTED_BUN_FAILURE_DIAGNOSTIC_BLOCK
+        record = verify.EXPECTED_RECORD_TRIVY_CACHE_BLOCK
+        for block in (stage, scan, gate, diagnostic):
+            self.assertEqual(1, workflow.count(block))
+        self.assertEqual(
+            4,
+            verify.EXPECTED_ACTIONS[
+                "actions/upload-artifact@"
+                "ea165f8d65b6e75b540449e92b4886f43607fa02"
+            ],
+        )
+        self.assertEqual(
+            1,
+            workflow.count(verify.EXPECTED_BUN_DIAGNOSTIC_ARTIFACT_PREFIX),
+        )
+        self.assertLess(workflow.index(stage), workflow.index(scan))
+        self.assertLess(workflow.index(scan), workflow.index(gate))
+        self.assertLess(workflow.index(gate), workflow.index(diagnostic))
+        self.assertLess(workflow.index(diagnostic), workflow.index(record))
+        publish = workflow.split("\n  publish:\n", 1)[1]
+        self.assertNotIn(
+            verify.EXPECTED_BUN_DIAGNOSTIC_ARTIFACT_PREFIX,
+            publish,
+        )
+        self.assertEqual(
+            1,
+            workflow.count(verify.EXPECTED_CANDIDATE_DOWNLOAD_BLOCK),
+        )
+
+        diagnostic_mutations = (
+            (
+                "          failure() &&\n",
+                "          always() &&\n",
+            ),
+            (
+                "          steps.lifecycle.outputs.active == 'true' &&\n",
+                "          success() &&\n",
+            ),
+            (
+                "          steps.verify_bun_scan.outcome == 'failure'\n",
+                "          steps.verify_bun_scan.outcome != 'cancelled'\n",
+            ),
+            (
+                "          include-hidden-files: true\n",
+                "          include-hidden-files: false\n",
+            ),
+            (
+                "            .trino-candidate/trino-bun-dependencies-483.cdx.json\n",
+                "",
+            ),
+            (
+                "            .trino-candidate/trivy-bun-vulnerability-raw.json\n",
+                "",
+            ),
+            (
+                "            .trino-candidate/trivy-bun-vulnerability.json\n",
+                "",
+            ),
+            (
+                "            .trino-candidate/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json\n",
+                "",
+            ),
+            (
+                "          if-no-files-found: error\n",
+                "          if-no-files-found: warn\n",
+            ),
+            (
+                "          retention-days: 14\n",
+                "          retention-days: 30\n",
+            ),
+        )
+        for original, replacement in diagnostic_mutations:
+            altered = workflow.replace(
+                diagnostic,
+                diagnostic.replace(original, replacement, 1),
+                1,
+            )
+            with self.subTest(original=original):
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "WORKFLOW_BUN_DIAGNOSTICS",
+                ):
+                    verify._validate_workflow(contract, altered)
+
+        scan_exit_code = workflow.replace(
+            scan,
+            scan.replace(
+                "            --exit-code 0 \\\n",
+                "            --exit-code 1 \\\n",
+                1,
+            ),
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_BUN_DIAGNOSTICS",
+        ):
+            verify._validate_workflow(contract, scan_exit_code)
+
+        changed_id = workflow.replace(
+            gate,
+            gate.replace(
+                "        id: verify_bun_scan\n",
+                "        id: verify_bun_report\n",
+                1,
+            ),
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_BUN_DIAGNOSTICS",
+        ):
+            verify._validate_workflow(contract, changed_id)
+
+        changed_stage_id = workflow.replace(
+            stage,
+            stage.replace(
+                "        id: stage_bun_scan_input\n",
+                "        id: stage_bun_report_input\n",
+                1,
+            ),
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_BUN_DIAGNOSTICS",
+        ):
+            verify._validate_workflow(contract, changed_stage_id)
+
+        for block in (scan, gate):
+            altered_condition = workflow.replace(
+                block,
+                block.replace(
+                    "          steps.stage_bun_scan_input.outcome == 'success'\n",
+                    "          success()\n",
+                    1,
+                ),
+                1,
+            )
+            with self.subTest(stage_condition=block.splitlines()[0]):
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "WORKFLOW_BUN_DIAGNOSTICS",
+                ):
+                    verify._validate_workflow(contract, altered_condition)
+
+        changed_action = workflow.replace(
+            diagnostic,
+            diagnostic.replace(
+                "actions/upload-artifact@"
+                "ea165f8d65b6e75b540449e92b4886f43607fa02",
+                "actions/upload-artifact@" + "0" * 40,
+                1,
+            ),
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_ACTION",
+        ):
+            verify._validate_workflow(contract, changed_action)
+
+        reordered = workflow.replace(
+            gate + "\n" + diagnostic,
+            diagnostic + "\n" + gate,
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_CLOSED_WORLD",
+        ):
+            verify._validate_workflow(contract, reordered)
+
+        renamed = workflow.replace(
+            "      - name: Retain failed Bun vulnerability diagnostics\n",
+            "      - name: Retain Bun scan output\n",
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_CLOSED_WORLD",
+        ):
+            verify._validate_workflow(contract, renamed)
+
+        diagnostic_as_publish_input = workflow.replace(
+            verify.EXPECTED_CANDIDATE_DOWNLOAD_BLOCK,
+            verify.EXPECTED_CANDIDATE_DOWNLOAD_BLOCK.replace(
+                "          name: ${{ needs.validate.outputs.candidate_artifact_name }}\n",
+                "          name: ${{ format('diagnostic-{0}', github.run_id) }}\n",
+                1,
+            ),
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_BUN_DIAGNOSTIC_ISOLATION",
+        ):
+            verify._validate_workflow(contract, diagnostic_as_publish_input)
 
     def test_descriptor_records_the_complete_reviewed_external_inputs(self) -> None:
         contract = json.loads(
@@ -5704,7 +5913,7 @@ class PublisherContractTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(
             verify.ContractError,
-            "WORKFLOW_TRIVY_CACHE",
+            "WORKFLOW_BUN_DIAGNOSTICS",
         ):
             verify._validate_workflow(contract, altered)
 

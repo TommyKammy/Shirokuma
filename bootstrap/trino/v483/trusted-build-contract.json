@@ -35,7 +35,7 @@
     },
     {
       "path": "scripts/package_trino_bun_dependencies.py",
-      "sha256": "4bd48cf0da86b1406cfe6a9baa9c0f2aefbaed2f590961d800ce479c0db588fe"
+      "sha256": "0ac1317e3d3ec9a1f8865500a732c892a8fe3a9cefc9c3694b383884acf7c423"
     },
     {
       "path": "scripts/prepare_trino_bun_input.py",
@@ -47,11 +47,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "35c3c5be8771526d1ead76145b7deced3d90b7f0dae90d22506e4e835db191e1"
+      "sha256": "ac5098b7103b0b5945c330eab75a599ca9cb46766167d596b6bcbca96d207b33"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "91437666fecc765e5caed8ef20f74dc88143281909fd923f7ac385f2fccab435"
+      "sha256": "13e1e6208934608af33cf5f56d7a5e722faf05663e18faadafb39a0185e76ea9"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -63,7 +63,7 @@
     },
     {
       "path": "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch",
-      "sha256": "d74d13976a8368c818755d67bbe2f464393c185d87317164bd214108e5d4712d"
+      "sha256": "90a2168b9e158f3a61e3cfe3c4e21b6cc6df39c393c2bb38a6df3ffa2e7a3d66"
     },
     {
       "path": "bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch",
@@ -79,7 +79,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md",
-      "sha256": "c91fc14f096d52c5076eef703355dc93e130a3cb623f4457d66da5c9e28905ff"
+      "sha256": "9873c17c8e4fb18152eec9efa2db3982029faaf9f9a9ced502fff1cc6b6ec0da"
     },
     {
       "path": "docs/design/07_ADR/ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_source_remediation.md",
@@ -225,7 +225,7 @@
       "applied_after_source_verification": true,
       "patch": {
         "path": "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch",
-        "sha256": "d74d13976a8368c818755d67bbe2f464393c185d87317164bd214108e5d4712d"
+        "sha256": "90a2168b9e158f3a61e3cfe3c4e21b6cc6df39c393c2bb38a6df3ffa2e7a3d66"
       },
       "apply_arguments": ["--unidiff-zero", "--whitespace=error-all"],
       "permitted_paths": [
@@ -241,15 +241,17 @@
         "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock": "0ca8b926ea0a2af3fff339b43c52de03a8f99c4aa9ba1d4c2ecd081bcd715ad3"
       },
       "postimages": {
-        "core/trino-web-ui/src/main/resources/webapp/package.json": "34b237a9af887a5cbe9c83f541a5084299f9eb3b1e974a661dea7cd17a1c8d38",
-        "core/trino-web-ui/src/main/resources/webapp/bun.lock": "b9010ec72590c76c7dc865a10b1fefe554a64eabb1492c422c954e45324cc9d3",
-        "core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json": "34f68bd556c33d54b2e3475ffd8dc45e1a7167b3c9c60ba257ed43e0f0e6a8df",
-        "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock": "14fa0d75107753676c59093978fe68fe67486868564f41dadc7d76d659d2df25"
+        "core/trino-web-ui/src/main/resources/webapp/package.json": "2af750b9571eddce309373325779a3e2d35ba1977db25b657fe4337f3cb687d2",
+        "core/trino-web-ui/src/main/resources/webapp/bun.lock": "90bfa0a797ae2f37a4ab5e8b445a62fa211328cedab186ac8c2402f78a07a194",
+        "core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json": "d555ca5ab130a76775c9677b5b9798dee486964ef0fc4992fbb02705e696d271",
+        "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock": "c8c9044cf3bd90d38e5aab71e680bf0dd3724c4062eaac9a60e981629601a163"
       },
       "dependency_overrides": {
-        "brace-expansion": "5.0.8",
+        "brace-expansion": "5.0.9",
         "d3-color": "3.1.0",
-        "fast-uri": "3.1.4",
+        "fast-uri": "3.1.5",
+        "js-yaml": "4.3.1",
+        "nanoid": "3.3.17",
         "postcss": "8.5.18",
         "react-router-dom": "7.18.1"
       },
@@ -649,18 +651,18 @@
       "frozen_lockfiles": [
         {
           "path": "core/trino-web-ui/src/main/resources/webapp/bun.lock",
-          "sha256": "b9010ec72590c76c7dc865a10b1fefe554a64eabb1492c422c954e45324cc9d3"
+          "sha256": "90bfa0a797ae2f37a4ab5e8b445a62fa211328cedab186ac8c2402f78a07a194"
         },
         {
           "path": "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock",
-          "sha256": "14fa0d75107753676c59093978fe68fe67486868564f41dadc7d76d659d2df25"
+          "sha256": "c8c9044cf3bd90d38e5aab71e680bf0dd3724c4062eaac9a60e981629601a163"
         }
       ],
       "independent_reconstructions": 2,
       "reviewed_snapshot": {
-        "manifest_sha256": "6e7be3a404014f6f7ac7e4bc326c8d46f7d5822fcea1ac000219c17f1d23f421",
-        "archive_sha256": "252eade2183bdf5a371f073752420c3a45f5ef8b1dacb08a4addea350389e3c2",
-        "archive_size": 128423777
+        "manifest_sha256": "ca5cc4e1a565ecdd7d3f29610b1cdbe869288357ae6e324c83de1a485872b453",
+        "archive_sha256": "863e9d08bf8d7f106059feff7a5e6d96ca7da17b2cf633381241fe66ab88b1ca",
+        "archive_size": 128430898
       },
       "network_none_rebuild_mount": "read-only",
       "network_none_cache_outside_source": true,

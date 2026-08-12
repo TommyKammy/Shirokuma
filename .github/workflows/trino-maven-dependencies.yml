@@ -849,6 +849,7 @@ jobs:
 
       - name: Stage the exact Bun lockfiles for dependency analysis
         if: steps.lifecycle.outputs.active == 'true'
+        id: stage_bun_scan_input
         shell: bash
         run: |
           set -euo pipefail
@@ -889,8 +890,11 @@ jobs:
           exit-code: 0
           list-all-pkgs: true
 
-      - name: Apply OpenVEX and block remaining Bun High or Critical findings
-        if: steps.lifecycle.outputs.active == 'true'
+      - name: Apply OpenVEX and retain adjusted Bun High or Critical findings
+        if: >-
+          always() &&
+          steps.lifecycle.outputs.active == 'true' &&
+          steps.stage_bun_scan_input.outcome == 'success'
         env:
           TRIVY_INCLUDE_DEV_DEPS: "true"
           TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
@@ -899,23 +903,27 @@ jobs:
           set -euo pipefail
           candidate="${GITHUB_WORKSPACE}/.trino-candidate"
           vex="${GITHUB_WORKSPACE}/bootstrap/trino/v483/vex/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
+          install -m 0444 "${vex}" \
+            "${candidate}/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
           trivy fs \
             --scanners vuln \
             --severity HIGH,CRITICAL \
             --ignore-unfixed=false \
             --skip-db-update \
             --pkg-types library \
-            --exit-code 1 \
+            --exit-code 0 \
             --list-all-pkgs \
             --format json \
             --output "${candidate}/trivy-bun-vulnerability.json" \
             --vex "${vex}" \
             "${RUNNER_TEMP}/trino-bun-scan-input"
-          install -m 0444 "${vex}" \
-            "${candidate}/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
 
-      - name: Verify the raw and OpenVEX-adjusted Bun dependency evidence
-        if: steps.lifecycle.outputs.active == 'true'
+      - name: Verify and block the raw and OpenVEX-adjusted Bun dependency evidence
+        if: >-
+          always() &&
+          steps.lifecycle.outputs.active == 'true' &&
+          steps.stage_bun_scan_input.outcome == 'success'
+        id: verify_bun_scan
         shell: bash
         run: |
           set -euo pipefail
@@ -927,6 +935,25 @@ jobs:
               "${GITHUB_WORKSPACE}/.trino-candidate/trivy-bun-vulnerability-raw.json" \
             --adjusted-report \
               "${GITHUB_WORKSPACE}/.trino-candidate/trivy-bun-vulnerability.json"
+
+      - name: Retain failed Bun vulnerability diagnostics
+        if: >-
+          failure() &&
+          steps.lifecycle.outputs.active == 'true' &&
+          steps.verify_bun_scan.outcome == 'failure'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: >-
+            trino-bun-vulnerability-diagnostics-${{ github.run_id }}-${{
+            github.run_attempt }}
+          include-hidden-files: true
+          path: |
+            .trino-candidate/trino-bun-dependencies-483.cdx.json
+            .trino-candidate/trivy-bun-vulnerability-raw.json
+            .trino-candidate/trivy-bun-vulnerability.json
+            .trino-candidate/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Record the read-only candidate
         if: steps.lifecycle.outputs.active == 'true'

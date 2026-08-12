@@ -4,8 +4,8 @@ doc_id: "ADR-0024"
 title: "Apply a bounded Trino 483 Web UI dependency overlay and OpenVEX"
 status: accepted
 created: 2026-07-26
-updated: 2026-07-26
-version: "0.1"
+updated: 2026-08-12
+version: "0.2"
 area: "architecture"
 tags: [shirokuma, adr, trino, web-ui, supply-chain, openvex]
 ---
@@ -43,11 +43,42 @@ typecheck/Vite packaging and legacy webpack packaging, retained exactly the
 React Router finding in the raw scan, and produced High=0/Critical=0 after an
 exact-PURL OpenVEX `not_affected` statement.
 
-Two subsequent independent clean native-arm64 cache reconstructions produced
-the same manifest SHA-256
+The third reviewed-main attempt, run `31590750849`, later proved that the
+original overlay no longer met the fail-closed adjusted-scan contract. Trivy
+0.72.0 exited `1` after OpenVEX processing because five unsuppressed High
+findings remained:
+
+- `fast-uri 3.1.4`, CVE-2026-18446;
+- `brace-expansion 5.0.8`, CVE-2026-69152;
+- `js-yaml 4.3.0`, GHSA-5p4m-2wfm-xmqj; and
+- `nanoid 3.3.15`, CVE-2026-67213 and CVE-2026-67214.
+
+The existing OpenVEX statement suppressed only
+`pkg:npm/react-router@7.18.1` / GHSA-qwww-vcr4-c8h2, as intended. Reproduction
+with the same Trivy release and vulnerability database produced six raw High
+findings and five adjusted High findings. The repeated
+`rolldown-vite@7.3.1` invalid-semantic-version warnings occurred identically in
+both scans and were non-fatal; they are not the cause of the adjusted exit.
+Because the blocking command preceded the normal upload, the failed run
+retained no artifact. The repair therefore updates the same four authorized
+files and makes the adjusted scan report-only before an explicit fail-closed
+verification step, so a validation failure can retain only its exact diagnostic
+SBOM, raw report, adjusted report, and reviewed OpenVEX document. It does not
+broaden the VEX or authorize publication.
+
+The original overlay's two independent clean native-arm64 cache
+reconstructions produced manifest SHA-256
 `6e7be3a404014f6f7ac7e4bc326c8d46f7d5822fcea1ac000219c17f1d23f421`
-and the same 128,423,777-byte archive SHA-256
+and 128,423,777-byte archive SHA-256
 `252eade2183bdf5a371f073752420c3a45f5ef8b1dacb08a4addea350389e3c2`.
+Those values remain historical evidence only. Two independent Linux/arm64 Bun
+1.3.14 reconstructions of the repaired lockfiles produced byte-identical
+75,981-entry caches: 75,321 regular files, 660 safe alias symlinks, and
+500,034,428 regular-file bytes. The active reviewed manifest is 17,312,740
+bytes with SHA-256
+`ca5cc4e1a565ecdd7d3f29610b1cdbe869288357ae6e324c83de1a485872b453`;
+the active 128,430,898-byte deterministic archive has SHA-256
+`863e9d08bf8d7f106059feff7a5e6d96ca7da17b2cf633381241fe66ab88b1ca`.
 
 The authoritative owner approval is Issue #63 comment
 `https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5081842992`.
@@ -66,8 +97,9 @@ The authoritative owner approval is Issue #63 comment
   other changed or untracked path. Store the artifact as a zero-context unified
   diff and invoke `git apply --unidiff-zero --whitespace=error-all` only after
   all complete-file preimages pass; then require all complete-file postimages.
-- Override only `d3-color 3.1.0`, `fast-uri 3.1.4`,
-  `brace-expansion 5.0.8`, and `postcss 8.5.18`. Pin
+- Override only `d3-color 3.1.0`, `fast-uri 3.1.5`,
+  `brace-expansion 5.0.9`, `js-yaml 4.3.1`, `nanoid 3.3.17`, and
+  `postcss 8.5.18`. Pin
   `react-router-dom` exactly to `7.18.1` so a future lock refresh cannot select
   another React Router surface implicitly.
 - Retain an unadjusted High/Critical-scoped Trivy JSON report. It must contain

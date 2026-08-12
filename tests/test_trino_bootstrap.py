@@ -3808,9 +3808,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertEqual(
             {
-                "brace-expansion": "5.0.8",
+                "brace-expansion": "5.0.9",
                 "d3-color": "3.1.0",
-                "fast-uri": "3.1.4",
+                "fast-uri": "3.1.5",
+                "js-yaml": "4.3.1",
+                "nanoid": "3.3.17",
                 "postcss": "8.5.18",
                 "react-router-dom": "7.18.1",
             },
@@ -4068,7 +4070,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                             "webapp/bun.lock"
                         ),
                         "sha256": (
-                            "b9010ec72590c76c7dc865a10b1fefe554a64eabb1492c422c954e45324cc9d3"
+                            "90bfa0a797ae2f37a4ab5e8b445a62fa211328cedab186ac8c2402f78a07a194"
                         ),
                     },
                     {
@@ -4077,19 +4079,19 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                             "webapp-legacy/src/bun.lock"
                         ),
                         "sha256": (
-                            "14fa0d75107753676c59093978fe68fe67486868564f41dadc7d76d659d2df25"
+                            "c8c9044cf3bd90d38e5aab71e680bf0dd3724c4062eaac9a60e981629601a163"
                         ),
                     },
                 ],
                 "independent_reconstructions": 2,
                 "reviewed_snapshot": {
                     "manifest_sha256": (
-                        "6e7be3a404014f6f7ac7e4bc326c8d46f7d5822fcea1ac000219c17f1d23f421"
+                        "ca5cc4e1a565ecdd7d3f29610b1cdbe869288357ae6e324c83de1a485872b453"
                     ),
                     "archive_sha256": (
-                        "252eade2183bdf5a371f073752420c3a45f5ef8b1dacb08a4addea350389e3c2"
+                        "863e9d08bf8d7f106059feff7a5e6d96ca7da17b2cf633381241fe66ab88b1ca"
                     ),
-                    "archive_size": 128423777,
+                    "archive_size": 128430898,
                 },
                 "network_none_rebuild_mount": "read-only",
                 "network_none_cache_outside_source": True,

@@ -930,25 +930,25 @@ EXPECTED_BUN_PACKAGE_CACHE = {
     "frozen_lockfiles": [
         {
             "path": "core/trino-web-ui/src/main/resources/webapp/bun.lock",
-            "sha256": "b9010ec72590c76c7dc865a10b1fefe554a64eabb1492c422c954e45324cc9d3",
+            "sha256": "90bfa0a797ae2f37a4ab5e8b445a62fa211328cedab186ac8c2402f78a07a194",
         },
         {
             "path": (
                 "core/trino-web-ui/src/main/resources/"
                 "webapp-legacy/src/bun.lock"
             ),
-            "sha256": "14fa0d75107753676c59093978fe68fe67486868564f41dadc7d76d659d2df25",
+            "sha256": "c8c9044cf3bd90d38e5aab71e680bf0dd3724c4062eaac9a60e981629601a163",
         },
     ],
     "independent_reconstructions": 2,
     "reviewed_snapshot": {
         "manifest_sha256": (
-            "6e7be3a404014f6f7ac7e4bc326c8d46f7d5822fcea1ac000219c17f1d23f421"
+            "ca5cc4e1a565ecdd7d3f29610b1cdbe869288357ae6e324c83de1a485872b453"
         ),
         "archive_sha256": (
-            "252eade2183bdf5a371f073752420c3a45f5ef8b1dacb08a4addea350389e3c2"
+            "863e9d08bf8d7f106059feff7a5e6d96ca7da17b2cf633381241fe66ab88b1ca"
         ),
-        "archive_size": 128_423_777,
+        "archive_size": 128_430_898,
     },
     "network_none_rebuild_mount": "read-only",
     "network_none_cache_outside_source": True,
@@ -987,7 +987,7 @@ EXPECTED_SOURCE_OVERLAY = {
     "applied_after_source_verification": True,
     "patch": {
         "path": SOURCE_OVERLAY_PATH.as_posix(),
-        "sha256": "d74d13976a8368c818755d67bbe2f464393c185d87317164bd214108e5d4712d",
+        "sha256": "90a2168b9e158f3a61e3cfe3c4e21b6cc6df39c393c2bb38a6df3ffa2e7a3d66",
     },
     "apply_arguments": [
         "--unidiff-zero",
@@ -1015,22 +1015,24 @@ EXPECTED_SOURCE_OVERLAY = {
     },
     "postimages": {
         "core/trino-web-ui/src/main/resources/webapp/package.json": (
-            "34b237a9af887a5cbe9c83f541a5084299f9eb3b1e974a661dea7cd17a1c8d38"
+            "2af750b9571eddce309373325779a3e2d35ba1977db25b657fe4337f3cb687d2"
         ),
         "core/trino-web-ui/src/main/resources/webapp/bun.lock": (
-            "b9010ec72590c76c7dc865a10b1fefe554a64eabb1492c422c954e45324cc9d3"
+            "90bfa0a797ae2f37a4ab5e8b445a62fa211328cedab186ac8c2402f78a07a194"
         ),
         "core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json": (
-            "34f68bd556c33d54b2e3475ffd8dc45e1a7167b3c9c60ba257ed43e0f0e6a8df"
+            "d555ca5ab130a76775c9677b5b9798dee486964ef0fc4992fbb02705e696d271"
         ),
         "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock": (
-            "14fa0d75107753676c59093978fe68fe67486868564f41dadc7d76d659d2df25"
+            "c8c9044cf3bd90d38e5aab71e680bf0dd3724c4062eaac9a60e981629601a163"
         ),
     },
     "dependency_overrides": {
-        "brace-expansion": "5.0.8",
+        "brace-expansion": "5.0.9",
         "d3-color": "3.1.0",
-        "fast-uri": "3.1.4",
+        "fast-uri": "3.1.5",
+        "js-yaml": "4.3.1",
+        "nanoid": "3.3.17",
         "postcss": "8.5.18",
         "react-router-dom": "7.18.1",
     },
@@ -1630,13 +1632,84 @@ EXPECTED_PR_OVERLAY_BUILD_MARKERS = (
     '          bun run --cwd "${modern}" build',
     '          bun run --cwd "${legacy}" package:clean',
 )
-EXPECTED_OPENVEX_TRIVY_CACHE_BLOCK = """\
-      - name: Apply OpenVEX and block remaining Bun High or Critical findings
+EXPECTED_BUN_SCAN_STAGE_BLOCK = """\
+      - name: Stage the exact Bun lockfiles for dependency analysis
         if: steps.lifecycle.outputs.active == 'true'
+        id: stage_bun_scan_input
+        shell: bash
+        run: |
+"""
+EXPECTED_BUN_ADJUSTED_SCAN_REPORT_BLOCK = """\
+      - name: Apply OpenVEX and retain adjusted Bun High or Critical findings
+        if: >-
+          always() &&
+          steps.lifecycle.outputs.active == 'true' &&
+          steps.stage_bun_scan_input.outcome == 'success'
         env:
           TRIVY_INCLUDE_DEV_DEPS: "true"
           TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="${GITHUB_WORKSPACE}/.trino-candidate"
+          vex="${GITHUB_WORKSPACE}/bootstrap/trino/v483/vex/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
+          install -m 0444 "${vex}" \\
+            "${candidate}/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
+          trivy fs \\
+            --scanners vuln \\
+            --severity HIGH,CRITICAL \\
+            --ignore-unfixed=false \\
+            --skip-db-update \\
+            --pkg-types library \\
+            --exit-code 0 \\
+            --list-all-pkgs \\
+            --format json \\
+            --output "${candidate}/trivy-bun-vulnerability.json" \\
+            --vex "${vex}" \\
+            "${RUNNER_TEMP}/trino-bun-scan-input"
 """
+EXPECTED_BUN_SCAN_GATE_BLOCK = """\
+      - name: Verify and block the raw and OpenVEX-adjusted Bun dependency evidence
+        if: >-
+          always() &&
+          steps.lifecycle.outputs.active == 'true' &&
+          steps.stage_bun_scan_input.outcome == 'success'
+        id: verify_bun_scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py \\
+            verify-bun-scan \\
+            --root . \\
+            --scan-input "${RUNNER_TEMP}/trino-bun-scan-input" \\
+            --raw-report \\
+              "${GITHUB_WORKSPACE}/.trino-candidate/trivy-bun-vulnerability-raw.json" \\
+            --adjusted-report \\
+              "${GITHUB_WORKSPACE}/.trino-candidate/trivy-bun-vulnerability.json"
+"""
+EXPECTED_BUN_FAILURE_DIAGNOSTIC_BLOCK = """\
+      - name: Retain failed Bun vulnerability diagnostics
+        if: >-
+          failure() &&
+          steps.lifecycle.outputs.active == 'true' &&
+          steps.verify_bun_scan.outcome == 'failure'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: >-
+            trino-bun-vulnerability-diagnostics-${{ github.run_id }}-${{
+            github.run_attempt }}
+          include-hidden-files: true
+          path: |
+            .trino-candidate/trino-bun-dependencies-483.cdx.json
+            .trino-candidate/trivy-bun-vulnerability-raw.json
+            .trino-candidate/trivy-bun-vulnerability.json
+            .trino-candidate/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json
+          if-no-files-found: error
+          retention-days: 14
+"""
+EXPECTED_BUN_DIAGNOSTIC_ARTIFACT_PREFIX = (
+    "trino-bun-vulnerability-diagnostics-"
+)
 EXPECTED_RECORD_TRIVY_CACHE_BLOCK = """\
       - name: Record the read-only candidate
         if: steps.lifecycle.outputs.active == 'true'
@@ -1694,6 +1767,13 @@ EXPECTED_CANDIDATE_HIDDEN_UPLOAD_BLOCK = """\
           name: ${{ steps.record.outputs.candidate_artifact_name }}
           include-hidden-files: true
           path: |
+"""
+EXPECTED_CANDIDATE_DOWNLOAD_BLOCK = """\
+      - name: Download the exact read-only-verified candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.validate.outputs.candidate_artifact_name }}
+          path: ${{ runner.temp }}/trino-maven-candidate
 """
 EXPECTED_ORAS_PUSH_BLOCK = """\
           (
@@ -1920,7 +2000,7 @@ DEFAULT_HTTP_BLOCKER = (
 )
 EXPECTED_ACTIONS = {
     "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10": 2,
-    "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02": 3,
+    "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02": 4,
     "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c": 1,
     "aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25": 4,
     "sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6": 1,
@@ -1946,8 +2026,9 @@ EXPECTED_STEPS = {
         "Stage the exact Bun lockfiles for dependency analysis",
         "Generate a CycloneDX Bun dependency SBOM",
         "Retain the raw Bun High or Critical findings",
-        "Apply OpenVEX and block remaining Bun High or Critical findings",
-        "Verify the raw and OpenVEX-adjusted Bun dependency evidence",
+        "Apply OpenVEX and retain adjusted Bun High or Critical findings",
+        "Verify and block the raw and OpenVEX-adjusted Bun dependency evidence",
+        "Retain failed Bun vulnerability diagnostics",
         "Record the read-only candidate",
         "Retain the read-only-verified candidate",
     ],
@@ -5952,7 +6033,6 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         or workflow.count(EXPECTED_MAVEN_FAILURE_DIAGNOSTIC_BLOCK) != 1
         or workflow.count(EXPECTED_CANDIDATE_HIDDEN_UPLOAD_BLOCK) != 1
         or workflow.count("        id: verify_maven_scan") != 1
-        or lines.count("          include-hidden-files: true") != 2
     ):
         _fail(
             "WORKFLOW_MAVEN_DIAGNOSTICS",
@@ -5960,6 +6040,37 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
                 "the report-only Maven scan must feed the explicit blocking "
                 "verifier, and both exact hidden candidate inventories must "
                 "be explicitly retained"
+            ),
+        )
+    if (
+        workflow.count(EXPECTED_BUN_SCAN_STAGE_BLOCK) != 1
+        or workflow.count(EXPECTED_BUN_ADJUSTED_SCAN_REPORT_BLOCK) != 1
+        or workflow.count(EXPECTED_BUN_SCAN_GATE_BLOCK) != 1
+        or workflow.count(EXPECTED_BUN_FAILURE_DIAGNOSTIC_BLOCK) != 1
+        or workflow.count("        id: stage_bun_scan_input") != 1
+        or workflow.count("        id: verify_bun_scan") != 1
+        or workflow.count(EXPECTED_BUN_DIAGNOSTIC_ARTIFACT_PREFIX) != 1
+        or lines.count("          include-hidden-files: true") != 3
+    ):
+        _fail(
+            "WORKFLOW_BUN_DIAGNOSTICS",
+            (
+                "the adjusted Bun scan must remain report-only, retain the "
+                "exact reviewed OpenVEX before the explicit blocking verifier, "
+                "and retain only the exact run-scoped failure diagnostic quartet"
+            ),
+        )
+    publish_workflow = workflow.split("\n  publish:\n", 1)
+    if (
+        len(publish_workflow) != 2
+        or workflow.count(EXPECTED_CANDIDATE_DOWNLOAD_BLOCK) != 1
+        or EXPECTED_BUN_DIAGNOSTIC_ARTIFACT_PREFIX in publish_workflow[1]
+    ):
+        _fail(
+            "WORKFLOW_BUN_DIAGNOSTIC_ISOLATION",
+            (
+                "the failure diagnostic artifact must never become a candidate, "
+                "admission, or publication input"
             ),
         )
     if (
@@ -6251,7 +6362,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
             "Bun cache must be frozen, independently reconstructed, and read-only offline",
         )
     if (
-        workflow.count(EXPECTED_OPENVEX_TRIVY_CACHE_BLOCK) != 1
+        workflow.count(EXPECTED_BUN_ADJUSTED_SCAN_REPORT_BLOCK) != 1
         or workflow.count(EXPECTED_RECORD_TRIVY_CACHE_BLOCK) != 1
         or workflow.count(
             "TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy"
