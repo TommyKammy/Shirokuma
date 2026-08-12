@@ -110,6 +110,13 @@ a narrow alternative for only repository `TommyKammy/Shirokuma`, PR #145, and
 this second publication attempt, the publisher may accept one canonical
 top-level issue comment when every condition below is true:
 
+- the REST issue-comments endpoint is queried with a page size of 100 and
+  followed through every page until exhaustion, bounded to at most 10 pages
+  and a 32 MiB response per page; every comment ID must be a unique positive
+  integer in strictly increasing order across pages, and two complete scans of
+  the decision-relevant comment fields must be identical; reaching the
+  1,000-comment ceiling without proving exhaustion, or any missing, malformed,
+  reordered, duplicated, or unstable page, fails closed;
 - the comment author login is exactly `TommyKammy`, the GitHub account type is
   `User`, and `author_association` is `OWNER`;
 - `.github/workflows/ci.yml`, `.github/workflows/security.yml`,
@@ -150,11 +157,14 @@ thread gate. On this owner-exception path only, the main publisher must repeat
 the exact merged-PR, attested-head CI, and review-thread queries at its
 write-capable boundary and again immediately before registry authentication.
 
-This exception grants only the approval path for PR #145. Failure consumes the
-attempt, rerun remains forbidden, and the empty downstream-authority set is
-closed-world: it grants no dependency-evidence admission, image publication,
-resident admission, Flux/runtime reconciliation, credentials, public
-exposure, production use, or Issue #63 closure.
+This exception grants only the approval path for PR #145's second publication
+attempt. It does not remove the independent-review requirement from any other
+pull request, later attempt, or repository policy and is not a permanent
+relaxation. Failure consumes the attempt, rerun remains forbidden, and the
+empty downstream-authority set is closed-world: it grants no
+dependency-evidence admission, image publication, resident admission,
+Flux/runtime reconciliation, credentials, public exposure, production use, or
+Issue #63 closure.
 
 ## Consequences
 

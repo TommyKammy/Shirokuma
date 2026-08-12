@@ -370,6 +370,17 @@
     "attestation_body_template": "Owner final-head attestation for PR #145\n\nDecision: {decision}\nFinal head: {final_head}\nException: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5262105662",
     "allowed_decisions": ["APPROVED", "REVOKED"],
     "standard_independent_review_remains_accepted": true,
+    "owner_issue_comments": {
+      "query_only_if_standard_independent_review_absent": true,
+      "api": "rest_issue_comments",
+      "page_size": 100,
+      "maximum_pages": 10,
+      "maximum_items": 1000,
+      "maximum_page_bytes": 33554432,
+      "stable_snapshot_passes": 2,
+      "strictly_increasing_unique_ids": true,
+      "pagination_must_be_complete": true
+    },
     "final_head_ci": {
       "required_before_attestation": true,
       "workflow_paths": [

@@ -1185,7 +1185,9 @@ merge and publication. The standard path remains a current independent human
 `APPROVED` review on the exact final activation PR head from a reviewer
 different from the owner and implementation author. It is evaluated first and,
 when satisfied, completes approval without querying owner-exception comments,
-final-head CI, or review-thread APIs.
+final-head CI, or review-thread APIs. The independent-review requirement
+remains the normal policy for every other pull request and any later attempt;
+the exception below is not a permanent relaxation.
 
 Because Shirokuma is `TommyKammy`'s personal experimental project and no
 independent approver is available, Issue #63 comment
@@ -1206,6 +1208,17 @@ used for ordering, a later `REVOKED` denies approval, and a tie at the latest
 timestamp fails closed as ambiguous. Bot or non-owner marker comments cannot
 satisfy or deny an otherwise valid attestation; owner identity, association,
 PR, head, body, timing, CI, thread, or pagination drift fails closed.
+
+Only on this fallback path, the publisher reads top-level comments through the
+REST issue-comments endpoint with `per_page=100`, follows every page to
+exhaustion, and permits at most 10 pages with a 32 MiB response bound per page.
+Every comment ID must be a unique positive integer in strictly increasing order
+across all pages, and two complete scans of the ID, body, author identity and
+type, association, and creation/update timestamps must match. Reaching the
+1,000-comment ceiling without proving exhaustion, or receiving a missing,
+malformed, reordered, duplicated, or unstable page, fails closed. A qualifying
+standard independent review short-circuits before this comment query, so
+owner-exception data is not fetched on the normal path.
 
 The thread result proves the state of the exact attested head. Resolving a
 non-outdated thread after attestation does not make it acceptable. Making a

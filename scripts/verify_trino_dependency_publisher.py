@@ -22,7 +22,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Callable, Mapping
 from urllib.error import URLError
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 
@@ -43,6 +43,8 @@ BUN_TEST_PATH = Path("tests/test_trino_bun_dependencies.py")
 PARQUET_REMEDIATION_TEST_PATH = Path(
     "tests/test_parquet_jackson_remediation.py"
 )
+GITHUB_API_RESPONSE_BYTES = 1_048_576
+GITHUB_COMMENT_PAGE_RESPONSE_BYTES = 33_554_432
 MAX_OMITTED_JAR_MEMBER_BYTES = 64 * 1024 * 1024
 MAX_OMITTED_JAR_EXPANDED_BYTES = 256 * 1024 * 1024
 MAX_OMITTED_JAR_COMPRESSION_RATIO = 200
@@ -163,6 +165,17 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
         "current_non_outdated": 0,
         "head_sha_must_match_attestation": True,
         "query": "graphql_review_threads",
+        "pagination_must_be_complete": True,
+    },
+    "owner_issue_comments": {
+        "query_only_if_standard_independent_review_absent": True,
+        "api": "rest_issue_comments",
+        "page_size": 100,
+        "maximum_pages": 10,
+        "maximum_items": 1000,
+        "maximum_page_bytes": GITHUB_COMMENT_PAGE_RESPONSE_BYTES,
+        "stable_snapshot_passes": 2,
+        "strictly_increasing_unique_ids": True,
         "pagination_must_be_complete": True,
     },
     "publication_enforcement": (
@@ -4219,9 +4232,16 @@ def _github_api_json(
     *,
     token: str,
     request_payload: Mapping[str, Any] | None = None,
+    maximum_response_bytes: int = GITHUB_API_RESPONSE_BYTES,
 ) -> Any:
     if not token:
         _fail("INDEPENDENT_REVIEW", "GitHub token is missing")
+    if (
+        type(maximum_response_bytes) is not int
+        or maximum_response_bytes < GITHUB_API_RESPONSE_BYTES
+        or maximum_response_bytes > GITHUB_COMMENT_PAGE_RESPONSE_BYTES
+    ):
+        _fail("INDEPENDENT_REVIEW", "GitHub API response bound differs")
     data = None
     if request_payload is not None:
         data = json.dumps(
@@ -4248,10 +4268,10 @@ def _github_api_json(
                     "INDEPENDENT_REVIEW",
                     f"GitHub API status differs: {response.status}",
                 )
-            response_payload = response.read(1_048_577)
+            response_payload = response.read(maximum_response_bytes + 1)
     except URLError as error:
         _fail("INDEPENDENT_REVIEW", f"GitHub API request failed: {error}")
-    if len(response_payload) > 1_048_576:
+    if len(response_payload) > maximum_response_bytes:
         _fail("INDEPENDENT_REVIEW", "GitHub API response is too large")
     try:
         return json.loads(response_payload)
@@ -4266,6 +4286,96 @@ def _github_api_list(url: str, *, token: str) -> list[Any]:
     if len(result) >= 100:
         _fail("INDEPENDENT_REVIEW", "GitHub API result may be truncated")
     return result
+
+
+def _github_api_paginated_list(
+    url: str,
+    *,
+    token: str,
+    page_size: int = 100,
+    maximum_pages: int = 10,
+    maximum_items: int = 1000,
+    maximum_page_bytes: int = GITHUB_COMMENT_PAGE_RESPONSE_BYTES,
+    stable_snapshot_passes: int = 2,
+) -> list[Any]:
+    if (
+        type(page_size) is not int
+        or page_size != 100
+        or type(maximum_pages) is not int
+        or maximum_pages != 10
+        or type(maximum_items) is not int
+        or maximum_items != page_size * maximum_pages
+        or maximum_page_bytes != GITHUB_COMMENT_PAGE_RESPONSE_BYTES
+        or stable_snapshot_passes != 2
+    ):
+        _fail("INDEPENDENT_REVIEW", "GitHub pagination bounds differ")
+    parsed = urlsplit(url)
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc != "api.github.com"
+        or parsed.path
+        != "/repos/TommyKammy/Shirokuma/issues/145/comments"
+        or parsed.fragment
+        or parsed.query
+    ):
+        _fail("INDEPENDENT_REVIEW", "GitHub pagination URL differs")
+
+    def scan() -> tuple[list[Any], tuple[Any, ...]]:
+        items: list[Any] = []
+        snapshot: list[Any] = []
+        previous_id = 0
+        for page in range(1, maximum_pages + 1):
+            page_url = urlunsplit(
+                (
+                    parsed.scheme,
+                    parsed.netloc,
+                    parsed.path,
+                    urlencode({"per_page": page_size, "page": page}),
+                    "",
+                )
+            )
+            result = _github_api_json(
+                page_url,
+                token=token,
+                maximum_response_bytes=maximum_page_bytes,
+            )
+            if not isinstance(result, list) or len(result) > page_size:
+                _fail(
+                    "INDEPENDENT_REVIEW",
+                    "paginated GitHub API response is malformed",
+                )
+            for item in result:
+                comment_id = item.get("id") if isinstance(item, Mapping) else None
+                if type(comment_id) is not int or comment_id <= previous_id:
+                    _fail(
+                        "INDEPENDENT_REVIEW",
+                        "GitHub comment IDs are not strictly increasing",
+                    )
+                previous_id = comment_id
+                user = item.get("user")
+                snapshot.append(
+                    (
+                        comment_id,
+                        item.get("body"),
+                        user.get("login") if isinstance(user, Mapping) else None,
+                        user.get("type") if isinstance(user, Mapping) else None,
+                        item.get("author_association"),
+                        item.get("created_at"),
+                        item.get("updated_at"),
+                    )
+                )
+            items.extend(result)
+            if len(items) > maximum_items:
+                _fail("INDEPENDENT_REVIEW", "GitHub pagination bound exceeded")
+            if len(result) < page_size:
+                return items, tuple(snapshot)
+        _fail("INDEPENDENT_REVIEW", "GitHub API result may be truncated")
+
+    first_items, first_snapshot = scan()
+    second_items, second_snapshot = scan()
+    if second_snapshot != first_snapshot:
+        _fail("INDEPENDENT_REVIEW", "GitHub comment snapshot is unstable")
+    return second_items
 
 
 def _github_api_mapping(
@@ -4419,8 +4529,8 @@ def _select_owner_final_head_attestation(
         match = pattern.fullmatch(body)
         if (
             match is None
-            or not isinstance(comment.get("id"), int)
-            or int(comment["id"]) <= 0
+            or type(comment.get("id")) is not int
+            or comment["id"] <= 0
             or not isinstance(comment.get("created_at"), str)
             or not isinstance(comment.get("updated_at"), str)
         ):
@@ -4742,8 +4852,8 @@ def verify_independent_review(
         pulls,
         reviews,
         commit=commit,
-        comments=lambda: _github_api_list(
-            f"{base}/issues/{matching[0]['number']}/comments?per_page=100",
+        comments=lambda: _github_api_paginated_list(
+            f"{base}/issues/{matching[0]['number']}/comments",
             token=token,
         ),
     )

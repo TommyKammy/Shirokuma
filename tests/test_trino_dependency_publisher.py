@@ -3402,7 +3402,11 @@ class PublisherContractTests(unittest.TestCase):
                 "head": {"sha": final_head},
             }
         ]
-        comments = [
+        first_comment_page = [
+            {"id": comment_id, "body": "ordinary comment"}
+            for comment_id in range(5262999900, 5263000000)
+        ]
+        second_comment_page = [
             {
                 "id": 5263000000,
                 "body": (
@@ -3444,7 +3448,10 @@ class PublisherContractTests(unittest.TestCase):
                 side_effect=[
                     Response(pulls),
                     Response([]),
-                    Response(comments),
+                    Response(first_comment_page),
+                    Response(second_comment_page),
+                    Response(first_comment_page),
+                    Response(second_comment_page),
                     Response(workflow_payload),
                     Response(thread_payload),
                 ],
@@ -3465,23 +3472,143 @@ class PublisherContractTests(unittest.TestCase):
             receipt["final_head_ci"]["completed_before_attestation"],
             True,
         )
-        self.assertEqual(5, request.call_count)
+        self.assertEqual(8, request.call_count)
         requests = [call.args[0] for call in request.call_args_list]
         self.assertIn(f"/commits/{commit}/pulls?per_page=100", requests[0].full_url)
         self.assertIn("/pulls/145/reviews?per_page=100", requests[1].full_url)
-        self.assertIn("/issues/145/comments?per_page=100", requests[2].full_url)
         self.assertIn(
-            f"/actions/runs?event=pull_request&head_sha={final_head}&per_page=100",
+            "/issues/145/comments?per_page=100&page=1",
+            requests[2].full_url,
+        )
+        self.assertIn(
+            "/issues/145/comments?per_page=100&page=2",
             requests[3].full_url,
         )
-        self.assertEqual("https://api.github.com/graphql", requests[4].full_url)
-        self.assertEqual("POST", requests[4].get_method())
-        graphql_request = json.loads(requests[4].data)
+        self.assertIn(
+            "/issues/145/comments?per_page=100&page=1",
+            requests[4].full_url,
+        )
+        self.assertIn(
+            "/issues/145/comments?per_page=100&page=2",
+            requests[5].full_url,
+        )
+        self.assertIn(
+            f"/actions/runs?event=pull_request&head_sha={final_head}&per_page=100",
+            requests[6].full_url,
+        )
+        self.assertEqual("https://api.github.com/graphql", requests[7].full_url)
+        self.assertEqual("POST", requests[7].get_method())
+        graphql_request = json.loads(requests[7].data)
         self.assertEqual(
             {"owner": "TommyKammy", "name": "Shirokuma", "number": 145},
             graphql_request["variables"],
         )
         self.assertIn("headRefOid", graphql_request["query"])
+
+    def test_owner_comment_pagination_fails_closed(self) -> None:
+        comment_url = (
+            "https://api.github.com/repos/TommyKammy/Shirokuma/"
+            "issues/145/comments"
+        )
+        full_page = [
+            {"id": comment_id, "body": "ordinary comment"}
+            for comment_id in range(1, 101)
+        ]
+
+        class Response:
+            status = 200
+
+            def __init__(self, payload: object) -> None:
+                self.payload = json.dumps(payload).encode()
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                return self.payload
+
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                side_effect=[Response(full_page), Response({"comments": []})],
+            ) as request,
+            self.assertRaisesRegex(
+                verify.ContractError,
+                "paginated GitHub API response is malformed",
+            ),
+        ):
+            verify._github_api_paginated_list(
+                comment_url,
+                token="ephemeral-token",
+            )
+        self.assertEqual(2, request.call_count)
+        self.assertIn("per_page=100&page=2", request.call_args.args[0].full_url)
+
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                side_effect=[
+                    Response(
+                        [
+                            {"id": page * 100 + offset + 1, "body": "comment"}
+                            for offset in range(100)
+                        ]
+                    )
+                    for page in range(10)
+                ],
+            ) as request,
+            self.assertRaisesRegex(
+                verify.ContractError,
+                "GitHub API result may be truncated",
+            ),
+        ):
+            verify._github_api_paginated_list(
+                comment_url,
+                token="ephemeral-token",
+            )
+        self.assertEqual(10, request.call_count)
+        self.assertIn("per_page=100&page=10", request.call_args.args[0].full_url)
+
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                return_value=Response([{"id": 2}, {"id": 1}]),
+            ),
+            self.assertRaisesRegex(
+                verify.ContractError,
+                "comment IDs are not strictly increasing",
+            ),
+        ):
+            verify._github_api_paginated_list(
+                comment_url,
+                token="ephemeral-token",
+            )
+
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                side_effect=[
+                    Response([{"id": 1, "body": "before"}]),
+                    Response([{"id": 1, "body": "after"}]),
+                ],
+            ) as request,
+            self.assertRaisesRegex(
+                verify.ContractError,
+                "comment snapshot is unstable",
+            ),
+        ):
+            verify._github_api_paginated_list(
+                comment_url,
+                token="ephemeral-token",
+            )
+        self.assertEqual(2, request.call_count)
 
     def test_independent_review_query_is_bounded_and_commit_scoped(self) -> None:
         commit = "b" * 40

@@ -47,11 +47,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "478fefd43570b8e463183144af6f62350466c5d0b0ccca9155fd29594d35f3f8"
+      "sha256": "56130f62188dfc19e8be53c012720b14c378af61d5f16c0f17ef0f84d94715aa"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "3a6e30b9c58e551f089453ff010531d6ed16f5c534c0a5c5d59a9219a2a034f7"
+      "sha256": "72c6ae47dc2d415d334be0d2e03518c2e04e10e0e4ccfdcb7bb2af78c9cc6fe1"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -95,7 +95,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md",
-      "sha256": "03c2321650bcce32ea94c5ce080c472d75e92d37a18a78c7d06e8f92b7d3b148"
+      "sha256": "f2e1fa71957b5b1ac141e93967e42a91c0a43608c57719b9527e75f4bdc01882"
     },
     {
       "path": "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",
@@ -1097,6 +1097,17 @@
       "attestation_body_template": "Owner final-head attestation for PR #145\n\nDecision: {decision}\nFinal head: {final_head}\nException: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5262105662",
       "allowed_decisions": ["APPROVED", "REVOKED"],
       "standard_independent_review_remains_accepted": true,
+      "owner_issue_comments": {
+        "query_only_if_standard_independent_review_absent": true,
+        "api": "rest_issue_comments",
+        "page_size": 100,
+        "maximum_pages": 10,
+        "maximum_items": 1000,
+        "maximum_page_bytes": 33554432,
+        "stable_snapshot_passes": 2,
+        "strictly_increasing_unique_ids": true,
+        "pagination_must_be_complete": true
+      },
       "final_head_ci": {
         "required_before_attestation": true,
         "workflow_paths": [
