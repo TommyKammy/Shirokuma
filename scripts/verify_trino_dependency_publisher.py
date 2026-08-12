@@ -1123,7 +1123,7 @@ EXPECTED_SOURCE_OVERLAY = {
             "vulnerability_id": "GHSA-qwww-vcr4-c8h2",
             "package": "react-router",
             "installed_version": "7.18.1",
-            "fixed_version": "8.3.0",
+            "fixed_version": "7.18.2, 8.3.0",
             "severity": "HIGH",
             "purl": "pkg:npm/react-router@7.18.1",
         },

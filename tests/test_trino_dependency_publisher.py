@@ -1114,6 +1114,7 @@ class BunScanEvidenceTests(unittest.TestCase):
         missing_sentinel: bool = False,
         wrong_purl: bool = False,
         inventory_drift: bool = False,
+        fixed_version: str = "7.18.2, 8.3.0",
     ) -> Path:
         packages = {
             "webapp/bun.lock": [
@@ -1130,7 +1131,7 @@ class BunScanEvidenceTests(unittest.TestCase):
             "VulnerabilityID": "GHSA-qwww-vcr4-c8h2",
             "PkgName": "react-router",
             "InstalledVersion": "7.18.1",
-            "FixedVersion": "8.3.0",
+            "FixedVersion": fixed_version,
             "Severity": "HIGH",
             "PkgIdentifier": {
                 "PURL": (
@@ -1248,6 +1249,27 @@ class BunScanEvidenceTests(unittest.TestCase):
             scan_input.mkdir()
             self._write_lockfiles(scan_input)
             raw = self._report(root, "raw.json", wrong_purl=True)
+            adjusted = self._report(root, "adjusted.json")
+            with (
+                self._scan_contract(),
+                self.assertRaisesRegex(
+                    verify.ContractError,
+                    "BUN_SCAN_RAW_FINDING",
+                ),
+            ):
+                verify.verify_bun_scan(root, scan_input, raw, adjusted)
+
+    def test_verify_bun_scan_rejects_fixed_version_metadata_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scan_input = root / "scan-input"
+            scan_input.mkdir()
+            self._write_lockfiles(scan_input)
+            raw = self._report(
+                root,
+                "raw.json",
+                fixed_version="8.3.0",
+            )
             adjusted = self._report(root, "adjusted.json")
             with (
                 self._scan_contract(),
