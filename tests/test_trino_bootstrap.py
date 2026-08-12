@@ -2908,6 +2908,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "distribution_remediation_authorization",
                 "build_plugin_remediation_authorization",
                 "dependency_snapshot_publication_reauthorization",
+                "independent_review",
                 "owner_only_approval_exception",
                 "repository_state",
                 "next_action",
@@ -4825,6 +4826,15 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "reviewer_must_differ_from_risk_owner": True,
                     "reviewer_must_differ_from_implementation_author": True,
                     "approval_must_match_final_head_sha": True,
+                    "approval_must_be_submitted_before_merge": True,
+                    "reviews": {
+                        "api": "rest_pull_request_reviews",
+                        "page_size": 100,
+                        "maximum_pages": 10,
+                        "maximum_reviews": 1000,
+                        "unique_review_ids": True,
+                        "pagination_must_be_complete": True,
+                    },
                     "publication_enforcement": (
                         "exact_merged_pull_request_review_or_owner_"
                         "attestation_query"
@@ -4895,6 +4905,12 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                         "current_non_outdated": 0,
                         "head_sha_must_match_attestation": True,
                         "query": "graphql_review_threads",
+                        "page_size": 100,
+                        "maximum_pages": 10,
+                        "maximum_threads": 1000,
+                        "stable_snapshot_passes": 2,
+                        "unique_thread_ids": True,
+                        "total_count_must_match": True,
                         "pagination_must_be_complete": True,
                     },
                     "publication_enforcement": (
@@ -4944,6 +4960,10 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         self.assertEqual(
             contract["publication"]["reauthorization"],
             admission["dependency_snapshot_publication_reauthorization"],
+        )
+        self.assertEqual(
+            contract["publication"]["independent_review"],
+            admission["independent_review"],
         )
         self.assertEqual(
             contract["publication"]["owner_only_approval_exception"],

@@ -45,6 +45,12 @@ PARQUET_REMEDIATION_TEST_PATH = Path(
 )
 GITHUB_API_RESPONSE_BYTES = 1_048_576
 GITHUB_COMMENT_PAGE_RESPONSE_BYTES = 33_554_432
+GITHUB_PULL_REVIEW_PAGE_SIZE = 100
+GITHUB_PULL_REVIEW_MAXIMUM_PAGES = 10
+GITHUB_PULL_REVIEW_MAXIMUM_REVIEWS = 1_000
+GITHUB_REVIEW_THREAD_PAGE_SIZE = 100
+GITHUB_REVIEW_THREAD_MAXIMUM_PAGES = 10
+GITHUB_REVIEW_THREAD_MAXIMUM_THREADS = 1_000
 MAX_OMITTED_JAR_MEMBER_BYTES = 64 * 1024 * 1024
 MAX_OMITTED_JAR_EXPANDED_BYTES = 256 * 1024 * 1024
 MAX_OMITTED_JAR_COMPRESSION_RATIO = 200
@@ -117,6 +123,15 @@ EXPECTED_INDEPENDENT_REVIEW = {
     "reviewer_must_differ_from_risk_owner": True,
     "reviewer_must_differ_from_implementation_author": True,
     "approval_must_match_final_head_sha": True,
+    "approval_must_be_submitted_before_merge": True,
+    "reviews": {
+        "api": "rest_pull_request_reviews",
+        "page_size": GITHUB_PULL_REVIEW_PAGE_SIZE,
+        "maximum_pages": GITHUB_PULL_REVIEW_MAXIMUM_PAGES,
+        "maximum_reviews": GITHUB_PULL_REVIEW_MAXIMUM_REVIEWS,
+        "unique_review_ids": True,
+        "pagination_must_be_complete": True,
+    },
     "publication_enforcement": (
         "exact_merged_pull_request_review_or_owner_attestation_query"
     ),
@@ -165,6 +180,12 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
         "current_non_outdated": 0,
         "head_sha_must_match_attestation": True,
         "query": "graphql_review_threads",
+        "page_size": GITHUB_REVIEW_THREAD_PAGE_SIZE,
+        "maximum_pages": GITHUB_REVIEW_THREAD_MAXIMUM_PAGES,
+        "maximum_threads": GITHUB_REVIEW_THREAD_MAXIMUM_THREADS,
+        "stable_snapshot_passes": 2,
+        "unique_thread_ids": True,
+        "total_count_must_match": True,
         "pagination_must_be_complete": True,
     },
     "owner_issue_comments": {
@@ -4288,6 +4309,64 @@ def _github_api_list(url: str, *, token: str) -> list[Any]:
     return result
 
 
+def _github_api_paginated_reviews(url: str, *, token: str) -> list[Any]:
+    parsed = urlsplit(url)
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc != "api.github.com"
+        or re.fullmatch(
+            r"/repos/TommyKammy/Shirokuma/pulls/[1-9][0-9]*/reviews",
+            parsed.path,
+        )
+        is None
+        or parsed.fragment
+        or parsed.query
+    ):
+        _fail("INDEPENDENT_REVIEW", "GitHub pull-review pagination URL differs")
+
+    reviews: list[Any] = []
+    review_ids: set[int] = set()
+    for page in range(1, GITHUB_PULL_REVIEW_MAXIMUM_PAGES + 1):
+        page_url = urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                urlencode(
+                    {
+                        "per_page": GITHUB_PULL_REVIEW_PAGE_SIZE,
+                        "page": page,
+                    }
+                ),
+                "",
+            )
+        )
+        result = _github_api_json(page_url, token=token)
+        if not isinstance(result, list) or len(result) > GITHUB_PULL_REVIEW_PAGE_SIZE:
+            _fail(
+                "INDEPENDENT_REVIEW",
+                "paginated GitHub pull-review response is malformed",
+            )
+        for review in result:
+            review_id = review.get("id") if isinstance(review, Mapping) else None
+            if (
+                type(review_id) is not int
+                or review_id <= 0
+                or review_id in review_ids
+            ):
+                _fail(
+                    "INDEPENDENT_REVIEW",
+                    "GitHub pull-review IDs are invalid or duplicated",
+                )
+            review_ids.add(review_id)
+        reviews.extend(result)
+        if len(reviews) > GITHUB_PULL_REVIEW_MAXIMUM_REVIEWS:
+            _fail("INDEPENDENT_REVIEW", "GitHub pull-review bound exceeded")
+        if len(result) < GITHUB_PULL_REVIEW_PAGE_SIZE:
+            return reviews
+    _fail("INDEPENDENT_REVIEW", "GitHub pull-review result may be truncated")
+
+
 def _github_api_paginated_list(
     url: str,
     *,
@@ -4428,6 +4507,10 @@ def _select_independent_review(
         r"[0-9a-f]{40}", final_head
     ) is None:
         _fail("INDEPENDENT_REVIEW", "final pull request head is not exact")
+    merged_at = pull.get("merged_at")
+    if not isinstance(merged_at, str):
+        _fail("INDEPENDENT_REVIEW", "merged pull request timestamp is missing")
+    merged_instant = _parse_time(merged_at)
 
     latest_by_reviewer: dict[str, Mapping[str, Any]] = {}
     for review in reviews:
@@ -4454,7 +4537,11 @@ def _select_independent_review(
             and isinstance(review.get("id"), int)
             and review.get("commit_id") == final_head
         ):
-            qualified.append(review)
+            submitted_at = review.get("submitted_at")
+            if not isinstance(submitted_at, str):
+                continue
+            if _parse_time(submitted_at) < merged_instant:
+                qualified.append(review)
     if len(qualified) >= EXPECTED_INDEPENDENT_REVIEW["minimum_approved_reviews"]:
         selected = sorted(qualified, key=lambda review: int(review["id"]))[0]
         return {
@@ -4708,13 +4795,12 @@ def _validate_owner_final_head_ci(
     }
 
 
-def _validate_owner_review_threads(
-    exception: Mapping[str, Any],
+def _owner_review_thread_page(
     payload: Mapping[str, Any],
     *,
     pull_request: int,
     final_head: str,
-) -> dict[str, int]:
+) -> tuple[list[Mapping[str, Any]], int, bool, str | None]:
     if payload.get("errors") not in (None, []):
         _fail("INDEPENDENT_REVIEW", "review-thread GraphQL query failed")
     data = payload.get("data")
@@ -4731,30 +4817,74 @@ def _validate_owner_review_threads(
     page_info = (
         connection.get("pageInfo") if isinstance(connection, Mapping) else None
     )
+    total_count = (
+        connection.get("totalCount")
+        if isinstance(connection, Mapping)
+        else None
+    )
+    has_next_page = (
+        page_info.get("hasNextPage")
+        if isinstance(page_info, Mapping)
+        else None
+    )
+    end_cursor = (
+        page_info.get("endCursor")
+        if isinstance(page_info, Mapping)
+        else None
+    )
     if (
-        not isinstance(pull, Mapping)
-        or pull.get("number") != pull_request
+        not isinstance(repository, Mapping)
+        or repository.get("nameWithOwner") != "TommyKammy/Shirokuma"
+        or not isinstance(pull, Mapping)
+        or type(pull.get("number")) is not int
+        or pull["number"] != pull_request
         or pull.get("headRefOid") != final_head
+        or not isinstance(connection, Mapping)
+        or type(total_count) is not int
+        or total_count < 0
+        or total_count > GITHUB_REVIEW_THREAD_MAXIMUM_THREADS
         or not isinstance(nodes, list)
-        or len(nodes) > 100
+        or len(nodes) > GITHUB_REVIEW_THREAD_PAGE_SIZE
         or not isinstance(page_info, Mapping)
-        or page_info.get("hasNextPage") is not False
+        or type(has_next_page) is not bool
+        or (
+            end_cursor is not None
+            and (not isinstance(end_cursor, str) or not end_cursor)
+        )
+        or (has_next_page and not isinstance(end_cursor, str))
+        or (has_next_page and not nodes)
     ):
         _fail(
             "INDEPENDENT_REVIEW",
             "review-thread GraphQL response is truncated or malformed",
         )
 
-    unresolved = 0
-    outdated = 0
-    resolved = 0
+    page_thread_ids: set[str] = set()
+    validated_nodes: list[Mapping[str, Any]] = []
     for thread in nodes:
+        thread_id = thread.get("id") if isinstance(thread, Mapping) else None
         if (
             not isinstance(thread, Mapping)
+            or not isinstance(thread_id, str)
+            or not thread_id
+            or thread_id in page_thread_ids
             or type(thread.get("isResolved")) is not bool
             or type(thread.get("isOutdated")) is not bool
         ):
             _fail("INDEPENDENT_REVIEW", "review-thread entry is malformed")
+        page_thread_ids.add(thread_id)
+        validated_nodes.append(thread)
+    return validated_nodes, total_count, has_next_page, end_cursor
+
+
+def _owner_review_thread_receipt(
+    exception: Mapping[str, Any],
+    nodes: list[Mapping[str, Any]],
+) -> dict[str, int]:
+    unresolved = 0
+    outdated = 0
+    resolved = 0
+    for thread in nodes:
         if thread["isOutdated"]:
             outdated += 1
         elif thread["isResolved"]:
@@ -4778,6 +4908,146 @@ def _validate_owner_review_threads(
         "resolved": resolved,
         "outdated": outdated,
     }
+
+
+def _validate_owner_review_threads(
+    exception: Mapping[str, Any],
+    payload: Mapping[str, Any],
+    *,
+    pull_request: int,
+    final_head: str,
+) -> dict[str, int]:
+    nodes, total_count, has_next_page, _ = _owner_review_thread_page(
+        payload,
+        pull_request=pull_request,
+        final_head=final_head,
+    )
+    if has_next_page or total_count != len(nodes):
+        _fail(
+            "INDEPENDENT_REVIEW",
+            "review-thread GraphQL response is truncated or malformed",
+        )
+    return _owner_review_thread_receipt(exception, nodes)
+
+
+def _github_review_threads_pages(
+    exception: Mapping[str, Any],
+    *,
+    pull_request: int,
+    final_head: str,
+    token: str,
+) -> dict[str, int]:
+    policy = exception.get("review_threads")
+    if (
+        not isinstance(policy, Mapping)
+        or policy.get("page_size") != GITHUB_REVIEW_THREAD_PAGE_SIZE
+        or policy.get("maximum_pages")
+        != GITHUB_REVIEW_THREAD_MAXIMUM_PAGES
+        or policy.get("maximum_threads")
+        != GITHUB_REVIEW_THREAD_MAXIMUM_THREADS
+        or policy.get("stable_snapshot_passes") != 2
+        or policy.get("unique_thread_ids") is not True
+        or policy.get("total_count_must_match") is not True
+        or policy.get("pagination_must_be_complete") is not True
+    ):
+        _fail("INDEPENDENT_REVIEW", "review-thread pagination bounds differ")
+
+    query = (
+        "query($owner:String!,$name:String!,$number:Int!,$after:String){"
+        "repository(owner:$owner,name:$name){nameWithOwner "
+        "pullRequest(number:$number){number headRefOid "
+        "reviewThreads(first:100,after:$after){totalCount "
+        "nodes{id isResolved isOutdated}"
+        "pageInfo{hasNextPage endCursor}}}}}"
+    )
+
+    def scan() -> tuple[
+        list[Mapping[str, Any]], tuple[tuple[Any, ...], ...], int
+    ]:
+        after: str | None = None
+        observed_cursors: set[str] = set()
+        observed_thread_ids: set[str] = set()
+        observed_total_count: int | None = None
+        all_nodes: list[Mapping[str, Any]] = []
+        snapshot: list[tuple[Any, ...]] = []
+        for _page in range(GITHUB_REVIEW_THREAD_MAXIMUM_PAGES):
+            payload = _github_api_mapping(
+                "https://api.github.com/graphql",
+                token=token,
+                request_payload={
+                    "query": query,
+                    "variables": {
+                        "owner": "TommyKammy",
+                        "name": "Shirokuma",
+                        "number": pull_request,
+                        "after": after,
+                    },
+                },
+            )
+            nodes, total_count, has_next_page, end_cursor = (
+                _owner_review_thread_page(
+                    payload,
+                    pull_request=pull_request,
+                    final_head=final_head,
+                )
+            )
+            if after is not None and not nodes:
+                _fail(
+                    "INDEPENDENT_REVIEW",
+                    "review-thread continuation page is empty",
+                )
+            if observed_total_count is None:
+                observed_total_count = total_count
+            elif total_count != observed_total_count:
+                _fail(
+                    "INDEPENDENT_REVIEW",
+                    "review-thread total count changed between pages",
+                )
+            for thread in nodes:
+                thread_id = thread["id"]
+                if thread_id in observed_thread_ids:
+                    _fail(
+                        "INDEPENDENT_REVIEW",
+                        "review-thread ID is duplicated between pages",
+                    )
+                observed_thread_ids.add(thread_id)
+                all_nodes.append(thread)
+                snapshot.append(
+                    (
+                        thread_id,
+                        thread["isResolved"],
+                        thread["isOutdated"],
+                    )
+                )
+            if len(all_nodes) > GITHUB_REVIEW_THREAD_MAXIMUM_THREADS:
+                _fail("INDEPENDENT_REVIEW", "review-thread bound exceeded")
+            if not has_next_page:
+                if len(all_nodes) != observed_total_count:
+                    _fail(
+                        "INDEPENDENT_REVIEW",
+                        "review-thread total count differs from collected pages",
+                    )
+                _owner_review_thread_receipt(exception, all_nodes)
+                return all_nodes, tuple(snapshot), observed_total_count
+            if not isinstance(end_cursor, str):
+                _fail(
+                    "INDEPENDENT_REVIEW",
+                    "review-thread continuation cursor is missing",
+                )
+            if end_cursor in observed_cursors:
+                _fail("INDEPENDENT_REVIEW", "review-thread cursor repeated")
+            observed_cursors.add(end_cursor)
+            after = end_cursor
+        _fail("INDEPENDENT_REVIEW", "review-thread result may be truncated")
+
+    _first_nodes, first_snapshot, first_total_count = scan()
+    second_nodes, second_snapshot, second_total_count = scan()
+    if (
+        second_total_count != first_total_count
+        or second_snapshot != first_snapshot
+    ):
+        _fail("INDEPENDENT_REVIEW", "review-thread snapshot is unstable")
+    return _owner_review_thread_receipt(exception, second_nodes)
 
 
 def _verify_owner_final_head_gates(
@@ -4804,29 +5074,11 @@ def _verify_owner_final_head_gates(
         final_head=final_head,
         attested_at=attested_at,
     )
-    review_thread_payload = _github_api_mapping(
-        "https://api.github.com/graphql",
-        token=token,
-        request_payload={
-            "query": (
-                "query($owner:String!,$name:String!,$number:Int!){"
-                "repository(owner:$owner,name:$name){"
-                "pullRequest(number:$number){number headRefOid "
-                "reviewThreads(first:100){nodes{isResolved isOutdated}"
-                "pageInfo{hasNextPage}}}}}"
-            ),
-            "variables": {
-                "owner": "TommyKammy",
-                "name": "Shirokuma",
-                "number": pull_request,
-            },
-        },
-    )
-    review_threads = _validate_owner_review_threads(
+    review_threads = _github_review_threads_pages(
         exception,
-        review_thread_payload,
         pull_request=pull_request,
         final_head=final_head,
+        token=token,
     )
     return {
         "final_head_ci": final_head_ci,
@@ -4855,8 +5107,8 @@ def verify_independent_review(
     ]
     if len(matching) != 1 or not isinstance(matching[0]["number"], int):
         _fail("INDEPENDENT_REVIEW", "associated pull request is ambiguous")
-    reviews = _github_api_list(
-        f"{base}/pulls/{matching[0]['number']}/reviews?per_page=100",
+    reviews = _github_api_paginated_reviews(
+        f"{base}/pulls/{matching[0]['number']}/reviews",
         token=token,
     )
     selection = _select_independent_review(
@@ -5126,7 +5378,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         or workflow.count(
             "--validation-point before_dependency_publication"
         )
-        != 2
+        != 3
         or workflow.count("GITHUB_TOKEN: ${{ github.token }}") != 2
         or workflow.count("verify-independent-review --root .") != 2
         or lines.count("      actions: read") != 1
@@ -5906,6 +6158,10 @@ def audit(root: Path) -> None:
         or not _matches_exact_json(
             admission.get("dependency_snapshot_publication_reauthorization"),
             EXPECTED_PUBLICATION_REAUTHORIZATION,
+        )
+        or not _matches_exact_json(
+            admission.get("independent_review"),
+            EXPECTED_INDEPENDENT_REVIEW,
         )
         or repository_state.get("publication_workflow_permitted") is not True
         or repository_state.get("dependency_artifact_present") is not False

@@ -100,6 +100,15 @@ and requires either a reviewer different from implementation author `Codex`
 and the owner before merge, or the exact PR #145 owner final-head attestation
 defined below.
 
+The standard independent-review path queries the REST pull-request reviews
+endpoint with `per_page=100` through a terminal short page, bounded to 10 pages
+and 1,000 reviews. Every review ID must be a unique positive integer; reaching
+the 1,000-review ceiling without proving exhaustion, a malformed or duplicate
+ID, or a missing or malformed page fails closed. A qualifying human
+`APPROVED` review must target the exact final pull-request head and have a valid
+UTC `submitted_at` strictly before the pull request's `merged_at`; an approval
+submitted at or after merge cannot authorize publication.
+
 ### PR #145 owner-only approval exception
 
 The standard independent-review path remains accepted and is evaluated first.
@@ -124,10 +133,14 @@ top-level issue comment when every condition below is true:
   `.github/workflows/trino-maven-dependencies.yml` each have a fully paginated
   PR check result with `status=completed` and `conclusion=success` for PR #145
   and the exact attested final head;
-- a fully paginated GraphQL query reports a pull-request `headRefOid` exactly
-  equal to the attested final head and zero current, non-outdated
-  `reviewThreads` before attestation, whether resolved or unresolved; only
-  already-outdated threads are permitted; and
+- a GraphQL cursor query reads `reviewThreads` in pages of 100 until
+  `hasNextPage=false`, bounded to at most 10 pages and 1,000 threads; every
+  page must report the exact repository, pull-request number, and attested
+  `headRefOid`; `totalCount` must remain stable and equal the number of unique
+  thread IDs collected; two complete ordered scans of thread ID, resolved
+  state, and outdated state must match; and all returned pages together must
+  contain zero current, non-outdated threads before attestation, whether
+  resolved or unresolved; only already-outdated threads are permitted; and
 - the canonical comment is created after those final-head conditions pass and
   before merge, with the exact body:
 
@@ -153,8 +166,12 @@ fails closed. Making a thread outdated requires changing the PR head, which
 invalidates the exact-head attestation and its final-head CI evidence; the new
 head must pass the exception gates and receive a new attestation. Consequently,
 a post-attestation transition to outdated cannot retroactively satisfy the
-thread gate. On this owner-exception path only, the main publisher must repeat
-the exact merged-PR, attested-head CI, and review-thread queries at its
+thread gate. A malformed page, missing or repeated cursor, cursor cycle,
+repository, pull-request, `headRefOid`, or `totalCount` drift between pages,
+duplicate thread IDs, a mismatch between the two complete ordered scans, or
+failure to prove exhaustion before reaching either pagination bound fails
+closed. On this owner-exception path only, the main publisher must repeat the
+exact merged-PR, attested-head CI, and review-thread queries at its
 write-capable boundary and again immediately before registry authentication.
 
 This exception grants only the approval path for PR #145's second publication
@@ -220,6 +237,9 @@ owner attestation `Final head`, must equal the exact final pull-request
 `head.sha`; an approval of an earlier revision cannot authorize publication.
 The alternative also requires all exact final-head CI checks successful and
 zero current non-outdated review threads, including resolved threads.
+After those API gates return, the publisher repeats the current-time
+authorization and one-attempt check immediately before registry authentication
+so expiry during the bounded API queries cannot reach `oras login` or a write.
 
 Dependency artifact presence, dependency evidence admission, Trino image
 publication, resident-image admission, Flux runtime reconciliation, public

@@ -354,6 +354,25 @@
     "failure_consumes_attempt": true,
     "rerun_permitted": false
   },
+  "independent_review": {
+    "required_before_merge": true,
+    "required_before_publication": true,
+    "minimum_approved_reviews": 1,
+    "human_user_type": "User",
+    "reviewer_must_differ_from_risk_owner": true,
+    "reviewer_must_differ_from_implementation_author": true,
+    "approval_must_match_final_head_sha": true,
+    "approval_must_be_submitted_before_merge": true,
+    "reviews": {
+      "api": "rest_pull_request_reviews",
+      "page_size": 100,
+      "maximum_pages": 10,
+      "maximum_reviews": 1000,
+      "unique_review_ids": true,
+      "pagination_must_be_complete": true
+    },
+    "publication_enforcement": "exact_merged_pull_request_review_or_owner_attestation_query"
+  },
   "owner_only_approval_exception": {
     "status": "active",
     "scope": "pr_145_second_publication_attempt_only",
@@ -401,6 +420,12 @@
       "current_non_outdated": 0,
       "head_sha_must_match_attestation": true,
       "query": "graphql_review_threads",
+      "page_size": 100,
+      "maximum_pages": 10,
+      "maximum_threads": 1000,
+      "stable_snapshot_passes": 2,
+      "unique_thread_ids": true,
+      "total_count_must_match": true,
       "pagination_must_be_complete": true
     },
     "publication_enforcement": "exact_merged_pull_request_attested_head_ci_and_review_threads_query",

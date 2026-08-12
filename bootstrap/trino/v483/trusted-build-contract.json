@@ -47,11 +47,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "87d7b0801477ba174c720b2007498d53d6cafa8566bb8f5fb3411ac708e0a8c2"
+      "sha256": "494bfde9848e9e46fb1c3ef56e285e748e46cba96a73a3cd72abd8c013f7d160"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "72c6ae47dc2d415d334be0d2e03518c2e04e10e0e4ccfdcb7bb2af78c9cc6fe1"
+      "sha256": "a2368c5e2232b6b5606fe419c5ee562d4d6baa3c88e2b0b1533517b27cea93c1"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -95,7 +95,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md",
-      "sha256": "f2e1fa71957b5b1ac141e93967e42a91c0a43608c57719b9527e75f4bdc01882"
+      "sha256": "dfebf61ec6b3d3940efa083b26d19d3786777258427f47f1bde264ba5a34d78e"
     },
     {
       "path": "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",
@@ -1079,6 +1079,15 @@
       "reviewer_must_differ_from_risk_owner": true,
       "reviewer_must_differ_from_implementation_author": true,
       "approval_must_match_final_head_sha": true,
+      "approval_must_be_submitted_before_merge": true,
+      "reviews": {
+        "api": "rest_pull_request_reviews",
+        "page_size": 100,
+        "maximum_pages": 10,
+        "maximum_reviews": 1000,
+        "unique_review_ids": true,
+        "pagination_must_be_complete": true
+      },
       "publication_enforcement": "exact_merged_pull_request_review_or_owner_attestation_query"
     },
     "owner_only_approval_exception": {
@@ -1128,6 +1137,12 @@
         "current_non_outdated": 0,
         "head_sha_must_match_attestation": true,
         "query": "graphql_review_threads",
+        "page_size": 100,
+        "maximum_pages": 10,
+        "maximum_threads": 1000,
+        "stable_snapshot_passes": 2,
+        "unique_thread_ids": true,
+        "total_count_must_match": true,
         "pagination_must_be_complete": true
       },
       "publication_enforcement": "exact_merged_pull_request_attested_head_ci_and_review_threads_query",

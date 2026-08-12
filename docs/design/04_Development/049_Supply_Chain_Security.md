@@ -1183,11 +1183,16 @@ after `6f557abc42713629510090db10d03630043364d7` and run attempt `1`, retains th
 same `2026-08-21T22:43:36Z` expiry, and requires a final-head approval before
 merge and publication. The standard path remains a current independent human
 `APPROVED` review on the exact final activation PR head from a reviewer
-different from the owner and implementation author. It is evaluated first and,
-when satisfied, completes approval without querying owner-exception comments,
-final-head CI, or review-thread APIs. The independent-review requirement
-remains the normal policy for every other pull request and any later attempt;
-the exception below is not a permanent relaxation.
+different from the owner and implementation author, submitted strictly before
+the activation PR's merge timestamp. The REST pull-request reviews endpoint is
+read with `per_page=100` through a terminal short page, bounded to 10 pages and
+1,000 unique positive review IDs; reaching 1,000 reviews without proving
+exhaustion, a duplicate or malformed ID, or a missing or malformed page fails
+closed. It is evaluated first and, when satisfied, completes approval without
+querying owner-exception comments, final-head CI, or review-thread APIs. The
+independent-review requirement remains the normal policy for every other pull
+request and any later attempt; the exception below is not a permanent
+relaxation.
 
 Because Shirokuma is `TommyKammy`'s personal experimental project and no
 independent approver is available, Issue #63 comment
@@ -1196,13 +1201,20 @@ defines one alternative for PR #145 only. After the exact final PR head has
 completed `.github/workflows/ci.yml`, `.github/workflows/security.yml`,
 `.github/workflows/trino-maven-remediation-feasibility.yml`, and
 `.github/workflows/trino-maven-dependencies.yml` successfully, and a complete
-GraphQL query reports a pull-request `headRefOid` equal to the attested final
-head and zero current non-outdated `reviewThreads`, including resolved threads,
-the owner may post the canonical top-level final-head attestation. Only
-already-outdated threads are permitted. It must be authored by login
-`TommyKammy`, GitHub type `User`, association `OWNER`, match the exact final
-head, reference exception comment `5262105662`, and exist before merge. Only
-exact `APPROVED` or `REVOKED` decisions are recognized. The
+GraphQL cursor query reads `reviewThreads` in pages of 100 until
+`hasNextPage=false`, bounded to at most 10 pages and 1,000 threads. Every page
+must report the exact repository, pull-request number, and attested
+`headRefOid`; `totalCount` must remain stable and equal the number of collected
+unique thread IDs. Two complete ordered scans of thread ID, resolved state, and
+outdated state must match. All returned pages together must contain zero
+current non-outdated threads, including resolved threads. Only
+already-outdated threads are permitted. A malformed page, missing or repeated
+cursor, cursor cycle, identity or count drift, duplicate thread ID, unstable
+snapshot, or failure to prove exhaustion before reaching either bound fails
+closed. The owner may then post the canonical top-level final-head attestation. It must be
+authored by login `TommyKammy`, GitHub type `User`, association `OWNER`, match
+the exact final head, reference exception comment `5262105662`, and exist
+before merge. Only exact `APPROVED` or `REVOKED` decisions are recognized. The
 matching owner decision with the latest `updated_at` governs; comment ID is not
 used for ordering, a later `REVOKED` denies approval, and a tie at the latest
 timestamp fails closed as ambiguous. Bot or non-owner marker comments cannot
@@ -1237,6 +1249,11 @@ fail-closed reauthorization pending. The exception's downstream-authority set
 is empty: no dependency artifact admission, image publication, resident
 admission, Flux/runtime state, credential, public exposure, production use, or
 Issue #63 closure is authorized.
+
+After the final review, CI, and thread API gates return, the publisher repeats
+the current-time authorization and exact one-attempt binding immediately before
+registry authentication. Expiry during those API calls therefore fails closed
+before `oras login` or any registry write.
 
 ## Resident image and SBOM evidence
 
