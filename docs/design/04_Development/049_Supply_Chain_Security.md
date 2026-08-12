@@ -816,16 +816,25 @@ server archives, and the Maven High=0/Critical=0 scan. It then failed closed on
 five Bun High findings. ADR-0024 authorizes one overlay only after the pristine
 source audit. The overlay is limited to the four exact Web UI package and lock
 files, pins `react-router-dom 7.18.1`, and overrides only `d3-color 3.1.0`,
-`fast-uri 3.1.4`, `brace-expansion 5.0.8`, and `postcss 8.5.18`. Patch bytes,
+`fast-uri 3.1.5`, `brace-expansion 5.0.9`, `js-yaml 4.3.1`, `nanoid 3.3.17`,
+and `postcss 8.5.18`. Patch bytes,
 preimages, postimages, dependency versions, and the complete React Router
 import inventory are hash- or value-bound and fail closed on drift.
-Two independent clean native-arm64 reconstructions of the patched lockfiles
-produced 75,321 regular cache files, 660 safe alias symlinks, and 500,020,836
-uncompressed bytes. Their manifest SHA-256 is
+Two independent clean native-arm64 reconstructions of the original patched
+lockfiles produced 75,321 regular cache files, 660 safe alias symlinks, and
+500,020,836 uncompressed bytes. Their historical manifest SHA-256 is
 `6e7be3a404014f6f7ac7e4bc326c8d46f7d5822fcea1ac000219c17f1d23f421`;
-their 128,423,777-byte deterministic archive SHA-256 is
+their historical 128,423,777-byte deterministic archive SHA-256 is
 `252eade2183bdf5a371f073752420c3a45f5ef8b1dacb08a4addea350389e3c2`.
-These are local pre-merge identities that reviewed main must reproduce exactly.
+The repaired lockfiles were then independently reconstructed twice with Bun
+1.3.14 on Linux/arm64. Both produced the same 75,981 entries: 75,321 regular
+files, 660 safe alias symlinks, and 500,034,428 regular-file bytes. The active
+17,312,740-byte manifest SHA-256 is
+`ca5cc4e1a565ecdd7d3f29610b1cdbe869288357ae6e324c83de1a485872b453`;
+the active 128,430,898-byte deterministic archive SHA-256 is
+`863e9d08bf8d7f106059feff7a5e6d96ca7da17b2cf633381241fe66ab88b1ca`.
+These active identities are the local pre-merge values that reviewed main must
+reproduce exactly.
 
 The remaining GHSA-qwww-vcr4-c8h2 finding applies to unstable React Server
 Components APIs that the exact Trino 483 client-side import inventory does not
@@ -1213,7 +1222,7 @@ Because Shirokuma is `TommyKammy`'s personal experimental project and no
 independent approver is available, Issue #63 comment
 [`5262105662`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5262105662)
 defined one historical alternative for PR #145 only. It is inactive after the
-consumed sequence-2 attempt and grants no authority to PR #146 or a later run.
+consumed sequence-2 attempt and grants no authority to a later run.
 
 PR #146 fixes the workflow-owned untracked tree while retaining the
 clean-source rejection. Each verified Maven snapshot is extracted outside the
@@ -1227,13 +1236,13 @@ snapshot repository. No `.gitignore`, cleanup, allowlist, network fallback, or
 writable repository exception is permitted.
 
 Issue #63 comment
-[`5264706435`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5264706435)
-records the active sequence-3 owner authorization at
-`2026-08-12T09:10:49Z`. It permits exactly one third reviewed-main attempt,
-bound to predecessor `bbd258739c59398da8c721480c48eab82d99441b` and GitHub
+[`5266462504`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5266462504)
+records the active sequence-4 owner authorization at
+`2026-08-12T11:54:32Z`. It permits exactly one fourth reviewed-main attempt,
+bound to predecessor `b1e58117cff9f9f1441176617dbdb2e4e0e8685f` and GitHub
 Actions attempt `1`, and retains the unchanged expiry
-`2026-08-21T22:43:36Z`. Its owner-only alternative is scoped to PR #146 and
-this third attempt only. After the exact final PR head has
+`2026-08-21T22:43:36Z`. Its owner-only alternative is scoped to PR #147 and
+this fourth attempt only. After the exact final PR head has
 completed `.github/workflows/ci.yml`, `.github/workflows/security.yml`,
 `.github/workflows/trino-maven-remediation-feasibility.yml`, and
 `.github/workflows/trino-maven-dependencies.yml` successfully, the publisher
@@ -1263,15 +1272,15 @@ closed. The owner may then post this exact canonical top-level final-head
 attestation:
 
 ```text
-Owner final-head attestation for PR #146
+Owner final-head attestation for PR #147
 
 Decision: APPROVED
 Final head: <exact final 40-character PR head SHA>
-Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5264706435
+Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5266462504
 ```
 
 It must be authored by login `TommyKammy`, GitHub type `User`, association
-`OWNER`, match the exact final head, reference exception comment `5264706435`,
+`OWNER`, match the exact final head, reference exception comment `5266462504`,
 and exist before merge. Only exact `APPROVED` or `REVOKED` decisions are recognized. The
 matching owner decision with the latest `updated_at` governs; comment ID is not
 used for ordering, a later `REVOKED` denies approval, and a tie at the latest
@@ -1317,6 +1326,41 @@ After the final review, CI, and thread API gates return, the publisher repeats
 the current-time authorization and exact one-attempt binding immediately before
 registry authentication. Expiry during those API calls therefore fails closed
 before `oras login` or any registry write.
+
+PR #146 was subsequently squash-merged as
+`b1e58117cff9f9f1441176617dbdb2e4e0e8685f`. Its reviewed-main publisher run
+[`31590750849`](https://github.com/TommyKammy/Shirokuma/actions/runs/31590750849),
+attempt `1`, failed closed before publication at the OpenVEX-adjusted Bun
+High/Critical step. Trivy 0.72.0 returned exit `1` with five unsuppressed High
+findings after the exact React Router statement removed only
+GHSA-qwww-vcr4-c8h2: `fast-uri 3.1.4` / CVE-2026-18446,
+`brace-expansion 5.0.8` / CVE-2026-69152, `js-yaml 4.3.0` /
+GHSA-5p4m-2wfm-xmqj, and `nanoid 3.3.15` / CVE-2026-67213 and
+CVE-2026-67214. An independent reproduction with the same Trivy release and
+database produced six raw High findings and those five adjusted High findings.
+The 22 `rolldown-vite@7.3.1` invalid-semantic-version warnings appeared in both
+scans and were non-fatal, so they are not treated as the cause. The publish job
+was skipped, the run retained zero artifacts, and the one sequence-3 attempt was
+consumed; rerunning `31590750849` is forbidden.
+
+The focused repair keeps the existing four-path authorization and exact
+React Router-only OpenVEX statement. It upgrades only the bounded dependency
+overrides needed to leave the raw scan with that single reviewed React Router
+finding and the adjusted scan at High=0/Critical=0. The adjusted `trivy fs`
+command writes its report with exit code zero, after which a separate
+repository-owned verifier remains the blocking gate. If and only if that gate
+fails while the one-shot lifecycle is active, a run/attempt-scoped diagnostic
+artifact retains for 14 days the exact Bun CycloneDX SBOM, raw report, adjusted
+report, and reviewed OpenVEX document. The upload includes the hidden candidate
+paths and fails if none of the diagnostic files exist. The explicit verifier
+still fails closed when either report or any required evidence is absent. The
+artifact name and paths are forbidden
+from the publish job, so diagnostics cannot become publication, admission,
+image, or runtime inputs. Comment `5266462504` grants the one sequence-4
+attempt described above and no downstream authority. Its empty downstream-
+authority set grants no dependency-evidence admission, image publication,
+resident admission, Flux/runtime reconciliation, credentials, public exposure,
+production use, or Issue #63 closure.
 
 ## Resident image and SBOM evidence
 

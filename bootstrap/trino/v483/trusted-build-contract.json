@@ -35,7 +35,7 @@
     },
     {
       "path": "scripts/package_trino_bun_dependencies.py",
-      "sha256": "4bd48cf0da86b1406cfe6a9baa9c0f2aefbaed2f590961d800ce479c0db588fe"
+      "sha256": "0ac1317e3d3ec9a1f8865500a732c892a8fe3a9cefc9c3694b383884acf7c423"
     },
     {
       "path": "scripts/prepare_trino_bun_input.py",
@@ -47,11 +47,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "35c3c5be8771526d1ead76145b7deced3d90b7f0dae90d22506e4e835db191e1"
+      "sha256": "c0593ed1e5bb6d6f696b9463a5a6dd0cdec454a87fc4d769dbdd41c8e2f64b56"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "91437666fecc765e5caed8ef20f74dc88143281909fd923f7ac385f2fccab435"
+      "sha256": "c6c6ff9ecc42737db0c10cce6bbcb4ce780a82762cbddb744ae081f12a6e30ed"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -63,7 +63,7 @@
     },
     {
       "path": "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch",
-      "sha256": "d74d13976a8368c818755d67bbe2f464393c185d87317164bd214108e5d4712d"
+      "sha256": "90a2168b9e158f3a61e3cfe3c4e21b6cc6df39c393c2bb38a6df3ffa2e7a3d66"
     },
     {
       "path": "bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch",
@@ -79,7 +79,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md",
-      "sha256": "c91fc14f096d52c5076eef703355dc93e130a3cb623f4457d66da5c9e28905ff"
+      "sha256": "9873c17c8e4fb18152eec9efa2db3982029faaf9f9a9ced502fff1cc6b6ec0da"
     },
     {
       "path": "docs/design/07_ADR/ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_source_remediation.md",
@@ -95,7 +95,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md",
-      "sha256": "ae1a6a4a6aed51faac09a8f8472f75754e839c55114e8f53703832d44e6b6eaf"
+      "sha256": "8dc78952082fbb7cb63b145c76482a48e2f112a9455eb612eead3457657d0b68"
     },
     {
       "path": "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",
@@ -225,7 +225,7 @@
       "applied_after_source_verification": true,
       "patch": {
         "path": "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch",
-        "sha256": "d74d13976a8368c818755d67bbe2f464393c185d87317164bd214108e5d4712d"
+        "sha256": "90a2168b9e158f3a61e3cfe3c4e21b6cc6df39c393c2bb38a6df3ffa2e7a3d66"
       },
       "apply_arguments": ["--unidiff-zero", "--whitespace=error-all"],
       "permitted_paths": [
@@ -241,15 +241,17 @@
         "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock": "0ca8b926ea0a2af3fff339b43c52de03a8f99c4aa9ba1d4c2ecd081bcd715ad3"
       },
       "postimages": {
-        "core/trino-web-ui/src/main/resources/webapp/package.json": "34b237a9af887a5cbe9c83f541a5084299f9eb3b1e974a661dea7cd17a1c8d38",
-        "core/trino-web-ui/src/main/resources/webapp/bun.lock": "b9010ec72590c76c7dc865a10b1fefe554a64eabb1492c422c954e45324cc9d3",
-        "core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json": "34f68bd556c33d54b2e3475ffd8dc45e1a7167b3c9c60ba257ed43e0f0e6a8df",
-        "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock": "14fa0d75107753676c59093978fe68fe67486868564f41dadc7d76d659d2df25"
+        "core/trino-web-ui/src/main/resources/webapp/package.json": "2af750b9571eddce309373325779a3e2d35ba1977db25b657fe4337f3cb687d2",
+        "core/trino-web-ui/src/main/resources/webapp/bun.lock": "90bfa0a797ae2f37a4ab5e8b445a62fa211328cedab186ac8c2402f78a07a194",
+        "core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json": "d555ca5ab130a76775c9677b5b9798dee486964ef0fc4992fbb02705e696d271",
+        "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock": "c8c9044cf3bd90d38e5aab71e680bf0dd3724c4062eaac9a60e981629601a163"
       },
       "dependency_overrides": {
-        "brace-expansion": "5.0.8",
+        "brace-expansion": "5.0.9",
         "d3-color": "3.1.0",
-        "fast-uri": "3.1.4",
+        "fast-uri": "3.1.5",
+        "js-yaml": "4.3.1",
+        "nanoid": "3.3.17",
         "postcss": "8.5.18",
         "react-router-dom": "7.18.1"
       },
@@ -649,18 +651,18 @@
       "frozen_lockfiles": [
         {
           "path": "core/trino-web-ui/src/main/resources/webapp/bun.lock",
-          "sha256": "b9010ec72590c76c7dc865a10b1fefe554a64eabb1492c422c954e45324cc9d3"
+          "sha256": "90bfa0a797ae2f37a4ab5e8b445a62fa211328cedab186ac8c2402f78a07a194"
         },
         {
           "path": "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock",
-          "sha256": "14fa0d75107753676c59093978fe68fe67486868564f41dadc7d76d659d2df25"
+          "sha256": "c8c9044cf3bd90d38e5aab71e680bf0dd3724c4062eaac9a60e981629601a163"
         }
       ],
       "independent_reconstructions": 2,
       "reviewed_snapshot": {
-        "manifest_sha256": "6e7be3a404014f6f7ac7e4bc326c8d46f7d5822fcea1ac000219c17f1d23f421",
-        "archive_sha256": "252eade2183bdf5a371f073752420c3a45f5ef8b1dacb08a4addea350389e3c2",
-        "archive_size": 128423777
+        "manifest_sha256": "ca5cc4e1a565ecdd7d3f29610b1cdbe869288357ae6e324c83de1a485872b453",
+        "archive_sha256": "863e9d08bf8d7f106059feff7a5e6d96ca7da17b2cf633381241fe66ab88b1ca",
+        "archive_size": 128430898
       },
       "network_none_rebuild_mount": "read-only",
       "network_none_cache_outside_source": true,
@@ -1045,28 +1047,41 @@
     "runner": "ubuntu-24.04-arm",
     "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",
     "reauthorization": {
-      "sequence": 3,
+      "sequence": 4,
       "status": "active",
-      "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5264706435",
+      "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5266462504",
       "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
-      "approved_at": "2026-08-12T09:10:49Z",
+      "approved_at": "2026-08-12T11:54:32Z",
       "expires_at": "2026-08-21T22:43:36Z",
       "automatic_renewal": false,
       "risk_owner": "TommyKammy",
       "same_candidate_required": true,
       "publication_authorized_after_required_approval": true,
       "previous_attempt": {
-        "run_id": "31577976760",
+        "run_id": "31590750849",
         "run_attempt": "1",
-        "source_sha": "bbd258739c59398da8c721480c48eab82d99441b",
+        "source_sha": "b1e58117cff9f9f1441176617dbdb2e4e0e8685f",
         "result": "failed_closed_before_publication",
-        "reason": "candidate_created_untracked_source_files",
+        "reason": "five_unsuppressed_bun_high_findings",
+        "unsuppressed_high_findings": 5,
+        "retained_artifact_count": 0,
         "dependency_artifact_published": false,
         "consumed": true
       },
       "repair": {
-        "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/146",
-        "predecessor_main_commit": "bbd258739c59398da8c721480c48eab82d99441b",
+        "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/147",
+        "predecessor_main_commit": "b1e58117cff9f9f1441176617dbdb2e4e0e8685f",
+        "web_ui_overlay_paths": [
+          "core/trino-web-ui/src/main/resources/webapp/package.json",
+          "core/trino-web-ui/src/main/resources/webapp/bun.lock",
+          "core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json",
+          "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock"
+        ],
+        "react_router_openvex_only": true,
+        "adjusted_scan_report_exit_code": 0,
+        "explicit_scan_verifier_required": true,
+        "diagnostic_artifact_on_scan_gate_failure": true,
+        "diagnostic_artifact_publication_input_permitted": false,
         "offline_repository_root": "${RUNNER_TEMP}/trino-offline-maven-repository-${suffix}",
         "container_mount": "/m2:ro",
         "maven_repo_local": "/m2",
@@ -1080,7 +1095,7 @@
     "authorized_attempt": {
       "event_name": "push",
       "ref": "refs/heads/main",
-      "before_sha": "bbd258739c59398da8c721480c48eab82d99441b",
+      "before_sha": "b1e58117cff9f9f1441176617dbdb2e4e0e8685f",
       "run_attempt": "1"
     },
     "independent_review": {
@@ -1106,18 +1121,18 @@
     },
     "owner_only_approval_exception": {
       "status": "active",
-      "scope": "pr_146_third_publication_attempt_only",
+      "scope": "pr_147_fourth_publication_attempt_only",
       "reason": "sole_owner_personal_experimental_project",
-      "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5264706435",
-      "approved_at": "2026-08-12T09:10:49Z",
+      "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5266462504",
+      "approved_at": "2026-08-12T11:54:32Z",
       "repository": "TommyKammy/Shirokuma",
-      "pull_request": 146,
+      "pull_request": 147,
       "owner": "TommyKammy",
       "human_user_type": "User",
       "author_association": "OWNER",
       "attestation_required_before_merge": true,
       "attestation_must_match_final_head_sha": true,
-      "attestation_body_template": "Owner final-head attestation for PR #146\n\nDecision: {decision}\nFinal head: {final_head}\nException: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5264706435",
+      "attestation_body_template": "Owner final-head attestation for PR #147\n\nDecision: {decision}\nFinal head: {final_head}\nException: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5266462504",
       "allowed_decisions": ["APPROVED", "REVOKED"],
       "standard_independent_review_remains_accepted": true,
       "owner_issue_comments": {
