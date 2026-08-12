@@ -658,7 +658,9 @@ jobs:
           candidate="${GITHUB_WORKSPACE}/.trino-candidate"
           for suffix in a b; do
             offline_source="${RUNNER_TEMP}/trino-offline-${suffix}"
+            offline_repository="${RUNNER_TEMP}/trino-offline-maven-repository-${suffix}"
             offline_bun_cache="${RUNNER_TEMP}/trino-offline-bun-cache-${suffix}"
+            test ! -e "${offline_repository}"
             git clone --no-local --no-checkout \
               "${RUNNER_TEMP}/trino-source" "${offline_source}"
             git -C "${offline_source}" remote set-url origin "${SOURCE_REPOSITORY}"
@@ -671,7 +673,7 @@ jobs:
             python3 scripts/package_trino_maven_dependencies.py verify \
               --descriptor "${candidate}/maven-dependency-manifest.json" \
               --archive "${candidate}/trino-maven-dependencies-483.tar.gz" \
-              --extract-root "${offline_source}/.m2/repository"
+              --extract-root "${offline_repository}"
             python3 scripts/package_trino_bun_dependencies.py verify \
               --descriptor "${candidate}/bun-dependency-manifest.json" \
               --archive "${candidate}/trino-bun-dependencies-483.tar.gz" \
@@ -688,6 +690,7 @@ jobs:
               --env BUN_INSTALL_CACHE_DIR="${BUN_CACHE_DIRECTORY}" \
               --env BUN_CONFIG_REGISTRY="${BUN_REGISTRY}" \
               --volume "${offline_source}:/workspace" \
+              --volume "${offline_repository}:/m2:ro" \
               --volume "${offline_bun_cache}:${BUN_CACHE_DIRECTORY}:ro" \
               --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/maven-policy:/policy/.mvn:ro" \
               --volume "${GITHUB_WORKSPACE}/bootstrap/trino/v483/settings.xml:/policy/settings.xml:ro" \
@@ -696,12 +699,13 @@ jobs:
               "${BUILDER_IMAGE}" \
               --offline --ignore-transitive-repositories \
               --settings /policy/settings.xml \
-              -Dmaven.repo.local=/workspace/.m2/repository \
+              -Dmaven.repo.local=/m2 \
+              -Daether.syncContext.named.basedir.locksDir=/tmp/maven-locks \
               -Dmaven.compiler.debuglevel=source,lines \
               -Dproject.build.outputTimestamp=2026-07-18T00:36:39Z \
               --file /workspace/pom.xml \
               -pl ':trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg' \
-              -am clean install -DskipTests \
+              -am clean package -DskipTests \
               -Dmaven.source.skip=true -Dair.check.skip-all
 
             python3 scripts/verify_trino_maven_feasibility.py verify-candidate \
@@ -752,13 +756,14 @@ jobs:
               "command": (
                   "mvn --offline --ignore-transitive-repositories "
                   "--settings /policy/settings.xml "
-                  "-Dmaven.repo.local=/workspace/.m2/repository "
+                  "-Dmaven.repo.local=/m2 "
+                  "-Daether.syncContext.named.basedir.locksDir=/tmp/maven-locks "
                   "-Dmaven.compiler.debuglevel=source,lines "
                   "-Dproject.build.outputTimestamp=2026-07-18T00:36:39Z "
                   "--file /workspace/pom.xml "
                   "-pl ':trino-server,:trino-server-core,:trino-server-main,"
                   ":trino-hdfs,:trino-iceberg' "
-                  "-am clean install -DskipTests "
+                  "-am clean package -DskipTests "
                   "-Dmaven.source.skip=true -Dair.check.skip-all"
               ),
               "output": "core/trino-server/target/trino-server-483.tar.gz",

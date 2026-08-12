@@ -4612,13 +4612,14 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             (
                 "mvn --offline --ignore-transitive-repositories "
                 "--settings /policy/settings.xml "
-                "-Dmaven.repo.local=/workspace/.m2/repository "
+                "-Dmaven.repo.local=/m2 "
+                "-Daether.syncContext.named.basedir.locksDir=/tmp/maven-locks "
                 "-Dmaven.compiler.debuglevel=source,lines "
                 "-Dproject.build.outputTimestamp=2026-07-18T00:36:39Z "
                 "--file /workspace/pom.xml "
                 "-pl ':trino-server,:trino-server-core,:trino-server-main,"
                 ":trino-hdfs,:trino-iceberg' "
-                "-am clean install -DskipTests "
+                "-am clean package -DskipTests "
                 "-Dmaven.source.skip=true -Dair.check.skip-all"
             ),
             rebuild["command"],
@@ -4702,22 +4703,31 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertEqual(
             {
-                "path": "/workspace/.m2/repository",
+                "host_path_template": (
+                    "${RUNNER_TEMP}/trino-offline-maven-repository-${suffix}"
+                ),
+                "path": "/m2",
+                "mount": "read-only",
+                "outside_source_checkout_required": True,
                 "initialization": (
-                    "copy_verified_snapshot_repository_to_empty_path_"
+                    "extract_verified_snapshot_repository_to_empty_path_"
                     "before_network_none_builder_start"
                 ),
                 "sole_dependency_repository": True,
                 "maven_args": (
-                    "-Dmaven.repo.local=/workspace/.m2/repository"
+                    "-Dmaven.repo.local=/m2 "
+                    "-Daether.syncContext.named.basedir.locksDir=/tmp/"
+                    "maven-locks"
                 ),
+                "resolver_lock_path": "/tmp/maven-locks",
+                "resolver_lock_path_outside_repository_required": True,
+                "lifecycle": "clean package",
+                "install_phase_executed": False,
+                "local_repository_writes_permitted": False,
                 "ambient_cache_mounts_permitted": False,
                 "ambient_home_permitted": False,
                 "prebuild_manifest_must_equal_snapshot": True,
-                (
-                    "postbuild_io_trino_entries_are_verifier_outputs_"
-                    "not_dependency_inputs"
-                ): True,
+                "repository_mounted_read_only_for_entire_build": True,
             },
             rebuild["maven_repository"],
         )

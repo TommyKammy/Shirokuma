@@ -47,11 +47,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "a059a0fa8224f0ffe640a23fdfccb203e62e95951b8b05a4bb3dfaf509e433e3"
+      "sha256": "1de32cf23682de27e7a01aed34211f84706c83ac74495b990b4d4be882e96e85"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "7bf66c3d5d2edd51b6edf69a1efcdf87de6451bd5d658f7661a427a6246ff712"
+      "sha256": "fdede11288bd290b354f2083b54266d36688e4a08aedffa89bc9006c414a80e7"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -964,7 +964,7 @@
       "observations_retained_as_evidence": true,
       "verification_failure_action": "fail_closed_before_offline_rebuild"
     },
-    "command": "mvn --offline --ignore-transitive-repositories --settings /policy/settings.xml -Dmaven.repo.local=/workspace/.m2/repository -Dmaven.compiler.debuglevel=source,lines -Dproject.build.outputTimestamp=2026-07-18T00:36:39Z --file /workspace/pom.xml -pl ':trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg' -am clean install -DskipTests -Dmaven.source.skip=true -Dair.check.skip-all",
+    "command": "mvn --offline --ignore-transitive-repositories --settings /policy/settings.xml -Dmaven.repo.local=/m2 -Daether.syncContext.named.basedir.locksDir=/tmp/maven-locks -Dmaven.compiler.debuglevel=source,lines -Dproject.build.outputTimestamp=2026-07-18T00:36:39Z --file /workspace/pom.xml -pl ':trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg' -am clean package -DskipTests -Dmaven.source.skip=true -Dair.check.skip-all",
     "compiler_debug_information": {
       "maven_property": "maven.compiler.debuglevel",
       "value": "source,lines",
@@ -1006,14 +1006,22 @@
       "manifest_equality_required_before_build": true
     },
     "maven_repository": {
-      "path": "/workspace/.m2/repository",
-      "initialization": "copy_verified_snapshot_repository_to_empty_path_before_network_none_builder_start",
+      "host_path_template": "${RUNNER_TEMP}/trino-offline-maven-repository-${suffix}",
+      "path": "/m2",
+      "mount": "read-only",
+      "outside_source_checkout_required": true,
+      "initialization": "extract_verified_snapshot_repository_to_empty_path_before_network_none_builder_start",
       "sole_dependency_repository": true,
-      "maven_args": "-Dmaven.repo.local=/workspace/.m2/repository",
+      "maven_args": "-Dmaven.repo.local=/m2 -Daether.syncContext.named.basedir.locksDir=/tmp/maven-locks",
+      "resolver_lock_path": "/tmp/maven-locks",
+      "resolver_lock_path_outside_repository_required": true,
+      "lifecycle": "clean package",
+      "install_phase_executed": false,
+      "local_repository_writes_permitted": false,
       "ambient_cache_mounts_permitted": false,
       "ambient_home_permitted": false,
       "prebuild_manifest_must_equal_snapshot": true,
-      "postbuild_io_trino_entries_are_verifier_outputs_not_dependency_inputs": true
+      "repository_mounted_read_only_for_entire_build": true
     },
     "expected_output": "core/trino-server/target/trino-server-483.tar.gz",
     "retained_output_evidence": [

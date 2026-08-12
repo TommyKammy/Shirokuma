@@ -1795,6 +1795,73 @@ EXPECTED_OFFLINE_REPOSITORY_SETTINGS = {
     ),
     "network_access_permitted_by_this_setting": False,
 }
+EXPECTED_OFFLINE_MAVEN_REPOSITORY = {
+    "host_path_template": (
+        "${RUNNER_TEMP}/trino-offline-maven-repository-${suffix}"
+    ),
+    "path": "/m2",
+    "mount": "read-only",
+    "outside_source_checkout_required": True,
+    "initialization": (
+        "extract_verified_snapshot_repository_to_empty_path_before_"
+        "network_none_builder_start"
+    ),
+    "sole_dependency_repository": True,
+    "maven_args": (
+        "-Dmaven.repo.local=/m2 "
+        "-Daether.syncContext.named.basedir.locksDir=/tmp/maven-locks"
+    ),
+    "resolver_lock_path": "/tmp/maven-locks",
+    "resolver_lock_path_outside_repository_required": True,
+    "lifecycle": "clean package",
+    "install_phase_executed": False,
+    "local_repository_writes_permitted": False,
+    "ambient_cache_mounts_permitted": False,
+    "ambient_home_permitted": False,
+    "prebuild_manifest_must_equal_snapshot": True,
+    "repository_mounted_read_only_for_entire_build": True,
+}
+EXPECTED_OFFLINE_MAVEN_REPOSITORY_ASSIGNMENT = (
+    'offline_repository="${RUNNER_TEMP}/'
+    'trino-offline-maven-repository-${suffix}"'
+)
+EXPECTED_OFFLINE_MAVEN_REPOSITORY_EXTRACTION = (
+    '--extract-root "${offline_repository}"'
+)
+EXPECTED_OFFLINE_MAVEN_REPOSITORY_MOUNT = (
+    '--volume "${offline_repository}:/m2:ro"'
+)
+EXPECTED_OFFLINE_RESOLVER_LOCK_ARGUMENT = (
+    "-Daether.syncContext.named.basedir.locksDir=/tmp/maven-locks"
+)
+EXPECTED_OFFLINE_LIFECYCLE = "-am clean package -DskipTests"
+EXPECTED_OFFLINE_MAVEN_REPOSITORY_PREPARATION = (
+    "for suffix in a b; do\n"
+    '  offline_source="${RUNNER_TEMP}/trino-offline-${suffix}"\n'
+    '  offline_repository="${RUNNER_TEMP}/'
+    'trino-offline-maven-repository-${suffix}"\n'
+    '  offline_bun_cache="${RUNNER_TEMP}/'
+    'trino-offline-bun-cache-${suffix}"\n'
+    '  test ! -e "${offline_repository}"\n'
+    "  git clone --no-local --no-checkout \\\n"
+    '    "${RUNNER_TEMP}/trino-source" "${offline_source}"\n'
+    '  git -C "${offline_source}" remote set-url origin '
+    '"${SOURCE_REPOSITORY}"\n'
+    '  git -C "${offline_source}" checkout --detach "${SOURCE_COMMIT}"\n'
+    "  python3 scripts/verify_trino_dependency_publisher.py audit-source \\\n"
+    '    --root . --checkout "${offline_source}"\n'
+    "  python3 scripts/verify_trino_dependency_publisher.py \\\n"
+    "    apply-source-overlay \\\n"
+    '    --root . --checkout "${offline_source}"\n'
+    "  python3 scripts/package_trino_maven_dependencies.py verify \\\n"
+    '    --descriptor "${candidate}/maven-dependency-manifest.json" \\\n'
+    '    --archive "${candidate}/trino-maven-dependencies-483.tar.gz" \\\n'
+    '    --extract-root "${offline_repository}"\n'
+    "  python3 scripts/package_trino_bun_dependencies.py verify \\\n"
+    '    --descriptor "${candidate}/bun-dependency-manifest.json" \\\n'
+    '    --archive "${candidate}/trino-bun-dependencies-483.tar.gz" \\\n'
+    '    --extract-root "${offline_bun_cache}"\n'
+)
 EXPECTED_OFFLINE_BUN_CACHE = {
     "path": "/bun-cache",
     "registry": "https://registry.npmjs.org/",
@@ -5443,6 +5510,8 @@ def _maven_command_before_marker(
     *,
     code: str,
     network_none: bool,
+    required_mounts: tuple[str, ...] = (),
+    docker_option_fragment_counts: tuple[tuple[str, int], ...] = (),
 ) -> str:
     docker_marker = "docker run --rm \\\n"
     maven_marker = (
@@ -5458,10 +5527,19 @@ def _maven_command_before_marker(
     line_start = workflow.rfind("\n", 0, docker_start) + 1
     block = textwrap.dedent(workflow[line_start:end])
     observed_network_none = block.count("  --network none \\\n")
+    docker_options = block.split(maven_marker, 1)[0]
     if (
         block.count(maven_marker) != 1
         or observed_network_none != (1 if network_none else 0)
         or block.count(f"  {EXPECTED_SETTINGS_MOUNT} \\\n") != 1
+        or any(
+            docker_options.count(f"  {mount} \\\n") != 1
+            for mount in required_mounts
+        )
+        or any(
+            docker_options.count(fragment) != expected_count
+            for fragment, expected_count in docker_option_fragment_counts
+        )
     ):
         _fail(code, "Maven builder invocation differs")
     arguments = block.split(maven_marker, 1)[1]
@@ -5472,14 +5550,35 @@ def _maven_command_before_marker(
 
 
 def _offline_maven_command(workflow: str) -> str:
+    output_marker = (
+        "            python3 scripts/"
+        "verify_trino_maven_feasibility.py verify-candidate \\"
+    )
+    loop_marker = "          for suffix in a b; do\n"
+    docker_marker = "            docker run --rm \\\n"
+    if workflow.count(output_marker) != 1:
+        _fail("WORKFLOW_OFFLINE_COMMAND", "output marker differs")
+    end = workflow.index(output_marker)
+    loop_start = workflow.rfind(loop_marker, 0, end)
+    docker_start = workflow.rfind(docker_marker, 0, end)
+    if loop_start < 0 or docker_start <= loop_start:
+        _fail(
+            "WORKFLOW_OFFLINE_COMMAND",
+            "offline repository preparation is missing",
+        )
+    preparation = textwrap.dedent(workflow[loop_start:docker_start])
+    if preparation != EXPECTED_OFFLINE_MAVEN_REPOSITORY_PREPARATION:
+        _fail(
+            "WORKFLOW_OFFLINE_COMMAND",
+            "offline repository preparation differs",
+        )
     return _maven_command_before_marker(
         workflow,
-        (
-            "            python3 scripts/"
-            "verify_trino_maven_feasibility.py verify-candidate \\"
-        ),
+        output_marker,
         code="WORKFLOW_OFFLINE_COMMAND",
         network_none=True,
+        required_mounts=(EXPECTED_OFFLINE_MAVEN_REPOSITORY_MOUNT,),
+        docker_option_fragment_counts=((":/m2", 1), ("--mount ", 0)),
     )
 
 
@@ -6025,6 +6124,14 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
             "WORKFLOW_SETTINGS",
             "contract offline build settings differ",
         )
+    if not _matches_exact_json(
+        offline_rebuild.get("maven_repository"),
+        EXPECTED_OFFLINE_MAVEN_REPOSITORY,
+    ):
+        _fail(
+            "WORKFLOW_OFFLINE_REPOSITORY",
+            "contract offline Maven repository boundary differs",
+        )
     observed_offline_command = _offline_maven_command(workflow)
     if observed_offline_command != expected_offline_command:
         _fail(
@@ -6042,6 +6149,28 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         _fail(
             "WORKFLOW_RESOLUTION_COMMAND",
             f"resolver commands differ: {observed_resolution_commands!r}",
+        )
+    if (
+        workflow.count(EXPECTED_OFFLINE_MAVEN_REPOSITORY_ASSIGNMENT) != 1
+        or workflow.count(EXPECTED_OFFLINE_MAVEN_REPOSITORY_EXTRACTION) != 1
+        or workflow.count(EXPECTED_OFFLINE_MAVEN_REPOSITORY_MOUNT) != 1
+        or workflow.count(
+            'test ! -e "${offline_repository}"'
+        )
+        != 1
+        or workflow.count(EXPECTED_OFFLINE_RESOLVER_LOCK_ARGUMENT) != 2
+        or workflow.count(EXPECTED_OFFLINE_LIFECYCLE) != 2
+        or "-Dmaven.install.skip" in workflow
+        or '${offline_source}/.m2' in workflow
+        or '--volume "${offline_repository}:/m2"' in workflow
+    ):
+        _fail(
+            "WORKFLOW_OFFLINE_REPOSITORY",
+            (
+                "each offline build must extract one fresh Maven repository "
+                "outside the source checkout, mount it read-only at /m2, and "
+                "stop at package without local-repository writes"
+            ),
         )
     if (
         workflow.count("--network none") != 1

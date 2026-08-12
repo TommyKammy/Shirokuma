@@ -2850,7 +2850,7 @@ class PublisherContractTests(unittest.TestCase):
             1,
         )[1].split("- name: Verify both closed dependency inventories", 1)[0]
         self.assertLess(
-            offline.index("-am clean install -DskipTests"),
+            offline.index("-am clean package -DskipTests"),
             offline.index("verify-candidate"),
         )
         self.assertLess(
@@ -6080,6 +6080,15 @@ class PublisherContractTests(unittest.TestCase):
             contract["offline_rebuild"]["command"],
             verify._offline_maven_command(workflow),
         )
+        self.assertIn(
+            verify.EXPECTED_OFFLINE_RESOLVER_LOCK_ARGUMENT,
+            contract["offline_rebuild"]["command"],
+        )
+        self.assertIn(
+            verify.EXPECTED_OFFLINE_LIFECYCLE,
+            contract["offline_rebuild"]["command"],
+        )
+        self.assertNotIn("-Dmaven.install.skip", workflow)
         self.assertEqual(
             verify.EXPECTED_OFFLINE_COMPILER_DEBUG,
             contract["offline_rebuild"]["compiler_debug_information"],
@@ -6119,14 +6128,14 @@ class PublisherContractTests(unittest.TestCase):
         ):
             verify._validate_workflow(contract, altered)
         offline_goal = (
-            "              -am clean install -DskipTests \\\n"
+            "              -am clean package -DskipTests \\\n"
             "              -Dmaven.source.skip=true -Dair.check.skip-all\n"
         )
         self.assertEqual(1, workflow.count(offline_goal))
         altered = workflow.replace(
             offline_goal,
             (
-                "              -am clean package -DskipTests \\\n"
+                "              -am clean install -DskipTests \\\n"
                 "              -Dmaven.source.skip=true -Dair.check.skip-all\n"
             ),
             1,
@@ -6158,6 +6167,16 @@ class PublisherContractTests(unittest.TestCase):
             "WORKFLOW_OFFLINE_COMMAND",
         ):
             verify._validate_workflow(contract, altered)
+        altered = workflow.replace(
+            debug_property,
+            "              -Dmaven.install.skip=true \\\n" + debug_property,
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_OFFLINE_COMMAND|WORKFLOW_OFFLINE_REPOSITORY",
+        ):
+            verify._validate_workflow(contract, altered)
 
     def test_all_maven_invocations_use_exact_repository_settings(self) -> None:
         contract = json.loads(
@@ -6180,6 +6199,27 @@ class PublisherContractTests(unittest.TestCase):
             verify.EXPECTED_OFFLINE_REPOSITORY_SETTINGS,
             contract["offline_rebuild"]["repository_settings"],
         )
+        self.assertEqual(
+            verify.EXPECTED_OFFLINE_MAVEN_REPOSITORY,
+            contract["offline_rebuild"]["maven_repository"],
+        )
+        self.assertEqual(
+            1,
+            workflow.count(
+                verify.EXPECTED_OFFLINE_MAVEN_REPOSITORY_ASSIGNMENT
+            ),
+        )
+        self.assertEqual(
+            1,
+            workflow.count(
+                verify.EXPECTED_OFFLINE_MAVEN_REPOSITORY_EXTRACTION
+            ),
+        )
+        self.assertEqual(
+            1,
+            workflow.count(verify.EXPECTED_OFFLINE_MAVEN_REPOSITORY_MOUNT),
+        )
+        self.assertNotIn('${offline_source}/.m2', workflow)
         self.assertEqual(5, workflow.count(verify.EXPECTED_SETTINGS_MOUNT))
         self.assertEqual(
             5,
@@ -6201,6 +6241,125 @@ class PublisherContractTests(unittest.TestCase):
                     "WORKFLOW_SETTINGS",
                 ):
                     verify._validate_workflow(contract, altered)
+
+        offline_repository_mutations = (
+            workflow.replace(
+                verify.EXPECTED_OFFLINE_MAVEN_REPOSITORY_EXTRACTION,
+                '--extract-root "${offline_source}/.m2/repository"',
+                1,
+            ),
+            workflow.replace(
+                verify.EXPECTED_OFFLINE_MAVEN_REPOSITORY_MOUNT,
+                '--volume "${offline_repository}:/m2"',
+                1,
+            ),
+        )
+        for index, altered in enumerate(offline_repository_mutations):
+            with self.subTest(mutation=index):
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "WORKFLOW_OFFLINE_COMMAND|WORKFLOW_OFFLINE_REPOSITORY",
+                ):
+                    verify._validate_workflow(contract, altered)
+
+        offline_repository_mount_line = (
+            f"              {verify.EXPECTED_OFFLINE_MAVEN_REPOSITORY_MOUNT} "
+            "\\\n"
+        )
+        relocated_offline_repository_mount = workflow.replace(
+            offline_repository_mount_line,
+            "",
+            1,
+        )
+        relocated_offline_repository_mount += (
+            "\n# relocated "
+            f"{verify.EXPECTED_OFFLINE_MAVEN_REPOSITORY_MOUNT}\n"
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_OFFLINE_COMMAND|WORKFLOW_OFFLINE_REPOSITORY",
+        ):
+            verify._validate_workflow(
+                contract,
+                relocated_offline_repository_mount,
+            )
+
+        offline_repository_assignment_line = (
+            "            "
+            f"{verify.EXPECTED_OFFLINE_MAVEN_REPOSITORY_ASSIGNMENT}\n"
+        )
+        offline_repository_freshness_line = (
+            '            test ! -e "${offline_repository}"\n'
+        )
+        for line in (
+            offline_repository_assignment_line,
+            offline_repository_freshness_line,
+        ):
+            with self.subTest(relocated_preparation=line):
+                altered = workflow.replace(line, "", 1)
+                altered += f"\n# relocated {line.strip()}\n"
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "WORKFLOW_OFFLINE_COMMAND",
+                ):
+                    verify._validate_workflow(contract, altered)
+
+        extraction_line = (
+            f"              {verify.EXPECTED_OFFLINE_MAVEN_REPOSITORY_EXTRACTION}"
+            "\n"
+        )
+        altered = workflow.replace(
+            extraction_line,
+            extraction_line
+            + '            cp -R "${RUNNER_TEMP}/ambient-m2" '
+            '"${offline_repository}"\n',
+            1,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_OFFLINE_COMMAND",
+        ):
+            verify._validate_workflow(contract, altered)
+
+        for shadow_mount in (
+            '              --volume "${RUNNER_TEMP}/shadow:/m2:rw" \\\n',
+            (
+                "              --mount "
+                'type=bind,src="${RUNNER_TEMP}/shadow",dst=/m2 '
+                "\\\n"
+            ),
+        ):
+            with self.subTest(shadow_mount=shadow_mount):
+                altered = workflow.replace(
+                    offline_repository_mount_line,
+                    offline_repository_mount_line + shadow_mount,
+                    1,
+                )
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "WORKFLOW_OFFLINE_COMMAND",
+                ):
+                    verify._validate_workflow(contract, altered)
+
+        altered_contract = json.loads(json.dumps(contract))
+        altered_contract["offline_rebuild"]["maven_repository"][
+            "mount"
+        ] = "read-write"
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_OFFLINE_REPOSITORY",
+        ):
+            verify._validate_workflow(altered_contract, workflow)
+
+        altered_contract = json.loads(json.dumps(contract))
+        altered_contract["offline_rebuild"]["maven_repository"][
+            "lifecycle"
+        ] = "clean install"
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "WORKFLOW_OFFLINE_REPOSITORY",
+        ):
+            verify._validate_workflow(altered_contract, workflow)
 
         online_mount_line = (
             f"            {verify.EXPECTED_SETTINGS_MOUNT} \\\n"
