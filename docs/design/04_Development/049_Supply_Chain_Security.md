@@ -1222,7 +1222,7 @@ Because Shirokuma is `TommyKammy`'s personal experimental project and no
 independent approver is available, Issue #63 comment
 [`5262105662`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5262105662)
 defined one historical alternative for PR #145 only. It is inactive after the
-consumed sequence-2 attempt and grants no authority to PR #146 or a later run.
+consumed sequence-2 attempt and grants no authority to a later run.
 
 PR #146 fixes the workflow-owned untracked tree while retaining the
 clean-source rejection. Each verified Maven snapshot is extracted outside the
@@ -1236,13 +1236,13 @@ snapshot repository. No `.gitignore`, cleanup, allowlist, network fallback, or
 writable repository exception is permitted.
 
 Issue #63 comment
-[`5264706435`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5264706435)
-records the active sequence-3 owner authorization at
-`2026-08-12T09:10:49Z`. It permits exactly one third reviewed-main attempt,
-bound to predecessor `bbd258739c59398da8c721480c48eab82d99441b` and GitHub
+[`5266462504`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5266462504)
+records the active sequence-4 owner authorization at
+`2026-08-12T11:54:32Z`. It permits exactly one fourth reviewed-main attempt,
+bound to predecessor `b1e58117cff9f9f1441176617dbdb2e4e0e8685f` and GitHub
 Actions attempt `1`, and retains the unchanged expiry
-`2026-08-21T22:43:36Z`. Its owner-only alternative is scoped to PR #146 and
-this third attempt only. After the exact final PR head has
+`2026-08-21T22:43:36Z`. Its owner-only alternative is scoped to PR #147 and
+this fourth attempt only. After the exact final PR head has
 completed `.github/workflows/ci.yml`, `.github/workflows/security.yml`,
 `.github/workflows/trino-maven-remediation-feasibility.yml`, and
 `.github/workflows/trino-maven-dependencies.yml` successfully, the publisher
@@ -1272,15 +1272,15 @@ closed. The owner may then post this exact canonical top-level final-head
 attestation:
 
 ```text
-Owner final-head attestation for PR #146
+Owner final-head attestation for PR #147
 
 Decision: APPROVED
 Final head: <exact final 40-character PR head SHA>
-Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5264706435
+Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5266462504
 ```
 
 It must be authored by login `TommyKammy`, GitHub type `User`, association
-`OWNER`, match the exact final head, reference exception comment `5264706435`,
+`OWNER`, match the exact final head, reference exception comment `5266462504`,
 and exist before merge. Only exact `APPROVED` or `REVOKED` decisions are recognized. The
 matching owner decision with the latest `updated_at` governs; comment ID is not
 used for ordering, a later `REVOKED` denies approval, and a tie at the latest
@@ -1356,8 +1356,11 @@ paths and fails if none of the diagnostic files exist. The explicit verifier
 still fails closed when either report or any required evidence is absent. The
 artifact name and paths are forbidden
 from the publish job, so diagnostics cannot become publication, admission,
-image, or runtime inputs. This repair grants no new publication attempt or any
-downstream authority.
+image, or runtime inputs. Comment `5266462504` grants the one sequence-4
+attempt described above and no downstream authority. Its empty downstream-
+authority set grants no dependency-evidence admission, image publication,
+resident admission, Flux/runtime reconciliation, credentials, public exposure,
+production use, or Issue #63 closure.
 
 ## Resident image and SBOM evidence
 

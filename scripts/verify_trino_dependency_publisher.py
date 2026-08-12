@@ -118,7 +118,7 @@ EXPECTED_AUTHORIZATION = {
 EXPECTED_PUBLICATION_ATTEMPT = {
     "event_name": "push",
     "ref": "refs/heads/main",
-    "before_sha": "bbd258739c59398da8c721480c48eab82d99441b",
+    "before_sha": "b1e58117cff9f9f1441176617dbdb2e4e0e8685f",
     "run_attempt": "1",
 }
 EXPECTED_INDEPENDENT_REVIEW = {
@@ -146,26 +146,26 @@ EXPECTED_INDEPENDENT_REVIEW = {
 }
 EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
     "status": "active",
-    "scope": "pr_146_third_publication_attempt_only",
+    "scope": "pr_147_fourth_publication_attempt_only",
     "reason": "sole_owner_personal_experimental_project",
     "approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5264706435"
+        "#issuecomment-5266462504"
     ),
-    "approved_at": "2026-08-12T09:10:49Z",
+    "approved_at": "2026-08-12T11:54:32Z",
     "repository": "TommyKammy/Shirokuma",
-    "pull_request": 146,
+    "pull_request": 147,
     "owner": "TommyKammy",
     "human_user_type": "User",
     "author_association": "OWNER",
     "attestation_required_before_merge": True,
     "attestation_must_match_final_head_sha": True,
     "attestation_body_template": (
-        "Owner final-head attestation for PR #146\n\n"
+        "Owner final-head attestation for PR #147\n\n"
         "Decision: {decision}\n"
         "Final head: {final_head}\n"
         "Exception: https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5264706435"
+        "#issuecomment-5266462504"
     ),
     "allowed_decisions": ["APPROVED", "REVOKED"],
     "final_head_ci": {
@@ -229,33 +229,46 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
     "standard_independent_review_remains_accepted": True,
 }
 EXPECTED_PUBLICATION_REAUTHORIZATION = {
-    "sequence": 3,
+    "sequence": 4,
     "status": "active",
     "approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5264706435"
+        "#issuecomment-5266462504"
     ),
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
-    "approved_at": "2026-08-12T09:10:49Z",
+    "approved_at": "2026-08-12T11:54:32Z",
     "expires_at": "2026-08-21T22:43:36Z",
     "automatic_renewal": False,
     "risk_owner": "TommyKammy",
     "same_candidate_required": True,
     "publication_authorized_after_required_approval": True,
     "previous_attempt": {
-        "run_id": "31577976760",
+        "run_id": "31590750849",
         "run_attempt": "1",
-        "source_sha": "bbd258739c59398da8c721480c48eab82d99441b",
+        "source_sha": "b1e58117cff9f9f1441176617dbdb2e4e0e8685f",
         "result": "failed_closed_before_publication",
-        "reason": "candidate_created_untracked_source_files",
+        "reason": "five_unsuppressed_bun_high_findings",
+        "unsuppressed_high_findings": 5,
+        "retained_artifact_count": 0,
         "dependency_artifact_published": False,
         "consumed": True,
     },
     "repair": {
-        "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/146",
+        "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/147",
         "predecessor_main_commit": (
-            "bbd258739c59398da8c721480c48eab82d99441b"
+            "b1e58117cff9f9f1441176617dbdb2e4e0e8685f"
         ),
+        "web_ui_overlay_paths": [
+            "core/trino-web-ui/src/main/resources/webapp/package.json",
+            "core/trino-web-ui/src/main/resources/webapp/bun.lock",
+            "core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json",
+            "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock",
+        ],
+        "react_router_openvex_only": True,
+        "adjusted_scan_report_exit_code": 0,
+        "explicit_scan_verifier_required": True,
+        "diagnostic_artifact_on_scan_gate_failure": True,
+        "diagnostic_artifact_publication_input_permitted": False,
         "offline_repository_root": (
             "${RUNNER_TEMP}/trino-offline-maven-repository-${suffix}"
         ),
@@ -4616,7 +4629,7 @@ def _github_api_paginated_list(
         parsed.scheme != "https"
         or parsed.netloc != "api.github.com"
         or parsed.path
-        != "/repos/TommyKammy/Shirokuma/issues/146/comments"
+        != "/repos/TommyKammy/Shirokuma/issues/147/comments"
         or parsed.fragment
         or parsed.query
     ):
@@ -4790,11 +4803,11 @@ def _select_independent_review(
             ),
         )
 
-    # This is the exact user-authorized policy alternative for PR #146's
-    # third attempt, not a generic self-review fallback for another PR/run.
+    # This is the exact user-authorized policy alternative for PR #147's
+    # fourth attempt, not a generic self-review fallback for another PR/run.
     exception = contract["publication"]["owner_only_approval_exception"]
     if (
-        exception["scope"] != "pr_146_third_publication_attempt_only"
+        exception["scope"] != "pr_147_fourth_publication_attempt_only"
         or exception["reason"] != "sole_owner_personal_experimental_project"
         or exception["repository"] != "TommyKammy/Shirokuma"
         or exception["pull_request"] != pull["number"]
@@ -4828,13 +4841,13 @@ def _select_owner_final_head_attestation(
         _fail("INDEPENDENT_REVIEW", "merged pull request timestamp is missing")
     merged_instant = _parse_time(merged_at)
     template = exception["attestation_body_template"]
-    marker = "Owner final-head attestation for PR #146\n\nDecision: "
+    marker = "Owner final-head attestation for PR #147\n\nDecision: "
     pattern = re.compile(
-        r"\AOwner final-head attestation for PR #146\n\n"
+        r"\AOwner final-head attestation for PR #147\n\n"
         r"Decision: (APPROVED|REVOKED)\n"
         r"Final head: ([0-9a-f]{40})\n"
         r"Exception: https://github\.com/TommyKammy/Shirokuma/issues/63"
-        r"#issuecomment-5264706435\Z"
+        r"#issuecomment-5266462504\Z"
     )
     decisions: list[
         tuple[int, str, str, dt.datetime, dt.datetime, Mapping[str, Any]]

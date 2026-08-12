@@ -4,7 +4,7 @@ title: Authorize exact Trino 483 Maven build-plugin remediation
 status: accepted
 created: 2026-08-07
 updated: 2026-08-12
-version: "1.2.0"
+version: "1.3.0"
 area: architecture
 tags: [adr, trino, maven, supply-chain, arm64]
 ---
@@ -57,10 +57,21 @@ second attempt was consumed. It must not be rerun.
 The risk owner then authorized exactly one third attempt and its owner-only
 approval path in Issue #63 comment
 [`5264706435`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5264706435)
-at `2026-08-12T09:10:49Z`. This active authorization remains bound to the same
+at `2026-08-12T09:10:49Z`. That historical authorization was bound to the same
 candidate and expiry, predecessor
 `bbd258739c59398da8c721480c48eab82d99441b`, GitHub Actions attempt `1`, and PR
-#146 final-head gates. It grants no downstream authority.
+#146 final-head gates. It granted no downstream authority and is consumed.
+
+PR #146 was squash-merged as
+`b1e58117cff9f9f1441176617dbdb2e4e0e8685f`. Its reviewed-main run
+[`31590750849`](https://github.com/TommyKammy/Shirokuma/actions/runs/31590750849),
+attempt `1`, failed closed before publication with five unsuppressed Bun High
+findings and retained zero artifacts. The sequence-3 attempt is consumed and
+must not be rerun. Issue #63 comment
+[`5266462504`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5266462504)
+at `2026-08-12T11:54:32Z` authorizes exactly one sequence-4 attempt after
+predecessor `b1e58117cff9f9f1441176617dbdb2e4e0e8685f`, bound to PR #147 and
+GitHub Actions attempt `1`.
 
 ## Decision
 
@@ -114,7 +125,7 @@ sidecar and any matching `_remote.repositories` entries before packaging.
 
 Authorization expires at `2026-08-21T22:43:36Z`, has no automatic renewal,
 and requires either a reviewer different from implementation author `Codex`
-and the owner before merge, or the exact PR #146 owner final-head attestation
+and the owner before merge, or the exact PR #147 owner final-head attestation
 defined below.
 
 The standard independent-review path queries the REST pull-request reviews
@@ -129,14 +140,14 @@ also fails closed. A qualifying human
 UTC `submitted_at` strictly before the pull request's `merged_at`; an approval
 submitted at or after merge cannot authorize publication.
 
-### PR #146 owner-only approval exception
+### PR #147 owner-only approval exception
 
 The standard independent-review path remains accepted and is evaluated first.
 When it succeeds, approval is complete without querying owner-exception issue
 comments, final-head CI, or review threads. Only when the standard path has no
 qualifying review does the publisher lazily query the exception data below. As
-a narrow alternative for only repository `TommyKammy/Shirokuma`, PR #146, and
-this third publication attempt, the publisher may accept one canonical
+a narrow alternative for only repository `TommyKammy/Shirokuma`, PR #147, and
+this fourth publication attempt, the publisher may accept one canonical
 top-level issue comment when every condition below is true:
 
 - the REST issue-comments endpoint is queried with a page size of 100 and
@@ -152,7 +163,7 @@ top-level issue comment when every condition below is true:
 - `.github/workflows/ci.yml`, `.github/workflows/security.yml`,
   `.github/workflows/trino-maven-remediation-feasibility.yml`, and
   `.github/workflows/trino-maven-dependencies.yml` each have a REST workflow-run
-  result with `status=completed` and `conclusion=success` for PR #146 and the
+  result with `status=completed` and `conclusion=success` for PR #147 and the
   exact attested final head; the workflow-runs endpoint is read with
   `per_page=100` and a 4 MiB response bound per page through a terminal short
   page, bounded to 10 pages and an accepted maximum of 999 runs; every run ID
@@ -176,11 +187,11 @@ top-level issue comment when every condition below is true:
   before merge, with the exact body:
 
 ```text
-Owner final-head attestation for PR #146
+Owner final-head attestation for PR #147
 
 Decision: APPROVED
 Final head: <exact final 40-character PR head SHA>
-Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5264706435
+Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5266462504
 ```
 
 Only `APPROVED` and `REVOKED` are valid decisions. The exact matching owner
@@ -209,7 +220,7 @@ exact merged-PR, attested-head CI, review-thread, and post-gate owner-decision
 queries at its write-capable boundary and again immediately before registry
 authentication.
 
-This exception grants only the approval path for PR #146's third publication
+This exception grants only the approval path for PR #147's fourth publication
 attempt. It does not remove the independent-review requirement from any other
 pull request, later attempt, or repository policy and is not a permanent
 relaxation. Failure consumes the attempt, rerun remains forbidden, and the
@@ -260,17 +271,17 @@ byte-identical server archives, and must leave the source checkout clean. The
 untracked-source rejection remains mandatory; no `.gitignore`, cleanup, or
 allowlist exception is permitted.
 
-Issue #63 comment `5264706435` is the active sequence-3 decision. It authorizes
-only one third reviewed-main attempt, after predecessor
-`bbd258739c59398da8c721480c48eab82d99441b`, with GitHub Actions attempt `1`.
+Issue #63 comment `5266462504` is the active sequence-4 decision. It authorizes
+only one fourth reviewed-main attempt, after predecessor
+`b1e58117cff9f9f1441176617dbdb2e4e0e8685f`, with GitHub Actions attempt `1`.
 The lifecycle is `dependency_snapshot_publication_pending`, and the contract,
 publication, and admission permission records are true only for that exact
-transition. Pull requests remain validation-only. PR #146 must pass the exact
+transition. Pull requests remain validation-only. PR #147 must pass the exact
 final-head CI and review-thread gates and satisfy either a standard current
-independent `APPROVED` review or the PR #146 owner-only final-head attestation
+independent `APPROVED` review or the PR #147 owner-only final-head attestation
 contract above. A different predecessor, a rerun, candidate drift, expiry, or
 failure before completing the closed publication-evidence boundary consumes or
-rejects this third attempt and returns publication to explicit reauthorization
+rejects this fourth attempt and returns publication to explicit reauthorization
 pending.
 
 The write-capable publish job must independently repeat the attempt check and
@@ -279,7 +290,7 @@ one current `APPROVED` review from a human GitHub user different from risk
 owner `TommyKammy` and implementation author `Codex` remains the standard
 path. A qualifying standard review short-circuits evaluation without querying
 owner comments or the exception-only CI and thread APIs. The only alternative
-is the exact PR #146 owner attestation above; an ordinary CODEOWNERS approval
+is the exact PR #147 owner attestation above; an ordinary CODEOWNERS approval
 by the risk owner cannot satisfy it. The qualifying review `commit_id`, or
 owner attestation `Final head`, must equal the exact final pull-request
 `head.sha`; an approval of an earlier revision cannot authorize publication.
