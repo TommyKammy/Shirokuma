@@ -368,6 +368,8 @@
       "page_size": 100,
       "maximum_pages": 10,
       "maximum_reviews": 999,
+      "maximum_page_bytes": 33554432,
+      "stable_snapshot_passes": 2,
       "unique_review_ids": true,
       "pagination_must_be_complete": true
     },
@@ -397,6 +399,8 @@
       "maximum_items": 999,
       "maximum_page_bytes": 33554432,
       "stable_snapshot_passes": 2,
+      "revalidate_after_final_api_gates": true,
+      "revalidated_decision_must_match": true,
       "strictly_increasing_unique_ids": true,
       "pagination_must_be_complete": true
     },
@@ -419,6 +423,7 @@
       "maximum_runs": 999,
       "maximum_page_bytes": 4194304,
       "stable_snapshot_passes": 2,
+      "same_path_run_selection": "latest_qualifying_success_attestation_preceding_by_updated_created_id",
       "positive_unique_run_ids": true,
       "total_count_must_match": true,
       "pagination_must_be_complete": true

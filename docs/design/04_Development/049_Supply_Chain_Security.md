@@ -1185,10 +1185,13 @@ merge and publication. The standard path remains a current independent human
 `APPROVED` review on the exact final activation PR head from a reviewer
 different from the owner and implementation author, submitted strictly before
 the activation PR's merge timestamp. The REST pull-request reviews endpoint is
-read with `per_page=100` through a terminal short page, bounded to 10 pages with
-an accepted maximum of 999 unique positive review IDs. A full tenth page yields
-1,000 reviews without proving exhaustion and therefore fails closed; a
-duplicate or malformed ID, or a missing or malformed page also fails closed.
+read with `per_page=100` and a 32 MiB response bound per page through a terminal
+short page, bounded to 10 pages with an accepted maximum of 999 unique positive
+review IDs. Two complete ordered scans of review ID, decision state, commit,
+submission timestamp, and reviewer login and type must match. A full tenth page
+yields 1,000 reviews without proving exhaustion and therefore fails closed; an
+unstable snapshot, a duplicate or malformed ID, or a missing or malformed page
+also fails closed.
 It is evaluated first and, when satisfied, completes approval without
 querying owner-exception comments, final-head CI, or review-thread APIs. The
 independent-review requirement remains the normal policy for every other pull
@@ -1208,8 +1211,12 @@ an accepted maximum of 999 runs. Every run
 ID must be a unique positive integer, `total_count` must remain stable and equal
 the collected run count, and two complete ordered scans of each run's identity,
 path, head, event, status, conclusion, timestamps, repository identities, and PR
-binding must match. A full tenth page does not prove exhaustion and fails
-closed. Then a complete GraphQL cursor query reads `reviewThreads` in pages of
+binding must match. When a required path has multiple runs, qualifying
+successful pre-attestation runs are selected deterministically by `updated_at`,
+then `created_at`, then run ID; failed or incomplete runs cannot satisfy the
+gate. A full
+tenth page does not prove exhaustion and fails closed. Then a complete GraphQL
+cursor query reads `reviewThreads` in pages of
 100 until
 `hasNextPage=false`, bounded to at most 10 pages and 1,000 threads. Every page
 must report the exact repository, pull-request number, and attested
@@ -1240,7 +1247,10 @@ maximum is 999 comments: a full tenth page yields 1,000 comments without
 proving exhaustion and therefore fails closed. A missing, malformed, reordered,
 duplicated, or unstable page also fails closed. A qualifying standard
 independent review short-circuits before this comment query, so owner-exception
-data is not fetched on the normal path.
+data is not fetched on the normal path. On the exception path, the same bounded
+two-pass comment query is repeated after the final workflow-run and review-
+thread API gates; the governing decision receipt must be identical, so an edit
+or later `REVOKED` cannot be missed before publication authorization returns.
 
 The thread result proves the state of the exact attested head. Resolving a
 non-outdated thread after attestation does not make it acceptable. Making a
@@ -1251,9 +1261,10 @@ a new attestation. The publisher queries owner comments and these CI/thread
 inputs lazily only when no qualifying standard independent review exists.
 
 On the owner-exception path, the main publisher repeats the exact merged PR,
-attested-head CI, and current-thread queries at its write-capable boundary and
-again immediately before registry authentication; the attestation is not a
-substitute for those checks. Failure, rerun, a different main predecessor, or
+attested-head CI, current-thread, and post-gate owner-decision queries at its
+write-capable boundary and again immediately before registry authentication;
+the attestation is not a substitute for those checks. Failure, rerun, a
+different main predecessor, or
 candidate drift consumes or rejects the attempt and returns publication to
 fail-closed reauthorization pending. The exception's downstream-authority set
 is empty: no dependency artifact admission, image publication, resident

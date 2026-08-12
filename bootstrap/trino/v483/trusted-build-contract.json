@@ -47,11 +47,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "b7649aa787407bdeb8be302dac90350127c85314dc9c63cbf498b424e381fed8"
+      "sha256": "a059a0fa8224f0ffe640a23fdfccb203e62e95951b8b05a4bb3dfaf509e433e3"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "a6c0fe82447c163b9db2f5909443dfe26381704045f9f397c7e13c8430aac32f"
+      "sha256": "7bf66c3d5d2edd51b6edf69a1efcdf87de6451bd5d658f7661a427a6246ff712"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -95,7 +95,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md",
-      "sha256": "b751854470332214bb7217049b71a26a3ebcdc52ab10b4578539fdff1328cd6d"
+      "sha256": "4da9928afd3da6ff03ef5e1b761df1f8a8ac72727201cc59605cfd76d93bd9ef"
     },
     {
       "path": "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",
@@ -1085,6 +1085,8 @@
         "page_size": 100,
         "maximum_pages": 10,
         "maximum_reviews": 999,
+        "maximum_page_bytes": 33554432,
+        "stable_snapshot_passes": 2,
         "unique_review_ids": true,
         "pagination_must_be_complete": true
       },
@@ -1114,6 +1116,8 @@
         "maximum_items": 999,
         "maximum_page_bytes": 33554432,
         "stable_snapshot_passes": 2,
+        "revalidate_after_final_api_gates": true,
+        "revalidated_decision_must_match": true,
         "strictly_increasing_unique_ids": true,
         "pagination_must_be_complete": true
       },
@@ -1136,6 +1140,7 @@
         "maximum_runs": 999,
         "maximum_page_bytes": 4194304,
         "stable_snapshot_passes": 2,
+        "same_path_run_selection": "latest_qualifying_success_attestation_preceding_by_updated_created_id",
         "positive_unique_run_ids": true,
         "total_count_must_match": true,
         "pagination_must_be_complete": true

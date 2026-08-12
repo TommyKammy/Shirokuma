@@ -4832,6 +4832,8 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                         "page_size": 100,
                         "maximum_pages": 10,
                         "maximum_reviews": 999,
+                        "maximum_page_bytes": 33554432,
+                        "stable_snapshot_passes": 2,
                         "unique_review_ids": True,
                         "pagination_must_be_complete": True,
                     },
@@ -4873,6 +4875,8 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                         "maximum_items": 999,
                         "maximum_page_bytes": 33554432,
                         "stable_snapshot_passes": 2,
+                        "revalidate_after_final_api_gates": True,
+                        "revalidated_decision_must_match": True,
                         "strictly_increasing_unique_ids": True,
                         "pagination_must_be_complete": True,
                     },
@@ -4904,6 +4908,9 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                         "maximum_runs": 999,
                         "maximum_page_bytes": 4194304,
                         "stable_snapshot_passes": 2,
+                        "same_path_run_selection": (
+                            "latest_qualifying_success_attestation_preceding_by_updated_created_id"
+                        ),
                         "positive_unique_run_ids": True,
                         "total_count_must_match": True,
                         "pagination_must_be_complete": True,

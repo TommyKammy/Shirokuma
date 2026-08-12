@@ -101,11 +101,13 @@ and the owner before merge, or the exact PR #145 owner final-head attestation
 defined below.
 
 The standard independent-review path queries the REST pull-request reviews
-endpoint with `per_page=100` through a terminal short page, bounded to 10 pages
-with an accepted maximum of 999 reviews. Every review ID must be a unique
-positive integer. A full tenth page yields 1,000 reviews without proving
-exhaustion and therefore fails closed; a malformed or duplicate ID, or a
-missing or malformed page also fails closed. A qualifying human
+endpoint with `per_page=100` and a 32 MiB response bound per page through a
+terminal short page, bounded to 10 pages with an accepted maximum of 999
+reviews. Every review ID must be a unique positive integer, and two complete
+ordered scans of decision-relevant review state must match. A full tenth page
+yields 1,000 reviews without proving exhaustion and therefore fails closed; an
+unstable snapshot, a malformed or duplicate ID, or a missing or malformed page
+also fails closed. A qualifying human
 `APPROVED` review must target the exact final pull-request head and have a valid
 UTC `submitted_at` strictly before the pull request's `merged_at`; an approval
 submitted at or after merge cannot authorize publication.
@@ -140,8 +142,11 @@ top-level issue comment when every condition below is true:
   is a unique positive integer,
   `total_count` remains stable and equals the collected run count, and two
   complete ordered scans of run identity, path, head, event, status, conclusion,
-  timestamps, repository identities, and PR binding are identical; a full tenth
-  page does not prove exhaustion and fails closed;
+  timestamps, repository identities, and PR binding are identical; multiple
+  qualifying successful pre-attestation runs for one required path are ordered
+  by `updated_at`, then `created_at`, then run ID, while failed or incomplete
+  runs cannot satisfy the gate; a full tenth page does not prove
+  exhaustion and fails closed;
 - a GraphQL cursor query reads `reviewThreads` in pages of 100 until
   `hasNextPage=false`, bounded to at most 10 pages and 1,000 threads; every
   page must report the exact repository, pull-request number, and attested
@@ -167,7 +172,10 @@ ordering signal. A later matching `REVOKED` comment invalidates the attestation,
 and two or more matching decisions tied at the latest `updated_at` fail closed
 as ambiguous. A bot or different login, account type, or association cannot
 satisfy the exception; an owner comment with a different PR, head, body, or
-post-merge timestamp fails closed.
+post-merge timestamp fails closed. After the workflow-run and review-thread API
+gates complete, the publisher repeats the same bounded two-pass owner-comment
+query and requires the governing decision receipt to match the first selection
+exactly; an edited approval or later `REVOKED` therefore fails closed.
 
 The zero-current-thread result is evidence for the attested final head, not a
 permission to resolve a thread later. A resolved but non-outdated thread still
@@ -180,8 +188,9 @@ repository, pull-request, `headRefOid`, or `totalCount` drift between pages,
 duplicate thread IDs, a mismatch between the two complete ordered scans, or
 failure to prove exhaustion before reaching either pagination bound fails
 closed. On this owner-exception path only, the main publisher must repeat the
-exact merged-PR, attested-head CI, and review-thread queries at its
-write-capable boundary and again immediately before registry authentication.
+exact merged-PR, attested-head CI, review-thread, and post-gate owner-decision
+queries at its write-capable boundary and again immediately before registry
+authentication.
 
 This exception grants only the approval path for PR #145's second publication
 attempt. It does not remove the independent-review requirement from any other
