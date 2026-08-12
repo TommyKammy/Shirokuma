@@ -413,6 +413,14 @@
       "conclusion": "success",
       "head_sha_must_match_attestation": true,
       "pull_request_must_match": true,
+      "api": "rest_workflow_runs",
+      "page_size": 100,
+      "maximum_pages": 10,
+      "maximum_runs": 999,
+      "maximum_page_bytes": 4194304,
+      "stable_snapshot_passes": 2,
+      "positive_unique_run_ids": true,
+      "total_count_must_match": true,
       "pagination_must_be_complete": true
     },
     "review_threads": {

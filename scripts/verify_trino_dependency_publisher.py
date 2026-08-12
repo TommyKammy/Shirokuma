@@ -49,6 +49,10 @@ GITHUB_PULL_REVIEW_PAGE_SIZE = 100
 GITHUB_PULL_REVIEW_MAXIMUM_PAGES = 10
 GITHUB_PULL_REVIEW_MAXIMUM_REVIEWS = 999
 GITHUB_OWNER_COMMENT_MAXIMUM_ITEMS = 999
+GITHUB_WORKFLOW_RUN_PAGE_SIZE = 100
+GITHUB_WORKFLOW_RUN_MAXIMUM_PAGES = 10
+GITHUB_WORKFLOW_RUN_MAXIMUM_RUNS = 999
+GITHUB_WORKFLOW_RUN_PAGE_RESPONSE_BYTES = 4_194_304
 GITHUB_REVIEW_THREAD_PAGE_SIZE = 100
 GITHUB_REVIEW_THREAD_MAXIMUM_PAGES = 10
 GITHUB_REVIEW_THREAD_MAXIMUM_THREADS = 1_000
@@ -174,6 +178,14 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
         "conclusion": "success",
         "head_sha_must_match_attestation": True,
         "pull_request_must_match": True,
+        "api": "rest_workflow_runs",
+        "page_size": GITHUB_WORKFLOW_RUN_PAGE_SIZE,
+        "maximum_pages": GITHUB_WORKFLOW_RUN_MAXIMUM_PAGES,
+        "maximum_runs": GITHUB_WORKFLOW_RUN_MAXIMUM_RUNS,
+        "maximum_page_bytes": GITHUB_WORKFLOW_RUN_PAGE_RESPONSE_BYTES,
+        "stable_snapshot_passes": 2,
+        "positive_unique_run_ids": True,
+        "total_count_must_match": True,
         "pagination_must_be_complete": True,
     },
     "review_threads": {
@@ -4466,11 +4478,13 @@ def _github_api_mapping(
     *,
     token: str,
     request_payload: Mapping[str, Any] | None = None,
+    maximum_response_bytes: int = GITHUB_API_RESPONSE_BYTES,
 ) -> Mapping[str, Any]:
     result = _github_api_json(
         url,
         token=token,
         request_payload=request_payload,
+        maximum_response_bytes=maximum_response_bytes,
     )
     if not isinstance(result, Mapping):
         _fail("INDEPENDENT_REVIEW", "GitHub API response must be an object")
@@ -4712,7 +4726,7 @@ def _validate_owner_final_head_ci(
         not isinstance(runs, list)
         or type(total_count) is not int
         or total_count != len(runs)
-        or len(runs) >= 100
+        or len(runs) > GITHUB_WORKFLOW_RUN_MAXIMUM_RUNS
     ):
         _fail(
             "INDEPENDENT_REVIEW",
@@ -4798,6 +4812,154 @@ def _validate_owner_final_head_ci(
         },
         "completed_before_attestation": True,
     }
+
+
+def _github_workflow_run_pages(
+    exception: Mapping[str, Any],
+    *,
+    pull_request: int,
+    final_head: str,
+    token: str,
+) -> Mapping[str, Any]:
+    policy = exception["final_head_ci"]
+    if (
+        policy.get("api") != "rest_workflow_runs"
+        or policy.get("page_size") != GITHUB_WORKFLOW_RUN_PAGE_SIZE
+        or policy.get("maximum_pages") != GITHUB_WORKFLOW_RUN_MAXIMUM_PAGES
+        or policy.get("maximum_runs") != GITHUB_WORKFLOW_RUN_MAXIMUM_RUNS
+        or policy.get("maximum_page_bytes")
+        != GITHUB_WORKFLOW_RUN_PAGE_RESPONSE_BYTES
+        or policy.get("stable_snapshot_passes") != 2
+        or policy.get("positive_unique_run_ids") is not True
+        or policy.get("total_count_must_match") is not True
+        or policy.get("pagination_must_be_complete") is not True
+    ):
+        _fail("INDEPENDENT_REVIEW", "final-head workflow pagination policy differs")
+    if (
+        type(pull_request) is not int
+        or pull_request != exception["pull_request"]
+        or not isinstance(final_head, str)
+        or re.fullmatch(r"[0-9a-f]{40}", final_head) is None
+    ):
+        _fail("INDEPENDENT_REVIEW", "final-head workflow query identity differs")
+
+    base = "https://api.github.com/repos/TommyKammy/Shirokuma/actions/runs"
+
+    def scan() -> tuple[list[Any], tuple[Any, ...], int]:
+        runs: list[Any] = []
+        snapshot: list[Any] = []
+        observed_run_ids: set[int] = set()
+        observed_total_count: int | None = None
+        for page in range(1, GITHUB_WORKFLOW_RUN_MAXIMUM_PAGES + 1):
+            page_url = (
+                f"{base}?"
+                + urlencode(
+                    {
+                        "event": policy["event"],
+                        "head_sha": final_head,
+                        "per_page": GITHUB_WORKFLOW_RUN_PAGE_SIZE,
+                        "page": page,
+                    }
+                )
+            )
+            payload = _github_api_mapping(
+                page_url,
+                token=token,
+                maximum_response_bytes=GITHUB_WORKFLOW_RUN_PAGE_RESPONSE_BYTES,
+            )
+            page_runs = payload.get("workflow_runs")
+            total_count = payload.get("total_count")
+            if (
+                not isinstance(page_runs, list)
+                or len(page_runs) > GITHUB_WORKFLOW_RUN_PAGE_SIZE
+                or type(total_count) is not int
+                or total_count < 0
+                or total_count > GITHUB_WORKFLOW_RUN_MAXIMUM_RUNS
+            ):
+                _fail(
+                    "INDEPENDENT_REVIEW",
+                    "paginated final-head workflow response is malformed",
+                )
+            if observed_total_count is None:
+                observed_total_count = total_count
+            elif total_count != observed_total_count:
+                _fail(
+                    "INDEPENDENT_REVIEW",
+                    "final-head workflow total count changed between pages",
+                )
+            for run in page_runs:
+                run_id = run.get("id") if isinstance(run, Mapping) else None
+                repository = run.get("repository") if isinstance(run, Mapping) else None
+                head_repository = (
+                    run.get("head_repository") if isinstance(run, Mapping) else None
+                )
+                pull_requests = (
+                    run.get("pull_requests") if isinstance(run, Mapping) else None
+                )
+                if (
+                    type(run_id) is not int
+                    or run_id <= 0
+                    or run_id in observed_run_ids
+                    or not isinstance(repository, Mapping)
+                    or not isinstance(head_repository, Mapping)
+                    or not isinstance(pull_requests, list)
+                ):
+                    _fail(
+                        "INDEPENDENT_REVIEW",
+                        "final-head workflow run identity is malformed or duplicated",
+                    )
+                observed_run_ids.add(run_id)
+                pull_binding = []
+                for associated_pull in pull_requests:
+                    associated_number = (
+                        associated_pull.get("number")
+                        if isinstance(associated_pull, Mapping)
+                        else None
+                    )
+                    if type(associated_number) is not int or associated_number <= 0:
+                        _fail(
+                            "INDEPENDENT_REVIEW",
+                            "workflow pull-request binding is malformed",
+                        )
+                    pull_binding.append(associated_number)
+                snapshot.append(
+                    (
+                        run_id,
+                        run.get("path"),
+                        run.get("head_sha"),
+                        run.get("event"),
+                        run.get("status"),
+                        run.get("conclusion"),
+                        run.get("created_at"),
+                        run.get("updated_at"),
+                        repository.get("full_name"),
+                        head_repository.get("full_name"),
+                        tuple(pull_binding),
+                    )
+                )
+            runs.extend(page_runs)
+            if len(runs) > GITHUB_WORKFLOW_RUN_MAXIMUM_RUNS:
+                _fail("INDEPENDENT_REVIEW", "final-head workflow run bound exceeded")
+            if len(page_runs) < GITHUB_WORKFLOW_RUN_PAGE_SIZE:
+                if len(runs) != observed_total_count:
+                    _fail(
+                        "INDEPENDENT_REVIEW",
+                        "final-head workflow total count differs from collected pages",
+                    )
+                return runs, tuple(snapshot), observed_total_count
+        _fail(
+            "INDEPENDENT_REVIEW",
+            "final-head workflow exhaustion was not proven within the accepted bound",
+        )
+
+    _first_runs, first_snapshot, first_total_count = scan()
+    second_runs, second_snapshot, second_total_count = scan()
+    if (
+        second_total_count != first_total_count
+        or second_snapshot != first_snapshot
+    ):
+        _fail("INDEPENDENT_REVIEW", "final-head workflow snapshot is unstable")
+    return {"total_count": second_total_count, "workflow_runs": second_runs}
 
 
 def _owner_review_thread_page(
@@ -5064,12 +5226,10 @@ def _verify_owner_final_head_gates(
     pull_request = selection["pull_request"]
     final_head = selection["attested_head"]
     attested_at = _parse_time(selection["attested_at"])
-    base = "https://api.github.com/repos/TommyKammy/Shirokuma"
-    workflow_payload = _github_api_mapping(
-        (
-            f"{base}/actions/runs?event=pull_request&"
-            f"head_sha={quote(final_head, safe='')}&per_page=100"
-        ),
+    workflow_payload = _github_workflow_run_pages(
+        exception,
+        pull_request=pull_request,
+        final_head=final_head,
         token=token,
     )
     final_head_ci = _validate_owner_final_head_ci(
@@ -5385,7 +5545,10 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
         != 3
         or workflow.count("GITHUB_TOKEN: ${{ github.token }}") != 2
-        or workflow.count("verify-independent-review --root .") != 2
+        or workflow.count("verify-independent-review") != 2
+        or workflow.count("verify-independent-review --root .") != 1
+        or workflow.count("final_review_gate=(") != 1
+        or workflow.count('"${final_review_gate[@]}"') != 1
         or lines.count("      actions: read") != 1
         or lines.count("      issues: read") != 1
         or lines.count("      pull-requests: read") != 1

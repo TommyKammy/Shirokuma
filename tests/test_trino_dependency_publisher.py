@@ -2557,6 +2557,28 @@ class PublisherContractTests(unittest.TestCase):
         return {"total_count": len(runs), "workflow_runs": runs}
 
     @staticmethod
+    def _owner_workflow_run(
+        run_id: int,
+        path: str,
+        *,
+        final_head: str = "c" * 40,
+        pull_request: int = 145,
+    ) -> dict[str, object]:
+        return {
+            "id": run_id,
+            "path": path,
+            "head_sha": final_head,
+            "event": "pull_request",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-08-12T04:40:00Z",
+            "updated_at": "2026-08-12T04:58:00Z",
+            "repository": {"full_name": "TommyKammy/Shirokuma"},
+            "head_repository": {"full_name": "TommyKammy/Shirokuma"},
+            "pull_requests": [{"number": pull_request}],
+        }
+
+    @staticmethod
     def _owner_review_thread_payload(
         nodes: list[dict[str, object]] | None = None,
         *,
@@ -2842,7 +2864,10 @@ class PublisherContractTests(unittest.TestCase):
             3,
             workflow.count("--validation-point before_dependency_publication"),
         )
-        self.assertEqual(2, workflow.count("verify-independent-review --root ."))
+        self.assertEqual(2, workflow.count("verify-independent-review"))
+        self.assertEqual(1, workflow.count("verify-independent-review --root ."))
+        self.assertEqual(1, workflow.count("final_review_gate=("))
+        self.assertEqual(1, workflow.count('"${final_review_gate[@]}"'))
         self.assertEqual(2, workflow.count("GITHUB_TOKEN: ${{ github.token }}"))
         for path in (
             verify.FEASIBILITY_VERIFIER_PATH,
@@ -2853,14 +2878,16 @@ class PublisherContractTests(unittest.TestCase):
         publish = workflow.split("  publish:", 1)[1]
         attempt = publish.index("--validation-point before_dependency_publication")
         review = publish.index("verify-independent-review --root .")
-        final_review = publish.rindex("verify-independent-review --root .")
+        final_review = publish.index("final_review_gate=(")
+        final_review_run = publish.index('"${final_review_gate[@]}"')
         final_authorization = publish.rindex(
             "--validation-point before_dependency_publication"
         )
         auth = publish.index("oras login ghcr.io")
         self.assertLess(attempt, review)
         self.assertLess(review, final_review)
-        self.assertLess(final_review, final_authorization)
+        self.assertLess(final_review, final_review_run)
+        self.assertLess(final_review_run, final_authorization)
         self.assertLess(final_authorization, auth)
         self.assertLess(review, auth)
 
@@ -3330,7 +3357,7 @@ class PublisherContractTests(unittest.TestCase):
             with self.subTest(total_count=payload["total_count"]):
                 with self.assertRaisesRegex(
                     verify.ContractError,
-                    "truncated or malformed",
+                    "INDEPENDENT_REVIEW",
                 ):
                     verify._validate_owner_final_head_ci(
                         exception,
@@ -3338,6 +3365,302 @@ class PublisherContractTests(unittest.TestCase):
                         pull_request=145,
                         final_head=final_head,
                         attested_at=attested_at,
+                    )
+
+    def test_owner_final_head_workflow_run_pagination_collects_stable_pages(
+        self,
+    ) -> None:
+        exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        final_head = "c" * 40
+        filler = [
+            self._owner_workflow_run(
+                run_id,
+                f".github/workflows/irrelevant-{run_id}.yml",
+                final_head=final_head,
+            )
+            for run_id in range(1, 101)
+        ]
+        for run in filler:
+            run["display_title"] = "x" * 12_000
+        required = [
+            self._owner_workflow_run(run_id, path, final_head=final_head)
+            for run_id, path in enumerate(
+                exception["final_head_ci"]["workflow_paths"],
+                start=101,
+            )
+        ]
+        pages = [
+            {"total_count": 104, "workflow_runs": filler},
+            {"total_count": 104, "workflow_runs": required},
+        ]
+        first_page_bytes = len(json.dumps(pages[0]).encode())
+        self.assertGreater(first_page_bytes, verify.GITHUB_API_RESPONSE_BYTES)
+        self.assertLess(
+            first_page_bytes,
+            verify.GITHUB_WORKFLOW_RUN_PAGE_RESPONSE_BYTES,
+        )
+        read_limits: list[int] = []
+
+        class Response:
+            status = 200
+
+            def __init__(self, payload: object) -> None:
+                self.payload = json.dumps(payload).encode()
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                read_limits.append(limit)
+                return self.payload[:limit]
+
+        with mock.patch.object(
+            verify,
+            "urlopen",
+            side_effect=[Response(page) for page in pages + pages],
+        ) as request:
+            payload = verify._github_workflow_run_pages(
+                exception,
+                pull_request=145,
+                final_head=final_head,
+                token="ephemeral-token",
+            )
+
+        self.assertEqual(104, payload["total_count"])
+        self.assertEqual(104, len(payload["workflow_runs"]))
+        self.assertEqual(4, request.call_count)
+        self.assertEqual(
+            [verify.GITHUB_WORKFLOW_RUN_PAGE_RESPONSE_BYTES + 1] * 4,
+            read_limits,
+        )
+        urls = [call.args[0].full_url for call in request.call_args_list]
+        for index, page in enumerate((1, 2, 1, 2)):
+            with self.subTest(request=index):
+                self.assertIn(f"page={page}", urls[index])
+                self.assertIn("per_page=100", urls[index])
+                self.assertIn("event=pull_request", urls[index])
+
+                self.assertIn(f"head_sha={final_head}", urls[index])
+        receipt = verify._validate_owner_final_head_ci(
+            exception,
+            payload,
+            pull_request=145,
+            final_head=final_head,
+            attested_at=dt.datetime(
+                2026,
+                8,
+                12,
+                4,
+                59,
+                tzinfo=dt.timezone.utc,
+            ),
+        )
+        self.assertEqual(
+            set(exception["final_head_ci"]["workflow_paths"]),
+            set(receipt["workflow_runs"]),
+        )
+
+    def test_owner_final_head_workflow_run_page_rejects_oversized_response(
+        self,
+    ) -> None:
+        exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        final_head = "c" * 40
+        run = self._owner_workflow_run(
+            1,
+            ".github/workflows/irrelevant.yml",
+            final_head=final_head,
+        )
+        run["display_title"] = "x" * verify.GITHUB_WORKFLOW_RUN_PAGE_RESPONSE_BYTES
+        page = {"total_count": 1, "workflow_runs": [run]}
+        read_limits: list[int] = []
+
+        class Response:
+            status = 200
+
+            def __init__(self, payload: object) -> None:
+                self.payload = json.dumps(payload).encode()
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                read_limits.append(limit)
+                return self.payload[:limit]
+
+        with (
+            mock.patch.object(verify, "urlopen", return_value=Response(page)),
+            self.assertRaisesRegex(verify.ContractError, "response is too large"),
+        ):
+            verify._github_workflow_run_pages(
+                exception,
+                pull_request=145,
+                final_head=final_head,
+                token="ephemeral-token",
+            )
+        self.assertEqual(
+            [verify.GITHUB_WORKFLOW_RUN_PAGE_RESPONSE_BYTES + 1],
+            read_limits,
+        )
+
+    def test_owner_final_head_workflow_run_pagination_accepts_999_runs(
+        self,
+    ) -> None:
+        exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        final_head = "c" * 40
+        runs = [
+            self._owner_workflow_run(
+                run_id,
+                f".github/workflows/irrelevant-{run_id}.yml",
+                final_head=final_head,
+            )
+            for run_id in range(1, 1000)
+        ]
+        pages = [
+            {"total_count": 999, "workflow_runs": runs[offset : offset + 100]}
+            for offset in range(0, 999, 100)
+        ]
+
+        class Response:
+            status = 200
+
+            def __init__(self, payload: object) -> None:
+                self.payload = json.dumps(payload).encode()
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                return self.payload
+
+        with mock.patch.object(
+            verify,
+            "urlopen",
+            side_effect=[Response(page) for page in pages + pages],
+        ) as request:
+            payload = verify._github_workflow_run_pages(
+                exception,
+                pull_request=145,
+                final_head=final_head,
+                token="ephemeral-token",
+            )
+        self.assertEqual(999, payload["total_count"])
+        self.assertEqual(999, len(payload["workflow_runs"]))
+        self.assertEqual(20, request.call_count)
+
+    def test_owner_final_head_workflow_run_pagination_fails_closed(
+        self,
+    ) -> None:
+        exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        final_head = "c" * 40
+
+        altered = copy.deepcopy(exception)
+        altered["final_head_ci"]["maximum_page_bytes"] -= 1
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "final-head workflow pagination policy differs",
+        ):
+            verify._github_workflow_run_pages(
+                altered,
+                pull_request=145,
+                final_head=final_head,
+                token="ephemeral-token",
+            )
+
+        class Response:
+            status = 200
+
+            def __init__(self, payload: object) -> None:
+                self.payload = json.dumps(payload).encode()
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                return self.payload
+
+        full_pages = []
+        for page in range(10):
+            page_runs = [
+                self._owner_workflow_run(
+                    page * 100 + offset + 1,
+                    f".github/workflows/irrelevant-{page}-{offset}.yml",
+                    final_head=final_head,
+                )
+                for offset in range(100)
+            ]
+            full_pages.append({"total_count": 999, "workflow_runs": page_runs})
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                side_effect=[Response(page) for page in full_pages],
+            ) as request,
+            self.assertRaisesRegex(
+                verify.ContractError,
+                "bound exceeded|exhaustion was not proven",
+            ),
+        ):
+            verify._github_workflow_run_pages(
+                exception,
+                pull_request=145,
+                final_head=final_head,
+                token="ephemeral-token",
+            )
+        self.assertEqual(10, request.call_count)
+
+        stable_run = self._owner_workflow_run(
+            1,
+            ".github/workflows/irrelevant.yml",
+            final_head=final_head,
+        )
+        mutations = (
+            ("duplicate-id", "id", 1),
+            ("non-positive-id", "id", 0),
+            ("changed-path", "path", ".github/workflows/changed.yml"),
+            ("changed-head", "head_sha", "d" * 40),
+            ("changed-status", "status", "in_progress"),
+            ("changed-timestamp", "updated_at", "2026-08-12T04:58:01Z"),
+            ("changed-pr", "pull_requests", [{"number": 144}]),
+        )
+        for name, key, value in mutations:
+            with self.subTest(case=name):
+                first = {"total_count": 1, "workflow_runs": [stable_run]}
+                changed_run = copy.deepcopy(stable_run)
+                changed_run[key] = value
+                if name == "duplicate-id":
+                    first = {
+                        "total_count": 2,
+                        "workflow_runs": [stable_run, copy.deepcopy(stable_run)],
+                    }
+                    responses = [Response(first)]
+                else:
+                    second = {"total_count": 1, "workflow_runs": [changed_run]}
+                    responses = [Response(first), Response(second)]
+                with (
+                    mock.patch.object(
+                        verify,
+                        "urlopen",
+                        side_effect=responses,
+                    ),
+                    self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"),
+                ):
+                    verify._github_workflow_run_pages(
+                        exception,
+                        pull_request=145,
+                        final_head=final_head,
+                        token="ephemeral-token",
                     )
 
     def test_owner_review_threads_allow_only_outdated_threads(
@@ -4001,6 +4324,7 @@ class PublisherContractTests(unittest.TestCase):
                     Response(first_comment_page),
                     Response(second_comment_page),
                     Response(workflow_payload),
+                    Response(workflow_payload),
                     Response(thread_payload),
                     Response(thread_payload),
                 ],
@@ -4021,7 +4345,7 @@ class PublisherContractTests(unittest.TestCase):
             receipt["final_head_ci"]["completed_before_attestation"],
             True,
         )
-        self.assertEqual(9, request.call_count)
+        self.assertEqual(10, request.call_count)
         requests = [call.args[0] for call in request.call_args_list]
         self.assertIn(f"/commits/{commit}/pulls?per_page=100", requests[0].full_url)
         self.assertIn("/pulls/145/reviews?per_page=100", requests[1].full_url)
@@ -4042,13 +4366,14 @@ class PublisherContractTests(unittest.TestCase):
             requests[5].full_url,
         )
         self.assertIn(
-            f"/actions/runs?event=pull_request&head_sha={final_head}&per_page=100",
+            f"/actions/runs?event=pull_request&head_sha={final_head}&per_page=100&page=1",
             requests[6].full_url,
         )
-        self.assertEqual("https://api.github.com/graphql", requests[7].full_url)
-        self.assertEqual("POST", requests[7].get_method())
-        graphql_request = json.loads(requests[7].data)
-        second_graphql_request = json.loads(requests[8].data)
+        self.assertEqual(requests[6].full_url, requests[7].full_url)
+        self.assertEqual("https://api.github.com/graphql", requests[8].full_url)
+        self.assertEqual("POST", requests[8].get_method())
+        graphql_request = json.loads(requests[8].data)
+        second_graphql_request = json.loads(requests[9].data)
         self.assertEqual(
             {
                 "owner": "TommyKammy",

@@ -132,9 +132,16 @@ top-level issue comment when every condition below is true:
   `User`, and `author_association` is `OWNER`;
 - `.github/workflows/ci.yml`, `.github/workflows/security.yml`,
   `.github/workflows/trino-maven-remediation-feasibility.yml`, and
-  `.github/workflows/trino-maven-dependencies.yml` each have a fully paginated
-  PR check result with `status=completed` and `conclusion=success` for PR #145
-  and the exact attested final head;
+  `.github/workflows/trino-maven-dependencies.yml` each have a REST workflow-run
+  result with `status=completed` and `conclusion=success` for PR #145 and the
+  exact attested final head; the workflow-runs endpoint is read with
+  `per_page=100` and a 4 MiB response bound per page through a terminal short
+  page, bounded to 10 pages and an accepted maximum of 999 runs; every run ID
+  is a unique positive integer,
+  `total_count` remains stable and equals the collected run count, and two
+  complete ordered scans of run identity, path, head, event, status, conclusion,
+  timestamps, repository identities, and PR binding are identical; a full tenth
+  page does not prove exhaustion and fails closed;
 - a GraphQL cursor query reads `reviewThreads` in pages of 100 until
   `hasNextPage=false`, bounded to at most 10 pages and 1,000 threads; every
   page must report the exact repository, pull-request number, and attested

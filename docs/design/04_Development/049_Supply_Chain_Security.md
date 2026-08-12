@@ -1201,8 +1201,16 @@ independent approver is available, Issue #63 comment
 defines one alternative for PR #145 only. After the exact final PR head has
 completed `.github/workflows/ci.yml`, `.github/workflows/security.yml`,
 `.github/workflows/trino-maven-remediation-feasibility.yml`, and
-`.github/workflows/trino-maven-dependencies.yml` successfully, and a complete
-GraphQL cursor query reads `reviewThreads` in pages of 100 until
+`.github/workflows/trino-maven-dependencies.yml` successfully, the publisher
+must read the REST workflow-runs endpoint with `per_page=100` and a 4 MiB
+response bound per page through a terminal short page, bounded to 10 pages and
+an accepted maximum of 999 runs. Every run
+ID must be a unique positive integer, `total_count` must remain stable and equal
+the collected run count, and two complete ordered scans of each run's identity,
+path, head, event, status, conclusion, timestamps, repository identities, and PR
+binding must match. A full tenth page does not prove exhaustion and fails
+closed. Then a complete GraphQL cursor query reads `reviewThreads` in pages of
+100 until
 `hasNextPage=false`, bounded to at most 10 pages and 1,000 threads. Every page
 must report the exact repository, pull-request number, and attested
 `headRefOid`; `totalCount` must remain stable and equal the number of collected
