@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-08-08
-version: "1.39"
+updated: 2026-08-12
+version: "1.40"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -620,12 +620,13 @@ The workflow binds the exact source coordinates, Maven 3.9.16 and Temurin 25
 native-arm64 builder, Maven Central plus the explicit Confluent repository, a
 closed Maven manifest plus a separately closed Bun package-cache manifest, and
 an independent fresh
-`mvn --offline --ignore-transitive-repositories --settings /policy/settings.xml -Dmaven.repo.local=/workspace/.m2/repository -Dmaven.compiler.debuglevel=source,lines --file /workspace/pom.xml -pl '!:trino-docs' clean install -DskipTests`
-with networking disabled. The same explicit exclusion is required for both
-fresh dependency resolutions and both offline rebuilds: `trino-docs` invokes
-Sphinx to generate non-runtime documentation, while all remaining reactor
-modules stay inside the Trino server dependency and output boundary. The
-same four Maven executions require `--ignore-transitive-repositories`; this
+`mvn --offline --ignore-transitive-repositories --settings /policy/settings.xml -Dmaven.repo.local=/m2 -Daether.syncContext.named.basedir.locksDir=/tmp/maven-locks -Dmaven.compiler.debuglevel=source,lines --file /workspace/pom.xml -pl ':trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg' -am clean package -DskipTests`
+with networking disabled and the snapshot mounted read-only at `/m2`. Both
+fresh dependency resolutions and both offline rebuilds use the exact selected
+reactor; the online executions populate and seal it with `clean install`, while
+the offline executions prove the same server output without writing back to the
+sealed repository. The same four Maven executions require
+`--ignore-transitive-repositories`; this
 prevents repository declarations from third-party dependency POMs from
 expanding the Central/Confluent allowlist. Main run `30068723157` completed the
 Trino reactor with `BUILD SUCCESS`, but the transfer audit still detected
@@ -1143,9 +1144,9 @@ the exact hardened Maven SCM metadata and vulnerable-input pruning before
 packaging. Their two POMs and checksum sidecars retain Maven-resolvable Central
 markers, while the closed manifest separately records the dedicated
 `shirokuma-scm-remediation` provenance only for the four exact hash-bound
-postimages. Every online and network-none
-Trino `clean install` must then revalidate the complete authorized source
-postimages before any resulting repository or server archive is consumed.
+postimages. Every online Trino `clean install` and network-none Trino
+`clean package` must then revalidate the complete authorized source postimages
+before any resulting repository or server archive is consumed.
 Pruning a blocked JAR also removes all checksum sidecars and matching Maven
 origin-marker entries so the sealed repository cannot retain orphan metadata.
 The write-capable publish job repeats the one-attempt check and queries the
@@ -1177,11 +1178,21 @@ PR #144 merged the JGit containment as
 blocked publisher path with `validate=success` and `publish=skipped`. Issue #63
 comment
 [`5221869732`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5221869732)
-then reauthorized exactly one second reviewed-main attempt using the unchanged
+then authorized exactly one second reviewed-main attempt using the unchanged
 ADR-0029 candidate. That activation is bound to the protected-main transition
 after `6f557abc42713629510090db10d03630043364d7` and run attempt `1`, retains the
 same `2026-08-21T22:43:36Z` expiry, and requires a final-head approval before
-merge and publication. The standard path remains a current independent human
+merge and publication. These sequence-2 rules are historical: PR #145 was
+squash-merged as `bbd258739c59398da8c721480c48eab82d99441b`, and GitHub
+Actions run
+[`31577976760`](https://github.com/TommyKammy/Shirokuma/actions/runs/31577976760),
+attempt `1`, consumed that authorization. The first network-none build
+completed, but the workflow had extracted the verified Maven snapshot inside
+the source checkout at `.m2/repository`. The clean-source postcondition found
+the resulting untracked files and failed closed. The `publish` job was skipped,
+zero artifacts were retained, and rerunning the consumed attempt is forbidden.
+
+The standard path for an active attempt remains a current independent human
 `APPROVED` review on the exact final activation PR head from a reviewer
 different from the owner and implementation author, submitted strictly before
 the activation PR's merge timestamp. The REST pull-request reviews endpoint is
@@ -1201,7 +1212,28 @@ relaxation.
 Because Shirokuma is `TommyKammy`'s personal experimental project and no
 independent approver is available, Issue #63 comment
 [`5262105662`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5262105662)
-defines one alternative for PR #145 only. After the exact final PR head has
+defined one historical alternative for PR #145 only. It is inactive after the
+consumed sequence-2 attempt and grants no authority to PR #146 or a later run.
+
+PR #146 fixes the workflow-owned untracked tree while retaining the
+clean-source rejection. Each verified Maven snapshot is extracted outside the
+checkout at
+`${RUNNER_TEMP}/trino-offline-maven-repository-<suffix>`, mounted in the
+network-disabled builder as read-only `/m2:ro`, and selected with
+`-Dmaven.repo.local=/m2`. Maven Resolver locks are redirected to
+`/tmp/maven-locks`. The two clean `package` builds must produce byte-identical
+server archives, leave each source checkout clean, and consume an unchanged
+snapshot repository. No `.gitignore`, cleanup, allowlist, network fallback, or
+writable repository exception is permitted.
+
+Issue #63 comment
+[`5264706435`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5264706435)
+records the active sequence-3 owner authorization at
+`2026-08-12T09:10:49Z`. It permits exactly one third reviewed-main attempt,
+bound to predecessor `bbd258739c59398da8c721480c48eab82d99441b` and GitHub
+Actions attempt `1`, and retains the unchanged expiry
+`2026-08-21T22:43:36Z`. Its owner-only alternative is scoped to PR #146 and
+this third attempt only. After the exact final PR head has
 completed `.github/workflows/ci.yml`, `.github/workflows/security.yml`,
 `.github/workflows/trino-maven-remediation-feasibility.yml`, and
 `.github/workflows/trino-maven-dependencies.yml` successfully, the publisher
@@ -1227,10 +1259,20 @@ current non-outdated threads, including resolved threads. Only
 already-outdated threads are permitted. A malformed page, missing or repeated
 cursor, cursor cycle, identity or count drift, duplicate thread ID, unstable
 snapshot, or failure to prove exhaustion before reaching either bound fails
-closed. The owner may then post the canonical top-level final-head attestation. It must be
-authored by login `TommyKammy`, GitHub type `User`, association `OWNER`, match
-the exact final head, reference exception comment `5262105662`, and exist
-before merge. Only exact `APPROVED` or `REVOKED` decisions are recognized. The
+closed. The owner may then post this exact canonical top-level final-head
+attestation:
+
+```text
+Owner final-head attestation for PR #146
+
+Decision: APPROVED
+Final head: <exact final 40-character PR head SHA>
+Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5264706435
+```
+
+It must be authored by login `TommyKammy`, GitHub type `User`, association
+`OWNER`, match the exact final head, reference exception comment `5264706435`,
+and exist before merge. Only exact `APPROVED` or `REVOKED` decisions are recognized. The
 matching owner decision with the latest `updated_at` governs; comment ID is not
 used for ordering, a later `REVOKED` denies approval, and a tie at the latest
 timestamp fails closed as ambiguous. Bot or non-owner marker comments cannot

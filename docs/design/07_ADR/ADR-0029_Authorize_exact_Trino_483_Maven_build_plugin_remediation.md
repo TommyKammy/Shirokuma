@@ -3,8 +3,8 @@ doc_id: ADR-0029
 title: Authorize exact Trino 483 Maven build-plugin remediation
 status: accepted
 created: 2026-08-07
-updated: 2026-08-08
-version: "1.1.0"
+updated: 2026-08-12
+version: "1.2.0"
 area: architecture
 tags: [adr, trino, maven, supply-chain, arm64]
 ---
@@ -41,10 +41,26 @@ Shirokuma is the risk owner's personal experimental project and has no
 available independent approver. The owner therefore recorded one approval-path
 exception for PR #145 in Issue #63 comment
 [`5262105662`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5262105662)
-at `2026-08-12T03:59:12Z`. The exception changes only how the exact final PR
-head is approved for this second attempt. It does not replace the standard
-independent-review path, change the candidate or attempt binding, or grant any
-downstream authority.
+at `2026-08-12T03:59:12Z`. That exception was limited to the now-consumed
+second attempt and is historical; it grants no authority to a later run.
+
+PR #145 was squash-merged to `main` as
+`bbd258739c59398da8c721480c48eab82d99441b`. The resulting second authorized
+attempt ran as GitHub Actions run
+[`31577976760`](https://github.com/TommyKammy/Shirokuma/actions/runs/31577976760),
+attempt `1`. After the first network-none build succeeded, the workflow
+extracted the verified Maven snapshot inside the source checkout. The retained
+clean-source check correctly detected the resulting untracked files and failed
+closed. The `publish` job was skipped, zero artifacts were retained, and the
+second attempt was consumed. It must not be rerun.
+
+The risk owner then authorized exactly one third attempt and its owner-only
+approval path in Issue #63 comment
+[`5264706435`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5264706435)
+at `2026-08-12T09:10:49Z`. This active authorization remains bound to the same
+candidate and expiry, predecessor
+`bbd258739c59398da8c721480c48eab82d99441b`, GitHub Actions attempt `1`, and PR
+#146 final-head gates. It grants no downstream authority.
 
 ## Decision
 
@@ -83,9 +99,10 @@ raw vulnerability evidence, and High=0/Critical=0 without waiver.
 
 The two online reconstructions must replace the two authorized Maven SCM POMs
 with their exact hardened postimages and remove the closed vulnerable-input
-inventory before sealing or packaging either repository. Every online and
-network-none `clean install` must be followed by complete candidate postimage
-revalidation before its repository or server archive can be consumed.
+inventory before sealing or packaging either repository. Every online
+`clean install` and network-none `clean package` must be followed by complete
+candidate postimage revalidation before its repository or server archive can
+be consumed.
 The replacement POMs and checksum sidecars must retain their Maven-resolvable
 Central markers so the network-none build can consume the hardened dependency
 graphs. The packager separately records the dedicated
@@ -97,7 +114,7 @@ sidecar and any matching `_remote.repositories` entries before packaging.
 
 Authorization expires at `2026-08-21T22:43:36Z`, has no automatic renewal,
 and requires either a reviewer different from implementation author `Codex`
-and the owner before merge, or the exact PR #145 owner final-head attestation
+and the owner before merge, or the exact PR #146 owner final-head attestation
 defined below.
 
 The standard independent-review path queries the REST pull-request reviews
@@ -112,14 +129,14 @@ also fails closed. A qualifying human
 UTC `submitted_at` strictly before the pull request's `merged_at`; an approval
 submitted at or after merge cannot authorize publication.
 
-### PR #145 owner-only approval exception
+### PR #146 owner-only approval exception
 
 The standard independent-review path remains accepted and is evaluated first.
 When it succeeds, approval is complete without querying owner-exception issue
 comments, final-head CI, or review threads. Only when the standard path has no
 qualifying review does the publisher lazily query the exception data below. As
-a narrow alternative for only repository `TommyKammy/Shirokuma`, PR #145, and
-this second publication attempt, the publisher may accept one canonical
+a narrow alternative for only repository `TommyKammy/Shirokuma`, PR #146, and
+this third publication attempt, the publisher may accept one canonical
 top-level issue comment when every condition below is true:
 
 - the REST issue-comments endpoint is queried with a page size of 100 and
@@ -135,7 +152,7 @@ top-level issue comment when every condition below is true:
 - `.github/workflows/ci.yml`, `.github/workflows/security.yml`,
   `.github/workflows/trino-maven-remediation-feasibility.yml`, and
   `.github/workflows/trino-maven-dependencies.yml` each have a REST workflow-run
-  result with `status=completed` and `conclusion=success` for PR #145 and the
+  result with `status=completed` and `conclusion=success` for PR #146 and the
   exact attested final head; the workflow-runs endpoint is read with
   `per_page=100` and a 4 MiB response bound per page through a terminal short
   page, bounded to 10 pages and an accepted maximum of 999 runs; every run ID
@@ -159,11 +176,11 @@ top-level issue comment when every condition below is true:
   before merge, with the exact body:
 
 ```text
-Owner final-head attestation for PR #145
+Owner final-head attestation for PR #146
 
 Decision: APPROVED
 Final head: <exact final 40-character PR head SHA>
-Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5262105662
+Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5264706435
 ```
 
 Only `APPROVED` and `REVOKED` are valid decisions. The exact matching owner
@@ -192,7 +209,7 @@ exact merged-PR, attested-head CI, review-thread, and post-gate owner-decision
 queries at its write-capable boundary and again immediately before registry
 authentication.
 
-This exception grants only the approval path for PR #145's second publication
+This exception grants only the approval path for PR #146's third publication
 attempt. It does not remove the independent-review requirement from any other
 pull request, later attempt, or repository policy and is not a permanent
 relaxation. Failure consumes the attempt, rerun remains forbidden, and the
@@ -203,18 +220,9 @@ Issue #63 closure.
 
 ## Consequences
 
-The authorization permitted one reviewed-`main`, run-scoped
-dependency-snapshot attempt using the three exact ordered patches. Pull
-requests remain validation-only and cannot publish. A produced dependency
-candidate remains review-pending and cannot authorize image publication.
-
-That single attempt is bound to the protected-main transition whose preceding
-commit is `ffbb4997420d4b66abf04ec4dfaa579aff2ce965` and to GitHub run attempt
-`1`. A rerun or any later main push fails closed and requires a new explicit
-owner authorization; changing this binding in the activation PR also requires
-re-review before merge.
-
-That attempt executed as GitHub Actions run
+The first authorization was bound to the protected-main transition after
+`ffbb4997420d4b66abf04ec4dfaa579aff2ce965` and GitHub Actions attempt `1`. It
+executed as GitHub Actions run
 [`31163679280`](https://github.com/TommyKammy/Shirokuma/actions/runs/31163679280)
 at `main` commit `27a313fca0aa080db8bd8f1d67744c68b1b0ab4f`. Both fresh
 online dependency reconstructions and the first network-none Maven build
@@ -225,23 +233,45 @@ completed, but the post-build candidate check failed closed with
 dependency artifact was published. The single attempt is consumed: this
 corrective change sets `MAVEN_OPTS=-Duser.home=/tmp/maven-home` on every Maven
 container invocation while retaining the untracked-file rejection, but it does
-not authorize another publisher run. Rebinding any later `main` transition or
-rerunning the failed attempt requires a new explicit owner authorization and
-independent review.
+not authorize another publisher run. That first attempt is historical and
+consumed.
 
-Issue #63 comment `5221869732` records that new decision and permits exactly
-one second attempt. The activation is bound to the protected-main transition
-whose preceding commit is `6f557abc42713629510090db10d03630043364d7` and to
-GitHub run attempt `1`. The lifecycle is therefore
-`dependency_snapshot_publication_pending`, and the contract, publication, and
-admission permission records are true only for that exact transition. Pull
-requests remain validation-only. The activation pull request must pass CI and
-satisfy either the standard current independent `APPROVED` review on the exact
-final pull-request head or the PR #145 owner-only final-head attestation
-contract above. If the protected-main predecessor changes, the run attempt is
-rerun, or the authorized run fails before completing the closed publication
-evidence boundary, the second attempt is consumed and publication fails closed
-until another explicit owner decision and required approval.
+Issue #63 comment `5221869732` authorized a second attempt bound to the
+protected-main transition after
+`6f557abc42713629510090db10d03630043364d7` and GitHub Actions attempt `1`. PR
+#145 was squash-merged as
+`bbd258739c59398da8c721480c48eab82d99441b`, and the attempt executed as run
+[`31577976760`](https://github.com/TommyKammy/Shirokuma/actions/runs/31577976760).
+The first network-none build completed, but the workflow had extracted the
+verified Maven snapshot under the source checkout as `.m2/repository`. The
+unchanged clean-source postcondition detected those untracked files and failed
+closed. The `publish` job was skipped, zero artifacts were retained, and the
+second attempt was consumed. Rerunning that run is forbidden. The sequence-2
+authorization and PR #145 owner-only exception are historical and inactive.
+
+PR #146 repairs that workflow-owned path error without weakening the
+postcondition. Each verified Maven snapshot is extracted to a fresh
+`${RUNNER_TEMP}/trino-offline-maven-repository-<suffix>` directory, mounted in
+the network-disabled Maven container as read-only `/m2:ro`, and selected with
+`-Dmaven.repo.local=/m2`. Maven Resolver lock files are redirected to
+`/tmp/maven-locks`, outside both the source checkout and the read-only
+repository. The two fresh offline builds use `clean package`, produce
+byte-identical server archives, and must leave the source checkout clean. The
+untracked-source rejection remains mandatory; no `.gitignore`, cleanup, or
+allowlist exception is permitted.
+
+Issue #63 comment `5264706435` is the active sequence-3 decision. It authorizes
+only one third reviewed-main attempt, after predecessor
+`bbd258739c59398da8c721480c48eab82d99441b`, with GitHub Actions attempt `1`.
+The lifecycle is `dependency_snapshot_publication_pending`, and the contract,
+publication, and admission permission records are true only for that exact
+transition. Pull requests remain validation-only. PR #146 must pass the exact
+final-head CI and review-thread gates and satisfy either a standard current
+independent `APPROVED` review or the PR #146 owner-only final-head attestation
+contract above. A different predecessor, a rerun, candidate drift, expiry, or
+failure before completing the closed publication-evidence boundary consumes or
+rejects this third attempt and returns publication to explicit reauthorization
+pending.
 
 The write-capable publish job must independently repeat the attempt check and
 query the exact merged pull request before registry authentication. At least
@@ -249,7 +279,7 @@ one current `APPROVED` review from a human GitHub user different from risk
 owner `TommyKammy` and implementation author `Codex` remains the standard
 path. A qualifying standard review short-circuits evaluation without querying
 owner comments or the exception-only CI and thread APIs. The only alternative
-is the exact PR #145 owner attestation above; an ordinary CODEOWNERS approval
+is the exact PR #146 owner attestation above; an ordinary CODEOWNERS approval
 by the risk owner cannot satisfy it. The qualifying review `commit_id`, or
 owner attestation `Final head`, must equal the exact final pull-request
 `head.sha`; an approval of an earlier revision cannot authorize publication.

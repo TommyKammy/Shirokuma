@@ -47,11 +47,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "1de32cf23682de27e7a01aed34211f84706c83ac74495b990b4d4be882e96e85"
+      "sha256": "35c3c5be8771526d1ead76145b7deced3d90b7f0dae90d22506e4e835db191e1"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "fdede11288bd290b354f2083b54266d36688e4a08aedffa89bc9006c414a80e7"
+      "sha256": "91437666fecc765e5caed8ef20f74dc88143281909fd923f7ac385f2fccab435"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -95,7 +95,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md",
-      "sha256": "4da9928afd3da6ff03ef5e1b761df1f8a8ac72727201cc59605cfd76d93bd9ef"
+      "sha256": "ae1a6a4a6aed51faac09a8f8472f75754e839c55114e8f53703832d44e6b6eaf"
     },
     {
       "path": "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",
@@ -1045,29 +1045,33 @@
     "runner": "ubuntu-24.04-arm",
     "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",
     "reauthorization": {
-      "sequence": 2,
+      "sequence": 3,
       "status": "active",
-      "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5221869732",
+      "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5264706435",
       "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
-      "approved_at": "2026-08-07T20:49:55Z",
+      "approved_at": "2026-08-12T09:10:49Z",
       "expires_at": "2026-08-21T22:43:36Z",
       "automatic_renewal": false,
       "risk_owner": "TommyKammy",
       "same_candidate_required": true,
       "publication_authorized_after_required_approval": true,
       "previous_attempt": {
-        "run_id": "31163679280",
+        "run_id": "31577976760",
         "run_attempt": "1",
-        "source_sha": "27a313fca0aa080db8bd8f1d67744c68b1b0ab4f",
+        "source_sha": "bbd258739c59398da8c721480c48eab82d99441b",
         "result": "failed_closed_before_publication",
-        "reason": "jgit_user_home_created_untracked_source_path",
+        "reason": "candidate_created_untracked_source_files",
         "dependency_artifact_published": false,
         "consumed": true
       },
       "repair": {
-        "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/144",
-        "merge_commit": "6f557abc42713629510090db10d03630043364d7",
-        "maven_opts": "-Duser.home=/tmp/maven-home",
+        "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/146",
+        "predecessor_main_commit": "bbd258739c59398da8c721480c48eab82d99441b",
+        "offline_repository_root": "${RUNNER_TEMP}/trino-offline-maven-repository-${suffix}",
+        "container_mount": "/m2:ro",
+        "maven_repo_local": "/m2",
+        "maven_lock_directory": "/tmp/maven-locks",
+        "maven_goal": "clean package",
         "untracked_source_rejection_retained": true
       },
       "failure_consumes_attempt": true,
@@ -1076,7 +1080,7 @@
     "authorized_attempt": {
       "event_name": "push",
       "ref": "refs/heads/main",
-      "before_sha": "6f557abc42713629510090db10d03630043364d7",
+      "before_sha": "bbd258739c59398da8c721480c48eab82d99441b",
       "run_attempt": "1"
     },
     "independent_review": {
@@ -1102,18 +1106,18 @@
     },
     "owner_only_approval_exception": {
       "status": "active",
-      "scope": "pr_145_second_publication_attempt_only",
+      "scope": "pr_146_third_publication_attempt_only",
       "reason": "sole_owner_personal_experimental_project",
-      "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5262105662",
-      "approved_at": "2026-08-12T03:59:12Z",
+      "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5264706435",
+      "approved_at": "2026-08-12T09:10:49Z",
       "repository": "TommyKammy/Shirokuma",
-      "pull_request": 145,
+      "pull_request": 146,
       "owner": "TommyKammy",
       "human_user_type": "User",
       "author_association": "OWNER",
       "attestation_required_before_merge": true,
       "attestation_must_match_final_head_sha": true,
-      "attestation_body_template": "Owner final-head attestation for PR #145\n\nDecision: {decision}\nFinal head: {final_head}\nException: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5262105662",
+      "attestation_body_template": "Owner final-head attestation for PR #146\n\nDecision: {decision}\nFinal head: {final_head}\nException: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5264706435",
       "allowed_decisions": ["APPROVED", "REVOKED"],
       "standard_independent_review_remains_accepted": true,
       "owner_issue_comments": {
