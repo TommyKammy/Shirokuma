@@ -20,11 +20,7 @@
   "candidate": {
     "index_reference": "docker.io/trinodb/trino@sha256:db58cc93e593a2706553745f276bb119c9810e69918be56ecde088ba7ccb0534",
     "manifest_digest": "sha256:aa18e61b2e7776ab8641ba8baaa8687d0430894e88c639e61010cc46a994ab36",
-    "observed_platforms": [
-      "linux/amd64",
-      "linux/arm64",
-      "linux/ppc64le"
-    ],
+    "observed_platforms": ["linux/amd64", "linux/arm64", "linux/ppc64le"],
     "attestation_manifest_count": 0
   },
   "assessment": {
@@ -97,10 +93,7 @@
     "scope": {
       "profile": "mac-studio-solo/local-lite",
       "purpose": "non-production-poc",
-      "data_classification": [
-        "synthetic",
-        "poc"
-      ],
+      "data_classification": ["synthetic", "poc"],
       "public_service_or_ingress_permitted": false,
       "source_binding": {
         "repository": "https://github.com/trinodb/trino",
@@ -182,9 +175,7 @@
       "commit_sha": "78a8d3230eb4769db93de5f2f2e18363c04cae81",
       "tree_sha": "28b877df95a7a661361b8776f6ebe21d73d8da6d"
     },
-    "permitted_paths": [
-      "pom.xml"
-    ],
+    "permitted_paths": ["pom.xml"],
     "preimage_sha256": "bfe7519b9886e9df51bfef8be52064b3aadcbf9ae21c77402d8a66837aa5442f",
     "postimage_sha256": "e07982c0f114b592c06c2aba1254df9c280b69a2dd27f3a0739421fe84d12efa",
     "dependency_replacements": {
@@ -248,16 +239,9 @@
     ],
     "also_make_required_projects": true,
     "distribution_contents": {
-      "server_modules": [
-        "trino-server-core",
-        "trino-server-main"
-      ],
-      "plugins": [
-        "iceberg"
-      ],
-      "iceberg_runtime_dependencies": [
-        "trino-hdfs"
-      ],
+      "server_modules": ["trino-server-core", "trino-server-main"],
+      "plugins": ["iceberg"],
+      "iceberg_runtime_dependencies": ["trino-hdfs"],
       "other_plugins_permitted": false
     },
     "dependency_replacements": {
@@ -267,10 +251,7 @@
       "commons-io:commons-io": "2.22.0",
       "org.apache.maven:maven-core": "3.9.16",
       "org.codehaus.plexus:plexus-archiver": "4.12.0",
-      "org.codehaus.plexus:plexus-utils": [
-        "3.6.1",
-        "4.0.3"
-      ],
+      "org.codehaus.plexus:plexus-utils": ["3.6.1", "4.0.3"],
       "com.github.eirslett:frontend-maven-plugin": "2.0.2",
       "ca.vanzyl.provisio.maven.plugins:provisio-maven-plugin": "2.0.0",
       "org.apache.maven.plugins:maven-jar-plugin": "3.5.1"
@@ -293,9 +274,9 @@
     "automatic_renewal": false,
     "risk_owner": "TommyKammy",
     "implementation_author": "Codex",
-      "reviewer_must_differ_from_implementation_author": true,
-      "reviewer_must_differ_from_risk_owner": true,
-      "approval_must_match_final_head_sha": true,
+    "reviewer_must_differ_from_implementation_author": true,
+    "reviewer_must_differ_from_risk_owner": true,
+    "approval_must_match_final_head_sha": true,
     "source_binding": {
       "repository": "https://github.com/trinodb/trino",
       "release_tag": "483",
@@ -306,9 +287,7 @@
       "path": "bootstrap/trino/v483/patches/0003-shirokuma-maven-build-plugin-closure.patch",
       "sha256": "731e76f296a725d34ea9e226a1815782168cae3890424e69f76a05530afc15be"
     },
-    "permitted_paths": [
-      "pom.xml"
-    ],
+    "permitted_paths": ["pom.xml"],
     "preimages": {
       "pom.xml": "8d342215a3c748f7965f0a82e847cab13587b94171d9d1422922b665475109c1"
     },
@@ -356,7 +335,7 @@
     "automatic_renewal": false,
     "risk_owner": "TommyKammy",
     "same_candidate_required": true,
-    "publication_authorized_after_independent_review": true,
+    "publication_authorized_after_required_approval": true,
     "previous_attempt": {
       "run_id": "31163679280",
       "run_attempt": "1",
@@ -374,6 +353,48 @@
     },
     "failure_consumes_attempt": true,
     "rerun_permitted": false
+  },
+  "owner_only_approval_exception": {
+    "status": "active",
+    "scope": "pr_145_second_publication_attempt_only",
+    "reason": "sole_owner_personal_experimental_project",
+    "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5262105662",
+    "approved_at": "2026-08-12T03:59:12Z",
+    "repository": "TommyKammy/Shirokuma",
+    "pull_request": 145,
+    "owner": "TommyKammy",
+    "human_user_type": "User",
+    "author_association": "OWNER",
+    "attestation_required_before_merge": true,
+    "attestation_must_match_final_head_sha": true,
+    "attestation_body_template": "Owner final-head attestation for PR #145\n\nDecision: {decision}\nFinal head: {final_head}\nException: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5262105662",
+    "allowed_decisions": ["APPROVED", "REVOKED"],
+    "standard_independent_review_remains_accepted": true,
+    "final_head_ci": {
+      "required_before_attestation": true,
+      "workflow_paths": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/security.yml",
+        ".github/workflows/trino-maven-remediation-feasibility.yml",
+        ".github/workflows/trino-maven-dependencies.yml"
+      ],
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha_must_match_attestation": true,
+      "pull_request_must_match": true,
+      "pagination_must_be_complete": true
+    },
+    "review_threads": {
+      "required_before_attestation": true,
+      "current_non_outdated_unresolved": 0,
+      "query": "graphql_review_threads",
+      "pagination_must_be_complete": true
+    },
+    "publication_enforcement": "exact_merged_pull_request_attested_head_ci_and_review_threads_query",
+    "failure_consumes_attempt": true,
+    "rerun_permitted": false,
+    "downstream_authorities_granted": []
   },
   "repository_state": {
     "dependency_snapshot_contract_permitted": true,
@@ -460,7 +481,7 @@
       "active exact owner authorization bound to the Parquet repository, tags, objects, commit, tree, preimage, postimage, permitted path, dependency replacements, expiry, and rollback",
       "active exact owner authorization bound to the Trino Iceberg-only source paths, patch and preimage/postimage hashes, selected reactor, dependency replacements, expiry, and rollback",
       "active exact owner authorization bound to the retained post-ADR-0027 pom.xml feasibility patch, patch and preimage/postimage hashes, Velocity Engine Core 2.4.1 and Plexus Utils 4.0.3 replacements, unchanged selected reactor, hardened run and independent audit, expiry, and rollback",
-      "independent reviewer approval distinct from the source-remediation author and owner",
+      "either a current independent human APPROVED review on the exact final activation pull-request head from a reviewer distinct from the source-remediation author and owner, or the exact PR #145 owner final-head attestation by TommyKammy as a User with OWNER association after all required final-head CI succeeds and current non-outdated unresolved review threads equal zero",
       "authenticated closed dependency snapshot",
       "network-none reproducible linux/arm64 build",
       "digest-pinned builder and runtime bases",

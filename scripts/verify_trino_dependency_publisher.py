@@ -115,7 +115,62 @@ EXPECTED_INDEPENDENT_REVIEW = {
     "reviewer_must_differ_from_risk_owner": True,
     "reviewer_must_differ_from_implementation_author": True,
     "approval_must_match_final_head_sha": True,
-    "publication_enforcement": "exact_merged_pull_request_review_query",
+    "publication_enforcement": (
+        "exact_merged_pull_request_review_or_owner_attestation_query"
+    ),
+}
+EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
+    "status": "active",
+    "scope": "pr_145_second_publication_attempt_only",
+    "reason": "sole_owner_personal_experimental_project",
+    "approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5262105662"
+    ),
+    "approved_at": "2026-08-12T03:59:12Z",
+    "repository": "TommyKammy/Shirokuma",
+    "pull_request": 145,
+    "owner": "TommyKammy",
+    "human_user_type": "User",
+    "author_association": "OWNER",
+    "attestation_required_before_merge": True,
+    "attestation_must_match_final_head_sha": True,
+    "attestation_body_template": (
+        "Owner final-head attestation for PR #145\n\n"
+        "Decision: {decision}\n"
+        "Final head: {final_head}\n"
+        "Exception: https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5262105662"
+    ),
+    "allowed_decisions": ["APPROVED", "REVOKED"],
+    "final_head_ci": {
+        "required_before_attestation": True,
+        "workflow_paths": [
+            ".github/workflows/ci.yml",
+            ".github/workflows/security.yml",
+            ".github/workflows/trino-maven-remediation-feasibility.yml",
+            ".github/workflows/trino-maven-dependencies.yml",
+        ],
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha_must_match_attestation": True,
+        "pull_request_must_match": True,
+        "pagination_must_be_complete": True,
+    },
+    "review_threads": {
+        "required_before_attestation": True,
+        "current_non_outdated_unresolved": 0,
+        "query": "graphql_review_threads",
+        "pagination_must_be_complete": True,
+    },
+    "publication_enforcement": (
+        "exact_merged_pull_request_attested_head_ci_and_review_threads_query"
+    ),
+    "failure_consumes_attempt": True,
+    "rerun_permitted": False,
+    "downstream_authorities_granted": [],
+    "standard_independent_review_remains_accepted": True,
 }
 EXPECTED_PUBLICATION_REAUTHORIZATION = {
     "sequence": 2,
@@ -130,7 +185,7 @@ EXPECTED_PUBLICATION_REAUTHORIZATION = {
     "automatic_renewal": False,
     "risk_owner": "TommyKammy",
     "same_candidate_required": True,
-    "publication_authorized_after_independent_review": True,
+    "publication_authorized_after_required_approval": True,
     "previous_attempt": {
         "run_id": "31163679280",
         "run_attempt": "1",
@@ -4141,27 +4196,49 @@ def _validate_publication_attempt(
 
 def _validate_independent_review_contract(contract: Mapping[str, Any]) -> None:
     publication = contract.get("publication")
-    if not isinstance(publication, Mapping) or not _matches_exact_json(
-        publication.get("independent_review"),
-        EXPECTED_INDEPENDENT_REVIEW,
+    if (
+        not isinstance(publication, Mapping)
+        or not _matches_exact_json(
+            publication.get("independent_review"),
+            EXPECTED_INDEPENDENT_REVIEW,
+        )
+        or not _matches_exact_json(
+            publication.get("owner_only_approval_exception"),
+            EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION,
+        )
     ):
         _fail(
             "INDEPENDENT_REVIEW",
-            "independent human review contract differs",
+            "publication approval contract differs",
         )
 
 
-def _github_api_list(url: str, *, token: str) -> list[Any]:
+def _github_api_json(
+    url: str,
+    *,
+    token: str,
+    request_payload: Mapping[str, Any] | None = None,
+) -> Any:
     if not token:
         _fail("INDEPENDENT_REVIEW", "GitHub token is missing")
+    data = None
+    if request_payload is not None:
+        data = json.dumps(
+            request_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
     request = Request(
         url,
+        data=data,
         headers={
             "Accept": "application/vnd.github+json",
             "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
             "X-GitHub-Api-Version": "2022-11-28",
             "User-Agent": "shirokuma-independent-review-verifier",
         },
+        method="POST" if data is not None else "GET",
     )
     try:
         with urlopen(request, timeout=30) as response:
@@ -4170,19 +4247,39 @@ def _github_api_list(url: str, *, token: str) -> list[Any]:
                     "INDEPENDENT_REVIEW",
                     f"GitHub API status differs: {response.status}",
                 )
-            payload = response.read(1_048_577)
+            response_payload = response.read(1_048_577)
     except URLError as error:
         _fail("INDEPENDENT_REVIEW", f"GitHub API request failed: {error}")
-    if len(payload) > 1_048_576:
+    if len(response_payload) > 1_048_576:
         _fail("INDEPENDENT_REVIEW", "GitHub API response is too large")
     try:
-        result = json.loads(payload)
+        return json.loads(response_payload)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         _fail("INDEPENDENT_REVIEW", f"GitHub API JSON is invalid: {error}")
+
+
+def _github_api_list(url: str, *, token: str) -> list[Any]:
+    result = _github_api_json(url, token=token)
     if not isinstance(result, list):
         _fail("INDEPENDENT_REVIEW", "GitHub API response must be a list")
     if len(result) >= 100:
         _fail("INDEPENDENT_REVIEW", "GitHub API result may be truncated")
+    return result
+
+
+def _github_api_mapping(
+    url: str,
+    *,
+    token: str,
+    request_payload: Mapping[str, Any] | None = None,
+) -> Mapping[str, Any]:
+    result = _github_api_json(
+        url,
+        token=token,
+        request_payload=request_payload,
+    )
+    if not isinstance(result, Mapping):
+        _fail("INDEPENDENT_REVIEW", "GitHub API response must be an object")
     return result
 
 
@@ -4192,6 +4289,7 @@ def _select_independent_review(
     reviews: list[Any],
     *,
     commit: str,
+    comments: list[Any] | None = None,
 ) -> dict[str, Any]:
     _validate_independent_review_contract(contract)
     if re.fullmatch(r"[0-9a-f]{40}", commit) is None:
@@ -4247,17 +4345,353 @@ def _select_independent_review(
         ):
             qualified.append(review)
     if len(qualified) < EXPECTED_INDEPENDENT_REVIEW["minimum_approved_reviews"]:
+        if comments is not None:
+            return _select_owner_final_head_attestation(
+                contract,
+                pull,
+                comments,
+                commit=commit,
+                final_head=final_head,
+            )
         _fail(
             "INDEPENDENT_REVIEW",
-            "no current human approval differs from the risk owner and author",
+            (
+                "no current human approval differs from the risk owner and "
+                "author, and no owner final-head attestation is available"
+            ),
         )
     selected = sorted(qualified, key=lambda review: int(review["id"]))[0]
     return {
+        "approval_mode": "independent_review",
         "pull_request": pull["number"],
         "review_id": selected["id"],
         "reviewer": selected["user"]["login"],
         "reviewed_head": final_head,
         "commit": commit,
+    }
+
+
+def _select_owner_final_head_attestation(
+    contract: Mapping[str, Any],
+    pull: Mapping[str, Any],
+    comments: list[Any],
+    *,
+    commit: str,
+    final_head: str,
+) -> dict[str, Any]:
+    _validate_independent_review_contract(contract)
+    exception = contract["publication"]["owner_only_approval_exception"]
+    if pull.get("number") != exception["pull_request"]:
+        _fail("INDEPENDENT_REVIEW", "owner exception pull request differs")
+    merged_at = pull.get("merged_at")
+    if not isinstance(merged_at, str):
+        _fail("INDEPENDENT_REVIEW", "merged pull request timestamp is missing")
+    merged_instant = _parse_time(merged_at)
+    template = exception["attestation_body_template"]
+    marker = "Owner final-head attestation for PR #145\n\nDecision: "
+    pattern = re.compile(
+        r"\AOwner final-head attestation for PR #145\n\n"
+        r"Decision: (APPROVED|REVOKED)\n"
+        r"Final head: ([0-9a-f]{40})\n"
+        r"Exception: https://github\.com/TommyKammy/Shirokuma/issues/63"
+        r"#issuecomment-5262105662\Z"
+    )
+    decisions: list[
+        tuple[int, str, str, dt.datetime, dt.datetime, Mapping[str, Any]]
+    ] = []
+    for comment in comments:
+        if not isinstance(comment, Mapping):
+            _fail("INDEPENDENT_REVIEW", "pull request comment must be an object")
+        body = comment.get("body")
+        if not isinstance(body, str) or not body.startswith(marker):
+            continue
+        user = comment.get("user")
+        if (
+            not isinstance(user, Mapping)
+            or user.get("login") != exception["owner"]
+            or user.get("type") != exception["human_user_type"]
+            or comment.get("author_association")
+            != exception["author_association"]
+        ):
+            continue
+        match = pattern.fullmatch(body)
+        if (
+            match is None
+            or not isinstance(comment.get("id"), int)
+            or int(comment["id"]) <= 0
+            or not isinstance(comment.get("created_at"), str)
+            or not isinstance(comment.get("updated_at"), str)
+        ):
+            _fail("INDEPENDENT_REVIEW", "owner attestation comment is malformed")
+        decision, attested_head = match.groups()
+        if decision not in exception["allowed_decisions"]:
+            _fail("INDEPENDENT_REVIEW", "owner attestation decision differs")
+        if body != template.format(
+            decision=decision,
+            final_head=attested_head,
+        ):
+            _fail("INDEPENDENT_REVIEW", "owner attestation body differs")
+        created_at = _parse_time(comment["created_at"])
+        updated_at = _parse_time(comment["updated_at"])
+        if updated_at < created_at:
+            _fail("INDEPENDENT_REVIEW", "owner attestation timestamps differ")
+        decisions.append(
+            (
+                int(comment["id"]),
+                decision,
+                attested_head,
+                created_at,
+                updated_at,
+                comment,
+            )
+        )
+    if not decisions:
+        _fail("INDEPENDENT_REVIEW", "owner final-head attestation is missing")
+    comment_id, decision, attested_head, created_at, updated_at, selected = max(
+        decisions,
+        key=lambda item: item[0],
+    )
+    exception_approved_at = _parse_time(exception["approved_at"])
+    if (
+        decision != "APPROVED"
+        or attested_head != final_head
+        or created_at < exception_approved_at
+        or updated_at >= merged_instant
+    ):
+        _fail(
+            "INDEPENDENT_REVIEW",
+            "latest owner attestation is not a pre-merge approval of final head",
+        )
+    return {
+        "approval_mode": "owner_final_head_attestation",
+        "pull_request": pull["number"],
+        "comment_id": comment_id,
+        "owner": selected["user"]["login"],
+        "attested_head": attested_head,
+        "attested_at": updated_at.isoformat().replace("+00:00", "Z"),
+        "commit": commit,
+    }
+
+
+def _validate_owner_final_head_ci(
+    exception: Mapping[str, Any],
+    payload: Mapping[str, Any],
+    *,
+    pull_request: int,
+    final_head: str,
+    attested_at: dt.datetime,
+) -> dict[str, Any]:
+    policy = exception["final_head_ci"]
+    runs = payload.get("workflow_runs")
+    total_count = payload.get("total_count")
+    if (
+        not isinstance(runs, list)
+        or type(total_count) is not int
+        or total_count != len(runs)
+        or len(runs) >= 100
+    ):
+        _fail(
+            "INDEPENDENT_REVIEW",
+            "final-head workflow run response is truncated or malformed",
+        )
+
+    required_paths = policy["workflow_paths"]
+    selected: dict[str, Mapping[str, Any]] = {}
+    for run in runs:
+        if not isinstance(run, Mapping) or not isinstance(run.get("path"), str):
+            _fail("INDEPENDENT_REVIEW", "workflow run entry is malformed")
+        path = run["path"]
+        if path not in required_paths:
+            continue
+        if path in selected:
+            _fail(
+                "INDEPENDENT_REVIEW",
+                f"final-head workflow run is ambiguous: {path}",
+            )
+        repository = run.get("repository")
+        head_repository = run.get("head_repository")
+        pull_requests = run.get("pull_requests")
+        if (
+            not isinstance(repository, Mapping)
+            or repository.get("full_name") != exception["repository"]
+            or not isinstance(head_repository, Mapping)
+            or head_repository.get("full_name") != exception["repository"]
+            or not isinstance(pull_requests, list)
+            or len(pull_requests) >= 100
+        ):
+            _fail(
+                "INDEPENDENT_REVIEW",
+                f"final-head workflow identity differs: {path}",
+            )
+        observed_pull_requests: list[int] = []
+        for associated_pull in pull_requests:
+            if (
+                not isinstance(associated_pull, Mapping)
+                or type(associated_pull.get("number")) is not int
+            ):
+                _fail(
+                    "INDEPENDENT_REVIEW",
+                    f"workflow pull-request binding is malformed: {path}",
+                )
+            observed_pull_requests.append(associated_pull["number"])
+        created_at = run.get("created_at")
+        updated_at = run.get("updated_at")
+        if not isinstance(created_at, str) or not isinstance(updated_at, str):
+            _fail(
+                "INDEPENDENT_REVIEW",
+                f"workflow completion timestamp is missing: {path}",
+            )
+        created_instant = _parse_time(created_at)
+        updated_instant = _parse_time(updated_at)
+        if (
+            run.get("head_sha") != final_head
+            or run.get("event") != policy["event"]
+            or run.get("status") != policy["status"]
+            or run.get("conclusion") != policy["conclusion"]
+            or observed_pull_requests != [pull_request]
+            or type(run.get("id")) is not int
+            or int(run["id"]) <= 0
+            or created_instant > updated_instant
+            or updated_instant >= attested_at
+        ):
+            _fail(
+                "INDEPENDENT_REVIEW",
+                f"required final-head workflow did not pass before attestation: {path}",
+            )
+        selected[path] = run
+
+    if set(selected) != set(required_paths):
+        _fail(
+            "INDEPENDENT_REVIEW",
+            (
+                "required final-head workflow set differs: "
+                f"{sorted(selected)!r}"
+            ),
+        )
+    return {
+        "workflow_runs": {
+            path: int(selected[path]["id"]) for path in required_paths
+        },
+        "completed_before_attestation": True,
+    }
+
+
+def _validate_owner_review_threads(
+    exception: Mapping[str, Any],
+    payload: Mapping[str, Any],
+    *,
+    pull_request: int,
+) -> dict[str, int]:
+    if payload.get("errors") not in (None, []):
+        _fail("INDEPENDENT_REVIEW", "review-thread GraphQL query failed")
+    data = payload.get("data")
+    repository = data.get("repository") if isinstance(data, Mapping) else None
+    pull = (
+        repository.get("pullRequest")
+        if isinstance(repository, Mapping)
+        else None
+    )
+    connection = (
+        pull.get("reviewThreads") if isinstance(pull, Mapping) else None
+    )
+    nodes = connection.get("nodes") if isinstance(connection, Mapping) else None
+    page_info = (
+        connection.get("pageInfo") if isinstance(connection, Mapping) else None
+    )
+    if (
+        not isinstance(pull, Mapping)
+        or pull.get("number") != pull_request
+        or not isinstance(nodes, list)
+        or len(nodes) > 100
+        or not isinstance(page_info, Mapping)
+        or page_info.get("hasNextPage") is not False
+    ):
+        _fail(
+            "INDEPENDENT_REVIEW",
+            "review-thread GraphQL response is truncated or malformed",
+        )
+
+    unresolved = 0
+    outdated = 0
+    resolved = 0
+    for thread in nodes:
+        if (
+            not isinstance(thread, Mapping)
+            or type(thread.get("isResolved")) is not bool
+            or type(thread.get("isOutdated")) is not bool
+        ):
+            _fail("INDEPENDENT_REVIEW", "review-thread entry is malformed")
+        if thread["isOutdated"]:
+            outdated += 1
+        elif thread["isResolved"]:
+            resolved += 1
+        else:
+            unresolved += 1
+    expected = exception["review_threads"][
+        "current_non_outdated_unresolved"
+    ]
+    if unresolved != expected:
+        _fail(
+            "INDEPENDENT_REVIEW",
+            f"current unresolved review-thread count differs: {unresolved}",
+        )
+    return {
+        "total": len(nodes),
+        "current_unresolved": unresolved,
+        "resolved": resolved,
+        "outdated": outdated,
+    }
+
+
+def _verify_owner_final_head_gates(
+    exception: Mapping[str, Any],
+    selection: Mapping[str, Any],
+    *,
+    token: str,
+) -> dict[str, Any]:
+    pull_request = selection["pull_request"]
+    final_head = selection["attested_head"]
+    attested_at = _parse_time(selection["attested_at"])
+    base = "https://api.github.com/repos/TommyKammy/Shirokuma"
+    workflow_payload = _github_api_mapping(
+        (
+            f"{base}/actions/runs?event=pull_request&"
+            f"head_sha={quote(final_head, safe='')}&per_page=100"
+        ),
+        token=token,
+    )
+    final_head_ci = _validate_owner_final_head_ci(
+        exception,
+        workflow_payload,
+        pull_request=pull_request,
+        final_head=final_head,
+        attested_at=attested_at,
+    )
+    review_thread_payload = _github_api_mapping(
+        "https://api.github.com/graphql",
+        token=token,
+        request_payload={
+            "query": (
+                "query($owner:String!,$name:String!,$number:Int!){"
+                "repository(owner:$owner,name:$name){"
+                "pullRequest(number:$number){number reviewThreads(first:100){"
+                "nodes{isResolved isOutdated}pageInfo{hasNextPage}}}}}"
+            ),
+            "variables": {
+                "owner": "TommyKammy",
+                "name": "Shirokuma",
+                "number": pull_request,
+            },
+        },
+    )
+    review_threads = _validate_owner_review_threads(
+        exception,
+        review_thread_payload,
+        pull_request=pull_request,
+    )
+    return {
+        "final_head_ci": final_head_ci,
+        "review_threads": review_threads,
     }
 
 
@@ -4286,17 +4720,26 @@ def verify_independent_review(
         f"{base}/pulls/{matching[0]['number']}/reviews?per_page=100",
         token=token,
     )
-    print(
-        json.dumps(
-            _select_independent_review(
-                contract,
-                pulls,
-                reviews,
-                commit=commit,
-            ),
-            sort_keys=True,
-        )
+    comments = _github_api_list(
+        f"{base}/issues/{matching[0]['number']}/comments?per_page=100",
+        token=token,
     )
+    selection = _select_independent_review(
+        contract,
+        pulls,
+        reviews,
+        commit=commit,
+        comments=comments,
+    )
+    if selection["approval_mode"] == "owner_final_head_attestation":
+        selection.update(
+            _verify_owner_final_head_gates(
+                contract["publication"]["owner_only_approval_exception"],
+                selection,
+                token=token,
+            )
+        )
+    print(json.dumps(selection, sort_keys=True))
 
 
 def _workflow_jobs_and_steps(workflow: str) -> tuple[list[str], dict[str, list[str]]]:
@@ -4546,8 +4989,10 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
             "--validation-point before_dependency_publication"
         )
         != 2
-        or workflow.count("GITHUB_TOKEN: ${{ github.token }}") != 1
-        or workflow.count("verify-independent-review --root .") != 1
+        or workflow.count("GITHUB_TOKEN: ${{ github.token }}") != 2
+        or workflow.count("verify-independent-review --root .") != 2
+        or lines.count("      actions: read") != 1
+        or lines.count("      issues: read") != 1
         or lines.count("      pull-requests: read") != 1
     ):
         _fail(

@@ -18,16 +18,16 @@ AI Coding Agentは、善意で悪性コードを実行するリスクがあり�
 
 ## Controls
 
-| Control | Tool/Practice |
-|---|---|
-| Dependency pinning | lock files, digest pinning |
-| SBOM | syft |
-| Vulnerability scan | osv-scanner, grype, trivy |
-| Secret scan | gitleaks |
-| Sandbox | devcontainer, no host mount secrets |
-| Install review | dependency changes require human review |
-| Script allowlist | only known scripts in AGENTS.md |
-| Network controls | no arbitrary outbound in CI where possible |
+| Control            | Tool/Practice                              |
+| ------------------ | ------------------------------------------ |
+| Dependency pinning | lock files, digest pinning                 |
+| SBOM               | syft                                       |
+| Vulnerability scan | osv-scanner, grype, trivy                  |
+| Secret scan        | gitleaks                                   |
+| Sandbox            | devcontainer, no host mount secrets        |
+| Install review     | dependency changes require human review    |
+| Script allowlist   | only known scripts in AGENTS.md            |
+| Network controls   | no arbitrary outbound in CI where possible |
 
 ## Pull request blocking baseline
 
@@ -1180,12 +1180,37 @@ comment
 then reauthorized exactly one second reviewed-main attempt using the unchanged
 ADR-0029 candidate. That activation is bound to the protected-main transition
 after `6f557abc42713629510090db10d03630043364d7` and run attempt `1`, retains the
-same `2026-08-21T22:43:36Z` expiry, and still requires a current independent
-human approval on the final activation PR head. Failure, a rerun, a different
-main predecessor, or any candidate drift consumes or rejects the attempt and
-returns publication to fail-closed reauthorization pending. No dependency
-artifact, image, admission, Flux/runtime state, credential, public exposure,
-or Issue #63 closure is authorized by this reauthorization.
+same `2026-08-21T22:43:36Z` expiry, and requires a final-head approval before
+merge and publication. The standard path remains a current independent human
+`APPROVED` review on the exact final activation PR head from a reviewer
+different from the owner and implementation author.
+
+Because Shirokuma is `TommyKammy`'s personal experimental project and no
+independent approver is available, Issue #63 comment
+[`5262105662`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5262105662)
+defines one alternative for PR #145 only. After the exact final PR head has
+completed `.github/workflows/ci.yml`, `.github/workflows/security.yml`,
+`.github/workflows/trino-maven-remediation-feasibility.yml`, and
+`.github/workflows/trino-maven-dependencies.yml` successfully, and a complete
+GraphQL `reviewThreads` query reports zero current non-outdated unresolved
+threads, the owner may post the canonical top-level final-head attestation. It
+must be authored by login `TommyKammy`, GitHub type `User`, association
+`OWNER`, match the exact final head, reference exception comment `5262105662`,
+and exist before merge. Only exact `APPROVED` or `REVOKED` decisions are
+recognized, and the latest matching owner decision governs. Bot or non-owner
+marker comments cannot satisfy or deny an otherwise valid attestation; owner
+identity, association, PR, head, body, timing, CI, thread, or pagination drift
+fails closed.
+
+The main publisher repeats the exact merged PR, attested-head CI, and
+current-thread queries at its write-capable boundary and again immediately
+before registry authentication; the attestation is not a substitute for those
+checks. Failure, rerun, a different main predecessor, or
+candidate drift consumes or rejects the attempt and returns publication to
+fail-closed reauthorization pending. The exception's downstream-authority set
+is empty: no dependency artifact admission, image publication, resident
+admission, Flux/runtime state, credential, public exposure, production use, or
+Issue #63 closure is authorized.
 
 ## Resident image and SBOM evidence
 

@@ -2524,6 +2524,59 @@ class ServerDistributionTests(unittest.TestCase):
 
 
 class PublisherContractTests(unittest.TestCase):
+    @staticmethod
+    def _owner_workflow_payload(
+        *,
+        final_head: str = "c" * 40,
+        pull_request: int = 145,
+    ) -> dict[str, object]:
+        runs = []
+        for run_id, path in enumerate(
+            verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION["final_head_ci"][
+                "workflow_paths"
+            ],
+            start=1000,
+        ):
+            runs.append(
+                {
+                    "id": run_id,
+                    "path": path,
+                    "head_sha": final_head,
+                    "event": "pull_request",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "created_at": "2026-08-12T04:40:00Z",
+                    "updated_at": "2026-08-12T04:58:00Z",
+                    "repository": {"full_name": "TommyKammy/Shirokuma"},
+                    "head_repository": {
+                        "full_name": "TommyKammy/Shirokuma"
+                    },
+                    "pull_requests": [{"number": pull_request}],
+                }
+            )
+        return {"total_count": len(runs), "workflow_runs": runs}
+
+    @staticmethod
+    def _owner_review_thread_payload(
+        nodes: list[dict[str, bool]] | None = None,
+        *,
+        pull_request: int = 145,
+        has_next_page: bool = False,
+    ) -> dict[str, object]:
+        return {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "number": pull_request,
+                        "reviewThreads": {
+                            "nodes": [] if nodes is None else nodes,
+                            "pageInfo": {"hasNextPage": has_next_page},
+                        },
+                    }
+                }
+            }
+        }
+
     def test_repository_contract_and_workflow_are_closed(self) -> None:
         verify.audit(ROOT)
 
@@ -2774,8 +2827,8 @@ class PublisherContractTests(unittest.TestCase):
             2,
             workflow.count("--validation-point before_dependency_publication"),
         )
-        self.assertEqual(1, workflow.count("verify-independent-review --root ."))
-        self.assertEqual(1, workflow.count("GITHUB_TOKEN: ${{ github.token }}"))
+        self.assertEqual(2, workflow.count("verify-independent-review --root ."))
+        self.assertEqual(2, workflow.count("GITHUB_TOKEN: ${{ github.token }}"))
         for path in (
             verify.FEASIBILITY_VERIFIER_PATH,
             verify.FEASIBILITY_TEST_PATH,
@@ -2785,8 +2838,11 @@ class PublisherContractTests(unittest.TestCase):
         publish = workflow.split("  publish:", 1)[1]
         attempt = publish.index("--validation-point before_dependency_publication")
         review = publish.index("verify-independent-review --root .")
+        final_review = publish.rindex("verify-independent-review --root .")
         auth = publish.index("oras login ghcr.io")
         self.assertLess(attempt, review)
+        self.assertLess(review, final_review)
+        self.assertLess(final_review, auth)
         self.assertLess(review, auth)
 
     def test_independent_review_requires_non_risk_owner_human_approval(
@@ -2826,6 +2882,15 @@ class PublisherContractTests(unittest.TestCase):
                 commit=commit,
             )["reviewer"],
         )
+        self.assertEqual(
+            "independent_review",
+            verify._select_independent_review(
+                contract,
+                pulls,
+                [owner_review, independent_review],
+                commit=commit,
+            )["approval_mode"],
+        )
         with self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"):
             verify._select_independent_review(
                 contract,
@@ -2860,6 +2925,483 @@ class PublisherContractTests(unittest.TestCase):
                 [stale_approval],
                 commit=commit,
             )
+
+    def test_owner_final_head_attestation_is_accepted_for_pr_145(self) -> None:
+        contract = verify._load_json(ROOT / verify.CONTRACT_PATH)
+        commit = "b" * 40
+        final_head = "c" * 40
+        pull = {
+            "number": 145,
+            "state": "closed",
+            "merged_at": "2026-08-12T05:00:00Z",
+            "merge_commit_sha": commit,
+            "base": {"ref": "main"},
+            "head": {"sha": final_head},
+        }
+        comment = {
+            "id": 5263000000,
+            "body": (
+                "Owner final-head attestation for PR #145\n\n"
+                "Decision: APPROVED\n"
+                f"Final head: {final_head}\n"
+                "Exception: https://github.com/TommyKammy/Shirokuma/issues/63"
+                "#issuecomment-5262105662"
+            ),
+            "user": {"login": "TommyKammy", "type": "User"},
+            "author_association": "OWNER",
+            "created_at": "2026-08-12T04:59:00Z",
+            "updated_at": "2026-08-12T04:59:00Z",
+        }
+        hostile_marker_comment = {
+            **comment,
+            "id": comment["id"] + 1,
+            "user": {"login": "UntrustedCommenter", "type": "User"},
+            "author_association": "NONE",
+        }
+
+        receipt = verify._select_independent_review(
+            contract,
+            [pull],
+            [],
+            commit=commit,
+            comments=[comment, hostile_marker_comment],
+        )
+        self.assertEqual("owner_final_head_attestation", receipt["approval_mode"])
+        self.assertEqual(145, receipt["pull_request"])
+        self.assertEqual(comment["id"], receipt["comment_id"])
+        self.assertEqual("TommyKammy", receipt["owner"])
+        self.assertEqual(final_head, receipt["attested_head"])
+
+    def test_owner_final_head_attestation_identity_and_scope_fail_closed(
+        self,
+    ) -> None:
+        contract = verify._load_json(ROOT / verify.CONTRACT_PATH)
+        commit = "b" * 40
+        final_head = "c" * 40
+        pull = {
+            "number": 145,
+            "state": "closed",
+            "merged_at": "2026-08-12T05:00:00Z",
+            "merge_commit_sha": commit,
+            "base": {"ref": "main"},
+            "head": {"sha": final_head},
+        }
+        comment = {
+            "id": 5263000000,
+            "body": (
+                "Owner final-head attestation for PR #145\n\n"
+                "Decision: APPROVED\n"
+                f"Final head: {final_head}\n"
+                "Exception: https://github.com/TommyKammy/Shirokuma/issues/63"
+                "#issuecomment-5262105662"
+            ),
+            "user": {"login": "TommyKammy", "type": "User"},
+            "author_association": "OWNER",
+            "created_at": "2026-08-12T04:59:00Z",
+            "updated_at": "2026-08-12T04:59:00Z",
+        }
+
+        cases: tuple[tuple[str, dict[str, object], dict[str, object]], ...] = (
+            (
+                "wrong-login",
+                {},
+                {"user": {"login": "OtherOwner", "type": "User"}},
+            ),
+            (
+                "bot",
+                {},
+                {"user": {"login": "TommyKammy", "type": "Bot"}},
+            ),
+            (
+                "wrong-association",
+                {},
+                {"author_association": "MEMBER"},
+            ),
+            (
+                "wrong-pr",
+                {"number": 144},
+                {},
+            ),
+            (
+                "wrong-head",
+                {},
+                {
+                    "body": comment["body"].replace(
+                        final_head,
+                        "d" * 40,
+                    )
+                },
+            ),
+            (
+                "wrong-body",
+                {},
+                {
+                    "body": comment["body"].replace(
+                        "#issuecomment-5262105662",
+                        "#issuecomment-5262105663",
+                    )
+                },
+            ),
+            (
+                "post-merge",
+                {},
+                {
+                    "created_at": "2026-08-12T05:00:01Z",
+                    "updated_at": "2026-08-12T05:00:01Z",
+                },
+            ),
+        )
+        for name, pull_update, comment_update in cases:
+            with self.subTest(name=name):
+                altered_pull = {**pull, **pull_update}
+                altered_comment = {**comment, **comment_update}
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "INDEPENDENT_REVIEW",
+                ):
+                    verify._select_independent_review(
+                        contract,
+                        [altered_pull],
+                        [],
+                        commit=commit,
+                        comments=[altered_comment],
+                    )
+
+        altered_contract = copy.deepcopy(contract)
+        altered_contract["publication"]["owner_only_approval_exception"][
+            "pull_request"
+        ] = 144
+        with self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"):
+            verify._select_independent_review(
+                altered_contract,
+                [pull],
+                [],
+                commit=commit,
+                comments=[comment],
+            )
+
+    def test_latest_owner_final_head_revocation_fails_closed(self) -> None:
+        contract = verify._load_json(ROOT / verify.CONTRACT_PATH)
+        commit = "b" * 40
+        final_head = "c" * 40
+        pull = {
+            "number": 145,
+            "state": "closed",
+            "merged_at": "2026-08-12T05:00:00Z",
+            "merge_commit_sha": commit,
+            "base": {"ref": "main"},
+            "head": {"sha": final_head},
+        }
+
+        def decision_comment(comment_id: int, decision: str) -> dict[str, object]:
+            return {
+                "id": comment_id,
+                "body": (
+                    "Owner final-head attestation for PR #145\n\n"
+                    f"Decision: {decision}\n"
+                    f"Final head: {final_head}\n"
+                    "Exception: https://github.com/TommyKammy/Shirokuma/"
+                    "issues/63#issuecomment-5262105662"
+                ),
+                "user": {"login": "TommyKammy", "type": "User"},
+                "author_association": "OWNER",
+                "created_at": "2026-08-12T04:59:00Z",
+                "updated_at": "2026-08-12T04:59:00Z",
+            }
+
+        with self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"):
+            verify._select_independent_review(
+                contract,
+                [pull],
+                [],
+                commit=commit,
+                comments=[
+                    decision_comment(5263000000, "APPROVED"),
+                    decision_comment(5263000001, "REVOKED"),
+                ],
+            )
+
+    def test_owner_final_head_ci_requires_unique_successful_current_runs(
+        self,
+    ) -> None:
+        exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        final_head = "c" * 40
+        attested_at = dt.datetime(
+            2026,
+            8,
+            12,
+            4,
+            59,
+            tzinfo=dt.timezone.utc,
+        )
+        payload = self._owner_workflow_payload(final_head=final_head)
+        receipt = verify._validate_owner_final_head_ci(
+            exception,
+            payload,
+            pull_request=145,
+            final_head=final_head,
+            attested_at=attested_at,
+        )
+        self.assertIs(receipt["completed_before_attestation"], True)
+        self.assertEqual(
+            set(exception["final_head_ci"]["workflow_paths"]),
+            set(receipt["workflow_runs"]),
+        )
+
+        altered = copy.deepcopy(payload)
+        altered["workflow_runs"].pop()
+        altered["total_count"] = len(altered["workflow_runs"])
+        with self.subTest(case="missing"), self.assertRaisesRegex(
+            verify.ContractError,
+            "INDEPENDENT_REVIEW",
+        ):
+            verify._validate_owner_final_head_ci(
+                exception,
+                altered,
+                pull_request=145,
+                final_head=final_head,
+                attested_at=attested_at,
+            )
+
+        altered = copy.deepcopy(payload)
+        altered["workflow_runs"].append(
+            copy.deepcopy(altered["workflow_runs"][0])
+        )
+        altered["total_count"] = len(altered["workflow_runs"])
+        with self.subTest(case="ambiguous"), self.assertRaisesRegex(
+            verify.ContractError,
+            "INDEPENDENT_REVIEW",
+        ):
+            verify._validate_owner_final_head_ci(
+                exception,
+                altered,
+                pull_request=145,
+                final_head=final_head,
+                attested_at=attested_at,
+            )
+
+        mutations = (
+            ("failed", "conclusion", "failure"),
+            ("pending", "status", "in_progress"),
+            ("stale-head", "head_sha", "d" * 40),
+            (
+                "not-proven-before-attestation",
+                "updated_at",
+                "2026-08-12T04:59:00Z",
+            ),
+            ("post-attestation", "updated_at", "2026-08-12T04:59:01Z"),
+            ("wrong-repository", "repository", {"full_name": "Other/Repo"}),
+            ("wrong-pr", "pull_requests", [{"number": 144}]),
+        )
+        for name, key, value in mutations:
+            with self.subTest(case=name):
+                altered = copy.deepcopy(payload)
+                altered["workflow_runs"][0][key] = value
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "INDEPENDENT_REVIEW",
+                ):
+                    verify._validate_owner_final_head_ci(
+                        exception,
+                        altered,
+                        pull_request=145,
+                        final_head=final_head,
+                        attested_at=attested_at,
+                    )
+
+    def test_owner_final_head_ci_response_completeness_fails_closed(self) -> None:
+        exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        final_head = "c" * 40
+        attested_at = dt.datetime(
+            2026,
+            8,
+            12,
+            4,
+            59,
+            tzinfo=dt.timezone.utc,
+        )
+        payloads = (
+            {
+                "total_count": 100,
+                "workflow_runs": [{} for _ in range(100)],
+            },
+            {
+                **self._owner_workflow_payload(final_head=final_head),
+                "total_count": 99,
+            },
+        )
+        for payload in payloads:
+            with self.subTest(total_count=payload["total_count"]):
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "truncated or malformed",
+                ):
+                    verify._validate_owner_final_head_ci(
+                        exception,
+                        payload,
+                        pull_request=145,
+                        final_head=final_head,
+                        attested_at=attested_at,
+                    )
+
+    def test_owner_review_threads_allow_only_resolved_or_outdated_threads(
+        self,
+    ) -> None:
+        exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        payload = self._owner_review_thread_payload(
+            [
+                {"isResolved": True, "isOutdated": False},
+                {"isResolved": False, "isOutdated": True},
+            ]
+        )
+        receipt = verify._validate_owner_review_threads(
+            exception,
+            payload,
+            pull_request=145,
+        )
+        self.assertEqual(
+            {
+                "total": 2,
+                "current_unresolved": 0,
+                "resolved": 1,
+                "outdated": 1,
+            },
+            receipt,
+        )
+
+        unresolved = self._owner_review_thread_payload(
+            [{"isResolved": False, "isOutdated": False}]
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "current unresolved review-thread count differs",
+        ):
+            verify._validate_owner_review_threads(
+                exception,
+                unresolved,
+                pull_request=145,
+            )
+
+    def test_owner_review_thread_graphql_response_fails_closed(self) -> None:
+        exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        cases = (
+            self._owner_review_thread_payload(has_next_page=True),
+            self._owner_review_thread_payload(
+                [
+                    {"isResolved": True, "isOutdated": False}
+                    for _ in range(101)
+                ]
+            ),
+            self._owner_review_thread_payload(pull_request=144),
+            {
+                **self._owner_review_thread_payload(),
+                "errors": [{"message": "truncated query"}],
+            },
+        )
+        for index, payload in enumerate(cases):
+            with self.subTest(case=index):
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "INDEPENDENT_REVIEW",
+                ):
+                    verify._validate_owner_review_threads(
+                        exception,
+                        payload,
+                        pull_request=145,
+                    )
+
+    def test_owner_attestation_query_checks_ci_and_review_threads(self) -> None:
+        commit = "b" * 40
+        final_head = "c" * 40
+        pulls = [
+            {
+                "number": 145,
+                "state": "closed",
+                "merged_at": "2026-08-12T05:00:00Z",
+                "merge_commit_sha": commit,
+                "base": {"ref": "main"},
+                "head": {"sha": final_head},
+            }
+        ]
+        comments = [
+            {
+                "id": 5263000000,
+                "body": (
+                    "Owner final-head attestation for PR #145\n\n"
+                    "Decision: APPROVED\n"
+                    f"Final head: {final_head}\n"
+                    "Exception: https://github.com/TommyKammy/Shirokuma/"
+                    "issues/63#issuecomment-5262105662"
+                ),
+                "user": {"login": "TommyKammy", "type": "User"},
+                "author_association": "OWNER",
+                "created_at": "2026-08-12T04:59:00Z",
+                "updated_at": "2026-08-12T04:59:00Z",
+            }
+        ]
+        workflow_payload = self._owner_workflow_payload(final_head=final_head)
+        thread_payload = self._owner_review_thread_payload()
+
+        class Response:
+            status = 200
+
+            def __init__(self, payload: object) -> None:
+                self.payload = json.dumps(payload).encode()
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                return self.payload
+
+        stdout = io.StringIO()
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                side_effect=[
+                    Response(pulls),
+                    Response([]),
+                    Response(comments),
+                    Response(workflow_payload),
+                    Response(thread_payload),
+                ],
+            ) as request,
+            contextlib.redirect_stdout(stdout),
+        ):
+            verify.verify_independent_review(
+                ROOT,
+                repository="TommyKammy/Shirokuma",
+                commit=commit,
+                token="ephemeral-token",
+            )
+
+        receipt = json.loads(stdout.getvalue())
+        self.assertEqual("owner_final_head_attestation", receipt["approval_mode"])
+        self.assertEqual(0, receipt["review_threads"]["current_unresolved"])
+        self.assertIs(
+            receipt["final_head_ci"]["completed_before_attestation"],
+            True,
+        )
+        self.assertEqual(5, request.call_count)
+        requests = [call.args[0] for call in request.call_args_list]
+        self.assertIn(f"/commits/{commit}/pulls?per_page=100", requests[0].full_url)
+        self.assertIn("/pulls/145/reviews?per_page=100", requests[1].full_url)
+        self.assertIn("/issues/145/comments?per_page=100", requests[2].full_url)
+        self.assertIn(
+            f"/actions/runs?event=pull_request&head_sha={final_head}&per_page=100",
+            requests[3].full_url,
+        )
+        self.assertEqual("https://api.github.com/graphql", requests[4].full_url)
+        self.assertEqual("POST", requests[4].get_method())
+        graphql_request = json.loads(requests[4].data)
+        self.assertEqual(
+            {"owner": "TommyKammy", "name": "Shirokuma", "number": 145},
+            graphql_request["variables"],
+        )
 
     def test_independent_review_query_is_bounded_and_commit_scoped(self) -> None:
         commit = "b" * 40
@@ -2904,7 +3446,7 @@ class PublisherContractTests(unittest.TestCase):
             mock.patch.object(
                 verify,
                 "urlopen",
-                side_effect=[Response(pulls), Response(reviews)],
+                side_effect=[Response(pulls), Response(reviews), Response([])],
             ) as request,
             contextlib.redirect_stdout(stdout),
         ):
@@ -2918,10 +3460,37 @@ class PublisherContractTests(unittest.TestCase):
         self.assertEqual(143, receipt["pull_request"])
         self.assertEqual("IndependentHuman", receipt["reviewer"])
         self.assertEqual(final_head, receipt["reviewed_head"])
-        self.assertEqual(2, request.call_count)
+        self.assertEqual(3, request.call_count)
         requested_urls = [call.args[0].full_url for call in request.call_args_list]
         self.assertIn(f"/commits/{commit}/pulls?per_page=100", requested_urls[0])
         self.assertIn("/pulls/143/reviews?per_page=100", requested_urls[1])
+        self.assertIn("/issues/143/comments?per_page=100", requested_urls[2])
+
+    def test_github_list_api_fails_closed_on_truncated_results(self) -> None:
+        class Response:
+            status = 200
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                return json.dumps([{}] * 100).encode()
+
+        with (
+            mock.patch.object(verify, "urlopen", return_value=Response()),
+            self.assertRaisesRegex(
+                verify.ContractError,
+                "GitHub API result may be truncated",
+            ),
+        ):
+            verify._github_api_list(
+                "https://api.github.com/repos/TommyKammy/Shirokuma/"
+                "issues/145/comments?per_page=100",
+                token="ephemeral-token",
+            )
 
     def test_authorization_rejects_duplicate_json_keys(self) -> None:
         contract = (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")

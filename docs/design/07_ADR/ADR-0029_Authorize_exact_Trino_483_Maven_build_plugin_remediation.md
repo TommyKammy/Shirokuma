@@ -37,6 +37,15 @@ second attempt in Issue #63 comment
 at `2026-08-07T20:49:55Z`. The reauthorization retains the same candidate,
 expiry, evidence gates, and downstream prohibitions.
 
+Shirokuma is the risk owner's personal experimental project and has no
+available independent approver. The owner therefore recorded one approval-path
+exception for PR #145 in Issue #63 comment
+[`5262105662`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5262105662)
+at `2026-08-12T03:59:12Z`. The exception changes only how the exact final PR
+head is approved for this second attempt. It does not replace the standard
+independent-review path, change the candidate or attempt binding, or grant any
+downstream authority.
+
 ## Decision
 
 Authorize only this exact sequential third Trino source patch:
@@ -87,8 +96,50 @@ Pruning each blocked vulnerable JAR must also remove every Maven checksum
 sidecar and any matching `_remote.repositories` entries before packaging.
 
 Authorization expires at `2026-08-21T22:43:36Z`, has no automatic renewal,
-and requires a reviewer different from implementation author `Codex` and the
-owner before merge.
+and requires either a reviewer different from implementation author `Codex`
+and the owner before merge, or the exact PR #145 owner final-head attestation
+defined below.
+
+### PR #145 owner-only approval exception
+
+The standard independent-review path remains accepted. As a narrow alternative
+for only repository `TommyKammy/Shirokuma`, PR #145, and this second
+publication attempt, the publisher may accept one canonical top-level issue
+comment when every condition below is true:
+
+- the comment author login is exactly `TommyKammy`, the GitHub account type is
+  `User`, and `author_association` is `OWNER`;
+- `.github/workflows/ci.yml`, `.github/workflows/security.yml`,
+  `.github/workflows/trino-maven-remediation-feasibility.yml`, and
+  `.github/workflows/trino-maven-dependencies.yml` each have a fully paginated
+  PR check result with `status=completed` and `conclusion=success` for PR #145
+  and the exact attested final head;
+- a fully paginated GraphQL `reviewThreads` query reports zero current,
+  non-outdated unresolved threads before attestation; and
+- the canonical comment is created after those final-head conditions pass and
+  before merge, with the exact body:
+
+```text
+Owner final-head attestation for PR #145
+
+Decision: APPROVED
+Final head: <exact final 40-character PR head SHA>
+Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5262105662
+```
+
+Only `APPROVED` and `REVOKED` are valid decisions. The latest exact matching
+owner decision governs, so a later matching `REVOKED` comment invalidates the
+attestation. A bot or different login, account type, or association cannot
+satisfy the exception; an owner comment with a different PR, head, body, or
+post-merge timestamp fails closed. The main publisher must repeat the exact
+merged-PR, attested-head CI, and review-thread queries at its write-capable
+boundary and again immediately before registry authentication.
+
+This exception grants only the approval path for PR #145. Failure consumes the
+attempt, rerun remains forbidden, and the empty downstream-authority set is
+closed-world: it grants no dependency-evidence admission, image publication,
+resident admission, Flux/runtime reconciliation, credentials, public
+exposure, production use, or Issue #63 closure.
 
 ## Consequences
 
@@ -125,20 +176,23 @@ GitHub run attempt `1`. The lifecycle is therefore
 `dependency_snapshot_publication_pending`, and the contract, publication, and
 admission permission records are true only for that exact transition. Pull
 requests remain validation-only. The activation pull request must pass CI and
-receive a current `APPROVED` review from a human user different from both risk
-owner and implementation author, with the review commit equal to the final
-pull-request head. If the protected-main predecessor changes, the run attempt
-is rerun, or the authorized run fails before completing the closed publication
+satisfy either the standard current independent `APPROVED` review on the exact
+final pull-request head or the PR #145 owner-only final-head attestation
+contract above. If the protected-main predecessor changes, the run attempt is
+rerun, or the authorized run fails before completing the closed publication
 evidence boundary, the second attempt is consumed and publication fails closed
-until another explicit owner decision and independent review.
+until another explicit owner decision and required approval.
 
 The write-capable publish job must independently repeat the attempt check and
 query the exact merged pull request before registry authentication. At least
 one current `APPROVED` review from a human GitHub user different from risk
-owner `TommyKammy` and implementation author `Codex` is required. CODEOWNERS
-approval by the risk owner alone cannot satisfy this boundary. The qualifying
-review's `commit_id` must equal the exact final pull-request `head.sha`; an
-approval of an earlier revision cannot authorize publication.
+owner `TommyKammy` and implementation author `Codex` remains the standard
+path. The only alternative is the exact PR #145 owner attestation above; an
+ordinary CODEOWNERS approval by the risk owner cannot satisfy it. The
+qualifying review `commit_id`, or owner attestation `Final head`, must equal the
+exact final pull-request `head.sha`; an approval of an earlier revision cannot
+authorize publication. The alternative also requires all exact final-head CI
+checks successful and zero current non-outdated unresolved review threads.
 
 Dependency artifact presence, dependency evidence admission, Trino image
 publication, resident-image admission, Flux runtime reconciliation, public
