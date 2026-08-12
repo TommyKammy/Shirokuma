@@ -47,11 +47,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "20ef55f37232a205688b5be92f932f41da7bef6194b87821164919e28abfb9cf"
+      "sha256": "478fefd43570b8e463183144af6f62350466c5d0b0ccca9155fd29594d35f3f8"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "6a4529e0d14bf4aaadd781b4d9a451728a294dc2dc4f3fcbee8cc30424d6c5e3"
+      "sha256": "3a6e30b9c58e551f089453ff010531d6ed16f5c534c0a5c5d59a9219a2a034f7"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -95,7 +95,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md",
-      "sha256": "cfb07f2031371c03cba6ec75e00c27b1ff6397d4d495e59cb191c9ba3af99d01"
+      "sha256": "03c2321650bcce32ea94c5ce080c472d75e92d37a18a78c7d06e8f92b7d3b148"
     },
     {
       "path": "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",
@@ -1114,7 +1114,8 @@
       },
       "review_threads": {
         "required_before_attestation": true,
-        "current_non_outdated_unresolved": 0,
+        "current_non_outdated": 0,
+        "head_sha_must_match_attestation": true,
         "query": "graphql_review_threads",
         "pagination_must_be_complete": true
       },

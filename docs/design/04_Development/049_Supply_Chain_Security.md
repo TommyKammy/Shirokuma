@@ -1183,7 +1183,9 @@ after `6f557abc42713629510090db10d03630043364d7` and run attempt `1`, retains th
 same `2026-08-21T22:43:36Z` expiry, and requires a final-head approval before
 merge and publication. The standard path remains a current independent human
 `APPROVED` review on the exact final activation PR head from a reviewer
-different from the owner and implementation author.
+different from the owner and implementation author. It is evaluated first and,
+when satisfied, completes approval without querying owner-exception comments,
+final-head CI, or review-thread APIs.
 
 Because Shirokuma is `TommyKammy`'s personal experimental project and no
 independent approver is available, Issue #63 comment
@@ -1192,20 +1194,31 @@ defines one alternative for PR #145 only. After the exact final PR head has
 completed `.github/workflows/ci.yml`, `.github/workflows/security.yml`,
 `.github/workflows/trino-maven-remediation-feasibility.yml`, and
 `.github/workflows/trino-maven-dependencies.yml` successfully, and a complete
-GraphQL `reviewThreads` query reports zero current non-outdated unresolved
-threads, the owner may post the canonical top-level final-head attestation. It
-must be authored by login `TommyKammy`, GitHub type `User`, association
-`OWNER`, match the exact final head, reference exception comment `5262105662`,
-and exist before merge. Only exact `APPROVED` or `REVOKED` decisions are
-recognized, and the latest matching owner decision governs. Bot or non-owner
-marker comments cannot satisfy or deny an otherwise valid attestation; owner
-identity, association, PR, head, body, timing, CI, thread, or pagination drift
-fails closed.
+GraphQL query reports a pull-request `headRefOid` equal to the attested final
+head and zero current non-outdated `reviewThreads`, including resolved threads,
+the owner may post the canonical top-level final-head attestation. Only
+already-outdated threads are permitted. It must be authored by login
+`TommyKammy`, GitHub type `User`, association `OWNER`, match the exact final
+head, reference exception comment `5262105662`, and exist before merge. Only
+exact `APPROVED` or `REVOKED` decisions are recognized. The
+matching owner decision with the latest `updated_at` governs; comment ID is not
+used for ordering, a later `REVOKED` denies approval, and a tie at the latest
+timestamp fails closed as ambiguous. Bot or non-owner marker comments cannot
+satisfy or deny an otherwise valid attestation; owner identity, association,
+PR, head, body, timing, CI, thread, or pagination drift fails closed.
 
-The main publisher repeats the exact merged PR, attested-head CI, and
-current-thread queries at its write-capable boundary and again immediately
-before registry authentication; the attestation is not a substitute for those
-checks. Failure, rerun, a different main predecessor, or
+The thread result proves the state of the exact attested head. Resolving a
+non-outdated thread after attestation does not make it acceptable. Making a
+thread outdated requires a new PR head, which invalidates the attestation and
+the old final-head CI evidence, so a post-attestation outdated transition
+cannot satisfy the gate; the new head must pass all exception gates and receive
+a new attestation. The publisher queries owner comments and these CI/thread
+inputs lazily only when no qualifying standard independent review exists.
+
+On the owner-exception path, the main publisher repeats the exact merged PR,
+attested-head CI, and current-thread queries at its write-capable boundary and
+again immediately before registry authentication; the attestation is not a
+substitute for those checks. Failure, rerun, a different main predecessor, or
 candidate drift consumes or rejects the attempt and returns publication to
 fail-closed reauthorization pending. The exception's downstream-authority set
 is empty: no dependency artifact admission, image publication, resident

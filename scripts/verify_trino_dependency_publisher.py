@@ -20,7 +20,7 @@ import textwrap
 import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 from urllib.error import URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
@@ -160,7 +160,8 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
     },
     "review_threads": {
         "required_before_attestation": True,
-        "current_non_outdated_unresolved": 0,
+        "current_non_outdated": 0,
+        "head_sha_must_match_attestation": True,
         "query": "graphql_review_threads",
         "pagination_must_be_complete": True,
     },
@@ -4289,7 +4290,7 @@ def _select_independent_review(
     reviews: list[Any],
     *,
     commit: str,
-    comments: list[Any] | None = None,
+    comments: list[Any] | Callable[[], list[Any]] | None = None,
 ) -> dict[str, Any]:
     _validate_independent_review_contract(contract)
     if re.fullmatch(r"[0-9a-f]{40}", commit) is None:
@@ -4346,10 +4347,11 @@ def _select_independent_review(
             qualified.append(review)
     if len(qualified) < EXPECTED_INDEPENDENT_REVIEW["minimum_approved_reviews"]:
         if comments is not None:
+            owner_comments = comments() if callable(comments) else comments
             return _select_owner_final_head_attestation(
                 contract,
                 pull,
-                comments,
+                owner_comments,
                 commit=commit,
                 final_head=final_head,
             )
@@ -4447,10 +4449,18 @@ def _select_owner_final_head_attestation(
         )
     if not decisions:
         _fail("INDEPENDENT_REVIEW", "owner final-head attestation is missing")
-    comment_id, decision, attested_head, created_at, updated_at, selected = max(
-        decisions,
-        key=lambda item: item[0],
-    )
+    latest_updated_at = max(item[4] for item in decisions)
+    latest = [item for item in decisions if item[4] == latest_updated_at]
+    if len(latest) != 1:
+        _fail("INDEPENDENT_REVIEW", "latest owner attestation is ambiguous")
+    (
+        comment_id,
+        decision,
+        attested_head,
+        created_at,
+        updated_at,
+        selected,
+    ) = latest[0]
     exception_approved_at = _parse_time(exception["approved_at"])
     if (
         decision != "APPROVED"
@@ -4581,6 +4591,7 @@ def _validate_owner_review_threads(
     payload: Mapping[str, Any],
     *,
     pull_request: int,
+    final_head: str,
 ) -> dict[str, int]:
     if payload.get("errors") not in (None, []):
         _fail("INDEPENDENT_REVIEW", "review-thread GraphQL query failed")
@@ -4601,6 +4612,7 @@ def _validate_owner_review_threads(
     if (
         not isinstance(pull, Mapping)
         or pull.get("number") != pull_request
+        or pull.get("headRefOid") != final_head
         or not isinstance(nodes, list)
         or len(nodes) > 100
         or not isinstance(page_info, Mapping)
@@ -4627,16 +4639,19 @@ def _validate_owner_review_threads(
             resolved += 1
         else:
             unresolved += 1
-    expected = exception["review_threads"][
-        "current_non_outdated_unresolved"
-    ]
-    if unresolved != expected:
+    current_non_outdated = resolved + unresolved
+    expected = exception["review_threads"]["current_non_outdated"]
+    if current_non_outdated != expected:
         _fail(
             "INDEPENDENT_REVIEW",
-            f"current unresolved review-thread count differs: {unresolved}",
+            (
+                "current non-outdated review-thread count differs: "
+                f"{current_non_outdated}"
+            ),
         )
     return {
         "total": len(nodes),
+        "current_non_outdated": current_non_outdated,
         "current_unresolved": unresolved,
         "resolved": resolved,
         "outdated": outdated,
@@ -4674,8 +4689,9 @@ def _verify_owner_final_head_gates(
             "query": (
                 "query($owner:String!,$name:String!,$number:Int!){"
                 "repository(owner:$owner,name:$name){"
-                "pullRequest(number:$number){number reviewThreads(first:100){"
-                "nodes{isResolved isOutdated}pageInfo{hasNextPage}}}}}"
+                "pullRequest(number:$number){number headRefOid "
+                "reviewThreads(first:100){nodes{isResolved isOutdated}"
+                "pageInfo{hasNextPage}}}}}"
             ),
             "variables": {
                 "owner": "TommyKammy",
@@ -4688,6 +4704,7 @@ def _verify_owner_final_head_gates(
         exception,
         review_thread_payload,
         pull_request=pull_request,
+        final_head=final_head,
     )
     return {
         "final_head_ci": final_head_ci,
@@ -4720,16 +4737,15 @@ def verify_independent_review(
         f"{base}/pulls/{matching[0]['number']}/reviews?per_page=100",
         token=token,
     )
-    comments = _github_api_list(
-        f"{base}/issues/{matching[0]['number']}/comments?per_page=100",
-        token=token,
-    )
     selection = _select_independent_review(
         contract,
         pulls,
         reviews,
         commit=commit,
-        comments=comments,
+        comments=lambda: _github_api_list(
+            f"{base}/issues/{matching[0]['number']}/comments?per_page=100",
+            token=token,
+        ),
     )
     if selection["approval_mode"] == "owner_final_head_attestation":
         selection.update(

@@ -102,10 +102,13 @@ defined below.
 
 ### PR #145 owner-only approval exception
 
-The standard independent-review path remains accepted. As a narrow alternative
-for only repository `TommyKammy/Shirokuma`, PR #145, and this second
-publication attempt, the publisher may accept one canonical top-level issue
-comment when every condition below is true:
+The standard independent-review path remains accepted and is evaluated first.
+When it succeeds, approval is complete without querying owner-exception issue
+comments, final-head CI, or review threads. Only when the standard path has no
+qualifying review does the publisher lazily query the exception data below. As
+a narrow alternative for only repository `TommyKammy/Shirokuma`, PR #145, and
+this second publication attempt, the publisher may accept one canonical
+top-level issue comment when every condition below is true:
 
 - the comment author login is exactly `TommyKammy`, the GitHub account type is
   `User`, and `author_association` is `OWNER`;
@@ -114,8 +117,10 @@ comment when every condition below is true:
   `.github/workflows/trino-maven-dependencies.yml` each have a fully paginated
   PR check result with `status=completed` and `conclusion=success` for PR #145
   and the exact attested final head;
-- a fully paginated GraphQL `reviewThreads` query reports zero current,
-  non-outdated unresolved threads before attestation; and
+- a fully paginated GraphQL query reports a pull-request `headRefOid` exactly
+  equal to the attested final head and zero current, non-outdated
+  `reviewThreads` before attestation, whether resolved or unresolved; only
+  already-outdated threads are permitted; and
 - the canonical comment is created after those final-head conditions pass and
   before merge, with the exact body:
 
@@ -127,13 +132,23 @@ Final head: <exact final 40-character PR head SHA>
 Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5262105662
 ```
 
-Only `APPROVED` and `REVOKED` are valid decisions. The latest exact matching
-owner decision governs, so a later matching `REVOKED` comment invalidates the
-attestation. A bot or different login, account type, or association cannot
+Only `APPROVED` and `REVOKED` are valid decisions. The exact matching owner
+decision with the latest `updated_at` timestamp governs; comment ID is not an
+ordering signal. A later matching `REVOKED` comment invalidates the attestation,
+and two or more matching decisions tied at the latest `updated_at` fail closed
+as ambiguous. A bot or different login, account type, or association cannot
 satisfy the exception; an owner comment with a different PR, head, body, or
-post-merge timestamp fails closed. The main publisher must repeat the exact
-merged-PR, attested-head CI, and review-thread queries at its write-capable
-boundary and again immediately before registry authentication.
+post-merge timestamp fails closed.
+
+The zero-current-thread result is evidence for the attested final head, not a
+permission to resolve a thread later. A resolved but non-outdated thread still
+fails closed. Making a thread outdated requires changing the PR head, which
+invalidates the exact-head attestation and its final-head CI evidence; the new
+head must pass the exception gates and receive a new attestation. Consequently,
+a post-attestation transition to outdated cannot retroactively satisfy the
+thread gate. On this owner-exception path only, the main publisher must repeat
+the exact merged-PR, attested-head CI, and review-thread queries at its
+write-capable boundary and again immediately before registry authentication.
 
 This exception grants only the approval path for PR #145. Failure consumes the
 attempt, rerun remains forbidden, and the empty downstream-authority set is
@@ -187,12 +202,14 @@ The write-capable publish job must independently repeat the attempt check and
 query the exact merged pull request before registry authentication. At least
 one current `APPROVED` review from a human GitHub user different from risk
 owner `TommyKammy` and implementation author `Codex` remains the standard
-path. The only alternative is the exact PR #145 owner attestation above; an
-ordinary CODEOWNERS approval by the risk owner cannot satisfy it. The
-qualifying review `commit_id`, or owner attestation `Final head`, must equal the
-exact final pull-request `head.sha`; an approval of an earlier revision cannot
-authorize publication. The alternative also requires all exact final-head CI
-checks successful and zero current non-outdated unresolved review threads.
+path. A qualifying standard review short-circuits evaluation without querying
+owner comments or the exception-only CI and thread APIs. The only alternative
+is the exact PR #145 owner attestation above; an ordinary CODEOWNERS approval
+by the risk owner cannot satisfy it. The qualifying review `commit_id`, or
+owner attestation `Final head`, must equal the exact final pull-request
+`head.sha`; an approval of an earlier revision cannot authorize publication.
+The alternative also requires all exact final-head CI checks successful and
+zero current non-outdated review threads, including resolved threads.
 
 Dependency artifact presence, dependency evidence admission, Trino image
 publication, resident-image admission, Flux runtime reconciliation, public

@@ -387,7 +387,8 @@
     },
     "review_threads": {
       "required_before_attestation": true,
-      "current_non_outdated_unresolved": 0,
+      "current_non_outdated": 0,
+      "head_sha_must_match_attestation": true,
       "query": "graphql_review_threads",
       "pagination_must_be_complete": true
     },
@@ -481,7 +482,7 @@
       "active exact owner authorization bound to the Parquet repository, tags, objects, commit, tree, preimage, postimage, permitted path, dependency replacements, expiry, and rollback",
       "active exact owner authorization bound to the Trino Iceberg-only source paths, patch and preimage/postimage hashes, selected reactor, dependency replacements, expiry, and rollback",
       "active exact owner authorization bound to the retained post-ADR-0027 pom.xml feasibility patch, patch and preimage/postimage hashes, Velocity Engine Core 2.4.1 and Plexus Utils 4.0.3 replacements, unchanged selected reactor, hardened run and independent audit, expiry, and rollback",
-      "either a current independent human APPROVED review on the exact final activation pull-request head from a reviewer distinct from the source-remediation author and owner, or the exact PR #145 owner final-head attestation by TommyKammy as a User with OWNER association after all required final-head CI succeeds and current non-outdated unresolved review threads equal zero",
+      "either a current independent human APPROVED review on the exact final activation pull-request head from a reviewer distinct from the source-remediation author and owner, or the exact PR #145 owner final-head attestation by TommyKammy as a User with OWNER association after all required final-head CI succeeds and current non-outdated review threads equal zero",
       "authenticated closed dependency snapshot",
       "network-none reproducible linux/arm64 build",
       "digest-pinned builder and runtime bases",

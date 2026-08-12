@@ -2561,6 +2561,7 @@ class PublisherContractTests(unittest.TestCase):
         nodes: list[dict[str, bool]] | None = None,
         *,
         pull_request: int = 145,
+        final_head: str = "c" * 40,
         has_next_page: bool = False,
     ) -> dict[str, object]:
         return {
@@ -2568,6 +2569,7 @@ class PublisherContractTests(unittest.TestCase):
                 "repository": {
                     "pullRequest": {
                         "number": pull_request,
+                        "headRefOid": final_head,
                         "reviewThreads": {
                             "nodes": [] if nodes is None else nodes,
                             "pageInfo": {"hasNextPage": has_next_page},
@@ -3080,7 +3082,7 @@ class PublisherContractTests(unittest.TestCase):
                 comments=[comment],
             )
 
-    def test_latest_owner_final_head_revocation_fails_closed(self) -> None:
+    def test_owner_final_head_decisions_are_ordered_by_updated_at(self) -> None:
         contract = verify._load_json(ROOT / verify.CONTRACT_PATH)
         commit = "b" * 40
         final_head = "c" * 40
@@ -3093,7 +3095,13 @@ class PublisherContractTests(unittest.TestCase):
             "head": {"sha": final_head},
         }
 
-        def decision_comment(comment_id: int, decision: str) -> dict[str, object]:
+        def decision_comment(
+            comment_id: int,
+            decision: str,
+            *,
+            created_at: str,
+            updated_at: str,
+        ) -> dict[str, object]:
             return {
                 "id": comment_id,
                 "body": (
@@ -3105,20 +3113,67 @@ class PublisherContractTests(unittest.TestCase):
                 ),
                 "user": {"login": "TommyKammy", "type": "User"},
                 "author_association": "OWNER",
-                "created_at": "2026-08-12T04:59:00Z",
-                "updated_at": "2026-08-12T04:59:00Z",
+                "created_at": created_at,
+                "updated_at": updated_at,
             }
 
-        with self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"):
+        approval = decision_comment(
+            5263000001,
+            "APPROVED",
+            created_at="2026-08-12T04:58:00Z",
+            updated_at="2026-08-12T04:58:00Z",
+        )
+        older_id_edited_approval = decision_comment(
+            5263000000,
+            "APPROVED",
+            created_at="2026-08-12T04:57:00Z",
+            updated_at="2026-08-12T04:59:00Z",
+        )
+        receipt = verify._select_independent_review(
+            contract,
+            [pull],
+            [],
+            commit=commit,
+            comments=[approval, older_id_edited_approval],
+        )
+        self.assertEqual(5263000000, receipt["comment_id"])
+        self.assertEqual("2026-08-12T04:59:00Z", receipt["attested_at"])
+
+        older_id_edited_revocation = {
+            **older_id_edited_approval,
+            "body": older_id_edited_approval["body"].replace(
+                "Decision: APPROVED",
+                "Decision: REVOKED",
+            ),
+        }
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "latest owner attestation is not a pre-merge approval",
+        ):
             verify._select_independent_review(
                 contract,
                 [pull],
                 [],
                 commit=commit,
-                comments=[
-                    decision_comment(5263000000, "APPROVED"),
-                    decision_comment(5263000001, "REVOKED"),
-                ],
+                comments=[approval, older_id_edited_revocation],
+            )
+
+        tied_revocation = decision_comment(
+            5263000002,
+            "REVOKED",
+            created_at="2026-08-12T04:58:30Z",
+            updated_at="2026-08-12T04:59:00Z",
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "latest owner attestation is ambiguous",
+        ):
+            verify._select_independent_review(
+                contract,
+                [pull],
+                [],
+                commit=commit,
+                comments=[older_id_edited_approval, tied_revocation],
             )
 
     def test_owner_final_head_ci_requires_unique_successful_current_runs(
@@ -3244,42 +3299,65 @@ class PublisherContractTests(unittest.TestCase):
                         attested_at=attested_at,
                     )
 
-    def test_owner_review_threads_allow_only_resolved_or_outdated_threads(
+    def test_owner_review_threads_allow_only_outdated_threads(
         self,
     ) -> None:
         exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        final_head = "c" * 40
         payload = self._owner_review_thread_payload(
             [
-                {"isResolved": True, "isOutdated": False},
+                {"isResolved": True, "isOutdated": True},
                 {"isResolved": False, "isOutdated": True},
-            ]
+            ],
+            final_head=final_head,
         )
         receipt = verify._validate_owner_review_threads(
             exception,
             payload,
             pull_request=145,
+            final_head=final_head,
         )
         self.assertEqual(
             {
                 "total": 2,
+                "current_non_outdated": 0,
                 "current_unresolved": 0,
-                "resolved": 1,
-                "outdated": 1,
+                "resolved": 0,
+                "outdated": 2,
             },
             receipt,
         )
 
-        unresolved = self._owner_review_thread_payload(
-            [{"isResolved": False, "isOutdated": False}]
-        )
+        for thread in (
+            {"isResolved": True, "isOutdated": False},
+            {"isResolved": False, "isOutdated": False},
+        ):
+            with self.subTest(thread=thread):
+                current = self._owner_review_thread_payload(
+                    [thread],
+                    final_head=final_head,
+                )
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "current non-outdated review-thread count differs",
+                ):
+                    verify._validate_owner_review_threads(
+                        exception,
+                        current,
+                        pull_request=145,
+                        final_head=final_head,
+                    )
+
+        wrong_head = self._owner_review_thread_payload(final_head="d" * 40)
         with self.assertRaisesRegex(
             verify.ContractError,
-            "current unresolved review-thread count differs",
+            "review-thread GraphQL response is truncated or malformed",
         ):
             verify._validate_owner_review_threads(
                 exception,
-                unresolved,
+                wrong_head,
                 pull_request=145,
+                final_head=final_head,
             )
 
     def test_owner_review_thread_graphql_response_fails_closed(self) -> None:
@@ -3308,6 +3386,7 @@ class PublisherContractTests(unittest.TestCase):
                         exception,
                         payload,
                         pull_request=145,
+                        final_head="c" * 40,
                     )
 
     def test_owner_attestation_query_checks_ci_and_review_threads(self) -> None:
@@ -3381,7 +3460,7 @@ class PublisherContractTests(unittest.TestCase):
 
         receipt = json.loads(stdout.getvalue())
         self.assertEqual("owner_final_head_attestation", receipt["approval_mode"])
-        self.assertEqual(0, receipt["review_threads"]["current_unresolved"])
+        self.assertEqual(0, receipt["review_threads"]["current_non_outdated"])
         self.assertIs(
             receipt["final_head_ci"]["completed_before_attestation"],
             True,
@@ -3402,6 +3481,7 @@ class PublisherContractTests(unittest.TestCase):
             {"owner": "TommyKammy", "name": "Shirokuma", "number": 145},
             graphql_request["variables"],
         )
+        self.assertIn("headRefOid", graphql_request["query"])
 
     def test_independent_review_query_is_bounded_and_commit_scoped(self) -> None:
         commit = "b" * 40
@@ -3446,7 +3526,7 @@ class PublisherContractTests(unittest.TestCase):
             mock.patch.object(
                 verify,
                 "urlopen",
-                side_effect=[Response(pulls), Response(reviews), Response([])],
+                side_effect=[Response(pulls), Response(reviews)],
             ) as request,
             contextlib.redirect_stdout(stdout),
         ):
@@ -3460,11 +3540,13 @@ class PublisherContractTests(unittest.TestCase):
         self.assertEqual(143, receipt["pull_request"])
         self.assertEqual("IndependentHuman", receipt["reviewer"])
         self.assertEqual(final_head, receipt["reviewed_head"])
-        self.assertEqual(3, request.call_count)
+        self.assertEqual(2, request.call_count)
         requested_urls = [call.args[0].full_url for call in request.call_args_list]
         self.assertIn(f"/commits/{commit}/pulls?per_page=100", requested_urls[0])
         self.assertIn("/pulls/143/reviews?per_page=100", requested_urls[1])
-        self.assertIn("/issues/143/comments?per_page=100", requested_urls[2])
+        self.assertNotIn("/issues/143/comments", "\n".join(requested_urls))
+        self.assertNotIn("/actions/runs", "\n".join(requested_urls))
+        self.assertNotIn("api.github.com/graphql", "\n".join(requested_urls))
 
     def test_github_list_api_fails_closed_on_truncated_results(self) -> None:
         class Response:

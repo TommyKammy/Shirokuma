@@ -4881,7 +4881,8 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     },
                     "review_threads": {
                         "required_before_attestation": True,
-                        "current_non_outdated_unresolved": 0,
+                        "current_non_outdated": 0,
+                        "head_sha_must_match_attestation": True,
                         "query": "graphql_review_threads",
                         "pagination_must_be_complete": True,
                     },
@@ -5046,7 +5047,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "distinct from the source-remediation author and owner, or the "
                     "exact PR #145 owner final-head attestation by TommyKammy as a "
                     "User with OWNER association after all required final-head CI "
-                    "succeeds and current non-outdated unresolved review threads "
+                    "succeeds and current non-outdated review threads "
                     "equal zero"
                 ),
                 "authenticated closed dependency snapshot",
