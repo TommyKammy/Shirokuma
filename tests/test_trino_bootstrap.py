@@ -3011,10 +3011,10 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                         ),
                         "evidence": (
                             "ADR-0029 and Issue #63 comments 5210182460 and 5221869732 "
-                            "authorize the exact third patch; comments 5264706435 and "
-                            "5266462504 record consumed sequence 3 PR #146 run 31590750849 "
-                            "and authorize one sequence 4 publication attempt for PR #147's "
-                            "exact Bun overlay and fail-closed diagnostic repair; no "
+                            "authorize the exact third patch; comments 5266462504 and "
+                            "5268307725 record consumed sequence 4 PR #147 run 31605249586; "
+                            "comment 5268936554 authorizes one sequence 5 publication "
+                            "attempt for PR #148's exact fixed-version metadata repair; no "
                             "dependency artifact, image admission, Flux object, or runtime "
                             "state exists yet"
                         ),
@@ -3028,13 +3028,15 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "retain their exact bounded source remediations. ADR-0028 retained "
                     "the Maven blocker and feasibility candidate. ADR-0029 activates "
                     "only the exact hash-bound third patch after hardened run "
-                    "31072144404 and independent audit. Issue #63 comment 5264706435 "
-                    "authorized the now-consumed sequence 3 attempt after PR #146 moved "
-                    "the offline Maven repository outside the source checkout. Run "
-                    "31590750849 failed closed before publication with five unsuppressed "
-                    "Bun High findings and retained zero artifacts. Comment 5266462504 "
-                    "authorizes one sequence 4 attempt after PR #147's exact four-path "
-                    "dependency overlay and diagnostic repair, without changing the "
+                    "31072144404 and independent audit. Issue #63 comment 5266462504 "
+                    "authorized the now-consumed sequence 4 attempt after PR #147's exact "
+                    "Bun overlay and diagnostic repair. Run 31605249586 failed closed "
+                    "before publication because Trivy reported React Router fixed-version "
+                    "metadata 7.18.2, 8.3.0 while the reviewed contract required 8.3.0; "
+                    "raw High remained 1, adjusted High/Critical remained 0, and only the "
+                    "exact diagnostic quartet was retained. Comment 5268936554 authorizes "
+                    "one sequence 5 attempt after PR #148's exact metadata-contract repair, "
+                    "without changing the "
                     "candidate or any downstream boundary. High=0/Critical=0 without "
                     "waivers remains mandatory; the dependency artifact is review-"
                     "pending if produced, the upstream image and server asset remain "
@@ -4792,38 +4794,43 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "runner": "ubuntu-24.04-arm",
                 "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",
                 "reauthorization": {
-                    "sequence": 4,
+                    "sequence": 5,
                     "status": "active",
                     "approval_record": (
                         "https://github.com/TommyKammy/Shirokuma/issues/63"
-                        "#issuecomment-5266462504"
+                        "#issuecomment-5268936554"
                     ),
                     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
-                    "approved_at": "2026-08-12T11:54:32Z",
+                    "approved_at": "2026-08-12T15:32:31Z",
                     "expires_at": "2026-08-21T22:43:36Z",
                     "automatic_renewal": False,
                     "risk_owner": "TommyKammy",
                     "same_candidate_required": True,
                     "publication_authorized_after_required_approval": True,
                     "previous_attempt": {
-                        "run_id": "31590750849",
+                        "run_id": "31605249586",
                         "run_attempt": "1",
                         "source_sha": (
-                            "b1e58117cff9f9f1441176617dbdb2e4e0e8685f"
+                            "e6eb99d0e79b4a85aa7670ed75f07e4bc2d5b823"
                         ),
                         "result": "failed_closed_before_publication",
-                        "reason": "five_unsuppressed_bun_high_findings",
-                        "unsuppressed_high_findings": 5,
-                        "retained_artifact_count": 0,
+                        "reason": "react_router_fixed_version_metadata_drift",
+                        "raw_high_findings": 1,
+                        "adjusted_high_findings": 0,
+                        "adjusted_critical_findings": 0,
+                        "retained_artifact_count": 1,
+                        "retained_diagnostic_artifact": (
+                            "trino-bun-vulnerability-diagnostics-31605249586-1"
+                        ),
                         "dependency_artifact_published": False,
                         "consumed": True,
                     },
                     "repair": {
                         "pull_request": (
-                            "https://github.com/TommyKammy/Shirokuma/pull/147"
+                            "https://github.com/TommyKammy/Shirokuma/pull/148"
                         ),
                         "predecessor_main_commit": (
-                            "b1e58117cff9f9f1441176617dbdb2e4e0e8685f"
+                            "e6eb99d0e79b4a85aa7670ed75f07e4bc2d5b823"
                         ),
                         "web_ui_overlay_paths": [
                             "core/trino-web-ui/src/main/resources/webapp/package.json",
@@ -4832,6 +4839,9 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                             "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock",
                         ],
                         "react_router_openvex_only": True,
+                        "raw_finding_fixed_version": "7.18.2, 8.3.0",
+                        "other_raw_finding_identity_fields_unchanged": True,
+                        "react_router_upgrade_admitted": False,
                         "adjusted_scan_report_exit_code": 0,
                         "explicit_scan_verifier_required": True,
                         "diagnostic_artifact_on_scan_gate_failure": True,
@@ -4853,7 +4863,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "event_name": "push",
                     "ref": "refs/heads/main",
                     "before_sha": (
-                        "b1e58117cff9f9f1441176617dbdb2e4e0e8685f"
+                        "e6eb99d0e79b4a85aa7670ed75f07e4bc2d5b823"
                     ),
                     "run_attempt": "1",
                 },
@@ -4883,26 +4893,26 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 },
                 "owner_only_approval_exception": {
                     "status": "active",
-                    "scope": "pr_147_fourth_publication_attempt_only",
+                    "scope": "pr_148_fifth_publication_attempt_only",
                     "reason": "sole_owner_personal_experimental_project",
                     "approval_record": (
                         "https://github.com/TommyKammy/Shirokuma/issues/63"
-                        "#issuecomment-5266462504"
+                        "#issuecomment-5268936554"
                     ),
-                    "approved_at": "2026-08-12T11:54:32Z",
+                    "approved_at": "2026-08-12T15:32:31Z",
                     "repository": "TommyKammy/Shirokuma",
-                    "pull_request": 147,
+                    "pull_request": 148,
                     "owner": "TommyKammy",
                     "human_user_type": "User",
                     "author_association": "OWNER",
                     "attestation_required_before_merge": True,
                     "attestation_must_match_final_head_sha": True,
                     "attestation_body_template": (
-                        "Owner final-head attestation for PR #147\n\n"
+                        "Owner final-head attestation for PR #148\n\n"
                         "Decision: {decision}\n"
                         "Final head: {final_head}\n"
                         "Exception: https://github.com/TommyKammy/Shirokuma/"
-                        "issues/63#issuecomment-5266462504"
+                        "issues/63#issuecomment-5268936554"
                     ),
                     "allowed_decisions": ["APPROVED", "REVOKED"],
                     "standard_independent_review_remains_accepted": True,
@@ -5130,7 +5140,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "either a current independent human APPROVED review on the "
                     "exact final activation pull-request head from a reviewer "
                     "distinct from the source-remediation author and owner, or the "
-                    "exact PR #147 owner final-head attestation by TommyKammy as a "
+                    "exact PR #148 owner final-head attestation by TommyKammy as a "
                     "User with OWNER association after all required final-head CI "
                     "succeeds and current non-outdated review threads "
                     "equal zero"

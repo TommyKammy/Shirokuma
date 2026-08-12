@@ -27,8 +27,8 @@ Trivy 0.72.0 reported five newly disclosed High findings:
 - `fast-uri 3.1.3`, fixed in `3.1.4`;
 - `brace-expansion 1.1.16`, fixed in `5.0.8`;
 - `postcss 8.5.16`, fixed in `8.5.18`; and
-- `react-router 7.18.1`, GHSA-qwww-vcr4-c8h2, then reported as fixed in
-  `8.3.0`.
+- `react-router 7.18.1`, GHSA-qwww-vcr4-c8h2, historically reported as fixed
+  in `8.3.0` and currently reported as fixed in `7.18.2, 8.3.0`.
 
 React Router versions below 7.12.0 retain other High findings. The fixed 8.3.0
 tag and GitHub release exist, but the npm package is not published as of this

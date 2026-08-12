@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-08-12
-version: "1.40"
+updated: 2026-08-13
+version: "1.41"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -843,6 +843,9 @@ for `pkg:npm/react-router@7.18.1`, applies one hash-bound OpenVEX
 `not_affected` statement with `vulnerable_code_not_in_execute_path`, and
 retains a separate adjusted report. The adjusted report must be
 High=0/Critical=0 and its complete package inventory must equal the raw report.
+For the active advisory snapshot, the exact raw finding also binds Trivy's
+complete `FixedVersion="7.18.2, 8.3.0"` metadata. This is an identity field,
+not permission to upgrade to or admit React Router 7.18.2.
 Any additional finding, changed PURL, version, advisory, severity, import,
 package inventory, VEX byte, or expiry fails closed. This is a reviewed
 non-applicability assessment, not an ADR-0019 vulnerability risk acceptance.
@@ -1236,13 +1239,13 @@ snapshot repository. No `.gitignore`, cleanup, allowlist, network fallback, or
 writable repository exception is permitted.
 
 Issue #63 comment
-[`5266462504`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5266462504)
-records the active sequence-4 owner authorization at
-`2026-08-12T11:54:32Z`. It permits exactly one fourth reviewed-main attempt,
-bound to predecessor `b1e58117cff9f9f1441176617dbdb2e4e0e8685f` and GitHub
+[`5268936554`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5268936554)
+records the active sequence-5 owner authorization at
+`2026-08-12T15:32:31Z`. It permits exactly one fifth reviewed-main attempt,
+bound to predecessor `e6eb99d0e79b4a85aa7670ed75f07e4bc2d5b823` and GitHub
 Actions attempt `1`, and retains the unchanged expiry
-`2026-08-21T22:43:36Z`. Its owner-only alternative is scoped to PR #147 and
-this fourth attempt only. After the exact final PR head has
+`2026-08-21T22:43:36Z`. Its owner-only alternative is scoped to PR #148 and
+this fifth attempt only. After the exact final PR head has
 completed `.github/workflows/ci.yml`, `.github/workflows/security.yml`,
 `.github/workflows/trino-maven-remediation-feasibility.yml`, and
 `.github/workflows/trino-maven-dependencies.yml` successfully, the publisher
@@ -1272,15 +1275,15 @@ closed. The owner may then post this exact canonical top-level final-head
 attestation:
 
 ```text
-Owner final-head attestation for PR #147
+Owner final-head attestation for PR #148
 
 Decision: APPROVED
 Final head: <exact final 40-character PR head SHA>
-Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5266462504
+Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5268936554
 ```
 
 It must be authored by login `TommyKammy`, GitHub type `User`, association
-`OWNER`, match the exact final head, reference exception comment `5266462504`,
+`OWNER`, match the exact final head, reference exception comment `5268936554`,
 and exist before merge. Only exact `APPROVED` or `REVOKED` decisions are recognized. The
 matching owner decision with the latest `updated_at` governs; comment ID is not
 used for ordering, a later `REVOKED` denies approval, and a tie at the latest
@@ -1356,7 +1359,16 @@ paths and fails if none of the diagnostic files exist. The explicit verifier
 still fails closed when either report or any required evidence is absent. The
 artifact name and paths are forbidden
 from the publish job, so diagnostics cannot become publication, admission,
-image, or runtime inputs. Comment `5266462504` grants the one sequence-4
+image, or runtime inputs. PR #147 was subsequently squash-merged as
+`e6eb99d0e79b4a85aa7670ed75f07e4bc2d5b823`. Reviewed-main run
+[`31605249586`](https://github.com/TommyKammy/Shirokuma/actions/runs/31605249586),
+attempt `1`, completed the closed Maven/Bun evidence pipeline through both Bun
+reports, then failed closed because Trivy reported React Router
+`FixedVersion="7.18.2, 8.3.0"` while the exact contract required `"8.3.0"`.
+The raw report retained one High finding and the exact OpenVEX-adjusted report
+retained High=0/Critical=0. The publish job was skipped; only diagnostic
+artifact `trino-bun-vulnerability-diagnostics-31605249586-1` was retained.
+Comment `5268936554` authorizes the one sequence-5 PR #148 metadata repair and
 attempt described above and no downstream authority. Its empty downstream-
 authority set grants no dependency-evidence admission, image publication,
 resident admission, Flux/runtime reconciliation, credentials, public exposure,
