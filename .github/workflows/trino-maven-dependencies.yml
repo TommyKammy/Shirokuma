@@ -936,11 +936,37 @@ jobs:
             --adjusted-report \
               "${GITHUB_WORKSPACE}/.trino-candidate/trivy-bun-vulnerability.json"
 
-      - name: Retain failed Bun vulnerability diagnostics
+      - name: Verify complete failed Bun vulnerability diagnostic quartet
         if: >-
           failure() &&
           steps.lifecycle.outputs.active == 'true' &&
           steps.verify_bun_scan.outcome == 'failure'
+        id: verify_bun_diagnostic_quartet
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="${GITHUB_WORKSPACE}/.trino-candidate"
+          required=(
+            "trino-bun-dependencies-483.cdx.json"
+            "trivy-bun-vulnerability-raw.json"
+            "trivy-bun-vulnerability.json"
+            "react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
+          )
+          for filename in "${required[@]}"; do
+            path="${candidate}/${filename}"
+            if [[ ! -s "${path}" ]]; then
+              printf 'missing or empty required Bun diagnostic: %s\n' \
+                "${path}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Retain failed Bun vulnerability diagnostics
+        if: >-
+          failure() &&
+          steps.lifecycle.outputs.active == 'true' &&
+          steps.verify_bun_scan.outcome == 'failure' &&
+          steps.verify_bun_diagnostic_quartet.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: >-

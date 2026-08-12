@@ -1700,12 +1700,39 @@ EXPECTED_BUN_SCAN_GATE_BLOCK = """\
             --adjusted-report \\
               "${GITHUB_WORKSPACE}/.trino-candidate/trivy-bun-vulnerability.json"
 """
+EXPECTED_BUN_FAILURE_DIAGNOSTIC_QUARTET_BLOCK = """\
+      - name: Verify complete failed Bun vulnerability diagnostic quartet
+        if: >-
+          failure() &&
+          steps.lifecycle.outputs.active == 'true' &&
+          steps.verify_bun_scan.outcome == 'failure'
+        id: verify_bun_diagnostic_quartet
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="${GITHUB_WORKSPACE}/.trino-candidate"
+          required=(
+            "trino-bun-dependencies-483.cdx.json"
+            "trivy-bun-vulnerability-raw.json"
+            "trivy-bun-vulnerability.json"
+            "react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
+          )
+          for filename in "${required[@]}"; do
+            path="${candidate}/${filename}"
+            if [[ ! -s "${path}" ]]; then
+              printf 'missing or empty required Bun diagnostic: %s\\n' \\
+                "${path}" >&2
+              exit 1
+            fi
+          done
+"""
 EXPECTED_BUN_FAILURE_DIAGNOSTIC_BLOCK = """\
       - name: Retain failed Bun vulnerability diagnostics
         if: >-
           failure() &&
           steps.lifecycle.outputs.active == 'true' &&
-          steps.verify_bun_scan.outcome == 'failure'
+          steps.verify_bun_scan.outcome == 'failure' &&
+          steps.verify_bun_diagnostic_quartet.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: >-
@@ -2041,6 +2068,7 @@ EXPECTED_STEPS = {
         "Retain the raw Bun High or Critical findings",
         "Apply OpenVEX and retain adjusted Bun High or Critical findings",
         "Verify and block the raw and OpenVEX-adjusted Bun dependency evidence",
+        "Verify complete failed Bun vulnerability diagnostic quartet",
         "Retain failed Bun vulnerability diagnostics",
         "Record the read-only candidate",
         "Retain the read-only-verified candidate",
@@ -6059,9 +6087,11 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         workflow.count(EXPECTED_BUN_SCAN_STAGE_BLOCK) != 1
         or workflow.count(EXPECTED_BUN_ADJUSTED_SCAN_REPORT_BLOCK) != 1
         or workflow.count(EXPECTED_BUN_SCAN_GATE_BLOCK) != 1
+        or workflow.count(EXPECTED_BUN_FAILURE_DIAGNOSTIC_QUARTET_BLOCK) != 1
         or workflow.count(EXPECTED_BUN_FAILURE_DIAGNOSTIC_BLOCK) != 1
         or workflow.count("        id: stage_bun_scan_input") != 1
         or workflow.count("        id: verify_bun_scan") != 1
+        or workflow.count("        id: verify_bun_diagnostic_quartet") != 1
         or workflow.count(EXPECTED_BUN_DIAGNOSTIC_ARTIFACT_PREFIX) != 1
         or lines.count("          include-hidden-files: true") != 3
     ):
@@ -6070,7 +6100,9 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
             (
                 "the adjusted Bun scan must remain report-only, retain the "
                 "exact reviewed OpenVEX before the explicit blocking verifier, "
-                "and retain only the exact run-scoped failure diagnostic quartet"
+                "fail closed unless every diagnostic file exists and is "
+                "nonempty, and retain only the exact run-scoped failure "
+                "diagnostic quartet"
             ),
         )
     publish_workflow = workflow.split("\n  publish:\n", 1)

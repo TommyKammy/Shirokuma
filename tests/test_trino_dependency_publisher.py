@@ -5541,9 +5541,10 @@ class PublisherContractTests(unittest.TestCase):
         stage = verify.EXPECTED_BUN_SCAN_STAGE_BLOCK
         scan = verify.EXPECTED_BUN_ADJUSTED_SCAN_REPORT_BLOCK
         gate = verify.EXPECTED_BUN_SCAN_GATE_BLOCK
+        quartet = verify.EXPECTED_BUN_FAILURE_DIAGNOSTIC_QUARTET_BLOCK
         diagnostic = verify.EXPECTED_BUN_FAILURE_DIAGNOSTIC_BLOCK
         record = verify.EXPECTED_RECORD_TRIVY_CACHE_BLOCK
-        for block in (stage, scan, gate, diagnostic):
+        for block in (stage, scan, gate, quartet, diagnostic):
             self.assertEqual(1, workflow.count(block))
         self.assertEqual(
             4,
@@ -5558,6 +5559,8 @@ class PublisherContractTests(unittest.TestCase):
         )
         self.assertLess(workflow.index(stage), workflow.index(scan))
         self.assertLess(workflow.index(scan), workflow.index(gate))
+        self.assertLess(workflow.index(gate), workflow.index(quartet))
+        self.assertLess(workflow.index(quartet), workflow.index(diagnostic))
         self.assertLess(workflow.index(gate), workflow.index(diagnostic))
         self.assertLess(workflow.index(diagnostic), workflow.index(record))
         publish = workflow.split("\n  publish:\n", 1)[1]
@@ -5580,8 +5583,12 @@ class PublisherContractTests(unittest.TestCase):
                 "          success() &&\n",
             ),
             (
-                "          steps.verify_bun_scan.outcome == 'failure'\n",
-                "          steps.verify_bun_scan.outcome != 'cancelled'\n",
+                "          steps.verify_bun_scan.outcome == 'failure' &&\n",
+                "          steps.verify_bun_scan.outcome != 'cancelled' &&\n",
+            ),
+            (
+                "          steps.verify_bun_diagnostic_quartet.outcome == 'success'\n",
+                "          steps.verify_bun_diagnostic_quartet.outcome != 'cancelled'\n",
             ),
             (
                 "          include-hidden-files: true\n",
@@ -5619,6 +5626,45 @@ class PublisherContractTests(unittest.TestCase):
                 1,
             )
             with self.subTest(original=original):
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "WORKFLOW_BUN_DIAGNOSTICS",
+                ):
+                    verify._validate_workflow(contract, altered)
+
+        quartet_mutations = (
+            (
+                '            if [[ ! -s "${path}" ]]; then\n',
+                '            if [[ ! -e "${path}" ]]; then\n',
+            ),
+            (
+                "              exit 1\n",
+                "              continue\n",
+            ),
+            (
+                "            \"trino-bun-dependencies-483.cdx.json\"\n",
+                "",
+            ),
+            (
+                "            \"trivy-bun-vulnerability-raw.json\"\n",
+                "",
+            ),
+            (
+                "            \"trivy-bun-vulnerability.json\"\n",
+                "",
+            ),
+            (
+                "            \"react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json\"\n",
+                "",
+            ),
+        )
+        for original, replacement in quartet_mutations:
+            altered = workflow.replace(
+                quartet,
+                quartet.replace(original, replacement, 1),
+                1,
+            )
+            with self.subTest(quartet_original=original):
                 with self.assertRaisesRegex(
                     verify.ContractError,
                     "WORKFLOW_BUN_DIAGNOSTICS",
@@ -5704,8 +5750,8 @@ class PublisherContractTests(unittest.TestCase):
             verify._validate_workflow(contract, changed_action)
 
         reordered = workflow.replace(
-            gate + "\n" + diagnostic,
-            diagnostic + "\n" + gate,
+            quartet + "\n" + diagnostic,
+            diagnostic + "\n" + quartet,
             1,
         )
         with self.assertRaisesRegex(
