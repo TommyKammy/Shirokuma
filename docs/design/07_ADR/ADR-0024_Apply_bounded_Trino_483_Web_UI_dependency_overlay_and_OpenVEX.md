@@ -5,7 +5,7 @@ title: "Apply a bounded Trino 483 Web UI dependency overlay and OpenVEX"
 status: accepted
 created: 2026-07-26
 updated: 2026-08-12
-version: "0.2"
+version: "0.3"
 area: "architecture"
 tags: [shirokuma, adr, trino, web-ui, supply-chain, openvex]
 ---
@@ -27,7 +27,8 @@ Trivy 0.72.0 reported five newly disclosed High findings:
 - `fast-uri 3.1.3`, fixed in `3.1.4`;
 - `brace-expansion 1.1.16`, fixed in `5.0.8`;
 - `postcss 8.5.16`, fixed in `8.5.18`; and
-- `react-router 7.18.1`, GHSA-qwww-vcr4-c8h2, fixed in `8.3.0`.
+- `react-router 7.18.1`, GHSA-qwww-vcr4-c8h2, historically reported as fixed
+  in `8.3.0` and currently reported as fixed in `7.18.2, 8.3.0`.
 
 React Router versions below 7.12.0 retain other High findings. The fixed 8.3.0
 tag and GitHub release exist, but the npm package is not published as of this
@@ -65,6 +66,18 @@ files and makes the adjusted scan report-only before an explicit fail-closed
 verification step, so a validation failure can retain only its exact diagnostic
 SBOM, raw report, adjusted report, and reviewed OpenVEX document. It does not
 broaden the VEX or authorize publication.
+
+The fourth reviewed-main attempt, run `31605249586`, completed both closed
+Maven repository reconstructions, both network-none builds, the raw rootfs
+inventory, and the Maven and Bun SBOM/scans. The raw Bun report retained the
+same single High React Router finding, and the exact OpenVEX-adjusted report
+retained High=0/Critical=0. The repository verifier nevertheless failed closed
+because Trivy 0.72.0 returned `FixedVersion="7.18.2, 8.3.0"` while the reviewed
+contract still required `"8.3.0"`; every other finding identity field matched.
+The `publish` job was skipped. This repair binds the newly observed complete
+fixed-version metadata exactly. It does not change the installed 7.18.1
+package, treat 7.18.2 as an admitted upgrade, broaden the OpenVEX statement, or
+relax any other raw-finding identity field.
 
 The original overlay's two independent clean native-arm64 cache
 reconstructions produced manifest SHA-256
