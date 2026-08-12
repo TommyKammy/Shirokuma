@@ -102,9 +102,10 @@ defined below.
 
 The standard independent-review path queries the REST pull-request reviews
 endpoint with `per_page=100` through a terminal short page, bounded to 10 pages
-and 1,000 reviews. Every review ID must be a unique positive integer; reaching
-the 1,000-review ceiling without proving exhaustion, a malformed or duplicate
-ID, or a missing or malformed page fails closed. A qualifying human
+with an accepted maximum of 999 reviews. Every review ID must be a unique
+positive integer. A full tenth page yields 1,000 reviews without proving
+exhaustion and therefore fails closed; a malformed or duplicate ID, or a
+missing or malformed page also fails closed. A qualifying human
 `APPROVED` review must target the exact final pull-request head and have a valid
 UTC `submitted_at` strictly before the pull request's `merged_at`; an approval
 submitted at or after merge cannot authorize publication.
@@ -121,11 +122,12 @@ top-level issue comment when every condition below is true:
 
 - the REST issue-comments endpoint is queried with a page size of 100 and
   followed through every page until exhaustion, bounded to at most 10 pages
-  and a 32 MiB response per page; every comment ID must be a unique positive
-  integer in strictly increasing order across pages, and two complete scans of
-  the decision-relevant comment fields must be identical; reaching the
-  1,000-comment ceiling without proving exhaustion, or any missing, malformed,
-  reordered, duplicated, or unstable page, fails closed;
+  and a 32 MiB response per page; the accepted maximum is 999 comments, every
+  comment ID must be a unique positive integer in strictly increasing order
+  across pages, and two complete scans of the decision-relevant comment fields
+  must be identical; a full tenth page yields 1,000 comments without proving
+  exhaustion and therefore fails closed, as does any missing, malformed,
+  reordered, duplicated, or unstable page;
 - the comment author login is exactly `TommyKammy`, the GitHub account type is
   `User`, and `author_association` is `OWNER`;
 - `.github/workflows/ci.yml`, `.github/workflows/security.yml`,

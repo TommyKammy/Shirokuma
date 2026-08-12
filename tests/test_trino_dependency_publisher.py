@@ -4109,6 +4109,28 @@ class PublisherContractTests(unittest.TestCase):
         self.assertEqual(2, request.call_count)
         self.assertIn("per_page=100&page=2", request.call_args.args[0].full_url)
 
+        accepted_pages = [
+            [
+                {"id": page * 100 + offset + 1, "body": "comment"}
+                for offset in range(100 if page < 9 else 99)
+            ]
+            for page in range(10)
+        ]
+        with mock.patch.object(
+            verify,
+            "urlopen",
+            side_effect=[
+                Response(page)
+                for page in [*accepted_pages, *accepted_pages]
+            ],
+        ) as request:
+            comments = verify._github_api_paginated_list(
+                comment_url,
+                token="ephemeral-token",
+            )
+        self.assertEqual(verify.GITHUB_OWNER_COMMENT_MAXIMUM_ITEMS, len(comments))
+        self.assertEqual(20, request.call_count)
+
         with (
             mock.patch.object(
                 verify,
@@ -4125,7 +4147,7 @@ class PublisherContractTests(unittest.TestCase):
             ) as request,
             self.assertRaisesRegex(
                 verify.ContractError,
-                "GitHub API result may be truncated",
+                "pagination bound exceeded",
             ),
         ):
             verify._github_api_paginated_list(
@@ -4278,6 +4300,25 @@ class PublisherContractTests(unittest.TestCase):
         self.assertIn("per_page=100&page=1", requested_urls[0])
         self.assertIn("per_page=100&page=2", requested_urls[1])
 
+        accepted_pages = [
+            [
+                {"id": page * 100 + offset + 1}
+                for offset in range(100 if page < 9 else 99)
+            ]
+            for page in range(10)
+        ]
+        with mock.patch.object(
+            verify,
+            "urlopen",
+            side_effect=[Response(page) for page in accepted_pages],
+        ) as request:
+            reviews = verify._github_api_paginated_reviews(
+                review_url,
+                token="ephemeral-token",
+            )
+        self.assertEqual(verify.GITHUB_PULL_REVIEW_MAXIMUM_REVIEWS, len(reviews))
+        self.assertEqual(10, request.call_count)
+
         full_pages = [
             Response(
                 [
@@ -4295,7 +4336,7 @@ class PublisherContractTests(unittest.TestCase):
             ) as request,
             self.assertRaisesRegex(
                 verify.ContractError,
-                "pull-review result may be truncated",
+                "pull-review bound exceeded",
             ),
         ):
             verify._github_api_paginated_reviews(

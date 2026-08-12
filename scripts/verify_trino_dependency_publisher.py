@@ -47,7 +47,8 @@ GITHUB_API_RESPONSE_BYTES = 1_048_576
 GITHUB_COMMENT_PAGE_RESPONSE_BYTES = 33_554_432
 GITHUB_PULL_REVIEW_PAGE_SIZE = 100
 GITHUB_PULL_REVIEW_MAXIMUM_PAGES = 10
-GITHUB_PULL_REVIEW_MAXIMUM_REVIEWS = 1_000
+GITHUB_PULL_REVIEW_MAXIMUM_REVIEWS = 999
+GITHUB_OWNER_COMMENT_MAXIMUM_ITEMS = 999
 GITHUB_REVIEW_THREAD_PAGE_SIZE = 100
 GITHUB_REVIEW_THREAD_MAXIMUM_PAGES = 10
 GITHUB_REVIEW_THREAD_MAXIMUM_THREADS = 1_000
@@ -193,7 +194,7 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
         "api": "rest_issue_comments",
         "page_size": 100,
         "maximum_pages": 10,
-        "maximum_items": 1000,
+        "maximum_items": GITHUB_OWNER_COMMENT_MAXIMUM_ITEMS,
         "maximum_page_bytes": GITHUB_COMMENT_PAGE_RESPONSE_BYTES,
         "stable_snapshot_passes": 2,
         "strictly_increasing_unique_ids": True,
@@ -4373,7 +4374,7 @@ def _github_api_paginated_list(
     token: str,
     page_size: int = 100,
     maximum_pages: int = 10,
-    maximum_items: int = 1000,
+    maximum_items: int = GITHUB_OWNER_COMMENT_MAXIMUM_ITEMS,
     maximum_page_bytes: int = GITHUB_COMMENT_PAGE_RESPONSE_BYTES,
     stable_snapshot_passes: int = 2,
 ) -> list[Any]:
@@ -4383,7 +4384,7 @@ def _github_api_paginated_list(
         or type(maximum_pages) is not int
         or maximum_pages != 10
         or type(maximum_items) is not int
-        or maximum_items != page_size * maximum_pages
+        or maximum_items != page_size * maximum_pages - 1
         or maximum_page_bytes != GITHUB_COMMENT_PAGE_RESPONSE_BYTES
         or stable_snapshot_passes != 2
     ):
@@ -4446,9 +4447,12 @@ def _github_api_paginated_list(
             items.extend(result)
             if len(items) > maximum_items:
                 _fail("INDEPENDENT_REVIEW", "GitHub pagination bound exceeded")
-            if len(result) < page_size:
+            if len(result) != page_size:
                 return items, tuple(snapshot)
-        _fail("INDEPENDENT_REVIEW", "GitHub API result may be truncated")
+        _fail(
+            "INDEPENDENT_REVIEW",
+            "GitHub comment exhaustion was not proven within the accepted bound",
+        )
 
     first_items, first_snapshot = scan()
     second_items, second_snapshot = scan()
@@ -4542,7 +4546,8 @@ def _select_independent_review(
                 continue
             if _parse_time(submitted_at) < merged_instant:
                 qualified.append(review)
-    if len(qualified) >= EXPECTED_INDEPENDENT_REVIEW["minimum_approved_reviews"]:
+    minimum_approvals = EXPECTED_INDEPENDENT_REVIEW["minimum_approved_reviews"]
+    if len(qualified) >= minimum_approvals:
         selected = sorted(qualified, key=lambda review: int(review["id"]))[0]
         return {
             "approval_mode": "independent_review",
@@ -5111,7 +5116,7 @@ def verify_independent_review(
         f"{base}/pulls/{matching[0]['number']}/reviews",
         token=token,
     )
-    selection = _select_independent_review(
+    review_selection = _select_independent_review(
         contract,
         pulls,
         reviews,
@@ -5121,15 +5126,15 @@ def verify_independent_review(
             token=token,
         ),
     )
-    if selection["approval_mode"] == "owner_final_head_attestation":
-        selection.update(
+    if review_selection["approval_mode"] == "owner_final_head_attestation":
+        review_selection.update(
             _verify_owner_final_head_gates(
                 contract["publication"]["owner_only_approval_exception"],
-                selection,
+                review_selection,
                 token=token,
             )
         )
-    print(json.dumps(selection, sort_keys=True))
+    print(json.dumps(review_selection, sort_keys=True))
 
 
 def _workflow_jobs_and_steps(workflow: str) -> tuple[list[str], dict[str, list[str]]]:

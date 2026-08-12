@@ -1073,8 +1073,7 @@ jobs:
           python3 scripts/verify_trino_dependency_publisher.py authorize --root .
           python3 scripts/verify_trino_dependency_publisher.py authorize-use \
             --root . --validation-point before_dependency_publication
-          python3 scripts/verify_trino_dependency_publisher.py \
-            verify-independent-review --root . \
+          python3 scripts/verify_trino_dependency_publisher.py verify-independent-review --root . \
             --repository "${GITHUB_REPOSITORY}" --commit "${GITHUB_SHA}"
 
       - name: Download the exact read-only-verified candidate
