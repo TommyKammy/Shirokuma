@@ -4455,16 +4455,17 @@ def _select_independent_review(
             and review.get("commit_id") == final_head
         ):
             qualified.append(review)
-    if len(qualified) < EXPECTED_INDEPENDENT_REVIEW["minimum_approved_reviews"]:
-        if comments is not None:
-            owner_comments = comments() if callable(comments) else comments
-            return _select_owner_final_head_attestation(
-                contract,
-                pull,
-                owner_comments,
-                commit=commit,
-                final_head=final_head,
-            )
+    if len(qualified) >= EXPECTED_INDEPENDENT_REVIEW["minimum_approved_reviews"]:
+        selected = sorted(qualified, key=lambda review: int(review["id"]))[0]
+        return {
+            "approval_mode": "independent_review",
+            "pull_request": pull["number"],
+            "review_id": selected["id"],
+            "reviewer": selected["user"]["login"],
+            "reviewed_head": final_head,
+            "commit": commit,
+        }
+    if comments is None:
         _fail(
             "INDEPENDENT_REVIEW",
             (
@@ -4472,15 +4473,26 @@ def _select_independent_review(
                 "author, and no owner final-head attestation is available"
             ),
         )
-    selected = sorted(qualified, key=lambda review: int(review["id"]))[0]
-    return {
-        "approval_mode": "independent_review",
-        "pull_request": pull["number"],
-        "review_id": selected["id"],
-        "reviewer": selected["user"]["login"],
-        "reviewed_head": final_head,
-        "commit": commit,
-    }
+
+    # This is the exact user-authorized policy alternative for PR #145's
+    # second attempt, not a generic self-review fallback for another PR/run.
+    exception = contract["publication"]["owner_only_approval_exception"]
+    if (
+        exception["scope"] != "pr_145_second_publication_attempt_only"
+        or exception["reason"] != "sole_owner_personal_experimental_project"
+        or exception["repository"] != "TommyKammy/Shirokuma"
+        or exception["pull_request"] != pull["number"]
+        or exception["standard_independent_review_remains_accepted"] is not True
+    ):
+        _fail("INDEPENDENT_REVIEW", "owner exception scope differs")
+    owner_comments = comments() if callable(comments) else comments
+    return _select_owner_final_head_attestation(
+        contract,
+        pull,
+        owner_comments,
+        commit=commit,
+        final_head=final_head,
+    )
 
 
 def _select_owner_final_head_attestation(

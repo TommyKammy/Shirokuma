@@ -47,7 +47,7 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "56130f62188dfc19e8be53c012720b14c378af61d5f16c0f17ef0f84d94715aa"
+      "sha256": "87d7b0801477ba174c720b2007498d53d6cafa8566bb8f5fb3411ac708e0a8c2"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
