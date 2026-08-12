@@ -74,10 +74,10 @@ jobs:
               )
           )
           expected = {
-              "state": "dependency_snapshot_publication_reauthorization_pending",
+              "state": "dependency_snapshot_publication_pending",
               "contract_only": False,
               "dependency_artifact_present": False,
-              "publication_workflow_permitted": False,
+              "publication_workflow_permitted": True,
               "image_publication_permitted": False,
               "resident_admission_permitted": False,
               "runtime_reconciliation_permitted": False,

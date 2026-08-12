@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-08-07
-version: "1.38"
+updated: 2026-08-08
+version: "1.39"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -18,16 +18,16 @@ AI Coding Agentは、善意で悪性コードを実行するリスクがあり�
 
 ## Controls
 
-| Control | Tool/Practice |
-|---|---|
-| Dependency pinning | lock files, digest pinning |
-| SBOM | syft |
-| Vulnerability scan | osv-scanner, grype, trivy |
-| Secret scan | gitleaks |
-| Sandbox | devcontainer, no host mount secrets |
-| Install review | dependency changes require human review |
-| Script allowlist | only known scripts in AGENTS.md |
-| Network controls | no arbitrary outbound in CI where possible |
+| Control            | Tool/Practice                              |
+| ------------------ | ------------------------------------------ |
+| Dependency pinning | lock files, digest pinning                 |
+| SBOM               | syft                                       |
+| Vulnerability scan | osv-scanner, grype, trivy                  |
+| Secret scan        | gitleaks                                   |
+| Sandbox            | devcontainer, no host mount secrets        |
+| Install review     | dependency changes require human review    |
+| Script allowlist   | only known scripts in AGENTS.md            |
+| Network controls   | no arbitrary outbound in CI where possible |
 
 ## Pull request blocking baseline
 
@@ -1171,6 +1171,110 @@ retained without an allowlist or cleanup exception. The failed run published
 nothing and consumed ADR-0029's one-shot authorization. Any rerun or later
 reviewed-main publication attempt requires a new explicit owner authorization;
 the corrective pull request is validation-only.
+
+PR #144 merged the JGit containment as
+`6f557abc42713629510090db10d03630043364d7`; its main workflow confirmed the
+blocked publisher path with `validate=success` and `publish=skipped`. Issue #63
+comment
+[`5221869732`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5221869732)
+then reauthorized exactly one second reviewed-main attempt using the unchanged
+ADR-0029 candidate. That activation is bound to the protected-main transition
+after `6f557abc42713629510090db10d03630043364d7` and run attempt `1`, retains the
+same `2026-08-21T22:43:36Z` expiry, and requires a final-head approval before
+merge and publication. The standard path remains a current independent human
+`APPROVED` review on the exact final activation PR head from a reviewer
+different from the owner and implementation author, submitted strictly before
+the activation PR's merge timestamp. The REST pull-request reviews endpoint is
+read with `per_page=100` and a 32 MiB response bound per page through a terminal
+short page, bounded to 10 pages with an accepted maximum of 999 unique positive
+review IDs. Two complete ordered scans of review ID, decision state, commit,
+submission timestamp, and reviewer login and type must match. A full tenth page
+yields 1,000 reviews without proving exhaustion and therefore fails closed; an
+unstable snapshot, a duplicate or malformed ID, or a missing or malformed page
+also fails closed.
+It is evaluated first and, when satisfied, completes approval without
+querying owner-exception comments, final-head CI, or review-thread APIs. The
+independent-review requirement remains the normal policy for every other pull
+request and any later attempt; the exception below is not a permanent
+relaxation.
+
+Because Shirokuma is `TommyKammy`'s personal experimental project and no
+independent approver is available, Issue #63 comment
+[`5262105662`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5262105662)
+defines one alternative for PR #145 only. After the exact final PR head has
+completed `.github/workflows/ci.yml`, `.github/workflows/security.yml`,
+`.github/workflows/trino-maven-remediation-feasibility.yml`, and
+`.github/workflows/trino-maven-dependencies.yml` successfully, the publisher
+must read the REST workflow-runs endpoint with `per_page=100` and a 4 MiB
+response bound per page through a terminal short page, bounded to 10 pages and
+an accepted maximum of 999 runs. Every run
+ID must be a unique positive integer, `total_count` must remain stable and equal
+the collected run count, and two complete ordered scans of each run's identity,
+path, head, event, status, conclusion, timestamps, repository identities, and PR
+binding must match. When a required path has multiple runs, qualifying
+successful pre-attestation runs are selected deterministically by `updated_at`,
+then `created_at`, then run ID; failed or incomplete runs cannot satisfy the
+gate. A full
+tenth page does not prove exhaustion and fails closed. Then a complete GraphQL
+cursor query reads `reviewThreads` in pages of
+100 until
+`hasNextPage=false`, bounded to at most 10 pages and 1,000 threads. Every page
+must report the exact repository, pull-request number, and attested
+`headRefOid`; `totalCount` must remain stable and equal the number of collected
+unique thread IDs. Two complete ordered scans of thread ID, resolved state, and
+outdated state must match. All returned pages together must contain zero
+current non-outdated threads, including resolved threads. Only
+already-outdated threads are permitted. A malformed page, missing or repeated
+cursor, cursor cycle, identity or count drift, duplicate thread ID, unstable
+snapshot, or failure to prove exhaustion before reaching either bound fails
+closed. The owner may then post the canonical top-level final-head attestation. It must be
+authored by login `TommyKammy`, GitHub type `User`, association `OWNER`, match
+the exact final head, reference exception comment `5262105662`, and exist
+before merge. Only exact `APPROVED` or `REVOKED` decisions are recognized. The
+matching owner decision with the latest `updated_at` governs; comment ID is not
+used for ordering, a later `REVOKED` denies approval, and a tie at the latest
+timestamp fails closed as ambiguous. Bot or non-owner marker comments cannot
+satisfy or deny an otherwise valid attestation; owner identity, association,
+PR, head, body, timing, CI, thread, or pagination drift fails closed.
+
+Only on this fallback path, the publisher reads top-level comments through the
+REST issue-comments endpoint with `per_page=100`, follows every page to
+exhaustion, and permits at most 10 pages with a 32 MiB response bound per page.
+Every comment ID must be a unique positive integer in strictly increasing order
+across all pages, and two complete scans of the ID, body, author identity and
+type, association, and creation/update timestamps must match. The accepted
+maximum is 999 comments: a full tenth page yields 1,000 comments without
+proving exhaustion and therefore fails closed. A missing, malformed, reordered,
+duplicated, or unstable page also fails closed. A qualifying standard
+independent review short-circuits before this comment query, so owner-exception
+data is not fetched on the normal path. On the exception path, the same bounded
+two-pass comment query is repeated after the final workflow-run and review-
+thread API gates; the governing decision receipt must be identical, so an edit
+or later `REVOKED` cannot be missed before publication authorization returns.
+
+The thread result proves the state of the exact attested head. Resolving a
+non-outdated thread after attestation does not make it acceptable. Making a
+thread outdated requires a new PR head, which invalidates the attestation and
+the old final-head CI evidence, so a post-attestation outdated transition
+cannot satisfy the gate; the new head must pass all exception gates and receive
+a new attestation. The publisher queries owner comments and these CI/thread
+inputs lazily only when no qualifying standard independent review exists.
+
+On the owner-exception path, the main publisher repeats the exact merged PR,
+attested-head CI, current-thread, and post-gate owner-decision queries at its
+write-capable boundary and again immediately before registry authentication;
+the attestation is not a substitute for those checks. Failure, rerun, a
+different main predecessor, or
+candidate drift consumes or rejects the attempt and returns publication to
+fail-closed reauthorization pending. The exception's downstream-authority set
+is empty: no dependency artifact admission, image publication, resident
+admission, Flux/runtime state, credential, public exposure, production use, or
+Issue #63 closure is authorized.
+
+After the final review, CI, and thread API gates return, the publisher repeats
+the current-time authorization and exact one-attempt binding immediately before
+registry authentication. Expiry during those API calls therefore fails closed
+before `oras login` or any registry write.
 
 ## Resident image and SBOM evidence
 

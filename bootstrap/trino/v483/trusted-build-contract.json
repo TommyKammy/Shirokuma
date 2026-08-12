@@ -4,10 +4,10 @@
   "version": "483",
   "platform": "linux/arm64",
   "lifecycle": {
-    "state": "dependency_snapshot_publication_reauthorization_pending",
+    "state": "dependency_snapshot_publication_pending",
     "contract_only": false,
     "dependency_artifact_present": false,
-    "publication_workflow_permitted": false,
+    "publication_workflow_permitted": true,
     "image_publication_permitted": false,
     "resident_admission_permitted": false,
     "runtime_reconciliation_permitted": false
@@ -47,11 +47,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "bfa473800c0556240ec8cc3cb4f741ddf15dd52a1a9e81ac096eb4ee2a23d6fd"
+      "sha256": "a059a0fa8224f0ffe640a23fdfccb203e62e95951b8b05a4bb3dfaf509e433e3"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "a342bb0d397a931af11770f8bf406e3aaf5685df1d4197206c176a75d46a1111"
+      "sha256": "7bf66c3d5d2edd51b6edf69a1efcdf87de6451bd5d658f7661a427a6246ff712"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -95,7 +95,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md",
-      "sha256": "69cb895d773dfd5e9856d3b3ab0baab402db748b6f7fffe66bb76b82da0e9dad"
+      "sha256": "4da9928afd3da6ff03ef5e1b761df1f8a8ac72727201cc59605cfd76d93bd9ef"
     },
     {
       "path": "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",
@@ -136,10 +136,7 @@
     "scope": {
       "profile": "mac-studio-solo/local-lite",
       "purpose": "non-production-poc",
-      "data_classification": [
-        "synthetic",
-        "poc"
-      ],
+      "data_classification": ["synthetic", "poc"],
       "public_service_or_ingress_permitted": false,
       "source_binding": {
         "repository": "https://github.com/trinodb/trino",
@@ -174,49 +171,49 @@
         "path": "pom.xml",
         "sha256": "e1ba9a61315097e3a7133238c778ec161ac6097fe77a660fc5455a3e84568820"
       },
-    {
-      "path": "core/trino-main/pom.xml",
-      "sha256": "bb3bfb37695cdbdf5e7b69e0eb4ad64d5446886f2050113ee04edc27c5ccde63"
-    },
-    {
-      "path": "core/trino-web-ui/pom.xml",
-      "sha256": "c9cb57ad7faa684e67250b0fb31e034a52c41b9a75de62ef29bb89f6ac64bd13"
-    },
-    {
-      "path": "core/trino-web-ui/src/main/resources/webapp/package.json",
-      "sha256": "0e059ceb7d558961bfafc93cb1f34ad4aebbc28caa6ccbc62e4635bf4f9e44e9"
-    },
-    {
-      "path": "core/trino-web-ui/src/main/resources/webapp/bun.lock",
-      "sha256": "70da1dad7c6f45743637cba7dde948793d787b1ced1382e90966d60fe17dc885"
-    },
-    {
-      "path": "core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json",
-      "sha256": "d241303ae65fa0d79ada35538e6948a3e8bdcc96b1bf132cab0d9d87a50c1c60"
-    },
-    {
-      "path": "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock",
-      "sha256": "0ca8b926ea0a2af3fff339b43c52de03a8f99c4aa9ba1d4c2ecd081bcd715ad3"
-    },
-    {
-      "path": "core/trino-server/pom.xml",
-      "sha256": "663d8bc33313160b26df9c80d4f1e5a3d970700573a914fb22db3462ac0e06d2"
-    },
-    {
-      "path": ".mvn/extensions.xml",
-      "sha256": "5d034f440781f43f035303fe029c6a6a751f207a88e7b2f1fe57ff2029b325fb"
-    },
-    {
-      "path": ".mvn/maven.config",
-      "sha256": "d79502f51b88441a7fc7d30e99b9ff979d9cbd2f23f924d579bfa81763566a02"
-    },
-    {
-      "path": ".mvn/jvm.config",
-      "sha256": "46b658da8d190179af6f8c1328e44388f0ff2807507bf580e236e31580c73d48"
-    },
-    {
-      "path": ".mvn/settings.xml",
-      "sha256": "d06dc6c2d5e027397bd1188b8d8f72caa58a1789f5f642d8f48e832ef0c2ebe3"
+      {
+        "path": "core/trino-main/pom.xml",
+        "sha256": "bb3bfb37695cdbdf5e7b69e0eb4ad64d5446886f2050113ee04edc27c5ccde63"
+      },
+      {
+        "path": "core/trino-web-ui/pom.xml",
+        "sha256": "c9cb57ad7faa684e67250b0fb31e034a52c41b9a75de62ef29bb89f6ac64bd13"
+      },
+      {
+        "path": "core/trino-web-ui/src/main/resources/webapp/package.json",
+        "sha256": "0e059ceb7d558961bfafc93cb1f34ad4aebbc28caa6ccbc62e4635bf4f9e44e9"
+      },
+      {
+        "path": "core/trino-web-ui/src/main/resources/webapp/bun.lock",
+        "sha256": "70da1dad7c6f45743637cba7dde948793d787b1ced1382e90966d60fe17dc885"
+      },
+      {
+        "path": "core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json",
+        "sha256": "d241303ae65fa0d79ada35538e6948a3e8bdcc96b1bf132cab0d9d87a50c1c60"
+      },
+      {
+        "path": "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock",
+        "sha256": "0ca8b926ea0a2af3fff339b43c52de03a8f99c4aa9ba1d4c2ecd081bcd715ad3"
+      },
+      {
+        "path": "core/trino-server/pom.xml",
+        "sha256": "663d8bc33313160b26df9c80d4f1e5a3d970700573a914fb22db3462ac0e06d2"
+      },
+      {
+        "path": ".mvn/extensions.xml",
+        "sha256": "5d034f440781f43f035303fe029c6a6a751f207a88e7b2f1fe57ff2029b325fb"
+      },
+      {
+        "path": ".mvn/maven.config",
+        "sha256": "d79502f51b88441a7fc7d30e99b9ff979d9cbd2f23f924d579bfa81763566a02"
+      },
+      {
+        "path": ".mvn/jvm.config",
+        "sha256": "46b658da8d190179af6f8c1328e44388f0ff2807507bf580e236e31580c73d48"
+      },
+      {
+        "path": ".mvn/settings.xml",
+        "sha256": "d06dc6c2d5e027397bd1188b8d8f72caa58a1789f5f642d8f48e832ef0c2ebe3"
       }
     ],
     "source_overlay": {
@@ -230,10 +227,7 @@
         "path": "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch",
         "sha256": "d74d13976a8368c818755d67bbe2f464393c185d87317164bd214108e5d4712d"
       },
-      "apply_arguments": [
-        "--unidiff-zero",
-        "--whitespace=error-all"
-      ],
+      "apply_arguments": ["--unidiff-zero", "--whitespace=error-all"],
       "permitted_paths": [
         "core/trino-web-ui/src/main/resources/webapp/package.json",
         "core/trino-web-ui/src/main/resources/webapp/bun.lock",
@@ -341,10 +335,7 @@
         "path": "bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch",
         "sha256": "dd9cd76984c4bd2845aa95e87cdb404f7d24c0cfed65d5a780da32ce4f9d4269"
       },
-      "apply_arguments": [
-        "--unidiff-zero",
-        "--whitespace=error-all"
-      ],
+      "apply_arguments": ["--unidiff-zero", "--whitespace=error-all"],
       "permitted_paths": [
         "pom.xml",
         "core/trino-spi/pom.xml",
@@ -373,16 +364,9 @@
       ],
       "also_make_required_projects": true,
       "distribution_contents": {
-        "server_modules": [
-          "trino-server-core",
-          "trino-server-main"
-        ],
-        "plugins": [
-          "iceberg"
-        ],
-        "iceberg_runtime_dependencies": [
-          "trino-hdfs"
-        ],
+        "server_modules": ["trino-server-core", "trino-server-main"],
+        "plugins": ["iceberg"],
+        "iceberg_runtime_dependencies": ["trino-hdfs"],
         "other_plugins_permitted": false
       },
       "dependency_replacements": {
@@ -392,10 +376,7 @@
         "commons-io:commons-io": "2.22.0",
         "org.apache.maven:maven-core": "3.9.16",
         "org.codehaus.plexus:plexus-archiver": "4.12.0",
-        "org.codehaus.plexus:plexus-utils": [
-          "3.6.1",
-          "4.0.3"
-        ],
+        "org.codehaus.plexus:plexus-utils": ["3.6.1", "4.0.3"],
         "com.github.eirslett:frontend-maven-plugin": "2.0.2",
         "ca.vanzyl.provisio.maven.plugins:provisio-maven-plugin": "2.0.0",
         "org.apache.maven.plugins:maven-jar-plugin": "3.5.1"
@@ -430,13 +411,8 @@
         "path": "bootstrap/trino/v483/patches/0003-shirokuma-maven-build-plugin-closure.patch",
         "sha256": "731e76f296a725d34ea9e226a1815782168cae3890424e69f76a05530afc15be"
       },
-      "apply_arguments": [
-        "--unidiff-zero",
-        "--whitespace=error-all"
-      ],
-      "permitted_paths": [
-        "pom.xml"
-      ],
+      "apply_arguments": ["--unidiff-zero", "--whitespace=error-all"],
+      "permitted_paths": ["pom.xml"],
       "preimages": {
         "pom.xml": "8d342215a3c748f7965f0a82e847cab13587b94171d9d1422922b665475109c1"
       },
@@ -512,9 +488,7 @@
       "nested_rc_tag_object": "172d200a7eb81161345bdccaf628af34178fc479",
       "commit_sha": "78a8d3230eb4769db93de5f2f2e18363c04cae81",
       "tree_sha": "28b877df95a7a661361b8776f6ebe21d73d8da6d",
-      "permitted_paths": [
-        "pom.xml"
-      ],
+      "permitted_paths": ["pom.xml"],
       "preimage": {
         "path": "pom.xml",
         "size": 24493,
@@ -606,9 +580,7 @@
         "nested_rc_tag_object": "172d200a7eb81161345bdccaf628af34178fc479",
         "commit_sha": "78a8d3230eb4769db93de5f2f2e18363c04cae81",
         "tree_sha": "28b877df95a7a661361b8776f6ebe21d73d8da6d",
-        "permitted_paths": [
-          "pom.xml"
-        ],
+        "permitted_paths": ["pom.xml"],
         "preimage": {
           "path": "pom.xml",
           "size": 24493,
@@ -797,17 +769,8 @@
     "manifest": {
       "schema_version": 2,
       "closed_world": true,
-      "entry_fields": [
-        "path",
-        "size",
-        "mode",
-        "sha256",
-        "repository_origin"
-      ],
-      "aggregate_fields": [
-        "file_count",
-        "total_bytes"
-      ],
+      "entry_fields": ["path", "size", "mode", "sha256", "repository_origin"],
+      "aggregate_fields": ["file_count", "total_bytes"],
       "excluded_resolver_metadata": [
         "*.lastUpdated",
         "_remote.repositories",
@@ -1005,13 +968,8 @@
     "compiler_debug_information": {
       "maven_property": "maven.compiler.debuglevel",
       "value": "source,lines",
-      "retained_debug_information": [
-        "source",
-        "lines"
-      ],
-      "omitted_debug_information": [
-        "vars"
-      ],
+      "retained_debug_information": ["source", "lines"],
+      "omitted_debug_information": ["vars"],
       "reason": "exclude nondeterministic compiler-generated LocalVariableTable names while retaining source and line diagnostics"
     },
     "repository_settings": {
@@ -1065,7 +1023,7 @@
     ]
   },
   "publication": {
-    "permitted": false,
+    "permitted": true,
     "workflow_present": true,
     "workflow": ".github/workflows/trino-maven-dependencies.yml",
     "allowed_ref": "refs/heads/main",
@@ -1074,14 +1032,43 @@
     "separate_evidence_only_pr_required": true,
     "image_publisher_permitted_before_evidence_review": false,
     "anonymous_exact_digest_pull_required": true,
-    "pull_request_behavior": "static_read_only_contract_validation",
+    "pull_request_behavior": "static_and_authorized_source_overlay_and_remediation_validation_without_publication",
     "publication_event": "push",
     "runner": "ubuntu-24.04-arm",
     "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",
+    "reauthorization": {
+      "sequence": 2,
+      "status": "active",
+      "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5221869732",
+      "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
+      "approved_at": "2026-08-07T20:49:55Z",
+      "expires_at": "2026-08-21T22:43:36Z",
+      "automatic_renewal": false,
+      "risk_owner": "TommyKammy",
+      "same_candidate_required": true,
+      "publication_authorized_after_required_approval": true,
+      "previous_attempt": {
+        "run_id": "31163679280",
+        "run_attempt": "1",
+        "source_sha": "27a313fca0aa080db8bd8f1d67744c68b1b0ab4f",
+        "result": "failed_closed_before_publication",
+        "reason": "jgit_user_home_created_untracked_source_path",
+        "dependency_artifact_published": false,
+        "consumed": true
+      },
+      "repair": {
+        "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/144",
+        "merge_commit": "6f557abc42713629510090db10d03630043364d7",
+        "maven_opts": "-Duser.home=/tmp/maven-home",
+        "untracked_source_rejection_retained": true
+      },
+      "failure_consumes_attempt": true,
+      "rerun_permitted": false
+    },
     "authorized_attempt": {
       "event_name": "push",
       "ref": "refs/heads/main",
-      "before_sha": "ffbb4997420d4b66abf04ec4dfaa579aff2ce965",
+      "before_sha": "6f557abc42713629510090db10d03630043364d7",
       "run_attempt": "1"
     },
     "independent_review": {
@@ -1092,7 +1079,89 @@
       "reviewer_must_differ_from_risk_owner": true,
       "reviewer_must_differ_from_implementation_author": true,
       "approval_must_match_final_head_sha": true,
-      "publication_enforcement": "exact_merged_pull_request_review_query"
+      "approval_must_be_submitted_before_merge": true,
+      "reviews": {
+        "api": "rest_pull_request_reviews",
+        "page_size": 100,
+        "maximum_pages": 10,
+        "maximum_reviews": 999,
+        "maximum_page_bytes": 33554432,
+        "stable_snapshot_passes": 2,
+        "unique_review_ids": true,
+        "pagination_must_be_complete": true
+      },
+      "publication_enforcement": "exact_merged_pull_request_review_or_owner_attestation_query"
+    },
+    "owner_only_approval_exception": {
+      "status": "active",
+      "scope": "pr_145_second_publication_attempt_only",
+      "reason": "sole_owner_personal_experimental_project",
+      "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5262105662",
+      "approved_at": "2026-08-12T03:59:12Z",
+      "repository": "TommyKammy/Shirokuma",
+      "pull_request": 145,
+      "owner": "TommyKammy",
+      "human_user_type": "User",
+      "author_association": "OWNER",
+      "attestation_required_before_merge": true,
+      "attestation_must_match_final_head_sha": true,
+      "attestation_body_template": "Owner final-head attestation for PR #145\n\nDecision: {decision}\nFinal head: {final_head}\nException: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5262105662",
+      "allowed_decisions": ["APPROVED", "REVOKED"],
+      "standard_independent_review_remains_accepted": true,
+      "owner_issue_comments": {
+        "query_only_if_standard_independent_review_absent": true,
+        "api": "rest_issue_comments",
+        "page_size": 100,
+        "maximum_pages": 10,
+        "maximum_items": 999,
+        "maximum_page_bytes": 33554432,
+        "stable_snapshot_passes": 2,
+        "revalidate_after_final_api_gates": true,
+        "revalidated_decision_must_match": true,
+        "strictly_increasing_unique_ids": true,
+        "pagination_must_be_complete": true
+      },
+      "final_head_ci": {
+        "required_before_attestation": true,
+        "workflow_paths": [
+          ".github/workflows/ci.yml",
+          ".github/workflows/security.yml",
+          ".github/workflows/trino-maven-remediation-feasibility.yml",
+          ".github/workflows/trino-maven-dependencies.yml"
+        ],
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha_must_match_attestation": true,
+        "pull_request_must_match": true,
+        "api": "rest_workflow_runs",
+        "page_size": 100,
+        "maximum_pages": 10,
+        "maximum_runs": 999,
+        "maximum_page_bytes": 4194304,
+        "stable_snapshot_passes": 2,
+        "same_path_run_selection": "latest_qualifying_success_attestation_preceding_by_updated_created_id",
+        "positive_unique_run_ids": true,
+        "total_count_must_match": true,
+        "pagination_must_be_complete": true
+      },
+      "review_threads": {
+        "required_before_attestation": true,
+        "current_non_outdated": 0,
+        "head_sha_must_match_attestation": true,
+        "query": "graphql_review_threads",
+        "page_size": 100,
+        "maximum_pages": 10,
+        "maximum_threads": 1000,
+        "stable_snapshot_passes": 2,
+        "unique_thread_ids": true,
+        "total_count_must_match": true,
+        "pagination_must_be_complete": true
+      },
+      "publication_enforcement": "exact_merged_pull_request_attested_head_ci_and_review_threads_query",
+      "failure_consumes_attempt": true,
+      "rerun_permitted": false,
+      "downstream_authorities_granted": []
     },
     "evidence_review_inventory_policy": {
       "recursive_closed_world_required": true,

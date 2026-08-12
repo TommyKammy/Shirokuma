@@ -2907,6 +2907,9 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "source_remediation_authorization",
                 "distribution_remediation_authorization",
                 "build_plugin_remediation_authorization",
+                "dependency_snapshot_publication_reauthorization",
+                "independent_review",
+                "owner_only_approval_exception",
                 "repository_state",
                 "next_action",
             },
@@ -3007,10 +3010,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                             "publication_evidence_pending"
                         ),
                         "evidence": (
-                            "ADR-0029 and Issue #63 comment 5210182460 authorize "
-                            "the exact third patch after hardened run 31072144404 "
-                            "and independent artifact audit; no dependency artifact, "
-                            "image admission, Flux object, or runtime state exists yet"
+                            "ADR-0029 and Issue #63 comments 5210182460 and "
+                            "5221869732 authorize the exact third patch and one second "
+                            "publication attempt after the PR #144 JGit user.home repair; "
+                            "no dependency artifact, image admission, Flux object, or "
+                            "runtime state exists yet"
                         ),
                     },
                 ],
@@ -3022,7 +3026,9 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "retain their exact bounded source remediations. ADR-0028 retained "
                     "the Maven blocker and feasibility candidate. ADR-0029 activates "
                     "only the exact hash-bound third patch after hardened run "
-                    "31072144404 and independent audit. High=0/Critical=0 without "
+                    "31072144404 and independent audit. Issue #63 comment 5221869732 "
+                    "reauthorizes one second attempt after PR #144 without changing "
+                    "that candidate or any downstream boundary. High=0/Critical=0 without "
                     "waivers remains mandatory; the dependency artifact is review-"
                     "pending if produced, the upstream image and server asset remain "
                     "rejected, all image controls remain mandatory, and re-signing "
@@ -3062,7 +3068,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             admission["source_authentication"],
         )
         self.assertIs(
-            admission["repository_state"]["publication_workflow_permitted"], False
+            admission["repository_state"]["publication_workflow_permitted"], True
         )
 
     def test_provisional_source_authorization_is_bounded_and_fail_closed(self) -> None:
@@ -3360,7 +3366,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         self.assertEqual(
             {
                 "dependency_snapshot_contract_permitted": True,
-                "publication_workflow_permitted": False,
+                "publication_workflow_permitted": True,
                 "dependency_artifact_present": False,
                 "resident_ledger_permitted": False,
                 "runtime_manifests_permitted": False,
@@ -3525,7 +3531,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             "runtime_manifests_permitted",
         ):
             self.assertIs(repository_state[key], False)
-        self.assertIs(repository_state["publication_workflow_permitted"], False)
+        self.assertIs(repository_state["publication_workflow_permitted"], True)
         self.assertIs(
             repository_state["dependency_snapshot_contract_permitted"], True
         )
@@ -4728,17 +4734,18 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             rebuild["retained_output_evidence"],
         )
 
-    def test_dependency_snapshot_contract_blocks_consumed_publication_attempt(
+    def test_dependency_snapshot_contract_authorizes_second_publication_attempt(
         self,
     ) -> None:
         contract = self._trusted_build_contract()
+        admission = self._admission()
         lifecycle = contract["lifecycle"]
         self.assertEqual(
             {
-                "state": "dependency_snapshot_publication_reauthorization_pending",
+                "state": "dependency_snapshot_publication_pending",
                 "contract_only": False,
                 "dependency_artifact_present": False,
-                "publication_workflow_permitted": False,
+                "publication_workflow_permitted": True,
                 "image_publication_permitted": False,
                 "resident_admission_permitted": False,
                 "runtime_reconciliation_permitted": False,
@@ -4747,7 +4754,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertEqual(
             {
-                "permitted": False,
+                "permitted": True,
                 "workflow_present": True,
                 "workflow": (
                     ".github/workflows/trino-maven-dependencies.yml"
@@ -4758,15 +4765,56 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "separate_evidence_only_pr_required": True,
                 "image_publisher_permitted_before_evidence_review": False,
                 "anonymous_exact_digest_pull_required": True,
-                "pull_request_behavior": "static_read_only_contract_validation",
+                "pull_request_behavior": (
+                    "static_and_authorized_source_overlay_and_remediation_"
+                    "validation_without_publication"
+                ),
                 "publication_event": "push",
                 "runner": "ubuntu-24.04-arm",
                 "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",
+                "reauthorization": {
+                    "sequence": 2,
+                    "status": "active",
+                    "approval_record": (
+                        "https://github.com/TommyKammy/Shirokuma/issues/63"
+                        "#issuecomment-5221869732"
+                    ),
+                    "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
+                    "approved_at": "2026-08-07T20:49:55Z",
+                    "expires_at": "2026-08-21T22:43:36Z",
+                    "automatic_renewal": False,
+                    "risk_owner": "TommyKammy",
+                    "same_candidate_required": True,
+                    "publication_authorized_after_required_approval": True,
+                    "previous_attempt": {
+                        "run_id": "31163679280",
+                        "run_attempt": "1",
+                        "source_sha": (
+                            "27a313fca0aa080db8bd8f1d67744c68b1b0ab4f"
+                        ),
+                        "result": "failed_closed_before_publication",
+                        "reason": "jgit_user_home_created_untracked_source_path",
+                        "dependency_artifact_published": False,
+                        "consumed": True,
+                    },
+                    "repair": {
+                        "pull_request": (
+                            "https://github.com/TommyKammy/Shirokuma/pull/144"
+                        ),
+                        "merge_commit": (
+                            "6f557abc42713629510090db10d03630043364d7"
+                        ),
+                        "maven_opts": "-Duser.home=/tmp/maven-home",
+                        "untracked_source_rejection_retained": True,
+                    },
+                    "failure_consumes_attempt": True,
+                    "rerun_permitted": False,
+                },
                 "authorized_attempt": {
                     "event_name": "push",
                     "ref": "refs/heads/main",
                     "before_sha": (
-                        "ffbb4997420d4b66abf04ec4dfaa579aff2ce965"
+                        "6f557abc42713629510090db10d03630043364d7"
                     ),
                     "run_attempt": "1",
                 },
@@ -4778,8 +4826,111 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "reviewer_must_differ_from_risk_owner": True,
                     "reviewer_must_differ_from_implementation_author": True,
                     "approval_must_match_final_head_sha": True,
+                    "approval_must_be_submitted_before_merge": True,
+                    "reviews": {
+                        "api": "rest_pull_request_reviews",
+                        "page_size": 100,
+                        "maximum_pages": 10,
+                        "maximum_reviews": 999,
+                        "maximum_page_bytes": 33554432,
+                        "stable_snapshot_passes": 2,
+                        "unique_review_ids": True,
+                        "pagination_must_be_complete": True,
+                    },
                     "publication_enforcement": (
-                        "exact_merged_pull_request_review_query"
+                        "exact_merged_pull_request_review_or_owner_"
+                        "attestation_query"
+                    ),
+                },
+                "owner_only_approval_exception": {
+                    "status": "active",
+                    "scope": "pr_145_second_publication_attempt_only",
+                    "reason": "sole_owner_personal_experimental_project",
+                    "approval_record": (
+                        "https://github.com/TommyKammy/Shirokuma/issues/63"
+                        "#issuecomment-5262105662"
+                    ),
+                    "approved_at": "2026-08-12T03:59:12Z",
+                    "repository": "TommyKammy/Shirokuma",
+                    "pull_request": 145,
+                    "owner": "TommyKammy",
+                    "human_user_type": "User",
+                    "author_association": "OWNER",
+                    "attestation_required_before_merge": True,
+                    "attestation_must_match_final_head_sha": True,
+                    "attestation_body_template": (
+                        "Owner final-head attestation for PR #145\n\n"
+                        "Decision: {decision}\n"
+                        "Final head: {final_head}\n"
+                        "Exception: https://github.com/TommyKammy/Shirokuma/"
+                        "issues/63#issuecomment-5262105662"
+                    ),
+                    "allowed_decisions": ["APPROVED", "REVOKED"],
+                    "standard_independent_review_remains_accepted": True,
+                    "owner_issue_comments": {
+                        "query_only_if_standard_independent_review_absent": True,
+                        "api": "rest_issue_comments",
+                        "page_size": 100,
+                        "maximum_pages": 10,
+                        "maximum_items": 999,
+                        "maximum_page_bytes": 33554432,
+                        "stable_snapshot_passes": 2,
+                        "revalidate_after_final_api_gates": True,
+                        "revalidated_decision_must_match": True,
+                        "strictly_increasing_unique_ids": True,
+                        "pagination_must_be_complete": True,
+                    },
+                    "failure_consumes_attempt": True,
+                    "rerun_permitted": False,
+                    "downstream_authorities_granted": [],
+                    "final_head_ci": {
+                        "required_before_attestation": True,
+                        "workflow_paths": [
+                            ".github/workflows/ci.yml",
+                            ".github/workflows/security.yml",
+                            (
+                                ".github/workflows/"
+                                "trino-maven-remediation-feasibility.yml"
+                            ),
+                            (
+                                ".github/workflows/"
+                                "trino-maven-dependencies.yml"
+                            ),
+                        ],
+                        "event": "pull_request",
+                        "status": "completed",
+                        "conclusion": "success",
+                        "head_sha_must_match_attestation": True,
+                        "pull_request_must_match": True,
+                        "api": "rest_workflow_runs",
+                        "page_size": 100,
+                        "maximum_pages": 10,
+                        "maximum_runs": 999,
+                        "maximum_page_bytes": 4194304,
+                        "stable_snapshot_passes": 2,
+                        "same_path_run_selection": (
+                            "latest_qualifying_success_attestation_preceding_by_updated_created_id"
+                        ),
+                        "positive_unique_run_ids": True,
+                        "total_count_must_match": True,
+                        "pagination_must_be_complete": True,
+                    },
+                    "review_threads": {
+                        "required_before_attestation": True,
+                        "current_non_outdated": 0,
+                        "head_sha_must_match_attestation": True,
+                        "query": "graphql_review_threads",
+                        "page_size": 100,
+                        "maximum_pages": 10,
+                        "maximum_threads": 1000,
+                        "stable_snapshot_passes": 2,
+                        "unique_thread_ids": True,
+                        "total_count_must_match": True,
+                        "pagination_must_be_complete": True,
+                    },
+                    "publication_enforcement": (
+                        "exact_merged_pull_request_attested_head_ci_and_"
+                        "review_threads_query"
                     ),
                 },
                 "evidence_review_inventory_policy": {
@@ -4820,6 +4971,18 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 ],
             },
             contract["publication"],
+        )
+        self.assertEqual(
+            contract["publication"]["reauthorization"],
+            admission["dependency_snapshot_publication_reauthorization"],
+        )
+        self.assertEqual(
+            contract["publication"]["independent_review"],
+            admission["independent_review"],
+        )
+        self.assertEqual(
+            contract["publication"]["owner_only_approval_exception"],
+            admission["owner_only_approval_exception"],
         )
         self.assertEqual(
             {
@@ -4925,8 +5088,13 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "independent audit, expiry, and rollback"
                 ),
                 (
-                    "independent reviewer approval distinct from the source-"
-                    "remediation author and owner"
+                    "either a current independent human APPROVED review on the "
+                    "exact final activation pull-request head from a reviewer "
+                    "distinct from the source-remediation author and owner, or the "
+                    "exact PR #145 owner final-head attestation by TommyKammy as a "
+                    "User with OWNER association after all required final-head CI "
+                    "succeeds and current non-outdated review threads "
+                    "equal zero"
                 ),
                 "authenticated closed dependency snapshot",
                 "network-none reproducible linux/arm64 build",

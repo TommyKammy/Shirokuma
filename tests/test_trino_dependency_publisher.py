@@ -2524,6 +2524,96 @@ class ServerDistributionTests(unittest.TestCase):
 
 
 class PublisherContractTests(unittest.TestCase):
+    @staticmethod
+    def _owner_workflow_payload(
+        *,
+        final_head: str = "c" * 40,
+        pull_request: int = 145,
+    ) -> dict[str, object]:
+        runs = []
+        for run_id, path in enumerate(
+            verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION["final_head_ci"][
+                "workflow_paths"
+            ],
+            start=1000,
+        ):
+            runs.append(
+                {
+                    "id": run_id,
+                    "path": path,
+                    "head_sha": final_head,
+                    "event": "pull_request",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "created_at": "2026-08-12T04:40:00Z",
+                    "updated_at": "2026-08-12T04:58:00Z",
+                    "repository": {"full_name": "TommyKammy/Shirokuma"},
+                    "head_repository": {
+                        "full_name": "TommyKammy/Shirokuma"
+                    },
+                    "pull_requests": [{"number": pull_request}],
+                }
+            )
+        return {"total_count": len(runs), "workflow_runs": runs}
+
+    @staticmethod
+    def _owner_workflow_run(
+        run_id: int,
+        path: str,
+        *,
+        final_head: str = "c" * 40,
+        pull_request: int = 145,
+    ) -> dict[str, object]:
+        return {
+            "id": run_id,
+            "path": path,
+            "head_sha": final_head,
+            "event": "pull_request",
+            "status": "completed",
+            "conclusion": "success",
+            "created_at": "2026-08-12T04:40:00Z",
+            "updated_at": "2026-08-12T04:58:00Z",
+            "repository": {"full_name": "TommyKammy/Shirokuma"},
+            "head_repository": {"full_name": "TommyKammy/Shirokuma"},
+            "pull_requests": [{"number": pull_request}],
+        }
+
+    @staticmethod
+    def _owner_review_thread_payload(
+        nodes: list[dict[str, object]] | None = None,
+        *,
+        repository: str = "TommyKammy/Shirokuma",
+        pull_request: int = 145,
+        final_head: str = "c" * 40,
+        has_next_page: bool = False,
+        end_cursor: str | None = None,
+        total_count: int | None = None,
+    ) -> dict[str, object]:
+        page_nodes = [] if nodes is None else nodes
+        return {
+            "data": {
+                "repository": {
+                    "nameWithOwner": repository,
+                    "pullRequest": {
+                        "number": pull_request,
+                        "headRefOid": final_head,
+                        "reviewThreads": {
+                            "totalCount": (
+                                len(page_nodes)
+                                if total_count is None
+                                else total_count
+                            ),
+                            "nodes": page_nodes,
+                            "pageInfo": {
+                                "hasNextPage": has_next_page,
+                                "endCursor": end_cursor,
+                            },
+                        },
+                    }
+                }
+            }
+        }
+
     def test_repository_contract_and_workflow_are_closed(self) -> None:
         verify.audit(ROOT)
 
@@ -2643,7 +2733,7 @@ class PublisherContractTests(unittest.TestCase):
         )
 
     def test_publication_authorization_is_bound_to_one_main_attempt(self) -> None:
-        instant = dt.datetime(2026, 8, 7, 2, 0, tzinfo=dt.timezone.utc)
+        instant = dt.datetime(2026, 8, 7, 21, 0, tzinfo=dt.timezone.utc)
         environment = {
             "GITHUB_EVENT_NAME": verify.EXPECTED_PUBLICATION_ATTEMPT["event_name"],
             "GITHUB_REF": verify.EXPECTED_PUBLICATION_ATTEMPT["ref"],
@@ -2703,6 +2793,24 @@ class PublisherContractTests(unittest.TestCase):
                 at=instant,
             )
 
+    def test_second_publication_reauthorization_record_is_exact(self) -> None:
+        contract = verify._load_json(ROOT / verify.CONTRACT_PATH)
+        self.assertEqual(
+            verify.EXPECTED_PUBLICATION_REAUTHORIZATION,
+            contract["publication"]["reauthorization"],
+        )
+
+        altered = copy.deepcopy(contract)
+        altered["publication"]["reauthorization"]["approval_record"] = (
+            "https://github.com/TommyKammy/Shirokuma/issues/63"
+            "#issuecomment-5210182460"
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "PUBLICATION_ATTEMPT",
+        ):
+            verify._validate_publication_attempt(altered)
+
     def test_main_publisher_revalidates_and_prunes_each_build(self) -> None:
         workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
         self.assertEqual(
@@ -2753,11 +2861,14 @@ class PublisherContractTests(unittest.TestCase):
     def test_publish_job_rechecks_attempt_and_independent_review(self) -> None:
         workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
         self.assertEqual(
-            2,
+            3,
             workflow.count("--validation-point before_dependency_publication"),
         )
+        self.assertEqual(2, workflow.count("verify-independent-review"))
         self.assertEqual(1, workflow.count("verify-independent-review --root ."))
-        self.assertEqual(1, workflow.count("GITHUB_TOKEN: ${{ github.token }}"))
+        self.assertEqual(1, workflow.count("final_review_gate=("))
+        self.assertEqual(1, workflow.count('"${final_review_gate[@]}"'))
+        self.assertEqual(2, workflow.count("GITHUB_TOKEN: ${{ github.token }}"))
         for path in (
             verify.FEASIBILITY_VERIFIER_PATH,
             verify.FEASIBILITY_TEST_PATH,
@@ -2767,8 +2878,17 @@ class PublisherContractTests(unittest.TestCase):
         publish = workflow.split("  publish:", 1)[1]
         attempt = publish.index("--validation-point before_dependency_publication")
         review = publish.index("verify-independent-review --root .")
+        final_review = publish.index("final_review_gate=(")
+        final_review_run = publish.index('"${final_review_gate[@]}"')
+        final_authorization = publish.rindex(
+            "--validation-point before_dependency_publication"
+        )
         auth = publish.index("oras login ghcr.io")
         self.assertLess(attempt, review)
+        self.assertLess(review, final_review)
+        self.assertLess(final_review, final_review_run)
+        self.assertLess(final_review_run, final_authorization)
+        self.assertLess(final_authorization, auth)
         self.assertLess(review, auth)
 
     def test_independent_review_requires_non_risk_owner_human_approval(
@@ -2792,12 +2912,14 @@ class PublisherContractTests(unittest.TestCase):
             "state": "APPROVED",
             "user": {"login": "TommyKammy", "type": "User"},
             "commit_id": final_head,
+            "submitted_at": "2026-08-07T02:59:59Z",
         }
         independent_review = {
             "id": 2,
             "state": "APPROVED",
             "user": {"login": "IndependentHuman", "type": "User"},
             "commit_id": final_head,
+            "submitted_at": "2026-08-07T02:59:59Z",
         }
         self.assertEqual(
             "IndependentHuman",
@@ -2808,6 +2930,15 @@ class PublisherContractTests(unittest.TestCase):
                 commit=commit,
             )["reviewer"],
         )
+        self.assertEqual(
+            "independent_review",
+            verify._select_independent_review(
+                contract,
+                pulls,
+                [owner_review, independent_review],
+                commit=commit,
+            )["approval_mode"],
+        )
         with self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"):
             verify._select_independent_review(
                 contract,
@@ -2815,6 +2946,28 @@ class PublisherContractTests(unittest.TestCase):
                 [owner_review],
                 commit=commit,
             )
+
+        for submitted_at in (
+            None,
+            "2026-08-07T03:00:00Z",
+            "2026-08-07T03:00:01Z",
+            "not-a-timestamp",
+        ):
+            candidate = dict(independent_review)
+            if submitted_at is None:
+                candidate.pop("submitted_at")
+            else:
+                candidate["submitted_at"] = submitted_at
+            with (
+                self.subTest(submitted_at=submitted_at),
+                self.assertRaises(verify.ContractError),
+            ):
+                verify._select_independent_review(
+                    contract,
+                    pulls,
+                    [candidate],
+                    commit=commit,
+                )
 
         changed_request = {
             "id": 3,
@@ -2843,6 +2996,1633 @@ class PublisherContractTests(unittest.TestCase):
                 commit=commit,
             )
 
+    def test_owner_final_head_attestation_is_accepted_for_pr_145(self) -> None:
+        contract = verify._load_json(ROOT / verify.CONTRACT_PATH)
+        commit = "b" * 40
+        final_head = "c" * 40
+        pull = {
+            "number": 145,
+            "state": "closed",
+            "merged_at": "2026-08-12T05:00:00Z",
+            "merge_commit_sha": commit,
+            "base": {"ref": "main"},
+            "head": {"sha": final_head},
+        }
+        comment = {
+            "id": 5263000000,
+            "body": (
+                "Owner final-head attestation for PR #145\n\n"
+                "Decision: APPROVED\n"
+                f"Final head: {final_head}\n"
+                "Exception: https://github.com/TommyKammy/Shirokuma/issues/63"
+                "#issuecomment-5262105662"
+            ),
+            "user": {"login": "TommyKammy", "type": "User"},
+            "author_association": "OWNER",
+            "created_at": "2026-08-12T04:59:00Z",
+            "updated_at": "2026-08-12T04:59:00Z",
+        }
+        hostile_marker_comment = {
+            **comment,
+            "id": comment["id"] + 1,
+            "user": {"login": "UntrustedCommenter", "type": "User"},
+            "author_association": "NONE",
+        }
+
+        receipt = verify._select_independent_review(
+            contract,
+            [pull],
+            [],
+            commit=commit,
+            comments=[comment, hostile_marker_comment],
+        )
+        self.assertEqual("owner_final_head_attestation", receipt["approval_mode"])
+        self.assertEqual(145, receipt["pull_request"])
+        self.assertEqual(comment["id"], receipt["comment_id"])
+        self.assertEqual("TommyKammy", receipt["owner"])
+        self.assertEqual(final_head, receipt["attested_head"])
+
+    def test_owner_final_head_attestation_identity_and_scope_fail_closed(
+        self,
+    ) -> None:
+        contract = verify._load_json(ROOT / verify.CONTRACT_PATH)
+        commit = "b" * 40
+        final_head = "c" * 40
+        pull = {
+            "number": 145,
+            "state": "closed",
+            "merged_at": "2026-08-12T05:00:00Z",
+            "merge_commit_sha": commit,
+            "base": {"ref": "main"},
+            "head": {"sha": final_head},
+        }
+        comment = {
+            "id": 5263000000,
+            "body": (
+                "Owner final-head attestation for PR #145\n\n"
+                "Decision: APPROVED\n"
+                f"Final head: {final_head}\n"
+                "Exception: https://github.com/TommyKammy/Shirokuma/issues/63"
+                "#issuecomment-5262105662"
+            ),
+            "user": {"login": "TommyKammy", "type": "User"},
+            "author_association": "OWNER",
+            "created_at": "2026-08-12T04:59:00Z",
+            "updated_at": "2026-08-12T04:59:00Z",
+        }
+
+        cases: tuple[tuple[str, dict[str, object], dict[str, object]], ...] = (
+            (
+                "wrong-login",
+                {},
+                {"user": {"login": "OtherOwner", "type": "User"}},
+            ),
+            (
+                "bot",
+                {},
+                {"user": {"login": "TommyKammy", "type": "Bot"}},
+            ),
+            (
+                "wrong-association",
+                {},
+                {"author_association": "MEMBER"},
+            ),
+            (
+                "wrong-pr",
+                {"number": 144},
+                {},
+            ),
+            (
+                "wrong-head",
+                {},
+                {
+                    "body": comment["body"].replace(
+                        final_head,
+                        "d" * 40,
+                    )
+                },
+            ),
+            (
+                "wrong-body",
+                {},
+                {
+                    "body": comment["body"].replace(
+                        "#issuecomment-5262105662",
+                        "#issuecomment-5262105663",
+                    )
+                },
+            ),
+            (
+                "post-merge",
+                {},
+                {
+                    "created_at": "2026-08-12T05:00:01Z",
+                    "updated_at": "2026-08-12T05:00:01Z",
+                },
+            ),
+        )
+        for name, pull_update, comment_update in cases:
+            with self.subTest(name=name):
+                altered_pull = {**pull, **pull_update}
+                altered_comment = {**comment, **comment_update}
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "INDEPENDENT_REVIEW",
+                ):
+                    verify._select_independent_review(
+                        contract,
+                        [altered_pull],
+                        [],
+                        commit=commit,
+                        comments=[altered_comment],
+                    )
+
+        altered_contract = copy.deepcopy(contract)
+        altered_contract["publication"]["owner_only_approval_exception"][
+            "pull_request"
+        ] = 144
+        with self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"):
+            verify._select_independent_review(
+                altered_contract,
+                [pull],
+                [],
+                commit=commit,
+                comments=[comment],
+            )
+
+    def test_owner_final_head_decisions_are_ordered_by_updated_at(self) -> None:
+        contract = verify._load_json(ROOT / verify.CONTRACT_PATH)
+        commit = "b" * 40
+        final_head = "c" * 40
+        pull = {
+            "number": 145,
+            "state": "closed",
+            "merged_at": "2026-08-12T05:00:00Z",
+            "merge_commit_sha": commit,
+            "base": {"ref": "main"},
+            "head": {"sha": final_head},
+        }
+
+        def decision_comment(
+            comment_id: int,
+            decision: str,
+            *,
+            created_at: str,
+            updated_at: str,
+        ) -> dict[str, object]:
+            return {
+                "id": comment_id,
+                "body": (
+                    "Owner final-head attestation for PR #145\n\n"
+                    f"Decision: {decision}\n"
+                    f"Final head: {final_head}\n"
+                    "Exception: https://github.com/TommyKammy/Shirokuma/"
+                    "issues/63#issuecomment-5262105662"
+                ),
+                "user": {"login": "TommyKammy", "type": "User"},
+                "author_association": "OWNER",
+                "created_at": created_at,
+                "updated_at": updated_at,
+            }
+
+        approval = decision_comment(
+            5263000001,
+            "APPROVED",
+            created_at="2026-08-12T04:58:00Z",
+            updated_at="2026-08-12T04:58:00Z",
+        )
+        older_id_edited_approval = decision_comment(
+            5263000000,
+            "APPROVED",
+            created_at="2026-08-12T04:57:00Z",
+            updated_at="2026-08-12T04:59:00Z",
+        )
+        receipt = verify._select_independent_review(
+            contract,
+            [pull],
+            [],
+            commit=commit,
+            comments=[approval, older_id_edited_approval],
+        )
+        self.assertEqual(5263000000, receipt["comment_id"])
+        self.assertEqual("2026-08-12T04:59:00Z", receipt["attested_at"])
+
+        older_id_edited_revocation = {
+            **older_id_edited_approval,
+            "body": older_id_edited_approval["body"].replace(
+                "Decision: APPROVED",
+                "Decision: REVOKED",
+            ),
+        }
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "latest owner attestation is not a pre-merge approval",
+        ):
+            verify._select_independent_review(
+                contract,
+                [pull],
+                [],
+                commit=commit,
+                comments=[approval, older_id_edited_revocation],
+            )
+
+        tied_revocation = decision_comment(
+            5263000002,
+            "REVOKED",
+            created_at="2026-08-12T04:58:30Z",
+            updated_at="2026-08-12T04:59:00Z",
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "latest owner attestation is ambiguous",
+        ):
+            verify._select_independent_review(
+                contract,
+                [pull],
+                [],
+                commit=commit,
+                comments=[older_id_edited_approval, tied_revocation],
+            )
+
+    def test_owner_final_head_ci_requires_unique_successful_current_runs(
+        self,
+    ) -> None:
+        exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        final_head = "c" * 40
+        attested_at = dt.datetime(
+            2026,
+            8,
+            12,
+            4,
+            59,
+            tzinfo=dt.timezone.utc,
+        )
+        payload = self._owner_workflow_payload(final_head=final_head)
+        receipt = verify._validate_owner_final_head_ci(
+            exception,
+            payload,
+            pull_request=145,
+            final_head=final_head,
+            attested_at=attested_at,
+        )
+        self.assertIs(receipt["completed_before_attestation"], True)
+        self.assertEqual(
+            set(exception["final_head_ci"]["workflow_paths"]),
+            set(receipt["workflow_runs"]),
+        )
+
+        altered = copy.deepcopy(payload)
+        altered["workflow_runs"].pop()
+        altered["total_count"] = len(altered["workflow_runs"])
+        with self.subTest(case="missing"), self.assertRaisesRegex(
+            verify.ContractError,
+            "INDEPENDENT_REVIEW",
+        ):
+            verify._validate_owner_final_head_ci(
+                exception,
+                altered,
+                pull_request=145,
+                final_head=final_head,
+                attested_at=attested_at,
+            )
+
+        altered = copy.deepcopy(payload)
+        older = altered["workflow_runs"][0]
+        older["id"] = 2000
+        older["updated_at"] = "2026-08-12T04:57:00Z"
+        newer = copy.deepcopy(older)
+        newer["id"] = 2001
+        newer["created_at"] = "2026-08-12T04:41:00Z"
+        newer["updated_at"] = "2026-08-12T04:58:00Z"
+        altered["workflow_runs"].append(newer)
+        altered["total_count"] = len(altered["workflow_runs"])
+        receipt = verify._validate_owner_final_head_ci(
+            exception,
+            altered,
+            pull_request=145,
+            final_head=final_head,
+            attested_at=attested_at,
+        )
+        self.assertEqual(2001, receipt["workflow_runs"][older["path"]])
+
+        for conclusion, status in (("failure", "completed"), (None, "in_progress")):
+            with self.subTest(case=f"newer-{conclusion or status}"):
+                failed = copy.deepcopy(altered)
+                failed["workflow_runs"][-1]["conclusion"] = conclusion
+                failed["workflow_runs"][-1]["status"] = status
+                receipt = verify._validate_owner_final_head_ci(
+                    exception,
+                    failed,
+                    pull_request=145,
+                    final_head=final_head,
+                    attested_at=attested_at,
+                )
+                self.assertEqual(2000, receipt["workflow_runs"][older["path"]])
+
+        reordered = copy.deepcopy(altered)
+        reordered["workflow_runs"].reverse()
+        receipt = verify._validate_owner_final_head_ci(
+            exception,
+            reordered,
+            pull_request=145,
+            final_head=final_head,
+            attested_at=attested_at,
+        )
+        self.assertEqual(2001, receipt["workflow_runs"][older["path"]])
+
+        mutations = (
+            ("failed", "conclusion", "failure"),
+            ("pending", "status", "in_progress"),
+            ("stale-head", "head_sha", "d" * 40),
+            (
+                "not-proven-before-attestation",
+                "updated_at",
+                "2026-08-12T04:59:00Z",
+            ),
+            ("post-attestation", "updated_at", "2026-08-12T04:59:01Z"),
+            ("wrong-repository", "repository", {"full_name": "Other/Repo"}),
+            ("wrong-pr", "pull_requests", [{"number": 144}]),
+        )
+        for name, key, value in mutations:
+            with self.subTest(case=name):
+                altered = copy.deepcopy(payload)
+                altered["workflow_runs"][0][key] = value
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "INDEPENDENT_REVIEW",
+                ):
+                    verify._validate_owner_final_head_ci(
+                        exception,
+                        altered,
+                        pull_request=145,
+                        final_head=final_head,
+                        attested_at=attested_at,
+                    )
+
+    def test_owner_final_head_ci_response_completeness_fails_closed(self) -> None:
+        exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        final_head = "c" * 40
+        attested_at = dt.datetime(
+            2026,
+            8,
+            12,
+            4,
+            59,
+            tzinfo=dt.timezone.utc,
+        )
+        payloads = (
+            {
+                "total_count": 100,
+                "workflow_runs": [{} for _ in range(100)],
+            },
+            {
+                **self._owner_workflow_payload(final_head=final_head),
+                "total_count": 99,
+            },
+        )
+        for payload in payloads:
+            with self.subTest(total_count=payload["total_count"]):
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "INDEPENDENT_REVIEW",
+                ):
+                    verify._validate_owner_final_head_ci(
+                        exception,
+                        payload,
+                        pull_request=145,
+                        final_head=final_head,
+                        attested_at=attested_at,
+                    )
+
+    def test_owner_final_head_workflow_run_pagination_collects_stable_pages(
+        self,
+    ) -> None:
+        exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        final_head = "c" * 40
+        filler = [
+            self._owner_workflow_run(
+                run_id,
+                f".github/workflows/irrelevant-{run_id}.yml",
+                final_head=final_head,
+            )
+            for run_id in range(1, 101)
+        ]
+        for run in filler:
+            run["display_title"] = "x" * 12_000
+        required = [
+            self._owner_workflow_run(run_id, path, final_head=final_head)
+            for run_id, path in enumerate(
+                exception["final_head_ci"]["workflow_paths"],
+                start=101,
+            )
+        ]
+        pages = [
+            {"total_count": 104, "workflow_runs": filler},
+            {"total_count": 104, "workflow_runs": required},
+        ]
+        first_page_bytes = len(json.dumps(pages[0]).encode())
+        self.assertGreater(first_page_bytes, verify.GITHUB_API_RESPONSE_BYTES)
+        self.assertLess(
+            first_page_bytes,
+            verify.GITHUB_WORKFLOW_RUN_PAGE_RESPONSE_BYTES,
+        )
+        read_limits: list[int] = []
+
+        class Response:
+            status = 200
+
+            def __init__(self, payload: object) -> None:
+                self.payload = json.dumps(payload).encode()
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                read_limits.append(limit)
+                return self.payload[:limit]
+
+        with mock.patch.object(
+            verify,
+            "urlopen",
+            side_effect=[Response(page) for page in pages + pages],
+        ) as request:
+            payload = verify._github_workflow_run_pages(
+                exception,
+                pull_request=145,
+                final_head=final_head,
+                token="ephemeral-token",
+            )
+
+        self.assertEqual(104, payload["total_count"])
+        self.assertEqual(104, len(payload["workflow_runs"]))
+        self.assertEqual(4, request.call_count)
+        self.assertEqual(
+            [verify.GITHUB_WORKFLOW_RUN_PAGE_RESPONSE_BYTES + 1] * 4,
+            read_limits,
+        )
+        urls = [call.args[0].full_url for call in request.call_args_list]
+        for index, page in enumerate((1, 2, 1, 2)):
+            with self.subTest(request=index):
+                self.assertIn(f"page={page}", urls[index])
+                self.assertIn("per_page=100", urls[index])
+                self.assertIn("event=pull_request", urls[index])
+
+                self.assertIn(f"head_sha={final_head}", urls[index])
+        receipt = verify._validate_owner_final_head_ci(
+            exception,
+            payload,
+            pull_request=145,
+            final_head=final_head,
+            attested_at=dt.datetime(
+                2026,
+                8,
+                12,
+                4,
+                59,
+                tzinfo=dt.timezone.utc,
+            ),
+        )
+        self.assertEqual(
+            set(exception["final_head_ci"]["workflow_paths"]),
+            set(receipt["workflow_runs"]),
+        )
+
+    def test_owner_final_head_workflow_run_page_rejects_oversized_response(
+        self,
+    ) -> None:
+        exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        final_head = "c" * 40
+        run = self._owner_workflow_run(
+            1,
+            ".github/workflows/irrelevant.yml",
+            final_head=final_head,
+        )
+        run["display_title"] = "x" * verify.GITHUB_WORKFLOW_RUN_PAGE_RESPONSE_BYTES
+        page = {"total_count": 1, "workflow_runs": [run]}
+        read_limits: list[int] = []
+
+        class Response:
+            status = 200
+
+            def __init__(self, payload: object) -> None:
+                self.payload = json.dumps(payload).encode()
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                read_limits.append(limit)
+                return self.payload[:limit]
+
+        with (
+            mock.patch.object(verify, "urlopen", return_value=Response(page)),
+            self.assertRaisesRegex(verify.ContractError, "response is too large"),
+        ):
+            verify._github_workflow_run_pages(
+                exception,
+                pull_request=145,
+                final_head=final_head,
+                token="ephemeral-token",
+            )
+        self.assertEqual(
+            [verify.GITHUB_WORKFLOW_RUN_PAGE_RESPONSE_BYTES + 1],
+            read_limits,
+        )
+
+    def test_owner_final_head_workflow_run_pagination_accepts_999_runs(
+        self,
+    ) -> None:
+        exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        final_head = "c" * 40
+        runs = [
+            self._owner_workflow_run(
+                run_id,
+                f".github/workflows/irrelevant-{run_id}.yml",
+                final_head=final_head,
+            )
+            for run_id in range(1, 1000)
+        ]
+        pages = [
+            {"total_count": 999, "workflow_runs": runs[offset : offset + 100]}
+            for offset in range(0, 999, 100)
+        ]
+
+        class Response:
+            status = 200
+
+            def __init__(self, payload: object) -> None:
+                self.payload = json.dumps(payload).encode()
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                return self.payload[:limit]
+
+        with mock.patch.object(
+            verify,
+            "urlopen",
+            side_effect=[Response(page) for page in pages + pages],
+        ) as request:
+            payload = verify._github_workflow_run_pages(
+                exception,
+                pull_request=145,
+                final_head=final_head,
+                token="ephemeral-token",
+            )
+        self.assertEqual(999, payload["total_count"])
+        self.assertEqual(999, len(payload["workflow_runs"]))
+        self.assertEqual(20, request.call_count)
+
+    def test_owner_final_head_workflow_run_pagination_fails_closed(
+        self,
+    ) -> None:
+        exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        final_head = "c" * 40
+
+        altered = copy.deepcopy(exception)
+        altered["final_head_ci"]["maximum_page_bytes"] -= 1
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "final-head workflow pagination policy differs",
+        ):
+            verify._github_workflow_run_pages(
+                altered,
+                pull_request=145,
+                final_head=final_head,
+                token="ephemeral-token",
+            )
+
+        class Response:
+            status = 200
+
+            def __init__(self, payload: object) -> None:
+                self.payload = json.dumps(payload).encode()
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                return self.payload
+
+        full_pages = []
+        for page in range(10):
+            page_runs = [
+                self._owner_workflow_run(
+                    page * 100 + offset + 1,
+                    f".github/workflows/irrelevant-{page}-{offset}.yml",
+                    final_head=final_head,
+                )
+                for offset in range(100)
+            ]
+            full_pages.append({"total_count": 999, "workflow_runs": page_runs})
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                side_effect=[Response(page) for page in full_pages],
+            ) as request,
+            self.assertRaisesRegex(
+                verify.ContractError,
+                "bound exceeded|exhaustion was not proven",
+            ),
+        ):
+            verify._github_workflow_run_pages(
+                exception,
+                pull_request=145,
+                final_head=final_head,
+                token="ephemeral-token",
+            )
+        self.assertEqual(10, request.call_count)
+
+        stable_run = self._owner_workflow_run(
+            1,
+            ".github/workflows/irrelevant.yml",
+            final_head=final_head,
+        )
+        mutations = (
+            ("duplicate-id", "id", 1),
+            ("non-positive-id", "id", 0),
+            ("changed-path", "path", ".github/workflows/changed.yml"),
+            ("changed-head", "head_sha", "d" * 40),
+            ("changed-status", "status", "in_progress"),
+            ("changed-timestamp", "updated_at", "2026-08-12T04:58:01Z"),
+            ("changed-pr", "pull_requests", [{"number": 144}]),
+        )
+        for name, key, value in mutations:
+            with self.subTest(case=name):
+                first = {"total_count": 1, "workflow_runs": [stable_run]}
+                changed_run = copy.deepcopy(stable_run)
+                changed_run[key] = value
+                if name == "duplicate-id":
+                    first = {
+                        "total_count": 2,
+                        "workflow_runs": [stable_run, copy.deepcopy(stable_run)],
+                    }
+                    responses = [Response(first)]
+                else:
+                    second = {"total_count": 1, "workflow_runs": [changed_run]}
+                    responses = [Response(first), Response(second)]
+                with (
+                    mock.patch.object(
+                        verify,
+                        "urlopen",
+                        side_effect=responses,
+                    ),
+                    self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"),
+                ):
+                    verify._github_workflow_run_pages(
+                        exception,
+                        pull_request=145,
+                        final_head=final_head,
+                        token="ephemeral-token",
+                    )
+
+    def test_owner_review_threads_allow_only_outdated_threads(
+        self,
+    ) -> None:
+        exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        final_head = "c" * 40
+        payload = self._owner_review_thread_payload(
+            [
+                {
+                    "id": "thread-0",
+                    "isResolved": True,
+                    "isOutdated": True,
+                },
+                {
+                    "id": "thread-1",
+                    "isResolved": False,
+                    "isOutdated": True,
+                },
+            ],
+            final_head=final_head,
+        )
+        receipt = verify._validate_owner_review_threads(
+            exception,
+            payload,
+            pull_request=145,
+            final_head=final_head,
+        )
+        self.assertEqual(
+            {
+                "total": 2,
+                "current_non_outdated": 0,
+                "current_unresolved": 0,
+                "resolved": 0,
+                "outdated": 2,
+            },
+            receipt,
+        )
+
+        for thread in (
+            {
+                "id": "thread-resolved",
+                "isResolved": True,
+                "isOutdated": False,
+            },
+            {
+                "id": "thread-unresolved",
+                "isResolved": False,
+                "isOutdated": False,
+            },
+        ):
+            with self.subTest(thread=thread):
+                current = self._owner_review_thread_payload(
+                    [thread],
+                    final_head=final_head,
+                )
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "current non-outdated review-thread count differs",
+                ):
+                    verify._validate_owner_review_threads(
+                        exception,
+                        current,
+                        pull_request=145,
+                        final_head=final_head,
+                    )
+
+        wrong_head = self._owner_review_thread_payload(final_head="d" * 40)
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "review-thread GraphQL response is truncated or malformed",
+        ):
+            verify._validate_owner_review_threads(
+                exception,
+                wrong_head,
+                pull_request=145,
+                final_head=final_head,
+            )
+
+    def test_owner_review_thread_graphql_response_fails_closed(self) -> None:
+        exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        cases = (
+            self._owner_review_thread_payload(has_next_page=True),
+            self._owner_review_thread_payload(
+                [
+                    {"isResolved": True, "isOutdated": False}
+                    for _ in range(101)
+                ]
+            ),
+            self._owner_review_thread_payload(pull_request=144),
+            {
+                **self._owner_review_thread_payload(),
+                "errors": [{"message": "truncated query"}],
+            },
+        )
+        for index, payload in enumerate(cases):
+            with self.subTest(case=index):
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "INDEPENDENT_REVIEW",
+                ):
+                    verify._validate_owner_review_threads(
+                        exception,
+                        payload,
+                        pull_request=145,
+                        final_head="c" * 40,
+                    )
+
+    def test_owner_review_thread_cursor_pagination_collects_every_page(
+        self,
+    ) -> None:
+        exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        final_head = "c" * 40
+        def outdated(thread_id: int) -> dict[str, object]:
+            return {
+                "id": f"thread-{thread_id}",
+                "isResolved": False,
+                "isOutdated": True,
+            }
+
+        pages = [
+            self._owner_review_thread_payload(
+                [outdated(thread_id) for thread_id in range(100)],
+                final_head=final_head,
+                has_next_page=True,
+                end_cursor="cursor-1",
+                total_count=101,
+            ),
+            self._owner_review_thread_payload(
+                [outdated(100)],
+                final_head=final_head,
+                end_cursor="cursor-2",
+                total_count=101,
+            ),
+        ]
+        stable_pages = [
+            *pages,
+            pages[0],
+            self._owner_review_thread_payload(
+                [outdated(100)],
+                final_head=final_head,
+                end_cursor=None,
+                total_count=101,
+            ),
+        ]
+
+        class Response:
+            status = 200
+
+            def __init__(self, payload: object) -> None:
+                self.payload = json.dumps(payload).encode()
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                return self.payload
+
+        with mock.patch.object(
+            verify,
+            "urlopen",
+            side_effect=[Response(page) for page in stable_pages],
+        ) as request:
+            receipt = verify._github_review_threads_pages(
+                exception,
+                pull_request=145,
+                final_head=final_head,
+                token="ephemeral-token",
+            )
+
+        self.assertEqual(
+            {
+                "total": 101,
+                "current_non_outdated": 0,
+                "current_unresolved": 0,
+                "resolved": 0,
+                "outdated": 101,
+            },
+            receipt,
+        )
+        self.assertEqual(4, request.call_count)
+        requests = [call.args[0] for call in request.call_args_list]
+        first = json.loads(requests[0].data)
+        second = json.loads(requests[1].data)
+        third = json.loads(requests[2].data)
+        fourth = json.loads(requests[3].data)
+        self.assertIsNone(first["variables"]["after"])
+        self.assertEqual("cursor-1", second["variables"]["after"])
+        self.assertIsNone(third["variables"]["after"])
+        self.assertEqual("cursor-1", fourth["variables"]["after"])
+        self.assertIn("after:$after", first["query"])
+        self.assertIn("endCursor", first["query"])
+
+    def test_owner_review_thread_cursor_pagination_accepts_exact_limit(
+        self,
+    ) -> None:
+        exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        final_head = "c" * 40
+
+        def page_payload(page: int, *, terminal_cursor: str | None) -> object:
+            first_id = (page - 1) * 100
+            return self._owner_review_thread_payload(
+                [
+                    {
+                        "id": f"thread-{thread_id}",
+                        "isResolved": False,
+                        "isOutdated": True,
+                    }
+                    for thread_id in range(first_id, first_id + 100)
+                ],
+                final_head=final_head,
+                has_next_page=page < 10,
+                end_cursor=(
+                    f"cursor-{page}" if page < 10 else terminal_cursor
+                ),
+                total_count=1000,
+            )
+
+        first_scan = [
+            page_payload(page, terminal_cursor="cursor-10")
+            for page in range(1, 11)
+        ]
+        second_scan = [
+            page_payload(page, terminal_cursor=None) for page in range(1, 11)
+        ]
+
+        class Response:
+            status = 200
+
+            def __init__(self, payload: object) -> None:
+                self.payload = json.dumps(payload).encode()
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                return self.payload
+
+        with mock.patch.object(
+            verify,
+            "urlopen",
+            side_effect=[Response(page) for page in first_scan + second_scan],
+        ) as request:
+            receipt = verify._github_review_threads_pages(
+                exception,
+                pull_request=145,
+                final_head=final_head,
+                token="ephemeral-token",
+            )
+
+        self.assertEqual(1000, receipt["total"])
+        self.assertEqual(1000, receipt["outdated"])
+        self.assertEqual(0, receipt["current_non_outdated"])
+        self.assertEqual(20, request.call_count)
+
+    def test_owner_review_thread_cursor_pagination_fails_closed(self) -> None:
+        exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
+        final_head = "c" * 40
+        def outdated(thread_id: int) -> dict[str, object]:
+            return {
+                "id": f"thread-{thread_id}",
+                "isResolved": False,
+                "isOutdated": True,
+            }
+
+        class Response:
+            status = 200
+
+            def __init__(self, payload: object) -> None:
+                self.payload = json.dumps(payload).encode()
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                return self.payload
+
+        malformed_pages = (
+            self._owner_review_thread_payload(
+                [outdated(0)],
+                final_head=final_head,
+                has_next_page="true",  # type: ignore[arg-type]
+                end_cursor="cursor-1",
+                total_count=2,
+            ),
+            self._owner_review_thread_payload(
+                [outdated(0)],
+                final_head=final_head,
+                has_next_page=True,
+                total_count=2,
+            ),
+            self._owner_review_thread_payload(
+                [outdated(0)],
+                final_head=final_head,
+                end_cursor=7,  # type: ignore[arg-type]
+                total_count=1,
+            ),
+            self._owner_review_thread_payload(
+                [outdated(0)],
+                final_head=final_head,
+                total_count=-1,
+            ),
+            self._owner_review_thread_payload(
+                [outdated(0)],
+                final_head=final_head,
+                total_count=1001,
+            ),
+            self._owner_review_thread_payload(
+                [],
+                final_head=final_head,
+                has_next_page=True,
+                end_cursor="cursor-1",
+                total_count=1,
+            ),
+            self._owner_review_thread_payload(
+                [
+                    {
+                        "isResolved": False,
+                        "isOutdated": True,
+                    }
+                ],
+                final_head=final_head,
+                total_count=1,
+            ),
+            self._owner_review_thread_payload(
+                [
+                    {
+                        "id": "",
+                        "isResolved": False,
+                        "isOutdated": True,
+                    }
+                ],
+                final_head=final_head,
+                total_count=1,
+            ),
+            self._owner_review_thread_payload(
+                [
+                    {
+                        "id": 7,
+                        "isResolved": False,
+                        "isOutdated": True,
+                    }
+                ],
+                final_head=final_head,
+                total_count=1,
+            ),
+            self._owner_review_thread_payload(
+                ["thread"],  # type: ignore[list-item]
+                final_head=final_head,
+                total_count=1,
+            ),
+            self._owner_review_thread_payload(
+                [outdated(0)],
+                repository="OtherOwner/Shirokuma",
+                final_head=final_head,
+                total_count=1,
+            ),
+        )
+        for index, page in enumerate(malformed_pages):
+            with (
+                self.subTest(malformed=index),
+                mock.patch.object(verify, "urlopen", return_value=Response(page)),
+                self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"),
+            ):
+                verify._github_review_threads_pages(
+                    exception,
+                    pull_request=145,
+                    final_head=final_head,
+                    token="ephemeral-token",
+                )
+
+        cursor_cycle = [
+            self._owner_review_thread_payload(
+                [outdated(0)],
+                final_head=final_head,
+                has_next_page=True,
+                end_cursor="cursor-1",
+                total_count=3,
+            ),
+            self._owner_review_thread_payload(
+                [outdated(1)],
+                final_head=final_head,
+                has_next_page=True,
+                end_cursor="cursor-1",
+                total_count=3,
+            ),
+        ]
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                side_effect=[Response(page) for page in cursor_cycle],
+            ) as request,
+            self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"),
+        ):
+            verify._github_review_threads_pages(
+                exception,
+                pull_request=145,
+                final_head=final_head,
+                token="ephemeral-token",
+            )
+        self.assertEqual(2, request.call_count)
+
+        maximum_pages = [
+            self._owner_review_thread_payload(
+                [outdated(page)],
+                final_head=final_head,
+                has_next_page=True,
+                end_cursor=f"cursor-{page}",
+                total_count=1000,
+            )
+            for page in range(1, 11)
+        ]
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                side_effect=[Response(page) for page in maximum_pages],
+            ) as request,
+            self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"),
+        ):
+            verify._github_review_threads_pages(
+                exception,
+                pull_request=145,
+                final_head=final_head,
+                token="ephemeral-token",
+            )
+        self.assertEqual(10, request.call_count)
+
+        first_page = self._owner_review_thread_payload(
+            [outdated(0)],
+            final_head=final_head,
+            has_next_page=True,
+            end_cursor="cursor-1",
+            total_count=2,
+        )
+        fail_closed_second_pages = (
+            self._owner_review_thread_payload(
+                [outdated(1)],
+                final_head="d" * 40,
+                end_cursor="cursor-2",
+                total_count=2,
+            ),
+            self._owner_review_thread_payload(
+                [
+                    {
+                        "id": "thread-1",
+                        "isResolved": True,
+                        "isOutdated": False,
+                    }
+                ],
+                final_head=final_head,
+                end_cursor="cursor-2",
+                total_count=2,
+            ),
+            self._owner_review_thread_payload(
+                [outdated(0)],
+                final_head=final_head,
+                end_cursor="cursor-2",
+                total_count=2,
+            ),
+            self._owner_review_thread_payload(
+                [outdated(1)],
+                final_head=final_head,
+                end_cursor="cursor-2",
+                total_count=3,
+            ),
+            self._owner_review_thread_payload(
+                [outdated(1)],
+                pull_request=144,
+                final_head=final_head,
+                end_cursor="cursor-2",
+                total_count=2,
+            ),
+            {
+                **self._owner_review_thread_payload(
+                    [outdated(1)],
+                    final_head=final_head,
+                    end_cursor="cursor-2",
+                    total_count=2,
+                ),
+                "errors": [{"message": "page failed"}],
+            },
+        )
+        for index, second_page in enumerate(fail_closed_second_pages):
+            with (
+                self.subTest(later_page=index),
+                mock.patch.object(
+                    verify,
+                    "urlopen",
+                    side_effect=[Response(first_page), Response(second_page)],
+                ),
+                self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"),
+            ):
+                verify._github_review_threads_pages(
+                    exception,
+                    pull_request=145,
+                    final_head=final_head,
+                    token="ephemeral-token",
+                )
+
+        empty_terminal_first_page = self._owner_review_thread_payload(
+            [outdated(0)],
+            final_head=final_head,
+            has_next_page=True,
+            end_cursor="cursor-1",
+            total_count=1,
+        )
+        empty_terminal_page = self._owner_review_thread_payload(
+            [],
+            final_head=final_head,
+            total_count=1,
+        )
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                side_effect=[
+                    Response(empty_terminal_first_page),
+                    Response(empty_terminal_page),
+                ],
+            ),
+            self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"),
+        ):
+            verify._github_review_threads_pages(
+                exception,
+                pull_request=145,
+                final_head=final_head,
+                token="ephemeral-token",
+            )
+
+        incomplete_first_page = self._owner_review_thread_payload(
+            [outdated(0)],
+            final_head=final_head,
+            has_next_page=True,
+            end_cursor="cursor-1",
+            total_count=3,
+        )
+        incomplete_terminal_page = self._owner_review_thread_payload(
+            [outdated(1)],
+            final_head=final_head,
+            end_cursor="cursor-2",
+            total_count=3,
+        )
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                side_effect=[
+                    Response(incomplete_first_page),
+                    Response(incomplete_terminal_page),
+                ],
+            ),
+            self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"),
+        ):
+            verify._github_review_threads_pages(
+                exception,
+                pull_request=145,
+                final_head=final_head,
+                token="ephemeral-token",
+            )
+
+        stable_first = self._owner_review_thread_payload(
+            [outdated(0), outdated(1)],
+            final_head=final_head,
+            end_cursor="terminal-1",
+            total_count=2,
+        )
+        reordered_second = self._owner_review_thread_payload(
+            [outdated(1), outdated(0)],
+            final_head=final_head,
+            end_cursor=None,
+            total_count=2,
+        )
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                side_effect=[Response(stable_first), Response(reordered_second)],
+            ) as request,
+            self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"),
+        ):
+            verify._github_review_threads_pages(
+                exception,
+                pull_request=145,
+                final_head=final_head,
+                token="ephemeral-token",
+            )
+        self.assertEqual(2, request.call_count)
+
+    def test_owner_attestation_query_checks_ci_and_review_threads(self) -> None:
+        commit = "b" * 40
+        final_head = "c" * 40
+        pulls = [
+            {
+                "number": 145,
+                "state": "closed",
+                "merged_at": "2026-08-12T05:00:00Z",
+                "merge_commit_sha": commit,
+                "base": {"ref": "main"},
+                "head": {"sha": final_head},
+            }
+        ]
+        first_comment_page = [
+            {"id": comment_id, "body": "ordinary comment"}
+            for comment_id in range(5262999900, 5263000000)
+        ]
+        second_comment_page = [
+            {
+                "id": 5263000000,
+                "body": (
+                    "Owner final-head attestation for PR #145\n\n"
+                    "Decision: APPROVED\n"
+                    f"Final head: {final_head}\n"
+                    "Exception: https://github.com/TommyKammy/Shirokuma/"
+                    "issues/63#issuecomment-5262105662"
+                ),
+                "user": {"login": "TommyKammy", "type": "User"},
+                "author_association": "OWNER",
+                "created_at": "2026-08-12T04:59:00Z",
+                "updated_at": "2026-08-12T04:59:00Z",
+            }
+        ]
+        workflow_payload = self._owner_workflow_payload(final_head=final_head)
+        thread_payload = self._owner_review_thread_payload()
+
+        class Response:
+            status = 200
+
+            def __init__(self, payload: object) -> None:
+                self.payload = json.dumps(payload).encode()
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                return self.payload
+
+        stdout = io.StringIO()
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                side_effect=[
+                    Response(pulls),
+                    Response([]),
+                    Response([]),
+                    Response(first_comment_page),
+                    Response(second_comment_page),
+                    Response(first_comment_page),
+                    Response(second_comment_page),
+                    Response(workflow_payload),
+                    Response(workflow_payload),
+                    Response(thread_payload),
+                    Response(thread_payload),
+                    Response(first_comment_page),
+                    Response(second_comment_page),
+                    Response(first_comment_page),
+                    Response(second_comment_page),
+                ],
+            ) as request,
+            contextlib.redirect_stdout(stdout),
+        ):
+            verify.verify_independent_review(
+                ROOT,
+                repository="TommyKammy/Shirokuma",
+                commit=commit,
+                token="ephemeral-token",
+            )
+
+        receipt = json.loads(stdout.getvalue())
+        self.assertEqual("owner_final_head_attestation", receipt["approval_mode"])
+        self.assertEqual(0, receipt["review_threads"]["current_non_outdated"])
+        self.assertIs(
+            receipt["final_head_ci"]["completed_before_attestation"],
+            True,
+        )
+        self.assertIs(
+            receipt["owner_decision_revalidated_after_final_api_gates"],
+            True,
+        )
+        self.assertEqual(15, request.call_count)
+        requests = [call.args[0] for call in request.call_args_list]
+        self.assertIn(f"/commits/{commit}/pulls?per_page=100", requests[0].full_url)
+        self.assertIn("/pulls/145/reviews?per_page=100", requests[1].full_url)
+        self.assertIn("/pulls/145/reviews?per_page=100", requests[2].full_url)
+        self.assertIn(
+            "/issues/145/comments?per_page=100&page=1",
+            requests[3].full_url,
+        )
+        self.assertIn(
+            "/issues/145/comments?per_page=100&page=2",
+            requests[4].full_url,
+        )
+        self.assertIn(
+            "/issues/145/comments?per_page=100&page=1",
+            requests[5].full_url,
+        )
+        self.assertIn(
+            "/issues/145/comments?per_page=100&page=2",
+            requests[6].full_url,
+        )
+        self.assertIn(
+            f"/actions/runs?event=pull_request&head_sha={final_head}&per_page=100&page=1",
+            requests[7].full_url,
+        )
+        self.assertEqual(requests[7].full_url, requests[8].full_url)
+        self.assertEqual("https://api.github.com/graphql", requests[9].full_url)
+        self.assertEqual("POST", requests[9].get_method())
+        graphql_request = json.loads(requests[9].data)
+        second_graphql_request = json.loads(requests[10].data)
+        self.assertEqual(
+            {
+                "owner": "TommyKammy",
+                "name": "Shirokuma",
+                "number": 145,
+                "after": None,
+            },
+            graphql_request["variables"],
+        )
+        self.assertEqual(
+            graphql_request["variables"],
+            second_graphql_request["variables"],
+        )
+        self.assertIn("headRefOid", graphql_request["query"])
+        self.assertIn("after:$after", graphql_request["query"])
+        self.assertIn("endCursor", graphql_request["query"])
+        self.assertIn(
+            "/issues/145/comments?per_page=100&page=1",
+            requests[11].full_url,
+        )
+        self.assertIn(
+            "/issues/145/comments?per_page=100&page=2",
+            requests[12].full_url,
+        )
+        self.assertIn(
+            "/issues/145/comments?per_page=100&page=1",
+            requests[13].full_url,
+        )
+        self.assertIn(
+            "/issues/145/comments?per_page=100&page=2",
+            requests[14].full_url,
+        )
+
+    def test_owner_comment_pagination_fails_closed(self) -> None:
+        comment_url = (
+            "https://api.github.com/repos/TommyKammy/Shirokuma/"
+            "issues/145/comments"
+        )
+        full_page = [
+            {"id": comment_id, "body": "ordinary comment"}
+            for comment_id in range(1, 101)
+        ]
+
+        class Response:
+            status = 200
+
+            def __init__(self, payload: object) -> None:
+                self.payload = json.dumps(payload).encode()
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                return self.payload
+
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                side_effect=[Response(full_page), Response({"comments": []})],
+            ) as request,
+            self.assertRaisesRegex(
+                verify.ContractError,
+                "paginated GitHub API response is malformed",
+            ),
+        ):
+            verify._github_api_paginated_list(
+                comment_url,
+                token="ephemeral-token",
+            )
+        self.assertEqual(2, request.call_count)
+
+        self.assertIn("per_page=100&page=2", request.call_args.args[0].full_url)
+
+        accepted_pages = [
+            [
+                {"id": page * 100 + offset + 1, "body": "comment"}
+                for offset in range(100 if page < 9 else 99)
+            ]
+            for page in range(10)
+        ]
+        with mock.patch.object(
+            verify,
+            "urlopen",
+            side_effect=[
+                Response(page)
+                for page in [*accepted_pages, *accepted_pages]
+            ],
+        ) as request:
+            comments = verify._github_api_paginated_list(
+                comment_url,
+                token="ephemeral-token",
+            )
+        self.assertEqual(verify.GITHUB_OWNER_COMMENT_MAXIMUM_ITEMS, len(comments))
+        self.assertEqual(20, request.call_count)
+
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                side_effect=[
+                    Response(
+                        [
+                            {"id": page * 100 + offset + 1, "body": "comment"}
+                            for offset in range(100)
+                        ]
+                    )
+                    for page in range(10)
+                ],
+            ) as request,
+            self.assertRaisesRegex(
+                verify.ContractError,
+                "pagination bound exceeded",
+            ),
+        ):
+            verify._github_api_paginated_list(
+                comment_url,
+                token="ephemeral-token",
+            )
+        self.assertEqual(10, request.call_count)
+        self.assertIn("per_page=100&page=10", request.call_args.args[0].full_url)
+
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                return_value=Response([{"id": 2}, {"id": 1}]),
+            ),
+            self.assertRaisesRegex(
+                verify.ContractError,
+                "comment IDs are not strictly increasing",
+            ),
+        ):
+            verify._github_api_paginated_list(
+                comment_url,
+                token="ephemeral-token",
+            )
+
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                side_effect=[
+                    Response([{"id": 1, "body": "before"}]),
+                    Response([{"id": 1, "body": "after"}]),
+                ],
+            ) as request,
+            self.assertRaisesRegex(
+                verify.ContractError,
+                "comment snapshot is unstable",
+            ),
+        ):
+            verify._github_api_paginated_list(
+                comment_url,
+                token="ephemeral-token",
+            )
+        self.assertEqual(2, request.call_count)
+
+    def test_owner_attestation_revalidation_rejects_later_revocation(self) -> None:
+        contract = verify._load_json(ROOT / verify.CONTRACT_PATH)
+        commit = "b" * 40
+        final_head = "c" * 40
+        pull = {
+            "number": 145,
+            "state": "closed",
+            "merged_at": "2026-08-12T05:00:00Z",
+            "merge_commit_sha": commit,
+            "base": {"ref": "main"},
+            "head": {"sha": final_head},
+        }
+        approved = {
+            "id": 5263000000,
+            "body": (
+                "Owner final-head attestation for PR #145\n\n"
+                "Decision: APPROVED\n"
+                f"Final head: {final_head}\n"
+                "Exception: https://github.com/TommyKammy/Shirokuma/"
+                "issues/63#issuecomment-5262105662"
+            ),
+            "user": {"login": "TommyKammy", "type": "User"},
+            "author_association": "OWNER",
+            "created_at": "2026-08-12T04:58:00Z",
+            "updated_at": "2026-08-12T04:58:00Z",
+        }
+        revoked = {
+            **approved,
+            "id": 5263000001,
+            "body": approved["body"].replace("Decision: APPROVED", "Decision: REVOKED"),
+            "created_at": "2026-08-12T04:59:00Z",
+            "updated_at": "2026-08-12T04:59:00Z",
+        }
+        first = verify._select_owner_final_head_attestation(
+            contract,
+            pull,
+            [approved],
+            commit=commit,
+            final_head=final_head,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "latest owner attestation is not a pre-merge approval",
+        ):
+            verify._revalidate_owner_final_head_decision(
+                contract,
+                pull,
+                first,
+                [approved, revoked],
+            )
+
     def test_independent_review_query_is_bounded_and_commit_scoped(self) -> None:
         commit = "b" * 40
         final_head = "c" * 40
@@ -2862,6 +4642,7 @@ class PublisherContractTests(unittest.TestCase):
                 "state": "APPROVED",
                 "user": {"login": "IndependentHuman", "type": "User"},
                 "commit_id": final_head,
+                "submitted_at": "2026-08-07T02:59:59Z",
             }
         ]
 
@@ -2886,7 +4667,7 @@ class PublisherContractTests(unittest.TestCase):
             mock.patch.object(
                 verify,
                 "urlopen",
-                side_effect=[Response(pulls), Response(reviews)],
+                side_effect=[Response(pulls), Response(reviews), Response(reviews)],
             ) as request,
             contextlib.redirect_stdout(stdout),
         ):
@@ -2900,10 +4681,224 @@ class PublisherContractTests(unittest.TestCase):
         self.assertEqual(143, receipt["pull_request"])
         self.assertEqual("IndependentHuman", receipt["reviewer"])
         self.assertEqual(final_head, receipt["reviewed_head"])
-        self.assertEqual(2, request.call_count)
+        self.assertEqual(3, request.call_count)
         requested_urls = [call.args[0].full_url for call in request.call_args_list]
         self.assertIn(f"/commits/{commit}/pulls?per_page=100", requested_urls[0])
-        self.assertIn("/pulls/143/reviews?per_page=100", requested_urls[1])
+        self.assertIn(
+            "/pulls/143/reviews?per_page=100&page=1",
+            requested_urls[1],
+        )
+        self.assertEqual(requested_urls[1], requested_urls[2])
+        self.assertNotIn("/issues/143/comments", "\n".join(requested_urls))
+        self.assertNotIn("/actions/runs", "\n".join(requested_urls))
+        self.assertNotIn("api.github.com/graphql", "\n".join(requested_urls))
+
+    def test_github_review_api_paginates_to_bounded_exhaustion(self) -> None:
+        review_url = (
+            "https://api.github.com/repos/TommyKammy/Shirokuma/"
+            "pulls/143/reviews"
+        )
+        altered_policy = copy.deepcopy(verify.EXPECTED_INDEPENDENT_REVIEW["reviews"])
+        altered_policy["maximum_page_bytes"] -= 1
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "pull-review pagination policy differs",
+        ):
+            verify._github_api_paginated_reviews(
+                review_url,
+                token="ephemeral-token",
+                policy=altered_policy,
+            )
+        first_page = [{"id": review_id} for review_id in range(1, 101)]
+        terminal_page = [{"id": 101}]
+
+        class Response:
+            status = 200
+
+            def __init__(self, payload: object) -> None:
+                self.payload = json.dumps(payload).encode()
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                return self.payload
+
+        with mock.patch.object(
+            verify,
+            "urlopen",
+            side_effect=[
+                Response(first_page),
+                Response(terminal_page),
+                Response(first_page),
+                Response(terminal_page),
+            ],
+        ) as request:
+            reviews = verify._github_api_paginated_reviews(
+                review_url,
+                token="ephemeral-token",
+            )
+        self.assertEqual(101, len(reviews))
+        self.assertEqual(4, request.call_count)
+        requested_urls = [call.args[0].full_url for call in request.call_args_list]
+        self.assertIn("per_page=100&page=1", requested_urls[0])
+        self.assertIn("per_page=100&page=2", requested_urls[1])
+        self.assertEqual(requested_urls[:2], requested_urls[2:])
+
+        accepted_pages = [
+            [
+                {"id": page * 100 + offset + 1}
+                for offset in range(100 if page < 9 else 99)
+            ]
+            for page in range(10)
+        ]
+        with mock.patch.object(
+            verify,
+            "urlopen",
+            side_effect=[Response(page) for page in accepted_pages + accepted_pages],
+        ) as request:
+            reviews = verify._github_api_paginated_reviews(
+                review_url,
+                token="ephemeral-token",
+            )
+        self.assertEqual(verify.GITHUB_PULL_REVIEW_MAXIMUM_REVIEWS, len(reviews))
+        self.assertEqual(20, request.call_count)
+
+        full_pages = [
+            Response(
+                [
+                    {"id": page * 100 + offset + 1}
+                    for offset in range(100)
+                ]
+            )
+            for page in range(10)
+        ]
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                side_effect=full_pages,
+            ) as request,
+            self.assertRaisesRegex(
+                verify.ContractError,
+                "pull-review bound exceeded",
+            ),
+        ):
+            verify._github_api_paginated_reviews(
+                review_url,
+                token="ephemeral-token",
+            )
+        self.assertEqual(10, request.call_count)
+
+        stable_review = {
+            "id": 1,
+            "state": "APPROVED",
+            "commit_id": "c" * 40,
+            "submitted_at": "2026-08-07T02:59:59Z",
+            "user": {"login": "IndependentHuman", "type": "User"},
+        }
+        dismissed_review = {**stable_review, "state": "DISMISSED"}
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                side_effect=[Response([stable_review]), Response([dismissed_review])],
+            ),
+            self.assertRaisesRegex(
+                verify.ContractError,
+                "pull-review snapshot is unstable",
+            ),
+        ):
+            verify._github_api_paginated_reviews(
+                review_url,
+                token="ephemeral-token",
+            )
+
+        long_review = copy.deepcopy(stable_review)
+        long_review["body"] = "x" * 12_000
+        long_page = [
+            {**copy.deepcopy(long_review), "id": review_id}
+            for review_id in range(1, 101)
+        ]
+        terminal_review = {**stable_review, "id": 101}
+        first_page_bytes = len(json.dumps(long_page).encode())
+        self.assertGreater(first_page_bytes, verify.GITHUB_API_RESPONSE_BYTES)
+        self.assertLess(
+            first_page_bytes,
+            verify.GITHUB_PULL_REVIEW_PAGE_RESPONSE_BYTES,
+        )
+        read_limits: list[int] = []
+
+        class BoundedResponse(Response):
+            def read(self, limit: int) -> bytes:
+                read_limits.append(limit)
+                return self.payload[:limit]
+
+        with mock.patch.object(
+            verify,
+            "urlopen",
+            side_effect=[
+                BoundedResponse(long_page),
+                BoundedResponse([terminal_review]),
+                BoundedResponse(long_page),
+                BoundedResponse([terminal_review]),
+            ],
+        ):
+            reviews = verify._github_api_paginated_reviews(
+                review_url,
+                token="ephemeral-token",
+            )
+        self.assertEqual(101, len(reviews))
+        self.assertEqual(
+            [verify.GITHUB_PULL_REVIEW_PAGE_RESPONSE_BYTES + 1] * 4,
+            read_limits,
+        )
+
+        oversized_review = copy.deepcopy(stable_review)
+        oversized_review["body"] = (
+            "x" * verify.GITHUB_PULL_REVIEW_PAGE_RESPONSE_BYTES
+        )
+        with (
+            mock.patch.object(
+                verify,
+                "urlopen",
+                return_value=BoundedResponse([oversized_review]),
+            ),
+            self.assertRaisesRegex(verify.ContractError, "response is too large"),
+        ):
+            verify._github_api_paginated_reviews(
+                review_url,
+                token="ephemeral-token",
+            )
+
+    def test_github_list_api_fails_closed_on_truncated_results(self) -> None:
+        class Response:
+            status = 200
+
+            def __enter__(self) -> Response:
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, limit: int) -> bytes:
+                return json.dumps([{}] * 100).encode()
+
+        with (
+            mock.patch.object(verify, "urlopen", return_value=Response()),
+            self.assertRaisesRegex(
+                verify.ContractError,
+                "GitHub API result may be truncated",
+            ),
+        ):
+            verify._github_api_list(
+                "https://api.github.com/repos/TommyKammy/Shirokuma/"
+                "issues/145/comments?per_page=100",
+                token="ephemeral-token",
+            )
 
     def test_authorization_rejects_duplicate_json_keys(self) -> None:
         contract = (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
@@ -3327,7 +5322,7 @@ class PublisherContractTests(unittest.TestCase):
                 ):
                     verify._validate_blocker_evidence(temporary_root)
 
-    def test_publication_status_is_blocked_and_records_must_agree(self) -> None:
+    def test_publication_status_is_active_and_records_must_agree(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
         )
@@ -3336,12 +5331,12 @@ class PublisherContractTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            "blocked",
+            "active",
             verify.publication_status(contract, admission),
         )
 
         altered = json.loads(json.dumps(contract))
-        altered["publication"]["permitted"] = True
+        altered["publication"]["permitted"] = False
         with self.assertRaisesRegex(
             verify.ContractError,
             "publication permission records disagree",
