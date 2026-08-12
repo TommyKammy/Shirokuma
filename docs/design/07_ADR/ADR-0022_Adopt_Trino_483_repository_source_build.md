@@ -4,8 +4,8 @@ doc_id: "ADR-0022"
 title: "Select a conditional repository-owned Trino 483 source build"
 status: accepted
 created: 2026-07-22
-updated: 2026-07-29
-version: "1.2"
+updated: 2026-08-12
+version: "1.3"
 area: "architecture"
 tags: [shirokuma, adr, trino, arm64, maven, supply-chain]
 ---
@@ -147,11 +147,15 @@ so native container smoke remains a mandatory publisher gate.
   repositories and two empty Bun caches and require each manifest/archive pair
   to be byte-identical. Online and offline builds set `CI=true`, use the exact
   npm registry and cache location, and therefore exercise Bun's frozen-lockfile
-  path. The offline cache is mounted read-only before running
-  `mvn --offline --ignore-transitive-repositories --settings /policy/settings.xml -Dmaven.repo.local=/workspace/.m2/repository -Dmaven.compiler.debuglevel=source,lines -Dproject.build.outputTimestamp=2026-07-18T00:36:39Z --file /workspace/pom.xml -pl ':trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg' -am clean install -DskipTests -Dmaven.source.skip=true -Dair.check.skip-all`
+  path. Each verified Maven snapshot is extracted to a fresh path outside the
+  source checkout, mounted read-only at `/m2`, and used before running
+  `mvn --offline --ignore-transitive-repositories --settings /policy/settings.xml -Dmaven.repo.local=/m2 -Daether.syncContext.named.basedir.locksDir=/tmp/maven-locks -Dmaven.compiler.debuglevel=source,lines -Dproject.build.outputTimestamp=2026-07-18T00:36:39Z --file /workspace/pom.xml -pl ':trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg' -am clean package -DskipTests -Dmaven.source.skip=true -Dair.check.skip-all`
   in a fresh network-none native-arm64 builder. The output must be exactly
   `core/trino-server/target/trino-server-483.tar.gz`; its hash, size, and
-  reproducible-build comparison become retained evidence. The explicit
+  reproducible-build comparison become retained evidence. Resolver locks are
+  redirected outside `/m2`; the lifecycle stops at `package` because that phase
+  already produces the byte-identical server archive while `install` writes
+  reactor outputs into the local repository. The explicit
   repository-owned settings file must be mounted read-only at
   `/policy/settings.xml` during both online resolution and offline rebuild.
   This preserves the reviewed mirror repository IDs used by Maven's

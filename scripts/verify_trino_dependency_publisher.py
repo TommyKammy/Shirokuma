@@ -118,7 +118,7 @@ EXPECTED_AUTHORIZATION = {
 EXPECTED_PUBLICATION_ATTEMPT = {
     "event_name": "push",
     "ref": "refs/heads/main",
-    "before_sha": "6f557abc42713629510090db10d03630043364d7",
+    "before_sha": "bbd258739c59398da8c721480c48eab82d99441b",
     "run_attempt": "1",
 }
 EXPECTED_INDEPENDENT_REVIEW = {
@@ -146,26 +146,26 @@ EXPECTED_INDEPENDENT_REVIEW = {
 }
 EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
     "status": "active",
-    "scope": "pr_145_second_publication_attempt_only",
+    "scope": "pr_146_third_publication_attempt_only",
     "reason": "sole_owner_personal_experimental_project",
     "approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5262105662"
+        "#issuecomment-5264706435"
     ),
-    "approved_at": "2026-08-12T03:59:12Z",
+    "approved_at": "2026-08-12T09:10:49Z",
     "repository": "TommyKammy/Shirokuma",
-    "pull_request": 145,
+    "pull_request": 146,
     "owner": "TommyKammy",
     "human_user_type": "User",
     "author_association": "OWNER",
     "attestation_required_before_merge": True,
     "attestation_must_match_final_head_sha": True,
     "attestation_body_template": (
-        "Owner final-head attestation for PR #145\n\n"
+        "Owner final-head attestation for PR #146\n\n"
         "Decision: {decision}\n"
         "Final head: {final_head}\n"
         "Exception: https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5262105662"
+        "#issuecomment-5264706435"
     ),
     "allowed_decisions": ["APPROVED", "REVOKED"],
     "final_head_ci": {
@@ -229,32 +229,40 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
     "standard_independent_review_remains_accepted": True,
 }
 EXPECTED_PUBLICATION_REAUTHORIZATION = {
-    "sequence": 2,
+    "sequence": 3,
     "status": "active",
     "approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5221869732"
+        "#issuecomment-5264706435"
     ),
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
-    "approved_at": "2026-08-07T20:49:55Z",
+    "approved_at": "2026-08-12T09:10:49Z",
     "expires_at": "2026-08-21T22:43:36Z",
     "automatic_renewal": False,
     "risk_owner": "TommyKammy",
     "same_candidate_required": True,
     "publication_authorized_after_required_approval": True,
     "previous_attempt": {
-        "run_id": "31163679280",
+        "run_id": "31577976760",
         "run_attempt": "1",
-        "source_sha": "27a313fca0aa080db8bd8f1d67744c68b1b0ab4f",
+        "source_sha": "bbd258739c59398da8c721480c48eab82d99441b",
         "result": "failed_closed_before_publication",
-        "reason": "jgit_user_home_created_untracked_source_path",
+        "reason": "candidate_created_untracked_source_files",
         "dependency_artifact_published": False,
         "consumed": True,
     },
     "repair": {
-        "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/144",
-        "merge_commit": "6f557abc42713629510090db10d03630043364d7",
-        "maven_opts": "-Duser.home=/tmp/maven-home",
+        "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/146",
+        "predecessor_main_commit": (
+            "bbd258739c59398da8c721480c48eab82d99441b"
+        ),
+        "offline_repository_root": (
+            "${RUNNER_TEMP}/trino-offline-maven-repository-${suffix}"
+        ),
+        "container_mount": "/m2:ro",
+        "maven_repo_local": "/m2",
+        "maven_lock_directory": "/tmp/maven-locks",
+        "maven_goal": "clean package",
         "untracked_source_rejection_retained": True,
     },
     "failure_consumes_attempt": True,
@@ -1795,6 +1803,73 @@ EXPECTED_OFFLINE_REPOSITORY_SETTINGS = {
     ),
     "network_access_permitted_by_this_setting": False,
 }
+EXPECTED_OFFLINE_MAVEN_REPOSITORY = {
+    "host_path_template": (
+        "${RUNNER_TEMP}/trino-offline-maven-repository-${suffix}"
+    ),
+    "path": "/m2",
+    "mount": "read-only",
+    "outside_source_checkout_required": True,
+    "initialization": (
+        "extract_verified_snapshot_repository_to_empty_path_before_"
+        "network_none_builder_start"
+    ),
+    "sole_dependency_repository": True,
+    "maven_args": (
+        "-Dmaven.repo.local=/m2 "
+        "-Daether.syncContext.named.basedir.locksDir=/tmp/maven-locks"
+    ),
+    "resolver_lock_path": "/tmp/maven-locks",
+    "resolver_lock_path_outside_repository_required": True,
+    "lifecycle": "clean package",
+    "install_phase_executed": False,
+    "local_repository_writes_permitted": False,
+    "ambient_cache_mounts_permitted": False,
+    "ambient_home_permitted": False,
+    "prebuild_manifest_must_equal_snapshot": True,
+    "repository_mounted_read_only_for_entire_build": True,
+}
+EXPECTED_OFFLINE_MAVEN_REPOSITORY_ASSIGNMENT = (
+    'offline_repository="${RUNNER_TEMP}/'
+    'trino-offline-maven-repository-${suffix}"'
+)
+EXPECTED_OFFLINE_MAVEN_REPOSITORY_EXTRACTION = (
+    '--extract-root "${offline_repository}"'
+)
+EXPECTED_OFFLINE_MAVEN_REPOSITORY_MOUNT = (
+    '--volume "${offline_repository}:/m2:ro"'
+)
+EXPECTED_OFFLINE_RESOLVER_LOCK_ARGUMENT = (
+    "-Daether.syncContext.named.basedir.locksDir=/tmp/maven-locks"
+)
+EXPECTED_OFFLINE_LIFECYCLE = "-am clean package -DskipTests"
+EXPECTED_OFFLINE_MAVEN_REPOSITORY_PREPARATION = (
+    "for suffix in a b; do\n"
+    '  offline_source="${RUNNER_TEMP}/trino-offline-${suffix}"\n'
+    '  offline_repository="${RUNNER_TEMP}/'
+    'trino-offline-maven-repository-${suffix}"\n'
+    '  offline_bun_cache="${RUNNER_TEMP}/'
+    'trino-offline-bun-cache-${suffix}"\n'
+    '  test ! -e "${offline_repository}"\n'
+    "  git clone --no-local --no-checkout \\\n"
+    '    "${RUNNER_TEMP}/trino-source" "${offline_source}"\n'
+    '  git -C "${offline_source}" remote set-url origin '
+    '"${SOURCE_REPOSITORY}"\n'
+    '  git -C "${offline_source}" checkout --detach "${SOURCE_COMMIT}"\n'
+    "  python3 scripts/verify_trino_dependency_publisher.py audit-source \\\n"
+    '    --root . --checkout "${offline_source}"\n'
+    "  python3 scripts/verify_trino_dependency_publisher.py \\\n"
+    "    apply-source-overlay \\\n"
+    '    --root . --checkout "${offline_source}"\n'
+    "  python3 scripts/package_trino_maven_dependencies.py verify \\\n"
+    '    --descriptor "${candidate}/maven-dependency-manifest.json" \\\n'
+    '    --archive "${candidate}/trino-maven-dependencies-483.tar.gz" \\\n'
+    '    --extract-root "${offline_repository}"\n'
+    "  python3 scripts/package_trino_bun_dependencies.py verify \\\n"
+    '    --descriptor "${candidate}/bun-dependency-manifest.json" \\\n'
+    '    --archive "${candidate}/trino-bun-dependencies-483.tar.gz" \\\n'
+    '    --extract-root "${offline_bun_cache}"\n'
+)
 EXPECTED_OFFLINE_BUN_CACHE = {
     "path": "/bun-cache",
     "registry": "https://registry.npmjs.org/",
@@ -4460,7 +4535,7 @@ def _github_api_paginated_list(
         parsed.scheme != "https"
         or parsed.netloc != "api.github.com"
         or parsed.path
-        != "/repos/TommyKammy/Shirokuma/issues/145/comments"
+        != "/repos/TommyKammy/Shirokuma/issues/146/comments"
         or parsed.fragment
         or parsed.query
     ):
@@ -4634,11 +4709,11 @@ def _select_independent_review(
             ),
         )
 
-    # This is the exact user-authorized policy alternative for PR #145's
-    # second attempt, not a generic self-review fallback for another PR/run.
+    # This is the exact user-authorized policy alternative for PR #146's
+    # third attempt, not a generic self-review fallback for another PR/run.
     exception = contract["publication"]["owner_only_approval_exception"]
     if (
-        exception["scope"] != "pr_145_second_publication_attempt_only"
+        exception["scope"] != "pr_146_third_publication_attempt_only"
         or exception["reason"] != "sole_owner_personal_experimental_project"
         or exception["repository"] != "TommyKammy/Shirokuma"
         or exception["pull_request"] != pull["number"]
@@ -4672,13 +4747,13 @@ def _select_owner_final_head_attestation(
         _fail("INDEPENDENT_REVIEW", "merged pull request timestamp is missing")
     merged_instant = _parse_time(merged_at)
     template = exception["attestation_body_template"]
-    marker = "Owner final-head attestation for PR #145\n\nDecision: "
+    marker = "Owner final-head attestation for PR #146\n\nDecision: "
     pattern = re.compile(
-        r"\AOwner final-head attestation for PR #145\n\n"
+        r"\AOwner final-head attestation for PR #146\n\n"
         r"Decision: (APPROVED|REVOKED)\n"
         r"Final head: ([0-9a-f]{40})\n"
         r"Exception: https://github\.com/TommyKammy/Shirokuma/issues/63"
-        r"#issuecomment-5262105662\Z"
+        r"#issuecomment-5264706435\Z"
     )
     decisions: list[
         tuple[int, str, str, dt.datetime, dt.datetime, Mapping[str, Any]]
@@ -5443,6 +5518,8 @@ def _maven_command_before_marker(
     *,
     code: str,
     network_none: bool,
+    required_mounts: tuple[str, ...] = (),
+    docker_option_fragment_counts: tuple[tuple[str, int], ...] = (),
 ) -> str:
     docker_marker = "docker run --rm \\\n"
     maven_marker = (
@@ -5458,10 +5535,19 @@ def _maven_command_before_marker(
     line_start = workflow.rfind("\n", 0, docker_start) + 1
     block = textwrap.dedent(workflow[line_start:end])
     observed_network_none = block.count("  --network none \\\n")
+    docker_options = block.split(maven_marker, 1)[0]
     if (
         block.count(maven_marker) != 1
         or observed_network_none != (1 if network_none else 0)
         or block.count(f"  {EXPECTED_SETTINGS_MOUNT} \\\n") != 1
+        or any(
+            docker_options.count(f"  {mount} \\\n") != 1
+            for mount in required_mounts
+        )
+        or any(
+            docker_options.count(fragment) != expected_count
+            for fragment, expected_count in docker_option_fragment_counts
+        )
     ):
         _fail(code, "Maven builder invocation differs")
     arguments = block.split(maven_marker, 1)[1]
@@ -5472,14 +5558,35 @@ def _maven_command_before_marker(
 
 
 def _offline_maven_command(workflow: str) -> str:
+    output_marker = (
+        "            python3 scripts/"
+        "verify_trino_maven_feasibility.py verify-candidate \\"
+    )
+    loop_marker = "          for suffix in a b; do\n"
+    docker_marker = "            docker run --rm \\\n"
+    if workflow.count(output_marker) != 1:
+        _fail("WORKFLOW_OFFLINE_COMMAND", "output marker differs")
+    end = workflow.index(output_marker)
+    loop_start = workflow.rfind(loop_marker, 0, end)
+    docker_start = workflow.rfind(docker_marker, 0, end)
+    if loop_start < 0 or docker_start <= loop_start:
+        _fail(
+            "WORKFLOW_OFFLINE_COMMAND",
+            "offline repository preparation is missing",
+        )
+    preparation = textwrap.dedent(workflow[loop_start:docker_start])
+    if preparation != EXPECTED_OFFLINE_MAVEN_REPOSITORY_PREPARATION:
+        _fail(
+            "WORKFLOW_OFFLINE_COMMAND",
+            "offline repository preparation differs",
+        )
     return _maven_command_before_marker(
         workflow,
-        (
-            "            python3 scripts/"
-            "verify_trino_maven_feasibility.py verify-candidate \\"
-        ),
+        output_marker,
         code="WORKFLOW_OFFLINE_COMMAND",
         network_none=True,
+        required_mounts=(EXPECTED_OFFLINE_MAVEN_REPOSITORY_MOUNT,),
+        docker_option_fragment_counts=((":/m2", 1), ("--mount ", 0)),
     )
 
 
@@ -6025,6 +6132,14 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
             "WORKFLOW_SETTINGS",
             "contract offline build settings differ",
         )
+    if not _matches_exact_json(
+        offline_rebuild.get("maven_repository"),
+        EXPECTED_OFFLINE_MAVEN_REPOSITORY,
+    ):
+        _fail(
+            "WORKFLOW_OFFLINE_REPOSITORY",
+            "contract offline Maven repository boundary differs",
+        )
     observed_offline_command = _offline_maven_command(workflow)
     if observed_offline_command != expected_offline_command:
         _fail(
@@ -6042,6 +6157,28 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         _fail(
             "WORKFLOW_RESOLUTION_COMMAND",
             f"resolver commands differ: {observed_resolution_commands!r}",
+        )
+    if (
+        workflow.count(EXPECTED_OFFLINE_MAVEN_REPOSITORY_ASSIGNMENT) != 1
+        or workflow.count(EXPECTED_OFFLINE_MAVEN_REPOSITORY_EXTRACTION) != 1
+        or workflow.count(EXPECTED_OFFLINE_MAVEN_REPOSITORY_MOUNT) != 1
+        or workflow.count(
+            'test ! -e "${offline_repository}"'
+        )
+        != 1
+        or workflow.count(EXPECTED_OFFLINE_RESOLVER_LOCK_ARGUMENT) != 2
+        or workflow.count(EXPECTED_OFFLINE_LIFECYCLE) != 2
+        or "-Dmaven.install.skip" in workflow
+        or '${offline_source}/.m2' in workflow
+        or '--volume "${offline_repository}:/m2"' in workflow
+    ):
+        _fail(
+            "WORKFLOW_OFFLINE_REPOSITORY",
+            (
+                "each offline build must extract one fresh Maven repository "
+                "outside the source checkout, mount it read-only at /m2, and "
+                "stop at package without local-repository writes"
+            ),
         )
     if (
         workflow.count("--network none") != 1
@@ -6447,6 +6584,10 @@ def audit(root: Path) -> None:
         or not _matches_exact_json(
             admission.get("independent_review"),
             EXPECTED_INDEPENDENT_REVIEW,
+        )
+        or not _matches_exact_json(
+            admission.get("owner_only_approval_exception"),
+            EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION,
         )
         or repository_state.get("publication_workflow_permitted") is not True
         or repository_state.get("dependency_artifact_present") is not False
