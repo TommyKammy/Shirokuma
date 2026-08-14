@@ -1,6 +1,14 @@
 {
   "schema_version": 1,
   "profile": "local-lab",
+  "owner_authorization": {
+    "issue_url": "https://github.com/TommyKammy/Shirokuma/issues/150",
+    "comment_url": "https://github.com/TommyKammy/Shirokuma/issues/150#issuecomment-5290345820",
+    "issue_body_sha256": "b125527ca8eb81f50baa90c0a07194dc8a761ae4e79fbf9e90a88bfc31c2f0b0",
+    "decision": "APPROVED",
+    "approved_on": "2026-08-14",
+    "expires_on": "2026-09-13"
+  },
   "exceptions": [
     {
       "component": "source-controller",
@@ -8,17 +16,25 @@
       "scope": "mac-studio-solo/local-lab",
       "max_severity": "HIGH",
       "decision_record": "docs/design/07_ADR/ADR-0019_Allow_time_boxed_resident_image_exceptions_for_local_lab.md",
-      "approved_on": "2026-07-14",
-      "expires_on": "2026-08-13",
-      "risk_acceptance": "Development-only use accepts the listed dependency vulnerabilities while Flux bootstrap fitness is evaluated; this is not production approval or a claim that the findings are unreachable.",
+      "approved_on": "2026-08-14",
+      "expires_on": "2026-09-13",
+      "risk_acceptance": "Development-only use accepts exactly the listed High findings under the Issue #150 OWNER authorization; this is not production approval or a claim that the findings are unreachable.",
       "compensating_controls": [
-        "Run only in the local Colima/k3s lab without production data or production credentials.",
-        "Reconcile only repository-approved Git and OCI/Helm sources; do not process untrusted archives.",
+        "Run only in the single-user mac-studio-solo Colima/k3s local lab without production data, credentials, or workloads.",
+        "Reconcile only repository-approved Git, OCI, and Helm sources; do not process untrusted archives or arbitrary third-party inputs.",
         "Do not expose the lab through a public Service or Ingress.",
-        "Rescan before renewal and whenever the pinned Flux distribution changes."
+        "Preserve immutable digest pinning, signature and transparency verification, SLSA provenance v1, SPDX/CycloneDX, and scan binding.",
+        "Rescan immediately if a digest, security advisory, or relevant evidence changes; expiry is fail-closed and automatic renewal is forbidden."
       ],
-      "replacement_plan": "Replace with the first signed upstream Flux distribution whose exact arm64 image has no unapproved High or Critical findings, then remove this exception.",
+      "replacement_plan": "Migrate through a separately authorized review to the first signed upstream Flux distribution whose exact arm64 image has no unapproved High or Critical findings, then remove this exception.",
       "cves": [
+        {
+          "id": "CVE-2026-71556",
+          "severity": "HIGH",
+          "package": "github.com/go-git/go-git/v5",
+          "installed_version": "v5.19.1",
+          "fixed_version": "5.19.2"
+        },
         {
           "id": "CVE-2026-49478",
           "severity": "HIGH",
@@ -27,11 +43,101 @@
           "fixed_version": "1.8.6"
         },
         {
+          "id": "CVE-2026-56852",
+          "severity": "HIGH",
+          "package": "golang.org/x/text",
+          "installed_version": "v0.38.0",
+          "fixed_version": "0.39.0"
+        },
+        {
+          "id": "GHSA-hrxh-6v49-42gf",
+          "severity": "HIGH",
+          "package": "google.golang.org/grpc",
+          "installed_version": "v1.81.1",
+          "fixed_version": "1.82.1"
+        },
+        {
           "id": "CVE-2026-50163",
           "severity": "HIGH",
           "package": "oras.land/oras-go/v2",
           "installed_version": "v2.6.1",
-          "fixed_version": ""
+          "fixed_version": "2.6.2"
+        },
+        {
+          "id": "CVE-2026-39821",
+          "severity": "HIGH",
+          "package": "stdlib",
+          "installed_version": "v1.26.5",
+          "fixed_version": "1.25.13, 1.26.6, 1.27.0-rc.3"
+        },
+        {
+          "id": "CVE-2026-46600",
+          "severity": "HIGH",
+          "package": "stdlib",
+          "installed_version": "v1.26.5",
+          "fixed_version": "1.26.6, 1.27.0-rc.3"
+        }
+      ]
+    },
+    {
+      "component": "kustomize-controller",
+      "reference": "ghcr.io/fluxcd/kustomize-controller@sha256:bfba7d249343683a5f9264fc6ad21bce5f9a0baac8d2a8c7527867312f96e9c9",
+      "scope": "mac-studio-solo/local-lab",
+      "max_severity": "HIGH",
+      "decision_record": "docs/design/07_ADR/ADR-0019_Allow_time_boxed_resident_image_exceptions_for_local_lab.md",
+      "approved_on": "2026-08-14",
+      "expires_on": "2026-09-13",
+      "risk_acceptance": "Development-only use accepts exactly the listed High findings under the Issue #150 OWNER authorization; this is not production approval or a claim that the findings are unreachable.",
+      "compensating_controls": [
+        "Run only in the single-user mac-studio-solo Colima/k3s local lab without production data, credentials, or workloads.",
+        "Reconcile only repository-approved Git, OCI, and Helm sources; do not process untrusted archives or arbitrary third-party inputs.",
+        "Do not expose the lab through a public Service or Ingress.",
+        "Preserve immutable digest pinning, signature and transparency verification, SLSA provenance v1, SPDX/CycloneDX, and scan binding.",
+        "Rescan immediately if a digest, security advisory, or relevant evidence changes; expiry is fail-closed and automatic renewal is forbidden."
+      ],
+      "replacement_plan": "Migrate through a separately authorized review to the first signed upstream Flux distribution whose exact arm64 image has no unapproved High or Critical findings, then remove this exception.",
+      "cves": [
+        {
+          "id": "CVE-2026-5773",
+          "severity": "HIGH",
+          "package": "libcurl",
+          "installed_version": "8.19.0-r0",
+          "fixed_version": "8.20.0-r0"
+        },
+        {
+          "id": "CVE-2026-6276",
+          "severity": "HIGH",
+          "package": "libcurl",
+          "installed_version": "8.19.0-r0",
+          "fixed_version": "8.20.0-r0"
+        },
+        {
+          "id": "CVE-2026-56852",
+          "severity": "HIGH",
+          "package": "golang.org/x/text",
+          "installed_version": "v0.38.0",
+          "fixed_version": "0.39.0"
+        },
+        {
+          "id": "GHSA-hrxh-6v49-42gf",
+          "severity": "HIGH",
+          "package": "google.golang.org/grpc",
+          "installed_version": "v1.81.1",
+          "fixed_version": "1.82.1"
+        },
+        {
+          "id": "CVE-2026-39821",
+          "severity": "HIGH",
+          "package": "stdlib",
+          "installed_version": "v1.26.5",
+          "fixed_version": "1.25.13, 1.26.6, 1.27.0-rc.3"
+        },
+        {
+          "id": "CVE-2026-46600",
+          "severity": "HIGH",
+          "package": "stdlib",
+          "installed_version": "v1.26.5",
+          "fixed_version": "1.26.6, 1.27.0-rc.3"
         }
       ]
     },
@@ -41,17 +147,46 @@
       "scope": "mac-studio-solo/local-lab",
       "max_severity": "HIGH",
       "decision_record": "docs/design/07_ADR/ADR-0019_Allow_time_boxed_resident_image_exceptions_for_local_lab.md",
-      "approved_on": "2026-07-14",
-      "expires_on": "2026-08-13",
-      "risk_acceptance": "Development-only use accepts the listed dependency vulnerabilities while Flux bootstrap fitness is evaluated; this is not production approval or a claim that the findings are unreachable.",
+      "approved_on": "2026-08-14",
+      "expires_on": "2026-09-13",
+      "risk_acceptance": "Development-only use accepts exactly the listed High findings under the Issue #150 OWNER authorization; this is not production approval or a claim that the findings are unreachable.",
       "compensating_controls": [
-        "Run only in the local Colima/k3s lab without production data or production credentials.",
-        "Reconcile only repository-approved Git and OCI/Helm sources; do not process untrusted archives.",
+        "Run only in the single-user mac-studio-solo Colima/k3s local lab without production data, credentials, or workloads.",
+        "Reconcile only repository-approved Git, OCI, and Helm sources; do not process untrusted archives or arbitrary third-party inputs.",
         "Do not expose the lab through a public Service or Ingress.",
-        "Rescan before renewal and whenever the pinned Flux distribution changes."
+        "Preserve immutable digest pinning, signature and transparency verification, SLSA provenance v1, SPDX/CycloneDX, and scan binding.",
+        "Rescan immediately if a digest, security advisory, or relevant evidence changes; expiry is fail-closed and automatic renewal is forbidden."
       ],
-      "replacement_plan": "Replace with the first signed upstream Flux distribution whose exact arm64 image has no unapproved High or Critical findings, then remove this exception.",
+      "replacement_plan": "Migrate through a separately authorized review to the first signed upstream Flux distribution whose exact arm64 image has no unapproved High or Critical findings, then remove this exception.",
       "cves": [
+        {
+          "id": "CVE-2026-56852",
+          "severity": "HIGH",
+          "package": "golang.org/x/text",
+          "installed_version": "v0.38.0",
+          "fixed_version": "0.39.0"
+        },
+        {
+          "id": "GHSA-hrxh-6v49-42gf",
+          "severity": "HIGH",
+          "package": "google.golang.org/grpc",
+          "installed_version": "v1.80.0",
+          "fixed_version": "1.82.1"
+        },
+        {
+          "id": "CVE-2026-50163",
+          "severity": "HIGH",
+          "package": "oras.land/oras-go/v2",
+          "installed_version": "v2.6.1",
+          "fixed_version": "2.6.2"
+        },
+        {
+          "id": "CVE-2026-39821",
+          "severity": "HIGH",
+          "package": "stdlib",
+          "installed_version": "v1.26.4",
+          "fixed_version": "1.25.13, 1.26.6, 1.27.0-rc.3"
+        },
         {
           "id": "CVE-2026-39822",
           "severity": "HIGH",
@@ -60,11 +195,11 @@
           "fixed_version": "1.25.12, 1.26.5, 1.27.0-rc.2"
         },
         {
-          "id": "CVE-2026-50163",
+          "id": "CVE-2026-46600",
           "severity": "HIGH",
-          "package": "oras.land/oras-go/v2",
-          "installed_version": "v2.6.1",
-          "fixed_version": ""
+          "package": "stdlib",
+          "installed_version": "v1.26.4",
+          "fixed_version": "1.26.6, 1.27.0-rc.3"
         }
       ]
     },
@@ -74,23 +209,59 @@
       "scope": "mac-studio-solo/local-lab",
       "max_severity": "HIGH",
       "decision_record": "docs/design/07_ADR/ADR-0019_Allow_time_boxed_resident_image_exceptions_for_local_lab.md",
-      "approved_on": "2026-07-14",
-      "expires_on": "2026-08-13",
-      "risk_acceptance": "Development-only use accepts the listed dependency vulnerabilities while Flux bootstrap fitness is evaluated; this is not production approval or a claim that the finding is unreachable.",
+      "approved_on": "2026-08-14",
+      "expires_on": "2026-09-13",
+      "risk_acceptance": "Development-only use accepts exactly the listed High findings under the Issue #150 OWNER authorization; this is not production approval or a claim that the findings are unreachable.",
       "compensating_controls": [
-        "Run only in the local Colima/k3s lab without production data or production credentials.",
-        "Reconcile only repository-approved Git and OCI/Helm sources; do not process untrusted archives.",
+        "Run only in the single-user mac-studio-solo Colima/k3s local lab without production data, credentials, or workloads.",
+        "Reconcile only repository-approved Git, OCI, and Helm sources; do not process untrusted archives or arbitrary third-party inputs.",
         "Do not expose the lab through a public Service or Ingress.",
-        "Rescan before renewal and whenever the pinned Flux distribution changes."
+        "Preserve immutable digest pinning, signature and transparency verification, SLSA provenance v1, SPDX/CycloneDX, and scan binding.",
+        "Rescan immediately if a digest, security advisory, or relevant evidence changes; expiry is fail-closed and automatic renewal is forbidden."
       ],
-      "replacement_plan": "Replace with the first signed upstream Flux distribution whose exact arm64 image has no unapproved High or Critical findings, then remove this exception.",
+      "replacement_plan": "Migrate through a separately authorized review to the first signed upstream Flux distribution whose exact arm64 image has no unapproved High or Critical findings, then remove this exception.",
       "cves": [
+        {
+          "id": "CVE-2026-71556",
+          "severity": "HIGH",
+          "package": "github.com/go-git/go-git/v5",
+          "installed_version": "v5.19.1",
+          "fixed_version": "5.19.2"
+        },
+        {
+          "id": "CVE-2026-56852",
+          "severity": "HIGH",
+          "package": "golang.org/x/text",
+          "installed_version": "v0.38.0",
+          "fixed_version": "0.39.0"
+        },
+        {
+          "id": "GHSA-hrxh-6v49-42gf",
+          "severity": "HIGH",
+          "package": "google.golang.org/grpc",
+          "installed_version": "v1.81.1",
+          "fixed_version": "1.82.1"
+        },
+        {
+          "id": "CVE-2026-39821",
+          "severity": "HIGH",
+          "package": "stdlib",
+          "installed_version": "v1.26.4",
+          "fixed_version": "1.25.13, 1.26.6, 1.27.0-rc.3"
+        },
         {
           "id": "CVE-2026-39822",
           "severity": "HIGH",
           "package": "stdlib",
           "installed_version": "v1.26.4",
           "fixed_version": "1.25.12, 1.26.5, 1.27.0-rc.2"
+        },
+        {
+          "id": "CVE-2026-46600",
+          "severity": "HIGH",
+          "package": "stdlib",
+          "installed_version": "v1.26.4",
+          "fixed_version": "1.26.6, 1.27.0-rc.3"
         }
       ]
     }

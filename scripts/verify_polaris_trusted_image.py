@@ -779,10 +779,10 @@ PENDING_SCRIPT_FILE_INVENTORY = {
         "b6bbbd383c74b190872bdcf144ede8126d8da5dbeb03e291027aaf276c62c955"
     ),
     "scripts/verify_supply_chain.py": (
-        "f5923551dee296c25b7786634340fece2ce89f03d9fd4398d3c182e610a6dedf"
+        "aa1608822311aeec3f528c79f9745bef8566623cc1062e37f462b8dfc9cb4f91"
     ),
     "scripts/verify_trivyignore.py": (
-        "75cee002d5749c0ec91629edb905c27362bee5c0813b0cbefcb59f161734f445"
+        "972a2ca19eb5e6c8e818ce8eaba469e4601f1a6bfa60ff829a8c66a412f28bcc"
     ),
     "scripts/verify_trino_dependency_publisher.py": (
         "27673f5c64364db10d60622d0c67dd95fc35fdcd89bee772d2180b5cb7569a7f"

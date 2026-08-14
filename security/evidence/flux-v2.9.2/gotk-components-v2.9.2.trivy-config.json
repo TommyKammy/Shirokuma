@@ -1,0 +1,923 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.72.0"
+  },
+  "ReportID": "019ffef3-400f-7246-9636-92b54a5f295e",
+  "CreatedAt": "2026-08-14T15:26:22.35115+09:00",
+  "ArtifactName": "deploy/gitops/clusters/local-lite/flux-system/gotk-components.yaml",
+  "ArtifactType": "filesystem",
+  "Results": [
+    {
+      "Target": "gotk-components.yaml",
+      "Class": "config",
+      "Type": "kubernetes",
+      "MisconfSummary": {
+        "Successes": 13,
+        "Failures": 9
+      },
+      "Misconfigurations": [
+        {
+          "Type": "Kubernetes Security Check",
+          "ID": "KSV-0041",
+          "Title": "Manage secrets",
+          "Description": "Viewing secrets at the cluster-scope is akin to cluster-admin in most clusters as there are typically at least one service accounts (their token stored in a secret) bound to cluster-admin directly or a role/clusterrole that gives similar permissions.",
+          "Message": "ClusterRole 'crd-controller-flux-system' shouldn't have access to manage resource 'secrets'",
+          "Namespace": "builtin.kubernetes.KSV041",
+          "Query": "data.builtin.kubernetes.KSV041.deny",
+          "Resolution": "Manage secrets are not allowed. Remove resource 'secrets' from cluster role",
+          "Severity": "CRITICAL",
+          "PrimaryURL": "https://avd.aquasec.com/misconfig/ksv-0041",
+          "References": [
+            "https://kubernetes.io/docs/concepts/security/rbac-good-practices/",
+            "https://avd.aquasec.com/misconfig/ksv-0041"
+          ],
+          "Status": "FAIL",
+          "CauseMetadata": {
+            "Provider": "Kubernetes",
+            "Service": "general",
+            "StartLine": 135,
+            "EndLine": 145,
+            "Code": {
+              "Lines": [
+                {
+                  "Number": 135,
+                  "Content": "  - source.extensions.fluxcd.io",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - source.extensions.fluxcd.io",
+                  "FirstCause": true,
+                  "LastCause": false
+                },
+                {
+                  "Number": 136,
+                  "Content": "  resources:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  \u001b[38;5;33mresources\u001b[0m:",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 137,
+                  "Content": "  - '*'",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - \u001b[38;5;37m'*'",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 138,
+                  "Content": "  verbs:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[0m  \u001b[38;5;33mverbs\u001b[0m:",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 139,
+                  "Content": "  - '*'",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - \u001b[38;5;37m'*'",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 140,
+                  "Content": "- apiGroups:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[0m- \u001b[38;5;33mapiGroups\u001b[0m:",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 141,
+                  "Content": "  - \"\"",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - \u001b[38;5;37m\"\"",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 142,
+                  "Content": "  resources:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[0m  \u001b[38;5;33mresources\u001b[0m:",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 143,
+                  "Content": "  - namespaces",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - namespaces",
+                  "FirstCause": false,
+                  "LastCause": true
+                },
+                {
+                  "Number": 144,
+                  "Content": "",
+                  "IsCause": false,
+                  "Annotation": "",
+                  "Truncated": true,
+                  "FirstCause": false,
+                  "LastCause": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "Type": "Kubernetes Security Check",
+          "ID": "KSV-0046",
+          "Title": "Manage all resources",
+          "Description": "Full control of the cluster resources, and therefore also root on all nodes where workloads can run and has access to all pods, secrets, and data.",
+          "Message": "ClusterRole 'crd-controller-flux-system' shouldn't manage all resources",
+          "Namespace": "builtin.kubernetes.KSV046",
+          "Query": "data.builtin.kubernetes.KSV046.deny",
+          "Resolution": "Remove '*' from 'rules.resources'. Provide specific list of resources to be managed by cluster role",
+          "Severity": "CRITICAL",
+          "PrimaryURL": "https://avd.aquasec.com/misconfig/ksv-0046",
+          "References": [
+            "https://kubernetes.io/docs/concepts/security/rbac-good-practices/",
+            "https://avd.aquasec.com/misconfig/ksv-0046"
+          ],
+          "Status": "FAIL",
+          "CauseMetadata": {
+            "Provider": "Kubernetes",
+            "Service": "general",
+            "StartLine": 123,
+            "EndLine": 128,
+            "Code": {
+              "Lines": [
+                {
+                  "Number": 123,
+                  "Content": "  - notification.toolkit.fluxcd.io",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - notification.toolkit.fluxcd.io",
+                  "FirstCause": true,
+                  "LastCause": false
+                },
+                {
+                  "Number": 124,
+                  "Content": "  resources:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  \u001b[38;5;33mresources\u001b[0m:",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 125,
+                  "Content": "  - '*'",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - \u001b[38;5;37m'*'",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 126,
+                  "Content": "  verbs:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[0m  \u001b[38;5;33mverbs\u001b[0m:",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 127,
+                  "Content": "  - '*'",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - \u001b[38;5;37m'*'",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 128,
+                  "Content": "- apiGroups:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[0m- apiGroups:",
+                  "FirstCause": false,
+                  "LastCause": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "Type": "Kubernetes Security Check",
+          "ID": "KSV-0046",
+          "Title": "Manage all resources",
+          "Description": "Full control of the cluster resources, and therefore also root on all nodes where workloads can run and has access to all pods, secrets, and data.",
+          "Message": "ClusterRole 'crd-controller-flux-system' shouldn't manage all resources",
+          "Namespace": "builtin.kubernetes.KSV046",
+          "Query": "data.builtin.kubernetes.KSV046.deny",
+          "Resolution": "Remove '*' from 'rules.resources'. Provide specific list of resources to be managed by cluster role",
+          "Severity": "CRITICAL",
+          "PrimaryURL": "https://avd.aquasec.com/misconfig/ksv-0046",
+          "References": [
+            "https://kubernetes.io/docs/concepts/security/rbac-good-practices/",
+            "https://avd.aquasec.com/misconfig/ksv-0046"
+          ],
+          "Status": "FAIL",
+          "CauseMetadata": {
+            "Provider": "Kubernetes",
+            "Service": "general",
+            "StartLine": 117,
+            "EndLine": 122,
+            "Code": {
+              "Lines": [
+                {
+                  "Number": 117,
+                  "Content": "  - helm.toolkit.fluxcd.io",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - helm.toolkit.fluxcd.io",
+                  "FirstCause": true,
+                  "LastCause": false
+                },
+                {
+                  "Number": 118,
+                  "Content": "  resources:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  \u001b[38;5;33mresources\u001b[0m:",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 119,
+                  "Content": "  - '*'",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - \u001b[38;5;37m'*'",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 120,
+                  "Content": "  verbs:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[0m  \u001b[38;5;33mverbs\u001b[0m:",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 121,
+                  "Content": "  - '*'",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - \u001b[38;5;37m'*'",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 122,
+                  "Content": "- apiGroups:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[0m- apiGroups:",
+                  "FirstCause": false,
+                  "LastCause": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "Type": "Kubernetes Security Check",
+          "ID": "KSV-0046",
+          "Title": "Manage all resources",
+          "Description": "Full control of the cluster resources, and therefore also root on all nodes where workloads can run and has access to all pods, secrets, and data.",
+          "Message": "ClusterRole 'crd-controller-flux-system' shouldn't manage all resources",
+          "Namespace": "builtin.kubernetes.KSV046",
+          "Query": "data.builtin.kubernetes.KSV046.deny",
+          "Resolution": "Remove '*' from 'rules.resources'. Provide specific list of resources to be managed by cluster role",
+          "Severity": "CRITICAL",
+          "PrimaryURL": "https://avd.aquasec.com/misconfig/ksv-0046",
+          "References": [
+            "https://kubernetes.io/docs/concepts/security/rbac-good-practices/",
+            "https://avd.aquasec.com/misconfig/ksv-0046"
+          ],
+          "Status": "FAIL",
+          "CauseMetadata": {
+            "Provider": "Kubernetes",
+            "Service": "general",
+            "StartLine": 129,
+            "EndLine": 134,
+            "Code": {
+              "Lines": [
+                {
+                  "Number": 129,
+                  "Content": "  - image.toolkit.fluxcd.io",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - image.toolkit.fluxcd.io",
+                  "FirstCause": true,
+                  "LastCause": false
+                },
+                {
+                  "Number": 130,
+                  "Content": "  resources:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  \u001b[38;5;33mresources\u001b[0m:",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 131,
+                  "Content": "  - '*'",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - \u001b[38;5;37m'*'",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 132,
+                  "Content": "  verbs:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[0m  \u001b[38;5;33mverbs\u001b[0m:",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 133,
+                  "Content": "  - '*'",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - \u001b[38;5;37m'*'",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 134,
+                  "Content": "- apiGroups:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[0m- apiGroups:",
+                  "FirstCause": false,
+                  "LastCause": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "Type": "Kubernetes Security Check",
+          "ID": "KSV-0046",
+          "Title": "Manage all resources",
+          "Description": "Full control of the cluster resources, and therefore also root on all nodes where workloads can run and has access to all pods, secrets, and data.",
+          "Message": "ClusterRole 'crd-controller-flux-system' shouldn't manage all resources",
+          "Namespace": "builtin.kubernetes.KSV046",
+          "Query": "data.builtin.kubernetes.KSV046.deny",
+          "Resolution": "Remove '*' from 'rules.resources'. Provide specific list of resources to be managed by cluster role",
+          "Severity": "CRITICAL",
+          "PrimaryURL": "https://avd.aquasec.com/misconfig/ksv-0046",
+          "References": [
+            "https://kubernetes.io/docs/concepts/security/rbac-good-practices/",
+            "https://avd.aquasec.com/misconfig/ksv-0046"
+          ],
+          "Status": "FAIL",
+          "CauseMetadata": {
+            "Provider": "Kubernetes",
+            "Service": "general",
+            "StartLine": 111,
+            "EndLine": 116,
+            "Code": {
+              "Lines": [
+                {
+                  "Number": 111,
+                  "Content": "  - kustomize.toolkit.fluxcd.io",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - kustomize.toolkit.fluxcd.io",
+                  "FirstCause": true,
+                  "LastCause": false
+                },
+                {
+                  "Number": 112,
+                  "Content": "  resources:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  \u001b[38;5;33mresources\u001b[0m:",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 113,
+                  "Content": "  - '*'",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - \u001b[38;5;37m'*'",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 114,
+                  "Content": "  verbs:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[0m  \u001b[38;5;33mverbs\u001b[0m:",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 115,
+                  "Content": "  - '*'",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - \u001b[38;5;37m'*'",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 116,
+                  "Content": "- apiGroups:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[0m- apiGroups:",
+                  "FirstCause": false,
+                  "LastCause": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "Type": "Kubernetes Security Check",
+          "ID": "KSV-0046",
+          "Title": "Manage all resources",
+          "Description": "Full control of the cluster resources, and therefore also root on all nodes where workloads can run and has access to all pods, secrets, and data.",
+          "Message": "ClusterRole 'crd-controller-flux-system' shouldn't manage all resources",
+          "Namespace": "builtin.kubernetes.KSV046",
+          "Query": "data.builtin.kubernetes.KSV046.deny",
+          "Resolution": "Remove '*' from 'rules.resources'. Provide specific list of resources to be managed by cluster role",
+          "Severity": "CRITICAL",
+          "PrimaryURL": "https://avd.aquasec.com/misconfig/ksv-0046",
+          "References": [
+            "https://kubernetes.io/docs/concepts/security/rbac-good-practices/",
+            "https://avd.aquasec.com/misconfig/ksv-0046"
+          ],
+          "Status": "FAIL",
+          "CauseMetadata": {
+            "Provider": "Kubernetes",
+            "Service": "general",
+            "StartLine": 99,
+            "EndLine": 104,
+            "Code": {
+              "Lines": [
+                {
+                  "Number": 99,
+                  "Content": "    app.kubernetes.io/instance: flux-system",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "    \u001b[38;5;33mapp.kubernetes.io/instance\u001b[0m: flux-system",
+                  "FirstCause": true,
+                  "LastCause": false
+                },
+                {
+                  "Number": 100,
+                  "Content": "    app.kubernetes.io/part-of: flux",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "    \u001b[38;5;33mapp.kubernetes.io/part-of\u001b[0m: flux",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 101,
+                  "Content": "    app.kubernetes.io/version: v2.9.2",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "    \u001b[38;5;33mapp.kubernetes.io/version\u001b[0m: v2.9.2",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 102,
+                  "Content": "  name: crd-controller-flux-system",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  \u001b[38;5;33mname\u001b[0m: crd-controller-flux-system",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 103,
+                  "Content": "rules:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[38;5;33mrules\u001b[0m:",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 104,
+                  "Content": "- apiGroups:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "- apiGroups:",
+                  "FirstCause": false,
+                  "LastCause": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "Type": "Kubernetes Security Check",
+          "ID": "KSV-0046",
+          "Title": "Manage all resources",
+          "Description": "Full control of the cluster resources, and therefore also root on all nodes where workloads can run and has access to all pods, secrets, and data.",
+          "Message": "ClusterRole 'crd-controller-flux-system' shouldn't manage all resources",
+          "Namespace": "builtin.kubernetes.KSV046",
+          "Query": "data.builtin.kubernetes.KSV046.deny",
+          "Resolution": "Remove '*' from 'rules.resources'. Provide specific list of resources to be managed by cluster role",
+          "Severity": "CRITICAL",
+          "PrimaryURL": "https://avd.aquasec.com/misconfig/ksv-0046",
+          "References": [
+            "https://kubernetes.io/docs/concepts/security/rbac-good-practices/",
+            "https://avd.aquasec.com/misconfig/ksv-0046"
+          ],
+          "Status": "FAIL",
+          "CauseMetadata": {
+            "Provider": "Kubernetes",
+            "Service": "general",
+            "StartLine": 105,
+            "EndLine": 110,
+            "Code": {
+              "Lines": [
+                {
+                  "Number": 105,
+                  "Content": "  - source.toolkit.fluxcd.io",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - source.toolkit.fluxcd.io",
+                  "FirstCause": true,
+                  "LastCause": false
+                },
+                {
+                  "Number": 106,
+                  "Content": "  resources:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  \u001b[38;5;33mresources\u001b[0m:",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 107,
+                  "Content": "  - '*'",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - \u001b[38;5;37m'*'",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 108,
+                  "Content": "  verbs:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[0m  \u001b[38;5;33mverbs\u001b[0m:",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 109,
+                  "Content": "  - '*'",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - \u001b[38;5;37m'*'",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 110,
+                  "Content": "- apiGroups:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[0m- apiGroups:",
+                  "FirstCause": false,
+                  "LastCause": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "Type": "Kubernetes Security Check",
+          "ID": "KSV-0046",
+          "Title": "Manage all resources",
+          "Description": "Full control of the cluster resources, and therefore also root on all nodes where workloads can run and has access to all pods, secrets, and data.",
+          "Message": "ClusterRole 'flux-edit-flux-system' shouldn't manage all resources",
+          "Namespace": "builtin.kubernetes.KSV046",
+          "Query": "data.builtin.kubernetes.KSV046.deny",
+          "Resolution": "Remove '*' from 'rules.resources'. Provide specific list of resources to be managed by cluster role",
+          "Severity": "CRITICAL",
+          "PrimaryURL": "https://avd.aquasec.com/misconfig/ksv-0046",
+          "References": [
+            "https://kubernetes.io/docs/concepts/security/rbac-good-practices/",
+            "https://avd.aquasec.com/misconfig/ksv-0046"
+          ],
+          "Status": "FAIL",
+          "CauseMetadata": {
+            "Provider": "Kubernetes",
+            "Service": "general",
+            "StartLine": 206,
+            "EndLine": 220,
+            "Code": {
+              "Lines": [
+                {
+                  "Number": 206,
+                  "Content": "    app.kubernetes.io/part-of: flux",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "    \u001b[38;5;33mapp.kubernetes.io/part-of\u001b[0m: flux",
+                  "FirstCause": true,
+                  "LastCause": false
+                },
+                {
+                  "Number": 207,
+                  "Content": "    app.kubernetes.io/version: v2.9.2",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "    \u001b[38;5;33mapp.kubernetes.io/version\u001b[0m: v2.9.2",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 208,
+                  "Content": "    rbac.authorization.k8s.io/aggregate-to-admin: \"true\"",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "    \u001b[38;5;33mrbac.authorization.k8s.io/aggregate-to-admin\u001b[0m: \u001b[38;5;37m\"true\"",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 209,
+                  "Content": "    rbac.authorization.k8s.io/aggregate-to-edit: \"true\"",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[0m    \u001b[38;5;33mrbac.authorization.k8s.io/aggregate-to-edit\u001b[0m: \u001b[38;5;37m\"true\"",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 210,
+                  "Content": "  name: flux-edit-flux-system",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[0m  \u001b[38;5;33mname\u001b[0m: flux-edit-flux-system",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 211,
+                  "Content": "rules:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[38;5;33mrules\u001b[0m:",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 212,
+                  "Content": "- apiGroups:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "- \u001b[38;5;33mapiGroups\u001b[0m:",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 213,
+                  "Content": "  - notification.toolkit.fluxcd.io",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - notification.toolkit.fluxcd.io",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 214,
+                  "Content": "  - source.toolkit.fluxcd.io",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - source.toolkit.fluxcd.io",
+                  "FirstCause": false,
+                  "LastCause": true
+                },
+                {
+                  "Number": 215,
+                  "Content": "",
+                  "IsCause": false,
+                  "Annotation": "",
+                  "Truncated": true,
+                  "FirstCause": false,
+                  "LastCause": false
+                }
+              ]
+            }
+          }
+        },
+        {
+          "Type": "Kubernetes Security Check",
+          "ID": "KSV-0046",
+          "Title": "Manage all resources",
+          "Description": "Full control of the cluster resources, and therefore also root on all nodes where workloads can run and has access to all pods, secrets, and data.",
+          "Message": "ClusterRole 'flux-view-flux-system' shouldn't manage all resources",
+          "Namespace": "builtin.kubernetes.KSV046",
+          "Query": "data.builtin.kubernetes.KSV046.deny",
+          "Resolution": "Remove '*' from 'rules.resources'. Provide specific list of resources to be managed by cluster role",
+          "Severity": "CRITICAL",
+          "PrimaryURL": "https://avd.aquasec.com/misconfig/ksv-0046",
+          "References": [
+            "https://kubernetes.io/docs/concepts/security/rbac-good-practices/",
+            "https://avd.aquasec.com/misconfig/ksv-0046"
+          ],
+          "Status": "FAIL",
+          "CauseMetadata": {
+            "Provider": "Kubernetes",
+            "Service": "general",
+            "StartLine": 233,
+            "EndLine": 245,
+            "Code": {
+              "Lines": [
+                {
+                  "Number": 233,
+                  "Content": "    app.kubernetes.io/part-of: flux",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "    \u001b[38;5;33mapp.kubernetes.io/part-of\u001b[0m: flux",
+                  "FirstCause": true,
+                  "LastCause": false
+                },
+                {
+                  "Number": 234,
+                  "Content": "    app.kubernetes.io/version: v2.9.2",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "    \u001b[38;5;33mapp.kubernetes.io/version\u001b[0m: v2.9.2",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 235,
+                  "Content": "    rbac.authorization.k8s.io/aggregate-to-admin: \"true\"",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "    \u001b[38;5;33mrbac.authorization.k8s.io/aggregate-to-admin\u001b[0m: \u001b[38;5;37m\"true\"",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 236,
+                  "Content": "    rbac.authorization.k8s.io/aggregate-to-edit: \"true\"",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[0m    \u001b[38;5;33mrbac.authorization.k8s.io/aggregate-to-edit\u001b[0m: \u001b[38;5;37m\"true\"",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 237,
+                  "Content": "    rbac.authorization.k8s.io/aggregate-to-view: \"true\"",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[0m    \u001b[38;5;33mrbac.authorization.k8s.io/aggregate-to-view\u001b[0m: \u001b[38;5;37m\"true\"",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 238,
+                  "Content": "  name: flux-view-flux-system",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[0m  \u001b[38;5;33mname\u001b[0m: flux-view-flux-system",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 239,
+                  "Content": "rules:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "\u001b[38;5;33mrules\u001b[0m:",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 240,
+                  "Content": "- apiGroups:",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "- \u001b[38;5;33mapiGroups\u001b[0m:",
+                  "FirstCause": false,
+                  "LastCause": false
+                },
+                {
+                  "Number": 241,
+                  "Content": "  - notification.toolkit.fluxcd.io",
+                  "IsCause": true,
+                  "Annotation": "",
+                  "Truncated": false,
+                  "Highlighted": "  - notification.toolkit.fluxcd.io",
+                  "FirstCause": false,
+                  "LastCause": true
+                },
+                {
+                  "Number": 242,
+                  "Content": "",
+                  "IsCause": false,
+                  "Annotation": "",
+                  "Truncated": true,
+                  "FirstCause": false,
+                  "LastCause": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

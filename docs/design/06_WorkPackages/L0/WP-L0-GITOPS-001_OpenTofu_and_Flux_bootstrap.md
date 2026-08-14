@@ -4,8 +4,8 @@ doc_id: "WP-L0-GITOPS-001"
 title: "WP-L0-GITOPS-001 OpenTofu and Flux bootstrap"
 status: draft
 created: 2026-07-05
-updated: 2026-07-14
-version: "0.4"
+updated: 2026-08-14
+version: "0.5"
 area: "workpackage"
 tags: [shirokuma, workpackage, l0, gitops, flux]
 ---
@@ -100,7 +100,9 @@ Do not introduce Image Automation, Flux Operator, the community Helm chart, or d
 ## Current implementation evidence
 
 - Flux v2.9.2の標準4controllerについて公式linux/arm64 platform digest、signed OCI index、SLSA provenance v1、upstream SPDX SBOM subjectを確定した。
-- Trivy 0.72.0、DB timestamp `2026-07-13T19:09:56.237113526Z`でHighはsource=2、kustomize=0、helm=2、notification=1、Criticalは全て0だった。
+- 初回Trivy 0.72.0、DB timestamp `2026-07-13T19:09:56.237113526Z`ではHighがsource=2、kustomize=0、helm=2、notification=1、Criticalは全て0だった。この5件のdecisionは2026-08-13に失効した。
 - CycloneDX 1.7 SBOM、Trivy JSON、署名・provenance summaryを`security/evidence/flux-v2.9.2/`へretained evidenceとして保存した。
-- ADR-0019によりsource、helm、notificationのexact findingsを2026-08-13までlocal-lab限定で承認した。strict profileは引き続き不適合を返す。
-- 新規High、Critical、scanから消えたstale exception、digest/package/version mismatch、expired approvalはbootstrapを再びfail closedにする。
+- Issue #150とfinal corrective OWNER comment `5290345820`は、同じ4 digestをTrivy 0.72.0、DB `2026-08-14T01:10:44.597550261Z`で再scanしたsource=7、kustomize=6、helm=6、notification=6（合計High=25、Critical=0）の完全一致tupleだけを2026-09-13までlocal-lab限定で承認した。
+- 同じdecisionはgenerated manifest（SHA-256 `ed307189fd1f9e49819a50843bb6f3c9257fe6d4d8359d1950b38207c26c3854`）のexact pathにある`KSV-0041` 1件と`KSV-0046` 8件を`2026-09-13T00:00:00Z`直前まで承認する。retained config report SHA-256は`00e87fef815ac9a99401f2a450e71c47555fd991ec6d2cfc7313e1f0dbe3bd7a`、raw Trivy metadata SHA-256は`a82d05e076fd54c9bd2e57fd1be00891a2384a3f618e9d72037bfd940a5406ea`であり、all-severity scanはunfiltered、blocking scanだけがignoreを使用する。
+- strict profileは引き続き不適合を返す。新規/欠落High、Critical、stale exception、digest/advisory/severity/package/installed/fixed version、scan hash、OWNER record、expiryのdriftはbootstrapをfail closedにする。自動更新は禁止する。
+- Flux v2.9.4は20 Highまで改善し公式SLSA v1/SPDX証跡もあるが、digest、CRD/RBAC、deploymentとlive runtimeを変えるため別のmigration decisionとする。

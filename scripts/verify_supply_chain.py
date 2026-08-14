@@ -59,6 +59,37 @@ REVIEWED_REPOSITORY_ADMIN_PUBLICATION_EVIDENCE_MODE = (
     "reviewed_repository_admin_publication"
 )
 SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+GITHUB_ISSUE_URL = re.compile(
+    r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/[1-9][0-9]*$"
+)
+OWNER_AUTHORIZATION_FIELDS = {
+    "issue_url",
+    "comment_url",
+    "issue_body_sha256",
+    "decision",
+    "approved_on",
+    "expires_on",
+}
+LAB_EXCEPTION_FIELDS = {
+    "component",
+    "reference",
+    "scope",
+    "max_severity",
+    "decision_record",
+    "approved_on",
+    "expires_on",
+    "risk_acceptance",
+    "compensating_controls",
+    "replacement_plan",
+    "cves",
+}
+LAB_EXCEPTION_FINDING_FIELDS = {
+    "id",
+    "severity",
+    "package",
+    "installed_version",
+    "fixed_version",
+}
 ATOMIC_ADMISSION_RECEIPT_PATH = (
     "bootstrap/polaris/v1.6.0/atomic-admission.json"
 )
@@ -381,24 +412,42 @@ def iter_trivy_findings(report: dict[str, Any]) -> list[dict[str, Any]]:
     return findings
 
 
-def high_finding_key(finding: dict[str, Any]) -> tuple[str, str, str]:
+def high_finding_key(finding: dict[str, Any]) -> tuple[str, str, str, str, str]:
     if finding.get("_category") != "Vulnerabilities":
         raise PolicyError("local-lab exceptions only apply to vulnerability findings")
-    values = tuple(
+    identity = tuple(
         str(finding.get(field, "")).strip()
         for field in ("VulnerabilityID", "PkgName", "InstalledVersion")
     )
-    if not all(values):
+    if not all(identity):
         raise PolicyError(
             "local-lab High findings require VulnerabilityID, PkgName, and InstalledVersion"
         )
-    return values
+    fixed_version = finding.get("FixedVersion")
+    if fixed_version is None:
+        fixed_version = ""
+    if not isinstance(fixed_version, str):
+        raise PolicyError("local-lab High finding FixedVersion must be a string or null")
+    return (
+        identity[0],
+        "HIGH",
+        identity[1],
+        identity[2],
+        fixed_version.strip(),
+    )
+
+
+def format_finding_key(finding: tuple[str, str, str, str, str]) -> str:
+    advisory, severity, package, installed_version, fixed_version = finding
+    return "/".join(
+        (advisory, severity, package, installed_version, fixed_version or "<none>")
+    )
 
 
 def check_trivy(
     report_path: Path,
     expected_image_reference: str | None = None,
-    allowed_high: set[tuple[str, str, str]] | None = None,
+    allowed_high: set[tuple[str, str, str, str, str]] | None = None,
 ) -> None:
     report = load_json(report_path)
     if not isinstance(report, dict):
@@ -446,7 +495,10 @@ def check_trivy(
         if str(finding.get("Severity", "")).upper() == "HIGH"
     ]
     if allowed_high is not None:
-        observed_high = {high_finding_key(finding) for finding in high}
+        observed_high_values = [high_finding_key(finding) for finding in high]
+        observed_high = set(observed_high_values)
+        if len(observed_high) != len(observed_high_values):
+            raise PolicyError("local-lab High findings contain a duplicate exact tuple")
         if observed_high != allowed_high:
             unapproved = sorted(observed_high - allowed_high)
             stale = sorted(allowed_high - observed_high)
@@ -454,12 +506,12 @@ def check_trivy(
             if unapproved:
                 details.append(
                     "unapproved="
-                    + ",".join(f"{cve}/{package}/{version}" for cve, package, version in unapproved)
+                    + ",".join(format_finding_key(finding) for finding in unapproved)
                 )
             if stale:
                 details.append(
                     "stale="
-                    + ",".join(f"{cve}/{package}/{version}" for cve, package, version in stale)
+                    + ",".join(format_finding_key(finding) for finding in stale)
                 )
             raise PolicyError("local-lab High exception mismatch: " + " ".join(details))
         return
@@ -1824,41 +1876,126 @@ def check_supply_chain_evidence(
         raise PolicyError(f"unsupported supply-chain evidence_mode {mode!r}")
 
 
-def exception_finding_key(value: Any, component: str) -> tuple[str, str, str] | None:
-    if not isinstance(value, dict):
+def exception_finding_key(
+    value: Any,
+    component: str,
+) -> tuple[str, str, str, str, str] | None:
+    if not isinstance(value, dict) or set(value) != LAB_EXCEPTION_FINDING_FIELDS:
         return None
     cve = value.get("id")
     package = value.get("package")
     installed_version = value.get("installed_version")
-    if not all(isinstance(field, str) and field.strip() for field in (cve, package, installed_version)):
+    if not all(
+        isinstance(field, str) and field.strip()
+        for field in (cve, package, installed_version)
+    ):
         return None
     if value.get("severity") != "HIGH":
         raise PolicyError(f"{component}: local-lab exceptions may only allow HIGH severity")
     fixed_version = value.get("fixed_version")
     if not isinstance(fixed_version, str):
         raise PolicyError(f"{component}: exception fixed_version must be a string")
-    return cve.strip(), package.strip(), installed_version.strip()
+    return (
+        cve.strip(),
+        "HIGH",
+        package.strip(),
+        installed_version.strip(),
+        fixed_version.strip(),
+    )
+
+
+def load_owner_authorization(document: dict[str, Any]) -> tuple[date, date]:
+    authorization = document.get("owner_authorization")
+    if (
+        not isinstance(authorization, dict)
+        or set(authorization) != OWNER_AUTHORIZATION_FIELDS
+    ):
+        raise PolicyError(
+            "resident image owner_authorization must contain exactly: "
+            + ", ".join(sorted(OWNER_AUTHORIZATION_FIELDS))
+        )
+    issue_url = authorization.get("issue_url")
+    comment_url = authorization.get("comment_url")
+    issue_body_sha256 = authorization.get("issue_body_sha256")
+    if (
+        not isinstance(issue_url, str)
+        or GITHUB_ISSUE_URL.fullmatch(issue_url) is None
+    ):
+        raise PolicyError("resident image owner_authorization issue_url is invalid")
+    if (
+        not isinstance(comment_url, str)
+        or re.fullmatch(re.escape(issue_url) + r"#issuecomment-[1-9][0-9]*", comment_url)
+        is None
+    ):
+        raise PolicyError(
+            "resident image owner_authorization comment_url must identify a comment on issue_url"
+        )
+    if (
+        not isinstance(issue_body_sha256, str)
+        or SHA256_HEX.fullmatch(issue_body_sha256) is None
+    ):
+        raise PolicyError(
+            "resident image owner_authorization issue_body_sha256 must be lowercase SHA-256"
+        )
+    if authorization.get("decision") != "APPROVED":
+        raise PolicyError("resident image owner_authorization decision must be APPROVED")
+    try:
+        approved_on = date.fromisoformat(str(authorization.get("approved_on", "")))
+        expires_on = date.fromisoformat(str(authorization.get("expires_on", "")))
+    except ValueError as error:
+        raise PolicyError(
+            "resident image owner_authorization dates must use YYYY-MM-DD"
+        ) from error
+    if approved_on > date.today():
+        raise PolicyError(
+            "resident image owner_authorization approved_on must not be in the future"
+        )
+    if expires_on <= date.today():
+        raise PolicyError("resident image owner_authorization has expired")
+    if expires_on > approved_on + timedelta(days=MAX_EXCEPTION_DAYS):
+        raise PolicyError(
+            f"resident image owner_authorization may not exceed {MAX_EXCEPTION_DAYS} days"
+        )
+    return approved_on, expires_on
 
 
 def load_lab_exceptions(
     path: Path,
     repository: Path,
     ledger_references: set[str],
-) -> dict[str, set[tuple[str, str, str]]]:
+) -> dict[str, set[tuple[str, str, str, str, str]]]:
     document = load_json(path)
     if not isinstance(document, dict) or document.get("schema_version") != 1:
         raise PolicyError("resident image exceptions require schema_version 1")
+    if set(document) != {
+        "schema_version",
+        "profile",
+        "owner_authorization",
+        "exceptions",
+    }:
+        raise PolicyError(
+            "resident image exceptions must contain exactly schema_version, profile, "
+            "owner_authorization, and exceptions"
+        )
     if document.get("profile") != LAB_PROFILE:
         raise PolicyError(f"resident image exceptions profile must be {LAB_PROFILE}")
+    authorization_approved_on, authorization_expires_on = load_owner_authorization(
+        document
+    )
     entries = document.get("exceptions")
     if not isinstance(entries, list):
         raise PolicyError("resident image exceptions require an exceptions list")
 
-    approved: dict[str, set[tuple[str, str, str]]] = {}
+    approved: dict[str, set[tuple[str, str, str, str, str]]] = {}
     for index, entry in enumerate(entries):
         label = f"exceptions[{index}]"
         if not isinstance(entry, dict):
             raise PolicyError(f"{label}: entry must be an object")
+        if set(entry) != LAB_EXCEPTION_FIELDS:
+            raise PolicyError(
+                f"{label}: entry must contain exactly: "
+                + ", ".join(sorted(LAB_EXCEPTION_FIELDS))
+            )
         component = entry.get("component")
         if not isinstance(component, str) or not component.strip():
             raise PolicyError(f"{label}: missing component")
@@ -1906,11 +2043,18 @@ def load_lab_exceptions(
             raise PolicyError(f"{component}: exception has expired")
         if expires_on > approved_on + timedelta(days=MAX_EXCEPTION_DAYS):
             raise PolicyError(f"{component}: exception may not exceed {MAX_EXCEPTION_DAYS} days")
+        if (
+            approved_on != authorization_approved_on
+            or expires_on != authorization_expires_on
+        ):
+            raise PolicyError(
+                f"{component}: exception dates must match owner_authorization"
+            )
 
         cves = entry.get("cves")
         if not isinstance(cves, list) or not cves:
             raise PolicyError(f"{component}: exception requires exact CVE records")
-        keys: set[tuple[str, str, str]] = set()
+        keys: set[tuple[str, str, str, str, str]] = set()
         for cve in cves:
             key = exception_finding_key(cve, component)
             if key is None:
@@ -2129,7 +2273,7 @@ def check_images(
     except PolicyError as error:
         errors.append(str(error))
 
-    lab_exceptions: dict[str, set[tuple[str, str, str]]] = {}
+    lab_exceptions: dict[str, set[tuple[str, str, str, str, str]]] = {}
     if not errors and exceptions_path is not None:
         try:
             lab_exceptions = load_lab_exceptions(
