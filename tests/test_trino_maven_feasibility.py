@@ -317,6 +317,14 @@ class TrinoMavenFeasibilityTests(unittest.TestCase):
             ),
             (
                 workflow.replace(
+                    "        if: steps.lifecycle.outputs.active == 'true'\n",
+                    "",
+                    1,
+                ),
+                "blocked feasibility step conditions differ",
+            ),
+            (
+                workflow.replace(
                     feasibility.EXPECTED_POLICY_MOUNT,
                     "${RUNNER_TEMP}/maven-policy:/policy/.mvn:ro",
                     1,

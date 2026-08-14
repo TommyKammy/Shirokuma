@@ -110,7 +110,7 @@ EXPECTED_WORKFLOW_STEPS = (
     "Retain the review-only feasibility inputs and outputs",
 )
 EXPECTED_WORKFLOW_SHA256 = (
-    "4ab01b0f4fe1ff2f3ea34c3338e9d754225179ac032bcbfd6256a27375db7fb4"
+    "0ebc272f87f06f84899ae34819de9c6b8b0fe4fdf9ce2e9e26ca56e900ab5043"
 )
 EXPECTED_MAVEN_BASEDIR = "/policy"
 EXPECTED_POLICY_SOURCE = "bootstrap/trino/v483/maven-policy/.mvn"
@@ -1928,6 +1928,12 @@ def audit_workflow(root: Path) -> None:
         "verify_trino_maven_feasibility.py finalize-record",
         "verify_trino_maven_feasibility.py audit-evidence",
         "verify_trino_maven_feasibility.py verify-candidate",
+        "id: lifecycle",
+        "publication-status --root .",
+        'test "${publication_status}" = "blocked"',
+        'echo "active=false" >> "${GITHUB_OUTPUT}"',
+        '"state": "dependency_snapshot_publication_reauthorization_pending"',
+        '"publication_workflow_permitted": False',
         "bootstrap/trino/v483/maven-policy/.mvn/**",
         "docs/design/evidence/trino/"
         "run-30693677356-maven-vulnerability-classification.json",
@@ -1950,6 +1956,10 @@ def audit_workflow(root: Path) -> None:
     present = [marker for marker in forbidden if marker in workflow]
     if missing or present:
         _fail("WORKFLOW", f"missing={missing}, forbidden={present}")
+    if workflow.count("if: steps.lifecycle.outputs.active == 'true'") != (
+        len(EXPECTED_WORKFLOW_STEPS) - 2
+    ):
+        _fail("WORKFLOW", "blocked feasibility step conditions differ")
     _audit_workflow_triggers(workflow)
     _audit_workflow_jobs(workflow)
     for step_name in (

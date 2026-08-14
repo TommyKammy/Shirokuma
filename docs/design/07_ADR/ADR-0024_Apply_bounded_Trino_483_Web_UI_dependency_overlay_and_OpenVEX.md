@@ -4,8 +4,8 @@ doc_id: "ADR-0024"
 title: "Apply a bounded Trino 483 Web UI dependency overlay and OpenVEX"
 status: accepted
 created: 2026-07-26
-updated: 2026-08-12
-version: "0.3"
+updated: 2026-08-14
+version: "0.4"
 area: "architecture"
 tags: [shirokuma, adr, trino, web-ui, supply-chain, openvex]
 ---
@@ -78,6 +78,31 @@ The `publish` job was skipped. This repair binds the newly observed complete
 fixed-version metadata exactly. It does not change the installed 7.18.1
 package, treat 7.18.2 as an admitted upgrade, broaden the OpenVEX statement, or
 relax any other raw-finding identity field.
+
+The fifth reviewed-main attempt, run
+[`31616764771`](https://github.com/TommyKammy/Shirokuma/actions/runs/31616764771),
+proved that repair at the dependency-evidence boundary. PR #148 final head
+`7581b2413c1c820ac1f774fe28034f1b7bfa6eb1` passed the required workflows and
+received exact owner attestation comment
+[`5269416490`](https://github.com/TommyKammy/Shirokuma/pull/148#issuecomment-5269416490)
+before squash merge `49a86522d6e6c69f4a552220b30fa510d3a5edd2`. Run attempt
+`1` then completed both closed Maven reconstructions, both network-none builds,
+and the Maven and Bun evidence gates with the reviewed React Router metadata.
+The `validate` job succeeded, but the `publish` job failed closed at
+`Revalidate the write-capable publication boundary`: GitHub returned empty
+workflow-run `pull_requests` associations for the successful final-head PR
+runs, while the repository verifier required exact `[148]`.
+
+Read-only candidate artifact `trino-maven-candidate-31616764771-1` (artifact
+ID `9150299769`, 844,111,993 bytes, expired `2026-08-13T16:39:07Z`) was retained
+by validation but never downloaded by the publish job. Registry
+authentication, registry write, signature, attestation, anonymous pull, and a
+final publication artifact were not reached. The candidate is not admitted or
+durable evidence. Sequence 5 is consumed, rerun and sequence 6 are not
+authorized, and publication returns to
+`dependency_snapshot_publication_reauthorization_pending`. This failure does
+not change the exact four-path overlay, installed React Router 7.18.1, the
+React Router-only OpenVEX statement, or any High=0/Critical=0 requirement.
 
 The original overlay's two independent clean native-arm64 cache
 reconstructions produced manifest SHA-256

@@ -2910,6 +2910,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "dependency_snapshot_publication_reauthorization",
                 "independent_review",
                 "owner_only_approval_exception",
+                "pending_publication_repair",
                 "repository_state",
                 "next_action",
             },
@@ -2963,89 +2964,22 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
 
     def test_missing_trust_controls_cannot_be_waived_by_exception(self) -> None:
         assessment = self._admission()["assessment"]
-        self.assertEqual(
-            {
-                "assessed_on": "2026-08-01",
-                "scope": "mac-studio-solo/local-lite",
-                "admission": "blocked",
-                "exception_eligible": False,
-                "blockers": [
-                    {
-                        "control": "upstream_image_signature",
-                        "status": "missing",
-                        "evidence": (
-                            "the immutable 483 image index exposes only runtime "
-                            "platform manifests and no trusted signer is documented"
-                        ),
-                    },
-                    {
-                        "control": "source_tag_signature",
-                        "status": "missing",
-                        "evidence": (
-                            "GitHub reports annotated tag object "
-                            "32d4f28e8311ea6f67edca209df59a0493d869fa as unsigned"
-                        ),
-                    },
-                    {
-                        "control": "source_commit_signature",
-                        "status": "missing",
-                        "evidence": (
-                            "GitHub reports source commit "
-                            "50b0b50b75abd47f830b7805ee1b51716eb4065e as unsigned"
-                        ),
-                    },
-                    {
-                        "control": "slsa_provenance",
-                        "status": "missing",
-                        "evidence": (
-                            "no trusted provenance statement binds the upstream image "
-                            "or server asset to commit "
-                            "50b0b50b75abd47f830b7805ee1b51716eb4065e"
-                        ),
-                    },
-                    {
-                        "control": "repository_source_build",
-                        "status": (
-                            "source_remediation_authorized_"
-                            "publication_evidence_pending"
-                        ),
-                        "evidence": (
-                            "ADR-0029 and Issue #63 comments 5210182460 and 5221869732 "
-                            "authorize the exact third patch; comments 5266462504 and "
-                            "5268307725 record consumed sequence 4 PR #147 run 31605249586; "
-                            "comment 5268936554 authorizes one sequence 5 publication "
-                            "attempt for PR #148's exact fixed-version metadata repair; no "
-                            "dependency artifact, image admission, Flux object, or runtime "
-                            "state exists yet"
-                        ),
-                    },
-                ],
-                "rationale": (
-                    "ADR-0019 does not waive source identity, image signature, "
-                    "transparency-log, provenance, or evidence requirements. ADR-0023 "
-                    "separately accepts only the exact Trino 483 source-identity risk "
-                    "for a time-boxed local PoC. ADR-0024, ADR-0026, and ADR-0027 "
-                    "retain their exact bounded source remediations. ADR-0028 retained "
-                    "the Maven blocker and feasibility candidate. ADR-0029 activates "
-                    "only the exact hash-bound third patch after hardened run "
-                    "31072144404 and independent audit. Issue #63 comment 5266462504 "
-                    "authorized the now-consumed sequence 4 attempt after PR #147's exact "
-                    "Bun overlay and diagnostic repair. Run 31605249586 failed closed "
-                    "before publication because Trivy reported React Router fixed-version "
-                    "metadata 7.18.2, 8.3.0 while the reviewed contract required 8.3.0; "
-                    "raw High remained 1, adjusted High/Critical remained 0, and only the "
-                    "exact diagnostic quartet was retained. Comment 5268936554 authorizes "
-                    "one sequence 5 attempt after PR #148's exact metadata-contract repair, "
-                    "without changing the "
-                    "candidate or any downstream boundary. High=0/Critical=0 without "
-                    "waivers remains mandatory; the dependency artifact is review-"
-                    "pending if produced, the upstream image and server asset remain "
-                    "rejected, all image controls remain mandatory, and re-signing "
-                    "untrusted upstream bytes is forbidden."
-                ),
-            },
-            assessment,
+        self.assertEqual("blocked", assessment["admission"])
+        self.assertIs(assessment["exception_eligible"], False)
+        source_build = next(
+            blocker
+            for blocker in assessment["blockers"]
+            if blocker["control"] == "repository_source_build"
         )
+        self.assertEqual(
+            "dependency_snapshot_publication_reauthorization_pending",
+            source_build["status"],
+        )
+        self.assertIn("PR #148", source_build["evidence"])
+        self.assertIn("31616764771", source_build["evidence"])
+        self.assertIn("failed closed", source_build["evidence"])
+        self.assertIn("sequence 6", assessment["rationale"])
+        self.assertIn("rerun is forbidden", assessment["rationale"])
 
     def test_source_authentication_is_only_provisionally_authorized(self) -> None:
         admission = self._admission()
@@ -3077,7 +3011,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             admission["source_authentication"],
         )
         self.assertIs(
-            admission["repository_state"]["publication_workflow_permitted"], True
+            admission["repository_state"]["publication_workflow_permitted"], False
         )
 
     def test_provisional_source_authorization_is_bounded_and_fail_closed(self) -> None:
@@ -3375,7 +3309,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         self.assertEqual(
             {
                 "dependency_snapshot_contract_permitted": True,
-                "publication_workflow_permitted": True,
+                "publication_workflow_permitted": False,
                 "dependency_artifact_present": False,
                 "resident_ledger_permitted": False,
                 "runtime_manifests_permitted": False,
@@ -3540,7 +3474,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             "runtime_manifests_permitted",
         ):
             self.assertIs(repository_state[key], False)
-        self.assertIs(repository_state["publication_workflow_permitted"], True)
+        self.assertIs(repository_state["publication_workflow_permitted"], False)
         self.assertIs(
             repository_state["dependency_snapshot_contract_permitted"], True
         )
@@ -4755,409 +4689,165 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             rebuild["retained_output_evidence"],
         )
 
-    def test_dependency_snapshot_contract_authorizes_third_publication_attempt(
+    def test_dependency_snapshot_contract_is_blocked_after_fifth_attempt(
         self,
     ) -> None:
         contract = self._trusted_build_contract()
         admission = self._admission()
-        lifecycle = contract["lifecycle"]
         self.assertEqual(
             {
-                "state": "dependency_snapshot_publication_pending",
+                "state": "dependency_snapshot_publication_reauthorization_pending",
                 "contract_only": False,
                 "dependency_artifact_present": False,
-                "publication_workflow_permitted": True,
+                "publication_workflow_permitted": False,
                 "image_publication_permitted": False,
                 "resident_admission_permitted": False,
                 "runtime_reconciliation_permitted": False,
             },
-            lifecycle,
+            contract["lifecycle"],
         )
+        publication = contract["publication"]
+        self.assertIs(publication["permitted"], False)
+        self.assertEqual(
+            "static_read_only_contract_validation",
+            publication["pull_request_behavior"],
+        )
+        reauthorization = publication["reauthorization"]
+        self.assertEqual(5, reauthorization["sequence"])
+        self.assertEqual("consumed_failed_closed", reauthorization["status"])
+        self.assertIs(
+            reauthorization["publication_authorized_after_required_approval"],
+            False,
+        )
+        self.assertIs(reauthorization["next_sequence_authorized"], False)
         self.assertEqual(
             {
-                "permitted": True,
-                "workflow_present": True,
-                "workflow": (
-                    ".github/workflows/trino-maven-dependencies.yml"
+                "pull_request": 148,
+                "pull_request_final_head": (
+                    "7581b2413c1c820ac1f774fe28034f1b7bfa6eb1"
                 ),
-                "allowed_ref": "refs/heads/main",
-                "artifact_role": "review_pending_dependency_evidence",
-                "retire_in_evidence_review_pr": True,
-                "separate_evidence_only_pr_required": True,
-                "image_publisher_permitted_before_evidence_review": False,
-                "anonymous_exact_digest_pull_required": True,
-                "pull_request_behavior": (
-                    "static_and_authorized_source_overlay_and_remediation_"
-                    "validation_without_publication"
-                ),
-                "publication_event": "push",
-                "runner": "ubuntu-24.04-arm",
-                "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",
-                "reauthorization": {
-                    "sequence": 5,
-                    "status": "active",
-                    "approval_record": (
-                        "https://github.com/TommyKammy/Shirokuma/issues/63"
-                        "#issuecomment-5268936554"
-                    ),
-                    "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
-                    "approved_at": "2026-08-12T15:32:31Z",
-                    "expires_at": "2026-08-21T22:43:36Z",
-                    "automatic_renewal": False,
-                    "risk_owner": "TommyKammy",
-                    "same_candidate_required": True,
-                    "publication_authorized_after_required_approval": True,
-                    "previous_attempt": {
-                        "run_id": "31605249586",
-                        "run_attempt": "1",
-                        "source_sha": (
-                            "e6eb99d0e79b4a85aa7670ed75f07e4bc2d5b823"
-                        ),
-                        "result": "failed_closed_before_publication",
-                        "reason": "react_router_fixed_version_metadata_drift",
-                        "raw_high_findings": 1,
-                        "adjusted_high_findings": 0,
-                        "adjusted_critical_findings": 0,
-                        "retained_artifact_count": 1,
-                        "retained_diagnostic_artifact": (
-                            "trino-bun-vulnerability-diagnostics-31605249586-1"
-                        ),
-                        "dependency_artifact_published": False,
-                        "consumed": True,
-                    },
-                    "repair": {
-                        "pull_request": (
-                            "https://github.com/TommyKammy/Shirokuma/pull/148"
-                        ),
-                        "predecessor_main_commit": (
-                            "e6eb99d0e79b4a85aa7670ed75f07e4bc2d5b823"
-                        ),
-                        "web_ui_overlay_paths": [
-                            "core/trino-web-ui/src/main/resources/webapp/package.json",
-                            "core/trino-web-ui/src/main/resources/webapp/bun.lock",
-                            "core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json",
-                            "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock",
-                        ],
-                        "react_router_openvex_only": True,
-                        "raw_finding_fixed_version": "7.18.2, 8.3.0",
-                        "other_raw_finding_identity_fields_unchanged": True,
-                        "react_router_upgrade_admitted": False,
-                        "adjusted_scan_report_exit_code": 0,
-                        "explicit_scan_verifier_required": True,
-                        "diagnostic_artifact_on_scan_gate_failure": True,
-                        "diagnostic_artifact_publication_input_permitted": False,
-                        "offline_repository_root": (
-                            "${RUNNER_TEMP}/trino-offline-maven-repository-"
-                            "${suffix}"
-                        ),
-                        "container_mount": "/m2:ro",
-                        "maven_repo_local": "/m2",
-                        "maven_lock_directory": "/tmp/maven-locks",
-                        "maven_goal": "clean package",
-                        "untracked_source_rejection_retained": True,
-                    },
-                    "failure_consumes_attempt": True,
-                    "rerun_permitted": False,
-                },
-                "authorized_attempt": {
-                    "event_name": "push",
-                    "ref": "refs/heads/main",
-                    "before_sha": (
-                        "e6eb99d0e79b4a85aa7670ed75f07e4bc2d5b823"
-                    ),
-                    "run_attempt": "1",
-                },
-                "independent_review": {
-                    "required_before_merge": True,
-                    "required_before_publication": True,
-                    "minimum_approved_reviews": 1,
-                    "human_user_type": "User",
-                    "reviewer_must_differ_from_risk_owner": True,
-                    "reviewer_must_differ_from_implementation_author": True,
-                    "approval_must_match_final_head_sha": True,
-                    "approval_must_be_submitted_before_merge": True,
-                    "reviews": {
-                        "api": "rest_pull_request_reviews",
-                        "page_size": 100,
-                        "maximum_pages": 10,
-                        "maximum_reviews": 999,
-                        "maximum_page_bytes": 33554432,
-                        "stable_snapshot_passes": 2,
-                        "unique_review_ids": True,
-                        "pagination_must_be_complete": True,
-                    },
-                    "publication_enforcement": (
-                        "exact_merged_pull_request_review_or_owner_"
-                        "attestation_query"
-                    ),
-                },
-                "owner_only_approval_exception": {
-                    "status": "active",
-                    "scope": "pr_148_fifth_publication_attempt_only",
-                    "reason": "sole_owner_personal_experimental_project",
-                    "approval_record": (
-                        "https://github.com/TommyKammy/Shirokuma/issues/63"
-                        "#issuecomment-5268936554"
-                    ),
-                    "approved_at": "2026-08-12T15:32:31Z",
-                    "repository": "TommyKammy/Shirokuma",
-                    "pull_request": 148,
-                    "owner": "TommyKammy",
-                    "human_user_type": "User",
-                    "author_association": "OWNER",
-                    "attestation_required_before_merge": True,
-                    "attestation_must_match_final_head_sha": True,
-                    "attestation_body_template": (
-                        "Owner final-head attestation for PR #148\n\n"
-                        "Decision: {decision}\n"
-                        "Final head: {final_head}\n"
-                        "Exception: https://github.com/TommyKammy/Shirokuma/"
-                        "issues/63#issuecomment-5268936554"
-                    ),
-                    "allowed_decisions": ["APPROVED", "REVOKED"],
-                    "standard_independent_review_remains_accepted": True,
-                    "owner_issue_comments": {
-                        "query_only_if_standard_independent_review_absent": True,
-                        "api": "rest_issue_comments",
-                        "page_size": 100,
-                        "maximum_pages": 10,
-                        "maximum_items": 999,
-                        "maximum_page_bytes": 33554432,
-                        "stable_snapshot_passes": 2,
-                        "revalidate_after_final_api_gates": True,
-                        "revalidated_decision_must_match": True,
-                        "strictly_increasing_unique_ids": True,
-                        "pagination_must_be_complete": True,
-                    },
-                    "failure_consumes_attempt": True,
-                    "rerun_permitted": False,
-                    "downstream_authorities_granted": [],
-                    "final_head_ci": {
-                        "required_before_attestation": True,
-                        "workflow_paths": [
-                            ".github/workflows/ci.yml",
-                            ".github/workflows/security.yml",
-                            (
-                                ".github/workflows/"
-                                "trino-maven-remediation-feasibility.yml"
-                            ),
-                            (
-                                ".github/workflows/"
-                                "trino-maven-dependencies.yml"
-                            ),
-                        ],
-                        "event": "pull_request",
-                        "status": "completed",
-                        "conclusion": "success",
-                        "head_sha_must_match_attestation": True,
-                        "pull_request_must_match": True,
-                        "api": "rest_workflow_runs",
-                        "page_size": 100,
-                        "maximum_pages": 10,
-                        "maximum_runs": 999,
-                        "maximum_page_bytes": 4194304,
-                        "stable_snapshot_passes": 2,
-                        "same_path_run_selection": (
-                            "latest_qualifying_success_attestation_preceding_by_updated_created_id"
-                        ),
-                        "positive_unique_run_ids": True,
-                        "total_count_must_match": True,
-                        "pagination_must_be_complete": True,
-                    },
-                    "review_threads": {
-                        "required_before_attestation": True,
-                        "current_non_outdated": 0,
-                        "head_sha_must_match_attestation": True,
-                        "query": "graphql_review_threads",
-                        "page_size": 100,
-                        "maximum_pages": 10,
-                        "maximum_threads": 1000,
-                        "stable_snapshot_passes": 2,
-                        "unique_thread_ids": True,
-                        "total_count_must_match": True,
-                        "pagination_must_be_complete": True,
-                    },
-                    "publication_enforcement": (
-                        "exact_merged_pull_request_attested_head_ci_and_"
-                        "review_threads_query"
-                    ),
-                },
-                "evidence_review_inventory_policy": {
-                    "recursive_closed_world_required": True,
-                    "regular_files_only": True,
-                    "directories_and_symlinks_rejected": True,
-                },
-                "retained_evidence": [
-                    "closed Maven dependency manifest and deterministic archive digest",
-                    "closed Bun dependency manifest and deterministic cache archive digest",
-                    "independent reconstruction equality",
-                    "two network-none native arm64 build output comparisons",
+                "merge_commit": "49a86522d6e6c69f4a552220b30fa510d3a5edd2",
+                "owner_attestation_comment_id": 5269416490,
+                "owner_attested_at": "2026-08-12T16:15:56Z",
+                "run_id": "31616764771",
+                "run_attempt": "1",
+                "event_name": "push",
+                "ref": "refs/heads/main",
+                "before_sha": "e6eb99d0e79b4a85aa7670ed75f07e4bc2d5b823",
+                "source_sha": "49a86522d6e6c69f4a552220b30fa510d3a5edd2",
+                "validate_job": "success",
+                "publish_job": "failure",
+                "failed_step": "Revalidate the write-capable publication boundary",
+                "failure_code": "INDEPENDENT_REVIEW",
+                "failure_reason": "workflow_run_pull_request_association_missing",
+                "final_head_ci_run_ids": {
+                    ".github/workflows/ci.yml": 31615663629,
+                    ".github/workflows/security.yml": 31615663622,
                     (
-                        "descriptor-complete CycloneDX Maven dependency SBOM "
-                        "retaining every rootfs-discovered top-level and embedded "
-                        "component and bound to the exact OCI digest"
-                    ),
-                    (
-                        "CycloneDX Bun dependency SBOM bound to the exact OCI digest"
-                    ),
-                    (
-                        "descriptor-complete and embedded-component-complete Maven "
-                        "High=0/Critical=0 Trivy result and database metadata bound "
-                        "to the exact OCI digest"
-                    ),
-                    (
-                        "exact raw Bun Trivy finding, hash-bound OpenVEX, and "
-                        "adjusted High=0/Critical=0 report with identical "
-                        "package inventories"
-                    ),
-                    "Cosign signature and Rekor bundle",
-                    (
-                        "SLSA v1 provenance with the exact tag object, commit, tree, "
-                        "and evidence hashes in predicate.buildDefinition."
-                        "resolvedDependencies"
-                    ),
-                    "keyless-signed anonymous exact-digest retrieval proof",
-                ],
+                        ".github/workflows/"
+                        "trino-maven-remediation-feasibility.yml"
+                    ): 31615663614,
+                    ".github/workflows/trino-maven-dependencies.yml": 31615663628,
+                },
+                "workflow_run_pull_requests_observed": [],
+                "candidate_artifact": {
+                    "id": 9150299769,
+                    "name": "trino-maven-candidate-31616764771-1",
+                    "bytes": 844111993,
+                    "expires_at": "2026-08-13T16:39:07Z",
+                    "expired": True,
+                },
+                "candidate_download_reached": False,
+                "registry_authentication_reached": False,
+                "registry_write_reached": False,
+                "dependency_artifact_published": False,
+                "final_publication_artifact_present": False,
+                "consumed": True,
             },
-            contract["publication"],
+            reauthorization["outcome"],
+        )
+        pending_repair = {
+            "status": "review_pending_not_authorized",
+            "scope": "final_head_pull_request_association_only",
+            "triggering_run_id": "31616764771",
+            "triggering_run_attempt": "1",
+            "failed_step": "Revalidate the write-capable publication boundary",
+            "observed_workflow_run_pull_requests": [],
+            "root_cause": (
+                "workflow_run_pull_requests_is_not_a_durable_post_merge_binding"
+            ),
+            "pull_request_binding": {
+                "apis": [
+                    "rest_merge_commit_associated_pulls",
+                    "rest_final_head_associated_pulls",
+                    "rest_head_filtered_pulls",
+                ],
+                "page_size": 100,
+                "maximum_pages": 10,
+                "maximum_pull_requests": 999,
+                "maximum_page_bytes": 4194304,
+                "stable_snapshot_passes": 2,
+                "pagination_must_be_complete": True,
+                "exact_singleton_required": True,
+                "workflow_query_branch_must_match_head_ref": True,
+                "workflow_run_pull_requests_policy": (
+                    "empty_or_exact_single_target"
+                ),
+            },
+            "publication_permissions_enabled": False,
+            "applies_only_after_separate_owner_authorization": True,
+            "next_sequence_authorized": False,
+        }
+        self.assertEqual(pending_repair, publication["pending_review_repair"])
+        self.assertEqual(
+            pending_repair,
+            admission["pending_publication_repair"],
         )
         self.assertEqual(
-            contract["publication"]["reauthorization"],
+            reauthorization,
             admission["dependency_snapshot_publication_reauthorization"],
         )
         self.assertEqual(
-            contract["publication"]["independent_review"],
-            admission["independent_review"],
-        )
-        self.assertEqual(
-            contract["publication"]["owner_only_approval_exception"],
-            admission["owner_only_approval_exception"],
-        )
-        self.assertEqual(
             {
-                "dependency_artifact_published": False,
-                "dependency_evidence_admitted": False,
-                "network_none_source_build_verified": False,
-                "runtime_image_published": False,
-                "native_arm64_smoke_verified": False,
-                "high_zero_critical_zero_scan_verified": False,
-                "cyclonedx_sbom_retained": False,
-                "cosign_rekor_signature_verified": False,
-                "slsa_provenance_verified": False,
-                "anonymous_exact_digest_pull_verified": False,
-                "resident_image_admitted": False,
-                "flux_runtime_reconciled": False,
+                "run_id": "31616764771",
+                "run_attempt": "1",
+                "source_sha": "49a86522d6e6c69f4a552220b30fa510d3a5edd2",
+                "result": "failed_closed_before_registry_authentication",
+                "rerun_permitted": False,
             },
-            contract["downstream_gates"],
+            publication["owner_only_approval_exception"]["consumed_run"],
         )
-        self.assertTrue((ROOT / contract["publication"]["workflow"]).is_file())
+        self.assertEqual(
+            "consumed_failed_closed",
+            publication["owner_only_approval_exception"]["status"],
+        )
+        self.assertTrue((ROOT / publication["workflow"]).is_file())
 
     def test_next_action_requires_exact_publication_evidence(
         self,
     ) -> None:
         next_action = self._admission()["next_action"]
         self.assertEqual(
-            {
-                "mode",
-                "decision_record_required",
-                "decision_records",
-                "phase",
-                "requirements",
-            },
-            set(next_action),
-        )
-        self.assertEqual(
-            "publish-reviewed-source-remediated-dependency-snapshot",
+            "review-failed-publication-and-request-new-owner-authorization",
             next_action["mode"],
         )
-        self.assertIs(next_action["decision_record_required"], False)
+        self.assertIs(next_action["decision_record_required"], True)
         self.assertEqual(
-            [
-                (
-                    "docs/design/07_ADR/"
-                    "ADR-0023_Allow_time_boxed_Trino_483_"
-                    "source_identity_exception_for_local_PoC.md"
-                ),
-                (
-                    "docs/design/07_ADR/"
-                    "ADR-0024_Apply_bounded_Trino_483_Web_UI_"
-                    "dependency_overlay_and_OpenVEX.md"
-                ),
-                (
-                    "docs/design/07_ADR/"
-                    "ADR-0025_Keep_Trino_483_Maven_closure_blocked_"
-                    "pending_source_remediation.md"
-                ),
-                (
-                    "docs/design/07_ADR/"
-                    "ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_"
-                    "source_remediation.md"
-                ),
-                (
-                    "docs/design/07_ADR/"
-                    "ADR-0027_Authorize_bounded_Trino_483_Iceberg_only_"
-                    "Maven_closure.md"
-                ),
-                (
-                    "docs/design/07_ADR/"
-                    "ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_"
-                    "Maven_findings.md"
-                ),
-                (
-                    "docs/design/07_ADR/"
-                    "ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_"
-                    "remediation.md"
-                ),
-            ],
-            next_action["decision_records"],
-        )
-        self.assertEqual(
-            "source_remediation_publication_evidence_pending",
+            "dependency_snapshot_publication_reauthorization_pending",
             next_action["phase"],
         )
-        self.assertEqual(
-            [
-                "active and unexpired provisional source authorization bound to the "
-                "exact source repository, tag, commit, and tree",
-                (
-                    "active exact owner authorization bound to the Parquet "
-                    "repository, tags, objects, commit, tree, preimage, postimage, "
-                    "permitted path, dependency replacements, expiry, and rollback"
-                ),
-                (
-                    "active exact owner authorization bound to the Trino "
-                    "Iceberg-only source paths, patch and preimage/postimage hashes, "
-                    "selected reactor, dependency replacements, expiry, and rollback"
-                ),
-                (
-                    "active exact owner authorization bound to the retained post-"
-                    "ADR-0027 pom.xml feasibility patch, patch and preimage/postimage "
-                    "hashes, Velocity Engine Core 2.4.1 and Plexus Utils 4.0.3 "
-                    "replacements, unchanged selected reactor, hardened run and "
-                    "independent audit, expiry, and rollback"
-                ),
-                (
-                    "either a current independent human APPROVED review on the "
-                    "exact final activation pull-request head from a reviewer "
-                    "distinct from the source-remediation author and owner, or the "
-                    "exact PR #148 owner final-head attestation by TommyKammy as a "
-                    "User with OWNER association after all required final-head CI "
-                    "succeeds and current non-outdated review threads "
-                    "equal zero"
-                ),
-                "authenticated closed dependency snapshot",
-                "network-none reproducible linux/arm64 build",
-                "digest-pinned builder and runtime bases",
-                "native linux/arm64 runtime smoke",
-                "Cosign signature and transparency-log evidence",
-                "SLSA provenance bound to the source revision",
-                (
-                    "retained closure-complete SBOM, raw vulnerability scan, exact "
-                    "bounded OpenVEX, and fresh High=0/Critical=0 scan without waivers"
-                ),
-                "anonymous exact-digest retrieval before separate admission review",
-            ],
-            next_action["requirements"],
+        requirements = next_action["requirements"]
+        self.assertTrue(
+            any("sequence 5 PR #148" in requirement for requirement in requirements)
+        )
+        self.assertTrue(
+            any("sequence 6" in requirement for requirement in requirements)
+        )
+        self.assertTrue(
+            any(
+                "publication permissions remain false" in requirement
+                for requirement in requirements
+            )
         )
 
     def test_provisional_source_decision_authorizes_only_the_next_boundary(self) -> None:

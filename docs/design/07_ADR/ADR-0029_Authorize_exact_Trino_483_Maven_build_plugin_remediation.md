@@ -3,8 +3,8 @@ doc_id: ADR-0029
 title: Authorize exact Trino 483 Maven build-plugin remediation
 status: accepted
 created: 2026-08-07
-updated: 2026-08-13
-version: "1.4.0"
+updated: 2026-08-14
+version: "1.5.0"
 area: architecture
 tags: [adr, trino, maven, supply-chain, arm64]
 ---
@@ -87,11 +87,31 @@ rerun.
 
 Issue #63 comment
 [`5268936554`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5268936554)
-at `2026-08-12T15:32:31Z` authorizes exactly one sequence-5 attempt after
+at `2026-08-12T15:32:31Z` authorized exactly one sequence-5 attempt after
 predecessor `e6eb99d0e79b4a85aa7670ed75f07e4bc2d5b823`, bound to PR #148 and
-GitHub Actions attempt `1`. It permits only the exact fixed-version metadata
+GitHub Actions attempt `1`. It permitted only the exact fixed-version metadata
 repair and retains the same candidate, expiry, fail-closed controls, and empty
 downstream-authority set.
+
+PR #148 final head `7581b2413c1c820ac1f774fe28034f1b7bfa6eb1` passed the four
+required pull-request workflows and received exact owner attestation comment
+[`5269416490`](https://github.com/TommyKammy/Shirokuma/pull/148#issuecomment-5269416490)
+at `2026-08-12T16:15:56Z`. It was squash-merged as
+`49a86522d6e6c69f4a552220b30fa510d3a5edd2`. Reviewed-main run
+[`31616764771`](https://github.com/TommyKammy/Shirokuma/actions/runs/31616764771),
+attempt `1`, completed the `validate` job successfully. The `publish` job
+failed closed at `Revalidate the write-capable publication boundary` because
+GitHub's head-filtered REST workflow-run records carried empty `pull_requests`
+associations while the verifier required exact `[148]`.
+
+Validation retained candidate artifact
+`trino-maven-candidate-31616764771-1` (ID `9150299769`, 844,111,993 bytes,
+expired `2026-08-13T16:39:07Z`). The publish job never downloaded that
+candidate and did not reach registry authentication, registry write, signing,
+attestation, anonymous pull, or final publication-artifact retention. The
+artifact is neither admitted nor durable evidence. The failure consumes
+sequence 5. Run rerun, sequence 6, publication, and every downstream authority
+remain unauthorized pending a new explicit owner decision.
 
 ## Decision
 
@@ -183,14 +203,23 @@ top-level issue comment when every condition below is true:
 - `.github/workflows/ci.yml`, `.github/workflows/security.yml`,
   `.github/workflows/trino-maven-remediation-feasibility.yml`, and
   `.github/workflows/trino-maven-dependencies.yml` each have a REST workflow-run
-  result with `status=completed` and `conclusion=success` for PR #148 and the
-  exact attested final head; the workflow-runs endpoint is read with
+  result with `status=completed` and `conclusion=success` for the exact attested
+  final head; the merge-commit association, final-head commit association, and
+  `pulls?state=all&head=owner:ref` result are each queried to bounded exhaustion
+  twice and must stably select the same exact singleton PR; that selected PR
+  itself must be closed and merged and bind the repository, base `main`, merge
+  commit, final head, and head branch; the workflow-runs endpoint is read
+  with
   `per_page=100` and a 4 MiB response bound per page through a terminal short
   page, bounded to 10 pages and an accepted maximum of 999 runs; every run ID
   is a unique positive integer,
   `total_count` remains stable and equals the collected run count, and two
   complete ordered scans of run identity, path, head, event, status, conclusion,
-  timestamps, repository identities, and PR binding are identical; multiple
+  timestamps, head branch, repository identities, and run-level PR association
+  are identical; the workflow query is filtered by `event=pull_request` and the
+  exact final-head SHA, and `pull_requests` may be empty or the exact singleton
+  selected PR only because that field is not a durable positive binding; any
+  other non-empty association or malformed entry fails closed; multiple
   qualifying successful pre-attestation runs for one required path are ordered
   by `updated_at`, then `created_at`, then run ID, while failed or incomplete
   runs cannot satisfy the gate; a full tenth page does not prove
@@ -240,10 +269,11 @@ exact merged-PR, attested-head CI, review-thread, and post-gate owner-decision
 queries at its write-capable boundary and again immediately before registry
 authentication.
 
-This exception grants only the approval path for PR #148's fifth publication
-attempt. It does not remove the independent-review requirement from any other
+This historical exception granted only the approval path for PR #148's fifth
+publication attempt and is consumed by run `31616764771`. It does not remove
+the independent-review requirement from any other
 pull request, later attempt, or repository policy and is not a permanent
-relaxation. Failure consumes the attempt, rerun remains forbidden, and the
+relaxation. Rerun and sequence 6 remain forbidden, and the
 empty downstream-authority set is closed-world: it grants no
 dependency-evidence admission, image publication, resident admission,
 Flux/runtime reconciliation, credentials, public exposure, production use, or
@@ -291,31 +321,45 @@ byte-identical server archives, and must leave the source checkout clean. The
 untracked-source rejection remains mandatory; no `.gitignore`, cleanup, or
 allowlist exception is permitted.
 
-Issue #63 comment `5268936554` is the active sequence-5 decision. It authorizes
-only one fifth reviewed-main attempt, after predecessor
-`e6eb99d0e79b4a85aa7670ed75f07e4bc2d5b823`, with GitHub Actions attempt `1`.
-The lifecycle is `dependency_snapshot_publication_pending`, and the contract,
-publication, and admission permission records are true only for that exact
-transition. Pull requests remain validation-only. PR #148 must pass the exact
-final-head CI and review-thread gates and satisfy either a standard current
-independent `APPROVED` review or the PR #148 owner-only final-head attestation
-contract above. A different predecessor, a rerun, candidate drift, expiry, or
-failure before completing the closed publication-evidence boundary consumes or
-rejects this fifth attempt and returns publication to explicit reauthorization
-pending.
+Issue #63 comment `5268936554` is now a consumed sequence-5 decision. PR #148
+and run `31616764771` used its only protected-main transition and GitHub Actions
+attempt `1`. The lifecycle is
+`dependency_snapshot_publication_reauthorization_pending`; the contract,
+publication, and admission permission records are false. Pull requests and
+later `main` pushes take the static blocked path. The pending Draft repair may
+correct only the workflow-run association verifier and bind this failure
+record. It cannot rerun the failed workflow, authorize sequence 6, activate the
+publisher, or create downstream authority.
+The remediation-feasibility pull-request workflow validates this blocked
+contract and skips its builder, source-fetch, network, evidence-finalization,
+and artifact-retention steps while `publication-status=blocked`.
 
-The write-capable publish job must independently repeat the attempt check and
-query the exact merged pull request before registry authentication. At least
+For any future separately authorized attempt, a workflow-run `pull_requests`
+array is supplemental only. The publisher must prove the PR through bounded,
+two-pass, exact-singleton merge-commit association, final-head commit
+association, and `pulls?state=all&head=owner:ref` queries. The exact singleton
+itself must be closed and merged. The publisher must then select required
+workflow runs from a query filtered to `event=pull_request` and that exact final
+head, checking workflow path, head SHA, head branch, repository and
+head-repository identities, successful completion, and completion before the
+attestation. The run-level PR array may be empty or the same exact singleton;
+any different non-empty association, malformed value, unstable snapshot, or
+failure to prove bounded exhaustion fails closed.
+
+When separately reauthorized, the write-capable publish job must independently
+repeat the attempt check and query the exact merged pull request before
+registry authentication. At least
 one current `APPROVED` review from a human GitHub user different from risk
 owner `TommyKammy` and implementation author `Codex` remains the standard
 path. A qualifying standard review short-circuits evaluation without querying
-owner comments or the exception-only CI and thread APIs. The only alternative
-is the exact PR #148 owner attestation above; an ordinary CODEOWNERS approval
-by the risk owner cannot satisfy it. The qualifying review `commit_id`, or
-owner attestation `Final head`, must equal the exact final pull-request
-`head.sha`; an approval of an earlier revision cannot authorize publication.
-The alternative also requires all exact final-head CI checks successful and
-zero current non-outdated review threads, including resolved threads.
+owner comments or exception-only CI and thread APIs. The consumed PR #148
+owner attestation above cannot authorize another run; an ordinary CODEOWNERS
+approval by the risk owner cannot replace a future exact authorization. Any
+qualifying review `commit_id`, or separately authorized owner attestation
+`Final head`, must equal the exact final pull-request `head.sha`; an approval
+of an earlier revision cannot authorize publication. Any owner-only
+alternative also requires all exact final-head CI checks successful and zero
+current non-outdated review threads, including resolved threads.
 After those API gates return, the publisher repeats the current-time
 authorization and one-attempt check immediately before registry authentication
 so expiry during the bounded API queries cannot reach `oras login` or a write.
