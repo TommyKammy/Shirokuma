@@ -122,7 +122,6 @@ jobs:
           scanners: vuln,secret,misconfig
           severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
           ignore-unfixed: false
-          trivyignores: /dev/null
           exit-code: 0
 
       - name: Capture current Flux RBAC findings before ignores
@@ -134,7 +133,6 @@ jobs:
           format: json
           output: trivy-live-flux-rbac.json
           severity: CRITICAL
-          trivyignores: /dev/null
           exit-code: 0
 
       - name: Verify current Flux RBAC findings before ignores

@@ -702,7 +702,7 @@ REVIEW_PENDING_WORKFLOW_INVENTORY = {
         "f097273d79c9595d42be816152ff1aabc862faf2667cb0648434280ce8b8ac06"
     ),
     ".github/workflows/security.yml": (
-        "7da537069319feb5159899187a7161f66d5602c8876ff26148adb03a928a9e0a"
+        "6010f6fd7c3284378822f159eb1071cb45639d3436f64a8e58f4f20547dac507"
     ),
     ".github/workflows/trino-maven-dependencies.yml": (
         "183755f187bdd90810e0e24e726c865464e33e8d2245a6fbf6c7bba8113cf972"

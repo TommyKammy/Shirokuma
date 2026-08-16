@@ -427,10 +427,10 @@ class TrivyIgnoreContractTests(unittest.TestCase):
         )[1].split(
             "- name: Block High or Critical dependency and configuration findings", 1
         )[0]
-        self.assertEqual(report.count("trivyignores: /dev/null"), 2)
+        self.assertNotIn("trivyignores:", report)
         self.assertIn("trivy-live-flux-rbac.json", capture)
         self.assertIn("severity: CRITICAL", capture)
-        self.assertIn("trivyignores: /dev/null", capture)
+        self.assertNotIn("trivyignores:", capture)
         self.assertIn(
             "--live-scan-report-file trivy-live-flux-rbac.json", verify_live
         )
