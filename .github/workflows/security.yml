@@ -124,6 +124,22 @@ jobs:
           ignore-unfixed: false
           exit-code: 0
 
+      - name: Capture current Flux RBAC findings before ignores
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.72.0
+          scan-type: config
+          scan-ref: deploy/gitops/clusters/local-lite/flux-system/gotk-components.yaml
+          format: json
+          output: trivy-live-flux-rbac.json
+          severity: CRITICAL
+          exit-code: 0
+
+      - name: Verify current Flux RBAC findings before ignores
+        run: >-
+          python3 scripts/verify_trivyignore.py
+          --live-scan-report-file trivy-live-flux-rbac.json
+
       - name: Block High or Critical dependency and configuration findings
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
