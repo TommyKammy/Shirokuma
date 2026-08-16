@@ -24,6 +24,7 @@ from scripts.verify_trivyignore import (
     canonical_document,
     expected_trivy_metadata,
     validate_authorization_window,
+    validate_live_scan_evidence,
     validate_scan_evidence,
 )
 
@@ -324,6 +325,43 @@ class TrivyIgnoreContractTests(unittest.TestCase):
                 expected_trivy_metadata_sha256=digest,
             )
 
+    def test_fresh_live_scan_with_exact_findings_is_accepted(self) -> None:
+        report = json.loads(SCAN_REPORT)
+        report["CreatedAt"] = "2026-08-16T10:39:54.464204+09:00"
+        raw = json.dumps(report).encode("utf-8")
+        now = datetime(2026, 8, 16, 1, 40, tzinfo=timezone.utc)
+        self.assertEqual(
+            validate_live_scan_evidence(raw, now),
+            hashlib.sha256(raw).hexdigest(),
+        )
+
+    def test_live_scan_finding_count_drift_is_rejected(self) -> None:
+        report = json.loads(SCAN_REPORT)
+        report["CreatedAt"] = "2026-08-16T10:39:54.464204+09:00"
+        report["Results"][0]["Misconfigurations"].append(
+            report["Results"][0]["Misconfigurations"][0]
+        )
+        raw = json.dumps(report).encode("utf-8")
+        now = datetime(2026, 8, 16, 1, 40, tzinfo=timezone.utc)
+        with self.assertRaisesRegex(ContractError, "finding set changed"):
+            validate_live_scan_evidence(raw, now)
+
+    def test_stale_or_future_live_scan_is_rejected(self) -> None:
+        report = json.loads(SCAN_REPORT)
+        report["CreatedAt"] = "2026-08-16T10:39:54.464204+09:00"
+        raw = json.dumps(report).encode("utf-8")
+        for now, message in (
+            (datetime(2026, 8, 16, 2, 0, tzinfo=timezone.utc), "stale"),
+            (
+                datetime(2026, 8, 16, 1, 39, tzinfo=timezone.utc),
+                "in the future",
+            ),
+        ):
+            with self.subTest(message=message), self.assertRaisesRegex(
+                ContractError, message
+            ):
+                validate_live_scan_evidence(raw, now)
+
     def test_additional_entry_or_field_is_rejected(self) -> None:
         mutations = (
             CANONICAL + b"  - id: KSV-0001\n",
@@ -381,7 +419,21 @@ class TrivyIgnoreContractTests(unittest.TestCase):
         blocking = workflow.split(
             "- name: Block High or Critical dependency and configuration findings", 1
         )[1].split("- name: Generate and retain source SBOM", 1)[0]
-        self.assertNotIn("trivyignores:", report)
+        capture = workflow.split(
+            "- name: Capture current Flux RBAC findings before ignores", 1
+        )[1].split("- name: Verify current Flux RBAC findings before ignores", 1)[0]
+        verify_live = workflow.split(
+            "- name: Verify current Flux RBAC findings before ignores", 1
+        )[1].split(
+            "- name: Block High or Critical dependency and configuration findings", 1
+        )[0]
+        self.assertEqual(report.count("trivyignores: /dev/null"), 2)
+        self.assertIn("trivy-live-flux-rbac.json", capture)
+        self.assertIn("severity: CRITICAL", capture)
+        self.assertIn("trivyignores: /dev/null", capture)
+        self.assertIn(
+            "--live-scan-report-file trivy-live-flux-rbac.json", verify_live
+        )
         self.assertEqual(blocking.count("trivyignores: .trivyignore.yaml"), 1)
         self.assertEqual(workflow.count("trivyignores: .trivyignore.yaml"), 1)
 

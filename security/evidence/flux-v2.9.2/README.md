@@ -46,6 +46,13 @@ tuples. A strict profile, an expired exception, tuple or scan-hash drift, a
 duplicate or additional High finding, or any Critical finding remains
 fail-closed. Automatic renewal is forbidden.
 
+The exception gate policy-binds the exact OWNER login, association, comment,
+comment timestamp, and Issue body hash. Each controller exception also binds
+the retained report path and bytes, report creation time, Trivy version, and
+vulnerability DB timestamp to the resident ledger. CI separately captures a
+fresh unfiltered config JSON and verifies the exact nine RBAC finding
+identities and counts before the blocking scan applies `.trivyignore.yaml`.
+
 The evidence can be reproduced with commands of this form:
 
 ```bash

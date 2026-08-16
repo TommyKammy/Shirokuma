@@ -83,6 +83,7 @@ APPROVED_TRIVY_METADATA_SHA256 = (
 )
 APPROVED_SCAN_CREATED_AT = "2026-08-14T15:26:22.35115+09:00"
 MAX_VALIDITY_DAYS = 30
+LIVE_SCAN_MAX_AGE = timedelta(minutes=15)
 
 
 class ContractError(ValueError):
@@ -217,6 +218,88 @@ def parse_json_object(raw: bytes, label: str) -> dict[str, Any]:
     return value
 
 
+def validate_scan_report_semantics(
+    report_raw: bytes,
+    *,
+    label: str,
+    expected_created_at: str | None = None,
+) -> datetime:
+    report = parse_json_object(report_raw, label)
+    if set(report) != {
+        "SchemaVersion",
+        "CreatedAt",
+        "ArtifactName",
+        "ArtifactType",
+        "Results",
+        "ReportID",
+        "Trivy",
+    }:
+        raise ContractError(f"{label} top-level fields changed")
+    if report.get("SchemaVersion") != 2:
+        raise ContractError(f"{label} schema must be 2")
+    if report.get("ArtifactName") != APPROVED_PATH:
+        raise ContractError(f"{label} path changed")
+    if report.get("ArtifactType") != "filesystem":
+        raise ContractError(f"{label} artifact type changed")
+    if report.get("Trivy") != {"Version": TRIVY_VERSION}:
+        raise ContractError(f"{label} scanner version changed")
+
+    created_at_value = report.get("CreatedAt")
+    if expected_created_at is not None and created_at_value != expected_created_at:
+        raise ContractError(f"{label} creation time changed")
+    created_at = parse_offset_timestamp(created_at_value, f"{label} creation time")
+    if created_at.tzinfo is None:
+        raise ContractError(f"{label} creation time requires a timezone")
+
+    results = report.get("Results")
+    if not isinstance(results, list) or len(results) != 1:
+        raise ContractError(f"{label} must contain one result")
+    result = results[0]
+    if not isinstance(result, dict):
+        raise ContractError(f"{label} result must be an object")
+    if (
+        result.get("Target") != "gotk-components.yaml"
+        or result.get("Class") != "config"
+        or result.get("Type") != "kubernetes"
+    ):
+        raise ContractError(f"{label} result identity changed")
+    if result.get("MisconfSummary") != {"Successes": 13, "Failures": 9}:
+        raise ContractError(f"{label} summary changed")
+    findings = result.get("Misconfigurations")
+    if not isinstance(findings, list):
+        raise ContractError(f"{label} findings must be a list")
+
+    observed: Counter[tuple[str, str, str, str, str, str]] = Counter()
+    for finding in findings:
+        if not isinstance(finding, dict):
+            raise ContractError(f"{label} finding must be an object")
+        values = tuple(
+            finding.get(field)
+            for field in ("ID", "Severity", "Title", "Status", "Namespace", "Query")
+        )
+        if not all(isinstance(value, str) and value for value in values):
+            raise ContractError(f"{label} finding identity is incomplete")
+        observed[values] += 1
+
+    expected = Counter(
+        {
+            (finding_id, severity, title, status, namespace, query): count
+            for (
+                finding_id,
+                severity,
+                title,
+                status,
+                namespace,
+                query,
+                count,
+            ) in APPROVED_FINDINGS
+        }
+    )
+    if observed != expected:
+        raise ContractError(f"{label} finding set changed")
+    return created_at
+
+
 def validate_scan_evidence(
     report_raw: bytes,
     trivy_metadata_raw: bytes,
@@ -239,32 +322,11 @@ def validate_scan_evidence(
     if metadata != expected_trivy_metadata():
         raise ContractError("retained Trivy metadata content changed")
 
-    report = parse_json_object(report_raw, "retained Trivy config report")
-    if set(report) != {
-        "SchemaVersion",
-        "CreatedAt",
-        "ArtifactName",
-        "ArtifactType",
-        "Results",
-        "ReportID",
-        "Trivy",
-    }:
-        raise ContractError("retained Trivy config report top-level fields changed")
-    if report.get("SchemaVersion") != 2:
-        raise ContractError("retained Trivy config report schema must be 2")
-    if report.get("ArtifactName") != APPROVED_PATH:
-        raise ContractError("retained Trivy config report path changed")
-    if report.get("ArtifactType") != "filesystem":
-        raise ContractError("retained Trivy config report artifact type changed")
-    if report.get("Trivy") != {"Version": TRIVY_VERSION}:
-        raise ContractError("retained Trivy config report scanner version changed")
-    if report.get("CreatedAt") != APPROVED_SCAN_CREATED_AT:
-        raise ContractError("retained Trivy config report creation time changed")
-    created_at = parse_offset_timestamp(
-        APPROVED_SCAN_CREATED_AT, "reviewed Trivy config creation time"
+    created_at = validate_scan_report_semantics(
+        report_raw,
+        label="retained Trivy config report",
+        expected_created_at=APPROVED_SCAN_CREATED_AT,
     )
-    if created_at.tzinfo is None:
-        raise ContractError("retained Trivy config creation time requires a timezone")
     try:
         bundle_downloaded_at = parse_offset_timestamp(
             metadata["CheckBundle"]["DownloadedAt"],
@@ -282,53 +344,19 @@ def validate_scan_evidence(
     ):
         raise ContractError("retained Trivy metadata postdates the config scan")
 
-    results = report.get("Results")
-    if not isinstance(results, list) or len(results) != 1:
-        raise ContractError("retained Trivy config report must contain one result")
-    result = results[0]
-    if not isinstance(result, dict):
-        raise ContractError("retained Trivy config result must be an object")
-    if (
-        result.get("Target") != "gotk-components.yaml"
-        or result.get("Class") != "config"
-        or result.get("Type") != "kubernetes"
-    ):
-        raise ContractError("retained Trivy config result identity changed")
-    if result.get("MisconfSummary") != {"Successes": 13, "Failures": 9}:
-        raise ContractError("retained Trivy config summary changed")
-    findings = result.get("Misconfigurations")
-    if not isinstance(findings, list):
-        raise ContractError("retained Trivy config findings must be a list")
-
-    observed: Counter[tuple[str, str, str, str, str, str]] = Counter()
-    for finding in findings:
-        if not isinstance(finding, dict):
-            raise ContractError("retained Trivy config finding must be an object")
-        values = tuple(
-            finding.get(field)
-            for field in ("ID", "Severity", "Title", "Status", "Namespace", "Query")
-        )
-        if not all(isinstance(value, str) and value for value in values):
-            raise ContractError("retained Trivy config finding identity is incomplete")
-        observed[values] += 1
-
-    expected = Counter(
-        {
-            (finding_id, severity, title, status, namespace, query): count
-            for (
-                finding_id,
-                severity,
-                title,
-                status,
-                namespace,
-                query,
-                count,
-            ) in APPROVED_FINDINGS
-        }
-    )
-    if observed != expected:
-        raise ContractError("retained Trivy config finding set changed")
     return report_digest
+
+
+def validate_live_scan_evidence(report_raw: bytes, now: datetime) -> str:
+    created_at = validate_scan_report_semantics(
+        report_raw,
+        label="live Trivy config report",
+    ).astimezone(timezone.utc)
+    if created_at > now:
+        raise ContractError("live Trivy config report creation time is in the future")
+    if now - created_at > LIVE_SCAN_MAX_AGE:
+        raise ContractError("live Trivy config report is stale")
+    return hashlib.sha256(report_raw).hexdigest()
 
 
 def validate_document(document: bytes, now: datetime) -> datetime:
@@ -374,6 +402,11 @@ def parse_args() -> argparse.Namespace:
         "--trivy-metadata-file", type=Path, default=DEFAULT_TRIVY_METADATA_FILE
     )
     parser.add_argument(
+        "--live-scan-report-file",
+        type=Path,
+        help="fresh unfiltered Trivy config JSON to verify before applying ignores",
+    )
+    parser.add_argument(
         "--now",
         help="canonical RFC 3339 UTC timestamp used only by deterministic tests",
     )
@@ -396,9 +429,25 @@ def main() -> int:
             load_regular_file(args.scan_report_file, "Trivy config report"),
             load_regular_file(args.trivy_metadata_file, "Trivy metadata"),
         )
+        live_scan_digest = (
+            validate_live_scan_evidence(
+                load_regular_file(
+                    args.live_scan_report_file,
+                    "live Trivy config report",
+                ),
+                now,
+            )
+            if args.live_scan_report_file is not None
+            else None
+        )
     except ContractError as error:
         print(f"trivyignore: {error}", file=sys.stderr)
         return 1
+    live_scan_output = (
+        f"live_scan_sha256={live_scan_digest} "
+        if live_scan_digest is not None
+        else ""
+    )
     print(
         "trivyignore: ok "
         f"ids={','.join(APPROVED_IDS)} path={APPROVED_PATH} "
@@ -406,6 +455,7 @@ def main() -> int:
         f"manifest_sha256={manifest_digest} trivy={TRIVY_VERSION} "
         f"check_bundle={TRIVY_CHECK_BUNDLE_DIGEST} "
         f"scan_sha256={scan_digest} "
+        f"{live_scan_output}"
         f"trivy_metadata_sha256={APPROVED_TRIVY_METADATA_SHA256} "
         f"approval_comment={APPROVAL_COMMENT_ID} "
         f"approved_at={APPROVAL_CREATED_AT.strftime('%Y-%m-%dT%H:%M:%SZ')} "

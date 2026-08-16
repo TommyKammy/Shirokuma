@@ -65,10 +65,27 @@ GITHUB_ISSUE_URL = re.compile(
 OWNER_AUTHORIZATION_FIELDS = {
     "issue_url",
     "comment_url",
+    "owner_login",
+    "author_association",
+    "comment_created_at",
     "issue_body_sha256",
     "decision",
     "approved_on",
     "expires_on",
+}
+APPROVED_OWNER_AUTHORIZATION_IDENTITY = {
+    "issue_url": "https://github.com/TommyKammy/Shirokuma/issues/150",
+    "comment_url": (
+        "https://github.com/TommyKammy/Shirokuma/issues/150"
+        "#issuecomment-5290345820"
+    ),
+    "owner_login": "TommyKammy",
+    "author_association": "OWNER",
+    "comment_created_at": "2026-08-14T06:43:14Z",
+    "issue_body_sha256": (
+        "b125527ca8eb81f50baa90c0a07194dc8a761ae4e79fbf9e90a88bfc31c2f0b0"
+    ),
+    "decision": "APPROVED",
 }
 LAB_EXCEPTION_FIELDS = {
     "component",
@@ -81,7 +98,15 @@ LAB_EXCEPTION_FIELDS = {
     "risk_acceptance",
     "compensating_controls",
     "replacement_plan",
+    "scan_evidence",
     "cves",
+}
+LAB_EXCEPTION_SCAN_EVIDENCE_FIELDS = {
+    "artifact",
+    "sha256",
+    "created_at",
+    "scanner_version",
+    "vulnerability_db_updated_at",
 }
 LAB_EXCEPTION_FINDING_FIELDS = {
     "id",
@@ -1939,6 +1964,15 @@ def load_owner_authorization(document: dict[str, Any]) -> tuple[date, date]:
         )
     if authorization.get("decision") != "APPROVED":
         raise PolicyError("resident image owner_authorization decision must be APPROVED")
+    observed_identity = {
+        field: authorization.get(field)
+        for field in APPROVED_OWNER_AUTHORIZATION_IDENTITY
+    }
+    if observed_identity != APPROVED_OWNER_AUTHORIZATION_IDENTITY:
+        raise PolicyError(
+            "resident image owner_authorization does not match the exact "
+            "Shirokuma OWNER record"
+        )
     try:
         approved_on = date.fromisoformat(str(authorization.get("approved_on", "")))
         expires_on = date.fromisoformat(str(authorization.get("expires_on", "")))
@@ -1959,10 +1993,91 @@ def load_owner_authorization(document: dict[str, Any]) -> tuple[date, date]:
     return approved_on, expires_on
 
 
+def check_lab_exception_scan_evidence(
+    entry: dict[str, Any],
+    ledger_image: dict[str, Any],
+    *,
+    manifest_path: Path,
+    repository: Path,
+    component: str,
+) -> None:
+    evidence = entry.get("scan_evidence")
+    if (
+        not isinstance(evidence, dict)
+        or set(evidence) != LAB_EXCEPTION_SCAN_EVIDENCE_FIELDS
+    ):
+        raise PolicyError(
+            f"{component}: scan_evidence must contain exactly: "
+            + ", ".join(sorted(LAB_EXCEPTION_SCAN_EVIDENCE_FIELDS))
+        )
+    if ledger_image.get("component") != component:
+        raise PolicyError(f"{component}: exception component does not match the resident ledger")
+
+    artifact = evidence.get("artifact")
+    if not isinstance(artifact, str) or artifact != ledger_image.get("scan_artifact"):
+        raise PolicyError(f"{component}: exception scan artifact does not match the resident ledger")
+    scan_path = evidence_artifact_path(
+        manifest_path,
+        repository,
+        artifact,
+        "scan_evidence.artifact",
+    )
+
+    expected_sha256 = evidence.get("sha256")
+    if not isinstance(expected_sha256, str) or SHA256_HEX.fullmatch(expected_sha256) is None:
+        raise PolicyError(f"{component}: exception scan SHA-256 is invalid")
+    if file_sha256(scan_path, f"{component} exception scan") != expected_sha256:
+        raise PolicyError(f"{component}: exception scan SHA-256 does not match retained bytes")
+
+    ledger_scanner = ledger_image.get("scanner_version")
+    expected_scanner_version = (
+        ledger_scanner.removeprefix("trivy ")
+        if isinstance(ledger_scanner, str)
+        else None
+    )
+    scanner_version = evidence.get("scanner_version")
+    if (
+        not isinstance(scanner_version, str)
+        or scanner_version != expected_scanner_version
+    ):
+        raise PolicyError(f"{component}: exception scanner version does not match the resident ledger")
+    database_updated_at = evidence.get("vulnerability_db_updated_at")
+    if (
+        not isinstance(database_updated_at, str)
+        or database_updated_at != ledger_image.get("vulnerability_db_updated_at")
+        or parse_timestamp(database_updated_at) is None
+    ):
+        raise PolicyError(
+            f"{component}: exception vulnerability DB identity does not match the resident ledger"
+        )
+
+    created_at = evidence.get("created_at")
+    parsed_created_at = parse_timestamp(created_at) if isinstance(created_at, str) else None
+    if parsed_created_at is None:
+        raise PolicyError(f"{component}: exception scan creation time is invalid")
+    if parsed_created_at.astimezone(timezone.utc) > datetime.now(timezone.utc):
+        raise PolicyError(f"{component}: exception scan creation time must not be in the future")
+
+    report = load_json(scan_path)
+    if not isinstance(report, dict):
+        raise PolicyError(f"{component}: exception scan must be a JSON object")
+    if report.get("SchemaVersion") != 2:
+        raise PolicyError(f"{component}: exception scan schema must be 2")
+    if report.get("ArtifactName") != entry.get("reference"):
+        raise PolicyError(f"{component}: exception scan artifact identity changed")
+    if report.get("ArtifactType") != "container_image":
+        raise PolicyError(f"{component}: exception scan artifact type changed")
+    if report.get("CreatedAt") != created_at:
+        raise PolicyError(f"{component}: exception scan creation time changed")
+    if report.get("Trivy") != {"Version": scanner_version}:
+        raise PolicyError(f"{component}: exception scan scanner version changed")
+
+
 def load_lab_exceptions(
     path: Path,
     repository: Path,
-    ledger_references: set[str],
+    manifest_path: Path,
+    ledger_images: dict[str, dict[str, Any]],
 ) -> dict[str, set[tuple[str, str, str, str, str]]]:
     document = load_json(path)
     if not isinstance(document, dict) or document.get("schema_version") != 1:
@@ -2002,7 +2117,7 @@ def load_lab_exceptions(
         reference = entry.get("reference")
         if not isinstance(reference, str) or not is_immutable_image_reference(reference):
             raise PolicyError(f"{component}: exception requires an immutable image reference")
-        if reference not in ledger_references:
+        if reference not in ledger_images:
             raise PolicyError(f"{component}: exception reference is not present in the resident ledger")
         if reference in approved:
             raise PolicyError(f"{component}: duplicate exception reference")
@@ -2050,6 +2165,14 @@ def load_lab_exceptions(
             raise PolicyError(
                 f"{component}: exception dates must match owner_authorization"
             )
+
+        check_lab_exception_scan_evidence(
+            entry,
+            ledger_images[reference],
+            manifest_path=manifest_path,
+            repository=repository,
+            component=component,
+        )
 
         cves = entry.get("cves")
         if not isinstance(cves, list) or not cves:
@@ -2204,6 +2327,7 @@ def check_images(
 
     errors: list[str] = []
     ledger_references: set[str] = set()
+    ledger_images: dict[str, dict[str, Any]] = {}
     for index, image in enumerate(images):
         label = f"images[{index}]"
         if not isinstance(image, dict):
@@ -2218,6 +2342,10 @@ def check_images(
         reference_value = image.get("reference")
         reference = reference_value if isinstance(reference_value, str) else ""
         ledger_references.add(reference)
+        if reference in ledger_images:
+            errors.append(f"{component}: duplicate resident ledger reference")
+        else:
+            ledger_images[reference] = image
         if not is_immutable_image_reference(reference):
             errors.append(
                 f"{component}: reference requires exact repository@sha256 digest without a tag"
@@ -2279,7 +2407,8 @@ def check_images(
             lab_exceptions = load_lab_exceptions(
                 exceptions_path,
                 repository,
-                ledger_references,
+                manifest_path,
+                ledger_images,
             )
         except PolicyError as error:
             errors.append(f"invalid resident image exceptions: {error}")

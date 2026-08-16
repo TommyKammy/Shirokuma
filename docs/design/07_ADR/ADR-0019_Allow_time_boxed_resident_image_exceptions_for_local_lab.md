@@ -4,8 +4,8 @@ doc_id: "ADR-0019"
 title: "Allow time-boxed resident image exceptions for the local lab"
 status: accepted
 created: 2026-07-14
-updated: 2026-08-14
-version: "0.2"
+updated: 2026-08-16
+version: "0.3"
 area: "adr"
 tags: [shirokuma, adr, security, supply-chain, local-lab]
 ---
@@ -92,11 +92,16 @@ exact 25 tupleはIssue body、OWNER commentに束縛された
 `security/resident-image-exceptions.json`、および上記retained scanが
 authoritativeである。advisory、severity、package、installed version、fixed
 version、digest、scan hashのいずれかが変化すれば、この承認は適用しない。
+例外validatorはさらにexact OWNER login/association/comment timestampと、各scanの
+artifact path、実ファイルSHA-256、`CreatedAt`、Trivy version、DB timestampを
+resident ledgerおよびretained JSONへ束縛する。
 
 同じOWNER decisionはgenerated `gotk-components.yaml`の完全一致pathに限り、
 Trivy `KSV-0041` 1件と`KSV-0046` 8件を
 `2026-09-13T00:00:00Z`まで承認する。all-severity reportにはignoreを適用せず、
-blocking scanだけがcanonical `.trivyignore.yaml`を使用する。resident imageと
+CIはignore前にfreshなcanonical-manifest scanを取得して完全一致する9 findingsと
+作成時刻を検証し、同じIDの追加発生も拒否する。blocking scanだけがcanonical
+`.trivyignore.yaml`を使用する。resident imageと
 RBACのどちらも自動更新を禁止し、期限到来時はfail closedへ戻す。
 retained config report SHA-256は
 `00e87fef815ac9a99401f2a450e71c47555fd991ec6d2cfc7313e1f0dbe3bd7a`、raw

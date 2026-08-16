@@ -283,6 +283,15 @@ class SupplyChainSecurityTests(unittest.TestCase):
                 "no public exposure",
             ],
             "replacement_plan": "Replace with a clean upstream image.",
+            "scan_evidence": {
+                "artifact": image["scan_artifact"],
+                "sha256": "",
+                "created_at": "2026-08-14T05:43:00Z",
+                "scanner_version": image["scanner_version"].removeprefix("trivy "),
+                "vulnerability_db_updated_at": image[
+                    "vulnerability_db_updated_at"
+                ],
+            },
             "cves": cves,
         }
 
@@ -294,6 +303,11 @@ class SupplyChainSecurityTests(unittest.TestCase):
             if entries
             else (date.today() + timedelta(days=30)).isoformat()
         )
+        for entry in entries:
+            scan_evidence = entry["scan_evidence"]
+            assert isinstance(scan_evidence, dict)
+            scan_path = root / str(scan_evidence["artifact"])
+            scan_evidence["sha256"] = hashlib.sha256(scan_path.read_bytes()).hexdigest()
         path = root / "resident-image-exceptions.json"
         path.write_text(
             json.dumps(
@@ -301,12 +315,17 @@ class SupplyChainSecurityTests(unittest.TestCase):
                     "schema_version": 1,
                     "profile": "local-lab",
                     "owner_authorization": {
-                        "issue_url": "https://github.com/example/fixture/issues/1",
+                        "issue_url": "https://github.com/TommyKammy/Shirokuma/issues/150",
                         "comment_url": (
-                            "https://github.com/example/fixture/issues/1"
-                            "#issuecomment-1"
+                            "https://github.com/TommyKammy/Shirokuma/issues/150"
+                            "#issuecomment-5290345820"
                         ),
-                        "issue_body_sha256": "a" * 64,
+                        "owner_login": "TommyKammy",
+                        "author_association": "OWNER",
+                        "comment_created_at": "2026-08-14T06:43:14Z",
+                        "issue_body_sha256": (
+                            "b125527ca8eb81f50baa90c0a07194dc8a761ae4e79fbf9e90a88bfc31c2f0b0"
+                        ),
                         "decision": "APPROVED",
                         "approved_on": approved_on,
                         "expires_on": expires_on,
@@ -327,7 +346,11 @@ class SupplyChainSecurityTests(unittest.TestCase):
         (root / "fixture.trivy.json").write_text(
             json.dumps(
                 {
+                    "SchemaVersion": 2,
+                    "CreatedAt": "2026-08-14T05:43:00Z",
                     "ArtifactName": reference,
+                    "ArtifactType": "container_image",
+                    "Trivy": {"Version": "0.72.0"},
                     "Metadata": {"RepoDigests": [reference]},
                     "Results": [
                         {
@@ -957,6 +980,87 @@ class SupplyChainSecurityTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("may not exceed 30 days", result.stderr)
 
+    def test_local_lab_exception_rejects_noncanonical_owner_identity(self) -> None:
+        mutations = {
+            "issue_url": (
+                "https://github.com/example/fixture/issues/150",
+                "must identify a comment on issue_url",
+            ),
+            "comment_url": (
+                "https://github.com/example/fixture/issues/150#issuecomment-1",
+                "must identify a comment on issue_url",
+            ),
+            "owner_login": ("someone-else", "exact Shirokuma OWNER record"),
+            "author_association": ("MEMBER", "exact Shirokuma OWNER record"),
+            "comment_created_at": (
+                "2026-08-14T06:43:15Z",
+                "exact Shirokuma OWNER record",
+            ),
+            "issue_body_sha256": ("0" * 64, "exact Shirokuma OWNER record"),
+        }
+        for field, (value, expected_error) in mutations.items():
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                image = self.valid_image()
+                self.write_valid_evidence(root, image)
+                self.write_trivy_report(root, image["reference"])
+                exceptions = self.write_exceptions(
+                    root, [self.valid_exception(image, [])]
+                )
+                document = json.loads(exceptions.read_text(encoding="utf-8"))
+                document["owner_authorization"][field] = value
+                exceptions.write_text(json.dumps(document), encoding="utf-8")
+                manifest = root / "resident-images.json"
+                manifest.write_text(
+                    json.dumps({"schema_version": 1, "images": [image]}),
+                    encoding="utf-8",
+                )
+
+                result = self.run_checker(
+                    "check-images",
+                    "--manifest",
+                    str(manifest),
+                    "--profile",
+                    "local-lab",
+                    "--exceptions",
+                    str(exceptions),
+                )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(expected_error, result.stderr)
+
+    def test_local_lab_exception_rejects_scan_byte_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = self.valid_image()
+            self.write_valid_evidence(root, image)
+            self.write_trivy_report(root, image["reference"])
+            exceptions = self.write_exceptions(
+                root, [self.valid_exception(image, [])]
+            )
+            report_path = root / image["scan_artifact"]
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            report["ReportID"] = "unreviewed-drift"
+            report_path.write_text(json.dumps(report), encoding="utf-8")
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [image]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--profile",
+                "local-lab",
+                "--exceptions",
+                str(exceptions),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("scan SHA-256 does not match retained bytes", result.stderr)
+
     def test_strict_profile_rejects_exception_input(self) -> None:
         result = self.run_checker(
             "check-images",
@@ -987,6 +1091,9 @@ class SupplyChainSecurityTests(unittest.TestCase):
                     "https://github.com/TommyKammy/Shirokuma/issues/150"
                     "#issuecomment-5290345820"
                 ),
+                "owner_login": "TommyKammy",
+                "author_association": "OWNER",
+                "comment_created_at": "2026-08-14T06:43:14Z",
                 "issue_body_sha256": (
                     "b125527ca8eb81f50baa90c0a07194dc8a761ae4e79fbf9e90a88bfc31c2f0b0"
                 ),
@@ -1000,21 +1107,25 @@ class SupplyChainSecurityTests(unittest.TestCase):
             "source-controller": (
                 "evidence/flux-v2.9.2/source-controller-v1.9.3-arm64.trivy.json",
                 "e30437cbd9f82ed6a6f8388d534f8e5f4aa41445b870fd542e37a8e363f62752",
+                "2026-08-14T14:43:24.630384+09:00",
                 7,
             ),
             "kustomize-controller": (
                 "evidence/flux-v2.9.2/kustomize-controller-v1.9.3-arm64.trivy.json",
                 "e818eadafd8de0bfbd3817462ba9b27539044624ea3a309288b64ad4187dcb33",
+                "2026-08-14T14:43:41.712868+09:00",
                 6,
             ),
             "helm-controller": (
                 "evidence/flux-v2.9.2/helm-controller-v1.6.2-arm64.trivy.json",
                 "a84640be06b89e07c30d602dec8be8194ed76371c801245a39c1ce911b38feb1",
+                "2026-08-14T14:43:42.590716+09:00",
                 6,
             ),
             "notification-controller": (
                 "evidence/flux-v2.9.2/notification-controller-v1.9.2-arm64.trivy.json",
                 "81ef8a0a8f23cf0d320866ba5a4d5b6327c0feee1b2a68807cb9e57ca97cdb07",
+                "2026-08-14T14:43:43.466573+09:00",
                 6,
             ),
         }
@@ -1030,7 +1141,12 @@ class SupplyChainSecurityTests(unittest.TestCase):
         self.assertEqual(set(images), set(expected_scans))
         self.assertEqual(set(exceptions), set(expected_scans))
 
-        for component, (artifact, expected_sha256, expected_high) in expected_scans.items():
+        for component, (
+            artifact,
+            expected_sha256,
+            expected_created_at,
+            expected_high,
+        ) in expected_scans.items():
             with self.subTest(component=component):
                 image = images[component]
                 entry = exceptions[component]
@@ -1043,6 +1159,18 @@ class SupplyChainSecurityTests(unittest.TestCase):
                 self.assertEqual(entry["approved_on"], "2026-08-14")
                 self.assertEqual(entry["expires_on"], "2026-09-13")
                 self.assertEqual(len(entry["cves"]), expected_high)
+                self.assertEqual(
+                    entry["scan_evidence"],
+                    {
+                        "artifact": artifact,
+                        "sha256": expected_sha256,
+                        "created_at": expected_created_at,
+                        "scanner_version": "0.72.0",
+                        "vulnerability_db_updated_at": (
+                            "2026-08-14T01:10:44.597550261Z"
+                        ),
+                    },
+                )
 
                 scan_path = POLICY.parent / artifact
                 self.assertEqual(

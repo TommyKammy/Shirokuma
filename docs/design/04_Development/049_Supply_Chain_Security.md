@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-08-14
-version: "1.42"
+updated: 2026-08-16
+version: "1.43"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -75,10 +75,19 @@ metadata SHA-256は
 `a82d05e076fd54c9bd2e57fd1be00891a2384a3f618e9d72037bfd940a5406ea`です。
 expiry instant `2026-09-13T00:00:00Z`自体はfail closedです。
 all-severityのreport scanは例外を適用せずfindingを
-ログへ残し、High/Criticalのblocking scanだけがこのignore fileを使います。
+ログへ残します。CIはignore適用前にもcanonical manifestを対象とするfreshな
+Critical JSONを取得し、完全一致するID、title、severity、status、namespace、query、
+件数と15分以内の作成時刻をvalidatorで確認します。その後のHigh/Critical blocking
+scanだけがこのignore fileを使います。同一IDの追加発生もこの事前比較でfail closedです。
 期限更新にはfresh scan、exact OWNER decision、validator code、ignore fileの
 同時reviewが必要で、自動更新は禁止します。期限到来またはID/path/schemaの拡張は
 `make verify-security`を失敗させます。
+
+resident image exceptionは、OWNER login、`OWNER` association、exact comment URL・
+作成時刻・Issue body hashを固定します。各controllerについてもscan artifact path、
+実ファイルSHA-256、`CreatedAt`、Trivy version、DB timestampをresident ledgerと
+retained JSONの双方へ束縛し、byte driftやscanner/DB identity driftを例外適用前に
+拒否します。
 
 The actions and scanner releases in `.github/workflows/security.yml` are pinned.
 Updates must be isolated dependency changes with review of upstream release
