@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-08-16
-version: "1.45"
+version: "1.46"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -73,7 +73,8 @@ retained config report SHA-256は
 `00e87fef815ac9a99401f2a450e71c47555fd991ec6d2cfc7313e1f0dbe3bd7a`、raw Trivy
 metadata SHA-256は
 `a82d05e076fd54c9bd2e57fd1be00891a2384a3f618e9d72037bfd940a5406ea`です。
-expiry instant `2026-09-13T00:00:00Z`自体はfail closedです。
+expiry instant `2026-09-13T00:00:00Z`自体はfail closedです。日付境界はhost timezone
+ではなくUTC calendarで評価します。
 all-severityのreport scanは例外を適用せずfindingを
 ログへ残します。CIはignore適用前にもcanonical manifestを対象とするfreshな
 Critical JSONを取得し、完全一致するID、title、severity、status、namespace、query、

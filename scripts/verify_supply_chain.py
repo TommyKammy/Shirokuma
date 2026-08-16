@@ -1994,11 +1994,12 @@ def load_owner_authorization(
         raise PolicyError(
             "resident image owner_authorization dates must use YYYY-MM-DD"
         ) from error
-    if approved_on > date.today():
+    today = current_utc_date()
+    if approved_on > today:
         raise PolicyError(
             "resident image owner_authorization approved_on must not be in the future"
         )
-    if expires_on <= date.today():
+    if expires_on <= today:
         raise PolicyError("resident image owner_authorization has expired")
     if expires_on > approved_on + timedelta(days=MAX_EXCEPTION_DAYS):
         raise PolicyError(
@@ -2219,9 +2220,10 @@ def load_lab_exceptions(
             expires_on = date.fromisoformat(str(entry.get("expires_on", "")))
         except ValueError as error:
             raise PolicyError(f"{component}: exception dates must use YYYY-MM-DD") from error
-        if approved_on > date.today():
+        today = current_utc_date()
+        if approved_on > today:
             raise PolicyError(f"{component}: exception approved_on must not be in the future")
-        if expires_on <= date.today():
+        if expires_on <= today:
             raise PolicyError(f"{component}: exception has expired")
         if expires_on > approved_on + timedelta(days=MAX_EXCEPTION_DAYS):
             raise PolicyError(f"{component}: exception may not exceed {MAX_EXCEPTION_DAYS} days")
@@ -2265,6 +2267,13 @@ def is_immutable_image_reference(reference: str) -> bool:
     return ":" not in match.group("repository").rsplit("/", 1)[-1]
 
 
+def current_utc_date(now: datetime | None = None) -> date:
+    instant = now if now is not None else datetime.now(timezone.utc)
+    if instant.tzinfo is None:
+        raise ValueError("current UTC date requires a timezone-qualified instant")
+    return instant.astimezone(timezone.utc).date()
+
+
 def parse_timestamp(value: str) -> datetime | None:
     normalized = value.replace("Z", "+00:00")
     normalized = re.sub(
@@ -2288,7 +2297,7 @@ def is_future_iso_date(value: str) -> bool:
         expiry = date.fromisoformat(value)
     except ValueError:
         return False
-    return expiry > date.today()
+    return expiry > current_utc_date()
 
 
 def json_image_references(value: Any, path: str) -> list[tuple[str, str]]:

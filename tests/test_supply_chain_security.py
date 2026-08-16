@@ -7,13 +7,14 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from scripts.verify_supply_chain import (
     PolicyError,
     check_images,
     check_supply_chain_evidence,
+    current_utc_date,
     deployed_image_references,
 )
 
@@ -29,6 +30,20 @@ LAB_ADR = "docs/design/07_ADR/ADR-0019_Allow_time_boxed_resident_image_exception
 
 
 class SupplyChainSecurityTests(unittest.TestCase):
+    def test_security_expiry_calendar_is_always_utc(self) -> None:
+        jst = timezone(timedelta(hours=9))
+        pacific = timezone(timedelta(hours=-7))
+        self.assertEqual(
+            current_utc_date(datetime(2026, 9, 13, 8, 59, 59, tzinfo=jst)),
+            date(2026, 9, 12),
+        )
+        self.assertEqual(
+            current_utc_date(datetime(2026, 9, 12, 17, 0, 0, tzinfo=pacific)),
+            date(2026, 9, 13),
+        )
+        with self.assertRaisesRegex(ValueError, "timezone-qualified"):
+            current_utc_date(datetime(2026, 9, 13))
+
     @staticmethod
     def valid_image(reference: str | None = None) -> dict[str, str]:
         return {

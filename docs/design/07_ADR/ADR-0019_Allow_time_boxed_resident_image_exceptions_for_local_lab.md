@@ -5,7 +5,7 @@ title: "Allow time-boxed resident image exceptions for the local lab"
 status: accepted
 created: 2026-07-14
 updated: 2026-08-16
-version: "0.4"
+version: "0.5"
 area: "adr"
 tags: [shirokuma, adr, security, supply-chain, local-lab]
 ---
@@ -110,7 +110,8 @@ retained config report SHA-256は
 `00e87fef815ac9a99401f2a450e71c47555fd991ec6d2cfc7313e1f0dbe3bd7a`、raw
 Trivy/check-bundle metadata SHA-256は
 `a82d05e076fd54c9bd2e57fd1be00891a2384a3f618e9d72037bfd940a5406ea`である。
-expiry instant自体は無効であり、その直前までだけを有効とする。
+expiry instant自体は無効であり、その直前までだけを有効とする。判定は実行hostの
+timezoneに依存させずUTC calendarで行う。
 
 Flux v2.9.4はsigned index内にSLSA provenance v1とSPDXを持ち、同じDBで
 High=20/Critical=0まで改善するが、4 digest、CRD/RBAC、admission binding、
