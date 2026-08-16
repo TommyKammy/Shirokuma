@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-08-16
-version: "1.43"
+version: "1.44"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -84,8 +84,11 @@ scanだけがこのignore fileを使います。同一IDの追加発生もこの
 `make verify-security`を失敗させます。
 
 resident image exceptionは、OWNER login、`OWNER` association、exact comment URL・
-作成時刻・Issue body hashを固定します。各controllerについてもscan artifact path、
-実ファイルSHA-256、`CreatedAt`、Trivy version、DB timestampをresident ledgerと
+作成時刻・Issue body hashと、canonical exception set SHA-256
+`c671dbd4986741abc60183c301794ffbabd6d5dda955e6a97e2a201cffceb3fb`を固定します。
+各controllerについてもscan artifact path、実ファイルSHA-256、`CreatedAt`、
+Trivy version、DB timestamp、およびimage-scan metadata artifact SHA-256
+`a82d05e076fd54c9bd2e57fd1be00891a2384a3f618e9d72037bfd940a5406ea`をresident ledgerと
 retained JSONの双方へ束縛し、byte driftやscanner/DB identity driftを例外適用前に
 拒否します。
 

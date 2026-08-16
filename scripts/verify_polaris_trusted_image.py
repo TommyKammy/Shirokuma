@@ -779,7 +779,7 @@ PENDING_SCRIPT_FILE_INVENTORY = {
         "b6bbbd383c74b190872bdcf144ede8126d8da5dbeb03e291027aaf276c62c955"
     ),
     "scripts/verify_supply_chain.py": (
-        "bd50752451e00984f96968b718fb2f9a1bb80e27027c792dda0ea75e7d7f9bfd"
+        "b10ca4f30611330e712e563897ed12a4cae9ed3acd085d3ab2d1d7680a75dce6"
     ),
     "scripts/verify_trivyignore.py": (
         "2e1d752c4dbc744578f29954c5bbc9e8125fe51c421e9ce65b68a6f7a7255e11"

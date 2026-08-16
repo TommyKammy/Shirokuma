@@ -21,6 +21,13 @@ The exact refreshed reports and observed blocking findings are:
 | helm-controller v1.6.2 | `a84640be06b89e07c30d602dec8be8194ed76371c801245a39c1ce911b38feb1` | 6 | 0 |
 | notification-controller v1.9.2 | `81ef8a0a8f23cf0d320866ba5a4d5b6327c0feee1b2a68807cb9e57ca97cdb07` | 6 | 0 |
 
+`image-scans.trivy-version.json` is the raw scanner metadata captured with the
+image-scan refresh. Its SHA-256 is
+`a82d05e076fd54c9bd2e57fd1be00891a2384a3f618e9d72037bfd940a5406ea`; it binds
+Trivy 0.72.0 and vulnerability DB `UpdatedAt`
+`2026-08-14T01:10:44.597550261Z`. Its DB download time precedes every retained
+image report creation time.
+
 The same refresh retains the exact RBAC blocking projection for the canonical
 generated manifest. `gotk-components-v2.9.2.trivy-config.json` has SHA-256
 `00e87fef815ac9a99401f2a450e71c47555fd991ec6d2cfc7313e1f0dbe3bd7a`
@@ -47,9 +54,12 @@ duplicate or additional High finding, or any Critical finding remains
 fail-closed. Automatic renewal is forbidden.
 
 The exception gate policy-binds the exact OWNER login, association, comment,
-comment timestamp, and Issue body hash. Each controller exception also binds
+comment timestamp, Issue body hash, and canonical approved exception-set hash
+`c671dbd4986741abc60183c301794ffbabd6d5dda955e6a97e2a201cffceb3fb`.
+Each controller exception also binds
 the retained report path and bytes, report creation time, Trivy version, and
-vulnerability DB timestamp to the resident ledger. CI separately captures a
+vulnerability DB timestamp plus the retained raw scanner metadata bytes to the
+resident ledger. CI separately captures a
 fresh unfiltered config JSON and verifies the exact nine RBAC finding
 identities and counts before the blocking scan applies `.trivyignore.yaml`.
 

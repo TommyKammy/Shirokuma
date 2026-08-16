@@ -12,6 +12,7 @@ from pathlib import Path
 
 from scripts.verify_supply_chain import (
     PolicyError,
+    check_images,
     check_supply_chain_evidence,
     deployed_image_references,
 )
@@ -46,6 +47,44 @@ class SupplyChainSecurityTests(unittest.TestCase):
         }
 
     def run_checker(self, *args: str) -> subprocess.CompletedProcess[str]:
+        if (
+            args
+            and args[0] == "check-images"
+            and "--profile" in args
+            and args[args.index("--profile") + 1] == "local-lab"
+            and Path(args[args.index("--exceptions") + 1]).resolve()
+            != EXCEPTIONS.resolve()
+        ):
+            manifest = Path(args[args.index("--manifest") + 1])
+            exceptions = Path(args[args.index("--exceptions") + 1])
+            document = json.loads(exceptions.read_text(encoding="utf-8"))
+            approved_set_sha256 = hashlib.sha256(
+                json.dumps(
+                    document["exceptions"],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+            document["owner_authorization"][
+                "approved_exception_set_sha256"
+            ] = approved_set_sha256
+            exceptions.write_text(json.dumps(document), encoding="utf-8")
+            repository = (
+                Path(args[args.index("--repo") + 1])
+                if "--repo" in args
+                else ROOT
+            )
+            try:
+                check_images(
+                    manifest,
+                    repository,
+                    profile="local-lab",
+                    exceptions_path=exceptions,
+                    approved_exception_set_sha256=approved_set_sha256,
+                )
+            except PolicyError as error:
+                return subprocess.CompletedProcess(args, 1, "", f"{error}\n")
+            return subprocess.CompletedProcess(args, 0, "", "")
         return subprocess.run(
             [sys.executable, str(CHECKER), *args],
             cwd=ROOT,
@@ -286,6 +325,8 @@ class SupplyChainSecurityTests(unittest.TestCase):
             "scan_evidence": {
                 "artifact": image["scan_artifact"],
                 "sha256": "",
+                "metadata_artifact": "fixture.trivy-version.json",
+                "metadata_sha256": "",
                 "created_at": "2026-08-14T05:43:00Z",
                 "scanner_version": image["scanner_version"].removeprefix("trivy "),
                 "vulnerability_db_updated_at": image[
@@ -308,6 +349,13 @@ class SupplyChainSecurityTests(unittest.TestCase):
             assert isinstance(scan_evidence, dict)
             scan_path = root / str(scan_evidence["artifact"])
             scan_evidence["sha256"] = hashlib.sha256(scan_path.read_bytes()).hexdigest()
+            metadata_path = root / str(scan_evidence["metadata_artifact"])
+            scan_evidence["metadata_sha256"] = hashlib.sha256(
+                metadata_path.read_bytes()
+            ).hexdigest()
+        approved_exception_set_sha256 = hashlib.sha256(
+            json.dumps(entries, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
         path = root / "resident-image-exceptions.json"
         path.write_text(
             json.dumps(
@@ -326,6 +374,9 @@ class SupplyChainSecurityTests(unittest.TestCase):
                         "issue_body_sha256": (
                             "b125527ca8eb81f50baa90c0a07194dc8a761ae4e79fbf9e90a88bfc31c2f0b0"
                         ),
+                        "approved_exception_set_sha256": (
+                            approved_exception_set_sha256
+                        ),
                         "decision": "APPROVED",
                         "approved_on": approved_on,
                         "expires_on": expires_on,
@@ -343,6 +394,20 @@ class SupplyChainSecurityTests(unittest.TestCase):
         reference: str,
         vulnerabilities: list[dict[str, str]] | None = None,
     ) -> None:
+        (root / "fixture.trivy-version.json").write_text(
+            json.dumps(
+                {
+                    "Version": "0.72.0",
+                    "VulnerabilityDB": {
+                        "Version": 2,
+                        "NextUpdate": "2026-08-15T01:10:44Z",
+                        "UpdatedAt": "2026-07-01T00:00:00Z",
+                        "DownloadedAt": "2026-06-30T23:59:00Z",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
         (root / "fixture.trivy.json").write_text(
             json.dumps(
                 {
@@ -1061,6 +1126,72 @@ class SupplyChainSecurityTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("scan SHA-256 does not match retained bytes", result.stderr)
 
+    def test_local_lab_exception_rejects_scanner_metadata_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = self.valid_image()
+            self.write_valid_evidence(root, image)
+            self.write_trivy_report(root, image["reference"])
+            exceptions = self.write_exceptions(
+                root, [self.valid_exception(image, [])]
+            )
+            metadata_path = root / "fixture.trivy-version.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata["VulnerabilityDB"]["UpdatedAt"] = "2026-06-29T00:00:00Z"
+            metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+            document = json.loads(exceptions.read_text(encoding="utf-8"))
+            document["exceptions"][0]["scan_evidence"]["metadata_sha256"] = (
+                hashlib.sha256(metadata_path.read_bytes()).hexdigest()
+            )
+            exceptions.write_text(json.dumps(document), encoding="utf-8")
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [image]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--profile",
+                "local-lab",
+                "--exceptions",
+                str(exceptions),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("retained vulnerability DB identity changed", result.stderr)
+
+    def test_committed_owner_authorization_rejects_exception_set_drift(self) -> None:
+        document = json.loads(EXCEPTIONS.read_text(encoding="utf-8"))
+        document["exceptions"][0]["risk_acceptance"] += " Unapproved change."
+        with tempfile.TemporaryDirectory() as directory:
+            exceptions = Path(directory) / "resident-image-exceptions.json"
+            exceptions.write_text(json.dumps(document), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(CHECKER),
+                    "check-images",
+                    "--manifest",
+                    str(POLICY),
+                    "--repo",
+                    str(ROOT),
+                    "--profile",
+                    "local-lab",
+                    "--exceptions",
+                    str(exceptions),
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("exact OWNER-approved set", result.stderr)
+
     def test_strict_profile_rejects_exception_input(self) -> None:
         result = self.run_checker(
             "check-images",
@@ -1096,6 +1227,9 @@ class SupplyChainSecurityTests(unittest.TestCase):
                 "comment_created_at": "2026-08-14T06:43:14Z",
                 "issue_body_sha256": (
                     "b125527ca8eb81f50baa90c0a07194dc8a761ae4e79fbf9e90a88bfc31c2f0b0"
+                ),
+                "approved_exception_set_sha256": (
+                    "c671dbd4986741abc60183c301794ffbabd6d5dda955e6a97e2a201cffceb3fb"
                 ),
                 "decision": "APPROVED",
                 "approved_on": "2026-08-14",
@@ -1138,6 +1272,16 @@ class SupplyChainSecurityTests(unittest.TestCase):
         exceptions = {
             entry["component"]: entry for entry in document["exceptions"]
         }
+        self.assertEqual(
+            hashlib.sha256(
+                json.dumps(
+                    document["exceptions"],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest(),
+            document["owner_authorization"]["approved_exception_set_sha256"],
+        )
         self.assertEqual(set(images), set(expected_scans))
         self.assertEqual(set(exceptions), set(expected_scans))
 
@@ -1164,6 +1308,12 @@ class SupplyChainSecurityTests(unittest.TestCase):
                     {
                         "artifact": artifact,
                         "sha256": expected_sha256,
+                        "metadata_artifact": (
+                            "evidence/flux-v2.9.2/image-scans.trivy-version.json"
+                        ),
+                        "metadata_sha256": (
+                            "a82d05e076fd54c9bd2e57fd1be00891a2384a3f618e9d72037bfd940a5406ea"
+                        ),
                         "created_at": expected_created_at,
                         "scanner_version": "0.72.0",
                         "vulnerability_db_updated_at": (
@@ -1192,6 +1342,19 @@ class SupplyChainSecurityTests(unittest.TestCase):
                 )
                 self.assertFalse(
                     any(finding["Severity"] == "CRITICAL" for finding in blocking)
+                )
+                metadata_path = POLICY.parent / entry["scan_evidence"][
+                    "metadata_artifact"
+                ]
+                self.assertEqual(
+                    hashlib.sha256(metadata_path.read_bytes()).hexdigest(),
+                    entry["scan_evidence"]["metadata_sha256"],
+                )
+                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                self.assertEqual(metadata["Version"], "0.72.0")
+                self.assertEqual(
+                    metadata["VulnerabilityDB"]["UpdatedAt"],
+                    image["vulnerability_db_updated_at"],
                 )
 
     def test_committed_flux_exception_rejects_fixed_version_drift(self) -> None:

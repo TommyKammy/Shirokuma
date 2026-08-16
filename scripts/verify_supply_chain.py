@@ -69,10 +69,14 @@ OWNER_AUTHORIZATION_FIELDS = {
     "author_association",
     "comment_created_at",
     "issue_body_sha256",
+    "approved_exception_set_sha256",
     "decision",
     "approved_on",
     "expires_on",
 }
+APPROVED_EXCEPTION_SET_SHA256 = (
+    "c671dbd4986741abc60183c301794ffbabd6d5dda955e6a97e2a201cffceb3fb"
+)
 APPROVED_OWNER_AUTHORIZATION_IDENTITY = {
     "issue_url": "https://github.com/TommyKammy/Shirokuma/issues/150",
     "comment_url": (
@@ -85,6 +89,7 @@ APPROVED_OWNER_AUTHORIZATION_IDENTITY = {
     "issue_body_sha256": (
         "b125527ca8eb81f50baa90c0a07194dc8a761ae4e79fbf9e90a88bfc31c2f0b0"
     ),
+    "approved_exception_set_sha256": APPROVED_EXCEPTION_SET_SHA256,
     "decision": "APPROVED",
 }
 LAB_EXCEPTION_FIELDS = {
@@ -104,6 +109,8 @@ LAB_EXCEPTION_FIELDS = {
 LAB_EXCEPTION_SCAN_EVIDENCE_FIELDS = {
     "artifact",
     "sha256",
+    "metadata_artifact",
+    "metadata_sha256",
     "created_at",
     "scanner_version",
     "vulnerability_db_updated_at",
@@ -1929,7 +1936,10 @@ def exception_finding_key(
     )
 
 
-def load_owner_authorization(document: dict[str, Any]) -> tuple[date, date]:
+def load_owner_authorization(
+    document: dict[str, Any],
+    approved_exception_set_sha256: str = APPROVED_EXCEPTION_SET_SHA256,
+) -> tuple[date, date]:
     authorization = document.get("owner_authorization")
     if (
         not isinstance(authorization, dict)
@@ -1964,11 +1974,15 @@ def load_owner_authorization(document: dict[str, Any]) -> tuple[date, date]:
         )
     if authorization.get("decision") != "APPROVED":
         raise PolicyError("resident image owner_authorization decision must be APPROVED")
+    expected_identity = dict(APPROVED_OWNER_AUTHORIZATION_IDENTITY)
+    expected_identity["approved_exception_set_sha256"] = (
+        approved_exception_set_sha256
+    )
     observed_identity = {
         field: authorization.get(field)
-        for field in APPROVED_OWNER_AUTHORIZATION_IDENTITY
+        for field in expected_identity
     }
-    if observed_identity != APPROVED_OWNER_AUTHORIZATION_IDENTITY:
+    if observed_identity != expected_identity:
         raise PolicyError(
             "resident image owner_authorization does not match the exact "
             "Shirokuma OWNER record"
@@ -2029,6 +2043,26 @@ def check_lab_exception_scan_evidence(
     if file_sha256(scan_path, f"{component} exception scan") != expected_sha256:
         raise PolicyError(f"{component}: exception scan SHA-256 does not match retained bytes")
 
+    metadata_artifact = evidence.get("metadata_artifact")
+    if not isinstance(metadata_artifact, str):
+        raise PolicyError(f"{component}: exception scan metadata artifact is invalid")
+    metadata_path = evidence_artifact_path(
+        manifest_path,
+        repository,
+        metadata_artifact,
+        "scan_evidence.metadata_artifact",
+    )
+    metadata_sha256 = evidence.get("metadata_sha256")
+    if (
+        not isinstance(metadata_sha256, str)
+        or SHA256_HEX.fullmatch(metadata_sha256) is None
+    ):
+        raise PolicyError(f"{component}: exception scan metadata SHA-256 is invalid")
+    if file_sha256(metadata_path, f"{component} exception scan metadata") != metadata_sha256:
+        raise PolicyError(
+            f"{component}: exception scan metadata SHA-256 does not match retained bytes"
+        )
+
     ledger_scanner = ledger_image.get("scanner_version")
     expected_scanner_version = (
         ledger_scanner.removeprefix("trivy ")
@@ -2058,6 +2092,25 @@ def check_lab_exception_scan_evidence(
     if parsed_created_at.astimezone(timezone.utc) > datetime.now(timezone.utc):
         raise PolicyError(f"{component}: exception scan creation time must not be in the future")
 
+    metadata = load_json(metadata_path)
+    if not isinstance(metadata, dict) or metadata.get("Version") != scanner_version:
+        raise PolicyError(f"{component}: retained scanner metadata version changed")
+    vulnerability_db = metadata.get("VulnerabilityDB")
+    if not isinstance(vulnerability_db, dict):
+        raise PolicyError(f"{component}: retained vulnerability DB metadata is missing")
+    if vulnerability_db.get("UpdatedAt") != database_updated_at:
+        raise PolicyError(f"{component}: retained vulnerability DB identity changed")
+    downloaded_at_value = vulnerability_db.get("DownloadedAt")
+    downloaded_at = (
+        parse_timestamp(downloaded_at_value)
+        if isinstance(downloaded_at_value, str)
+        else None
+    )
+    if downloaded_at is None:
+        raise PolicyError(f"{component}: retained vulnerability DB download time is invalid")
+    if downloaded_at.astimezone(timezone.utc) > parsed_created_at.astimezone(timezone.utc):
+        raise PolicyError(f"{component}: retained vulnerability DB postdates the image scan")
+
     report = load_json(scan_path)
     if not isinstance(report, dict):
         raise PolicyError(f"{component}: exception scan must be a JSON object")
@@ -2078,6 +2131,7 @@ def load_lab_exceptions(
     repository: Path,
     manifest_path: Path,
     ledger_images: dict[str, dict[str, Any]],
+    approved_exception_set_sha256: str = APPROVED_EXCEPTION_SET_SHA256,
 ) -> dict[str, set[tuple[str, str, str, str, str]]]:
     document = load_json(path)
     if not isinstance(document, dict) or document.get("schema_version") != 1:
@@ -2095,11 +2149,24 @@ def load_lab_exceptions(
     if document.get("profile") != LAB_PROFILE:
         raise PolicyError(f"resident image exceptions profile must be {LAB_PROFILE}")
     authorization_approved_on, authorization_expires_on = load_owner_authorization(
-        document
+        document, approved_exception_set_sha256
     )
     entries = document.get("exceptions")
     if not isinstance(entries, list):
         raise PolicyError("resident image exceptions require an exceptions list")
+    approved_set_sha256 = document["owner_authorization"].get(
+        "approved_exception_set_sha256"
+    )
+    observed_set_sha256 = hashlib.sha256(
+        json.dumps(entries, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    if (
+        observed_set_sha256 != approved_set_sha256
+        or observed_set_sha256 != approved_exception_set_sha256
+    ):
+        raise PolicyError(
+            "resident image exception set does not match the exact OWNER-approved set"
+        )
 
     approved: dict[str, set[tuple[str, str, str, str, str]]] = {}
     for index, entry in enumerate(entries):
@@ -2311,6 +2378,7 @@ def check_images(
     *,
     profile: str = STRICT_PROFILE,
     exceptions_path: Path | None = None,
+    approved_exception_set_sha256: str = APPROVED_EXCEPTION_SET_SHA256,
 ) -> None:
     manifest = load_json(manifest_path)
     if not isinstance(manifest, dict) or manifest.get("schema_version") != 1:
@@ -2409,6 +2477,7 @@ def check_images(
                 repository,
                 manifest_path,
                 ledger_images,
+                approved_exception_set_sha256,
             )
         except PolicyError as error:
             errors.append(f"invalid resident image exceptions: {error}")

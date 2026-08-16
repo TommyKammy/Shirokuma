@@ -5,7 +5,7 @@ title: "Allow time-boxed resident image exceptions for the local lab"
 status: accepted
 created: 2026-07-14
 updated: 2026-08-16
-version: "0.3"
+version: "0.4"
 area: "adr"
 tags: [shirokuma, adr, security, supply-chain, local-lab]
 ---
@@ -92,9 +92,12 @@ exact 25 tupleはIssue body、OWNER commentに束縛された
 `security/resident-image-exceptions.json`、および上記retained scanが
 authoritativeである。advisory、severity、package、installed version、fixed
 version、digest、scan hashのいずれかが変化すれば、この承認は適用しない。
-例外validatorはさらにexact OWNER login/association/comment timestampと、各scanの
-artifact path、実ファイルSHA-256、`CreatedAt`、Trivy version、DB timestampを
-resident ledgerおよびretained JSONへ束縛する。
+例外validatorはさらにexact OWNER login/association/comment timestamp、canonical
+exception set SHA-256 `c671dbd4986741abc60183c301794ffbabd6d5dda955e6a97e2a201cffceb3fb`と、
+各scanのartifact path、実ファイルSHA-256、`CreatedAt`、Trivy version、DB timestamp、
+image-scan metadata SHA-256
+`a82d05e076fd54c9bd2e57fd1be00891a2384a3f618e9d72037bfd940a5406ea`をresident ledger
+およびretained JSONへ束縛する。
 
 同じOWNER decisionはgenerated `gotk-components.yaml`の完全一致pathに限り、
 Trivy `KSV-0041` 1件と`KSV-0046` 8件を
