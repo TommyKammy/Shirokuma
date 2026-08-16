@@ -61,7 +61,9 @@ the retained report path and bytes, report creation time, Trivy version, and
 vulnerability DB timestamp plus the retained raw scanner metadata bytes to the
 resident ledger. CI separately captures a
 fresh unfiltered config JSON and verifies the exact nine RBAC finding
-identities and counts before the blocking scan applies `.trivyignore.yaml`.
+identities, messages, provider/service values, manifest line spans, and counts
+before the blocking scan applies `.trivyignore.yaml`. A same-ID, same-count
+swap to a different affected RBAC rule therefore fails closed.
 
 The evidence can be reproduced with commands of this form:
 

@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-08-16
-version: "1.44"
+version: "1.45"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -77,8 +77,9 @@ expiry instant `2026-09-13T00:00:00Z`自体はfail closedです。
 all-severityのreport scanは例外を適用せずfindingを
 ログへ残します。CIはignore適用前にもcanonical manifestを対象とするfreshな
 Critical JSONを取得し、完全一致するID、title、severity、status、namespace、query、
-件数と15分以内の作成時刻をvalidatorで確認します。その後のHigh/Critical blocking
-scanだけがこのignore fileを使います。同一IDの追加発生もこの事前比較でfail closedです。
+message、provider/service、manifest line span、件数と15分以内の作成時刻をvalidatorで
+確認します。その後のHigh/Critical blocking scanだけがこのignore fileを使います。
+同一IDの追加発生や、同数のまま別RBAC ruleへ移るdriftもこの事前比較でfail closedです。
 期限更新にはfresh scan、exact OWNER decision、validator code、ignore fileの
 同時reviewが必要で、自動更新は禁止します。期限到来またはID/path/schemaの拡張は
 `make verify-security`を失敗させます。

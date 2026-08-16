@@ -14,6 +14,7 @@ from scripts.verify_trivyignore import (
     APPROVAL_COMMENT_URL,
     APPROVAL_CREATED_AT,
     APPROVED_EXPIRY,
+    APPROVED_AFFECTED_RULES,
     APPROVED_FINDINGS,
     APPROVED_MANIFEST_SHA256,
     APPROVED_ON,
@@ -208,6 +209,21 @@ class TrivyIgnoreContractTests(unittest.TestCase):
                 ),
             ),
         )
+        self.assertEqual(len(APPROVED_AFFECTED_RULES), 9)
+        self.assertEqual(
+            {(rule[0], rule[1], rule[2], rule[3]) for rule in APPROVED_AFFECTED_RULES},
+            {
+                (
+                    finding["ID"],
+                    finding["Message"],
+                    finding["CauseMetadata"]["StartLine"],
+                    finding["CauseMetadata"]["EndLine"],
+                )
+                for finding in json.loads(SCAN_REPORT)["Results"][0][
+                    "Misconfigurations"
+                ]
+            },
+        )
 
     def test_unapproved_id_is_rejected(self) -> None:
         result = self.run_checker(CANONICAL.replace(b"KSV-0041", b"KSV-0001", 1))
@@ -344,6 +360,21 @@ class TrivyIgnoreContractTests(unittest.TestCase):
         raw = json.dumps(report).encode("utf-8")
         now = datetime(2026, 8, 16, 1, 40, tzinfo=timezone.utc)
         with self.assertRaisesRegex(ContractError, "finding set changed"):
+            validate_live_scan_evidence(raw, now)
+
+    def test_live_scan_affected_rule_swap_is_rejected(self) -> None:
+        report = json.loads(SCAN_REPORT)
+        report["CreatedAt"] = "2026-08-16T10:39:54.464204+09:00"
+        finding = next(
+            item
+            for item in report["Results"][0]["Misconfigurations"]
+            if item["ID"] == "KSV-0046"
+        )
+        finding["CauseMetadata"]["StartLine"] = 246
+        finding["CauseMetadata"]["EndLine"] = 251
+        raw = json.dumps(report).encode("utf-8")
+        now = datetime(2026, 8, 16, 1, 40, tzinfo=timezone.utc)
+        with self.assertRaisesRegex(ContractError, "affected rule set changed"):
             validate_live_scan_evidence(raw, now)
 
     def test_stale_or_future_live_scan_is_rejected(self) -> None:

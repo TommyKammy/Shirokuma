@@ -64,6 +64,50 @@ APPROVED_FINDINGS = (
         8,
     ),
 )
+APPROVED_AFFECTED_RULES = (
+    (
+        "KSV-0041",
+        "ClusterRole 'crd-controller-flux-system' shouldn't have access to manage resource 'secrets'",
+        135,
+        145,
+        "Kubernetes",
+        "general",
+    ),
+    *(
+        (
+            "KSV-0046",
+            "ClusterRole 'crd-controller-flux-system' shouldn't manage all resources",
+            start_line,
+            end_line,
+            "Kubernetes",
+            "general",
+        )
+        for start_line, end_line in (
+            (123, 128),
+            (117, 122),
+            (129, 134),
+            (111, 116),
+            (99, 104),
+            (105, 110),
+        )
+    ),
+    (
+        "KSV-0046",
+        "ClusterRole 'flux-edit-flux-system' shouldn't manage all resources",
+        206,
+        220,
+        "Kubernetes",
+        "general",
+    ),
+    (
+        "KSV-0046",
+        "ClusterRole 'flux-view-flux-system' shouldn't manage all resources",
+        233,
+        245,
+        "Kubernetes",
+        "general",
+    ),
+)
 TRIVY_VERSION = "0.72.0"
 TRIVY_CHECK_BUNDLE_DIGEST = (
     "sha256:1583562f8b90ed2a071b99f0e5ffff6b57e4ceb6ca3e4796577b4e6a339eb74c"
@@ -270,6 +314,7 @@ def validate_scan_report_semantics(
         raise ContractError(f"{label} findings must be a list")
 
     observed: Counter[tuple[str, str, str, str, str, str]] = Counter()
+    observed_rules: Counter[tuple[str, str, int, int, str, str]] = Counter()
     for finding in findings:
         if not isinstance(finding, dict):
             raise ContractError(f"{label} finding must be an object")
@@ -280,6 +325,30 @@ def validate_scan_report_semantics(
         if not all(isinstance(value, str) and value for value in values):
             raise ContractError(f"{label} finding identity is incomplete")
         observed[values] += 1
+        message = finding.get("Message")
+        cause = finding.get("CauseMetadata")
+        if not isinstance(message, str) or not message or not isinstance(cause, dict):
+            raise ContractError(f"{label} affected rule identity is incomplete")
+        rule_identity = (
+            values[0],
+            message,
+            cause.get("StartLine"),
+            cause.get("EndLine"),
+            cause.get("Provider"),
+            cause.get("Service"),
+        )
+        if (
+            not isinstance(rule_identity[2], int)
+            or isinstance(rule_identity[2], bool)
+            or not isinstance(rule_identity[3], int)
+            or isinstance(rule_identity[3], bool)
+            or not all(
+                isinstance(value, str) and value
+                for value in (rule_identity[0], rule_identity[1], *rule_identity[4:])
+            )
+        ):
+            raise ContractError(f"{label} affected rule identity is incomplete")
+        observed_rules[rule_identity] += 1
 
     expected = Counter(
         {
@@ -297,6 +366,8 @@ def validate_scan_report_semantics(
     )
     if observed != expected:
         raise ContractError(f"{label} finding set changed")
+    if observed_rules != Counter(APPROVED_AFFECTED_RULES):
+        raise ContractError(f"{label} affected rule set changed")
     return created_at
 
 
