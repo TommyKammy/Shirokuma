@@ -4,8 +4,8 @@ doc_id: "REQ-036"
 title: "Security Policy Requirements"
 status: draft
 created: 2026-07-05
-updated: 2026-07-14
-version: "0.4"
+updated: 2026-08-14
+version: "0.5"
 area: "requirements"
 tags: [shirokuma, policy, requirements]
 ---
@@ -35,9 +35,16 @@ tags: [shirokuma, policy, requirements]
   Kyverno digest rule and repository supply-chain check form one fail-closed
   boundary; digest syntax alone is not image approval.
 - `security/resident-image-exceptions.json` is a separate local-lab risk
-  acceptance source. It may allow only exact High findings for an admitted
-  digest for no more than 30 days. Critical, production use, missing evidence,
-  new findings, and stale exception records fail closed.
+  acceptance source. It may allow only OWNER Issue/comment-authorized High
+  findings for an admitted digest for no more than 30 days. Advisory, severity,
+  package, installed version, fixed version, scan hash, approval dates, and
+  authorization record must match exactly. Critical, production use, missing
+  evidence, new or missing findings, stale records, and automatic renewal fail
+  closed.
+- Path-scoped Trivy misconfiguration ignores require a separate exact OWNER
+  decision, canonical ID/path/statement bytes, a maximum-30-day UTC expiry, and
+  an unfiltered reporting scan. Expiry or count/path/ID drift restores the
+  blocking gate.
 - `policies/exceptions/` requires a separate owner and reviewer, a Shirokuma
   Issue, a narrow metadata match, and an expiry no more than 30 days ahead.
 - CI validates policies and fixtures offline. Live Kyverno admission may proceed

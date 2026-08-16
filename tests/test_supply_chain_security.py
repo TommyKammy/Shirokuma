@@ -7,12 +7,14 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from scripts.verify_supply_chain import (
     PolicyError,
+    check_images,
     check_supply_chain_evidence,
+    current_utc_date,
     deployed_image_references,
 )
 
@@ -28,6 +30,20 @@ LAB_ADR = "docs/design/07_ADR/ADR-0019_Allow_time_boxed_resident_image_exception
 
 
 class SupplyChainSecurityTests(unittest.TestCase):
+    def test_security_expiry_calendar_is_always_utc(self) -> None:
+        jst = timezone(timedelta(hours=9))
+        pacific = timezone(timedelta(hours=-7))
+        self.assertEqual(
+            current_utc_date(datetime(2026, 9, 13, 8, 59, 59, tzinfo=jst)),
+            date(2026, 9, 12),
+        )
+        self.assertEqual(
+            current_utc_date(datetime(2026, 9, 12, 17, 0, 0, tzinfo=pacific)),
+            date(2026, 9, 13),
+        )
+        with self.assertRaisesRegex(ValueError, "timezone-qualified"):
+            current_utc_date(datetime(2026, 9, 13))
+
     @staticmethod
     def valid_image(reference: str | None = None) -> dict[str, str]:
         return {
@@ -46,6 +62,44 @@ class SupplyChainSecurityTests(unittest.TestCase):
         }
 
     def run_checker(self, *args: str) -> subprocess.CompletedProcess[str]:
+        if (
+            args
+            and args[0] == "check-images"
+            and "--profile" in args
+            and args[args.index("--profile") + 1] == "local-lab"
+            and Path(args[args.index("--exceptions") + 1]).resolve()
+            != EXCEPTIONS.resolve()
+        ):
+            manifest = Path(args[args.index("--manifest") + 1])
+            exceptions = Path(args[args.index("--exceptions") + 1])
+            document = json.loads(exceptions.read_text(encoding="utf-8"))
+            approved_set_sha256 = hashlib.sha256(
+                json.dumps(
+                    document["exceptions"],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+            document["owner_authorization"][
+                "approved_exception_set_sha256"
+            ] = approved_set_sha256
+            exceptions.write_text(json.dumps(document), encoding="utf-8")
+            repository = (
+                Path(args[args.index("--repo") + 1])
+                if "--repo" in args
+                else ROOT
+            )
+            try:
+                check_images(
+                    manifest,
+                    repository,
+                    profile="local-lab",
+                    exceptions_path=exceptions,
+                    approved_exception_set_sha256=approved_set_sha256,
+                )
+            except PolicyError as error:
+                return subprocess.CompletedProcess(args, 1, "", f"{error}\n")
+            return subprocess.CompletedProcess(args, 0, "", "")
         return subprocess.run(
             [sys.executable, str(CHECKER), *args],
             cwd=ROOT,
@@ -267,7 +321,7 @@ class SupplyChainSecurityTests(unittest.TestCase):
         image: dict[str, str],
         cves: list[dict[str, str]],
     ) -> dict[str, object]:
-        today = date.today()
+        today = current_utc_date()
         return {
             "component": image["component"],
             "reference": image["reference"],
@@ -283,17 +337,66 @@ class SupplyChainSecurityTests(unittest.TestCase):
                 "no public exposure",
             ],
             "replacement_plan": "Replace with a clean upstream image.",
+            "scan_evidence": {
+                "artifact": image["scan_artifact"],
+                "sha256": "",
+                "metadata_artifact": "fixture.trivy-version.json",
+                "metadata_sha256": "",
+                "created_at": "2026-08-14T05:43:00Z",
+                "scanner_version": image["scanner_version"].removeprefix("trivy "),
+                "vulnerability_db_updated_at": image[
+                    "vulnerability_db_updated_at"
+                ],
+            },
             "cves": cves,
         }
 
     @staticmethod
     def write_exceptions(root: Path, entries: list[dict[str, object]]) -> Path:
+        today = current_utc_date()
+        approved_on = str(entries[0]["approved_on"]) if entries else today.isoformat()
+        expires_on = (
+            str(entries[0]["expires_on"])
+            if entries
+            else (today + timedelta(days=30)).isoformat()
+        )
+        for entry in entries:
+            scan_evidence = entry["scan_evidence"]
+            assert isinstance(scan_evidence, dict)
+            scan_path = root / str(scan_evidence["artifact"])
+            scan_evidence["sha256"] = hashlib.sha256(scan_path.read_bytes()).hexdigest()
+            metadata_path = root / str(scan_evidence["metadata_artifact"])
+            scan_evidence["metadata_sha256"] = hashlib.sha256(
+                metadata_path.read_bytes()
+            ).hexdigest()
+        approved_exception_set_sha256 = hashlib.sha256(
+            json.dumps(entries, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
         path = root / "resident-image-exceptions.json"
         path.write_text(
             json.dumps(
                 {
                     "schema_version": 1,
                     "profile": "local-lab",
+                    "owner_authorization": {
+                        "issue_url": "https://github.com/TommyKammy/Shirokuma/issues/150",
+                        "comment_url": (
+                            "https://github.com/TommyKammy/Shirokuma/issues/150"
+                            "#issuecomment-5290345820"
+                        ),
+                        "owner_login": "TommyKammy",
+                        "author_association": "OWNER",
+                        "comment_created_at": "2026-08-14T06:43:14Z",
+                        "issue_body_sha256": (
+                            "b125527ca8eb81f50baa90c0a07194dc8a761ae4e79fbf9e90a88bfc31c2f0b0"
+                        ),
+                        "approved_exception_set_sha256": (
+                            approved_exception_set_sha256
+                        ),
+                        "decision": "APPROVED",
+                        "approved_on": approved_on,
+                        "expires_on": expires_on,
+                    },
                     "exceptions": entries,
                 }
             ),
@@ -307,10 +410,28 @@ class SupplyChainSecurityTests(unittest.TestCase):
         reference: str,
         vulnerabilities: list[dict[str, str]] | None = None,
     ) -> None:
+        (root / "fixture.trivy-version.json").write_text(
+            json.dumps(
+                {
+                    "Version": "0.72.0",
+                    "VulnerabilityDB": {
+                        "Version": 2,
+                        "NextUpdate": "2026-08-15T01:10:44Z",
+                        "UpdatedAt": "2026-07-01T00:00:00Z",
+                        "DownloadedAt": "2026-06-30T23:59:00Z",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
         (root / "fixture.trivy.json").write_text(
             json.dumps(
                 {
+                    "SchemaVersion": 2,
+                    "CreatedAt": "2026-08-14T05:43:00Z",
                     "ArtifactName": reference,
+                    "ArtifactType": "container_image",
+                    "Trivy": {"Version": "0.72.0"},
                     "Metadata": {"RepoDigests": [reference]},
                     "Results": [
                         {
@@ -646,6 +767,55 @@ class SupplyChainSecurityTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_local_lab_exception_rejects_duplicate_exact_high_finding(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            image = self.valid_image()
+            finding = {
+                "VulnerabilityID": "CVE-2099-1001",
+                "Severity": "HIGH",
+                "PkgName": "example.invalid/module",
+                "InstalledVersion": "v1.0.0",
+                "FixedVersion": "1.0.1",
+            }
+            exception_cve = {
+                "id": "CVE-2099-1001",
+                "severity": "HIGH",
+                "package": "example.invalid/module",
+                "installed_version": "v1.0.0",
+                "fixed_version": "1.0.1",
+            }
+            self.write_valid_evidence(root, image)
+            self.write_trivy_report(root, image["reference"], [finding, finding])
+            exceptions = self.write_exceptions(
+                root,
+                [self.valid_exception(image, [exception_cve])],
+            )
+            decision_record = root / LAB_ADR
+            decision_record.parent.mkdir(parents=True)
+            decision_record.write_text("# Fixture decision record\n", encoding="utf-8")
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [image]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--repo",
+                str(root),
+                "--profile",
+                "local-lab",
+                "--exceptions",
+                str(exceptions),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("duplicate exact tuple", result.stderr)
+
     def test_local_lab_exception_rejects_unapproved_high_finding(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -788,8 +958,9 @@ class SupplyChainSecurityTests(unittest.TestCase):
                 "fixed_version": "",
             }
             entry = self.valid_exception(image, [exception_cve])
-            entry["approved_on"] = (date.today() - timedelta(days=31)).isoformat()
-            entry["expires_on"] = (date.today() - timedelta(days=1)).isoformat()
+            today = current_utc_date()
+            entry["approved_on"] = (today - timedelta(days=31)).isoformat()
+            entry["expires_on"] = (today - timedelta(days=1)).isoformat()
             self.write_valid_evidence(root, image)
             self.write_trivy_report(root, image["reference"])
             exceptions = self.write_exceptions(root, [entry])
@@ -812,6 +983,235 @@ class SupplyChainSecurityTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("has expired", result.stderr)
 
+    def test_local_lab_exception_rejects_future_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = self.valid_image()
+            entry = self.valid_exception(
+                image,
+                [
+                    {
+                        "id": "CVE-2099-1001",
+                        "severity": "HIGH",
+                        "package": "example.invalid/module",
+                        "installed_version": "v1.0.0",
+                        "fixed_version": "",
+                    }
+                ],
+            )
+            today = current_utc_date()
+            entry["approved_on"] = (today + timedelta(days=1)).isoformat()
+            entry["expires_on"] = (today + timedelta(days=30)).isoformat()
+            self.write_valid_evidence(root, image)
+            self.write_trivy_report(root, image["reference"])
+            exceptions = self.write_exceptions(root, [entry])
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [image]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--profile",
+                "local-lab",
+                "--exceptions",
+                str(exceptions),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("approved_on must not be in the future", result.stderr)
+
+    def test_local_lab_exception_rejects_overlong_owner_authorization(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = self.valid_image()
+            entry = self.valid_exception(
+                image,
+                [
+                    {
+                        "id": "CVE-2099-1001",
+                        "severity": "HIGH",
+                        "package": "example.invalid/module",
+                        "installed_version": "v1.0.0",
+                        "fixed_version": "",
+                    }
+                ],
+            )
+            entry["expires_on"] = (
+                current_utc_date() + timedelta(days=31)
+            ).isoformat()
+            self.write_valid_evidence(root, image)
+            self.write_trivy_report(root, image["reference"])
+            exceptions = self.write_exceptions(root, [entry])
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [image]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--profile",
+                "local-lab",
+                "--exceptions",
+                str(exceptions),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("may not exceed 30 days", result.stderr)
+
+    def test_local_lab_exception_rejects_noncanonical_owner_identity(self) -> None:
+        mutations = {
+            "issue_url": (
+                "https://github.com/example/fixture/issues/150",
+                "must identify a comment on issue_url",
+            ),
+            "comment_url": (
+                "https://github.com/example/fixture/issues/150#issuecomment-1",
+                "must identify a comment on issue_url",
+            ),
+            "owner_login": ("someone-else", "exact Shirokuma OWNER record"),
+            "author_association": ("MEMBER", "exact Shirokuma OWNER record"),
+            "comment_created_at": (
+                "2026-08-14T06:43:15Z",
+                "exact Shirokuma OWNER record",
+            ),
+            "issue_body_sha256": ("0" * 64, "exact Shirokuma OWNER record"),
+        }
+        for field, (value, expected_error) in mutations.items():
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                image = self.valid_image()
+                self.write_valid_evidence(root, image)
+                self.write_trivy_report(root, image["reference"])
+                exceptions = self.write_exceptions(
+                    root, [self.valid_exception(image, [])]
+                )
+                document = json.loads(exceptions.read_text(encoding="utf-8"))
+                document["owner_authorization"][field] = value
+                exceptions.write_text(json.dumps(document), encoding="utf-8")
+                manifest = root / "resident-images.json"
+                manifest.write_text(
+                    json.dumps({"schema_version": 1, "images": [image]}),
+                    encoding="utf-8",
+                )
+
+                result = self.run_checker(
+                    "check-images",
+                    "--manifest",
+                    str(manifest),
+                    "--profile",
+                    "local-lab",
+                    "--exceptions",
+                    str(exceptions),
+                )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(expected_error, result.stderr)
+
+    def test_local_lab_exception_rejects_scan_byte_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = self.valid_image()
+            self.write_valid_evidence(root, image)
+            self.write_trivy_report(root, image["reference"])
+            exceptions = self.write_exceptions(
+                root, [self.valid_exception(image, [])]
+            )
+            report_path = root / image["scan_artifact"]
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            report["ReportID"] = "unreviewed-drift"
+            report_path.write_text(json.dumps(report), encoding="utf-8")
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [image]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--profile",
+                "local-lab",
+                "--exceptions",
+                str(exceptions),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("scan SHA-256 does not match retained bytes", result.stderr)
+
+    def test_local_lab_exception_rejects_scanner_metadata_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = self.valid_image()
+            self.write_valid_evidence(root, image)
+            self.write_trivy_report(root, image["reference"])
+            exceptions = self.write_exceptions(
+                root, [self.valid_exception(image, [])]
+            )
+            metadata_path = root / "fixture.trivy-version.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata["VulnerabilityDB"]["UpdatedAt"] = "2026-06-29T00:00:00Z"
+            metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+            document = json.loads(exceptions.read_text(encoding="utf-8"))
+            document["exceptions"][0]["scan_evidence"]["metadata_sha256"] = (
+                hashlib.sha256(metadata_path.read_bytes()).hexdigest()
+            )
+            exceptions.write_text(json.dumps(document), encoding="utf-8")
+            manifest = root / "resident-images.json"
+            manifest.write_text(
+                json.dumps({"schema_version": 1, "images": [image]}),
+                encoding="utf-8",
+            )
+
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(manifest),
+                "--profile",
+                "local-lab",
+                "--exceptions",
+                str(exceptions),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("retained vulnerability DB identity changed", result.stderr)
+
+    def test_committed_owner_authorization_rejects_exception_set_drift(self) -> None:
+        document = json.loads(EXCEPTIONS.read_text(encoding="utf-8"))
+        document["exceptions"][0]["risk_acceptance"] += " Unapproved change."
+        with tempfile.TemporaryDirectory() as directory:
+            exceptions = Path(directory) / "resident-image-exceptions.json"
+            exceptions.write_text(json.dumps(document), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(CHECKER),
+                    "check-images",
+                    "--manifest",
+                    str(POLICY),
+                    "--repo",
+                    str(ROOT),
+                    "--profile",
+                    "local-lab",
+                    "--exceptions",
+                    str(exceptions),
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("exact OWNER-approved set", result.stderr)
+
     def test_strict_profile_rejects_exception_input(self) -> None:
         result = self.run_checker(
             "check-images",
@@ -826,7 +1226,199 @@ class SupplyChainSecurityTests(unittest.TestCase):
     def test_committed_local_lab_images_remain_blocked_by_strict_profile(self) -> None:
         result = self.run_checker("check-images", "--manifest", str(POLICY))
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Trivy blocking threshold crossed: HIGH=2", result.stderr)
+        self.assertIn("Trivy blocking threshold crossed: HIGH=7", result.stderr)
+
+    def test_committed_flux_exception_decision_and_scan_hashes_are_exact(self) -> None:
+        document = json.loads(EXCEPTIONS.read_text(encoding="utf-8"))
+        self.assertEqual(
+            set(document),
+            {"schema_version", "profile", "owner_authorization", "exceptions"},
+        )
+        self.assertEqual(
+            document["owner_authorization"],
+            {
+                "issue_url": "https://github.com/TommyKammy/Shirokuma/issues/150",
+                "comment_url": (
+                    "https://github.com/TommyKammy/Shirokuma/issues/150"
+                    "#issuecomment-5290345820"
+                ),
+                "owner_login": "TommyKammy",
+                "author_association": "OWNER",
+                "comment_created_at": "2026-08-14T06:43:14Z",
+                "issue_body_sha256": (
+                    "b125527ca8eb81f50baa90c0a07194dc8a761ae4e79fbf9e90a88bfc31c2f0b0"
+                ),
+                "approved_exception_set_sha256": (
+                    "c671dbd4986741abc60183c301794ffbabd6d5dda955e6a97e2a201cffceb3fb"
+                ),
+                "decision": "APPROVED",
+                "approved_on": "2026-08-14",
+                "expires_on": "2026-09-13",
+            },
+        )
+
+        expected_scans = {
+            "source-controller": (
+                "evidence/flux-v2.9.2/source-controller-v1.9.3-arm64.trivy.json",
+                "e30437cbd9f82ed6a6f8388d534f8e5f4aa41445b870fd542e37a8e363f62752",
+                "2026-08-14T14:43:24.630384+09:00",
+                7,
+            ),
+            "kustomize-controller": (
+                "evidence/flux-v2.9.2/kustomize-controller-v1.9.3-arm64.trivy.json",
+                "e818eadafd8de0bfbd3817462ba9b27539044624ea3a309288b64ad4187dcb33",
+                "2026-08-14T14:43:41.712868+09:00",
+                6,
+            ),
+            "helm-controller": (
+                "evidence/flux-v2.9.2/helm-controller-v1.6.2-arm64.trivy.json",
+                "a84640be06b89e07c30d602dec8be8194ed76371c801245a39c1ce911b38feb1",
+                "2026-08-14T14:43:42.590716+09:00",
+                6,
+            ),
+            "notification-controller": (
+                "evidence/flux-v2.9.2/notification-controller-v1.9.2-arm64.trivy.json",
+                "81ef8a0a8f23cf0d320866ba5a4d5b6327c0feee1b2a68807cb9e57ca97cdb07",
+                "2026-08-14T14:43:43.466573+09:00",
+                6,
+            ),
+        }
+        policy = json.loads(POLICY.read_text(encoding="utf-8"))
+        images = {
+            image["component"]: image
+            for image in policy["images"]
+            if image["component"] in expected_scans
+        }
+        exceptions = {
+            entry["component"]: entry for entry in document["exceptions"]
+        }
+        self.assertEqual(
+            hashlib.sha256(
+                json.dumps(
+                    document["exceptions"],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest(),
+            document["owner_authorization"]["approved_exception_set_sha256"],
+        )
+        self.assertEqual(set(images), set(expected_scans))
+        self.assertEqual(set(exceptions), set(expected_scans))
+
+        for component, (
+            artifact,
+            expected_sha256,
+            expected_created_at,
+            expected_high,
+        ) in expected_scans.items():
+            with self.subTest(component=component):
+                image = images[component]
+                entry = exceptions[component]
+                self.assertEqual(image["scan_artifact"], artifact)
+                self.assertEqual(
+                    image["vulnerability_db_updated_at"],
+                    "2026-08-14T01:10:44.597550261Z",
+                )
+                self.assertEqual(entry["reference"], image["reference"])
+                self.assertEqual(entry["approved_on"], "2026-08-14")
+                self.assertEqual(entry["expires_on"], "2026-09-13")
+                self.assertEqual(len(entry["cves"]), expected_high)
+                self.assertEqual(
+                    entry["scan_evidence"],
+                    {
+                        "artifact": artifact,
+                        "sha256": expected_sha256,
+                        "metadata_artifact": (
+                            "evidence/flux-v2.9.2/image-scans.trivy-version.json"
+                        ),
+                        "metadata_sha256": (
+                            "a82d05e076fd54c9bd2e57fd1be00891a2384a3f618e9d72037bfd940a5406ea"
+                        ),
+                        "created_at": expected_created_at,
+                        "scanner_version": "0.72.0",
+                        "vulnerability_db_updated_at": (
+                            "2026-08-14T01:10:44.597550261Z"
+                        ),
+                    },
+                )
+
+                scan_path = POLICY.parent / artifact
+                self.assertEqual(
+                    hashlib.sha256(scan_path.read_bytes()).hexdigest(),
+                    expected_sha256,
+                )
+                report = json.loads(scan_path.read_text(encoding="utf-8"))
+                self.assertEqual(report["ArtifactName"], image["reference"])
+                self.assertIn(image["reference"], report["Metadata"]["RepoDigests"])
+                blocking = [
+                    finding
+                    for result in report["Results"]
+                    for finding in result.get("Vulnerabilities", [])
+                    if finding.get("Severity") in {"HIGH", "CRITICAL"}
+                ]
+                self.assertEqual(
+                    sum(finding["Severity"] == "HIGH" for finding in blocking),
+                    expected_high,
+                )
+                self.assertFalse(
+                    any(finding["Severity"] == "CRITICAL" for finding in blocking)
+                )
+                metadata_path = POLICY.parent / entry["scan_evidence"][
+                    "metadata_artifact"
+                ]
+                self.assertEqual(
+                    hashlib.sha256(metadata_path.read_bytes()).hexdigest(),
+                    entry["scan_evidence"]["metadata_sha256"],
+                )
+                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                self.assertEqual(metadata["Version"], "0.72.0")
+                self.assertEqual(
+                    metadata["VulnerabilityDB"]["UpdatedAt"],
+                    image["vulnerability_db_updated_at"],
+                )
+
+    def test_committed_flux_exception_rejects_fixed_version_drift(self) -> None:
+        document = json.loads(EXCEPTIONS.read_text(encoding="utf-8"))
+        document["exceptions"][0]["cves"][0]["fixed_version"] = "5.19.3"
+        with tempfile.TemporaryDirectory() as directory:
+            exceptions = Path(directory) / "resident-image-exceptions.json"
+            exceptions.write_text(json.dumps(document), encoding="utf-8")
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(POLICY),
+                "--repo",
+                str(ROOT),
+                "--profile",
+                "local-lab",
+                "--exceptions",
+                str(exceptions),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("CVE-2026-71556", result.stderr)
+        self.assertIn("5.19.3", result.stderr)
+
+    def test_committed_flux_exception_rejects_authorization_date_drift(self) -> None:
+        document = json.loads(EXCEPTIONS.read_text(encoding="utf-8"))
+        document["owner_authorization"]["expires_on"] = "2026-09-12"
+        with tempfile.TemporaryDirectory() as directory:
+            exceptions = Path(directory) / "resident-image-exceptions.json"
+            exceptions.write_text(json.dumps(document), encoding="utf-8")
+            result = self.run_checker(
+                "check-images",
+                "--manifest",
+                str(POLICY),
+                "--repo",
+                str(ROOT),
+                "--profile",
+                "local-lab",
+                "--exceptions",
+                str(exceptions),
+            )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("dates must match owner_authorization", result.stderr)
 
     def test_supply_chain_subject_must_match_ledger_digest(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

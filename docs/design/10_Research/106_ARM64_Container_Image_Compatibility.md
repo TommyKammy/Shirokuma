@@ -4,8 +4,8 @@ doc_id: "RES-106"
 title: "ARM64 Container Image Compatibility"
 status: draft
 created: 2026-07-05
-updated: 2026-07-23
-version: "0.24"
+updated: 2026-08-14
+version: "0.25"
 area: "research"
 tags: [shirokuma, arm64, apple-silicon]
 ---
@@ -377,11 +377,10 @@ helm-controller `v1.6.2`, and notification-controller `v1.9.2`. Exact native
 `linux/arm64` digests are pinned in `opentofu/dev/bootstrap-images.json` and the
 generated Flux manifests.
 
-Trivy `0.72.0` scanning with DB timestamp
-`2026-07-13T19:09:56.237113526Z` found High findings in three images:
-source-controller=2, kustomize-controller=0, helm-controller=2,
-notification-controller=1; Critical=0 for all four. Findings are Go stdlib
-CVE-2026-39822, oras-go CVE-2026-50163, and fulcio CVE-2026-49478.
+Initial Trivy `0.72.0` scanning with DB timestamp
+`2026-07-13T19:09:56.237113526Z` found source=2, kustomize=0, helm=2, and
+notification=1 High findings with Critical=0. That five-finding decision
+expired on 2026-08-13.
 
 Cosign verification succeeded for each signed OCI index using GitHub Actions
 OIDC and the Flux controller-release workflow identity. Each index contains the
@@ -389,12 +388,22 @@ exact linux/arm64 manifest plus SLSA provenance v1 and SPDX SBOM attestations
 whose subjects match the platform digest. CycloneDX 1.7 SBOMs and Trivy reports
 are retained under `security/evidence/flux-v2.9.2/`.
 
-ADR-0019 admits these exact digests only to `mac-studio-solo/local-lab` through
-2026-08-13. Source, Helm, and notification controller High findings are listed
-individually in `security/resident-image-exceptions.json`; kustomize-controller
-needs no exception. Strict and production profiles remain blocked, and any
-Critical, new High, stale exception, digest/package/version mismatch, or expiry
-restores fail-closed behavior.
+Fresh Trivy `0.72.0` scanning with DB timestamp
+`2026-08-14T01:10:44.597550261Z` reports source=7, kustomize=6, helm=6, and
+notification=6 High findings with Critical=0. Issue #150 and OWNER comment
+`5290345820` authorize the unchanged four exact digests and all 25 exact
+finding tuples only in `mac-studio-solo/local-lab` through 2026-09-13. The
+generated manifest's exact `KSV-0041` x1 and `KSV-0046` x8 RBAC findings are
+separately bounded through `2026-09-13T00:00:00Z`. Strict and production
+profiles remain blocked, automatic renewal is forbidden, and any Critical,
+tuple/hash/authorization drift, unlisted finding, or expiry restores
+fail-closed behavior.
+
+Flux v2.9.4 was also assessed: its signed indexes retain exact arm64 SLSA v1
+and SPDX evidence and the same DB reports 20 High findings. It is not selected
+by Issue #150 because adopting it changes all four digests, generated CRD/RBAC,
+admission bindings, deployment manifests, and the live self-reconciling Flux
+runtime. That migration requires a separate decision.
 
 ## WP decision rules
 

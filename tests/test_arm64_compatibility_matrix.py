@@ -69,8 +69,8 @@ class Arm64CompatibilityMatrixTests(unittest.TestCase):
 
     def test_document_metadata_matches_latest_verification(self) -> None:
         front_matter = self.matrix_text.split("---", 2)[1]
-        self.assertIn("\nupdated: 2026-07-23\n", front_matter)
-        self.assertIn('\nversion: "0.24"\n', front_matter)
+        self.assertIn("\nupdated: 2026-08-14\n", front_matter)
+        self.assertIn('\nversion: "0.25"\n', front_matter)
         self.assertIn("Verification date: 2026-07-22.", self.matrix_text)
 
     def test_all_required_components_have_complete_evidence_rows(self) -> None:

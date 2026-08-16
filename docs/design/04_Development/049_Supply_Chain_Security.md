@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-08-14
-version: "1.42"
+updated: 2026-08-16
+version: "1.47"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -56,16 +56,43 @@ fail closed rather than silently reducing the gate.
 Flux v2.9.2が生成する
 `deploy/gitops/clusters/local-lite/flux-system/gotk-components.yaml`の
 cluster-wide controller RBACに対してのみ、Trivy `KSV-0041`と`KSV-0046`をsingle-user
-local labの期限付き例外とします。`.trivyignore.yaml`はcanonical YAMLで
+local labの期限付き例外とします。初回expiry
+`2026-08-14T00:00:00Z`は到来済みで、[Issue #150](https://github.com/TommyKammy/Shirokuma/issues/150)
+とfinal corrective OWNER [comment 5290345820](https://github.com/TommyKammy/Shirokuma/issues/150#issuecomment-5290345820)
+が、同じ完全一致pathの`KSV-0041` 1件と`KSV-0046` 8件だけを
+`2026-09-13T00:00:00Z`まで再承認しました。`.trivyignore.yaml`はcanonical YAMLで
 記述し、`scripts/verify_trivyignore.py`が完全一致する2つのID、単一の完全一致path、
-2つのexact `statement`、`2026-08-14`のUTC calendar date `expired_at`から生成した
-canonical bytesとの完全一致と、非期限切れかつ30日以内というcontractをfail closedで
-検証します。Trivy v0.72.0と同じくdate scalarをUTC midnightへ変換するため、
-effective expiry instantは`2026-08-14T00:00:00Z`です。この瞬間は有効で、1秒後は
-期限切れとなります。期限更新にはvalidator codeとignore fileの同時reviewが必要です。
+2つのexact `statement`、OWNER binding、manifest SHA-256
+`ed307189fd1f9e49819a50843bb6f3c9257fe6d4d8359d1950b38207c26c3854`、UTC expiryから
+生成したcanonical bytesとの完全一致と、非期限切れかつ承認から30日以内という
+contractをfail closedで検証します。
+final corrective commentはpolicy pathのsection整理後に最終OWNER承認された
+Issue body raw SHA-256
+`b125527ca8eb81f50baa90c0a07194dc8a761ae4e79fbf9e90a88bfc31c2f0b0`を束縛します。
+retained config report SHA-256は
+`00e87fef815ac9a99401f2a450e71c47555fd991ec6d2cfc7313e1f0dbe3bd7a`、raw Trivy
+metadata SHA-256は
+`a82d05e076fd54c9bd2e57fd1be00891a2384a3f618e9d72037bfd940a5406ea`です。
+expiry instant `2026-09-13T00:00:00Z`自体はfail closedです。日付境界はhost timezone
+ではなくUTC calendarで評価します。
 all-severityのreport scanは例外を適用せずfindingを
-ログへ残し、High/Criticalのblocking scanだけがこのignore fileを使います。
-期限到来またはID/path/schemaの拡張は`make verify-security`を失敗させます。
+ログへ残します。CIはignore適用前にもcanonical manifestを対象とするfreshな
+Critical JSONを取得し、完全一致するID、title、severity、status、namespace、query、
+message、provider/service、manifest line span、件数と15分以内の作成時刻をvalidatorで
+確認します。その後のHigh/Critical blocking scanだけがこのignore fileを使います。
+同一IDの追加発生や、同数のまま別RBAC ruleへ移るdriftもこの事前比較でfail closedです。
+期限更新にはfresh scan、exact OWNER decision、validator code、ignore fileの
+同時reviewが必要で、自動更新は禁止します。期限到来またはID/path/schemaの拡張は
+`make verify-security`を失敗させます。
+
+resident image exceptionは、OWNER login、`OWNER` association、exact comment URL・
+作成時刻・Issue body hashと、canonical exception set SHA-256
+`c671dbd4986741abc60183c301794ffbabd6d5dda955e6a97e2a201cffceb3fb`を固定します。
+各controllerについてもscan artifact path、実ファイルSHA-256、`CreatedAt`、
+Trivy version、DB timestamp、およびimage-scan metadata artifact SHA-256
+`a82d05e076fd54c9bd2e57fd1be00891a2384a3f618e9d72037bfd940a5406ea`をresident ledgerと
+retained JSONの双方へ束縛し、byte driftやscanner/DB identity driftを例外適用前に
+拒否します。
 
 The actions and scanner releases in `.github/workflows/security.yml` are pinned.
 Updates must be isolated dependency changes with review of upstream release
@@ -1520,18 +1547,32 @@ on `mac-studio-solo`. The default `strict` profile continues to require
 High=0/Critical=0. `check-trivy` also remains strict when run directly.
 
 `security/resident-image-exceptions.json` may acknowledge High findings only
-when each record matches the exact image digest, CVE, package, and installed
-version in the retained scan. The record must reference an existing ADR, state
+when each record matches the exact image digest, advisory, severity, package,
+installed version, and fixed version in the retained scan. The document must
+bind an exact OWNER Issue/comment and authorized Issue-body hash. The record must
+reference an existing ADR, state
 the bounded risk, list at least three compensating controls, provide a concrete
 replacement plan, and expire no more than 30 days after approval. Critical
 findings are never allowed. New or missing High findings, stale exceptions,
-digest/package/version mismatch, missing evidence, expired approval, public
+digest/advisory/severity/package/installed/fixed-version mismatch, OWNER or
+scan-hash drift, missing evidence, expired approval, public
 exposure, or production use fail closed.
 
 The local-lab profile is not a production certification and does not assert
 that an accepted CVE is unreachable. Production data and credentials, public
 Service/Ingress exposure, and untrusted Git/OCI/Helm sources remain outside the
 approved scope.
+
+The original Flux v2.9.2 approval expired on 2026-08-13 after covering five
+High findings. Fresh Trivy 0.72.0 evidence with DB timestamp
+`2026-08-14T01:10:44.597550261Z` reports source=7, kustomize=6, helm=6, and
+notification=6 High findings, with Critical=0 for all four unchanged exact
+digests. Issue #150 and final corrective OWNER comment `5290345820` authorize exactly those 25
+tuples and the four retained scan hashes through 2026-09-13 for local-lab use
+only. Any tuple/hash drift or expiry closes the gate. Flux v2.9.4 reduces the
+same scan to 20 High findings and has valid signed-index SLSA v1/SPDX evidence,
+but its digest, CRD/RBAC, deployment, admission, and live-runtime migration is
+outside this repair.
 
 ## Scanner or feed failure rollback
 
