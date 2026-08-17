@@ -5,7 +5,7 @@ title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
 updated: 2026-08-16
-version: "1.46"
+version: "1.47"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -1267,26 +1267,57 @@ writable repository exception is permitted.
 
 Issue #63 comment
 [`5268936554`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5268936554)
-records the active sequence-5 owner authorization at
-`2026-08-12T15:32:31Z`. It permits exactly one fifth reviewed-main attempt,
-bound to predecessor `e6eb99d0e79b4a85aa7670ed75f07e4bc2d5b823` and GitHub
-Actions attempt `1`, and retains the unchanged expiry
-`2026-08-21T22:43:36Z`. Its owner-only alternative is scoped to PR #148 and
-this fifth attempt only. After the exact final PR head has
-completed `.github/workflows/ci.yml`, `.github/workflows/security.yml`,
-`.github/workflows/trino-maven-remediation-feasibility.yml`, and
-`.github/workflows/trino-maven-dependencies.yml` successfully, the publisher
-must read the REST workflow-runs endpoint with `per_page=100` and a 4 MiB
-response bound per page through a terminal short page, bounded to 10 pages and
-an accepted maximum of 999 runs. Every run
-ID must be a unique positive integer, `total_count` must remain stable and equal
-the collected run count, and two complete ordered scans of each run's identity,
-path, head, event, status, conclusion, timestamps, repository identities, and PR
-binding must match. When a required path has multiple runs, qualifying
-successful pre-attestation runs are selected deterministically by `updated_at`,
-then `created_at`, then run ID; failed or incomplete runs cannot satisfy the
-gate. A full
-tenth page does not prove exhaustion and fails closed. Then a complete GraphQL
+recorded the now-consumed sequence-5 owner authorization at
+`2026-08-12T15:32:31Z`. It permitted exactly one fifth reviewed-main attempt,
+bound to predecessor `e6eb99d0e79b4a85aa7670ed75f07e4bc2d5b823`, PR #148, and
+GitHub Actions attempt `1`, with unchanged expiry
+`2026-08-21T22:43:36Z`. PR #148 passed all four required workflows at final
+head `7581b2413c1c820ac1f774fe28034f1b7bfa6eb1`; owner attestation comment
+[`5269416490`](https://github.com/TommyKammy/Shirokuma/pull/148#issuecomment-5269416490)
+recorded that exact head before the PR was squash-merged as
+`49a86522d6e6c69f4a552220b30fa510d3a5edd2`.
+
+Reviewed-main run
+[`31616764771`](https://github.com/TommyKammy/Shirokuma/actions/runs/31616764771),
+attempt `1`, completed the `validate` job and retained read-only candidate
+artifact `trino-maven-candidate-31616764771-1` (artifact ID `9150299769`,
+844,111,993 bytes, expired `2026-08-13T16:39:07Z`). The write-capable
+`publish` job then failed closed in `Revalidate the write-capable publication
+boundary`. GitHub's head-filtered REST workflow-run response returned an empty
+`pull_requests` list for each successful final-head pull-request workflow, but
+the verifier treated exact `[148]` as the only valid representation. Candidate
+download, registry authentication, registry write, signature, attestation,
+anonymous pull, and final publication-artifact retention were never reached.
+The candidate artifact is expired, incomplete publication input and is not a
+durable evidence pin. Attempt 5 is consumed; rerun and sequence 6 remain
+unauthorized.
+
+A workflow run's REST `pull_requests` list is therefore not a durable positive
+PR binding. Future authorization logic must instead perform bounded, complete,
+two-pass stable queries and require an exact singleton PR across the merge
+commit association, final-head commit association, and
+`pulls?state=all&head=owner:ref` result. The selected singleton itself must be
+closed and merged and bind the
+expected repository, base `main`, merge
+commit, final head, and head branch. Required workflow runs are independently
+queried with `event=pull_request` and the exact final-head SHA, and each selected
+run must bind the exact workflow path, head SHA, head branch, repository and
+head-repository identities, successful completion, and completion before the
+attestation. A run-level `pull_requests` list may be empty or the exact
+singleton selected PR only; any other non-empty binding, malformed entry, or
+two-pass drift fails closed. Run IDs remain unique positive integers,
+`total_count` must equal the bounded collected result, and qualifying runs for
+one path are selected deterministically by `updated_at`, then `created_at`,
+then run ID. A full tenth page does not prove exhaustion and fails closed.
+This verifier repair is review-only: lifecycle returns to
+`dependency_snapshot_publication_reauthorization_pending`, all three
+publication permission records are false, and no sixth attempt or downstream
+authority is created.
+The remediation-feasibility pull-request workflow validates that blocked
+lifecycle and then skips every builder, source-fetch, network, and artifact
+step; `publication-status=blocked` cannot create fresh feasibility evidence.
+
+After the workflow gate, a complete GraphQL
 cursor query reads `reviewThreads` in pages of
 100 until
 `hasNextPage=false`, bounded to at most 10 pages and 1,000 threads. Every page
@@ -1395,11 +1426,23 @@ reports, then failed closed because Trivy reported React Router
 The raw report retained one High finding and the exact OpenVEX-adjusted report
 retained High=0/Critical=0. The publish job was skipped; only diagnostic
 artifact `trino-bun-vulnerability-diagnostics-31605249586-1` was retained.
-Comment `5268936554` authorizes the one sequence-5 PR #148 metadata repair and
-attempt described above and no downstream authority. Its empty downstream-
-authority set grants no dependency-evidence admission, image publication,
-resident admission, Flux/runtime reconciliation, credentials, public exposure,
-production use, or Issue #63 closure.
+Comment `5268936554` authorized the one sequence-5 PR #148 metadata repair and
+attempt described above and no downstream authority. PR #148 merged from final
+head `7581b2413c1c820ac1f774fe28034f1b7bfa6eb1` as
+`49a86522d6e6c69f4a552220b30fa510d3a5edd2` after exact owner attestation
+comment `5269416490`. Reviewed-main run `31616764771`, attempt `1`, passed
+validation but failed closed at the publish job's pre-download revalidation
+because the REST workflow-run `pull_requests` association was empty. Candidate
+artifact `trino-maven-candidate-31616764771-1` (ID `9150299769`, 844,111,993
+bytes, expired `2026-08-13T16:39:07Z`) was never downloaded by the publish job
+and is not admitted evidence. Registry authentication, OCI write, signing,
+attestation, anonymous pull, and final publication artifact were not reached.
+Attempt 5 is consumed, rerun and sequence 6 are unauthorized, and the lifecycle
+is `dependency_snapshot_publication_reauthorization_pending`. The empty
+downstream-authority set still grants no dependency-evidence admission, image
+publication, resident admission, Flux/runtime reconciliation, credentials,
+public exposure, production use, or Issue #63 closure. A Draft review-only
+workflow-run association repair is pending; it cannot activate publication.
 
 ## Resident image and SBOM evidence
 

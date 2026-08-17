@@ -321,7 +321,7 @@ class SupplyChainSecurityTests(unittest.TestCase):
         image: dict[str, str],
         cves: list[dict[str, str]],
     ) -> dict[str, object]:
-        today = date.today()
+        today = current_utc_date()
         return {
             "component": image["component"],
             "reference": image["reference"],
@@ -353,11 +353,12 @@ class SupplyChainSecurityTests(unittest.TestCase):
 
     @staticmethod
     def write_exceptions(root: Path, entries: list[dict[str, object]]) -> Path:
-        approved_on = str(entries[0]["approved_on"]) if entries else date.today().isoformat()
+        today = current_utc_date()
+        approved_on = str(entries[0]["approved_on"]) if entries else today.isoformat()
         expires_on = (
             str(entries[0]["expires_on"])
             if entries
-            else (date.today() + timedelta(days=30)).isoformat()
+            else (today + timedelta(days=30)).isoformat()
         )
         for entry in entries:
             scan_evidence = entry["scan_evidence"]
@@ -957,8 +958,9 @@ class SupplyChainSecurityTests(unittest.TestCase):
                 "fixed_version": "",
             }
             entry = self.valid_exception(image, [exception_cve])
-            entry["approved_on"] = (date.today() - timedelta(days=31)).isoformat()
-            entry["expires_on"] = (date.today() - timedelta(days=1)).isoformat()
+            today = current_utc_date()
+            entry["approved_on"] = (today - timedelta(days=31)).isoformat()
+            entry["expires_on"] = (today - timedelta(days=1)).isoformat()
             self.write_valid_evidence(root, image)
             self.write_trivy_report(root, image["reference"])
             exceptions = self.write_exceptions(root, [entry])
@@ -997,8 +999,9 @@ class SupplyChainSecurityTests(unittest.TestCase):
                     }
                 ],
             )
-            entry["approved_on"] = (date.today() + timedelta(days=1)).isoformat()
-            entry["expires_on"] = (date.today() + timedelta(days=30)).isoformat()
+            today = current_utc_date()
+            entry["approved_on"] = (today + timedelta(days=1)).isoformat()
+            entry["expires_on"] = (today + timedelta(days=30)).isoformat()
             self.write_valid_evidence(root, image)
             self.write_trivy_report(root, image["reference"])
             exceptions = self.write_exceptions(root, [entry])
@@ -1037,7 +1040,9 @@ class SupplyChainSecurityTests(unittest.TestCase):
                     }
                 ],
             )
-            entry["expires_on"] = (date.today() + timedelta(days=31)).isoformat()
+            entry["expires_on"] = (
+                current_utc_date() + timedelta(days=31)
+            ).isoformat()
             self.write_valid_evidence(root, image)
             self.write_trivy_report(root, image["reference"])
             exceptions = self.write_exceptions(root, [entry])
