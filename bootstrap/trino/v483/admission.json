@@ -110,8 +110,8 @@
       "network-none reproducible native linux/arm64 build",
       "digest-pinned builder and runtime bases",
       "native linux/arm64 runtime smoke",
-      "High=0/Critical=0 fresh vulnerability scan after exact reviewed OpenVEX processing",
-      "retained CycloneDX SBOM, raw scan, OpenVEX, and adjusted scan evidence",
+      "High=0/Critical=0 fresh vulnerability scan without OpenVEX adjustment",
+      "retained CycloneDX SBOM and exact raw scan evidence",
       "Cosign signature and Rekor transparency-log evidence",
       "SLSA provenance bound to the exact source revision",
       "anonymous exact-digest retrieval",
@@ -122,10 +122,10 @@
     "expiry_action": "fail_closed_before_dependency_or_image_publication_resident_admission_or_runtime_reconciliation"
   },
   "source_overlay_authorization": {
-    "status": "active",
-    "authorization_type": "time_boxed_bounded_source_overlay_and_not_affected_assessment",
+    "status": "implementation_authorized_review_pending",
+    "authorization_type": "focused_patched_dependency_candidate_revision_without_openvex",
     "decision_record": "docs/design/07_ADR/ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md",
-    "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5081842992",
+    "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5312231113",
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
     "expires_at": "2026-08-21T22:43:36Z",
     "automatic_renewal": false,
@@ -144,15 +144,13 @@
       "core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json",
       "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock"
     ],
-    "openvex_scope": {
-      "vulnerability_id": "GHSA-qwww-vcr4-c8h2",
-      "product": "pkg:npm/react-router@7.18.1",
-      "status": "not_affected",
-      "justification": "vulnerable_code_not_in_execute_path"
-    },
+    "candidate_revision_only": true,
+    "merge_permitted": false,
+    "sequence_6_permitted": false,
+    "publication_permitted": false,
     "vulnerability_risk_accepted": false,
-    "raw_finding_retention_required": true,
-    "adjusted_high_zero_critical_zero_required": true,
+    "raw_high_zero_critical_zero_required": true,
+    "openvex_permitted": false,
     "expiry_action": "fail_closed_before_dependency_resolution_or_publication"
   },
   "source_remediation_authorization": {
@@ -561,7 +559,6 @@
       "bootstrap/trino/v483/patches/0003-shirokuma-maven-build-plugin-closure.patch",
       "bootstrap/trino/v483/settings.xml",
       "bootstrap/trino/v483/trusted-build-contract.json",
-      "bootstrap/trino/v483/vex/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json",
       "docs/design/04_Development/049_Supply_Chain_Security.md",
       "docs/design/07_ADR/ADR-0022_Adopt_Trino_483_repository_source_build.md",
       "docs/design/07_ADR/ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md",
@@ -638,7 +635,7 @@
       "native linux/arm64 runtime smoke",
       "Cosign signature and transparency-log evidence",
       "SLSA provenance bound to the source revision",
-      "retained closure-complete SBOM, raw vulnerability scan, exact bounded OpenVEX, and fresh High=0/Critical=0 scan without waivers",
+      "retained closure-complete SBOM and fresh raw High=0/Critical=0 vulnerability scan without waivers or OpenVEX",
       "anonymous exact-digest retrieval before separate admission review"
     ]
   }

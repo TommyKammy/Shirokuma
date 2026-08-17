@@ -1,16 +1,16 @@
 ---
 project: Shirokuma
 doc_id: "ADR-0024"
-title: "Apply a bounded Trino 483 Web UI dependency overlay and OpenVEX"
+title: "Apply a bounded Trino 483 Web UI dependency overlay"
 status: accepted
 created: 2026-07-26
-updated: 2026-08-14
-version: "0.4"
+updated: 2026-08-17
+version: "0.5"
 area: "architecture"
-tags: [shirokuma, adr, trino, web-ui, supply-chain, openvex]
+tags: [shirokuma, adr, trino, web-ui, supply-chain]
 ---
 
-# ADR-0024: Apply a bounded Trino 483 Web UI dependency overlay and OpenVEX
+# ADR-0024: Apply a bounded Trino 483 Web UI dependency overlay
 
 ## Context
 
@@ -20,6 +20,17 @@ local PoC. Reviewed-main dependency publisher run `30184349867` subsequently
 completed two independent Maven/Bun reconstructions, two native-arm64
 network-none full builds, byte-identical server archives, and the Maven
 High=0/Critical=0 gate. It then failed closed at the Bun lockfile scan.
+
+On 2026-08-17, the npm registry published provenance-bearing
+`react-router` and `react-router-dom` 7.18.2, and GHSA-qwww-vcr4-c8h2 listed
+7.18.2 as the first patched 7.x release. A fresh Trivy 0.72.0 database also
+classified `nanoid 3.3.17` as High under CVE-2026-67213, fixed in 3.3.18.
+Detached validation of the exact Trino 483 tree showed that the focused
+7.18.2 / 3.3.18 revision passes Bun 1.3.14 frozen installation, TypeScript
+typecheck, Vite packaging, and legacy webpack packaging, with zero High or
+Critical findings across both lockfiles. Issue #63 owner comment `5312231113`
+authorizes implementation and a Draft candidate-revision PR only. It does not
+authorize merge, sequence 6, publication, or downstream use.
 
 Trivy 0.72.0 reported five newly disclosed High findings:
 
@@ -118,8 +129,8 @@ bytes with SHA-256
 the active 128,430,898-byte deterministic archive has SHA-256
 `863e9d08bf8d7f106059feff7a5e6d96ca7da17b2cf633381241fe66ab88b1ca`.
 
-The authoritative owner approval is Issue #63 comment
-`https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5081842992`.
+The active implementation authorization is Issue #63 comment
+`https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5312231113`.
 
 ## Decision
 
@@ -136,25 +147,17 @@ The authoritative owner approval is Issue #63 comment
   diff and invoke `git apply --unidiff-zero --whitespace=error-all` only after
   all complete-file preimages pass; then require all complete-file postimages.
 - Override only `d3-color 3.1.0`, `fast-uri 3.1.5`,
-  `brace-expansion 5.0.9`, `js-yaml 4.3.1`, `nanoid 3.3.17`, and
+  `brace-expansion 5.0.9`, `js-yaml 4.3.1`, `nanoid 3.3.18`, and
   `postcss 8.5.18`. Pin
-  `react-router-dom` exactly to `7.18.1` so a future lock refresh cannot select
+  `react-router-dom` exactly to `7.18.2` so a future lock refresh cannot select
   another React Router surface implicitly.
-- Retain an unadjusted High/Critical-scoped Trivy JSON report. It must contain
-  exactly one High and no Critical findings: GHSA-qwww-vcr4-c8h2 for exact
-  `pkg:npm/react-router@7.18.1`. Any other vulnerability, package, version,
-  PURL, severity, target, or duplicate finding fails closed.
-- Apply one hash-bound OpenVEX statement with status `not_affected` and
-  justification `vulnerable_code_not_in_execute_path`. It may identify only
-  GHSA-qwww-vcr4-c8h2 and `pkg:npm/react-router@7.18.1`.
-- Bind the VEX to the exact Trino source tree, overlay, postimage lock hashes,
-  and a closed inventory of every `react-router` or `react-router-dom` import.
-  Any import inventory change, any unstable RSC marker, or any product/advisory
-  drift fails closed before dependency resolution or publication.
-- Retain a second VEX-adjusted Trivy report. It must analyze the same two exact
-  Bun lockfiles and identical package inventory as the raw report, with
-  High=0/Critical=0. The raw report, adjusted report, OpenVEX document, and
-  their hashes remain separate evidence.
+- Retain one unadjusted High/Critical-scoped Trivy JSON report over both exact
+  lockfiles. It must contain zero High and zero Critical findings while
+  retaining the complete expected package inventories. Any finding or package
+  graph drift fails closed.
+- Remove the active OpenVEX document, adjusted scan command, adjusted report,
+  hashes, provenance entries, publication inputs, and diagnostic inputs.
+  OpenVEX or another waiver mechanism is not permitted for this candidate.
 - Require current Web UI typecheck/Vite packaging and legacy webpack packaging
   as pre-merge validation. Require native server Web UI and client-side route
   smoke before the later image is admitted. Cross-major transitive overrides
@@ -162,27 +165,23 @@ The authoritative owner approval is Issue #63 comment
   succeeds.
 - Expire this decision no later than `2026-08-21T22:43:36Z`, together with the
   ADR-0023 authorization. Automatic renewal is forbidden. A fresh decision is
-  required for another Trino source tree, lockfile, React Router version,
-  advisory, VEX status, or import surface.
+  required for another Trino source tree, lockfile, dependency version, or
+  advisory state.
 - Preserve owner/reviewer separation. `TommyKammy` owns this decision; `Codex`
   authors the implementation; a different reviewer must approve before merge.
-- Do not classify this as an ADR-0019 vulnerability exception. The raw finding
-  is retained, and the adjusted High=0 result is justified by reviewed
-  non-applicability rather than accepted exploitability risk. No other High or
+- Do not classify this as an ADR-0019 vulnerability exception. No High or
   Critical finding is waived.
 
 This decision supersedes only ADR-0022's unmodified-source requirement for the
-four hash-bound Web UI files and refines ADR-0023's High=0 requirement with one
-closed non-applicability statement. Every other ADR-0022 and ADR-0023 control
-remains in force.
+four hash-bound Web UI files. Every other ADR-0022 and ADR-0023 control remains
+in force.
 
 ## Consequences
 
 The resulting server is a disclosed Shirokuma downstream build of Trino 483,
-not a byte-equivalent upstream build. The overlay and VEX increase policy and
-review surface, but avoid importing an unpublished independently packaged React
-Router release. A React Router import change or advisory change stops
-publication until a new review is complete.
+not a byte-equivalent upstream build. The overlay increases policy and review
+surface. Dependency or advisory drift stops publication until a new review is
+complete.
 
 Issue #63 remains open. This ADR does not publish a dependency artifact, admit
 an image, create Flux resources, activate a runtime, or authorize production or
@@ -196,16 +195,15 @@ public exposure.
 - `make verify-security`
 - `make verify`
 
-The first reviewed-main publisher run must retain both raw and VEX-adjusted
-reports and complete the existing reconstruction, reproducibility, signing,
+Any separately authorized reviewed-main publisher run must retain the raw
+zero-finding report and complete the existing reconstruction, reproducibility, signing,
 provenance, publication, and anonymous-pull gates before evidence-only review.
 
 ## Rollback
 
 Revert the focused pull request. The publisher then returns to the prior
-fail-closed state with no dependency artifact or runtime admitted. Do not remove
-the raw finding, broaden the VEX, weaken severity filters, or substitute an
-ignore file as rollback.
+fail-closed state with no dependency artifact or runtime admitted. Do not
+weaken severity filters or substitute a waiver, VEX, or ignore file as rollback.
 
 ## Related
 

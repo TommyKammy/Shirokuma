@@ -214,12 +214,11 @@ def _provisional_source_authorization_errors(
         "digest-pinned builder and runtime bases",
         "native linux/arm64 runtime smoke",
         (
-            "High=0/Critical=0 fresh vulnerability scan after exact reviewed "
-            "OpenVEX processing"
+            "High=0/Critical=0 fresh vulnerability scan without OpenVEX "
+            "adjustment"
         ),
         (
-            "retained CycloneDX SBOM, raw scan, OpenVEX, and adjusted scan "
-            "evidence"
+            "retained CycloneDX SBOM and exact raw scan evidence"
         ),
         "Cosign signature and Rekor transparency-log evidence",
         "SLSA provenance bound to the exact source revision",
@@ -3150,14 +3149,17 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         self,
     ) -> None:
         authorization = self._admission()["source_overlay_authorization"]
-        self.assertEqual("active", authorization["status"])
         self.assertEqual(
-            "time_boxed_bounded_source_overlay_and_not_affected_assessment",
+            "implementation_authorized_review_pending",
+            authorization["status"],
+        )
+        self.assertEqual(
+            "focused_patched_dependency_candidate_revision_without_openvex",
             authorization["authorization_type"],
         )
         self.assertEqual(
             "https://github.com/TommyKammy/Shirokuma/issues/63"
-            "#issuecomment-5081842992",
+            "#issuecomment-5312231113",
             authorization["approval_record"],
         )
         self.assertEqual(
@@ -3166,20 +3168,12 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertIs(authorization["automatic_renewal"], False)
         self.assertIs(authorization["vulnerability_risk_accepted"], False)
-        self.assertIs(authorization["raw_finding_retention_required"], True)
-        self.assertIs(
-            authorization["adjusted_high_zero_critical_zero_required"],
-            True,
-        )
-        self.assertEqual(
-            {
-                "vulnerability_id": "GHSA-qwww-vcr4-c8h2",
-                "product": "pkg:npm/react-router@7.18.1",
-                "status": "not_affected",
-                "justification": "vulnerable_code_not_in_execute_path",
-            },
-            authorization["openvex_scope"],
-        )
+        self.assertIs(authorization["candidate_revision_only"], True)
+        self.assertIs(authorization["merge_permitted"], False)
+        self.assertIs(authorization["sequence_6_permitted"], False)
+        self.assertIs(authorization["publication_permitted"], False)
+        self.assertIs(authorization["raw_high_zero_critical_zero_required"], True)
+        self.assertIs(authorization["openvex_permitted"], False)
 
     def test_parquet_source_remediation_is_exact_and_not_a_risk_waiver(
         self,
@@ -3340,10 +3334,6 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     ),
                     "bootstrap/trino/v483/settings.xml",
                     "bootstrap/trino/v483/trusted-build-contract.json",
-                    (
-                        "bootstrap/trino/v483/vex/"
-                        "react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
-                    ),
                     "docs/design/04_Development/049_Supply_Chain_Security.md",
                     (
                         "docs/design/07_ADR/"
@@ -3728,12 +3718,12 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         overlay = source["source_overlay"]
         self.assertEqual(
-            "approved_bounded_web_ui_security",
+            "implementation_authorized_review_pending_patched_web_ui_security",
             overlay["state"],
         )
         self.assertEqual(
             "https://github.com/TommyKammy/Shirokuma/issues/63"
-            "#issuecomment-5081842992",
+            "#issuecomment-5312231113",
             overlay["approval_record"],
         )
         self.assertEqual(
@@ -3751,19 +3741,19 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "d3-color": "3.1.0",
                 "fast-uri": "3.1.5",
                 "js-yaml": "4.3.1",
-                "nanoid": "3.3.17",
+                "nanoid": "3.3.18",
                 "postcss": "8.5.18",
-                "react-router-dom": "7.18.1",
+                "react-router-dom": "7.18.2",
             },
             overlay["dependency_overrides"],
         )
         self.assertEqual(
-            "not_affected",
-            overlay["vulnerability_assessment"]["openvex"]["status"],
+            False,
+            overlay["vulnerability_assessment"]["openvex_permitted"],
         )
         self.assertEqual(
             0,
-            overlay["vulnerability_assessment"]["adjusted_maximum_high"],
+            overlay["vulnerability_assessment"]["maximum_high"],
         )
         self.assertEqual(
             {
@@ -4009,7 +3999,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                             "webapp/bun.lock"
                         ),
                         "sha256": (
-                            "90bfa0a797ae2f37a4ab5e8b445a62fa211328cedab186ac8c2402f78a07a194"
+                            "7d61c5d3868b5a600ff8a21206168c114848dd7d65b882dc6f5bdaf4c792c8f3"
                         ),
                     },
                     {

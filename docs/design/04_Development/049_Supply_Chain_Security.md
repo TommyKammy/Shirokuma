@@ -1574,6 +1574,33 @@ same scan to 20 High findings and has valid signed-index SLSA v1/SPDX evidence,
 but its digest, CRD/RBAC, deployment, admission, and live-runtime migration is
 outside this repair.
 
+## Trino 483 patched Web UI candidate revision (2026-08-17)
+
+Issue #63 owner comment `5312231113` supersedes the active 7.18.1 + OpenVEX
+candidate design for implementation purposes. The focused revision pins
+`react-router-dom` and its locked `react-router` dependency to 7.18.2 and
+updates the existing `nanoid` override to 3.3.18. The other bounded overrides
+and the exact four permitted Web UI package/lock paths remain unchanged.
+
+The active publisher workflow retains one High/Critical-scoped raw Trivy JSON
+report over both exact lockfiles and requires High=0/Critical=0 plus the closed
+package inventories. The OpenVEX document, adjusted scan command and report,
+candidate checksums, provenance dependency, publication input, retained
+evidence entry, and four-file failure diagnostic are removed. A failed Bun gate
+may retain only the CycloneDX SBOM and raw scan report, and that diagnostic
+artifact remains forbidden as a publication input.
+
+Detached validation against exact Trino commit
+`50b0b50b75abd47f830b7805ee1b51716eb4065e` produced modern postimages
+`2ed7946adc71a60b2f0affb546e115c981697b52b92d924caeb4ba52b091cd11`
+for `package.json` and
+`7d61c5d3868b5a600ff8a21206168c114848dd7d65b882dc6f5bdaf4c792c8f3`
+for `bun.lock`. Bun 1.3.14 frozen install, modern typecheck/Vite build, legacy
+webpack build, and fresh Trivy 0.72.0 High/Critical scans passed. This is a
+review-pending Draft candidate only: merge, sequence 6, publication, expiry
+renewal, dependency admission, image/runtime work, and Issue #63 closure remain
+unauthorized.
+
 ## Scanner or feed failure rollback
 
 Security-tool and feed failures do not permit bypassing the check. First retry

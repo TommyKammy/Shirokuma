@@ -384,10 +384,6 @@ BUILD_PLUGIN_REMEDIATION_PATH = Path(
     "bootstrap/trino/v483/patches/"
     "0003-shirokuma-maven-build-plugin-closure.patch"
 )
-VEX_PATH = Path(
-    "bootstrap/trino/v483/vex/"
-    "react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
-)
 OVERLAY_ADR_PATH = Path(
     "docs/design/07_ADR/"
     "ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md"
@@ -1035,7 +1031,7 @@ EXPECTED_BUN_PACKAGE_CACHE = {
     "frozen_lockfiles": [
         {
             "path": "core/trino-web-ui/src/main/resources/webapp/bun.lock",
-            "sha256": "90bfa0a797ae2f37a4ab5e8b445a62fa211328cedab186ac8c2402f78a07a194",
+            "sha256": "7d61c5d3868b5a600ff8a21206168c114848dd7d65b882dc6f5bdaf4c792c8f3",
         },
         {
             "path": (
@@ -1081,18 +1077,18 @@ EXPECTED_BUN_SCAN_RESULTS = {
     },
 }
 EXPECTED_SOURCE_OVERLAY = {
-    "state": "approved_bounded_web_ui_security",
+    "state": "implementation_authorized_review_pending_patched_web_ui_security",
     "decision_record": OVERLAY_ADR_PATH.as_posix(),
     "approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5081842992"
+        "#issuecomment-5312231113"
     ),
     "expires_at": "2026-08-21T22:43:36Z",
     "automatic_renewal": False,
     "applied_after_source_verification": True,
     "patch": {
         "path": SOURCE_OVERLAY_PATH.as_posix(),
-        "sha256": "90a2168b9e158f3a61e3cfe3c4e21b6cc6df39c393c2bb38a6df3ffa2e7a3d66",
+        "sha256": "53eb4bfb5c06859e27e269bed5af6469c386d3bd8cf8b837d8031188e6bf9b7a",
     },
     "apply_arguments": [
         "--unidiff-zero",
@@ -1120,10 +1116,10 @@ EXPECTED_SOURCE_OVERLAY = {
     },
     "postimages": {
         "core/trino-web-ui/src/main/resources/webapp/package.json": (
-            "2af750b9571eddce309373325779a3e2d35ba1977db25b657fe4337f3cb687d2"
+            "2ed7946adc71a60b2f0affb546e115c981697b52b92d924caeb4ba52b091cd11"
         ),
         "core/trino-web-ui/src/main/resources/webapp/bun.lock": (
-            "90bfa0a797ae2f37a4ab5e8b445a62fa211328cedab186ac8c2402f78a07a194"
+            "7d61c5d3868b5a600ff8a21206168c114848dd7d65b882dc6f5bdaf4c792c8f3"
         ),
         "core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json": (
             "d555ca5ab130a76775c9677b5b9798dee486964ef0fc4992fbb02705e696d271"
@@ -1137,9 +1133,9 @@ EXPECTED_SOURCE_OVERLAY = {
         "d3-color": "3.1.0",
         "fast-uri": "3.1.5",
         "js-yaml": "4.3.1",
-        "nanoid": "3.3.17",
+        "nanoid": "3.3.18",
         "postcss": "8.5.18",
-        "react-router-dom": "7.18.1",
+        "react-router-dom": "7.18.2",
     },
     "react_router_import_inventory": [
         {
@@ -1208,28 +1204,10 @@ EXPECTED_SOURCE_OVERLAY = {
         },
     ],
     "vulnerability_assessment": {
-        "raw_report_required": True,
-        "adjusted_report_required": True,
-        "raw_finding": {
-            "target": "core/trino-web-ui/src/main/resources/webapp/bun.lock",
-            "vulnerability_id": "GHSA-qwww-vcr4-c8h2",
-            "package": "react-router",
-            "installed_version": "7.18.1",
-            "fixed_version": "7.18.2, 8.3.0",
-            "severity": "HIGH",
-            "purl": "pkg:npm/react-router@7.18.1",
-        },
-        "openvex": {
-            "path": VEX_PATH.as_posix(),
-            "sha256": (
-                "f36e8c7ab98f177c0e3f796a22cfa23e8709dc9a9b39bff32806c9b5db534a2a"
-            ),
-            "status": "not_affected",
-            "justification": "vulnerable_code_not_in_execute_path",
-        },
-        "adjusted_maximum_high": 0,
-        "adjusted_maximum_critical": 0,
-        "raw_and_adjusted_package_inventory_must_match": True,
+        "report_required": True,
+        "maximum_high": 0,
+        "maximum_critical": 0,
+        "openvex_permitted": False,
     },
 }
 EXPECTED_DISTRIBUTION_REMEDIATION = {
@@ -1442,9 +1420,9 @@ EXPECTED_BUILD_PLUGIN_REMEDIATION = {
     ),
 }
 EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION = {
-    "status": "active",
+    "status": "implementation_authorized_review_pending",
     "authorization_type": (
-        "time_boxed_bounded_source_overlay_and_not_affected_assessment"
+        "focused_patched_dependency_candidate_revision_without_openvex"
     ),
     "decision_record": OVERLAY_ADR_PATH.as_posix(),
     "approval_record": EXPECTED_SOURCE_OVERLAY["approval_record"],
@@ -1461,15 +1439,13 @@ EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION = {
         "tree_sha": EXPECTED_TREE,
     },
     "permitted_paths": EXPECTED_SOURCE_OVERLAY["permitted_paths"],
-    "openvex_scope": {
-        "vulnerability_id": "GHSA-qwww-vcr4-c8h2",
-        "product": "pkg:npm/react-router@7.18.1",
-        "status": "not_affected",
-        "justification": "vulnerable_code_not_in_execute_path",
-    },
+    "candidate_revision_only": True,
+    "merge_permitted": False,
+    "sequence_6_permitted": False,
+    "publication_permitted": False,
     "vulnerability_risk_accepted": False,
-    "raw_finding_retention_required": True,
-    "adjusted_high_zero_critical_zero_required": True,
+    "raw_high_zero_critical_zero_required": True,
+    "openvex_permitted": False,
     "expiry_action": "fail_closed_before_dependency_resolution_or_publication",
 }
 EXPECTED_SOURCE_REMEDIATION = {
@@ -1744,37 +1720,8 @@ EXPECTED_BUN_SCAN_STAGE_BLOCK = """\
         shell: bash
         run: |
 """
-EXPECTED_BUN_ADJUSTED_SCAN_REPORT_BLOCK = """\
-      - name: Apply OpenVEX and retain adjusted Bun High or Critical findings
-        if: >-
-          always() &&
-          steps.lifecycle.outputs.active == 'true' &&
-          steps.stage_bun_scan_input.outcome == 'success'
-        env:
-          TRIVY_INCLUDE_DEV_DEPS: "true"
-          TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
-        shell: bash
-        run: |
-          set -euo pipefail
-          candidate="${GITHUB_WORKSPACE}/.trino-candidate"
-          vex="${GITHUB_WORKSPACE}/bootstrap/trino/v483/vex/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
-          install -m 0444 "${vex}" \\
-            "${candidate}/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
-          trivy fs \\
-            --scanners vuln \\
-            --severity HIGH,CRITICAL \\
-            --ignore-unfixed=false \\
-            --skip-db-update \\
-            --pkg-types library \\
-            --exit-code 0 \\
-            --list-all-pkgs \\
-            --format json \\
-            --output "${candidate}/trivy-bun-vulnerability.json" \\
-            --vex "${vex}" \\
-            "${RUNNER_TEMP}/trino-bun-scan-input"
-"""
 EXPECTED_BUN_SCAN_GATE_BLOCK = """\
-      - name: Verify and block the raw and OpenVEX-adjusted Bun dependency evidence
+      - name: Verify and block the Bun dependency evidence
         if: >-
           always() &&
           steps.lifecycle.outputs.active == 'true' &&
@@ -1787,27 +1734,23 @@ EXPECTED_BUN_SCAN_GATE_BLOCK = """\
             verify-bun-scan \\
             --root . \\
             --scan-input "${RUNNER_TEMP}/trino-bun-scan-input" \\
-            --raw-report \\
-              "${GITHUB_WORKSPACE}/.trino-candidate/trivy-bun-vulnerability-raw.json" \\
-            --adjusted-report \\
+            --report \\
               "${GITHUB_WORKSPACE}/.trino-candidate/trivy-bun-vulnerability.json"
 """
-EXPECTED_BUN_FAILURE_DIAGNOSTIC_QUARTET_BLOCK = """\
-      - name: Verify complete failed Bun vulnerability diagnostic quartet
+EXPECTED_BUN_FAILURE_DIAGNOSTIC_PAIR_BLOCK = """\
+      - name: Verify complete failed Bun vulnerability diagnostic pair
         if: >-
           failure() &&
           steps.lifecycle.outputs.active == 'true' &&
           steps.verify_bun_scan.outcome == 'failure'
-        id: verify_bun_diagnostic_quartet
+        id: verify_bun_diagnostic_pair
         shell: bash
         run: |
           set -euo pipefail
           candidate="${GITHUB_WORKSPACE}/.trino-candidate"
           required=(
             "trino-bun-dependencies-483.cdx.json"
-            "trivy-bun-vulnerability-raw.json"
             "trivy-bun-vulnerability.json"
-            "react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
           )
           for filename in "${required[@]}"; do
             path="${candidate}/${filename}"
@@ -1824,7 +1767,7 @@ EXPECTED_BUN_FAILURE_DIAGNOSTIC_BLOCK = """\
           failure() &&
           steps.lifecycle.outputs.active == 'true' &&
           steps.verify_bun_scan.outcome == 'failure' &&
-          steps.verify_bun_diagnostic_quartet.outcome == 'success'
+          steps.verify_bun_diagnostic_pair.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: >-
@@ -1833,9 +1776,7 @@ EXPECTED_BUN_FAILURE_DIAGNOSTIC_BLOCK = """\
           include-hidden-files: true
           path: |
             .trino-candidate/trino-bun-dependencies-483.cdx.json
-            .trino-candidate/trivy-bun-vulnerability-raw.json
             .trino-candidate/trivy-bun-vulnerability.json
-            .trino-candidate/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json
           if-no-files-found: error
           retention-days: 14
 """
@@ -2157,10 +2098,9 @@ EXPECTED_STEPS = {
         "Retain failed Maven vulnerability diagnostics",
         "Stage the exact Bun lockfiles for dependency analysis",
         "Generate a CycloneDX Bun dependency SBOM",
-        "Retain the raw Bun High or Critical findings",
-        "Apply OpenVEX and retain adjusted Bun High or Critical findings",
-        "Verify and block the raw and OpenVEX-adjusted Bun dependency evidence",
-        "Verify complete failed Bun vulnerability diagnostic quartet",
+        "Retain the Bun High or Critical findings",
+        "Verify and block the Bun dependency evidence",
+        "Verify complete failed Bun vulnerability diagnostic pair",
         "Retain failed Bun vulnerability diagnostics",
         "Record the read-only candidate",
         "Retain the read-only-verified candidate",
@@ -2392,40 +2332,6 @@ def verify_bun_snapshot_identity(descriptor: Path, archive: Path) -> None:
         _fail("BUN_SNAPSHOT_IDENTITY", "archive identity differs")
 
 
-def _validate_openvex(root: Path) -> None:
-    expected = EXPECTED_SOURCE_OVERLAY["vulnerability_assessment"]["openvex"]
-    path = root / expected["path"]
-    if _sha256(path) != expected["sha256"]:
-        _fail("SOURCE_VEX", "OpenVEX SHA-256 differs")
-    document = _load_json(path)
-    expected_document = {
-        "@context": "https://openvex.dev/ns/v0.2.0",
-        "@id": (
-            "https://github.com/TommyKammy/Shirokuma/issues/63"
-            "#trino-483-react-router-ghsa-qwww-vcr4-c8h2"
-        ),
-        "author": "TommyKammy/Shirokuma",
-        "timestamp": "2026-07-26T03:42:59Z",
-        "version": 1,
-        "statements": [
-            {
-                "vulnerability": {"@id": "GHSA-qwww-vcr4-c8h2"},
-                "products": [{"@id": "pkg:npm/react-router@7.18.1"}],
-                "status": "not_affected",
-                "justification": "vulnerable_code_not_in_execute_path",
-                "impact_statement": (
-                    "The advisory affects unstable React Server Components APIs. "
-                    "Trino 483 imports only client-side HashRouter, Routes, Route, "
-                    "Navigate, Link, location, parameter, and search-parameter APIs; "
-                    "it does not import or invoke unstable RSC APIs."
-                ),
-            }
-        ],
-    }
-    if not _matches_exact_json(document, expected_document):
-        _fail("SOURCE_VEX", "OpenVEX document differs")
-
-
 def _validate_source_overlay_contract(
     root: Path,
     contract: Mapping[str, Any],
@@ -2438,7 +2344,6 @@ def _validate_source_overlay_contract(
     patch = EXPECTED_SOURCE_OVERLAY["patch"]
     if _sha256(root / patch["path"]) != patch["sha256"]:
         _fail("SOURCE_OVERLAY", "source overlay SHA-256 differs")
-    _validate_openvex(root)
     expires = _parse_time(EXPECTED_SOURCE_OVERLAY["expires_at"])
     authorization_expires = _parse_time(contract["authorization"]["expires_at"])
     if expires > authorization_expires:
@@ -3293,46 +3198,10 @@ def _bun_scan_report(
     return inventories, findings
 
 
-def _verify_raw_bun_finding(findings: list[tuple[str, dict[str, Any]]]) -> None:
-    expected = EXPECTED_SOURCE_OVERLAY["vulnerability_assessment"]["raw_finding"]
-    if len(findings) != 1:
-        _fail(
-            "BUN_SCAN_RAW_FINDING",
-            f"expected exactly one reviewed finding, found {len(findings)}",
-        )
-    target, finding = findings[0]
-    identifier = finding.get("PkgIdentifier")
-    purl = identifier.get("PURL") if isinstance(identifier, dict) else None
-    observed = {
-        "target": target,
-        "vulnerability_id": finding.get("VulnerabilityID"),
-        "package": finding.get("PkgName"),
-        "installed_version": finding.get("InstalledVersion"),
-        "fixed_version": finding.get("FixedVersion"),
-        "severity": finding.get("Severity"),
-        "purl": purl,
-    }
-    if observed != expected:
-        _fail("BUN_SCAN_RAW_FINDING", f"finding differs: {observed!r}")
-
-
-def _canonical_inventory(
-    inventories: Mapping[str, list[dict[str, Any]]],
-) -> dict[str, list[str]]:
-    return {
-        target: sorted(
-            json.dumps(package, sort_keys=True, separators=(",", ":"))
-            for package in packages
-        )
-        for target, packages in inventories.items()
-    }
-
-
 def verify_bun_scan(
     root: Path,
     scan_input: Path,
-    raw_report_path: Path,
-    adjusted_report_path: Path,
+    report_path: Path,
 ) -> None:
     try:
         root_metadata = scan_input.lstat()
@@ -3383,22 +3252,11 @@ def verify_bun_scan(
         contract,
         at=dt.datetime.now(dt.timezone.utc),
     )
-    raw_inventory, raw_findings = _bun_scan_report(raw_report_path)
-    adjusted_inventory, adjusted_findings = _bun_scan_report(
-        adjusted_report_path
-    )
-    _verify_raw_bun_finding(raw_findings)
-    if adjusted_findings:
+    _, findings = _bun_scan_report(report_path)
+    if findings:
         _fail(
-            "BUN_SCAN_ADJUSTED_FINDING",
-            f"blocking findings remain: {adjusted_findings!r}",
-        )
-    if _canonical_inventory(raw_inventory) != _canonical_inventory(
-        adjusted_inventory
-    ):
-        _fail(
-            "BUN_SCAN_INVENTORY",
-            "raw and OpenVEX-adjusted package inventories differ",
+            "BUN_SCAN_FINDING",
+            f"blocking findings remain: {findings!r}",
         )
 
 
@@ -4435,26 +4293,17 @@ def bind_artifact_evidence(
     maven_sbom_path: Path,
     maven_report_path: Path,
     bun_sbom_path: Path,
-    bun_raw_report_path: Path,
-    bun_adjusted_report_path: Path,
+    bun_report_path: Path,
 ) -> None:
     verify_maven_scan(descriptor_path, maven_sbom_path, maven_report_path)
     digest, digest_hex = _artifact_identity(reference)
     for path in (maven_sbom_path, bun_sbom_path):
         _bind_cyclonedx(path, reference, digest_hex)
-    for path in (
-        maven_report_path,
-        bun_raw_report_path,
-        bun_adjusted_report_path,
-    ):
+    for path in (maven_report_path, bun_report_path):
         _bind_trivy_report(path, reference, digest)
     for path in (maven_sbom_path, bun_sbom_path):
         _verify_cyclonedx_subject(path, reference, digest_hex)
-    for path in (
-        maven_report_path,
-        bun_raw_report_path,
-        bun_adjusted_report_path,
-    ):
+    for path in (maven_report_path, bun_report_path):
         _verify_trivy_subject(path, reference, digest)
 
 
@@ -6389,7 +6238,6 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         SOURCE_OVERLAY_PATH,
         DISTRIBUTION_REMEDIATION_PATH,
         BUILD_PLUGIN_REMEDIATION_PATH,
-        VEX_PATH,
         OVERLAY_ADR_PATH,
         PARQUET_REMEDIATION_ADR_PATH,
         DISTRIBUTION_REMEDIATION_ADR_PATH,
@@ -6475,8 +6323,6 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "trivy-vulnerability.json",
         "trino-maven-dependencies-483.cdx.json",
         "trivy-bun-vulnerability.json",
-        "trivy-bun-vulnerability-raw.json",
-        VEX_PATH.as_posix(),
         "trino-bun-dependencies-483.cdx.json",
     )
     for value in required:
@@ -6517,24 +6363,23 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
     if (
         workflow.count(EXPECTED_BUN_SCAN_STAGE_BLOCK) != 1
-        or workflow.count(EXPECTED_BUN_ADJUSTED_SCAN_REPORT_BLOCK) != 1
         or workflow.count(EXPECTED_BUN_SCAN_GATE_BLOCK) != 1
-        or workflow.count(EXPECTED_BUN_FAILURE_DIAGNOSTIC_QUARTET_BLOCK) != 1
+        or workflow.count(EXPECTED_BUN_FAILURE_DIAGNOSTIC_PAIR_BLOCK) != 1
         or workflow.count(EXPECTED_BUN_FAILURE_DIAGNOSTIC_BLOCK) != 1
         or workflow.count("        id: stage_bun_scan_input") != 1
         or workflow.count("        id: verify_bun_scan") != 1
-        or workflow.count("        id: verify_bun_diagnostic_quartet") != 1
+        or workflow.count("        id: verify_bun_diagnostic_pair") != 1
         or workflow.count(EXPECTED_BUN_DIAGNOSTIC_ARTIFACT_PREFIX) != 1
         or lines.count("          include-hidden-files: true") != 3
     ):
         _fail(
             "WORKFLOW_BUN_DIAGNOSTICS",
             (
-                "the adjusted Bun scan must remain report-only, retain the "
-                "exact reviewed OpenVEX before the explicit blocking verifier, "
+                "the Bun scan must remain report-only before the explicit "
+                "blocking verifier, "
                 "fail closed unless every diagnostic file exists and is "
                 "nonempty, and retain only the exact run-scoped failure "
-                "diagnostic quartet"
+                "diagnostic pair"
             ),
         )
     publish_workflow = workflow.split("\n  publish:\n", 1)
@@ -6839,18 +6684,17 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
             "Bun cache must be frozen, independently reconstructed, and read-only offline",
         )
     if (
-        workflow.count(EXPECTED_BUN_ADJUSTED_SCAN_REPORT_BLOCK) != 1
-        or workflow.count(EXPECTED_RECORD_TRIVY_CACHE_BLOCK) != 1
+        workflow.count(EXPECTED_RECORD_TRIVY_CACHE_BLOCK) != 1
         or workflow.count(
             "TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy"
         )
-        != 2
+        != 1
     ):
         _fail(
             "WORKFLOW_TRIVY_CACHE",
             (
-                "direct OpenVEX and version metadata commands must reuse the "
-                "Trivy action vulnerability database cache"
+                "version metadata must reuse the Trivy action vulnerability "
+                "database cache"
             ),
         )
     if (
@@ -6870,12 +6714,10 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
         != 2
         or "scan-ref: ${{ runner.temp }}/bun-cache-a" in workflow
-        or workflow.count('TRIVY_INCLUDE_DEV_DEPS: "true"') != 3
+        or workflow.count('TRIVY_INCLUDE_DEV_DEPS: "true"') != 2
         or workflow.count("list-all-pkgs: true") != 3
-        or workflow.count('--vex "${vex}"') != 1
-        or workflow.count("--skip-db-update") != 1
-        or "--raw-report \\" not in workflow
-        or "--adjusted-report \\" not in workflow
+        or "--vex" in workflow
+        or "--report \\" not in workflow
     ):
         _fail(
             "WORKFLOW_BUN_SCAN",
@@ -6985,7 +6827,6 @@ def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
         SOURCE_OVERLAY_PATH,
         DISTRIBUTION_REMEDIATION_PATH,
         BUILD_PLUGIN_REMEDIATION_PATH,
-        VEX_PATH,
         OVERLAY_ADR_PATH,
         PARQUET_REMEDIATION_ADR_PATH,
         DISTRIBUTION_REMEDIATION_ADR_PATH,
@@ -7470,8 +7311,7 @@ def _parser() -> argparse.ArgumentParser:
     bun_scan = commands.add_parser("verify-bun-scan")
     bun_scan.add_argument("--root", type=Path, default=Path("."))
     bun_scan.add_argument("--scan-input", type=Path, required=True)
-    bun_scan.add_argument("--raw-report", type=Path, required=True)
-    bun_scan.add_argument("--adjusted-report", type=Path, required=True)
+    bun_scan.add_argument("--report", type=Path, required=True)
     bun_snapshot = commands.add_parser("verify-bun-snapshot")
     bun_snapshot.add_argument("--descriptor", type=Path, required=True)
     bun_snapshot.add_argument("--archive", type=Path, required=True)
@@ -7490,8 +7330,7 @@ def _parser() -> argparse.ArgumentParser:
     bind.add_argument("--maven-sbom", type=Path, required=True)
     bind.add_argument("--maven-report", type=Path, required=True)
     bind.add_argument("--bun-sbom", type=Path, required=True)
-    bind.add_argument("--bun-raw-report", type=Path, required=True)
-    bind.add_argument("--bun-adjusted-report", type=Path, required=True)
+    bind.add_argument("--bun-report", type=Path, required=True)
     return parser
 
 
@@ -7571,8 +7410,7 @@ def main() -> int:
             verify_bun_scan(
                 args.root.resolve(),
                 args.scan_input.resolve(),
-                args.raw_report.resolve(),
-                args.adjusted_report.resolve(),
+                args.report.resolve(),
             )
         elif args.command == "verify-bun-snapshot":
             verify_bun_snapshot_identity(
@@ -7599,8 +7437,7 @@ def main() -> int:
                 args.maven_sbom.resolve(),
                 args.maven_report.resolve(),
                 args.bun_sbom.resolve(),
-                args.bun_raw_report.resolve(),
-                args.bun_adjusted_report.resolve(),
+                args.bun_report.resolve(),
             )
     except ContractError as error:
         print(f"Trino dependency publisher rejected: {error}", file=os.sys.stderr)
