@@ -5027,6 +5027,8 @@ def _select_independent_review(
             "review_id": selected["id"],
             "reviewer": selected["user"]["login"],
             "reviewed_head": final_head,
+            "reviewed_at": selected["submitted_at"],
+            "base_sha": _owner_pull_base_sha(contract, pull),
             "commit": commit,
         }
     if comments is None:
@@ -5746,7 +5748,7 @@ def _github_review_threads_pages(
     return _owner_review_thread_receipt(exception, second_nodes)
 
 
-def _verify_owner_final_head_gates(
+def _verify_final_head_gates(
     exception: Mapping[str, Any],
     selection: Mapping[str, Any],
     *,
@@ -5754,8 +5756,11 @@ def _verify_owner_final_head_gates(
     token: str,
 ) -> dict[str, Any]:
     pull_request = selection["pull_request"]
-    final_head = selection["attested_head"]
-    attested_at = _parse_time(selection["attested_at"])
+    final_head = selection.get("attested_head", selection.get("reviewed_head"))
+    approved_at = selection.get("attested_at", selection.get("reviewed_at"))
+    if not isinstance(final_head, str) or not isinstance(approved_at, str):
+        _fail("INDEPENDENT_REVIEW", "final-head approval receipt differs")
+    approved_instant = _parse_time(approved_at)
     pull_request_binding = _github_exact_pull_binding(
         association_policy,
         pull_request=pull_request,
@@ -5780,7 +5785,7 @@ def _verify_owner_final_head_gates(
         pull_request=pull_request,
         final_head=final_head,
         head_ref=head_ref,
-        attested_at=attested_at,
+        attested_at=approved_instant,
     )
     review_threads = _github_review_threads_pages(
         exception,
@@ -5841,16 +5846,15 @@ def verify_independent_review(
             token=token,
         ),
     )
-    if review_selection["approval_mode"] == "owner_final_head_attestation":
-        exception = contract["publication"]["owner_only_approval_exception"]
-        review_selection.update(
-            _verify_owner_final_head_gates(
-                exception,
-                review_selection,
-                association_policy=association_policy,
-                token=token,
-            )
+    review_selection.update(
+        _verify_final_head_gates(
+            exception,
+            review_selection,
+            association_policy=association_policy,
+            token=token,
         )
+    )
+    if review_selection["approval_mode"] == "owner_final_head_attestation":
         owner_comment_policy = exception["owner_issue_comments"]
         if (
             owner_comment_policy.get("revalidate_after_final_api_gates") is not True

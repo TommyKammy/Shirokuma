@@ -2928,7 +2928,10 @@ class PublisherContractTests(unittest.TestCase):
                 "state": "closed",
                 "merged_at": "2026-08-07T03:00:00Z",
                 "merge_commit_sha": commit,
-                "base": {"ref": "main"},
+                "base": {
+                    "ref": "main",
+                    "sha": verify.EXPECTED_PUBLICATION_ATTEMPT["before_sha"],
+                },
                 "head": {"sha": final_head},
             }
         ]
@@ -3086,6 +3089,7 @@ class PublisherContractTests(unittest.TestCase):
             verify.EXPECTED_PUBLICATION_ATTEMPT["before_sha"],
             receipt["base_sha"],
         )
+        self.assertEqual("2026-08-18T15:50:00Z", receipt["attested_at"])
 
     def test_owner_final_head_attestation_identity_and_scope_fail_closed(
         self,
@@ -5071,6 +5075,15 @@ class PublisherContractTests(unittest.TestCase):
             mock.patch.object(verify, "_load_json", side_effect=load_json),
             mock.patch.object(
                 verify,
+                "_verify_final_head_gates",
+                return_value={
+                    "pull_request_binding": {"pull_request": 153},
+                    "final_head_ci": {"required_workflows": 4},
+                    "review_threads": {"current_non_outdated": 0},
+                },
+            ) as final_head_gates,
+            mock.patch.object(
+                verify,
                 "urlopen",
                 side_effect=[
                     Response(pulls),
@@ -5091,6 +5104,20 @@ class PublisherContractTests(unittest.TestCase):
         self.assertEqual(153, receipt["pull_request"])
         self.assertEqual("IndependentHuman", receipt["reviewer"])
         self.assertEqual(final_head, receipt["reviewed_head"])
+        self.assertEqual("2026-08-07T02:59:59Z", receipt["reviewed_at"])
+        self.assertEqual(
+            verify.EXPECTED_PUBLICATION_ATTEMPT["before_sha"],
+            receipt["base_sha"],
+        )
+        self.assertEqual(0, receipt["review_threads"]["current_non_outdated"])
+        final_head_gates.assert_called_once_with(
+            active_contract["publication"]["owner_only_approval_exception"],
+            mock.ANY,
+            association_policy=active_contract["publication"][
+                "pending_review_repair"
+            ]["pull_request_binding"],
+            token="ephemeral-token",
+        )
         self.assertEqual(4, request.call_count)
         requested_urls = [call.args[0].full_url for call in request.call_args_list]
         self.assertIn(f"/commits/{commit}/pulls?per_page=100", requested_urls[0])
