@@ -434,7 +434,7 @@
     "attestation_body_template": "Owner final-head attestation for PR #153\n\nDecision: {decision}\nFinal head: {final_head}\nReview-thread snapshot SHA-256: {review_thread_snapshot_sha256}\nException: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5324238100",
     "allowed_decisions": ["APPROVED", "REVOKED"],
     "standard_independent_review_remains_accepted": true,
-    "owner_issue_comments": {
+      "owner_issue_comments": {
       "query_only_if_standard_independent_review_absent": false,
       "review_thread_snapshot_required_for_all_approval_modes": true,
       "api": "rest_issue_comments",
@@ -446,8 +446,19 @@
       "revalidate_after_final_api_gates": true,
       "revalidated_decision_must_match": true,
       "strictly_increasing_unique_ids": true,
-      "pagination_must_be_complete": true
-    },
+        "pagination_must_be_complete": true
+      },
+      "final_authorization_revalidation": {
+        "stable_passes": 2,
+        "exact_snapshot_match_required": true,
+        "resources": [
+          "pull_request_binding",
+          "final_head_ci",
+          "review_threads",
+          "owner_attestation",
+          "independent_review_if_selected"
+        ]
+      },
     "final_head_ci": {
       "required_before_attestation": true,
       "workflow_paths": [
@@ -490,7 +501,7 @@
       "total_count_must_match": true,
       "pagination_must_be_complete": true
     },
-    "publication_enforcement": "exact_merged_pull_request_attested_head_ci_pre_merge_review_thread_snapshot_and_post_gate_decision_revalidation",
+    "publication_enforcement": "exact_merged_pull_request_pre_merge_review_thread_snapshot_and_two_pass_composite_final_authorization",
     "failure_consumes_attempt": true,
     "rerun_permitted": false,
     "downstream_authorities_granted": []

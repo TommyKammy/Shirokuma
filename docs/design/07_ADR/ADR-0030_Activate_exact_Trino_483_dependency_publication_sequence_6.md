@@ -71,8 +71,14 @@ trusted contract. That attestation binds the canonical review-thread snapshot
 SHA-256 before merge, including resolved and outdated state, and is required
 for both approval modes. The standard independent-review path remains valid,
 is evaluated first, and must remain current after the final API gates. The
-publisher must query and match the review-thread snapshot again after decision
-revalidation and immediately before returning publication authorization.
+publisher must capture the exact pull binding, final-head CI, review-thread
+snapshot, OWNER attestation, and selected independent review twice and require
+the complete authorization snapshots to match before returning.
+
+The dependency package already exists publicly at the retained immutable
+sequence-4 digest `sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c`.
+Sequence 6 must anonymously fetch that manifest before registry
+authentication. It may not rely on a post-write visibility change or rerun.
 
 Any sequence-6 failure consumes the authorization. Manual dispatch, rerun, a
 second push attempt, reuse of runs `31605249586` or `31616764771`, and sequence

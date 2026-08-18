@@ -47,11 +47,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "8695429511a9b9392ef8b7f71bee1cf2b99cadcf2e082f205d3ecdc98be59d52"
+      "sha256": "f940ea314f581fd6bc0718390fb1887557dff7fe924cd3c005c47785c348663d"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "7ec35dd5ac614230372eb645767758f5c7c8330bf79df33ccc9526350de5caf7"
+      "sha256": "803a158d13c15acc3774017487f5319d42e3b3bc4d42214aec929284490cdb3c"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -95,7 +95,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0030_Activate_exact_Trino_483_dependency_publication_sequence_6.md",
-      "sha256": "aeb35df5031d6b1a3cc53a1a67d804795cb03893b734a6ec52acb521961ae0bf"
+      "sha256": "cb480af206589c8da5ab4a06392552fc2a3ba6c3d8baa1ddfc48e43af988d8c2"
     },
     {
       "path": "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",
@@ -750,7 +750,10 @@
     "visibility_bootstrap": {
       "required_visibility": "public",
       "sign_and_attest_before_anonymous_pull": true,
-      "owner_action_on_first_private_run": "set-package-public-and-rerun",
+      "preexisting_public_reference": "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c",
+      "anonymous_preflight_before_registry_authentication": true,
+      "owner_action_on_first_private_run": "not_applicable_preexisting_package_public",
+      "same_run_visibility_mutation_permitted": false,
       "failed_attempt_admitted": false,
       "user_credential_fallback": false
     },
@@ -1164,6 +1167,17 @@
         "strictly_increasing_unique_ids": true,
         "pagination_must_be_complete": true
       },
+      "final_authorization_revalidation": {
+        "stable_passes": 2,
+        "exact_snapshot_match_required": true,
+        "resources": [
+          "pull_request_binding",
+          "final_head_ci",
+          "review_threads",
+          "owner_attestation",
+          "independent_review_if_selected"
+        ]
+      },
       "final_head_ci": {
         "required_before_attestation": true,
         "workflow_paths": [
@@ -1206,7 +1220,7 @@
         "total_count_must_match": true,
         "pagination_must_be_complete": true
       },
-      "publication_enforcement": "exact_merged_pull_request_attested_head_ci_pre_merge_review_thread_snapshot_and_post_gate_decision_revalidation",
+      "publication_enforcement": "exact_merged_pull_request_pre_merge_review_thread_snapshot_and_two_pass_composite_final_authorization",
       "failure_consumes_attempt": true,
       "rerun_permitted": false,
       "downstream_authorities_granted": []

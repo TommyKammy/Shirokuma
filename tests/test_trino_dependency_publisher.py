@@ -4842,8 +4842,20 @@ class PublisherContractTests(unittest.TestCase):
                     Response(second_comment_page),
                     Response(first_comment_page),
                     Response(second_comment_page),
+                    Response(pulls),
+                    Response(pulls),
+                    Response(pulls),
+                    Response(pulls),
+                    Response(pulls),
+                    Response(pulls),
+                    Response(workflow_payload),
+                    Response(workflow_payload),
                     Response(thread_payload),
                     Response(thread_payload),
+                    Response(first_comment_page),
+                    Response(second_comment_page),
+                    Response(first_comment_page),
+                    Response(second_comment_page),
                 ],
             ) as request,
             contextlib.redirect_stdout(stdout),
@@ -4874,7 +4886,7 @@ class PublisherContractTests(unittest.TestCase):
             receipt["pull_request_binding"]["base_sha"],
         )
         self.assertEqual(self.OWNER_HEAD_REF, receipt["pull_request_binding"]["head_ref"])
-        self.assertEqual(24, request.call_count)
+        self.assertEqual(36, request.call_count)
         requests = [call.args[0] for call in request.call_args_list]
         self.assertIn(f"/commits/{commit}/pulls?per_page=100", requests[0].full_url)
         self.assertIn("/pulls/153/reviews?per_page=100", requests[2].full_url)
@@ -4943,8 +4955,12 @@ class PublisherContractTests(unittest.TestCase):
             "/issues/153/comments?per_page=100&page=2",
             requests[21].full_url,
         )
-        self.assertEqual("https://api.github.com/graphql", requests[22].full_url)
-        self.assertEqual(requests[22].full_url, requests[23].full_url)
+        self.assertIn(f"/commits/{commit}/pulls?", requests[22].full_url)
+        self.assertIn(f"/commits/{final_head}/pulls?", requests[24].full_url)
+        self.assertIn("/pulls?state=all", requests[26].full_url)
+        self.assertEqual(requests[28].full_url, requests[29].full_url)
+        self.assertEqual("https://api.github.com/graphql", requests[30].full_url)
+        self.assertEqual(requests[30].full_url, requests[31].full_url)
 
     def test_owner_comment_pagination_fails_closed(self) -> None:
         comment_url = (
@@ -5219,8 +5235,10 @@ class PublisherContractTests(unittest.TestCase):
                     Response([owner_attestation]),
                     Response(reviews),
                     Response(reviews),
-                    Response(thread_payload),
-                    Response(thread_payload),
+                    Response([owner_attestation]),
+                    Response([owner_attestation]),
+                    Response(reviews),
+                    Response(reviews),
                 ],
             ) as request,
             contextlib.redirect_stdout(stdout),
@@ -5246,13 +5264,9 @@ class PublisherContractTests(unittest.TestCase):
             receipt["independent_review_revalidated_after_final_api_gates"],
             True,
         )
-        self.assertEqual(
-            self.EMPTY_REVIEW_THREAD_SNAPSHOT_SHA256,
-            receipt["review_threads_revalidated_after_decision_gates"][
-                "snapshot_sha256"
-            ],
-        )
-        final_head_gates.assert_called_once_with(
+        self.assertEqual(2, receipt["stable_final_authorization_passes"])
+        self.assertEqual(2, final_head_gates.call_count)
+        final_head_gates.assert_any_call(
             active_contract["publication"]["owner_only_approval_exception"],
             mock.ANY,
             association_policy=active_contract["publication"][
@@ -5260,7 +5274,7 @@ class PublisherContractTests(unittest.TestCase):
             ]["pull_request_binding"],
             token="ephemeral-token",
         )
-        self.assertEqual(12, request.call_count)
+        self.assertEqual(14, request.call_count)
         requested_urls = [call.args[0].full_url for call in request.call_args_list]
         self.assertIn(f"/commits/{commit}/pulls?per_page=100", requested_urls[0])
         self.assertIn(
@@ -5272,9 +5286,10 @@ class PublisherContractTests(unittest.TestCase):
         self.assertEqual(requested_urls[4], requested_urls[5])
         self.assertEqual(requested_urls[6], requested_urls[7])
         self.assertEqual(requested_urls[8], requested_urls[9])
-        self.assertNotIn("/actions/runs", "\n".join(requested_urls))
-        self.assertEqual("https://api.github.com/graphql", requested_urls[10])
         self.assertEqual(requested_urls[10], requested_urls[11])
+        self.assertEqual(requested_urls[12], requested_urls[13])
+        self.assertNotIn("/actions/runs", "\n".join(requested_urls))
+        self.assertNotIn("api.github.com/graphql", "\n".join(requested_urls))
 
     def test_independent_review_revalidation_rejects_dismissal(self) -> None:
         contract = self._active_owner_contract()
@@ -5315,6 +5330,25 @@ class PublisherContractTests(unittest.TestCase):
             {"independent_review_revalidated_after_final_api_gates": True},
             receipt,
         )
+
+    def test_composite_final_authorization_snapshot_rejects_drift(self) -> None:
+        stable = {
+            "pull_request_binding": {"pull_request": 153},
+            "final_head_ci": {"run_ids": [1, 2, 3, 4]},
+            "review_threads": {"snapshot_sha256": "a" * 64},
+            "owner_decision_revalidated_after_final_api_gates": True,
+        }
+        self.assertEqual(
+            stable,
+            verify._stable_final_authorization_snapshot([stable, stable]),
+        )
+        changed = copy.deepcopy(stable)
+        changed["final_head_ci"]["run_ids"] = [1, 2, 3, 5]
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "final authorization snapshot is unstable",
+        ):
+            verify._stable_final_authorization_snapshot([stable, changed])
 
     def test_github_review_api_paginates_to_bounded_exhaustion(self) -> None:
         review_url = (
@@ -6653,21 +6687,40 @@ class PublisherContractTests(unittest.TestCase):
                 ):
                     verify._validate_workflow(contract, altered)
 
-    def test_first_private_publication_requires_owner_visibility_bootstrap(self) -> None:
+    def test_publication_requires_preexisting_public_package_visibility(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
+        )
+        workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
+        public_reference = (
+            "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@"
+            "sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97"
+            "e1e952499f8af5075c"
         )
         self.assertEqual(
             {
                 "required_visibility": "public",
                 "sign_and_attest_before_anonymous_pull": True,
+                "preexisting_public_reference": public_reference,
+                "anonymous_preflight_before_registry_authentication": True,
                 "owner_action_on_first_private_run": (
-                    "set-package-public-and-rerun"
+                    "not_applicable_preexisting_package_public"
                 ),
+                "same_run_visibility_mutation_permitted": False,
                 "failed_attempt_admitted": False,
                 "user_credential_fallback": False,
             },
             contract["snapshot"]["visibility_bootstrap"],
+        )
+        preflight = (
+            "- name: Prove pre-existing public package visibility\n"
+            "        env:\n"
+            f"          PUBLIC_REFERENCE: {public_reference}\n"
+        )
+        self.assertIn(preflight, workflow)
+        self.assertLess(
+            workflow.index(preflight),
+            workflow.index("echo \"${GHCR_TOKEN}\""),
         )
 
     def test_maven_policy_isolated_from_upstream_project_configuration(self) -> None:

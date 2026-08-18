@@ -1619,9 +1619,13 @@ review threads must equal zero, and the exact OWNER final-head attestation must
 bind the canonical review-thread snapshot SHA-256 before merge. That OWNER
 attestation remains mandatory when the standard independent-review path
 qualifies; the independent approval is also revalidated after the final API
-gates. The bounded review-thread query and attested snapshot comparison run
-again after decision revalidation, immediately before publication
-authorization returns.
+gates. The exact pull binding, final-head CI, review-thread snapshot, OWNER
+attestation, and selected independent review are captured twice as one
+authorization snapshot and must match before publication authorization
+returns. Before registry authentication, the workflow also anonymously fetches
+the retained public sequence-4 manifest at digest
+`sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c`;
+no post-write visibility change or rerun is allowed.
 
 Any sequence-6 failure consumes the authorization. Rerun, a second attempt,
 sequence 7, dependency admission, image publication, resident admission,

@@ -233,9 +233,20 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
         "strictly_increasing_unique_ids": True,
         "pagination_must_be_complete": True,
     },
+    "final_authorization_revalidation": {
+        "stable_passes": 2,
+        "exact_snapshot_match_required": True,
+        "resources": [
+            "pull_request_binding",
+            "final_head_ci",
+            "review_threads",
+            "owner_attestation",
+            "independent_review_if_selected",
+        ],
+    },
     "publication_enforcement": (
-        "exact_merged_pull_request_attested_head_ci_pre_merge_review_thread_"
-        "snapshot_and_post_gate_decision_revalidation"
+        "exact_merged_pull_request_pre_merge_review_thread_snapshot_and_"
+        "two_pass_composite_final_authorization"
     ),
     "failure_consumes_attempt": True,
     "rerun_permitted": False,
@@ -2098,6 +2109,7 @@ EXPECTED_STEPS = {
         "Revalidate the write-capable publication boundary",
         "Download the exact read-only-verified candidate",
         "Install checksum-pinned ORAS for publication",
+        "Prove pre-existing public package visibility",
         "Validate the candidate before registry authentication",
         "Publish the immutable run-scoped OCI artifact",
         "Install pinned Cosign after publication",
@@ -5921,6 +5933,69 @@ def _verify_final_head_gates(
     }
 
 
+def _capture_final_authorization_snapshot(
+    contract: Mapping[str, Any],
+    pull: Mapping[str, Any],
+    selection: Mapping[str, Any],
+    thread_attestation: Mapping[str, Any],
+    *,
+    association_policy: Mapping[str, Any],
+    token: str,
+) -> dict[str, Any]:
+    base = "https://api.github.com/repos/TommyKammy/Shirokuma"
+    exception = contract["publication"]["owner_only_approval_exception"]
+    snapshot = _verify_final_head_gates(
+        exception,
+        selection,
+        association_policy=association_policy,
+        token=token,
+    )
+    snapshot.update(
+        _revalidate_owner_final_head_decision(
+            contract,
+            pull,
+            thread_attestation,
+            _github_api_paginated_list(
+                f"{base}/issues/{selection['pull_request']}/comments",
+                token=token,
+            ),
+        )
+    )
+    if selection["approval_mode"] == "independent_review":
+        independent_policy = contract["publication"]["independent_review"]
+        if (
+            independent_policy.get("revalidate_after_final_api_gates") is not True
+            or independent_policy.get("revalidated_decision_must_match") is not True
+        ):
+            _fail(
+                "INDEPENDENT_REVIEW",
+                "independent review revalidation policy differs",
+            )
+        snapshot.update(
+            _revalidate_independent_review_decision(
+                contract,
+                pull,
+                selection,
+                _github_api_paginated_reviews(
+                    f"{base}/pulls/{selection['pull_request']}/reviews",
+                    token=token,
+                    policy=independent_policy["reviews"],
+                ),
+            )
+        )
+    return snapshot
+
+
+def _stable_final_authorization_snapshot(
+    snapshots: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    if len(snapshots) != 2 or any(
+        snapshot != snapshots[0] for snapshot in snapshots[1:]
+    ):
+        _fail("INDEPENDENT_REVIEW", "final authorization snapshot is unstable")
+    return dict(snapshots[-1])
+
+
 def verify_independent_review(
     root: Path,
     *,
@@ -5999,65 +6074,28 @@ def verify_independent_review(
             "review_threads_attested_at": thread_attestation["attested_at"],
         }
     )
-    review_selection.update(
-        _verify_final_head_gates(
-            exception,
+    final_policy = exception.get("final_authorization_revalidation")
+    if not _matches_exact_json(
+        final_policy,
+        EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION[
+            "final_authorization_revalidation"
+        ],
+    ):
+        _fail("INDEPENDENT_REVIEW", "final authorization policy differs")
+    snapshots = [
+        _capture_final_authorization_snapshot(
+            contract,
+            matching[0],
             review_selection,
+            thread_attestation,
             association_policy=association_policy,
             token=token,
         )
-    )
-    review_selection.update(
-        _revalidate_owner_final_head_decision(
-            contract,
-            matching[0],
-            thread_attestation,
-            _github_api_paginated_list(
-                f"{base}/issues/{matching[0]['number']}/comments",
-                token=token,
-            ),
-        )
-    )
-    if review_selection["approval_mode"] == "independent_review":
-        independent_policy = contract["publication"]["independent_review"]
-        if (
-            independent_policy.get("revalidate_after_final_api_gates") is not True
-            or independent_policy.get("revalidated_decision_must_match") is not True
-        ):
-            _fail(
-                "INDEPENDENT_REVIEW",
-                "independent review revalidation policy differs",
-            )
-        review_selection.update(
-            _revalidate_independent_review_decision(
-                contract,
-                matching[0],
-                review_selection,
-                _github_api_paginated_reviews(
-                    f"{base}/pulls/{matching[0]['number']}/reviews",
-                    token=token,
-                    policy=contract["publication"]["independent_review"][
-                        "reviews"
-                    ],
-                ),
-            )
-        )
-    final_review_threads = _github_review_threads_pages(
-        exception,
-        pull_request=review_selection["pull_request"],
-        final_head=review_selection.get(
-            "attested_head",
-            review_selection.get("reviewed_head"),
-        ),
-        token=token,
-    )
-    _validate_review_thread_snapshot_attestation(
-        review_selection,
-        final_review_threads,
-    )
-    review_selection[
-        "review_threads_revalidated_after_decision_gates"
-    ] = final_review_threads
+        for _pass in range(final_policy["stable_passes"])
+    ]
+    final_snapshot = _stable_final_authorization_snapshot(snapshots)
+    review_selection.update(final_snapshot)
+    review_selection["stable_final_authorization_passes"] = 2
     print(json.dumps(review_selection, sort_keys=True))
 
 
@@ -7145,7 +7183,14 @@ def audit(root: Path) -> None:
         {
             "required_visibility": "public",
             "sign_and_attest_before_anonymous_pull": True,
-            "owner_action_on_first_private_run": "set-package-public-and-rerun",
+            "preexisting_public_reference": (
+                "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c"
+            ),
+            "anonymous_preflight_before_registry_authentication": True,
+            "owner_action_on_first_private_run": (
+                "not_applicable_preexisting_package_public"
+            ),
+            "same_run_visibility_mutation_permitted": False,
             "failed_attempt_admitted": False,
             "user_credential_fallback": False,
         },

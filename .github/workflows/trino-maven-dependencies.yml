@@ -1116,6 +1116,18 @@ jobs:
           test "$("${install_dir}/oras" version | awk '/Version:/ {print $2}')" \
             = "${ORAS_VERSION}"
 
+      - name: Prove pre-existing public package visibility
+        env:
+          PUBLIC_REFERENCE: ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c
+        shell: bash
+        run: |
+          set -euo pipefail
+          anonymous_config="${RUNNER_TEMP}/anonymous-trino-preflight.json"
+          printf '{}\n' > "${anonymous_config}"
+          oras manifest fetch \
+            --registry-config "${anonymous_config}" \
+            "${PUBLIC_REFERENCE}" > /dev/null
+
       - name: Validate the candidate before registry authentication
         shell: bash
         run: |
