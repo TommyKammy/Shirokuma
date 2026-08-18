@@ -1616,7 +1616,10 @@ authorized prospectively for sequence 6 only. It does not retroactively
 authorize the consumed sequence-5 run. Before PR #153 merges, every required
 workflow must pass on its exact final head, current non-outdated unresolved
 review threads must equal zero, and the exact OWNER final-head attestation must
-be present unless the standard independent-review path qualifies first.
+bind the canonical review-thread snapshot SHA-256 before merge. That OWNER
+attestation remains mandatory when the standard independent-review path
+qualifies; the independent approval is also revalidated after the final API
+gates.
 
 Any sequence-6 failure consumes the authorization. Rerun, a second attempt,
 sequence 7, dependency admission, image publication, resident admission,
