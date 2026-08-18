@@ -3537,6 +3537,14 @@ class PublisherContractTests(unittest.TestCase):
         for run in post_review_payload["workflow_runs"]:
             run["created_at"] = "2026-08-18T15:55:00Z"
             run["updated_at"] = "2026-08-18T16:00:00Z"
+        merged_at = dt.datetime(
+            2026,
+            8,
+            18,
+            16,
+            5,
+            tzinfo=dt.timezone.utc,
+        )
         independent_receipt = verify._validate_owner_final_head_ci(
             exception,
             post_review_payload,
@@ -3546,13 +3554,38 @@ class PublisherContractTests(unittest.TestCase):
             pull_request=153,
             final_head=final_head,
             head_ref=self.OWNER_HEAD_REF,
-            attested_at=None,
+            attested_at=merged_at,
+            cutoff_kind="merge",
         )
         self.assertIs(
             independent_receipt["completed_before_attestation"],
             False,
         )
+        self.assertEqual("merge", independent_receipt["completion_cutoff"])
         self.assertEqual(receipt["workflow_runs"], independent_receipt["workflow_runs"])
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "required final-head workflow is missing",
+        ):
+            verify._validate_owner_final_head_ci(
+                exception,
+                post_review_payload,
+                association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
+                    "pull_request_binding"
+                ],
+                pull_request=153,
+                final_head=final_head,
+                head_ref=self.OWNER_HEAD_REF,
+                attested_at=dt.datetime(
+                    2026,
+                    8,
+                    18,
+                    15,
+                    59,
+                    tzinfo=dt.timezone.utc,
+                ),
+                cutoff_kind="merge",
+            )
         explicit_payload = self._owner_workflow_payload(
             final_head=final_head,
             pull_requests=[{"number": 153}],
@@ -5125,6 +5158,7 @@ class PublisherContractTests(unittest.TestCase):
         self.assertEqual("IndependentHuman", receipt["reviewer"])
         self.assertEqual(final_head, receipt["reviewed_head"])
         self.assertEqual("2026-08-07T02:59:59Z", receipt["reviewed_at"])
+        self.assertEqual("2026-08-18T16:00:00Z", receipt["merged_at"])
         self.assertEqual(
             verify.EXPECTED_PUBLICATION_ATTEMPT["before_sha"],
             receipt["base_sha"],

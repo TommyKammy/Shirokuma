@@ -5028,6 +5028,7 @@ def _select_independent_review(
             "reviewer": selected["user"]["login"],
             "reviewed_head": final_head,
             "reviewed_at": selected["submitted_at"],
+            "merged_at": merged_at,
             "base_sha": _owner_pull_base_sha(contract, pull),
             "commit": commit,
         }
@@ -5214,10 +5215,13 @@ def _validate_owner_final_head_ci(
     pull_request: int,
     final_head: str,
     head_ref: str,
-    attested_at: dt.datetime | None,
+    attested_at: dt.datetime,
+    cutoff_kind: str = "attestation",
 ) -> dict[str, Any]:
     _pull_binding_policy(association_policy)
     policy = exception["final_head_ci"]
+    if cutoff_kind not in {"attestation", "merge"}:
+        _fail("INDEPENDENT_REVIEW", "final-head workflow cutoff differs")
     if policy.get("same_path_run_selection") != (
         "latest_qualifying_success_attestation_preceding_by_updated_created_id"
     ):
@@ -5299,7 +5303,7 @@ def _validate_owner_final_head_ci(
             _fail("INDEPENDENT_REVIEW", "final-head workflow run ID is duplicated")
         observed_required_run_ids.add(run_id)
         if (
-            (attested_at is not None and updated_instant >= attested_at)
+            updated_instant >= attested_at
             or run.get("status") != policy["status"]
             or run.get("conclusion") != policy["conclusion"]
         ):
@@ -5322,7 +5326,8 @@ def _validate_owner_final_head_ci(
         "workflow_runs": {
             path: int(selected[path]["id"]) for path in required_paths
         },
-        "completed_before_attestation": attested_at is not None,
+        "completion_cutoff": cutoff_kind,
+        "completed_before_attestation": cutoff_kind == "attestation",
     }
 
 
@@ -5760,13 +5765,21 @@ def _verify_final_head_gates(
     approval_mode = selection.get("approval_mode")
     if not isinstance(final_head, str):
         _fail("INDEPENDENT_REVIEW", "final-head approval receipt differs")
-    attested_at: dt.datetime | None = None
+    cutoff_at: dt.datetime
+    cutoff_kind: str
     if approval_mode == "owner_final_head_attestation":
         owner_attested_at = selection.get("attested_at")
         if not isinstance(owner_attested_at, str):
             _fail("INDEPENDENT_REVIEW", "owner attestation timestamp differs")
-        attested_at = _parse_time(owner_attested_at)
-    elif approval_mode != "independent_review":
+        cutoff_at = _parse_time(owner_attested_at)
+        cutoff_kind = "attestation"
+    elif approval_mode == "independent_review":
+        merged_at = selection.get("merged_at")
+        if not isinstance(merged_at, str):
+            _fail("INDEPENDENT_REVIEW", "independent review merge timestamp differs")
+        cutoff_at = _parse_time(merged_at)
+        cutoff_kind = "merge"
+    else:
         _fail("INDEPENDENT_REVIEW", "approval mode differs")
     pull_request_binding = _github_exact_pull_binding(
         association_policy,
@@ -5792,7 +5805,8 @@ def _verify_final_head_gates(
         pull_request=pull_request,
         final_head=final_head,
         head_ref=head_ref,
-        attested_at=attested_at,
+        attested_at=cutoff_at,
+        cutoff_kind=cutoff_kind,
     )
     review_threads = _github_review_threads_pages(
         exception,
