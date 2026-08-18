@@ -208,6 +208,7 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
         "snapshot_hash_algorithm": "sha256",
         "snapshot_canonicalization": "sorted_thread_id_is_resolved_is_outdated_json",
         "snapshot_must_match_at_publication": True,
+        "revalidate_after_decision_gates": True,
         "head_sha_must_match_attestation": True,
         "query": "graphql_review_threads",
         "page_size": GITHUB_REVIEW_THREAD_PAGE_SIZE,
@@ -5749,6 +5750,7 @@ def _github_review_threads_pages(
         or policy.get("snapshot_canonicalization")
         != "sorted_thread_id_is_resolved_is_outdated_json"
         or policy.get("snapshot_must_match_at_publication") is not True
+        or policy.get("revalidate_after_decision_gates") is not True
     ):
         _fail("INDEPENDENT_REVIEW", "review-thread pagination bounds differ")
 
@@ -6040,6 +6042,22 @@ def verify_independent_review(
                 ),
             )
         )
+    final_review_threads = _github_review_threads_pages(
+        exception,
+        pull_request=review_selection["pull_request"],
+        final_head=review_selection.get(
+            "attested_head",
+            review_selection.get("reviewed_head"),
+        ),
+        token=token,
+    )
+    _validate_review_thread_snapshot_attestation(
+        review_selection,
+        final_review_threads,
+    )
+    review_selection[
+        "review_threads_revalidated_after_decision_gates"
+    ] = final_review_threads
     print(json.dumps(review_selection, sort_keys=True))
 
 

@@ -70,7 +70,9 @@ and receive the exact top-level OWNER final-head attestation defined by the
 trusted contract. That attestation binds the canonical review-thread snapshot
 SHA-256 before merge, including resolved and outdated state, and is required
 for both approval modes. The standard independent-review path remains valid,
-is evaluated first, and must remain current after the final API gates.
+is evaluated first, and must remain current after the final API gates. The
+publisher must query and match the review-thread snapshot again after decision
+revalidation and immediately before returning publication authorization.
 
 Any sequence-6 failure consumes the authorization. Manual dispatch, rerun, a
 second push attempt, reuse of runs `31605249586` or `31616764771`, and sequence

@@ -4842,6 +4842,8 @@ class PublisherContractTests(unittest.TestCase):
                     Response(second_comment_page),
                     Response(first_comment_page),
                     Response(second_comment_page),
+                    Response(thread_payload),
+                    Response(thread_payload),
                 ],
             ) as request,
             contextlib.redirect_stdout(stdout),
@@ -4872,7 +4874,7 @@ class PublisherContractTests(unittest.TestCase):
             receipt["pull_request_binding"]["base_sha"],
         )
         self.assertEqual(self.OWNER_HEAD_REF, receipt["pull_request_binding"]["head_ref"])
-        self.assertEqual(22, request.call_count)
+        self.assertEqual(24, request.call_count)
         requests = [call.args[0] for call in request.call_args_list]
         self.assertIn(f"/commits/{commit}/pulls?per_page=100", requests[0].full_url)
         self.assertIn("/pulls/153/reviews?per_page=100", requests[2].full_url)
@@ -4941,6 +4943,8 @@ class PublisherContractTests(unittest.TestCase):
             "/issues/153/comments?per_page=100&page=2",
             requests[21].full_url,
         )
+        self.assertEqual("https://api.github.com/graphql", requests[22].full_url)
+        self.assertEqual(requests[22].full_url, requests[23].full_url)
 
     def test_owner_comment_pagination_fails_closed(self) -> None:
         comment_url = (
@@ -5161,6 +5165,7 @@ class PublisherContractTests(unittest.TestCase):
             "created_at": "2026-08-18T15:50:00Z",
             "updated_at": "2026-08-18T15:50:00Z",
         }
+        thread_payload = self._owner_review_thread_payload(final_head=final_head)
 
         class Response:
             status = 200
@@ -5214,6 +5219,8 @@ class PublisherContractTests(unittest.TestCase):
                     Response([owner_attestation]),
                     Response(reviews),
                     Response(reviews),
+                    Response(thread_payload),
+                    Response(thread_payload),
                 ],
             ) as request,
             contextlib.redirect_stdout(stdout),
@@ -5239,6 +5246,12 @@ class PublisherContractTests(unittest.TestCase):
             receipt["independent_review_revalidated_after_final_api_gates"],
             True,
         )
+        self.assertEqual(
+            self.EMPTY_REVIEW_THREAD_SNAPSHOT_SHA256,
+            receipt["review_threads_revalidated_after_decision_gates"][
+                "snapshot_sha256"
+            ],
+        )
         final_head_gates.assert_called_once_with(
             active_contract["publication"]["owner_only_approval_exception"],
             mock.ANY,
@@ -5247,7 +5260,7 @@ class PublisherContractTests(unittest.TestCase):
             ]["pull_request_binding"],
             token="ephemeral-token",
         )
-        self.assertEqual(10, request.call_count)
+        self.assertEqual(12, request.call_count)
         requested_urls = [call.args[0].full_url for call in request.call_args_list]
         self.assertIn(f"/commits/{commit}/pulls?per_page=100", requested_urls[0])
         self.assertIn(
@@ -5260,7 +5273,8 @@ class PublisherContractTests(unittest.TestCase):
         self.assertEqual(requested_urls[6], requested_urls[7])
         self.assertEqual(requested_urls[8], requested_urls[9])
         self.assertNotIn("/actions/runs", "\n".join(requested_urls))
-        self.assertNotIn("api.github.com/graphql", "\n".join(requested_urls))
+        self.assertEqual("https://api.github.com/graphql", requested_urls[10])
+        self.assertEqual(requested_urls[10], requested_urls[11])
 
     def test_independent_review_revalidation_rejects_dismissal(self) -> None:
         contract = self._active_owner_contract()

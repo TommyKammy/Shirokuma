@@ -479,6 +479,7 @@
       "snapshot_hash_algorithm": "sha256",
       "snapshot_canonicalization": "sorted_thread_id_is_resolved_is_outdated_json",
       "snapshot_must_match_at_publication": true,
+      "revalidate_after_decision_gates": true,
       "head_sha_must_match_attestation": true,
       "query": "graphql_review_threads",
       "page_size": 100,
