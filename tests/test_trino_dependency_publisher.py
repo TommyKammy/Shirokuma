@@ -3746,6 +3746,27 @@ class PublisherContractTests(unittest.TestCase):
                 attested_at=attested_at,
             )
 
+    def test_independent_review_uses_owner_attestation_as_ci_cutoff(self) -> None:
+        selection = {
+            "approval_mode": "independent_review",
+            "merged_at": "2026-08-18T16:05:00Z",
+            "review_threads_attested_at": "2026-08-18T15:50:00Z",
+        }
+        self.assertEqual(
+            dt.datetime(2026, 8, 18, 15, 50, tzinfo=dt.timezone.utc),
+            verify._owner_attestation_ci_cutoff(selection),
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "owner attestation timestamp differs",
+        ):
+            verify._owner_attestation_ci_cutoff(
+                {
+                    "approval_mode": "independent_review",
+                    "merged_at": "2026-08-18T16:05:00Z",
+                }
+            )
+
     def test_owner_final_head_ci_response_completeness_fails_closed(self) -> None:
         exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
         final_head = "c" * 40

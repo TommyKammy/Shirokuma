@@ -5864,6 +5864,15 @@ def _github_review_threads_pages(
     return _owner_review_thread_receipt(exception, second_nodes)
 
 
+def _owner_attestation_ci_cutoff(
+    selection: Mapping[str, Any],
+) -> dt.datetime:
+    owner_attested_at = selection.get("review_threads_attested_at")
+    if not isinstance(owner_attested_at, str):
+        _fail("INDEPENDENT_REVIEW", "owner attestation timestamp differs")
+    return _parse_time(owner_attested_at)
+
+
 def _verify_final_head_gates(
     exception: Mapping[str, Any],
     selection: Mapping[str, Any],
@@ -5873,25 +5882,9 @@ def _verify_final_head_gates(
 ) -> dict[str, Any]:
     pull_request = selection["pull_request"]
     final_head = selection.get("attested_head", selection.get("reviewed_head"))
-    approval_mode = selection.get("approval_mode")
     if not isinstance(final_head, str):
         _fail("INDEPENDENT_REVIEW", "final-head approval receipt differs")
-    cutoff_at: dt.datetime
-    cutoff_kind: str
-    if approval_mode == "owner_final_head_attestation":
-        owner_attested_at = selection.get("attested_at")
-        if not isinstance(owner_attested_at, str):
-            _fail("INDEPENDENT_REVIEW", "owner attestation timestamp differs")
-        cutoff_at = _parse_time(owner_attested_at)
-        cutoff_kind = "attestation"
-    elif approval_mode == "independent_review":
-        merged_at = selection.get("merged_at")
-        if not isinstance(merged_at, str):
-            _fail("INDEPENDENT_REVIEW", "independent review merge timestamp differs")
-        cutoff_at = _parse_time(merged_at)
-        cutoff_kind = "merge"
-    else:
-        _fail("INDEPENDENT_REVIEW", "approval mode differs")
+    cutoff_at = _owner_attestation_ci_cutoff(selection)
     pull_request_binding = _github_exact_pull_binding(
         association_policy,
         pull_request=pull_request,
@@ -5917,7 +5910,7 @@ def _verify_final_head_gates(
         final_head=final_head,
         head_ref=head_ref,
         attested_at=cutoff_at,
-        cutoff_kind=cutoff_kind,
+        cutoff_kind="attestation",
     )
     review_threads = _github_review_threads_pages(
         exception,
