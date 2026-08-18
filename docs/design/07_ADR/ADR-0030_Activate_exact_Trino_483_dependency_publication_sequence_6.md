@@ -42,7 +42,7 @@ at `2026-08-18T05:58:59Z`.
 
 ## Decision
 
-Authorize one focused activation pull request from predecessor
+Authorize focused activation PR #153 from predecessor
 `fdec9cdb170ed63d18735ef9f6d0abacc8e475ab` and exactly one reviewed-main Trino
 dependency publisher run for sequence 6, GitHub Actions attempt `1` only.
 
@@ -92,3 +92,5 @@ closure. A separate evidence-only review is required before admission.
 - [[ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC]]
 - [[ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX]]
 - [[ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation]]
+- [Issue #63 OWNER approval](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5324238100)
+- [PR #153](https://github.com/TommyKammy/Shirokuma/pull/153)

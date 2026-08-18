@@ -2460,14 +2460,14 @@ class ServerDistributionTests(unittest.TestCase):
 
 
 class PublisherContractTests(unittest.TestCase):
-    OWNER_HEAD_REF = "agent/issue-63-fifth-publisher-repair"
+    OWNER_HEAD_REF = "agent/issue-63-sequence-6-activation"
 
     @staticmethod
     def _owner_workflow_payload(
         *,
         final_head: str = "c" * 40,
-        pull_request: int = 148,
-        head_ref: str = "agent/issue-63-fifth-publisher-repair",
+        pull_request: int = 153,
+        head_ref: str = OWNER_HEAD_REF,
         pull_requests: list[dict[str, int]] | None = None,
     ) -> dict[str, object]:
         runs = []
@@ -2486,8 +2486,8 @@ class PublisherContractTests(unittest.TestCase):
                     "event": "pull_request",
                     "status": "completed",
                     "conclusion": "success",
-                    "created_at": "2026-08-12T15:35:00Z",
-                    "updated_at": "2026-08-12T15:40:00Z",
+                "created_at": "2026-08-18T15:35:00Z",
+                "updated_at": "2026-08-18T15:40:00Z",
                     "repository": {"full_name": "TommyKammy/Shirokuma"},
                     "head_repository": {
                         "full_name": "TommyKammy/Shirokuma"
@@ -2505,8 +2505,8 @@ class PublisherContractTests(unittest.TestCase):
         path: str,
         *,
         final_head: str = "c" * 40,
-        pull_request: int = 148,
-        head_ref: str = "agent/issue-63-fifth-publisher-repair",
+        pull_request: int = 153,
+        head_ref: str = OWNER_HEAD_REF,
         pull_requests: list[dict[str, int]] | None = None,
     ) -> dict[str, object]:
         return {
@@ -2517,8 +2517,8 @@ class PublisherContractTests(unittest.TestCase):
             "event": "pull_request",
             "status": "completed",
             "conclusion": "success",
-            "created_at": "2026-08-12T15:35:00Z",
-            "updated_at": "2026-08-12T15:40:00Z",
+            "created_at": "2026-08-18T15:35:00Z",
+            "updated_at": "2026-08-18T15:40:00Z",
             "repository": {"full_name": "TommyKammy/Shirokuma"},
             "head_repository": {"full_name": "TommyKammy/Shirokuma"},
             "pull_requests": copy.deepcopy(
@@ -2531,14 +2531,14 @@ class PublisherContractTests(unittest.TestCase):
         *,
         final_head: str = "c" * 40,
         merge_commit: str = "b" * 40,
-        pull_request: int = 148,
-        head_ref: str = "agent/issue-63-fifth-publisher-repair",
+        pull_request: int = 153,
+        head_ref: str = OWNER_HEAD_REF,
         base_sha: str = verify.EXPECTED_PUBLICATION_ATTEMPT["before_sha"],
     ) -> dict[str, object]:
         return {
             "number": pull_request,
             "state": "closed",
-            "merged_at": "2026-08-12T16:00:00Z",
+            "merged_at": "2026-08-18T16:00:00Z",
             "merge_commit_sha": merge_commit,
             "base": {
                 "ref": "main",
@@ -2560,7 +2560,7 @@ class PublisherContractTests(unittest.TestCase):
             verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
         )
         active_exception["status"] = "active"
-        active_exception.pop("consumed_run")
+        active_exception.pop("consumed_run", None)
         publication = contract["publication"]
         publication["permitted"] = True
         publication["owner_only_approval_exception"] = copy.deepcopy(
@@ -2590,7 +2590,7 @@ class PublisherContractTests(unittest.TestCase):
         nodes: list[dict[str, object]] | None = None,
         *,
         repository: str = "TommyKammy/Shirokuma",
-        pull_request: int = 148,
+        pull_request: int = 153,
         final_head: str = "c" * 40,
         has_next_page: bool = False,
         end_cursor: str | None = None,
@@ -2686,11 +2686,11 @@ class PublisherContractTests(unittest.TestCase):
             validation_point="before_source_fetch",
             at=dt.datetime(
                 2026,
-                8,
-                21,
-                22,
-                43,
-                35,
+                9,
+                17,
+                2,
+                15,
+                57,
                 tzinfo=dt.timezone.utc,
             ),
         )
@@ -2703,11 +2703,11 @@ class PublisherContractTests(unittest.TestCase):
                 validation_point="before_dependency_resolution",
                 at=dt.datetime(
                     2026,
-                    8,
-                    21,
-                    22,
-                    43,
-                    36,
+                    9,
+                    17,
+                    2,
+                    15,
+                    58,
                     tzinfo=dt.timezone.utc,
                 ),
             )
@@ -2739,8 +2739,8 @@ class PublisherContractTests(unittest.TestCase):
             review.index("finalize-record"),
         )
 
-    def test_consumed_publication_attempt_cannot_be_authorized(self) -> None:
-        instant = dt.datetime(2026, 8, 12, 15, 33, tzinfo=dt.timezone.utc)
+    def test_sequence_6_publication_attempt_is_exactly_authorized(self) -> None:
+        instant = dt.datetime(2026, 8, 18, 6, 0, tzinfo=dt.timezone.utc)
         environment = {
             "GITHUB_EVENT_NAME": verify.EXPECTED_PUBLICATION_ATTEMPT["event_name"],
             "GITHUB_REF": verify.EXPECTED_PUBLICATION_ATTEMPT["ref"],
@@ -2751,13 +2751,7 @@ class PublisherContractTests(unittest.TestCase):
                 "run_attempt"
             ],
         }
-        with (
-            mock.patch.dict(os.environ, environment, clear=False),
-            self.assertRaisesRegex(
-                verify.ContractError,
-                "no publication attempt is authorized",
-            ),
-        ):
+        with mock.patch.dict(os.environ, environment, clear=False):
             verify.authorize_use(
                 ROOT,
                 validation_point="before_dependency_publication",
@@ -2765,14 +2759,7 @@ class PublisherContractTests(unittest.TestCase):
             )
 
         contract = verify._load_json(ROOT / verify.CONTRACT_PATH)
-        with self.assertRaisesRegex(
-            verify.ContractError,
-            "no publication attempt is authorized",
-        ):
-            verify._validate_publication_attempt(
-                contract,
-                environment=environment,
-            )
+        verify._validate_publication_attempt(contract, environment=environment)
 
         for key, replacement in (
             ("GITHUB_EVENT_NAME", "workflow_dispatch"),
@@ -3034,14 +3021,14 @@ class PublisherContractTests(unittest.TestCase):
                 commit=commit,
             )
 
-    def test_owner_final_head_attestation_is_accepted_for_pr_148(self) -> None:
+    def test_owner_final_head_attestation_is_accepted_for_pr_153(self) -> None:
         contract = self._active_owner_contract()
         commit = "b" * 40
         final_head = "c" * 40
         pull = {
-            "number": 148,
+            "number": 153,
             "state": "closed",
-            "merged_at": "2026-08-12T16:00:00Z",
+            "merged_at": "2026-08-18T16:00:00Z",
             "merge_commit_sha": commit,
             "base": {
                 "ref": "main",
@@ -3052,16 +3039,16 @@ class PublisherContractTests(unittest.TestCase):
         comment = {
             "id": 5264800000,
             "body": (
-                "Owner final-head attestation for PR #148\n\n"
+                "Owner final-head attestation for PR #153\n\n"
                 "Decision: APPROVED\n"
                 f"Final head: {final_head}\n"
                 "Exception: https://github.com/TommyKammy/Shirokuma/issues/63"
-                "#issuecomment-5268936554"
+                "#issuecomment-5324238100"
             ),
             "user": {"login": "TommyKammy", "type": "User"},
             "author_association": "OWNER",
-            "created_at": "2026-08-12T15:50:00Z",
-            "updated_at": "2026-08-12T15:50:00Z",
+            "created_at": "2026-08-18T15:50:00Z",
+            "updated_at": "2026-08-18T15:50:00Z",
         }
         hostile_marker_comment = {
             **comment,
@@ -3078,7 +3065,7 @@ class PublisherContractTests(unittest.TestCase):
             comments=[comment, hostile_marker_comment],
         )
         self.assertEqual("owner_final_head_attestation", receipt["approval_mode"])
-        self.assertEqual(148, receipt["pull_request"])
+        self.assertEqual(153, receipt["pull_request"])
         self.assertEqual(comment["id"], receipt["comment_id"])
         self.assertEqual("TommyKammy", receipt["owner"])
         self.assertEqual(final_head, receipt["attested_head"])
@@ -3094,9 +3081,9 @@ class PublisherContractTests(unittest.TestCase):
         commit = "b" * 40
         final_head = "c" * 40
         pull = {
-            "number": 148,
+            "number": 153,
             "state": "closed",
-            "merged_at": "2026-08-12T16:00:00Z",
+            "merged_at": "2026-08-18T16:00:00Z",
             "merge_commit_sha": commit,
             "base": {
                 "ref": "main",
@@ -3107,16 +3094,16 @@ class PublisherContractTests(unittest.TestCase):
         comment = {
             "id": 5264800000,
             "body": (
-                "Owner final-head attestation for PR #148\n\n"
+                "Owner final-head attestation for PR #153\n\n"
                 "Decision: APPROVED\n"
                 f"Final head: {final_head}\n"
                 "Exception: https://github.com/TommyKammy/Shirokuma/issues/63"
-                "#issuecomment-5268936554"
+                "#issuecomment-5324238100"
             ),
             "user": {"login": "TommyKammy", "type": "User"},
             "author_association": "OWNER",
-            "created_at": "2026-08-12T15:50:00Z",
-            "updated_at": "2026-08-12T15:50:00Z",
+            "created_at": "2026-08-18T15:50:00Z",
+            "updated_at": "2026-08-18T15:50:00Z",
         }
 
         cases: tuple[tuple[str, dict[str, object], dict[str, object]], ...] = (
@@ -3165,7 +3152,7 @@ class PublisherContractTests(unittest.TestCase):
                 {},
                 {
                     "body": comment["body"].replace(
-                        "#issuecomment-5268936554",
+                        "#issuecomment-5324238100",
                         "#issuecomment-5264706436",
                     )
                 },
@@ -3174,8 +3161,8 @@ class PublisherContractTests(unittest.TestCase):
                 "post-merge",
                 {},
                 {
-                    "created_at": "2026-08-12T16:00:01Z",
-                    "updated_at": "2026-08-12T16:00:01Z",
+                    "created_at": "2026-08-18T16:00:01Z",
+                    "updated_at": "2026-08-18T16:00:01Z",
                 },
             ),
         )
@@ -3208,86 +3195,38 @@ class PublisherContractTests(unittest.TestCase):
                 comments=[comment],
             )
 
-    def test_consumed_owner_exception_cannot_be_reactivated(self) -> None:
-        commit = "b" * 40
-        final_head = "c" * 40
-        pull = self._owner_pull(
-            final_head=final_head,
-            merge_commit=commit,
-        )
+    def test_active_owner_exception_rejects_consumed_run_state(self) -> None:
         contract = verify._load_json(ROOT / verify.CONTRACT_PATH)
-        contract["publication"]["permitted"] = True
-        for selector in ("fallback", "direct"):
-            with self.subTest(case=f"consumed-{selector}"), self.assertRaisesRegex(
-                verify.ContractError,
-                "owner approval exception is not active",
-            ):
-                if selector == "fallback":
-                    verify._select_independent_review(
-                        contract,
-                        [pull],
-                        [],
-                        commit=commit,
-                        comments=[],
-                    )
-                else:
-                    verify._select_owner_final_head_attestation(
-                        contract,
-                        pull,
-                        [],
-                        commit=commit,
-                        final_head=final_head,
-                    )
-
-        status_only_contract = copy.deepcopy(contract)
-        status_only_exception = status_only_contract["publication"][
+        consumed_contract = copy.deepcopy(contract)
+        consumed_exception = consumed_contract["publication"][
             "owner_only_approval_exception"
         ]
-        status_only_exception["status"] = "active"
-        reauthorization = status_only_contract["publication"]["reauthorization"]
-        reauthorization["status"] = "active"
-        reauthorization[
-            "publication_authorized_after_required_approval"
-        ] = True
-        reauthorization["next_sequence_authorized"] = True
+        consumed_exception["consumed_run"] = {
+            "run_id": "31616764771",
+            "run_attempt": "1",
+            "source_sha": "49a86522d6e6c69f4a552220b30fa510d3a5edd2",
+            "result": "failed_closed_before_registry_authentication",
+            "rerun_permitted": False,
+        }
         with mock.patch.object(
             verify,
             "EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION",
-            copy.deepcopy(status_only_exception),
+            copy.deepcopy(consumed_exception),
         ):
-            for selector in ("fallback", "direct"):
-                with (
-                    self.subTest(case=f"status-only-{selector}"),
-                    self.assertRaisesRegex(
-                        verify.ContractError,
-                        "consumed owner approval exception cannot be reused",
-                    ),
-                ):
-                    if selector == "fallback":
-                        verify._select_independent_review(
-                            status_only_contract,
-                            [pull],
-                            [],
-                            commit=commit,
-                            comments=[],
-                        )
-                    else:
-                        verify._select_owner_final_head_attestation(
-                            status_only_contract,
-                            pull,
-                            [],
-                            commit=commit,
-                            final_head=final_head,
-                        )
+            with self.assertRaisesRegex(
+                verify.ContractError,
+                "consumed owner approval exception cannot be reused",
+            ):
+                verify._active_owner_exception(consumed_contract)
 
     def test_owner_final_head_decisions_are_ordered_by_updated_at(self) -> None:
         contract = self._active_owner_contract()
         commit = "b" * 40
         final_head = "c" * 40
         pull = {
-            "number": 148,
+            "number": 153,
             "state": "closed",
-            "merged_at": "2026-08-12T16:00:00Z",
+            "merged_at": "2026-08-18T16:00:00Z",
             "merge_commit_sha": commit,
             "base": {
                 "ref": "main",
@@ -3306,11 +3245,11 @@ class PublisherContractTests(unittest.TestCase):
             return {
                 "id": comment_id,
                 "body": (
-                    "Owner final-head attestation for PR #148\n\n"
+                    "Owner final-head attestation for PR #153\n\n"
                     f"Decision: {decision}\n"
                     f"Final head: {final_head}\n"
                     "Exception: https://github.com/TommyKammy/Shirokuma/"
-                    "issues/63#issuecomment-5268936554"
+                    "issues/63#issuecomment-5324238100"
                 ),
                 "user": {"login": "TommyKammy", "type": "User"},
                 "author_association": "OWNER",
@@ -3321,14 +3260,14 @@ class PublisherContractTests(unittest.TestCase):
         approval = decision_comment(
             5264800001,
             "APPROVED",
-            created_at="2026-08-12T15:40:00Z",
-            updated_at="2026-08-12T15:40:00Z",
+            created_at="2026-08-18T15:40:00Z",
+            updated_at="2026-08-18T15:40:00Z",
         )
         older_id_edited_approval = decision_comment(
             5264800000,
             "APPROVED",
-            created_at="2026-08-12T15:37:00Z",
-            updated_at="2026-08-12T15:50:00Z",
+            created_at="2026-08-18T15:37:00Z",
+            updated_at="2026-08-18T15:50:00Z",
         )
         receipt = verify._select_independent_review(
             contract,
@@ -3338,7 +3277,7 @@ class PublisherContractTests(unittest.TestCase):
             comments=[approval, older_id_edited_approval],
         )
         self.assertEqual(5264800000, receipt["comment_id"])
-        self.assertEqual("2026-08-12T15:50:00Z", receipt["attested_at"])
+        self.assertEqual("2026-08-18T15:50:00Z", receipt["attested_at"])
 
         older_id_edited_revocation = {
             **older_id_edited_approval,
@@ -3362,8 +3301,8 @@ class PublisherContractTests(unittest.TestCase):
         tied_revocation = decision_comment(
             5264800002,
             "REVOKED",
-            created_at="2026-08-12T15:45:00Z",
-            updated_at="2026-08-12T15:50:00Z",
+            created_at="2026-08-18T15:45:00Z",
+            updated_at="2026-08-18T15:50:00Z",
         )
         with self.assertRaisesRegex(
             verify.ContractError,
@@ -3407,7 +3346,7 @@ class PublisherContractTests(unittest.TestCase):
         ) as request:
             receipt = verify._github_exact_pull_binding(
                 verify.EXPECTED_PENDING_REVIEW_REPAIR["pull_request_binding"],
-                pull_request=148,
+                pull_request=153,
                 merge_commit=merge_commit,
                 final_head=final_head,
                 expected_base_sha=verify.EXPECTED_PUBLICATION_ATTEMPT[
@@ -3418,7 +3357,7 @@ class PublisherContractTests(unittest.TestCase):
 
         self.assertEqual(
             {
-                "pull_request": 148,
+                "pull_request": 153,
                 "merge_commit": merge_commit,
                 "final_head": final_head,
                 "base_sha": verify.EXPECTED_PUBLICATION_ATTEMPT["before_sha"],
@@ -3440,7 +3379,7 @@ class PublisherContractTests(unittest.TestCase):
         self.assertEqual(urls[4], urls[5])
         self.assertIn("/pulls?state=all", urls[4])
         self.assertIn(
-            "head=TommyKammy%3Aagent%2Fissue-63-fifth-publisher-repair",
+            "head=TommyKammy%3Aagent%2Fissue-63-sequence-6-activation",
             urls[4],
         )
         for url in urls:
@@ -3503,7 +3442,7 @@ class PublisherContractTests(unittest.TestCase):
                         verify.EXPECTED_PENDING_REVIEW_REPAIR[
                             "pull_request_binding"
                         ],
-                        pull_request=148,
+                        pull_request=153,
                         merge_commit=merge_commit,
                         final_head=final_head,
                         expected_base_sha=verify.EXPECTED_PUBLICATION_ATTEMPT[
@@ -3555,7 +3494,7 @@ class PublisherContractTests(unittest.TestCase):
         attested_at = dt.datetime(
             2026,
             8,
-            12,
+            18,
             15,
             50,
             tzinfo=dt.timezone.utc,
@@ -3567,7 +3506,7 @@ class PublisherContractTests(unittest.TestCase):
             association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
                 "pull_request_binding"
             ],
-            pull_request=148,
+            pull_request=153,
             final_head=final_head,
             head_ref=self.OWNER_HEAD_REF,
             attested_at=attested_at,
@@ -3579,7 +3518,7 @@ class PublisherContractTests(unittest.TestCase):
         )
         explicit_payload = self._owner_workflow_payload(
             final_head=final_head,
-            pull_requests=[{"number": 148}],
+            pull_requests=[{"number": 153}],
         )
         explicit_receipt = verify._validate_owner_final_head_ci(
             exception,
@@ -3587,7 +3526,7 @@ class PublisherContractTests(unittest.TestCase):
             association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
                 "pull_request_binding"
             ],
-            pull_request=148,
+            pull_request=153,
             final_head=final_head,
             head_ref=self.OWNER_HEAD_REF,
             attested_at=attested_at,
@@ -3607,7 +3546,7 @@ class PublisherContractTests(unittest.TestCase):
                 association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
                     "pull_request_binding"
                 ],
-                pull_request=148,
+                pull_request=153,
                 final_head=final_head,
                 head_ref=self.OWNER_HEAD_REF,
                 attested_at=attested_at,
@@ -3616,11 +3555,11 @@ class PublisherContractTests(unittest.TestCase):
         altered = copy.deepcopy(payload)
         older = altered["workflow_runs"][0]
         older["id"] = 2000
-        older["updated_at"] = "2026-08-12T15:37:00Z"
+        older["updated_at"] = "2026-08-18T15:37:00Z"
         newer = copy.deepcopy(older)
         newer["id"] = 2001
-        newer["created_at"] = "2026-08-12T15:36:00Z"
-        newer["updated_at"] = "2026-08-12T15:40:00Z"
+        newer["created_at"] = "2026-08-18T15:36:00Z"
+        newer["updated_at"] = "2026-08-18T15:40:00Z"
         altered["workflow_runs"].append(newer)
         altered["total_count"] = len(altered["workflow_runs"])
         receipt = verify._validate_owner_final_head_ci(
@@ -3629,7 +3568,7 @@ class PublisherContractTests(unittest.TestCase):
             association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
                 "pull_request_binding"
             ],
-            pull_request=148,
+            pull_request=153,
             final_head=final_head,
             head_ref=self.OWNER_HEAD_REF,
             attested_at=attested_at,
@@ -3647,7 +3586,7 @@ class PublisherContractTests(unittest.TestCase):
                     association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
                         "pull_request_binding"
                     ],
-                    pull_request=148,
+                    pull_request=153,
                     final_head=final_head,
                     head_ref=self.OWNER_HEAD_REF,
                     attested_at=attested_at,
@@ -3662,7 +3601,7 @@ class PublisherContractTests(unittest.TestCase):
             association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
                 "pull_request_binding"
             ],
-            pull_request=148,
+            pull_request=153,
             final_head=final_head,
             head_ref=self.OWNER_HEAD_REF,
             attested_at=attested_at,
@@ -3676,21 +3615,21 @@ class PublisherContractTests(unittest.TestCase):
             (
                 "not-proven-before-attestation",
                 "updated_at",
-                "2026-08-12T15:50:00Z",
+                "2026-08-18T15:50:00Z",
             ),
-            ("post-attestation", "updated_at", "2026-08-12T15:50:01Z"),
+            ("post-attestation", "updated_at", "2026-08-18T15:50:01Z"),
             ("wrong-repository", "repository", {"full_name": "Other/Repo"}),
             ("wrong-head-branch", "head_branch", "agent/other"),
             ("wrong-pr", "pull_requests", [{"number": 144}]),
             (
                 "multiple-prs",
                 "pull_requests",
-                [{"number": 148}, {"number": 149}],
+                [{"number": 153}, {"number": 149}],
             ),
             (
                 "duplicate-pr",
                 "pull_requests",
-                [{"number": 148}, {"number": 148}],
+                [{"number": 153}, {"number": 153}],
             ),
             ("malformed-pr", "pull_requests", [{"number": "148"}]),
             ("null-pr", "pull_requests", None),
@@ -3709,7 +3648,7 @@ class PublisherContractTests(unittest.TestCase):
                         association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
                             "pull_request_binding"
                         ],
-                        pull_request=148,
+                        pull_request=153,
                         final_head=final_head,
                         head_ref=self.OWNER_HEAD_REF,
                         attested_at=attested_at,
@@ -3724,7 +3663,7 @@ class PublisherContractTests(unittest.TestCase):
                 association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
                     "pull_request_binding"
                 ],
-                pull_request=148,
+                pull_request=153,
                 final_head=final_head,
                 head_ref=self.OWNER_HEAD_REF,
                 attested_at=attested_at,
@@ -3736,7 +3675,7 @@ class PublisherContractTests(unittest.TestCase):
         attested_at = dt.datetime(
             2026,
             8,
-            12,
+            18,
             15,
             50,
             tzinfo=dt.timezone.utc,
@@ -3763,7 +3702,7 @@ class PublisherContractTests(unittest.TestCase):
                         association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
                             "pull_request_binding"
                         ],
-                        pull_request=148,
+                        pull_request=153,
                         final_head=final_head,
                         head_ref=self.OWNER_HEAD_REF,
                         attested_at=attested_at,
@@ -3829,7 +3768,7 @@ class PublisherContractTests(unittest.TestCase):
                 association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
                     "pull_request_binding"
                 ],
-                pull_request=148,
+                pull_request=153,
                 final_head=final_head,
                 head_ref=self.OWNER_HEAD_REF,
                 token="ephemeral-token",
@@ -3851,7 +3790,7 @@ class PublisherContractTests(unittest.TestCase):
 
                 self.assertIn(f"head_sha={final_head}", urls[index])
                 self.assertIn(
-                    "branch=agent%2Fissue-63-fifth-publisher-repair",
+                    "branch=agent%2Fissue-63-sequence-6-activation",
                     urls[index],
                 )
         receipt = verify._validate_owner_final_head_ci(
@@ -3860,13 +3799,13 @@ class PublisherContractTests(unittest.TestCase):
             association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
                 "pull_request_binding"
             ],
-            pull_request=148,
+            pull_request=153,
             final_head=final_head,
             head_ref=self.OWNER_HEAD_REF,
             attested_at=dt.datetime(
                 2026,
                 8,
-                12,
+                18,
                 15,
                 50,
                 tzinfo=dt.timezone.utc,
@@ -3916,7 +3855,7 @@ class PublisherContractTests(unittest.TestCase):
                 association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
                     "pull_request_binding"
                 ],
-                pull_request=148,
+                pull_request=153,
                 final_head=final_head,
                 head_ref=self.OWNER_HEAD_REF,
                 token="ephemeral-token",
@@ -3969,7 +3908,7 @@ class PublisherContractTests(unittest.TestCase):
                 association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
                     "pull_request_binding"
                 ],
-                pull_request=148,
+                pull_request=153,
                 final_head=final_head,
                 head_ref=self.OWNER_HEAD_REF,
                 token="ephemeral-token",
@@ -3995,7 +3934,7 @@ class PublisherContractTests(unittest.TestCase):
                 association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
                     "pull_request_binding"
                 ],
-                pull_request=148,
+                pull_request=153,
                 final_head=final_head,
                 head_ref=self.OWNER_HEAD_REF,
                 token="ephemeral-token",
@@ -4043,7 +3982,7 @@ class PublisherContractTests(unittest.TestCase):
                 association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
                     "pull_request_binding"
                 ],
-                pull_request=148,
+                pull_request=153,
                 final_head=final_head,
                 head_ref=self.OWNER_HEAD_REF,
                 token="ephemeral-token",
@@ -4062,17 +4001,17 @@ class PublisherContractTests(unittest.TestCase):
             ("changed-head", "head_sha", "d" * 40),
             ("changed-branch", "head_branch", "agent/other"),
             ("changed-status", "status", "in_progress"),
-            ("changed-timestamp", "updated_at", "2026-08-12T12:10:01Z"),
+            ("changed-timestamp", "updated_at", "2026-08-18T12:10:01Z"),
             ("changed-pr", "pull_requests", [{"number": 144}]),
             (
                 "multiple-prs",
                 "pull_requests",
-                [{"number": 148}, {"number": 149}],
+                [{"number": 153}, {"number": 149}],
             ),
             (
                 "duplicate-pr",
                 "pull_requests",
-                [{"number": 148}, {"number": 148}],
+                [{"number": 153}, {"number": 153}],
             ),
             ("malformed-pr", "pull_requests", [{"number": "148"}]),
         )
@@ -4103,7 +4042,7 @@ class PublisherContractTests(unittest.TestCase):
                         association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
                             "pull_request_binding"
                         ],
-                        pull_request=148,
+                        pull_request=153,
                         final_head=final_head,
                         head_ref=self.OWNER_HEAD_REF,
                         token="ephemeral-token",
@@ -4132,7 +4071,7 @@ class PublisherContractTests(unittest.TestCase):
         receipt = verify._validate_owner_review_threads(
             exception,
             payload,
-            pull_request=148,
+            pull_request=153,
             final_head=final_head,
         )
         self.assertEqual(
@@ -4170,7 +4109,7 @@ class PublisherContractTests(unittest.TestCase):
                     verify._validate_owner_review_threads(
                         exception,
                         current,
-                        pull_request=148,
+                        pull_request=153,
                         final_head=final_head,
                     )
 
@@ -4182,7 +4121,7 @@ class PublisherContractTests(unittest.TestCase):
             verify._validate_owner_review_threads(
                 exception,
                 wrong_head,
-                pull_request=148,
+                pull_request=153,
                 final_head=final_head,
             )
 
@@ -4211,7 +4150,7 @@ class PublisherContractTests(unittest.TestCase):
                     verify._validate_owner_review_threads(
                         exception,
                         payload,
-                        pull_request=148,
+                        pull_request=153,
                         final_head="c" * 40,
                     )
 
@@ -4275,7 +4214,7 @@ class PublisherContractTests(unittest.TestCase):
         ) as request:
             receipt = verify._github_review_threads_pages(
                 exception,
-                pull_request=148,
+                pull_request=153,
                 final_head=final_head,
                 token="ephemeral-token",
             )
@@ -4358,7 +4297,7 @@ class PublisherContractTests(unittest.TestCase):
         ) as request:
             receipt = verify._github_review_threads_pages(
                 exception,
-                pull_request=148,
+                pull_request=153,
                 final_head=final_head,
                 token="ephemeral-token",
             )
@@ -4482,7 +4421,7 @@ class PublisherContractTests(unittest.TestCase):
             ):
                 verify._github_review_threads_pages(
                     exception,
-                    pull_request=148,
+                    pull_request=153,
                     final_head=final_head,
                     token="ephemeral-token",
                 )
@@ -4513,7 +4452,7 @@ class PublisherContractTests(unittest.TestCase):
         ):
             verify._github_review_threads_pages(
                 exception,
-                pull_request=148,
+                pull_request=153,
                 final_head=final_head,
                 token="ephemeral-token",
             )
@@ -4539,7 +4478,7 @@ class PublisherContractTests(unittest.TestCase):
         ):
             verify._github_review_threads_pages(
                 exception,
-                pull_request=148,
+                pull_request=153,
                 final_head=final_head,
                 token="ephemeral-token",
             )
@@ -4612,7 +4551,7 @@ class PublisherContractTests(unittest.TestCase):
             ):
                 verify._github_review_threads_pages(
                     exception,
-                    pull_request=148,
+                    pull_request=153,
                     final_head=final_head,
                     token="ephemeral-token",
                 )
@@ -4642,7 +4581,7 @@ class PublisherContractTests(unittest.TestCase):
         ):
             verify._github_review_threads_pages(
                 exception,
-                pull_request=148,
+                pull_request=153,
                 final_head=final_head,
                 token="ephemeral-token",
             )
@@ -4673,7 +4612,7 @@ class PublisherContractTests(unittest.TestCase):
         ):
             verify._github_review_threads_pages(
                 exception,
-                pull_request=148,
+                pull_request=153,
                 final_head=final_head,
                 token="ephemeral-token",
             )
@@ -4700,7 +4639,7 @@ class PublisherContractTests(unittest.TestCase):
         ):
             verify._github_review_threads_pages(
                 exception,
-                pull_request=148,
+                pull_request=153,
                 final_head=final_head,
                 token="ephemeral-token",
             )
@@ -4718,16 +4657,16 @@ class PublisherContractTests(unittest.TestCase):
             {
                 "id": 5264800000,
                 "body": (
-                    "Owner final-head attestation for PR #148\n\n"
+                    "Owner final-head attestation for PR #153\n\n"
                     "Decision: APPROVED\n"
                     f"Final head: {final_head}\n"
                     "Exception: https://github.com/TommyKammy/Shirokuma/"
-                    "issues/63#issuecomment-5268936554"
+                    "issues/63#issuecomment-5324238100"
                 ),
                 "user": {"login": "TommyKammy", "type": "User"},
                 "author_association": "OWNER",
-                "created_at": "2026-08-12T15:50:00Z",
-                "updated_at": "2026-08-12T15:50:00Z",
+                "created_at": "2026-08-18T15:50:00Z",
+                "updated_at": "2026-08-18T15:50:00Z",
             }
         ]
         workflow_payload = self._owner_workflow_payload(final_head=final_head)
@@ -4808,7 +4747,7 @@ class PublisherContractTests(unittest.TestCase):
             receipt["owner_decision_revalidated_after_final_api_gates"],
             True,
         )
-        self.assertEqual(148, receipt["pull_request_binding"]["pull_request"])
+        self.assertEqual(153, receipt["pull_request_binding"]["pull_request"])
         self.assertEqual(commit, receipt["pull_request_binding"]["merge_commit"])
         self.assertEqual(final_head, receipt["pull_request_binding"]["final_head"])
         self.assertEqual(
@@ -4819,22 +4758,22 @@ class PublisherContractTests(unittest.TestCase):
         self.assertEqual(22, request.call_count)
         requests = [call.args[0] for call in request.call_args_list]
         self.assertIn(f"/commits/{commit}/pulls?per_page=100", requests[0].full_url)
-        self.assertIn("/pulls/148/reviews?per_page=100", requests[2].full_url)
-        self.assertIn("/pulls/148/reviews?per_page=100", requests[3].full_url)
+        self.assertIn("/pulls/153/reviews?per_page=100", requests[2].full_url)
+        self.assertIn("/pulls/153/reviews?per_page=100", requests[3].full_url)
         self.assertIn(
-            "/issues/148/comments?per_page=100&page=1",
+            "/issues/153/comments?per_page=100&page=1",
             requests[4].full_url,
         )
         self.assertIn(
-            "/issues/148/comments?per_page=100&page=2",
+            "/issues/153/comments?per_page=100&page=2",
             requests[5].full_url,
         )
         self.assertIn(
-            "/issues/148/comments?per_page=100&page=1",
+            "/issues/153/comments?per_page=100&page=1",
             requests[6].full_url,
         )
         self.assertIn(
-            "/issues/148/comments?per_page=100&page=2",
+            "/issues/153/comments?per_page=100&page=2",
             requests[7].full_url,
         )
         self.assertIn(f"/commits/{commit}/pulls?", requests[8].full_url)
@@ -4844,7 +4783,10 @@ class PublisherContractTests(unittest.TestCase):
             f"/actions/runs?event=pull_request&head_sha={final_head}",
             requests[14].full_url,
         )
-        self.assertIn("branch=agent%2Fissue-63-fifth-publisher-repair", requests[14].full_url)
+        self.assertIn(
+            "branch=agent%2Fissue-63-sequence-6-activation",
+            requests[14].full_url,
+        )
         self.assertEqual(requests[14].full_url, requests[15].full_url)
         self.assertEqual("https://api.github.com/graphql", requests[16].full_url)
         self.assertEqual("POST", requests[16].get_method())
@@ -4854,7 +4796,7 @@ class PublisherContractTests(unittest.TestCase):
             {
                 "owner": "TommyKammy",
                 "name": "Shirokuma",
-                "number": 148,
+                "number": 153,
                 "after": None,
             },
             graphql_request["variables"],
@@ -4867,26 +4809,26 @@ class PublisherContractTests(unittest.TestCase):
         self.assertIn("after:$after", graphql_request["query"])
         self.assertIn("endCursor", graphql_request["query"])
         self.assertIn(
-            "/issues/148/comments?per_page=100&page=1",
+            "/issues/153/comments?per_page=100&page=1",
             requests[18].full_url,
         )
         self.assertIn(
-            "/issues/148/comments?per_page=100&page=2",
+            "/issues/153/comments?per_page=100&page=2",
             requests[19].full_url,
         )
         self.assertIn(
-            "/issues/148/comments?per_page=100&page=1",
+            "/issues/153/comments?per_page=100&page=1",
             requests[20].full_url,
         )
         self.assertIn(
-            "/issues/148/comments?per_page=100&page=2",
+            "/issues/153/comments?per_page=100&page=2",
             requests[21].full_url,
         )
 
     def test_owner_comment_pagination_fails_closed(self) -> None:
         comment_url = (
             "https://api.github.com/repos/TommyKammy/Shirokuma/"
-            "issues/148/comments"
+            "issues/153/comments"
         )
         full_page = [
             {"id": comment_id, "body": "ordinary comment"}
@@ -5016,9 +4958,9 @@ class PublisherContractTests(unittest.TestCase):
         commit = "b" * 40
         final_head = "c" * 40
         pull = {
-            "number": 148,
+            "number": 153,
             "state": "closed",
-            "merged_at": "2026-08-12T16:00:00Z",
+            "merged_at": "2026-08-18T16:00:00Z",
             "merge_commit_sha": commit,
             "base": {
                 "ref": "main",
@@ -5029,23 +4971,23 @@ class PublisherContractTests(unittest.TestCase):
         approved = {
             "id": 5264800000,
             "body": (
-                "Owner final-head attestation for PR #148\n\n"
+                "Owner final-head attestation for PR #153\n\n"
                 "Decision: APPROVED\n"
                 f"Final head: {final_head}\n"
                 "Exception: https://github.com/TommyKammy/Shirokuma/"
-                "issues/63#issuecomment-5268936554"
+                "issues/63#issuecomment-5324238100"
             ),
             "user": {"login": "TommyKammy", "type": "User"},
             "author_association": "OWNER",
-            "created_at": "2026-08-12T15:40:00Z",
-            "updated_at": "2026-08-12T15:40:00Z",
+            "created_at": "2026-08-18T15:40:00Z",
+            "updated_at": "2026-08-18T15:40:00Z",
         }
         revoked = {
             **approved,
             "id": 5264800001,
             "body": approved["body"].replace("Decision: APPROVED", "Decision: REVOKED"),
-            "created_at": "2026-08-12T15:50:00Z",
-            "updated_at": "2026-08-12T15:50:00Z",
+            "created_at": "2026-08-18T15:50:00Z",
+            "updated_at": "2026-08-18T15:50:00Z",
         }
         first = verify._select_owner_final_head_attestation(
             contract,
@@ -5351,7 +5293,7 @@ class PublisherContractTests(unittest.TestCase):
         ):
             verify._github_api_list(
                 "https://api.github.com/repos/TommyKammy/Shirokuma/"
-                "issues/148/comments?per_page=100",
+                "issues/153/comments?per_page=100",
                 token="ephemeral-token",
             )
 
@@ -5777,7 +5719,7 @@ class PublisherContractTests(unittest.TestCase):
                 ):
                     verify._validate_blocker_evidence(temporary_root)
 
-    def test_publication_status_is_blocked_and_records_must_agree(self) -> None:
+    def test_publication_status_is_active_and_records_must_agree(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
         )
@@ -5786,12 +5728,12 @@ class PublisherContractTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            "blocked",
+            "active",
             verify.publication_status(contract, admission),
         )
 
         altered = json.loads(json.dumps(contract))
-        altered["publication"]["permitted"] = True
+        altered["publication"]["permitted"] = False
         with self.assertRaisesRegex(
             verify.ContractError,
             "publication permission records disagree",
@@ -5829,7 +5771,7 @@ class PublisherContractTests(unittest.TestCase):
         verify._validate_build_plugin_remediation_contract(
             ROOT,
             contract,
-            at=verify._parse_time("2026-08-07T00:08:49Z"),
+            at=verify._parse_time("2026-08-18T06:00:00Z"),
         )
         self.assertEqual(
             verify.EXPECTED_ADMISSION_BUILD_PLUGIN_REMEDIATION_AUTHORIZATION,
@@ -5857,7 +5799,7 @@ class PublisherContractTests(unittest.TestCase):
             verify._validate_build_plugin_remediation_contract(
                 ROOT,
                 contract,
-                at=verify._parse_time("2026-08-21T22:43:36Z"),
+                at=verify._parse_time("2026-09-17T02:15:58Z"),
             )
 
     def test_workflow_retains_the_blocked_publication_noop(self) -> None:
@@ -7233,15 +7175,15 @@ class PublisherContractTests(unittest.TestCase):
         )
         verify._validate_authorization(
             contract,
-            at=dt.datetime(2026, 7, 22, 22, 43, 36, tzinfo=dt.timezone.utc),
+            at=dt.datetime(2026, 8, 18, 5, 58, 59, tzinfo=dt.timezone.utc),
         )
         verify._validate_authorization(
             contract,
-            at=dt.datetime(2026, 8, 21, 22, 43, 35, tzinfo=dt.timezone.utc),
+            at=dt.datetime(2026, 9, 17, 2, 15, 57, tzinfo=dt.timezone.utc),
         )
         for instant in (
-            dt.datetime(2026, 7, 22, 22, 43, 35, tzinfo=dt.timezone.utc),
-            dt.datetime(2026, 8, 21, 22, 43, 36, tzinfo=dt.timezone.utc),
+            dt.datetime(2026, 8, 18, 5, 58, 58, tzinfo=dt.timezone.utc),
+            dt.datetime(2026, 9, 17, 2, 15, 58, tzinfo=dt.timezone.utc),
         ):
             with self.subTest(instant=instant):
                 with self.assertRaises(verify.ContractError):
@@ -7254,7 +7196,7 @@ class PublisherContractTests(unittest.TestCase):
         verify._validate_source_overlay_contract(
             ROOT,
             contract,
-            at=dt.datetime(2026, 8, 21, 22, 43, 35, tzinfo=dt.timezone.utc),
+            at=dt.datetime(2026, 9, 17, 2, 15, 57, tzinfo=dt.timezone.utc),
         )
         with self.assertRaisesRegex(
             verify.ContractError,
@@ -7265,11 +7207,11 @@ class PublisherContractTests(unittest.TestCase):
                 contract,
                 at=dt.datetime(
                     2026,
-                    8,
-                    21,
-                    22,
-                    43,
-                    36,
+                    9,
+                    17,
+                    2,
+                    15,
+                    58,
                     tzinfo=dt.timezone.utc,
                 ),
             )
@@ -7280,7 +7222,7 @@ class PublisherContractTests(unittest.TestCase):
         )
         verify._validate_source_remediation_contract(
             contract,
-            at=dt.datetime(2026, 8, 21, 22, 43, 35, tzinfo=dt.timezone.utc),
+            at=dt.datetime(2026, 9, 17, 2, 15, 57, tzinfo=dt.timezone.utc),
         )
         with self.assertRaisesRegex(
             verify.ContractError,
@@ -7290,11 +7232,11 @@ class PublisherContractTests(unittest.TestCase):
                 contract,
                 at=dt.datetime(
                     2026,
-                    8,
-                    21,
-                    22,
-                    43,
-                    36,
+                    9,
+                    17,
+                    2,
+                    15,
+                    58,
                     tzinfo=dt.timezone.utc,
                 ),
             )
@@ -7306,7 +7248,7 @@ class PublisherContractTests(unittest.TestCase):
         verify._validate_distribution_remediation_contract(
             ROOT,
             contract,
-            at=dt.datetime(2026, 8, 21, 22, 43, 35, tzinfo=dt.timezone.utc),
+            at=dt.datetime(2026, 9, 17, 2, 15, 57, tzinfo=dt.timezone.utc),
         )
         with self.assertRaisesRegex(
             verify.ContractError,
@@ -7317,11 +7259,11 @@ class PublisherContractTests(unittest.TestCase):
                 contract,
                 at=dt.datetime(
                     2026,
-                    8,
-                    21,
-                    22,
-                    43,
-                    36,
+                    9,
+                    17,
+                    2,
+                    15,
+                    58,
                     tzinfo=dt.timezone.utc,
                 ),
             )

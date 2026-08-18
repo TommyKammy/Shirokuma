@@ -1437,12 +1437,14 @@ artifact `trino-maven-candidate-31616764771-1` (ID `9150299769`, 844,111,993
 bytes, expired `2026-08-13T16:39:07Z`) was never downloaded by the publish job
 and is not admitted evidence. Registry authentication, OCI write, signing,
 attestation, anonymous pull, and final publication artifact were not reached.
-Attempt 5 is consumed, rerun and sequence 6 are unauthorized, and the lifecycle
-is `dependency_snapshot_publication_reauthorization_pending`. The empty
+Attempt 5 is consumed and cannot be rerun. At that checkpoint, sequence 6 was
+unauthorized and the lifecycle was
+`dependency_snapshot_publication_reauthorization_pending`. The empty
 downstream-authority set still grants no dependency-evidence admission, image
 publication, resident admission, Flux/runtime reconciliation, credentials,
 public exposure, production use, or Issue #63 closure. A Draft review-only
-workflow-run association repair is pending; it cannot activate publication.
+workflow-run association repair was then required before any fresh owner
+authorization; it could not activate publication by itself.
 
 ## Resident image and SBOM evidence
 
@@ -1596,10 +1598,30 @@ Detached validation against exact Trino commit
 for `package.json` and
 `7d61c5d3868b5a600ff8a21206168c114848dd7d65b882dc6f5bdaf4c792c8f3`
 for `bun.lock`. Bun 1.3.14 frozen install, modern typecheck/Vite build, legacy
-webpack build, and fresh Trivy 0.72.0 High/Critical scans passed. This is a
-review-pending Draft candidate only: merge, sequence 6, publication, expiry
-renewal, dependency admission, image/runtime work, and Issue #63 closure remain
-unauthorized.
+webpack build, and fresh Trivy 0.72.0 High/Critical scans passed. PR #152 final
+head `cce85c1424691b5157f0881e249a984224eb6875` was merged as
+`fdec9cdb170ed63d18735ef9f6d0abacc8e475ab`. That merge established the exact
+candidate but did not activate publication.
+
+## Trino 483 dependency publication sequence 6 (2026-08-18)
+
+ADR-0030 and Issue #63 OWNER comment `5324238100` activate exactly one focused
+PR #153 from predecessor `fdec9cdb170ed63d18735ef9f6d0abacc8e475ab`, followed
+by exactly one reviewed-main sequence-6 publisher run with
+`github.run_attempt=1`. The authorization expires at
+`2026-09-17T02:15:58Z` and does not renew automatically.
+
+PR #149's merge-commit, final-head, and head-filtered association lookup is
+authorized prospectively for sequence 6 only. It does not retroactively
+authorize the consumed sequence-5 run. Before PR #153 merges, every required
+workflow must pass on its exact final head, current non-outdated unresolved
+review threads must equal zero, and the exact OWNER final-head attestation must
+be present unless the standard independent-review path qualifies first.
+
+Any sequence-6 failure consumes the authorization. Rerun, a second attempt,
+sequence 7, dependency admission, image publication, resident admission,
+Flux/runtime reconciliation, credentials, public exposure, production use,
+Issues #64-#66, and Issue #63 closure remain unauthorized.
 
 ## Scanner or feed failure rollback
 
