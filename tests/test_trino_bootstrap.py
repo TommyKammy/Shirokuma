@@ -4828,6 +4828,16 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 for requirement in requirements
             )
         )
+        approval_requirement = next(
+            requirement
+            for requirement in requirements
+            if "OWNER final-head attestation" in requirement
+        )
+        self.assertIn("for every approval mode", approval_requirement)
+        self.assertIn(
+            "when the standard independent-review mode is selected",
+            approval_requirement,
+        )
 
     def test_provisional_source_decision_authorizes_only_the_next_boundary(self) -> None:
         decision = TRINO_PROVISIONAL_SOURCE_ADR.read_text(encoding="utf-8")

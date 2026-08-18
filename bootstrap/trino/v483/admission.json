@@ -595,7 +595,7 @@
       "retain the exact sequence 5 PR #148 and run 31616764771 fail-closed outcome without admitting its expired temporary candidate artifact",
       "use the PR #149 association repair prospectively only and never as retroactive authorization for sequence 5",
       "merge only focused activation PR #153 from predecessor fdec9cdb170ed63d18735ef9f6d0abacc8e475ab after all exact final-head checks pass and current non-outdated unresolved review threads equal zero",
-      "require either a current independent human APPROVED review on exact PR #153 final head from a reviewer distinct from the source-remediation author and owner, or the exact OWNER final-head attestation authorized by comment 5324238100",
+      "require the exact OWNER final-head attestation authorized by comment 5324238100 for every approval mode, plus a current independent human APPROVED review on exact PR #153 final head from a reviewer distinct from the source-remediation author and owner when the standard independent-review mode is selected",
       "after merge permit exactly one sequence 6 push run on reviewed main with run_attempt 1 and no rerun",
       "authenticated closed dependency snapshot",
       "network-none reproducible linux/arm64 build",
