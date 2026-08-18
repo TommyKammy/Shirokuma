@@ -67,8 +67,10 @@ data, and no public Service or Ingress.
 Before merge, the activation pull request must pass every required workflow on
 its exact final head, have zero current non-outdated unresolved review threads,
 and receive the exact top-level OWNER final-head attestation defined by the
-trusted contract. The standard independent-review path remains valid and is
-evaluated first.
+trusted contract. That attestation binds the canonical review-thread snapshot
+SHA-256 before merge, including resolved and outdated state, and is required
+for both approval modes. The standard independent-review path remains valid,
+is evaluated first, and must remain current after the final API gates.
 
 Any sequence-6 failure consumes the authorization. Manual dispatch, rerun, a
 second push attempt, reuse of runs `31605249586` or `31616764771`, and sequence

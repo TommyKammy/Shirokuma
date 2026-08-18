@@ -134,6 +134,8 @@ EXPECTED_INDEPENDENT_REVIEW = {
     "reviewer_must_differ_from_implementation_author": True,
     "approval_must_match_final_head_sha": True,
     "approval_must_be_submitted_before_merge": True,
+    "revalidate_after_final_api_gates": True,
+    "revalidated_decision_must_match": True,
     "reviews": {
         "api": "rest_pull_request_reviews",
         "page_size": GITHUB_PULL_REVIEW_PAGE_SIZE,
@@ -145,7 +147,7 @@ EXPECTED_INDEPENDENT_REVIEW = {
         "pagination_must_be_complete": True,
     },
     "publication_enforcement": (
-        "exact_merged_pull_request_review_or_owner_attestation_query"
+        "exact_merged_pull_request_review_or_owner_attestation_query_and_revalidation"
     ),
 }
 EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
@@ -168,6 +170,7 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
         "Owner final-head attestation for PR #153\n\n"
         "Decision: {decision}\n"
         "Final head: {final_head}\n"
+        "Review-thread snapshot SHA-256: {review_thread_snapshot_sha256}\n"
         "Exception: https://github.com/TommyKammy/Shirokuma/issues/63"
         "#issuecomment-5324238100"
     ),
@@ -201,6 +204,10 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
     "review_threads": {
         "required_before_attestation": True,
         "current_non_outdated_unresolved": 0,
+        "pre_merge_snapshot_attestation_required": True,
+        "snapshot_hash_algorithm": "sha256",
+        "snapshot_canonicalization": "sorted_thread_id_is_resolved_is_outdated_json",
+        "snapshot_must_match_at_publication": True,
         "head_sha_must_match_attestation": True,
         "query": "graphql_review_threads",
         "page_size": GITHUB_REVIEW_THREAD_PAGE_SIZE,
@@ -212,7 +219,8 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
         "pagination_must_be_complete": True,
     },
     "owner_issue_comments": {
-        "query_only_if_standard_independent_review_absent": True,
+        "query_only_if_standard_independent_review_absent": False,
+        "review_thread_snapshot_required_for_all_approval_modes": True,
         "api": "rest_issue_comments",
         "page_size": 100,
         "maximum_pages": 10,
@@ -225,7 +233,8 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
         "pagination_must_be_complete": True,
     },
     "publication_enforcement": (
-        "exact_merged_pull_request_attested_head_ci_and_review_threads_query"
+        "exact_merged_pull_request_attested_head_ci_pre_merge_review_thread_"
+        "snapshot_and_post_gate_decision_revalidation"
     ),
     "failure_consumes_attempt": True,
     "rerun_permitted": False,
@@ -5084,11 +5093,20 @@ def _select_owner_final_head_attestation(
         r"\AOwner final-head attestation for PR #153\n\n"
         r"Decision: (APPROVED|REVOKED)\n"
         r"Final head: ([0-9a-f]{40})\n"
+        r"Review-thread snapshot SHA-256: ([0-9a-f]{64})\n"
         r"Exception: https://github\.com/TommyKammy/Shirokuma/issues/63"
         r"#issuecomment-5324238100\Z"
     )
     decisions: list[
-        tuple[int, str, str, dt.datetime, dt.datetime, Mapping[str, Any]]
+        tuple[
+            int,
+            str,
+            str,
+            str,
+            dt.datetime,
+            dt.datetime,
+            Mapping[str, Any],
+        ]
     ] = []
     for comment in comments:
         if not isinstance(comment, Mapping):
@@ -5114,12 +5132,13 @@ def _select_owner_final_head_attestation(
             or not isinstance(comment.get("updated_at"), str)
         ):
             _fail("INDEPENDENT_REVIEW", "owner attestation comment is malformed")
-        decision, attested_head = match.groups()
+        decision, attested_head, review_thread_snapshot_sha256 = match.groups()
         if decision not in exception["allowed_decisions"]:
             _fail("INDEPENDENT_REVIEW", "owner attestation decision differs")
         if body != template.format(
             decision=decision,
             final_head=attested_head,
+            review_thread_snapshot_sha256=review_thread_snapshot_sha256,
         ):
             _fail("INDEPENDENT_REVIEW", "owner attestation body differs")
         created_at = _parse_time(comment["created_at"])
@@ -5131,6 +5150,7 @@ def _select_owner_final_head_attestation(
                 int(comment["id"]),
                 decision,
                 attested_head,
+                review_thread_snapshot_sha256,
                 created_at,
                 updated_at,
                 comment,
@@ -5138,14 +5158,15 @@ def _select_owner_final_head_attestation(
         )
     if not decisions:
         _fail("INDEPENDENT_REVIEW", "owner final-head attestation is missing")
-    latest_updated_at = max(item[4] for item in decisions)
-    latest = [item for item in decisions if item[4] == latest_updated_at]
+    latest_updated_at = max(item[5] for item in decisions)
+    latest = [item for item in decisions if item[5] == latest_updated_at]
     if len(latest) != 1:
         _fail("INDEPENDENT_REVIEW", "latest owner attestation is ambiguous")
     (
         comment_id,
         decision,
         attested_head,
+        review_thread_snapshot_sha256,
         created_at,
         updated_at,
         selected,
@@ -5168,6 +5189,7 @@ def _select_owner_final_head_attestation(
         "owner": selected["user"]["login"],
         "attested_head": attested_head,
         "attested_at": updated_at.isoformat().replace("+00:00", "Z"),
+        "review_thread_snapshot_sha256": review_thread_snapshot_sha256,
         "commit": commit,
         "base_sha": base_sha,
     }
@@ -5195,6 +5217,7 @@ def _revalidate_owner_final_head_decision(
             "owner",
             "attested_head",
             "attested_at",
+            "review_thread_snapshot_sha256",
             "commit",
             "base_sha",
         )
@@ -5205,6 +5228,40 @@ def _revalidate_owner_final_head_decision(
             "owner final-head decision changed after final API gates",
         )
     return {"owner_decision_revalidated_after_final_api_gates": True}
+
+
+def _revalidate_independent_review_decision(
+    contract: Mapping[str, Any],
+    pull: Mapping[str, Any],
+    selection: Mapping[str, Any],
+    reviews: list[Any],
+) -> dict[str, bool]:
+    revalidated = _select_independent_review(
+        contract,
+        [pull],
+        reviews,
+        commit=selection["commit"],
+    )
+    original = {
+        key: selection[key]
+        for key in (
+            "approval_mode",
+            "pull_request",
+            "review_id",
+            "reviewer",
+            "reviewed_head",
+            "reviewed_at",
+            "merged_at",
+            "base_sha",
+            "commit",
+        )
+    }
+    if revalidated != original:
+        _fail(
+            "INDEPENDENT_REVIEW",
+            "independent review decision changed after final API gates",
+        )
+    return {"independent_review_revalidated_after_final_api_gates": True}
 
 
 def _validate_owner_final_head_ci(
@@ -5580,10 +5637,27 @@ def _owner_review_thread_page(
     return validated_nodes, total_count, has_next_page, end_cursor
 
 
+def _review_thread_snapshot_sha256(nodes: list[Mapping[str, Any]]) -> str:
+    snapshot = [
+        {
+            "id": thread["id"],
+            "isOutdated": thread["isOutdated"],
+            "isResolved": thread["isResolved"],
+        }
+        for thread in sorted(nodes, key=lambda thread: thread["id"])
+    ]
+    encoded = json.dumps(
+        snapshot,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _owner_review_thread_receipt(
     exception: Mapping[str, Any],
     nodes: list[Mapping[str, Any]],
-) -> dict[str, int]:
+) -> dict[str, Any]:
     unresolved = 0
     outdated = 0
     resolved = 0
@@ -5610,7 +5684,25 @@ def _owner_review_thread_receipt(
         "current_unresolved": unresolved,
         "resolved": resolved,
         "outdated": outdated,
+        "snapshot_sha256": _review_thread_snapshot_sha256(nodes),
     }
+
+
+def _validate_review_thread_snapshot_attestation(
+    selection: Mapping[str, Any],
+    review_threads: Mapping[str, Any],
+) -> None:
+    attested = selection.get("review_thread_snapshot_sha256")
+    observed = review_threads.get("snapshot_sha256")
+    if (
+        not isinstance(attested, str)
+        or re.fullmatch(r"[0-9a-f]{64}", attested) is None
+        or observed != attested
+    ):
+        _fail(
+            "INDEPENDENT_REVIEW",
+            "review-thread snapshot differs from the pre-merge owner attestation",
+        )
 
 
 def _validate_owner_review_threads(
@@ -5619,7 +5711,7 @@ def _validate_owner_review_threads(
     *,
     pull_request: int,
     final_head: str,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     nodes, total_count, has_next_page, _ = _owner_review_thread_page(
         payload,
         pull_request=pull_request,
@@ -5639,7 +5731,7 @@ def _github_review_threads_pages(
     pull_request: int,
     final_head: str,
     token: str,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     policy = exception.get("review_threads")
     if (
         not isinstance(policy, Mapping)
@@ -5652,6 +5744,11 @@ def _github_review_threads_pages(
         or policy.get("unique_thread_ids") is not True
         or policy.get("total_count_must_match") is not True
         or policy.get("pagination_must_be_complete") is not True
+        or policy.get("pre_merge_snapshot_attestation_required") is not True
+        or policy.get("snapshot_hash_algorithm") != "sha256"
+        or policy.get("snapshot_canonicalization")
+        != "sorted_thread_id_is_resolved_is_outdated_json"
+        or policy.get("snapshot_must_match_at_publication") is not True
     ):
         _fail("INDEPENDENT_REVIEW", "review-thread pagination bounds differ")
 
@@ -5814,6 +5911,7 @@ def _verify_final_head_gates(
         final_head=final_head,
         token=token,
     )
+    _validate_review_thread_snapshot_attestation(selection, review_threads)
     return {
         "pull_request_binding": pull_request_binding,
         "final_head_ci": final_head_ci,
@@ -5857,15 +5955,47 @@ def verify_independent_review(
         token=token,
         policy=contract["publication"]["independent_review"]["reviews"],
     )
+    owner_comment_policy = exception["owner_issue_comments"]
+    if (
+        owner_comment_policy.get("query_only_if_standard_independent_review_absent")
+        is not False
+        or owner_comment_policy.get(
+            "review_thread_snapshot_required_for_all_approval_modes"
+        )
+        is not True
+        or owner_comment_policy.get("revalidate_after_final_api_gates") is not True
+        or owner_comment_policy.get("revalidated_decision_must_match") is not True
+    ):
+        _fail("INDEPENDENT_REVIEW", "owner decision revalidation policy differs")
+    comments = _github_api_paginated_list(
+        f"{base}/issues/{matching[0]['number']}/comments",
+        token=token,
+    )
     review_selection = _select_independent_review(
         contract,
         pulls,
         reviews,
         commit=commit,
-        comments=lambda: _github_api_paginated_list(
-            f"{base}/issues/{matching[0]['number']}/comments",
-            token=token,
-        ),
+        comments=comments,
+    )
+    if review_selection["approval_mode"] == "owner_final_head_attestation":
+        thread_attestation = dict(review_selection)
+    else:
+        thread_attestation = _select_owner_final_head_attestation(
+            contract,
+            matching[0],
+            comments,
+            commit=commit,
+            final_head=review_selection["reviewed_head"],
+        )
+    review_selection.update(
+        {
+            "review_thread_attestation_comment_id": thread_attestation["comment_id"],
+            "review_thread_snapshot_sha256": thread_attestation[
+                "review_thread_snapshot_sha256"
+            ],
+            "review_threads_attested_at": thread_attestation["attested_at"],
+        }
     )
     review_selection.update(
         _verify_final_head_gates(
@@ -5875,21 +6005,38 @@ def verify_independent_review(
             token=token,
         )
     )
-    if review_selection["approval_mode"] == "owner_final_head_attestation":
-        owner_comment_policy = exception["owner_issue_comments"]
+    review_selection.update(
+        _revalidate_owner_final_head_decision(
+            contract,
+            matching[0],
+            thread_attestation,
+            _github_api_paginated_list(
+                f"{base}/issues/{matching[0]['number']}/comments",
+                token=token,
+            ),
+        )
+    )
+    if review_selection["approval_mode"] == "independent_review":
+        independent_policy = contract["publication"]["independent_review"]
         if (
-            owner_comment_policy.get("revalidate_after_final_api_gates") is not True
-            or owner_comment_policy.get("revalidated_decision_must_match") is not True
+            independent_policy.get("revalidate_after_final_api_gates") is not True
+            or independent_policy.get("revalidated_decision_must_match") is not True
         ):
-            _fail("INDEPENDENT_REVIEW", "owner decision revalidation policy differs")
+            _fail(
+                "INDEPENDENT_REVIEW",
+                "independent review revalidation policy differs",
+            )
         review_selection.update(
-            _revalidate_owner_final_head_decision(
+            _revalidate_independent_review_decision(
                 contract,
                 matching[0],
                 review_selection,
-                _github_api_paginated_list(
-                    f"{base}/issues/{matching[0]['number']}/comments",
+                _github_api_paginated_reviews(
+                    f"{base}/pulls/{matching[0]['number']}/reviews",
                     token=token,
+                    policy=contract["publication"]["independent_review"][
+                        "reviews"
+                    ],
                 ),
             )
         )

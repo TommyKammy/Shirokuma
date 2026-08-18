@@ -2461,6 +2461,7 @@ class ServerDistributionTests(unittest.TestCase):
 
 class PublisherContractTests(unittest.TestCase):
     OWNER_HEAD_REF = "agent/issue-63-sequence-6-activation"
+    EMPTY_REVIEW_THREAD_SNAPSHOT_SHA256 = verify._review_thread_snapshot_sha256([])
 
     @staticmethod
     def _owner_workflow_payload(
@@ -3058,6 +3059,8 @@ class PublisherContractTests(unittest.TestCase):
                 "Owner final-head attestation for PR #153\n\n"
                 "Decision: APPROVED\n"
                 f"Final head: {final_head}\n"
+                "Review-thread snapshot SHA-256: "
+                f"{self.EMPTY_REVIEW_THREAD_SNAPSHOT_SHA256}\n"
                 "Exception: https://github.com/TommyKammy/Shirokuma/issues/63"
                 "#issuecomment-5324238100"
             ),
@@ -3114,6 +3117,8 @@ class PublisherContractTests(unittest.TestCase):
                 "Owner final-head attestation for PR #153\n\n"
                 "Decision: APPROVED\n"
                 f"Final head: {final_head}\n"
+                "Review-thread snapshot SHA-256: "
+                f"{self.EMPTY_REVIEW_THREAD_SNAPSHOT_SHA256}\n"
                 "Exception: https://github.com/TommyKammy/Shirokuma/issues/63"
                 "#issuecomment-5324238100"
             ),
@@ -3265,6 +3270,8 @@ class PublisherContractTests(unittest.TestCase):
                     "Owner final-head attestation for PR #153\n\n"
                     f"Decision: {decision}\n"
                     f"Final head: {final_head}\n"
+                    "Review-thread snapshot SHA-256: "
+                    f"{self.EMPTY_REVIEW_THREAD_SNAPSHOT_SHA256}\n"
                     "Exception: https://github.com/TommyKammy/Shirokuma/"
                     "issues/63#issuecomment-5324238100"
                 ),
@@ -4156,6 +4163,10 @@ class PublisherContractTests(unittest.TestCase):
                 "current_unresolved": 0,
                 "resolved": 1,
                 "outdated": 2,
+                "snapshot_sha256": (
+                    "9d941cf5d3e3231230662402cb354653147c988ce907e9ec"
+                    "8853c3b6963d23a1"
+                ),
             },
             receipt,
         )
@@ -4179,6 +4190,38 @@ class PublisherContractTests(unittest.TestCase):
                 unresolved,
                 pull_request=153,
                 final_head=final_head,
+            )
+
+        resolved_after_merge = [
+            {
+                "id": "thread-resolution-race",
+                "isResolved": True,
+                "isOutdated": False,
+            }
+        ]
+        receipt_after_merge = verify._owner_review_thread_receipt(
+            exception,
+            resolved_after_merge,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "snapshot differs from the pre-merge owner attestation",
+        ):
+            verify._validate_review_thread_snapshot_attestation(
+                {
+                    "review_thread_snapshot_sha256": (
+                        verify._review_thread_snapshot_sha256(
+                            [
+                                {
+                                    "id": "thread-resolution-race",
+                                    "isResolved": False,
+                                    "isOutdated": False,
+                                }
+                            ]
+                        )
+                    )
+                },
+                receipt_after_merge,
             )
 
         wrong_head = self._owner_review_thread_payload(final_head="d" * 40)
@@ -4294,6 +4337,10 @@ class PublisherContractTests(unittest.TestCase):
                 "current_unresolved": 0,
                 "resolved": 0,
                 "outdated": 101,
+                "snapshot_sha256": (
+                    "e222780208c8e0167d1cb8ac26aec1cf7baff1a3b8fbe070"
+                    "ef75553ea6594d4e"
+                ),
             },
             receipt,
         )
@@ -4728,6 +4775,8 @@ class PublisherContractTests(unittest.TestCase):
                     "Owner final-head attestation for PR #153\n\n"
                     "Decision: APPROVED\n"
                     f"Final head: {final_head}\n"
+                    "Review-thread snapshot SHA-256: "
+                    f"{self.EMPTY_REVIEW_THREAD_SNAPSHOT_SHA256}\n"
                     "Exception: https://github.com/TommyKammy/Shirokuma/"
                     "issues/63#issuecomment-5324238100"
                 ),
@@ -5042,6 +5091,8 @@ class PublisherContractTests(unittest.TestCase):
                 "Owner final-head attestation for PR #153\n\n"
                 "Decision: APPROVED\n"
                 f"Final head: {final_head}\n"
+                "Review-thread snapshot SHA-256: "
+                f"{self.EMPTY_REVIEW_THREAD_SNAPSHOT_SHA256}\n"
                 "Exception: https://github.com/TommyKammy/Shirokuma/"
                 "issues/63#issuecomment-5324238100"
             ),
@@ -5094,6 +5145,22 @@ class PublisherContractTests(unittest.TestCase):
                 "submitted_at": "2026-08-07T02:59:59Z",
             }
         ]
+        owner_attestation = {
+            "id": 5264800000,
+            "body": (
+                "Owner final-head attestation for PR #153\n\n"
+                "Decision: APPROVED\n"
+                f"Final head: {final_head}\n"
+                "Review-thread snapshot SHA-256: "
+                f"{self.EMPTY_REVIEW_THREAD_SNAPSHOT_SHA256}\n"
+                "Exception: https://github.com/TommyKammy/Shirokuma/"
+                "issues/63#issuecomment-5324238100"
+            ),
+            "user": {"login": "TommyKammy", "type": "User"},
+            "author_association": "OWNER",
+            "created_at": "2026-08-18T15:50:00Z",
+            "updated_at": "2026-08-18T15:50:00Z",
+        }
 
         class Response:
             status = 200
@@ -5141,6 +5208,12 @@ class PublisherContractTests(unittest.TestCase):
                     Response(pulls),
                     Response(reviews),
                     Response(reviews),
+                    Response([owner_attestation]),
+                    Response([owner_attestation]),
+                    Response([owner_attestation]),
+                    Response([owner_attestation]),
+                    Response(reviews),
+                    Response(reviews),
                 ],
             ) as request,
             contextlib.redirect_stdout(stdout),
@@ -5162,6 +5235,10 @@ class PublisherContractTests(unittest.TestCase):
             receipt["base_sha"],
         )
         self.assertEqual(0, receipt["review_threads"]["current_non_outdated"])
+        self.assertIs(
+            receipt["independent_review_revalidated_after_final_api_gates"],
+            True,
+        )
         final_head_gates.assert_called_once_with(
             active_contract["publication"]["owner_only_approval_exception"],
             mock.ANY,
@@ -5170,7 +5247,7 @@ class PublisherContractTests(unittest.TestCase):
             ]["pull_request_binding"],
             token="ephemeral-token",
         )
-        self.assertEqual(4, request.call_count)
+        self.assertEqual(10, request.call_count)
         requested_urls = [call.args[0].full_url for call in request.call_args_list]
         self.assertIn(f"/commits/{commit}/pulls?per_page=100", requested_urls[0])
         self.assertIn(
@@ -5178,9 +5255,52 @@ class PublisherContractTests(unittest.TestCase):
             requested_urls[2],
         )
         self.assertEqual(requested_urls[2], requested_urls[3])
-        self.assertNotIn("/issues/153/comments", "\n".join(requested_urls))
+        self.assertIn("/issues/153/comments", "\n".join(requested_urls))
+        self.assertEqual(requested_urls[4], requested_urls[5])
+        self.assertEqual(requested_urls[6], requested_urls[7])
+        self.assertEqual(requested_urls[8], requested_urls[9])
         self.assertNotIn("/actions/runs", "\n".join(requested_urls))
         self.assertNotIn("api.github.com/graphql", "\n".join(requested_urls))
+
+    def test_independent_review_revalidation_rejects_dismissal(self) -> None:
+        contract = self._active_owner_contract()
+        commit = "b" * 40
+        final_head = "c" * 40
+        pull = self._owner_pull(final_head=final_head, merge_commit=commit)
+        approval = {
+            "id": 9,
+            "state": "APPROVED",
+            "user": {"login": "IndependentHuman", "type": "User"},
+            "commit_id": final_head,
+            "submitted_at": "2026-08-18T15:50:00Z",
+        }
+        selection = verify._select_independent_review(
+            contract,
+            [pull],
+            [approval],
+            commit=commit,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "no current human approval",
+        ):
+            verify._revalidate_independent_review_decision(
+                contract,
+                pull,
+                selection,
+                [{**approval, "state": "DISMISSED"}],
+            )
+
+        receipt = verify._revalidate_independent_review_decision(
+            contract,
+            pull,
+            selection,
+            [approval],
+        )
+        self.assertEqual(
+            {"independent_review_revalidated_after_final_api_gates": True},
+            receipt,
+        )
 
     def test_github_review_api_paginates_to_bounded_exhaustion(self) -> None:
         review_url = (
