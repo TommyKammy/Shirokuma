@@ -35,7 +35,7 @@
     },
     {
       "path": "scripts/package_trino_bun_dependencies.py",
-      "sha256": "0ac1317e3d3ec9a1f8865500a732c892a8fe3a9cefc9c3694b383884acf7c423"
+      "sha256": "0a9e0515706b157affafdde400c22b1c6c81ff17489c1eb406938a302f7bc79e"
     },
     {
       "path": "scripts/prepare_trino_bun_input.py",
@@ -47,11 +47,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "3e3ce28b8268995558704cb218733e176a3ce2adb08ca1c3341da17d1641728b"
+      "sha256": "08ab6ae354d70bea00a4e8ac80e2a2c69fcbafcf5d355175ad9e74198fc1414d"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "dff11625b781872ea8bff50795f7645889b6bd29f5185b7ffdef6021fedb86ec"
+      "sha256": "10672cff0fbbea1aaf7d0ed8befd3f745225ef6039e6efd88571632f7a985a15"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -63,7 +63,7 @@
     },
     {
       "path": "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch",
-      "sha256": "90a2168b9e158f3a61e3cfe3c4e21b6cc6df39c393c2bb38a6df3ffa2e7a3d66"
+      "sha256": "53eb4bfb5c06859e27e269bed5af6469c386d3bd8cf8b837d8031188e6bf9b7a"
     },
     {
       "path": "bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch",
@@ -74,12 +74,8 @@
       "sha256": "731e76f296a725d34ea9e226a1815782168cae3890424e69f76a05530afc15be"
     },
     {
-      "path": "bootstrap/trino/v483/vex/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json",
-      "sha256": "f36e8c7ab98f177c0e3f796a22cfa23e8709dc9a9b39bff32806c9b5db534a2a"
-    },
-    {
       "path": "docs/design/07_ADR/ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md",
-      "sha256": "853965cce315ed98a56a8fee45587a07b2f71b49c0e7a6fcf72dbee0fc848965"
+      "sha256": "ac02d03ed2255440c21290970378e25dfc580905d404cbbb99635f3c65959c87"
     },
     {
       "path": "docs/design/07_ADR/ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_source_remediation.md",
@@ -217,15 +213,15 @@
       }
     ],
     "source_overlay": {
-      "state": "approved_bounded_web_ui_security",
+      "state": "implementation_authorized_review_pending_patched_web_ui_security",
       "decision_record": "docs/design/07_ADR/ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md",
-      "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5081842992",
+      "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5312231113",
       "expires_at": "2026-08-21T22:43:36Z",
       "automatic_renewal": false,
       "applied_after_source_verification": true,
       "patch": {
         "path": "bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch",
-        "sha256": "90a2168b9e158f3a61e3cfe3c4e21b6cc6df39c393c2bb38a6df3ffa2e7a3d66"
+        "sha256": "53eb4bfb5c06859e27e269bed5af6469c386d3bd8cf8b837d8031188e6bf9b7a"
       },
       "apply_arguments": ["--unidiff-zero", "--whitespace=error-all"],
       "permitted_paths": [
@@ -241,8 +237,8 @@
         "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock": "0ca8b926ea0a2af3fff339b43c52de03a8f99c4aa9ba1d4c2ecd081bcd715ad3"
       },
       "postimages": {
-        "core/trino-web-ui/src/main/resources/webapp/package.json": "2af750b9571eddce309373325779a3e2d35ba1977db25b657fe4337f3cb687d2",
-        "core/trino-web-ui/src/main/resources/webapp/bun.lock": "90bfa0a797ae2f37a4ab5e8b445a62fa211328cedab186ac8c2402f78a07a194",
+        "core/trino-web-ui/src/main/resources/webapp/package.json": "2ed7946adc71a60b2f0affb546e115c981697b52b92d924caeb4ba52b091cd11",
+        "core/trino-web-ui/src/main/resources/webapp/bun.lock": "7d61c5d3868b5a600ff8a21206168c114848dd7d65b882dc6f5bdaf4c792c8f3",
         "core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json": "d555ca5ab130a76775c9677b5b9798dee486964ef0fc4992fbb02705e696d271",
         "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock": "c8c9044cf3bd90d38e5aab71e680bf0dd3724c4062eaac9a60e981629601a163"
       },
@@ -251,9 +247,9 @@
         "d3-color": "3.1.0",
         "fast-uri": "3.1.5",
         "js-yaml": "4.3.1",
-        "nanoid": "3.3.17",
+        "nanoid": "3.3.18",
         "postcss": "8.5.18",
-        "react-router-dom": "7.18.1"
+        "react-router-dom": "7.18.2"
       },
       "react_router_import_inventory": [
         {
@@ -294,26 +290,10 @@
         }
       ],
       "vulnerability_assessment": {
-        "raw_report_required": true,
-        "adjusted_report_required": true,
-        "raw_finding": {
-          "target": "core/trino-web-ui/src/main/resources/webapp/bun.lock",
-          "vulnerability_id": "GHSA-qwww-vcr4-c8h2",
-          "package": "react-router",
-          "installed_version": "7.18.1",
-          "fixed_version": "7.18.2, 8.3.0",
-          "severity": "HIGH",
-          "purl": "pkg:npm/react-router@7.18.1"
-        },
-        "openvex": {
-          "path": "bootstrap/trino/v483/vex/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json",
-          "sha256": "f36e8c7ab98f177c0e3f796a22cfa23e8709dc9a9b39bff32806c9b5db534a2a",
-          "status": "not_affected",
-          "justification": "vulnerable_code_not_in_execute_path"
-        },
-        "adjusted_maximum_high": 0,
-        "adjusted_maximum_critical": 0,
-        "raw_and_adjusted_package_inventory_must_match": true
+        "report_required": true,
+        "maximum_high": 0,
+        "maximum_critical": 0,
+        "openvex_permitted": false
       }
     },
     "distribution_remediation": {
@@ -651,7 +631,7 @@
       "frozen_lockfiles": [
         {
           "path": "core/trino-web-ui/src/main/resources/webapp/bun.lock",
-          "sha256": "90bfa0a797ae2f37a4ab5e8b445a62fa211328cedab186ac8c2402f78a07a194"
+          "sha256": "7d61c5d3868b5a600ff8a21206168c114848dd7d65b882dc6f5bdaf4c792c8f3"
         },
         {
           "path": "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock",
@@ -1283,7 +1263,7 @@
       "descriptor-complete CycloneDX Maven dependency SBOM retaining every rootfs-discovered top-level and embedded component and bound to the exact OCI digest",
       "CycloneDX Bun dependency SBOM bound to the exact OCI digest",
       "descriptor-complete and embedded-component-complete Maven High=0/Critical=0 Trivy result and database metadata bound to the exact OCI digest",
-      "exact raw Bun Trivy finding, hash-bound OpenVEX, and adjusted High=0/Critical=0 report with identical package inventories",
+      "exact Bun Trivy High=0/Critical=0 report without OpenVEX adjustment",
       "Cosign signature and Rekor bundle",
       "SLSA v1 provenance with the exact tag object, commit, tree, and evidence hashes in predicate.buildDefinition.resolvedDependencies",
       "keyless-signed anonymous exact-digest retrieval proof"

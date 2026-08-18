@@ -1064,11 +1064,7 @@ class BunScanEvidenceTests(unittest.TestCase):
             path.write_bytes(payload)
 
     def _overlay_contract(self) -> dict[str, object]:
-        overlay = json.loads(json.dumps(verify.EXPECTED_SOURCE_OVERLAY))
-        overlay["vulnerability_assessment"]["raw_finding"]["target"] = (
-            "webapp/bun.lock"
-        )
-        return overlay
+        return json.loads(json.dumps(verify.EXPECTED_SOURCE_OVERLAY))
 
     @contextlib.contextmanager
     def _scan_contract(self):
@@ -1110,11 +1106,8 @@ class BunScanEvidenceTests(unittest.TestCase):
         root: Path,
         name: str,
         *,
-        adjusted_finding: bool = False,
+        finding: bool = False,
         missing_sentinel: bool = False,
-        wrong_purl: bool = False,
-        inventory_drift: bool = False,
-        fixed_version: str = "7.18.2, 8.3.0",
     ) -> Path:
         packages = {
             "webapp/bun.lock": [
@@ -1125,19 +1118,15 @@ class BunScanEvidenceTests(unittest.TestCase):
         }
         if missing_sentinel:
             packages["webapp/bun.lock"][0] = {"Name": "different-package"}
-        if inventory_drift:
-            packages["legacy/bun.lock"][0]["Version"] = "changed"
-        finding = {
-            "VulnerabilityID": "GHSA-qwww-vcr4-c8h2",
-            "PkgName": "react-router",
-            "InstalledVersion": "7.18.1",
-            "FixedVersion": fixed_version,
+        vulnerability = {
+            "VulnerabilityID": "CVE-2026-67213",
+            "PkgName": "nanoid",
+            "InstalledVersion": "3.3.17",
+            "FixedVersion": "3.3.18",
             "Severity": "HIGH",
             "PkgIdentifier": {
                 "PURL": (
-                    "pkg:npm/react-router@7.18.2"
-                    if wrong_purl
-                    else "pkg:npm/react-router@7.18.1"
+                    "pkg:npm/nanoid@3.3.17"
                 )
             },
         }
@@ -1154,12 +1143,9 @@ class BunScanEvidenceTests(unittest.TestCase):
                             "Type": "bun",
                             "Packages": records,
                             **(
-                                {"Vulnerabilities": [finding]}
+                                {"Vulnerabilities": [vulnerability]}
                                 if target == "webapp/bun.lock"
-                                and (
-                                    name.startswith("raw")
-                                    or adjusted_finding
-                                )
+                                and finding
                                 else {}
                             ),
                         }
@@ -1216,10 +1202,9 @@ class BunScanEvidenceTests(unittest.TestCase):
             scan_input = root / "scan-input"
             scan_input.mkdir()
             self._write_lockfiles(scan_input)
-            raw = self._report(root, "raw.json")
-            adjusted = self._report(root, "adjusted.json")
+            report = self._report(root, "report.json")
             with self._scan_contract():
-                verify.verify_bun_scan(root, scan_input, raw, adjusted)
+                verify.verify_bun_scan(root, scan_input, report)
 
     def test_verify_bun_scan_rejects_missing_expected_package(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1227,12 +1212,7 @@ class BunScanEvidenceTests(unittest.TestCase):
             scan_input = root / "scan-input"
             scan_input.mkdir()
             self._write_lockfiles(scan_input)
-            raw = self._report(root, "raw.json", missing_sentinel=True)
-            adjusted = self._report(
-                root,
-                "adjusted.json",
-                missing_sentinel=True,
-            )
+            report = self._report(root, "report.json", missing_sentinel=True)
             with (
                 self._scan_contract(),
                 self.assertRaisesRegex(
@@ -1240,87 +1220,23 @@ class BunScanEvidenceTests(unittest.TestCase):
                     "required packages missing",
                 ),
             ):
-                verify.verify_bun_scan(root, scan_input, raw, adjusted)
+                verify.verify_bun_scan(root, scan_input, report)
 
-    def test_verify_bun_scan_rejects_raw_finding_identity_drift(self) -> None:
+    def test_verify_bun_scan_rejects_any_high_or_critical_finding(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             scan_input = root / "scan-input"
             scan_input.mkdir()
             self._write_lockfiles(scan_input)
-            raw = self._report(root, "raw.json", wrong_purl=True)
-            adjusted = self._report(root, "adjusted.json")
+            report = self._report(root, "report.json", finding=True)
             with (
                 self._scan_contract(),
                 self.assertRaisesRegex(
                     verify.ContractError,
-                    "BUN_SCAN_RAW_FINDING",
+                    "BUN_SCAN_FINDING",
                 ),
             ):
-                verify.verify_bun_scan(root, scan_input, raw, adjusted)
-
-    def test_verify_bun_scan_rejects_fixed_version_metadata_drift(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            scan_input = root / "scan-input"
-            scan_input.mkdir()
-            self._write_lockfiles(scan_input)
-            raw = self._report(
-                root,
-                "raw.json",
-                fixed_version="8.3.0",
-            )
-            adjusted = self._report(root, "adjusted.json")
-            with (
-                self._scan_contract(),
-                self.assertRaisesRegex(
-                    verify.ContractError,
-                    "BUN_SCAN_RAW_FINDING",
-                ),
-            ):
-                verify.verify_bun_scan(root, scan_input, raw, adjusted)
-
-    def test_verify_bun_scan_rejects_adjusted_finding(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            scan_input = root / "scan-input"
-            scan_input.mkdir()
-            self._write_lockfiles(scan_input)
-            raw = self._report(root, "raw.json")
-            adjusted = self._report(
-                root,
-                "adjusted.json",
-                adjusted_finding=True,
-            )
-            with (
-                self._scan_contract(),
-                self.assertRaisesRegex(
-                    verify.ContractError,
-                    "BUN_SCAN_ADJUSTED_FINDING",
-                ),
-            ):
-                verify.verify_bun_scan(root, scan_input, raw, adjusted)
-
-    def test_verify_bun_scan_rejects_package_inventory_drift(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            scan_input = root / "scan-input"
-            scan_input.mkdir()
-            self._write_lockfiles(scan_input)
-            raw = self._report(root, "raw.json")
-            adjusted = self._report(
-                root,
-                "adjusted.json",
-                inventory_drift=True,
-            )
-            with (
-                self._scan_contract(),
-                self.assertRaisesRegex(
-                    verify.ContractError,
-                    "BUN_SCAN_INVENTORY",
-                ),
-            ):
-                verify.verify_bun_scan(root, scan_input, raw, adjusted)
+                verify.verify_bun_scan(root, scan_input, report)
 
     def test_verify_bun_snapshot_requires_reviewed_identities(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -2284,8 +2200,7 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 if dependency["ref"] != "urn:test:maven-root"
             ]
             bun_sbom.write_text(json.dumps(bun_document), encoding="utf-8")
-            bun_raw = self._report(root)
-            bun_adjusted = self._report(root)
+            bun_report = self._report(root)
             reference = (
                 "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@"
                 "sha256:" + "a" * 64
@@ -2296,11 +2211,10 @@ class MavenScanEvidenceTests(unittest.TestCase):
                 maven_sbom,
                 maven_report,
                 bun_sbom,
-                bun_raw,
-                bun_adjusted,
+                bun_report,
             )
             digest = "sha256:" + "a" * 64
-            for path in (maven_report, bun_raw, bun_adjusted):
+            for path in (maven_report, bun_report):
                 document = json.loads(path.read_text(encoding="utf-8"))
                 self.assertEqual(reference, document["ArtifactName"])
                 self.assertEqual(digest, document["Metadata"]["ImageID"])
@@ -6063,12 +5977,11 @@ class PublisherContractTests(unittest.TestCase):
         )
         workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
         stage = verify.EXPECTED_BUN_SCAN_STAGE_BLOCK
-        scan = verify.EXPECTED_BUN_ADJUSTED_SCAN_REPORT_BLOCK
         gate = verify.EXPECTED_BUN_SCAN_GATE_BLOCK
-        quartet = verify.EXPECTED_BUN_FAILURE_DIAGNOSTIC_QUARTET_BLOCK
+        pair = verify.EXPECTED_BUN_FAILURE_DIAGNOSTIC_PAIR_BLOCK
         diagnostic = verify.EXPECTED_BUN_FAILURE_DIAGNOSTIC_BLOCK
         record = verify.EXPECTED_RECORD_TRIVY_CACHE_BLOCK
-        for block in (stage, scan, gate, quartet, diagnostic):
+        for block in (stage, gate, pair, diagnostic):
             self.assertEqual(1, workflow.count(block))
         self.assertEqual(
             4,
@@ -6081,10 +5994,9 @@ class PublisherContractTests(unittest.TestCase):
             1,
             workflow.count(verify.EXPECTED_BUN_DIAGNOSTIC_ARTIFACT_PREFIX),
         )
-        self.assertLess(workflow.index(stage), workflow.index(scan))
-        self.assertLess(workflow.index(scan), workflow.index(gate))
-        self.assertLess(workflow.index(gate), workflow.index(quartet))
-        self.assertLess(workflow.index(quartet), workflow.index(diagnostic))
+        self.assertLess(workflow.index(stage), workflow.index(gate))
+        self.assertLess(workflow.index(gate), workflow.index(pair))
+        self.assertLess(workflow.index(pair), workflow.index(diagnostic))
         self.assertLess(workflow.index(gate), workflow.index(diagnostic))
         self.assertLess(workflow.index(diagnostic), workflow.index(record))
         publish = workflow.split("\n  publish:\n", 1)[1]
@@ -6111,8 +6023,8 @@ class PublisherContractTests(unittest.TestCase):
                 "          steps.verify_bun_scan.outcome != 'cancelled' &&\n",
             ),
             (
-                "          steps.verify_bun_diagnostic_quartet.outcome == 'success'\n",
-                "          steps.verify_bun_diagnostic_quartet.outcome != 'cancelled'\n",
+                "          steps.verify_bun_diagnostic_pair.outcome == 'success'\n",
+                "          steps.verify_bun_diagnostic_pair.outcome != 'cancelled'\n",
             ),
             (
                 "          include-hidden-files: true\n",
@@ -6123,15 +6035,7 @@ class PublisherContractTests(unittest.TestCase):
                 "",
             ),
             (
-                "            .trino-candidate/trivy-bun-vulnerability-raw.json\n",
-                "",
-            ),
-            (
                 "            .trino-candidate/trivy-bun-vulnerability.json\n",
-                "",
-            ),
-            (
-                "            .trino-candidate/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json\n",
                 "",
             ),
             (
@@ -6156,7 +6060,7 @@ class PublisherContractTests(unittest.TestCase):
                 ):
                     verify._validate_workflow(contract, altered)
 
-        quartet_mutations = (
+        pair_mutations = (
             (
                 '            if [[ ! -s "${path}" ]]; then\n',
                 '            if [[ ! -e "${path}" ]]; then\n',
@@ -6170,45 +6074,22 @@ class PublisherContractTests(unittest.TestCase):
                 "",
             ),
             (
-                "            \"trivy-bun-vulnerability-raw.json\"\n",
-                "",
-            ),
-            (
                 "            \"trivy-bun-vulnerability.json\"\n",
                 "",
             ),
-            (
-                "            \"react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json\"\n",
-                "",
-            ),
         )
-        for original, replacement in quartet_mutations:
+        for original, replacement in pair_mutations:
             altered = workflow.replace(
-                quartet,
-                quartet.replace(original, replacement, 1),
+                pair,
+                pair.replace(original, replacement, 1),
                 1,
             )
-            with self.subTest(quartet_original=original):
+            with self.subTest(pair_original=original):
                 with self.assertRaisesRegex(
                     verify.ContractError,
                     "WORKFLOW_BUN_DIAGNOSTICS",
                 ):
                     verify._validate_workflow(contract, altered)
-
-        scan_exit_code = workflow.replace(
-            scan,
-            scan.replace(
-                "            --exit-code 0 \\\n",
-                "            --exit-code 1 \\\n",
-                1,
-            ),
-            1,
-        )
-        with self.assertRaisesRegex(
-            verify.ContractError,
-            "WORKFLOW_BUN_DIAGNOSTICS",
-        ):
-            verify._validate_workflow(contract, scan_exit_code)
 
         changed_id = workflow.replace(
             gate,
@@ -6240,7 +6121,7 @@ class PublisherContractTests(unittest.TestCase):
         ):
             verify._validate_workflow(contract, changed_stage_id)
 
-        for block in (scan, gate):
+        for block in (gate,):
             altered_condition = workflow.replace(
                 block,
                 block.replace(
@@ -6274,8 +6155,8 @@ class PublisherContractTests(unittest.TestCase):
             verify._validate_workflow(contract, changed_action)
 
         reordered = workflow.replace(
-            quartet + "\n" + diagnostic,
-            diagnostic + "\n" + quartet,
+            pair + "\n" + diagnostic,
+            diagnostic + "\n" + pair,
             1,
         )
         with self.assertRaisesRegex(
@@ -6437,20 +6318,20 @@ class PublisherContractTests(unittest.TestCase):
             workflow,
         )
         self.assertEqual(
-            3,
+            2,
             workflow.count('TRIVY_INCLUDE_DEV_DEPS: "true"'),
         )
         self.assertEqual(
-            2,
+            1,
             workflow.count(
                 "TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy"
             ),
         )
         self.assertEqual(3, workflow.count("list-all-pkgs: true"))
-        self.assertIn('--vex "${vex}"', workflow)
-        self.assertEqual(1, workflow.count("--skip-db-update"))
-        self.assertIn("trivy-bun-vulnerability-raw.json", workflow)
-        self.assertIn("--adjusted-report \\", workflow)
+        self.assertNotIn("--vex", workflow)
+        self.assertNotIn(".openvex.json", workflow)
+        self.assertNotIn("trivy-bun-vulnerability-raw.json", workflow)
+        self.assertIn("--report \\", workflow)
         altered = workflow.replace(
             "scan-ref: ${{ runner.temp }}/trino-bun-scan-input",
             "scan-ref: ${{ runner.temp }}/bun-cache-a",
@@ -6475,18 +6356,6 @@ class PublisherContractTests(unittest.TestCase):
             "WORKFLOW_TRIVY_CACHE",
         ):
             verify._validate_workflow(contract, altered)
-        altered = workflow.replace(
-            "          TRIVY_CACHE_DIR: "
-            "${{ github.workspace }}/.cache/trivy\n",
-            "",
-            1,
-        )
-        with self.assertRaisesRegex(
-            verify.ContractError,
-            "WORKFLOW_BUN_DIAGNOSTICS",
-        ):
-            verify._validate_workflow(contract, altered)
-
     def test_oras_push_uses_only_reviewed_candidate_basenames(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")

@@ -27,7 +27,7 @@ SYMLINK_MODE = "0777"
 LOCKFILES = [
     {
         "path": "core/trino-web-ui/src/main/resources/webapp/bun.lock",
-        "sha256": "90bfa0a797ae2f37a4ab5e8b445a62fa211328cedab186ac8c2402f78a07a194",
+        "sha256": "7d61c5d3868b5a600ff8a21206168c114848dd7d65b882dc6f5bdaf4c792c8f3",
     },
     {
         "path": "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock",

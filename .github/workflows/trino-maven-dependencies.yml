@@ -11,7 +11,6 @@ on:
       - bootstrap/trino/v483/patches/0003-shirokuma-maven-build-plugin-closure.patch
       - bootstrap/trino/v483/settings.xml
       - bootstrap/trino/v483/trusted-build-contract.json
-      - bootstrap/trino/v483/vex/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json
       - docs/design/07_ADR/ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md
       - docs/design/07_ADR/ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_source_remediation.md
       - docs/design/07_ADR/ADR-0027_Authorize_bounded_Trino_483_Iceberg_only_Maven_closure.md
@@ -42,7 +41,6 @@ on:
       - bootstrap/trino/v483/patches/0003-shirokuma-maven-build-plugin-closure.patch
       - bootstrap/trino/v483/settings.xml
       - bootstrap/trino/v483/trusted-build-contract.json
-      - bootstrap/trino/v483/vex/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json
       - docs/design/07_ADR/ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md
       - docs/design/07_ADR/ADR-0026_Authorize_bounded_Parquet_Jackson_1_17_1_source_remediation.md
       - docs/design/07_ADR/ADR-0027_Authorize_bounded_Trino_483_Iceberg_only_Maven_closure.md
@@ -126,9 +124,7 @@ jobs:
       bun_archive_sha256: ${{ steps.record.outputs.bun_archive_sha256 }}
       bun_descriptor_sha256: ${{ steps.record.outputs.bun_descriptor_sha256 }}
       bun_sbom_sha256: ${{ steps.record.outputs.bun_sbom_sha256 }}
-      bun_scan_raw_sha256: ${{ steps.record.outputs.bun_scan_raw_sha256 }}
       bun_scan_sha256: ${{ steps.record.outputs.bun_scan_sha256 }}
-      bun_vex_sha256: ${{ steps.record.outputs.bun_vex_sha256 }}
       descriptor_sha256: ${{ steps.record.outputs.descriptor_sha256 }}
       offline_sha256: ${{ steps.record.outputs.offline_sha256 }}
       reconstruction_sha256: ${{ steps.record.outputs.reconstruction_sha256 }}
@@ -872,7 +868,7 @@ jobs:
           scanners: vuln
           list-all-pkgs: true
 
-      - name: Retain the raw Bun High or Critical findings
+      - name: Retain the Bun High or Critical findings
         if: steps.lifecycle.outputs.active == 'true'
         env:
           TRIVY_INCLUDE_DEV_DEPS: "true"
@@ -882,7 +878,7 @@ jobs:
           scan-type: fs
           scan-ref: ${{ runner.temp }}/trino-bun-scan-input
           format: json
-          output: .trino-candidate/trivy-bun-vulnerability-raw.json
+          output: .trino-candidate/trivy-bun-vulnerability.json
           scanners: vuln
           severity: HIGH,CRITICAL
           ignore-unfixed: false
@@ -890,35 +886,7 @@ jobs:
           exit-code: 0
           list-all-pkgs: true
 
-      - name: Apply OpenVEX and retain adjusted Bun High or Critical findings
-        if: >-
-          always() &&
-          steps.lifecycle.outputs.active == 'true' &&
-          steps.stage_bun_scan_input.outcome == 'success'
-        env:
-          TRIVY_INCLUDE_DEV_DEPS: "true"
-          TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
-        shell: bash
-        run: |
-          set -euo pipefail
-          candidate="${GITHUB_WORKSPACE}/.trino-candidate"
-          vex="${GITHUB_WORKSPACE}/bootstrap/trino/v483/vex/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
-          install -m 0444 "${vex}" \
-            "${candidate}/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
-          trivy fs \
-            --scanners vuln \
-            --severity HIGH,CRITICAL \
-            --ignore-unfixed=false \
-            --skip-db-update \
-            --pkg-types library \
-            --exit-code 0 \
-            --list-all-pkgs \
-            --format json \
-            --output "${candidate}/trivy-bun-vulnerability.json" \
-            --vex "${vex}" \
-            "${RUNNER_TEMP}/trino-bun-scan-input"
-
-      - name: Verify and block the raw and OpenVEX-adjusted Bun dependency evidence
+      - name: Verify and block the Bun dependency evidence
         if: >-
           always() &&
           steps.lifecycle.outputs.active == 'true' &&
@@ -931,26 +899,22 @@ jobs:
             verify-bun-scan \
             --root . \
             --scan-input "${RUNNER_TEMP}/trino-bun-scan-input" \
-            --raw-report \
-              "${GITHUB_WORKSPACE}/.trino-candidate/trivy-bun-vulnerability-raw.json" \
-            --adjusted-report \
+            --report \
               "${GITHUB_WORKSPACE}/.trino-candidate/trivy-bun-vulnerability.json"
 
-      - name: Verify complete failed Bun vulnerability diagnostic quartet
+      - name: Verify complete failed Bun vulnerability diagnostic pair
         if: >-
           failure() &&
           steps.lifecycle.outputs.active == 'true' &&
           steps.verify_bun_scan.outcome == 'failure'
-        id: verify_bun_diagnostic_quartet
+        id: verify_bun_diagnostic_pair
         shell: bash
         run: |
           set -euo pipefail
           candidate="${GITHUB_WORKSPACE}/.trino-candidate"
           required=(
             "trino-bun-dependencies-483.cdx.json"
-            "trivy-bun-vulnerability-raw.json"
             "trivy-bun-vulnerability.json"
-            "react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
           )
           for filename in "${required[@]}"; do
             path="${candidate}/${filename}"
@@ -966,7 +930,7 @@ jobs:
           failure() &&
           steps.lifecycle.outputs.active == 'true' &&
           steps.verify_bun_scan.outcome == 'failure' &&
-          steps.verify_bun_diagnostic_quartet.outcome == 'success'
+          steps.verify_bun_diagnostic_pair.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: >-
@@ -975,9 +939,7 @@ jobs:
           include-hidden-files: true
           path: |
             .trino-candidate/trino-bun-dependencies-483.cdx.json
-            .trino-candidate/trivy-bun-vulnerability-raw.json
             .trino-candidate/trivy-bun-vulnerability.json
-            .trino-candidate/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json
           if-no-files-found: error
           retention-days: 14
 
@@ -1012,11 +974,7 @@ jobs:
               "bun_archive": "trino-bun-dependencies-483.tar.gz",
               "bun_descriptor": "bun-dependency-manifest.json",
               "bun_sbom": "trino-bun-dependencies-483.cdx.json",
-              "bun_scan_raw": "trivy-bun-vulnerability-raw.json",
               "bun_scan": "trivy-bun-vulnerability.json",
-              "bun_vex": (
-                  "react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json"
-              ),
               "descriptor": "maven-dependency-manifest.json",
               "offline": "offline-build.json",
               "reconstruction": "independent-reconstruction.json",
@@ -1070,8 +1028,6 @@ jobs:
             .trino-candidate/trino-maven-dependencies-483.cdx.json
             .trino-candidate/trino-maven-dependencies-483.tar.gz
             .trino-candidate/trivy-version.json
-            .trino-candidate/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json
-            .trino-candidate/trivy-bun-vulnerability-raw.json
             .trino-candidate/trivy-bun-vulnerability.json
             .trino-candidate/trivy-vulnerability.json
           if-no-files-found: error
@@ -1176,12 +1132,8 @@ jobs:
             = "${{ needs.validate.outputs.bun_descriptor_sha256 }}"
           test "$(sha256sum "${candidate}/trino-bun-dependencies-483.cdx.json" | cut -d' ' -f1)" \
             = "${{ needs.validate.outputs.bun_sbom_sha256 }}"
-          test "$(sha256sum "${candidate}/trivy-bun-vulnerability-raw.json" | cut -d' ' -f1)" \
-            = "${{ needs.validate.outputs.bun_scan_raw_sha256 }}"
           test "$(sha256sum "${candidate}/trivy-bun-vulnerability.json" | cut -d' ' -f1)" \
             = "${{ needs.validate.outputs.bun_scan_sha256 }}"
-          test "$(sha256sum "${candidate}/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json" | cut -d' ' -f1)" \
-            = "${{ needs.validate.outputs.bun_vex_sha256 }}"
           test "$(sha256sum "${candidate}/maven-dependency-manifest.json" | cut -d' ' -f1)" \
             = "${{ needs.validate.outputs.descriptor_sha256 }}"
           test "$(sha256sum "${candidate}/offline-build.json" | cut -d' ' -f1)" \
@@ -1271,8 +1223,7 @@ jobs:
             --maven-sbom "${candidate}/trino-maven-dependencies-483.cdx.json" \
             --maven-report "${candidate}/trivy-vulnerability.json" \
             --bun-sbom "${candidate}/trino-bun-dependencies-483.cdx.json" \
-            --bun-raw-report "${candidate}/trivy-bun-vulnerability-raw.json" \
-            --bun-adjusted-report "${candidate}/trivy-bun-vulnerability.json"
+            --bun-report "${candidate}/trivy-bun-vulnerability.json"
 
       - name: Keyless-sign and attest the exact OCI manifest
         env:
@@ -1409,34 +1360,6 @@ jobs:
                                   (
                                       candidate
                                       / "trivy-bun-vulnerability.json"
-                                  ).read_bytes()
-                              ).hexdigest()
-                          },
-                      },
-                      {
-                          "uri": "file:trivy-bun-vulnerability-raw.json",
-                          "digest": {
-                              "sha256": hashlib.sha256(
-                                  (
-                                      candidate
-                                      / "trivy-bun-vulnerability-raw.json"
-                                  ).read_bytes()
-                              ).hexdigest()
-                          },
-                      },
-                      {
-                          "uri": (
-                              "file:react-router-7.18.1-ghsa-qwww-vcr4-c8h2"
-                              ".openvex.json"
-                          ),
-                          "digest": {
-                              "sha256": hashlib.sha256(
-                                  (
-                                      candidate
-                                      / (
-                                          "react-router-7.18.1-"
-                                          "ghsa-qwww-vcr4-c8h2.openvex.json"
-                                      )
                                   ).read_bytes()
                               ).hexdigest()
                           },
@@ -1726,12 +1649,10 @@ jobs:
               "maven-dependency-manifest.json",
               "offline-build.json",
               "oci-manifest.json",
-              "react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json",
               "slsa-provenance.json",
               "toolchain.json",
               "trino-bun-dependencies-483.cdx.json",
               "trino-maven-dependencies-483.cdx.json",
-              "trivy-bun-vulnerability-raw.json",
               "trivy-bun-vulnerability.json",
               "trivy-version.json",
               "trivy-vulnerability.json",
@@ -1788,12 +1709,10 @@ jobs:
             ${{ runner.temp }}/trino-maven-candidate/offline-build.json
             ${{ runner.temp }}/trino-maven-candidate/oci-manifest.json
             ${{ runner.temp }}/trino-maven-candidate/publication.json
-            ${{ runner.temp }}/trino-maven-candidate/react-router-7.18.1-ghsa-qwww-vcr4-c8h2.openvex.json
             ${{ runner.temp }}/trino-maven-candidate/slsa-provenance.json
             ${{ runner.temp }}/trino-maven-candidate/toolchain.json
             ${{ runner.temp }}/trino-maven-candidate/trino-bun-dependencies-483.cdx.json
             ${{ runner.temp }}/trino-maven-candidate/trino-maven-dependencies-483.cdx.json
-            ${{ runner.temp }}/trino-maven-candidate/trivy-bun-vulnerability-raw.json
             ${{ runner.temp }}/trino-maven-candidate/trivy-bun-vulnerability.json
             ${{ runner.temp }}/trino-maven-candidate/trivy-version.json
             ${{ runner.temp }}/trino-maven-candidate/trivy-vulnerability.json
