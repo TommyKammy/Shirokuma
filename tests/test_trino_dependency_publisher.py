@@ -3533,6 +3533,26 @@ class PublisherContractTests(unittest.TestCase):
             set(exception["final_head_ci"]["workflow_paths"]),
             set(receipt["workflow_runs"]),
         )
+        post_review_payload = copy.deepcopy(payload)
+        for run in post_review_payload["workflow_runs"]:
+            run["created_at"] = "2026-08-18T15:55:00Z"
+            run["updated_at"] = "2026-08-18T16:00:00Z"
+        independent_receipt = verify._validate_owner_final_head_ci(
+            exception,
+            post_review_payload,
+            association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
+                "pull_request_binding"
+            ],
+            pull_request=153,
+            final_head=final_head,
+            head_ref=self.OWNER_HEAD_REF,
+            attested_at=None,
+        )
+        self.assertIs(
+            independent_receipt["completed_before_attestation"],
+            False,
+        )
+        self.assertEqual(receipt["workflow_runs"], independent_receipt["workflow_runs"])
         explicit_payload = self._owner_workflow_payload(
             final_head=final_head,
             pull_requests=[{"number": 153}],

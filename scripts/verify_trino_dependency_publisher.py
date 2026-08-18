@@ -5214,7 +5214,7 @@ def _validate_owner_final_head_ci(
     pull_request: int,
     final_head: str,
     head_ref: str,
-    attested_at: dt.datetime,
+    attested_at: dt.datetime | None,
 ) -> dict[str, Any]:
     _pull_binding_policy(association_policy)
     policy = exception["final_head_ci"]
@@ -5299,7 +5299,7 @@ def _validate_owner_final_head_ci(
             _fail("INDEPENDENT_REVIEW", "final-head workflow run ID is duplicated")
         observed_required_run_ids.add(run_id)
         if (
-            updated_instant >= attested_at
+            (attested_at is not None and updated_instant >= attested_at)
             or run.get("status") != policy["status"]
             or run.get("conclusion") != policy["conclusion"]
         ):
@@ -5322,7 +5322,7 @@ def _validate_owner_final_head_ci(
         "workflow_runs": {
             path: int(selected[path]["id"]) for path in required_paths
         },
-        "completed_before_attestation": True,
+        "completed_before_attestation": attested_at is not None,
     }
 
 
@@ -5757,10 +5757,17 @@ def _verify_final_head_gates(
 ) -> dict[str, Any]:
     pull_request = selection["pull_request"]
     final_head = selection.get("attested_head", selection.get("reviewed_head"))
-    approved_at = selection.get("attested_at", selection.get("reviewed_at"))
-    if not isinstance(final_head, str) or not isinstance(approved_at, str):
+    approval_mode = selection.get("approval_mode")
+    if not isinstance(final_head, str):
         _fail("INDEPENDENT_REVIEW", "final-head approval receipt differs")
-    approved_instant = _parse_time(approved_at)
+    attested_at: dt.datetime | None = None
+    if approval_mode == "owner_final_head_attestation":
+        owner_attested_at = selection.get("attested_at")
+        if not isinstance(owner_attested_at, str):
+            _fail("INDEPENDENT_REVIEW", "owner attestation timestamp differs")
+        attested_at = _parse_time(owner_attested_at)
+    elif approval_mode != "independent_review":
+        _fail("INDEPENDENT_REVIEW", "approval mode differs")
     pull_request_binding = _github_exact_pull_binding(
         association_policy,
         pull_request=pull_request,
@@ -5785,7 +5792,7 @@ def _verify_final_head_gates(
         pull_request=pull_request,
         final_head=final_head,
         head_ref=head_ref,
-        attested_at=approved_instant,
+        attested_at=attested_at,
     )
     review_threads = _github_review_threads_pages(
         exception,
