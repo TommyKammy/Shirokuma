@@ -4118,7 +4118,7 @@ class PublisherContractTests(unittest.TestCase):
                         token="ephemeral-token",
                     )
 
-    def test_owner_review_threads_allow_only_outdated_threads(
+    def test_owner_review_threads_allow_resolved_and_outdated_threads(
         self,
     ) -> None:
         exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
@@ -4135,6 +4135,11 @@ class PublisherContractTests(unittest.TestCase):
                     "isResolved": False,
                     "isOutdated": True,
                 },
+                {
+                    "id": "thread-2",
+                    "isResolved": True,
+                    "isOutdated": False,
+                },
             ],
             final_head=final_head,
         )
@@ -4146,42 +4151,35 @@ class PublisherContractTests(unittest.TestCase):
         )
         self.assertEqual(
             {
-                "total": 2,
-                "current_non_outdated": 0,
+                "total": 3,
+                "current_non_outdated": 1,
                 "current_unresolved": 0,
-                "resolved": 0,
+                "resolved": 1,
                 "outdated": 2,
             },
             receipt,
         )
 
-        for thread in (
-            {
-                "id": "thread-resolved",
-                "isResolved": True,
-                "isOutdated": False,
-            },
-            {
-                "id": "thread-unresolved",
-                "isResolved": False,
-                "isOutdated": False,
-            },
+        unresolved = self._owner_review_thread_payload(
+            [
+                {
+                    "id": "thread-unresolved",
+                    "isResolved": False,
+                    "isOutdated": False,
+                }
+            ],
+            final_head=final_head,
+        )
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "current non-outdated unresolved review-thread count differs",
         ):
-            with self.subTest(thread=thread):
-                current = self._owner_review_thread_payload(
-                    [thread],
-                    final_head=final_head,
-                )
-                with self.assertRaisesRegex(
-                    verify.ContractError,
-                    "current non-outdated review-thread count differs",
-                ):
-                    verify._validate_owner_review_threads(
-                        exception,
-                        current,
-                        pull_request=153,
-                        final_head=final_head,
-                    )
+            verify._validate_owner_review_threads(
+                exception,
+                unresolved,
+                pull_request=153,
+                final_head=final_head,
+            )
 
         wrong_head = self._owner_review_thread_payload(final_head="d" * 40)
         with self.assertRaisesRegex(
@@ -4572,7 +4570,7 @@ class PublisherContractTests(unittest.TestCase):
                 [
                     {
                         "id": "thread-1",
-                        "isResolved": True,
+                        "isResolved": False,
                         "isOutdated": False,
                     }
                 ],

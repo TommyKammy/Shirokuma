@@ -471,7 +471,7 @@
     },
     "review_threads": {
       "required_before_attestation": true,
-      "current_non_outdated": 0,
+      "current_non_outdated_unresolved": 0,
       "head_sha_must_match_attestation": true,
       "query": "graphql_review_threads",
       "page_size": 100,

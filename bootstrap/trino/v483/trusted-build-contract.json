@@ -47,11 +47,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "278ccd940366d9fbb97811644066f70ea33944513281a300730722de344a2512"
+      "sha256": "be609c401d787d8c09759ed317654d2a3222df74bb65969b2fa04b9f4136f5de"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "c275cf309b3c0243ea60b24f518fc79d2b5477790403d686912d23d1aad671fd"
+      "sha256": "461ab9f1c8a9e7e1fb4e3cf074905d413cc89ddb654a9f07e9607d1c509fac28"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -1187,7 +1187,7 @@
       },
       "review_threads": {
         "required_before_attestation": true,
-        "current_non_outdated": 0,
+        "current_non_outdated_unresolved": 0,
         "head_sha_must_match_attestation": true,
         "query": "graphql_review_threads",
         "page_size": 100,

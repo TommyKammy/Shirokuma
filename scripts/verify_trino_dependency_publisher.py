@@ -200,7 +200,7 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
     },
     "review_threads": {
         "required_before_attestation": True,
-        "current_non_outdated": 0,
+        "current_non_outdated_unresolved": 0,
         "head_sha_must_match_attestation": True,
         "query": "graphql_review_threads",
         "page_size": GITHUB_REVIEW_THREAD_PAGE_SIZE,
@@ -5595,13 +5595,13 @@ def _owner_review_thread_receipt(
         else:
             unresolved += 1
     current_non_outdated = resolved + unresolved
-    expected = exception["review_threads"]["current_non_outdated"]
-    if current_non_outdated != expected:
+    expected = exception["review_threads"]["current_non_outdated_unresolved"]
+    if unresolved != expected:
         _fail(
             "INDEPENDENT_REVIEW",
             (
-                "current non-outdated review-thread count differs: "
-                f"{current_non_outdated}"
+                "current non-outdated unresolved review-thread count differs: "
+                f"{unresolved}"
             ),
         )
     return {
