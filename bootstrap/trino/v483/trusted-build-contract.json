@@ -47,11 +47,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "33d211dc5bf513d582bdb2bac9b6bb308839c374a3367d76d6f44d5ea2f79513"
+      "sha256": "5d9274dbe3c0935826856d9b24e374f7a2cdc57c89c71bad096d3393f29e280c"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "e3065bf86054177731a2b79ff6d6a082f3e91a7a14fee9b8aab978e6909f11c9"
+      "sha256": "565941ff23064dd952dcb2bfb4f0ac8b03c7fa1e95f6c42707d5c31ce2780e16"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -1170,6 +1170,10 @@
       "final_authorization_revalidation": {
         "stable_passes": 2,
         "exact_snapshot_match_required": true,
+        "invocation_points": [
+          "before_registry_authentication",
+          "after_registry_authentication_immediately_before_write"
+        ],
         "resources": [
           "pull_request_binding",
           "final_head_ci",

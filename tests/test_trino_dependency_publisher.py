@@ -2893,7 +2893,7 @@ class PublisherContractTests(unittest.TestCase):
         self.assertEqual(2, workflow.count("verify-independent-review"))
         self.assertEqual(1, workflow.count("verify-independent-review --root ."))
         self.assertEqual(1, workflow.count("final_review_gate=("))
-        self.assertEqual(1, workflow.count('"${final_review_gate[@]}"'))
+        self.assertEqual(2, workflow.count('"${final_review_gate[@]}"'))
         self.assertEqual(2, workflow.count("GITHUB_TOKEN: ${{ github.token }}"))
         for path in (
             verify.FEASIBILITY_VERIFIER_PATH,
@@ -2905,17 +2905,20 @@ class PublisherContractTests(unittest.TestCase):
         attempt = publish.index("--validation-point before_dependency_publication")
         review = publish.index("verify-independent-review --root .")
         final_review = publish.index("final_review_gate=(")
-        final_review_run = publish.index('"${final_review_gate[@]}"')
+        first_final_review_run = publish.index('"${final_review_gate[@]}"')
+        last_final_review_run = publish.rindex('"${final_review_gate[@]}"')
         final_authorization = publish.rindex(
             "--validation-point before_dependency_publication"
         )
         auth = publish.index("oras login ghcr.io")
+        push = publish.index("oras push")
         self.assertLess(attempt, review)
         self.assertLess(review, final_review)
-        self.assertLess(final_review, final_review_run)
-        self.assertLess(final_review_run, final_authorization)
+        self.assertLess(final_review, first_final_review_run)
+        self.assertLess(first_final_review_run, final_authorization)
         self.assertLess(final_authorization, auth)
-        self.assertLess(review, auth)
+        self.assertLess(auth, last_final_review_run)
+        self.assertLess(last_final_review_run, push)
 
     def test_independent_review_requires_non_risk_owner_human_approval(
         self,

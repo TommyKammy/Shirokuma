@@ -236,6 +236,10 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
     "final_authorization_revalidation": {
         "stable_passes": 2,
         "exact_snapshot_match_required": True,
+        "invocation_points": [
+            "before_registry_authentication",
+            "after_registry_authentication_immediately_before_write",
+        ],
         "resources": [
             "pull_request_binding",
             "final_head_ci",
@@ -6375,7 +6379,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         or workflow.count("verify-independent-review") != 2
         or workflow.count("verify-independent-review --root .") != 1
         or workflow.count("final_review_gate=(") != 1
-        or workflow.count('"${final_review_gate[@]}"') != 1
+        or workflow.count('"${final_review_gate[@]}"') != 2
         or lines.count("      actions: read") != 1
         or lines.count("      issues: read") != 1
         or lines.count("      pull-requests: read") != 1

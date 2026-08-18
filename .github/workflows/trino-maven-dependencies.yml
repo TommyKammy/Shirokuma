@@ -1196,6 +1196,7 @@ jobs:
             --root . --validation-point before_dependency_publication
           echo "${GHCR_TOKEN}" \
             | oras login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+          "${final_review_gate[@]}"
           (
             cd "${candidate}"
             oras push \

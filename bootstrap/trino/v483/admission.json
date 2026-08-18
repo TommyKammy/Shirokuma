@@ -451,6 +451,10 @@
       "final_authorization_revalidation": {
         "stable_passes": 2,
         "exact_snapshot_match_required": true,
+        "invocation_points": [
+          "before_registry_authentication",
+          "after_registry_authentication_immediately_before_write"
+        ],
         "resources": [
           "pull_request_binding",
           "final_head_ci",
