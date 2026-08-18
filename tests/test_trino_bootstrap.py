@@ -4746,55 +4746,22 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             publication["owner_only_approval_exception"],
         )
         self.assertTrue((ROOT / publication["workflow"]).is_file())
-        return
         self.assertEqual(
             {
-                "pull_request": 148,
-                "pull_request_final_head": (
-                    "7581b2413c1c820ac1f774fe28034f1b7bfa6eb1"
-                ),
-                "merge_commit": "49a86522d6e6c69f4a552220b30fa510d3a5edd2",
-                "owner_attestation_comment_id": 5269416490,
-                "owner_attested_at": "2026-08-12T16:15:56Z",
                 "run_id": "31616764771",
                 "run_attempt": "1",
-                "event_name": "push",
-                "ref": "refs/heads/main",
-                "before_sha": "e6eb99d0e79b4a85aa7670ed75f07e4bc2d5b823",
                 "source_sha": "49a86522d6e6c69f4a552220b30fa510d3a5edd2",
-                "validate_job": "success",
-                "publish_job": "failure",
-                "failed_step": "Revalidate the write-capable publication boundary",
-                "failure_code": "INDEPENDENT_REVIEW",
-                "failure_reason": "workflow_run_pull_request_association_missing",
-                "final_head_ci_run_ids": {
-                    ".github/workflows/ci.yml": 31615663629,
-                    ".github/workflows/security.yml": 31615663622,
-                    (
-                        ".github/workflows/"
-                        "trino-maven-remediation-feasibility.yml"
-                    ): 31615663614,
-                    ".github/workflows/trino-maven-dependencies.yml": 31615663628,
-                },
-                "workflow_run_pull_requests_observed": [],
-                "candidate_artifact": {
-                    "id": 9150299769,
-                    "name": "trino-maven-candidate-31616764771-1",
-                    "bytes": 844111993,
-                    "expires_at": "2026-08-13T16:39:07Z",
-                    "expired": True,
-                },
-                "candidate_download_reached": False,
-                "registry_authentication_reached": False,
-                "registry_write_reached": False,
+                "result": "failed_closed_before_registry_authentication",
+                "reason": "workflow_run_pull_request_association_missing",
+                "candidate_artifact_id": 9150299769,
+                "candidate_artifact_expired": True,
                 "dependency_artifact_published": False,
-                "final_publication_artifact_present": False,
                 "consumed": True,
             },
-            reauthorization["outcome"],
+            reauthorization["previous_attempt"],
         )
         pending_repair = {
-            "status": "review_pending_not_authorized",
+            "status": "authorized_for_sequence_6",
             "scope": "final_head_pull_request_association_only",
             "triggering_run_id": "31616764771",
             "triggering_run_attempt": "1",
@@ -4821,9 +4788,9 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "empty_or_exact_single_target"
                 ),
             },
-            "publication_permissions_enabled": False,
-            "applies_only_after_separate_owner_authorization": True,
-            "next_sequence_authorized": False,
+            "publication_permissions_enabled": True,
+            "applies_only_after_separate_owner_authorization": False,
+            "next_sequence_authorized": True,
         }
         self.assertEqual(pending_repair, publication["pending_review_repair"])
         self.assertEqual(
@@ -4834,21 +4801,6 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             reauthorization,
             admission["dependency_snapshot_publication_reauthorization"],
         )
-        self.assertEqual(
-            {
-                "run_id": "31616764771",
-                "run_attempt": "1",
-                "source_sha": "49a86522d6e6c69f4a552220b30fa510d3a5edd2",
-                "result": "failed_closed_before_registry_authentication",
-                "rerun_permitted": False,
-            },
-            publication["owner_only_approval_exception"]["consumed_run"],
-        )
-        self.assertEqual(
-            "consumed_failed_closed",
-            publication["owner_only_approval_exception"]["status"],
-        )
-        self.assertTrue((ROOT / publication["workflow"]).is_file())
 
     def test_next_action_requires_exact_publication_evidence(
         self,

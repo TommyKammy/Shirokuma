@@ -4980,6 +4980,9 @@ def _select_independent_review(
         r"[0-9a-f]{40}", final_head
     ) is None:
         _fail("INDEPENDENT_REVIEW", "final pull request head is not exact")
+    exception = _active_owner_exception(contract)
+    if pull["number"] != exception["pull_request"]:
+        _fail("INDEPENDENT_REVIEW", "activation pull request differs")
     merged_at = pull.get("merged_at")
     if not isinstance(merged_at, str):
         _fail("INDEPENDENT_REVIEW", "merged pull request timestamp is missing")
@@ -5037,7 +5040,6 @@ def _select_independent_review(
 
     # This is the exact user-authorized policy alternative for PR #153's
     # sixth attempt, not a generic self-review fallback for another PR/run.
-    exception = _active_owner_exception(contract)
     if (
         exception["scope"] != "pr_153_sixth_publication_attempt_only"
         or exception["reason"] != "sole_owner_personal_experimental_project"

@@ -2924,7 +2924,7 @@ class PublisherContractTests(unittest.TestCase):
         final_head = "c" * 40
         pulls = [
             {
-                "number": 143,
+                "number": 153,
                 "state": "closed",
                 "merged_at": "2026-08-07T03:00:00Z",
                 "merge_commit_sha": commit,
@@ -2969,6 +2969,19 @@ class PublisherContractTests(unittest.TestCase):
                 contract,
                 pulls,
                 [owner_review],
+                commit=commit,
+            )
+
+        wrong_activation_pull = copy.deepcopy(pulls)
+        wrong_activation_pull[0]["number"] = 154
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "activation pull request differs",
+        ):
+            verify._select_independent_review(
+                contract,
+                wrong_activation_pull,
+                [independent_review],
                 commit=commit,
             )
 
@@ -5012,7 +5025,7 @@ class PublisherContractTests(unittest.TestCase):
         final_head = "c" * 40
         pulls = [
             self._owner_pull(
-                pull_request=143,
+                pull_request=153,
                 final_head=final_head,
                 merge_commit=commit,
             )
@@ -5075,18 +5088,18 @@ class PublisherContractTests(unittest.TestCase):
                 token="ephemeral-token",
             )
         receipt = json.loads(stdout.getvalue())
-        self.assertEqual(143, receipt["pull_request"])
+        self.assertEqual(153, receipt["pull_request"])
         self.assertEqual("IndependentHuman", receipt["reviewer"])
         self.assertEqual(final_head, receipt["reviewed_head"])
         self.assertEqual(4, request.call_count)
         requested_urls = [call.args[0].full_url for call in request.call_args_list]
         self.assertIn(f"/commits/{commit}/pulls?per_page=100", requested_urls[0])
         self.assertIn(
-            "/pulls/143/reviews?per_page=100&page=1",
+            "/pulls/153/reviews?per_page=100&page=1",
             requested_urls[2],
         )
         self.assertEqual(requested_urls[2], requested_urls[3])
-        self.assertNotIn("/issues/143/comments", "\n".join(requested_urls))
+        self.assertNotIn("/issues/153/comments", "\n".join(requested_urls))
         self.assertNotIn("/actions/runs", "\n".join(requested_urls))
         self.assertNotIn("api.github.com/graphql", "\n".join(requested_urls))
 
