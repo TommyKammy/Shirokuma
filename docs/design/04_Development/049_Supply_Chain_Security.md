@@ -1242,10 +1242,10 @@ submission timestamp, and reviewer login and type must match. A full tenth page
 yields 1,000 reviews without proving exhaustion and therefore fails closed; an
 unstable snapshot, a duplicate or malformed ID, or a missing or malformed page
 also fails closed.
-It is evaluated first and, when satisfied, completes approval without
-querying owner-exception comments, final-head CI, or review-thread APIs. The
-independent-review requirement remains the normal policy for every other pull
-request and any later attempt; the exception below is not a permanent
+It is evaluated as the standard approval mode, but sequence 6 still requires
+the exact OWNER final-head attestation, final-head CI, and review-thread gates.
+The independent-review requirement remains the normal policy for every other
+pull request and any later attempt; the exception below is not a permanent
 relaxation.
 
 Because Shirokuma is `TommyKammy`'s personal experimental project and no
@@ -1265,7 +1265,8 @@ server archives, leave each source checkout clean, and consume an unchanged
 snapshot repository. No `.gitignore`, cleanup, allowlist, network fallback, or
 writable repository exception is permitted.
 
-Issue #63 comment
+The following sequence-5 record is historical and is not an attestation
+template for sequence 6. Issue #63 comment
 [`5268936554`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5268936554)
 recorded the now-consumed sequence-5 owner authorization at
 `2026-08-12T15:32:31Z`. It permitted exactly one fifth reviewed-main attempt,
@@ -1317,7 +1318,7 @@ The remediation-feasibility pull-request workflow validates that blocked
 lifecycle and then skips every builder, source-fetch, network, and artifact
 step; `publication-status=blocked` cannot create fresh feasibility evidence.
 
-After the workflow gate, a complete GraphQL
+For active sequence 6, after the workflow gate, a complete GraphQL
 cursor query reads `reviewThreads` in pages of
 100 until
 `hasNextPage=false`, bounded to at most 10 pages and 1,000 threads. Every page
@@ -1333,21 +1334,23 @@ closed. The owner may then post this exact canonical top-level final-head
 attestation:
 
 ```text
-Owner final-head attestation for PR #148
+Owner final-head attestation for PR #153
 
 Decision: APPROVED
 Final head: <exact final 40-character PR head SHA>
-Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5268936554
+Review-thread snapshot SHA-256: <canonical 64-character lowercase SHA-256>
+Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5324238100
 ```
 
 It must be authored by login `TommyKammy`, GitHub type `User`, association
-`OWNER`, match the exact final head, reference exception comment `5268936554`,
-and exist before merge. Only exact `APPROVED` or `REVOKED` decisions are recognized. The
-matching owner decision with the latest `updated_at` governs; comment ID is not
-used for ordering, a later `REVOKED` denies approval, and a tie at the latest
-timestamp fails closed as ambiguous. Bot or non-owner marker comments cannot
-satisfy or deny an otherwise valid attestation; owner identity, association,
-PR, head, body, timing, CI, thread, or pagination drift fails closed.
+`OWNER`, match the exact final head and canonical review-thread snapshot,
+reference exception comment `5324238100`, and exist before merge. Only exact
+`APPROVED` or `REVOKED` decisions are recognized. The matching owner decision
+with the latest `updated_at` governs; comment ID is not used for ordering, a
+later `REVOKED` denies approval, and a tie at the latest timestamp fails closed
+as ambiguous. Bot or non-owner marker comments cannot satisfy or deny an
+otherwise valid attestation; owner identity, association, PR, head, body,
+timing, CI, thread, or pagination drift fails closed.
 
 For both approval modes, the publisher reads top-level comments through the
 REST issue-comments endpoint with `per_page=100`, follows every page to

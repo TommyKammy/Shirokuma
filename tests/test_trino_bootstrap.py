@@ -4801,6 +4801,28 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             reauthorization,
             admission["dependency_snapshot_publication_reauthorization"],
         )
+        context = json.loads(
+            (ROOT / "docs/design/context-manifest.json").read_text(encoding="utf-8")
+        )
+        self.assertIn(
+            {
+                "source": (
+                    "07_ADR/ADR-0030_Activate_exact_Trino_483_dependency_"
+                    "publication_sequence_6.md"
+                ),
+                "target": (
+                    "docs/design/07_ADR/ADR-0030_Activate_exact_Trino_483_"
+                    "dependency_publication_sequence_6.md"
+                ),
+            },
+            context["documents"],
+        )
+        security = (
+            ROOT / "docs/design/04_Development/049_Supply_Chain_Security.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Owner final-head attestation for PR #153", security)
+        self.assertIn("Review-thread snapshot SHA-256:", security)
+        self.assertIn("#issuecomment-5324238100", security)
 
     def test_next_action_requires_exact_publication_evidence(
         self,
