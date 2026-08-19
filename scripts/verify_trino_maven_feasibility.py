@@ -86,6 +86,7 @@ EXPECTED_WORKFLOW_TRIGGER_BLOCK = """on:
       - bootstrap/trino/v483/trusted-build-contract.json
       - docs/design/07_ADR/ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md
       - docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md
+      - docs/design/07_ADR/ADR-0030_Activate_exact_Trino_483_dependency_publication_sequence_6.md
       - docs/design/evidence/trino/run-30693677356-post-adr-0027-pom.xml.gz
       - docs/design/evidence/trino/run-30693677356-proposed-source-overlay.patch
       - docs/design/evidence/trino/run-30693677356-maven-vulnerability-classification.json
@@ -110,7 +111,7 @@ EXPECTED_WORKFLOW_STEPS = (
     "Retain the review-only feasibility inputs and outputs",
 )
 EXPECTED_WORKFLOW_SHA256 = (
-    "0c35c3298a1061c41d88cf7346b96de5da34e4ca61b7b58785b6e55b9f507315"
+    "cef1c35d22d7afa90814dbfefc069d995201ecf4d364d28d361a41f855dce11d"
 )
 EXPECTED_MAVEN_BASEDIR = "/policy"
 EXPECTED_POLICY_SOURCE = "bootstrap/trino/v483/maven-policy/.mvn"

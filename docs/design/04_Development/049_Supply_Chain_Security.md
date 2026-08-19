@@ -1349,7 +1349,7 @@ timestamp fails closed as ambiguous. Bot or non-owner marker comments cannot
 satisfy or deny an otherwise valid attestation; owner identity, association,
 PR, head, body, timing, CI, thread, or pagination drift fails closed.
 
-Only on this fallback path, the publisher reads top-level comments through the
+For both approval modes, the publisher reads top-level comments through the
 REST issue-comments endpoint with `per_page=100`, follows every page to
 exhaustion, and permits at most 10 pages with a 32 MiB response bound per page.
 Every comment ID must be a unique positive integer in strictly increasing order
@@ -1358,21 +1358,23 @@ type, association, and creation/update timestamps must match. The accepted
 maximum is 999 comments: a full tenth page yields 1,000 comments without
 proving exhaustion and therefore fails closed. A missing, malformed, reordered,
 duplicated, or unstable page also fails closed. A qualifying standard
-independent review short-circuits before this comment query, so owner-exception
-data is not fetched on the normal path. On the exception path, the same bounded
-two-pass comment query is repeated after the final workflow-run and review-
-thread API gates; the governing decision receipt must be identical, so an edit
-or later `REVOKED` cannot be missed before publication authorization returns.
+independent review remains an accepted approval mode, but does not replace the
+mandatory OWNER final-head attestation and its review-thread snapshot. The same
+bounded two-pass comment query is repeated after the final workflow-run and
+review-thread API gates; the governing OWNER decision receipt must be identical,
+so an edit or later `REVOKED` cannot be missed before publication authorization
+returns.
 
 The thread result proves the state of the exact attested head. Resolving a
 non-outdated thread after attestation does not make it acceptable. Making a
 thread outdated requires a new PR head, which invalidates the attestation and
 the old final-head CI evidence, so a post-attestation outdated transition
-cannot satisfy the gate; the new head must pass all exception gates and receive
-a new attestation. The publisher queries owner comments and these CI/thread
-inputs lazily only when no qualifying standard independent review exists.
+cannot satisfy the gate; the new head must pass all final-head gates and receive
+a new attestation. The publisher queries OWNER comments and CI/thread inputs for
+every approval mode, and additionally revalidates the independent approval when
+that mode is selected.
 
-On the owner-exception path, the main publisher repeats the exact merged PR,
+On both approval modes, the main publisher repeats the exact merged PR,
 attested-head CI, current-thread, and post-gate owner-decision queries at its
 write-capable boundary, immediately before registry authentication, and again
 after authentication immediately before `oras push`; the attestation is not a

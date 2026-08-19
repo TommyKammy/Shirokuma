@@ -14,6 +14,7 @@ on:
       - bootstrap/trino/v483/trusted-build-contract.json
       - docs/design/07_ADR/ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md
       - docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md
+      - docs/design/07_ADR/ADR-0030_Activate_exact_Trino_483_dependency_publication_sequence_6.md
       - docs/design/evidence/trino/run-30693677356-post-adr-0027-pom.xml.gz
       - docs/design/evidence/trino/run-30693677356-proposed-source-overlay.patch
       - docs/design/evidence/trino/run-30693677356-maven-vulnerability-classification.json
