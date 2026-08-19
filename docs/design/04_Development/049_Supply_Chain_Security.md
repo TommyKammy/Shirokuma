@@ -1309,7 +1309,11 @@ singleton selected PR only; any other non-empty binding, malformed entry, or
 two-pass drift fails closed. Run IDs remain unique positive integers,
 `total_count` must equal the bounded collected result, and qualifying runs for
 one path are selected deterministically by `updated_at`, then `created_at`,
-then run ID. A full tenth page does not prove exhaustion and fails closed.
+then run ID. Any required run created before the applicable attestation or merge
+cutoff but updated at or after that cutoff fails closed, so a post-cutoff rerun
+cannot fall back to an older success. A distinct run created at or after the
+cutoff does not replace the selected pre-cutoff evidence. A full tenth page does
+not prove exhaustion and fails closed.
 This verifier repair is review-only: lifecycle returns to
 `dependency_snapshot_publication_reauthorization_pending`, all three
 publication permission records are false, and no sixth attempt or downstream

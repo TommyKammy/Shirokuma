@@ -3562,6 +3562,25 @@ class PublisherContractTests(unittest.TestCase):
             set(exception["final_head_ci"]["workflow_paths"]),
             set(receipt["workflow_runs"]),
         )
+        altered_policy = copy.deepcopy(exception)
+        altered_policy["final_head_ci"][
+            "pre_cutoff_run_updated_at_or_after_cutoff_rejected"
+        ] = False
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "final-head workflow cutoff policy differs",
+        ):
+            verify._validate_owner_final_head_ci(
+                altered_policy,
+                payload,
+                association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
+                    "pull_request_binding"
+                ],
+                pull_request=153,
+                final_head=final_head,
+                head_ref=self.OWNER_HEAD_REF,
+                attested_at=attested_at,
+            )
         post_review_payload = copy.deepcopy(payload)
         for run in post_review_payload["workflow_runs"]:
             run["created_at"] = "2026-08-18T15:55:00Z"
@@ -3594,7 +3613,7 @@ class PublisherContractTests(unittest.TestCase):
         self.assertEqual(receipt["workflow_runs"], independent_receipt["workflow_runs"])
         with self.assertRaisesRegex(
             verify.ContractError,
-            "required final-head workflow is missing",
+            "pre-cutoff final-head workflow changed at or after cutoff",
         ):
             verify._validate_owner_final_head_ci(
                 exception,
@@ -3694,6 +3713,50 @@ class PublisherContractTests(unittest.TestCase):
                         head_ref=self.OWNER_HEAD_REF,
                         attested_at=attested_at,
                     )
+
+        rerun_after_attestation = copy.deepcopy(altered)
+        rerun_after_attestation["workflow_runs"][-1]["conclusion"] = "failure"
+        rerun_after_attestation["workflow_runs"][-1][
+            "updated_at"
+        ] = "2026-08-18T15:51:00Z"
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "pre-cutoff final-head workflow changed at or after cutoff",
+        ):
+            verify._validate_owner_final_head_ci(
+                exception,
+                rerun_after_attestation,
+                association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
+                    "pull_request_binding"
+                ],
+                pull_request=153,
+                final_head=final_head,
+                head_ref=self.OWNER_HEAD_REF,
+                attested_at=attested_at,
+            )
+
+        distinct_post_attestation_run = copy.deepcopy(altered)
+        post_attestation = copy.deepcopy(older)
+        post_attestation["id"] = 2002
+        post_attestation["created_at"] = "2026-08-18T15:51:00Z"
+        post_attestation["updated_at"] = "2026-08-18T15:55:00Z"
+        post_attestation["conclusion"] = "failure"
+        distinct_post_attestation_run["workflow_runs"].append(post_attestation)
+        distinct_post_attestation_run["total_count"] = len(
+            distinct_post_attestation_run["workflow_runs"]
+        )
+        receipt = verify._validate_owner_final_head_ci(
+            exception,
+            distinct_post_attestation_run,
+            association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
+                "pull_request_binding"
+            ],
+            pull_request=153,
+            final_head=final_head,
+            head_ref=self.OWNER_HEAD_REF,
+            attested_at=attested_at,
+        )
+        self.assertEqual(2001, receipt["workflow_runs"][older["path"]])
 
         reordered = copy.deepcopy(altered)
         reordered["workflow_runs"].reverse()

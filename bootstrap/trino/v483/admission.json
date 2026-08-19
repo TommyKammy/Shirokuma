@@ -487,6 +487,7 @@
       "maximum_page_bytes": 4194304,
       "stable_snapshot_passes": 2,
       "same_path_run_selection": "latest_qualifying_success_attestation_preceding_by_updated_created_id",
+      "pre_cutoff_run_updated_at_or_after_cutoff_rejected": true,
       "positive_unique_run_ids": true,
       "total_count_must_match": true,
       "pagination_must_be_complete": true

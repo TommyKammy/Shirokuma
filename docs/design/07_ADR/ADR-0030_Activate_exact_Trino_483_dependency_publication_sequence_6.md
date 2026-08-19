@@ -73,7 +73,10 @@ for both approval modes. The standard independent-review path remains valid,
 is evaluated first, and must remain current after the final API gates. The
 publisher must capture the exact pull binding, final-head CI, review-thread
 snapshot, OWNER attestation, and selected independent review twice and require
-the complete authorization snapshots to match before returning.
+the complete authorization snapshots to match before returning. A required
+workflow run created before the applicable cutoff but updated at or after it
+fails closed; a post-attestation rerun cannot authorize publication by falling
+back to an older successful run.
 
 The dependency package already exists publicly at the retained immutable
 sequence-4 digest `sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c`.

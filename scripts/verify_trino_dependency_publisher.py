@@ -197,6 +197,7 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
         "same_path_run_selection": (
             "latest_qualifying_success_attestation_preceding_by_updated_created_id"
         ),
+        "pre_cutoff_run_updated_at_or_after_cutoff_rejected": True,
         "positive_unique_run_ids": True,
         "total_count_must_match": True,
         "pagination_must_be_complete": True,
@@ -5304,6 +5305,8 @@ def _validate_owner_final_head_ci(
         "latest_qualifying_success_attestation_preceding_by_updated_created_id"
     ):
         _fail("INDEPENDENT_REVIEW", "final-head workflow selection policy differs")
+    if policy.get("pre_cutoff_run_updated_at_or_after_cutoff_rejected") is not True:
+        _fail("INDEPENDENT_REVIEW", "final-head workflow cutoff policy differs")
     runs = payload.get("workflow_runs")
     total_count = payload.get("total_count")
     if (
@@ -5380,6 +5383,11 @@ def _validate_owner_final_head_ci(
         if run_id in observed_required_run_ids:
             _fail("INDEPENDENT_REVIEW", "final-head workflow run ID is duplicated")
         observed_required_run_ids.add(run_id)
+        if created_instant < attested_at <= updated_instant:
+            _fail(
+                "INDEPENDENT_REVIEW",
+                f"pre-cutoff final-head workflow changed at or after cutoff: {path}",
+            )
         if updated_instant >= attested_at:
             continue
         candidates[path].append((updated_instant, created_instant, run_id, run))
@@ -5433,6 +5441,7 @@ def _github_workflow_run_pages(
         or policy.get("stable_snapshot_passes") != 2
         or policy.get("same_path_run_selection")
         != "latest_qualifying_success_attestation_preceding_by_updated_created_id"
+        or policy.get("pre_cutoff_run_updated_at_or_after_cutoff_rejected") is not True
         or policy.get("positive_unique_run_ids") is not True
         or policy.get("total_count_must_match") is not True
         or policy.get("pagination_must_be_complete") is not True
