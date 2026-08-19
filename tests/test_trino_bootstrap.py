@@ -4822,6 +4822,8 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("Owner final-head attestation for PR #153", security)
         self.assertIn("Review-thread snapshot SHA-256:", security)
+        self.assertIn("review-thread-snapshot", security)
+        self.assertIn("Resolved non-outdated threads", security)
         self.assertIn("#issuecomment-5324238100", security)
 
     def test_next_action_requires_exact_publication_evidence(

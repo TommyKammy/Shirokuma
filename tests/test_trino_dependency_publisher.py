@@ -4279,6 +4279,54 @@ class PublisherContractTests(unittest.TestCase):
                 final_head=final_head,
             )
 
+    def test_premerge_review_thread_snapshot_uses_exact_graphql_receipt(
+        self,
+    ) -> None:
+        expected = {
+            "total": 1,
+            "current_non_outdated": 1,
+            "current_unresolved": 0,
+            "resolved": 1,
+            "outdated": 0,
+            "snapshot_sha256": "a" * 64,
+        }
+        stdout = io.StringIO()
+        with (
+            mock.patch.object(
+                verify,
+                "_github_review_threads_pages",
+                return_value=expected,
+            ) as query,
+            contextlib.redirect_stdout(stdout),
+        ):
+            verify.print_review_thread_snapshot(
+                ROOT,
+                repository="TommyKammy/Shirokuma",
+                pull_request=153,
+                final_head="c" * 40,
+                token="ephemeral-token",
+            )
+        self.assertEqual(expected, json.loads(stdout.getvalue()))
+        query.assert_called_once_with(
+            verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION,
+            pull_request=153,
+            final_head="c" * 40,
+            token="ephemeral-token",
+        )
+        for repository, pull_request, final_head in (
+            ("Other/Repo", 153, "c" * 40),
+            ("TommyKammy/Shirokuma", 152, "c" * 40),
+            ("TommyKammy/Shirokuma", 153, "short"),
+        ):
+            with self.assertRaisesRegex(verify.ContractError, "INDEPENDENT_REVIEW"):
+                verify.print_review_thread_snapshot(
+                    ROOT,
+                    repository=repository,
+                    pull_request=pull_request,
+                    final_head=final_head,
+                    token="ephemeral-token",
+                )
+
     def test_owner_review_thread_graphql_response_fails_closed(self) -> None:
         exception = verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION
         cases = (

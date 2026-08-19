@@ -5872,6 +5872,32 @@ def _github_review_threads_pages(
     return _owner_review_thread_receipt(exception, second_nodes)
 
 
+def print_review_thread_snapshot(
+    root: Path,
+    *,
+    repository: str,
+    pull_request: int,
+    final_head: str,
+    token: str,
+) -> None:
+    if repository != "TommyKammy/Shirokuma":
+        _fail("INDEPENDENT_REVIEW", "repository identity differs")
+    if re.fullmatch(r"[0-9a-f]{40}", final_head) is None:
+        _fail("INDEPENDENT_REVIEW", "final pull request head is not exact")
+    contract = _load_json(root.resolve() / CONTRACT_PATH)
+    _validate_independent_review_contract(contract)
+    exception = _active_owner_exception(contract)
+    if pull_request != exception["pull_request"]:
+        _fail("INDEPENDENT_REVIEW", "activation pull request differs")
+    receipt = _github_review_threads_pages(
+        exception,
+        pull_request=pull_request,
+        final_head=final_head,
+        token=token,
+    )
+    print(json.dumps(receipt, sort_keys=True))
+
+
 def _owner_attestation_ci_cutoff(
     selection: Mapping[str, Any],
 ) -> dt.datetime:
@@ -7508,6 +7534,11 @@ def _parser() -> argparse.ArgumentParser:
     independent_review.add_argument("--root", type=Path, default=Path("."))
     independent_review.add_argument("--repository", required=True)
     independent_review.add_argument("--commit", required=True)
+    review_thread_snapshot = commands.add_parser("review-thread-snapshot")
+    review_thread_snapshot.add_argument("--root", type=Path, default=Path("."))
+    review_thread_snapshot.add_argument("--repository", required=True)
+    review_thread_snapshot.add_argument("--pull-request", type=int, required=True)
+    review_thread_snapshot.add_argument("--final-head", required=True)
     publication_status = commands.add_parser("publication-status")
     publication_status.add_argument("--root", type=Path, default=Path("."))
     source = commands.add_parser("audit-source")
@@ -7598,6 +7629,14 @@ def main() -> int:
                 args.root.resolve(),
                 repository=args.repository,
                 commit=args.commit,
+                token=os.environ.get("GITHUB_TOKEN", ""),
+            )
+        elif args.command == "review-thread-snapshot":
+            print_review_thread_snapshot(
+                args.root.resolve(),
+                repository=args.repository,
+                pull_request=args.pull_request,
+                final_head=args.final_head,
                 token=os.environ.get("GITHUB_TOKEN", ""),
             )
         elif args.command == "publication-status":

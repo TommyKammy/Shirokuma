@@ -1325,13 +1325,32 @@ cursor query reads `reviewThreads` in pages of
 must report the exact repository, pull-request number, and attested
 `headRefOid`; `totalCount` must remain stable and equal the number of collected
 unique thread IDs. Two complete ordered scans of thread ID, resolved state, and
-outdated state must match. All returned pages together must contain zero
-current non-outdated threads, including resolved threads. Only
-already-outdated threads are permitted. A malformed page, missing or repeated
-cursor, cursor cycle, identity or count drift, duplicate thread ID, unstable
-snapshot, or failure to prove exhaustion before reaching either bound fails
-closed. The owner may then post this exact canonical top-level final-head
-attestation:
+outdated state must match. All returned pages together must contain zero current
+non-outdated unresolved threads. Resolved non-outdated threads and already-
+outdated threads are permitted and remain bound into the snapshot. A malformed
+page, missing or repeated cursor, cursor cycle, identity or count drift,
+duplicate thread ID, unstable snapshot, or failure to prove exhaustion before
+reaching either bound fails closed.
+
+Before merge, the OWNER obtains the byte-exact canonical snapshot receipt from
+the repository verifier. The command performs the same bounded two-pass GraphQL
+query used by publication, verifies PR #153 and its exact head, rejects any
+current unresolved thread, sorts by thread ID, serializes the `id`,
+`isOutdated`, and `isResolved` fields as compact key-sorted UTF-8 JSON, and
+prints its lowercase SHA-256 as `snapshot_sha256`:
+
+```bash
+final_head="$(gh pr view 153 --json headRefOid --jq .headRefOid)"
+GITHUB_TOKEN="$(gh auth token)" \
+  python3 scripts/verify_trino_dependency_publisher.py review-thread-snapshot \
+    --root . \
+    --repository TommyKammy/Shirokuma \
+    --pull-request 153 \
+    --final-head "${final_head}"
+```
+
+The owner copies that receipt's `snapshot_sha256` into this exact canonical
+top-level final-head attestation:
 
 ```text
 Owner final-head attestation for PR #153
