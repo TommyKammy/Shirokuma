@@ -1242,10 +1242,10 @@ submission timestamp, and reviewer login and type must match. A full tenth page
 yields 1,000 reviews without proving exhaustion and therefore fails closed; an
 unstable snapshot, a duplicate or malformed ID, or a missing or malformed page
 also fails closed.
-It is evaluated first and, when satisfied, completes approval without
-querying owner-exception comments, final-head CI, or review-thread APIs. The
-independent-review requirement remains the normal policy for every other pull
-request and any later attempt; the exception below is not a permanent
+It is evaluated as the standard approval mode, but sequence 6 still requires
+the exact OWNER final-head attestation, final-head CI, and review-thread gates.
+The independent-review requirement remains the normal policy for every other
+pull request and any later attempt; the exception below is not a permanent
 relaxation.
 
 Because Shirokuma is `TommyKammy`'s personal experimental project and no
@@ -1265,7 +1265,8 @@ server archives, leave each source checkout clean, and consume an unchanged
 snapshot repository. No `.gitignore`, cleanup, allowlist, network fallback, or
 writable repository exception is permitted.
 
-Issue #63 comment
+The following sequence-5 record is historical and is not an attestation
+template for sequence 6. Issue #63 comment
 [`5268936554`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5268936554)
 recorded the now-consumed sequence-5 owner authorization at
 `2026-08-12T15:32:31Z`. It permitted exactly one fifth reviewed-main attempt,
@@ -1308,7 +1309,11 @@ singleton selected PR only; any other non-empty binding, malformed entry, or
 two-pass drift fails closed. Run IDs remain unique positive integers,
 `total_count` must equal the bounded collected result, and qualifying runs for
 one path are selected deterministically by `updated_at`, then `created_at`,
-then run ID. A full tenth page does not prove exhaustion and fails closed.
+then run ID. Any required run created before the applicable attestation or merge
+cutoff but updated at or after that cutoff fails closed, so a post-cutoff rerun
+cannot fall back to an older success. A distinct run created at or after the
+cutoff does not replace the selected pre-cutoff evidence. A full tenth page does
+not prove exhaustion and fails closed.
 This verifier repair is review-only: lifecycle returns to
 `dependency_snapshot_publication_reauthorization_pending`, all three
 publication permission records are false, and no sixth attempt or downstream
@@ -1317,39 +1322,60 @@ The remediation-feasibility pull-request workflow validates that blocked
 lifecycle and then skips every builder, source-fetch, network, and artifact
 step; `publication-status=blocked` cannot create fresh feasibility evidence.
 
-After the workflow gate, a complete GraphQL
+For active sequence 6, after the workflow gate, a complete GraphQL
 cursor query reads `reviewThreads` in pages of
 100 until
 `hasNextPage=false`, bounded to at most 10 pages and 1,000 threads. Every page
 must report the exact repository, pull-request number, and attested
 `headRefOid`; `totalCount` must remain stable and equal the number of collected
 unique thread IDs. Two complete ordered scans of thread ID, resolved state, and
-outdated state must match. All returned pages together must contain zero
-current non-outdated threads, including resolved threads. Only
-already-outdated threads are permitted. A malformed page, missing or repeated
-cursor, cursor cycle, identity or count drift, duplicate thread ID, unstable
-snapshot, or failure to prove exhaustion before reaching either bound fails
-closed. The owner may then post this exact canonical top-level final-head
-attestation:
+outdated state must match. All returned pages together must contain zero current
+non-outdated unresolved threads. Resolved non-outdated threads and already-
+outdated threads are permitted and remain bound into the snapshot. A malformed
+page, missing or repeated cursor, cursor cycle, identity or count drift,
+duplicate thread ID, unstable snapshot, or failure to prove exhaustion before
+reaching either bound fails closed.
+
+Before merge, the OWNER obtains the byte-exact canonical snapshot receipt from
+the repository verifier. The command performs the same bounded two-pass GraphQL
+query used by publication, verifies PR #153 and its exact head, rejects any
+current unresolved thread, sorts by thread ID, serializes the `id`,
+`isOutdated`, and `isResolved` fields as compact key-sorted UTF-8 JSON, and
+prints its lowercase SHA-256 as `snapshot_sha256`:
+
+```bash
+final_head="$(gh pr view 153 --json headRefOid --jq .headRefOid)"
+GITHUB_TOKEN="$(gh auth token)" \
+  python3 scripts/verify_trino_dependency_publisher.py review-thread-snapshot \
+    --root . \
+    --repository TommyKammy/Shirokuma \
+    --pull-request 153 \
+    --final-head "${final_head}"
+```
+
+The owner copies that receipt's `snapshot_sha256` into this exact canonical
+top-level final-head attestation:
 
 ```text
-Owner final-head attestation for PR #148
+Owner final-head attestation for PR #153
 
 Decision: APPROVED
 Final head: <exact final 40-character PR head SHA>
-Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5268936554
+Review-thread snapshot SHA-256: <canonical 64-character lowercase SHA-256>
+Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5324238100
 ```
 
 It must be authored by login `TommyKammy`, GitHub type `User`, association
-`OWNER`, match the exact final head, reference exception comment `5268936554`,
-and exist before merge. Only exact `APPROVED` or `REVOKED` decisions are recognized. The
-matching owner decision with the latest `updated_at` governs; comment ID is not
-used for ordering, a later `REVOKED` denies approval, and a tie at the latest
-timestamp fails closed as ambiguous. Bot or non-owner marker comments cannot
-satisfy or deny an otherwise valid attestation; owner identity, association,
-PR, head, body, timing, CI, thread, or pagination drift fails closed.
+`OWNER`, match the exact final head and canonical review-thread snapshot,
+reference exception comment `5324238100`, and exist before merge. Only exact
+`APPROVED` or `REVOKED` decisions are recognized. The matching owner decision
+with the latest `updated_at` governs; comment ID is not used for ordering, a
+later `REVOKED` denies approval, and a tie at the latest timestamp fails closed
+as ambiguous. Bot or non-owner marker comments cannot satisfy or deny an
+otherwise valid attestation; owner identity, association, PR, head, body,
+timing, CI, thread, or pagination drift fails closed.
 
-Only on this fallback path, the publisher reads top-level comments through the
+For both approval modes, the publisher reads top-level comments through the
 REST issue-comments endpoint with `per_page=100`, follows every page to
 exhaustion, and permits at most 10 pages with a 32 MiB response bound per page.
 Every comment ID must be a unique positive integer in strictly increasing order
@@ -1358,24 +1384,27 @@ type, association, and creation/update timestamps must match. The accepted
 maximum is 999 comments: a full tenth page yields 1,000 comments without
 proving exhaustion and therefore fails closed. A missing, malformed, reordered,
 duplicated, or unstable page also fails closed. A qualifying standard
-independent review short-circuits before this comment query, so owner-exception
-data is not fetched on the normal path. On the exception path, the same bounded
-two-pass comment query is repeated after the final workflow-run and review-
-thread API gates; the governing decision receipt must be identical, so an edit
-or later `REVOKED` cannot be missed before publication authorization returns.
+independent review remains an accepted approval mode, but does not replace the
+mandatory OWNER final-head attestation and its review-thread snapshot. The same
+bounded two-pass comment query is repeated after the final workflow-run and
+review-thread API gates; the governing OWNER decision receipt must be identical,
+so an edit or later `REVOKED` cannot be missed before publication authorization
+returns.
 
 The thread result proves the state of the exact attested head. Resolving a
 non-outdated thread after attestation does not make it acceptable. Making a
 thread outdated requires a new PR head, which invalidates the attestation and
 the old final-head CI evidence, so a post-attestation outdated transition
-cannot satisfy the gate; the new head must pass all exception gates and receive
-a new attestation. The publisher queries owner comments and these CI/thread
-inputs lazily only when no qualifying standard independent review exists.
+cannot satisfy the gate; the new head must pass all final-head gates and receive
+a new attestation. The publisher queries OWNER comments and CI/thread inputs for
+every approval mode, and additionally revalidates the independent approval when
+that mode is selected.
 
-On the owner-exception path, the main publisher repeats the exact merged PR,
+On both approval modes, the main publisher repeats the exact merged PR,
 attested-head CI, current-thread, and post-gate owner-decision queries at its
-write-capable boundary and again immediately before registry authentication;
-the attestation is not a substitute for those checks. Failure, rerun, a
+write-capable boundary, immediately before registry authentication, and again
+after authentication immediately before `oras push`; the attestation is not a
+substitute for those checks. Failure, rerun, a
 different main predecessor, or
 candidate drift consumes or rejects the attempt and returns publication to
 fail-closed reauthorization pending. The exception's downstream-authority set
@@ -1385,8 +1414,11 @@ Issue #63 closure is authorized.
 
 After the final review, CI, and thread API gates return, the publisher repeats
 the current-time authorization and exact one-attempt binding immediately before
-registry authentication. Expiry during those API calls therefore fails closed
-before `oras login` or any registry write.
+registry authentication. It then repeats the complete two-pass authorization
+snapshot after login, followed by the time-based authorization and exact
+one-attempt binding immediately before `oras push`. Expiry or a changed decision,
+thread, pull binding, required CI state, or attempt identity during either
+interval therefore fails closed before any registry write.
 
 PR #146 was subsequently squash-merged as
 `b1e58117cff9f9f1441176617dbdb2e4e0e8685f`. Its reviewed-main publisher run
@@ -1437,12 +1469,14 @@ artifact `trino-maven-candidate-31616764771-1` (ID `9150299769`, 844,111,993
 bytes, expired `2026-08-13T16:39:07Z`) was never downloaded by the publish job
 and is not admitted evidence. Registry authentication, OCI write, signing,
 attestation, anonymous pull, and final publication artifact were not reached.
-Attempt 5 is consumed, rerun and sequence 6 are unauthorized, and the lifecycle
-is `dependency_snapshot_publication_reauthorization_pending`. The empty
+Attempt 5 is consumed and cannot be rerun. At that checkpoint, sequence 6 was
+unauthorized and the lifecycle was
+`dependency_snapshot_publication_reauthorization_pending`. The empty
 downstream-authority set still grants no dependency-evidence admission, image
 publication, resident admission, Flux/runtime reconciliation, credentials,
 public exposure, production use, or Issue #63 closure. A Draft review-only
-workflow-run association repair is pending; it cannot activate publication.
+workflow-run association repair was then required before any fresh owner
+authorization; it could not activate publication by itself.
 
 ## Resident image and SBOM evidence
 
@@ -1596,10 +1630,42 @@ Detached validation against exact Trino commit
 for `package.json` and
 `7d61c5d3868b5a600ff8a21206168c114848dd7d65b882dc6f5bdaf4c792c8f3`
 for `bun.lock`. Bun 1.3.14 frozen install, modern typecheck/Vite build, legacy
-webpack build, and fresh Trivy 0.72.0 High/Critical scans passed. This is a
-review-pending Draft candidate only: merge, sequence 6, publication, expiry
-renewal, dependency admission, image/runtime work, and Issue #63 closure remain
-unauthorized.
+webpack build, and fresh Trivy 0.72.0 High/Critical scans passed. PR #152 final
+head `cce85c1424691b5157f0881e249a984224eb6875` was merged as
+`fdec9cdb170ed63d18735ef9f6d0abacc8e475ab`. That merge established the exact
+candidate but did not activate publication.
+
+## Trino 483 dependency publication sequence 6 (2026-08-18)
+
+ADR-0030 and Issue #63 OWNER comment `5324238100` activate exactly one focused
+PR #153 from predecessor `fdec9cdb170ed63d18735ef9f6d0abacc8e475ab`, followed
+by exactly one reviewed-main sequence-6 publisher run with
+`github.run_attempt=1`. The authorization expires at
+`2026-09-17T02:15:58Z` and does not renew automatically.
+
+PR #149's merge-commit, final-head, and head-filtered association lookup is
+authorized prospectively for sequence 6 only. It does not retroactively
+authorize the consumed sequence-5 run. Before PR #153 merges, every required
+workflow must pass on its exact final head, current non-outdated unresolved
+review threads must equal zero, and the exact OWNER final-head attestation must
+bind the canonical review-thread snapshot SHA-256 before merge. That OWNER
+attestation remains mandatory when the standard independent-review path
+qualifies; the independent approval is also revalidated after the final API
+gates. The exact pull binding, final-head CI, review-thread snapshot, OWNER
+attestation, and selected independent review are captured twice as one
+authorization snapshot and must match before publication authorization
+returns. The same composite authorization is repeated after registry
+authentication, then current-time authorization and the exact attempt binding
+are repeated immediately before `oras push`. Before registry authentication,
+the workflow also anonymously fetches
+the retained public sequence-4 manifest at digest
+`sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c`;
+no post-write visibility change or rerun is allowed.
+
+Any sequence-6 failure consumes the authorization. Rerun, a second attempt,
+sequence 7, dependency admission, image publication, resident admission,
+Flux/runtime reconciliation, credentials, public exposure, production use,
+Issues #64-#66, and Issue #63 closure remain unauthorized.
 
 ## Scanner or feed failure rollback
 

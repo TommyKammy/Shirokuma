@@ -95,7 +95,11 @@ PARQUET_SOURCE_REMEDIATION = {
         "https://github.com/TommyKammy/Shirokuma/issues/63"
         "#issuecomment-5105612399"
     ),
-    "expires_at": "2026-08-21T22:43:36Z",
+    "sequence_6_approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5324238100"
+    ),
+    "expires_at": "2026-09-17T02:15:58Z",
     "automatic_renewal": False,
 }
 SCM_METADATA_REMEDIATION = {
@@ -148,7 +152,11 @@ SCM_METADATA_REMEDIATION = {
         "https://github.com/TommyKammy/Shirokuma/issues/63"
         "#issuecomment-5210182460"
     ),
-    "expires_at": "2026-08-21T22:43:36Z",
+    "sequence_6_approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5324238100"
+    ),
+    "expires_at": "2026-09-17T02:15:58Z",
     "automatic_renewal": False,
 }
 EXTERNAL_INPUTS = [

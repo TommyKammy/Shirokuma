@@ -16,6 +16,7 @@ on:
       - docs/design/07_ADR/ADR-0027_Authorize_bounded_Trino_483_Iceberg_only_Maven_closure.md
       - docs/design/07_ADR/ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md
       - docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md
+      - docs/design/07_ADR/ADR-0030_Activate_exact_Trino_483_dependency_publication_sequence_6.md
       - docs/design/evidence/trino/run-31072144404-maven-feasibility-artifact-receipt.json
       - docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json
       - scripts/package_trino_bun_dependencies.py
@@ -46,6 +47,7 @@ on:
       - docs/design/07_ADR/ADR-0027_Authorize_bounded_Trino_483_Iceberg_only_Maven_closure.md
       - docs/design/07_ADR/ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md
       - docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md
+      - docs/design/07_ADR/ADR-0030_Activate_exact_Trino_483_dependency_publication_sequence_6.md
       - docs/design/evidence/trino/run-31072144404-maven-feasibility-artifact-receipt.json
       - docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json
       - scripts/package_trino_bun_dependencies.py
@@ -1114,6 +1116,18 @@ jobs:
           test "$("${install_dir}/oras" version | awk '/Version:/ {print $2}')" \
             = "${ORAS_VERSION}"
 
+      - name: Prove pre-existing public package visibility
+        env:
+          PUBLIC_REFERENCE: ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c
+        shell: bash
+        run: |
+          set -euo pipefail
+          anonymous_config="${RUNNER_TEMP}/anonymous-trino-preflight.json"
+          printf '{}\n' > "${anonymous_config}"
+          oras manifest fetch \
+            --registry-config "${anonymous_config}" \
+            "${PUBLIC_REFERENCE}" > /dev/null
+
       - name: Validate the candidate before registry authentication
         shell: bash
         run: |
@@ -1182,6 +1196,10 @@ jobs:
             --root . --validation-point before_dependency_publication
           echo "${GHCR_TOKEN}" \
             | oras login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+          "${final_review_gate[@]}"
+          python3 scripts/verify_trino_dependency_publisher.py authorize --root .
+          python3 scripts/verify_trino_dependency_publisher.py authorize-use \
+            --root . --validation-point before_dependency_publication
           (
             cd "${candidate}"
             oras push \
@@ -1265,7 +1283,7 @@ jobs:
                       "sourceIdentityRisk": (
                           "provisionally-authorized-not-authenticated"
                       ),
-                      "authorizationExpiresAt": "2026-08-21T22:43:36Z",
+                      "authorizationExpiresAt": "2026-09-17T02:15:58Z",
                   },
                   "resolvedDependencies": [
                       {
@@ -1677,7 +1695,7 @@ jobs:
               "workflow_sha": os.environ["GITHUB_WORKFLOW_SHA"],
               "run_id": os.environ["GITHUB_RUN_ID"],
               "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
-              "authorization_expires_at": "2026-08-21T22:43:36Z",
+              "authorization_expires_at": "2026-09-17T02:15:58Z",
               "source_identity": "provisionally-authorized-not-authenticated",
               "dependency_artifact_admitted": False,
               "image_publication_permitted": False,

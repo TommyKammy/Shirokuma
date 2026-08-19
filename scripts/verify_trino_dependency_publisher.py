@@ -72,15 +72,15 @@ EXPECTED_AUTHORIZATION = {
     "type": "time_boxed_source_identity_risk_acceptance",
     "decision_record": (
         "docs/design/07_ADR/"
-        "ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md"
+        "ADR-0030_Activate_exact_Trino_483_dependency_publication_sequence_6.md"
     ),
     "approval_record": (
         "https://github.com/TommyKammy/Shirokuma/"
-        "issues/63#issuecomment-5052385803"
+        "issues/63#issuecomment-5324238100"
     ),
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
-    "approved_at": "2026-07-22T22:43:36Z",
-    "expires_at": "2026-08-21T22:43:36Z",
+    "approved_at": "2026-08-18T05:58:59Z",
+    "expires_at": "2026-09-17T02:15:58Z",
     "maximum_duration_days": 30,
     "automatic_renewal": False,
     "risk_owner": "TommyKammy",
@@ -122,7 +122,7 @@ EXPECTED_AUTHORIZATION = {
 EXPECTED_PUBLICATION_ATTEMPT = {
     "event_name": "push",
     "ref": "refs/heads/main",
-    "before_sha": "e6eb99d0e79b4a85aa7670ed75f07e4bc2d5b823",
+    "before_sha": "fdec9cdb170ed63d18735ef9f6d0abacc8e475ab",
     "run_attempt": "1",
 }
 EXPECTED_INDEPENDENT_REVIEW = {
@@ -134,6 +134,8 @@ EXPECTED_INDEPENDENT_REVIEW = {
     "reviewer_must_differ_from_implementation_author": True,
     "approval_must_match_final_head_sha": True,
     "approval_must_be_submitted_before_merge": True,
+    "revalidate_after_final_api_gates": True,
+    "revalidated_decision_must_match": True,
     "reviews": {
         "api": "rest_pull_request_reviews",
         "page_size": GITHUB_PULL_REVIEW_PAGE_SIZE,
@@ -145,40 +147,34 @@ EXPECTED_INDEPENDENT_REVIEW = {
         "pagination_must_be_complete": True,
     },
     "publication_enforcement": (
-        "exact_merged_pull_request_review_or_owner_attestation_query"
+        "exact_merged_pull_request_review_or_owner_attestation_query_and_revalidation"
     ),
 }
 EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
-    "status": "consumed_failed_closed",
-    "scope": "pr_148_fifth_publication_attempt_only",
+    "status": "active",
+    "scope": "pr_153_sixth_publication_attempt_only",
     "reason": "sole_owner_personal_experimental_project",
     "approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5268936554"
+        "#issuecomment-5324238100"
     ),
-    "approved_at": "2026-08-12T15:32:31Z",
+    "approved_at": "2026-08-18T05:58:59Z",
     "repository": "TommyKammy/Shirokuma",
-    "pull_request": 148,
+    "pull_request": 153,
     "owner": "TommyKammy",
     "human_user_type": "User",
     "author_association": "OWNER",
     "attestation_required_before_merge": True,
     "attestation_must_match_final_head_sha": True,
     "attestation_body_template": (
-        "Owner final-head attestation for PR #148\n\n"
+        "Owner final-head attestation for PR #153\n\n"
         "Decision: {decision}\n"
         "Final head: {final_head}\n"
+        "Review-thread snapshot SHA-256: {review_thread_snapshot_sha256}\n"
         "Exception: https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5268936554"
+        "#issuecomment-5324238100"
     ),
     "allowed_decisions": ["APPROVED", "REVOKED"],
-    "consumed_run": {
-        "run_id": "31616764771",
-        "run_attempt": "1",
-        "source_sha": "49a86522d6e6c69f4a552220b30fa510d3a5edd2",
-        "result": "failed_closed_before_registry_authentication",
-        "rerun_permitted": False,
-    },
     "final_head_ci": {
         "required_before_attestation": True,
         "workflow_paths": [
@@ -201,13 +197,19 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
         "same_path_run_selection": (
             "latest_qualifying_success_attestation_preceding_by_updated_created_id"
         ),
+        "pre_cutoff_run_updated_at_or_after_cutoff_rejected": True,
         "positive_unique_run_ids": True,
         "total_count_must_match": True,
         "pagination_must_be_complete": True,
     },
     "review_threads": {
         "required_before_attestation": True,
-        "current_non_outdated": 0,
+        "current_non_outdated_unresolved": 0,
+        "pre_merge_snapshot_attestation_required": True,
+        "snapshot_hash_algorithm": "sha256",
+        "snapshot_canonicalization": "sorted_thread_id_is_resolved_is_outdated_json",
+        "snapshot_must_match_at_publication": True,
+        "revalidate_after_decision_gates": True,
         "head_sha_must_match_attestation": True,
         "query": "graphql_review_threads",
         "page_size": GITHUB_REVIEW_THREAD_PAGE_SIZE,
@@ -219,7 +221,8 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
         "pagination_must_be_complete": True,
     },
     "owner_issue_comments": {
-        "query_only_if_standard_independent_review_absent": True,
+        "query_only_if_standard_independent_review_absent": False,
+        "review_thread_snapshot_required_for_all_approval_modes": True,
         "api": "rest_issue_comments",
         "page_size": 100,
         "maximum_pages": 10,
@@ -231,8 +234,28 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
         "strictly_increasing_unique_ids": True,
         "pagination_must_be_complete": True,
     },
+    "final_authorization_revalidation": {
+        "stable_passes": 2,
+        "exact_snapshot_match_required": True,
+        "invocation_points": [
+            "before_registry_authentication",
+            "after_registry_authentication_immediately_before_write",
+        ],
+        "post_composite_checks": [
+            "time_boxed_authorizations",
+            "exact_publication_attempt",
+        ],
+        "resources": [
+            "pull_request_binding",
+            "final_head_ci",
+            "review_threads",
+            "owner_attestation",
+            "independent_review_if_selected",
+        ],
+    },
     "publication_enforcement": (
-        "exact_merged_pull_request_attested_head_ci_and_review_threads_query"
+        "exact_merged_pull_request_pre_merge_review_thread_snapshot_and_"
+        "two_pass_composite_final_authorization"
     ),
     "failure_consumes_attempt": True,
     "rerun_permitted": False,
@@ -240,7 +263,7 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
     "standard_independent_review_remains_accepted": True,
 }
 EXPECTED_PENDING_REVIEW_REPAIR = {
-    "status": "review_pending_not_authorized",
+    "status": "authorized_for_sequence_6",
     "scope": "final_head_pull_request_association_only",
     "triggering_run_id": "31616764771",
     "triggering_run_attempt": "1",
@@ -265,110 +288,59 @@ EXPECTED_PENDING_REVIEW_REPAIR = {
         "workflow_query_branch_must_match_head_ref": True,
         "workflow_run_pull_requests_policy": "empty_or_exact_single_target",
     },
-    "publication_permissions_enabled": False,
-    "applies_only_after_separate_owner_authorization": True,
-    "next_sequence_authorized": False,
+    "publication_permissions_enabled": True,
+    "applies_only_after_separate_owner_authorization": False,
+    "next_sequence_authorized": True,
 }
 EXPECTED_PUBLICATION_REAUTHORIZATION = {
-    "sequence": 5,
-    "status": "consumed_failed_closed",
+    "sequence": 6,
+    "status": "active",
     "approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5268936554"
+        "#issuecomment-5324238100"
     ),
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
-    "approved_at": "2026-08-12T15:32:31Z",
-    "expires_at": "2026-08-21T22:43:36Z",
+    "approved_at": "2026-08-18T05:58:59Z",
+    "expires_at": "2026-09-17T02:15:58Z",
     "automatic_renewal": False,
     "risk_owner": "TommyKammy",
     "same_candidate_required": True,
-    "publication_authorized_after_required_approval": False,
-    "next_sequence_authorized": False,
+    "publication_authorized_after_required_approval": True,
+    "next_sequence_authorized": True,
     "previous_attempt": {
-        "run_id": "31605249586",
-        "run_attempt": "1",
-        "source_sha": "e6eb99d0e79b4a85aa7670ed75f07e4bc2d5b823",
-        "result": "failed_closed_before_publication",
-        "reason": "react_router_fixed_version_metadata_drift",
-        "raw_high_findings": 1,
-        "adjusted_high_findings": 0,
-        "adjusted_critical_findings": 0,
-        "retained_artifact_count": 1,
-        "retained_diagnostic_artifact": (
-            "trino-bun-vulnerability-diagnostics-31605249586-1"
-        ),
-        "dependency_artifact_published": False,
-        "consumed": True,
-    },
-    "repair": {
-        "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/148",
-        "predecessor_main_commit": (
-            "e6eb99d0e79b4a85aa7670ed75f07e4bc2d5b823"
-        ),
-        "web_ui_overlay_paths": [
-            "core/trino-web-ui/src/main/resources/webapp/package.json",
-            "core/trino-web-ui/src/main/resources/webapp/bun.lock",
-            "core/trino-web-ui/src/main/resources/webapp-legacy/src/package.json",
-            "core/trino-web-ui/src/main/resources/webapp-legacy/src/bun.lock",
-        ],
-        "react_router_openvex_only": True,
-        "raw_finding_fixed_version": "7.18.2, 8.3.0",
-        "other_raw_finding_identity_fields_unchanged": True,
-        "react_router_upgrade_admitted": False,
-        "adjusted_scan_report_exit_code": 0,
-        "explicit_scan_verifier_required": True,
-        "diagnostic_artifact_on_scan_gate_failure": True,
-        "diagnostic_artifact_publication_input_permitted": False,
-        "offline_repository_root": (
-            "${RUNNER_TEMP}/trino-offline-maven-repository-${suffix}"
-        ),
-        "container_mount": "/m2:ro",
-        "maven_repo_local": "/m2",
-        "maven_lock_directory": "/tmp/maven-locks",
-        "maven_goal": "clean package",
-        "untracked_source_rejection_retained": True,
-    },
-    "outcome": {
-        "pull_request": 148,
-        "pull_request_final_head": (
-            "7581b2413c1c820ac1f774fe28034f1b7bfa6eb1"
-        ),
-        "merge_commit": "49a86522d6e6c69f4a552220b30fa510d3a5edd2",
-        "owner_attestation_comment_id": 5269416490,
-        "owner_attested_at": "2026-08-12T16:15:56Z",
         "run_id": "31616764771",
         "run_attempt": "1",
-        "event_name": "push",
-        "ref": "refs/heads/main",
-        "before_sha": "e6eb99d0e79b4a85aa7670ed75f07e4bc2d5b823",
         "source_sha": "49a86522d6e6c69f4a552220b30fa510d3a5edd2",
-        "validate_job": "success",
-        "publish_job": "failure",
-        "failed_step": "Revalidate the write-capable publication boundary",
-        "failure_code": "INDEPENDENT_REVIEW",
-        "failure_reason": "workflow_run_pull_request_association_missing",
-        "final_head_ci_run_ids": {
-            ".github/workflows/ci.yml": 31615663629,
-            ".github/workflows/security.yml": 31615663622,
-            ".github/workflows/trino-maven-remediation-feasibility.yml": (
-                31615663614
-            ),
-            ".github/workflows/trino-maven-dependencies.yml": 31615663628,
-        },
-        "workflow_run_pull_requests_observed": [],
-        "candidate_artifact": {
-            "id": 9150299769,
-            "name": "trino-maven-candidate-31616764771-1",
-            "bytes": 844111993,
-            "expires_at": "2026-08-13T16:39:07Z",
-            "expired": True,
-        },
-        "candidate_download_reached": False,
-        "registry_authentication_reached": False,
-        "registry_write_reached": False,
+        "result": "failed_closed_before_registry_authentication",
+        "reason": "workflow_run_pull_request_association_missing",
+        "candidate_artifact_id": 9150299769,
+        "candidate_artifact_expired": True,
         "dependency_artifact_published": False,
-        "final_publication_artifact_present": False,
         "consumed": True,
+    },
+    "activation": {
+        "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/153",
+        "predecessor_main_commit": (
+            "fdec9cdb170ed63d18735ef9f6d0abacc8e475ab"
+        ),
+        "candidate_pull_request": 152,
+        "candidate_final_head": (
+            "cce85c1424691b5157f0881e249a984224eb6875"
+        ),
+        "candidate_merge_commit": (
+            "fdec9cdb170ed63d18735ef9f6d0abacc8e475ab"
+        ),
+        "association_repair_pull_request": 149,
+        "association_repair_final_head": (
+            "61ffe56387f95c7fee055feeeedebea90a986725"
+        ),
+        "association_repair_merge_commit": (
+            "6109a40a09e89d2a0760858ca61b8fe1260524ba"
+        ),
+        "association_repair_prospectively_authorized": True,
+        "association_repair_retroactively_authorized": False,
+        "raw_bun_high_zero_critical_zero_required": True,
+        "openvex_permitted": False,
     },
     "failure_consumes_attempt": True,
     "rerun_permitted": False,
@@ -403,6 +375,10 @@ BLOCKER_ADR_PATH = Path(
 BUILD_PLUGIN_REMEDIATION_ADR_PATH = Path(
     "docs/design/07_ADR/"
     "ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md"
+)
+ACTIVATION_ADR_PATH = Path(
+    "docs/design/07_ADR/"
+    "ADR-0030_Activate_exact_Trino_483_dependency_publication_sequence_6.md"
 )
 AUTHORIZED_FEASIBILITY_RECORD_PATH = Path(
     "docs/design/evidence/trino/"
@@ -963,7 +939,11 @@ EXPECTED_PARQUET_SOURCE_REMEDIATION = {
         "https://github.com/TommyKammy/Shirokuma/issues/63"
         "#issuecomment-5105612399"
     ),
-    "expires_at": "2026-08-21T22:43:36Z",
+    "sequence_6_approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5324238100"
+    ),
+    "expires_at": "2026-09-17T02:15:58Z",
     "automatic_renewal": False,
 }
 EXPECTED_SCM_METADATA_REMEDIATION = {
@@ -1016,7 +996,11 @@ EXPECTED_SCM_METADATA_REMEDIATION = {
         "https://github.com/TommyKammy/Shirokuma/issues/63"
         "#issuecomment-5210182460"
     ),
-    "expires_at": "2026-08-21T22:43:36Z",
+    "sequence_6_approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5324238100"
+    ),
+    "expires_at": "2026-09-17T02:15:58Z",
     "automatic_renewal": False,
 }
 EXPECTED_PARQUET_REMEDIATION_JAR_PATH = (
@@ -1077,13 +1061,17 @@ EXPECTED_BUN_SCAN_RESULTS = {
     },
 }
 EXPECTED_SOURCE_OVERLAY = {
-    "state": "implementation_authorized_review_pending_patched_web_ui_security",
+    "state": "approved_patched_web_ui_security",
     "decision_record": OVERLAY_ADR_PATH.as_posix(),
     "approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5324238100"
+    ),
+    "candidate_revision_approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/issues/63"
         "#issuecomment-5312231113"
     ),
-    "expires_at": "2026-08-21T22:43:36Z",
+    "expires_at": "2026-09-17T02:15:58Z",
     "automatic_renewal": False,
     "applied_after_source_verification": True,
     "patch": {
@@ -1217,9 +1205,13 @@ EXPECTED_DISTRIBUTION_REMEDIATION = {
         "https://github.com/TommyKammy/Shirokuma/issues/63"
         "#issuecomment-5115851323"
     ),
+    "sequence_6_approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5324238100"
+    ),
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
     "approved_at": "2026-07-29T09:35:05Z",
-    "expires_at": "2026-08-21T22:43:36Z",
+    "expires_at": "2026-09-17T02:15:58Z",
     "automatic_renewal": False,
     "risk_owner": "TommyKammy",
     "implementation_author": "Codex",
@@ -1312,9 +1304,13 @@ EXPECTED_BUILD_PLUGIN_REMEDIATION = {
         "https://github.com/TommyKammy/Shirokuma/issues/63"
         "#issuecomment-5210182460"
     ),
+    "sequence_6_approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5324238100"
+    ),
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
     "approved_at": "2026-08-07T00:08:48Z",
-    "expires_at": "2026-08-21T22:43:36Z",
+    "expires_at": "2026-09-17T02:15:58Z",
     "automatic_renewal": False,
     "risk_owner": "TommyKammy",
     "implementation_author": "Codex",
@@ -1420,12 +1416,15 @@ EXPECTED_BUILD_PLUGIN_REMEDIATION = {
     ),
 }
 EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION = {
-    "status": "implementation_authorized_review_pending",
+    "status": "active",
     "authorization_type": (
         "focused_patched_dependency_candidate_revision_without_openvex"
     ),
     "decision_record": OVERLAY_ADR_PATH.as_posix(),
     "approval_record": EXPECTED_SOURCE_OVERLAY["approval_record"],
+    "candidate_revision_approval_record": EXPECTED_SOURCE_OVERLAY[
+        "candidate_revision_approval_record"
+    ],
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
     "expires_at": EXPECTED_SOURCE_OVERLAY["expires_at"],
     "automatic_renewal": False,
@@ -1439,10 +1438,10 @@ EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION = {
         "tree_sha": EXPECTED_TREE,
     },
     "permitted_paths": EXPECTED_SOURCE_OVERLAY["permitted_paths"],
-    "candidate_revision_only": True,
-    "merge_permitted": False,
-    "sequence_6_permitted": False,
-    "publication_permitted": False,
+    "candidate_revision_only": False,
+    "merge_permitted": True,
+    "sequence_6_permitted": True,
+    "publication_permitted": True,
     "vulnerability_risk_accepted": False,
     "raw_high_zero_critical_zero_required": True,
     "openvex_permitted": False,
@@ -1452,6 +1451,9 @@ EXPECTED_SOURCE_REMEDIATION = {
     "state": "approved_bounded_parquet_jackson_1_17_1",
     "decision_record": PARQUET_REMEDIATION_ADR_PATH.as_posix(),
     "approval_record": EXPECTED_PARQUET_SOURCE_REMEDIATION["approval_record"],
+    "sequence_6_approval_record": EXPECTED_PARQUET_SOURCE_REMEDIATION[
+        "sequence_6_approval_record"
+    ],
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
     "expires_at": EXPECTED_PARQUET_SOURCE_REMEDIATION["expires_at"],
     "automatic_renewal": False,
@@ -1482,6 +1484,9 @@ EXPECTED_ADMISSION_SOURCE_REMEDIATION_AUTHORIZATION = {
     ),
     "decision_record": PARQUET_REMEDIATION_ADR_PATH.as_posix(),
     "approval_record": EXPECTED_PARQUET_SOURCE_REMEDIATION["approval_record"],
+    "sequence_6_approval_record": EXPECTED_PARQUET_SOURCE_REMEDIATION[
+        "sequence_6_approval_record"
+    ],
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
     "expires_at": EXPECTED_PARQUET_SOURCE_REMEDIATION["expires_at"],
     "automatic_renewal": False,
@@ -1530,6 +1535,7 @@ EXPECTED_ADMISSION_DISTRIBUTION_REMEDIATION_AUTHORIZATION = {
         for key in (
             "decision_record",
             "approval_record",
+            "sequence_6_approval_record",
             "issue",
             "approved_at",
             "expires_at",
@@ -1564,6 +1570,7 @@ EXPECTED_ADMISSION_BUILD_PLUGIN_REMEDIATION_AUTHORIZATION = {
         for key in (
             "decision_record",
             "approval_record",
+            "sequence_6_approval_record",
             "issue",
             "approved_at",
             "expires_at",
@@ -2111,6 +2118,7 @@ EXPECTED_STEPS = {
         "Revalidate the write-capable publication boundary",
         "Download the exact read-only-verified candidate",
         "Install checksum-pinned ORAS for publication",
+        "Prove pre-existing public package visibility",
         "Validate the candidate before registry authentication",
         "Publish the immutable run-scoped OCI artifact",
         "Install pinned Cosign after publication",
@@ -4832,7 +4840,7 @@ def _github_api_paginated_list(
         parsed.scheme != "https"
         or parsed.netloc != "api.github.com"
         or parsed.path
-        != "/repos/TommyKammy/Shirokuma/issues/148/comments"
+        != "/repos/TommyKammy/Shirokuma/issues/153/comments"
         or parsed.fragment
         or parsed.query
     ):
@@ -5003,6 +5011,9 @@ def _select_independent_review(
         r"[0-9a-f]{40}", final_head
     ) is None:
         _fail("INDEPENDENT_REVIEW", "final pull request head is not exact")
+    exception = _active_owner_exception(contract)
+    if pull["number"] != exception["pull_request"]:
+        _fail("INDEPENDENT_REVIEW", "activation pull request differs")
     merged_at = pull.get("merged_at")
     if not isinstance(merged_at, str):
         _fail("INDEPENDENT_REVIEW", "merged pull request timestamp is missing")
@@ -5047,6 +5058,9 @@ def _select_independent_review(
             "review_id": selected["id"],
             "reviewer": selected["user"]["login"],
             "reviewed_head": final_head,
+            "reviewed_at": selected["submitted_at"],
+            "merged_at": merged_at,
+            "base_sha": _owner_pull_base_sha(contract, pull),
             "commit": commit,
         }
     if comments is None:
@@ -5058,11 +5072,10 @@ def _select_independent_review(
             ),
         )
 
-    # This is the exact user-authorized policy alternative for PR #148's
-    # fifth attempt, not a generic self-review fallback for another PR/run.
-    exception = _active_owner_exception(contract)
+    # This is the exact user-authorized policy alternative for PR #153's
+    # sixth attempt, not a generic self-review fallback for another PR/run.
     if (
-        exception["scope"] != "pr_148_fifth_publication_attempt_only"
+        exception["scope"] != "pr_153_sixth_publication_attempt_only"
         or exception["reason"] != "sole_owner_personal_experimental_project"
         or exception["repository"] != "TommyKammy/Shirokuma"
         or exception["pull_request"] != pull["number"]
@@ -5097,16 +5110,25 @@ def _select_owner_final_head_attestation(
         _fail("INDEPENDENT_REVIEW", "merged pull request timestamp is missing")
     merged_instant = _parse_time(merged_at)
     template = exception["attestation_body_template"]
-    marker = "Owner final-head attestation for PR #148\n\nDecision: "
+    marker = "Owner final-head attestation for PR #153\n\nDecision: "
     pattern = re.compile(
-        r"\AOwner final-head attestation for PR #148\n\n"
+        r"\AOwner final-head attestation for PR #153\n\n"
         r"Decision: (APPROVED|REVOKED)\n"
         r"Final head: ([0-9a-f]{40})\n"
+        r"Review-thread snapshot SHA-256: ([0-9a-f]{64})\n"
         r"Exception: https://github\.com/TommyKammy/Shirokuma/issues/63"
-        r"#issuecomment-5268936554\Z"
+        r"#issuecomment-5324238100\Z"
     )
     decisions: list[
-        tuple[int, str, str, dt.datetime, dt.datetime, Mapping[str, Any]]
+        tuple[
+            int,
+            str,
+            str,
+            str,
+            dt.datetime,
+            dt.datetime,
+            Mapping[str, Any],
+        ]
     ] = []
     for comment in comments:
         if not isinstance(comment, Mapping):
@@ -5132,12 +5154,13 @@ def _select_owner_final_head_attestation(
             or not isinstance(comment.get("updated_at"), str)
         ):
             _fail("INDEPENDENT_REVIEW", "owner attestation comment is malformed")
-        decision, attested_head = match.groups()
+        decision, attested_head, review_thread_snapshot_sha256 = match.groups()
         if decision not in exception["allowed_decisions"]:
             _fail("INDEPENDENT_REVIEW", "owner attestation decision differs")
         if body != template.format(
             decision=decision,
             final_head=attested_head,
+            review_thread_snapshot_sha256=review_thread_snapshot_sha256,
         ):
             _fail("INDEPENDENT_REVIEW", "owner attestation body differs")
         created_at = _parse_time(comment["created_at"])
@@ -5149,6 +5172,7 @@ def _select_owner_final_head_attestation(
                 int(comment["id"]),
                 decision,
                 attested_head,
+                review_thread_snapshot_sha256,
                 created_at,
                 updated_at,
                 comment,
@@ -5156,14 +5180,15 @@ def _select_owner_final_head_attestation(
         )
     if not decisions:
         _fail("INDEPENDENT_REVIEW", "owner final-head attestation is missing")
-    latest_updated_at = max(item[4] for item in decisions)
-    latest = [item for item in decisions if item[4] == latest_updated_at]
+    latest_updated_at = max(item[5] for item in decisions)
+    latest = [item for item in decisions if item[5] == latest_updated_at]
     if len(latest) != 1:
         _fail("INDEPENDENT_REVIEW", "latest owner attestation is ambiguous")
     (
         comment_id,
         decision,
         attested_head,
+        review_thread_snapshot_sha256,
         created_at,
         updated_at,
         selected,
@@ -5186,6 +5211,7 @@ def _select_owner_final_head_attestation(
         "owner": selected["user"]["login"],
         "attested_head": attested_head,
         "attested_at": updated_at.isoformat().replace("+00:00", "Z"),
+        "review_thread_snapshot_sha256": review_thread_snapshot_sha256,
         "commit": commit,
         "base_sha": base_sha,
     }
@@ -5213,6 +5239,7 @@ def _revalidate_owner_final_head_decision(
             "owner",
             "attested_head",
             "attested_at",
+            "review_thread_snapshot_sha256",
             "commit",
             "base_sha",
         )
@@ -5225,6 +5252,40 @@ def _revalidate_owner_final_head_decision(
     return {"owner_decision_revalidated_after_final_api_gates": True}
 
 
+def _revalidate_independent_review_decision(
+    contract: Mapping[str, Any],
+    pull: Mapping[str, Any],
+    selection: Mapping[str, Any],
+    reviews: list[Any],
+) -> dict[str, bool]:
+    revalidated = _select_independent_review(
+        contract,
+        [pull],
+        reviews,
+        commit=selection["commit"],
+    )
+    original = {
+        key: selection[key]
+        for key in (
+            "approval_mode",
+            "pull_request",
+            "review_id",
+            "reviewer",
+            "reviewed_head",
+            "reviewed_at",
+            "merged_at",
+            "base_sha",
+            "commit",
+        )
+    }
+    if revalidated != original:
+        _fail(
+            "INDEPENDENT_REVIEW",
+            "independent review decision changed after final API gates",
+        )
+    return {"independent_review_revalidated_after_final_api_gates": True}
+
+
 def _validate_owner_final_head_ci(
     exception: Mapping[str, Any],
     payload: Mapping[str, Any],
@@ -5234,13 +5295,18 @@ def _validate_owner_final_head_ci(
     final_head: str,
     head_ref: str,
     attested_at: dt.datetime,
+    cutoff_kind: str = "attestation",
 ) -> dict[str, Any]:
     _pull_binding_policy(association_policy)
     policy = exception["final_head_ci"]
+    if cutoff_kind not in {"attestation", "merge"}:
+        _fail("INDEPENDENT_REVIEW", "final-head workflow cutoff differs")
     if policy.get("same_path_run_selection") != (
         "latest_qualifying_success_attestation_preceding_by_updated_created_id"
     ):
         _fail("INDEPENDENT_REVIEW", "final-head workflow selection policy differs")
+    if policy.get("pre_cutoff_run_updated_at_or_after_cutoff_rejected") is not True:
+        _fail("INDEPENDENT_REVIEW", "final-head workflow cutoff policy differs")
     runs = payload.get("workflow_runs")
     total_count = payload.get("total_count")
     if (
@@ -5317,11 +5383,12 @@ def _validate_owner_final_head_ci(
         if run_id in observed_required_run_ids:
             _fail("INDEPENDENT_REVIEW", "final-head workflow run ID is duplicated")
         observed_required_run_ids.add(run_id)
-        if (
-            updated_instant >= attested_at
-            or run.get("status") != policy["status"]
-            or run.get("conclusion") != policy["conclusion"]
-        ):
+        if created_instant < attested_at <= updated_instant:
+            _fail(
+                "INDEPENDENT_REVIEW",
+                f"pre-cutoff final-head workflow changed at or after cutoff: {path}",
+            )
+        if updated_instant >= attested_at:
             continue
         candidates[path].append((updated_instant, created_instant, run_id, run))
 
@@ -5336,12 +5403,21 @@ def _validate_owner_final_head_ci(
             candidates[path],
             key=lambda candidate: (candidate[0], candidate[1], candidate[2]),
         )
+        if (
+            latest.get("status") != policy["status"]
+            or latest.get("conclusion") != policy["conclusion"]
+        ):
+            _fail(
+                "INDEPENDENT_REVIEW",
+                f"latest final-head workflow did not pass before attestation: {path}",
+            )
         selected[path] = latest
     return {
         "workflow_runs": {
             path: int(selected[path]["id"]) for path in required_paths
         },
-        "completed_before_attestation": True,
+        "completion_cutoff": cutoff_kind,
+        "completed_before_attestation": cutoff_kind == "attestation",
     }
 
 
@@ -5365,6 +5441,7 @@ def _github_workflow_run_pages(
         or policy.get("stable_snapshot_passes") != 2
         or policy.get("same_path_run_selection")
         != "latest_qualifying_success_attestation_preceding_by_updated_created_id"
+        or policy.get("pre_cutoff_run_updated_at_or_after_cutoff_rejected") is not True
         or policy.get("positive_unique_run_ids") is not True
         or policy.get("total_count_must_match") is not True
         or policy.get("pagination_must_be_complete") is not True
@@ -5594,10 +5671,27 @@ def _owner_review_thread_page(
     return validated_nodes, total_count, has_next_page, end_cursor
 
 
+def _review_thread_snapshot_sha256(nodes: list[Mapping[str, Any]]) -> str:
+    snapshot = [
+        {
+            "id": thread["id"],
+            "isOutdated": thread["isOutdated"],
+            "isResolved": thread["isResolved"],
+        }
+        for thread in sorted(nodes, key=lambda thread: thread["id"])
+    ]
+    encoded = json.dumps(
+        snapshot,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _owner_review_thread_receipt(
     exception: Mapping[str, Any],
     nodes: list[Mapping[str, Any]],
-) -> dict[str, int]:
+) -> dict[str, Any]:
     unresolved = 0
     outdated = 0
     resolved = 0
@@ -5609,13 +5703,13 @@ def _owner_review_thread_receipt(
         else:
             unresolved += 1
     current_non_outdated = resolved + unresolved
-    expected = exception["review_threads"]["current_non_outdated"]
-    if current_non_outdated != expected:
+    expected = exception["review_threads"]["current_non_outdated_unresolved"]
+    if unresolved != expected:
         _fail(
             "INDEPENDENT_REVIEW",
             (
-                "current non-outdated review-thread count differs: "
-                f"{current_non_outdated}"
+                "current non-outdated unresolved review-thread count differs: "
+                f"{unresolved}"
             ),
         )
     return {
@@ -5624,7 +5718,25 @@ def _owner_review_thread_receipt(
         "current_unresolved": unresolved,
         "resolved": resolved,
         "outdated": outdated,
+        "snapshot_sha256": _review_thread_snapshot_sha256(nodes),
     }
+
+
+def _validate_review_thread_snapshot_attestation(
+    selection: Mapping[str, Any],
+    review_threads: Mapping[str, Any],
+) -> None:
+    attested = selection.get("review_thread_snapshot_sha256")
+    observed = review_threads.get("snapshot_sha256")
+    if (
+        not isinstance(attested, str)
+        or re.fullmatch(r"[0-9a-f]{64}", attested) is None
+        or observed != attested
+    ):
+        _fail(
+            "INDEPENDENT_REVIEW",
+            "review-thread snapshot differs from the pre-merge owner attestation",
+        )
 
 
 def _validate_owner_review_threads(
@@ -5633,7 +5745,7 @@ def _validate_owner_review_threads(
     *,
     pull_request: int,
     final_head: str,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     nodes, total_count, has_next_page, _ = _owner_review_thread_page(
         payload,
         pull_request=pull_request,
@@ -5653,7 +5765,7 @@ def _github_review_threads_pages(
     pull_request: int,
     final_head: str,
     token: str,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     policy = exception.get("review_threads")
     if (
         not isinstance(policy, Mapping)
@@ -5666,6 +5778,12 @@ def _github_review_threads_pages(
         or policy.get("unique_thread_ids") is not True
         or policy.get("total_count_must_match") is not True
         or policy.get("pagination_must_be_complete") is not True
+        or policy.get("pre_merge_snapshot_attestation_required") is not True
+        or policy.get("snapshot_hash_algorithm") != "sha256"
+        or policy.get("snapshot_canonicalization")
+        != "sorted_thread_id_is_resolved_is_outdated_json"
+        or policy.get("snapshot_must_match_at_publication") is not True
+        or policy.get("revalidate_after_decision_gates") is not True
     ):
         _fail("INDEPENDENT_REVIEW", "review-thread pagination bounds differ")
 
@@ -5767,7 +5885,42 @@ def _github_review_threads_pages(
     return _owner_review_thread_receipt(exception, second_nodes)
 
 
-def _verify_owner_final_head_gates(
+def print_review_thread_snapshot(
+    root: Path,
+    *,
+    repository: str,
+    pull_request: int,
+    final_head: str,
+    token: str,
+) -> None:
+    if repository != "TommyKammy/Shirokuma":
+        _fail("INDEPENDENT_REVIEW", "repository identity differs")
+    if re.fullmatch(r"[0-9a-f]{40}", final_head) is None:
+        _fail("INDEPENDENT_REVIEW", "final pull request head is not exact")
+    contract = _load_json(root.resolve() / CONTRACT_PATH)
+    _validate_independent_review_contract(contract)
+    exception = _active_owner_exception(contract)
+    if pull_request != exception["pull_request"]:
+        _fail("INDEPENDENT_REVIEW", "activation pull request differs")
+    receipt = _github_review_threads_pages(
+        exception,
+        pull_request=pull_request,
+        final_head=final_head,
+        token=token,
+    )
+    print(json.dumps(receipt, sort_keys=True))
+
+
+def _owner_attestation_ci_cutoff(
+    selection: Mapping[str, Any],
+) -> dt.datetime:
+    owner_attested_at = selection.get("review_threads_attested_at")
+    if not isinstance(owner_attested_at, str):
+        _fail("INDEPENDENT_REVIEW", "owner attestation timestamp differs")
+    return _parse_time(owner_attested_at)
+
+
+def _verify_final_head_gates(
     exception: Mapping[str, Any],
     selection: Mapping[str, Any],
     *,
@@ -5775,8 +5928,10 @@ def _verify_owner_final_head_gates(
     token: str,
 ) -> dict[str, Any]:
     pull_request = selection["pull_request"]
-    final_head = selection["attested_head"]
-    attested_at = _parse_time(selection["attested_at"])
+    final_head = selection.get("attested_head", selection.get("reviewed_head"))
+    if not isinstance(final_head, str):
+        _fail("INDEPENDENT_REVIEW", "final-head approval receipt differs")
+    cutoff_at = _owner_attestation_ci_cutoff(selection)
     pull_request_binding = _github_exact_pull_binding(
         association_policy,
         pull_request=pull_request,
@@ -5801,7 +5956,8 @@ def _verify_owner_final_head_gates(
         pull_request=pull_request,
         final_head=final_head,
         head_ref=head_ref,
-        attested_at=attested_at,
+        attested_at=cutoff_at,
+        cutoff_kind="attestation",
     )
     review_threads = _github_review_threads_pages(
         exception,
@@ -5809,11 +5965,75 @@ def _verify_owner_final_head_gates(
         final_head=final_head,
         token=token,
     )
+    _validate_review_thread_snapshot_attestation(selection, review_threads)
     return {
         "pull_request_binding": pull_request_binding,
         "final_head_ci": final_head_ci,
         "review_threads": review_threads,
     }
+
+
+def _capture_final_authorization_snapshot(
+    contract: Mapping[str, Any],
+    pull: Mapping[str, Any],
+    selection: Mapping[str, Any],
+    thread_attestation: Mapping[str, Any],
+    *,
+    association_policy: Mapping[str, Any],
+    token: str,
+) -> dict[str, Any]:
+    base = "https://api.github.com/repos/TommyKammy/Shirokuma"
+    exception = contract["publication"]["owner_only_approval_exception"]
+    snapshot = _verify_final_head_gates(
+        exception,
+        selection,
+        association_policy=association_policy,
+        token=token,
+    )
+    snapshot.update(
+        _revalidate_owner_final_head_decision(
+            contract,
+            pull,
+            thread_attestation,
+            _github_api_paginated_list(
+                f"{base}/issues/{selection['pull_request']}/comments",
+                token=token,
+            ),
+        )
+    )
+    if selection["approval_mode"] == "independent_review":
+        independent_policy = contract["publication"]["independent_review"]
+        if (
+            independent_policy.get("revalidate_after_final_api_gates") is not True
+            or independent_policy.get("revalidated_decision_must_match") is not True
+        ):
+            _fail(
+                "INDEPENDENT_REVIEW",
+                "independent review revalidation policy differs",
+            )
+        snapshot.update(
+            _revalidate_independent_review_decision(
+                contract,
+                pull,
+                selection,
+                _github_api_paginated_reviews(
+                    f"{base}/pulls/{selection['pull_request']}/reviews",
+                    token=token,
+                    policy=independent_policy["reviews"],
+                ),
+            )
+        )
+    return snapshot
+
+
+def _stable_final_authorization_snapshot(
+    snapshots: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    if len(snapshots) != 2 or any(
+        snapshot != snapshots[0] for snapshot in snapshots[1:]
+    ):
+        _fail("INDEPENDENT_REVIEW", "final authorization snapshot is unstable")
+    return dict(snapshots[-1])
 
 
 def verify_independent_review(
@@ -5852,43 +6072,70 @@ def verify_independent_review(
         token=token,
         policy=contract["publication"]["independent_review"]["reviews"],
     )
+    owner_comment_policy = exception["owner_issue_comments"]
+    if (
+        owner_comment_policy.get("query_only_if_standard_independent_review_absent")
+        is not False
+        or owner_comment_policy.get(
+            "review_thread_snapshot_required_for_all_approval_modes"
+        )
+        is not True
+        or owner_comment_policy.get("revalidate_after_final_api_gates") is not True
+        or owner_comment_policy.get("revalidated_decision_must_match") is not True
+    ):
+        _fail("INDEPENDENT_REVIEW", "owner decision revalidation policy differs")
+    comments = _github_api_paginated_list(
+        f"{base}/issues/{matching[0]['number']}/comments",
+        token=token,
+    )
     review_selection = _select_independent_review(
         contract,
         pulls,
         reviews,
         commit=commit,
-        comments=lambda: _github_api_paginated_list(
-            f"{base}/issues/{matching[0]['number']}/comments",
-            token=token,
-        ),
+        comments=comments,
     )
     if review_selection["approval_mode"] == "owner_final_head_attestation":
-        exception = contract["publication"]["owner_only_approval_exception"]
-        review_selection.update(
-            _verify_owner_final_head_gates(
-                exception,
-                review_selection,
-                association_policy=association_policy,
-                token=token,
-            )
+        thread_attestation = dict(review_selection)
+    else:
+        thread_attestation = _select_owner_final_head_attestation(
+            contract,
+            matching[0],
+            comments,
+            commit=commit,
+            final_head=review_selection["reviewed_head"],
         )
-        owner_comment_policy = exception["owner_issue_comments"]
-        if (
-            owner_comment_policy.get("revalidate_after_final_api_gates") is not True
-            or owner_comment_policy.get("revalidated_decision_must_match") is not True
-        ):
-            _fail("INDEPENDENT_REVIEW", "owner decision revalidation policy differs")
-        review_selection.update(
-            _revalidate_owner_final_head_decision(
-                contract,
-                matching[0],
-                review_selection,
-                _github_api_paginated_list(
-                    f"{base}/issues/{matching[0]['number']}/comments",
-                    token=token,
-                ),
-            )
+    review_selection.update(
+        {
+            "review_thread_attestation_comment_id": thread_attestation["comment_id"],
+            "review_thread_snapshot_sha256": thread_attestation[
+                "review_thread_snapshot_sha256"
+            ],
+            "review_threads_attested_at": thread_attestation["attested_at"],
+        }
+    )
+    final_policy = exception.get("final_authorization_revalidation")
+    if not _matches_exact_json(
+        final_policy,
+        EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION[
+            "final_authorization_revalidation"
+        ],
+    ):
+        _fail("INDEPENDENT_REVIEW", "final authorization policy differs")
+    snapshots = [
+        _capture_final_authorization_snapshot(
+            contract,
+            matching[0],
+            review_selection,
+            thread_attestation,
+            association_policy=association_policy,
+            token=token,
         )
+        for _pass in range(final_policy["stable_passes"])
+    ]
+    final_snapshot = _stable_final_authorization_snapshot(snapshots)
+    review_selection.update(final_snapshot)
+    review_selection["stable_final_authorization_passes"] = 2
     print(json.dumps(review_selection, sort_keys=True))
 
 
@@ -6170,12 +6417,12 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         or workflow.count(
             "--validation-point before_dependency_publication"
         )
-        != 3
+        != 4
         or workflow.count("GITHUB_TOKEN: ${{ github.token }}") != 2
         or workflow.count("verify-independent-review") != 2
         or workflow.count("verify-independent-review --root .") != 1
         or workflow.count("final_review_gate=(") != 1
-        or workflow.count('"${final_review_gate[@]}"') != 1
+        or workflow.count('"${final_review_gate[@]}"') != 2
         or lines.count("      actions: read") != 1
         or lines.count("      issues: read") != 1
         or lines.count("      pull-requests: read") != 1
@@ -6243,6 +6490,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         DISTRIBUTION_REMEDIATION_ADR_PATH,
         BLOCKER_ADR_PATH,
         BUILD_PLUGIN_REMEDIATION_ADR_PATH,
+        ACTIVATION_ADR_PATH,
         AUTHORIZED_FEASIBILITY_RECORD_PATH,
         AUTHORIZED_FEASIBILITY_RECEIPT_PATH,
         Path("Makefile"),
@@ -6749,7 +6997,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
     publication = contract.get("publication", {})
     if (
-        publication.get("permitted") is not False
+        publication.get("permitted") is not True
         or publication.get("workflow_present") is not True
         or publication.get("workflow") != WORKFLOW_PATH.as_posix()
         or publication.get("allowed_ref") != "refs/heads/main"
@@ -6832,6 +7080,7 @@ def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
         DISTRIBUTION_REMEDIATION_ADR_PATH,
         BLOCKER_ADR_PATH,
         BUILD_PLUGIN_REMEDIATION_ADR_PATH,
+        ACTIVATION_ADR_PATH,
         AUTHORIZED_FEASIBILITY_RECORD_PATH,
         AUTHORIZED_FEASIBILITY_RECEIPT_PATH,
         BLOCKER_CLASSIFICATION_PATH,
@@ -6868,10 +7117,10 @@ def audit(root: Path) -> None:
     if not _matches_exact_json(
         lifecycle,
         {
-            "state": "dependency_snapshot_publication_reauthorization_pending",
+            "state": "dependency_snapshot_publication_pending",
             "contract_only": False,
             "dependency_artifact_present": False,
-            "publication_workflow_permitted": False,
+            "publication_workflow_permitted": True,
             "image_publication_permitted": False,
             "resident_admission_permitted": False,
             "runtime_reconciliation_permitted": False,
@@ -6974,7 +7223,14 @@ def audit(root: Path) -> None:
         {
             "required_visibility": "public",
             "sign_and_attest_before_anonymous_pull": True,
-            "owner_action_on_first_private_run": "set-package-public-and-rerun",
+            "preexisting_public_reference": (
+                "ghcr.io/tommykammy/shirokuma-trino-maven-dependencies@sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c"
+            ),
+            "anonymous_preflight_before_registry_authentication": True,
+            "owner_action_on_first_private_run": (
+                "not_applicable_preexisting_package_public"
+            ),
+            "same_run_visibility_mutation_permitted": False,
             "failed_attempt_admitted": False,
             "user_credential_fallback": False,
         },
@@ -7023,7 +7279,7 @@ def audit(root: Path) -> None:
             admission.get("pending_publication_repair"),
             EXPECTED_PENDING_REVIEW_REPAIR,
         )
-        or repository_state.get("publication_workflow_permitted") is not False
+        or repository_state.get("publication_workflow_permitted") is not True
         or repository_state.get("dependency_artifact_present") is not False
         or repository_state.get("resident_ledger_permitted") is not False
         or repository_state.get("runtime_manifests_permitted") is not False
@@ -7291,6 +7547,11 @@ def _parser() -> argparse.ArgumentParser:
     independent_review.add_argument("--root", type=Path, default=Path("."))
     independent_review.add_argument("--repository", required=True)
     independent_review.add_argument("--commit", required=True)
+    review_thread_snapshot = commands.add_parser("review-thread-snapshot")
+    review_thread_snapshot.add_argument("--root", type=Path, default=Path("."))
+    review_thread_snapshot.add_argument("--repository", required=True)
+    review_thread_snapshot.add_argument("--pull-request", type=int, required=True)
+    review_thread_snapshot.add_argument("--final-head", required=True)
     publication_status = commands.add_parser("publication-status")
     publication_status.add_argument("--root", type=Path, default=Path("."))
     source = commands.add_parser("audit-source")
@@ -7381,6 +7642,14 @@ def main() -> int:
                 args.root.resolve(),
                 repository=args.repository,
                 commit=args.commit,
+                token=os.environ.get("GITHUB_TOKEN", ""),
+            )
+        elif args.command == "review-thread-snapshot":
+            print_review_thread_snapshot(
+                args.root.resolve(),
+                repository=args.repository,
+                pull_request=args.pull_request,
+                final_head=args.final_head,
                 token=os.environ.get("GITHUB_TOKEN", ""),
             )
         elif args.command == "publication-status":

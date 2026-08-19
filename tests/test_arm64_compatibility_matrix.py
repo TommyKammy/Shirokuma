@@ -67,10 +67,17 @@ class Arm64CompatibilityMatrixTests(unittest.TestCase):
             if len(cells) == len(EXPECTED_HEADER):
                 cls.rows[cells[0]] = dict(zip(EXPECTED_HEADER, cells))
 
+    def test_trino_sequence_6_status_is_current(self) -> None:
+        trino_decision = self.rows["Trino"]["v0.2 decision"]
+        self.assertIn("2026-09-17T02:15:58Z", trino_decision)
+        self.assertIn("dependency_snapshot_publication_pending", trino_decision)
+        self.assertIn("No sequence 6 dependency artifact exists yet", trino_decision)
+        self.assertNotIn("dependency/image publication", trino_decision)
+
     def test_document_metadata_matches_latest_verification(self) -> None:
         front_matter = self.matrix_text.split("---", 2)[1]
-        self.assertIn("\nupdated: 2026-08-14\n", front_matter)
-        self.assertIn('\nversion: "0.25"\n', front_matter)
+        self.assertIn("\nupdated: 2026-08-18\n", front_matter)
+        self.assertIn('\nversion: "0.26"\n', front_matter)
         self.assertIn("Verification date: 2026-07-22.", self.matrix_text)
 
     def test_all_required_components_have_complete_evidence_rows(self) -> None:
