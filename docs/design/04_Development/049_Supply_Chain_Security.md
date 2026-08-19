@@ -1387,9 +1387,10 @@ Issue #63 closure is authorized.
 After the final review, CI, and thread API gates return, the publisher repeats
 the current-time authorization and exact one-attempt binding immediately before
 registry authentication. It then repeats the complete two-pass authorization
-snapshot after login and immediately before `oras push`. Expiry or a changed
-decision, thread, pull binding, or required CI state during either interval
-therefore fails closed before any registry write.
+snapshot after login, followed by the time-based authorization and exact
+one-attempt binding immediately before `oras push`. Expiry or a changed decision,
+thread, pull binding, required CI state, or attempt identity during either
+interval therefore fails closed before any registry write.
 
 PR #146 was subsequently squash-merged as
 `b1e58117cff9f9f1441176617dbdb2e4e0e8685f`. Its reviewed-main publisher run
@@ -1626,8 +1627,9 @@ gates. The exact pull binding, final-head CI, review-thread snapshot, OWNER
 attestation, and selected independent review are captured twice as one
 authorization snapshot and must match before publication authorization
 returns. The same composite authorization is repeated after registry
-authentication and immediately before `oras push`. Before registry
-authentication, the workflow also anonymously fetches
+authentication, then current-time authorization and the exact attempt binding
+are repeated immediately before `oras push`. Before registry authentication,
+the workflow also anonymously fetches
 the retained public sequence-4 manifest at digest
 `sha256:0394143034298f4c6606c288e8ef97154826978bf3aa97e1e952499f8af5075c`;
 no post-write visibility change or rerun is allowed.

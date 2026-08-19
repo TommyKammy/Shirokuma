@@ -2887,7 +2887,7 @@ class PublisherContractTests(unittest.TestCase):
     def test_publish_job_rechecks_attempt_and_independent_review(self) -> None:
         workflow = (ROOT / verify.WORKFLOW_PATH).read_text(encoding="utf-8")
         self.assertEqual(
-            3,
+            4,
             workflow.count("--validation-point before_dependency_publication"),
         )
         self.assertEqual(2, workflow.count("verify-independent-review"))
@@ -2907,18 +2907,37 @@ class PublisherContractTests(unittest.TestCase):
         final_review = publish.index("final_review_gate=(")
         first_final_review_run = publish.index('"${final_review_gate[@]}"')
         last_final_review_run = publish.rindex('"${final_review_gate[@]}"')
-        final_authorization = publish.rindex(
-            "--validation-point before_dependency_publication"
+        push_step_start = publish.index(
+            "- name: Publish the immutable run-scoped OCI artifact"
+        )
+        push_step_end = publish.index(
+            "- name: Install pinned Cosign after publication"
+        )
+        first_final_authorization = publish.index(
+            "--validation-point before_dependency_publication",
+            first_final_review_run,
         )
         auth = publish.index("oras login ghcr.io")
+        last_authorize = publish.rindex(
+            "python3 scripts/verify_trino_dependency_publisher.py authorize --root .",
+            push_step_start,
+            push_step_end,
+        )
+        last_final_authorization = publish.rindex(
+            "--validation-point before_dependency_publication",
+            push_step_start,
+            push_step_end,
+        )
         push = publish.index("oras push")
         self.assertLess(attempt, review)
         self.assertLess(review, final_review)
         self.assertLess(final_review, first_final_review_run)
-        self.assertLess(first_final_review_run, final_authorization)
-        self.assertLess(final_authorization, auth)
+        self.assertLess(first_final_review_run, first_final_authorization)
+        self.assertLess(first_final_authorization, auth)
         self.assertLess(auth, last_final_review_run)
-        self.assertLess(last_final_review_run, push)
+        self.assertLess(last_final_review_run, last_authorize)
+        self.assertLess(last_authorize, last_final_authorization)
+        self.assertLess(last_final_authorization, push)
 
     def test_independent_review_requires_non_risk_owner_human_approval(
         self,

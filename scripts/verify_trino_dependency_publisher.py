@@ -240,6 +240,10 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
             "before_registry_authentication",
             "after_registry_authentication_immediately_before_write",
         ],
+        "post_composite_checks": [
+            "time_boxed_authorizations",
+            "exact_publication_attempt",
+        ],
         "resources": [
             "pull_request_binding",
             "final_head_ci",
@@ -6374,7 +6378,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         or workflow.count(
             "--validation-point before_dependency_publication"
         )
-        != 3
+        != 4
         or workflow.count("GITHUB_TOKEN: ${{ github.token }}") != 2
         or workflow.count("verify-independent-review") != 2
         or workflow.count("verify-independent-review --root .") != 1
