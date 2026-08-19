@@ -3679,18 +3679,21 @@ class PublisherContractTests(unittest.TestCase):
                 failed = copy.deepcopy(altered)
                 failed["workflow_runs"][-1]["conclusion"] = conclusion
                 failed["workflow_runs"][-1]["status"] = status
-                receipt = verify._validate_owner_final_head_ci(
-                    exception,
-                    failed,
-                    association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
-                        "pull_request_binding"
-                    ],
-                    pull_request=153,
-                    final_head=final_head,
-                    head_ref=self.OWNER_HEAD_REF,
-                    attested_at=attested_at,
-                )
-                self.assertEqual(2000, receipt["workflow_runs"][older["path"]])
+                with self.assertRaisesRegex(
+                    verify.ContractError,
+                    "latest final-head workflow did not pass before attestation",
+                ):
+                    verify._validate_owner_final_head_ci(
+                        exception,
+                        failed,
+                        association_policy=verify.EXPECTED_PENDING_REVIEW_REPAIR[
+                            "pull_request_binding"
+                        ],
+                        pull_request=153,
+                        final_head=final_head,
+                        head_ref=self.OWNER_HEAD_REF,
+                        attested_at=attested_at,
+                    )
 
         reordered = copy.deepcopy(altered)
         reordered["workflow_runs"].reverse()

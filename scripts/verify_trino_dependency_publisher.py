@@ -5380,11 +5380,7 @@ def _validate_owner_final_head_ci(
         if run_id in observed_required_run_ids:
             _fail("INDEPENDENT_REVIEW", "final-head workflow run ID is duplicated")
         observed_required_run_ids.add(run_id)
-        if (
-            updated_instant >= attested_at
-            or run.get("status") != policy["status"]
-            or run.get("conclusion") != policy["conclusion"]
-        ):
+        if updated_instant >= attested_at:
             continue
         candidates[path].append((updated_instant, created_instant, run_id, run))
 
@@ -5399,6 +5395,14 @@ def _validate_owner_final_head_ci(
             candidates[path],
             key=lambda candidate: (candidate[0], candidate[1], candidate[2]),
         )
+        if (
+            latest.get("status") != policy["status"]
+            or latest.get("conclusion") != policy["conclusion"]
+        ):
+            _fail(
+                "INDEPENDENT_REVIEW",
+                f"latest final-head workflow did not pass before attestation: {path}",
+            )
         selected[path] = latest
     return {
         "workflow_runs": {
