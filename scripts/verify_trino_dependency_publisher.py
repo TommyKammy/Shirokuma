@@ -125,6 +125,45 @@ EXPECTED_PUBLICATION_ATTEMPT = {
     "before_sha": "fdec9cdb170ed63d18735ef9f6d0abacc8e475ab",
     "run_attempt": "1",
 }
+EXPECTED_SEQUENCE_6_OUTCOME = {
+    "pull_request": 153,
+    "pull_request_final_head": "52f1d3194396347078cbe18e871c76d725c79d1e",
+    "merge_commit": "e634f66b4df9ad2086b32c5cf29c4da416108248",
+    "owner_attestation_comment_id": 5349424935,
+    "owner_attested_at": "2026-08-19T23:54:00Z",
+    "review_thread_snapshot_sha256": (
+        "5adda7aff7c40d1799e0815337c4471b8950a196065e35381a4f5e0f0ef4a2f8"
+    ),
+    "run_id": "32315191436",
+    "run_attempt": "1",
+    "event_name": "push",
+    "ref": "refs/heads/main",
+    "before_sha": "fdec9cdb170ed63d18735ef9f6d0abacc8e475ab",
+    "source_sha": "e634f66b4df9ad2086b32c5cf29c4da416108248",
+    "validate_job": "failure",
+    "publish_job": "skipped",
+    "maven_build": "success",
+    "failed_step": "Resolve and package the first closed Maven repository",
+    "failure_code": "BUN_SNAPSHOT_IDENTITY",
+    "failure_reason": "reviewed_manifest_sha256_did_not_match_generated_candidate",
+    "reviewed_manifest_sha256": (
+        "ca5cc4e172b72a9074d9bf2fc215a36aef9549c64ad3626203b31bb6c1e4b0df"
+    ),
+    "generated_manifest_sha256_retained": False,
+    "candidate_lockfile_sha256": (
+        "7d61c5d3868b5a600ff8a21206168c114848dd7d65b882dc6f5bdaf4c792c8f3"
+    ),
+    "root_cause": (
+        "sequence_6_reused_sequence_4_reviewed_bun_snapshot_identity_after_"
+        "pr_152_changed_the_candidate_lockfile"
+    ),
+    "retained_artifact_count": 0,
+    "registry_authentication_reached": False,
+    "registry_write_reached": False,
+    "dependency_artifact_published": False,
+    "final_publication_artifact_present": False,
+    "consumed": True,
+}
 EXPECTED_INDEPENDENT_REVIEW = {
     "required_before_merge": True,
     "required_before_publication": True,
@@ -151,7 +190,7 @@ EXPECTED_INDEPENDENT_REVIEW = {
     ),
 }
 EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
-    "status": "active",
+    "status": "consumed_failed_closed",
     "scope": "pr_153_sixth_publication_attempt_only",
     "reason": "sole_owner_personal_experimental_project",
     "approval_record": (
@@ -261,9 +300,16 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
     "rerun_permitted": False,
     "downstream_authorities_granted": [],
     "standard_independent_review_remains_accepted": True,
+    "consumed_run": {
+        "run_id": "32315191436",
+        "run_attempt": "1",
+        "source_sha": "e634f66b4df9ad2086b32c5cf29c4da416108248",
+        "result": "failed_closed_before_publication",
+        "rerun_permitted": False,
+    },
 }
 EXPECTED_PENDING_REVIEW_REPAIR = {
-    "status": "authorized_for_sequence_6",
+    "status": "consumed_by_sequence_6_failure",
     "scope": "final_head_pull_request_association_only",
     "triggering_run_id": "31616764771",
     "triggering_run_attempt": "1",
@@ -288,13 +334,13 @@ EXPECTED_PENDING_REVIEW_REPAIR = {
         "workflow_query_branch_must_match_head_ref": True,
         "workflow_run_pull_requests_policy": "empty_or_exact_single_target",
     },
-    "publication_permissions_enabled": True,
-    "applies_only_after_separate_owner_authorization": False,
-    "next_sequence_authorized": True,
+    "publication_permissions_enabled": False,
+    "applies_only_after_separate_owner_authorization": True,
+    "next_sequence_authorized": False,
 }
 EXPECTED_PUBLICATION_REAUTHORIZATION = {
     "sequence": 6,
-    "status": "active",
+    "status": "consumed_failed_closed",
     "approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
         "#issuecomment-5324238100"
@@ -305,8 +351,8 @@ EXPECTED_PUBLICATION_REAUTHORIZATION = {
     "automatic_renewal": False,
     "risk_owner": "TommyKammy",
     "same_candidate_required": True,
-    "publication_authorized_after_required_approval": True,
-    "next_sequence_authorized": True,
+    "publication_authorized_after_required_approval": False,
+    "next_sequence_authorized": False,
     "previous_attempt": {
         "run_id": "31616764771",
         "run_attempt": "1",
@@ -342,6 +388,7 @@ EXPECTED_PUBLICATION_REAUTHORIZATION = {
         "raw_bun_high_zero_critical_zero_required": True,
         "openvex_permitted": False,
     },
+    "outcome": EXPECTED_SEQUENCE_6_OUTCOME,
     "failure_consumes_attempt": True,
     "rerun_permitted": False,
 }
@@ -6997,7 +7044,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
     publication = contract.get("publication", {})
     if (
-        publication.get("permitted") is not True
+        publication.get("permitted") is not False
         or publication.get("workflow_present") is not True
         or publication.get("workflow") != WORKFLOW_PATH.as_posix()
         or publication.get("allowed_ref") != "refs/heads/main"
@@ -7117,10 +7164,10 @@ def audit(root: Path) -> None:
     if not _matches_exact_json(
         lifecycle,
         {
-            "state": "dependency_snapshot_publication_pending",
+            "state": "dependency_snapshot_publication_reauthorization_pending",
             "contract_only": False,
             "dependency_artifact_present": False,
-            "publication_workflow_permitted": True,
+            "publication_workflow_permitted": False,
             "image_publication_permitted": False,
             "resident_admission_permitted": False,
             "runtime_reconciliation_permitted": False,
@@ -7279,7 +7326,7 @@ def audit(root: Path) -> None:
             admission.get("pending_publication_repair"),
             EXPECTED_PENDING_REVIEW_REPAIR,
         )
-        or repository_state.get("publication_workflow_permitted") is not True
+        or repository_state.get("publication_workflow_permitted") is not False
         or repository_state.get("dependency_artifact_present") is not False
         or repository_state.get("resident_ledger_permitted") is not False
         or repository_state.get("runtime_manifests_permitted") is not False

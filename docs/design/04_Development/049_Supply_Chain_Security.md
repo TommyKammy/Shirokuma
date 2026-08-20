@@ -1667,6 +1667,21 @@ sequence 7, dependency admission, image publication, resident admission,
 Flux/runtime reconciliation, credentials, public exposure, production use,
 Issues #64-#66, and Issue #63 closure remain unauthorized.
 
+## Trino 483 dependency publication sequence 6 closeout (2026-08-20)
+
+PR #153 merged as `e634f66b4df9ad2086b32c5cf29c4da416108248` after the
+required exact final-head OWNER attestation. Reviewed-main run `32315191436`,
+attempt `1`, consumed sequence 6. The Maven build succeeded, but `validate`
+failed closed with `BUN_SNAPSHOT_IDENTITY` because the reviewed sequence-4 Bun
+manifest SHA-256 did not match the candidate generated from PR #152's revised
+lockfile. The generated manifest SHA-256 was not retained and must not be
+guessed or approved from this run.
+
+The `publish` job was skipped, no artifact was retained, and registry
+authentication and write were never reached. Publication permissions are
+false. Rerun, another sequence-6 attempt, and sequence 7 require fresh exact
+candidate evidence and a new explicit OWNER decision.
+
 ## Scanner or feed failure rollback
 
 Security-tool and feed failures do not permit bypassing the check. First retry

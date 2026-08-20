@@ -2740,7 +2740,7 @@ class PublisherContractTests(unittest.TestCase):
             review.index("finalize-record"),
         )
 
-    def test_sequence_6_publication_attempt_is_exactly_authorized(self) -> None:
+    def test_consumed_sequence_6_publication_attempt_is_not_authorized(self) -> None:
         instant = dt.datetime(2026, 8, 18, 6, 0, tzinfo=dt.timezone.utc)
         environment = {
             "GITHUB_EVENT_NAME": verify.EXPECTED_PUBLICATION_ATTEMPT["event_name"],
@@ -2752,7 +2752,13 @@ class PublisherContractTests(unittest.TestCase):
                 "run_attempt"
             ],
         }
-        with mock.patch.dict(os.environ, environment, clear=False):
+        with (
+            mock.patch.dict(os.environ, environment, clear=False),
+            self.assertRaisesRegex(
+                verify.ContractError,
+                "no publication attempt is authorized",
+            ),
+        ):
             verify.authorize_use(
                 ROOT,
                 validation_point="before_dependency_publication",
@@ -2760,7 +2766,11 @@ class PublisherContractTests(unittest.TestCase):
             )
 
         contract = verify._load_json(ROOT / verify.CONTRACT_PATH)
-        verify._validate_publication_attempt(contract, environment=environment)
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "no publication attempt is authorized",
+        ):
+            verify._validate_publication_attempt(contract, environment=environment)
 
         for key, replacement in (
             ("GITHUB_EVENT_NAME", "workflow_dispatch"),
@@ -2942,7 +2952,7 @@ class PublisherContractTests(unittest.TestCase):
     def test_independent_review_requires_non_risk_owner_human_approval(
         self,
     ) -> None:
-        contract = verify._load_json(ROOT / verify.CONTRACT_PATH)
+        contract = self._active_owner_contract()
         commit = "a" * 40
         final_head = "c" * 40
         pulls = [
@@ -3240,7 +3250,7 @@ class PublisherContractTests(unittest.TestCase):
             )
 
     def test_active_owner_exception_rejects_consumed_run_state(self) -> None:
-        contract = verify._load_json(ROOT / verify.CONTRACT_PATH)
+        contract, active_exception = self._active_owner_contract_fixture()
         consumed_contract = copy.deepcopy(contract)
         consumed_exception = consumed_contract["publication"][
             "owner_only_approval_exception"
@@ -3255,7 +3265,7 @@ class PublisherContractTests(unittest.TestCase):
         with mock.patch.object(
             verify,
             "EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION",
-            copy.deepcopy(consumed_exception),
+            active_exception,
         ):
             with self.assertRaisesRegex(
                 verify.ContractError,
@@ -4357,7 +4367,22 @@ class PublisherContractTests(unittest.TestCase):
             "snapshot_sha256": "a" * 64,
         }
         stdout = io.StringIO()
+        contract_path = ROOT / verify.CONTRACT_PATH
+        original_load_json = verify._load_json
+        active_contract, active_exception = self._active_owner_contract_fixture()
+
+        def load_json(path: Path) -> dict[str, object]:
+            if path == contract_path:
+                return active_contract
+            return original_load_json(path)
+
         with (
+            mock.patch.object(verify, "_load_json", side_effect=load_json),
+            mock.patch.object(
+                verify,
+                "EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION",
+                active_exception,
+            ),
             mock.patch.object(
                 verify,
                 "_github_review_threads_pages",
@@ -4374,7 +4399,7 @@ class PublisherContractTests(unittest.TestCase):
             )
         self.assertEqual(expected, json.loads(stdout.getvalue()))
         query.assert_called_once_with(
-            verify.EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION,
+            active_exception,
             pull_request=153,
             final_head="c" * 40,
             token="ephemeral-token",
@@ -5359,8 +5384,7 @@ class PublisherContractTests(unittest.TestCase):
         stdout = io.StringIO()
         contract_path = ROOT / verify.CONTRACT_PATH
         original_load_json = verify._load_json
-        active_contract = original_load_json(contract_path)
-        active_contract["publication"]["permitted"] = True
+        active_contract, active_exception = self._active_owner_contract_fixture()
 
         def load_json(path: Path) -> dict[str, object]:
             if path == contract_path:
@@ -5369,6 +5393,11 @@ class PublisherContractTests(unittest.TestCase):
 
         with (
             mock.patch.object(verify, "_load_json", side_effect=load_json),
+            mock.patch.object(
+                verify,
+                "EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION",
+                active_exception,
+            ),
             mock.patch.object(
                 verify,
                 "_verify_final_head_gates",
@@ -6136,7 +6165,7 @@ class PublisherContractTests(unittest.TestCase):
                 ):
                     verify._validate_blocker_evidence(temporary_root)
 
-    def test_publication_status_is_active_and_records_must_agree(self) -> None:
+    def test_publication_status_is_blocked_and_records_must_agree(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
         )
@@ -6145,12 +6174,12 @@ class PublisherContractTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            "active",
+            "blocked",
             verify.publication_status(contract, admission),
         )
 
         altered = json.loads(json.dumps(contract))
-        altered["publication"]["permitted"] = False
+        altered["publication"]["permitted"] = True
         with self.assertRaisesRegex(
             verify.ContractError,
             "publication permission records disagree",

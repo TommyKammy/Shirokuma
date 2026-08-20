@@ -3,8 +3,8 @@ doc_id: ADR-0030
 title: Activate exact Trino 483 dependency publication sequence 6
 status: accepted
 created: 2026-08-18
-updated: 2026-08-18
-version: "1.0.0"
+updated: 2026-08-20
+version: "1.1.0"
 area: architecture
 tags: [adr, trino, maven, supply-chain, arm64]
 ---
@@ -86,6 +86,30 @@ authentication. It may not rely on a post-write visibility change or rerun.
 Any sequence-6 failure consumes the authorization. Manual dispatch, rerun, a
 second push attempt, reuse of runs `31605249586` or `31616764771`, and sequence
 7 are forbidden without another explicit fresh owner decision.
+
+## Outcome
+
+PR #153 final head `52f1d3194396347078cbe18e871c76d725c79d1e` received
+the required OWNER attestation in comment `5349424935` with review-thread
+snapshot SHA-256
+`5adda7aff7c40d1799e0815337c4471b8950a196065e35381a4f5e0f0ef4a2f8`,
+then merged as `e634f66b4df9ad2086b32c5cf29c4da416108248`.
+
+Reviewed-main run `32315191436`, attempt `1`, consumed sequence 6. Its Maven
+build completed successfully, but `validate` failed closed in `Resolve and
+package the first closed Maven repository` with `BUN_SNAPSHOT_IDENTITY:
+manifest SHA-256 differs`. PR #152 had changed the modern Web UI lockfile to
+SHA-256 `7d61c5d3868b5a600ff8a21206168c114848dd7d65b882dc6f5bdaf4c792c8f3`,
+while the reviewed Bun snapshot identity still required the sequence-4
+manifest SHA-256
+`ca5cc4e172b72a9074d9bf2fc215a36aef9549c64ad3626203b31bb6c1e4b0df`.
+
+The generated manifest SHA-256 was not retained and is not inferred here.
+`publish` was skipped, retained artifact count was zero, and registry
+authentication and registry write were never reached. Publication permissions
+return to false. A rerun, another sequence-6 attempt, and sequence 7 remain
+forbidden until fresh exact candidate evidence and a new explicit OWNER
+decision are recorded.
 
 ## Consequences
 
