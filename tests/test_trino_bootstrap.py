@@ -4718,6 +4718,12 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertIs(reauthorization["next_sequence_authorized"], False)
         self.assertEqual(
+            contract["dependency_resolution"]["bun_package_cache"][
+                "reviewed_snapshot"
+            ]["manifest_sha256"],
+            reauthorization["outcome"]["reviewed_manifest_sha256"],
+        )
+        self.assertEqual(
             {
                 "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/153",
                 "predecessor_main_commit": "fdec9cdb170ed63d18735ef9f6d0abacc8e475ab",

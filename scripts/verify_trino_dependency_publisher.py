@@ -125,6 +125,9 @@ EXPECTED_PUBLICATION_ATTEMPT = {
     "before_sha": "fdec9cdb170ed63d18735ef9f6d0abacc8e475ab",
     "run_attempt": "1",
 }
+EXPECTED_REVIEWED_BUN_MANIFEST_SHA256 = (
+    "ca5cc4e1a565ecdd7d3f29610b1cdbe869288357ae6e324c83de1a485872b453"
+)
 EXPECTED_SEQUENCE_6_OUTCOME = {
     "pull_request": 153,
     "pull_request_final_head": "52f1d3194396347078cbe18e871c76d725c79d1e",
@@ -146,9 +149,7 @@ EXPECTED_SEQUENCE_6_OUTCOME = {
     "failed_step": "Resolve and package the first closed Maven repository",
     "failure_code": "BUN_SNAPSHOT_IDENTITY",
     "failure_reason": "reviewed_manifest_sha256_did_not_match_generated_candidate",
-    "reviewed_manifest_sha256": (
-        "ca5cc4e172b72a9074d9bf2fc215a36aef9549c64ad3626203b31bb6c1e4b0df"
-    ),
+    "reviewed_manifest_sha256": EXPECTED_REVIEWED_BUN_MANIFEST_SHA256,
     "generated_manifest_sha256_retained": False,
     "candidate_lockfile_sha256": (
         "7d61c5d3868b5a600ff8a21206168c114848dd7d65b882dc6f5bdaf4c792c8f3"
@@ -1074,9 +1075,7 @@ EXPECTED_BUN_PACKAGE_CACHE = {
     ],
     "independent_reconstructions": 2,
     "reviewed_snapshot": {
-        "manifest_sha256": (
-            "ca5cc4e1a565ecdd7d3f29610b1cdbe869288357ae6e324c83de1a485872b453"
-        ),
+        "manifest_sha256": EXPECTED_REVIEWED_BUN_MANIFEST_SHA256,
         "archive_sha256": (
             "863e9d08bf8d7f106059feff7a5e6d96ca7da17b2cf633381241fe66ab88b1ca"
         ),

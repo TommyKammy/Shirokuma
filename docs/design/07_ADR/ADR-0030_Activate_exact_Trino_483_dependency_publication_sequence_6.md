@@ -102,7 +102,7 @@ manifest SHA-256 differs`. PR #152 had changed the modern Web UI lockfile to
 SHA-256 `7d61c5d3868b5a600ff8a21206168c114848dd7d65b882dc6f5bdaf4c792c8f3`,
 while the reviewed Bun snapshot identity still required the sequence-4
 manifest SHA-256
-`ca5cc4e172b72a9074d9bf2fc215a36aef9549c64ad3626203b31bb6c1e4b0df`.
+`ca5cc4e1a565ecdd7d3f29610b1cdbe869288357ae6e324c83de1a485872b453`.
 
 The generated manifest SHA-256 was not retained and is not inferred here.
 `publish` was skipped, retained artifact count was zero, and registry

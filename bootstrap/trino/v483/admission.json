@@ -383,7 +383,7 @@
       "failed_step": "Resolve and package the first closed Maven repository",
       "failure_code": "BUN_SNAPSHOT_IDENTITY",
       "failure_reason": "reviewed_manifest_sha256_did_not_match_generated_candidate",
-      "reviewed_manifest_sha256": "ca5cc4e172b72a9074d9bf2fc215a36aef9549c64ad3626203b31bb6c1e4b0df",
+      "reviewed_manifest_sha256": "ca5cc4e1a565ecdd7d3f29610b1cdbe869288357ae6e324c83de1a485872b453",
       "generated_manifest_sha256_retained": false,
       "candidate_lockfile_sha256": "7d61c5d3868b5a600ff8a21206168c114848dd7d65b882dc6f5bdaf4c792c8f3",
       "root_cause": "sequence_6_reused_sequence_4_reviewed_bun_snapshot_identity_after_pr_152_changed_the_candidate_lockfile",

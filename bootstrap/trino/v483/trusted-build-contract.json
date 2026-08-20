@@ -47,7 +47,7 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "375b0a80d2b7cc9979fb342a77c878153eb232d37da8c3212b92324ce424e935"
+      "sha256": "76a6f2d7826c58073f07ba93fbe5dd394fc7b0267412b9b806b60e55b57ddb58"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
@@ -95,7 +95,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0030_Activate_exact_Trino_483_dependency_publication_sequence_6.md",
-      "sha256": "bf03c26c294313c22b1631eb2c6840f5e60086b7a42307802bb094c29992a28a"
+      "sha256": "e69e8e1cf0b1e951ef78de1aecc0bcc6562937d31058a027710277d2a1364ba5"
     },
     {
       "path": "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",
@@ -1096,7 +1096,7 @@
         "failed_step": "Resolve and package the first closed Maven repository",
         "failure_code": "BUN_SNAPSHOT_IDENTITY",
         "failure_reason": "reviewed_manifest_sha256_did_not_match_generated_candidate",
-        "reviewed_manifest_sha256": "ca5cc4e172b72a9074d9bf2fc215a36aef9549c64ad3626203b31bb6c1e4b0df",
+        "reviewed_manifest_sha256": "ca5cc4e1a565ecdd7d3f29610b1cdbe869288357ae6e324c83de1a485872b453",
         "generated_manifest_sha256_retained": false,
         "candidate_lockfile_sha256": "7d61c5d3868b5a600ff8a21206168c114848dd7d65b882dc6f5bdaf4c792c8f3",
         "root_cause": "sequence_6_reused_sequence_4_reviewed_bun_snapshot_identity_after_pr_152_changed_the_candidate_lockfile",
