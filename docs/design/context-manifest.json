@@ -36,6 +36,7 @@
     {"source": "07_ADR/ADR-0027_Authorize_bounded_Trino_483_Iceberg_only_Maven_closure.md", "target": "docs/design/07_ADR/ADR-0027_Authorize_bounded_Trino_483_Iceberg_only_Maven_closure.md"},
     {"source": "07_ADR/ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md", "target": "docs/design/07_ADR/ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md"},
     {"source": "07_ADR/ADR-0030_Activate_exact_Trino_483_dependency_publication_sequence_6.md", "target": "docs/design/07_ADR/ADR-0030_Activate_exact_Trino_483_dependency_publication_sequence_6.md"},
+    {"source": "07_ADR/ADR-0031_Activate_exact_Trino_483_dependency_publication_sequence_7.md", "target": "docs/design/07_ADR/ADR-0031_Activate_exact_Trino_483_dependency_publication_sequence_7.md"},
     {"source": "08_Runbooks/RB-001_Bootstrap_local_lite_lab.md", "target": "docs/design/08_Runbooks/RB-001_Bootstrap_local_lite_lab.md"},
     {"source": "08_Runbooks/RB-002_Diagnose_failed_Flux_reconciliation.md", "target": "docs/design/08_Runbooks/RB-002_Diagnose_failed_Flux_reconciliation.md"},
     {"source": "08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo.md", "target": "docs/design/08_Runbooks/RB-013_Nuke_and_Rebuild_mac_studio_solo.md"},

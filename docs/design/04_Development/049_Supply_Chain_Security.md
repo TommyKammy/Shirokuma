@@ -4,8 +4,8 @@ doc_id: "DEV-049"
 title: "Supply Chain Security"
 status: draft
 created: 2026-07-05
-updated: 2026-08-16
-version: "1.47"
+updated: 2026-08-24
+version: "1.48"
 area: "development"
 tags: [shirokuma, security, supply-chain]
 ---
@@ -1322,7 +1322,7 @@ The remediation-feasibility pull-request workflow validates that blocked
 lifecycle and then skips every builder, source-fetch, network, and artifact
 step; `publication-status=blocked` cannot create fresh feasibility evidence.
 
-For active sequence 6, after the workflow gate, a complete GraphQL
+For active sequence 7, after the workflow gate, a complete GraphQL
 cursor query reads `reviewThreads` in pages of
 100 until
 `hasNextPage=false`, bounded to at most 10 pages and 1,000 threads. Every page
@@ -1338,18 +1338,18 @@ reaching either bound fails closed.
 
 Before merge, the OWNER obtains the byte-exact canonical snapshot receipt from
 the repository verifier. The command performs the same bounded two-pass GraphQL
-query used by publication, verifies PR #153 and its exact head, rejects any
+query used by publication, verifies PR #155 and its exact head, rejects any
 current unresolved thread, sorts by thread ID, serializes the `id`,
 `isOutdated`, and `isResolved` fields as compact key-sorted UTF-8 JSON, and
 prints its lowercase SHA-256 as `snapshot_sha256`:
 
 ```bash
-final_head="$(gh pr view 153 --json headRefOid --jq .headRefOid)"
+final_head="$(gh pr view 155 --json headRefOid --jq .headRefOid)"
 GITHUB_TOKEN="$(gh auth token)" \
   python3 scripts/verify_trino_dependency_publisher.py review-thread-snapshot \
     --root . \
     --repository TommyKammy/Shirokuma \
-    --pull-request 153 \
+    --pull-request 155 \
     --final-head "${final_head}"
 ```
 
@@ -1357,17 +1357,17 @@ The owner copies that receipt's `snapshot_sha256` into this exact canonical
 top-level final-head attestation:
 
 ```text
-Owner final-head attestation for PR #153
+Owner final-head attestation for PR #155
 
 Decision: APPROVED
 Final head: <exact final 40-character PR head SHA>
 Review-thread snapshot SHA-256: <canonical 64-character lowercase SHA-256>
-Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5324238100
+Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5389044844
 ```
 
 It must be authored by login `TommyKammy`, GitHub type `User`, association
 `OWNER`, match the exact final head and canonical review-thread snapshot,
-reference exception comment `5324238100`, and exist before merge. Only exact
+reference exception comment `5389044844`, and exist before merge. Only exact
 `APPROVED` or `REVOKED` decisions are recognized. The matching owner decision
 with the latest `updated_at` governs; comment ID is not used for ordering, a
 later `REVOKED` denies approval, and a tie at the latest timestamp fails closed
@@ -1681,6 +1681,38 @@ The `publish` job was skipped, no artifact was retained, and registry
 authentication and write were never reached. Publication permissions are
 false. Rerun, another sequence-6 attempt, and sequence 7 require fresh exact
 candidate evidence and a new explicit OWNER decision.
+
+## Trino 483 dependency publication sequence 7 (2026-08-24)
+
+ADR-0031 and Issue #63 OWNER comment `5389044844` authorize focused PR #155
+from exact predecessor `b2177ef4b1c6e55f225649911d2ed1bc09cd3a0b` and exactly
+one reviewed-main sequence-7 publisher run with `github.run_attempt=1`. Fresh
+source and candidate evidence is recorded in Issue #63 comment `5388964891`.
+The exact revised Bun snapshot is manifest
+`365ca0ac2b081f7be2ef531ddbba94e542a1b6bfce2bad0302a6d046ff69d647`
+and archive
+`8a1d9246c6201f55b8ae10791bba3513351b3de933f8bd89b49d95db3e908cf1`.
+The raw Bun scan remains High=0/Critical=0 and OpenVEX is forbidden.
+
+Before merge, all required workflows must pass on PR #155's exact final head,
+current non-outdated unresolved review threads must equal zero, and the OWNER
+must post this exact top-level form with the generated review-thread snapshot:
+
+```text
+Owner final-head attestation for PR #155
+
+Decision: APPROVED
+Final head: <exact 40-hex final head>
+Review-thread snapshot SHA-256: <exact 64-hex review-thread-snapshot>
+Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5389044844
+```
+
+The snapshot includes every current thread's resolved and outdated state;
+Resolved non-outdated threads remain represented in the canonical hash. Manual
+dispatch, rerun, a second attempt, reuse of run `32315191436`, another
+sequence-6 attempt, and sequence 8 are forbidden. Any sequence-7 failure
+consumes the authorization. Publication success remains review-pending evidence
+and grants no dependency admission or downstream authority.
 
 ## Scanner or feed failure rollback
 

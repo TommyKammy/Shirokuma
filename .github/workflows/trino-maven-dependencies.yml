@@ -17,6 +17,7 @@ on:
       - docs/design/07_ADR/ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md
       - docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md
       - docs/design/07_ADR/ADR-0030_Activate_exact_Trino_483_dependency_publication_sequence_6.md
+      - docs/design/07_ADR/ADR-0031_Activate_exact_Trino_483_dependency_publication_sequence_7.md
       - docs/design/evidence/trino/run-31072144404-maven-feasibility-artifact-receipt.json
       - docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json
       - scripts/package_trino_bun_dependencies.py
@@ -48,6 +49,7 @@ on:
       - docs/design/07_ADR/ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md
       - docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md
       - docs/design/07_ADR/ADR-0030_Activate_exact_Trino_483_dependency_publication_sequence_6.md
+      - docs/design/07_ADR/ADR-0031_Activate_exact_Trino_483_dependency_publication_sequence_7.md
       - docs/design/evidence/trino/run-31072144404-maven-feasibility-artifact-receipt.json
       - docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json
       - scripts/package_trino_bun_dependencies.py
