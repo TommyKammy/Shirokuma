@@ -4,10 +4,10 @@
   "version": "483",
   "platform": "linux/arm64",
   "lifecycle": {
-    "state": "dependency_snapshot_publication_pending",
+    "state": "dependency_snapshot_publication_reauthorization_pending",
     "contract_only": false,
     "dependency_artifact_present": false,
-    "publication_workflow_permitted": true,
+    "publication_workflow_permitted": false,
     "image_publication_permitted": false,
     "resident_admission_permitted": false,
     "runtime_reconciliation_permitted": false
@@ -47,11 +47,11 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "ded5490aa46822b2bf1fbd9bc0eccc1dd6cc0f526b7f6afc4077f9c6a0821d20"
+      "sha256": "76a6f2d7826c58073f07ba93fbe5dd394fc7b0267412b9b806b60e55b57ddb58"
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "b10ece42b69f23167e3a81b0c95368aa42a99d82967699c4f818cb7d17529002"
+      "sha256": "47767c9c72a99511928a32ea1253e1951233a070b72d77a180c63566b893cfc7"
     },
     {
       "path": "tests/test_trino_bun_dependencies.py",
@@ -95,7 +95,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0030_Activate_exact_Trino_483_dependency_publication_sequence_6.md",
-      "sha256": "6fd45e3f6971d168912823d26c71ad3c85118f42a9a8eb3583106f2a5883e434"
+      "sha256": "e69e8e1cf0b1e951ef78de1aecc0bcc6562937d31058a027710277d2a1364ba5"
     },
     {
       "path": "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",
@@ -1027,7 +1027,7 @@
     ]
   },
   "publication": {
-    "permitted": true,
+    "permitted": false,
     "workflow_present": true,
     "workflow": ".github/workflows/trino-maven-dependencies.yml",
     "allowed_ref": "refs/heads/main",
@@ -1042,7 +1042,7 @@
     "run_scoped_tag": "run-<github.run_id>-<github.run_attempt>",
     "reauthorization": {
       "sequence": 6,
-      "status": "active",
+      "status": "consumed_failed_closed",
       "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5324238100",
       "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
       "approved_at": "2026-08-18T05:58:59Z",
@@ -1050,8 +1050,8 @@
       "automatic_renewal": false,
       "risk_owner": "TommyKammy",
       "same_candidate_required": true,
-      "publication_authorized_after_required_approval": true,
-      "next_sequence_authorized": true,
+      "publication_authorized_after_required_approval": false,
+      "next_sequence_authorized": false,
       "previous_attempt": {
         "run_id": "31616764771",
         "run_attempt": "1",
@@ -1077,6 +1077,36 @@
         "raw_bun_high_zero_critical_zero_required": true,
         "openvex_permitted": false
       },
+      "outcome": {
+        "pull_request": 153,
+        "pull_request_final_head": "52f1d3194396347078cbe18e871c76d725c79d1e",
+        "merge_commit": "e634f66b4df9ad2086b32c5cf29c4da416108248",
+        "owner_attestation_comment_id": 5349424935,
+        "owner_attested_at": "2026-08-19T23:54:00Z",
+        "review_thread_snapshot_sha256": "5adda7aff7c40d1799e0815337c4471b8950a196065e35381a4f5e0f0ef4a2f8",
+        "run_id": "32315191436",
+        "run_attempt": "1",
+        "event_name": "push",
+        "ref": "refs/heads/main",
+        "before_sha": "fdec9cdb170ed63d18735ef9f6d0abacc8e475ab",
+        "source_sha": "e634f66b4df9ad2086b32c5cf29c4da416108248",
+        "validate_job": "failure",
+        "publish_job": "skipped",
+        "maven_build": "success",
+        "failed_step": "Resolve and package the first closed Maven repository",
+        "failure_code": "BUN_SNAPSHOT_IDENTITY",
+        "failure_reason": "reviewed_manifest_sha256_did_not_match_generated_candidate",
+        "reviewed_manifest_sha256": "ca5cc4e1a565ecdd7d3f29610b1cdbe869288357ae6e324c83de1a485872b453",
+        "generated_manifest_sha256_retained": false,
+        "candidate_lockfile_sha256": "7d61c5d3868b5a600ff8a21206168c114848dd7d65b882dc6f5bdaf4c792c8f3",
+        "root_cause": "sequence_6_reused_sequence_4_reviewed_bun_snapshot_identity_after_pr_152_changed_the_candidate_lockfile",
+        "retained_artifact_count": 0,
+        "registry_authentication_reached": false,
+        "registry_write_reached": false,
+        "dependency_artifact_published": false,
+        "final_publication_artifact_present": false,
+        "consumed": true
+      },
       "failure_consumes_attempt": true,
       "rerun_permitted": false
     },
@@ -1087,7 +1117,7 @@
       "run_attempt": "1"
     },
     "pending_review_repair": {
-      "status": "authorized_for_sequence_6",
+      "status": "consumed_by_sequence_6_failure",
       "scope": "final_head_pull_request_association_only",
       "triggering_run_id": "31616764771",
       "triggering_run_attempt": "1",
@@ -1110,9 +1140,9 @@
         "workflow_query_branch_must_match_head_ref": true,
         "workflow_run_pull_requests_policy": "empty_or_exact_single_target"
       },
-      "publication_permissions_enabled": true,
-      "applies_only_after_separate_owner_authorization": false,
-      "next_sequence_authorized": true
+      "publication_permissions_enabled": false,
+      "applies_only_after_separate_owner_authorization": true,
+      "next_sequence_authorized": false
     },
     "independent_review": {
       "required_before_merge": true,
@@ -1138,7 +1168,7 @@
       "publication_enforcement": "exact_merged_pull_request_review_or_owner_attestation_query_and_revalidation"
     },
     "owner_only_approval_exception": {
-      "status": "active",
+      "status": "consumed_failed_closed",
       "scope": "pr_153_sixth_publication_attempt_only",
       "reason": "sole_owner_personal_experimental_project",
       "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5324238100",
@@ -1232,7 +1262,14 @@
       "publication_enforcement": "exact_merged_pull_request_pre_merge_review_thread_snapshot_and_two_pass_composite_final_authorization",
       "failure_consumes_attempt": true,
       "rerun_permitted": false,
-      "downstream_authorities_granted": []
+      "downstream_authorities_granted": [],
+      "consumed_run": {
+        "run_id": "32315191436",
+        "run_attempt": "1",
+        "source_sha": "e634f66b4df9ad2086b32c5cf29c4da416108248",
+        "result": "failed_closed_before_publication",
+        "rerun_permitted": false
+      }
     },
     "evidence_review_inventory_policy": {
       "recursive_closed_world_required": true,

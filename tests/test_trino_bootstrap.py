@@ -2971,14 +2971,15 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             if blocker["control"] == "repository_source_build"
         )
         self.assertEqual(
-            "dependency_snapshot_publication_pending",
+            "dependency_snapshot_publication_reauthorization_pending",
             source_build["status"],
         )
-        self.assertIn("PR #148", source_build["evidence"])
-        self.assertIn("31616764771", source_build["evidence"])
+        self.assertIn("PR #153", source_build["evidence"])
+        self.assertIn("32315191436", source_build["evidence"])
+        self.assertIn("BUN_SNAPSHOT_IDENTITY", source_build["evidence"])
         self.assertIn("failed closed", source_build["evidence"])
         self.assertIn("sequence 6", assessment["rationale"])
-        self.assertIn("sequence 6", assessment["rationale"])
+        self.assertIn("sequence 7", assessment["rationale"])
 
     def test_source_authentication_is_only_provisionally_authorized(self) -> None:
         admission = self._admission()
@@ -3010,7 +3011,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             admission["source_authentication"],
         )
         self.assertIs(
-            admission["repository_state"]["publication_workflow_permitted"], True
+            admission["repository_state"]["publication_workflow_permitted"], False
         )
 
     def test_provisional_source_authorization_is_bounded_and_fail_closed(self) -> None:
@@ -3303,7 +3304,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         self.assertEqual(
             {
                 "dependency_snapshot_contract_permitted": True,
-                "publication_workflow_permitted": True,
+                "publication_workflow_permitted": False,
                 "dependency_artifact_present": False,
                 "resident_ledger_permitted": False,
                 "runtime_manifests_permitted": False,
@@ -3469,7 +3470,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             "runtime_manifests_permitted",
         ):
             self.assertIs(repository_state[key], False)
-        self.assertIs(repository_state["publication_workflow_permitted"], True)
+        self.assertIs(repository_state["publication_workflow_permitted"], False)
         self.assertIs(
             repository_state["dependency_snapshot_contract_permitted"], True
         )
@@ -4685,17 +4686,17 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             rebuild["retained_output_evidence"],
         )
 
-    def test_dependency_snapshot_contract_activates_exact_sequence_6(
+    def test_dependency_snapshot_contract_closes_consumed_sequence_6(
         self,
     ) -> None:
         contract = self._trusted_build_contract()
         admission = self._admission()
         self.assertEqual(
             {
-                "state": "dependency_snapshot_publication_pending",
+                "state": "dependency_snapshot_publication_reauthorization_pending",
                 "contract_only": False,
                 "dependency_artifact_present": False,
-                "publication_workflow_permitted": True,
+                "publication_workflow_permitted": False,
                 "image_publication_permitted": False,
                 "resident_admission_permitted": False,
                 "runtime_reconciliation_permitted": False,
@@ -4703,19 +4704,25 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             contract["lifecycle"],
         )
         publication = contract["publication"]
-        self.assertIs(publication["permitted"], True)
+        self.assertIs(publication["permitted"], False)
         self.assertEqual(
             "static_read_only_contract_validation",
             publication["pull_request_behavior"],
         )
         reauthorization = publication["reauthorization"]
         self.assertEqual(6, reauthorization["sequence"])
-        self.assertEqual("active", reauthorization["status"])
+        self.assertEqual("consumed_failed_closed", reauthorization["status"])
         self.assertIs(
             reauthorization["publication_authorized_after_required_approval"],
-            True,
+            False,
         )
-        self.assertIs(reauthorization["next_sequence_authorized"], True)
+        self.assertIs(reauthorization["next_sequence_authorized"], False)
+        self.assertEqual(
+            contract["dependency_resolution"]["bun_package_cache"][
+                "reviewed_snapshot"
+            ]["manifest_sha256"],
+            reauthorization["outcome"]["reviewed_manifest_sha256"],
+        )
         self.assertEqual(
             {
                 "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/153",
@@ -4734,16 +4741,22 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             reauthorization["activation"],
         )
         self.assertEqual(
-            "authorized_for_sequence_6",
+            "consumed_by_sequence_6_failure",
             publication["pending_review_repair"]["status"],
         )
         self.assertEqual(
-            "active",
+            "consumed_failed_closed",
             publication["owner_only_approval_exception"]["status"],
         )
-        self.assertNotIn(
-            "consumed_run",
-            publication["owner_only_approval_exception"],
+        self.assertEqual(
+            {
+                "run_id": "32315191436",
+                "run_attempt": "1",
+                "source_sha": "e634f66b4df9ad2086b32c5cf29c4da416108248",
+                "result": "failed_closed_before_publication",
+                "rerun_permitted": False,
+            },
+            publication["owner_only_approval_exception"]["consumed_run"],
         )
         self.assertTrue((ROOT / publication["workflow"]).is_file())
         self.assertEqual(
@@ -4761,7 +4774,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             reauthorization["previous_attempt"],
         )
         pending_repair = {
-            "status": "authorized_for_sequence_6",
+            "status": "consumed_by_sequence_6_failure",
             "scope": "final_head_pull_request_association_only",
             "triggering_run_id": "31616764771",
             "triggering_run_attempt": "1",
@@ -4788,9 +4801,9 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "empty_or_exact_single_target"
                 ),
             },
-            "publication_permissions_enabled": True,
-            "applies_only_after_separate_owner_authorization": False,
-            "next_sequence_authorized": True,
+            "publication_permissions_enabled": False,
+            "applies_only_after_separate_owner_authorization": True,
+            "next_sequence_authorized": False,
         }
         self.assertEqual(pending_repair, publication["pending_review_repair"])
         self.assertEqual(
@@ -4831,36 +4844,29 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
     ) -> None:
         next_action = self._admission()["next_action"]
         self.assertEqual(
-            "merge-focused-activation-after-final-head-owner-attestation",
+            "prepare-fresh-candidate-review-and-owner-reauthorization",
             next_action["mode"],
         )
         self.assertIs(next_action["decision_record_required"], True)
         self.assertEqual(
-            "dependency_snapshot_publication_pending",
+            "dependency_snapshot_publication_reauthorization_pending",
             next_action["phase"],
         )
         requirements = next_action["requirements"]
         self.assertTrue(
-            any("sequence 5 PR #148" in requirement for requirement in requirements)
-        )
-        self.assertTrue(
-            any("sequence 6" in requirement for requirement in requirements)
-        )
-        self.assertTrue(
             any(
-                "exactly one sequence 6" in requirement
+                "sequence 6 run 32315191436" in requirement
                 for requirement in requirements
             )
         )
-        approval_requirement = next(
-            requirement
-            for requirement in requirements
-            if "OWNER final-head attestation" in requirement
+        self.assertTrue(
+            any("sequence 7" in requirement for requirement in requirements)
         )
-        self.assertIn("for every approval mode", approval_requirement)
-        self.assertIn(
-            "when the standard independent-review mode is selected",
-            approval_requirement,
+        self.assertTrue(
+            any(
+                "unretained generated manifest" in requirement
+                for requirement in requirements
+            )
         )
 
     def test_provisional_source_decision_authorizes_only_the_next_boundary(self) -> None:

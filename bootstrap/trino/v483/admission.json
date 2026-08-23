@@ -51,11 +51,11 @@
       },
       {
         "control": "repository_source_build",
-        "status": "dependency_snapshot_publication_pending",
-        "evidence": "PR #148 merged as 49a86522d6e6c69f4a552220b30fa510d3a5edd2 and consumed the sequence 5 authorization in run 31616764771 attempt 1. Validate succeeded, but publish failed closed before candidate download or registry authentication because GitHub's workflow-run pull_requests association was empty after merge. The temporary candidate artifact expired and no dependency artifact or final publication evidence exists. PR #149 repaired only the prospective pull-request association lookup, PR #152 fixed the candidate to React Router 7.18.2 and nanoid 3.3.18 without OpenVEX, and OWNER comment 5324238100 authorizes exactly one sequence 6 attempt after focused activation PR #153 merges from predecessor fdec9cdb170ed63d18735ef9f6d0abacc8e475ab."
+        "status": "dependency_snapshot_publication_reauthorization_pending",
+        "evidence": "PR #153 merged as e634f66b4df9ad2086b32c5cf29c4da416108248 and consumed the sequence 6 authorization in run 32315191436 attempt 1. The Maven build succeeded, but validate failed closed at the first repository packaging step with BUN_SNAPSHOT_IDENTITY because the reviewed sequence-4 Bun manifest SHA-256 did not match the candidate generated from PR #152's revised lockfile. Publish was skipped, no artifact was retained, and registry authentication or write was never reached. Rerun and sequence 7 remain forbidden without a fresh OWNER decision."
       }
     ],
-    "rationale": "ADR-0019 does not waive source identity, image signature, transparency-log, provenance, or evidence requirements. ADR-0023, ADR-0024, ADR-0026, ADR-0027, and ADR-0029 retain their exact bounded source remediations. Main run 31616764771 consumed sequence 5 and failed closed before candidate download or registry authentication because the workflow-run pull_requests association was empty after merge. PR #149 prospectively repaired that lookup without retroactively authorizing the failed run. PR #152 fixed the candidate to React Router 7.18.2 and nanoid 3.3.18 with raw High=0/Critical=0 and no OpenVEX. ADR-0030 and OWNER comment 5324238100 activate only PR #153 and exactly one sequence 6 push to reviewed main after exact final-head CI, review-thread, and OWNER attestation gates. Dependency admission, image, resident, Flux/runtime, credential, exposure, production, and Issue #63 closure authorities remain false."
+    "rationale": "ADR-0019 does not waive source identity, image signature, transparency-log, provenance, or evidence requirements. ADR-0023, ADR-0024, ADR-0026, ADR-0027, and ADR-0029 retain their exact bounded source remediations. Main run 32315191436 consumed sequence 6 and failed closed before publication because the reviewed Bun manifest identity remained bound to sequence 4 while PR #152 changed the candidate lockfile. The Maven build succeeded, but validate failed before candidate retention; publish was skipped; and registry authentication and write were never reached. No generated manifest SHA-256 was retained, so this closeout does not invent or approve one. Rerun, sequence 7, dependency admission, image, resident, Flux/runtime, credential, exposure, production, and Issue #63 closure authorities remain false pending a fresh OWNER decision."
   },
   "source_authentication": {
     "status": "provisionally_authorized_for_local_poc",
@@ -329,7 +329,7 @@
   },
   "dependency_snapshot_publication_reauthorization": {
     "sequence": 6,
-    "status": "active",
+    "status": "consumed_failed_closed",
     "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5324238100",
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
     "approved_at": "2026-08-18T05:58:59Z",
@@ -337,8 +337,8 @@
     "automatic_renewal": false,
     "risk_owner": "TommyKammy",
     "same_candidate_required": true,
-    "publication_authorized_after_required_approval": true,
-    "next_sequence_authorized": true,
+    "publication_authorized_after_required_approval": false,
+    "next_sequence_authorized": false,
     "previous_attempt": {
       "run_id": "31616764771",
       "run_attempt": "1",
@@ -364,11 +364,41 @@
       "raw_bun_high_zero_critical_zero_required": true,
       "openvex_permitted": false
     },
+    "outcome": {
+      "pull_request": 153,
+      "pull_request_final_head": "52f1d3194396347078cbe18e871c76d725c79d1e",
+      "merge_commit": "e634f66b4df9ad2086b32c5cf29c4da416108248",
+      "owner_attestation_comment_id": 5349424935,
+      "owner_attested_at": "2026-08-19T23:54:00Z",
+      "review_thread_snapshot_sha256": "5adda7aff7c40d1799e0815337c4471b8950a196065e35381a4f5e0f0ef4a2f8",
+      "run_id": "32315191436",
+      "run_attempt": "1",
+      "event_name": "push",
+      "ref": "refs/heads/main",
+      "before_sha": "fdec9cdb170ed63d18735ef9f6d0abacc8e475ab",
+      "source_sha": "e634f66b4df9ad2086b32c5cf29c4da416108248",
+      "validate_job": "failure",
+      "publish_job": "skipped",
+      "maven_build": "success",
+      "failed_step": "Resolve and package the first closed Maven repository",
+      "failure_code": "BUN_SNAPSHOT_IDENTITY",
+      "failure_reason": "reviewed_manifest_sha256_did_not_match_generated_candidate",
+      "reviewed_manifest_sha256": "ca5cc4e1a565ecdd7d3f29610b1cdbe869288357ae6e324c83de1a485872b453",
+      "generated_manifest_sha256_retained": false,
+      "candidate_lockfile_sha256": "7d61c5d3868b5a600ff8a21206168c114848dd7d65b882dc6f5bdaf4c792c8f3",
+      "root_cause": "sequence_6_reused_sequence_4_reviewed_bun_snapshot_identity_after_pr_152_changed_the_candidate_lockfile",
+      "retained_artifact_count": 0,
+      "registry_authentication_reached": false,
+      "registry_write_reached": false,
+      "dependency_artifact_published": false,
+      "final_publication_artifact_present": false,
+      "consumed": true
+    },
     "failure_consumes_attempt": true,
     "rerun_permitted": false
   },
   "pending_publication_repair": {
-    "status": "authorized_for_sequence_6",
+    "status": "consumed_by_sequence_6_failure",
     "scope": "final_head_pull_request_association_only",
     "triggering_run_id": "31616764771",
     "triggering_run_attempt": "1",
@@ -391,9 +421,9 @@
       "workflow_query_branch_must_match_head_ref": true,
       "workflow_run_pull_requests_policy": "empty_or_exact_single_target"
     },
-    "publication_permissions_enabled": true,
-    "applies_only_after_separate_owner_authorization": false,
-    "next_sequence_authorized": true
+    "publication_permissions_enabled": false,
+    "applies_only_after_separate_owner_authorization": true,
+    "next_sequence_authorized": false
   },
   "independent_review": {
     "required_before_merge": true,
@@ -419,7 +449,7 @@
     "publication_enforcement": "exact_merged_pull_request_review_or_owner_attestation_query_and_revalidation"
   },
   "owner_only_approval_exception": {
-    "status": "active",
+    "status": "consumed_failed_closed",
     "scope": "pr_153_sixth_publication_attempt_only",
     "reason": "sole_owner_personal_experimental_project",
     "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5324238100",
@@ -513,11 +543,18 @@
     "publication_enforcement": "exact_merged_pull_request_pre_merge_review_thread_snapshot_and_two_pass_composite_final_authorization",
     "failure_consumes_attempt": true,
     "rerun_permitted": false,
-    "downstream_authorities_granted": []
+    "downstream_authorities_granted": [],
+    "consumed_run": {
+      "run_id": "32315191436",
+      "run_attempt": "1",
+      "source_sha": "e634f66b4df9ad2086b32c5cf29c4da416108248",
+      "result": "failed_closed_before_publication",
+      "rerun_permitted": false
+    }
   },
   "repository_state": {
     "dependency_snapshot_contract_permitted": true,
-    "publication_workflow_permitted": true,
+    "publication_workflow_permitted": false,
     "dependency_artifact_present": false,
     "resident_ledger_permitted": false,
     "runtime_manifests_permitted": false,
@@ -583,7 +620,7 @@
     ]
   },
   "next_action": {
-    "mode": "merge-focused-activation-after-final-head-owner-attestation",
+    "mode": "prepare-fresh-candidate-review-and-owner-reauthorization",
     "decision_record_required": true,
     "decision_records": [
       "docs/design/07_ADR/ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md",
@@ -595,7 +632,7 @@
       "docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md",
       "docs/design/07_ADR/ADR-0030_Activate_exact_Trino_483_dependency_publication_sequence_6.md"
     ],
-    "phase": "dependency_snapshot_publication_pending",
+    "phase": "dependency_snapshot_publication_reauthorization_pending",
     "requirements": [
       "active and unexpired provisional source authorization bound to the exact source repository, tag, commit, and tree",
       "active exact owner authorization bound to the Parquet repository, tags, objects, commit, tree, preimage, postimage, permitted path, dependency replacements, expiry, and rollback",
@@ -603,9 +640,8 @@
       "active exact owner authorization bound to the retained post-ADR-0027 pom.xml feasibility patch, patch and preimage/postimage hashes, Velocity Engine Core 2.4.1 and Plexus Utils 4.0.3 replacements, unchanged selected reactor, hardened run and independent audit, expiry, and rollback",
       "retain the exact sequence 5 PR #148 and run 31616764771 fail-closed outcome without admitting its expired temporary candidate artifact",
       "use the PR #149 association repair prospectively only and never as retroactive authorization for sequence 5",
-      "merge only focused activation PR #153 from predecessor fdec9cdb170ed63d18735ef9f6d0abacc8e475ab after all exact final-head checks pass and current non-outdated unresolved review threads equal zero",
-      "require the exact OWNER final-head attestation authorized by comment 5324238100 for every approval mode, plus a current independent human APPROVED review on exact PR #153 final head from a reviewer distinct from the source-remediation author and owner when the standard independent-review mode is selected",
-      "after merge permit exactly one sequence 6 push run on reviewed main with run_attempt 1 and no rerun",
+      "retain exact sequence 6 run 32315191436 as consumed after BUN_SNAPSHOT_IDENTITY failure without inventing the unretained generated manifest SHA-256",
+      "keep rerun, a second sequence 6 attempt, and sequence 7 disabled until a focused candidate revision records fresh exact snapshot evidence and receives a new explicit OWNER decision",
       "authenticated closed dependency snapshot",
       "network-none reproducible linux/arm64 build",
       "digest-pinned builder and runtime bases",
