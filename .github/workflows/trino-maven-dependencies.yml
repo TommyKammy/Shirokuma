@@ -1285,7 +1285,7 @@ jobs:
                       "sourceIdentityRisk": (
                           "provisionally-authorized-not-authenticated"
                       ),
-                      "authorizationExpiresAt": "2026-09-17T02:15:58Z",
+                      "authorizationExpiresAt": "2026-09-22T23:00:43Z",
                   },
                   "resolvedDependencies": [
                       {
@@ -1697,7 +1697,7 @@ jobs:
               "workflow_sha": os.environ["GITHUB_WORKFLOW_SHA"],
               "run_id": os.environ["GITHUB_RUN_ID"],
               "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
-              "authorization_expires_at": "2026-09-17T02:15:58Z",
+              "authorization_expires_at": "2026-09-22T23:00:43Z",
               "source_identity": "provisionally-authorized-not-authenticated",
               "dependency_artifact_admitted": False,
               "image_publication_permitted": False,
