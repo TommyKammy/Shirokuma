@@ -168,6 +168,45 @@ EXPECTED_SEQUENCE_6_OUTCOME = {
     "final_publication_artifact_present": False,
     "consumed": True,
 }
+EXPECTED_SEQUENCE_7_OUTCOME = {
+    "pull_request": 155,
+    "pull_request_final_head": "aaf83e8433a2e306f80ab8c707c5804412096396",
+    "merge_commit": "688e8e8cfcd9653a74dc93bceee2100c5acf18cb",
+    "owner_attestation_comment_id": 5402502634,
+    "owner_attested_at": "2026-08-24T22:43:42Z",
+    "review_thread_snapshot_sha256": (
+        "500ea2b7c199352b23f57363b7cf676c3d7155b657af1718e9c1c058659ace0d"
+    ),
+    "run_id": "32786095668",
+    "run_attempt": "1",
+    "event_name": "push",
+    "ref": "refs/heads/main",
+    "before_sha": "b2177ef4b1c6e55f225649911d2ed1bc09cd3a0b",
+    "source_sha": "688e8e8cfcd9653a74dc93bceee2100c5acf18cb",
+    "validate_job": "failure",
+    "publish_job": "skipped",
+    "maven_build": "success",
+    "failed_step": "Verify and block the complete Maven JAR scan inventory",
+    "failure_code": "MAVEN_SCAN_FINDING",
+    "failure_reason": "Maven High/Critical finding remains",
+    "critical_occurrences": 0,
+    "high_occurrences": 3,
+    "high_vulnerability_ids": 3,
+    "diagnostic_artifact_id": "9542062490",
+    "diagnostic_artifact_digest": (
+        "sha256:bbb58d79f653c04e4d37739bd9cfc73426edaa4cbc78c5b3a390b1524759c369"
+    ),
+    "diagnostic_receipt": (
+        "docs/design/evidence/trino/"
+        "run-32786095668-maven-vulnerability-diagnostic-receipt.json"
+    ),
+    "candidate_artifact_recorded": False,
+    "registry_authentication_reached": False,
+    "registry_write_reached": False,
+    "dependency_artifact_published": False,
+    "final_publication_artifact_present": False,
+    "consumed": True,
+}
 EXPECTED_INDEPENDENT_REVIEW = {
     "required_before_merge": True,
     "required_before_publication": True,
@@ -194,7 +233,7 @@ EXPECTED_INDEPENDENT_REVIEW = {
     ),
 }
 EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
-    "status": "active",
+    "status": "consumed_failed_closed",
     "scope": "pr_155_seventh_publication_attempt_only",
     "reason": "sole_owner_personal_experimental_project",
     "approval_record": (
@@ -304,9 +343,16 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
     "rerun_permitted": False,
     "downstream_authorities_granted": [],
     "standard_independent_review_remains_accepted": True,
+    "consumed_run": {
+        "run_id": "32786095668",
+        "run_attempt": "1",
+        "source_sha": "688e8e8cfcd9653a74dc93bceee2100c5acf18cb",
+        "result": "failed_closed_before_publication",
+        "rerun_permitted": False,
+    },
 }
 EXPECTED_PENDING_REVIEW_REPAIR = {
-    "status": "authorized_for_sequence_7",
+    "status": "consumed_by_sequence_7_failure",
     "scope": "final_head_pull_request_association_only",
     "triggering_run_id": "31616764771",
     "triggering_run_attempt": "1",
@@ -331,13 +377,13 @@ EXPECTED_PENDING_REVIEW_REPAIR = {
         "workflow_query_branch_must_match_head_ref": True,
         "workflow_run_pull_requests_policy": "empty_or_exact_single_target",
     },
-    "publication_permissions_enabled": True,
-    "applies_only_after_separate_owner_authorization": False,
-    "next_sequence_authorized": True,
+    "publication_permissions_enabled": False,
+    "applies_only_after_separate_owner_authorization": True,
+    "next_sequence_authorized": False,
 }
 EXPECTED_PUBLICATION_REAUTHORIZATION = {
     "sequence": 7,
-    "status": "active",
+    "status": "consumed_failed_closed",
     "approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
         "#issuecomment-5389044844"
@@ -348,8 +394,8 @@ EXPECTED_PUBLICATION_REAUTHORIZATION = {
     "automatic_renewal": False,
     "risk_owner": "TommyKammy",
     "same_candidate_required": True,
-    "publication_authorized_after_required_approval": True,
-    "next_sequence_authorized": True,
+    "publication_authorized_after_required_approval": False,
+    "next_sequence_authorized": False,
     "previous_attempt": EXPECTED_SEQUENCE_6_OUTCOME,
     "activation": {
         "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/155",
@@ -382,6 +428,7 @@ EXPECTED_PUBLICATION_REAUTHORIZATION = {
         "raw_bun_high_zero_critical_zero_required": True,
         "openvex_permitted": False,
     },
+    "outcome": EXPECTED_SEQUENCE_7_OUTCOME,
     "failure_consumes_attempt": True,
     "rerun_permitted": False,
 }
@@ -451,6 +498,21 @@ BLOCKER_FEASIBILITY_RECORD_PATH = Path(
 BLOCKER_FEASIBILITY_RECEIPT_PATH = Path(
     "docs/design/evidence/trino/"
     "run-30731801825-maven-feasibility-artifact-receipt.json"
+)
+SEQUENCE_7_DIAGNOSTIC_RECEIPT_PATH = Path(
+    "docs/design/evidence/trino/"
+    "run-32786095668-maven-vulnerability-diagnostic-receipt.json"
+)
+SEQUENCE_7_DIAGNOSTIC_INPUT_PATHS = (
+    Path(
+        "docs/design/evidence/trino/"
+        "run-32786095668-maven-dependency-manifest.json"
+    ),
+    Path("docs/design/evidence/trino/run-32786095668-maven-closure.cdx.json"),
+    Path("docs/design/evidence/trino/run-32786095668-maven-rootfs.cdx.json"),
+    Path(
+        "docs/design/evidence/trino/run-32786095668-trivy-vulnerability.json"
+    ),
 )
 SUPERSEDED_FEASIBILITY_RECORD_PATH = Path(
     "docs/design/evidence/trino/"
@@ -2859,6 +2921,163 @@ def _validate_blocker_evidence(
             "BLOCKER_FEASIBILITY_EXPIRED",
             f"{at.isoformat()} is at or after {expires.isoformat()}",
         )
+    _validate_retained_blocker_and_sequence_7_evidence(root)
+
+
+def _validate_retained_blocker_and_sequence_7_evidence(root: Path) -> None:
+    receipt = _load_json(root / SEQUENCE_7_DIAGNOSTIC_RECEIPT_PATH)
+    expected_files = [
+        (
+            "docs/design/evidence/trino/"
+            "run-32786095668-maven-dependency-manifest.json",
+            "00747799da4c5e528b25da32ca84e6f88a4eb732990c3d4a58a694298a4d4eaf",
+            1758268,
+        ),
+        (
+            "docs/design/evidence/trino/run-32786095668-maven-closure.cdx.json",
+            "8bca36b56a8c6377c1325797e6655479f961cc7c63f65a818c2dcc32fb1e6ed6",
+            801050,
+        ),
+        (
+            "docs/design/evidence/trino/run-32786095668-maven-rootfs.cdx.json",
+            "91a72cf94e8bac64a5136097cf1835a1152636050e1f40ab4b805d42e2e8c5a5",
+            862311,
+        ),
+        (
+            "docs/design/evidence/trino/"
+            "run-32786095668-trivy-vulnerability.json",
+            "80a378e01ae91c24a5faf5d2feb9de98c1e09390405edc49cc02a4fa39535f90",
+            520619,
+        ),
+    ]
+    observed_files = receipt.get("retained_files")
+    if not isinstance(observed_files, list) or len(observed_files) != len(
+        expected_files
+    ):
+        _fail("SEQUENCE_7_EVIDENCE", "retained file inventory differs")
+    for record, (path, sha256, size) in zip(
+        observed_files,
+        expected_files,
+    ):
+        if not _matches_exact_json(
+            record,
+            {"path": path, "sha256": sha256, "size_in_bytes": size},
+        ):
+            _fail("SEQUENCE_7_EVIDENCE", f"retained record differs: {path}")
+        payload = _read_reviewed_regular_file(
+            root / path,
+            code="SEQUENCE_7_EVIDENCE",
+        )
+        if len(payload) != size or hashlib.sha256(payload).hexdigest() != sha256:
+            _fail("SEQUENCE_7_EVIDENCE", f"retained bytes differ: {path}")
+    if (
+        receipt.get("schema_version") != 1
+        or receipt.get("subject")
+        != "Trino 483 dependency publication sequence 7 Maven vulnerability diagnostic"
+        or not _matches_exact_json(
+            receipt.get("source_run", {}),
+            {
+                "run_id": "32786095668",
+                "run_attempt": "1",
+                "event_name": "push",
+                "ref": "refs/heads/main",
+                "before_sha": "b2177ef4b1c6e55f225649911d2ed1bc09cd3a0b",
+                "source_sha": "688e8e8cfcd9653a74dc93bceee2100c5acf18cb",
+                "created_at": "2026-08-24T22:44:31Z",
+                "completed_at": "2026-08-24T23:06:59Z",
+            },
+        )
+        or not _matches_exact_json(
+            receipt.get("artifact", {}),
+            {
+                "id": "9542062490",
+                "name": "trino-maven-vulnerability-diagnostics-32786095668-1",
+                "digest": EXPECTED_SEQUENCE_7_OUTCOME[
+                    "diagnostic_artifact_digest"
+                ],
+                "size_in_bytes": 530903,
+                "created_at": "2026-08-24T23:06:34Z",
+                "expires_at": "2026-09-07T23:06:33Z",
+            },
+        )
+        or not _matches_exact_json(
+            receipt.get("inventory", {}),
+            {
+                "rootfs_discovered_jars": 803,
+                "closed_manifest_jars": 805,
+                "rootfs_discovered_components": 835,
+                "manifest_added_components": 23,
+                "authorized_omissions": 2,
+                "supplemental_components": 1,
+                "closure_components": 858,
+                "closure_dependencies": 859,
+            },
+        )
+        or not _matches_exact_json(
+            receipt.get("scan", {}),
+            {
+                "scanner": "Trivy 0.72.0",
+                "created_at": "2026-08-24T23:06:31.536362371Z",
+                "critical_occurrences": 0,
+                "high_occurrences": 3,
+                "high_vulnerability_ids": 3,
+                "findings": [
+                    {
+                        "vulnerability_id": "CVE-2026-59902",
+                        "severity": "HIGH",
+                        "package": "io.netty:netty-transport-sctp",
+                        "installed_version": "4.2.16.Final",
+                        "fixed_versions": "4.2.17.Final, 4.1.137.Final",
+                        "status": "fixed",
+                    },
+                    {
+                        "vulnerability_id": "CVE-2026-54399",
+                        "severity": "HIGH",
+                        "package": "org.apache.httpcomponents.core5:httpcore5",
+                        "installed_version": "5.3.6",
+                        "fixed_versions": "5.4.3, 5.5-beta2",
+                        "status": "fixed",
+                    },
+                    {
+                        "vulnerability_id": "CVE-2026-54428",
+                        "severity": "HIGH",
+                        "package": "org.apache.httpcomponents.core5:httpcore5-h2",
+                        "installed_version": "5.3.6",
+                        "fixed_versions": "5.4.3, 5.5-beta2",
+                        "status": "fixed",
+                    },
+                ],
+            },
+        )
+        or not _matches_exact_json(
+            receipt.get("outcome", {}),
+            {
+                "validate_job": "failure",
+                "publish_job": "skipped",
+                "failed_step": (
+                    "Verify and block the complete Maven JAR scan inventory"
+                ),
+                "failure_code": "MAVEN_SCAN_FINDING",
+                "failure_reason": "Maven High/Critical finding remains",
+                "candidate_artifact_recorded": False,
+                "registry_authentication_reached": False,
+                "registry_write_reached": False,
+                "dependency_artifact_published": False,
+                "sequence_consumed": True,
+            },
+        )
+        or not _matches_exact_json(
+            receipt.get("next_action", {}),
+            {
+                "publication_remains_blocked": True,
+                "rerun_permitted": False,
+                "sequence_8_authorized": False,
+                "fresh_remediation_feasibility_required": True,
+                "fresh_owner_decision_required": True,
+            },
+        )
+    ):
+        _fail("SEQUENCE_7_EVIDENCE", "receipt policy boundary differs")
     retained_feasibility: dict[Path, dict[str, Any]] = {}
     for path, expected in EXPECTED_BLOCKER_FEASIBILITY_FILES.items():
         payload = _read_reviewed_regular_file(
@@ -7035,7 +7254,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
     publication = contract.get("publication", {})
     if (
-        publication.get("permitted") is not True
+        publication.get("permitted") is not False
         or publication.get("workflow_present") is not True
         or publication.get("workflow") != WORKFLOW_PATH.as_posix()
         or publication.get("allowed_ref") != "refs/heads/main"
@@ -7122,6 +7341,7 @@ def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
         AUTHORIZED_FEASIBILITY_RECORD_PATH,
         AUTHORIZED_FEASIBILITY_RECEIPT_PATH,
         BLOCKER_CLASSIFICATION_PATH,
+        SEQUENCE_7_DIAGNOSTIC_RECEIPT_PATH,
         BLOCKER_HARDENED_SCM_POM_PATH,
         BLOCKER_HARDENED_SCM_MANAGER_POM_PATH,
     }
@@ -7155,10 +7375,10 @@ def audit(root: Path) -> None:
     if not _matches_exact_json(
         lifecycle,
         {
-            "state": "dependency_snapshot_publication_pending",
+            "state": "dependency_snapshot_publication_reauthorization_pending",
             "contract_only": False,
             "dependency_artifact_present": False,
-            "publication_workflow_permitted": True,
+            "publication_workflow_permitted": False,
             "image_publication_permitted": False,
             "resident_admission_permitted": False,
             "runtime_reconciliation_permitted": False,
@@ -7317,7 +7537,7 @@ def audit(root: Path) -> None:
             admission.get("pending_publication_repair"),
             EXPECTED_PENDING_REVIEW_REPAIR,
         )
-        or repository_state.get("publication_workflow_permitted") is not True
+        or repository_state.get("publication_workflow_permitted") is not False
         or repository_state.get("dependency_artifact_present") is not False
         or repository_state.get("resident_ledger_permitted") is not False
         or repository_state.get("runtime_manifests_permitted") is not False

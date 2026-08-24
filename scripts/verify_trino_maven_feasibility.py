@@ -112,7 +112,7 @@ EXPECTED_WORKFLOW_STEPS = (
     "Retain the review-only feasibility inputs and outputs",
 )
 EXPECTED_WORKFLOW_SHA256 = (
-    "a77f6f1414472a07cb73dd43e9d921bdd2f2874792396a120e5a82ba511d1c39"
+    "0f4d7ee41ee75212e673acf490a42fbdb39280f9a3b414f9496125a8035b706f"
 )
 EXPECTED_MAVEN_BASEDIR = "/policy"
 EXPECTED_POLICY_SOURCE = "bootstrap/trino/v483/maven-policy/.mvn"
@@ -1932,10 +1932,10 @@ def audit_workflow(root: Path) -> None:
         "verify_trino_maven_feasibility.py verify-candidate",
         "id: lifecycle",
         "publication-status --root .",
-        'test "${publication_status}" = "active"',
-        'echo "active=true" >> "${GITHUB_OUTPUT}"',
-        '"state": "dependency_snapshot_publication_pending"',
-        '"publication_workflow_permitted": True',
+        'test "${publication_status}" = "blocked"',
+        'echo "active=false" >> "${GITHUB_OUTPUT}"',
+        '"state": "dependency_snapshot_publication_reauthorization_pending"',
+        '"publication_workflow_permitted": False',
         "bootstrap/trino/v483/maven-policy/.mvn/**",
         "docs/design/evidence/trino/"
         "run-30693677356-maven-vulnerability-classification.json",

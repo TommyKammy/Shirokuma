@@ -55,11 +55,11 @@
       },
       {
         "control": "repository_source_build",
-        "status": "dependency_snapshot_publication_pending",
-        "evidence": "PR #154 retained reviewed-main run 32315191436 attempt 1 as the consumed sequence 6 BUN_SNAPSHOT_IDENTITY failure that failed closed before publication, and merged as exact predecessor b2177ef4b1c6e55f225649911d2ed1bc09cd3a0b. Fresh evidence retained byte-identical Bun manifest 365ca0ac2b081f7be2ef531ddbba94e542a1b6bfce2bad0302a6d046ff69d647 and archive 8a1d9246c6201f55b8ae10791bba3513351b3de933f8bd89b49d95db3e908cf1 with raw High=0/Critical=0 and no OpenVEX. OWNER comment 5389044844 authorizes only focused activation PR #155 and one sequence 7 reviewed-main attempt after exact final-head gates."
+        "status": "dependency_snapshot_publication_reauthorization_pending",
+        "evidence": "PR #155 merged as 688e8e8cfcd9653a74dc93bceee2100c5acf18cb and consumed sequence 7 in run 32786095668 attempt 1. Validate failed closed at the complete Maven JAR scan inventory because three raw High findings remained; publish was skipped, no candidate artifact was recorded, and registry authentication or write was never reached. The diagnostic artifact and its four exact source files are retained by repository evidence. Rerun and sequence 8 remain forbidden without fresh remediation evidence and a new OWNER decision."
       }
     ],
-    "rationale": "ADR-0019 does not waive source identity, image signature, transparency-log, provenance, or evidence requirements. ADR-0023, ADR-0024, ADR-0026, ADR-0027, and ADR-0029 retain their exact bounded source remediations. ADR-0030 retains the consumed sequence 6 failure. Fresh candidate evidence in Issue #63 comment 5388964891 binds the exact revised Bun snapshot identity, and OWNER comment 5389044844 activates only PR #155 and one sequence 7 reviewed-main attempt. Dependency admission, image, resident, Flux/runtime, credential, exposure, production, and Issue #63 closure authorities remain false."
+    "rationale": "ADR-0019 does not waive source identity, image signature, transparency-log, provenance, or evidence requirements. ADR-0023, ADR-0024, ADR-0026, ADR-0027, and ADR-0029 retain their exact bounded source remediations. ADR-0030 retains the consumed sequence 6 failure. The sequence 7 run reached the closure-complete Maven scan and failed closed on CVE-2026-59902, CVE-2026-54399, and CVE-2026-54428 before candidate retention or publication. No waiver or OpenVEX adjustment is accepted. Rerun, sequence 8, dependency admission, image, resident, Flux/runtime, credential, exposure, production, and Issue #63 closure authorities remain false pending fresh remediation evidence and a new OWNER decision."
   },
   "source_authentication": {
     "status": "provisionally_authorized_for_local_poc",
@@ -350,7 +350,7 @@
   },
   "dependency_snapshot_publication_reauthorization": {
     "sequence": 7,
-    "status": "active",
+    "status": "consumed_failed_closed",
     "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5389044844",
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
     "approved_at": "2026-08-23T23:20:10Z",
@@ -358,8 +358,8 @@
     "automatic_renewal": false,
     "risk_owner": "TommyKammy",
     "same_candidate_required": true,
-    "publication_authorized_after_required_approval": true,
-    "next_sequence_authorized": true,
+    "publication_authorized_after_required_approval": false,
+    "next_sequence_authorized": false,
     "previous_attempt": {
       "pull_request": 153,
       "pull_request_final_head": "52f1d3194396347078cbe18e871c76d725c79d1e",
@@ -407,11 +407,43 @@
       "sequence_6_closeout_final_head": "f0124af3b9a391f7f5126463576ebd6713fba3db",
       "sequence_6_closeout_merge_commit": "b2177ef4b1c6e55f225649911d2ed1bc09cd3a0b"
     },
+    "outcome": {
+      "pull_request": 155,
+      "pull_request_final_head": "aaf83e8433a2e306f80ab8c707c5804412096396",
+      "merge_commit": "688e8e8cfcd9653a74dc93bceee2100c5acf18cb",
+      "owner_attestation_comment_id": 5402502634,
+      "owner_attested_at": "2026-08-24T22:43:42Z",
+      "review_thread_snapshot_sha256": "500ea2b7c199352b23f57363b7cf676c3d7155b657af1718e9c1c058659ace0d",
+      "run_id": "32786095668",
+      "run_attempt": "1",
+      "event_name": "push",
+      "ref": "refs/heads/main",
+      "before_sha": "b2177ef4b1c6e55f225649911d2ed1bc09cd3a0b",
+      "source_sha": "688e8e8cfcd9653a74dc93bceee2100c5acf18cb",
+      "validate_job": "failure",
+      "publish_job": "skipped",
+      "maven_build": "success",
+      "failed_step": "Verify and block the complete Maven JAR scan inventory",
+      "failure_code": "MAVEN_SCAN_FINDING",
+      "failure_reason": "Maven High/Critical finding remains",
+      "critical_occurrences": 0,
+      "high_occurrences": 3,
+      "high_vulnerability_ids": 3,
+      "diagnostic_artifact_id": "9542062490",
+      "diagnostic_artifact_digest": "sha256:bbb58d79f653c04e4d37739bd9cfc73426edaa4cbc78c5b3a390b1524759c369",
+      "diagnostic_receipt": "docs/design/evidence/trino/run-32786095668-maven-vulnerability-diagnostic-receipt.json",
+      "candidate_artifact_recorded": false,
+      "registry_authentication_reached": false,
+      "registry_write_reached": false,
+      "dependency_artifact_published": false,
+      "final_publication_artifact_present": false,
+      "consumed": true
+    },
     "failure_consumes_attempt": true,
     "rerun_permitted": false
   },
   "pending_publication_repair": {
-    "status": "authorized_for_sequence_7",
+    "status": "consumed_by_sequence_7_failure",
     "scope": "final_head_pull_request_association_only",
     "triggering_run_id": "31616764771",
     "triggering_run_attempt": "1",
@@ -434,9 +466,9 @@
       "workflow_query_branch_must_match_head_ref": true,
       "workflow_run_pull_requests_policy": "empty_or_exact_single_target"
     },
-    "publication_permissions_enabled": true,
-    "applies_only_after_separate_owner_authorization": false,
-    "next_sequence_authorized": true
+    "publication_permissions_enabled": false,
+    "applies_only_after_separate_owner_authorization": true,
+    "next_sequence_authorized": false
   },
   "independent_review": {
     "required_before_merge": true,
@@ -462,7 +494,7 @@
     "publication_enforcement": "exact_merged_pull_request_review_or_owner_attestation_query_and_revalidation"
   },
   "owner_only_approval_exception": {
-    "status": "active",
+    "status": "consumed_failed_closed",
     "scope": "pr_155_seventh_publication_attempt_only",
     "reason": "sole_owner_personal_experimental_project",
     "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5389044844",
@@ -559,11 +591,18 @@
     "publication_enforcement": "exact_merged_pull_request_pre_merge_review_thread_snapshot_and_two_pass_composite_final_authorization",
     "failure_consumes_attempt": true,
     "rerun_permitted": false,
-    "downstream_authorities_granted": []
+    "downstream_authorities_granted": [],
+    "consumed_run": {
+      "run_id": "32786095668",
+      "run_attempt": "1",
+      "source_sha": "688e8e8cfcd9653a74dc93bceee2100c5acf18cb",
+      "result": "failed_closed_before_publication",
+      "rerun_permitted": false
+    }
   },
   "repository_state": {
     "dependency_snapshot_contract_permitted": true,
-    "publication_workflow_permitted": true,
+    "publication_workflow_permitted": false,
     "dependency_artifact_present": false,
     "resident_ledger_permitted": false,
     "runtime_manifests_permitted": false,
@@ -606,6 +645,11 @@
       "docs/design/evidence/trino/run-30731801825-verify-trino-maven-feasibility.py",
       "docs/design/evidence/trino/run-31072144404-maven-feasibility-artifact-receipt.json",
       "docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json",
+      "docs/design/evidence/trino/run-32786095668-maven-closure.cdx.json",
+      "docs/design/evidence/trino/run-32786095668-maven-dependency-manifest.json",
+      "docs/design/evidence/trino/run-32786095668-maven-rootfs.cdx.json",
+      "docs/design/evidence/trino/run-32786095668-maven-vulnerability-diagnostic-receipt.json",
+      "docs/design/evidence/trino/run-32786095668-trivy-vulnerability.json",
       "scripts/package_trino_bun_dependencies.py",
       "scripts/package_trino_maven_dependencies.py",
       "scripts/prepare_trino_bun_input.py",
@@ -630,7 +674,7 @@
     ]
   },
   "next_action": {
-    "mode": "merge-focused-activation-after-final-head-owner-attestation",
+    "mode": "prepare-fresh-maven-remediation-feasibility-and-owner-reauthorization",
     "decision_record_required": true,
     "decision_records": [
       "docs/design/07_ADR/ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md",
@@ -643,7 +687,7 @@
       "docs/design/07_ADR/ADR-0030_Activate_exact_Trino_483_dependency_publication_sequence_6.md",
       "docs/design/07_ADR/ADR-0031_Activate_exact_Trino_483_dependency_publication_sequence_7.md"
     ],
-    "phase": "dependency_snapshot_publication_pending",
+    "phase": "dependency_snapshot_publication_reauthorization_pending",
     "requirements": [
       "active and unexpired provisional source authorization bound to the exact source repository, tag, commit, and tree",
       "active exact owner authorization bound to the Parquet repository, tags, objects, commit, tree, preimage, postimage, permitted path, dependency replacements, expiry, and rollback",
@@ -652,8 +696,8 @@
       "retain the exact sequence 5 PR #148 and run 31616764771 fail-closed outcome without admitting its expired temporary candidate artifact",
       "use the PR #149 association repair prospectively only and never as retroactive authorization for sequence 5",
       "retain exact sequence 6 run 32315191436 as consumed after BUN_SNAPSHOT_IDENTITY failure without inventing the unretained generated manifest SHA-256",
-      "bind focused activation PR #155 to predecessor b2177ef4b1c6e55f225649911d2ed1bc09cd3a0b and exact fresh Bun manifest/archive identities after all final-head gates pass",
-      "permit exactly one sequence 7 reviewed-main push run with run_attempt 1; keep manual dispatch, rerun, a second attempt, sequence 6 reuse, and sequence 8 forbidden",
+      "retain exact sequence 7 run 32786095668 as consumed after MAVEN_SCAN_FINDING failure with all four diagnostic source files hash-bound by the retained receipt",
+      "keep rerun, a second sequence 7 attempt, and sequence 8 disabled until fresh Maven remediation feasibility evidence and a new explicit OWNER decision are recorded",
       "authenticated closed dependency snapshot",
       "network-none reproducible linux/arm64 build",
       "digest-pinned builder and runtime bases",
