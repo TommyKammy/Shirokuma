@@ -87,6 +87,7 @@ EXPECTED_WORKFLOW_TRIGGER_BLOCK = """on:
       - docs/design/07_ADR/ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md
       - docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md
       - docs/design/07_ADR/ADR-0030_Activate_exact_Trino_483_dependency_publication_sequence_6.md
+      - docs/design/07_ADR/ADR-0031_Activate_exact_Trino_483_dependency_publication_sequence_7.md
       - docs/design/evidence/trino/run-30693677356-post-adr-0027-pom.xml.gz
       - docs/design/evidence/trino/run-30693677356-proposed-source-overlay.patch
       - docs/design/evidence/trino/run-30693677356-maven-vulnerability-classification.json
@@ -111,7 +112,7 @@ EXPECTED_WORKFLOW_STEPS = (
     "Retain the review-only feasibility inputs and outputs",
 )
 EXPECTED_WORKFLOW_SHA256 = (
-    "0e63608dee6eabdf480aab836378078e106b948d7225925deda883cc2e274f84"
+    "a77f6f1414472a07cb73dd43e9d921bdd2f2874792396a120e5a82ba511d1c39"
 )
 EXPECTED_MAVEN_BASEDIR = "/policy"
 EXPECTED_POLICY_SOURCE = "bootstrap/trino/v483/maven-policy/.mvn"
@@ -1931,10 +1932,10 @@ def audit_workflow(root: Path) -> None:
         "verify_trino_maven_feasibility.py verify-candidate",
         "id: lifecycle",
         "publication-status --root .",
-        'test "${publication_status}" = "blocked"',
-        'echo "active=false" >> "${GITHUB_OUTPUT}"',
-        '"state": "dependency_snapshot_publication_reauthorization_pending"',
-        '"publication_workflow_permitted": False',
+        'test "${publication_status}" = "active"',
+        'echo "active=true" >> "${GITHUB_OUTPUT}"',
+        '"state": "dependency_snapshot_publication_pending"',
+        '"publication_workflow_permitted": True',
         "bootstrap/trino/v483/maven-policy/.mvn/**",
         "docs/design/evidence/trino/"
         "run-30693677356-maven-vulnerability-classification.json",

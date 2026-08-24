@@ -15,6 +15,7 @@ on:
       - docs/design/07_ADR/ADR-0028_Keep_Trino_483_publisher_blocked_for_refreshed_Maven_findings.md
       - docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md
       - docs/design/07_ADR/ADR-0030_Activate_exact_Trino_483_dependency_publication_sequence_6.md
+      - docs/design/07_ADR/ADR-0031_Activate_exact_Trino_483_dependency_publication_sequence_7.md
       - docs/design/evidence/trino/run-30693677356-post-adr-0027-pom.xml.gz
       - docs/design/evidence/trino/run-30693677356-proposed-source-overlay.patch
       - docs/design/evidence/trino/run-30693677356-maven-vulnerability-classification.json
@@ -70,8 +71,8 @@ jobs:
             python3 scripts/verify_trino_dependency_publisher.py \
               publication-status --root .
           )"
-          test "${publication_status}" = "blocked"
-          echo "active=false" >> "${GITHUB_OUTPUT}"
+          test "${publication_status}" = "active"
+          echo "active=true" >> "${GITHUB_OUTPUT}"
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -82,10 +83,10 @@ jobs:
               )
           )
           expected = {
-              "state": "dependency_snapshot_publication_reauthorization_pending",
+              "state": "dependency_snapshot_publication_pending",
               "contract_only": False,
               "dependency_artifact_present": False,
-              "publication_workflow_permitted": False,
+              "publication_workflow_permitted": True,
               "image_publication_permitted": False,
               "resident_admission_permitted": False,
               "runtime_reconciliation_permitted": False,

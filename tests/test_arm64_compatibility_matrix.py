@@ -67,23 +67,23 @@ class Arm64CompatibilityMatrixTests(unittest.TestCase):
             if len(cells) == len(EXPECTED_HEADER):
                 cls.rows[cells[0]] = dict(zip(EXPECTED_HEADER, cells))
 
-    def test_trino_sequence_6_closeout_is_current(self) -> None:
+    def test_trino_sequence_7_activation_is_current(self) -> None:
         trino_decision = self.rows["Trino"]["v0.2 decision"]
         self.assertIn(
-            "dependency_snapshot_publication_reauthorization_pending",
+            "dependency_snapshot_publication_pending",
             trino_decision,
         )
         self.assertIn("32315191436", trino_decision)
         self.assertIn("BUN_SNAPSHOT_IDENTITY", trino_decision)
         self.assertIn(
-            "Rerun and sequence 7 require a fresh OWNER decision",
+            "Only focused PR #155 and one sequence 7 attempt are authorized",
             trino_decision,
         )
 
     def test_document_metadata_matches_latest_verification(self) -> None:
         front_matter = self.matrix_text.split("---", 2)[1]
-        self.assertIn("\nupdated: 2026-08-20\n", front_matter)
-        self.assertIn('\nversion: "0.27"\n', front_matter)
+        self.assertIn("\nupdated: 2026-08-24\n", front_matter)
+        self.assertIn('\nversion: "0.28"\n', front_matter)
         self.assertIn("Verification date: 2026-07-22.", self.matrix_text)
 
     def test_all_required_components_have_complete_evidence_rows(self) -> None:
