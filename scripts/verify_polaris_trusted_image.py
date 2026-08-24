@@ -705,7 +705,7 @@ REVIEW_PENDING_WORKFLOW_INVENTORY = {
         "6010f6fd7c3284378822f159eb1071cb45639d3436f64a8e58f4f20547dac507"
     ),
     ".github/workflows/trino-maven-dependencies.yml": (
-        "60c7c16a08e3e2dfc90240d701b91b859b778f6a0e2ee2ac25abaa704bf1690a"
+        "9366c7d67a42c02f9b6e31ab5bb25a68d2d85d64dd1467141626b60d9b903056"
     ),
     ".github/workflows/trino-maven-remediation-feasibility.yml": (
         "a77f6f1414472a07cb73dd43e9d921bdd2f2874792396a120e5a82ba511d1c39"
