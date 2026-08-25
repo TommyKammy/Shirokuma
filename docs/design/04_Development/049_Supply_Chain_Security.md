@@ -1714,6 +1714,27 @@ sequence-6 attempt, and sequence 8 are forbidden. Any sequence-7 failure
 consumes the authorization. Publication success remains review-pending evidence
 and grants no dependency admission or downstream authority.
 
+## Trino 483 sequence 7 failure closeout (2026-08-25)
+
+PR #155 merged as `688e8e8cfcd9653a74dc93bceee2100c5acf18cb` after the
+OWNER attested exact final head `aaf83e8433a2e306f80ab8c707c5804412096396`.
+Reviewed-main run `32786095668`, attempt `1`, consumed sequence 7 and failed
+closed at the complete Maven JAR scan inventory with `MAVEN_SCAN_FINDING`.
+The raw result was Critical=0 and High=3: `CVE-2026-59902` for
+`io.netty:netty-transport-sctp` 4.2.16.Final, plus `CVE-2026-54399` and
+`CVE-2026-54428` for Apache HttpCore 5.3.6 components.
+
+Publish was skipped. Candidate recording, registry authentication, registry
+write, dependency artifact publication, and final publication evidence were not
+reached. Artifact `9542062490` and digest
+`sha256:bbb58d79f653c04e4d37739bd9cfc73426edaa4cbc78c5b3a390b1524759c369`
+are preserved by
+`run-32786095668-maven-vulnerability-diagnostic-receipt.json` and its four
+hash-bound source files. Publication permissions are false. Rerun, a second
+sequence-7 attempt, sequence 8, admission, image/runtime activation, and Issue
+#63 closure remain unauthorized pending fresh Maven remediation feasibility and
+a new explicit OWNER decision.
+
 ## Scanner or feed failure rollback
 
 Security-tool and feed failures do not permit bypassing the check. First retry

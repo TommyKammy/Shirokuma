@@ -3,8 +3,8 @@ doc_id: ADR-0031
 title: Activate exact Trino 483 dependency publication sequence 7
 status: accepted
 created: 2026-08-24
-updated: 2026-08-24
-version: "1.0.0"
+updated: 2026-08-25
+version: "1.1.0"
 area: architecture
 tags: [adr, trino, maven, supply-chain, arm64]
 ---
@@ -76,12 +76,34 @@ permissions to false.
 
 ## Consequences
 
-Merging PR #155 may enable only the dependency publisher. Successful
-publication creates review-pending evidence only. It does not admit a dependency
-digest or authorize image publication, resident admission, Flux/runtime
-reconciliation, credentials, public exposure, production use, Polaris/Iceberg
-query acceptance, dependent Issues #64-#66, or Issue #63 closure. Those steps
-require separate evidence review and authorization.
+PR #155 merged as `688e8e8cfcd9653a74dc93bceee2100c5acf18cb` after the
+OWNER attested final head `aaf83e8433a2e306f80ab8c707c5804412096396` and
+review-thread snapshot
+`500ea2b7c199352b23f57363b7cf676c3d7155b657af1718e9c1c058659ace0d`.
+Reviewed-main run `32786095668`, attempt `1`, consumed sequence 7. Validation
+reached the closure-complete Maven inventory and failed closed at `Verify and
+block the complete Maven JAR scan inventory` with `MAVEN_SCAN_FINDING`.
+
+The raw scan reported Critical=0 and three High findings:
+
+- `CVE-2026-59902` in `io.netty:netty-transport-sctp` 4.2.16.Final;
+- `CVE-2026-54399` in `org.apache.httpcomponents.core5:httpcore5` 5.3.6; and
+- `CVE-2026-54428` in `org.apache.httpcomponents.core5:httpcore5-h2` 5.3.6.
+
+Publish was skipped. Candidate recording, registry authentication, registry
+write, dependency artifact publication, and final publication evidence were
+not reached. Diagnostic artifact `9542062490`, digest
+`sha256:bbb58d79f653c04e4d37739bd9cfc73426edaa4cbc78c5b3a390b1524759c369`,
+is retained in repository evidence through an exact receipt and four hash-bound
+source files before its GitHub expiry.
+
+Publication permissions return to false. Rerun, a second sequence-7 attempt,
+and sequence 8 are forbidden. Fresh Maven remediation feasibility evidence and
+a new explicit OWNER decision are required before any later activation. No
+dependency digest is admitted, and image publication, resident admission,
+Flux/runtime reconciliation, credentials, public exposure, production use,
+Polaris/Iceberg query acceptance, dependent Issues #64-#66, and Issue #63
+closure remain unauthorized.
 
 ## References
 
@@ -91,3 +113,5 @@ require separate evidence review and authorization.
 - [Issue #63 sequence-7 proposal](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5388964891)
 - [Issue #63 OWNER approval](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5389044844)
 - [PR #155](https://github.com/TommyKammy/Shirokuma/pull/155)
+- [sequence 7 run](https://github.com/TommyKammy/Shirokuma/actions/runs/32786095668)
+- [sequence 7 diagnostic receipt](../evidence/trino/run-32786095668-maven-vulnerability-diagnostic-receipt.json)

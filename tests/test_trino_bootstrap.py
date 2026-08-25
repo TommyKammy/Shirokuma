@@ -2971,12 +2971,12 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             if blocker["control"] == "repository_source_build"
         )
         self.assertEqual(
-            "dependency_snapshot_publication_pending",
+            "dependency_snapshot_publication_reauthorization_pending",
             source_build["status"],
         )
         self.assertIn("PR #155", source_build["evidence"])
-        self.assertIn("32315191436", source_build["evidence"])
-        self.assertIn("BUN_SNAPSHOT_IDENTITY", source_build["evidence"])
+        self.assertIn("32786095668", source_build["evidence"])
+        self.assertIn("three raw High findings", source_build["evidence"])
         self.assertIn("failed closed", source_build["evidence"])
         self.assertIn("sequence 6", assessment["rationale"])
         self.assertIn("sequence 7", assessment["rationale"])
@@ -3011,7 +3011,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             admission["source_authentication"],
         )
         self.assertIs(
-            admission["repository_state"]["publication_workflow_permitted"], True
+            admission["repository_state"]["publication_workflow_permitted"], False
         )
 
     def test_provisional_source_authorization_is_bounded_and_fail_closed(self) -> None:
@@ -3304,7 +3304,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         self.assertEqual(
             {
                 "dependency_snapshot_contract_permitted": True,
-                "publication_workflow_permitted": True,
+                "publication_workflow_permitted": False,
                 "dependency_artifact_present": False,
                 "resident_ledger_permitted": False,
                 "runtime_manifests_permitted": False,
@@ -3445,6 +3445,26 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                         "docs/design/evidence/trino/"
                         "run-31072144404-maven-feasibility-validation.json"
                     ),
+                    (
+                        "docs/design/evidence/trino/"
+                        "run-32786095668-maven-closure.cdx.json"
+                    ),
+                    (
+                        "docs/design/evidence/trino/"
+                        "run-32786095668-maven-dependency-manifest.json"
+                    ),
+                    (
+                        "docs/design/evidence/trino/"
+                        "run-32786095668-maven-rootfs.cdx.json"
+                    ),
+                    (
+                        "docs/design/evidence/trino/"
+                        "run-32786095668-maven-vulnerability-diagnostic-receipt.json"
+                    ),
+                    (
+                        "docs/design/evidence/trino/"
+                        "run-32786095668-trivy-vulnerability.json"
+                    ),
                     "scripts/package_trino_bun_dependencies.py",
                     "scripts/package_trino_maven_dependencies.py",
                     "scripts/prepare_trino_bun_input.py",
@@ -3475,7 +3495,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             "runtime_manifests_permitted",
         ):
             self.assertIs(repository_state[key], False)
-        self.assertIs(repository_state["publication_workflow_permitted"], True)
+        self.assertIs(repository_state["publication_workflow_permitted"], False)
         self.assertIs(
             repository_state["dependency_snapshot_contract_permitted"], True
         )
@@ -4691,17 +4711,17 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             rebuild["retained_output_evidence"],
         )
 
-    def test_dependency_snapshot_contract_activates_exact_sequence_7(
+    def test_dependency_snapshot_contract_closes_consumed_sequence_7(
         self,
     ) -> None:
         contract = self._trusted_build_contract()
         admission = self._admission()
         self.assertEqual(
             {
-                "state": "dependency_snapshot_publication_pending",
+                "state": "dependency_snapshot_publication_reauthorization_pending",
                 "contract_only": False,
                 "dependency_artifact_present": False,
-                "publication_workflow_permitted": True,
+                "publication_workflow_permitted": False,
                 "image_publication_permitted": False,
                 "resident_admission_permitted": False,
                 "runtime_reconciliation_permitted": False,
@@ -4709,19 +4729,19 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             contract["lifecycle"],
         )
         publication = contract["publication"]
-        self.assertIs(publication["permitted"], True)
+        self.assertIs(publication["permitted"], False)
         self.assertEqual(
             "static_read_only_contract_validation",
             publication["pull_request_behavior"],
         )
         reauthorization = publication["reauthorization"]
         self.assertEqual(7, reauthorization["sequence"])
-        self.assertEqual("active", reauthorization["status"])
+        self.assertEqual("consumed_failed_closed", reauthorization["status"])
         self.assertIs(
             reauthorization["publication_authorized_after_required_approval"],
-            True,
+            False,
         )
-        self.assertIs(reauthorization["next_sequence_authorized"], True)
+        self.assertIs(reauthorization["next_sequence_authorized"], False)
         self.assertEqual(
             "ca5cc4e1a565ecdd7d3f29610b1cdbe869288357ae6e324c83de1a485872b453",
             reauthorization["previous_attempt"]["reviewed_manifest_sha256"],
@@ -4747,15 +4767,16 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             reauthorization["activation"],
         )
         self.assertEqual(
-            "authorized_for_sequence_7",
+            "consumed_by_sequence_7_failure",
             publication["pending_review_repair"]["status"],
         )
         self.assertEqual(
-            "active",
+            "consumed_failed_closed",
             publication["owner_only_approval_exception"]["status"],
         )
-        self.assertNotIn(
-            "consumed_run", publication["owner_only_approval_exception"]
+        self.assertEqual(
+            "32786095668",
+            publication["owner_only_approval_exception"]["consumed_run"]["run_id"],
         )
         self.assertTrue((ROOT / publication["workflow"]).is_file())
         self.assertEqual(153, reauthorization["previous_attempt"]["pull_request"])
@@ -4763,7 +4784,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             "32315191436", reauthorization["previous_attempt"]["run_id"]
         )
         pending_repair = {
-            "status": "authorized_for_sequence_7",
+            "status": "consumed_by_sequence_7_failure",
             "scope": "final_head_pull_request_association_only",
             "triggering_run_id": "31616764771",
             "triggering_run_attempt": "1",
@@ -4790,9 +4811,9 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "empty_or_exact_single_target"
                 ),
             },
-            "publication_permissions_enabled": True,
-            "applies_only_after_separate_owner_authorization": False,
-            "next_sequence_authorized": True,
+            "publication_permissions_enabled": False,
+            "applies_only_after_separate_owner_authorization": True,
+            "next_sequence_authorized": False,
         }
         self.assertEqual(pending_repair, publication["pending_review_repair"])
         self.assertEqual(
@@ -4833,12 +4854,12 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
     ) -> None:
         next_action = self._admission()["next_action"]
         self.assertEqual(
-            "merge-focused-activation-after-final-head-owner-attestation",
+            "prepare-fresh-maven-remediation-feasibility-and-owner-reauthorization",
             next_action["mode"],
         )
         self.assertIs(next_action["decision_record_required"], True)
         self.assertEqual(
-            "dependency_snapshot_publication_pending",
+            "dependency_snapshot_publication_reauthorization_pending",
             next_action["phase"],
         )
         requirements = next_action["requirements"]
@@ -4853,7 +4874,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertTrue(
             any(
-                "unretained generated manifest" in requirement
+                "run 32786095668" in requirement
                 for requirement in requirements
             )
         )
