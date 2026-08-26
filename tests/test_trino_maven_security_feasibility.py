@@ -91,8 +91,18 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
                 candidate.read_bytes()
             ).hexdigest()
             feasibility.DOCKER_JAVA_CANDIDATE_JAR_BYTES = candidate.stat().st_size
+            receipt_path = root / "candidate.source.json"
             try:
-                feasibility.stage_jar(repository, candidate)
+                with self.assertRaisesRegex(
+                    feasibility.FeasibilityError,
+                    "JAR_RECEIPT",
+                ):
+                    feasibility.stage_jar(
+                        repository,
+                        candidate,
+                        target.with_name(target.name + ".shirokuma-source.json"),
+                    )
+                feasibility.stage_jar(repository, candidate, receipt_path)
             finally:
                 feasibility.DOCKER_JAVA_CENTRAL_JAR_SHA256 = old_hash
                 feasibility.DOCKER_JAVA_CENTRAL_JAR_BYTES = old_bytes
@@ -101,12 +111,16 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
 
             self.assertEqual(target.read_bytes(), candidate.read_bytes())
             receipt = json.loads(
-                target.with_name(
-                    target.name + ".shirokuma-source.json"
-                ).read_text(encoding="utf-8")
+                receipt_path.read_text(encoding="utf-8")
             )
             self.assertEqual(receipt["source_commit"], feasibility.DOCKER_JAVA_COMMIT)
             self.assertEqual(receipt["candidate_sha256"], hashlib.sha256(candidate.read_bytes()).hexdigest())
+            self.assertFalse(
+                any(
+                    path.name.endswith(".shirokuma-source.json")
+                    for path in repository.rglob("*")
+                )
+            )
 
     def test_zero_findings_rejects_high(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -290,6 +304,21 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
 
     def test_workflow_is_pull_request_only_and_read_only(self) -> None:
         feasibility.audit_workflow(ROOT)
+
+    def test_workflow_checks_out_exact_head_from_reviewed_predecessor(self) -> None:
+        workflow = feasibility._regular_file(
+            ROOT / feasibility.WORKFLOW_PATH,
+            "WORKFLOW",
+        ).decode("utf-8")
+        self.assertIn(
+            "ref: ${{ github.event.pull_request.head.sha }}",
+            workflow,
+        )
+        self.assertIn("fetch-depth: 0", workflow)
+        self.assertIn(
+            "REVIEWED_PREDECESSOR: 59f38dc26a1a02203df9c629360d863e4856a2ba",
+            workflow,
+        )
 
     def test_parquet_origin_is_sealed_only_after_offline_rebuild(self) -> None:
         runner = (ROOT / feasibility.RUNNER_PATH).read_text(encoding="utf-8")

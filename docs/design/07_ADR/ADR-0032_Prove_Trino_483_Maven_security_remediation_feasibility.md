@@ -71,7 +71,10 @@ closure-complete CycloneDX SBOM derived from the complete retained Maven JAR
 descriptor. Raw rootfs discovery is not treated as complete: the existing
 publisher generator validates every omission against the descriptor and the
 final verifier requires the exact `(PURL, FilePath)` set in the Trivy report.
-The PR's exact final-head CI is the review evidence.
+The workflow checks out the exact PR head SHA and verifies that its linear
+history starts at reviewed predecessor
+`59f38dc26a1a02203df9c629360d863e4856a2ba`. The PR's exact final-head CI is
+the review evidence.
 
 ## Consequences
 

@@ -257,8 +257,14 @@ def verify_reviewed_jar(path: Path) -> None:
         _fail("JAR_IDENTITY", "reviewed canonical candidate identity differs")
 
 
-def stage_jar(repository: Path, candidate: Path) -> None:
-    target = repository.resolve() / DOCKER_JAVA_REPOSITORY_PATH
+def stage_jar(repository: Path, candidate: Path, receipt: Path) -> None:
+    repository = repository.resolve()
+    receipt = receipt.resolve()
+    target = repository / DOCKER_JAVA_REPOSITORY_PATH
+    if receipt.is_relative_to(repository):
+        _fail("JAR_RECEIPT", "source receipt must be outside the Maven repository")
+    if receipt.exists() or receipt.is_symlink():
+        _fail("JAR_RECEIPT", f"source receipt already exists: {receipt}")
     if _sha256(target) != DOCKER_JAVA_CENTRAL_JAR_SHA256 or target.stat().st_size != DOCKER_JAVA_CENTRAL_JAR_BYTES:
         _fail("CENTRAL_PREIMAGE", "docker-java zerodep Central preimage differs")
     verify_reviewed_jar(candidate)
@@ -268,7 +274,6 @@ def stage_jar(repository: Path, candidate: Path) -> None:
     )
     for suffix in (".md5", ".sha256", ".sha512"):
         target.with_name(target.name + suffix).unlink(missing_ok=True)
-    receipt = target.with_name(target.name + ".shirokuma-source.json")
     receipt.write_text(
         json.dumps(
             {
@@ -371,6 +376,11 @@ def audit_workflow(root: Path) -> None:
         "apply-trino", "apply-docker-java", "canonicalize-jar", "stage-jar",
         "--network none", "generate-maven-sbom", "scan-type: sbom",
         "verify-scan", "cmp ",
+        "ref: ${{ github.event.pull_request.head.sha }}", "fetch-depth: 0",
+        "REVIEWED_PREDECESSOR: 59f38dc26a1a02203df9c629360d863e4856a2ba",
+        'test "$(git rev-parse HEAD)" = "${REVIEWED_HEAD}"',
+        'git rev-list --merges "${REVIEWED_PREDECESSOR}..HEAD"',
+        'git rev-parse "${first_commit}^"',
     )
     combined = workflow + "\n" + runner
     for marker in required:
@@ -403,6 +413,7 @@ def _parser() -> argparse.ArgumentParser:
     stage = commands.add_parser("stage-jar")
     stage.add_argument("--repository", type=Path, required=True)
     stage.add_argument("--candidate", type=Path, required=True)
+    stage.add_argument("--receipt", type=Path, required=True)
     manifest = commands.add_parser("manifest-repository")
     manifest.add_argument("--repository", type=Path, required=True)
     manifest.add_argument("--output", type=Path, required=True)
@@ -435,7 +446,7 @@ def main() -> int:
         elif args.command == "verify-reviewed-jar":
             verify_reviewed_jar(args.jar)
         elif args.command == "stage-jar":
-            stage_jar(args.repository, args.candidate)
+            stage_jar(args.repository, args.candidate, args.receipt)
         elif args.command == "manifest-repository":
             manifest_repository(args.repository, args.output)
         elif args.command == "verify-zero-findings":

@@ -48,6 +48,8 @@ env:
   BUN_ARCHIVE_SIZE: "35700603"
   BUN_CACHE_DIRECTORY: /bun-cache
   BUN_REGISTRY: https://registry.npmjs.org/
+  REVIEWED_HEAD: ${{ github.event.pull_request.head.sha }}
+  REVIEWED_PREDECESSOR: 59f38dc26a1a02203df9c629360d863e4856a2ba
 
 jobs:
   validate:
@@ -62,6 +64,8 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
 
       - name: Audit the PR-only fail-closed contract
         shell: bash
@@ -71,6 +75,11 @@ jobs:
           python3 scripts/verify_trino_maven_security_feasibility.py \
             audit-workflow --root .
           test "$(python3 scripts/verify_trino_dependency_publisher.py publication-status --root .)" = blocked
+          test "$(git rev-parse HEAD)" = "${REVIEWED_HEAD}"
+          test -z "$(git rev-list --merges "${REVIEWED_PREDECESSOR}..HEAD")"
+          first_commit="$(git rev-list --reverse "${REVIEWED_PREDECESSOR}..HEAD" | sed -n '1p')"
+          test -n "${first_commit}"
+          test "$(git rev-parse "${first_commit}^")" = "${REVIEWED_PREDECESSOR}"
 
       - name: Verify native arm64 builders
         shell: bash

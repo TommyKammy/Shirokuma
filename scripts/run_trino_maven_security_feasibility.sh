@@ -139,7 +139,8 @@ build_repository() {
     --output "${central_jar}" \
     https://repo.maven.apache.org/maven2/com/github/docker-java/docker-java-transport-zerodep/3.7.1/docker-java-transport-zerodep-3.7.1.jar
   ${verify} stage-jar --repository "${repository}" \
-    --candidate "${candidate}/docker-java-transport-zerodep-3.7.1-${suffix}.jar"
+    --candidate "${candidate}/docker-java-transport-zerodep-3.7.1-${suffix}.jar" \
+    --receipt "${candidate}/docker-java-transport-zerodep-3.7.1-${suffix}.source.json"
   docker run --rm --platform linux/arm64 \
     --user "$(id -u):$(id -g)" \
     --env HOME=/tmp/maven-home \
@@ -175,6 +176,8 @@ build_repository() {
 for suffix in a b; do
   build_repository "${suffix}"
 done
+cmp "${candidate}/docker-java-transport-zerodep-3.7.1-a.source.json" \
+  "${candidate}/docker-java-transport-zerodep-3.7.1-b.source.json"
 for suffix in a b; do
   source="${temp}/trino-source-${suffix}"
   repository="${temp}/maven-repository-${suffix}"
