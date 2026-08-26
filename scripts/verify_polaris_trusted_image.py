@@ -743,7 +743,7 @@ PENDING_SCRIPT_FILE_INVENTORY = {
         "0d18734b909ec7bdad4d93a67aebef269ae373a1312a380feabc3bcd912b3d8c"
     ),
     "scripts/run_trino_maven_security_feasibility.sh": (
-        "6763369ea3acf302876ce5caa8b8076711152e5282ae544f7dc3146b706db9a4"
+        "0b600620d7998d83318a6ed88d09ffa494579bb4772f9df662359b9ba1debc26"
     ),
     "scripts/package_polaris_gradle_dependencies.py": (
         POLARIS_DEPENDENCY_PACKAGER_SHA256

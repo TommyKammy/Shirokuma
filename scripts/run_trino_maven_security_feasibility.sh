@@ -174,27 +174,20 @@ build_repository() {
     -Dmaven.repo.local=/m2 -Dproject.build.outputTimestamp=2026-07-18T00:36:39Z \
     --file /workspace/pom.xml \
     -pl ':trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg' \
-    -am clean install -DskipTests -Dmaven.test.skip=true \
-    -Dmaven.source.skip=true -Dair.check.skip-all \
+    -am clean install -DskipTests -Dmaven.source.skip=true -Dair.check.skip-all \
     2>&1 | tee "${candidate}/trino-transfer-${suffix}.log"
   ${publisher} audit-transfer-log --log "${candidate}/trino-transfer-${suffix}.log"
   ${verify} verify-trino --checkout "${trino_source}"
   ${verify} verify-jar --jar "${repository}/com/github/docker-java/docker-java-transport-zerodep/3.7.1/docker-java-transport-zerodep-3.7.1.jar"
   python3 "${root}/scripts/verify_trino_maven_feasibility.py" prune-vulnerable-inputs \
     --repository "${repository}" --root "${root}"
-  ${parquet} seal-artifact --build-repository "${parquet_repository}" \
-    --target-repository "${repository}"
   python3 "${root}/scripts/package_trino_maven_dependencies.py" \
     prune-reactor-outputs --repository "${repository}"
-  ${verify} manifest-repository --repository "${repository}" \
-    --output "${candidate}/maven-repository-${suffix}.json"
 }
 
 for suffix in a b; do
   build_repository "${suffix}"
 done
-cmp "${candidate}/maven-repository-a.json" "${candidate}/maven-repository-b.json"
-
 for suffix in a b; do
   source="${temp}/trino-source-${suffix}"
   repository="${temp}/maven-repository-${suffix}"
@@ -223,12 +216,17 @@ for suffix in a b; do
     -Dproject.build.outputTimestamp=2026-07-18T00:36:39Z \
     --file /workspace/pom.xml \
     -pl ':trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg' \
-    -am clean package -DskipTests -Dmaven.test.skip=true \
-    -Dmaven.source.skip=true -Dair.check.skip-all
+    -am clean package -DskipTests -Dmaven.source.skip=true -Dair.check.skip-all
   output="${source}/core/trino-server/target/trino-server-483.tar.gz"
   ${publisher} verify-server-distribution --archive "${output}"
   sha256sum "${output}" | cut -d' ' -f1 > "${candidate}/offline-output-${suffix}.sha256"
   stat --format='%s' "${output}" > "${candidate}/offline-output-${suffix}.size"
+  ${parquet} seal-artifact \
+    --build-repository "${temp}/parquet-repository-${suffix}" \
+    --target-repository "${repository}"
+  ${verify} manifest-repository --repository "${repository}" \
+    --output "${candidate}/maven-repository-${suffix}.json"
 done
+cmp "${candidate}/maven-repository-a.json" "${candidate}/maven-repository-b.json"
 cmp "${candidate}/offline-output-a.sha256" "${candidate}/offline-output-b.sha256"
 cmp "${candidate}/offline-output-a.size" "${candidate}/offline-output-b.size"
