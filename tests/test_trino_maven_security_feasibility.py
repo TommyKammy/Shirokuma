@@ -200,6 +200,18 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
     def test_workflow_is_pull_request_only_and_read_only(self) -> None:
         feasibility.audit_workflow(ROOT)
 
+    def test_trino_builds_skip_test_compilation_and_dependency_resolution(self) -> None:
+        runner = (ROOT / feasibility.RUNNER_PATH).read_text(encoding="utf-8")
+        self.assertEqual(runner.count("-Dmaven.test.skip=true"), 2)
+        self.assertIn(
+            "clean install -DskipTests -Dmaven.test.skip=true",
+            runner,
+        )
+        self.assertIn(
+            "clean package -DskipTests -Dmaven.test.skip=true",
+            runner,
+        )
+
     def test_exact_patch_and_source_identities_are_pinned(self) -> None:
         self.assertEqual(
             feasibility.TRINO_POSTIMAGE_SHA256,

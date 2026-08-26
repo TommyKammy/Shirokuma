@@ -174,7 +174,8 @@ build_repository() {
     -Dmaven.repo.local=/m2 -Dproject.build.outputTimestamp=2026-07-18T00:36:39Z \
     --file /workspace/pom.xml \
     -pl ':trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg' \
-    -am clean install -DskipTests -Dmaven.source.skip=true -Dair.check.skip-all \
+    -am clean install -DskipTests -Dmaven.test.skip=true \
+    -Dmaven.source.skip=true -Dair.check.skip-all \
     2>&1 | tee "${candidate}/trino-transfer-${suffix}.log"
   ${publisher} audit-transfer-log --log "${candidate}/trino-transfer-${suffix}.log"
   ${verify} verify-trino --checkout "${trino_source}"
@@ -222,7 +223,8 @@ for suffix in a b; do
     -Dproject.build.outputTimestamp=2026-07-18T00:36:39Z \
     --file /workspace/pom.xml \
     -pl ':trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg' \
-    -am clean package -DskipTests -Dmaven.source.skip=true -Dair.check.skip-all
+    -am clean package -DskipTests -Dmaven.test.skip=true \
+    -Dmaven.source.skip=true -Dair.check.skip-all
   output="${source}/core/trino-server/target/trino-server-483.tar.gz"
   ${publisher} verify-server-distribution --archive "${output}"
   sha256sum "${output}" | cut -d' ' -f1 > "${candidate}/offline-output-${suffix}.sha256"
