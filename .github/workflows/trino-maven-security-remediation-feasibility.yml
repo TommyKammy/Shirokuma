@@ -91,7 +91,10 @@ jobs:
             "${DOCKER_JAVA_BUILDER_IMAGE}" --version \
             | tee "${RUNNER_TEMP}/docker-java-builder-version.txt"
           grep -F 'Apache Maven 3.9.12' "${RUNNER_TEMP}/docker-java-builder-version.txt"
-          grep -F 'Java version: 8' "${RUNNER_TEMP}/docker-java-builder-version.txt"
+          grep -F 'Java version: 1.8.0_482, vendor: Temurin' \
+            "${RUNNER_TEMP}/docker-java-builder-version.txt"
+          grep -F 'arch: "aarch64"' \
+            "${RUNNER_TEMP}/docker-java-builder-version.txt"
 
       - name: Reconstruct and build the candidate twice
         shell: bash
