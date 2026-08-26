@@ -326,7 +326,23 @@ def verify_zero_findings(report: Path) -> None:
         if vulnerability.get("Severity") in {"HIGH", "CRITICAL"}
     ]
     if findings:
-        _fail("MAVEN_SCAN_FINDING", f"High/Critical findings: {len(findings)}")
+        identities = sorted(
+            {
+                (
+                    finding.get("VulnerabilityID"),
+                    finding.get("PkgName"),
+                    finding.get("InstalledVersion"),
+                    finding.get("FixedVersion"),
+                    finding.get("Severity"),
+                )
+                for finding in findings
+            },
+            key=repr,
+        )
+        _fail(
+            "MAVEN_SCAN_FINDING",
+            f"High/Critical findings: {len(findings)} identities={identities!r}",
+        )
 
 
 def verify_scan(repository: Path, report: Path) -> None:
