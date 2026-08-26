@@ -147,6 +147,7 @@ build_repository() {
     --batch-mode --show-version --errors --strict-checksums \
     --ignore-transitive-repositories --settings /policy/settings.xml \
     -Dmaven.repo.local=/m2 dependency:get \
+    -Dtransitive=false \
     -Dartifact=com.github.docker-java:docker-java-transport-zerodep:3.7.1 \
     2>&1 | tee "${candidate}/docker-java-central-${suffix}.log"
   ${publisher} audit-transfer-log \
