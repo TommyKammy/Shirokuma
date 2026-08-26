@@ -130,7 +130,7 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
             ):
                 feasibility.verify_zero_findings(report)
 
-    def test_scan_requires_complete_jar_inventory_and_exact_versions(self) -> None:
+    def test_scan_binds_reported_jars_to_inventory_and_exact_versions(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             repository = root / "repository"
@@ -191,7 +191,16 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
             )
             feasibility.verify_scan(repository, report)
 
-            (repository / "unscanned.jar").write_bytes(b"opaque")
+            packages[0]["FilePath"] = "outside-inventory.jar"
+            report.write_text(
+                json.dumps(
+                    {
+                        "SchemaVersion": 2,
+                        "Results": [{"Packages": packages, "Vulnerabilities": []}],
+                    }
+                ),
+                encoding="utf-8",
+            )
             with self.assertRaisesRegex(
                 feasibility.FeasibilityError, "TRIVY_INVENTORY"
             ):

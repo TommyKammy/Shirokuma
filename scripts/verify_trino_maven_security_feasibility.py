@@ -339,21 +339,20 @@ def verify_scan(repository: Path, report: Path) -> None:
         for result in document.get("Results") or []
         for package in result.get("Packages") or []
     ]
-    observed_files = {
-        (package.get("FilePath"), package.get("Digest")) for package in packages
+    inventory = {
+        jar.relative_to(repository).as_posix():
+        "sha1:" + hashlib.sha1(_regular_file(jar, "MAVEN_JAR")).hexdigest()
+        for jar in sorted(repository.rglob("*.jar"))
     }
-    missing = []
-    allowed_omissions = {
-        entry["path"] for entry in publisher.EXPECTED_TRIVY_ROOTFS_OMISSIONS
-    }
-    for jar in sorted(repository.rglob("*.jar")):
-        digest = "sha1:" + hashlib.sha1(_regular_file(jar, "MAVEN_JAR")).hexdigest()
-        relative = jar.relative_to(repository).as_posix()
-        if (relative, digest) not in observed_files:
-            if relative not in allowed_omissions:
-                missing.append(relative)
-    if missing:
-        _fail("TRIVY_INVENTORY", f"unscanned JARs: {missing!r}")
+    if not inventory:
+        _fail("TRIVY_INVENTORY", "Maven JAR inventory is empty")
+    for package in packages:
+        path = package.get("FilePath")
+        digest = package.get("Digest")
+        if not isinstance(path, str) or path not in inventory:
+            _fail("TRIVY_INVENTORY", f"reported package is outside JAR inventory: {path!r}")
+        if digest != inventory[path]:
+            _fail("TRIVY_INVENTORY", f"reported package digest differs: {path}")
     identities = {(package.get("Name"), package.get("Version")) for package in packages}
     required = {
         ("io.netty:netty-transport-sctp", "4.2.17.Final"),
