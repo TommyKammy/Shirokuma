@@ -8,6 +8,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -113,6 +114,17 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
             receipt = json.loads(
                 receipt_path.read_text(encoding="utf-8")
             )
+            marker = target.with_name("_remote.repositories").read_text(
+                encoding="iso-8859-1"
+            )
+            self.assertEqual(
+                marker,
+                f"{target.name}>{feasibility.DOCKER_JAVA_ORIGIN_ID}=\n",
+            )
+            self.assertEqual(
+                receipt["source_repository"],
+                feasibility.DOCKER_JAVA_SOURCE_REPOSITORY,
+            )
             self.assertEqual(receipt["source_commit"], feasibility.DOCKER_JAVA_COMMIT)
             self.assertEqual(receipt["candidate_sha256"], hashlib.sha256(candidate.read_bytes()).hexdigest())
             self.assertFalse(
@@ -143,6 +155,34 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
                 feasibility.FeasibilityError, "MAVEN_SCAN_FINDING"
             ):
                 feasibility.verify_zero_findings(report)
+
+    def test_manifest_scopes_the_source_origin_to_feasibility(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def build_manifest(repository: Path) -> dict[str, str]:
+                self.assertEqual(repository, root.resolve())
+                self.assertEqual(
+                    feasibility.packager.ALLOWED_ORIGIN_IDS[
+                        feasibility.DOCKER_JAVA_ORIGIN_ID
+                    ],
+                    feasibility.DOCKER_JAVA_SOURCE_REPOSITORY,
+                )
+                return {"status": "ok"}
+
+            with mock.patch.object(
+                feasibility.packager,
+                "build_manifest",
+                side_effect=build_manifest,
+            ):
+                output = root / "manifest.json"
+                feasibility.manifest_repository(root, output)
+
+            self.assertEqual(json.loads(output.read_text()), {"status": "ok"})
+            self.assertNotIn(
+                feasibility.DOCKER_JAVA_ORIGIN_ID,
+                feasibility.packager.ALLOWED_ORIGIN_IDS,
+            )
 
     def test_scan_requires_the_complete_sbom_package_closure(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

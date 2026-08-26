@@ -39,6 +39,8 @@ TRINO_POSTIMAGE_SHA256 = (
 )
 DOCKER_JAVA_COMMIT = "7b7fabd4567573e4957e549365dc0df8c2e54ab9"
 DOCKER_JAVA_TREE = "f6119a3ff6da4b1df34a1054000b849c70f4aae6"
+DOCKER_JAVA_SOURCE_REPOSITORY = "https://github.com/docker-java/docker-java"
+DOCKER_JAVA_ORIGIN_ID = "shirokuma-docker-java-source-remediation"
 DOCKER_JAVA_POM = Path("docker-java-transport-httpclient5/pom.xml")
 DOCKER_JAVA_POM_PREIMAGE_SHA256 = (
     "839b9dcb35b9fa58bb61823733e501058b19f877d614cc53db0df4fdafeb2006"
@@ -261,10 +263,13 @@ def stage_jar(repository: Path, candidate: Path, receipt: Path) -> None:
     repository = repository.resolve()
     receipt = receipt.resolve()
     target = repository / DOCKER_JAVA_REPOSITORY_PATH
+    marker = target.parent / "_remote.repositories"
     if receipt.is_relative_to(repository):
         _fail("JAR_RECEIPT", "source receipt must be outside the Maven repository")
     if receipt.exists() or receipt.is_symlink():
         _fail("JAR_RECEIPT", f"source receipt already exists: {receipt}")
+    if marker.exists() or marker.is_symlink():
+        _fail("JAR_ORIGIN", f"Maven origin marker already exists: {marker}")
     if _sha256(target) != DOCKER_JAVA_CENTRAL_JAR_SHA256 or target.stat().st_size != DOCKER_JAVA_CENTRAL_JAR_BYTES:
         _fail("CENTRAL_PREIMAGE", "docker-java zerodep Central preimage differs")
     verify_reviewed_jar(candidate)
@@ -274,10 +279,16 @@ def stage_jar(repository: Path, candidate: Path, receipt: Path) -> None:
     )
     for suffix in (".md5", ".sha256", ".sha512"):
         target.with_name(target.name + suffix).unlink(missing_ok=True)
+    marker.write_text(
+        f"{target.name}>{DOCKER_JAVA_ORIGIN_ID}=\n",
+        encoding="iso-8859-1",
+    )
+    marker.chmod(0o644)
     receipt.write_text(
         json.dumps(
             {
                 "schema_version": 1,
+                "source_repository": DOCKER_JAVA_SOURCE_REPOSITORY,
                 "source_commit": DOCKER_JAVA_COMMIT,
                 "source_tree": DOCKER_JAVA_TREE,
                 "source_patch": DOCKER_JAVA_PATCH.as_posix(),
@@ -296,7 +307,19 @@ def stage_jar(repository: Path, candidate: Path, receipt: Path) -> None:
 
 
 def manifest_repository(repository: Path, output: Path) -> None:
-    manifest = packager.build_manifest(repository.resolve())
+    existing = packager.ALLOWED_ORIGIN_IDS.get(DOCKER_JAVA_ORIGIN_ID)
+    if existing not in (None, DOCKER_JAVA_SOURCE_REPOSITORY):
+        _fail("JAR_ORIGIN", "docker-java source origin ID is already reassigned")
+    packager.ALLOWED_ORIGIN_IDS[DOCKER_JAVA_ORIGIN_ID] = (
+        DOCKER_JAVA_SOURCE_REPOSITORY
+    )
+    try:
+        manifest = packager.build_manifest(repository.resolve())
+    finally:
+        if existing is None:
+            del packager.ALLOWED_ORIGIN_IDS[DOCKER_JAVA_ORIGIN_ID]
+        else:
+            packager.ALLOWED_ORIGIN_IDS[DOCKER_JAVA_ORIGIN_ID] = existing
     output.write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
