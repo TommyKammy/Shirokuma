@@ -133,25 +133,11 @@ build_repository() {
   ${bun} stage --archive "${bun_archive}" --repository "${repository}"
   ${parquet} stage-artifact --checkout "${parquet_source}" \
     --build-repository "${parquet_repository}" --target-repository "${repository}"
-  docker run --rm --platform linux/arm64 \
-    --user "$(id -u):$(id -g)" \
-    --env HOME=/tmp/maven-home \
-    --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
-    --env MAVEN_OPTS=-Duser.home=/tmp/maven-home \
-    --env JAVA_TOOL_OPTIONS= \
-    --volume "${repository}:/m2" \
-    --volume "${policy}/maven-policy:/policy/.mvn:ro" \
-    --volume "${policy}/settings.xml:/policy/settings.xml:ro" \
-    --workdir /policy --entrypoint /usr/share/maven/bin/mvn \
-    "${TRINO_BUILDER_IMAGE}" \
-    --batch-mode --show-version --errors --strict-checksums \
-    --ignore-transitive-repositories --settings /policy/settings.xml \
-    -Dmaven.repo.local=/m2 dependency:get \
-    -Dtransitive=false \
-    -Dartifact=com.github.docker-java:docker-java-transport-zerodep:3.7.1 \
-    2>&1 | tee "${candidate}/docker-java-central-${suffix}.log"
-  ${publisher} audit-transfer-log \
-    --log "${candidate}/docker-java-central-${suffix}.log"
+  local central_jar="${repository}/com/github/docker-java/docker-java-transport-zerodep/3.7.1/docker-java-transport-zerodep-3.7.1.jar"
+  mkdir -p "$(dirname "${central_jar}")"
+  curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
+    --output "${central_jar}" \
+    https://repo.maven.apache.org/maven2/com/github/docker-java/docker-java-transport-zerodep/3.7.1/docker-java-transport-zerodep-3.7.1.jar
   ${verify} stage-jar --repository "${repository}" \
     --candidate "${candidate}/docker-java-transport-zerodep-3.7.1-${suffix}.jar"
   docker run --rm --platform linux/arm64 \

@@ -217,13 +217,19 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
         self.assertLess(offline, seal)
         self.assertLess(seal, manifest)
 
-    def test_central_preimage_fetch_does_not_expand_transitive_closure(self) -> None:
+    def test_central_preimage_fetch_does_not_invoke_a_maven_plugin(self) -> None:
         runner = (ROOT / feasibility.RUNNER_PATH).read_text(encoding="utf-8")
-        fetch = runner.index("dependency:get")
-        artifact = runner.index(
-            "-Dartifact=com.github.docker-java:docker-java-transport-zerodep:3.7.1"
+        self.assertNotIn("dependency:get", runner)
+        self.assertIn(
+            "curl --proto '=https' --tlsv1.2 --fail --silent --show-error",
+            runner,
         )
-        self.assertIn("-Dtransitive=false", runner[fetch:artifact])
+        self.assertIn(
+            "https://repo.maven.apache.org/maven2/com/github/docker-java/"
+            "docker-java-transport-zerodep/3.7.1/"
+            "docker-java-transport-zerodep-3.7.1.jar",
+            runner,
+        )
 
     def test_exact_patch_and_source_identities_are_pinned(self) -> None:
         self.assertEqual(
