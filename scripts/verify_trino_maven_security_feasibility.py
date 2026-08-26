@@ -263,13 +263,10 @@ def stage_jar(repository: Path, candidate: Path, receipt: Path) -> None:
     repository = repository.resolve()
     receipt = receipt.resolve()
     target = repository / DOCKER_JAVA_REPOSITORY_PATH
-    marker = target.parent / "_remote.repositories"
     if receipt.is_relative_to(repository):
         _fail("JAR_RECEIPT", "source receipt must be outside the Maven repository")
     if receipt.exists() or receipt.is_symlink():
         _fail("JAR_RECEIPT", f"source receipt already exists: {receipt}")
-    if marker.exists() or marker.is_symlink():
-        _fail("JAR_ORIGIN", f"Maven origin marker already exists: {marker}")
     if _sha256(target) != DOCKER_JAVA_CENTRAL_JAR_SHA256 or target.stat().st_size != DOCKER_JAVA_CENTRAL_JAR_BYTES:
         _fail("CENTRAL_PREIMAGE", "docker-java zerodep Central preimage differs")
     verify_reviewed_jar(candidate)
@@ -279,11 +276,6 @@ def stage_jar(repository: Path, candidate: Path, receipt: Path) -> None:
     )
     for suffix in (".md5", ".sha256", ".sha512"):
         target.with_name(target.name + suffix).unlink(missing_ok=True)
-    marker.write_text(
-        f"{target.name}>{DOCKER_JAVA_ORIGIN_ID}=\n",
-        encoding="iso-8859-1",
-    )
-    marker.chmod(0o644)
     receipt.write_text(
         json.dumps(
             {
@@ -304,6 +296,37 @@ def stage_jar(repository: Path, candidate: Path, receipt: Path) -> None:
     )
     if target.read_bytes() != candidate.read_bytes():
         _fail("JAR_STAGE", "staged source-built JAR differs")
+
+
+def seal_jar_origin(repository: Path) -> None:
+    target = repository.resolve() / DOCKER_JAVA_REPOSITORY_PATH
+    verify_reviewed_jar(target)
+    marker = target.parent / "_remote.repositories"
+    entries: dict[str, str] = {}
+    if marker.exists():
+        for raw in _regular_file(marker, "JAR_ORIGIN").decode(
+            "iso-8859-1"
+        ).splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            match = re.fullmatch(r"([^<>=\r\n]+)(?:>|<)([^=\r\n]*)=", line)
+            if match is None:
+                _fail("JAR_ORIGIN", f"malformed Maven origin marker: {raw!r}")
+            filename, origin_id = match.groups()
+            if filename == target.name:
+                continue
+            if filename in entries:
+                _fail("JAR_ORIGIN", f"duplicate Maven origin for {filename}")
+            if origin_id not in packager.ALLOWED_ORIGIN_IDS:
+                _fail("JAR_ORIGIN", f"unknown Maven origin ID: {origin_id}")
+            entries[filename] = origin_id
+    entries[target.name] = DOCKER_JAVA_ORIGIN_ID
+    marker.write_text(
+        "".join(f"{name}>{entries[name]}=\n" for name in sorted(entries)),
+        encoding="iso-8859-1",
+    )
+    marker.chmod(0o644)
 
 
 def manifest_repository(repository: Path, output: Path) -> None:
@@ -437,6 +460,8 @@ def _parser() -> argparse.ArgumentParser:
     stage.add_argument("--repository", type=Path, required=True)
     stage.add_argument("--candidate", type=Path, required=True)
     stage.add_argument("--receipt", type=Path, required=True)
+    seal = commands.add_parser("seal-jar-origin")
+    seal.add_argument("--repository", type=Path, required=True)
     manifest = commands.add_parser("manifest-repository")
     manifest.add_argument("--repository", type=Path, required=True)
     manifest.add_argument("--output", type=Path, required=True)
@@ -470,6 +495,8 @@ def main() -> int:
             verify_reviewed_jar(args.jar)
         elif args.command == "stage-jar":
             stage_jar(args.repository, args.candidate, args.receipt)
+        elif args.command == "seal-jar-origin":
+            seal_jar_origin(args.repository)
         elif args.command == "manifest-repository":
             manifest_repository(args.repository, args.output)
         elif args.command == "verify-zero-findings":

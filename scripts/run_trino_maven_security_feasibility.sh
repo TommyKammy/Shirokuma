@@ -214,6 +214,7 @@ for suffix in a b; do
   ${parquet} seal-artifact \
     --build-repository "${temp}/parquet-repository-${suffix}" \
     --target-repository "${repository}"
+  ${verify} seal-jar-origin --repository "${repository}"
   ${verify} manifest-repository --repository "${repository}" \
     --output "${candidate}/maven-repository-${suffix}.json"
 done

@@ -114,13 +114,7 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
             receipt = json.loads(
                 receipt_path.read_text(encoding="utf-8")
             )
-            marker = target.with_name("_remote.repositories").read_text(
-                encoding="iso-8859-1"
-            )
-            self.assertEqual(
-                marker,
-                f"{target.name}>{feasibility.DOCKER_JAVA_ORIGIN_ID}=\n",
-            )
+            self.assertFalse(target.with_name("_remote.repositories").exists())
             self.assertEqual(
                 receipt["source_repository"],
                 feasibility.DOCKER_JAVA_SOURCE_REPOSITORY,
@@ -132,6 +126,28 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
                     path.name.endswith(".shirokuma-source.json")
                     for path in repository.rglob("*")
                 )
+            )
+
+            marker_path = target.with_name("_remote.repositories")
+            marker_path.write_text(
+                f"{target.name}>shirokuma-central=\n"
+                f"{target.name}>{feasibility.DOCKER_JAVA_ORIGIN_ID}=\n"
+                "docker-java-transport-zerodep-3.7.1.pom>shirokuma-central=\n",
+                encoding="iso-8859-1",
+            )
+            feasibility.DOCKER_JAVA_CANDIDATE_JAR_SHA256 = hashlib.sha256(
+                candidate.read_bytes()
+            ).hexdigest()
+            feasibility.DOCKER_JAVA_CANDIDATE_JAR_BYTES = candidate.stat().st_size
+            try:
+                feasibility.seal_jar_origin(repository)
+            finally:
+                feasibility.DOCKER_JAVA_CANDIDATE_JAR_SHA256 = old_candidate_hash
+                feasibility.DOCKER_JAVA_CANDIDATE_JAR_BYTES = old_candidate_bytes
+            self.assertEqual(
+                marker_path.read_text(encoding="iso-8859-1"),
+                f"{target.name}>{feasibility.DOCKER_JAVA_ORIGIN_ID}=\n"
+                "docker-java-transport-zerodep-3.7.1.pom>shirokuma-central=\n",
             )
 
     def test_zero_findings_rejects_high(self) -> None:
