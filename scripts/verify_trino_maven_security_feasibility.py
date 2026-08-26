@@ -334,6 +334,7 @@ def verify_zero_findings(report: Path) -> None:
                     finding.get("InstalledVersion"),
                     finding.get("FixedVersion"),
                     finding.get("Severity"),
+                    finding.get("PkgPath"),
                 )
                 for finding in findings
             },
