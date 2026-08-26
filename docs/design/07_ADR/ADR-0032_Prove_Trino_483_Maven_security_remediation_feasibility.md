@@ -66,14 +66,12 @@ two complete repositories must have byte-identical manifests. Two separate
 repositories then drive two native Linux/arm64, `--network none` Trino builds;
 their server distributions must be byte-identical.
 
-The final fresh Trivy 0.72 scan must report High=0 and Critical=0 over the
-complete retained Maven JAR repository. A local pre-PR candidate scan using DB
-update `2026-08-25T13:00:57.303086402Z` observed High=0/Critical=0, rootfs SBOM
-SHA-256 `79946f30f44b48fe1d1fe3f6c0e3411ef3b4fa56febcd9701e4557be0fa64c17`,
-and report SHA-256
-`f2768b6b7e8e3adb7a2b50de6184617f5be203612e99b3688d7ae7fe11240cf1`.
-These values are candidate evidence only; the Draft PR's exact final-head CI is
-the review evidence.
+The final fresh Trivy 0.72 scan must report High=0 and Critical=0 over a
+closure-complete CycloneDX SBOM derived from the complete retained Maven JAR
+descriptor. Raw rootfs discovery is not treated as complete: the existing
+publisher generator validates every omission against the descriptor and the
+final verifier requires the exact `(PURL, FilePath)` set in the Trivy report.
+The PR's exact final-head CI is the review evidence.
 
 ## Consequences
 

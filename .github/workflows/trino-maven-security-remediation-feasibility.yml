@@ -100,12 +100,33 @@ jobs:
         shell: bash
         run: bash scripts/run_trino_maven_security_feasibility.sh
 
-      - name: Generate the fresh complete Maven JAR inventory
+      - name: Generate the fresh raw rootfs Maven JAR inventory
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: v0.72.0
           scan-type: rootfs
           scan-ref: ${{ runner.temp }}/maven-repository-a
+          format: cyclonedx
+          output: .trino-security-feasibility/trino-maven-rootfs-483.cdx.json
+          scanners: vuln
+
+      - name: Generate the closure-complete Maven CycloneDX SBOM
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py \
+            generate-maven-sbom \
+            --descriptor .trino-security-feasibility/maven-repository-a.json \
+            --repository "${RUNNER_TEMP}/maven-repository-a" \
+            --rootfs-sbom .trino-security-feasibility/trino-maven-rootfs-483.cdx.json \
+            --output .trino-security-feasibility/trino-maven-dependencies-483.cdx.json
+
+      - name: Scan the closure-complete Maven JAR inventory
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.72.0
+          scan-type: sbom
+          scan-ref: .trino-security-feasibility/trino-maven-dependencies-483.cdx.json
           format: json
           output: .trino-security-feasibility/trivy-vulnerability.json
           scanners: vuln
@@ -121,5 +142,6 @@ jobs:
           set -euo pipefail
           python3 scripts/verify_trino_maven_security_feasibility.py \
             verify-scan \
-            --repository "${RUNNER_TEMP}/maven-repository-a" \
+            --descriptor .trino-security-feasibility/maven-repository-a.json \
+            --sbom .trino-security-feasibility/trino-maven-dependencies-483.cdx.json \
             --report .trino-security-feasibility/trivy-vulnerability.json

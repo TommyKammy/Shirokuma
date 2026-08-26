@@ -130,50 +130,132 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
             ):
                 feasibility.verify_zero_findings(report)
 
-    def test_scan_binds_reported_jars_to_inventory_and_exact_versions(self) -> None:
+    def test_scan_requires_the_complete_sbom_package_closure(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            repository = root / "repository"
-            repository.mkdir()
-            docker_jar = repository / "docker-java-transport-zerodep-3.7.1.jar"
-            netty_jar = repository / "netty-transport-sctp-4.2.17.Final.jar"
-            docker_jar.write_bytes(b"docker candidate")
-            netty_jar.write_bytes(b"netty candidate")
-            packages = [
-                {
-                    "Name": name,
-                    "Version": version,
-                    "FilePath": path.name,
-                    "Digest": "sha1:trivy-package-record-not-jar-bytes",
-                }
-                for name, version, path in (
-                    (
-                        "com.github.docker-java:docker-java-transport-zerodep",
-                        "3.7.1",
-                        docker_jar,
-                    ),
-                    (
-                        "org.apache.httpcomponents.client5:httpclient5",
-                        "5.6.4",
-                        docker_jar,
-                    ),
-                    (
-                        "org.apache.httpcomponents.core5:httpcore5",
-                        "5.4.3",
-                        docker_jar,
-                    ),
-                    (
-                        "org.apache.httpcomponents.core5:httpcore5-h2",
-                        "5.4.3",
-                        docker_jar,
-                    ),
-                    (
-                        "io.netty:netty-transport-sctp",
-                        "4.2.17.Final",
-                        netty_jar,
-                    ),
+            docker_path = (
+                "com/github/docker-java/docker-java-transport-zerodep/3.7.1/"
+                "docker-java-transport-zerodep-3.7.1.jar"
+            )
+            netty_path = (
+                "io/netty/netty-transport-sctp/4.2.17.Final/"
+                "netty-transport-sctp-4.2.17.Final.jar"
+            )
+            omitted_path = "org/example/omitted/1.0/omitted-1.0.jar"
+            descriptor = root / "descriptor.json"
+            descriptor.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "file_count": 3,
+                        "files": [
+                            {
+                                "mode": "0644",
+                                "path": path,
+                                "repository_origin": (
+                                    "https://repo.maven.apache.org/maven2/"
+                                ),
+                                "sha256": hashlib.sha256(
+                                    path.encode()
+                                ).hexdigest(),
+                                "size": len(path),
+                            }
+                            for path in (docker_path, netty_path, omitted_path)
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            identities = (
+                (
+                    "com.github.docker-java:docker-java-transport-zerodep",
+                    "3.7.1",
+                    docker_path,
+                ),
+                (
+                    "org.apache.httpcomponents.client5:httpclient5",
+                    "5.6.4",
+                    docker_path,
+                ),
+                (
+                    "org.apache.httpcomponents.core5:httpcore5",
+                    "5.4.3",
+                    docker_path,
+                ),
+                (
+                    "org.apache.httpcomponents.core5:httpcore5-h2",
+                    "5.4.3",
+                    docker_path,
+                ),
+                (
+                    "io.netty:netty-transport-sctp",
+                    "4.2.17.Final",
+                    netty_path,
+                ),
+                (
+                    "org.example:omitted",
+                    "1.0",
+                    omitted_path,
+                ),
+            )
+            packages = []
+            components = []
+            for name, version, path in identities:
+                group, artifact = name.split(":", 1)
+                purl = f"pkg:maven/{group}/{artifact}@{version}"
+                packages.append(
+                    {
+                        "Name": name,
+                        "Version": version,
+                        "FilePath": path,
+                        "Identifier": {"PURL": purl},
+                    }
                 )
-            ]
+                components.append(
+                    {
+                        "bom-ref": purl,
+                        "type": "library",
+                        "name": artifact,
+                        "purl": purl,
+                        "properties": [
+                            {
+                                "name": "aquasecurity:trivy:FilePath",
+                                "value": path,
+                            }
+                        ],
+                    }
+                )
+            root_ref = "urn:test:maven-root"
+            sbom = root / "sbom.json"
+            sbom.write_text(
+                json.dumps(
+                    {
+                        "bomFormat": "CycloneDX",
+                        "specVersion": "1.7",
+                        "metadata": {
+                            "component": {
+                                "bom-ref": root_ref,
+                                "type": "application",
+                                "name": "maven-repository-a",
+                            }
+                        },
+                        "components": components,
+                        "dependencies": [
+                            {
+                                "ref": root_ref,
+                                "dependsOn": [
+                                    component["bom-ref"] for component in components
+                                ],
+                            },
+                            *[
+                                {"ref": component["bom-ref"], "dependsOn": []}
+                                for component in components
+                            ],
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
             report = root / "report.json"
             report.write_text(
                 json.dumps(
@@ -189,9 +271,9 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            feasibility.verify_scan(repository, report)
+            feasibility.verify_scan(descriptor, sbom, report)
 
-            packages[0]["FilePath"] = "outside-inventory.jar"
+            packages.pop()
             report.write_text(
                 json.dumps(
                     {
@@ -202,9 +284,9 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(
-                feasibility.FeasibilityError, "TRIVY_INVENTORY"
+                feasibility.publisher.ContractError, "MAVEN_SCAN_CLOSURE"
             ):
-                feasibility.verify_scan(repository, report)
+                feasibility.verify_scan(descriptor, sbom, report)
 
     def test_workflow_is_pull_request_only_and_read_only(self) -> None:
         feasibility.audit_workflow(ROOT)

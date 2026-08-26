@@ -14,6 +14,7 @@ import sys
 import zipfile
 from pathlib import Path, PurePosixPath
 
+import package_trino_maven_dependencies as packager
 import verify_trino_dependency_publisher as publisher
 
 
@@ -290,29 +291,9 @@ def stage_jar(repository: Path, candidate: Path) -> None:
 
 
 def manifest_repository(repository: Path, output: Path) -> None:
-    repository = repository.resolve()
-    entries = []
-    for path in sorted(repository.rglob("*")):
-        if path.is_dir():
-            continue
-        if path.name in {"_remote.repositories", "resolver-status.properties"}:
-            continue
-        if path.name.endswith(".lastUpdated"):
-            continue
-        payload = _regular_file(path, "MAVEN_REPOSITORY")
-        entries.append(
-            {
-                "path": path.relative_to(repository).as_posix(),
-                "sha256": hashlib.sha256(payload).hexdigest(),
-                "bytes": len(payload),
-            }
-        )
-    if not entries:
-        _fail("MAVEN_REPOSITORY", "repository is empty")
+    manifest = packager.build_manifest(repository.resolve())
     output.write_text(
-        json.dumps(
-            {"schema_version": 1, "entries": entries}, indent=2, sort_keys=True
-        ) + "\n",
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 
@@ -346,8 +327,13 @@ def verify_zero_findings(report: Path) -> None:
         )
 
 
-def verify_scan(repository: Path, report: Path) -> None:
-    repository = repository.resolve()
+def verify_scan(descriptor: Path, sbom: Path, report: Path) -> None:
+    publisher.verify_maven_scan(
+        descriptor,
+        sbom,
+        report,
+        allow_high_critical=True,
+    )
     document = json.loads(_regular_file(report, "TRIVY_REPORT"))
     if type(document.get("SchemaVersion")) is not int:
         _fail("TRIVY_REPORT", "schema version is not an exact integer")
@@ -356,16 +342,6 @@ def verify_scan(repository: Path, report: Path) -> None:
         for result in document.get("Results") or []
         for package in result.get("Packages") or []
     ]
-    inventory = set()
-    for jar in sorted(repository.rglob("*.jar")):
-        _regular_file(jar, "MAVEN_JAR")
-        inventory.add(jar.relative_to(repository).as_posix())
-    if not inventory:
-        _fail("TRIVY_INVENTORY", "Maven JAR inventory is empty")
-    for package in packages:
-        path = package.get("FilePath")
-        if not isinstance(path, str) or path not in inventory:
-            _fail("TRIVY_INVENTORY", f"reported package is outside JAR inventory: {path!r}")
     identities = {(package.get("Name"), package.get("Version")) for package in packages}
     required = {
         ("io.netty:netty-transport-sctp", "4.2.17.Final"),
@@ -393,7 +369,8 @@ def audit_workflow(root: Path) -> None:
         _fail("WORKFLOW_PERMISSION", "job must grant contents: read only")
     required = (
         "apply-trino", "apply-docker-java", "canonicalize-jar", "stage-jar",
-        "--network none", "verify-scan", "cmp ",
+        "--network none", "generate-maven-sbom", "scan-type: sbom",
+        "verify-scan", "cmp ",
     )
     combined = workflow + "\n" + runner
     for marker in required:
@@ -432,7 +409,8 @@ def _parser() -> argparse.ArgumentParser:
     scan = commands.add_parser("verify-zero-findings")
     scan.add_argument("--report", type=Path, required=True)
     complete_scan = commands.add_parser("verify-scan")
-    complete_scan.add_argument("--repository", type=Path, required=True)
+    complete_scan.add_argument("--descriptor", type=Path, required=True)
+    complete_scan.add_argument("--sbom", type=Path, required=True)
     complete_scan.add_argument("--report", type=Path, required=True)
     audit = commands.add_parser("audit-workflow")
     audit.add_argument("--root", type=Path, default=Path("."))
@@ -463,11 +441,12 @@ def main() -> int:
         elif args.command == "verify-zero-findings":
             verify_zero_findings(args.report)
         elif args.command == "verify-scan":
-            verify_scan(args.repository, args.report)
+            verify_scan(args.descriptor, args.sbom, args.report)
         elif args.command == "audit-workflow":
             audit_workflow(args.root.resolve())
     except (
         FeasibilityError,
+        packager.SnapshotError,
         publisher.ContractError,
         OSError,
         json.JSONDecodeError,
