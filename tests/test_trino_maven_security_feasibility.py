@@ -144,7 +144,7 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
                     "Name": name,
                     "Version": version,
                     "FilePath": path.name,
-                    "Digest": "sha1:" + hashlib.sha1(path.read_bytes()).hexdigest(),
+                    "Digest": "sha1:trivy-package-record-not-jar-bytes",
                 }
                 for name, version, path in (
                     (

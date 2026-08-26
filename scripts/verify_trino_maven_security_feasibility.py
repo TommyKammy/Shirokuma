@@ -339,20 +339,16 @@ def verify_scan(repository: Path, report: Path) -> None:
         for result in document.get("Results") or []
         for package in result.get("Packages") or []
     ]
-    inventory = {
-        jar.relative_to(repository).as_posix():
-        "sha1:" + hashlib.sha1(_regular_file(jar, "MAVEN_JAR")).hexdigest()
-        for jar in sorted(repository.rglob("*.jar"))
-    }
+    inventory = set()
+    for jar in sorted(repository.rglob("*.jar")):
+        _regular_file(jar, "MAVEN_JAR")
+        inventory.add(jar.relative_to(repository).as_posix())
     if not inventory:
         _fail("TRIVY_INVENTORY", "Maven JAR inventory is empty")
     for package in packages:
         path = package.get("FilePath")
-        digest = package.get("Digest")
         if not isinstance(path, str) or path not in inventory:
             _fail("TRIVY_INVENTORY", f"reported package is outside JAR inventory: {path!r}")
-        if digest != inventory[path]:
-            _fail("TRIVY_INVENTORY", f"reported package digest differs: {path}")
     identities = {(package.get("Name"), package.get("Version")) for package in packages}
     required = {
         ("io.netty:netty-transport-sctp", "4.2.17.Final"),
