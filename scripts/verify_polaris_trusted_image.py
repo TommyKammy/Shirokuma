@@ -797,7 +797,7 @@ PENDING_SCRIPT_FILE_INVENTORY = {
         "f3c72002a1360a586177d01290063ecf1ddfc42d079d9299ee1f6daf2ee30d5c"
     ),
     "scripts/verify_trino_maven_security_feasibility.py": (
-        "60844965e9d3df935573a78081f74b9b1f6d35311d11142aac6450343d261909"
+        "c7dbd77d60b10f428781474f82bec5a82af802ab545cc74c9213ca47d33891c4"
     ),
     "scripts/verify_trusted_image.py": (
         "cc569a5ee10400ad657f7648ccc2c14e8fd21691adfdc9e155212b16dc0afba0"

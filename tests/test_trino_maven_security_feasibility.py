@@ -189,7 +189,11 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
                         {
                             "path": feasibility.DOCKER_JAVA_REPOSITORY_PATH.as_posix(),
                             "repository_origin": feasibility.DOCKER_JAVA_SOURCE_REPOSITORY,
-                        }
+                        },
+                        {
+                            "path": feasibility.DOCKER_JAVA_REPOSITORY_PATH.as_posix() + ".sha1",
+                            "repository_origin": feasibility.DOCKER_JAVA_SOURCE_REPOSITORY,
+                        },
                     ]
                 }
 

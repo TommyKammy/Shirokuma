@@ -347,9 +347,11 @@ def manifest_repository(repository: Path, output: Path) -> None:
         record for record in manifest["files"]
         if record["repository_origin"] == DOCKER_JAVA_SOURCE_REPOSITORY
     ]
-    if len(source_records) != 1 or source_records[0]["path"] != (
-        DOCKER_JAVA_REPOSITORY_PATH.as_posix()
-    ):
+    expected_source_paths = {
+        DOCKER_JAVA_REPOSITORY_PATH.as_posix(),
+        DOCKER_JAVA_REPOSITORY_PATH.as_posix() + ".sha1",
+    }
+    if {record["path"] for record in source_records} != expected_source_paths:
         _fail("JAR_ORIGIN", "docker-java source origin is not exact-path scoped")
     output.write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
