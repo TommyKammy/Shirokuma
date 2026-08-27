@@ -343,6 +343,14 @@ def manifest_repository(repository: Path, output: Path) -> None:
             del packager.ALLOWED_ORIGIN_IDS[DOCKER_JAVA_ORIGIN_ID]
         else:
             packager.ALLOWED_ORIGIN_IDS[DOCKER_JAVA_ORIGIN_ID] = existing
+    source_records = [
+        record for record in manifest["files"]
+        if record["repository_origin"] == DOCKER_JAVA_SOURCE_REPOSITORY
+    ]
+    if len(source_records) != 1 or source_records[0]["path"] != (
+        DOCKER_JAVA_REPOSITORY_PATH.as_posix()
+    ):
+        _fail("JAR_ORIGIN", "docker-java source origin is not exact-path scoped")
     output.write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -378,11 +386,34 @@ def verify_zero_findings(report: Path) -> None:
         )
 
 
+def _with_publisher_source_origin(callback, *args, **kwargs) -> None:
+    key = "docker-java-source-remediation"
+    existing = publisher.EXPECTED_REPOSITORIES.get(key)
+    if existing not in (None, DOCKER_JAVA_SOURCE_REPOSITORY):
+        _fail("JAR_ORIGIN", "publisher source origin key is already reassigned")
+    publisher.EXPECTED_REPOSITORIES[key] = DOCKER_JAVA_SOURCE_REPOSITORY
+    try:
+        callback(*args, **kwargs)
+    finally:
+        if existing is None:
+            del publisher.EXPECTED_REPOSITORIES[key]
+        else:
+            publisher.EXPECTED_REPOSITORIES[key] = existing
+
+
+def generate_maven_sbom(
+    descriptor: Path, repository: Path, rootfs_sbom: Path, output: Path
+) -> None:
+    _with_publisher_source_origin(
+        publisher.generate_maven_sbom,
+        descriptor, repository, rootfs_sbom, output,
+    )
+
+
 def verify_scan(descriptor: Path, sbom: Path, report: Path) -> None:
-    publisher.verify_maven_scan(
-        descriptor,
-        sbom,
-        report,
+    _with_publisher_source_origin(
+        publisher.verify_maven_scan,
+        descriptor, sbom, report,
         allow_high_critical=True,
     )
     document = json.loads(_regular_file(report, "TRIVY_REPORT"))
@@ -465,6 +496,11 @@ def _parser() -> argparse.ArgumentParser:
     manifest = commands.add_parser("manifest-repository")
     manifest.add_argument("--repository", type=Path, required=True)
     manifest.add_argument("--output", type=Path, required=True)
+    sbom = commands.add_parser("generate-maven-sbom")
+    sbom.add_argument("--descriptor", type=Path, required=True)
+    sbom.add_argument("--repository", type=Path, required=True)
+    sbom.add_argument("--rootfs-sbom", type=Path, required=True)
+    sbom.add_argument("--output", type=Path, required=True)
     scan = commands.add_parser("verify-zero-findings")
     scan.add_argument("--report", type=Path, required=True)
     complete_scan = commands.add_parser("verify-scan")
@@ -499,6 +535,10 @@ def main() -> int:
             seal_jar_origin(args.repository)
         elif args.command == "manifest-repository":
             manifest_repository(args.repository, args.output)
+        elif args.command == "generate-maven-sbom":
+            generate_maven_sbom(
+                args.descriptor, args.repository, args.rootfs_sbom, args.output
+            )
         elif args.command == "verify-zero-findings":
             verify_zero_findings(args.report)
         elif args.command == "verify-scan":

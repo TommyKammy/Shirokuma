@@ -184,7 +184,14 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
                     ],
                     feasibility.DOCKER_JAVA_SOURCE_REPOSITORY,
                 )
-                return {"status": "ok"}
+                return {
+                    "files": [
+                        {
+                            "path": feasibility.DOCKER_JAVA_REPOSITORY_PATH.as_posix(),
+                            "repository_origin": feasibility.DOCKER_JAVA_SOURCE_REPOSITORY,
+                        }
+                    ]
+                }
 
             with mock.patch.object(
                 feasibility.packager,
@@ -194,7 +201,10 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
                 output = root / "manifest.json"
                 feasibility.manifest_repository(root, output)
 
-            self.assertEqual(json.loads(output.read_text()), {"status": "ok"})
+            self.assertEqual(
+                json.loads(output.read_text())["files"][0]["repository_origin"],
+                feasibility.DOCKER_JAVA_SOURCE_REPOSITORY,
+            )
             self.assertNotIn(
                 feasibility.DOCKER_JAVA_ORIGIN_ID,
                 feasibility.packager.ALLOWED_ORIGIN_IDS,
