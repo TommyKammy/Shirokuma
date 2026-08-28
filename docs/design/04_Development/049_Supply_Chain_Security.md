@@ -1735,6 +1735,29 @@ sequence-7 attempt, sequence 8, admission, image/runtime activation, and Issue
 #63 closure remain unauthorized pending fresh Maven remediation feasibility and
 a new explicit OWNER decision.
 
+## Trino 483 focused Maven security remediation feasibility (2026-08-26)
+
+ADR-0032 and Issue #63 comment `5418664130` define a Draft review-only path
+from predecessor `59f38dc26a1a02203df9c629360d863e4856a2ba`. It changes only
+Trino's Netty property to 4.2.17.Final and docker-java 3.7.1's HttpClient source
+dependency to 5.6.4, producing embedded HttpCore and HttpCore H2 5.4.3.
+
+The PR workflow runs only on `pull_request`, grants `contents: read`, performs
+two independent source reconstructions, replaces the exact Maven Central
+docker-java zerodep preimage only after hash and size verification, compares
+the complete closed-repository manifests, performs two separate native arm64
+`--network none` Trino builds, compares their server distributions, and
+requires a fresh complete Maven inventory with High=0/Critical=0. The
+source-built JAR has a deterministic canonical ZIP representation because the
+upstream raw build preserves variable entry timestamps.
+
+The workflow does not retain or publish artifacts and has no registry
+credentials, authentication, write, signing, admission, image, Flux, or
+runtime step. Existing publication lifecycle flags remain false. Draft PR CI
+is feasibility evidence only; merge, sequence 8, dependency publication,
+downstream activation, public exposure, production use, dependent Issues
+#64-#66, and Issue #63 closure each remain unauthorized.
+
 ## Scanner or feed failure rollback
 
 Security-tool and feed failures do not permit bypassing the check. First retry

@@ -3311,6 +3311,10 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "allowed_paths": [
                     ".github/workflows/trino-maven-dependencies.yml",
                     ".github/workflows/trino-maven-remediation-feasibility.yml",
+                    (
+                        ".github/workflows/"
+                        "trino-maven-security-remediation-feasibility.yml"
+                    ),
                     "bootstrap/trino/v483/admission.json",
                     "bootstrap/trino/v483/maven-policy/.mvn/jvm.config",
                     (
@@ -3332,6 +3336,14 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     (
                         "bootstrap/trino/v483/patches/"
                         "0003-shirokuma-maven-build-plugin-closure.patch"
+                    ),
+                    (
+                        "bootstrap/trino/v483/patches/"
+                        "0004-shirokuma-netty-4.2.17.patch"
+                    ),
+                    (
+                        "bootstrap/trino/v483/patches/"
+                        "0005-shirokuma-docker-java-httpclient-5.6.4.patch"
                     ),
                     "bootstrap/trino/v483/settings.xml",
                     "bootstrap/trino/v483/trusted-build-contract.json",
@@ -3379,6 +3391,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                         "docs/design/07_ADR/"
                         "ADR-0031_Activate_exact_Trino_483_dependency_"
                         "publication_sequence_7.md"
+                    ),
+                    (
+                        "docs/design/07_ADR/"
+                        "ADR-0032_Prove_Trino_483_Maven_security_"
+                        "remediation_feasibility.md"
                     ),
                     "docs/design/context-manifest.json",
                     (
@@ -3469,14 +3486,17 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "scripts/package_trino_maven_dependencies.py",
                     "scripts/prepare_trino_bun_input.py",
                     "scripts/remediate_parquet_jackson.py",
+                    "scripts/run_trino_maven_security_feasibility.sh",
                     "scripts/verify_polaris_trusted_image.py",
                     "scripts/verify_trino_dependency_publisher.py",
                     "scripts/verify_trino_maven_feasibility.py",
+                    "scripts/verify_trino_maven_security_feasibility.py",
                     "tests/test_trino_bun_dependencies.py",
                     "tests/test_parquet_jackson_remediation.py",
                     "tests/test_trino_bootstrap.py",
                     "tests/test_trino_dependency_publisher.py",
                     "tests/test_trino_maven_feasibility.py",
+                    "tests/test_trino_maven_security_feasibility.py",
                     "Makefile",
                 ],
                 "forbidden_paths": [
@@ -3594,15 +3614,21 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         for path in _github_workflow_paths():
             workflow = path.read_text(encoding="utf-8").casefold()
             with self.subTest(workflow=path):
-                if path.name == "trino-maven-dependencies.yml":
+                if path.name in {
+                    "trino-maven-dependencies.yml",
+                    "trino-maven-security-remediation-feasibility.yml",
+                }:
                     self.assertIn(
                         "https://github.com/trinodb/trino", workflow
                     )
-                    self.assertIn(
-                        "shirokuma-trino-maven-dependencies", workflow
-                    )
                     self.assertNotIn(TRINO_INDEX_REFERENCE, workflow)
                     self.assertNotIn("docker.io/trinodb/trino", workflow)
+                    if path.name == "trino-maven-dependencies.yml":
+                        self.assertIn(
+                            "shirokuma-trino-maven-dependencies", workflow
+                        )
+                    else:
+                        self.assertNotIn("shirokuma-trino", workflow)
                 else:
                     self.assertNotIn("trinodb/trino", workflow)
                     self.assertNotIn("shirokuma-trino", workflow)
