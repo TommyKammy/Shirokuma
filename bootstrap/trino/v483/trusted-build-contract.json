@@ -99,7 +99,7 @@
     },
     {
       "path": "scripts/package_trino_maven_dependencies.py",
-      "sha256": "98b0e1489183c8d73d1000487365715d6f53cee7373b0944de8b76c0479b0f3e"
+      "sha256": "783278b5c4d2738a8f1aa89fa7e7873661411fe7e6de9315dbec78620c4f85e2"
     },
     {
       "path": "scripts/prepare_trino_bun_input.py",
@@ -139,7 +139,7 @@
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "680276941da192862ab5269d9d3746b7967931d49a93afa2acdeec4778743a08"
+      "sha256": "f31994e66b0c5e5cdceaf0c55ff734334a9713cbc6e29a12d3d820ef57cd45c4"
     },
     {
       "path": "tests/test_trino_maven_feasibility.py",

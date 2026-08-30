@@ -492,6 +492,49 @@ class MavenSnapshotTests(unittest.TestCase):
             ):
                 package.build_manifest(repository)
 
+    def test_docker_java_source_origin_accepts_exact_jar_and_sha1(self) -> None:
+        remediation = package.DOCKER_JAVA_SOURCE_REMEDIATION
+        payload = b"jar"
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.dict(
+            remediation,
+            {
+                "candidate_bytes": len(payload),
+                "candidate_sha256": hashlib.sha256(payload).hexdigest(),
+            },
+        ):
+            repository = self._repository(Path(temporary))
+            target = repository / remediation["repository_path"]
+            target.parent.mkdir(parents=True)
+            target.write_bytes(payload)
+            sidecar = target.with_name(f"{target.name}.sha1")
+            sidecar.write_text(
+                hashlib.sha1(payload, usedforsecurity=False).hexdigest(),
+                encoding="ascii",
+            )
+            (target.parent / "_remote.repositories").write_text(
+                f"{target.name}>{remediation['origin_id']}=\n"
+                f"{sidecar.name}>{remediation['origin_id']}=\n",
+                encoding="iso-8859-1",
+            )
+
+            manifest = package.build_manifest(repository)
+            origins = {
+                record["path"]: record["repository_origin"]
+                for record in manifest["files"]
+                if record["path"].startswith(
+                    "com/github/docker-java/docker-java-transport-zerodep/"
+                )
+            }
+            self.assertEqual(
+                {
+                    remediation["repository_path"]: remediation["repository"],
+                    f"{remediation['repository_path']}.sha1": remediation[
+                        "repository"
+                    ],
+                },
+                origins,
+            )
+
     def test_scm_remediation_is_not_a_maven_resolver_origin(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repository = self._repository(Path(temporary))

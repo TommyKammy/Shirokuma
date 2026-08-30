@@ -678,6 +678,7 @@ def build_manifest(repository: Path) -> dict[str, Any]:
                 f"an unauthorized path: {relative}"
             )
         docker_java_path = DOCKER_JAVA_SOURCE_REMEDIATION["repository_path"]
+        docker_java_sha1_path = f"{docker_java_path}.sha1"
         if relative.as_posix() == docker_java_path:
             if (
                 origin != DOCKER_JAVA_SOURCE_REMEDIATION["repository"]
@@ -687,6 +688,12 @@ def build_manifest(repository: Path) -> dict[str, Any]:
                 != DOCKER_JAVA_SOURCE_REMEDIATION["candidate_sha256"]
             ):
                 _fail("docker-java source remediation differs")
+        elif relative.as_posix() == docker_java_sha1_path:
+            if (
+                origin != DOCKER_JAVA_SOURCE_REMEDIATION["repository"]
+                or metadata.st_size != 40
+            ):
+                _fail("docker-java source remediation checksum differs")
         elif origin == DOCKER_JAVA_SOURCE_REMEDIATION["repository"]:
             _fail(
                 "docker-java source-remediation origin is forbidden for "
@@ -892,6 +899,7 @@ def _load_manifest(path: Path) -> dict[str, Any]:
                 "for an unauthorized path"
             )
         docker_java_path = DOCKER_JAVA_SOURCE_REMEDIATION["repository_path"]
+        docker_java_sha1_path = f"{docker_java_path}.sha1"
         if relative.as_posix() == docker_java_path:
             if (
                 record["repository_origin"]
@@ -902,6 +910,15 @@ def _load_manifest(path: Path) -> dict[str, Any]:
                 != DOCKER_JAVA_SOURCE_REMEDIATION["candidate_sha256"]
             ):
                 _fail("Maven manifest docker-java remediation differs")
+        elif relative.as_posix() == docker_java_sha1_path:
+            if (
+                record["repository_origin"]
+                != DOCKER_JAVA_SOURCE_REMEDIATION["repository"]
+                or record["size"] != 40
+            ):
+                _fail(
+                    "Maven manifest docker-java remediation checksum differs"
+                )
         elif (
             record["repository_origin"]
             == DOCKER_JAVA_SOURCE_REMEDIATION["repository"]
