@@ -41,54 +41,8 @@ fetch_parquet() {
 
 fetch_docker_java() {
   local suffix="$1" source="${temp}/docker-java-source-${suffix}"
-  git init "${source}"
-  git -C "${source}" remote add origin "${DOCKER_JAVA_SOURCE_REPOSITORY}"
-  git -C "${source}" fetch --depth=1 origin \
-    "${DOCKER_JAVA_SOURCE_COMMIT}" \
-    "refs/tags/${DOCKER_JAVA_SOURCE_TAG}:refs/tags/${DOCKER_JAVA_SOURCE_TAG}"
-  test "$(git -C "${source}" rev-parse "refs/tags/${DOCKER_JAVA_SOURCE_TAG}^{}")" = "${DOCKER_JAVA_SOURCE_COMMIT}"
-  git -C "${source}" checkout --detach "${DOCKER_JAVA_SOURCE_COMMIT}"
-  test "$(git -C "${source}" rev-parse 'HEAD^{tree}')" = "${DOCKER_JAVA_SOURCE_TREE}"
-  ${verify} apply-docker-java --root "${root}" --checkout "${source}"
-  docker run --rm --platform linux/arm64 \
-    --user "$(id -u):$(id -g)" \
-    --env HOME=/tmp/maven-home \
-    --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
-    --env MAVEN_OPTS=-Duser.home=/tmp/maven-home \
-    --env JAVA_TOOL_OPTIONS= \
-    --volume "${source}:/workspace" \
-    --volume "${policy}/settings.xml:/policy/settings.xml:ro" \
-    --workdir /workspace \
-    --entrypoint /usr/share/maven/bin/mvn \
-    "${DOCKER_JAVA_BUILDER_IMAGE}" \
-    --batch-mode --show-version --errors --strict-checksums \
-    --ignore-transitive-repositories --settings /policy/settings.xml \
-    versions:set -DnewVersion=3.7.1 -DgenerateBackupPoms=false \
-    2>&1 | tee "${candidate}/docker-java-versions-${suffix}.log"
-  ${publisher} audit-transfer-log \
-    --log "${candidate}/docker-java-versions-${suffix}.log"
-  docker run --rm --platform linux/arm64 \
-    --user "$(id -u):$(id -g)" \
-    --env HOME=/tmp/maven-home \
-    --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
-    --env MAVEN_OPTS=-Duser.home=/tmp/maven-home \
-    --env JAVA_TOOL_OPTIONS= \
-    --volume "${source}:/workspace" \
-    --volume "${policy}/settings.xml:/policy/settings.xml:ro" \
-    --workdir /workspace \
-    --entrypoint /usr/share/maven/bin/mvn \
-    "${DOCKER_JAVA_BUILDER_IMAGE}" \
-    --batch-mode --show-version --errors --strict-checksums \
-    --ignore-transitive-repositories --settings /policy/settings.xml \
-    -pl docker-java-transport-zerodep -am clean package -DskipTests \
-    2>&1 | tee "${candidate}/docker-java-build-${suffix}.log"
-  ${publisher} audit-transfer-log \
-    --log "${candidate}/docker-java-build-${suffix}.log"
-  ${verify} canonicalize-jar \
-    --source "${source}/docker-java-transport-zerodep/target/docker-java-transport-zerodep-3.7.1.jar" \
-    --output "${candidate}/docker-java-transport-zerodep-3.7.1-${suffix}.jar"
-  ${verify} verify-reviewed-jar \
-    --jar "${candidate}/docker-java-transport-zerodep-3.7.1-${suffix}.jar"
+  bash "${root}/scripts/reconstruct_docker_java_transport.sh" \
+    "${suffix}" "${source}" "${candidate}"
 }
 
 for suffix in a b; do

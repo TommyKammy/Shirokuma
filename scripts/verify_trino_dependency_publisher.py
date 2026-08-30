@@ -39,6 +39,18 @@ VERIFIER_PATH = Path("scripts/verify_trino_dependency_publisher.py")
 FEASIBILITY_VERIFIER_PATH = Path("scripts/verify_trino_maven_feasibility.py")
 TEST_PATH = Path("tests/test_trino_dependency_publisher.py")
 FEASIBILITY_TEST_PATH = Path("tests/test_trino_maven_feasibility.py")
+SECURITY_FEASIBILITY_VERIFIER_PATH = Path(
+    "scripts/verify_trino_maven_security_feasibility.py"
+)
+SECURITY_FEASIBILITY_RUNNER_PATH = Path(
+    "scripts/run_trino_maven_security_feasibility.sh"
+)
+DOCKER_JAVA_RECONSTRUCTOR_PATH = Path(
+    "scripts/reconstruct_docker_java_transport.sh"
+)
+SECURITY_FEASIBILITY_TEST_PATH = Path(
+    "tests/test_trino_maven_security_feasibility.py"
+)
 BUN_TEST_PATH = Path("tests/test_trino_bun_dependencies.py")
 PARQUET_REMEDIATION_TEST_PATH = Path(
     "tests/test_parquet_jackson_remediation.py"
@@ -72,15 +84,15 @@ EXPECTED_AUTHORIZATION = {
     "type": "time_boxed_source_identity_risk_acceptance",
     "decision_record": (
         "docs/design/07_ADR/"
-        "ADR-0031_Activate_exact_Trino_483_dependency_publication_sequence_7.md"
+        "ADR-0033_Activate_exact_Trino_483_dependency_publication_sequence_8.md"
     ),
     "approval_record": (
         "https://github.com/TommyKammy/Shirokuma/"
-        "issues/63#issuecomment-5389044844"
+        "issues/63#issuecomment-5469184039"
     ),
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
-    "approved_at": "2026-08-23T23:20:10Z",
-    "expires_at": "2026-09-22T23:00:43Z",
+    "approved_at": "2026-08-30T14:12:29Z",
+    "expires_at": "2026-09-05T04:48:07Z",
     "maximum_duration_days": 30,
     "automatic_renewal": False,
     "risk_owner": "TommyKammy",
@@ -122,7 +134,7 @@ EXPECTED_AUTHORIZATION = {
 EXPECTED_PUBLICATION_ATTEMPT = {
     "event_name": "push",
     "ref": "refs/heads/main",
-    "before_sha": "b2177ef4b1c6e55f225649911d2ed1bc09cd3a0b",
+    "before_sha": "1f4e2ce0b958f69c91780857b11695ac47d1e00a",
     "run_attempt": "1",
 }
 EXPECTED_SEQUENCE_6_REVIEWED_BUN_MANIFEST_SHA256 = (
@@ -233,28 +245,28 @@ EXPECTED_INDEPENDENT_REVIEW = {
     ),
 }
 EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
-    "status": "consumed_failed_closed",
-    "scope": "pr_155_seventh_publication_attempt_only",
+    "status": "active",
+    "scope": "pr_158_eighth_publication_attempt_only",
     "reason": "sole_owner_personal_experimental_project",
     "approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5389044844"
+        "#issuecomment-5469184039"
     ),
-    "approved_at": "2026-08-23T23:20:10Z",
+    "approved_at": "2026-08-30T14:12:29Z",
     "repository": "TommyKammy/Shirokuma",
-    "pull_request": 155,
+    "pull_request": 158,
     "owner": "TommyKammy",
     "human_user_type": "User",
     "author_association": "OWNER",
     "attestation_required_before_merge": True,
     "attestation_must_match_final_head_sha": True,
     "attestation_body_template": (
-        "Owner final-head attestation for PR #155\n\n"
+        "Owner final-head attestation for PR #158\n\n"
         "Decision: {decision}\n"
         "Final head: {final_head}\n"
         "Review-thread snapshot SHA-256: {review_thread_snapshot_sha256}\n"
         "Exception: https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5389044844"
+        "#issuecomment-5469184039"
     ),
     "allowed_decisions": ["APPROVED", "REVOKED"],
     "final_head_ci": {
@@ -263,6 +275,7 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
             ".github/workflows/ci.yml",
             ".github/workflows/security.yml",
             ".github/workflows/trino-maven-remediation-feasibility.yml",
+            ".github/workflows/trino-maven-security-remediation-feasibility.yml",
             ".github/workflows/trino-maven-dependencies.yml",
         ],
         "event": "pull_request",
@@ -343,16 +356,9 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
     "rerun_permitted": False,
     "downstream_authorities_granted": [],
     "standard_independent_review_remains_accepted": True,
-    "consumed_run": {
-        "run_id": "32786095668",
-        "run_attempt": "1",
-        "source_sha": "688e8e8cfcd9653a74dc93bceee2100c5acf18cb",
-        "result": "failed_closed_before_publication",
-        "rerun_permitted": False,
-    },
 }
 EXPECTED_PENDING_REVIEW_REPAIR = {
-    "status": "consumed_by_sequence_7_failure",
+    "status": "authorized_for_sequence_8",
     "scope": "final_head_pull_request_association_only",
     "triggering_run_id": "31616764771",
     "triggering_run_attempt": "1",
@@ -377,58 +383,58 @@ EXPECTED_PENDING_REVIEW_REPAIR = {
         "workflow_query_branch_must_match_head_ref": True,
         "workflow_run_pull_requests_policy": "empty_or_exact_single_target",
     },
-    "publication_permissions_enabled": False,
-    "applies_only_after_separate_owner_authorization": True,
-    "next_sequence_authorized": False,
+    "publication_permissions_enabled": True,
+    "applies_only_after_separate_owner_authorization": False,
+    "next_sequence_authorized": True,
 }
 EXPECTED_PUBLICATION_REAUTHORIZATION = {
-    "sequence": 7,
-    "status": "consumed_failed_closed",
+    "sequence": 8,
+    "status": "active",
     "approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5389044844"
+        "#issuecomment-5469184039"
     ),
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
-    "approved_at": "2026-08-23T23:20:10Z",
-    "expires_at": "2026-09-22T23:00:43Z",
+    "approved_at": "2026-08-30T14:12:29Z",
+    "expires_at": "2026-09-05T04:48:07Z",
     "automatic_renewal": False,
     "risk_owner": "TommyKammy",
     "same_candidate_required": True,
-    "publication_authorized_after_required_approval": False,
-    "next_sequence_authorized": False,
-    "previous_attempt": EXPECTED_SEQUENCE_6_OUTCOME,
+    "publication_authorized_after_required_approval": True,
+    "next_sequence_authorized": True,
+    "previous_attempt": EXPECTED_SEQUENCE_7_OUTCOME,
     "activation": {
-        "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/155",
+        "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/158",
         "predecessor_main_commit": (
-            "b2177ef4b1c6e55f225649911d2ed1bc09cd3a0b"
+            "1f4e2ce0b958f69c91780857b11695ac47d1e00a"
         ),
-        "sequence_6_closeout_pull_request": 154,
-        "sequence_6_closeout_final_head": (
-            "f0124af3b9a391f7f5126463576ebd6713fba3db"
+        "remediation_pull_request": 157,
+        "remediation_final_head": (
+            "6da785983a9ee460c71f35ca1d5bac35cec4184b"
         ),
-        "sequence_6_closeout_merge_commit": (
-            "b2177ef4b1c6e55f225649911d2ed1bc09cd3a0b"
+        "remediation_merge_commit": (
+            "1f4e2ce0b958f69c91780857b11695ac47d1e00a"
         ),
-        "candidate_pull_request": 152,
-        "candidate_final_head": (
-            "cce85c1424691b5157f0881e249a984224eb6875"
+        "remediation_feasibility_run": "33026390700",
+        "sequence_7_closeout_pull_request": 156,
+        "sequence_7_closeout_final_head": (
+            "e856b917ee90561979ff1e97b2e5c4a9969dc210"
         ),
-        "candidate_merge_commit": (
-            "fdec9cdb170ed63d18735ef9f6d0abacc8e475ab"
+        "sequence_7_closeout_merge_commit": (
+            "59f38dc26a1a02203df9c629360d863e4856a2ba"
         ),
-        "association_repair_pull_request": 149,
-        "association_repair_final_head": (
-            "61ffe56387f95c7fee055feeeedebea90a986725"
+        "trino_postimage_sha256": (
+            "3d0c79d798c68632a23e94abb899b760485e199f4ead530bcc27c52a2f2854d3"
         ),
-        "association_repair_merge_commit": (
-            "6109a40a09e89d2a0760858ca61b8fe1260524ba"
+        "docker_java_candidate_sha256": (
+            "6898a76926caa2c875d2963ac9e225f2566270a4a0152f8a151785cdaf8769b0"
         ),
-        "association_repair_prospectively_authorized": True,
-        "association_repair_retroactively_authorized": False,
+        "docker_java_candidate_bytes": 2_446_145,
         "raw_bun_high_zero_critical_zero_required": True,
+        "raw_maven_high_zero_critical_zero_required": True,
         "openvex_permitted": False,
+        "vulnerability_waiver_permitted": False,
     },
-    "outcome": EXPECTED_SEQUENCE_7_OUTCOME,
     "failure_consumes_attempt": True,
     "rerun_permitted": False,
 }
@@ -442,6 +448,13 @@ DISTRIBUTION_REMEDIATION_PATH = Path(
 BUILD_PLUGIN_REMEDIATION_PATH = Path(
     "bootstrap/trino/v483/patches/"
     "0003-shirokuma-maven-build-plugin-closure.patch"
+)
+NETTY_REMEDIATION_PATH = Path(
+    "bootstrap/trino/v483/patches/0004-shirokuma-netty-4.2.17.patch"
+)
+DOCKER_JAVA_REMEDIATION_PATH = Path(
+    "bootstrap/trino/v483/patches/"
+    "0005-shirokuma-docker-java-httpclient-5.6.4.patch"
 )
 OVERLAY_ADR_PATH = Path(
     "docs/design/07_ADR/"
@@ -465,7 +478,11 @@ BUILD_PLUGIN_REMEDIATION_ADR_PATH = Path(
 )
 ACTIVATION_ADR_PATH = Path(
     "docs/design/07_ADR/"
-    "ADR-0031_Activate_exact_Trino_483_dependency_publication_sequence_7.md"
+    "ADR-0033_Activate_exact_Trino_483_dependency_publication_sequence_8.md"
+)
+SECURITY_FEASIBILITY_ADR_PATH = Path(
+    "docs/design/07_ADR/"
+    "ADR-0032_Prove_Trino_483_Maven_security_remediation_feasibility.md"
 )
 AUTHORIZED_FEASIBILITY_RECORD_PATH = Path(
     "docs/design/evidence/trino/"
@@ -1041,11 +1058,11 @@ EXPECTED_PARQUET_SOURCE_REMEDIATION = {
         "https://github.com/TommyKammy/Shirokuma/issues/63"
         "#issuecomment-5105612399"
     ),
-    "sequence_7_approval_record": (
+    "sequence_8_approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5389044844"
+        "#issuecomment-5469184039"
     ),
-    "expires_at": "2026-09-22T23:00:43Z",
+    "expires_at": "2026-09-05T04:48:07Z",
     "automatic_renewal": False,
 }
 EXPECTED_SCM_METADATA_REMEDIATION = {
@@ -1098,11 +1115,11 @@ EXPECTED_SCM_METADATA_REMEDIATION = {
         "https://github.com/TommyKammy/Shirokuma/issues/63"
         "#issuecomment-5210182460"
     ),
-    "sequence_7_approval_record": (
+    "sequence_8_approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5389044844"
+        "#issuecomment-5469184039"
     ),
-    "expires_at": "2026-09-22T23:00:43Z",
+    "expires_at": "2026-09-05T04:48:07Z",
     "automatic_renewal": False,
 }
 EXPECTED_PARQUET_REMEDIATION_JAR_PATH = (
@@ -1165,13 +1182,13 @@ EXPECTED_SOURCE_OVERLAY = {
     "decision_record": OVERLAY_ADR_PATH.as_posix(),
     "approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5389044844"
+        "#issuecomment-5469184039"
     ),
     "candidate_revision_approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
         "#issuecomment-5312231113"
     ),
-    "expires_at": "2026-09-22T23:00:43Z",
+    "expires_at": "2026-09-05T04:48:07Z",
     "automatic_renewal": False,
     "applied_after_source_verification": True,
     "patch": {
@@ -1305,13 +1322,13 @@ EXPECTED_DISTRIBUTION_REMEDIATION = {
         "https://github.com/TommyKammy/Shirokuma/issues/63"
         "#issuecomment-5115851323"
     ),
-    "sequence_7_approval_record": (
+    "sequence_8_approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5389044844"
+        "#issuecomment-5469184039"
     ),
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
     "approved_at": "2026-07-29T09:35:05Z",
-    "expires_at": "2026-09-22T23:00:43Z",
+    "expires_at": "2026-09-05T04:48:07Z",
     "automatic_renewal": False,
     "risk_owner": "TommyKammy",
     "implementation_author": "Codex",
@@ -1404,13 +1421,13 @@ EXPECTED_BUILD_PLUGIN_REMEDIATION = {
         "https://github.com/TommyKammy/Shirokuma/issues/63"
         "#issuecomment-5210182460"
     ),
-    "sequence_7_approval_record": (
+    "sequence_8_approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5389044844"
+        "#issuecomment-5469184039"
     ),
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
     "approved_at": "2026-08-07T00:08:48Z",
-    "expires_at": "2026-09-22T23:00:43Z",
+    "expires_at": "2026-09-05T04:48:07Z",
     "automatic_renewal": False,
     "risk_owner": "TommyKammy",
     "implementation_author": "Codex",
@@ -1540,7 +1557,7 @@ EXPECTED_ADMISSION_OVERLAY_AUTHORIZATION = {
     "permitted_paths": EXPECTED_SOURCE_OVERLAY["permitted_paths"],
     "candidate_revision_only": False,
     "merge_permitted": True,
-    "sequence_7_permitted": True,
+    "sequence_8_permitted": True,
     "publication_permitted": True,
     "vulnerability_risk_accepted": False,
     "raw_high_zero_critical_zero_required": True,
@@ -1551,8 +1568,8 @@ EXPECTED_SOURCE_REMEDIATION = {
     "state": "approved_bounded_parquet_jackson_1_17_1",
     "decision_record": PARQUET_REMEDIATION_ADR_PATH.as_posix(),
     "approval_record": EXPECTED_PARQUET_SOURCE_REMEDIATION["approval_record"],
-    "sequence_7_approval_record": EXPECTED_PARQUET_SOURCE_REMEDIATION[
-        "sequence_7_approval_record"
+    "sequence_8_approval_record": EXPECTED_PARQUET_SOURCE_REMEDIATION[
+        "sequence_8_approval_record"
     ],
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
     "expires_at": EXPECTED_PARQUET_SOURCE_REMEDIATION["expires_at"],
@@ -1584,8 +1601,8 @@ EXPECTED_ADMISSION_SOURCE_REMEDIATION_AUTHORIZATION = {
     ),
     "decision_record": PARQUET_REMEDIATION_ADR_PATH.as_posix(),
     "approval_record": EXPECTED_PARQUET_SOURCE_REMEDIATION["approval_record"],
-    "sequence_7_approval_record": EXPECTED_PARQUET_SOURCE_REMEDIATION[
-        "sequence_7_approval_record"
+    "sequence_8_approval_record": EXPECTED_PARQUET_SOURCE_REMEDIATION[
+        "sequence_8_approval_record"
     ],
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
     "expires_at": EXPECTED_PARQUET_SOURCE_REMEDIATION["expires_at"],
@@ -1635,7 +1652,7 @@ EXPECTED_ADMISSION_DISTRIBUTION_REMEDIATION_AUTHORIZATION = {
         for key in (
             "decision_record",
             "approval_record",
-            "sequence_7_approval_record",
+            "sequence_8_approval_record",
             "issue",
             "approved_at",
             "expires_at",
@@ -1670,7 +1687,7 @@ EXPECTED_ADMISSION_BUILD_PLUGIN_REMEDIATION_AUTHORIZATION = {
         for key in (
             "decision_record",
             "approval_record",
-            "sequence_7_approval_record",
+            "sequence_8_approval_record",
             "issue",
             "approved_at",
             "expires_at",
@@ -2118,9 +2135,8 @@ EXPECTED_OFFLINE_MAVEN_REPOSITORY_PREPARATION = (
     '  git -C "${offline_source}" checkout --detach "${SOURCE_COMMIT}"\n'
     "  python3 scripts/verify_trino_dependency_publisher.py audit-source \\\n"
     '    --root . --checkout "${offline_source}"\n'
-    "  python3 scripts/verify_trino_dependency_publisher.py \\\n"
-    "    apply-source-overlay \\\n"
-    '    --root . --checkout "${offline_source}"\n'
+    "  python3 scripts/verify_trino_maven_security_feasibility.py \\\n"
+    '    apply-trino --root . --checkout "${offline_source}"\n'
     "  python3 scripts/package_trino_maven_dependencies.py verify \\\n"
     '    --descriptor "${candidate}/maven-dependency-manifest.json" \\\n'
     '    --archive "${candidate}/trino-maven-dependencies-483.tar.gz" \\\n'
@@ -2192,9 +2208,10 @@ EXPECTED_STEPS = {
         "Check the Trino dependency publication lifecycle",
         "Verify the native arm64 builder substrate",
         "Fetch and verify the exact provisionally authorized source",
-        "Apply the bounded Web UI security overlay",
+        "Apply the exact Trino security remediation",
         "Fetch and prepare the exact Parquet Jackson remediation sources",
         "Validate the bounded Web UI overlay before merge",
+        "Independently reconstruct the exact docker-java candidate",
         "Resolve and package the first closed Maven repository",
         "Independently reconstruct the closed Maven repository",
         "Prove two fresh network-none offline source builds",
@@ -5097,7 +5114,7 @@ def _github_api_paginated_list(
         parsed.scheme != "https"
         or parsed.netloc != "api.github.com"
         or parsed.path
-        != "/repos/TommyKammy/Shirokuma/issues/155/comments"
+        != "/repos/TommyKammy/Shirokuma/issues/158/comments"
         or parsed.fragment
         or parsed.query
     ):
@@ -5329,10 +5346,10 @@ def _select_independent_review(
             ),
         )
 
-    # This is the exact user-authorized policy alternative for PR #155's
-    # sixth attempt, not a generic self-review fallback for another PR/run.
+    # This is the exact user-authorized policy alternative for PR #158's
+    # eighth attempt, not a generic self-review fallback for another PR/run.
     if (
-        exception["scope"] != "pr_155_seventh_publication_attempt_only"
+        exception["scope"] != "pr_158_eighth_publication_attempt_only"
         or exception["reason"] != "sole_owner_personal_experimental_project"
         or exception["repository"] != "TommyKammy/Shirokuma"
         or exception["pull_request"] != pull["number"]
@@ -5367,14 +5384,14 @@ def _select_owner_final_head_attestation(
         _fail("INDEPENDENT_REVIEW", "merged pull request timestamp is missing")
     merged_instant = _parse_time(merged_at)
     template = exception["attestation_body_template"]
-    marker = "Owner final-head attestation for PR #155\n\nDecision: "
+    marker = "Owner final-head attestation for PR #158\n\nDecision: "
     pattern = re.compile(
-        r"\AOwner final-head attestation for PR #155\n\n"
+        r"\AOwner final-head attestation for PR #158\n\n"
         r"Decision: (APPROVED|REVOKED)\n"
         r"Final head: ([0-9a-f]{40})\n"
         r"Review-thread snapshot SHA-256: ([0-9a-f]{64})\n"
         r"Exception: https://github\.com/TommyKammy/Shirokuma/issues/63"
-        r"#issuecomment-5389044844\Z"
+        r"#issuecomment-5469184039\Z"
     )
     decisions: list[
         tuple[
@@ -6467,7 +6484,8 @@ def _maven_command_before_marker(
 def _offline_maven_command(workflow: str) -> str:
     output_marker = (
         "            python3 scripts/"
-        "verify_trino_maven_feasibility.py verify-candidate \\"
+        "verify_trino_maven_security_feasibility.py \\\n"
+        '              verify-trino --checkout "${offline_source}"'
     )
     loop_marker = "          for suffix in a b; do\n"
     docker_marker = "            docker run --rm \\\n"
@@ -6735,19 +6753,26 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         PARQUET_REMEDIATION_PATH,
         VERIFIER_PATH,
         FEASIBILITY_VERIFIER_PATH,
+        SECURITY_FEASIBILITY_VERIFIER_PATH,
+        SECURITY_FEASIBILITY_RUNNER_PATH,
+        DOCKER_JAVA_RECONSTRUCTOR_PATH,
         TEST_PATH,
         FEASIBILITY_TEST_PATH,
+        SECURITY_FEASIBILITY_TEST_PATH,
         BUN_TEST_PATH,
         PARQUET_REMEDIATION_TEST_PATH,
         SOURCE_OVERLAY_PATH,
         DISTRIBUTION_REMEDIATION_PATH,
         BUILD_PLUGIN_REMEDIATION_PATH,
+        NETTY_REMEDIATION_PATH,
+        DOCKER_JAVA_REMEDIATION_PATH,
         OVERLAY_ADR_PATH,
         PARQUET_REMEDIATION_ADR_PATH,
         DISTRIBUTION_REMEDIATION_ADR_PATH,
         BLOCKER_ADR_PATH,
         BUILD_PLUGIN_REMEDIATION_ADR_PATH,
         ACTIVATION_ADR_PATH,
+        SECURITY_FEASIBILITY_ADR_PATH,
         AUTHORIZED_FEASIBILITY_RECORD_PATH,
         AUTHORIZED_FEASIBILITY_RECEIPT_PATH,
         Path("Makefile"),
@@ -6782,7 +6807,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "python3 scripts/verify_trino_dependency_publisher.py authorize",
         "python3 scripts/verify_trino_dependency_publisher.py authorize-use",
         "verify-independent-review --root .",
-        "python3 scripts/verify_trino_maven_feasibility.py verify-candidate",
+        "python3 scripts/verify_trino_maven_security_feasibility.py",
         "python3 scripts/verify_trino_maven_feasibility.py prune-vulnerable-inputs",
         "publication-status --root .",
         (
@@ -6796,7 +6821,9 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         "python3 scripts/remediate_parquet_jackson.py seal-artifact",
         "python3 scripts/remediate_parquet_jackson.py compare-artifacts",
         "generate-maven-sbom",
-        "verify-maven-scan",
+        "verify-scan",
+        "stage-jar",
+        "seal-jar-origin",
         "bind-artifact-evidence",
         "scan-type: rootfs",
         "prune-reactor-outputs",
@@ -7016,10 +7043,8 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
             "each fresh repository must use the bounded reactor-output pruner",
         )
     if (
-        workflow.count(
-            "python3 scripts/verify_trino_maven_feasibility.py verify-candidate"
-        )
-        != 4
+        workflow.count("apply-trino --root . --checkout") != 3
+        or workflow.count("verify-trino --checkout") != 3
         or workflow.count(
             "python3 scripts/verify_trino_maven_feasibility.py "
             "prune-vulnerable-inputs"
@@ -7213,7 +7238,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
             "            verify-bun-scan"
         )
         != 1
-        or workflow.count("apply-source-overlay \\") != 3
+        or workflow.count("apply-trino --root . --checkout") != 3
         or workflow.count(
             "scan-ref: ${{ runner.temp }}/trino-bun-scan-input"
         )
@@ -7254,7 +7279,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
     publication = contract.get("publication", {})
     if (
-        publication.get("permitted") is not False
+        publication.get("permitted") is not True
         or publication.get("workflow_present") is not True
         or publication.get("workflow") != WORKFLOW_PATH.as_posix()
         or publication.get("allowed_ref") != "refs/heads/main"
@@ -7326,18 +7351,27 @@ def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
         BUN_PREPARER_PATH,
         PARQUET_REMEDIATION_PATH,
         VERIFIER_PATH,
+        FEASIBILITY_VERIFIER_PATH,
+        SECURITY_FEASIBILITY_VERIFIER_PATH,
+        SECURITY_FEASIBILITY_RUNNER_PATH,
+        DOCKER_JAVA_RECONSTRUCTOR_PATH,
         TEST_PATH,
+        FEASIBILITY_TEST_PATH,
+        SECURITY_FEASIBILITY_TEST_PATH,
         BUN_TEST_PATH,
         PARQUET_REMEDIATION_TEST_PATH,
         SOURCE_OVERLAY_PATH,
         DISTRIBUTION_REMEDIATION_PATH,
         BUILD_PLUGIN_REMEDIATION_PATH,
+        NETTY_REMEDIATION_PATH,
+        DOCKER_JAVA_REMEDIATION_PATH,
         OVERLAY_ADR_PATH,
         PARQUET_REMEDIATION_ADR_PATH,
         DISTRIBUTION_REMEDIATION_ADR_PATH,
         BLOCKER_ADR_PATH,
         BUILD_PLUGIN_REMEDIATION_ADR_PATH,
         ACTIVATION_ADR_PATH,
+        SECURITY_FEASIBILITY_ADR_PATH,
         AUTHORIZED_FEASIBILITY_RECORD_PATH,
         AUTHORIZED_FEASIBILITY_RECEIPT_PATH,
         BLOCKER_CLASSIFICATION_PATH,
@@ -7375,10 +7409,10 @@ def audit(root: Path) -> None:
     if not _matches_exact_json(
         lifecycle,
         {
-            "state": "dependency_snapshot_publication_reauthorization_pending",
+            "state": "dependency_snapshot_publication_pending",
             "contract_only": False,
             "dependency_artifact_present": False,
-            "publication_workflow_permitted": False,
+            "publication_workflow_permitted": True,
             "image_publication_permitted": False,
             "resident_admission_permitted": False,
             "runtime_reconciliation_permitted": False,
@@ -7537,7 +7571,7 @@ def audit(root: Path) -> None:
             admission.get("pending_publication_repair"),
             EXPECTED_PENDING_REVIEW_REPAIR,
         )
-        or repository_state.get("publication_workflow_permitted") is not False
+        or repository_state.get("publication_workflow_permitted") is not True
         or repository_state.get("dependency_artifact_present") is not False
         or repository_state.get("resident_ledger_permitted") is not False
         or repository_state.get("runtime_manifests_permitted") is not False

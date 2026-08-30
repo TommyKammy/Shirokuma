@@ -54,9 +54,9 @@ TRINO_MAVEN_CLOSURE_BLOCKER_ADR = ROOT / (
     "ADR-0025_Keep_Trino_483_Maven_closure_blocked_pending_source_remediation.md"
 )
 TRINO_PROVISIONAL_APPROVAL_WINDOWS = {
-    "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5389044844": (
-        "2026-08-23T23:20:10Z",
-        "2026-09-22T23:00:43Z",
+    "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5469184039": (
+        "2026-08-30T14:12:29Z",
+        "2026-09-05T04:48:07Z",
     )
 }
 TRINO_BUILDER_INDEX = (
@@ -2971,15 +2971,15 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             if blocker["control"] == "repository_source_build"
         )
         self.assertEqual(
-            "dependency_snapshot_publication_reauthorization_pending",
+            "dependency_snapshot_publication_pending",
             source_build["status"],
         )
-        self.assertIn("PR #155", source_build["evidence"])
-        self.assertIn("32786095668", source_build["evidence"])
-        self.assertIn("three raw High findings", source_build["evidence"])
-        self.assertIn("failed closed", source_build["evidence"])
-        self.assertIn("sequence 6", assessment["rationale"])
+        self.assertIn("PR #157", source_build["evidence"])
+        self.assertIn("33026390700", source_build["evidence"])
+        self.assertIn("High=0/Critical=0", source_build["evidence"])
+        self.assertIn("PR #158", source_build["evidence"])
         self.assertIn("sequence 7", assessment["rationale"])
+        self.assertIn("sequence 8", assessment["rationale"])
 
     def test_source_authentication_is_only_provisionally_authorized(self) -> None:
         admission = self._admission()
@@ -2988,7 +2988,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "status": "provisionally_authorized_for_local_poc",
                 "authorization_record": (
                     "docs/design/07_ADR/"
-                    "ADR-0031_Activate_exact_Trino_483_dependency_publication_sequence_7.md"
+                    "ADR-0033_Activate_exact_Trino_483_dependency_publication_sequence_8.md"
                 ),
                 "required_binding": {
                     "repository": "https://github.com/trinodb/trino",
@@ -3011,7 +3011,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             admission["source_authentication"],
         )
         self.assertIs(
-            admission["repository_state"]["publication_workflow_permitted"], False
+            admission["repository_state"]["publication_workflow_permitted"], True
         )
 
     def test_provisional_source_authorization_is_bounded_and_fail_closed(self) -> None:
@@ -3044,7 +3044,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             authorization["authorization_type"],
         )
         self.assertEqual(
-            "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5389044844",
+            "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5469184039",
             authorization["approval_record"],
         )
         self.assertEqual(
@@ -3078,7 +3078,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 lambda record: record["provisional_source_authorization"].__setitem__(
                     "expires_at", "2026-09-23T23:20:11Z"
                 ),
-                "authorization exceeds 30 days",
+                "authorization timestamps do not match the approval record",
             ),
             (
                 "automatic-renewal",
@@ -3092,7 +3092,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 lambda record: record["provisional_source_authorization"].update(
                     {
                         "approved_at": "2026-08-24T23:20:10Z",
-                        "expires_at": "2026-09-22T23:00:43Z",
+                        "expires_at": "2026-09-05T04:48:07Z",
                     }
                 ),
                 "authorization timestamps do not match the approval record",
@@ -3160,18 +3160,18 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertEqual(
             "https://github.com/TommyKammy/Shirokuma/issues/63"
-            "#issuecomment-5389044844",
+            "#issuecomment-5469184039",
             authorization["approval_record"],
         )
         self.assertEqual(
-            "2026-09-22T23:00:43Z",
+            "2026-09-05T04:48:07Z",
             authorization["expires_at"],
         )
         self.assertIs(authorization["automatic_renewal"], False)
         self.assertIs(authorization["vulnerability_risk_accepted"], False)
         self.assertIs(authorization["candidate_revision_only"], False)
         self.assertIs(authorization["merge_permitted"], True)
-        self.assertIs(authorization["sequence_7_permitted"], True)
+        self.assertIs(authorization["sequence_8_permitted"], True)
         self.assertIs(authorization["publication_permitted"], True)
         self.assertIs(authorization["raw_high_zero_critical_zero_required"], True)
         self.assertIs(authorization["openvex_permitted"], False)
@@ -3304,7 +3304,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         self.assertEqual(
             {
                 "dependency_snapshot_contract_permitted": True,
-                "publication_workflow_permitted": False,
+                "publication_workflow_permitted": True,
                 "dependency_artifact_present": False,
                 "resident_ledger_permitted": False,
                 "runtime_manifests_permitted": False,
@@ -3397,6 +3397,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                         "ADR-0032_Prove_Trino_483_Maven_security_"
                         "remediation_feasibility.md"
                     ),
+                    (
+                        "docs/design/07_ADR/"
+                        "ADR-0033_Activate_exact_Trino_483_dependency_"
+                        "publication_sequence_8.md"
+                    ),
                     "docs/design/context-manifest.json",
                     (
                         "docs/design/evidence/trino/"
@@ -3486,6 +3491,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "scripts/package_trino_maven_dependencies.py",
                     "scripts/prepare_trino_bun_input.py",
                     "scripts/remediate_parquet_jackson.py",
+                    "scripts/reconstruct_docker_java_transport.sh",
                     "scripts/run_trino_maven_security_feasibility.sh",
                     "scripts/verify_polaris_trusted_image.py",
                     "scripts/verify_trino_dependency_publisher.py",
@@ -3515,7 +3521,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             "runtime_manifests_permitted",
         ):
             self.assertIs(repository_state[key], False)
-        self.assertIs(repository_state["publication_workflow_permitted"], False)
+        self.assertIs(repository_state["publication_workflow_permitted"], True)
         self.assertIs(
             repository_state["dependency_snapshot_contract_permitted"], True
         )
@@ -3780,11 +3786,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertEqual(
             "https://github.com/TommyKammy/Shirokuma/issues/63"
-            "#issuecomment-5389044844",
+            "#issuecomment-5469184039",
             overlay["approval_record"],
         )
         self.assertEqual(
-            "2026-09-22T23:00:43Z",
+            "2026-09-05T04:48:07Z",
             overlay["expires_at"],
         )
         self.assertIs(overlay["automatic_renewal"], False)
@@ -4012,7 +4018,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "origin_id",
                 "files",
                 "approval_record",
-                "sequence_7_approval_record",
+                "sequence_8_approval_record",
                 "expires_at",
                 "automatic_renewal",
             },
@@ -4737,17 +4743,17 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             rebuild["retained_output_evidence"],
         )
 
-    def test_dependency_snapshot_contract_closes_consumed_sequence_7(
+    def test_dependency_snapshot_contract_activates_exact_sequence_8(
         self,
     ) -> None:
         contract = self._trusted_build_contract()
         admission = self._admission()
         self.assertEqual(
             {
-                "state": "dependency_snapshot_publication_reauthorization_pending",
+                "state": "dependency_snapshot_publication_pending",
                 "contract_only": False,
                 "dependency_artifact_present": False,
-                "publication_workflow_permitted": False,
+                "publication_workflow_permitted": True,
                 "image_publication_permitted": False,
                 "resident_admission_permitted": False,
                 "runtime_reconciliation_permitted": False,
@@ -4755,62 +4761,56 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             contract["lifecycle"],
         )
         publication = contract["publication"]
-        self.assertIs(publication["permitted"], False)
+        self.assertIs(publication["permitted"], True)
         self.assertEqual(
             "static_read_only_contract_validation",
             publication["pull_request_behavior"],
         )
         reauthorization = publication["reauthorization"]
-        self.assertEqual(7, reauthorization["sequence"])
-        self.assertEqual("consumed_failed_closed", reauthorization["status"])
+        self.assertEqual(8, reauthorization["sequence"])
+        self.assertEqual("active", reauthorization["status"])
         self.assertIs(
             reauthorization["publication_authorized_after_required_approval"],
-            False,
+            True,
         )
-        self.assertIs(reauthorization["next_sequence_authorized"], False)
+        self.assertIs(reauthorization["next_sequence_authorized"], True)
         self.assertEqual(
-            "ca5cc4e1a565ecdd7d3f29610b1cdbe869288357ae6e324c83de1a485872b453",
-            reauthorization["previous_attempt"]["reviewed_manifest_sha256"],
+            "32786095668",
+            reauthorization["previous_attempt"]["run_id"],
         )
         self.assertEqual(
             {
-                "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/155",
-                "predecessor_main_commit": "b2177ef4b1c6e55f225649911d2ed1bc09cd3a0b",
-                "candidate_pull_request": 152,
-                "candidate_final_head": "cce85c1424691b5157f0881e249a984224eb6875",
-                "candidate_merge_commit": "fdec9cdb170ed63d18735ef9f6d0abacc8e475ab",
-                "association_repair_pull_request": 149,
-                "association_repair_final_head": "61ffe56387f95c7fee055feeeedebea90a986725",
-                "association_repair_merge_commit": "6109a40a09e89d2a0760858ca61b8fe1260524ba",
-                "association_repair_prospectively_authorized": True,
-                "association_repair_retroactively_authorized": False,
+                "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/158",
+                "predecessor_main_commit": "1f4e2ce0b958f69c91780857b11695ac47d1e00a",
+                "remediation_pull_request": 157,
+                "remediation_final_head": "6da785983a9ee460c71f35ca1d5bac35cec4184b",
+                "remediation_merge_commit": "1f4e2ce0b958f69c91780857b11695ac47d1e00a",
+                "remediation_feasibility_run": "33026390700",
+                "sequence_7_closeout_pull_request": 156,
+                "sequence_7_closeout_final_head": "e856b917ee90561979ff1e97b2e5c4a9969dc210",
+                "sequence_7_closeout_merge_commit": "59f38dc26a1a02203df9c629360d863e4856a2ba",
+                "trino_postimage_sha256": "3d0c79d798c68632a23e94abb899b760485e199f4ead530bcc27c52a2f2854d3",
+                "docker_java_candidate_sha256": "6898a76926caa2c875d2963ac9e225f2566270a4a0152f8a151785cdaf8769b0",
+                "docker_java_candidate_bytes": 2446145,
                 "raw_bun_high_zero_critical_zero_required": True,
+                "raw_maven_high_zero_critical_zero_required": True,
                 "openvex_permitted": False,
-                "sequence_6_closeout_pull_request": 154,
-                "sequence_6_closeout_final_head": "f0124af3b9a391f7f5126463576ebd6713fba3db",
-                "sequence_6_closeout_merge_commit": "b2177ef4b1c6e55f225649911d2ed1bc09cd3a0b",
+                "vulnerability_waiver_permitted": False,
             },
             reauthorization["activation"],
         )
         self.assertEqual(
-            "consumed_by_sequence_7_failure",
+            "authorized_for_sequence_8",
             publication["pending_review_repair"]["status"],
         )
         self.assertEqual(
-            "consumed_failed_closed",
+            "active",
             publication["owner_only_approval_exception"]["status"],
         )
-        self.assertEqual(
-            "32786095668",
-            publication["owner_only_approval_exception"]["consumed_run"]["run_id"],
-        )
         self.assertTrue((ROOT / publication["workflow"]).is_file())
-        self.assertEqual(153, reauthorization["previous_attempt"]["pull_request"])
-        self.assertEqual(
-            "32315191436", reauthorization["previous_attempt"]["run_id"]
-        )
+        self.assertEqual(155, reauthorization["previous_attempt"]["pull_request"])
         pending_repair = {
-            "status": "consumed_by_sequence_7_failure",
+            "status": "authorized_for_sequence_8",
             "scope": "final_head_pull_request_association_only",
             "triggering_run_id": "31616764771",
             "triggering_run_attempt": "1",
@@ -4837,9 +4837,9 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                     "empty_or_exact_single_target"
                 ),
             },
-            "publication_permissions_enabled": False,
-            "applies_only_after_separate_owner_authorization": True,
-            "next_sequence_authorized": False,
+            "publication_permissions_enabled": True,
+            "applies_only_after_separate_owner_authorization": False,
+            "next_sequence_authorized": True,
         }
         self.assertEqual(pending_repair, publication["pending_review_repair"])
         self.assertEqual(
@@ -4856,12 +4856,12 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         self.assertIn(
             {
                 "source": (
-                    "07_ADR/ADR-0031_Activate_exact_Trino_483_dependency_"
-                    "publication_sequence_7.md"
+                    "07_ADR/ADR-0033_Activate_exact_Trino_483_dependency_"
+                    "publication_sequence_8.md"
                 ),
                 "target": (
-                    "docs/design/07_ADR/ADR-0031_Activate_exact_Trino_483_"
-                    "dependency_publication_sequence_7.md"
+                    "docs/design/07_ADR/ADR-0033_Activate_exact_Trino_483_"
+                    "dependency_publication_sequence_8.md"
                 ),
             },
             context["documents"],
@@ -4869,23 +4869,23 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         security = (
             ROOT / "docs/design/04_Development/049_Supply_Chain_Security.md"
         ).read_text(encoding="utf-8")
-        self.assertIn("Owner final-head attestation for PR #155", security)
+        self.assertIn("Owner final-head attestation for PR #158", security)
         self.assertIn("Review-thread snapshot SHA-256:", security)
         self.assertIn("review-thread-snapshot", security)
         self.assertIn("Resolved non-outdated threads", security)
-        self.assertIn("#issuecomment-5389044844", security)
+        self.assertIn("#issuecomment-5469184039", security)
 
     def test_next_action_requires_exact_publication_evidence(
         self,
     ) -> None:
         next_action = self._admission()["next_action"]
         self.assertEqual(
-            "prepare-fresh-maven-remediation-feasibility-and-owner-reauthorization",
+            "execute-authorized-sequence-8-dependency-publication",
             next_action["mode"],
         )
         self.assertIs(next_action["decision_record_required"], True)
         self.assertEqual(
-            "dependency_snapshot_publication_reauthorization_pending",
+            "dependency_snapshot_publication_pending",
             next_action["phase"],
         )
         requirements = next_action["requirements"]
@@ -4900,10 +4900,11 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         )
         self.assertTrue(
             any(
-                "run 32786095668" in requirement
+                "33026390700" in requirement
                 for requirement in requirements
             )
         )
+        self.assertTrue(any("PR #158" in requirement for requirement in requirements))
 
     def test_provisional_source_decision_authorizes_only_the_next_boundary(self) -> None:
         decision = TRINO_PROVISIONAL_SOURCE_ADR.read_text(encoding="utf-8")

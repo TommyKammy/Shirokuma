@@ -386,7 +386,7 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
         )
         self.assertIn("fetch-depth: 0", workflow)
         self.assertIn(
-            "REVIEWED_PREDECESSOR: 59f38dc26a1a02203df9c629360d863e4856a2ba",
+            "REVIEWED_PREDECESSOR: 1f4e2ce0b958f69c91780857b11695ac47d1e00a",
             workflow,
         )
 
