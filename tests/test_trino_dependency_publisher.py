@@ -381,7 +381,8 @@ class MavenSnapshotTests(unittest.TestCase):
                 set(manifest["files"][0]),
             )
             self.assertEqual(
-                set(package.ALLOWED_ORIGINS),
+                set(package.ALLOWED_ORIGINS)
+                - {package.DOCKER_JAVA_SOURCE_REMEDIATION["repository"]},
                 {record["repository_origin"] for record in manifest["files"]},
             )
             self.assertEqual(package.EXTERNAL_INPUTS, manifest["external_inputs"])
@@ -462,6 +463,26 @@ class MavenSnapshotTests(unittest.TestCase):
             artifact = repository / "org/example/demo/1.0"
             (artifact / "_remote.repositories").write_text(
                 "demo-1.0.jar>shirokuma-parquet-remediation=\n"
+                "demo-1.0.pom>shirokuma-central-fallback=\n",
+                encoding="iso-8859-1",
+            )
+            with self.assertRaisesRegex(
+                package.SnapshotError,
+                "unauthorized path",
+            ):
+                package.build_manifest(repository)
+
+    def test_docker_java_source_origin_is_registered_and_path_scoped(self) -> None:
+        remediation = package.DOCKER_JAVA_SOURCE_REMEDIATION
+        self.assertEqual(
+            remediation["repository"],
+            package.ALLOWED_ORIGIN_IDS[remediation["origin_id"]],
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = self._repository(Path(temporary))
+            artifact = repository / "org/example/demo/1.0"
+            (artifact / "_remote.repositories").write_text(
+                f"demo-1.0.jar>{remediation['origin_id']}=\n"
                 "demo-1.0.pom>shirokuma-central-fallback=\n",
                 encoding="iso-8859-1",
             )
@@ -6588,6 +6609,7 @@ class PublisherContractTests(unittest.TestCase):
             [
                 verify.EXPECTED_BUN_INPUT,
                 verify.EXPECTED_PARQUET_SOURCE_REMEDIATION,
+                verify.EXPECTED_DOCKER_JAVA_SOURCE_REMEDIATION,
                 verify.EXPECTED_SCM_METADATA_REMEDIATION,
             ],
             package.EXTERNAL_INPUTS,

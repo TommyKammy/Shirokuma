@@ -120,6 +120,7 @@ env:
   ARCHIVE_MEDIA_TYPE: application/vnd.shirokuma.maven-repository.v1.tar+gzip
   BUN_DESCRIPTOR_MEDIA_TYPE: application/vnd.shirokuma.bun-dependency-manifest.v1+json
   BUN_ARCHIVE_MEDIA_TYPE: application/vnd.shirokuma.bun-cache.v1.tar+gzip
+  DOCKER_JAVA_SOURCE_RECEIPT_MEDIA_TYPE: application/vnd.shirokuma.source-receipt.v1+json
   ORAS_VERSION: 1.3.3
   ORAS_URL: https://github.com/oras-project/oras/releases/download/v1.3.3/oras_1.3.3_linux_arm64.tar.gz
   ORAS_ARCHIVE_SHA256: ac7156f93a21e903f7ad606c792f3560f17e0cd0e36365634701b1e7cc4e4eca
@@ -689,6 +690,9 @@ jobs:
           cmp \
             "${candidate}/docker-java-transport-zerodep-3.7.1-a.source.json" \
             "${candidate}/docker-java-transport-zerodep-3.7.1-b.source.json"
+          cp \
+            "${candidate}/docker-java-transport-zerodep-3.7.1-a.source.json" \
+            "${candidate}/docker-java-source-remediation.json"
           CANDIDATE="${candidate}" python3 - <<'PY'
           import hashlib
           import json
@@ -700,6 +704,7 @@ jobs:
           archive = candidate / "trino-maven-dependencies-483.tar.gz"
           bun_descriptor = candidate / "bun-dependency-manifest.json"
           bun_archive = candidate / "trino-bun-dependencies-483.tar.gz"
+          docker_java_receipt = candidate / "docker-java-source-remediation.json"
           record = {
               "schema_version": 1,
               "result": "passed",
@@ -716,6 +721,10 @@ jobs:
               ).hexdigest(),
               "bun_cache_archive_sha256": hashlib.sha256(
                   bun_archive.read_bytes()
+              ).hexdigest(),
+              "docker_java_source_receipt_equal": True,
+              "docker_java_source_receipt_sha256": hashlib.sha256(
+                  docker_java_receipt.read_bytes()
               ).hexdigest(),
           }
           (candidate / "independent-reconstruction.json").write_text(
@@ -1054,6 +1063,9 @@ jobs:
               "bun_sbom": "trino-bun-dependencies-483.cdx.json",
               "bun_scan": "trivy-bun-vulnerability.json",
               "descriptor": "maven-dependency-manifest.json",
+              "docker_java_source_receipt": (
+                  "docker-java-source-remediation.json"
+              ),
               "offline": "offline-build.json",
               "reconstruction": "independent-reconstruction.json",
               "sbom": "trino-maven-dependencies-483.cdx.json",
@@ -1095,6 +1107,7 @@ jobs:
           path: |
             .trino-candidate/candidate.sha256
             .trino-candidate/bun-dependency-manifest.json
+            .trino-candidate/docker-java-source-remediation.json
             .trino-candidate/independent-reconstruction.json
             .trino-candidate/maven-dependency-manifest.json
             .trino-candidate/maven-transfer-a.log
@@ -1285,6 +1298,7 @@ jobs:
               "trino-maven-dependencies-483.tar.gz:${ARCHIVE_MEDIA_TYPE}" \
               "bun-dependency-manifest.json:${BUN_DESCRIPTOR_MEDIA_TYPE}" \
               "trino-bun-dependencies-483.tar.gz:${BUN_ARCHIVE_MEDIA_TYPE}" \
+              "docker-java-source-remediation.json:${DOCKER_JAVA_SOURCE_RECEIPT_MEDIA_TYPE}" \
               > "oras-push.txt"
           )
           digest=$(oras resolve "${tagged_reference}")
@@ -1368,6 +1382,26 @@ jobs:
                               "gitTagObject": os.environ["SOURCE_TAG_OBJECT"],
                               "gitCommit": os.environ["SOURCE_COMMIT"],
                               "gitTree": os.environ["SOURCE_TREE"],
+                          },
+                      },
+                      {
+                          "uri": (
+                              "git+https://github.com/docker-java/docker-java"
+                              "@refs/tags/3.7.1"
+                          ),
+                          "digest": {
+                              "gitCommit": os.environ[
+                                  "DOCKER_JAVA_SOURCE_COMMIT"
+                              ],
+                              "gitTree": os.environ[
+                                  "DOCKER_JAVA_SOURCE_TREE"
+                              ],
+                              "sourceReceiptSha256": hashlib.sha256(
+                                  (
+                                      candidate
+                                      / "docker-java-source-remediation.json"
+                                  ).read_bytes()
+                              ).hexdigest(),
                           },
                       },
                       {
@@ -1657,6 +1691,9 @@ jobs:
           cmp \
             "${candidate}/trino-bun-dependencies-483.tar.gz" \
             "${anonymous_dir}/trino-bun-dependencies-483.tar.gz"
+          cmp \
+            "${candidate}/docker-java-source-remediation.json" \
+            "${anonymous_dir}/docker-java-source-remediation.json"
           python3 scripts/package_trino_maven_dependencies.py verify \
             --descriptor "${anonymous_dir}/maven-dependency-manifest.json" \
             --archive "${anonymous_dir}/trino-maven-dependencies-483.tar.gz"
@@ -1680,6 +1717,7 @@ jobs:
               "archive_equal": True,
               "bun_manifest_equal": True,
               "bun_archive_equal": True,
+              "docker_java_source_receipt_equal": True,
               "manifest_sha256": hashlib.sha256(
                   (candidate / "maven-dependency-manifest.json").read_bytes()
               ).hexdigest(),
@@ -1691,6 +1729,9 @@ jobs:
               ).hexdigest(),
               "bun_archive_sha256": hashlib.sha256(
                   (candidate / "trino-bun-dependencies-483.tar.gz").read_bytes()
+              ).hexdigest(),
+              "docker_java_source_receipt_sha256": hashlib.sha256(
+                  (candidate / "docker-java-source-remediation.json").read_bytes()
               ).hexdigest(),
           }
           (candidate / "anonymous-pull.json").write_text(
@@ -1739,6 +1780,7 @@ jobs:
               "cosign-verify-anonymous-pull.json",
               "cosign-verify-attestation.json",
               "cosign-verify.json",
+              "docker-java-source-remediation.json",
               "independent-reconstruction.json",
               "maven-dependency-manifest.json",
               "offline-build.json",
@@ -1798,6 +1840,7 @@ jobs:
             ${{ runner.temp }}/trino-maven-candidate/cosign-verify-anonymous-pull.json
             ${{ runner.temp }}/trino-maven-candidate/cosign-verify-attestation.json
             ${{ runner.temp }}/trino-maven-candidate/cosign-verify.json
+            ${{ runner.temp }}/trino-maven-candidate/docker-java-source-remediation.json
             ${{ runner.temp }}/trino-maven-candidate/independent-reconstruction.json
             ${{ runner.temp }}/trino-maven-candidate/maven-dependency-manifest.json
             ${{ runner.temp }}/trino-maven-candidate/offline-build.json

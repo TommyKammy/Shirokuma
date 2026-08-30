@@ -4010,7 +4010,41 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
             ],
             resolution["external_inputs"][:2],
         )
-        scm_metadata = resolution["external_inputs"][2]
+        docker_java = resolution["external_inputs"][2]
+        self.assertEqual(
+            {
+                "name",
+                "coordinate",
+                "repository",
+                "tag",
+                "commit_sha",
+                "tree_sha",
+                "patch",
+                "candidate_sha256",
+                "candidate_bytes",
+                "repository_path",
+                "origin_id",
+                "independent_source_fetches",
+                "independent_builds",
+                "approval_record",
+                "expires_at",
+                "automatic_renewal",
+            },
+            set(docker_java),
+        )
+        self.assertEqual(
+            "docker-java-transport-source-remediation",
+            docker_java["name"],
+        )
+        self.assertEqual(
+            "shirokuma-docker-java-source-remediation",
+            docker_java["origin_id"],
+        )
+        self.assertEqual(
+            "6898a76926caa2c875d2963ac9e225f2566270a4a0152f8a151785cdaf8769b0",
+            docker_java["candidate_sha256"],
+        )
+        scm_metadata = resolution["external_inputs"][3]
         self.assertEqual(
             {
                 "name",
@@ -4209,6 +4243,7 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
                 "manifest",
                 "trivy_rootfs_omission_contract",
                 "bun_cache",
+                "docker_java_source_receipt",
                 "maven_archive",
                 "maven_forbidden_entries",
                 "independent_reconstruction",
@@ -4246,6 +4281,20 @@ class TrinoAdmissionBlockerTests(unittest.TestCase):
         self.assertEqual(
             "maven-dependency-manifest.json",
             snapshot["manifest_filename"],
+        )
+        self.assertEqual(
+            {
+                "filename": "docker-java-source-remediation.json",
+                "media_type": (
+                    "application/vnd.shirokuma.source-receipt.v1+json"
+                ),
+                "schema_version": 1,
+                "retained_with_candidate": True,
+                "retained_with_publication_evidence": True,
+                "published_as_oci_layer": True,
+                "bound_in_slsa_resolved_dependencies": True,
+            },
+            snapshot["docker_java_source_receipt"],
         )
         self.assertEqual(
             [

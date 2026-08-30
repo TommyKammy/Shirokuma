@@ -1126,6 +1126,41 @@ EXPECTED_PARQUET_REMEDIATION_JAR_PATH = (
     "org/apache/parquet/parquet-jackson/1.17.1/"
     "parquet-jackson-1.17.1.jar"
 )
+EXPECTED_DOCKER_JAVA_SOURCE_REMEDIATION = {
+    "name": "docker-java-transport-source-remediation",
+    "coordinate": (
+        "com.github.docker-java:docker-java-transport-zerodep:3.7.1"
+    ),
+    "repository": "https://github.com/docker-java/docker-java",
+    "tag": "3.7.1",
+    "commit_sha": "7b7fabd4567573e4957e549365dc0df8c2e54ab9",
+    "tree_sha": "f6119a3ff6da4b1df34a1054000b849c70f4aae6",
+    "patch": (
+        "bootstrap/trino/v483/patches/"
+        "0005-shirokuma-docker-java-httpclient-5.6.4.patch"
+    ),
+    "candidate_sha256": (
+        "6898a76926caa2c875d2963ac9e225f2566270a4a0152f8a151785cdaf8769b0"
+    ),
+    "candidate_bytes": 2_446_145,
+    "repository_path": (
+        "com/github/docker-java/docker-java-transport-zerodep/3.7.1/"
+        "docker-java-transport-zerodep-3.7.1.jar"
+    ),
+    "origin_id": "shirokuma-docker-java-source-remediation",
+    "independent_source_fetches": 2,
+    "independent_builds": 2,
+    "approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5469184039"
+    ),
+    "expires_at": "2026-09-05T04:48:07Z",
+    "automatic_renewal": False,
+}
+EXPECTED_DOCKER_JAVA_CENTRAL_PREIMAGE_SHA256 = (
+    "b89bdb1754160323597f9ea32a7fe7a4a3aa8f5b3b43b88e8d71fff3b267ab21"
+)
+EXPECTED_DOCKER_JAVA_CENTRAL_PREIMAGE_BYTES = 2_304_500
 EXPECTED_BUN_PACKAGE_CACHE = {
     "bun_version": "v1.3.14",
     "platform": "linux/arm64",
@@ -1780,6 +1815,15 @@ EXPECTED_BUN_DESCRIPTOR_MEDIA_TYPE = (
 EXPECTED_BUN_ARCHIVE_MEDIA_TYPE = (
     "application/vnd.shirokuma.bun-cache.v1.tar+gzip"
 )
+EXPECTED_DOCKER_JAVA_SOURCE_RECEIPT = {
+    "filename": "docker-java-source-remediation.json",
+    "media_type": "application/vnd.shirokuma.source-receipt.v1+json",
+    "schema_version": 1,
+    "retained_with_candidate": True,
+    "retained_with_publication_evidence": True,
+    "published_as_oci_layer": True,
+    "bound_in_slsa_resolved_dependencies": True,
+}
 EXPECTED_BUN_STAGE_BLOCK = """\
           python3 scripts/prepare_trino_bun_input.py download \\
             --url "${BUN_URL}" \\
@@ -1982,6 +2026,7 @@ EXPECTED_ORAS_PUSH_BLOCK = """\
               "trino-maven-dependencies-483.tar.gz:${ARCHIVE_MEDIA_TYPE}" \\
               "bun-dependency-manifest.json:${BUN_DESCRIPTOR_MEDIA_TYPE}" \\
               "trino-bun-dependencies-483.tar.gz:${BUN_ARCHIVE_MEDIA_TYPE}" \\
+              "docker-java-source-remediation.json:${DOCKER_JAVA_SOURCE_RECEIPT_MEDIA_TYPE}" \\
               > "oras-push.txt"
           )
 """
@@ -3572,6 +3617,32 @@ def _maven_jar_records(
                 origin_is_expected = (
                     repository_origin
                     == EXPECTED_PARQUET_SOURCE_REMEDIATION["repository"]
+                )
+            elif path == EXPECTED_DOCKER_JAVA_SOURCE_REMEDIATION[
+                "repository_path"
+            ]:
+                origin_is_expected = (
+                    (
+                        repository_origin
+                        == EXPECTED_DOCKER_JAVA_SOURCE_REMEDIATION[
+                            "repository"
+                        ]
+                        and record.get("sha256")
+                        == EXPECTED_DOCKER_JAVA_SOURCE_REMEDIATION[
+                            "candidate_sha256"
+                        ]
+                        and record.get("size")
+                        == EXPECTED_DOCKER_JAVA_SOURCE_REMEDIATION[
+                            "candidate_bytes"
+                        ]
+                    )
+                    or (
+                        repository_origin == EXPECTED_REPOSITORIES["central"]
+                        and record.get("sha256")
+                        == EXPECTED_DOCKER_JAVA_CENTRAL_PREIMAGE_SHA256
+                        and record.get("size")
+                        == EXPECTED_DOCKER_JAVA_CENTRAL_PREIMAGE_BYTES
+                    )
                 )
             else:
                 origin_is_expected = repository_origin in set(
@@ -6839,6 +6910,13 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         EXPECTED_DESCRIPTOR_MEDIA_TYPE,
         EXPECTED_BUN_DESCRIPTOR_MEDIA_TYPE,
         EXPECTED_BUN_ARCHIVE_MEDIA_TYPE,
+        EXPECTED_DOCKER_JAVA_SOURCE_RECEIPT["filename"],
+        EXPECTED_DOCKER_JAVA_SOURCE_RECEIPT["media_type"],
+        "https://github.com/docker-java/docker-java",
+        "7b7fabd4567573e4957e549365dc0df8c2e54ab9",
+        "f6119a3ff6da4b1df34a1054000b849c70f4aae6",
+        '"sourceReceiptSha256"',
+        '"docker_java_source_receipt_sha256"',
         "oras push",
         "cosign sign",
         "cosign attest-blob",
@@ -7463,6 +7541,7 @@ def audit(root: Path) -> None:
             [
                 EXPECTED_BUN_INPUT,
                 EXPECTED_PARQUET_SOURCE_REMEDIATION,
+                EXPECTED_DOCKER_JAVA_SOURCE_REMEDIATION,
                 EXPECTED_SCM_METADATA_REMEDIATION,
             ],
         )
@@ -7507,6 +7586,10 @@ def audit(root: Path) -> None:
                 "archive_media_type": EXPECTED_BUN_ARCHIVE_MEDIA_TYPE,
                 "manifest_schema_version": 1,
             },
+        )
+        or not _matches_exact_json(
+            snapshot.get("docker_java_source_receipt"),
+            EXPECTED_DOCKER_JAVA_SOURCE_RECEIPT,
         )
     ):
         _fail("SNAPSHOT_FORMAT", "dependency snapshot v2 contract differs")

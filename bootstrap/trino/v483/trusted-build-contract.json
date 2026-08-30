@@ -99,7 +99,7 @@
     },
     {
       "path": "scripts/package_trino_maven_dependencies.py",
-      "sha256": "f93139f6ebe4d2afa981a37d7dea2a3489b495664a9504def77f0e94eaf1ac74"
+      "sha256": "98b0e1489183c8d73d1000487365715d6f53cee7373b0944de8b76c0479b0f3e"
     },
     {
       "path": "scripts/prepare_trino_bun_input.py",
@@ -119,7 +119,7 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "d61a9ea07d36c412df77b6902ac416e18dcf483b9cd5e5498c64050b3570c588"
+      "sha256": "aea8641ad3ed4b92ab800535b8a345624cae901e92422ffdea662c8f6c8b9d09"
     },
     {
       "path": "scripts/verify_trino_maven_feasibility.py",
@@ -139,7 +139,7 @@
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "265666b0950b3e5124ca653646996dbd3a0a1b8a2146c94e247ff56716a8db5d"
+      "sha256": "680276941da192862ab5269d9d3746b7967931d49a93afa2acdeec4778743a08"
     },
     {
       "path": "tests/test_trino_maven_feasibility.py",
@@ -147,7 +147,7 @@
     },
     {
       "path": "tests/test_trino_maven_security_feasibility.py",
-      "sha256": "fa8e7c0c8e24707420a15e5914f105d2b82a1034353618350cbb0eda6cde6e7d"
+      "sha256": "32cfc57e2d8308387265532fd6befbad6f73292b926506191f94dee11eeaa61a"
     }
   ],
   "authorization": {
@@ -666,9 +666,27 @@
         "byte_identical_outputs_required": true,
         "origin_id": "shirokuma-parquet-remediation",
         "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5105612399",
+        "sequence_8_approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5469184039",
         "expires_at": "2026-09-05T04:48:07Z",
-        "automatic_renewal": false,
-        "sequence_8_approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5469184039"
+        "automatic_renewal": false
+      },
+      {
+        "name": "docker-java-transport-source-remediation",
+        "coordinate": "com.github.docker-java:docker-java-transport-zerodep:3.7.1",
+        "repository": "https://github.com/docker-java/docker-java",
+        "tag": "3.7.1",
+        "commit_sha": "7b7fabd4567573e4957e549365dc0df8c2e54ab9",
+        "tree_sha": "f6119a3ff6da4b1df34a1054000b849c70f4aae6",
+        "patch": "bootstrap/trino/v483/patches/0005-shirokuma-docker-java-httpclient-5.6.4.patch",
+        "candidate_sha256": "6898a76926caa2c875d2963ac9e225f2566270a4a0152f8a151785cdaf8769b0",
+        "candidate_bytes": 2446145,
+        "repository_path": "com/github/docker-java/docker-java-transport-zerodep/3.7.1/docker-java-transport-zerodep-3.7.1.jar",
+        "origin_id": "shirokuma-docker-java-source-remediation",
+        "independent_source_fetches": 2,
+        "independent_builds": 2,
+        "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5469184039",
+        "expires_at": "2026-09-05T04:48:07Z",
+        "automatic_renewal": false
       },
       {
         "name": "maven-scm-reviewed-metadata-remediation",
@@ -697,9 +715,9 @@
           }
         ],
         "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5210182460",
+        "sequence_8_approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5469184039",
         "expires_at": "2026-09-05T04:48:07Z",
-        "automatic_renewal": false,
-        "sequence_8_approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5469184039"
+        "automatic_renewal": false
       }
     ],
     "bun_package_cache": {
@@ -919,6 +937,15 @@
       "descriptor_media_type": "application/vnd.shirokuma.bun-dependency-manifest.v1+json",
       "archive_media_type": "application/vnd.shirokuma.bun-cache.v1.tar+gzip",
       "manifest_schema_version": 1
+    },
+    "docker_java_source_receipt": {
+      "filename": "docker-java-source-remediation.json",
+      "media_type": "application/vnd.shirokuma.source-receipt.v1+json",
+      "schema_version": 1,
+      "retained_with_candidate": true,
+      "retained_with_publication_evidence": true,
+      "published_as_oci_layer": true,
+      "bound_in_slsa_resolved_dependencies": true
     },
     "maven_archive": {
       "regular_files_only": true,
