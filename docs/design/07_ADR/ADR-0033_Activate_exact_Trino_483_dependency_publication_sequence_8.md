@@ -88,7 +88,7 @@ permissions to false, and requires a focused closeout/publication-reblock PR.
 
 ## Consequences
 
-PR #158 merged as `8903beb4a6190953bb2506c8c6a11ab9bde7de98` after the
+PR #158 merged as `8903beb4a6190953bb2506c8c6a11ab9bde7de98` without the
 required exact final-head OWNER attestation. Reviewed-main run
 [`33477757991`](https://github.com/TommyKammy/Shirokuma/actions/runs/33477757991),
 attempt `1`, consumed sequence 8. Validation completed both independent

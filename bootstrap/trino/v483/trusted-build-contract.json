@@ -75,7 +75,7 @@
     },
     {
       "path": "docs/design/07_ADR/ADR-0033_Activate_exact_Trino_483_dependency_publication_sequence_8.md",
-      "sha256": "02709ba5a7a70a1cd0bb3c8cb5226b4417cf5942cc4c23c263935a985d6384bf"
+      "sha256": "b18e64c97a58b4f88c8c104d7a8743a1d7a20647989f6a7e408e99ac5fcd743a"
     },
     {
       "path": "docs/design/evidence/trino/run-30693677356-maven-vulnerability-classification.json",
@@ -123,7 +123,7 @@
     },
     {
       "path": "scripts/verify_trino_dependency_publisher.py",
-      "sha256": "a30b05ae41807302fb18c367f2864605e5c507a85b6a916f2d6ae32ec6769694"
+      "sha256": "72843b330a3c9dd22a98febcd9e144a47eec914b97f6b32ec8f87a43a3634e80"
     },
     {
       "path": "scripts/verify_trino_maven_feasibility.py",
@@ -143,7 +143,7 @@
     },
     {
       "path": "tests/test_trino_dependency_publisher.py",
-      "sha256": "76c2039cfb924e963814c36f8ae7d9fbbe883489a3adf59e0aa27b660db600fa"
+      "sha256": "47bbf9fb693f8cd69d4cb6bdaaa86211d29be21a45cf20d7056d96c6023715db"
     },
     {
       "path": "tests/test_trino_maven_feasibility.py",

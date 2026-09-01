@@ -5535,7 +5535,7 @@ def _active_owner_exception(
     if "consumed_run" in exception:
         _fail("INDEPENDENT_REVIEW", "consumed owner approval exception cannot be reused")
     if (
-        publication.get("permitted") is not False
+        publication.get("permitted") is not True
         or not isinstance(reauthorization, Mapping)
         or reauthorization.get("status") != "active"
         or reauthorization.get("publication_authorized_after_required_approval")

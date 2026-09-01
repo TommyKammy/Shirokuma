@@ -2627,7 +2627,7 @@ class PublisherContractTests(unittest.TestCase):
         active_exception["status"] = "active"
         active_exception.pop("consumed_run", None)
         publication = contract["publication"]
-        publication["permitted"] = False
+        publication["permitted"] = True
         publication["owner_only_approval_exception"] = copy.deepcopy(
             active_exception
         )
@@ -5053,7 +5053,6 @@ class PublisherContractTests(unittest.TestCase):
         contract_path = ROOT / verify.CONTRACT_PATH
         original_load_json = verify._load_json
         active_contract = self._active_owner_contract()
-        active_contract["publication"]["permitted"] = True
 
         def load_json(path: Path) -> dict[str, object]:
             if path == contract_path:
@@ -5062,13 +5061,6 @@ class PublisherContractTests(unittest.TestCase):
 
         with (
             mock.patch.object(verify, "_load_json", side_effect=load_json),
-            mock.patch.object(
-                verify,
-                "_active_owner_exception",
-                return_value=active_contract["publication"][
-                    "owner_only_approval_exception"
-                ],
-            ),
             mock.patch.object(
                 verify,
                 "urlopen",
@@ -5456,7 +5448,6 @@ class PublisherContractTests(unittest.TestCase):
         contract_path = ROOT / verify.CONTRACT_PATH
         original_load_json = verify._load_json
         active_contract, active_exception = self._active_owner_contract_fixture()
-        active_contract["publication"]["permitted"] = True
 
         def load_json(path: Path) -> dict[str, object]:
             if path == contract_path:
@@ -5465,11 +5456,6 @@ class PublisherContractTests(unittest.TestCase):
 
         with (
             mock.patch.object(verify, "_load_json", side_effect=load_json),
-            mock.patch.object(
-                verify,
-                "_active_owner_exception",
-                return_value=active_exception,
-            ),
             mock.patch.object(
                 verify,
                 "EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION",
