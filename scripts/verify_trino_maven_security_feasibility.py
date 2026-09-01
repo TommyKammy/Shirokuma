@@ -22,6 +22,9 @@ WORKFLOW_PATH = Path(
     ".github/workflows/trino-maven-security-remediation-feasibility.yml"
 )
 RUNNER_PATH = Path("scripts/run_trino_maven_security_feasibility.sh")
+DOCKER_JAVA_RECONSTRUCTOR_PATH = Path(
+    "scripts/reconstruct_docker_java_transport.sh"
+)
 TRINO_PATCHES = (
     Path("bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch"),
     Path("bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch"),
@@ -447,6 +450,9 @@ def verify_scan(descriptor: Path, sbom: Path, report: Path) -> None:
 def audit_workflow(root: Path) -> None:
     workflow = _regular_file(root / WORKFLOW_PATH, "WORKFLOW").decode("utf-8")
     runner = _regular_file(root / RUNNER_PATH, "RUNNER").decode("utf-8")
+    reconstructor = _regular_file(
+        root / DOCKER_JAVA_RECONSTRUCTOR_PATH, "RECONSTRUCTOR"
+    ).decode("utf-8")
     if "pull_request:" not in workflow or "workflow_dispatch:" in workflow or "push:" in workflow:
         _fail("WORKFLOW_TRIGGER", "workflow must be pull-request only")
     if workflow.count("permissions:\n      contents: read") != 1:
@@ -456,12 +462,12 @@ def audit_workflow(root: Path) -> None:
         "--network none", "generate-maven-sbom", "scan-type: sbom",
         "verify-scan", "cmp ",
         "ref: ${{ github.event.pull_request.head.sha }}", "fetch-depth: 0",
-        "REVIEWED_PREDECESSOR: 59f38dc26a1a02203df9c629360d863e4856a2ba",
+        "REVIEWED_PREDECESSOR: 1f4e2ce0b958f69c91780857b11695ac47d1e00a",
         'test "$(git rev-parse HEAD)" = "${REVIEWED_HEAD}"',
         'git rev-list --merges "${REVIEWED_PREDECESSOR}..HEAD"',
         'git rev-parse "${first_commit}^"',
     )
-    combined = workflow + "\n" + runner
+    combined = workflow + "\n" + runner + "\n" + reconstructor
     for marker in required:
         if marker not in combined:
             _fail("WORKFLOW_STEP", f"required operation missing: {marker}")

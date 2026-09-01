@@ -67,21 +67,23 @@ class Arm64CompatibilityMatrixTests(unittest.TestCase):
             if len(cells) == len(EXPECTED_HEADER):
                 cls.rows[cells[0]] = dict(zip(EXPECTED_HEADER, cells))
 
-    def test_trino_sequence_7_failure_closeout_is_current(self) -> None:
+    def test_trino_sequence_8_activation_is_current(self) -> None:
         trino_decision = self.rows["Trino"]["v0.2 decision"]
         self.assertIn(
-            "dependency_snapshot_publication_reauthorization_pending",
+            "dependency_snapshot_publication_pending",
             trino_decision,
         )
         self.assertIn("32786095668", trino_decision)
         self.assertIn("MAVEN_SCAN_FINDING", trino_decision)
         self.assertIn("Critical=0/High=3", trino_decision)
-        self.assertIn("sequence 8 are blocked", trino_decision)
+        self.assertIn("33026390700", trino_decision)
+        self.assertIn("High=0/Critical=0", trino_decision)
+        self.assertIn("exactly one automatic attempt 1", trino_decision)
 
     def test_document_metadata_matches_latest_verification(self) -> None:
         front_matter = self.matrix_text.split("---", 2)[1]
-        self.assertIn("\nupdated: 2026-08-25\n", front_matter)
-        self.assertIn('\nversion: "0.29"\n', front_matter)
+        self.assertIn("\nupdated: 2026-08-30\n", front_matter)
+        self.assertIn('\nversion: "0.30"\n', front_matter)
         self.assertIn("Verification date: 2026-07-22.", self.matrix_text)
 
     def test_all_required_components_have_complete_evidence_rows(self) -> None:

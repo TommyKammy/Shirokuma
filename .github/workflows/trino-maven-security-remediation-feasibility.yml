@@ -8,6 +8,7 @@ on:
       - scripts/package_trino_maven_dependencies.py
       - scripts/prepare_trino_bun_input.py
       - scripts/remediate_parquet_jackson.py
+      - scripts/reconstruct_docker_java_transport.sh
       - scripts/run_trino_maven_security_feasibility.sh
       - scripts/verify_trino_dependency_publisher.py
       - scripts/verify_trino_maven_feasibility.py
@@ -15,6 +16,7 @@ on:
       - tests/test_trino_maven_security_feasibility.py
       - docs/design/04_Development/049_Supply_Chain_Security.md
       - docs/design/07_ADR/ADR-0032_Prove_Trino_483_Maven_security_remediation_feasibility.md
+      - docs/design/07_ADR/ADR-0033_Activate_exact_Trino_483_dependency_publication_sequence_8.md
       - docs/design/10_Research/106_ARM64_Container_Image_Compatibility.md
       - docs/design/context-manifest.json
       - Makefile
@@ -49,7 +51,7 @@ env:
   BUN_CACHE_DIRECTORY: /bun-cache
   BUN_REGISTRY: https://registry.npmjs.org/
   REVIEWED_HEAD: ${{ github.event.pull_request.head.sha }}
-  REVIEWED_PREDECESSOR: 59f38dc26a1a02203df9c629360d863e4856a2ba
+  REVIEWED_PREDECESSOR: 1f4e2ce0b958f69c91780857b11695ac47d1e00a
 
 jobs:
   validate:
@@ -74,7 +76,7 @@ jobs:
           python3 -m unittest -v tests.test_trino_maven_security_feasibility
           python3 scripts/verify_trino_maven_security_feasibility.py \
             audit-workflow --root .
-          test "$(python3 scripts/verify_trino_dependency_publisher.py publication-status --root .)" = blocked
+          test "$(python3 scripts/verify_trino_dependency_publisher.py publication-status --root .)" = active
           test "$(git rev-parse HEAD)" = "${REVIEWED_HEAD}"
           test -z "$(git rev-list --merges "${REVIEWED_PREDECESSOR}..HEAD")"
           first_commit="$(git rev-list --reverse "${REVIEWED_PREDECESSOR}..HEAD" | sed -n '1p')"

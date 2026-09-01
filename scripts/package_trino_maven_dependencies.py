@@ -95,11 +95,42 @@ PARQUET_SOURCE_REMEDIATION = {
         "https://github.com/TommyKammy/Shirokuma/issues/63"
         "#issuecomment-5105612399"
     ),
-    "sequence_7_approval_record": (
+    "sequence_8_approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5389044844"
+        "#issuecomment-5469184039"
     ),
-    "expires_at": "2026-09-22T23:00:43Z",
+    "expires_at": "2026-09-05T04:48:07Z",
+    "automatic_renewal": False,
+}
+DOCKER_JAVA_SOURCE_REMEDIATION = {
+    "name": "docker-java-transport-source-remediation",
+    "coordinate": (
+        "com.github.docker-java:docker-java-transport-zerodep:3.7.1"
+    ),
+    "repository": "https://github.com/docker-java/docker-java",
+    "tag": "3.7.1",
+    "commit_sha": "7b7fabd4567573e4957e549365dc0df8c2e54ab9",
+    "tree_sha": "f6119a3ff6da4b1df34a1054000b849c70f4aae6",
+    "patch": (
+        "bootstrap/trino/v483/patches/"
+        "0005-shirokuma-docker-java-httpclient-5.6.4.patch"
+    ),
+    "candidate_sha256": (
+        "6898a76926caa2c875d2963ac9e225f2566270a4a0152f8a151785cdaf8769b0"
+    ),
+    "candidate_bytes": 2_446_145,
+    "repository_path": (
+        "com/github/docker-java/docker-java-transport-zerodep/3.7.1/"
+        "docker-java-transport-zerodep-3.7.1.jar"
+    ),
+    "origin_id": "shirokuma-docker-java-source-remediation",
+    "independent_source_fetches": 2,
+    "independent_builds": 2,
+    "approval_record": (
+        "https://github.com/TommyKammy/Shirokuma/issues/63"
+        "#issuecomment-5469184039"
+    ),
+    "expires_at": "2026-09-05T04:48:07Z",
     "automatic_renewal": False,
 }
 SCM_METADATA_REMEDIATION = {
@@ -152,16 +183,17 @@ SCM_METADATA_REMEDIATION = {
         "https://github.com/TommyKammy/Shirokuma/issues/63"
         "#issuecomment-5210182460"
     ),
-    "sequence_7_approval_record": (
+    "sequence_8_approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
-        "#issuecomment-5389044844"
+        "#issuecomment-5469184039"
     ),
-    "expires_at": "2026-09-22T23:00:43Z",
+    "expires_at": "2026-09-05T04:48:07Z",
     "automatic_renewal": False,
 }
 EXTERNAL_INPUTS = [
     BUN_INPUT,
     PARQUET_SOURCE_REMEDIATION,
+    DOCKER_JAVA_SOURCE_REMEDIATION,
     SCM_METADATA_REMEDIATION,
 ]
 ALLOWED_ORIGIN_IDS = {
@@ -173,6 +205,9 @@ ALLOWED_ORIGIN_IDS = {
     PARQUET_SOURCE_REMEDIATION["origin_id"]: PARQUET_SOURCE_REMEDIATION[
         "repository"
     ],
+    DOCKER_JAVA_SOURCE_REMEDIATION["origin_id"]: (
+        DOCKER_JAVA_SOURCE_REMEDIATION["repository"]
+    ),
 }
 ALLOWED_ORIGINS = frozenset(
     {
@@ -642,6 +677,28 @@ def build_manifest(repository: Path) -> dict[str, Any]:
                 "Parquet source-remediation origin is forbidden for "
                 f"an unauthorized path: {relative}"
             )
+        docker_java_path = DOCKER_JAVA_SOURCE_REMEDIATION["repository_path"]
+        docker_java_sha1_path = f"{docker_java_path}.sha1"
+        if relative.as_posix() == docker_java_path:
+            if (
+                origin != DOCKER_JAVA_SOURCE_REMEDIATION["repository"]
+                or metadata.st_size
+                != DOCKER_JAVA_SOURCE_REMEDIATION["candidate_bytes"]
+                or digest
+                != DOCKER_JAVA_SOURCE_REMEDIATION["candidate_sha256"]
+            ):
+                _fail("docker-java source remediation differs")
+        elif relative.as_posix() == docker_java_sha1_path:
+            if (
+                origin != DOCKER_JAVA_SOURCE_REMEDIATION["repository"]
+                or metadata.st_size != 40
+            ):
+                _fail("docker-java source remediation checksum differs")
+        elif origin == DOCKER_JAVA_SOURCE_REMEDIATION["repository"]:
+            _fail(
+                "docker-java source-remediation origin is forbidden for "
+                f"an unauthorized path: {relative}"
+            )
         if relative in SCM_METADATA_REMEDIATION_REQUIRED_RECORDS:
             expected = SCM_METADATA_REMEDIATION_REQUIRED_RECORDS.get(relative)
             if origin != ALLOWED_REPOSITORIES["central"]:
@@ -840,6 +897,35 @@ def _load_manifest(path: Path) -> dict[str, Any]:
             _fail(
                 "Maven manifest uses the Parquet source-remediation origin "
                 "for an unauthorized path"
+            )
+        docker_java_path = DOCKER_JAVA_SOURCE_REMEDIATION["repository_path"]
+        docker_java_sha1_path = f"{docker_java_path}.sha1"
+        if relative.as_posix() == docker_java_path:
+            if (
+                record["repository_origin"]
+                != DOCKER_JAVA_SOURCE_REMEDIATION["repository"]
+                or record["size"]
+                != DOCKER_JAVA_SOURCE_REMEDIATION["candidate_bytes"]
+                or record["sha256"]
+                != DOCKER_JAVA_SOURCE_REMEDIATION["candidate_sha256"]
+            ):
+                _fail("Maven manifest docker-java remediation differs")
+        elif relative.as_posix() == docker_java_sha1_path:
+            if (
+                record["repository_origin"]
+                != DOCKER_JAVA_SOURCE_REMEDIATION["repository"]
+                or record["size"] != 40
+            ):
+                _fail(
+                    "Maven manifest docker-java remediation checksum differs"
+                )
+        elif (
+            record["repository_origin"]
+            == DOCKER_JAVA_SOURCE_REMEDIATION["repository"]
+        ):
+            _fail(
+                "Maven manifest uses the docker-java source-remediation "
+                "origin for an unauthorized path"
             )
         if (
             record["repository_origin"]

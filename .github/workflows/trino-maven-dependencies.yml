@@ -9,6 +9,8 @@ on:
       - bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch
       - bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch
       - bootstrap/trino/v483/patches/0003-shirokuma-maven-build-plugin-closure.patch
+      - bootstrap/trino/v483/patches/0004-shirokuma-netty-4.2.17.patch
+      - bootstrap/trino/v483/patches/0005-shirokuma-docker-java-httpclient-5.6.4.patch
       - bootstrap/trino/v483/settings.xml
       - bootstrap/trino/v483/trusted-build-contract.json
       - docs/design/07_ADR/ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md
@@ -18,18 +20,24 @@ on:
       - docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md
       - docs/design/07_ADR/ADR-0030_Activate_exact_Trino_483_dependency_publication_sequence_6.md
       - docs/design/07_ADR/ADR-0031_Activate_exact_Trino_483_dependency_publication_sequence_7.md
+      - docs/design/07_ADR/ADR-0032_Prove_Trino_483_Maven_security_remediation_feasibility.md
+      - docs/design/07_ADR/ADR-0033_Activate_exact_Trino_483_dependency_publication_sequence_8.md
       - docs/design/evidence/trino/run-31072144404-maven-feasibility-artifact-receipt.json
       - docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json
       - scripts/package_trino_bun_dependencies.py
       - scripts/package_trino_maven_dependencies.py
       - scripts/prepare_trino_bun_input.py
       - scripts/remediate_parquet_jackson.py
+      - scripts/reconstruct_docker_java_transport.sh
+      - scripts/run_trino_maven_security_feasibility.sh
+      - scripts/verify_trino_maven_security_feasibility.py
       - scripts/verify_trino_dependency_publisher.py
       - scripts/verify_trino_maven_feasibility.py
       - tests/test_parquet_jackson_remediation.py
       - tests/test_trino_bun_dependencies.py
       - tests/test_trino_dependency_publisher.py
       - tests/test_trino_maven_feasibility.py
+      - tests/test_trino_maven_security_feasibility.py
       - Makefile
   push:
     branches:
@@ -41,6 +49,8 @@ on:
       - bootstrap/trino/v483/patches/0001-shirokuma-web-ui-security.patch
       - bootstrap/trino/v483/patches/0002-shirokuma-iceberg-only-maven-closure.patch
       - bootstrap/trino/v483/patches/0003-shirokuma-maven-build-plugin-closure.patch
+      - bootstrap/trino/v483/patches/0004-shirokuma-netty-4.2.17.patch
+      - bootstrap/trino/v483/patches/0005-shirokuma-docker-java-httpclient-5.6.4.patch
       - bootstrap/trino/v483/settings.xml
       - bootstrap/trino/v483/trusted-build-contract.json
       - docs/design/07_ADR/ADR-0024_Apply_bounded_Trino_483_Web_UI_dependency_overlay_and_OpenVEX.md
@@ -50,18 +60,24 @@ on:
       - docs/design/07_ADR/ADR-0029_Authorize_exact_Trino_483_Maven_build_plugin_remediation.md
       - docs/design/07_ADR/ADR-0030_Activate_exact_Trino_483_dependency_publication_sequence_6.md
       - docs/design/07_ADR/ADR-0031_Activate_exact_Trino_483_dependency_publication_sequence_7.md
+      - docs/design/07_ADR/ADR-0032_Prove_Trino_483_Maven_security_remediation_feasibility.md
+      - docs/design/07_ADR/ADR-0033_Activate_exact_Trino_483_dependency_publication_sequence_8.md
       - docs/design/evidence/trino/run-31072144404-maven-feasibility-artifact-receipt.json
       - docs/design/evidence/trino/run-31072144404-maven-feasibility-validation.json
       - scripts/package_trino_bun_dependencies.py
       - scripts/package_trino_maven_dependencies.py
       - scripts/prepare_trino_bun_input.py
       - scripts/remediate_parquet_jackson.py
+      - scripts/reconstruct_docker_java_transport.sh
+      - scripts/run_trino_maven_security_feasibility.sh
+      - scripts/verify_trino_maven_security_feasibility.py
       - scripts/verify_trino_dependency_publisher.py
       - scripts/verify_trino_maven_feasibility.py
       - tests/test_parquet_jackson_remediation.py
       - tests/test_trino_bun_dependencies.py
       - tests/test_trino_dependency_publisher.py
       - tests/test_trino_maven_feasibility.py
+      - tests/test_trino_maven_security_feasibility.py
       - Makefile
 
 permissions:
@@ -88,6 +104,11 @@ env:
   PARQUET_OUTPUT_TIMESTAMP: "2026-05-08T01:45:35Z"
   BUILDER_IMAGE: docker.io/library/maven@sha256:7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c
   BUILDER_ARM64_MANIFEST: sha256:5476bfca9d0a6485b7161f6863123f7e6822336de4177273b47b5ec38ffd573a
+  DOCKER_JAVA_BUILDER_IMAGE: docker.io/library/maven@sha256:5ad4be2ba5946d2513786e6e5374659a28e39ad5f3dfbc8a9109e1d3a1fde655
+  DOCKER_JAVA_SOURCE_REPOSITORY: https://github.com/docker-java/docker-java
+  DOCKER_JAVA_SOURCE_TAG: 3.7.1
+  DOCKER_JAVA_SOURCE_COMMIT: 7b7fabd4567573e4957e549365dc0df8c2e54ab9
+  DOCKER_JAVA_SOURCE_TREE: f6119a3ff6da4b1df34a1054000b849c70f4aae6
   BUN_URL: https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-aarch64.zip
   BUN_ARCHIVE_SHA256: a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b
   BUN_ARCHIVE_SIZE: "35700603"
@@ -99,6 +120,7 @@ env:
   ARCHIVE_MEDIA_TYPE: application/vnd.shirokuma.maven-repository.v1.tar+gzip
   BUN_DESCRIPTOR_MEDIA_TYPE: application/vnd.shirokuma.bun-dependency-manifest.v1+json
   BUN_ARCHIVE_MEDIA_TYPE: application/vnd.shirokuma.bun-cache.v1.tar+gzip
+  DOCKER_JAVA_SOURCE_RECEIPT_MEDIA_TYPE: application/vnd.shirokuma.source-receipt.v1+json
   ORAS_VERSION: 1.3.3
   ORAS_URL: https://github.com/oras-project/oras/releases/download/v1.3.3/oras_1.3.3_linux_arm64.tar.gz
   ORAS_ARCHIVE_SHA256: ac7156f93a21e903f7ad606c792f3560f17e0cd0e36365634701b1e7cc4e4eca
@@ -149,6 +171,7 @@ jobs:
           python3 -m unittest -v tests.test_parquet_jackson_remediation
           python3 -m unittest -v tests.test_trino_bun_dependencies
           python3 -m unittest -v tests.test_trino_dependency_publisher
+          python3 -m unittest -v tests.test_trino_maven_security_feasibility
           python3 scripts/verify_trino_dependency_publisher.py audit --root .
 
       - name: Check the Trino dependency publication lifecycle
@@ -207,7 +230,9 @@ jobs:
             test -z "$(find /proc/sys/fs/binfmt_misc -maxdepth 1 -type f -name 'qemu-*' -print -quit)"
           fi
           docker pull --platform linux/arm64 "${BUILDER_IMAGE}"
+          docker pull --platform linux/arm64 "${DOCKER_JAVA_BUILDER_IMAGE}"
           test "$(docker image inspect "${BUILDER_IMAGE}" --format '{{.Architecture}}')" = "arm64"
+          test "$(docker image inspect "${DOCKER_JAVA_BUILDER_IMAGE}" --format '{{.Architecture}}')" = "arm64"
           container_arch=$(
             docker run --rm --platform linux/arm64 "${BUILDER_IMAGE}" uname -m
           )
@@ -225,6 +250,20 @@ jobs:
           grep -F 'vendor: Eclipse Adoptium' "${RUNNER_TEMP}/maven-version.txt"
           grep -F 'OS name: "linux", version:' "${RUNNER_TEMP}/maven-version.txt"
           grep -F 'arch: "aarch64"' "${RUNNER_TEMP}/maven-version.txt"
+          docker run --rm --platform linux/arm64 \
+            --env HOME=/tmp/maven-home \
+            --env MAVEN_CONFIG=/tmp/maven-home/.m2 \
+            --env MAVEN_OPTS=-Duser.home=/tmp/maven-home \
+            --env JAVA_TOOL_OPTIONS= \
+            --entrypoint /usr/share/maven/bin/mvn \
+            "${DOCKER_JAVA_BUILDER_IMAGE}" --version \
+            > "${RUNNER_TEMP}/docker-java-maven-version.txt"
+          grep -F 'Apache Maven 3.9.12' \
+            "${RUNNER_TEMP}/docker-java-maven-version.txt"
+          grep -F 'Java version: 1.8.0_482, vendor: Temurin' \
+            "${RUNNER_TEMP}/docker-java-maven-version.txt"
+          grep -F 'arch: "aarch64"' \
+            "${RUNNER_TEMP}/docker-java-maven-version.txt"
           docker run --rm --platform linux/arm64 \
             --entrypoint /bin/cat \
             "${BUILDER_IMAGE}" /usr/share/maven/conf/settings.xml \
@@ -293,19 +332,15 @@ jobs:
           python3 scripts/verify_trino_dependency_publisher.py audit-source \
             --root . --checkout "${source_dir}"
 
-      - name: Apply the bounded Web UI security overlay
+      - name: Apply the exact Trino security remediation
         if: >-
           steps.lifecycle.outputs.active == 'true' ||
           steps.lifecycle.outputs.source_validation_active == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/verify_trino_dependency_publisher.py \
-            apply-source-overlay \
-            --root . --checkout "${RUNNER_TEMP}/trino-source"
-          python3 scripts/verify_trino_maven_feasibility.py verify-candidate \
-            --authorization-root . \
-            --checkout "${RUNNER_TEMP}/trino-source"
+          python3 scripts/verify_trino_maven_security_feasibility.py \
+            apply-trino --root . --checkout "${RUNNER_TEMP}/trino-source"
 
       - name: Fetch and prepare the exact Parquet Jackson remediation sources
         if: >-
@@ -377,6 +412,23 @@ jobs:
           bun run --cwd "${modern}" build
           bun run --cwd "${legacy}" package:clean
 
+      - name: Independently reconstruct the exact docker-java candidate
+        if: steps.lifecycle.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_trino_dependency_publisher.py authorize --root .
+          candidate="${GITHUB_WORKSPACE}/.trino-candidate"
+          for suffix in a b; do
+            bash scripts/reconstruct_docker_java_transport.sh \
+              "${suffix}" \
+              "${RUNNER_TEMP}/docker-java-source-${suffix}" \
+              "${candidate}"
+          done
+          cmp \
+            "${candidate}/docker-java-transport-zerodep-3.7.1-a.jar" \
+            "${candidate}/docker-java-transport-zerodep-3.7.1-b.jar"
+
       - name: Resolve and package the first closed Maven repository
         if: steps.lifecycle.outputs.active == 'true'
         shell: bash
@@ -431,6 +483,15 @@ jobs:
             --checkout "${parquet_source}" \
             --build-repository "${parquet_repository}" \
             --target-repository "${repository}"
+          central_jar="${repository}/com/github/docker-java/docker-java-transport-zerodep/3.7.1/docker-java-transport-zerodep-3.7.1.jar"
+          mkdir -p "$(dirname "${central_jar}")"
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
+            --output "${central_jar}" \
+            https://repo.maven.apache.org/maven2/com/github/docker-java/docker-java-transport-zerodep/3.7.1/docker-java-transport-zerodep-3.7.1.jar
+          python3 scripts/verify_trino_maven_security_feasibility.py stage-jar \
+            --repository "${repository}" \
+            --candidate "${candidate}/docker-java-transport-zerodep-3.7.1-a.jar" \
+            --receipt "${candidate}/docker-java-transport-zerodep-3.7.1-a.source.json"
           docker run --rm \
             --platform linux/arm64 \
             --user "$(id -u):$(id -g)" \
@@ -461,13 +522,15 @@ jobs:
             2>&1 | tee "${candidate}/maven-transfer-a.log"
           python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log \
             --log "${candidate}/maven-transfer-a.log"
-          python3 scripts/verify_trino_maven_feasibility.py verify-candidate \
-            --checkout "${source_dir}"
+          python3 scripts/verify_trino_maven_security_feasibility.py \
+            verify-trino --checkout "${source_dir}"
           python3 scripts/verify_trino_maven_feasibility.py prune-vulnerable-inputs \
             --repository "${repository}" --root .
           python3 scripts/remediate_parquet_jackson.py seal-artifact \
             --build-repository "${parquet_repository}" \
             --target-repository "${repository}"
+          python3 scripts/verify_trino_maven_security_feasibility.py \
+            seal-jar-origin --repository "${repository}"
           python3 scripts/package_trino_maven_dependencies.py \
             prune-reactor-outputs --repository "${repository}"
           python3 scripts/package_trino_maven_dependencies.py create \
@@ -503,9 +566,8 @@ jobs:
           git -C "${source_dir}" checkout --detach "${SOURCE_COMMIT}"
           python3 scripts/verify_trino_dependency_publisher.py audit-source \
             --root . --checkout "${source_dir}"
-          python3 scripts/verify_trino_dependency_publisher.py \
-            apply-source-overlay \
-            --root . --checkout "${source_dir}"
+          python3 scripts/verify_trino_maven_security_feasibility.py \
+            apply-trino --root . --checkout "${source_dir}"
           install -d -m 0700 \
             "${parquet_repository}" "${repository}" "${bun_cache}"
           docker run --rm \
@@ -551,6 +613,15 @@ jobs:
             --checkout "${parquet_source}" \
             --build-repository "${parquet_repository}" \
             --target-repository "${repository}"
+          central_jar="${repository}/com/github/docker-java/docker-java-transport-zerodep/3.7.1/docker-java-transport-zerodep-3.7.1.jar"
+          mkdir -p "$(dirname "${central_jar}")"
+          curl --proto '=https' --tlsv1.2 --fail --silent --show-error \
+            --output "${central_jar}" \
+            https://repo.maven.apache.org/maven2/com/github/docker-java/docker-java-transport-zerodep/3.7.1/docker-java-transport-zerodep-3.7.1.jar
+          python3 scripts/verify_trino_maven_security_feasibility.py stage-jar \
+            --repository "${repository}" \
+            --candidate "${candidate}/docker-java-transport-zerodep-3.7.1-b.jar" \
+            --receipt "${candidate}/docker-java-transport-zerodep-3.7.1-b.source.json"
           docker run --rm \
             --platform linux/arm64 \
             --user "$(id -u):$(id -g)" \
@@ -581,13 +652,15 @@ jobs:
             2>&1 | tee "${candidate}/maven-transfer-b.log"
           python3 scripts/verify_trino_dependency_publisher.py audit-transfer-log \
             --log "${candidate}/maven-transfer-b.log"
-          python3 scripts/verify_trino_maven_feasibility.py verify-candidate \
-            --checkout "${source_dir}"
+          python3 scripts/verify_trino_maven_security_feasibility.py \
+            verify-trino --checkout "${source_dir}"
           python3 scripts/verify_trino_maven_feasibility.py prune-vulnerable-inputs \
             --repository "${repository}" --root .
           python3 scripts/remediate_parquet_jackson.py seal-artifact \
             --build-repository "${parquet_repository}" \
             --target-repository "${repository}"
+          python3 scripts/verify_trino_maven_security_feasibility.py \
+            seal-jar-origin --repository "${repository}"
           python3 scripts/package_trino_maven_dependencies.py \
             prune-reactor-outputs --repository "${repository}"
           python3 scripts/package_trino_maven_dependencies.py create \
@@ -614,6 +687,12 @@ jobs:
           cmp \
             "${candidate}/trino-bun-dependencies-483.tar.gz" \
             "${RUNNER_TEMP}/trino-bun-dependencies-b.tar.gz"
+          cmp \
+            "${candidate}/docker-java-transport-zerodep-3.7.1-a.source.json" \
+            "${candidate}/docker-java-transport-zerodep-3.7.1-b.source.json"
+          cp \
+            "${candidate}/docker-java-transport-zerodep-3.7.1-a.source.json" \
+            "${candidate}/docker-java-source-remediation.json"
           CANDIDATE="${candidate}" python3 - <<'PY'
           import hashlib
           import json
@@ -625,6 +704,7 @@ jobs:
           archive = candidate / "trino-maven-dependencies-483.tar.gz"
           bun_descriptor = candidate / "bun-dependency-manifest.json"
           bun_archive = candidate / "trino-bun-dependencies-483.tar.gz"
+          docker_java_receipt = candidate / "docker-java-source-remediation.json"
           record = {
               "schema_version": 1,
               "result": "passed",
@@ -641,6 +721,10 @@ jobs:
               ).hexdigest(),
               "bun_cache_archive_sha256": hashlib.sha256(
                   bun_archive.read_bytes()
+              ).hexdigest(),
+              "docker_java_source_receipt_equal": True,
+              "docker_java_source_receipt_sha256": hashlib.sha256(
+                  docker_java_receipt.read_bytes()
               ).hexdigest(),
           }
           (candidate / "independent-reconstruction.json").write_text(
@@ -667,9 +751,8 @@ jobs:
             git -C "${offline_source}" checkout --detach "${SOURCE_COMMIT}"
             python3 scripts/verify_trino_dependency_publisher.py audit-source \
               --root . --checkout "${offline_source}"
-            python3 scripts/verify_trino_dependency_publisher.py \
-              apply-source-overlay \
-              --root . --checkout "${offline_source}"
+            python3 scripts/verify_trino_maven_security_feasibility.py \
+              apply-trino --root . --checkout "${offline_source}"
             python3 scripts/package_trino_maven_dependencies.py verify \
               --descriptor "${candidate}/maven-dependency-manifest.json" \
               --archive "${candidate}/trino-maven-dependencies-483.tar.gz" \
@@ -708,8 +791,8 @@ jobs:
               -am clean package -DskipTests \
               -Dmaven.source.skip=true -Dair.check.skip-all
 
-            python3 scripts/verify_trino_maven_feasibility.py verify-candidate \
-              --checkout "${offline_source}"
+            python3 scripts/verify_trino_maven_security_feasibility.py \
+              verify-trino --checkout "${offline_source}"
             python3 scripts/package_trino_bun_dependencies.py verify-cache \
               --descriptor "${candidate}/bun-dependency-manifest.json" \
               --cache "${offline_bun_cache}"
@@ -793,7 +876,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/verify_trino_dependency_publisher.py \
+          python3 scripts/verify_trino_maven_security_feasibility.py \
             generate-maven-sbom \
             --descriptor .trino-candidate/maven-dependency-manifest.json \
             --repository "${RUNNER_TEMP}/maven-repository-a" \
@@ -822,8 +905,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/verify_trino_dependency_publisher.py \
-            verify-maven-scan \
+          python3 scripts/verify_trino_maven_security_feasibility.py \
+            verify-scan \
             --descriptor .trino-candidate/maven-dependency-manifest.json \
             --sbom .trino-candidate/trino-maven-dependencies-483.cdx.json \
             --report .trino-candidate/trivy-vulnerability.json
@@ -980,6 +1063,9 @@ jobs:
               "bun_sbom": "trino-bun-dependencies-483.cdx.json",
               "bun_scan": "trivy-bun-vulnerability.json",
               "descriptor": "maven-dependency-manifest.json",
+              "docker_java_source_receipt": (
+                  "docker-java-source-remediation.json"
+              ),
               "offline": "offline-build.json",
               "reconstruction": "independent-reconstruction.json",
               "sbom": "trino-maven-dependencies-483.cdx.json",
@@ -1021,6 +1107,7 @@ jobs:
           path: |
             .trino-candidate/candidate.sha256
             .trino-candidate/bun-dependency-manifest.json
+            .trino-candidate/docker-java-source-remediation.json
             .trino-candidate/independent-reconstruction.json
             .trino-candidate/maven-dependency-manifest.json
             .trino-candidate/maven-transfer-a.log
@@ -1211,6 +1298,7 @@ jobs:
               "trino-maven-dependencies-483.tar.gz:${ARCHIVE_MEDIA_TYPE}" \
               "bun-dependency-manifest.json:${BUN_DESCRIPTOR_MEDIA_TYPE}" \
               "trino-bun-dependencies-483.tar.gz:${BUN_ARCHIVE_MEDIA_TYPE}" \
+              "docker-java-source-remediation.json:${DOCKER_JAVA_SOURCE_RECEIPT_MEDIA_TYPE}" \
               > "oras-push.txt"
           )
           digest=$(oras resolve "${tagged_reference}")
@@ -1285,7 +1373,7 @@ jobs:
                       "sourceIdentityRisk": (
                           "provisionally-authorized-not-authenticated"
                       ),
-                      "authorizationExpiresAt": "2026-09-22T23:00:43Z",
+                      "authorizationExpiresAt": "2026-09-05T04:48:07Z",
                   },
                   "resolvedDependencies": [
                       {
@@ -1294,6 +1382,26 @@ jobs:
                               "gitTagObject": os.environ["SOURCE_TAG_OBJECT"],
                               "gitCommit": os.environ["SOURCE_COMMIT"],
                               "gitTree": os.environ["SOURCE_TREE"],
+                          },
+                      },
+                      {
+                          "uri": (
+                              "git+https://github.com/docker-java/docker-java"
+                              "@refs/tags/3.7.1"
+                          ),
+                          "digest": {
+                              "gitCommit": os.environ[
+                                  "DOCKER_JAVA_SOURCE_COMMIT"
+                              ],
+                              "gitTree": os.environ[
+                                  "DOCKER_JAVA_SOURCE_TREE"
+                              ],
+                              "sourceReceiptSha256": hashlib.sha256(
+                                  (
+                                      candidate
+                                      / "docker-java-source-remediation.json"
+                                  ).read_bytes()
+                              ).hexdigest(),
                           },
                       },
                       {
@@ -1583,6 +1691,9 @@ jobs:
           cmp \
             "${candidate}/trino-bun-dependencies-483.tar.gz" \
             "${anonymous_dir}/trino-bun-dependencies-483.tar.gz"
+          cmp \
+            "${candidate}/docker-java-source-remediation.json" \
+            "${anonymous_dir}/docker-java-source-remediation.json"
           python3 scripts/package_trino_maven_dependencies.py verify \
             --descriptor "${anonymous_dir}/maven-dependency-manifest.json" \
             --archive "${anonymous_dir}/trino-maven-dependencies-483.tar.gz"
@@ -1606,6 +1717,7 @@ jobs:
               "archive_equal": True,
               "bun_manifest_equal": True,
               "bun_archive_equal": True,
+              "docker_java_source_receipt_equal": True,
               "manifest_sha256": hashlib.sha256(
                   (candidate / "maven-dependency-manifest.json").read_bytes()
               ).hexdigest(),
@@ -1617,6 +1729,9 @@ jobs:
               ).hexdigest(),
               "bun_archive_sha256": hashlib.sha256(
                   (candidate / "trino-bun-dependencies-483.tar.gz").read_bytes()
+              ).hexdigest(),
+              "docker_java_source_receipt_sha256": hashlib.sha256(
+                  (candidate / "docker-java-source-remediation.json").read_bytes()
               ).hexdigest(),
           }
           (candidate / "anonymous-pull.json").write_text(
@@ -1665,6 +1780,7 @@ jobs:
               "cosign-verify-anonymous-pull.json",
               "cosign-verify-attestation.json",
               "cosign-verify.json",
+              "docker-java-source-remediation.json",
               "independent-reconstruction.json",
               "maven-dependency-manifest.json",
               "offline-build.json",
@@ -1697,7 +1813,7 @@ jobs:
               "workflow_sha": os.environ["GITHUB_WORKFLOW_SHA"],
               "run_id": os.environ["GITHUB_RUN_ID"],
               "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
-              "authorization_expires_at": "2026-09-22T23:00:43Z",
+              "authorization_expires_at": "2026-09-05T04:48:07Z",
               "source_identity": "provisionally-authorized-not-authenticated",
               "dependency_artifact_admitted": False,
               "image_publication_permitted": False,
@@ -1724,6 +1840,7 @@ jobs:
             ${{ runner.temp }}/trino-maven-candidate/cosign-verify-anonymous-pull.json
             ${{ runner.temp }}/trino-maven-candidate/cosign-verify-attestation.json
             ${{ runner.temp }}/trino-maven-candidate/cosign-verify.json
+            ${{ runner.temp }}/trino-maven-candidate/docker-java-source-remediation.json
             ${{ runner.temp }}/trino-maven-candidate/independent-reconstruction.json
             ${{ runner.temp }}/trino-maven-candidate/maven-dependency-manifest.json
             ${{ runner.temp }}/trino-maven-candidate/offline-build.json

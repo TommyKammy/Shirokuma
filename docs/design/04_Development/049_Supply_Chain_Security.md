@@ -1758,6 +1758,47 @@ is feasibility evidence only; merge, sequence 8, dependency publication,
 downstream activation, public exposure, production use, dependent Issues
 #64-#66, and Issue #63 closure each remain unauthorized.
 
+## Trino 483 dependency publication sequence 8 (2026-08-30)
+
+ADR-0033 activates focused PR #158 from exact predecessor
+`1f4e2ce0b958f69c91780857b11695ac47d1e00a`. It integrates only the
+PR #157 remediation proven by exact-head feasibility run `33026390700`: Trino
+Netty 4.2.17.Final plus the source-reconstructed docker-java 3.7.1 transport
+using HttpClient 5.6.4 and embedded HttpCore 5.4.3. The exact source, postimage,
+JAR, builder, closure, and scan identities remain closed by the contract.
+
+Issue #63 comment
+[`5469094658`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5469094658)
+contains the exact proposal. The OWNER approved it without modification in
+comment
+[`5469184039`](https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5469184039).
+The authorization expires at `2026-09-05T04:48:07Z` and does not renew.
+
+PR creation does not authorize merge. Every required workflow must pass on the
+exact final head, and all current non-outdated review threads must be resolved.
+The canonical `review-thread-snapshot` includes every current thread's resolved
+and outdated state. Resolved non-outdated threads remain represented in its
+SHA-256. Before merge, the OWNER must post this exact template with the final
+head and snapshot values filled in:
+
+```text
+Owner final-head attestation for PR #158
+
+Decision: {decision}
+Final head: {final_head}
+Review-thread snapshot SHA-256: {review_thread_snapshot_sha256}
+Exception: https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5469184039
+```
+
+After a separately approved merge, exactly one automatic reviewed-main run of
+the dependency publisher is authorized with `github.run_attempt=1`. Manual
+dispatch, rerun, a second attempt, another sequence-8 run, and SHA substitution
+are forbidden. Any activation or publisher failure consumes sequence 8 and
+requires a focused failure-closeout/publication-reblock PR. Success remains
+review-pending publication evidence only; dependency admission, image
+publication, resident admission, Flux/runtime activation, dependent Issues
+#64-#66, and Issue #63 closure remain unauthorized.
+
 ## Scanner or feed failure rollback
 
 Security-tool and feed failures do not permit bypassing the check. First retry

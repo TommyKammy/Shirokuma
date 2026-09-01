@@ -172,7 +172,7 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
             ):
                 feasibility.verify_zero_findings(report)
 
-    def test_manifest_scopes_the_source_origin_to_feasibility(self) -> None:
+    def test_manifest_preserves_the_registered_source_origin(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
 
@@ -209,9 +209,11 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
                 json.loads(output.read_text())["files"][0]["repository_origin"],
                 feasibility.DOCKER_JAVA_SOURCE_REPOSITORY,
             )
-            self.assertNotIn(
-                feasibility.DOCKER_JAVA_ORIGIN_ID,
-                feasibility.packager.ALLOWED_ORIGIN_IDS,
+            self.assertEqual(
+                feasibility.DOCKER_JAVA_SOURCE_REPOSITORY,
+                feasibility.packager.ALLOWED_ORIGIN_IDS[
+                    feasibility.DOCKER_JAVA_ORIGIN_ID
+                ],
             )
 
     def test_scan_requires_the_complete_sbom_package_closure(self) -> None:
@@ -237,12 +239,20 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
                                 "mode": "0644",
                                 "path": path,
                                 "repository_origin": (
-                                    "https://repo.maven.apache.org/maven2/"
+                                    feasibility.DOCKER_JAVA_SOURCE_REPOSITORY
+                                    if path == docker_path
+                                    else "https://repo.maven.apache.org/maven2/"
                                 ),
-                                "sha256": hashlib.sha256(
-                                    path.encode()
-                                ).hexdigest(),
-                                "size": len(path),
+                                "sha256": (
+                                    feasibility.DOCKER_JAVA_CANDIDATE_JAR_SHA256
+                                    if path == docker_path
+                                    else hashlib.sha256(path.encode()).hexdigest()
+                                ),
+                                "size": (
+                                    feasibility.DOCKER_JAVA_CANDIDATE_JAR_BYTES
+                                    if path == docker_path
+                                    else len(path)
+                                ),
                             }
                             for path in (docker_path, netty_path, omitted_path)
                         ],
@@ -386,7 +396,7 @@ class TrinoMavenSecurityFeasibilityTests(unittest.TestCase):
         )
         self.assertIn("fetch-depth: 0", workflow)
         self.assertIn(
-            "REVIEWED_PREDECESSOR: 59f38dc26a1a02203df9c629360d863e4856a2ba",
+            "REVIEWED_PREDECESSOR: 1f4e2ce0b958f69c91780857b11695ac47d1e00a",
             workflow,
         )
 
