@@ -3,8 +3,8 @@ doc_id: ADR-0033
 title: Activate exact Trino 483 dependency publication sequence 8
 status: accepted
 created: 2026-08-30
-updated: 2026-08-30
-version: "1.0.0"
+updated: 2026-09-01
+version: "1.1.0"
 area: architecture
 tags: [adr, trino, maven, supply-chain, arm64]
 ---
@@ -87,6 +87,24 @@ Any activation or publisher failure consumes sequence 8, returns publication
 permissions to false, and requires a focused closeout/publication-reblock PR.
 
 ## Consequences
+
+PR #158 merged as `8903beb4a6190953bb2506c8c6a11ab9bde7de98` after the
+required exact final-head OWNER attestation. Reviewed-main run
+[`33477757991`](https://github.com/TommyKammy/Shirokuma/actions/runs/33477757991),
+attempt `1`, consumed sequence 8. Validation completed both independent
+docker-java source reconstructions, both closed Maven repository builds, both
+network-none offline builds, and the complete Maven and Bun scans at raw
+High=0/Critical=0 without OpenVEX. It retained the read-only candidate artifact
+`9789367534`, digest
+`sha256:790e94aa2e40b40a2181c5d587fe16a5ed9f509a24a11ab32992e5102ac52a2f`.
+
+Publication then failed closed at the first write-capable boundary with
+`INDEPENDENT_REVIEW: owner final-head attestation is missing`. The failure
+occurred before candidate download, registry authentication, registry write,
+signing, provenance generation, or anonymous exact-digest retrieval. No
+dependency artifact was published. Sequence 8 is consumed, all publication
+permissions are false, and rerun, a second attempt, another sequence-8 run, or
+a later sequence requires a new explicit OWNER decision after this closeout.
 
 Successful dependency publication remains review-pending evidence only. A
 separate evidence-only review must bind the exact digest, signature,

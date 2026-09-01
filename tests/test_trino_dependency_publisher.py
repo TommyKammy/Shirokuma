@@ -2627,7 +2627,7 @@ class PublisherContractTests(unittest.TestCase):
         active_exception["status"] = "active"
         active_exception.pop("consumed_run", None)
         publication = contract["publication"]
-        publication["permitted"] = True
+        publication["permitted"] = False
         publication["owner_only_approval_exception"] = copy.deepcopy(
             active_exception
         )
@@ -2804,7 +2804,7 @@ class PublisherContractTests(unittest.TestCase):
             review.index("finalize-record"),
         )
 
-    def test_sequence_8_publication_attempt_is_exactly_authorized(self) -> None:
+    def test_consumed_sequence_8_publication_attempt_is_not_authorized(self) -> None:
         instant = dt.datetime(2026, 8, 31, 0, 0, tzinfo=dt.timezone.utc)
         environment = {
             "GITHUB_EVENT_NAME": verify.EXPECTED_PUBLICATION_ATTEMPT["event_name"],
@@ -2816,7 +2816,13 @@ class PublisherContractTests(unittest.TestCase):
                 "run_attempt"
             ],
         }
-        with mock.patch.dict(os.environ, environment, clear=False):
+        with (
+            mock.patch.dict(os.environ, environment, clear=False),
+            self.assertRaisesRegex(
+                verify.ContractError,
+                "no publication attempt is authorized",
+            ),
+        ):
             verify.authorize_use(
                 ROOT,
                 validation_point="before_dependency_publication",
@@ -2824,7 +2830,11 @@ class PublisherContractTests(unittest.TestCase):
             )
 
         contract = verify._load_json(ROOT / verify.CONTRACT_PATH)
-        verify._validate_publication_attempt(contract, environment=environment)
+        with self.assertRaisesRegex(
+            verify.ContractError,
+            "no publication attempt is authorized",
+        ):
+            verify._validate_publication_attempt(contract, environment=environment)
 
         for key, replacement in (
             ("GITHUB_EVENT_NAME", "workflow_dispatch"),
@@ -5043,6 +5053,7 @@ class PublisherContractTests(unittest.TestCase):
         contract_path = ROOT / verify.CONTRACT_PATH
         original_load_json = verify._load_json
         active_contract = self._active_owner_contract()
+        active_contract["publication"]["permitted"] = True
 
         def load_json(path: Path) -> dict[str, object]:
             if path == contract_path:
@@ -5051,6 +5062,13 @@ class PublisherContractTests(unittest.TestCase):
 
         with (
             mock.patch.object(verify, "_load_json", side_effect=load_json),
+            mock.patch.object(
+                verify,
+                "_active_owner_exception",
+                return_value=active_contract["publication"][
+                    "owner_only_approval_exception"
+                ],
+            ),
             mock.patch.object(
                 verify,
                 "urlopen",
@@ -5438,6 +5456,7 @@ class PublisherContractTests(unittest.TestCase):
         contract_path = ROOT / verify.CONTRACT_PATH
         original_load_json = verify._load_json
         active_contract, active_exception = self._active_owner_contract_fixture()
+        active_contract["publication"]["permitted"] = True
 
         def load_json(path: Path) -> dict[str, object]:
             if path == contract_path:
@@ -5446,6 +5465,11 @@ class PublisherContractTests(unittest.TestCase):
 
         with (
             mock.patch.object(verify, "_load_json", side_effect=load_json),
+            mock.patch.object(
+                verify,
+                "_active_owner_exception",
+                return_value=active_exception,
+            ),
             mock.patch.object(
                 verify,
                 "EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION",
@@ -5922,6 +5946,8 @@ class PublisherContractTests(unittest.TestCase):
             verify.FEASIBILITY_RETAINED_VERIFIER_PATH,
             verify.SEQUENCE_7_DIAGNOSTIC_RECEIPT_PATH,
             *verify.SEQUENCE_7_DIAGNOSTIC_INPUT_PATHS,
+            verify.SEQUENCE_8_CLOSEOUT_RECEIPT_PATH,
+            *verify.SEQUENCE_8_EVIDENCE_FILES,
         ]
         originals = {
             path: (ROOT / path).read_bytes()
@@ -6039,6 +6065,8 @@ class PublisherContractTests(unittest.TestCase):
             verify.FEASIBILITY_RETAINED_VERIFIER_PATH,
             verify.SEQUENCE_7_DIAGNOSTIC_RECEIPT_PATH,
             *verify.SEQUENCE_7_DIAGNOSTIC_INPUT_PATHS,
+            verify.SEQUENCE_8_CLOSEOUT_RECEIPT_PATH,
+            *verify.SEQUENCE_8_EVIDENCE_FILES,
         ]
         originals = {path: (ROOT / path).read_bytes() for path in paths}
         classification = json.loads(
@@ -6126,6 +6154,8 @@ class PublisherContractTests(unittest.TestCase):
             verify.FEASIBILITY_RETAINED_VERIFIER_PATH,
             verify.SEQUENCE_7_DIAGNOSTIC_RECEIPT_PATH,
             *verify.SEQUENCE_7_DIAGNOSTIC_INPUT_PATHS,
+            verify.SEQUENCE_8_CLOSEOUT_RECEIPT_PATH,
+            *verify.SEQUENCE_8_EVIDENCE_FILES,
         ]
         originals = {path: (ROOT / path).read_bytes() for path in paths}
 
@@ -6179,6 +6209,8 @@ class PublisherContractTests(unittest.TestCase):
             verify.FEASIBILITY_RETAINED_VERIFIER_PATH,
             verify.SEQUENCE_7_DIAGNOSTIC_RECEIPT_PATH,
             *verify.SEQUENCE_7_DIAGNOSTIC_INPUT_PATHS,
+            verify.SEQUENCE_8_CLOSEOUT_RECEIPT_PATH,
+            *verify.SEQUENCE_8_EVIDENCE_FILES,
         ]
         originals = {path: (ROOT / path).read_bytes() for path in paths}
 
@@ -6226,7 +6258,7 @@ class PublisherContractTests(unittest.TestCase):
                 ):
                     verify._validate_blocker_evidence(temporary_root)
 
-    def test_publication_status_is_active_and_records_must_agree(self) -> None:
+    def test_publication_status_is_blocked_and_records_must_agree(self) -> None:
         contract = json.loads(
             (ROOT / verify.CONTRACT_PATH).read_text(encoding="utf-8")
         )
@@ -6235,12 +6267,12 @@ class PublisherContractTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            "active",
+            "blocked",
             verify.publication_status(contract, admission),
         )
 
         altered = json.loads(json.dumps(contract))
-        altered["publication"]["permitted"] = False
+        altered["publication"]["permitted"] = True
         with self.assertRaisesRegex(
             verify.ContractError,
             "publication permission records disagree",

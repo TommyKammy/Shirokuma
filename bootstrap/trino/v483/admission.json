@@ -55,11 +55,11 @@
       },
       {
         "control": "repository_source_build",
-        "status": "dependency_snapshot_publication_pending",
-        "evidence": "PR #156 retained sequence 7 run 32786095668 attempt 1 as consumed and failed closed before publication. PR #157 then proved the exact Netty 4.2.17.Final and docker-java HttpClient 5.6.4 remediation on final head 6da785983a9ee460c71f35ca1d5bac35cec4184b and merged as exact predecessor 1f4e2ce0b958f69c91780857b11695ac47d1e00a. Feasibility run 33026390700 completed two independent native arm64 reconstructions and raw High=0/Critical=0 without OpenVEX. OWNER comment 5469184039 authorizes only focused activation PR #158 and one sequence 8 reviewed-main attempt after exact final-head gates."
+        "status": "dependency_snapshot_publication_reauthorization_pending",
+        "evidence": "PR #158 merged as 8903beb4a6190953bb2506c8c6a11ab9bde7de98 and consumed sequence 8 in run 33477757991 attempt 1. Validate completed two independent native arm64 reconstructions, two network-none builds, and raw Maven/Bun High=0/Critical=0. Publish then failed closed at the write-capable boundary because the required OWNER final-head attestation was missing. Candidate download, registry authentication, and registry write were never reached. The read-only candidate evidence is retained by repository receipt; rerun and any later sequence remain forbidden without a fresh OWNER decision."
       }
     ],
-    "rationale": "ADR-0019 does not waive source identity, image signature, transparency-log, provenance, or evidence requirements. ADR-0023, ADR-0024, ADR-0026, ADR-0027, and ADR-0029 retain their exact bounded source remediations. ADR-0031 retains the consumed sequence 7 failure, ADR-0032 binds the exact remediation feasibility, and ADR-0033 activates only PR #158 and one sequence 8 reviewed-main attempt. Dependency admission, image, resident, Flux/runtime, credential, exposure, production, and Issue #63 closure authorities remain false."
+    "rationale": "ADR-0019 does not waive source identity, image signature, transparency-log, provenance, or evidence requirements. ADR-0023, ADR-0024, ADR-0026, ADR-0027, and ADR-0029 retain their exact bounded source remediations. ADR-0031 retains the consumed sequence 7 failure, ADR-0032 binds the exact remediation feasibility, and ADR-0033 now retains the consumed sequence 8 failure. The clean read-only candidate does not substitute for the missing final-head attestation and no registry write occurred. Rerun, any later publication sequence, dependency admission, image, resident, Flux/runtime, credential, exposure, production, and Issue #63 closure authorities remain false pending a fresh OWNER decision."
   },
   "source_authentication": {
     "status": "provisionally_authorized_for_local_poc",
@@ -350,7 +350,7 @@
   },
   "dependency_snapshot_publication_reauthorization": {
     "sequence": 8,
-    "status": "active",
+    "status": "consumed_failed_closed",
     "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5469184039",
     "issue": "https://github.com/TommyKammy/Shirokuma/issues/63",
     "approved_at": "2026-08-30T14:12:29Z",
@@ -358,8 +358,8 @@
     "automatic_renewal": false,
     "risk_owner": "TommyKammy",
     "same_candidate_required": true,
-    "publication_authorized_after_required_approval": true,
-    "next_sequence_authorized": true,
+    "publication_authorized_after_required_approval": false,
+    "next_sequence_authorized": false,
     "previous_attempt": {
       "pull_request": 155,
       "pull_request_final_head": "aaf83e8433a2e306f80ab8c707c5804412096396",
@@ -410,11 +410,44 @@
       "openvex_permitted": false,
       "vulnerability_waiver_permitted": false
     },
+    "outcome": {
+      "pull_request": 158,
+      "pull_request_final_head": "53c437ba20f0ce2fbeda6fcd540f4a0fcdf6d274",
+      "merge_commit": "8903beb4a6190953bb2506c8c6a11ab9bde7de98",
+      "owner_final_head_attestation_present": false,
+      "review_thread_snapshot_attested": false,
+      "run_id": "33477757991",
+      "run_attempt": "1",
+      "event_name": "push",
+      "ref": "refs/heads/main",
+      "before_sha": "1f4e2ce0b958f69c91780857b11695ac47d1e00a",
+      "source_sha": "8903beb4a6190953bb2506c8c6a11ab9bde7de98",
+      "validate_job": "success",
+      "publish_job": "failure",
+      "failed_step": "Revalidate the write-capable publication boundary",
+      "failure_code": "INDEPENDENT_REVIEW",
+      "failure_reason": "owner final-head attestation is missing",
+      "maven_high_occurrences": 0,
+      "maven_critical_occurrences": 0,
+      "bun_high_occurrences": 0,
+      "bun_critical_occurrences": 0,
+      "candidate_artifact_recorded": true,
+      "candidate_artifact_id": "9789367534",
+      "candidate_artifact_digest": "sha256:790e94aa2e40b40a2181c5d587fe16a5ed9f509a24a11ab32992e5102ac52a2f",
+      "candidate_artifact_name": "trino-maven-candidate-33477757991-1",
+      "candidate_receipt": "docs/design/evidence/trino/run-33477757991-publication-closeout-receipt.json",
+      "candidate_download_reached": false,
+      "registry_authentication_reached": false,
+      "registry_write_reached": false,
+      "dependency_artifact_published": false,
+      "final_publication_artifact_present": false,
+      "consumed": true
+    },
     "failure_consumes_attempt": true,
     "rerun_permitted": false
   },
   "pending_publication_repair": {
-    "status": "authorized_for_sequence_8",
+    "status": "consumed_by_sequence_8_failure",
     "scope": "final_head_pull_request_association_only",
     "triggering_run_id": "31616764771",
     "triggering_run_attempt": "1",
@@ -437,9 +470,9 @@
       "workflow_query_branch_must_match_head_ref": true,
       "workflow_run_pull_requests_policy": "empty_or_exact_single_target"
     },
-    "publication_permissions_enabled": true,
-    "applies_only_after_separate_owner_authorization": false,
-    "next_sequence_authorized": true
+    "publication_permissions_enabled": false,
+    "applies_only_after_separate_owner_authorization": true,
+    "next_sequence_authorized": false
   },
   "independent_review": {
     "required_before_merge": true,
@@ -465,7 +498,7 @@
     "publication_enforcement": "exact_merged_pull_request_review_or_owner_attestation_query_and_revalidation"
   },
   "owner_only_approval_exception": {
-    "status": "active",
+    "status": "consumed_failed_closed",
     "scope": "pr_158_eighth_publication_attempt_only",
     "reason": "sole_owner_personal_experimental_project",
     "approval_record": "https://github.com/TommyKammy/Shirokuma/issues/63#issuecomment-5469184039",
@@ -563,11 +596,20 @@
     "publication_enforcement": "exact_merged_pull_request_pre_merge_review_thread_snapshot_and_two_pass_composite_final_authorization",
     "failure_consumes_attempt": true,
     "rerun_permitted": false,
-    "downstream_authorities_granted": []
+    "downstream_authorities_granted": [],
+    "consumed_run": {
+      "run_id": "33477757991",
+      "run_attempt": "1",
+      "source_sha": "8903beb4a6190953bb2506c8c6a11ab9bde7de98",
+      "result": "failed_closed_before_registry_authentication",
+      "failure_code": "INDEPENDENT_REVIEW",
+      "owner_final_head_attestation_present": false,
+      "rerun_permitted": false
+    }
   },
   "repository_state": {
     "dependency_snapshot_contract_permitted": true,
-    "publication_workflow_permitted": true,
+    "publication_workflow_permitted": false,
     "dependency_artifact_present": false,
     "resident_ledger_permitted": false,
     "runtime_manifests_permitted": false,
@@ -620,6 +662,19 @@
       "docs/design/evidence/trino/run-32786095668-maven-rootfs.cdx.json",
       "docs/design/evidence/trino/run-32786095668-maven-vulnerability-diagnostic-receipt.json",
       "docs/design/evidence/trino/run-32786095668-trivy-vulnerability.json",
+      "docs/design/evidence/trino/run-33477757991-bun-closure.cdx.json",
+      "docs/design/evidence/trino/run-33477757991-bun-dependency-manifest.json",
+      "docs/design/evidence/trino/run-33477757991-candidate.sha256",
+      "docs/design/evidence/trino/run-33477757991-docker-java-source-remediation.json",
+      "docs/design/evidence/trino/run-33477757991-independent-reconstruction.json",
+      "docs/design/evidence/trino/run-33477757991-maven-closure.cdx.json",
+      "docs/design/evidence/trino/run-33477757991-maven-dependency-manifest.json",
+      "docs/design/evidence/trino/run-33477757991-offline-build.json",
+      "docs/design/evidence/trino/run-33477757991-publication-closeout-receipt.json",
+      "docs/design/evidence/trino/run-33477757991-toolchain.json",
+      "docs/design/evidence/trino/run-33477757991-trivy-bun-vulnerability.json",
+      "docs/design/evidence/trino/run-33477757991-trivy-version.json",
+      "docs/design/evidence/trino/run-33477757991-trivy-vulnerability.json",
       "scripts/package_trino_bun_dependencies.py",
       "scripts/package_trino_maven_dependencies.py",
       "scripts/prepare_trino_bun_input.py",
@@ -648,7 +703,7 @@
     ]
   },
   "next_action": {
-    "mode": "execute-authorized-sequence-8-dependency-publication",
+    "mode": "prepare-fresh-publication-reauthorization-after-sequence-8-closeout",
     "decision_record_required": true,
     "decision_records": [
       "docs/design/07_ADR/ADR-0023_Allow_time_boxed_Trino_483_source_identity_exception_for_local_PoC.md",
@@ -663,7 +718,7 @@
       ,"docs/design/07_ADR/ADR-0032_Prove_Trino_483_Maven_security_remediation_feasibility.md"
       ,"docs/design/07_ADR/ADR-0033_Activate_exact_Trino_483_dependency_publication_sequence_8.md"
     ],
-    "phase": "dependency_snapshot_publication_pending",
+    "phase": "dependency_snapshot_publication_reauthorization_pending",
     "requirements": [
       "active and unexpired provisional source authorization bound to the exact source repository, tag, commit, and tree",
       "active exact owner authorization bound to the Parquet repository, tags, objects, commit, tree, preimage, postimage, permitted path, dependency replacements, expiry, and rollback",
@@ -673,8 +728,9 @@
       "use the PR #149 association repair prospectively only and never as retroactive authorization for sequence 5",
       "retain exact sequence 6 run 32315191436 as consumed after BUN_SNAPSHOT_IDENTITY failure without inventing the unretained generated manifest SHA-256",
       "retain exact sequence 7 run 32786095668 as consumed after MAVEN_SCAN_FINDING failure with all four diagnostic source files hash-bound by the retained receipt",
-      "bind sequence 8 to PR #157 final head 6da785983a9ee460c71f35ca1d5bac35cec4184b, merge commit 1f4e2ce0b958f69c91780857b11695ac47d1e00a, and feasibility run 33026390700",
-      "permit only PR #158 and one automatic reviewed-main sequence 8 workflow run attempt 1 after separate exact final-head OWNER merge approval",
+      "retain exact sequence 8 run 33477757991 attempt 1 as consumed after INDEPENDENT_REVIEW rejected the missing OWNER final-head attestation before candidate download or registry authentication",
+      "retain the exact read-only candidate manifest, SBOM, raw Maven/Bun High=0/Critical=0 reports, reconstruction receipts, artifact identity, and closeout receipt without treating them as a published dependency artifact",
+      "keep rerun, a second sequence 8 attempt, and any later publication sequence disabled until a fresh exact OWNER decision is recorded",
       "authenticated closed dependency snapshot",
       "network-none reproducible linux/arm64 build",
       "digest-pinned builder and runtime bases",
