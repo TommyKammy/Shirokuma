@@ -711,7 +711,7 @@ REVIEW_PENDING_WORKFLOW_INVENTORY = {
         "d98b0635329a859d9e529277217bd9579c5ec4329bc5754246a0e9a4f5290849"
     ),
     ".github/workflows/trino-maven-security-remediation-feasibility.yml": (
-        "863a8db71c24c43f099614dc5af82808d4431c5fead64964629a2c03282cff95"
+        "1da097a91fefa308bd9f957f366d94b198067ad3ccd953d8c8240fc9abc0e4e5"
     ),
 }
 PENDING_SCRIPT_FILE_INVENTORY = {

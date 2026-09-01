@@ -76,7 +76,7 @@ jobs:
           python3 -m unittest -v tests.test_trino_maven_security_feasibility
           python3 scripts/verify_trino_maven_security_feasibility.py \
             audit-workflow --root .
-          test "$(python3 scripts/verify_trino_dependency_publisher.py publication-status --root .)" = active
+          test "$(python3 scripts/verify_trino_dependency_publisher.py publication-status --root .)" = blocked
           test "$(git rev-parse HEAD)" = "${REVIEWED_HEAD}"
           test -z "$(git rev-list --merges "${REVIEWED_PREDECESSOR}..HEAD")"
           first_commit="$(git rev-list --reverse "${REVIEWED_PREDECESSOR}..HEAD" | sed -n '1p')"
