@@ -462,7 +462,7 @@ def audit_workflow(root: Path) -> None:
         "--network none", "generate-maven-sbom", "scan-type: sbom",
         "verify-scan", "cmp ",
         "ref: ${{ github.event.pull_request.head.sha }}", "fetch-depth: 0",
-        "REVIEWED_PREDECESSOR: 1f4e2ce0b958f69c91780857b11695ac47d1e00a",
+        "REVIEWED_PREDECESSOR: 8903beb4a6190953bb2506c8c6a11ab9bde7de98",
         'test "$(git rev-parse HEAD)" = "${REVIEWED_HEAD}"',
         'git rev-list --merges "${REVIEWED_PREDECESSOR}..HEAD"',
         'git rev-parse "${first_commit}^"',

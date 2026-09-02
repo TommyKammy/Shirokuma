@@ -1,0 +1,20 @@
+{
+  "bun_cache_directory": "/bun-cache",
+  "bun_lockfile_mode": "frozen-via-CI-profile",
+  "bun_registry": "https://registry.npmjs.org/",
+  "command": "mvn --offline --ignore-transitive-repositories --settings /policy/settings.xml -Dmaven.repo.local=/m2 -Daether.syncContext.named.basedir.locksDir=/tmp/maven-locks -Dmaven.compiler.debuglevel=source,lines -Dproject.build.outputTimestamp=2026-07-18T00:36:39Z --file /workspace/pom.xml -pl ':trino-server,:trino-server-core,:trino-server-main,:trino-hdfs,:trino-iceberg' -am clean package -DskipTests -Dmaven.source.skip=true -Dair.check.skip-all",
+  "compiler_debug_level": "source,lines",
+  "fresh_bun_cache_extractions": 2,
+  "fresh_snapshot_extractions": 2,
+  "fresh_source_checkouts": 2,
+  "local_variable_debug_table_permitted": false,
+  "maven_wrapper_used": false,
+  "network": "none",
+  "output": "core/trino-server/target/trino-server-483.tar.gz",
+  "output_sha256": "4362e3e838bf8489471cbd57dd579b59d1284a451460daaa65630d8d7586be09",
+  "output_size": 451736207,
+  "platform": "linux/arm64",
+  "reproducible_build_comparison": "equal",
+  "result": "passed",
+  "schema_version": 1
+}

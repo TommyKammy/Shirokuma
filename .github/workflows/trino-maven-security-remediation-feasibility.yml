@@ -51,7 +51,7 @@ env:
   BUN_CACHE_DIRECTORY: /bun-cache
   BUN_REGISTRY: https://registry.npmjs.org/
   REVIEWED_HEAD: ${{ github.event.pull_request.head.sha }}
-  REVIEWED_PREDECESSOR: 1f4e2ce0b958f69c91780857b11695ac47d1e00a
+  REVIEWED_PREDECESSOR: 8903beb4a6190953bb2506c8c6a11ab9bde7de98
 
 jobs:
   validate:
@@ -76,7 +76,7 @@ jobs:
           python3 -m unittest -v tests.test_trino_maven_security_feasibility
           python3 scripts/verify_trino_maven_security_feasibility.py \
             audit-workflow --root .
-          test "$(python3 scripts/verify_trino_dependency_publisher.py publication-status --root .)" = active
+          test "$(python3 scripts/verify_trino_dependency_publisher.py publication-status --root .)" = blocked
           test "$(git rev-parse HEAD)" = "${REVIEWED_HEAD}"
           test -z "$(git rev-list --merges "${REVIEWED_PREDECESSOR}..HEAD")"
           first_commit="$(git rev-list --reverse "${REVIEWED_PREDECESSOR}..HEAD" | sed -n '1p')"

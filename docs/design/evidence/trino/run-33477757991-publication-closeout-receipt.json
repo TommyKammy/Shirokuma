@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "state": "sequence_8_consumed_failed_closed",
+  "run": {
+    "id": "33477757991",
+    "attempt": "1",
+    "event": "push",
+    "ref": "refs/heads/main",
+    "before_sha": "1f4e2ce0b958f69c91780857b11695ac47d1e00a",
+    "source_sha": "8903beb4a6190953bb2506c8c6a11ab9bde7de98",
+    "created_at": "2026-09-01T06:28:37Z",
+    "completed_at": "2026-09-01T06:52:57Z",
+    "url": "https://github.com/TommyKammy/Shirokuma/actions/runs/33477757991"
+  },
+  "pull_request": {
+    "number": 158,
+    "final_head": "53c437ba20f0ce2fbeda6fcd540f4a0fcdf6d274",
+    "merge_commit": "8903beb4a6190953bb2506c8c6a11ab9bde7de98",
+    "owner_final_head_attestation_present": false
+  },
+  "jobs": {
+    "validate": "success",
+    "publish": "failure"
+  },
+  "validation": {
+    "independent_docker_java_reconstruction": "success",
+    "independent_closed_repository_reconstruction": "success",
+    "network_none_offline_builds": "success",
+    "maven_inventory": "success",
+    "maven_sbom": "success",
+    "maven_high_occurrences": 0,
+    "maven_critical_occurrences": 0,
+    "bun_sbom": "success",
+    "bun_high_occurrences": 0,
+    "bun_critical_occurrences": 0,
+    "openvex_used": false
+  },
+  "failure": {
+    "job": "publish",
+    "step": "Revalidate the write-capable publication boundary",
+    "code": "INDEPENDENT_REVIEW",
+    "reason": "owner final-head attestation is missing",
+    "failed_before_candidate_download": true,
+    "failed_before_registry_authentication": true,
+    "failed_before_registry_write": true
+  },
+  "retained_candidate_artifact": {
+    "id": "9789367534",
+    "name": "trino-maven-candidate-33477757991-1",
+    "digest": "sha256:790e94aa2e40b40a2181c5d587fe16a5ed9f509a24a11ab32992e5102ac52a2f",
+    "size": 843798606,
+    "created_at": "2026-09-01T06:52:22Z",
+    "expires_at": "2026-09-02T06:52:16Z",
+    "candidate_sha256_verified": true
+  },
+  "retained_files": {
+    "docs/design/evidence/trino/run-33477757991-bun-closure.cdx.json": {
+      "sha256": "91751ea79f5dcb8e5522f12b78eff533478d279543f3bf1a0348868dd61cd8f7",
+      "size": 551522
+    },
+    "docs/design/evidence/trino/run-33477757991-bun-dependency-manifest.json": {
+      "sha256": "365ca0ac2b081f7be2ef531ddbba94e542a1b6bfce2bad0302a6d046ff69d647",
+      "size": 17312740
+    },
+    "docs/design/evidence/trino/run-33477757991-candidate.sha256": {
+      "sha256": "c09a6d8cbde3627f56636e0a4cf84fdd2ba215207ea6c0bd6694d5f608563033",
+      "size": 1152
+    },
+    "docs/design/evidence/trino/run-33477757991-docker-java-source-remediation.json": {
+      "sha256": "be342ecd842fe0f7cd0492549c71c9781945c53f84d02dc6553ea23e7eabf3b9",
+      "size": 589
+    },
+    "docs/design/evidence/trino/run-33477757991-independent-reconstruction.json": {
+      "sha256": "350e0b1e03f782c128e8fa98210a45aac708e54deb4036f96e5359dbca22264d",
+      "size": 785
+    },
+    "docs/design/evidence/trino/run-33477757991-maven-closure.cdx.json": {
+      "sha256": "8199658ee296c87ec7b19d293000299bb8721fe0cb4590ee1ee6bb59f9e23624",
+      "size": 800780
+    },
+    "docs/design/evidence/trino/run-33477757991-maven-dependency-manifest.json": {
+      "sha256": "86e44554f04507ba4a1b54ad70ed75cad03b63ba846c17d567c2288d547c11ef",
+      "size": 1759309
+    },
+    "docs/design/evidence/trino/run-33477757991-offline-build.json": {
+      "sha256": "26a0ea63549c0cb7798f5ff0798c50520d4484683eece389a82cbc82aa5d617b",
+      "size": 1141
+    },
+    "docs/design/evidence/trino/run-33477757991-toolchain.json": {
+      "sha256": "ee1dae284d6307269a531b19a0717f1c5b2fa961a1987b2ea50b98e3d1dbb1df",
+      "size": 1162
+    },
+    "docs/design/evidence/trino/run-33477757991-trivy-bun-vulnerability.json": {
+      "sha256": "a30537f2f3215bfef66f95d0c8403246dc6c32e2c1ef81053e6d53733e07abbc",
+      "size": 464178
+    },
+    "docs/design/evidence/trino/run-33477757991-trivy-version.json": {
+      "sha256": "4d37c3d95e96eda87c728b88e5067d7d448337a0cc1fdcc7d112c152ef0e3ad7",
+      "size": 499
+    },
+    "docs/design/evidence/trino/run-33477757991-trivy-vulnerability.json": {
+      "sha256": "15c25fcb405038e21c1be3e9ad7ebf15a16ce77e5f40e047f39676868978228f",
+      "size": 511895
+    }
+  },
+  "publication": {
+    "candidate_download_reached": false,
+    "registry_authentication_reached": false,
+    "registry_write_reached": false,
+    "dependency_artifact_published": false,
+    "final_publication_artifact_present": false,
+    "rerun_permitted": false,
+    "next_sequence_authorized": false
+  }
+}
