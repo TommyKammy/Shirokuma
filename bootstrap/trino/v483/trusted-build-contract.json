@@ -131,7 +131,7 @@
     },
     {
       "path": "scripts/verify_trino_maven_security_feasibility.py",
-      "sha256": "5e048ab0f6eab60b41bad612c5cfcc50ed11a00a4e98a3e9c3ce143cef44869e"
+      "sha256": "b74a8b476161b6576581120541c2f005d834ca24bc9600272f9003c2af29522c"
     },
     {
       "path": "tests/test_parquet_jackson_remediation.py",
@@ -151,7 +151,7 @@
     },
     {
       "path": "tests/test_trino_maven_security_feasibility.py",
-      "sha256": "32cfc57e2d8308387265532fd6befbad6f73292b926506191f94dee11eeaa61a"
+      "sha256": "0fb62e75c9b9546ef21b5645216b3fce7e61f2610f9ec4884665985ded283f24"
     }
   ],
   "authorization": {
