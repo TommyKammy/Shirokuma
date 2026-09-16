@@ -1,0 +1,16 @@
+{
+  "archive_equal": true,
+  "archive_sha256": "e99f93965d1371ddf93d1a5d0b086cdd422ca19aa3957da5401d7f8997b15b2f",
+  "bun_cache_archive_equal": true,
+  "bun_cache_archive_sha256": "8a1d9246c6201f55b8ae10791bba3513351b3de933f8bd89b49d95db3e908cf1",
+  "bun_cache_manifest_equal": true,
+  "bun_cache_manifest_sha256": "365ca0ac2b081f7be2ef531ddbba94e542a1b6bfce2bad0302a6d046ff69d647",
+  "complete_manifest_equal": true,
+  "docker_java_source_receipt_equal": true,
+  "docker_java_source_receipt_sha256": "be342ecd842fe0f7cd0492549c71c9781945c53f84d02dc6553ea23e7eabf3b9",
+  "independent_fresh_repository": true,
+  "manifest_sha256": "86e44554f04507ba4a1b54ad70ed75cad03b63ba846c17d567c2288d547c11ef",
+  "result": "passed",
+  "same_allowlisted_repositories": true,
+  "schema_version": 1
+}

@@ -219,6 +219,44 @@ EXPECTED_SEQUENCE_7_OUTCOME = {
     "final_publication_artifact_present": False,
     "consumed": True,
 }
+EXPECTED_SEQUENCE_8_OUTCOME = {
+    "pull_request": 158,
+    "pull_request_final_head": "53c437ba20f0ce2fbeda6fcd540f4a0fcdf6d274",
+    "merge_commit": "8903beb4a6190953bb2506c8c6a11ab9bde7de98",
+    "owner_final_head_attestation_present": False,
+    "review_thread_snapshot_attested": False,
+    "run_id": "33477757991",
+    "run_attempt": "1",
+    "event_name": "push",
+    "ref": "refs/heads/main",
+    "before_sha": "1f4e2ce0b958f69c91780857b11695ac47d1e00a",
+    "source_sha": "8903beb4a6190953bb2506c8c6a11ab9bde7de98",
+    "validate_job": "success",
+    "publish_job": "failure",
+    "failed_step": "Revalidate the write-capable publication boundary",
+    "failure_code": "INDEPENDENT_REVIEW",
+    "failure_reason": "owner final-head attestation is missing",
+    "maven_high_occurrences": 0,
+    "maven_critical_occurrences": 0,
+    "bun_high_occurrences": 0,
+    "bun_critical_occurrences": 0,
+    "candidate_artifact_recorded": True,
+    "candidate_artifact_id": "9789367534",
+    "candidate_artifact_digest": (
+        "sha256:790e94aa2e40b40a2181c5d587fe16a5ed9f509a24a11ab32992e5102ac52a2f"
+    ),
+    "candidate_artifact_name": "trino-maven-candidate-33477757991-1",
+    "candidate_receipt": (
+        "docs/design/evidence/trino/"
+        "run-33477757991-publication-closeout-receipt.json"
+    ),
+    "candidate_download_reached": False,
+    "registry_authentication_reached": False,
+    "registry_write_reached": False,
+    "dependency_artifact_published": False,
+    "final_publication_artifact_present": False,
+    "consumed": True,
+}
 EXPECTED_INDEPENDENT_REVIEW = {
     "required_before_merge": True,
     "required_before_publication": True,
@@ -245,7 +283,7 @@ EXPECTED_INDEPENDENT_REVIEW = {
     ),
 }
 EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
-    "status": "active",
+    "status": "consumed_failed_closed",
     "scope": "pr_158_eighth_publication_attempt_only",
     "reason": "sole_owner_personal_experimental_project",
     "approval_record": (
@@ -356,9 +394,18 @@ EXPECTED_OWNER_ONLY_APPROVAL_EXCEPTION = {
     "rerun_permitted": False,
     "downstream_authorities_granted": [],
     "standard_independent_review_remains_accepted": True,
+    "consumed_run": {
+        "run_id": "33477757991",
+        "run_attempt": "1",
+        "source_sha": "8903beb4a6190953bb2506c8c6a11ab9bde7de98",
+        "result": "failed_closed_before_registry_authentication",
+        "failure_code": "INDEPENDENT_REVIEW",
+        "owner_final_head_attestation_present": False,
+        "rerun_permitted": False,
+    },
 }
 EXPECTED_PENDING_REVIEW_REPAIR = {
-    "status": "authorized_for_sequence_8",
+    "status": "consumed_by_sequence_8_failure",
     "scope": "final_head_pull_request_association_only",
     "triggering_run_id": "31616764771",
     "triggering_run_attempt": "1",
@@ -383,13 +430,13 @@ EXPECTED_PENDING_REVIEW_REPAIR = {
         "workflow_query_branch_must_match_head_ref": True,
         "workflow_run_pull_requests_policy": "empty_or_exact_single_target",
     },
-    "publication_permissions_enabled": True,
-    "applies_only_after_separate_owner_authorization": False,
-    "next_sequence_authorized": True,
+    "publication_permissions_enabled": False,
+    "applies_only_after_separate_owner_authorization": True,
+    "next_sequence_authorized": False,
 }
 EXPECTED_PUBLICATION_REAUTHORIZATION = {
     "sequence": 8,
-    "status": "active",
+    "status": "consumed_failed_closed",
     "approval_record": (
         "https://github.com/TommyKammy/Shirokuma/issues/63"
         "#issuecomment-5469184039"
@@ -400,8 +447,8 @@ EXPECTED_PUBLICATION_REAUTHORIZATION = {
     "automatic_renewal": False,
     "risk_owner": "TommyKammy",
     "same_candidate_required": True,
-    "publication_authorized_after_required_approval": True,
-    "next_sequence_authorized": True,
+    "publication_authorized_after_required_approval": False,
+    "next_sequence_authorized": False,
     "previous_attempt": EXPECTED_SEQUENCE_7_OUTCOME,
     "activation": {
         "pull_request": "https://github.com/TommyKammy/Shirokuma/pull/158",
@@ -435,6 +482,7 @@ EXPECTED_PUBLICATION_REAUTHORIZATION = {
         "openvex_permitted": False,
         "vulnerability_waiver_permitted": False,
     },
+    "outcome": EXPECTED_SEQUENCE_8_OUTCOME,
     "failure_consumes_attempt": True,
     "rerun_permitted": False,
 }
@@ -531,6 +579,76 @@ SEQUENCE_7_DIAGNOSTIC_INPUT_PATHS = (
         "docs/design/evidence/trino/run-32786095668-trivy-vulnerability.json"
     ),
 )
+SEQUENCE_8_CLOSEOUT_RECEIPT_PATH = Path(
+    "docs/design/evidence/trino/"
+    "run-33477757991-publication-closeout-receipt.json"
+)
+SEQUENCE_8_EVIDENCE_FILES = {
+    Path("docs/design/evidence/trino/run-33477757991-bun-closure.cdx.json"): (
+        "91751ea79f5dcb8e5522f12b78eff533478d279543f3bf1a0348868dd61cd8f7",
+        551_522,
+    ),
+    Path(
+        "docs/design/evidence/trino/run-33477757991-bun-dependency-manifest.json"
+    ): (
+        "365ca0ac2b081f7be2ef531ddbba94e542a1b6bfce2bad0302a6d046ff69d647",
+        17_312_740,
+    ),
+    Path("docs/design/evidence/trino/run-33477757991-candidate.sha256"): (
+        "c09a6d8cbde3627f56636e0a4cf84fdd2ba215207ea6c0bd6694d5f608563033",
+        1_152,
+    ),
+    Path(
+        "docs/design/evidence/trino/"
+        "run-33477757991-docker-java-source-remediation.json"
+    ): (
+        "be342ecd842fe0f7cd0492549c71c9781945c53f84d02dc6553ea23e7eabf3b9",
+        589,
+    ),
+    Path(
+        "docs/design/evidence/trino/"
+        "run-33477757991-independent-reconstruction.json"
+    ): (
+        "350e0b1e03f782c128e8fa98210a45aac708e54deb4036f96e5359dbca22264d",
+        785,
+    ),
+    Path("docs/design/evidence/trino/run-33477757991-maven-closure.cdx.json"): (
+        "8199658ee296c87ec7b19d293000299bb8721fe0cb4590ee1ee6bb59f9e23624",
+        800_780,
+    ),
+    Path(
+        "docs/design/evidence/trino/"
+        "run-33477757991-maven-dependency-manifest.json"
+    ): (
+        "86e44554f04507ba4a1b54ad70ed75cad03b63ba846c17d567c2288d547c11ef",
+        1_759_309,
+    ),
+    Path("docs/design/evidence/trino/run-33477757991-offline-build.json"): (
+        "26a0ea63549c0cb7798f5ff0798c50520d4484683eece389a82cbc82aa5d617b",
+        1_141,
+    ),
+    Path("docs/design/evidence/trino/run-33477757991-toolchain.json"): (
+        "ee1dae284d6307269a531b19a0717f1c5b2fa961a1987b2ea50b98e3d1dbb1df",
+        1_162,
+    ),
+    Path(
+        "docs/design/evidence/trino/"
+        "run-33477757991-trivy-bun-vulnerability.json"
+    ): (
+        "a30537f2f3215bfef66f95d0c8403246dc6c32e2c1ef81053e6d53733e07abbc",
+        464_178,
+    ),
+    Path("docs/design/evidence/trino/run-33477757991-trivy-version.json"): (
+        "4d37c3d95e96eda87c728b88e5067d7d448337a0cc1fdcc7d112c152ef0e3ad7",
+        499,
+    ),
+    Path(
+        "docs/design/evidence/trino/run-33477757991-trivy-vulnerability.json"
+    ): (
+        "15c25fcb405038e21c1be3e9ad7ebf15a16ce77e5f40e047f39676868978228f",
+        511_895,
+    ),
+}
 SUPERSEDED_FEASIBILITY_RECORD_PATH = Path(
     "docs/design/evidence/trino/"
     "run-30724152120-maven-feasibility-validation.json"
@@ -2986,6 +3104,139 @@ def _validate_blocker_evidence(
     _validate_retained_blocker_and_sequence_7_evidence(root)
 
 
+def _validate_retained_sequence_8_evidence(root: Path) -> None:
+    receipt = _load_json(root / SEQUENCE_8_CLOSEOUT_RECEIPT_PATH)
+    if set(receipt) != {
+        "schema_version",
+        "state",
+        "run",
+        "pull_request",
+        "jobs",
+        "validation",
+        "failure",
+        "retained_candidate_artifact",
+        "retained_files",
+        "publication",
+    }:
+        _fail("SEQUENCE_8_EVIDENCE", "closeout receipt is not closed-world")
+    fixed_sections = {
+        "schema_version": 1,
+        "state": "sequence_8_consumed_failed_closed",
+        "run": {
+            "id": "33477757991",
+            "attempt": "1",
+            "event": "push",
+            "ref": "refs/heads/main",
+            "before_sha": "1f4e2ce0b958f69c91780857b11695ac47d1e00a",
+            "source_sha": "8903beb4a6190953bb2506c8c6a11ab9bde7de98",
+            "created_at": "2026-09-01T06:28:37Z",
+            "completed_at": "2026-09-01T06:52:57Z",
+            "url": (
+                "https://github.com/TommyKammy/Shirokuma/actions/runs/"
+                "33477757991"
+            ),
+        },
+        "pull_request": {
+            "number": 158,
+            "final_head": "53c437ba20f0ce2fbeda6fcd540f4a0fcdf6d274",
+            "merge_commit": "8903beb4a6190953bb2506c8c6a11ab9bde7de98",
+            "owner_final_head_attestation_present": False,
+        },
+        "jobs": {"validate": "success", "publish": "failure"},
+        "validation": {
+            "independent_docker_java_reconstruction": "success",
+            "independent_closed_repository_reconstruction": "success",
+            "network_none_offline_builds": "success",
+            "maven_inventory": "success",
+            "maven_sbom": "success",
+            "maven_high_occurrences": 0,
+            "maven_critical_occurrences": 0,
+            "bun_sbom": "success",
+            "bun_high_occurrences": 0,
+            "bun_critical_occurrences": 0,
+            "openvex_used": False,
+        },
+        "failure": {
+            "job": "publish",
+            "step": "Revalidate the write-capable publication boundary",
+            "code": "INDEPENDENT_REVIEW",
+            "reason": "owner final-head attestation is missing",
+            "failed_before_candidate_download": True,
+            "failed_before_registry_authentication": True,
+            "failed_before_registry_write": True,
+        },
+        "retained_candidate_artifact": {
+            "id": "9789367534",
+            "name": "trino-maven-candidate-33477757991-1",
+            "digest": EXPECTED_SEQUENCE_8_OUTCOME["candidate_artifact_digest"],
+            "size": 843_798_606,
+            "created_at": "2026-09-01T06:52:22Z",
+            "expires_at": "2026-09-02T06:52:16Z",
+            "candidate_sha256_verified": True,
+        },
+        "publication": {
+            "candidate_download_reached": False,
+            "registry_authentication_reached": False,
+            "registry_write_reached": False,
+            "dependency_artifact_published": False,
+            "final_publication_artifact_present": False,
+            "rerun_permitted": False,
+            "next_sequence_authorized": False,
+        },
+    }
+    for key, expected in fixed_sections.items():
+        if not _matches_exact_json(receipt.get(key), expected):
+            _fail("SEQUENCE_8_EVIDENCE", f"closeout section differs: {key}")
+    retained = receipt.get("retained_files")
+    expected_retained = {
+        path.as_posix(): {"sha256": digest, "size": size}
+        for path, (digest, size) in SEQUENCE_8_EVIDENCE_FILES.items()
+    }
+    if not _matches_exact_json(retained, expected_retained):
+        _fail("SEQUENCE_8_EVIDENCE", "retained evidence inventory differs")
+    for path, (digest, size) in SEQUENCE_8_EVIDENCE_FILES.items():
+        payload = _read_reviewed_regular_file(
+            root / path,
+            code="SEQUENCE_8_EVIDENCE",
+        )
+        if len(payload) != size or hashlib.sha256(payload).hexdigest() != digest:
+            _fail("SEQUENCE_8_EVIDENCE", f"retained bytes differ: {path}")
+    for path in (
+        Path(
+            "docs/design/evidence/trino/"
+            "run-33477757991-trivy-vulnerability.json"
+        ),
+        Path(
+            "docs/design/evidence/trino/"
+            "run-33477757991-trivy-bun-vulnerability.json"
+        ),
+    ):
+        report = _load_json(root / path)
+        findings = [
+            finding
+            for result in report.get("Results", [])
+            for finding in result.get("Vulnerabilities") or []
+            if finding.get("Severity") in {"HIGH", "CRITICAL"}
+        ]
+        if findings:
+            _fail("SEQUENCE_8_EVIDENCE", f"retained scan is not clean: {path}")
+    expected_component_counts = {
+        Path(
+            "docs/design/evidence/trino/run-33477757991-maven-closure.cdx.json"
+        ): (858, 859),
+        Path(
+            "docs/design/evidence/trino/run-33477757991-bun-closure.cdx.json"
+        ): (771, 772),
+    }
+    for path, (components, dependencies) in expected_component_counts.items():
+        sbom = _load_json(root / path)
+        if (
+            len(sbom.get("components", [])) != components
+            or len(sbom.get("dependencies", [])) != dependencies
+        ):
+            _fail("SEQUENCE_8_EVIDENCE", f"retained SBOM differs: {path}")
+
+
 def _validate_retained_blocker_and_sequence_7_evidence(root: Path) -> None:
     receipt = _load_json(root / SEQUENCE_7_DIAGNOSTIC_RECEIPT_PATH)
     expected_files = [
@@ -3140,6 +3391,7 @@ def _validate_retained_blocker_and_sequence_7_evidence(root: Path) -> None:
         )
     ):
         _fail("SEQUENCE_7_EVIDENCE", "receipt policy boundary differs")
+    _validate_retained_sequence_8_evidence(root)
     retained_feasibility: dict[Path, dict[str, Any]] = {}
     for path, expected in EXPECTED_BLOCKER_FEASIBILITY_FILES.items():
         payload = _read_reviewed_regular_file(
@@ -7357,7 +7609,7 @@ def _validate_workflow(contract: Mapping[str, Any], workflow: str) -> None:
         )
     publication = contract.get("publication", {})
     if (
-        publication.get("permitted") is not True
+        publication.get("permitted") is not False
         or publication.get("workflow_present") is not True
         or publication.get("workflow") != WORKFLOW_PATH.as_posix()
         or publication.get("allowed_ref") != "refs/heads/main"
@@ -7454,6 +7706,7 @@ def _validate_policy_hashes(root: Path, contract: Mapping[str, Any]) -> None:
         AUTHORIZED_FEASIBILITY_RECEIPT_PATH,
         BLOCKER_CLASSIFICATION_PATH,
         SEQUENCE_7_DIAGNOSTIC_RECEIPT_PATH,
+        SEQUENCE_8_CLOSEOUT_RECEIPT_PATH,
         BLOCKER_HARDENED_SCM_POM_PATH,
         BLOCKER_HARDENED_SCM_MANAGER_POM_PATH,
     }
@@ -7487,10 +7740,10 @@ def audit(root: Path) -> None:
     if not _matches_exact_json(
         lifecycle,
         {
-            "state": "dependency_snapshot_publication_pending",
+            "state": "dependency_snapshot_publication_reauthorization_pending",
             "contract_only": False,
             "dependency_artifact_present": False,
-            "publication_workflow_permitted": True,
+            "publication_workflow_permitted": False,
             "image_publication_permitted": False,
             "resident_admission_permitted": False,
             "runtime_reconciliation_permitted": False,
@@ -7654,7 +7907,7 @@ def audit(root: Path) -> None:
             admission.get("pending_publication_repair"),
             EXPECTED_PENDING_REVIEW_REPAIR,
         )
-        or repository_state.get("publication_workflow_permitted") is not True
+        or repository_state.get("publication_workflow_permitted") is not False
         or repository_state.get("dependency_artifact_present") is not False
         or repository_state.get("resident_ledger_permitted") is not False
         or repository_state.get("runtime_manifests_permitted") is not False

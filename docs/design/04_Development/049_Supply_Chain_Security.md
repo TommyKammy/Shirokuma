@@ -1799,6 +1799,27 @@ review-pending publication evidence only; dependency admission, image
 publication, resident admission, Flux/runtime activation, dependent Issues
 #64-#66, and Issue #63 closure remain unauthorized.
 
+## Trino 483 sequence 8 failure closeout (2026-09-01)
+
+PR #158 merged as `8903beb4a6190953bb2506c8c6a11ab9bde7de98`. Its only
+automatic reviewed-main execution, run `33477757991`, attempt `1`, consumed
+sequence 8. The `validate` job completed two independent native Linux/arm64
+docker-java reconstructions, two closed Maven repository builds, two separate
+network-none offline builds, and closure-complete Maven and Bun scans at raw
+High=0/Critical=0 without OpenVEX. Read-only candidate artifact `9789367534`
+was retained with digest
+`sha256:790e94aa2e40b40a2181c5d587fe16a5ed9f509a24a11ab32992e5102ac52a2f`.
+
+The `publish` job failed closed in `Revalidate the write-capable publication
+boundary` with `INDEPENDENT_REVIEW: owner final-head attestation is missing`.
+Candidate download, registry authentication, registry write, signing,
+provenance generation, anonymous exact-digest retrieval, and dependency
+publication were not reached. The retained closeout receipt and its twelve
+hash-bound source files preserve the exact validation and failure evidence.
+Publication permissions are false. Rerun, a second attempt, another sequence-8
+run, a later sequence, admission, image/runtime activation, and Issue #63
+closure remain unauthorized pending a fresh explicit OWNER decision.
+
 ## Scanner or feed failure rollback
 
 Security-tool and feed failures do not permit bypassing the check. First retry

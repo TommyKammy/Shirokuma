@@ -1,0 +1,11 @@
+{
+  "candidate_bytes": 2446145,
+  "candidate_sha256": "6898a76926caa2c875d2963ac9e225f2566270a4a0152f8a151785cdaf8769b0",
+  "canonical_zip_timestamp": "2026-05-06T00:00:00Z",
+  "central_preimage_sha256": "b89bdb1754160323597f9ea32a7fe7a4a3aa8f5b3b43b88e8d71fff3b267ab21",
+  "schema_version": 1,
+  "source_commit": "7b7fabd4567573e4957e549365dc0df8c2e54ab9",
+  "source_patch": "bootstrap/trino/v483/patches/0005-shirokuma-docker-java-httpclient-5.6.4.patch",
+  "source_repository": "https://github.com/docker-java/docker-java",
+  "source_tree": "f6119a3ff6da4b1df34a1054000b849c70f4aae6"
+}
