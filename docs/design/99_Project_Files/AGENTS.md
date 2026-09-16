@@ -2,50 +2,77 @@
 project: Shirokuma
 doc_id: "PF-AGENTS"
 title: "Root AGENTS.md for Shirokuma"
-status: draft
+status: accepted
 created: 2026-07-05
-updated: 2026-07-05
-version: "0.2.1"
+updated: 2026-09-16
+version: "0.3.0"
 area: "project-files"
 tags: [shirokuma, agents]
 ---
 
 # AGENTS.md
 
-## Mission
+## Mission and current mode
 
-You are working on Shirokuma, an agentic OSS data cloud lab running on a single Mac Studio M3 Ultra through Colima.
+Shirokuma is an experimental OSS data cloud lab on a single Mac Studio through
+Colima, with no current production-use objective. The owner approved autonomous
+local development on 2026-09-16. Follow
+`docs/design/07_ADR/ADR-0034_Use_autonomous_local_experimental_development.md`
+and `docs/design/04_Development/04B_Autonomous_Local_Development.md`.
 
-## Hard constraints
+- Select and order useful work from WP dependencies and acceptance criteria;
+  implement, change dependencies, repair, retry, commit locally and advance to
+  the next WP without per-attempt approval.
+- Use a dedicated local branch/worktree and preserve existing user work. Update
+  matching planning notes and repository snapshots with decisions and evidence.
+- Host execution and changes to the dedicated Shirokuma Colima/k3s lab are
+  authorized: local build/import/registry, manifests, configuration, local RBAC,
+  policy, services, restarts and newly generated disposable experiment data.
+- Dedicated Flux reconciliation may be suspended or redirected for local work;
+  record prior state, scope and recovery. Bounded local admission may use
+  recorded source/image identity without GitHub publication identity.
+- These local permissions supersede conflicting legacy PR/CI/review, host-shell,
+  GitHub admission and per-attempt owner gates in scoped instructions and notes.
+  Preserve actual failures and historical evidence; do not claim publication
+  or production acceptance from a local result.
 
-- Primary profile is `mac-studio-solo`.
-- Assume Linux/arm64 inside Colima.
-- Use Colima built-in k3s as the default local Kubernetes runtime; kind is CI/reset-only.
-- Do not introduce multi-node physical cluster assumptions.
-- Do not add Ceph to the mainline path.
-- Prefer SeaweedFS for object storage.
-- Use MinIO only as a pinned-image/source-build fallback when a compatibility experiment explicitly requires it; record digest, CVE risk, and replacement plan.
-- Do not add Apache Ranger to the default L3 path; use OPA and native RBAC unless an ADR changes this.
+## Boundaries
+
+- Do not create Issues/PRs, write to GitHub, push or publish to external registries.
+- Additional spending, public exposure, unrelated projects, global host settings,
+  retained data/backup deletion, whole-Colima destruction and project-purpose
+  changes require separate authorization. Pause only the dependent action.
+- Keep secrets, generated data and workstation-local paths out of Git. Do not
+  inspect unrelated host credentials or bypass authenticated scope checks.
+- If external delivery is later authorized, its protected-branch, CI, policy,
+  security and CODEOWNERS rules apply; this local mode does not waive them.
+
+## Architecture constraints
+
+- Primary profile is `mac-studio-solo`, Linux/arm64 in Colima built-in k3s.
+  kind is CI/reset-only; no physical multi-node assumptions.
+- Prefer SeaweedFS. Do not add Ceph to the mainline path. MinIO is a pinned
+  compatibility fallback with digest, risk and replacement notes.
+- Use OPA and native RBAC for L3; no Apache Ranger without an ADR.
 - Doris is benchmark-only, not resident.
-- Agents must not bypass GitHub PR, CI, policy checks, and CODEOWNERS.
-- Use pinned Flux v2 as the GitOps reconciler. Do not introduce Argo CD, Flux Operator, runtime `latest`, or direct cluster mutation unless a later accepted ADR changes this.
-- L0 Flux installs only source-controller, kustomize-controller, helm-controller, and notification-controller in `flux-system`.
+- Keep pinned Flux v2; no Argo CD, Flux Operator or runtime `latest`.
+- L0 Flux installs source-controller, kustomize-controller, helm-controller and
+  notification-controller in `flux-system`.
 
-## Supervisor context
+## Verification and records
 
-- Repository-owned design context lives under `docs/design/`.
-- Before planning or implementation, read every path listed by the current issue under `Related docs / ADR`.
-- Do not infer missing design decisions. Stop and report a blocker when a referenced document is absent.
-- Run `make supervisor-preflight` before starting the host codex-supervisor loop.
-- Do not commit workstation-local Obsidian paths; GitHub issues and durable repository docs must use repository-relative paths.
+Read the relevant WP, dependency/design records and scoped instructions before
+implementation. Ordinary missing detail is an assumption to document and test;
+missing authority outside the standing scope remains a blocker for that action.
+Run focused checks first, then relevant integration/runtime checks and broader
+verification at milestones. Use local review for substantive defects, without
+an external review wait loop.
 
-## Required checks
+Record test results, remaining criteria and rollback steps. Storage changes
+include disk and backup/export impact; new resident components include ARM64
+evidence. Update ADRs for architectural decisions and related WP/WBS notes for
+scope or acceptance changes. Keep durable references repository-relative.
 
-Before opening a PR:
-
-1. Update related Obsidian note and WBS if scope changes.
-2. Update ADR if an architectural decision changes.
-3. Update ARM64 compatibility notes for new resident components.
-4. Include test evidence.
-5. Include rollback or nuke/rebuild note for infrastructure changes.
-6. For storage changes, include host SSD free-space impact and backup/export notes.
+The GitHub supervisor path is inactive for this loop. Run
+`make supervisor-preflight` only before deliberately starting that separately
+authorized supervisor path; it is not a prerequisite for local work.

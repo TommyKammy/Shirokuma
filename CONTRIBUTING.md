@@ -1,42 +1,45 @@
 # Contributing
 
-Read [the project governance contract](docs/GOVERNANCE.md), the root
-`AGENTS.md`, and every design document or ADR referenced by the approved issue
-before changing the repository. Work must stay inside a bounded GitHub issue and
-use an issue branch and pull request; never push directly to `main` or bypass
-CI, policy, security, CODEOWNERS, or required human approval.
+Read [the project governance contract](docs/GOVERNANCE.md), root/scoped
+`AGENTS.md`, the relevant Work Package and its design records. Current work uses
+[autonomous local experimental development](docs/design/04_Development/04B_Autonomous_Local_Development.md),
+approved on 2026-09-16 in
+[ADR-0034](docs/design/07_ADR/ADR-0034_Use_autonomous_local_experimental_development.md).
 
-Start with the narrowest focused reproduction or regression check. Then run the
-repository-owned verification command before opening a pull request:
+Use a dedicated local branch/worktree, preserve existing work, choose the next
+increment from WP dependencies, implement and verify it, record evidence and
+commit locally. Do not create Issues or PRs, write to GitHub, push or publish
+externally. The standing approval covers routine technical decisions, local
+lab application and retries; do not ask again for each attempt or WP transition.
+
+Start with the narrowest useful reproduction or regression check. Run relevant
+integration/runtime checks and the repository baseline at meaningful milestones:
 
 ```bash
 make verify
 ```
 
-If a preserved supervisor worktree needs setup before verification, use the
-repository-owned preparation entrypoint:
+When the checkout needs preparation, use the repeatable repository entrypoint:
 
 ```bash
 make prepare
 ```
 
-Keep machine-local state, credentials, generated data, and large warehouse
-scratch files out of git. If a local setting is required for development,
-document the variable name in the repository and keep the value outside the
-repository.
+Keep credentials, generated data and large warehouse scratch files out of Git.
+Keep workstation-local variable values and paths outside durable repository
+documents. Record local image/admission and Flux overrides with their identity,
+scope and recovery. Do not delete existing retained data or reset the whole VM.
 
-Pull requests must include Intent, Changes, Related Issue and design records,
-test evidence, risk tier and policy impact, rollback, agent disclosure, and
-self-review. Tier 3 schema or resource changes and Tier 4 permissions, secrets,
-deletion, or external-exposure changes require human approval. Infrastructure
-changes need rollback or nuke/rebuild guidance; storage changes also need host
-SSD and backup/export impact; new resident components need ARM64 compatibility
-evidence.
+Update the related Obsidian note and repository-owned snapshot together; update
+WBS for scope/acceptance changes and record architectural choices in an ADR.
+Infrastructure changes need rollback guidance, storage changes need disk and
+backup/export impact, and new resident components need ARM64 evidence. Report
+unverified criteria and distinguish local experimental completion from external
+publication or production/operator acceptance.
 
-If scope or evidence changes, update the related Obsidian note, WBS, and its
-repository-owned snapshot together. Architectural changes require an ADR. Use
-repository-relative paths in durable artifacts and issue text; never commit a
-workstation-local Obsidian path.
-
-Shirokuma is a single-node lab. Contributions must not add production, GxP, or
-physical multi-node commitments.
+If external delivery is separately authorized later, its Issue/PR, CI, policy,
+security, CODEOWNERS and required human-approval gates apply. Pull requests then
+include Intent, Changes, Related Issue/design records, Tests, Risk, Rollback,
+agent involvement and self-review. Do not push directly to `main` or bypass those
+gates. Shirokuma remains a single-node lab without production, GxP or physical
+multi-node commitments.

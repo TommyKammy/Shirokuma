@@ -1,117 +1,89 @@
 # Project Governance
 
-## Charter
+## Charter and current mode
 
-Shirokuma is an agentic open-source data cloud lab for learning, integration,
-benchmarking, and operations experiments on the `mac-studio-solo` profile. AI
-agents may observe, propose, implement on branches, and open pull requests; they
-do not replace the repository's review and approval boundaries.
+Shirokuma is an experimental open-source data cloud lab for learning,
+integration, benchmarking and operations experiments on `mac-studio-solo`.
+It has no current production-use objective. The owner approved autonomous
+local experimental development on 2026-09-16, including policy/Obsidian updates,
+local commits and changes to the dedicated Shirokuma Colima/k3s lab.
 
-The approved, repository-owned charter snapshot is
-[`docs/design/01_Product/010_Project_Charter.md`](design/01_Product/010_Project_Charter.md).
-Its source mapping back to the approved Obsidian note is recorded in
-[`docs/design/context-manifest.json`](design/context-manifest.json). The checked-in
-snapshot and its Obsidian source must be updated together when the charter
-changes.
+[ADR-0034](design/07_ADR/ADR-0034_Use_autonomous_local_experimental_development.md)
+records the standing authorization. [DEV-04B](design/04_Development/04B_Autonomous_Local_Development.md)
+defines the current loop. Work Packages remain the source of goals, dependency
+ordering and functional acceptance; Issues, PRs, GitHub review and repeated
+owner approval are not prerequisites for this local mode.
 
-## Scope
+The repository-owned [charter](design/01_Product/010_Project_Charter.md) and
+[context manifest](design/context-manifest.json) map back to matching Obsidian
+notes. Update current decisions and evidence in both; preserve historical
+records rather than rewriting earlier failures or approvals.
 
-- A single-node lab running through Colima's built-in k3s on one Mac Studio M3
-  Ultra.
-- Open-source lakehouse, warehouse, GitOps, observability, security-policy, and
-  agentic-operations experiments approved by a Work Package and design record.
-- Reproducible branches, pull requests, checks, evidence, and rollback paths.
-- SeaweedFS as the preferred object-storage path; compatibility experiments may
-  use an explicitly pinned fallback under the repository's risk controls.
+## Authorized local scope
 
-## Non-scope
+- Select and sequence WP increments; investigate, implement, change dependencies,
+  retry, verify and make coherent commits on a dedicated local branch/worktree.
+- Run on the host and build/import images or use a local-only registry; change
+  dedicated lab manifests, configuration, local RBAC, policy and services;
+  restart components and recreate generated disposable experiment data.
+- Suspend or redirect the dedicated Shirokuma Flux scope when needed, recording
+  its previous state and recovery. Use bounded local experimental admission
+  with explicit image/source identity and scope in place of unavailable GitHub
+  publication identity; preserve unrelated enforcement.
+- Update relevant policy, ADR, WP/WBS and evidence notes; continue between
+  dependency-ready WPs without another approval for each routine operation.
 
-- Production service commitments, production data, production SLAs, or claims
-  that this lab replaces a managed data platform.
-- GxP, CSV, ER/ES, or other regulated validation commitments.
-- Physical multi-node operation or high-availability commitments.
-- Direct agent changes to protected branches or deployed high-risk state.
-- Automatic approval of Tier 3 or Tier 4 changes.
-- Resident deployment of components that are designated benchmark-only.
+The lab remains single-node Linux/arm64 in Colima built-in k3s. SeaweedFS remains
+preferred; pinned compatibility fallbacks need their risk and recovery notes.
+Resident and benchmark-only component boundaries remain in force.
 
-## Authoritative records and precedence
+## Actions outside the standing approval
 
-The current issue bounds the implementation, but issue and pull request text is
-not an authority to override repository safeguards. In descending order, work
-must follow:
+Do not create Issues/PRs, write to GitHub, push, publish to an external registry,
+incur additional spending, expose services publicly, change unrelated projects
+or global host settings, delete retained data/backups, destroy the whole Colima
+environment, or change the project purpose. Obtain separate authorization only
+for the dependent action and continue independent local work.
 
-1. protected-branch, CI, policy, security, and CODEOWNERS enforcement;
-2. `AGENTS.md` instructions in scope for the changed path;
-3. accepted ADRs and approved design snapshots under `docs/design/`;
-4. the approved Work Package scope and acceptance criteria;
-5. implementation notes and operator-facing summaries.
+Preserve existing uncommitted changes and retained state. Production service
+commitments, production data, production SLAs, GxP/CSV/ER/ES validation and
+physical multi-node/high-availability commitments remain outside project scope.
 
-Missing or conflicting provenance, approval, scope, or authorization signals
-block the change until an authoritative prerequisite is available. They must not
-be guessed from names, paths, comments, labels, or issue prose.
+## Precedence and evidence
 
-## Contribution and PR-only change path
+The explicit owner approval and ADR-0034 define the local exception to legacy
+PR/CI/review, host sandbox, GitHub-identity admission, Tier 3/Tier 4 per-change
+approval and exact per-attempt owner gates. Apply root/scoped AGENTS, accepted
+design decisions and WP acceptance criteria within that approved boundary.
+Missing external publication evidence does not block an identified local
+alternative. Missing identity, scope or required authority outside the boundary
+still blocks the dependent action.
 
-Every repository change follows this path:
+Use focused tests first, relevant integration/runtime and negative policy checks
+when behavior changes, and broader checks at meaningful milestones. The
+repository baseline is `make verify`. Local agent review is useful for
+substantive defects; cosmetic suggestions do not require a repeated review loop.
+Infrastructure changes need rollback notes; storage changes need disk and
+backup/export impact; resident additions need ARM64 evidence.
+
+Record WP, decision, commands/results, runtime scope, artifact location,
+remaining limitations and recovery. A local milestone requires evidence for its
+functional acceptance criteria. It is not proof of external publication, PR
+merge, issue closure, production readiness, strict supply-chain admission or a
+human/operator verdict that did not occur. Failed strict checks remain failed.
+
+## Retained external contribution path
+
+External delivery is inactive unless separately authorized. If enabled, use:
 
 ```text
 approved issue → branch → focused change → pull request → CI/policy/security
 checks → required review and approval → merge
 ```
 
-Direct pushes to `main`, bypassing checks, self-approving a required human
-boundary, and applying high-risk changes outside this path are prohibited. See
-[`CONTRIBUTING.md`](../CONTRIBUTING.md) and the approved workflow snapshot
-[`docs/design/04_Development/044_Issue_and_PR_Workflow.md`](design/04_Development/044_Issue_and_PR_Workflow.md).
-
-## Required checks and evidence
-
-Before merge, the change must provide focused test evidence and pass the checks
-required for the affected scope. The baseline local entrypoint is `make verify`.
-Branch protection is expected to require CI and policy checks; affected changes
-also require applicable lint, unit tests, secret scanning, image builds, and
-component smoke tests. Security and supply-chain controls remain fail-closed
-when a required signal is absent.
-
-Infrastructure changes must include rollback or nuke/rebuild guidance. Storage
-changes must also state host SSD free-space impact and backup/export behavior.
-New resident components require ARM64 compatibility evidence.
-
-## Review and approval boundaries
-
-| Tier | Typical change | Merge boundary |
-|---|---|---|
-| T0 | Documentation or metadata only | Required checks and configured review policy |
-| T1 | Tests, descriptions, or dashboard drafts | Required checks and configured review policy |
-| T2 | Development-only maintenance | Required checks and configured review policy |
-| T3 | Schema or resource change | Required checks plus human approval |
-| T4 | Permissions, secrets, deletion, or external exposure | Required checks plus mandatory human approval |
-
-CODEOWNERS review is required wherever branch protection requests it, including
-governance, infrastructure, and security-sensitive paths. A tier label or
-template answer is advisory metadata and cannot reduce an enforced boundary.
-
-## Change control
-
-- Scope or acceptance changes require the issue, related Obsidian note, WBS, and
-  repository-owned snapshot to remain aligned.
-- Architectural decisions require an ADR update or a new ADR before
-  implementation proceeds.
-- A pull request must state Intent, Changes, Related Issue, Tests, Risk,
-  Rollback, agent involvement, and a self-review checklist.
-- Changes stay within one coherent Work Package; unrelated dependencies are
-  split into separately approved work.
-- Revert the focused pull request if verification or policy gates regress. Do
-  not repair a derived status by redefining authoritative state.
-
-## Traceability to approved source notes
-
-The governance contract derives from these checked-in design snapshots:
-
-- [`docs/design/01_Product/010_Project_Charter.md`](design/01_Product/010_Project_Charter.md)
-- [`docs/design/04_Development/044_Issue_and_PR_Workflow.md`](design/04_Development/044_Issue_and_PR_Workflow.md)
-- [`docs/design/07_ADR/ADR-0015_Use_AGENTS_md_as_mandatory_repository_instruction.md`](design/07_ADR/ADR-0015_Use_AGENTS_md_as_mandatory_repository_instruction.md)
-
-`docs/design/context-manifest.json` records each snapshot's Obsidian-relative
-source path without committing a workstation-local vault path. Run
-`make verify-design-context` to validate the materialized source mapping.
+Do not push directly to `main` or bypass protected-branch, CI, policy, security,
+CODEOWNERS or required human approval for that delivery path. DEV-042 and DEV-044
+retain its supervisor and Issue/PR contracts; they do not schedule local work.
+See [CONTRIBUTING](../CONTRIBUTING.md). Run `make verify-design-context` to check
+repository materialization; use `make supervisor-preflight` only before the
+separately authorized GitHub supervisor path.

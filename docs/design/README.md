@@ -1,7 +1,10 @@
 # Repository-owned design context
 
 This directory contains the repository-owned snapshot of the approved
-Shirokuma design notes used by GitHub issues and Codex worktrees.
+Shirokuma design notes used by Work Packages and local worktrees. Current
+autonomous local development follows [DEV-04B](04_Development/04B_Autonomous_Local_Development.md)
+and [ADR-0034](07_ADR/ADR-0034_Use_autonomous_local_experimental_development.md).
+The legacy GitHub supervisor path below is inactive unless separately authorized.
 
 - `context-manifest.json` records the Obsidian-relative source and checked-in
   target for every materialized document.
