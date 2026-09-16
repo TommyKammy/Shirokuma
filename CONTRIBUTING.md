@@ -13,16 +13,21 @@ externally. The standing approval covers routine technical decisions, local
 lab application and retries; do not ask again for each attempt or WP transition.
 
 Start with the narrowest useful reproduction or regression check. Run relevant
-integration/runtime checks and the repository baseline at meaningful milestones:
+integration/runtime checks and the local development entrypoint at meaningful milestones:
 
 ```bash
-make verify
+rtk make verify-local-experiment
 ```
+
+Use additional focused component checks for the changed scope. The retained
+`make verify` also evaluates historical publication/admission gates, including
+expired authorization and the absence of an unpublished Trino runtime. Those
+failures remain explicit and do not block this separately approved local loop.
 
 When the checkout needs preparation, use the repeatable repository entrypoint:
 
 ```bash
-make prepare
+rtk make prepare
 ```
 
 Keep credentials, generated data and large warehouse scratch files out of Git.

@@ -68,6 +68,13 @@ Run focused checks first, then relevant integration/runtime checks and broader
 verification at milestones. Use local review for substantive defects, without
 an external review wait loop.
 
+The local-mode entrypoint is `make verify-local-experiment`, plus focused checks
+for the changed component and actual runtime smoke tests. The historical
+`make verify` includes expired authorizations and strict unpublished-runtime
+gates; run its relevant parts for regressions, not as an approval prerequisite
+on every local iteration. Preserve those failures until external delivery work
+is separately authorized; do not renew old evidence to make the local loop green.
+
 Record test results, remaining criteria and rollback steps. Storage changes
 include disk and backup/export impact; new resident components include ARM64
 evidence. Update ADRs for architectural decisions and related WP/WBS notes for

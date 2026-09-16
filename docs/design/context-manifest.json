@@ -54,6 +54,7 @@
     {"source": "99_Project_Files/AGENTS.md", "target": "docs/design/99_Project_Files/AGENTS.md"},
     {"source": "07_ADR/ADR-0001_Use_Agentic_GitOps_as_the_primary_operating_model.md", "target": "docs/design/07_ADR/ADR-0001_Use_Agentic_GitOps_as_the_primary_operating_model.md"},
     {"source": "07_ADR/ADR-0034_Use_autonomous_local_experimental_development.md", "target": "docs/design/07_ADR/ADR-0034_Use_autonomous_local_experimental_development.md"},
-    {"source": "04_Development/04B_Autonomous_Local_Development.md", "target": "docs/design/04_Development/04B_Autonomous_Local_Development.md"}
+    {"source": "04_Development/04B_Autonomous_Local_Development.md", "target": "docs/design/04_Development/04B_Autonomous_Local_Development.md"},
+    {"source": "06_WorkPackages/061_Local_Experiment_Milestones.md", "target": "docs/design/06_WorkPackages/061_Local_Experiment_Milestones.md"}
   ]
 }

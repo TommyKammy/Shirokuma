@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: shirokuma-dev
+resources:
+  - deployment.yaml
+  - service.yaml
+  - networkpolicy.yaml
+configMapGenerator:
+  - name: trino-local-config
+    files:
+      - config.properties
+      - node.properties
+      - jvm.config
+      - log.properties
+      - iceberg.properties
+images:
+  - name: shirokuma.local/trino
+    newName: shirokuma.local/trino
+    digest: sha256:REPLACE_WITH_IMPORTED_LOCAL_MANIFEST_DIGEST

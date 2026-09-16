@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: trino-local
+  labels:
+    app.kubernetes.io/name: trino-local
+    app.kubernetes.io/part-of: shirokuma
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: trino-local
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

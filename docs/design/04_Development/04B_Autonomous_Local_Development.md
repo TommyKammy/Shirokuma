@@ -31,8 +31,8 @@ fresh approval on an operation already inside that standing scope.
    record any local admission/Flux override and its recovery path, and keep
    changes outside unrelated scopes. Retry local repairs without renewed owner
    approval. Recreate only disposable data generated for these experiments.
-5. At a meaningful milestone, run relevant integration and repository checks
-   (`make verify` when applicable), inspect substantive local review findings,
+5. At a meaningful milestone, run `make verify-local-experiment` and relevant
+   integration/component checks, inspect substantive local review findings,
    and fix defects that affect correctness, security or data retention.
 6. Record WP ID, change/decision, commands/results, runtime scope, evidence
    location, recovery steps and remaining gaps in the WP and repository notes.
@@ -42,6 +42,13 @@ fresh approval on an operation already inside that standing scope.
 Local completion means the recorded functional acceptance criteria passed in
 the stated lab scope. Report untested, blocked and incomplete criteria directly;
 external publication and production/operator acceptance remain separate.
+
+The retained `make verify` includes historical publication/admission gates,
+including expired authorization and the absence of unpublished runtime inputs.
+Run relevant portions for regression evidence, but do not wait for those gates
+or rewrite their historical outcomes to continue local development. See the
+[local milestones](../06_WorkPackages/061_Local_Experiment_Milestones.md) for
+the actual results, reproduction commands and remaining boundaries.
 
 ## Boundaries
 

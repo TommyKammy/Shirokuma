@@ -12,6 +12,14 @@ tags: [shirokuma, workpackage, l1, lakehouse]
 
 # WP-L1-LAKE-003 Iceberg table bootstrap
 
+## 2026-09-16: local experimental milestone
+
+[ADR-0034](../../07_ADR/ADR-0034_Use_autonomous_local_experimental_development.md)の承認範囲で
+ローカル実機検証を実施。保持fixtureの2行を読み取り、Trino 483から新規試験tableの
+CREATE/SELECT/DROPが成功した。実験namespaceには試験tableを残していない。
+公開経路・過去のadmission結果は変更していない。
+[実測結果と再実行手順](../061_Local_Experiment_Milestones.md)を参照。
+
 ## Summary
 
 TPC-H/CSVをIcebergにロードする

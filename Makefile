@@ -286,3 +286,47 @@ check-no-secret-filenames:
 		echo "secret-like filename is tracked"; \
 		exit 1; \
 	fi
+# Host-local experiments use their own fixed context; KUBE_CONTEXT is not used.
+.PHONY: local-experiment-status local-experiment-prepare local-experiment-apply local-experiment-resume test-local-experiment
+
+local-experiment-status:
+	@$(PYTHON) tools/local_experiment/local_experiment.py status
+
+local-experiment-prepare:
+	@$(PYTHON) tools/local_experiment/local_experiment.py prepare "$(COMPONENT)"
+
+local-experiment-apply:
+	@test -n "$(RUN)" || { echo "RUN must name a prepared local experiment directory"; exit 1; }
+	@$(PYTHON) tools/local_experiment/local_experiment.py apply "$(RUN)"
+
+local-experiment-resume:
+	@test -n "$(RUN)" || { echo "RUN must name a prepared local experiment directory"; exit 1; }
+	@$(PYTHON) tools/local_experiment/local_experiment.py resume "$(RUN)"
+
+test-local-experiment:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_experiment.py'
+
+TRINO_LOCAL_URL ?= http://127.0.0.1:18080
+.PHONY: local-trino-build local-trino-render local-trino-smoke local-trino-smoke-write test-local-trino-smoke verify-local-experiment
+
+local-trino-build:
+	@test -f "$(TRINO_ARCHIVE)" || { echo "TRINO_ARCHIVE must name the pinned Trino 483 archive"; exit 1; }
+	@./bootstrap/trino/local-experiment/build-local.sh "$(TRINO_ARCHIVE)"
+
+local-trino-render:
+	@$(PYTHON) bootstrap/trino/local-experiment/render-local.py "$(TRINO_IMAGE_DIGEST)"
+
+local-trino-smoke:
+	@$(PYTHON) tools/local_experiment/local_trino_smoke.py --url "$(TRINO_LOCAL_URL)"
+
+local-trino-smoke-write:
+	@$(PYTHON) tools/local_experiment/local_trino_smoke.py --url "$(TRINO_LOCAL_URL)" --write-test
+
+test-local-trino-smoke:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_trino_smoke.py'
+
+.PHONY: test-local-polaris-permissions
+test-local-polaris-permissions:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_experiment_polaris_permissions.py'
+
+verify-local-experiment: test-local-experiment test-local-trino-smoke test-local-polaris-permissions

@@ -61,7 +61,10 @@ still blocks the dependent action.
 
 Use focused tests first, relevant integration/runtime and negative policy checks
 when behavior changes, and broader checks at meaningful milestones. The
-repository baseline is `make verify`. Local agent review is useful for
+local entrypoint is `make verify-local-experiment`, with relevant component
+checks and live smoke evidence. The historical `make verify` preserves strict
+publication/admission outcomes and is not the local loop's approval gate.
+Local agent review is useful for
 substantive defects; cosmetic suggestions do not require a repeated review loop.
 Infrastructure changes need rollback notes; storage changes need disk and
 backup/export impact; resident additions need ARM64 evidence.
