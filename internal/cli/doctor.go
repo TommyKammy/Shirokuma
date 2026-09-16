@@ -73,17 +73,22 @@ type kubernetesResourceList struct {
 	Items []struct {
 		Kind     string `json:"kind"`
 		Metadata struct {
-			Name       string `json:"name"`
-			Namespace  string `json:"namespace"`
-			Generation int64  `json:"generation"`
+			Name              string `json:"name"`
+			Namespace         string `json:"namespace"`
+			Generation        int64  `json:"generation"`
+			DeletionTimestamp string `json:"deletionTimestamp"`
 		} `json:"metadata"`
 		Spec struct {
-			Suspend bool `json:"suspend"`
+			Suspend  bool `json:"suspend"`
+			Replicas *int `json:"replicas"`
 		} `json:"spec"`
 		Status struct {
-			Replicas          int `json:"replicas"`
-			AvailableReplicas int `json:"availableReplicas"`
-			Conditions        []struct {
+			Replicas           int   `json:"replicas"`
+			AvailableReplicas  int   `json:"availableReplicas"`
+			ReadyReplicas      int   `json:"readyReplicas"`
+			UpdatedReplicas    int   `json:"updatedReplicas"`
+			ObservedGeneration int64 `json:"observedGeneration"`
+			Conditions         []struct {
 				Type               string `json:"type"`
 				Status             string `json:"status"`
 				ObservedGeneration int64  `json:"observedGeneration"`
@@ -106,9 +111,16 @@ func newDoctorCommand(runner commandRunner) *cobra.Command {
 			if outputFormat != "json" && outputFormat != "markdown" {
 				return fmt.Errorf("unsupported output format %q (use json or markdown)", outputFormat)
 			}
-			resolvedRoot, err := resolveRepositoryRoot(repositoryRoot)
-			if err != nil {
-				return err
+			if profile == localExperimentProfile && kubeContext != localExperimentContext {
+				return fmt.Errorf("profile %s requires context %s", localExperimentProfile, localExperimentContext)
+			}
+			var resolvedRoot string
+			if profile != localExperimentProfile {
+				var err error
+				resolvedRoot, err = resolveRepositoryRoot(repositoryRoot)
+				if err != nil {
+					return err
+				}
 			}
 			report := runDoctor(cmd.Context(), runner, profile, kubeContext, resolvedRoot, time.Now().UTC())
 			if outputFormat == "json" {
@@ -120,7 +132,7 @@ func newDoctorCommand(runner commandRunner) *cobra.Command {
 		},
 	}
 	command.Flags().StringVar(&outputFormat, "output", "markdown", "output format: json or markdown")
-	command.Flags().StringVar(&profile, "profile", "local-lite", "diagnostic profile")
+	command.Flags().StringVar(&profile, "profile", "local-lite", "diagnostic profile: local-lite or local-experiment")
 	command.Flags().StringVar(&kubeContext, "context", "colima-mac-studio-solo", "Kubernetes context")
 	command.Flags().StringVar(&repositoryRoot, "repo-root", "", "repository root (auto-detected from the current directory)")
 	return command
@@ -158,6 +170,9 @@ func regularFile(path string) bool {
 }
 
 func runDoctor(ctx context.Context, runner commandRunner, profile, kubeContext, repositoryRoot string, now time.Time) doctorReport {
+	if profile == localExperimentProfile {
+		return runLocalExperimentDoctor(ctx, runner, kubeContext, now)
+	}
 	checks := []doctorCheck{
 		checkCluster(ctx, runner, kubeContext),
 		checkFlux(ctx, runner, kubeContext),
@@ -194,6 +209,10 @@ func checkCluster(ctx context.Context, runner commandRunner, kubeContext string)
 }
 
 func checkFlux(ctx context.Context, runner commandRunner, kubeContext string) doctorCheck {
+	return checkFluxForProfile(ctx, runner, kubeContext, false)
+}
+
+func checkFluxForProfile(ctx context.Context, runner commandRunner, kubeContext string, localExperiment bool) doctorCheck {
 	checkContext, cancel := context.WithTimeout(ctx, kubernetesCheckTimeout)
 	defer cancel()
 	controllerOutput, err := runner.Run(checkContext, "kubectl", "--context", kubeContext, "-n", "flux-system", "get", "deployments.apps", "-l", "app.kubernetes.io/part-of=flux", "-o", "json")
@@ -223,7 +242,22 @@ func checkFlux(ctx context.Context, runner commandRunner, kubeContext string) do
 	}
 	var unhealthy []string
 	for _, controller := range controllers.Items {
-		if controller.Status.Replicas < 1 || controller.Status.AvailableReplicas < controller.Status.Replicas {
+		unready := controller.Status.Replicas < 1 || controller.Status.AvailableReplicas < controller.Status.Replicas
+		if localExperiment {
+			unready = unready || controller.Metadata.DeletionTimestamp != "" ||
+				controller.Metadata.Generation < 1 || controller.Status.ObservedGeneration != controller.Metadata.Generation ||
+				controller.Spec.Replicas == nil || *controller.Spec.Replicas < 1 ||
+				controller.Status.Replicas != *controller.Spec.Replicas ||
+				controller.Status.AvailableReplicas != *controller.Spec.Replicas ||
+				controller.Status.ReadyReplicas != *controller.Spec.Replicas ||
+				controller.Status.UpdatedReplicas != *controller.Spec.Replicas
+			for _, condition := range controller.Status.Conditions {
+				if (condition.Type == "ReplicaFailure" && condition.Status == "True") || (condition.Type == "Progressing" && condition.Status == "False") {
+					unready = true
+				}
+			}
+		}
+		if unready {
 			unhealthy = append(unhealthy, "Deployment/"+controller.Metadata.Name)
 		}
 	}
@@ -237,9 +271,16 @@ func checkFlux(ctx context.Context, runner commandRunner, kubeContext string) do
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "resource response was not valid JSON"}
 	}
 	kinds := map[string]int{}
+	rootPresent, rootSuspended := false, false
 	for _, resource := range resources.Items {
 		kinds[resource.Kind]++
 		resourceID := fmt.Sprintf("%s/%s/%s", resource.Kind, resource.Metadata.Namespace, resource.Metadata.Name)
+		isRoot := resource.Kind == "Kustomization" && resource.Metadata.Namespace == "flux-system" && resource.Metadata.Name == "flux-system"
+		rootPresent = rootPresent || isRoot
+		if localExperiment && isRoot && resource.Spec.Suspend && resource.Metadata.DeletionTimestamp == "" {
+			rootSuspended = true
+			continue
+		}
 		if resource.Spec.Suspend {
 			unhealthy = append(unhealthy, resourceID+" (suspended)")
 			continue
@@ -254,9 +295,15 @@ func checkFlux(ctx context.Context, runner commandRunner, kubeContext string) do
 		if !ready {
 			unhealthy = append(unhealthy, resourceID)
 		}
+		if localExperiment && resource.Metadata.DeletionTimestamp != "" {
+			unhealthy = append(unhealthy, resourceID+" (terminating)")
+		}
 	}
 	if kinds["GitRepository"] == 0 || kinds["Kustomization"] == 0 {
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: "Flux GitRepository and Kustomization resources are required"}
+	}
+	if localExperiment && !rootPresent {
+		unhealthy = append(unhealthy, "Kustomization/flux-system/flux-system (missing)")
 	}
 	if len(unhealthy) > 0 {
 		sort.Strings(unhealthy)
@@ -265,6 +312,9 @@ func checkFlux(ctx context.Context, runner commandRunner, kubeContext string) do
 			reported = reported[:maxReportedResources]
 		}
 		return doctorCheck{Name: "flux", Status: "degraded", Summary: fmt.Sprintf("%d Flux resource(s) are suspended or not Ready; first %d: %s", len(unhealthy), len(reported), strings.Join(reported, ", "))}
+	}
+	if rootSuspended {
+		return doctorCheck{Name: "flux", Status: "informational", Summary: fmt.Sprintf("4 controllers and %d other reconciled resource(s) are Ready; root Kustomization/flux-system/flux-system is intentionally suspended for local-experiment", len(resources.Items)-1)}
 	}
 	return doctorCheck{Name: "flux", Status: "healthy", Summary: fmt.Sprintf("4 controllers and %d reconciled resource(s) are Ready", len(resources.Items))}
 }

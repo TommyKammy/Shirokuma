@@ -1,0 +1,13 @@
+[project]
+name = "shirokuma-local-dataops"
+version = "0.1.0"
+description = "Host-local Dagster and dbt experiment against the Shirokuma lakehouse"
+requires-python = "==3.12.*"
+dependencies = [
+  "dagster==1.13.22",
+  "dbt-core==1.12.5",
+  "dbt-trino==1.10.3",
+]
+
+[tool.uv]
+package = false

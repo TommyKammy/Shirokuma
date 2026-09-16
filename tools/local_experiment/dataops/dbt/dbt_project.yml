@@ -1,0 +1,14 @@
+name: shirokuma_local_dataops
+version: '1.0.0'
+config-version: 2
+profile: shirokuma_local_dataops
+model-paths: [models]
+test-paths: [tests]
+models:
+  shirokuma_local_dataops:
+    +materialized: table
+    +on_table_exists: drop
+    +properties:
+      format: "'PARQUET'"
+    +persist_docs:
+      relation: true

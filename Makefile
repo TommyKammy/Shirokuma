@@ -329,4 +329,27 @@ test-local-trino-smoke:
 test-local-polaris-permissions:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_experiment_polaris_permissions.py'
 
-verify-local-experiment: test-local-experiment test-local-trino-smoke test-local-polaris-permissions
+.PHONY: local-lakehouse-smoke local-dataops-sync local-dataops-smoke local-dataops-recovery-smoke test-local-session test-local-dataops local-doctor
+
+local-lakehouse-smoke:
+	@$(PYTHON) tools/local_experiment/local_session.py smoke --write-test
+
+local-dataops-sync:
+	@uv sync --locked --no-dev --project tools/local_experiment/dataops
+
+local-dataops-smoke: local-dataops-sync
+	@$(PYTHON) tools/local_experiment/local_session.py dataops
+
+local-dataops-recovery-smoke: local-dataops-sync
+	@$(PYTHON) tools/local_experiment/local_session.py dataops --exercise-failure
+
+test-local-session:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_session.py'
+
+test-local-dataops:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_dataops.py'
+
+local-doctor:
+	@go run ./cmd/shirokuma doctor --profile local-experiment
+
+verify-local-experiment: test-local-experiment test-local-trino-smoke test-local-polaris-permissions test-local-session test-local-dataops

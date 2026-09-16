@@ -18,18 +18,29 @@ go run ./cmd/shirokuma --help
 go run ./cmd/shirokuma version
 ```
 
-Run focused checks during development and the repository baseline at milestones:
+Run focused checks during development and the local verification at milestones:
 
 ```bash
-make verify
+make verify-local-experiment
+go test ./...
+go vet ./...
 ```
 
-The supervisor can run the repository-owned preparation command before local
-verification in preserved worktrees:
+With the dedicated Colima lakehouse running, inspect readiness and exercise the
+data path. The smoke commands open and close their own loopback port-forward:
 
 ```bash
-make prepare
+make local-doctor
+make local-lakehouse-smoke
+make local-dataops-recovery-smoke
 ```
+
+The DataOps command installs the locked Python dependencies in a project-local
+environment, materializes dbt staging/mart tables through Dagster, verifies repeat
+results and recovery from a controlled test failure, and removes its experiment
+tables. See [the runbook](tools/local_experiment/dataops/README.md).
+The historical `make verify` retains publication checks and is separate from
+this local loop.
 
 ## Design context
 

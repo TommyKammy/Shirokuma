@@ -1,0 +1,22 @@
+version: 2
+sources:
+  - name: retained_smoke
+    database: iceberg
+    schema: smoke
+    tables:
+      - name: fixture_v1
+models:
+  - name: stg_fixture
+    description: "shirokuma-local-dataops:{{ var('run_token') }}"
+    columns:
+      - name: id
+        data_tests: [not_null, unique]
+      - name: name
+        data_tests: [not_null]
+  - name: mart_fixture
+    description: "shirokuma-local-dataops:{{ var('run_token') }}"
+    columns:
+      - name: id
+        data_tests: [not_null, unique]
+      - name: name_upper
+        data_tests: [not_null]

@@ -12,6 +12,61 @@ tags: [shirokuma, local, evidence]
 
 # Local Experiment Milestones
 
+## 2026-09-16: Dagster / dbtによるローカルDataOps
+
+**WP-L1-DATAOPS-001のローカル機能検証**を実装した。既存のIceberg fixtureを
+dbt staging tableへ読み込み、martでnameを大文字に変換する。Dagster assetが
+`dbt build`と`dbt test`を実行し、同じ入力で再実行できる。
+
+2026-09-16 05:03–05:05 UTC（14:03–14:05 JST）の実測では、通常・再実行・retryの
+3回が成功し、それぞれ2 models + 8 data tests、追加の`dbt test` 8件が通過した。
+martの結果は毎回`[[1,"SHIROKUMA"],[2,"POLARIS"]]`。
+意図的に期待行数を3へ変えた試行は、指定したrow-count testの1件だけが失敗し、
+Dagsterも失敗として記録した。期待行数を2へ戻したretryは成功した。
+保持fixtureの前後の値は一致し、今回生成した2 tableを所有コメント確認後に削除した。
+
+```sh
+rtk make local-dataops-smoke
+rtk make local-dataops-recovery-smoke
+rtk make local-lakehouse-smoke
+rtk make local-doctor
+```
+
+コマンドは固定contextを確認し、空きポートにloopback限定tunnelを作成して終了時に閉じる。
+dbt profileとDagster instanceはGit管理外の実行ディレクトリ内だけに生成する。
+実験namespaceは既存`iceberg.local_experiment`を使用し、credentialや権限は追加していない。
+run UUID付きの2 tableだけが再作成・削除対象で、既存データは対象にしない。
+
+中断・timeoutではローカルdbt processを回収後、run UUIDごとに分離したTrino userの
+実行中queryを停止し、終了を確認してからcleanupする。確認できない場合は
+`cleanup.status=deferred`としてtableを保持し、成功扱いにしない。
+実機でもRUNNING query `20260916_051124_00143_ftq95`の限定停止とactive query 0件を確認した。
+想定したdbt assertion失敗はexit code 1だけを受理し、timeoutや強制終了とは区別する。
+
+### 依存・環境・診断
+
+- Python 3.12.12 / macOS ARM64、Dagster 1.13.22、dbt-core 1.12.5、dbt-trino 1.10.3。
+- `uv.lock`の96 package entries / 395 archive hashesを固定し、91 installed packagesの
+  依存整合性を検証した。追加の常駐Pod・scheduler・公開endpointはない。
+- `.venv`は約295MB、初回成功までの実行証跡は約11MB。生成tableは計4行で、実験後に削除。
+  backup対象の追加はなく、fixture・versioned models・lockfileから再現できる。
+- `doctor --profile local-experiment`は4 workloadの現在世代・replica・rollout失敗を確認する。
+  親Flux停止だけをinformationalとして表示し、他の不健全なresourceはdegradedを維持する。
+  SQLと公開承認は未評価と明記し、旧default profileの動作は保持した。
+- ローカル回帰61 tests（runner 18、SQL 6、Polaris 12、session 7、DataOps 18）、
+  設計55 documentsと関連14 tests、`go test ./...`、`go vet ./...`、secret scanを検証した。
+
+実行証跡は`tmp/local-experiment/dataops/5bc35888a9144c5090fbe726d924c33b/summary.json`、
+各attemptのDagster run storage、dbt `run_results.json`とログに保存した。
+初回はDagster作業directoryの作成漏れで失敗し、修正後に成功した。失敗記録も保持している。
+中断対策後の最終再実行`edfd3bf2fe7b440eaea576e133621e14`でも4試行の期待結果が一致し、
+query終了確認・実験table 2件の削除・保持fixture一致を確認した。
+詳しい再実行・復旧手順はrepositoryの`tools/local_experiment/dataops/README.md`を参照。
+
+この到達点はhost-localのDataOps機能検証であり、常駐Dagster UI/scheduler、
+OpenMetadata/OpenLineage、10GB TPC-H、旧公開admissionの完了は含まない。
+次の依存先はWP-L1-META-001、独立した候補はWP-L1-BENCH-001とWP-L1-BI-001。
+
 ## 2026-09-16: ローカル開発への移行とLakehouse SQL検証
 
 適用方針は[ADR-0034](../07_ADR/ADR-0034_Use_autonomous_local_experimental_development.md)。

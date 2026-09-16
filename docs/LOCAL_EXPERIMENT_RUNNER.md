@@ -9,6 +9,28 @@ publish Git commits, images, Issues or PRs.
 
 Run from the checkout root, with Python 3.10+ and kubectl available:
 
+For the running lakehouse, these commands manage their own loopback-only Trino
+port-forward and remove it on exit:
+
+```sh
+rtk make local-lakehouse-smoke
+rtk make local-dataops-smoke
+rtk make local-dataops-recovery-smoke
+rtk make local-doctor
+```
+
+The DataOps targets use uv to synchronize the checked-in dependency lock into
+`tools/local_experiment/dataops/.venv`, without changing the global Python or
+dbt configuration. They read the retained fixture and create only disposable
+experiment tables. See the [DataOps runbook](../tools/local_experiment/dataops/README.md)
+for expected results, failure evidence and cleanup.
+
+`local-doctor` explicitly selects `local-experiment`; it reports workload
+readiness and the scoped reconciliation state. SQL correctness comes from the
+smoke commands. The default `shirokuma doctor` retains the original diagnostics.
+
+For bounded manifest application:
+
 ```sh
 rtk make local-experiment-status
 rtk make test-local-experiment
