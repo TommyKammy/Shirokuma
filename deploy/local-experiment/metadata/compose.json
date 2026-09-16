@@ -1,0 +1,203 @@
+{
+  "name": "shirokuma-local-metadata",
+  "services": {
+    "postgresql": {
+      "image": "docker.getcollate.io/openmetadata/postgresql@sha256:011116a2b339bd0ee65d6204c867b15110f2d0e50cbc02003a9b668b073f5a3d",
+      "platform": "linux/arm64",
+      "environment": {
+        "POSTGRES_PASSWORD": "${OM_POSTGRES_PASSWORD:?initialize metadata state}"
+      },
+      "volumes": [
+        "metadata-db:/var/lib/postgresql/data",
+        "${OM_STATE}/db-init.sql:/docker-entrypoint-initdb.d/postgres-script.sql:ro"
+      ],
+      "cpus": 1,
+      "mem_limit": "2g",
+      "networks": [
+        "metadata"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "pg_isready -U postgres -d openmetadata_db"
+        ],
+        "interval": "5s",
+        "timeout": "5s",
+        "retries": 30
+      }
+    },
+    "search": {
+      "image": "docker.elastic.co/elasticsearch/elasticsearch@sha256:c3ad2340447b6bd9e53c79dbfcca4d16697006077b61f8ea789d25a5384a1893",
+      "platform": "linux/arm64",
+      "environment": {
+        "discovery.type": "single-node",
+        "xpack.security.enabled": "false",
+        "ES_JAVA_OPTS": "-Xms1g -Xmx1g",
+        "node.store.allow_mmap": "false"
+      },
+      "volumes": [
+        "metadata-search:/usr/share/elasticsearch/data"
+      ],
+      "cpus": 2,
+      "mem_limit": "3g",
+      "networks": [
+        "metadata"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=1s' >/dev/null"
+        ],
+        "interval": "5s",
+        "timeout": "5s",
+        "retries": 60
+      }
+    },
+    "migrate": {
+      "image": "docker.getcollate.io/openmetadata/server@sha256:d31aab48cd30b5530e5cf65def3500c206cc8f5f27b124778b76cd3e8cb0aa9d",
+      "platform": "linux/arm64",
+      "environment": {
+        "OPENMETADATA_CLUSTER_NAME": "shirokuma-local-metadata",
+        "DB_DRIVER_CLASS": "org.postgresql.Driver",
+        "DB_SCHEME": "postgresql",
+        "DB_HOST": "postgresql",
+        "DB_PORT": "5432",
+        "DB_USER": "openmetadata_user",
+        "DB_USER_PASSWORD": "${OM_DB_PASSWORD:?initialize metadata state}",
+        "DB_PARAMS": "sslmode=disable",
+        "OM_DATABASE": "openmetadata_db",
+        "ELASTICSEARCH_HOST": "search",
+        "ELASTICSEARCH_PORT": "9200",
+        "ELASTICSEARCH_SCHEME": "http",
+        "SEARCH_TYPE": "elasticsearch",
+        "AUTHENTICATION_PROVIDER": "basic",
+        "AUTHENTICATION_ENABLE_SELF_SIGNUP": "false",
+        "AUTHORIZER_ADMIN_PRINCIPALS": "[admin]",
+        "AUTHORIZER_PRINCIPAL_DOMAIN": "open-metadata.org",
+        "AUTHENTICATION_PUBLIC_KEYS": "[http://localhost:8585/api/v1/system/config/jwks]",
+        "RSA_PUBLIC_KEY_FILE_PATH": "/run/metadata/public_key.der",
+        "RSA_PRIVATE_KEY_FILE_PATH": "/run/metadata/private_key.der",
+        "JWT_ISSUER": "shirokuma-local-metadata",
+        "JWT_KEY_ID": "shirokuma-local-metadata-key",
+        "FERNET_KEY": "${OM_FERNET_KEY:?initialize metadata state}",
+        "PIPELINE_SERVICE_CLIENT_ENABLED": "false",
+        "OPENMETADATA_HEAP_OPTS": "-Xms1G -Xmx2G",
+        "DB_CONNECTION_POOL_MAX_SIZE": "20",
+        "DB_CONNECTION_POOL_MIN_SIZE": "2",
+        "DB_CONNECTION_POOL_MIN_IDLE": "2",
+        "DB_CONNECTION_POOL_INITIAL_SIZE": "2",
+        "MASK_PASSWORDS_API": "true",
+        "LOG_LEVEL": "WARN"
+      },
+      "volumes": [
+        "${OM_STATE}/private_key.der:/run/metadata/private_key.der:ro",
+        "${OM_STATE}/public_key.der:/run/metadata/public_key.der:ro"
+      ],
+      "cpus": 2,
+      "mem_limit": "4g",
+      "networks": [
+        "metadata"
+      ],
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      },
+      "command": "./bootstrap/openmetadata-ops.sh migrate",
+      "depends_on": {
+        "postgresql": {
+          "condition": "service_healthy"
+        },
+        "search": {
+          "condition": "service_healthy"
+        }
+      }
+    },
+    "server": {
+      "image": "docker.getcollate.io/openmetadata/server@sha256:d31aab48cd30b5530e5cf65def3500c206cc8f5f27b124778b76cd3e8cb0aa9d",
+      "platform": "linux/arm64",
+      "environment": {
+        "OPENMETADATA_CLUSTER_NAME": "shirokuma-local-metadata",
+        "DB_DRIVER_CLASS": "org.postgresql.Driver",
+        "DB_SCHEME": "postgresql",
+        "DB_HOST": "postgresql",
+        "DB_PORT": "5432",
+        "DB_USER": "openmetadata_user",
+        "DB_USER_PASSWORD": "${OM_DB_PASSWORD:?initialize metadata state}",
+        "DB_PARAMS": "sslmode=disable",
+        "OM_DATABASE": "openmetadata_db",
+        "ELASTICSEARCH_HOST": "search",
+        "ELASTICSEARCH_PORT": "9200",
+        "ELASTICSEARCH_SCHEME": "http",
+        "SEARCH_TYPE": "elasticsearch",
+        "AUTHENTICATION_PROVIDER": "basic",
+        "AUTHENTICATION_ENABLE_SELF_SIGNUP": "false",
+        "AUTHORIZER_ADMIN_PRINCIPALS": "[admin]",
+        "AUTHORIZER_PRINCIPAL_DOMAIN": "open-metadata.org",
+        "AUTHENTICATION_PUBLIC_KEYS": "[http://localhost:8585/api/v1/system/config/jwks]",
+        "RSA_PUBLIC_KEY_FILE_PATH": "/run/metadata/public_key.der",
+        "RSA_PRIVATE_KEY_FILE_PATH": "/run/metadata/private_key.der",
+        "JWT_ISSUER": "shirokuma-local-metadata",
+        "JWT_KEY_ID": "shirokuma-local-metadata-key",
+        "FERNET_KEY": "${OM_FERNET_KEY:?initialize metadata state}",
+        "PIPELINE_SERVICE_CLIENT_ENABLED": "false",
+        "OPENMETADATA_HEAP_OPTS": "-Xms1G -Xmx2G",
+        "DB_CONNECTION_POOL_MAX_SIZE": "20",
+        "DB_CONNECTION_POOL_MIN_SIZE": "2",
+        "DB_CONNECTION_POOL_MIN_IDLE": "2",
+        "DB_CONNECTION_POOL_INITIAL_SIZE": "2",
+        "MASK_PASSWORDS_API": "true",
+        "LOG_LEVEL": "WARN"
+      },
+      "volumes": [
+        "${OM_STATE}/private_key.der:/run/metadata/private_key.der:ro",
+        "${OM_STATE}/public_key.der:/run/metadata/public_key.der:ro"
+      ],
+      "cpus": 2,
+      "mem_limit": "4g",
+      "networks": [
+        "metadata",
+        "frontend"
+      ],
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      },
+      "ports": [
+        "127.0.0.1:18585:8585"
+      ],
+      "depends_on": {
+        "migrate": {
+          "condition": "service_completed_successfully"
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "wget",
+          "-q",
+          "--spider",
+          "http://localhost:8586/healthcheck"
+        ],
+        "interval": "10s",
+        "timeout": "5s",
+        "retries": 30
+      }
+    }
+  },
+  "networks": {
+    "metadata": {
+      "internal": true
+    },
+    "frontend": {}
+  },
+  "volumes": {
+    "metadata-db": {},
+    "metadata-search": {}
+  }
+}

@@ -108,6 +108,31 @@ allowlist with focused tests when a further safe deployment path is needed.
 
 ## Verification boundaries
 
+### Additional local components
+
+`make local-platform-status` reads the Kubernetes doctor and four scoped Docker
+component groups concurrently. It reports runtime readiness separately from
+functional smoke results. All host service listeners are loopback-only.
+
+| Component | Runbook | Host endpoint / transport |
+| --- | --- | --- |
+| Superset | [BI](../tools/local_experiment/superset/README.md) | `127.0.0.1:18088` |
+| OpenMetadata | [Metadata and native OpenLineage](../tools/local_experiment/metadata/README.md) | `127.0.0.1:18585` |
+| AgentHouse | [ClickHouse and Pawprint export](../tools/local_experiment/agenthouse/README.md) | `127.0.0.1:18123` |
+| Loki | [Normalized log correlation](../tools/local_experiment/loki/README.md) | `127.0.0.1:13100` |
+| MCP Gateway | [Typed read allowlist and audit](../tools/local_experiment/gateway/README.md) | stdio |
+| LLM workflow | [LangGraph and local mock](../tools/local_experiment/llm/README.md) | ephemeral loopback |
+| TPC-H SF10 | [Correctness comparison and cleanup](../tools/local_experiment/benchmark/README.md) | temporary managed Trino tunnel |
+
+The local storage [memory override](../deploy/local-experiment/storage/README.md)
+raises SeaweedFS to 8 GiB after a reproduced 2 GiB OOM during SF10 writes. The
+storage child reconciler carries this narrow override and remains active; root
+Flux stays suspended. The runner's two-component apply allowlist is unchanged.
+Private generated state, credentials, raw runtime evidence and retained backups
+are excluded from Git. Stopping individual new services preserves their data.
+
+### Historical publication gates
+
 On 2026-09-16, the runner's 18 regression tests passed. A live catalog
 prepare/apply/resume cycle restored the recorded suspension flags: the already
 suspended root remained suspended and the selected child's previously unset

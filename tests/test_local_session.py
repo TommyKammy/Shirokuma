@@ -107,7 +107,7 @@ class LocalTunnelTests(unittest.TestCase):
                     " return real_start(args,**kwargs)\n"
                     "session.subprocess.Popen=start\n"
                     "real_run=session.run_experiment\n"
-                    f"session.run_experiment=lambda command: real_run([sys.executable,'-u',{str(child)!r}],shutdown_timeout=2)\n"
+                    f"session.run_experiment=lambda command, **kwargs: real_run([sys.executable,'-u',{str(child)!r}],shutdown_timeout=2)\n"
                     "sys.argv=['local_session.py','smoke']\n"
                     "raise SystemExit(session.main())\n"
                 )

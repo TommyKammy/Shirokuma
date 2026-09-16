@@ -1,0 +1,12 @@
+[
+  {
+    "target": {
+      "group": "apps",
+      "version": "v1",
+      "kind": "StatefulSet",
+      "name": "seaweedfs",
+      "namespace": "shirokuma-storage"
+    },
+    "patch": "apiVersion: apps/v1\nkind: StatefulSet\nmetadata:\n  name: seaweedfs\n  namespace: shirokuma-storage\nspec:\n  template:\n    spec:\n      containers:\n        - name: seaweedfs\n          resources:\n            requests:\n              memory: 1Gi\n            limits:\n              memory: 8Gi\n"
+  }
+]

@@ -162,6 +162,8 @@ def main() -> int:
     smoke.add_argument("--write-test", action="store_true")
     dataops = commands.add_parser("dataops")
     dataops.add_argument("--exercise-failure", action="store_true")
+    benchmark = commands.add_parser("benchmark")
+    benchmark.add_argument("--cleanup-run")
     args = parser.parse_args()
     try:
         with interruption_handlers():
@@ -171,7 +173,7 @@ def main() -> int:
                     command = [sys.executable, str(Path(__file__).with_name("local_trino_smoke.py")), "--url", url]
                     if args.write_test:
                         command.append("--write-test")
-                else:
+                elif args.command == "dataops":
                     project = Path(__file__).with_name("dataops")
                     python = project / ".venv" / "bin" / "python"
                     if not python.is_file():
@@ -179,7 +181,13 @@ def main() -> int:
                     command = [str(python), str(project / "run.py"), "--url", url]
                     if args.exercise_failure:
                         command.append("--exercise-failure")
-                return run_experiment(command)
+                else:
+                    project = Path(__file__).with_name("benchmark")
+                    command = [sys.executable, str(project / "run.py"), "--url", url,
+                               "--scale-factor", "10", "--query-timeout", "900"]
+                    if args.cleanup_run:
+                        command.extend(["--cleanup-run", args.cleanup_run])
+                return run_experiment(command, shutdown_timeout=330 if args.command == "benchmark" else 180)
     except SessionInterrupted as error:
         print(json.dumps({"result": "interrupted", "signal": error.signum}), file=sys.stderr)
         return 128 + error.signum

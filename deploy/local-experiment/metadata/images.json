@@ -1,0 +1,22 @@
+{
+  "scope": "local-experiment-only",
+  "observed_at": "2026-09-16",
+  "source": "https://github.com/open-metadata/OpenMetadata/blob/1.12.6-release/docker/docker-compose-quickstart/docker-compose-postgres.yml",
+  "images": {
+    "server": {
+      "version": "1.12.6",
+      "image": "docker.getcollate.io/openmetadata/server@sha256:d31aab48cd30b5530e5cf65def3500c206cc8f5f27b124778b76cd3e8cb0aa9d",
+      "platform": "linux/arm64"
+    },
+    "postgresql": {
+      "version": "1.12.6",
+      "image": "docker.getcollate.io/openmetadata/postgresql@sha256:011116a2b339bd0ee65d6204c867b15110f2d0e50cbc02003a9b668b073f5a3d",
+      "platform": "linux/arm64"
+    },
+    "search": {
+      "version": "9.3.0",
+      "image": "docker.elastic.co/elasticsearch/elasticsearch@sha256:c3ad2340447b6bd9e53c79dbfcca4d16697006077b61f8ea789d25a5384a1893",
+      "platform": "linux/arm64"
+    }
+  }
+}

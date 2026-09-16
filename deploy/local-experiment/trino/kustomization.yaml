@@ -13,6 +13,7 @@ configMapGenerator:
       - jvm.config
       - log.properties
       - iceberg.properties
+      - tpch.properties
 images:
   - name: shirokuma.local/trino
     newName: shirokuma.local/trino

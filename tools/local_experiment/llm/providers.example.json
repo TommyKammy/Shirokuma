@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "active_provider": "mock",
+  "providers": {
+    "mock": {
+      "kind": "mock",
+      "enabled": true,
+      "provider": "shirokuma-mock",
+      "model": "shirokuma-deterministic-v1",
+      "endpoint": null,
+      "api_key_env": null,
+      "budget_usd": null,
+      "timeout_seconds": 10,
+      "max_output_tokens": 128
+    },
+    "local": {
+      "kind": "local-compatible",
+      "enabled": false,
+      "provider": "local-compatible",
+      "model": null,
+      "endpoint": "http://127.0.0.1:8080/v1",
+      "api_key_env": null,
+      "budget_usd": null,
+      "timeout_seconds": 30,
+      "max_output_tokens": 128
+    },
+    "cloud": {
+      "kind": "cloud",
+      "enabled": false,
+      "provider": null,
+      "model": null,
+      "endpoint": null,
+      "api_key_env": null,
+      "budget_usd": null,
+      "timeout_seconds": 30,
+      "max_output_tokens": 128
+    }
+  }
+}

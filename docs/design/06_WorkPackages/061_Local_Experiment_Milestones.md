@@ -5,12 +5,155 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-16
-version: "1.0"
+version: "1.3"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+最終確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
+repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
+Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
+Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
+Cloud APIは未実行で、provider/model・認証環境変数名・追加予算の判断だけを保留している。
+
+## 2026-09-16: TPC-H SF10 全22クエリの完走
+
+**WP-L1-BENCH-001のローカル機能検証**が成功した。Trino 483の固定query corpusを使い、
+SF10の8テーブル・86,586,082行をIcebergへ生成した。全22 queryでgenerator参照結果と
+Iceberg結果が一致し、実行queryの終了確認後、今回の8 tableを所有コメント確認付きで削除した。
+保持fixtureの前後一致と生成table残数0を確認した。
+
+成功runは`3ca015b7c9d2431c9997b23dda777cb9`、完了時刻は2026-09-16 09:52:05 UTC。
+SF10は公称10GBのsource規模で、実測Parquet data filesは2,286,204,977 bytesだった。
+22 queryのclient wall time合計はgenerator参照174.35秒、Iceberg66.81秒。
+generator・client・測定対象を同居させ、cacheや並行実験を分離していないため、
+公式TPC成績・本番capacity・他製品との性能比較として扱わない。
+100GBは実行しておらず、別の容量・実行時間評価として扱う。
+
+環境はColima 16 CPU / 96 GiB / 400 GiB、Trino 8 CPU / 16 GiB（heap 12G、query 8GB）。
+SeaweedFSは次の実障害の修正で2 CPU / 8 GiB、memory request 1 GiBへ変更した。
+既存PVC、保持dataset、backupは変更・削除していない。
+
+- 最初のrunはQ15で不一致。同じgenerator queryだけでも0行→1行が再現し、
+  CTEを二度展開したDOUBLE SUMが`2194132.8166000005`と`2194132.8165999996`に分かれた。
+  Q15の金額・割引だけをDECIMALへ変換し、両経路へ同じ式を適用した。
+  全59,986,052 lineitemで元の2桁金額・割引値を保持することを確認した。
+  vendor SQLとchecksum、比較条件は保持し、実行時SQL/hashと変換理由を記録する。
+- 次のrunはSeaweedFSの2 GiB上限でOOMKilled（exit 137）となり、Parquet commitが失敗した。
+  Flux storage childのlocal patchで8 GiBへ変更し、rollout後に再試験した。
+  失敗したCTASの専用prefixに残った15 incomplete multipart uploadsだけを回収し、
+  upload/objectとも0件を確認した。SQL tableが0件でもobject回収完了とはみなさない。
+- 型検証は完全なcolumn type列を要求する。Icebergの文書化された`varchar(n) → varchar`
+  変換だけを明示的に扱い、文字列型と元の長さ上限も検証する。
+  数値・文字列・booleanの型違いは拒否し、金額結果の比較を緩めていない。
+
+証跡は`tmp/local-experiment/benchmark/<run>/`。失敗runも保持している。
+現行の型比較実装で保存済み22組を再検証し、source/result hashを
+`comparison-reverification.json`へ保存した。比較器のfocused testsは20件。
+SeaweedFSはrollout後の同一Podでrestart 0、観測したmemory sample最大値は4,828Miだった。
+再実行は`rtk make local-tpch-smoke`、詳細はrepositoryの
+`tools/local_experiment/benchmark/README.md`と`deploy/local-experiment/storage/README.md`を参照。
+
+## 2026-09-16: 読み取り専用SRE診断
+
+**WP-L2-AGENT-002の部分実装**として、MCP doctor/Pod/Eventの構造化snapshotを
+固定ルールで分類する診断を追加した。実LLM推論や自動修復、PR提案の完了とは扱わない。
+実機6 Pod / 9 Eventを読み取り、3 tool callsと診断自身の計4件をClickHouse/Lokiへ記録した。
+同じtask/traceと各span/action、event ID、usage NULLを再取得して照合した。
+
+結果は`attention-required`。Polarisの過去4回、PostgreSQLの過去3回のrestartを警告し、
+現在の停止とは断定しない。承認済みのroot Flux停止はinformationalへ分離した。
+failed/pending/unreadyのfixture、namespace逸脱、監査の不一致など11 focused testsが成功。
+初回は検証側がLoki actionの`mcp.` prefixを欠いて不一致となり、修正後の再試験が成功した。
+失敗記録は保持している。
+
+成功証跡は`tmp/local-experiment/bears/61faa9b3a8a44ea09fb082365d023d23/result.json`。
+再実行は`rtk make local-sre-smoke`。詳細はrepositoryの
+`tools/local_experiment/bears/README.md`を参照。
+
+## 2026-09-16: MCP・Pawprint・LangGraphのローカル連携
+
+**WP-L2-AGENT-001 / WP-L2-OBS-001**のローカル機能として、公式Python MCP SDK
+2.2.0のstdio Gatewayを実装した。8つの固定読み取りtool（doctor、Pod、Event、dbt models、
+固定fixture EXPLAIN、固定lineage、直近Pawprint、policy）だけを公開する。
+任意shell/SQL/URL/path、別namespace、GitHub書き込みは受理しない。
+Kubernetes context名だけでなく、実際のloopback endpointも要求する。
+
+実機11呼び出し（8成功・3 policy拒否）すべてで、OpenTelemetry SDK 1.44.0のspan、
+Loki log、ClickHouse Pawprintのtask/trace/span相関を確認した。
+いずれかの監査保存に失敗した場合は成功を返さず、backend dataを返却しない。
+自由入力・prompt・credential・生の例外は監査payloadへ保存しない。
+最終再実行は`tmp/local-experiment/gateway/smoke-39827f89c41543889d2e5bf2d3ca7624.json`。
+Gateway 12、metadata 13、Loki 7 focused testsが成功した。
+
+**WP-L2-LLM-001**はLangGraph 1.2.11、provider設定schema、cloud無効化境界、
+一時的なloopback mock HTTP endpointを実装した。2回の`plan → MCP → summarize`が成功し、
+8件のAgentHouse eventと親子traceの相関を確認した。Colimaから`host.lima.internal`を
+経由したmacOS loopback mock接続も成功した。13 focused testsが成功した。
+最終実測は`tmp/local-experiment/llm/d9fedb72a0894873acd24196cdda2772/summary.json`。
+
+これは接続と制御フローの検証であり、実LLM推論・モデル品質・診断能力の証明ではない。
+summarizeへ渡す入力はtool成功状態のみ。token/costは未知としてNULLに保持する。
+model weightsは取得せず、cloud APIは一度も呼び出していない。
+Cloud側はprovider/model・APIキーの環境変数名・明示予算の判断待ち。
+ローカル開発の包括承認へ追加課金を含めていない。
+
+```sh
+rtk make local-platform-status
+rtk make local-gateway-smoke
+rtk make local-llm-smoke
+rtk make verify-local-experiment
+```
+
+`local-platform-status`はLakehouse、Superset、metadata、AgentHouse、Lokiの状態を
+一括確認し、不健全・欠落・異なるruntimeで非ゼロ終了する。機能検証は各smokeと分ける。
+詳細と復元はrepositoryの`tools/local_experiment/{gateway,llm}/README.md`を参照。
+metadataのprivate設定が消失しても、保持volume/containerがあれば秘密情報を再生成しない。
+
+## 2026-09-16: BI・metadata・AgentHouseの実機導入
+
+ADR-0034のローカル適用経路で、以下の機能を検証した。GitHubでの公開・
+Flux admission・本番受入の完了は意味しない。
+
+- **WP-L1-BI-001**: Superset 6.1.0のnative ARM64 imageに固定Trino driverを追加。
+  既存Iceberg fixtureの2行を取得し、dataset/chart/dashboardを保存した。
+  container再起動・再作成後も同じ保存物とquery結果が残った。
+  SQLite online backupと対応するprivate設定をexportし、integrity checkが成功した。
+  `127.0.0.1:18088`のみ、2 CPU / 3 GiB、Colima VM host networkからTrinoへ接続する。
+- **WP-L1-META-001**: OpenMetadata 1.12.6 / PostgreSQL 1.12.6 / Elasticsearch 9.3.0の
+  native ARM64を固定。実fixtureとhistorical dbt modelsの3 dataset、schema、team owner、
+  Dagster pipelineに紐づく2 native OpenLineage edgesをAPI保存・再取得した。
+  実際のdbt実行時刻とDagster run IDを使う4件のSTART/COMPLETE eventを送信する。
+  PostgreSQL backupを新規scratch DBへ復元し、3 table entitiesを確認してscratchだけ削除した。
+  serverは`127.0.0.1:18585`のみ、DB/searchは非公開。
+- **WP-L2-CH-001**: ClickHouse 26.8.5.13のnative ARM64、2 CPU / 4 GiB、
+  `127.0.0.1:18123`のみ。Pawprint schema、insert/query/export、同じevent IDの
+  論理的重複排除と再起動後の保持が成功した。未知のtoken/costはNULLとする。
+- Loki 3.7.0のnative ARM64を1 CPU / 1 GiB、`127.0.0.1:13100`のみで起動した。
+  正規化したtask/trace/span/action/statusのpush/queryと再起動後の保持を確認した。
+  MCP連携・LLM workflowの実測結果は後続記録へ分ける。
+
+SupersetはSQLiteの単一process profile。OpenMetadataのdbt model entitiesは
+cleanup済みの過去実行を表すことを明記し、artifactにない型はUNKNOWNのままにする。
+Elasticsearchのoptional vector index警告は残るが、通常のmetadata/lineage APIは成功した。
+保持データ・volume・backupの削除は行わず、生成された秘密情報はGit管理外に保存する。
+
+```sh
+rtk make local-superset-start local-superset-smoke
+rtk make local-metadata-start local-metadata-ingest
+rtk make local-agenthouse-start local-agenthouse-smoke
+rtk make local-loki-start
+rtk make test-local-platform
+```
+
+再起動・export・復元・制限の詳細はrepositoryの
+`tools/local_experiment/{superset,metadata,agenthouse,loki}/README.md`を参照。
+Supersetの保存dashboardは`/superset/dashboard/shirokuma-local-lakehouse/`。
+証跡はGit管理外の`tmp/local-superset/`と`tmp/local-experiment/{metadata,agenthouse,loki}/`。
+Metadata最終実測は`ingestion-20260916T093504Z.json`、復元記録は
+`backup-restore-verification.json`。focused testsはBI 11、metadata 8、AgentHouse 9、Loki 5件。
 
 ## 2026-09-16: Dagster / dbtによるローカルDataOps
 

@@ -56,6 +56,17 @@
     {"source": "07_ADR/ADR-0034_Use_autonomous_local_experimental_development.md", "target": "docs/design/07_ADR/ADR-0034_Use_autonomous_local_experimental_development.md"},
     {"source": "04_Development/04B_Autonomous_Local_Development.md", "target": "docs/design/04_Development/04B_Autonomous_Local_Development.md"},
     {"source": "06_WorkPackages/061_Local_Experiment_Milestones.md", "target": "docs/design/06_WorkPackages/061_Local_Experiment_Milestones.md"},
-    {"source": "06_WorkPackages/L1/WP-L1-DATAOPS-001_Dagster_and_dbt_bootstrap.md", "target": "docs/design/06_WorkPackages/L1/WP-L1-DATAOPS-001_Dagster_and_dbt_bootstrap.md"}
+    {"source": "06_WorkPackages/L1/WP-L1-DATAOPS-001_Dagster_and_dbt_bootstrap.md", "target": "docs/design/06_WorkPackages/L1/WP-L1-DATAOPS-001_Dagster_and_dbt_bootstrap.md"},
+    {"source": "06_WorkPackages/L1/WP-L1-BI-001_Superset_bootstrap.md", "target": "docs/design/06_WorkPackages/L1/WP-L1-BI-001_Superset_bootstrap.md"},
+    {"source": "06_WorkPackages/L1/WP-L1-META-001_OpenMetadata_and_OpenLineage_bootstrap.md", "target": "docs/design/06_WorkPackages/L1/WP-L1-META-001_OpenMetadata_and_OpenLineage_bootstrap.md"},
+    {"source": "06_WorkPackages/L2/WP-L2-CH-001_ClickHouse_minimal_AgentHouse.md", "target": "docs/design/06_WorkPackages/L2/WP-L2-CH-001_ClickHouse_minimal_AgentHouse.md"},
+    {"source": "06_WorkPackages/L2/WP-L2-AGENT-001_MCP_Gateway_MVP.md", "target": "docs/design/06_WorkPackages/L2/WP-L2-AGENT-001_MCP_Gateway_MVP.md"},
+    {"source": "06_WorkPackages/L2/WP-L2-OBS-001_Pawprint_telemetry.md", "target": "docs/design/06_WorkPackages/L2/WP-L2-OBS-001_Pawprint_telemetry.md"},
+    {"source": "06_WorkPackages/L2/WP-L2-LLM-001_Agent_LLM_endpoint_baseline.md", "target": "docs/design/06_WorkPackages/L2/WP-L2-LLM-001_Agent_LLM_endpoint_baseline.md"},
+    {"source": "02_Architecture/028_MCP_Tool_API_Strategy.md", "target": "docs/design/02_Architecture/028_MCP_Tool_API_Strategy.md"},
+    {"source": "02_Architecture/02A_Observability_AgentHouse.md", "target": "docs/design/02_Architecture/02A_Observability_AgentHouse.md"},
+    {"source": "07_ADR/ADR-0010_Use_LangGraph_plus_MCP_Gateway_for_agent_workflows.md", "target": "docs/design/07_ADR/ADR-0010_Use_LangGraph_plus_MCP_Gateway_for_agent_workflows.md"},
+    {"source": "06_WorkPackages/L1/WP-L1-BENCH-001_TPC_H_benchmark_smoke.md", "target": "docs/design/06_WorkPackages/L1/WP-L1-BENCH-001_TPC_H_benchmark_smoke.md"},
+    {"source": "06_WorkPackages/L2/WP-L2-AGENT-002_SRE_Bear.md", "target": "docs/design/06_WorkPackages/L2/WP-L2-AGENT-002_SRE_Bear.md"}
   ]
 }

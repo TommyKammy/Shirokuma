@@ -4,7 +4,13 @@ This image is for the approved host-only development loop. It uses the existing
 upstream Trino 483 release archive, whose SHA-256 is
 `4f3978428f26f36398c94b85a3e03b5301394919c8a4271b497b0fcd1698d0cb`
 (851,844,304 bytes), and the repository-pinned Maven/Temurin Java 25 Ubuntu ARM64
-base. Only the launcher, server libraries, and Iceberg connector are included.
+base. Only the launcher, server libraries, Iceberg and TPC-H connectors are included.
+
+The TPC-H catalog uses the simplified column names used by Trino's own query suite. Its deterministic
+`tpch.sf10` generator supplies the nominal 10GB benchmark data; the generator
+itself stores no data. Iceberg benchmark copies are disposable and explicitly
+owned by their run. The local profile permits 8 CPU / 16GiB with a 12GiB heap
+for this single-node benchmark; this is a resource limit, not a capacity claim.
 
 The archive identity is recorded in `../v483/admission.json` as
 `evaluated_upstream_binary_not_approved_build_input`. It is **not** the hardened

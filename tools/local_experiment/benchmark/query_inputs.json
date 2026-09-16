@@ -1,0 +1,193 @@
+{
+  "project": "Trino",
+  "version": "483",
+  "commit": "50b0b50b75abd47f830b7805ee1b51716eb4065e",
+  "license": "Apache-2.0",
+  "inputs": [
+    {
+      "path": "queries/q01.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q01.sql",
+      "sha256": "54842cb327e72097c2051d292a805b9e30473bffbff2b0db9c4bc7c9cca72844",
+      "bytes": 806,
+      "upstream_sha256": "54842cb327e72097c2051d292a805b9e30473bffbff2b0db9c4bc7c9cca72844",
+      "upstream_bytes": 806
+    },
+    {
+      "path": "queries/q02.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q02.sql",
+      "sha256": "6e5f04c12b99856289b8dd92c63f601fc9da8600c76446c6cce3f26283676c99",
+      "bytes": 1066,
+      "upstream_sha256": "6e5f04c12b99856289b8dd92c63f601fc9da8600c76446c6cce3f26283676c99",
+      "upstream_bytes": 1066
+    },
+    {
+      "path": "queries/q03.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q03.sql",
+      "sha256": "2f5918a890de303da509f76ab24d2494c7c73f7a2a68ede3c6826ce8db7a8768",
+      "bytes": 543,
+      "upstream_sha256": "2f5918a890de303da509f76ab24d2494c7c73f7a2a68ede3c6826ce8db7a8768",
+      "upstream_bytes": 543
+    },
+    {
+      "path": "queries/q04.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q04.sql",
+      "sha256": "e527f6d9bb732c966f99ed12023e94ab67560dc4d8bce5de8ce19bb5ad62f3ca",
+      "bytes": 441,
+      "upstream_sha256": "bd135b9c09951546788782c8fdab21085e2b817606fa25b074ae691e35b710bf",
+      "upstream_bytes": 454
+    },
+    {
+      "path": "queries/q05.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q05.sql",
+      "sha256": "fda67d684fd593946039bf4524b38f024b99c799233b49a649f1f421e2754e27",
+      "bytes": 739,
+      "upstream_sha256": "fda67d684fd593946039bf4524b38f024b99c799233b49a649f1f421e2754e27",
+      "upstream_bytes": 739
+    },
+    {
+      "path": "queries/q06.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q06.sql",
+      "sha256": "49d12ad68d6511dc577c630270ac5475c805cc6aff1fe9e05e5435200fd3c703",
+      "bytes": 279,
+      "upstream_sha256": "3ec76f7913e4de8e9deae511c01fc032ca7cfb799633bb7393e43e8c7f3e779b",
+      "upstream_bytes": 282
+    },
+    {
+      "path": "queries/q07.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q07.sql",
+      "sha256": "970b53dfb2d9fb6134d613c98f64abccb365b959a485573adf2ed42a42b54bb4",
+      "bytes": 1217,
+      "upstream_sha256": "970b53dfb2d9fb6134d613c98f64abccb365b959a485573adf2ed42a42b54bb4",
+      "upstream_bytes": 1217
+    },
+    {
+      "path": "queries/q08.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q08.sql",
+      "sha256": "26227a28b21b088dc579b794d12ca4c8125f0bed82a057d705851868e257eb4c",
+      "bytes": 1283,
+      "upstream_sha256": "26227a28b21b088dc579b794d12ca4c8125f0bed82a057d705851868e257eb4c",
+      "upstream_bytes": 1283
+    },
+    {
+      "path": "queries/q09.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q09.sql",
+      "sha256": "f962d8104fff9f9aa0c6574c3fba0e720a598396959051b19f5e47a1dcfb97ee",
+      "bytes": 1039,
+      "upstream_sha256": "f962d8104fff9f9aa0c6574c3fba0e720a598396959051b19f5e47a1dcfb97ee",
+      "upstream_bytes": 1039
+    },
+    {
+      "path": "queries/q10.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q10.sql",
+      "sha256": "13b39382138bb44aca25ebd7671acc5d8e0536f330937d22a83bab44516db925",
+      "bytes": 700,
+      "upstream_sha256": "13b39382138bb44aca25ebd7671acc5d8e0536f330937d22a83bab44516db925",
+      "upstream_bytes": 700
+    },
+    {
+      "path": "queries/q11.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q11.sql",
+      "sha256": "30688cf0c85a9c3a294d6c3a8876569ded4e475946a1bed9dc43b243a18adb1c",
+      "bytes": 891,
+      "upstream_sha256": "b3a8ed10047fbf3000d3b0deb0fe0c92bc73bc29e20ef70803363dfbd3349390",
+      "upstream_bytes": 906
+    },
+    {
+      "path": "queries/q12.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q12.sql",
+      "sha256": "7e8330fe5426ee5d7d967883472c0396a4c22cb5ead5e95bdf2d6867cdda42e3",
+      "bytes": 717,
+      "upstream_sha256": "7e8330fe5426ee5d7d967883472c0396a4c22cb5ead5e95bdf2d6867cdda42e3",
+      "upstream_bytes": 717
+    },
+    {
+      "path": "queries/q13.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q13.sql",
+      "sha256": "fc8b2b1a5287dc9a393959f28f7a5b77637419eea018a54a316337c286eac2bf",
+      "bytes": 420,
+      "upstream_sha256": "eab5131cdf8d694958cad174592709ae88c3ba15a0f6436c9667b255b3076fc3",
+      "upstream_bytes": 429
+    },
+    {
+      "path": "queries/q14.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q14.sql",
+      "sha256": "9c2870620c38d9ce893109bc579a2e05ec1b6777af2cc2b6529c9af86978e9c8",
+      "bytes": 480,
+      "upstream_sha256": "9c2870620c38d9ce893109bc579a2e05ec1b6777af2cc2b6529c9af86978e9c8",
+      "upstream_bytes": 480
+    },
+    {
+      "path": "queries/q15.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q15.sql",
+      "sha256": "d8618c6a520dd0522bbcadffedc152f53f05eb4e91e3a76d2d9413a3a89f1312",
+      "bytes": 598,
+      "upstream_sha256": "6e2e5a1529ae11b53f5837b78f1eb21f0bde67293c69fe0afdbf311daad990f4",
+      "upstream_bytes": 612
+    },
+    {
+      "path": "queries/q16.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q16.sql",
+      "sha256": "77b81b61141482af2bc0f985144242513400c4a26e43e9a1434acd0fdcd5a3e6",
+      "bytes": 612,
+      "upstream_sha256": "77b81b61141482af2bc0f985144242513400c4a26e43e9a1434acd0fdcd5a3e6",
+      "upstream_bytes": 612
+    },
+    {
+      "path": "queries/q17.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q17.sql",
+      "sha256": "c5876803768dd67e91bc1c10505fec6337a06d06fdb941d7e359724c3b7994bf",
+      "bytes": 400,
+      "upstream_sha256": "cdf4e6e7d6b07f3881b84b9daf249928d0df56074dc1f864447a697fee3b8cd8",
+      "upstream_bytes": 410
+    },
+    {
+      "path": "queries/q18.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q18.sql",
+      "sha256": "56e79b3b1b9d948ee320c574554dda1d77f8fbed649037d41e1ba7a6d8d661e0",
+      "bytes": 632,
+      "upstream_sha256": "56e79b3b1b9d948ee320c574554dda1d77f8fbed649037d41e1ba7a6d8d661e0",
+      "upstream_bytes": 632
+    },
+    {
+      "path": "queries/q19.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q19.sql",
+      "sha256": "f40c3d1c5d13dc7f5d78e242e9fa4b17a56da3b0952fe0fc0526085429129bf8",
+      "bytes": 1020,
+      "upstream_sha256": "679161fc4a685dc42491aaed8928e31e672fc502a0c219ebda792ce6b44542d2",
+      "upstream_bytes": 1036
+    },
+    {
+      "path": "queries/q20.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q20.sql",
+      "sha256": "a934253f3d305bbe1c803ec6c49758781a9f16bbf57c47f41ee5b117f51b93fb",
+      "bytes": 863,
+      "upstream_sha256": "77a26d1ca060be4a47dfd246bad9def0708dc59d50e67388ec5de9b8acc786a7",
+      "upstream_bytes": 885
+    },
+    {
+      "path": "queries/q21.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q21.sql",
+      "sha256": "cece44521a59987cc661240d09d6603e8a89e89c8920d3c8cac13435c55183c4",
+      "bytes": 899,
+      "upstream_sha256": "b12e8d01c35a1d3b392360f47136f59f456f029207987a43ef3e38078e30f636",
+      "upstream_bytes": 921
+    },
+    {
+      "path": "queries/q22.sql",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/testing/trino-benchmark-queries/src/main/resources/sql/trino/tpch/q22.sql",
+      "sha256": "b30e852280441a359866391663868d17941647062fdde6248aefebd5e9f43d27",
+      "bytes": 790,
+      "upstream_sha256": "a99a1151d7e9d88339cbd9d9ffae6e100034daeecc4e5cabe1ca50a349a5b967",
+      "upstream_bytes": 809
+    },
+    {
+      "path": "LICENSE.trino",
+      "source": "https://raw.githubusercontent.com/trinodb/trino/50b0b50b75abd47f830b7805ee1b51716eb4065e/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "bytes": 11358,
+      "upstream_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "upstream_bytes": 11358
+    }
+  ],
+  "adaptation": "Only trailing whitespace normalized in vendored files. Runtime substitutes database, schema, table prefix and scale=10. Upstream fixed query parameters and stability adaptations are retained; this is an SF10 functional smoke, not an official TPC-H result."
+}

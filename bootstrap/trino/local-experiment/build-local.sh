@@ -26,7 +26,7 @@ mkdir -p "$stage/unpacked" "$stage/context/trino-server-483/plugin"
 tar -xzf "$archive" -C "$stage/unpacked"
 distribution="$stage/unpacked/trino-server-483"
 mv "$distribution/bin" "$distribution/lib" "$stage/context/trino-server-483/"
-mv "$distribution/plugin/iceberg" "$stage/context/trino-server-483/plugin/"
+mv "$distribution/plugin/iceberg" "$distribution/plugin/tpch" "$stage/context/trino-server-483/plugin/"
 cp "$distribution/NOTICE" "$stage/context/trino-server-483/NOTICE"
 rm -rf "$stage/unpacked"
 cp "$script_dir/Dockerfile" "$stage/context/Dockerfile"
@@ -39,10 +39,11 @@ if not (root / "bin/linux-arm64/launcher").is_file():
 for path in root.rglob("*"):
     if path.is_symlink() and not path.exists():
         raise SystemExit("unresolved archive link: " + str(path.relative_to(root)))
-jars = list((root / "plugin/iceberg").glob("*.jar"))
-if not jars or any(not path.is_file() or path.stat().st_size == 0 for path in jars):
-    raise SystemExit("missing or empty Iceberg connector JAR")
-print(f"Prepared local context: {len(jars)} Iceberg JARs; ARM64 launcher present")
+for connector in ("iceberg", "tpch"):
+    jars = list((root / "plugin" / connector).glob("*.jar"))
+    if not jars or any(not path.is_file() or path.stat().st_size == 0 for path in jars):
+        raise SystemExit(f"missing or empty {connector} connector JAR")
+    print(f"Prepared {connector}: {len(jars)} JARs; ARM64 launcher present")
 PY
 if [ "${SHIROKUMA_TRINO_VALIDATE_ONLY:-0}" = 1 ]; then
   echo "Archive extraction validated; Docker build skipped."

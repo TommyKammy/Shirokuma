@@ -47,8 +47,8 @@ spec:
               cpu: "1"
               memory: 2Gi
             limits:
-              cpu: "4"
-              memory: 6Gi
+              cpu: "8"
+              memory: 16Gi
           env:
             - name: POLARIS_CLIENT_ID
               valueFrom:
@@ -120,6 +120,8 @@ spec:
                 path: log.properties
               - key: iceberg.properties
                 path: catalog/iceberg.properties
+              - key: tpch.properties
+                path: catalog/tpch.properties
         - name: tmp
           emptyDir:
             sizeLimit: 1Gi

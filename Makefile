@@ -353,3 +353,74 @@ local-doctor:
 	@go run ./cmd/shirokuma doctor --profile local-experiment
 
 verify-local-experiment: test-local-experiment test-local-trino-smoke test-local-polaris-permissions test-local-session test-local-dataops
+
+.PHONY: local-tpch-smoke local-superset-start local-superset-smoke local-metadata-start local-metadata-ingest local-agenthouse-start local-agenthouse-smoke local-loki-start test-local-platform
+
+local-tpch-smoke:
+	@$(PYTHON) tools/local_experiment/local_session.py benchmark
+
+local-superset-start:
+	@$(PYTHON) tools/local_experiment/superset/local_superset.py start
+
+local-superset-smoke:
+	@$(PYTHON) tools/local_experiment/superset/local_superset.py smoke
+
+local-metadata-start:
+	@$(PYTHON) tools/local_experiment/metadata/runtime.py up
+
+local-metadata-ingest:
+	@$(PYTHON) tools/local_experiment/metadata/ingest.py
+
+local-agenthouse-start:
+	@$(PYTHON) tools/local_experiment/agenthouse/manage.py up
+
+local-agenthouse-smoke:
+	@$(PYTHON) tools/local_experiment/agenthouse/manage.py smoke
+
+local-loki-start:
+	@$(PYTHON) tools/local_experiment/loki/manage.py up
+
+test-local-platform:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_superset.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_metadata.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_tpch.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_agenthouse.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_loki.py'
+
+verify-local-experiment: test-local-platform
+
+.PHONY: local-gateway-sync local-gateway-smoke test-local-gateway local-platform-status
+local-platform-status:
+	@$(PYTHON) tools/local_experiment/platform_status.py
+
+local-gateway-sync:
+	@uv sync --locked --no-dev --project tools/local_experiment/gateway
+
+local-gateway-smoke: local-gateway-sync
+	@tools/local_experiment/gateway/.venv/bin/python tools/local_experiment/gateway/smoke.py
+
+test-local-gateway:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_gateway.py'
+
+verify-local-experiment: test-local-gateway
+
+.PHONY: local-llm-sync local-llm-smoke test-local-llm
+local-llm-sync:
+	@uv sync --locked --no-dev --project tools/local_experiment/llm
+
+local-llm-smoke: local-llm-sync local-gateway-sync
+	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/llm/workflow.py
+
+test-local-llm: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_llm.py'
+
+verify-local-experiment: test-local-llm
+
+.PHONY: local-sre-smoke test-local-bears
+local-sre-smoke: local-gateway-sync
+	@tools/local_experiment/gateway/.venv/bin/python tools/local_experiment/bears/run_sre.py
+
+test-local-bears:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_bears.py'
+
+verify-local-experiment: test-local-bears
