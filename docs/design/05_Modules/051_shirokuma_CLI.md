@@ -4,8 +4,8 @@ doc_id: "MOD-051"
 title: "shirokuma CLI"
 status: draft
 created: 2026-07-05
-updated: 2026-09-17
-version: "0.5.0"
+updated: 2026-09-18
+version: "0.6.0"
 area: "module"
 tags: [shirokuma, module]
 ---
@@ -19,7 +19,7 @@ tags: [shirokuma, module]
 ## Commands
 
 ```text
-init, status, status --export, doctor, plan, pr, ask, data, query, sre, warehouse, lineage, paws, chill, wake, nuke, restore, bench, version
+init, status, status --export, doctor, plan, pr, ask, data, query, sre, policy, warehouse, lineage, paws, chill, wake, nuke, restore, bench, version
 ```
 
 ## Implementation
@@ -114,3 +114,16 @@ healthyへ変換せず、root_cause=undetermined、remediation_executed=falseを
 evidence_tokenは保存先、workflow_tokenは内部監査identityである。原logs/manifestや
 promptを出力せず、MCP返却span IDによる相関と保存model/root spanを区別する。
 取消・保存状態・exit契約は[SRE CLI runbook](../../../tools/local_experiment/bears/SRE_CLI.md)を参照。
+
+### Local experimental Pod policy check
+
+`shirokuma policy check --pod-stdin`は16KiB以内の限定Pod JSON1件を検証し、
+safe featureだけのlocal Qwen分類と、同じ候補へのnative server dry-run1回を照合する。
+`policy status TOKEN`は保存証拠だけを読む。原候補・原API応答・モデル原文は保存しない。
+
+CLIはworkflowのpassedとadmissionのallowed/deniedを分ける。checkは許可確認でexit0、
+拒否確認でexit2、不明・失敗でexit1。statusのexit0は保存内容の読取成功である。
+モデルは権限を付与せず、保存workloadは0。対象namespace・16policy/bindingの同一性、
+LimitRange空、dry-run前後の不存在、pending intent、監査と4保存spanを検証する。
+defaultingが違反特徴を変える入力は事前拒否し、不明な結果を自動再送しない。
+詳細は[Policy CLI runbook](../../../tools/local_experiment/bears/POLICY_CLI.md)を参照。

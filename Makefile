@@ -784,3 +784,10 @@ test-sre-bear-cli: local-llm-sync
 	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_sre_cli.py'
 
 verify-local-experiment: test-sre-bear-cli
+
+.PHONY: test-policy-candidate-cli
+test-policy-candidate-cli: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -s tests -p 'test_policy_candidate*.py'
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -s tests -p 'test_policy_cli.py'
+
+verify-local-experiment: test-policy-candidate-cli

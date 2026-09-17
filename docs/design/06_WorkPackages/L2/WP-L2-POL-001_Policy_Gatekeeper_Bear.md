@@ -4,8 +4,8 @@ doc_id: "WP-L2-POL-001"
 title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-17
-version: "0.4"
+updated: 2026-09-18
+version: "0.5"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
@@ -16,6 +16,24 @@ tags: [shirokuma, workpackage, l2, policy]
 
 Local実験では固定candidateのrule違反・適用範囲を実native admissionと照合する。
 モデルは助言だけを返し、権限付与・本番Tier/PRリスク判断は未実装とする。
+
+## 2026-09-18: bounded caller Pod candidate plan
+
+固定15caseだけの実証から、利用者がstdinで渡す限定Pod1件を事前検査できる入口へ進める。
+`policy check --pod-stdin`はhostの厳密なinput validation、safe featureだけを使うQwen分類、
+同じ候補のnative server dry-runを順に照合する。権限付与・workload実作成・policy変更は行わない。
+
+- [x] 16KiB以内のJSON1文書・Pod1件/container1個と限定fieldだけを受理する。
+- [x] 不明field・Secret/環境変数/任意command等を推論前に拒否し、原候補を保存しない。
+- [x] P01–P06のhost期待値を独立計算し、特にregistry portとresource値をnative CELと照合する。
+- [x] モデルの全違反集合と実APIが報告する違反subsetを区別する。
+- [x] protected namespaceと16policy/bindingの同一性、pending intent、dry-run後の不存在を検証する。
+- [x] 適合・privileged違反・推論前拒否の3経路、保存status、取消・不明結果を実証する。
+
+送信名はhostが生成し、固定の安全側defaultを補う場合は変換を記録する。
+入力/送信bodyのhashと特徴・型付き結果だけを残し、raw manifest/image名/原API応答を保存しない。
+原文を保存しないため、後日の再現には元JSONの再提出とhash一致が必要である。
+未知結果をallowへ変換せず、自動再送しない。既存15case corpusと認可境界の評価は維持する。
 
 ## Context
 
@@ -117,3 +135,49 @@ Core12＋Bear18の新規tests、既存native17 testsを含む全回帰486 tests�
 [Runbook](../../../../tools/local_experiment/bears/POLICY_GATEKEEPER.md)に境界・中断証跡・終了方法を記録。
 今回の成功は固定25分類と15dry-runに限る。任意policy、一般的なリスク判断、
 実workload作成、署名/CVE保証、本番受入、historical GitHub gatesの完了を主張しない。
+
+## 2026-09-18 caller Pod policy CLI evidence
+
+`policy check --pod-stdin`と`policy status TOKEN`を実装した。16KiB以内の限定Pod1件から
+safe boolean featuresを作り、独立host期待値・Qwen分類・同じmemory bodyへのdry-runを照合する。
+入力のraw bytesはargvや保存filesへ出さず、入力/body hash・変換ID・features・型付き結果を残す。
+namespace/name、Never設定、service account token無効だけを補い、policy違反は修復しない。
+limitだけでrequestがない入力と、hostNetworkの暗黙hostPortはnative defaultingで判定が変わるため
+事前拒否する。resource数量は限定した正の文字列と大小関係を検証し、SI kiloは小文字`k`とする。
+
+実compiled CLIで以下を確認した。各workflowはモデル1回、dry-run1回、retry/cloud呼出し0。
+
+| 保存token | 結果 | Qwen入力/出力 tokens | 推論ms |
+|---|---|---:|---:|
+| `255b21eed54252825d90870c0811f86f` | passed / allowed、exit0 | 675 / 74 | 4080 |
+| `d906b723859c1be5095da0c786ddabb6` | failed / unknown、exit1 | 675 / 84 | 3148 |
+| `1e0a67ec0d8785febb8539f1580f5b9f` | passed / denied P01、exit2 | 675 / 84 | 3146 |
+
+最初のprivileged試行はモデルP01一致後、APIのInvalid/422形式をForbidden/403専用parserが
+認識できずunknownで停止した。元証拠を保持し、別の新候補によるmodel無しの診断dry-run1回も
+unknownとして保持した。Kubernetes v1.33.4の一次sourceに沿ってexact Invalid単一cause形式を追加し、
+新tokenで拒否を実証した。policy名・binding名・固定messageの完全一致を維持し、foreign/schema/
+混在/余分な末尾は認識しない。未知の元試行を再送・成功への書換えはしていない。
+
+未対応env入力 `02c0bd3c1089d36dd579130a0c2a7f21` はINPUT_INVALIDで推論/API/intent保存前に拒否。
+namespace UID/label、空LimitRange、16policy/binding UID/generation/spec/owner/source hashを固定し、
+API前のpending intentをfsync、後の不存在とbaseline不変を確認した。権限付与・保存workloadは0。
+成功2回と失敗1回に各4件のAgentHouse/Loki/保存OTelを残した。モデル原文・raw API応答は保存しない。
+3tokenのstatus各3回（計9回）で32のfiles/directoriesのhash/mode/mtimeが不変だった。
+statusは保存features/host期待値/plan/型付き結果/spans/hash sealを検証し、原manifestの再構成や
+最新admissionの再観測を主張しない。旧15case corpusは別入口のまま維持した。
+
+Python新規78件（入力27/観測17/workflow13/CLI21）、Go91 top-level testsと59 subtests、
+vet/raceが成功。実Python bridge＋実workflow/外部fakeの7経路でexit/取消/再送防止/非保存を検証。
+全local回帰1658件（1657成功・既存optional OTel1skip）、設計83documents/関連14tests、secret検査も成功。
+証拠は `tmp/local-experiment/policy-cli-checks/38ccaf07c7e64c93935b49fa18234d4d/`、
+各workflowは `tmp/local-experiment/policy-candidate-bear/<token>/`、
+独立監査は `policy-candidate-preflight/6abcff1fbcd841e9be85f43791c848b2/`。
+[Runbook](../../../../tools/local_experiment/bears/POLICY_CLI.md)に入出力と停止時の扱いを記録した。
+実証は限定PodのP01適合/違反と入力拒否であり、全P01–P06のcaller入力live網羅、任意manifest、
+画像署名/CVE、scheduling、アプリ動作、権限判断、本番受入の完了とは区別する。
+
+独立の軽量再観測でAgentHouseは453→465（上記3workflow各4件）、旧453件の全行hashは不変。
+対応Loki各4件、保持3410files、14Pods/3Docker/MLflow identity、16policy/bindingとnamespaceは不変、
+LimitRange空、candidate Pod残存0、既存tunnel閉鎖を確認した。深いDB/metadata/fixture観測は
+直前のQuery/SRE監査の保存証拠を継承し、今回は各ストアの全内容を再走査していない。

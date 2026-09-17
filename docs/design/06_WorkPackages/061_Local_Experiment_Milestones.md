@@ -4,8 +4,8 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-09-17
-version: "3.18"
+updated: 2026-09-18
+version: "3.19"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
@@ -1410,3 +1410,49 @@ workflow保存span2件に加え、共有Gateway exporterの保存span5件を別�
 CLI status自体の6回/26files・directories不変とは別に、これらrun中の更新を記録した。
 監査tunnel終了、design83docs/14tests・secret scan・diff check成功。
 SRE WP/MilestonesをVaultへ同期し、MOD-051の既存言語差を維持して追記した。
+
+## 2026-09-18 caller Pod policy CLI evidence
+
+`policy check --pod-stdin`と`policy status TOKEN`を実装した。16KiB以内の限定Pod1件から
+safe boolean featuresを作り、独立host期待値・Qwen分類・同じmemory bodyへのdry-runを照合する。
+入力のraw bytesはargvや保存filesへ出さず、入力/body hash・変換ID・features・型付き結果を残す。
+namespace/name、Never設定、service account token無効だけを補い、policy違反は修復しない。
+limitだけでrequestがない入力と、hostNetworkの暗黙hostPortはnative defaultingで判定が変わるため
+事前拒否する。resource数量は限定した正の文字列と大小関係を検証し、SI kiloは小文字`k`とする。
+
+実compiled CLIで以下を確認した。各workflowはモデル1回、dry-run1回、retry/cloud呼出し0。
+
+| 保存token | 結果 | Qwen入力/出力 tokens | 推論ms |
+|---|---|---:|---:|
+| `255b21eed54252825d90870c0811f86f` | passed / allowed、exit0 | 675 / 74 | 4080 |
+| `d906b723859c1be5095da0c786ddabb6` | failed / unknown、exit1 | 675 / 84 | 3148 |
+| `1e0a67ec0d8785febb8539f1580f5b9f` | passed / denied P01、exit2 | 675 / 84 | 3146 |
+
+最初のprivileged試行はモデルP01一致後、APIのInvalid/422形式をForbidden/403専用parserが
+認識できずunknownで停止した。元証拠を保持し、別の新候補によるmodel無しの診断dry-run1回も
+unknownとして保持した。Kubernetes v1.33.4の一次sourceに沿ってexact Invalid単一cause形式を追加し、
+新tokenで拒否を実証した。policy名・binding名・固定messageの完全一致を維持し、foreign/schema/
+混在/余分な末尾は認識しない。未知の元試行を再送・成功への書換えはしていない。
+
+未対応env入力 `02c0bd3c1089d36dd579130a0c2a7f21` はINPUT_INVALIDで推論/API/intent保存前に拒否。
+namespace UID/label、空LimitRange、16policy/binding UID/generation/spec/owner/source hashを固定し、
+API前のpending intentをfsync、後の不存在とbaseline不変を確認した。権限付与・保存workloadは0。
+成功2回と失敗1回に各4件のAgentHouse/Loki/保存OTelを残した。モデル原文・raw API応答は保存しない。
+3tokenのstatus各3回（計9回）で32のfiles/directoriesのhash/mode/mtimeが不変だった。
+statusは保存features/host期待値/plan/型付き結果/spans/hash sealを検証し、原manifestの再構成や
+最新admissionの再観測を主張しない。旧15case corpusは別入口のまま維持した。
+
+Python新規78件（入力27/観測17/workflow13/CLI21）、Go91 top-level testsと59 subtests、
+vet/raceが成功。実Python bridge＋実workflow/外部fakeの7経路でexit/取消/再送防止/非保存を検証。
+全local回帰1658件（1657成功・既存optional OTel1skip）、設計83documents/関連14tests、secret検査も成功。
+証拠は `tmp/local-experiment/policy-cli-checks/38ccaf07c7e64c93935b49fa18234d4d/`、
+各workflowは `tmp/local-experiment/policy-candidate-bear/<token>/`、
+独立監査は `policy-candidate-preflight/6abcff1fbcd841e9be85f43791c848b2/`。
+[Runbook](../../../tools/local_experiment/bears/POLICY_CLI.md)に入出力と停止時の扱いを記録した。
+実証は限定PodのP01適合/違反と入力拒否であり、全P01–P06のcaller入力live網羅、任意manifest、
+画像署名/CVE、scheduling、アプリ動作、権限判断、本番受入の完了とは区別する。
+
+独立の軽量再観測でAgentHouseは453→465（上記3workflow各4件）、旧453件の全行hashは不変。
+対応Loki各4件、保持3410files、14Pods/3Docker/MLflow identity、16policy/bindingとnamespaceは不変、
+LimitRange空、candidate Pod残存0、既存tunnel閉鎖を確認した。深いDB/metadata/fixture観測は
+直前のQuery/SRE監査の保存証拠を継承し、今回は各ストアの全内容を再走査していない。
