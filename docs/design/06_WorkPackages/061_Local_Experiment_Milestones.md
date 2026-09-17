@@ -5,23 +5,41 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "2.9"
+version: "3.0"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：隔離Keycloak→JWT→Trino/OPAの認証・認可15caseが成功。
-実発行5tokenと61decisionsを照合し、認証401・policy拒否・両header偽装拒否を区別した。
-2run計8生成resources残留0、既存6Pods/27resources/6CM/3Secret UIDs不変。
-次は新しいlive policy観測をPawprints/Loki/OTelへ記録する。Cloudは無効のまま。
+最新の到達点（2026-09-17）：Keycloak→Trino/OPAの新live実験が15case成功し、
+16Pawprints/16Loki/16OTelを照合。MCP経由の全16件読出しとGrafanaの拒否9件表示も確認。
+認証401とOPA拒否を分離し、期間/原判断の性能を補造しない。3run計12生成resources残留0。
+次はWP-L3-VW-001の隔離Gateway/2backendルーティング実験。Cloudは無効のまま。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: live identity audit visibility
+
+run`b94184c624174f0c8f01fc00cae8d7d7`の全15case/61decisionsとcleanup成功を、
+新しい実測時刻・case観測時間で16Pawprints/16Loki/16OTelへ記録。7success/9blocked、
+うちOPA拒否3件だけpolicy flag=true、認証拒否6件false。推論usage/costはNULL。
+送信前runtime同一性、journal、両store読戻し、保存spanのname/status/task/root/query/decision相関を検査。
+途中失敗でもcleanup結果を残し、全配送/照合が終わるまで実験成功にしない。
+MCPの既存agenthouse_recentが全16件を返し、source metadataと一致。新MCP監査は1件。
+Grafanaの同Task/Trace絞込みに拒否9件を実表示。詳細OPA相関はprivate telemetry/OTelの限定射影。
+既存Kube6Pods/27resources/6CM/3Secret UIDs不変、3run計12生成resources残留0。
+独立after照合でPawprintsは311件＝保持294件完全不変＋新identity16＋MCP1。残4表の全行hash/DDL、
+Pawprint DDL、AH/Loki/GrafanaのID/Config/HostConfig/起動時刻/restarts/mount/ports/networksも一致。
+保護31filesのhash/mtime/modeを保持。実結果行は非保存のため再照合はcount/matched射影までとする。
+
+59 focused全成功、全回帰691成功＋標準環境1skip（同結合は専用venvで成功）、76documents検証。
+証跡`trino-identity-telemetry-preflight/c96c6414e88c4531a7f21b7f2c760a3c`。
+次は隔離Gateway/2backendのVirtualWarehouse機能実験へ進む。
 
 ## 2026-09-17: authenticated Trino identity
 

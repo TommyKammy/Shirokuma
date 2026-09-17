@@ -5,7 +5,7 @@ title: "Keycloak OPA and native RBAC integration"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.6"
+version: "0.7"
 area: "workpackage"
 tags: [shirokuma, wp, l3, security]
 ---
@@ -159,6 +159,37 @@ Keycloak image: `sha256:0e4df83be2a3ad04b6fce7618004e7791917c1035fdc833c6c9d2bc2
 手順と一次source: repository `tools/local_experiment/trino_identity/README.md`。
 
 全回帰664 tests（identity focused32を含む）・設計76documentsが成功。
-次は新しいlive runのcase観測をPawprints/Loki/OTelへ相関する。過去のOPA receiptに欠ける
-時刻/duration/traceを補造して取込まず、実際の新しい観測時刻/所要時間だけを記録する。
+次節で新しいlive runのcase観測をPawprints/Loki/OTelへ相関した。過去のOPA receiptは変換しない。
 StarRocks RBAC、browser SSO、JWKS rotation、realm role同期、本番security acceptanceは未達。
+
+## 2026-09-17: live policy observation telemetry
+
+新run`trino-identity/runs/b94184c624174f0c8f01fc00cae8d7d7`が全15caseに成功し、
+専用actor `local-trino-identity`の16Pawprints・16Loki records・16OTel spansを相互照合した。
+実5token/61decisions、生成4UID cleanupも完了。Keycloak実験3run計12resources残留0、
+既存6Pods/27resources/6CM/3Secret UIDs不変を追加確認した。
+
+- 6正常case＋全体結果1はsuccess、拒否9caseはblocked。期待どおりの拒否でもblockedを残す。
+- 検証済みOPA拒否3caseだけ`blocked_by_policy=true`。認証401の6caseはfalse。
+- case時間はquery送信/読取/結果検査/監査照合を含む実測時間。元OPA判断の時間や純SQL latencyではない。
+- trace `8a6354a575534d342d3849134fb12295`に実query IDs・61decision IDs/限定相関を結び付けた。
+- token/credentials/SQL本文/結果行/生OPA logは送信しない。model usage/costはNULL。
+- runtime所有/同IDを送信前に確認し、pending journal→AH/Loki読戻し→保存spanの意味照合を実施する。
+- cleanup結果は実験失敗時にも独立保存。全case/cleanup/最終delivery/span確認前はpassedにしない。
+
+既存MCP `agenthouse_recent(limit=20,status=any)`がこのTaskの全16eventを返し、
+status/policy flag/trace/duration/NULLがsource journalと一致した。MCP読出し自身の監査1件も保存。
+決定の詳細/元query相関はprivate OTel/telemetry射影、MCPに見えるのは固定Pawprint metadataという境界を保つ。
+GrafanaのTask/Trace絞込みで拒否9件の表示を確認した。これは実policy/requestの観測であり、
+モデル推論や汎用security運用、本番受入を示すものではない。
+
+独立after照合でPawprintsは311件＝保持294件完全不変＋新identity16＋MCP1。残4表の全行hash/DDL、
+Pawprint DDL、AH/Loki/GrafanaのID/Config/HostConfig/起動時刻/restarts/mount/ports/networksも一致。
+保護31filesのhash/mtime/modeを保持。実結果行は非保存のため再照合はcount/matched射影までとする。
+
+再実行: `rtk make local-trino-identity-telemetry TRINO_IDENTITY_BUILD_TOKEN=<build token>`。
+通常runは標準ライブラリのまま、opt-in時だけ既存pinned LLM venvのOTelを使う。新規LLM呼出なし。
+59 focused testsはpinned環境で全成功。全回帰は692実行中691成功/標準環境のOTel結合1skipで、
+同じ結合テストは専用venv targetで必ず実行・成功。設計76documentsも成功。
+証跡: `trino-identity-telemetry-preflight/c96c6414e88c4531a7f21b7f2c760a3c`。
+次はWP-L3-VW-001の隔離Gateway/2backendルーティング実験を進める。

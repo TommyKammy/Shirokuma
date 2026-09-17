@@ -14,7 +14,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from support import ExperimentError, canonical, digest, require
+if __package__:
+    from .support import ExperimentError, canonical, digest, require
+else:
+    from support import ExperimentError, canonical, digest, require
 
 ISSUER = 'https://localhost:18443/realms/shirokuma-lab'
 AUDIENCE = 'shirokuma-trino'

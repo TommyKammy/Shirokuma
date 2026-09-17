@@ -2,7 +2,7 @@
 """Disposable Keycloak JWT -> Trino/OPA experiment with private TLS trust."""
 import argparse
 import base64
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import copy
 from datetime import datetime, timezone
 import json
@@ -465,13 +465,47 @@ def redact(raw, secrets):
     return re.sub(r'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+', '[REDACTED_JWT]', raw)
 
 
-def execute(plan, material, output, *, kube=None, tunnel_factory=tunnel, client_factory=Client):
+def open_telemetry(output, run_token):
+    # Standard experiments require only the standard library. The opt-in path
+    # uses the existing pinned observability environment without global setup.
+    from tools.local_experiment.trino_identity.telemetry import identity_telemetry
+    return identity_telemetry(output, run_token)
+
+
+def execute(plan, material, output, *, kube=None, tunnel_factory=tunnel, client_factory=Client,
+            telemetry_factory=None):
     objects, kube = validate_plan(plan), kube or Kubernetes()
     receipt = {'schema_version': 1, 'run_token': plan['run_token'], 'build_token': plan['build_token'],
         'result': 'running', 'observed_at': stamp(), 'scope': 'isolated-keycloak-jwt-username-authorization',
         'images': plan['images'], 'plan_sha256': digest(plan), 'fixture_hashes': material['hashes'],
         'objects': [], 'tokens': [], 'readiness': [], 'cases': [], 'decisions': [], 'pending': None, 'cleanup': None,
         'unobserved': ['browser-sso', 'key-rotation', 'token-revocation', 'realm-role-propagation', 'production-readiness']}
+    if telemetry_factory is not None:
+        receipt['telemetry'] = {'enabled': True, 'result': 'running', 'evidence': 'telemetry.json'}
+    write(output / 'receipt.json', receipt)
+    try:
+        context = telemetry_factory(output, plan['run_token']) if telemetry_factory is not None else nullcontext()
+        with context as audit:
+            _execute_runtime(plan, material, output, receipt, objects, kube,
+                             tunnel_factory=tunnel_factory, client_factory=client_factory, audit=audit)
+            if audit is not None:
+                audit.finish(receipt)
+        if telemetry_factory is not None:
+            receipt['telemetry']['result'] = 'passed'
+            receipt['result'] = 'passed'
+            write(output / 'receipt.json', receipt)
+        return receipt
+    except BaseException as error:
+        receipt['result'] = 'failed' if isinstance(error, Exception) else 'interrupted'
+        if telemetry_factory is not None:
+            receipt['telemetry']['result'] = 'failed'
+        receipt.setdefault('failure_code', str(error) if isinstance(error, ExperimentError) else (
+            'TELEMETRY_UNVERIFIED' if telemetry_factory is not None else 'IDENTITY_EXPERIMENT_FAILED'))
+        write(output / 'receipt.json', receipt)
+        raise
+
+
+def _execute_runtime(plan, material, output, receipt, objects, kube, *, tunnel_factory, client_factory, audit):
     secrets = list(material['credentials']['users'].values()) + [material['credentials']['client_secret']]
     secrets += list(material['secret_data'].values()) + list(material['negative_tokens'].values())
     def save():
@@ -515,23 +549,31 @@ def execute(plan, material, output, *, kube=None, tunnel_factory=tunnel, client_
             save()
             seen = {}
             for case, token_key, expected in CASES:
-                def progress(result):
-                    receipt['pending'] = {'operation': 'query', **{key: value for key, value in result.items() if key != 'rows'},
-                                          'rows_observed': len(result['rows'])}
+                # This observation includes query dispatch/polling and OPA
+                # correlation. It is not a measurement of SQL engine latency.
+                with audit.case(case) if audit is not None else nullcontext() as observed:
+                    def progress(result):
+                        receipt['pending'] = {'operation': 'query', **{key: value for key, value in result.items() if key != 'rows'},
+                                              'rows_observed': len(result['rows'])}
+                        save()
+                        if observed is not None:
+                            observed.progress(result)
+                    result = client.query(case, bearers[token_key] if token_key else None, progress)
+                    require(result['result'] == expected and result['response_complete'], 'CASE_RESULT_MISMATCH')
+                    if expected == 'success':
+                        user = 'lab_admin' if case == 'fixture_control' else token_key
+                        require(result['rows'] == expected_rows(user), 'CASE_ROWS_MISMATCH')
+                    else:
+                        require(result['rows'] == [], 'DENIED_ROWS_OBSERVED')
+                    decisions, seen, log_sha = collect_audit(kube, pod, case, result, seen)
+                    receipt['decisions'].extend(decisions)
+                    receipt['cases'].append({key: value for key, value in result.items() if key != 'rows'} | {
+                        'row_count': len(result['rows']), 'matched': True, 'audit_decision_ids': [v['decision_id'] for v in decisions],
+                        'opa_log_sha256': log_sha, 'token_source': 'none' if token_key is None else (
+                            'host-signed-validation-fixture' if token_key in {*NEGATIVES, 'control'} else 'keycloak-password-grant')})
                     save()
-                result = client.query(case, bearers[token_key] if token_key else None, progress)
-                require(result['result'] == expected and result['response_complete'], 'CASE_RESULT_MISMATCH')
-                if expected == 'success':
-                    user = 'lab_admin' if case == 'fixture_control' else token_key
-                    require(result['rows'] == expected_rows(user), 'CASE_ROWS_MISMATCH')
-                else:
-                    require(result['rows'] == [], 'DENIED_ROWS_OBSERVED')
-                decisions, seen, log_sha = collect_audit(kube, pod, case, result, seen)
-                receipt['decisions'].extend(decisions)
-                receipt['cases'].append({key: value for key, value in result.items() if key != 'rows'} | {
-                    'row_count': len(result['rows']), 'matched': True, 'audit_decision_ids': [v['decision_id'] for v in decisions],
-                    'opa_log_sha256': log_sha, 'token_source': 'none' if token_key is None else (
-                        'host-signed-validation-fixture' if token_key in {*NEGATIVES, 'control'} else 'keycloak-password-grant')})
+                    if observed is not None:
+                        observed.finish(result, decisions)
                 receipt['pending'] = None
                 save()
             receipt['readiness'].append(client.ready('keycloak'))
@@ -559,12 +601,20 @@ def execute(plan, material, output, *, kube=None, tunnel_factory=tunnel, client_
         save()
         raise
     finally:
+        original_error = sys.exc_info()[1]
         cleanup(kube, receipt, objects, save)
         if receipt['result'] == 'verified':
-            receipt['result'] = 'passed' if receipt['cleanup']['verified'] else 'failed'
+            receipt['result'] = ('passed' if audit is None else 'verified') if receipt['cleanup']['verified'] else 'failed'
         save()
-    require(receipt['result'] == 'passed', 'CLEANUP_UNVERIFIED')
-    return receipt
+        if audit is not None:
+            try:
+                audit.record_cleanup(receipt['cleanup'])
+            except BaseException:
+                # Cleanup has already run. Keep an original cancellation or
+                # runtime exception instead of replacing it with delivery error.
+                if original_error is None:
+                    raise
+    require(receipt['result'] == ('passed' if audit is None else 'verified'), 'CLEANUP_UNVERIFIED')
 
 
 def recover(run_token, kube=None):
@@ -593,9 +643,11 @@ def main():
     parser.add_argument('command', choices=('plan', 'run', 'recover'))
     parser.add_argument('--build-token')
     parser.add_argument('--run-token')
+    parser.add_argument('--telemetry', action='store_true', help='Record this new run in AgentHouse, Loki and private OTel spans')
     args = parser.parse_args()
     run_token = None
     try:
+        require(not args.telemetry or args.command == 'run', 'TELEMETRY_RUN_ONLY')
         if args.command == 'recover':
             require(args.run_token and not args.build_token, 'RECOVERY_ARGUMENTS')
             run_token = token(args.run_token)
@@ -614,7 +666,10 @@ def main():
                 write(output / 'plan.json', plan)
                 if args.command == 'run':
                     check_context()
-                    execute(plan, material, output)
+                    if args.telemetry:
+                        execute(plan, material, output, telemetry_factory=open_telemetry)
+                    else:
+                        execute(plan, material, output)
         print(canonical({'result': 'passed', 'mode': args.command, 'run_token': run_token,
                          'evidence': 'tmp/local-experiment/trino-identity/runs/' + run_token}))
         return 0

@@ -5,7 +5,7 @@ title: "ClickHouse AgentHouse advanced dashboards"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.7"
+version: "0.8"
 area: "workpackage"
 tags: [shirokuma, wp, l3, observability]
 ---
@@ -185,3 +185,19 @@ focused17 tests追加、全回帰609 testsと設計76documentsが成功。
 
 再実行: `rtk make local-grafana-history-enable local-grafana-verify-history`。
 本WPはlocal-partial。継続history収集/Gateway連携/実費測定は未達のまま。
+
+## 2026-09-17: live authenticated policy observations
+
+SEC実験の新run`b94184c624174f0c8f01fc00cae8d7d7`から16Pawprintsを追記し、
+同16Loki/OTelとreadback一致を確認。7success/9blocked、検証済みOPA拒否3件だけpolicy flag=true。
+認証拒否6件はfalseで、期待どおり拒否された実験結果と要求自体のblockedを区別する。
+実測durationはcaseのquery＋監査照合を含み、元policy判断の性能値ではない。usage/costはNULL。
+MCP agenthouse_recentが同Task全16件を読出し、そのMCP監査1件も保存した。
+Grafanaの既存Task/Trace画面で拒否9件を確認。schema/table/dashboard/reader権限の変更はない。
+独立after照合でPawprintsは311件＝保持294件完全不変＋新identity16＋MCP1。残4表の全行hash/DDL、
+Pawprint DDL、AH/Loki/GrafanaのID/Config/HostConfig/起動時刻/restarts/mount/ports/networksも一致。
+保護31filesのhash/mtime/modeを保持。実結果行は非保存のため再照合はcount/matched射影までとする。
+
+全回帰691成功/標準環境OTel1skip（専用venvでは実行成功）、設計76documents。
+詳細は[[WP-L3-SEC-001_Keycloak_OPA_native_RBAC_integration]]のlive telemetry節と、
+private証跡`trino-identity-telemetry-preflight/c96c6414e88c4531a7f21b7f2c760a3c`を参照。

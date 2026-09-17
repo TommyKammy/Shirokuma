@@ -96,7 +96,10 @@ behavior. The [Keycloak identity experiment](tools/local_experiment/trino_identi
 adds private TLS, live Keycloak tokens, fixed username mapping and signed negative
 controls in a separate disposable Pod. It checks row/column authorization and
 both user-header impersonation paths. Browser SSO, key rotation and realm role
-propagation remain outside this experiment.
+propagation remain outside this experiment. Its explicit
+`rtk make local-trino-identity-telemetry TRINO_IDENTITY_BUILD_TOKEN=<token>`
+mode records a fresh run in Pawprints, Loki and OTel, with expected rejections
+kept visible as blocked requests. Existing MCP/Grafana reads expose the results.
 The [evaluation report](tools/local_experiment/evaluation/README.md) checks all
 retained suite receipts and keeps failures, missing evidence and case differences visible.
 The [AgentHouse dashboard](tools/local_experiment/grafana/README.md) provides

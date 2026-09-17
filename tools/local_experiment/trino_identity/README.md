@@ -141,6 +141,35 @@ checks for the command passed; failures, unknown cleanup, and interruption
 return nonzero. No broad image prune, retained-data deletion, or cluster reset
 is performed.
 
+### Explicit live telemetry
+
+The standard `run` remains a standard-library experiment. To observe a new run
+in the existing AgentHouse and Loki services, use the pinned local LLM Python
+environment (which includes OpenTelemetry) and explicitly opt in:
+
+```sh
+rtk proxy tools/local_experiment/llm/.venv/bin/python tools/local_experiment/trino_identity/run.py run --build-token BUILD_TOKEN --telemetry
+```
+
+`--telemetry` is accepted only for a fresh `run`; it does not import earlier
+receipts or change recovery. Actor `local-trino-identity` records one event per
+case and a final experiment event. Case durations include query dispatch,
+polling, result verification, and OPA audit collection; they are not SQL engine
+latency or original OPA decision timing. Expected authentication and policy
+rejections remain blocked events, with expectation matching recorded separately.
+
+Only fixed case/result classifications, query/decision IDs, synthetic principal
+names, correlation types, and counts reach telemetry. Bearer tokens, credentials,
+result rows, and raw OPA logs are excluded. Private `telemetry.json` journals
+pending delivery and independent AgentHouse/Loki readback; `identity-spans.jsonl`
+retains this run's OTel spans without modifying the process-global provider.
+The experiment does not pass until all case observations, cleanup, final
+delivery, and saved spans are verified. A delivery or readback failure stops
+later cases, still attempts cleanup of all confirmed UIDs, and leaves a failed
+receipt. Cleanup outcomes remain recorded even when the experiment fails or is
+interrupted. Existing local services are required; the command does not start
+or recreate them.
+
 The 2026-09-17 local run `8121b529b1844086bfa489a1336a7b60` passed all
 15 cases and retained 61 OPA decisions: 52 correlated by query ID and user,
 and 9 by the serial case window and user/operation. Five actual Keycloak tokens
@@ -150,12 +179,20 @@ denied, all four readiness observations passed, and all four created UIDs were
 removed. The retained runtime baseline remained unchanged.
 
 The first run, `3da115d1df454b10a139086a6460bacc`, is preserved as failed.
-Its token signature passed, but the token lacked `sub` because this minimal
-realm intentionally omits default client scopes. Adding Keycloak's explicit
+Its token signature passed, but required-claim validation failed. The minimal
+realm omitted default client scopes and an explicit subject mapper. Adding Keycloak's explicit
 `oidc-sub-mapper` restored the subject without weakening validation. That run
 also removed all four created UIDs. Raw tokens and claim values were not added
 to normal receipts to diagnose it; fixed claim-error classifications were added
 instead.
+
+The telemetry run `b94184c624174f0c8f01fc00cae8d7d7` also passed the 15 cases,
+with 16 verified Pawprints, Loki records, and local OTel spans. Seven events
+were successful and nine blocked; only the three verified OPA denials had
+`blocked_by_policy=true`. The existing MCP `agenthouse_recent` tool returned
+all 16 events with matching metadata and NULL model usage. Its read itself
+added one separate Gateway audit event. The existing Grafana Task/Trace filter
+showed all nine blocked cases. No additional model request was made.
 
 ## Primary sources
 

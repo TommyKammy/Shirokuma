@@ -611,3 +611,11 @@ local-trino-identity-recover:
 test-local-trino-identity:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_trino_identity*.py'
 verify-local-experiment: test-local-trino-identity
+
+.PHONY: local-trino-identity-telemetry test-local-identity-telemetry
+local-trino-identity-telemetry:
+	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/trino_identity/run.py run --build-token "$(TRINO_IDENTITY_BUILD_TOKEN)" --telemetry
+test-local-identity-telemetry:
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_identity_telemetry.py'
+	@PYTHONPATH=tests tools/local_experiment/llm/.venv/bin/python -m unittest -v test_local_trino_identity.IdentityRunnerTests.test_connected_run_exports_real_local_spans_with_fake_services
+verify-local-experiment: test-local-identity-telemetry

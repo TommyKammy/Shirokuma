@@ -57,7 +57,8 @@ class FakeClient:
         user = 'lab_admin' if case == 'fixture_control' else user
         result = {'case': case, 'result': expected, 'query_id': query_id, 'http_status': 401 if expected == 'unauthenticated' else 200,
                   'response_complete': True, 'rows': RUN.expected_rows(user) if expected == 'success' else [],
-                  'error_name': 'PERMISSION_DENIED' if expected == 'denied' else None}
+                  'error_name': 'PERMISSION_DENIED' if expected == 'denied' else None,
+                  'sql_sha256': RUN.digest(CLIENT.SELECT.encode())}
         progress(result)
         if self.failure == case:
             raise KeyboardInterrupt() if self.interrupt else TimeoutError('PRIVATE LIVE TOKEN lab_admin')
@@ -122,6 +123,62 @@ def tunnel(_):
     yield
 
 
+class FakeTelemetry:
+    def __init__(self, output, kube, fail_at=None):
+        self.output, self.kube, self.fail_at = output, kube, fail_at
+        self.active_case, self.events, self.cleanup = None, [], None
+
+    def fail(self, stage):
+        if self.fail_at == stage:
+            raise RuntimeError('PRIVATE TELEMETRY ERROR ' + stage)
+
+    def __enter__(self):
+        assert self.kube.created == []
+        self.events.append('enter')
+        self.fail('enter')
+        return self
+
+    def __exit__(self, kind, error, traceback):
+        assert not self.kube.objects
+        self.events.append(('exit', kind))
+        self.fail('exit')
+        return False
+
+    @contextmanager
+    def case(self, name):
+        owner = self
+        self.active_case = name
+        self.events.append(('case', name))
+        class Observation:
+            def progress(self, result):
+                owner.events.append(('progress', result['case'], result['query_id']))
+                owner.fail('progress')
+
+            def finish(self, result, decisions):
+                assert owner.active_case == result['case']
+                assert all(value['case'] == result['case'] for value in decisions)
+                owner.events.append(('observed', result['case'], result['result']))
+                owner.fail('observation')
+        try:
+            yield Observation()
+            self.fail('delivery')
+        finally:
+            self.active_case = None
+
+    def record_cleanup(self, report):
+        assert not self.kube.objects
+        self.cleanup = copy.deepcopy(report)
+        self.events.append('cleanup')
+        self.fail('cleanup')
+
+    def finish(self, receipt):
+        assert not self.kube.objects and self.cleanup['verified']
+        assert receipt['result'] == 'verified' and receipt['telemetry']['result'] == 'running'
+        assert json.loads((self.output / 'receipt.json').read_text())['result'] == 'verified'
+        self.events.append('finish')
+        self.fail('finish')
+
+
 class IdentityRunnerTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -136,9 +193,137 @@ class IdentityRunnerTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def execute(self, kube):
+    def execute(self, kube, **kwargs):
         with patch.object(RUN, 'token_projection', return_value={'source': 'host-signed-validation-control'}):
-            return RUN.execute(self.plan, self.material, self.output, kube=kube, tunnel_factory=tunnel, client_factory=FakeClient)
+            return RUN.execute(self.plan, self.material, self.output, kube=kube, tunnel_factory=tunnel, client_factory=FakeClient, **kwargs)
+
+    def test_standard_run_never_initializes_optional_telemetry(self):
+        with patch.object(RUN, 'open_telemetry', side_effect=AssertionError('optional import')):
+            receipt = self.execute(FakeKube())
+        self.assertEqual(receipt['result'], 'passed')
+        self.assertNotIn('telemetry', receipt)
+
+    def test_opt_in_observes_query_and_audit_before_cleanup_and_final_success(self):
+        kube = FakeKube()
+        audit = FakeTelemetry(self.output, kube)
+        original = RUN.collect_audit
+        def collect(*args):
+            self.assertEqual(audit.active_case, args[2])
+            audit.events.append(('audit', args[2]))
+            return original(*args)
+        with patch.object(RUN, 'collect_audit', side_effect=collect):
+            receipt = self.execute(kube, telemetry_factory=lambda output, token: audit)
+        self.assertEqual(receipt['result'], 'passed')
+        self.assertEqual(receipt['telemetry']['result'], 'passed')
+        self.assertEqual([v[1] for v in audit.events if isinstance(v, tuple) and v[0] == 'case'], [v[0] for v in RUN.CASES])
+        for name, _, expected in RUN.CASES:
+            self.assertLess(audit.events.index(('audit', name)), audit.events.index(('observed', name, expected)))
+        self.assertEqual(audit.events[-3:], ['cleanup', 'finish', ('exit', None)])
+        self.assertEqual(len(kube.deleted), 4)
+
+    def test_telemetry_startup_failure_prevents_runtime_creation(self):
+        for constructor in (False, True):
+            with self.subTest(constructor=constructor):
+                kube = FakeKube()
+                audit = FakeTelemetry(self.output, kube, 'enter')
+                def factory(output, token):
+                    if constructor:
+                        raise RuntimeError('PRIVATE CONSTRUCTOR ERROR')
+                    return audit
+                with self.assertRaises(RuntimeError):
+                    self.execute(kube, telemetry_factory=factory)
+                receipt = json.loads((self.output / 'receipt.json').read_text())
+                self.assertEqual(kube.created, [])
+                self.assertEqual(receipt['result'], 'failed')
+                self.assertEqual(receipt['failure_code'], 'TELEMETRY_UNVERIFIED')
+                self.assertIsNone(receipt['cleanup'])
+                self.assertNotIn('PRIVATE', RUN.canonical(receipt))
+
+    def test_each_telemetry_failure_keeps_cleanup_and_never_passes(self):
+        for stage in ('progress', 'observation', 'delivery', 'cleanup', 'finish', 'exit'):
+            with self.subTest(stage=stage):
+                FakeClient.calls, FakeClient.decisions = [], []
+                kube = FakeKube()
+                audit = FakeTelemetry(self.output, kube, stage)
+                with self.assertRaises(RuntimeError):
+                    self.execute(kube, telemetry_factory=lambda output, token: audit)
+                receipt = json.loads((self.output / 'receipt.json').read_text())
+                self.assertEqual(receipt['result'], 'failed')
+                self.assertEqual(receipt['telemetry']['result'], 'failed')
+                self.assertTrue(receipt['cleanup']['verified'])
+                self.assertEqual(len(kube.deleted), 4)
+                self.assertEqual(kube.objects, {})
+                self.assertEqual(audit.events.count('cleanup'), 1)
+                self.assertNotIn('PRIVATE TELEMETRY ERROR', RUN.canonical(receipt))
+                if stage in ('progress', 'observation', 'delivery'):
+                    self.assertLessEqual(len(FakeClient.calls), 1)
+
+    def test_cancellation_preserved_when_cleanup_telemetry_also_fails(self):
+        kube = FakeKube()
+        audit = FakeTelemetry(self.output, kube, 'cleanup')
+        FakeClient.failure, FakeClient.interrupt = 'row', True
+        with self.assertRaises(KeyboardInterrupt):
+            self.execute(kube, telemetry_factory=lambda output, token: audit)
+        receipt = json.loads((self.output / 'receipt.json').read_text())
+        self.assertEqual(receipt['result'], 'interrupted')
+        self.assertEqual(receipt['telemetry']['result'], 'failed')
+        self.assertTrue(audit.cleanup['verified'])
+        self.assertEqual(audit.events[-1], ('exit', KeyboardInterrupt))
+        self.assertEqual(len(kube.deleted), 4)
+        self.assertTrue(any(v[:2] == ('progress', 'row') for v in audit.events if isinstance(v, tuple)))
+
+    def test_telemetry_flag_cannot_relabel_plan_or_recovery(self):
+        for command in ('plan', 'recover'):
+            with self.subTest(command=command), patch.object(sys, 'argv', ['run.py', command, '--telemetry']), \
+                    patch.object(RUN, 'check_context') as context, patch('builtins.print') as printed:
+                self.assertEqual(RUN.main(), 1)
+                self.assertEqual(json.loads(printed.call_args.args[0])['failure_code'], 'TELEMETRY_RUN_ONLY')
+                context.assert_not_called()
+
+    def test_connected_run_exports_real_local_spans_with_fake_services(self):
+        try:
+            import opentelemetry.sdk.trace  # Optional only in the pinned telemetry environment.
+        except ImportError:
+            self.skipTest('OpenTelemetry is optional for the standard-library runner')
+        from tools.local_experiment.trino_identity import telemetry as telemetry
+        from tools.local_experiment.agenthouse import manage as agenthouse
+        events, logs = [], []
+        class Backend:
+            def event(self, **fields):
+                return agenthouse.event(**fields)
+
+            def insert(self, event):
+                events.append(copy.deepcopy(event))
+
+            def verify(self, event):
+                assert events[-1] == event
+
+            def push_log(self, record):
+                logs.append(copy.deepcopy(record))
+
+            def verify_log(self, record):
+                assert logs[-1] == record
+        self.output = self.output / self.token
+        self.output.mkdir(mode=0o700)
+        kube = FakeKube()
+        receipt = self.execute(kube, telemetry_factory=lambda output, token: telemetry.identity_telemetry(output, token, backend=Backend()))
+        journal = json.loads((self.output / 'telemetry.json').read_text())
+        spans = [json.loads(line) for line in (self.output / 'identity-spans.jsonl').read_text().splitlines()]
+        self.assertEqual(receipt['result'], 'passed')
+        self.assertEqual(journal['result'], 'passed')
+        self.assertTrue(journal['cleanup_verified'])
+        self.assertTrue(journal['saved_spans_verified'])
+        self.assertEqual((len(events), len(logs), len(spans)), (16, 16, 16))
+        self.assertEqual({event['agent_id'] for event in events}, {'local-trino-identity'})
+        self.assertEqual(sum(event['status'] == 'blocked' for event in events), 9)
+        self.assertEqual(sum(event['blocked_by_policy'] for event in events), 3)
+        self.assertEqual({event['trace_id'] for event in events}, {journal['trace_id']})
+        self.assertTrue(all(event['prompt_tokens'] is None and event['completion_tokens'] is None
+                            and event['inference_cost_estimate'] is None for event in events))
+        encoded = RUN.canonical(journal) + RUN.canonical(spans) + RUN.canonical(events) + RUN.canonical(logs)
+        for secret in ('PRIVATE', 'ALGERIA', CLIENT.SELECT):
+            self.assertNotIn(secret, encoded)
+        self.assertEqual(len(kube.deleted), 4)
 
     def test_secret_projection_is_scoped_and_no_credentials_in_configmap(self):
         RUN.validate_plan(self.plan)
