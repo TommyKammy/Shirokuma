@@ -26,6 +26,9 @@ expression, function, join, write or caller-provided endpoint. A separate
 [typed equality profile](../query_filter/README.md) accepts the paired
 `--where-column` / `--equals` flags, including with `--snapshot-id`. Reads without
 these flags preserve the existing v1/v2 request and result formats.
+For an exact aggregate without returning rows, use
+[`query count`](../query_count/README.md). It has no row LIMIT and may scan the
+selected snapshot under the existing timeout; it does not change select behavior.
 
 Inventories are bounded at 100 tables, schemas at 32 columns and selections at
 16 columns and 100 rows. One extra row detects truncation. A complete response

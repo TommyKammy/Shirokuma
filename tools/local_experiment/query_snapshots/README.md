@@ -23,6 +23,11 @@ local-experiment profile, Iceberg catalog and smoke/local_experiment schemas are
 accepted. No SQL expressions, names of branches or tags, timestamps, writes,
 model calls, new services or fallback to the current head are added.
 
+[`query count --table smoke.fixture_v1 --snapshot-id ID`](../query_count/README.md)
+uses a separate schema 4 aggregate profile with the same retained-snapshot and
+schema checks. It returns an exact count, has no row LIMIT and does not add
+schema 4 support to Query Doctor or its saved report.
+
 Before reading data, the command discovers the table and columns and fetches
 current Polaris metadata. The selected snapshot must still be retained and its
 recorded schema must have the same ordered field IDs, names, scalar types and

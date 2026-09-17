@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.36"
+version: "3.37"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
@@ -17,7 +17,36 @@ Trackingは既存runを保持して12評価＋4benchmark、1320 metric pointsと
 固定Notebookの実kernel2回と独立最終照合62checksも成功した。
 登録Notebookを定型Dagster2assetsへ接続する実2回と独立最終照合42checksも成功した。
 保持exportの非稼働MLflow clone復元とSDK全履歴読取2回も成功し、稼働中storeを保持した。
+current/historical snapshotと型付き等値条件の正確なCount読取4件も成功した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-18: exact snapshot count — local acceptance complete
+
+`query count --table`へ任意の`--snapshot-id`とpaired `--where-column` / `--equals`を接続した。
+schema4は固定snapshotの正確な`COUNT(*)`を非負bigint文字列で返し、推定値・LIMIT・個別行返却はない。
+NULLを持つ行もCOUNT対象で、等値条件にNULLは一致しない。全行をscanし得るため既存timeoutを維持する。
+current headとselected snapshotを分け、data COUNT POST1回・自動retry0・cleanup完了後だけ公開する。
+旧Reader v1/v2/v3は維持し、Query Doctorと保存reportへのschema4接続は未対応。
+
+新規所有fixtureのA `8323966370373005165`は2行、B `4863128661439145808`は3行。
+Count4件はcurrent3 / historical2 / currentのid3一致1 / historicalのid3不一致0で全passed・cleanup true、
+16.270秒 / 16.558秒 / 15.411秒 / 16.107秒だった。旧v1 selectでもNULLを含むtypedrowsを確認した。
+literal syntax不正はallocation/SQL0、varchar等値はFILTER_TYPE_UNSUPPORTED/cleanup trueで拒否した。
+最初のCountは並行Readerとの固定Polaris tunnel
+18181競合でquery前に失敗し、公開cleanup_verified=false/未観測nullの元receiptを保持した。
+以降は製品変更なしで既存制約どおり直列実行する。
+失敗をcount0へ補完しない。fixtureは同UUIDで回収し、元retained fixtureの6views/inventoryを復帰確認した。
+前後で54sources/384保持files・MLflow59tables全行/16runs/1320points/16artifacts・AH519が一致した。
+保存のみの最終独立206checks/86inputsが成功。同UUID DROP1回・retained6views exact一致・
+既存10tablesと所有table不在、4成功のexact countと初回失敗/未観測の区別を確認した。追加API/model/SQL0。
+
+全local65suites/2403tests（2402PASS・既存optional1skip）が60.817秒で成功し、
+Go212 top/369 subtests・race・vetも成功した。初回fullのtest fixture import失敗は保持し、
+Makeのtest discoveryを既存方式へ統一後に40focused→全回帰を確認した。
+新Qwen呼出・ReaderからのSQL writeは0。証拠は
+`tmp/local-experiment/query-count-checks/26cbcfe56a684d95b610b06e2ccca68b/`。
+[Count runbook](../../../tools/local_experiment/query_count/README.md)を参照。
+新WPや一般SQL/性能/本番受入へ範囲を広げず、local増分として扱う。
 
 ## 2026-09-18: inactive MLflow clone restore and SDK readback
 

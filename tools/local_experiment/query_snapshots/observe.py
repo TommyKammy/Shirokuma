@@ -31,7 +31,8 @@ def _checked_contract(value):
     if value is C:
         return value
     from tools.local_experiment.query_filter import contract as F
-    require(value is F)
+    from tools.local_experiment.query_count import contract as COUNT
+    require(value is F or value is COUNT)
     return value
 
 
@@ -59,11 +60,12 @@ class SnapshotClient(Q.QueryClient):
 
     def bind_select(self, inventory, columns, window):
         C = self._contract
-        require(self._request['command']=='select' and 'select' not in self._statements and
+        require(self._request['command'] in ('select', 'count') and 'select' not in self._statements and
                 self._attempted_labels == {'inventory', 'schema_before'})
         # The only way to authorize a data statement is the pure fresh-window
         # compiler. There is no arbitrary SQL argument on this binding API.
-        self._statements['select'] = C.select_sql(self._request, inventory, columns, window)
+        compiler = C.count_sql if self._request['command'] == 'count' else C.select_sql
+        self._statements['select'] = compiler(self._request, inventory, columns, window)
 
     def _validate_sql(self, sql, label):
         Q.require(type(sql) is str and type(label) is str and label in self._statements and
@@ -99,11 +101,13 @@ def _observe(request, worker, catalog, journal, save, _contract=C):
     journal['identity_before'] = before['identity']
     journal['snapshot_catalog_before'] = before['snapshots']
     save()
-    if request['command']=='select':
+    if request['command'] in ('select', 'count'):
         C.select_snapshot(before, request)
         worker.bind_select(inventory, columns, before)
-        raw = worker.query(C.select_sql(request, inventory, columns, before), 'select')
-        public = C.project_rows(raw, request, columns, before)
+        compiler = C.count_sql if request['command'] == 'count' else C.select_sql
+        project = C.project_count if request['command'] == 'count' else C.project_rows
+        raw = worker.query(compiler(request, inventory, columns, before), 'select')
+        public = project(raw, request, columns, before)
         del raw
         journal['selection'] = C.receipt_projection(public)
         save()

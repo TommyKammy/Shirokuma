@@ -55,13 +55,20 @@ def sources(_contract=C):
         for name in ('contract.py', 'run.py'):
             path = ROOT / 'tools/local_experiment/query_filter' / name
             value[str(path.relative_to(ROOT))] = hashlib.sha256(path.read_bytes()).hexdigest()
+    if _profile(_contract)[0] == 4:
+        for name in ('contract.py', 'run.py'):
+            path = ROOT / 'tools/local_experiment/query_count' / name
+            value[str(path.relative_to(ROOT))] = hashlib.sha256(path.read_bytes()).hexdigest()
     return dict(sorted(value.items()))
 
 
 def _profile(contract):
     from tools.local_experiment.query_snapshots.observe import _checked_contract
     _checked_contract(contract)
-    return (2, 'query-snapshots') if contract is C else (3, 'query-filter')
+    if contract is C:
+        return 2, 'query-snapshots'
+    from tools.local_experiment.query_filter import contract as F
+    return (3, 'query-filter') if contract is F else (4, 'query-count')
 
 
 class Owner:
@@ -82,8 +89,12 @@ class Owner:
                        'NO_ARBITRARY_SQL_OR_MODEL_CALLS', 'NO_POST_RETRY_OR_FALLBACK',
                        'ROWS_ARE_EXPLICIT_OUTPUT_NOT_SAVED_EVIDENCE',
                        'NO_TENANT_AUTHORIZATION_OR_PRODUCTION_CLAIM']}
-        if version == 3:
+        if version in (3, 4):
             self.report['profile'] = C.PROFILE
+        if version == 4:
+            self.report['limits'].remove('ROWS_ARE_EXPLICIT_OUTPUT_NOT_SAVED_EVIDENCE')
+            self.report['limits'].extend(['EXACT_COUNT_MAY_SCAN_ALL_ROWS', 'NO_ROW_LIMIT_OR_ESTIMATE',
+                                          'AGGREGATE_ONLY_NO_INDIVIDUAL_ROWS'])
 
     def save(self):
         FS.write(self.output / 'summary.json', self.report)
@@ -110,7 +121,7 @@ class Owner:
             self.progress(observation)
             candidate = C.validate_public(candidate, self.request)
             projected = C.receipt_projection(candidate)
-            require(observation['selection'] == projected if self.request['command'] == 'select'
+            require(observation['selection'] == projected if self.request['command'] in ('select', 'count')
                     else observation['selection'] is None, 'OBSERVATION_FAILED')
             require(self.report['source_hashes'] == self.sources(), 'SNAPSHOT_SOURCE_CHANGED')
         except BaseException as error:
@@ -213,14 +224,15 @@ class Parser(argparse.ArgumentParser):
 def main(argv=None, *, stdin=None, stdout=None, invoker=None, _contract=C, _state=None):
     version, _ = _profile(_contract)
     C = _contract
-    stream, token, action = stdout or sys.stdout, '0' * 32, 'snapshots' if version == 2 else 'select'
+    actions = {2: ('snapshots', 'select'), 3: ('select',), 4: ('count',)}[version]
+    stream, token, action = stdout or sys.stdout, '0' * 32, actions[0]
     def emit(value):
         raw = R.canonical(value)
         require(len(raw) <= R.MAX_PUBLIC_BYTES, 'PUBLIC_RESULT_LIMIT')
         stream.write(raw.decode('ascii') + '\n'); stream.flush()
     try:
         parser = Parser(description=__doc__)
-        parser.add_argument('command', choices=('snapshots', 'select') if version == 2 else ('select',))
+        parser.add_argument('command', choices=actions)
         parser.add_argument('--evidence-token', required=True)
         parser.add_argument('--request-stdin', required=True, action='store_true')
         try:
