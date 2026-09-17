@@ -5,22 +5,66 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "3.7"
+version: "3.8"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：自然文Data→Catalogのdurable handoffが実機成功。
-大文字化の結果・限定cleanup・履歴登録と、完了resumeでchild/API/model呼出し0を確認した。
-unsupportedはCatalog起動0。6成功Data PlansのLineageは12/12。次はSREのcontainer状態観測を検討する。
+最新の到達点（2026-09-17）：SREがcontainerの現在状態と過去終了履歴を分けて再観測する実機drillに成功。
+新規Failed Podの同UID・Error・exit1・時刻を確認し、限定cleanupを完了した。
+合成SRE評価32/32、正式全回帰1012件（1011成功・optional1skip）。原因診断・自動修復は未達を維持する。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: SRE reported container states
+
+[MCP Gateway](L2/WP-L2-AGENT-001_MCP_Gateway_MVP.md)の既存Pod readにapplication-containerの固定射影を追加。
+spec/statusを照合し、入力256行・返却8行に制限、reason allowlistと型・時刻を再検証する。
+message/log/secret/container IDは渡さず、init/ephemeral containersは対象外。
+現在と過去の終了は別根拠、unknown/truncatedは健康の証拠にせず、旧保存snapshotはnot-observedで互換を保つ。
+
+[SRE Bear](L2/WP-L2-AGENT-002_SRE_Bear.md)は現在の非0終了・OOM報告・image-pull/backoff待機をcritical、
+過去の非0終了/OOMはwarningとする。exit137だけではOOMと断定せず、root_causeはundetermined。
+最大24findings・入力8KiB・追加read最大2種のまま、current critical根拠のPod再読取を必須とする。
+同Pod UID＋container名の比較でstate・過去履歴・restart減少を記録するが、process identityや回復は推論しない。
+
+実評価`c0de842e01824262bdc19298cfb9f0ac`は既存8＋追加8case×2＝32/32、監査32件成功。
+入力26368/出力2070tokens、91289ms、cost NULL。実drillはこれと別の証拠である。
+`tmp/local-experiment/sre-drill/850681c5c93949f09cd449c4d6728c9a/`のrun
+`8efbf36cdca845af8caba3d5a3b26b5a`で、新規Pod UID `ba22d3e2-6df7-464d-af62-4df1287a1e72`を作成。
+`fail-once`のcurrent terminated / Error / exit1 / ready=false / restarts0 / last_termination=null、
+開始・終了とも2026-09-17 09:53:25 UTCを初回/followupで照合した。
+Qwenはcritical f01/f02を選択し、保存射影から再構成した根拠も一致、同UID限定でPodを削除した。
+
+workflow `workflow-c4455c5ca4664504899009781b79d8bb`、trace `4706d338a360bb614ce3d2a51a122054`。
+実drillのモデルは入力1731/出力174tokens・6996ms、4初期read＋2followups＋LLM＋assessmentの8監査を
+AgentHouse/Lokiで照合。保存実OTel2spansとMCP6件の返却span ID相関を区別する。
+今回の実モデル合計33callsは入力28099/出力2244tokens・98285ms、cost NULL。
+
+[評価harness](L2/WP-L2-EVAL-001_Agent_evaluation_harness.md)の新report
+`tmp/local-experiment/evaluation-reports/a1f4249181e64c6c8943b13b2ed6a0f8/`は11valid runsでcomplete。
+母集団はQwen152/152・mock10/10（別群）、全体162/162・11valid runs。
+Qwen goldenは旧SRE6/8caseと新16caseを別groupにし、drill1callは加算しない。
+SRE84（新host17＋drill3含む）/Gateway94（新14含む）/report24（新2含む）のfocused testsが成功。
+最初の全回帰998件でGateway14件の配線漏れを発見してMakeへ追加し、正式1012件
+（1011成功・optional OTel 1skip）を確認した。
+
+独立最終監査`tmp/local-experiment/sre-container-preflight/0ac17cd4dad044d5838caccc68473445/verification.json`
+の80checksが成功。AH388→428は旧388件全hash保持＋新評価32/workflow8、Loki8件は完全一致。
+保存実span2＋MCP返却ID相関6、同UID/current Error/exit1とcritical f01/f02再観測を独立再計算して一致した。
+保持Kube/Docker/履歴4tables・5DDL/1151filesは不変、生成Podの不存在をfresh確認した。
+保持fixture/metadataの証明は前handoff監査
+`data-catalog-preflight/de60ba1818d74bad9a0a289176e9f72f/verification.json`の継承referenceであり、
+今回それらのAPIやSQLをfresh readしたとは主張しない。SREはlocal-partialを維持する。
+一般的なlogs/metricsによる原因診断・自動修復・本番受入・外部publicationはこの増分に含まない。
+次はWP-L4-ML-001のTracking部分を先行し、既存評価receiptを専用local SQLite/loopback MLflow標準UIへ
+取り込む。本来のSpark/JupyterHub依存とMLflow全体の受入は未達として残す。
 
 ## 2026-09-17: durable Data to Catalog handoff
 

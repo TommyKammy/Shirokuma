@@ -4,16 +4,17 @@ from __future__ import annotations
 from datetime import datetime
 import re
 
-from diagnostics import DiagnosticError, diagnose, identifier, count
+from diagnostics import (DiagnosticError, diagnose, identifier, count, container_observation,
+                         container_code, CONTAINER_CRITICAL, CONTAINER_HISTORICAL, CONTAINER_UNKNOWN)
 
 TOOLS = ('shirokuma_doctor', 'k8s_read_pods', 'k8s_read_events', 'local_platform_status')
 SOURCES = dict(zip(TOOLS, ('doctor', 'pods', 'events', 'platform')))
 COMPONENTS = ('lakehouse', 'superset', 'metadata', 'agenthouse', 'loki')
 MAX_FINDINGS = 24
 INTENTIONAL_FLUX_MARKER = 'root Kustomization/flux-system/flux-system is intentionally suspended for local-experiment'
-POD_CRITICAL = {'WORKLOAD_FAILED', 'WORKLOAD_UNAVAILABLE', 'WORKLOAD_NOT_READY'}
+POD_CRITICAL = {'WORKLOAD_FAILED', 'WORKLOAD_UNAVAILABLE', 'WORKLOAD_NOT_READY'} | CONTAINER_CRITICAL
 RUNTIME_CRITICAL = {'RUNTIME_NOT_READY'}
-UNKNOWN_FINDINGS = {'EVENT_OBSERVATION_TRUNCATED', 'OBSERVATION_UNKNOWN', 'RUNTIME_STATUS_UNKNOWN'}
+UNKNOWN_FINDINGS = {'EVENT_OBSERVATION_TRUNCATED', 'OBSERVATION_UNKNOWN', 'RUNTIME_STATUS_UNKNOWN'} | CONTAINER_UNKNOWN
 ALLOWED = {
     'CHECK_DEGRADED': (TOOLS[0],),
     'WORKLOAD_FAILED': (TOOLS[1], TOOLS[2]),
@@ -28,6 +29,7 @@ ALLOWED = {
     'RUNTIME_STATUS_UNKNOWN': (TOOLS[3],),
     'OBSERVATION_UNKNOWN': TOOLS,
 }
+ALLOWED.update({code: (TOOLS[1],) for code in CONTAINER_CRITICAL | CONTAINER_HISTORICAL | CONTAINER_UNKNOWN})
 
 
 def _keys(value, keys):
@@ -102,7 +104,16 @@ def _observation(source, report):
     completeness = ('unknown' if stamp is None or truncated is None else
                     'truncated' if truncated else
                     'empty' if not values and source != 'events' else 'complete')
-    return {'observed_at': stamp, 'completeness': completeness, 'count': len(values)}
+    result = {'observed_at': stamp, 'completeness': completeness, 'count': len(values)}
+    if source == 'pods':
+        details = dict(scope='application-containers', complete=0, truncated=0, unknown=0, not_observed=0)
+        for pod in values:
+            if not isinstance(pod, dict):
+                raise DiagnosticError('invalid Pod observation')
+            observed = container_observation(pod)
+            details[observed['status'] if observed is not None else 'not_observed'] += 1
+        result['container_details'] = details
+    return result
 
 
 def _allowed(code, subject):
@@ -117,6 +128,11 @@ def _allowed(code, subject):
     return list(ALLOWED[code])
 
 
+def _unknown_container_coverage(observations):
+    details = observations['pods'].get('container_details', {})
+    return bool(details.get('unknown') or details.get('truncated'))
+
+
 def build_evidence(doctor: dict, pods: dict, events: dict, platform: dict | None = None) -> dict:
     """Project no raw summaries, messages, logs, commands, credentials or causes."""
     reports = dict(zip(('doctor', 'pods', 'events'), (doctor, pods, events)))
@@ -124,7 +140,7 @@ def build_evidence(doctor: dict, pods: dict, events: dict, platform: dict | None
     observations['platform'] = (_observation('platform', platform) if platform is not None else
                                 {'observed_at': None, 'completeness': 'unknown', 'count': 0})
     baseline = diagnose(doctor, pods, events)
-    findings = [{key: item[key] for key in ('code', 'severity', 'subject')}
+    findings = [{key: item[key] for key in ('code', 'severity', 'subject', 'container') if key in item}
                 for item in baseline['findings'] if item['severity'] in {'warning', 'critical'}]
     if events.get('truncated'):
         findings.append({'code': 'EVENT_OBSERVATION_TRUNCATED', 'severity': 'warning', 'subject': 'events'})
@@ -136,7 +152,8 @@ def build_evidence(doctor: dict, pods: dict, events: dict, platform: dict | None
     for source, item in observations.items():
         if item['completeness'] == 'unknown' and (source != 'platform' or item['observed_at'] is None):
             findings.append({'code': 'OBSERVATION_UNKNOWN', 'severity': 'warning', 'subject': source})
-    findings.sort(key=lambda item: (item['severity'] != 'critical', item['code'], item['subject']))
+    findings.sort(key=lambda item: (item['severity'] != 'critical', item['code'], item['subject'],
+                                    item.get('container', {}).get('name', '')))
     if sum(item['severity'] == 'critical' for item in findings) > MAX_FINDINGS:
         raise DiagnosticError('critical findings exceed bounded triage capacity')
     result = {
@@ -148,7 +165,8 @@ def build_evidence(doctor: dict, pods: dict, events: dict, platform: dict | None
         'omitted_findings': max(0, len(findings) - MAX_FINDINGS),
     }
     result['health'] = ('attention-required' if any(x['code'] not in UNKNOWN_FINDINGS for x in findings)
-                        else 'unknown' if any(item['completeness'] != 'complete' for item in observations.values())
+                        else 'unknown' if findings or _unknown_container_coverage(observations)
+                        or any(item['completeness'] != 'complete' for item in observations.values())
                         else 'healthy-observed-scope')
     validate_evidence(result)
     return result
@@ -166,20 +184,28 @@ def validate_evidence(evidence: dict) -> dict:
         raise DiagnosticError('invalid intentional suspension flag')
     count(evidence['omitted_findings'])
     _keys(evidence['observations'], SOURCES.values())
-    for observation in evidence['observations'].values():
-        _keys(observation, ('observed_at', 'completeness', 'count'))
+    for source, observation in evidence['observations'].items():
+        detailed = source == 'pods' and isinstance(observation, dict) and 'container_details' in observation
+        _keys(observation, ('observed_at', 'completeness', 'count') + (('container_details',) if detailed else ()))
         _timestamp(observation['observed_at'])
         count(observation['count'])
         if not isinstance(observation['completeness'], str) or observation['completeness'] not in {'complete', 'truncated', 'empty', 'unknown'}:
             raise DiagnosticError('invalid observation completeness')
         if observation['observed_at'] is None and observation['completeness'] != 'unknown':
             raise DiagnosticError('untimed observation must remain unknown')
+        if detailed:
+            details = observation['container_details']
+            _keys(details, ('scope', 'complete', 'truncated', 'unknown', 'not_observed'))
+            if details['scope'] != 'application-containers' or sum(
+                    count(details[key]) for key in ('complete', 'truncated', 'unknown', 'not_observed')) != observation['count']:
+                raise DiagnosticError('container detail coverage disagrees with Pod count')
     findings = evidence['findings']
     if not isinstance(findings, list) or len(findings) > MAX_FINDINGS:
         raise DiagnosticError('invalid bounded findings')
     for index, finding in enumerate(findings, 1):
-        _keys(finding, ('id', 'code', 'severity', 'subject', 'allowed_tools'))
-        code = finding['code']
+        code = finding.get('code') if isinstance(finding, dict) else None
+        contextual = isinstance(code, str) and code in CONTAINER_CRITICAL | CONTAINER_HISTORICAL
+        _keys(finding, ('id', 'code', 'severity', 'subject', 'allowed_tools') + (('container',) if contextual else ()))
         if finding['id'] != f'f{index:02d}' or not isinstance(code, str) or code not in ALLOWED:
             raise DiagnosticError('invalid finding identity')
         identifier(finding['subject'])
@@ -187,17 +213,69 @@ def validate_evidence(evidence: dict) -> dict:
             raise DiagnosticError('invalid finding severity')
         if finding['allowed_tools'] != _allowed(code, finding['subject']):
             raise DiagnosticError('invalid finding read tools')
+        if contextual:
+            _validate_container_context(finding)
     if evidence['health'] == 'healthy-observed-scope' and (findings or evidence['omitted_findings']
+            or _unknown_container_coverage(evidence['observations'])
             or any(x['completeness'] != 'complete' for x in evidence['observations'].values())):
         raise DiagnosticError('incomplete or abnormal evidence cannot assert observed health')
     if evidence['health'] == 'attention-required' and not findings:
         raise DiagnosticError('attention requires a bounded finding')
     observed_attention = any(x['code'] not in UNKNOWN_FINDINGS for x in findings)
-    expected_health = ('attention-required' if observed_attention else 'unknown' if any(
+    expected_health = ('attention-required' if observed_attention else 'unknown' if findings
+        or _unknown_container_coverage(evidence['observations']) or any(
         x['completeness'] != 'complete' for x in evidence['observations'].values()) else 'healthy-observed-scope')
     if evidence['health'] != expected_health:
         raise DiagnosticError('observed health disagrees with bounded findings')
     return evidence
+
+
+def _validate_container_context(finding):
+    context = finding['container']
+    _keys(context, ('name', 'observation', 'status', 'ready', 'restarts', 'state'))
+    if context['observation'] not in ('current', 'last-termination') or context['status'] not in ('complete', 'truncated', 'unknown'):
+        raise DiagnosticError('invalid container evidence context')
+    historical = context['observation'] == 'last-termination'
+    running = dict(kind='running', reason=None, exit_code=None, started_at=None, finished_at=None)
+    observed = container_observation({'container_observation': {
+        'status': 'unknown' if context['status'] == 'unknown' else 'complete',
+        'scope': 'application-containers', 'containers': [{
+            'name': context['name'], 'ready': context['ready'], 'restarts': context['restarts'],
+            'state': running if historical else context['state'],
+            'last_termination': context['state'] if historical else None}]}})
+    if container_code(context['state'], historical=historical) != finding['code'] or observed is None:
+        raise DiagnosticError('finding does not match its reported container state')
+
+
+def _compare_containers(old, new, item):
+    """Same Pod UID only; container names do not identify a process or prove recovery."""
+    left, right = old.get('container_observation'), new.get('container_observation')
+    statuses = [value['status'] if value is not None else 'not-observed' for value in (left, right)]
+    item['limitations'].extend(['container-process-identity-not-observed', 'no-recovery-claim'])
+    if 'not-observed' in statuses:
+        item['limitations'].append('container-details-not-observed')
+    incomplete = any(status in ('unknown', 'truncated') for status in statuses)
+    if incomplete:
+        item['limitations'].append('incomplete-container-details')
+    base = {'subject': new['subject'], 'identity': new['uid']}
+    if statuses[0] != statuses[1]:
+        item['changes'].append(dict(base, kind='container-observation-status-changed',
+                                    before=statuses[0], after=statuses[1]))
+    if left is None or right is None:
+        return incomplete
+    left_rows, right_rows = ({row['name']: row for row in value['containers']} for value in (left, right))
+    for name in sorted(set(left_rows) | set(right_rows)):
+        before, after = left_rows.get(name), right_rows.get(name)
+        if before is None or after is None:
+            item['changes'].append(dict(base, container_name=name,
+                kind='container-first-observed' if before is None else 'container-no-longer-observed'))
+        elif before != after:
+            fields = [field for field in ('ready', 'restarts', 'state', 'last_termination') if before[field] != after[field]]
+            item['changes'].append(dict(base, kind='container-fields-changed', container_name=name,
+                                        changed_fields=fields, before=before, after=after))
+            if before['restarts'] is not None and after['restarts'] is not None and after['restarts'] < before['restarts']:
+                item['limitations'].append('container-restart-count-decreased')
+    return incomplete
 
 
 def validate_triage(response: dict, evidence: dict) -> dict:
@@ -279,6 +357,9 @@ def project_observations(snapshots: dict) -> dict:
                 row.update({field: count(item.get(field)) for field in ('ready_containers', 'total_containers', 'restarts')})
                 if row['ready_containers'] > row['total_containers']:
                     raise DiagnosticError('invalid retained Pod readiness counts')
+                observed = container_observation(item)
+                if observed is not None:
+                    row['container_observation'] = observed
             else:
                 row = {field: identifier(item.get(field)) for field in ('reason', 'type', 'object_kind', 'object_name')}
                 row.update(uid=_uid(item.get('uid')), object_uid=_uid(item.get('object_uid')),
@@ -309,6 +390,9 @@ def _rows(source, report):
                 raise DiagnosticError('invalid Pod readiness counts')
             if name in names:
                 raise DiagnosticError('duplicate Pod name')
+            observed = container_observation(item)
+            if observed is not None:
+                row['container_observation'] = observed
             names.add(name)
         else:
             uid = _uid(item.get('uid'))
@@ -379,6 +463,10 @@ def compare_observations(before: dict, after: dict) -> dict:
             if uid in replacements:
                 continue
             old, new = left.get(uid), right.get(uid)
+            if source == 'pods' and old is not None and new is not None:
+                incomplete = _compare_containers(old, new, item) or incomplete
+                old = {key: value for key, value in old.items() if key != 'container_observation'}
+                new = {key: value for key, value in new.items() if key != 'container_observation'}
             if old is None or new is None:
                 row = new if old is None else old
                 changes.append({'kind': source + ('-first-observed' if old is None else '-no-longer-observed'),
@@ -395,4 +483,5 @@ def compare_observations(before: dict, after: dict) -> dict:
                     item['limitations'].append('pod-restart-count-decreased')
                 changes.append(change)
         item['status'] = ('changed' if changes else 'incomparable' if incomplete else 'no-change-observed')
+        item['limitations'] = list(dict.fromkeys(item['limitations']))
     return {'scope': 'selected-bounded-snapshots', 'root_cause': 'undetermined', 'sources': sources}

@@ -21,7 +21,9 @@ SUITES = {
         "empty_no_run", "single_no_run", "renamed_three_verified", "unverified_record", "sixteen_names_boundary")),
     "sre": ("sre-evaluation", "result.json", "sre-eval-", "llm.sre_eval", (
         "intentional_flux_only", "historical_restart", "critical_pod", "warning_event", "doctor_degraded",
-        "event_list_truncated", "runtime_degraded", "runtime_unknown")),
+        "event_list_truncated", "runtime_degraded", "runtime_unknown",
+        "container_exit_nonzero", "container_oom_reported", "container_image_pull_wait", "container_backoff_wait",
+        "container_previous_nonzero", "container_previous_oom", "container_details_unknown", "container_details_truncated")),
     "data": ("data-evaluation", "result.json", "data-eval-", "llm.data_eval", (
         "uppercase_names_ja", "name_lengths_ja", "row_count_ja", "delete_rows_unsupported_ja",
         "unknown_column_unsupported_ja", "name_lengths_en")),
@@ -147,7 +149,9 @@ def normalize(value, suite):
     directory, filename, task_prefix, action, current_cases = SUITES[suite]
     requested = value.get("requested_inferences")
     require(integer(requested), "missing_or_invalid_requested_count")
-    cases = current_cases[:6] if suite == "sre" and requested == 12 else current_cases
+    # Keep the original six-case and five-runtime-source eight-case receipts
+    # separate from the later container-state suite. Old evidence is unchanged.
+    cases = current_cases[:{12: 6, 16: 8}[requested]] if suite == "sre" and requested in (12, 16) else current_cases
     data_metadata = {}
     if suite == "data":
         cases, data_metadata = data_cases(value)

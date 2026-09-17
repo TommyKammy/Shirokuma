@@ -5,7 +5,7 @@ title: "WP-L2-EVAL-001 Agent evaluation harness"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.6"
+version: "0.7"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, evaluation]
 ---
@@ -142,3 +142,24 @@ Qwen固定評価は合計120/120、実測58326入力/7226出力tokens。mock10�
 新Data requests14件とbaseline24件（旧12＋今回12）は別集計。旧SRE6case/新8caseも混在させない。
 このreportは評価suiteだけを集計し、別workflow実行で発生した失敗を削除・成功化するものではない。
 追加report focused22件が成功。実機生成にはmodel/API呼出や外部書込みを追加していない。
+
+## 2026-09-17: SRE container observation coverage
+
+SREの既存8caseにcontainerの現在状態・過去終了履歴・詳細unknown/truncatedの8caseを追加した。
+実Qwen評価`c0de842e01824262bdc19298cfb9f0ac`は16case×2＝32/32成功、全32推論の監査読戻しも成功。
+入力26368/出力2070tokens、推論91289ms、cost NULL。合成snapshotの読み取り選択評価であり、
+一般的な原因診断や既存サービスの故障・復旧成功率としては扱わない。
+
+report `a1f4249181e64c6c8943b13b2ed6a0f8` はcomplete、保持11評価runsすべてvalid。
+母集団はQwen152/152・mock10/10（別群）、全体162/162。
+実Qwen固定評価は旧SRE6case・8case・今回16caseを別signature/groupのまま保持する。
+mockをモデル品質・usageの同じ群へ混ぜず、最新成功だけへの置換や過去run削除はしない。
+別途実行したFailed Pod drillのモデル1callはgolden152件へ加算しない。
+report focused24件（互換性・分母の追加2件を含む）が成功。
+全回帰は新Gateway14件の配線も確認した正式1012件（1011成功・optional OTel 1skip）。
+旧receiptの未記録fixture hashはunknownのまま、PR指標・実runtime成功率・本番受入はN/Aを維持する。
+
+SRE増分の独立最終監査`tmp/local-experiment/sre-container-preflight/0ac17cd4dad044d5838caccc68473445/verification.json`
+は80checks成功。旧AH388件全hashと1151filesを保持し、追加AH40件を評価32/workflow8に分けて照合した。
+次はWP-L4-ML-001のTracking部分として、既存評価receiptを専用local SQLite/loopback MLflow標準UIへ
+取り込む限定実装を進める。本来のSpark/JupyterHub依存とMLflow全受入が完了したとは扱わない。

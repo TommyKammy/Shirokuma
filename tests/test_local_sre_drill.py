@@ -45,6 +45,15 @@ def receipt(run_id=RUN_ID):
     return {'run_id': run_id, 'name': D.identity(run_id)['name'], 'namespace': D.NAMESPACE, 'uid': 'owned-pod-uid'}
 
 
+def container_observation():
+    return {'status': 'complete', 'scope': 'application-containers', 'containers': [{
+        'name': 'fail-once', 'ready': False, 'restarts': 0,
+        'state': {'kind': 'terminated', 'reason': 'Error', 'exit_code': 1,
+                  'started_at': '2026-09-17T02:59:59.000000Z',
+                  'finished_at': '2026-09-17T03:00:00.000000Z'},
+        'last_termination': None}]}
+
+
 def proof(creation):
     stamp = '2026-09-17T03:00:00.000000Z'
     initial = {
@@ -57,14 +66,18 @@ def proof(creation):
         'local_platform_status': {'profile': 'local-experiment', 'observed_at': stamp, 'ready': True,
             'components': {name: {'ready': True, 'status': 'ready'} for name in
                 ('lakehouse', 'superset', 'metadata', 'agenthouse', 'loki')}}}
+    initial['k8s_read_pods']['pods'][0]['container_observation'] = container_observation()
+    evidence = D.build_evidence(initial['shirokuma_doctor'], initial['k8s_read_pods'],
+                                initial['k8s_read_events'], initial['local_platform_status'])
     after = copy.deepcopy(initial['k8s_read_pods'])
     after['observed_at'] = '2026-09-17T03:00:01.000000Z'
     observations = [{'tool': tool, 'phase': 'initial', 'snapshot': snapshot} for tool, snapshot in initial.items()]
     observations.append({'tool': 'k8s_read_pods', 'phase': 'followup', 'snapshot': after})
     report = {'result': 'passed', 'checkpoint': 'completed-in-memory', 'observations_file': 'observations.json',
         'task_id': 'workflow-' + 'b' * 32, 'trace_id': 'c' * 32,
-        'evidence': {'findings': [{'subject': creation['name'], 'severity': 'critical', 'code': 'WORKLOAD_FAILED', 'id': 'f01'}]},
-        'triage': {'checks': [{'tool': 'k8s_read_pods', 'finding_ids': ['f01']}]},
+        'evidence': evidence,
+        'triage': {'checks': [{'tool': 'k8s_read_pods',
+                              'finding_ids': [item['id'] for item in evidence['findings'] if item['severity'] == 'critical']}]},
         'initial_sha256': hashlib.sha256(json.dumps(initial, sort_keys=True).encode()).hexdigest(),
         'followup_sha256': {'k8s_read_pods': hashlib.sha256(json.dumps(after, sort_keys=True).encode()).hexdigest()},
         'comparisons': {'sources': {'k8s_read_pods': {'status': 'no-change-observed'}}}}
@@ -261,6 +274,58 @@ class SREDrillTests(unittest.TestCase):
         self.assertEqual(len(kube.deleted), 1)
         self.assertEqual(kube.deleted[0][0]['uid'], creation['uid'])
         self.assertIsNone(kube.pod)
+
+    def test_detection_rejects_incomplete_historical_or_changed_container_evidence(self):
+        report, observations = proof(receipt())
+        for mutation in ('missing', 'incomplete', 'history_only', 'exit_code', 'boolean_exit',
+                         'reason', 'container_name', 'timestamp', 'restarted'):
+            current, snapshots = copy.deepcopy((report, observations))
+            after = snapshots[-1]['snapshot']
+            pod = after['pods'][0]
+            detail = pod['container_observation']
+            container = detail['containers'][0]
+            if mutation == 'missing':
+                del pod['container_observation']
+            elif mutation == 'incomplete':
+                detail['status'] = 'unknown'
+            elif mutation == 'history_only':
+                container['last_termination'] = container['state']
+                container['state'] = {'kind': 'running', 'reason': None, 'exit_code': None,
+                                      'started_at': '2026-09-17T03:00:01.000000Z', 'finished_at': None}
+            elif mutation in {'exit_code', 'boolean_exit'}:
+                container['state']['exit_code'] = 7 if mutation == 'exit_code' else True
+            elif mutation == 'reason':
+                container['state']['reason'] = 'OOMKilled'
+            elif mutation == 'container_name':
+                container['name'] = 'other'
+            elif mutation == 'timestamp':
+                container['state']['finished_at'] = '2026-09-17T03:00:00.500000Z'
+            else:
+                container['restarts'] = 1
+            current['followup_sha256']['k8s_read_pods'] = hashlib.sha256(
+                json.dumps(after, sort_keys=True).encode()).hexdigest()
+            with self.subTest(mutation=mutation), self.assertRaises(D.DrillError):
+                D.verify_detection(current, snapshots, receipt())
+
+    def test_detection_requires_the_container_finding_in_model_read_selection(self):
+        report, observations = proof(receipt())
+        finding = next(item for item in report['evidence']['findings']
+                       if item['code'] == 'CONTAINER_EXIT_NONZERO')
+        report['triage']['checks'][0]['finding_ids'].remove(finding['id'])
+        with self.assertRaises(D.DrillError):
+            D.verify_detection(report, observations, receipt())
+
+    def test_detection_binds_model_finding_to_saved_current_termination(self):
+        report, observations = proof(receipt())
+        result = D.verify_detection(report, observations, receipt())
+        self.assertEqual(result['container_name'], 'fail-once')
+        self.assertEqual(result['container_state'], container_observation()['containers'][0]['state'])
+        changed = copy.deepcopy(report)
+        finding = next(item for item in changed['evidence']['findings']
+                       if item['code'] == 'CONTAINER_EXIT_NONZERO')
+        finding['code'] = 'CONTAINER_OOM_REPORTED'
+        with self.assertRaises(D.DrillError):
+            D.verify_detection(changed, observations, receipt())
 
     def test_uncertain_create_never_acquires_cleanup_authority(self):
         with tempfile.TemporaryDirectory() as directory:

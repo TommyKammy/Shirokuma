@@ -62,6 +62,34 @@ def cases() -> list[dict]:
             runtime['ready'] = False
             runtime['components']['loki'] = {'ready': False, 'status': 'unknown'}
         result.append({'case_id': name, 'evidence': build_evidence(d, p, e, runtime)})
+    for name in ('container_exit_nonzero', 'container_oom_reported', 'container_image_pull_wait',
+                 'container_backoff_wait', 'container_previous_nonzero', 'container_previous_oom',
+                 'container_details_unknown', 'container_details_truncated'):
+        d, p, e, runtime = copy.deepcopy((doctor, pods, events, platform))
+        state = dict(kind='running', reason=None, exit_code=None, started_at=stamp, finished_at=None)
+        row = dict(name='application', ready=True, restarts=0, state=state, last_termination=None)
+        observed = dict(status='complete', scope='application-containers', containers=[row])
+        if name in ('container_exit_nonzero', 'container_oom_reported', 'container_previous_nonzero', 'container_previous_oom'):
+            historical = name.startswith('container_previous')
+            terminated = dict(kind='terminated', reason='OOMKilled' if name.endswith(('oom', 'reported')) else 'Error',
+                              exit_code=137, started_at=stamp, finished_at=stamp)
+            if historical:
+                row.update(last_termination=terminated, restarts=1)
+                p['pods'][0]['restarts'] = 1
+            else:
+                row.update(state=terminated, ready=False)
+                p['pods'][0].update(phase='Failed', ready_containers=0)
+        elif name in ('container_image_pull_wait', 'container_backoff_wait'):
+            row.update(ready=False, state=dict(kind='waiting', exit_code=None, started_at=None, finished_at=None,
+                reason='ImagePullBackOff' if name == 'container_image_pull_wait' else 'CrashLoopBackOff'))
+            p['pods'][0].update(ready_containers=0)
+        elif name == 'container_details_unknown':
+            observed.update(status='unknown', containers=[])
+        else:
+            observed.update(status='truncated', containers=[dict(copy.deepcopy(row), name=f'application-{i}') for i in range(8)])
+            p['pods'][0].update(total_containers=9, ready_containers=9)
+        p['pods'][0]['container_observation'] = observed
+        result.append({'case_id': name, 'evidence': build_evidence(d, p, e, runtime)})
     return result
 
 

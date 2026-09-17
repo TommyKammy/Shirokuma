@@ -165,6 +165,41 @@ class EvaluationClient:
 
 
 class SRELLMTests(unittest.TestCase):
+    def test_container_golden_cases_keep_old_ids_response_shape_and_bounded_inputs(self):
+        fixtures = EVALUATION.cases()
+        self.assertEqual([x['case_id'] for x in fixtures], [
+            'intentional_flux_only', 'historical_restart', 'critical_pod', 'warning_event',
+            'doctor_degraded', 'event_list_truncated', 'runtime_degraded', 'runtime_unknown',
+            'container_exit_nonzero', 'container_oom_reported', 'container_image_pull_wait',
+            'container_backoff_wait', 'container_previous_nonzero', 'container_previous_oom',
+            'container_details_unknown', 'container_details_truncated'])
+        model = PROVIDER.SREProvider(local_profile())
+        for case in fixtures:
+            with self.subTest(case=case['case_id']):
+                body = model.request_body('sre_triage', case['evidence'])
+                self.assertLessEqual(len(json.dumps(body).encode()), 8192)
+                projected = json.loads(body['messages'][1]['content'])['evidence']
+                self.assertEqual(projected, case['evidence'])
+                response = FixtureSelector().complete('sre_triage', projected)['content']
+                self.assertEqual(set(response), {'assessment', 'checks', 'root_cause'})
+                CONTRACT.validate_triage(response, projected)
+        current = fixtures[8]['evidence']
+        self.assertFalse(any('OOM' in finding['code'] for finding in current['findings']))
+        for case in fixtures[12:14]:
+            self.assertFalse(any(finding['severity'] == 'critical' for finding in case['evidence']['findings']))
+        self.assertTrue(all(x['evidence']['health'] == 'unknown' for x in fixtures[14:]))
+
+    def test_typed_container_context_cannot_expand_model_input_past_existing_limit(self):
+        evidence = copy.deepcopy(EVALUATION.cases()[8]['evidence'])
+        finding = next(x for x in evidence['findings'] if x['code'] == 'CONTAINER_EXIT_NONZERO')
+        evidence['findings'] = [dict(copy.deepcopy(finding), id=f'f{i:02d}', subject=f'pod-{i}') for i in range(1, 25)]
+        CONTRACT.validate_evidence(evidence)
+        model = PROVIDER.SREProvider(local_profile())
+        model.opener.open = Mock()
+        with self.assertRaisesRegex(ProviderError, 'bounded input'):
+            model.complete('sre_triage', evidence)
+        model.opener.open.assert_not_called()
+
     def test_provider_request_has_only_bounded_projection_and_optional_thinking_control(self):
         evidence = evidence_from(snapshots())
         for flag in (None, False, True):
@@ -434,12 +469,12 @@ class SRELLMTests(unittest.TestCase):
             saved = json.loads((Path(directory) / 'evidence/result.json').read_text())
         self.assertEqual(report, saved)
         self.assertEqual(report['result'], 'passed')
-        self.assertEqual(report['requested_inferences'], 16)
-        self.assertEqual(report['attempted_inferences'], 16)
-        self.assertEqual(report['passed_inferences'], 16)
-        self.assertEqual(report['audited_inferences'], 16)
+        self.assertEqual(report['requested_inferences'], 32)
+        self.assertEqual(report['attempted_inferences'], 32)
+        self.assertEqual(report['passed_inferences'], 32)
+        self.assertEqual(report['audited_inferences'], 32)
         self.assertEqual(report['retries'], 0)
-        self.assertEqual(len(model.calls), 16)
+        self.assertEqual(len(model.calls), 32)
         self.assertEqual(model.calls, [('sre_triage', case['evidence']) for case in EVALUATION.cases() for _ in range(2)])
         first_case = [item for item in report['attempts'] if item['case_id'] == 'intentional_flux_only']
         self.assertEqual([item['selected_tools'] for item in first_case], [[], []])
@@ -450,7 +485,7 @@ class SRELLMTests(unittest.TestCase):
         unknown = [item for item in report['attempts'] if item['case_id'] == 'runtime_unknown']
         self.assertTrue(all(item['expected_health'] == 'unknown' and item['selected_tools'] == ['local_platform_status']
                             for item in unknown))
-        self.assertEqual(len({event['event_id'] for event in client.events}), 16)
+        self.assertEqual(len({event['event_id'] for event in client.events}), 32)
         for event in client.events:
             self.assertEqual(event['task_id'], report['task_id'])
             self.assertEqual(event['trace_id'], report['trace_id'])
@@ -462,15 +497,15 @@ class SRELLMTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             report = self.evaluate(directory, model, client)
         self.assertEqual(report['result'], 'failed')
-        self.assertEqual(report['attempted_inferences'], 16)
-        self.assertEqual(report['passed_inferences'], 12)
-        self.assertEqual(report['audited_inferences'], 16)
+        self.assertEqual(report['attempted_inferences'], 32)
+        self.assertEqual(report['passed_inferences'], 20)
+        self.assertEqual(report['audited_inferences'], 32)
         rejected = [item for item in report['attempts'] if item['result'] == 'failed']
-        self.assertEqual([item['case_id'] for item in rejected], ['critical_pod', 'critical_pod',
-                                                               'runtime_degraded', 'runtime_degraded'])
+        self.assertEqual([item['case_id'] for item in rejected], [name for name in ('critical_pod', 'runtime_degraded', 'container_exit_nonzero',
+            'container_oom_reported', 'container_image_pull_wait', 'container_backoff_wait') for _ in range(2)])
         self.assertTrue(all(item['failure_code'] == 'triage_contract_rejected' for item in rejected))
-        self.assertEqual([event['status'] for event in client.events].count('failed'), 4)
-        self.assertEqual(len(model.calls), 16)
+        self.assertEqual([event['status'] for event in client.events].count('failed'), 12)
+        self.assertEqual(len(model.calls), 32)
 
     def test_synthetic_sre_evaluation_retains_failed_inference_usage_but_not_raw_error(self):
         model, client = FixtureSelector(fail_first=True), EvaluationClient()
@@ -478,17 +513,17 @@ class SRELLMTests(unittest.TestCase):
             report = self.evaluate(directory, model, client)
             saved = '\n'.join(file.read_text() for file in (Path(directory) / 'evidence').iterdir())
         self.assertEqual(report['result'], 'failed')
-        self.assertEqual(report['passed_inferences'], 15)
-        self.assertEqual(report['audited_inferences'], 16)
+        self.assertEqual(report['passed_inferences'], 31)
+        self.assertEqual(report['audited_inferences'], 32)
         self.assertEqual(report['attempts'][0]['failure_code'], 'model_response_failed')
         self.assertEqual(report['attempts'][0]['metrics']['completion_tokens'], 45)
-        self.assertEqual(report['usage']['prompt_tokens'], 123 * 16)
-        self.assertEqual(report['usage']['completion_tokens'], 45 * 16)
+        self.assertEqual(report['usage']['prompt_tokens'], 123 * 32)
+        self.assertEqual(report['usage']['completion_tokens'], 45 * 32)
         self.assertIsNone(report['usage']['inference_cost_estimate'])
         self.assertNotIn('private-model-error', saved)
         self.assertNotIn('private-output', saved)
         self.assertEqual(client.events[0]['status'], 'failed')
-        self.assertEqual(len(model.calls), 16)
+        self.assertEqual(len(model.calls), 32)
 
     def test_synthetic_sre_evaluation_audit_outage_stops_further_inference(self):
         for preflight in (False, True):

@@ -61,7 +61,7 @@ to repeat and the findings that justify those reads. Tool arguments, namespace
 and context are fixed by the host. No model-provided commands are executed.
 
 The model receives only bounded finding IDs, codes, severities, subjects,
-permitted tools and observation completeness/times. Raw doctor summaries,
+permitted tools, typed container-state facts and observation completeness/times. Raw doctor summaries,
 event messages, logs, credentials and arbitrary payload fields are excluded.
 Input is capped at 8 KiB, with at most 24 findings; all critical findings must
 fit or the task fails. Omitted warning counts stay visible. The profile bounds
@@ -78,6 +78,24 @@ follow-up executes. Intentional root Flux suspension is informational. A
 historical restart or Warning event is not proof of a current outage. The
 contract deliberately leaves `root_cause: undetermined`; this is an evidence
 collection assistant, not a general causal diagnosis or repair agent.
+
+Application-container observations distinguish the current state from the last
+reported termination. The Gateway binds status names to the Pod's declared
+application containers and retains at most eight rows, with explicit incomplete
+or unknown coverage. It excludes init and ephemeral containers. Only known
+reason codes, strict exit/restart counts, readiness and normalized timestamps
+survive projection; messages, image/container IDs, commands and environment
+variables do not. Missing fields remain unknown. Older snapshots without this
+field retain their original readiness meaning and label detailed coverage as
+not observed.
+
+The host classifies a reported nonzero exit, explicit `OOMKilled`, image-pull
+wait or restart backoff into evidence findings. Qwen selects the next permitted
+reads from those findings. Exit code 137 alone is not classified as OOM, and a
+previous termination is historical evidence rather than a current failure.
+These distinctions follow the [Kubernetes 1.33 container-state contract](https://v1-33.docs.kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-states).
+Container comparisons bind the same Pod UID and container name; a changed
+state is not a claim of recovery or root cause.
 
 Comparisons use Pod/Event UIDs and acquisition times. The same Pod name with a
 new UID is a replacement, not restart-counter recovery. Event count growth is
@@ -115,15 +133,19 @@ findings and comparisons. Hashes cover these retained projections. Arbitrary
 snapshot fields and raw model responses are not written. A successful workflow may still report
 `attention-required`; it has verified its procedure, not repaired the lab.
 
-The evaluation command sends eight synthetic cases twice each: intentional Flux
+The evaluation command sends sixteen synthetic cases twice each. Its original
+eight cases cover intentional Flux
 only, historical restarts, two critical Pods, a Warning event, degraded doctor,
 truncated events, simultaneous Pod/runtime unavailability, and unknown runtime
-status. It verifies evidence references, critical coverage,
+status. Eight additional cases cover current nonzero exit, explicit OOM,
+image-pull wait, restart backoff, previous nonzero exit/OOM, unknown details and
+truncated details. It verifies evidence references, critical coverage,
 uncertainty, and allowed read selection using the same validator. It performs
-no MCP calls or fault injection. Sixteen inference events are individually
+no MCP calls or fault injection. Thirty-two inference events are individually
 written to AgentHouse and read back; an audit failure stops the suite. Evaluation
 trace IDs are correlation identifiers, not exported spans. Evidence stays in
 `tmp/local-experiment/sre-evaluation/<uuid>/` without raw prompts/responses.
+The report preserves earlier six/eight-case receipts as separate case groups.
 
 No server settings, weights, resident services, volumes or workload state are
 changed. Run the original `local-sre-smoke` to use the deterministic baseline;
@@ -140,9 +162,12 @@ rtk make local-sre-qwen-drill
 This is a real local fault-detection experiment. It creates exactly one new
 `sre-drill-<uuid>` Pod, runs `/bin/sh -c 'exit 1'`, waits for `Failed` with exit
 code 1, then invokes the same Qwen SRE workflow. Success requires a critical
-`WORKLOAD_FAILED` finding and a selected Pod follow-up that observes the same
-UID still Failed. It verifies the saved initial/follow-up hashes as well as the
-workflow's audit success. This does not test repair of a retained workload.
+`WORKLOAD_FAILED` and `CONTAINER_EXIT_NONZERO` finding, and a selected Pod
+follow-up that observes the same UID still Failed. Both snapshots must report
+the `fail-once` container's current `Error` termination, exit code 1, unchanged
+start/finish times and zero restarts. The drill reconstructs the model-facing
+evidence from saved observations and verifies both hashes and audit success.
+This does not test repair of a retained workload or induce an actual OOM.
 
 The drill reads the existing `trino-local` Deployment's fixed local image digest
 and numeric non-root user. It uses `imagePullPolicy: Never`, 50m CPU / 32 MiB,

@@ -22,7 +22,7 @@ protocol JSON continues to use MCP's standard field aliases.
 | `gateway_policy` | No arguments | Fixed allowlist and local scope |
 | `shirokuma_doctor` | No arguments | Existing `local-experiment` doctor report |
 | `local_platform_status` | No arguments | Fixed lakehouse, Superset, metadata, AgentHouse and Loki readiness, including unknown observations |
-| `k8s_read_pods` | Only `shirokuma-dev`; limit 1–50 | Names, phases, readiness and restart counts |
+| `k8s_read_pods` | Only `shirokuma-dev`; limit 1–50 | Names, phases, readiness/restart counts and bounded application-container states |
 | `k8s_read_events` | Only `shirokuma-dev`; limit 1–50 | Reasons and object identities; no free-text messages or Secret events |
 | `dbt_list_models` | No arguments | Fixed project and latest successful DataOps artifact dependencies |
 | `trino_explain_fixture` | No SQL argument | EXPLAIN of the fixed retained fixture SELECT through a temporary managed tunnel |

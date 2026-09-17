@@ -402,6 +402,7 @@ local-gateway-smoke: local-gateway-sync
 
 test-local-gateway:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_gateway.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_gateway_container_status.py'
 
 verify-local-experiment: test-local-gateway
 

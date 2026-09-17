@@ -391,5 +391,193 @@ class ProjectionTests(unittest.TestCase):
             self.assertNotIn('private', str(error.exception))
 
 
+def container_state(kind='running', reason=None, exit_code=None):
+    stamp = '2026-09-17T01:00:00.000000Z'
+    return dict(kind=kind, reason=reason, exit_code=exit_code,
+                started_at=stamp if kind in ('running', 'terminated') else None,
+                finished_at=stamp if kind == 'terminated' else None)
+
+
+def container_details(state=None, *, prior=None, status='complete', restarts=0):
+    state = state or container_state()
+    return {'status': status, 'scope': 'application-containers', 'containers': [
+        dict(name='application', ready=state['kind'] == 'running', restarts=restarts,
+             state=state, last_termination=prior)]}
+
+
+class ContainerEvidenceTests(unittest.TestCase):
+    def data(self, details):
+        data = observations()
+        pod = data[1]['pods'][0]
+        pod['container_observation'] = details
+        if details['containers'] and not details['containers'][0]['ready']:
+            pod['ready_containers'] = 0
+        return data
+
+    def test_legacy_missing_details_explicitly_not_observed_and_old_saved_evidence_valid(self):
+        evidence = contract.build_evidence(*observations())
+        self.assertEqual(evidence['observations']['pods']['container_details'],
+            dict(scope='application-containers', complete=0, truncated=0, unknown=0, not_observed=1))
+        self.assertEqual(evidence['health'], 'healthy-observed-scope')
+        del evidence['observations']['pods']['container_details']
+        contract.validate_evidence(evidence)
+        retained = contract.project_observations(snapshots())
+        self.assertNotIn('container_observation', retained['k8s_read_pods']['pods'][0])
+
+    def test_exit137_without_reported_oom_is_nonzero_only_with_exact_current_context(self):
+        details = container_details(container_state('terminated', 'Error', 137))
+        evidence = contract.build_evidence(*self.data(details))
+        finding = next(x for x in evidence['findings'] if x['code'] == 'CONTAINER_EXIT_NONZERO')
+        self.assertEqual(finding['severity'], 'critical')
+        self.assertEqual(finding['subject'], 'seaweedfs-0')
+        self.assertEqual(finding['container'], dict(name='application', observation='current', status='complete',
+            ready=False, restarts=0, state=details['containers'][0]['state']))
+        self.assertFalse(any('OOM' in x['code'] for x in evidence['findings']))
+
+    def test_reported_oom_uses_reason_not_exit_code_and_no_inferred_cause(self):
+        for code in (137, 1, 0):
+            evidence = contract.build_evidence(*self.data(container_details(container_state('terminated', 'OOMKilled', code))))
+            findings = [x for x in evidence['findings'] if x['code'].startswith('CONTAINER_')]
+            self.assertEqual([x['code'] for x in findings], ['CONTAINER_OOM_REPORTED'])
+            reads = {'tool': 'k8s_read_pods', 'finding_ids': [x['id'] for x in evidence['findings'] if x['severity'] == 'critical']}
+            contract.validate_triage(triage(evidence, reads), evidence)
+            with self.assertRaises(contract.DiagnosticError):
+                contract.validate_triage(dict(triage(evidence, reads), root_cause='memory-limit'), evidence)
+
+    def test_image_pull_and_crashloop_wait_are_current_critical_other_waits_not_invented(self):
+        for reason, expected in [('ErrImagePull', 'CONTAINER_IMAGE_PULL_WAIT'),
+                                 ('ImagePullBackOff', 'CONTAINER_IMAGE_PULL_WAIT'),
+                                 ('CrashLoopBackOff', 'CONTAINER_BACKOFF_WAIT'),
+                                 ('ContainerCreating', None)]:
+            evidence = contract.build_evidence(*self.data(container_details(container_state('waiting', reason))))
+            findings = [x for x in evidence['findings'] if 'container' in x]
+            self.assertEqual([x['code'] for x in findings], [expected] if expected else [])
+
+    def test_prior_termination_only_is_warning_with_running_current_not_current_failure(self):
+        for reason, expected in [('Error', 'CONTAINER_PREVIOUS_EXIT_NONZERO'), ('OOMKilled', 'CONTAINER_PREVIOUS_OOM_REPORTED')]:
+            details = container_details(prior=container_state('terminated', reason, 137), restarts=2)
+            evidence = contract.build_evidence(*self.data(details))
+            self.assertEqual([(x['code'], x['severity']) for x in evidence['findings']], [(expected, 'warning')])
+            self.assertEqual(evidence['findings'][0]['container']['observation'], 'last-termination')
+
+    def test_current_and_prior_different_facts_remain_separate_and_all_current_critical_mandatory(self):
+        details = container_details(container_state('waiting', 'CrashLoopBackOff'),
+                                    prior=container_state('terminated', 'OOMKilled', 137), restarts=3)
+        evidence = contract.build_evidence(*self.data(details))
+        self.assertIn('CONTAINER_PREVIOUS_OOM_REPORTED', [x['code'] for x in evidence['findings']])
+        readiness = [x['id'] for x in evidence['findings'] if x['code'] == 'WORKLOAD_NOT_READY']
+        with self.assertRaisesRegex(contract.DiagnosticError, 'critical'):
+            contract.validate_triage(triage(evidence, {'tool': 'k8s_read_pods', 'finding_ids': readiness}), evidence)
+        ids = [x['id'] for x in evidence['findings'] if x['severity'] == 'critical']
+        contract.validate_triage(triage(evidence, {'tool': 'k8s_read_pods', 'finding_ids': ids}), evidence)
+
+    def test_unknown_and_truncated_details_do_not_assert_health_or_missing_states(self):
+        for status in ('unknown', 'truncated'):
+            details = container_details(status=status)
+            if status == 'unknown':
+                details['containers'] = []
+            else:
+                details['containers'] = [dict(copy.deepcopy(details['containers'][0]), name=f'app-{i}') for i in range(8)]
+            evidence = contract.build_evidence(*self.data(details))
+            self.assertEqual(evidence['health'], 'unknown')
+            self.assertEqual([x['code'] for x in evidence['findings']], ['CONTAINER_OBSERVATION_' + status.upper()])
+            self.assertEqual(evidence['observations']['pods']['container_details'][status], 1)
+            evidence['findings'] = []
+            evidence['health'] = 'healthy-observed-scope'
+            with self.assertRaises(contract.DiagnosticError):
+                contract.validate_evidence(evidence)
+
+    def test_unknown_reason_keeps_nonzero_fact_without_guessing_cause(self):
+        evidence = contract.build_evidence(*self.data(container_details(container_state('terminated', 'unknown', 1), status='unknown')))
+        self.assertEqual({x['code'] for x in evidence['findings']},
+            {'CONTAINER_EXIT_NONZERO', 'CONTAINER_OBSERVATION_UNKNOWN', 'WORKLOAD_NOT_READY'})
+
+    def test_malformed_or_raw_container_details_fail_before_model_projection(self):
+        changes = [lambda x: x.update(message='private message'),
+                   lambda x: x['containers'][0].update(container_id='private runtime ID'),
+                   lambda x: x['containers'][0]['state'].update(reason='private unknown reason'),
+                   lambda x: x['containers'][0].update(restarts=True),
+                   lambda x: x.update(status='truncated')]
+        for mutate in changes:
+            details = container_details()
+            mutate(details)
+            data = self.data(details)
+            for operation in (lambda: contract.build_evidence(*data),
+                              lambda: contract.project_observations(dict(zip(contract.TOOLS, data)))):
+                with self.assertRaises(contract.DiagnosticError) as error:
+                    operation()
+                self.assertNotIn('private', str(error.exception))
+
+    def test_context_cannot_relabel_history_severity_exit_or_oom_and_must_be_exact(self):
+        evidence = contract.build_evidence(*self.data(container_details(container_state('terminated', 'Error', 137))))
+        index = next(i for i, x in enumerate(evidence['findings']) if 'container' in x)
+        changes = [lambda x: x['container'].update(observation='last-termination'),
+                   lambda x: x['container']['state'].update(reason='OOMKilled'),
+                   lambda x: x['container']['state'].update(exit_code=0),
+                   lambda x: x['container'].update(raw_message='private'),
+                   lambda x: x.update(severity='warning'), lambda x: x.pop('container')]
+        for mutate in changes:
+            changed = copy.deepcopy(evidence)
+            mutate(changed['findings'][index])
+            with self.assertRaises(contract.DiagnosticError):
+                contract.validate_evidence(changed)
+
+    def test_full_container_projection_replays_without_aliasing_input(self):
+        data = self.data(container_details(container_state('waiting', 'CrashLoopBackOff'),
+                        prior=container_state('terminated', 'Error', 1), restarts=4))
+        raw = dict(zip(contract.TOOLS, data))
+        projected = contract.project_observations(raw)
+        self.assertEqual(contract.build_evidence(*data), contract.build_evidence(*(projected[t] for t in contract.TOOLS)))
+        projected['k8s_read_pods']['pods'][0]['container_observation']['containers'][0]['restarts'] = 9
+        self.assertEqual(data[1]['pods'][0]['container_observation']['containers'][0]['restarts'], 4)
+
+
+class ContainerComparisonTests(unittest.TestCase):
+    def before(self):
+        before = snapshots()
+        before['k8s_read_pods']['pods'][0]['container_observation'] = container_details(
+            container_state('waiting', 'CrashLoopBackOff'), prior=container_state('terminated', 'Error', 1), restarts=4)
+        return before
+
+    def test_same_uid_name_preserves_state_history_and_restart_decrease_without_recovery(self):
+        before = self.before()
+        after = reread(before, 'k8s_read_pods')
+        after['k8s_read_pods']['pods'][0]['container_observation'] = container_details(restarts=1)
+        result = contract.compare_observations(before, after)
+        observed = result['sources']['k8s_read_pods']
+        self.assertEqual(observed['status'], 'changed')
+        self.assertEqual(observed['changes'][0]['kind'], 'container-fields-changed')
+        self.assertEqual(observed['changes'][0]['changed_fields'], ['ready', 'restarts', 'state', 'last_termination'])
+        self.assertIn('container-restart-count-decreased', observed['limitations'])
+        self.assertIn('no-recovery-claim', observed['limitations'])
+        self.assertEqual(result['root_cause'], 'undetermined')
+        self.assertEqual(result, contract.compare_observations(contract.project_observations(before), contract.project_observations(after)))
+
+    def test_replaced_pod_does_not_compare_same_named_container_history(self):
+        before = self.before()
+        after = reread(before, 'k8s_read_pods')
+        after['k8s_read_pods']['pods'][0].update(uid='new-pod', container_observation=container_details())
+        observed = contract.compare_observations(before, after)['sources']['k8s_read_pods']
+        self.assertEqual([x['kind'] for x in observed['changes']], ['pod-replaced'])
+
+    def test_incomplete_equal_detail_lists_cannot_claim_no_change(self):
+        before = self.before()
+        before['k8s_read_pods']['pods'][0]['container_observation'] = dict(status='unknown', scope='application-containers', containers=[])
+        after = reread(before, 'k8s_read_pods')
+        observed = contract.compare_observations(before, after)['sources']['k8s_read_pods']
+        self.assertEqual(observed['status'], 'incomparable')
+        self.assertIn('incomplete-container-details', observed['limitations'])
+
+    def test_unknown_to_complete_records_new_observation_without_recovery_claim(self):
+        before = self.before()
+        before['k8s_read_pods']['pods'][0]['container_observation'] = dict(status='unknown', scope='application-containers', containers=[])
+        after = reread(before, 'k8s_read_pods')
+        after['k8s_read_pods']['pods'][0]['container_observation'] = container_details()
+        observed = contract.compare_observations(before, after)['sources']['k8s_read_pods']
+        self.assertEqual([x['kind'] for x in observed['changes']],
+                         ['container-observation-status-changed', 'container-first-observed'])
+        self.assertIn('no-recovery-claim', observed['limitations'])
+
+
 if __name__ == '__main__':
     unittest.main()

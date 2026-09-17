@@ -13,6 +13,7 @@ import time
 import uuid
 
 from run_sre_llm import run as run_sre, module, TOOLS
+from sre_contract import build_evidence
 from providers import load_config, validate_config
 from evaluation import private_write
 
@@ -189,21 +190,55 @@ def verify_detection(report: dict, observations: list, receipt: dict) -> dict:
         raise DrillError('initial workflow observations differ')
     if hashlib.sha256(json.dumps(initial, sort_keys=True).encode()).hexdigest() != report['initial_sha256']:
         raise DrillError('initial workflow observation digest differs')
+    try:
+        rebuilt = build_evidence(initial['shirokuma_doctor'], initial['k8s_read_pods'],
+                                 initial['k8s_read_events'], initial['local_platform_status'])
+    except (ValueError, KeyError, TypeError):
+        raise DrillError('saved observations cannot reconstruct the SRE evidence') from None
+    if rebuilt != report['evidence']:
+        raise DrillError('SRE evidence differs from the saved observations')
+    container_findings = [finding for finding in rebuilt['findings']
+                          if finding['subject'] == receipt['name']
+                          and finding['code'] == 'CONTAINER_EXIT_NONZERO'
+                          and finding['severity'] == 'critical']
+    if (len(container_findings) != 1
+            or container_findings[0]['id'] not in selected[0]['finding_ids']):
+        raise DrillError('SRE did not select the observed container exit for re-observation')
     followups = [item['snapshot'] for item in observations
                  if item.get('tool') == 'k8s_read_pods' and item.get('phase') == 'followup']
     if len(followups) != 1:
         raise DrillError('missing exact Pod follow-up observation')
     if hashlib.sha256(json.dumps(followups[0], sort_keys=True).encode()).hexdigest() != report['followup_sha256']['k8s_read_pods']:
         raise DrillError('Pod follow-up digest differs')
+    terminations = []
     for snapshot in (initial['k8s_read_pods'], followups[0]):
         rows = [pod for pod in snapshot['pods'] if pod.get('name') == receipt['name']]
         if (snapshot.get('namespace') != NAMESPACE or snapshot.get('truncated') is not False
                 or len(rows) != 1 or rows[0].get('uid') != receipt['uid'] or rows[0].get('phase') != 'Failed'):
             raise DrillError('SRE snapshots did not retain the same Failed Pod UID')
+        detail = rows[0].get('container_observation')
+        if (not isinstance(detail, dict) or detail.get('status') != 'complete'
+                or detail.get('scope') != 'application-containers'
+                or not isinstance(detail.get('containers'), list) or len(detail['containers']) != 1):
+            raise DrillError('SRE snapshots lack the complete application container observation')
+        container = detail['containers'][0]
+        state = container.get('state') if isinstance(container, dict) else None
+        if (not isinstance(state, dict) or container.get('name') != 'fail-once'
+                or container.get('ready') is not False or type(container.get('restarts')) is not int
+                or container['restarts'] != 0 or container.get('last_termination') is not None
+                or state.get('kind') != 'terminated' or state.get('reason') != 'Error'
+                or type(state.get('exit_code')) is not int or state['exit_code'] != 1
+                or not state.get('started_at') or not state.get('finished_at')):
+            raise DrillError('SRE snapshots did not retain the intended current container exit')
+        terminations.append(detail)
+    if terminations[0] != terminations[1]:
+        raise DrillError('container termination changed between the same-UID observations')
     comparison = report['comparisons']['sources']['k8s_read_pods']
     if comparison.get('status') not in {'changed', 'no-change-observed'}:
         raise DrillError('Pod re-observation was not comparable')
     return {'critical_finding_id': findings[0]['id'], 'pod_uid': receipt['uid'],
+            'container_finding_id': container_findings[0]['id'],
+            'container_name': 'fail-once', 'container_state': terminations[0]['containers'][0]['state'],
             'initial_and_followup_phase': 'Failed', 'selected_tool': 'k8s_read_pods',
             'comparison_status': comparison['status'], 'workflow_task_id': report['task_id'],
             'workflow_trace_id': report['trace_id']}

@@ -5,7 +5,7 @@ title: "WP-L2-AGENT-001 MCP Gateway MVP"
 status: local-verified
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.3"
+version: "0.4"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -95,3 +95,21 @@ SREはこのtoolを4つ目の初期観測として利用する。個々のSQL/da
 監査配送の時間を確保する。実親子process回収を含む31 gateway testsが成功。
 修正後の実MCP12件相関・5群readyも再確認した。最終証跡は
 `tmp/local-experiment/gateway/smoke-1aff3c763c9c41e490cc59a16d51505a.json`。
+
+## 2026-09-17 bounded application-container observations
+
+既存`k8s_read_pods`へ`container_observation`を追加。固定9toolと読み取り専用の境界を維持し、
+application containersの現在stateと`last_termination`を分けて返す。name、ready、restart回数、
+state kind、allowlist reason、exit code、UTCの開始・終了時刻だけを射影する。
+message、container ID、環境変数、ログ原文、秘密情報は返さない。init/ephemeral containersは対象外。
+
+spec/statusのname集合を照合し、最大256入力行を検査、返却は名前順8行までに制限する。
+正しい全件が8行を超えた場合だけtruncated、不正・欠測はunknownを優先する。
+旧保存snapshotのキー欠落はSRE側でnot-observedとし、詳細が完全だったとは扱わない。
+typed null、reason enum、int32、UTC時刻順序、完全性を同じpure helperで再検証する。
+
+Gateway関連94 tests（新規14件を含む）が成功。SREの実Failed Pod drillでは、同UIDの
+`fail-once`についてcurrent terminated / Error / exit1 / restarts0 / last_termination nullと
+開始・終了時刻を2回のMCP観測で照合した。実機結果・監査の範囲は
+[SRE Bear](WP-L2-AGENT-002_SRE_Bear.md)と[Milestones](../061_Local_Experiment_Milestones.md)を参照。
+これは報告されたコンテナ状態の観測であり、根本原因・process identity・自動修復の証明ではない。

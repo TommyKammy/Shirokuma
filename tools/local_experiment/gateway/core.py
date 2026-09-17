@@ -79,6 +79,9 @@ def load_module(name: str, path: Path):
     return module
 
 
+CONTAINER_STATUS = load_module('gateway_container_status', HERE / 'container_status.py')
+
+
 def safe_name(value: Any, maximum: int = 128) -> str:
     if not isinstance(value, str) or len(value) > maximum:
         return 'unavailable'
@@ -240,7 +243,9 @@ class Backends:
                          'phase': safe_name(status.get('phase')),
                          'ready_containers': sum(x.get('ready') is True for x in containers),
                          'total_containers': len(containers),
-                         'restarts': sum(x.get('restartCount', 0) for x in containers)})
+                         'restarts': sum(x.get('restartCount', 0) for x in containers),
+                         'container_observation': CONTAINER_STATUS.project_container_observation(
+                             item, timestamp=safe_timestamp)})
         return {'namespace': namespace, 'observed_at': observed_at, 'pods': pods,
                 'truncated': len(data.get('items', [])) > limit}
 

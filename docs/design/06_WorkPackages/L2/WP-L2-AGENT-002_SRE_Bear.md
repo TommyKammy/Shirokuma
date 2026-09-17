@@ -5,7 +5,7 @@ title: "WP-L2-AGENT-002 SRE Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.5"
+version: "0.6"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -14,7 +14,8 @@ tags: [shirokuma, workpackage, l2, agentops]
 
 ## Summary
 
-K8s events/logs/metricsを診断してPR提案する
+K8s Pod/Event・runtime状態の固定観測から実LLMが追加読取を選び、同一identityの変化を確認する。
+containerの現在状態と過去終了履歴を分離する。logs/metricsによる原因診断・自動修復は未達。
 
 ## Context
 
@@ -136,3 +137,50 @@ Native admission適用後にも新規Failed Pod drillを再実行した。
 4初期観測＋Pod/Eventの2followups、8監査event相関が成功。入力854・出力146 tokens、4.930秒。
 作成UID `6f55c9f5-83e9-47a9-b69d-4bedfdadbb89`だけを削除し、既存6 Pod前後一致・残留0。
 証跡は`tmp/local-experiment/sre-drill/4a856109b32f408185aebe247508c1b2/`。
+
+## 2026-09-17 current and historical container evidence
+
+Gatewayの型付き`container_observation`をhost側で検証し、現在の非0終了、報告されたOOMKilled、
+image-pull待機、CrashLoopBackOffをcriticalとして分類する。過去の非0終了・OOM報告はwarningであり、
+現在の障害に昇格させない。exit137だけではOOMとせず、未知reasonから原因を推測しない。
+findingはPod名をsubjectとし、container名・current/last-termination・観測完全性・ready・restart・
+固定stateを根拠として持つ。モデルの返却JSONはassessment/checks/root_causeのまま、
+current criticalの全根拠IDを`k8s_read_pods`で再観測することをhostが要求する。
+
+application containersだけを対象に256行まで検査・8行まで返し、raw message/log/secretは除外する。
+unknown/truncatedは健康の根拠にせず、旧snapshotに詳細キーがなければnot-observedを明示し、
+旧readiness評価との互換を維持する。保存射影から根拠を再構成できる。
+比較は同Pod UID＋container名に限定し、state移動・last_termination変化・restart減少を記録する。
+観測可能になったことやRunningへの変化を復旧と推定せず、root_causeはundeterminedのまま保持する。
+入力8KiB・最大24findings・最大2種の追加readの制限を維持する。
+
+### Actual model evaluation and disposable drill
+
+既存8caseを保持し、current非0/OOM/image-pull/backoff、historical非0/OOM、unknown/truncatedの
+8caseを追加した。実Qwen評価`c0de842e01824262bdc19298cfb9f0ac`は16case×2＝32/32成功・監査32件。
+入力26368/出力2070tokens、推論91289ms、cost NULL。合成評価は実故障注入と区別する。
+
+実drill `850681c5c93949f09cd449c4d6728c9a`（run `8efbf36cdca845af8caba3d5a3b26b5a`）では
+新規Pod UID `ba22d3e2-6df7-464d-af62-4df1287a1e72`の`fail-once`がcurrent terminated / Error /
+exit1 / ready=false / restarts0 / last_termination=nullと観測された。
+開始・終了はともに2026-09-17 09:53:25 UTC。初回とfollowupで同UID・全固定値を確認し、
+モデルはcriticalのf01/f02を選択、所有UIDを条件としたcleanupでPodを削除した。
+
+workflow `workflow-c4455c5ca4664504899009781b79d8bb`、trace
+`4706d338a360bb614ce3d2a51a122054`。入力1731/出力174tokens、推論6996ms。
+4初期read＋2followups＋LLM＋assessmentの8件をAgentHouse/Lokiで照合した。
+保存された実OTel spanは2件、MCP6件は返却span IDによる相関であり、保存span8件とは呼ばない。
+評価とdrillの合計33callsは28099入力/2244出力tokens・98285ms、cost NULL。
+
+SRE84 tests（新host17＋drill3件を含む）、Gateway関連94、report24が成功。
+最初の全回帰998件で新Gatewayテストの配線漏れを検出し、14件をMakeへ追加した。
+正式な最終全回帰は1012件（1011成功・optional OTel 1skip）。
+この結果はlocal-partialの観測機能を進めたもので、一般的な原因診断・自動修復・本番受入は未達。
+
+最終独立監査は`tmp/local-experiment/sre-container-preflight/0ac17cd4dad044d5838caccc68473445/verification.json`
+の80checksが成功。AH388→428は旧388件の全hash保持＋新評価32/workflow8、Loki8件が完全一致した。
+保存実span2＋MCP返却span ID相関6、同UID/current Error/exit1とf01/f02再観測を独立再計算して一致。
+保持Kube/Docker/履歴4tables・5DDL/1151filesは不変、生成Podの不存在もfresh確認した。
+fixture/metadataは前handoffのsealed証拠を継承しており、今回のfresh読取とはしない。
+全評価reportの母集団はQwen152/152・mock10/10（別群）、全体162/162・11valid runs。
+上記drillの1推論はgolden評価に含めない。

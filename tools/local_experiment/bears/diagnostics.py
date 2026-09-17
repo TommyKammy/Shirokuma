@@ -2,7 +2,20 @@
 from __future__ import annotations
 
 import re
+import copy
+from pathlib import Path
+import sys
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from tools.local_experiment.gateway.container_status import (
+    ContainerObservationError, validate_container_observation,
+)
+
+CONTAINER_CRITICAL = frozenset({'CONTAINER_EXIT_NONZERO', 'CONTAINER_OOM_REPORTED',
+                                'CONTAINER_IMAGE_PULL_WAIT', 'CONTAINER_BACKOFF_WAIT'})
+CONTAINER_HISTORICAL = frozenset({'CONTAINER_PREVIOUS_EXIT_NONZERO', 'CONTAINER_PREVIOUS_OOM_REPORTED'})
+CONTAINER_UNKNOWN = frozenset({'CONTAINER_OBSERVATION_UNKNOWN', 'CONTAINER_OBSERVATION_TRUNCATED'})
 
 
 class DiagnosticError(ValueError):
@@ -19,6 +32,54 @@ def count(value: Any) -> int:
     if type(value) is not int or value < 0:
         raise DiagnosticError('invalid diagnostic count')
     return value
+
+
+def container_observation(pod: dict) -> dict | None:
+    """A missing legacy field is not observed, never synthesized as complete."""
+    if 'container_observation' not in pod:
+        return None
+    try:
+        return copy.deepcopy(validate_container_observation(pod['container_observation']))
+    except (ContainerObservationError, TypeError):
+        raise DiagnosticError('invalid bounded container observation') from None
+
+
+def container_code(state: dict, *, historical=False) -> str | None:
+    if state['kind'] == 'terminated':
+        if state['reason'] == 'OOMKilled':
+            return 'CONTAINER_PREVIOUS_OOM_REPORTED' if historical else 'CONTAINER_OOM_REPORTED'
+        if state['exit_code'] is not None and state['exit_code'] != 0:
+            return 'CONTAINER_PREVIOUS_EXIT_NONZERO' if historical else 'CONTAINER_EXIT_NONZERO'
+    if not historical and state['kind'] == 'waiting':
+        if state['reason'] in ('ErrImagePull', 'ImagePullBackOff'):
+            return 'CONTAINER_IMAGE_PULL_WAIT'
+        if state['reason'] == 'CrashLoopBackOff':
+            return 'CONTAINER_BACKOFF_WAIT'
+    return None
+
+
+def container_findings(pod: dict) -> list[dict]:
+    observed = container_observation(pod)
+    if observed is None:
+        return []
+    result = []
+    name = identifier(pod.get('name'))
+    if observed['status'] != 'complete':
+        result.append({'code': 'CONTAINER_OBSERVATION_' + observed['status'].upper(),
+                       'severity': 'warning', 'source': 'pods', 'subject': name,
+                       'detail': 'Application-container details are incomplete; omitted states remain unknown.'})
+    for row in observed['containers']:
+        for field, label in (('state', 'current'), ('last_termination', 'last-termination')):
+            state = row[field]
+            code = container_code(state, historical=field == 'last_termination') if state else None
+            if code:
+                result.append({'code': code, 'severity': 'critical' if code in CONTAINER_CRITICAL else 'warning',
+                               'source': 'pods', 'subject': name,
+                               'detail': 'Reported container state only; root cause remains undetermined.',
+                               'container': {'name': row['name'], 'observation': label,
+                                             'status': observed['status'], 'ready': row['ready'],
+                                             'restarts': row['restarts'], 'state': copy.deepcopy(state)}})
+    return result
 
 
 def verify_correlation(rows: list, logs: list, calls: list, *, event_id: str,
@@ -96,6 +157,7 @@ def diagnose(doctor: dict, pods: dict, events: dict) -> dict:
         if restarts:
             add('WORKLOAD_RESTARTED', 'warning', 'pods', name,
                 f'{restarts} historical container restart(s); restart count alone does not prove a current outage.')
+        findings.extend(container_findings(pod))
     if pods.get('truncated'):
         add('POD_OBSERVATION_TRUNCATED', 'warning', 'pods', 'shirokuma-dev',
             'The bounded pod list is incomplete; this report cannot assert namespace-wide readiness.')
@@ -107,12 +169,15 @@ def diagnose(doctor: dict, pods: dict, events: dict) -> dict:
             add('WARNING_EVENT', 'warning', 'events', f'{kind}/{name}',
                 f'Kubernetes reported {reason}; free-text messages are deliberately omitted.')
     findings.sort(key=lambda x: (x['severity'], x['code'], x['subject']))
-    attention = any(x['severity'] in {'critical', 'warning'} for x in findings)
+    attention = any(x['severity'] in {'critical', 'warning'} and x['code'] not in CONTAINER_UNKNOWN for x in findings)
     return {'mode': 'deterministic-read-only', 'llm_inference': False,
-            'health': 'attention-required' if attention else 'healthy-observed-scope',
+            'health': 'attention-required' if attention else 'unknown' if any(
+                x['code'] in CONTAINER_UNKNOWN for x in findings) else 'healthy-observed-scope',
             'intentional_flux_suspension': intentional_flux, 'findings': findings,
             'pod_count': len(pods['pods']), 'event_count': len(events['events']),
             'actions_executed': [],
             'limits': ['Observations are bounded snapshots, not a continuous monitor.',
                        'No root-cause inference from restart counts alone.',
+                       'Legacy container details are not observed; init and ephemeral containers are excluded.',
+                       'Reported OOM reason is not a root-cause diagnosis; exit 137 alone is not an OOM report.',
                        'No workload mutation, remediation, PR, or external publication.']}

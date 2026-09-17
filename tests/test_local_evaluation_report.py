@@ -18,10 +18,12 @@ SPEC.loader.exec_module(REPORT)
 
 
 def receipt(suite="inventory", *, mock=False, old_sre=False, failed_index=None, truncate=None, unknown_tokens=False,
-            data_variant=None):
+            data_variant=None, platform_sre=False):
     _, _, prefix, action, cases = REPORT.SUITES[suite]
     if old_sre:
         cases = cases[:6]
+    elif platform_sre:
+        cases = cases[:8]
     if suite == "data" and data_variant == "requests":
         cases = REPORT.DATA_REQUEST_CASES
     provider, model = ("shirokuma-mock", "shirokuma-deterministic-v1") if mock else ("mtplx", "qwen3.8-flash-next")
@@ -99,14 +101,30 @@ class EvaluationReportTests(unittest.TestCase):
         self.complete_all()
         self.save("inventory", receipt(mock=True, unknown_tokens=True))
         self.save("sre", receipt("sre", old_sre=True))
+        self.save("sre", receipt("sre", platform_sre=True))
         result = REPORT.collect(self.base)
-        self.assertEqual(len(result["groups"]), len(REPORT.SUITES) + 2)
+        self.assertEqual(len(result["groups"]), len(REPORT.SUITES) + 3)
         sre = [g for g in result["groups"] if g["suite"] == "sre"]
-        self.assertEqual({g["requested_inferences"] for g in sre}, {12, 16})
-        self.assertEqual(len({g["case_signature"] for g in sre}), 2)
+        self.assertEqual({g["requested_inferences"] for g in sre}, {12, 16, 32})
+        self.assertEqual(len({g["case_signature"] for g in sre}), 3)
         mock = next(g for g in result["groups"] if g["provider_kind"] == "mock")
         self.assertIsNone(mock["usage"]["prompt_tokens"]["total"])
         self.assertEqual(mock["usage"]["prompt_tokens"]["missing_calls"], 10)
+
+    def test_container_case_cannot_be_substituted_into_historical_sre_receipt(self):
+        value = receipt("sre", platform_sre=True)
+        value['attempts'][0]['case_id'] = 'container_exit_nonzero'
+        with self.assertRaises(REPORT.ReceiptError):
+            REPORT.normalize(value, 'sre')
+
+    def test_incomplete_container_evaluation_preserves_the_full_new_denominator(self):
+        self.save('sre', receipt('sre', failed_index=16, truncate=17))
+        result = REPORT.collect(self.base)
+        group = result['groups'][0]
+        self.assertEqual(group['requested_inferences'], 32)
+        self.assertEqual(group['attempted_inferences'], 17)
+        self.assertEqual(group['functional_success_observed']['numerator'], 16)
+        self.assertEqual(group['functional_success_observed']['denominator'], 17)
 
     def test_partial_failed_evaluation_preserves_unattempted_denominator(self):
         self.save("data", receipt("data", failed_index=0, truncate=1))

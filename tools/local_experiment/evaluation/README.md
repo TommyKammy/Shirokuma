@@ -28,8 +28,9 @@ service readiness or general model quality.
 ## Metric meanings
 
 - Groups separate suite, provider/model and case signature. Mock results stay
-  separate from local Qwen; older six-case SRE results stay separate from the
-  newer eight-case suite. Data `baseline` (six cases × two) and `requests`
+  separate from local Qwen; six-case, eight-case and sixteen-case SRE results
+  remain separate groups. The last adds eight container-state cases. Data
+  `baseline` (six cases × two) and `requests`
   (seven cases × two) have separate signatures and labels. A Data receipt with
   no `suite` field retains legacy baseline compatibility; unknown suite names,
   changed case order/IDs/counts, or altered expected operations are rejected.
