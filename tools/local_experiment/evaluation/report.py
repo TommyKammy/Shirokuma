@@ -31,6 +31,9 @@ SUITES = {
     "query-doctor": ("query-evaluation", "result.json", "query-eval-", "llm.query_eval", (
         "complete_observations", "projection_estimates_unknown", "both_estimates_unknown", "history_missing",
         "estimates_and_history_unknown", "zero_is_known", "failed_captured_query", "history_timing_unknown")),
+    "policy-gatekeeper": ("policy-evaluation", "result.json", "policy-eval-", "llm.policy_eval", (
+        "native_baseline", "native_host_controls", "native_container_controls", "native_exposure",
+        "native_namespace_control", "boundary_local_scope", "boundary_data_and_external", "boundary_environment_scope")),
 }
 TOKENS = ("prompt_tokens", "completion_tokens")
 METRICS = (*TOKENS, "duration_ms")

@@ -204,6 +204,23 @@ class EvaluationReportTests(unittest.TestCase):
         query = next(group for group in result["groups"] if group["suite"] == "query-doctor")
         self.assertEqual(query["requested_inferences"], 16)
 
+    def test_policy_suite_missing_then_failed_receipt_remains_in_denominators(self):
+        for suite in REPORT.SUITES:
+            if suite != "policy-gatekeeper":
+                self.save(suite, receipt(suite))
+        result = REPORT.collect(self.base)
+        self.assertEqual(result["result"], "incomplete")
+        self.assertEqual(result["coverage"]["unobserved_suites"], ["policy-gatekeeper"])
+        self.save("policy-gatekeeper", receipt("policy-gatekeeper", failed_index=0))
+        self.save("policy-gatekeeper", receipt("policy-gatekeeper"))
+        result = REPORT.collect(self.base)
+        self.assertEqual(result["result"], "complete")
+        self.assertEqual(result["coverage"]["reported_failed_runs"], 1)
+        group = next(g for g in result["groups"] if g["suite"] == "policy-gatekeeper")
+        self.assertEqual(group["functional_success_requested"], {"numerator": 31, "denominator": 32, "value": 31 / 32})
+        self.assertEqual(group["first_repeat_success"]["denominator"], 16)
+        self.assertEqual(group["audit_coverage"]["denominator"], 32)
+
     def test_no_raw_extras_or_free_text_enter_json_or_markdown(self):
         value = receipt()
         value.update(prompt="AUTH_SECRET", sql="DROP SECRET_TABLE", error="RAW_ERROR")

@@ -8,8 +8,8 @@ rtk make local-evaluation-report
 rtk make test-local-evaluation-report
 ```
 
-The fixed suites are inventory, SRE, Data Engineer, Catalog Curator and Query
-Doctor. Every discovered UUID directory in their private evaluation roots is
+The fixed suites are inventory, SRE, Data Engineer, Catalog Curator, Query
+Doctor and Policy Gatekeeper. Every discovered UUID directory in their private evaluation roots is
 inspected; selection never prefers the latest successful run. Result receipts
 and attempt logs must agree, and declared totals are recomputed. Saved audit
 identities, statuses and model usage must match each attempt. Duplicate run,

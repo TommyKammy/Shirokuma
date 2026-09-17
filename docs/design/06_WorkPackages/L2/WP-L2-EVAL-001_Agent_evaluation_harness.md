@@ -5,7 +5,7 @@ title: "WP-L2-EVAL-001 Agent evaluation harness"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.4"
+version: "0.5"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, evaluation]
 ---
@@ -73,12 +73,12 @@ Do not add unrelated dependencies or bypass policy checks.
 
 ## 2026-09-17 local bounded implementation plan
 
-Inventory/SRE/Data/Catalog/Query Doctorの5評価suiteが生成した全UUID receiptを読み取り専用で集計する。
+Inventory/SRE/Data/Catalog/Query Doctor/Policy Gatekeeperの6評価suiteが生成した全UUID receiptを読み取り専用で集計する。
 成功runや最新runだけを選択しない。mock/local、provider/model、case signatureを分離し、
 異なる評価範囲の成功数やlatencyを同じ品質指標として混ぜない。
 JSONのsummaryとattempts.jsonlを照合し、不正・未完了・重複・欠損を明示する。
 
-- [x] 5固定directory配下の全receiptを対象とし、失敗や不正receiptを黙って除かない。
+- [x] 6固定directory配下の全receiptを対象とし、失敗や不正receiptを黙って除かない。
 - [x] Functional success/audit coverage/latency/tokenの分母と欠損coverageを明示する。
 - [x] mockと実LLM、異なるcase setを別groupにする。
 - [x] 初回成功率、開始日時、同一code/fixture版は根拠がない場合unknownとし、mtimeから推測しない。
@@ -114,3 +114,16 @@ PR関連指標/MTTP/実runtime成功率はN/A、既存receiptの開始日時・c
 chronological初回成功率・修正率・費用はunknownのまま保持する。
 
 Query Doctor統合後、全回帰455 testsと設計73 documentsの検証も成功した。
+
+## 2026-09-17 Policy Gatekeeper suite追加
+
+固定8case×2のPolicy評価を第6suiteへ追加し、focused15 testsが成功。
+Policy未観測のreportはexit1となり、後続の成功が過去の失敗を隠さない分母もテストした。
+全6suiteの最終集計は8receipt/8groups valid、invalid/incomplete/duplicate/failed/unobserved各0。
+Qwenは7receiptに94/94成功・監査、入力46974/出力6660tokensは全94calls既知。
+Mock10callsは別groupでtokens欠測を保持する。異なるsuiteの一般品質比較には使用しない。
+
+`tmp/local-experiment/evaluation-reports/076b0abbce144d179e7c223c0126058d/`へ保存。
+独立検証は入力16filesと従来report9filesのSHA256前後不変、case/provider別分母、
+latency quantiles、saved audit metrics、unique IDsを再計算して一致。
+既存5suite complete reportも保持。全回帰486 testsと設計73documentsが成功。

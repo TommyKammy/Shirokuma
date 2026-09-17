@@ -5,18 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "2.1"
+version: "2.2"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：Query Doctorの実Qwen→固定Trino観測→追加統計readが成功。
-残った6項目の欠測を保持し、4監査/保存OTel・query終了・元fixture不変を確認した。
-8合成case×2は16/16成功。評価harnessは5suiteの全7receiptを集計し、14入力hash不変を確認。
-mock10とQwen78calls、SREの旧/現case構成を分離する。全回帰455 tests、設計73 documentsを検証。
-次はPolicy Gatekeeperを既存の固定server dry-runへ接続する。モデルに権限を付与させない。
+最新の到達点（2026-09-17）：Policy Gatekeeperの実Qwen25分類とnative15dry-runが全件一致。
+7監査/保存OTel、既存6Podと16policy/binding不変、残存object0を確認した。
+8合成case×2は16/16成功。評価harnessは6suite全8receiptを検査し、入力16files不変。
+Qwen94callsとmock10を別groupで保持する。全回帰486 tests、設計73documentsを検証。
+次はWP-L3-ICE-001のsnapshot time-travel/復元sandboxを既存Lakehouseで実装する。
 Cloud APIは無効のままローカル開発を継続する。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
@@ -24,6 +24,22 @@ repositoryの設計66 documentsを検証した。今回更新した12 materializ
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: Qwen Policy Gatekeeper
+
+[WP-L2-POL-001](L2/WP-L2-POL-001_Policy_Gatekeeper_Bear.md)はneutralなnative15候補と
+操作境界10候補を4batchで分類。host truthと全件一致後、固定native15件をserver dry-runで検証。
+入力3907/出力1171tokens、推論33.125秒。allow2/deny12/対象外control1が全件一致し、
+7監査と保存OTel、completed checkpointも一致。モデルは権限付与・policy変更をしない。
+`tmp/local-experiment/policy-bear/f37433c5b92d462a8ea69f4465c334b5/`に保持。
+04:31 UTCに保持6Pod/16policy resourcesの前後不変・残存object0を独立確認した。
+
+8合成case×2は16/16、16監査、12454/2768tokens、81.187秒。
+新規core12/Bear18と既存native17を含む全回帰486 tests、設計73documentsを検証。
+評価harnessは6suite全8receipt/8groups valid、欠損/不整合/重複/保存失敗/未観測0。
+Qwen94callsとmock10を分離し、入力16filesと以前のreport9filesはhash不変。
+最終report `tmp/local-experiment/evaluation-reports/076b0abbce144d179e7c223c0126058d/`。
+任意policyやリスク品質、署名/CVE保証、本番Tier/PR承認は未達のまま保持する。
 
 ## 2026-09-17: Query Doctorと全評価receipt集計
 

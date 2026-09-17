@@ -506,3 +506,16 @@ test-local-evaluation-report:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_evaluation_report.py'
 
 verify-local-experiment: test-local-query-bear test-local-evaluation-report
+
+.PHONY: local-policy-bear-smoke local-policy-bear-eval test-local-policy-bear
+local-policy-bear-smoke: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/bears/run_policy.py
+
+local-policy-bear-eval: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/bears/evaluate_policy.py
+
+test-local-policy-bear: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_policy_bear.py'
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_gatekeeper_observe.py'
+
+verify-local-experiment: test-local-policy-bear
