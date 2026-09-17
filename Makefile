@@ -839,3 +839,10 @@ local-notebook-run:
 test-local-notebook:
 	@tools/local_experiment/notebook/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_notebook*.py'
 verify-local-experiment: test-local-notebook
+
+.PHONY: local-notebook-assets-run test-local-notebook-assets
+local-notebook-assets-run: local-dataops-sync
+	@tools/local_experiment/dataops/.venv/bin/python -B tools/local_experiment/notebook_assets/run.py
+test-local-notebook-assets: local-dataops-sync
+	@tools/local_experiment/dataops/.venv/bin/python -B -m unittest -v tests.test_notebook_dagster_assets
+verify-local-experiment: test-local-notebook-assets

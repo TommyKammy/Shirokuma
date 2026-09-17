@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.34"
+version: "3.35"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
@@ -15,7 +15,29 @@ tags: [shirokuma, local, evidence]
 最新の到達点（2026-09-18）：保存SRE log観測のCLI表示と、新SRE評価のMLflow取込を完了。
 Trackingは既存runを保持して12評価＋4benchmark、1320 metric pointsとなり、再取込追加0を確認した。
 固定Notebookの実kernel2回と独立最終照合62checksも成功した。
+登録Notebookを定型Dagster2assetsへ接続する実2回と独立最終照合42checksも成功した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-18: fixed Notebook to two assets — local acceptance complete
+
+[WP-L4-AGENT-001](L4/WP-L4-AGENT-001_Notebook_to_Dagster_Agent.md)のlocal-partialとして、
+登録template/hashからhost定型`defs.py`/manifestを生成し、`fixture_preview`と
+`saved_evaluation_summary`を各1回in-process materializeする。依存は実行順だけでdata lineageを主張しない。
+既存Dagster 1.13.22環境を再利用し、毎回新規private instance・telemetry false・retry0。
+Notebook clientのReader1回と固定MLflow評価読取を使い、kernel/Hub/daemon/model/データ・MLflow書込みは0。
+実run `feac569a1b4941929506cb53c36a14c2`は17.176秒、`e4a5a35f7dc64c089802f44e3b0b746b`は16.977秒で
+業務/ownerともpassed・cleanup true。両方fixture2行、同head `7141845066324476177`、12評価runを表示し、
+4benchmark runを除外する。型付き行/評価射影hashも保存結果で一致した。
+19focused（実Dagster＋fake clients2件を含む）と全63suites/2316tests（2315PASS・既存1skip）が成功。
+前後で69sources・先行Notebook42files・MLflow59tables全行/16artifacts/indexが一致し、16runs/1320pointsを保持した。
+独立42checks/144inputsで各SQLiteの1SUCCESS/2materializationsとmetadata、retry/failure0、
+Reader10 terminal query IDs、先行Notebookと同じtypedrows/12評価JSON、所有Reader2PID終了を確認した。
+追加API0、SQLiteはread-only・immutable・query_only。実2runは38files・21,364,736B（binary/Dagster込み）、
+新env0・保持data/backup削除なし。
+証拠は`tmp/local-experiment/notebook-assets-checks/7f7dd020de634a0d930dbe6b756850eb/`。
+生成物を動的importせず、業務成功後の取消はowner終端で区別する。利用停止時も証跡/既存fixture/Trackingを保持する。
+任意Notebook変換・LLM変換Agent・Hub/scheduler・training・本番受入は未達。
+[Assets runbook](../../../tools/local_experiment/notebook_assets/README.md)を参照。
 
 ## 2026-09-18: fixed local Notebook — local acceptance complete
 
