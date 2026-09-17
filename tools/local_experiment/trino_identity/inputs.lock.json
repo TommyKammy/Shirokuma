@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "architecture": "arm64",
+  "keycloak": {
+    "version": "26.7.4",
+    "source_image": "quay.io/keycloak/keycloak@sha256:1f91ac24e8d68b8189d5d53a8381464c1db0fcff479348d5de973a86b63d621c",
+    "local_repository": "shirokuma.local/keycloak-identity",
+    "database": "dev-file",
+    "cache": "local"
+  },
+  "opa_build_token": "55cc059f9d9648b0a28191b13905b6c7",
+  "images": {
+    "trino": "shirokuma.local/trino-opa@sha256:420d88cf037c400e23ed42a319f0683d6753a525dc94d8f46bfdd57d86aacaa3",
+    "opa": "shirokuma.local/opa@sha256:9bf48d2d88d954b562ee2090a9887814966707ec55f676f7c5127afb4f29918b"
+  },
+  "limits": {
+    "browser_sso": "not_tested",
+    "jwks_rotation": "not_tested",
+    "production_database": "not_provided"
+  }
+}

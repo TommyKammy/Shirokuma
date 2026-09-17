@@ -598,3 +598,16 @@ local-trino-opa-recover:
 test-local-trino-opa:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_trino_opa.py'
 verify-local-experiment: test-local-trino-opa
+
+.PHONY: local-trino-identity-build local-trino-identity-plan local-trino-identity-run local-trino-identity-recover test-local-trino-identity
+local-trino-identity-build:
+	@$(PYTHON) tools/local_experiment/trino_identity/build.py
+local-trino-identity-plan:
+	@$(PYTHON) tools/local_experiment/trino_identity/run.py plan --build-token "$(TRINO_IDENTITY_BUILD_TOKEN)"
+local-trino-identity-run:
+	@$(PYTHON) tools/local_experiment/trino_identity/run.py run --build-token "$(TRINO_IDENTITY_BUILD_TOKEN)"
+local-trino-identity-recover:
+	@$(PYTHON) tools/local_experiment/trino_identity/run.py recover --run-token "$(TRINO_IDENTITY_RUN_TOKEN)"
+test-local-trino-identity:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_trino_identity*.py'
+verify-local-experiment: test-local-trino-identity

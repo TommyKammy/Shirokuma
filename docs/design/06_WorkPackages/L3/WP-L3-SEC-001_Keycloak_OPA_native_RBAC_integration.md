@@ -5,7 +5,7 @@ title: "Keycloak OPA and native RBAC integration"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.4"
+version: "0.6"
 area: "workpackage"
 tags: [shirokuma, wp, l3, security]
 ---
@@ -100,7 +100,7 @@ OPA公式ARM64 static binaryは`sha256:431bed5a365578241ab06c7cc1c7d0cdff8c11dcb
 
 再実行/復旧: repository `tools/local_experiment/trino_opa/README.md`。
 `rtk make local-trino-opa-run TRINO_OPA_BUILD_TOKEN=<build token>`。
-このWPはlocal-partial。次は新しい隔離環境でKeycloakの認証とTrinoのidentity bindingを検証する。
+このWPはlocal-partial。Keycloakの認証とTrinoのidentity bindingは次節の別環境で検証した。
 StarRocks RBAC・policy telemetry・本番security acceptanceは未達を維持する。
 
 ### Independent retained-state check
@@ -110,3 +110,55 @@ StarRocks RBAC・policy telemetry・本番security acceptanceは未達を維持�
 成功receiptの8case・固定SQL hash・59decisions・全既知UID cleanupを再照合した。
 原文rowsや決定log全bytesは成功receiptにはなく、保存射影の再計算という証拠範囲を明記した。
 private証跡`trino-opa-preflight/d14316b781e74ec0ab18804df9ac8739/after.json`。
+
+## 2026-09-17: Keycloak token identity
+
+新規の隔離3container Pod（Keycloak/Trino/OPA）で、Keycloak発行の期限付きJWTを
+Trino483のJWT authenticatorが検証し、認証済み固定5usernameへ既存のrow/column policyを適用する。
+既存TrinoやOPA実験は変更せず、synthetic fixture/専用realm/clientだけを作成する。
+JWT signing RSAとTLS CAは分離し、CAの信頼設定は実験client/プロセス内だけとする。
+macOS hosts/keychain/global truststore、外部DNS/公開endpoint、保持dataに変更は加えない。
+
+- [x] 公式Keycloak ARM64 imageをdigestで固定し、必要なlocal buildとnative動作を確認する。
+- [x] private CA/証明書/realm key/user/clientをprivate stateへ保存し、Secretもrun所有だけに限定する。
+- [x] valid tokenでadmin/row/mask/both/denied userの固定SQL結果を確認する。
+- [x] tokenなし/改変署名、署名が正しいwrong issuer/wrong audience/expired tokenの認証拒否を確認する。
+- [x] X-Trino-UserおよびOriginal-User経由の偽装を拒否し、認証401とSQL permission拒否を区別する。
+- [x] positive control、保存readiness、全known UID cleanup、保持環境不変、再実行/復旧/testsを確認する。
+
+Realm RSAのpublic PEMをTrinoへ固定し、JWKS起動競合を避ける。この実験はOIDC IdP発行JWTの
+検証であり、browser login/redirect、JWKS rotation、realm roles/groups同期を含まない。
+Trino483はJWTのexpが存在すれば期限を検証するが、その存在必須を設定できないため、
+Keycloak発行tokenにexpがあることと、正しい署名の期限切れfixtureの拒否を検査する。
+
+### Live evidence and limits
+
+成功run: `trino-identity/runs/8121b529b1844086bfa489a1336a7b60`。
+Keycloak26.7.4が実発行した5tokenはRS256署名・issuer/audience/principal/期限を検査し、
+寿命はすべて300秒。独立鍵で署名した負例と、同じrealm鍵の正常対照を分けた。
+正常6case（admin前後、row、mask、both、host署名対照）、認証拒否6case（なし/別鍵署名/
+issuer/audience/期限/未登録principal）、認可拒否3case（denied/両header偽装）が全件一致。
+401時は新規OPA決定0。両偽装は認証済み`lab_mask`から`lab_admin`へのImpersonateUser拒否を確認。
+61decisionsの52件はquery ID＋user、9件は直列case window＋user/operationの限定相関。
+queryless決定を複数caseへ再利用しない。Keycloak/Trinoの前後4readinessを時刻/TLS検証付きで保存。
+
+初回`3da115d1df454b10a139086a6460bacc`はtoken必須claim検査で停止しSQL未実行。
+default scopesを空にしたKeycloak26.7.4に明示的な`oidc-sub-mapper`を追加した。
+検査を緩めず、固定reason codeを細分化し、failed証跡を保持して新runで再検証した。
+2run計8resources（Pod/Secret/ConfigMap/NetworkPolicy）残留0。初回のrecover再実行も削除0で成功。
+既存6Pods/27resources/6CM/3Secret UIDsが前後一致。private0700/0600、fixture hashes、
+通常receiptの秘密値非混入、case/decision相関を独立再照合した。実tokenや結果行の原文は保存せず、
+署名・完全行一致はlive runner検証、後段の再検証は保存射影の検査という範囲を維持する。
+証跡: `trino-identity-preflight/fc0e1b3343bb411b992cb55fc18e76c5`。
+
+build: `trino-identity/builds/6a5ddcfa93c141de861113b2160a5227`。
+Keycloak image: `sha256:0e4df83be2a3ad04b6fce7618004e7791917c1035fdc833c6c9d2bc2258395d2`。
+公式ARM64固定digestから専用imageをlocal buildし、既存Trino/OPA imageを再利用した。
+最大1Pod/4.5CPU/6.25GiB、4 emptyDir計3GiB、PVC/Serviceなし、保持catalogへの接続なし。
+再実行: `rtk make local-trino-identity-run TRINO_IDENTITY_BUILD_TOKEN=<build token>`。
+手順と一次source: repository `tools/local_experiment/trino_identity/README.md`。
+
+全回帰664 tests（identity focused32を含む）・設計76documentsが成功。
+次は新しいlive runのcase観測をPawprints/Loki/OTelへ相関する。過去のOPA receiptに欠ける
+時刻/duration/traceを補造して取込まず、実際の新しい観測時刻/所要時間だけを記録する。
+StarRocks RBAC、browser SSO、JWKS rotation、realm role同期、本番security acceptanceは未達。

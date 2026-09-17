@@ -5,23 +5,38 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "2.8"
+version: "2.9"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：隔離Trino/OPAの行制限・列マスク・拒否・policy不達を8caseで検証。
-59decisionsを限定相関し、3実機試行で作成した15resourcesは残留0、既存6Pods/27resources/6CM不変。
-全回帰632 tests・native OPA policy8 tests・設計76documentsが成功。認証は未達として明示する。
-次はKeycloak発行tokenとTrino identity bindingの隔離実験を進める。Cloudは無効のまま。
+最新の到達点（2026-09-17）：隔離Keycloak→JWT→Trino/OPAの認証・認可15caseが成功。
+実発行5tokenと61decisionsを照合し、認証401・policy拒否・両header偽装拒否を区別した。
+2run計8生成resources残留0、既存6Pods/27resources/6CM/3Secret UIDs不変。
+次は新しいlive policy観測をPawprints/Loki/OTelへ記録する。Cloudは無効のまま。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: authenticated Trino identity
+
+[WP-L3-SEC-001](L3/WP-L3-SEC-001_Keycloak_OPA_native_RBAC_integration.md)の新しい3container Podで、
+Keycloak26.7.4の実発行JWT5件をTrino483/OPAへ渡した。寿命300秒/署名/issuer/audience/principalを検証。
+正常6、認証拒否6、認可拒否3の全15caseが一致。認証拒否は401＋OPA未到達、
+両user header偽装はlab_mask→lab_adminのImpersonateUser拒否。前後readiness4応答も保存。
+成功run`8121b529b1844086bfa489a1336a7b60`、61decisionsのquery-ID相関52/直列window限定相関9。
+初回の必須claim検査失敗を保持し、空default scopesに明示sub mapperを追加して再試行した。
+2run計8resource残留0、初回recoverは削除0、既存6Pods/27resources/6CM/3Secret UIDs一致。
+秘密はprivate fixtures/planに限定し、通常receiptの非混入とprivate mode/hashを再検査。
+独立再検査は保存射影の照合であり、実token/完全結果行の検査はlive runnerの証拠と区別する。
+証跡`trino-identity-preflight/fc0e1b3343bb411b992cb55fc18e76c5`。
+全回帰664 tests（identity focused32を含む）・設計76documentsが成功。
+次はlive case観測のPawprints/Loki/OTel連携。browserSSO/rotation/role同期/StarRocks/本番受入は未達。
 
 ## 2026-09-17: isolated Trino OPA authorization
 

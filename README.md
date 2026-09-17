@@ -92,7 +92,11 @@ classifies fixed policy candidates and verifies native admission through server 
 The [isolated Trino/OPA experiment](tools/local_experiment/trino_opa/README.md)
 checks row filters, column masks, denials and an unavailable policy backend on
 disposable TPCH-only Pods. Its synthetic user headers demonstrate authorization
-behavior; authenticated identity is a separate next increment.
+behavior. The [Keycloak identity experiment](tools/local_experiment/trino_identity/README.md)
+adds private TLS, live Keycloak tokens, fixed username mapping and signed negative
+controls in a separate disposable Pod. It checks row/column authorization and
+both user-header impersonation paths. Browser SSO, key rotation and realm role
+propagation remain outside this experiment.
 The [evaluation report](tools/local_experiment/evaluation/README.md) checks all
 retained suite receipts and keeps failures, missing evidence and case differences visible.
 The [AgentHouse dashboard](tools/local_experiment/grafana/README.md) provides
