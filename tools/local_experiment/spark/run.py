@@ -34,7 +34,7 @@ INVENTORY = ('pods,services,configmaps,serviceaccounts,roles,rolebindings,resour
              'replicasets,statefulsets,daemonsets,jobs,cronjobs,endpoints,endpointslices,events')
 UUID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
 SECRET_KEYS = ['aws-credentials', 'polaris-token']
-REMOTE_PROFILES = ('iceberg-write', 'iceberg-benchmark', 'iceberg-branch')
+REMOTE_PROFILES = ('iceberg-write', 'iceberg-benchmark', 'iceberg-branch', 'iceberg-publish')
 
 
 def remote_contract(profile='iceberg-write'):
@@ -44,6 +44,8 @@ def remote_contract(profile='iceberg-write'):
         from tools.local_experiment.spark_benchmark import contract as remote
     elif profile == 'iceberg-branch':
         from tools.local_experiment.spark_branch import contract as remote
+    elif profile == 'iceberg-publish':
+        from tools.local_experiment.spark_publish import contract as remote
     else:
         from tools.local_experiment.spark_iceberg import remote_contract as remote
     return remote
@@ -351,6 +353,9 @@ def source_hashes(profile='native'):
         if profile == 'iceberg-benchmark':
             from tools.local_experiment.spark_benchmark import workload as W
             paths += [Path(remote_contract().__file__), Path(W.__file__)]
+        elif profile == 'iceberg-publish':
+            # The new fixed job embeds the connection helpers from this source.
+            paths += [Path(remote_contract().__file__)]
     return {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in paths}
 

@@ -4,8 +4,8 @@ doc_id: "WP-L3-ICE-001"
 title: "WP-L3-ICE-001 Iceberg branch/tag clone demo"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-17
-version: "0.7"
+updated: 2026-09-18
+version: "0.8"
 area: "workpackage"
 tags: [shirokuma, workpackage, l3, lakehouse]
 ---
@@ -15,6 +15,64 @@ tags: [shirokuma, workpackage, l3, lakehouse]
 ## Summary
 
 Time Travel/Clone風デモを作る
+
+## 2026-09-18 owned branch publish plan
+
+新規所有tableだけで、検証済みbranchをmainへfast-forwardする。既存のB/C兄弟snapshotは
+拒否対象として保持し、別fresh tableでA2行→main B3行→branchをBから作成→Spark C4行とする。
+hostがC.parent=Bと現在refsを照合した後、UUID/main/branch/tagのCAS条件付きREST1回でmainをCへ進める。
+
+- [x] 限定writer/profileでC4行・main B3行・tag A2行をSpark/Trinoから検証する。
+- [x] mainがbranch snapshotの祖先であることと、現在UUID/marker/location/ref/metadataを確認する。
+- [x] durable pending intentの後だけ、main更新1件のREST commitを最大1回送る。
+- [x] refs.main/current ID/snapshot log等の合法deltaだけを認め、旧snapshot/rows/filesを保持する。
+- [x] 別fresh negative tableでmain Dとbranch Cを兄弟にし、stale expected Bと非祖先DをPOST0で拒否する。
+- [x] 不明結果は再commit/再INSERT/自動rollback/DROPを行わず保留する。
+- [x] 成功または確認済み拒否後にquery drain/権限回収/同UUID table回収と保持環境不変を確認する。
+
+保持table・以前の実験証拠は変更しない。新image/package/service/model呼出しは追加しない。
+REST set-snapshot-ref自体は祖先関係を強制しないため、host側検証とref CASを分ける。
+汎用merge/rebase、異なるtableのzero-copy clone、branch別認可、並行writerの一般保証、
+object全byte hash、保持データ復旧や本番受入の達成は主張しない。
+
+## 2026-09-18: verified branch publication
+
+正例 `75e820ef797a43fba52585860588b2c0` が初回で成功（15:49:49–15:53:00 UTC、9月17日）。
+新table UUID `509209ed-0866-4b2a-9032-d8840a923f10` で、A=1002717412236272376の2行から
+main B=9211570477933275546の3行を作り、Sparkがbranchへid4を1回appendして
+C=2224987170743755404の4行を生成した。C.parent=Bを確認し、Spark終了・一時access回収後、
+UUID/mainB/branchC/tagAの4条件付きREST POST1回（HTTP200）でmainをCへ進めた。
+CのIDはBより小さく、IDの大小ではなく実parent chainを判定している。
+
+main/branch=C4行・tag=A2行とnumeric A/B/CをTrinoで照合。新snapshot追加0、
+旧snapshot全hash・schema/spec/properties・branch/tag不変、main/current IDと所定の履歴追加だけを許容した。
+Aは1file/612B、Bは2files/1228B、Cは3files/2417Bで、published mainの`$files`が
+Sparkで取得したCの一覧へ完全一致した。40steps、worker38/control16 queriesが完了した。
+
+負例 `9a88d1803c814ff18dca4f9f965f99e8` も初回で成功（15:53:21–15:56:44 UTC）。
+UUID `7cfcab0c-5c32-4cb1-87b6-ebd01b65eacf`、A=7888007345279584392、B=5336059430357120780、
+C=1391304228033215520、D=3974582407880763445。CとDはともにBを親とし、
+branch Cはid4、main Dはid5を含む異なる4行となった。expected Bは`STALE_MAIN`、
+expected Dは`MAIN_NOT_ANCESTOR`で拒否し、publish POSTは0回。
+全named/numeric7読取とC/Dの独立追加fileを照合。Dは3files/1874B、44steps、worker42/control16 queries。
+これはhost preflightの拒否であり、並行更新に対する実server CAS409の検証ではない。
+
+両runともnative既知19UID、一時NP2・Polaris3entities/bindingsを回収し、所有query終了後に
+同UUIDの生成tableだけをDROP。保持fixtureの全schema/rows/snapshots/history/refsとtable一覧は前後一致した。
+既存imageを再利用し、新image/build/service/model/Pawprint追加は0。
+再現入口と未知結果の扱いは[Runbook](../../../../tools/local_experiment/spark_publish/README.md)を参照。
+
+新75 tests（contract20/table29/workflow26）、Spark全467、全local回帰52suites/1776件
+（1775成功＋既存optional OTel1skip）が成功。取消保全、再送禁止、最終drainの再確認、
+float/boolをsnapshot IDとして受理しない境界を含む。source20filesは実機前後で不変。
+checksは`spark-publish-checks/4c337304b84144e4bb87ec3090996944/`、保存証跡の独立照合は
+`spark-publish-audit/fe34393128fd433099e06c0434c0b0a1/`（正67＋負64 checks）へ保持した。
+raw REST本体は保存せず、metadata hashの比較とsource固定journalのPOST回数を証拠とする。
+独立環境監査`spark-publish-preflight/31744da846564be486e63ac1eb804215/`の前後22項目も成功。
+AH470全行、保持3503files、14Pods/27resources/3Docker、MLflow store/process/indexと
+既存network境界は不変、Spark namespace/Pod残留0・5ports解放・28旧locks非activeを確認した。
+深いMetadata/MLflow全内容等は先行sealの継承であり、今回の全API再走査ではない。
+object全byte hash、branch別認可、zero-copy clone、汎用merge/並行writer、本番受入は未達のまま維持する。
 
 ## Context
 

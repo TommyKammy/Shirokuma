@@ -778,6 +778,15 @@ test-local-spark-branch:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_spark_branch*.py'
 # verify-local-experiment includes these through test-local-spark.
 
+.PHONY: local-spark-publish local-spark-publish-negative test-local-spark-publish
+local-spark-publish:
+	@$(PYTHON) tools/local_experiment/spark_publish/run.py --build-token "$(SPARK_ICEBERG_BUILD_TOKEN)" --mode positive
+local-spark-publish-negative:
+	@$(PYTHON) tools/local_experiment/spark_publish/run.py --build-token "$(SPARK_ICEBERG_BUILD_TOKEN)" --mode negative
+test-local-spark-publish:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_spark_publish*.py'
+# verify-local-experiment includes these through test-local-spark.
+
 .PHONY: test-query-doctor-cli
 test-query-doctor-cli: local-llm-sync
 	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_query_cli.py'

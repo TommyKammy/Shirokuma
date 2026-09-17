@@ -5,17 +5,34 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.20"
+version: "3.21"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：SRE Bearを製品CLIへ接続し、実Qwenで4観測源とPod再読取を
-確認した。過去exit/restartのwarningを現在障害と混同せず、保存statusも検証した。
-全local回帰1580件（1579成功/既存1skip）、Go78tests＋52subtestsとvet/raceが通過した。
-次はstdinの限定Pod候補をQwen分類とnative server dry-runへ接続する。
+最新の到達点（2026-09-18）：Policy CLIの実Qwen/native dry-runとWarehouseのquery起動を検証した。
+続いて新規Iceberg tableのbranchをmainへ条件付きで反映し、mainが分岐した場合の送信前拒否も確認。
+全local回帰1776件（1775成功/既存1skip）が通過した。
+次は現存table・列を選び、snapshotを固定して少量の行を取得する読み取りCLIへ進む。
+
+## 2026-09-18: Iceberg branch publication and divergence refusal
+
+新規所有tableでSparkがB3行からC4行を作り、停止・一時access回収後にhostの
+UUID/main/branch/tag4条件付きREST1回でmainをCへ反映した。
+正例`75e820ef797a43fba52585860588b2c0`はHTTP200・metadata-only・新snapshot0。
+named/numeric6読取とCの3files/2417BをSpark/Trinoで照合した。
+別tableの負例`9a88d1803c814ff18dca4f9f965f99e8`ではmain Dとbranch Cを兄弟にし、
+古いBと非祖先Dをそれぞれ送信前拒否、publish POST0・全7読取一致を確認した。
+これはhost拒否であり、実並行writerのCAS409実証ではない。
+
+両runとも19nativeUID＋一時NP2/Polaris3entitiesを回収し、同UUIDの生成tableをDROP。
+保持fixture全履歴/refs/table一覧不変、AH470追加0、新image/service/model0。
+新75tests、全1776件（1775成功＋既存1skip）、source20files不変、保存証跡独立131checksが成功。
+前後環境22checksも成功し、3503既存files・14Pods/27resources/3Docker・MLflow・network境界が不変。
+詳細と証跡は[WP-L3-ICE-001](L3/WP-L3-ICE-001_Iceberg_branch_tag_clone_demo.md)と
+`tools/local_experiment/spark_publish/README.md`を参照。汎用merge/zero-copy clone/本番受入は未達。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
