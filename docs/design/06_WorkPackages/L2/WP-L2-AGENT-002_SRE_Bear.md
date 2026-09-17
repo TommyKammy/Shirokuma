@@ -5,7 +5,7 @@ title: "WP-L2-AGENT-002 SRE Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.3"
+version: "0.4"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -104,3 +104,15 @@ Pod同名でもUIDが変われば置換として扱い、未再観測、欠測�
 旧PR gateはローカル実行条件にしない。再実行は`rtk make local-sre-qwen-smoke`、
 合成評価は`rtk make local-sre-qwen-eval`。新しい常駐サービス・weights・workload変更なし。
 既存固定ルールは`rtk make local-sre-smoke`で利用でき、監査記録は保持する。
+
+## 2026-09-17 disposable Failed Pod drill
+
+新規Pod一個を`exit 1`でFailedにし、Qwenがcritical根拠として選択・再観測する実機試験に成功。
+初回/followupの同UID Failedを照合し、モデルの出力ではなく実観測に基づいて判定した。
+入力735・出力90 tokens、推論3.398秒、6監査eventが相関一致した。
+作成receiptのUID/resourceVersionを条件に削除し、残留drill Pod0、既存6 PodのUID・状態・
+restart前後一致を確認した。既存サービスを故障させたり修復したりする試験ではない。
+
+14 drill testsを含む計259回帰/設計testsが成功。再実行は`rtk make local-sre-qwen-drill`。
+証跡・所有確認付きcleanup・未適用のlive admission境界は[Local Experiment Milestones](../061_Local_Experiment_Milestones.md)を参照。
+logs/metricsによる原因診断と既存サービスの自動修復は未達として保持する。

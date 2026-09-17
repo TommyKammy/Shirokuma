@@ -5,23 +5,55 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "1.5"
+version: "1.6"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：QwenによるSRE確認項目の選択、実MCP再観測、UID比較が成功。
+最新の到達点（2026-09-17）：新規使い捨てFailed PodをQwenが重大所見として選択・再観測し、
+同UIDだけを削除する実機drillが成功。既存6 PodのUID・状態・restart回数は前後一致した。
 Cloud APIは無効のまま、ローカル実LLMを利用して開発を継続できる。
 稼働停止していた専用Colimaを既存設定で復旧し、5 component groupsすべてreadyを確認した。
-ローカル回帰231件・設計関連14件が成功し、設計66 documentsを検証した。
+ローカル回帰245件・設計関連14件が成功し、設計66 documentsを検証した。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: 使い捨てFailed Podの実機SRE drill
+
+**WP-L2-AGENT-002の実障害検知実験**として、新規の専用Pod一個だけを`exit 1`で失敗させた。
+モデルはそのPodを`WORKLOAD_FAILED`のcritical所見として選び、実MCPで再観測した。
+初回・followupとも同UID・同Failed状態を確認し、既知の過去restart所見と区別できた。
+Qwen入力735・出力90 tokens、推論3.398秒、6監査eventの相関・readbackが成功した。
+
+作成物は`sre-drill-f5573fa58e5d4ffc853bd55b02e42a9f`、
+UID `10d94a3c-1d29-484a-8f6d-d1e410c9a2e7`。終了時にowner/run labelsとUIDを再照合し、
+UID/resourceVersion precondition付きDELETEで削除した。残留drill Podは0。
+既存6 Podのname/UID/phase/ready/restartを前後比較して完全一致し、保持workloadを変更していない。
+
+証跡は`tmp/local-experiment/sre-drill/f34f175d82934d5090244ca2fbfb4340/`。
+`creation-intent.json`、`created.json`、`summary.json`、nested `workflow/`、
+`retained-pods-verification.json`を保持する。作成結果やreceiptが不確かな場合、または
+同名でもUIDが変わった場合に名前だけで削除せず、cleanup不明はdeferred・全体failedとする。
+この試験Podのcleanupは既存serviceの自動修復ではない。
+
+既存Trinoの固定local image digestとUID10000を使い、pullなし、50m CPU / 32Mi、
+非root・readOnlyRootFilesystem・dropALL・RuntimeDefault、token/volume/host pathなしで実行した。
+restartNever、deadline60秒。事前server dry-run成功、専用labelsは既存Service/controllerと非一致。
+追加image・weights・resident service・data volumeはなく、保存増分は小さなprivate証跡と監査。
+
+14 focused drill testsが成功し、全ローカル回帰245件＋設計14件の計259 testsを検証した。
+再実行は`rtk make local-sre-qwen-drill`。deferred時はcreated receiptと現物UIDを照合し、
+未確認の作成物や保持データをまとめて消さない。Colima resetは復旧手順に含めない。
+
+事前調査時のlive clusterにはKyverno CRD・追加admission policy/webhookが存在しなかった。
+従ってこのdrillのガードをcluster-wide policyの適用証拠にはしない。
+該当するローカルpolicy導入は独立した次の検証事項として扱う。
 
 ## 2026-09-17: QwenによるSRE読み取り確認と再観測
 

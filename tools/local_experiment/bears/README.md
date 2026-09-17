@@ -119,3 +119,42 @@ changed. Run the original `local-sre-smoke` to use the deterministic baseline;
 retain audit records and experiment evidence. Continuous monitoring, logs and
 metrics-based causal diagnosis, remediation and production acceptance remain
 outside the demonstrated scope.
+
+## Disposable Failed Pod drill
+
+```sh
+rtk make local-sre-qwen-drill
+```
+
+This is a real local fault-detection experiment. It creates exactly one new
+`sre-drill-<uuid>` Pod, runs `/bin/sh -c 'exit 1'`, waits for `Failed` with exit
+code 1, then invokes the same Qwen SRE workflow. Success requires a critical
+`WORKLOAD_FAILED` finding and a selected Pod follow-up that observes the same
+UID still Failed. It verifies the saved initial/follow-up hashes as well as the
+workflow's audit success. This does not test repair of a retained workload.
+
+The drill reads the existing `trino-local` Deployment's fixed local image digest
+and numeric non-root user. It uses `imagePullPolicy: Never`, 50m CPU / 32 MiB,
+`restartPolicy: Never`, a 60-second Pod deadline, read-only root filesystem,
+dropped capabilities and RuntimeDefault seccomp. It mounts no secret/PVC/host
+path, disables service-account tokens, and exposes no ports. Its labels do not
+match existing Service or workload-controller selectors. The adapter verifies
+the dedicated loopback Kubernetes context before every operation.
+
+`creation-intent.json` records the manifest; cleanup authority starts only after
+the successful creation UID is retained in private `created.json`. Cleanup checks
+the exact name, namespace, owner/run labels and UID, then sends Kubernetes
+DeleteOptions with **UID and resourceVersion preconditions**. It confirms the
+original UID is absent and preserves any replacement. Uncertain creation,
+missing receipts, identity mismatch or an unconfirmed delete becomes `deferred`
+and makes the run fail. There is no name-only deletion or broad cleanup retry.
+
+Evidence is retained under `tmp/local-experiment/sre-drill/<uuid>/`, including
+the nested workflow's safe observation receipts and audit records. No new model
+weights, images or data volumes are created. A deferred cleanup needs inspection
+of its exact receipt and current UID before any further action; do not reset
+Colima or delete matching names broadly.
+
+At the 2026-09-17 preflight, the live cluster had no Kyverno CRDs or additional
+admission policies/webhooks. This drill's manifest checks are implemented in
+the local adapter; this result does not establish cluster-wide policy enforcement.

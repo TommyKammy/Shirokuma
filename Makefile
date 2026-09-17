@@ -425,7 +425,7 @@ test-local-llm: local-llm-sync
 
 verify-local-experiment: test-local-llm
 
-.PHONY: local-sre-smoke local-sre-qwen-smoke local-sre-qwen-eval test-local-bears test-local-sre-llm
+.PHONY: local-sre-smoke local-sre-qwen-smoke local-sre-qwen-eval local-sre-qwen-drill test-local-bears test-local-sre-llm
 local-sre-smoke: local-gateway-sync
 	@tools/local_experiment/gateway/.venv/bin/python tools/local_experiment/bears/run_sre.py
 
@@ -434,6 +434,9 @@ local-sre-qwen-smoke: local-gateway-sync local-llm-sync
 
 local-sre-qwen-eval: local-llm-sync
 	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/bears/evaluate_sre.py
+
+local-sre-qwen-drill: local-gateway-sync local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/bears/drill_sre.py
 
 test-local-sre-llm: local-llm-sync
 	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_sre*.py'
