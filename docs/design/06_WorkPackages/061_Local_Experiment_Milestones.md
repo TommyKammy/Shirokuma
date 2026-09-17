@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.33"
+version: "3.34"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
@@ -14,7 +14,28 @@ tags: [shirokuma, local, evidence]
 
 最新の到達点（2026-09-18）：保存SRE log観測のCLI表示と、新SRE評価のMLflow取込を完了。
 Trackingは既存runを保持して12評価＋4benchmark、1320 metric pointsとなり、再取込追加0を確認した。
+固定Notebookの実kernel2回と独立最終照合62checksも成功した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-18: fixed local Notebook — local acceptance complete
+
+[WP-L4-NB-001](L4/WP-L4-NB-001_JupyterHub_bootstrap.md)の最小local-partialを実装し、実2回が成功した。
+専用Python 3.12とnbclient/nbformat/ipykernelのlock環境で固定Notebookを実行し、
+既存Go Readerの`smoke.fixture_v1` id/name・limit10 SELECTを1回だけ表示する。
+次にloopback MLflowの12評価runをread-onlyで表示し、4benchmark runは別experimentとして除外する。
+Git templateは空outputsのまま、実行済みNotebook・connection・Readerログをprivate tmpに保持する。
+各3code cells・Reader1回・MLflow12評価run表示、18.275秒/18.241秒、cleanup両trueを確認。
+Reader前の初回失敗を保持し、Jupyter接続file親のsticky mode変更をprivate subdir配置で解消した。
+全回帰は修正前62suites/2297tests（既存optional1skip）、修正後26focused＋実2回を区別する。
+65sourcesとMLflow59tables全行・16artifacts/indexが前後同一で、16runs/1320metricsを保持した。
+独立62checks/104inputsでtypedrows/同UUIDhead/10 terminal query IDs/各12評価射影/cleanupを照合した。
+Reader/kernel各2PID消失・connectionなし、追加API0。helperの2誤前提修正は元logを保持し、製品再実行0。
+専用env約72MB・check cache約83MB・実3run約30MBの実割当を記録し、保持データ/backup移行なし。
+利用停止時も実行証拠とMLflow/fixtureを保持する。証拠は
+`tmp/local-experiment/notebook-checks/8d4a2ec9c0f5413e85009312de57faa9/`。
+モデル/MLflow書込・直接PySpark・Hub・training/autologは対象外。
+WBSのSpark→JupyterHub→MLflow全依存を完了したとは扱わず、ADR-0034でこの独立部分を進める。
+[Notebook runbook](../../../tools/local_experiment/notebook/README.md)を参照。
 
 ## 2026-09-18: SRE observation-signals in MLflow
 

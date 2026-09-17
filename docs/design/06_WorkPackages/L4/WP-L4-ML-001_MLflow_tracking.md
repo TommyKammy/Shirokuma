@@ -5,7 +5,7 @@ title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.5"
+version: "0.6"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -15,7 +15,25 @@ tags: [shirokuma, workpackage, l4, ml]
 ## Summary
 
 MLflowで実験とAgent evalを記録する。ADR-0034のlocal実験では、保存済み評価receiptと
-Spark/Trino測定を専用SQLite/loopback標準UIへ取り込む。Notebook連携は未達。
+Spark/Trino測定を専用SQLite/loopback標準UIへ取り込む。固定Notebookからのread-only表示は実2回と
+独立最終照合が成功した。training/autolog、JupyterHub連携は未達。
+
+## 2026-09-18: fixed Notebook consumer — local acceptance complete
+
+[WP-L4-NB-001](WP-L4-NB-001_JupyterHub_bootstrap.md)で、専用Python kernelの固定Notebookから
+loopback Trackingの評価experimentを読む。既存12評価runをsafe projectionで表示し、
+別experimentの4benchmark runを含めない。モデル推論・新評価・MLflow追記・autologは行わず、
+suite/provider/case signature、cost NULL、import時刻の意味を維持する。
+Notebook側の最初の読取は既存Go Reader経由の固定fixture SELECT1回で、直接PySparkではない。
+
+実Notebook `fcd6b48ab9b84f86bba01058cd909087`、`093b1e1c4ad34f3aa01d71cc8413edfd`で
+各12評価runを表示し、Reader/kernel cleanupも確認した。MLflow59tablesの全行multiset・16artifacts・
+indexは前後同一、全16runs/1320pointsを維持した。新推論/MLflow書込は0。
+初回のReader前失敗と接続file配置修正、full回帰と修正後focusedの区分はNB-001に記録する。
+保存射影とindexを含む独立照合62checks/104inputsが成功し、各12評価runとbenchmark4件除外、
+既存MLflow59tables全行/16artifacts/indexの保持を確認した。追加API呼出しは0。証拠は
+`tmp/local-experiment/notebook-checks/8d4a2ec9c0f5413e85009312de57faa9/`。
+[Notebook runbook](../../../../tools/local_experiment/notebook/README.md)を参照。
 
 ## 2026-09-18: observation-signals evaluation import
 

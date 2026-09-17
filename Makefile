@@ -830,3 +830,12 @@ verify-local-experiment: test-local-query-snapshots
 test-local-query-filter:
 	@$(PYTHON) -m unittest discover -s tests -p 'test_query_filter_*.py'
 verify-local-experiment: test-local-query-filter
+
+.PHONY: local-notebook-sync local-notebook-run test-local-notebook
+local-notebook-sync:
+	@uv sync --project tools/local_experiment/notebook --locked --no-build --cache-dir tmp/local-experiment/notebook-cache
+local-notebook-run:
+	@tools/local_experiment/notebook/.venv/bin/python tools/local_experiment/notebook/runner.py
+test-local-notebook:
+	@tools/local_experiment/notebook/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_notebook*.py'
+verify-local-experiment: test-local-notebook
