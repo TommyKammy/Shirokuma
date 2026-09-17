@@ -24,6 +24,10 @@ type queryDiagnoseRequest struct {
 }
 
 func newQueryDiagnoseCommand(child dataChildRunner, root, profile *string) *cobra.Command {
+	return newQueryDiagnoseCommandWithReport(child, execQueryDiagnoseReportChild{}, root, profile)
+}
+
+func newQueryDiagnoseCommandWithReport(child, reportChild dataChildRunner, root, profile *string) *cobra.Command {
 	var readToken string
 	command := &cobra.Command{Use: "diagnose --read-token TOKEN", Short: "Diagnose one saved bounded SELECT without replaying it", Args: func(_ *cobra.Command, args []string) error {
 		if len(args) != 0 {
@@ -62,6 +66,7 @@ func newQueryDiagnoseCommand(child dataChildRunner, root, profile *string) *cobr
 	}}
 	command.Flags().StringVar(&readToken, "read-token", "", "successful query select evidence token")
 	command.SetFlagErrorFunc(func(_ *cobra.Command, _ error) error { return errors.New("query diagnose flags are invalid") })
+	command.AddCommand(newQueryDiagnoseReportCommand(reportChild, root, profile))
 	return command
 }
 

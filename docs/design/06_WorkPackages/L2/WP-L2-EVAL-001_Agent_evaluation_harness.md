@@ -4,8 +4,8 @@ doc_id: "WP-L2-EVAL-001"
 title: "WP-L2-EVAL-001 Agent evaluation harness"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-17
-version: "0.8"
+updated: 2026-09-18
+version: "0.9"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, evaluation]
 ---
@@ -16,6 +16,40 @@ tags: [shirokuma, workpackage, l2, evaluation]
 
 Agentの評価結果を同じ定義で比較する。ADR-0034のlocal実験では、
 functional success、監査coverage、latency、tokensと欠損を集計し、PR指標は対象外とする。
+
+## 2026-09-18: saved Query Doctor report — local acceptance complete
+
+6synthetic suiteの既存reportとは別に、実Query Doctorの保存済み診断を
+`query diagnose report [--token TOKEN]`から一覧/単件表示する。両modeは同じbounded JSON schemaを使う。
+新moduleは`query_diagnose_report`へ分離し、推論用D source globや既存診断の契約を変更しない。
+
+- [x] 固定private directoryのsummary/spansだけを読み、元Reader files/table/configや外部APIへアクセスしない。
+- [x] command_resultとrecorded_resultを分離し、passed/failed/interrupted/active/incomplete/invalid/missingを表示する。
+- [x] 全件と単件の同一projectionを検証し、active・不正・欠損をterminal groupへ含めない。
+- [x] v1/v2と保存model/providerを分け、model intent/記録済inference、既知token小計/usage欠損、cost NULLを維持する。
+- [x] 私有file/lock・JSON・読取前後hash・128tokens/32MiB入力/256KiB出力の境界と取消を確認する。
+- [x] 現6records（passed4、closedfailed2）の保存読取を実行し、全入力不変とAPI/model/audit0を確認する。
+
+過去runのfailed/interruptedはreport commandの失敗ではない。正常なactive lock観測はexit0/分母外、
+all rootが未作成または空なら明示0、指定token不存在と整合/網羅性不明はexit1とする。
+元Reader/tableの現存は要求せず、embedded sourceと保存spansの内部整合を検証する。
+旧23/新27 source manifestは保存時の形を受理し、現在codeとのhash一致を要求しない。
+保存audit claimとrecords/spansの一致はfresh AH/Loki確認とは区別する。
+SQL・行値・raw prompt/response/error/planやentity名は出力しない。mtimeから実行順を推測しない。
+
+実CLI9回（all、single6、all再読取、missing）が受入成功し、exit0が8回・missingのexit1が1回だった。
+allは4passed/2failed・3groups、single6行はallの同token行と一致し、all再読取はJSON全体が一致した。
+入力6dirs/18filesのSHA・mode・mtime・ctime・inode・集合、source77filesを保持し、出力logs9件は0600。
+API/model/新診断/audit/runtime呼出しは0。直前historical診断の独立60checks・AH486を環境baselineとして継承し、
+fresh AH確認や追加runtime監査は行っていない。
+
+最終known-cost修正前の全local回帰55suites/2099件（2098成功・既存optional1skip）、
+Go157 top-level/116subtests・vet/raceが成功。修正後はPython診断family158件（report52件を含む）と
+実Python→Go全9経路（新cost1subtestを含む）で検証した。全体回帰を修正後に再実行したとは主張しない。
+known costの0.1/0.2/0.3もtoken順のfloat64加算へ統一し、欠測costのNULLは維持した。
+証跡は`query-diagnose-report-checks/5f502301717046f39c3718f85d73fdb3/`の
+`acceptance-{input-seal,input-after,verification,source-verification}.json`と`independent-final-review.json`。
+詳細は[Saved diagnosis report runbook](../../../../tools/local_experiment/query_diagnose_report/README.md)を参照。
 
 ## Context
 

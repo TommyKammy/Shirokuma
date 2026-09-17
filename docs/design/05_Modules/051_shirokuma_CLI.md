@@ -5,12 +5,23 @@ title: "shirokuma CLI"
 status: draft
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.11.0"
+version: "0.12.0"
 area: "module"
 tags: [shirokuma, module]
 ---
 
 # shirokuma CLI
+
+### Inspect saved Query Doctor runs
+
+`query diagnose report [--token TOKEN]`で全診断または1件を同schemaのbounded JSONとして表示する。
+既存診断commandを維持し、固定private summary/spansだけを読む。元Reader/tableの現存は不要、API/model/audit0。
+command_resultと過去のrecorded_resultを分離し、失敗・active・不正を成功groupへ混ぜない。
+既知usage小計と欠損数を分け、欠測costはNULL、v1/v2と保存model/providerを別groupにする。
+新規evidence directoryや任意path/SQL入力は追加しない。9実CLIの保存読取を受入済み。
+保存6件の4passed/2failed・3groupsを維持し、all/single6行とall再読取が一致した。
+missingは固定row/exit1、他8回はexit0。入力6dirs/18files・source77不変、API/model/新診断/audit/runtime0。
+[Saved diagnosis report runbook](../../../tools/local_experiment/query_diagnose_report/README.md)を参照。
 
 ### Read a retained snapshot
 

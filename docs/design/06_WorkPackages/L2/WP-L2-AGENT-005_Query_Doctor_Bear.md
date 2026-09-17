@@ -5,7 +5,7 @@ title: "WP-L2-AGENT-005 Query Doctor Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.9"
+version: "0.10"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -15,6 +15,24 @@ tags: [shirokuma, workpackage, l2, agentops]
 ## Summary
 
 EXPLAINとquery historyから改善案を出す
+
+## 2026-09-18: saved diagnosis report — local acceptance complete
+
+`query diagnose report [--token TOKEN]`で実診断の保存記録を全件または1件読む入口を追加した。
+既存の`query diagnose --read-token TOKEN`は維持し、reportは新診断・モデル・監査を呼ばない。
+元Reader files/tableが消えていても、D summary/spansだけから内部整合を検証する。
+command_resultと過去のrecorded_resultを分け、失敗・取消・active・不正・欠損を隠さない。
+v1/v2・modelを別groupにし、usage不明とcost NULLを保持する。旧23/新27 source manifestは
+保存時のprovenanceとして扱い、現在codeのhashへ更新しない。
+
+現6records＝passed4（v1=3/v2=1）＋closed observation failure2を対象とした実CLI9回が成功。
+allは3groups、single6行が一致し、all再読取はJSON全体が一致、missingは固定row/exit1だった（他8回exit0）。
+入力6dirs/18filesのSHA・mode・mtime・ctime・inode・集合、source77を保持し、出力logs9件は0600。
+API/model/新診断/audit/runtime0。直前の独立60checks・AH486を継承し、fresh AH確認や追加runtime監査は行わない。
+最終known-cost修正前の全local55suites/2099件（2098成功/既存1skip）、Go157/116subtests・vet/race、
+修正後のPython診断family158（report52を含む）と実Python→Go9経路（新cost1subtest）が成功した。
+詳細と終了codeは[WP-L2-EVAL-001](WP-L2-EVAL-001_Agent_evaluation_harness.md)と
+[report runbook](../../../../tools/local_experiment/query_diagnose_report/README.md)を参照。
 
 ## 2026-09-18: historical snapshot diagnosis
 
@@ -68,7 +86,7 @@ AHは旧480行の全hashを保持して486行へ増加し、新6event IDs/Loki6/
 `query-diagnose-snapshot-preflight/92bebffcde6b4bed8c3bd65127bfb163/independent-verification.json`に保存した。
 設計83documents/関連14tests、repo/Vaultの同期と関連リンク、secret/diff検査も成功した。
 この増分のlocal機能検証は完了したが、一般原因診断・性能改善・本番受入は主張しない。
-次は`query diagnose report [--token TOKEN]`で実診断の保存記録を読み取り専用で一覧/単件表示する。
+保存記録の一覧/単件表示は本ノート冒頭のreport増分で受入を完了した。
 
 ## 2026-09-18: diagnose a completed Reader query
 

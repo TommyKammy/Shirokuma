@@ -5,17 +5,38 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.25"
+version: "3.26"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-18）：過去snapshotの成功読取もQuery Doctorから診断できる。
-現在identity Bと選択Aを分け、A2行の統計を使う実診断と旧v1診断が成功し、生成tableを回収した。
-全local回帰2048件（2047成功/既存1skip）と独立保持監査60checksが通過した。
-次は`query diagnose report [--token TOKEN]`で実診断の保存記録を読み取り専用で一覧/単件表示する。
+最新の到達点（2026-09-18）：`query diagnose report [--token TOKEN]`から、
+実診断の保存6件を再実行せず一覧/単件表示できる。4passed/2failed・3groupsを保持し、
+実CLI9回でall/single一致・再読取一致・missing/exit1と全入力不変を確認した。
+API/model/新診断/audit/runtime0。直前の独立保持監査60checksとAH486は継承baselineである。
+
+## 2026-09-18: saved diagnosis report — local acceptance complete
+
+新しいread-only reportを既存診断とは独立moduleへ実装した。
+全件と単件を同schemaで表示し、過去結果とreport commandの成否を分離する。
+失敗・active・不正・欠損は可視化し、v1/v2やmodelの別groupとusage/cost NULLを維持する。
+元Reader files/tableを読まず、D summary/spansだけで整合を確認し、API/model/audit0とする。
+
+実CLI9回（all、single6、all再読取、missing）はexit0が8回・expected exit1が1回で受入成功。
+allは4passed/2failed・3groups、single6行はallと一致し、再読取はJSON全体が一致した。
+入力6dirs/18filesのSHA・mode・mtime・ctime・inode・集合、source77を保持、出力logs9件はprivate0600。
+直前の独立60checksを環境baselineとして引用し、追加runtime監査やfresh AH読取は行わない。
+
+最終known-cost修正前に全local55suites/2099件（2098成功/既存optional1skip）と
+Go157 top-level/116subtests・vet/raceが成功。修正後はPython診断family158件（report52を含む）、
+実Python→Go9経路（新cost1subtestを含む）を確認した。全体回帰の重複再実行はしていない。
+cost0.1/0.2/0.3はtoken順float64加算でPython/Goが一致し、現保存6件のcostNULLは変わらない。
+実記録の整合表示を確認したもので、synthetic評価の品質分母へ実診断を加算しない。
+証跡は`query-diagnose-report-checks/5f502301717046f39c3718f85d73fdb3/`の
+`acceptance-{input-seal,input-after,verification,source-verification}.json`と`independent-final-review.json`。
+scopeは[WP-L2-EVAL-001](L2/WP-L2-EVAL-001_Agent_evaluation_harness.md)を参照。
 
 ## 2026-09-18: historical snapshot diagnosis
 
