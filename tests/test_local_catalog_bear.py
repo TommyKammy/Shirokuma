@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import sys
 import tempfile
+import threading
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -464,6 +465,40 @@ class WorkflowTests(unittest.TestCase):
         apply.assert_not_awaited()
         self.assertEqual(audit.call_args.args[:2], ('bear.catalog.observe', 'failed'))
 
+    def test_inference_cancellation_preserves_original_even_when_failed_audit_is_unavailable(self):
+        async def exercise():
+            entered, release = asyncio.Event(), threading.Event()
+            loop = asyncio.get_running_loop()
+
+            def complete(*args):
+                loop.call_soon_threadsafe(entered.set)
+                release.wait(5)
+                return response(plan())
+
+            model, apply, audit = Mock(complete=Mock(side_effect=complete)), AsyncMock(), Mock()
+            def failed_audit(action, *args, **kwargs):
+                if action == 'llm.catalog_plan':
+                    raise RuntimeError('PRIVATE AUDIT FAILURE')
+            audit.side_effect = failed_audit
+            graph, options, _, _, _, _ = self.graph(model=model, apply=apply, audit=audit)
+            running = asyncio.create_task(graph.ainvoke({}, options))
+            try:
+                await asyncio.wait_for(entered.wait(), 2)
+                running.cancel('PRIVATE CANCELLATION')
+                with self.assertRaises(asyncio.CancelledError) as raised:
+                    await running
+                self.assertEqual(raised.exception.args, ('PRIVATE CANCELLATION',))
+            finally:
+                release.set()
+            apply.assert_not_awaited()
+            failures = [call for call in audit.call_args_list if call.args[0] == 'llm.catalog_plan']
+            self.assertEqual(len(failures), 1)
+            self.assertEqual(failures[0].args[1], 'failed')
+            self.assertIsNone(failures[0].args[2]['prompt_tokens'])
+            self.assertIsNone(failures[0].args[2]['completion_tokens'])
+            self.assertIsNone(failures[0].args[2]['inference_cost_estimate'])
+        asyncio.run(exercise())
+
     def test_saved_local_spans_require_exact_audited_trace_phase_and_success(self):
         records = [{'span_id': '1' * 16, 'action_type': 'bear.catalog.apply', 'status': 'success'}]
         span = {'span_id': '1' * 16, 'trace_id': 'a' * 32, 'name': 'bear.catalog.apply', 'status': 'OK'}
@@ -479,6 +514,157 @@ class WorkflowTests(unittest.TestCase):
             RUN.private_write(path, span, append=True)
             with self.assertRaises(RUN.CatalogError):
                 RUN.verify_saved_spans(path, records, 'a' * 32)
+
+
+class RunInterruptionTests(unittest.TestCase):
+    @contextlib.contextmanager
+    def environment(self, directory):
+        from opentelemetry.sdk.trace import TracerProvider
+        provider = TracerProvider()
+        agenthouse, audit_client, loki, model = EVALUATE.agenthouse_module(), AuditClient(), Mock(), Mock()
+        model.complete.return_value = response(plan())
+        logs = []
+        loki.push_record.side_effect = lambda value: logs.append(copy.deepcopy(value))
+        loki.query_task.side_effect = lambda task: [row for row in logs if row['task_id'] == task]
+        with contextlib.ExitStack() as stack:
+            patches = [patch.object(RUN, 'CatalogProvider', return_value=model),
+                patch.object(RUN, 'MetadataClient', return_value=Mock()),
+                patch.object(RUN, 'agenthouse_module', return_value=agenthouse),
+                patch.object(agenthouse, 'Client', return_value=audit_client),
+                patch.object(RUN, 'module', return_value=loki),
+                patch.object(RUN, 'disable_external_tracing'),
+                patch.object(RUN.data_plan_evidence, 'read_evidence', return_value=projection()),
+                patch.object(RUN.curate, 'preflight', return_value=observed()['catalog_state']),
+                patch('opentelemetry.sdk.trace.TracerProvider', return_value=provider)]
+            for item in patches:
+                stack.enter_context(item)
+            shutdown = stack.enter_context(patch.object(provider, 'shutdown', wraps=provider.shutdown))
+            yield Path(directory) / 'catalog', audit_client, loki, model, shutdown
+
+    def check_interrupted(self, output, audit_client, *, application_started=False):
+        report = json.loads((output / 'result.json').read_text())
+        spans = [json.loads(line) for line in (output / 'spans.jsonl').read_text().splitlines()]
+        self.assertEqual(report['result'], 'interrupted')
+        self.assertEqual(report['application_started'], application_started)
+        self.assertNotIn('checkpoint', report)
+        self.assertNotIn('verification', report)
+        self.assertNotIn('rollback_performed', report)
+        roots = [row for row in audit_client.events if row['action_type'] == 'bear.catalog.assess']
+        self.assertEqual(len(roots), 1)
+        self.assertEqual(roots[0]['status'], 'failed')
+        self.assertIsNone(roots[0]['prompt_tokens'])
+        self.assertIsNone(roots[0]['completion_tokens'])
+        self.assertIsNone(roots[0]['inference_cost_estimate'])
+        root_spans = [row for row in spans if row['name'] == 'bear.catalog.assess']
+        self.assertEqual(len(root_spans), 1)
+        self.assertEqual(root_spans[0]['status'], 'ERROR')
+        self.assertTrue(all(row['audit_delivery'] == 'delivered' for row in report['audit_records']))
+        self.assertNotIn('PRIVATE', json.dumps([report, spans, audit_client.events]))
+        self.assertEqual((output / 'result.json').stat().st_mode & 0o777, 0o600)
+        return report, spans
+
+    def test_outer_cancellation_and_keyboard_interrupt_save_root_failure_and_shutdown_before_reraise(self):
+        for interruption in (asyncio.CancelledError('PRIVATE CANCEL'), KeyboardInterrupt('PRIVATE INTERRUPT')):
+            with self.subTest(kind=type(interruption).__name__), tempfile.TemporaryDirectory() as directory, \
+                    self.environment(directory) as (output, audit_client, loki, model, shutdown), \
+                    patch.object(RUN, 'check_runtime', side_effect=interruption), \
+                    patch.object(RUN.curate, 'apply') as apply:
+                with self.assertRaises(type(interruption)) as raised:
+                    asyncio.run(RUN.run(config(), TOKEN, output))
+                self.assertIs(raised.exception, interruption)
+                shutdown.assert_called_once_with()
+                model.complete.assert_not_called()
+                apply.assert_not_called()
+                self.check_interrupted(output, audit_client)
+                loki.push_record.assert_called_once()
+
+    def test_actual_inference_task_cancellation_closes_error_spans_keeps_unknown_usage_and_does_not_apply(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                self.environment(directory) as (output, audit_client, loki, model, shutdown), \
+                patch.object(RUN, 'check_runtime'), patch.object(RUN.curate, 'apply') as apply:
+            async def exercise():
+                entered, release = asyncio.Event(), threading.Event()
+                loop = asyncio.get_running_loop()
+
+                def complete(*args):
+                    loop.call_soon_threadsafe(entered.set)
+                    release.wait(5)
+                    return response(plan())
+
+                model.complete.side_effect = complete
+                running = asyncio.create_task(RUN.run(config(), TOKEN, output))
+                try:
+                    await asyncio.wait_for(entered.wait(), 2)
+                    running.cancel('PRIVATE CANCEL')
+                    with self.assertRaises(asyncio.CancelledError):
+                        await running
+                finally:
+                    release.set()
+            asyncio.run(exercise())
+            shutdown.assert_called_once_with()
+            apply.assert_not_called()
+            report, spans = self.check_interrupted(output, audit_client)
+            self.assertEqual(len(audit_client.events), 3)
+            inference = next(row for row in audit_client.events if row['action_type'] == 'llm.catalog_plan')
+            self.assertEqual(inference['status'], 'failed')
+            self.assertIsNone(inference['prompt_tokens'])
+            self.assertIsNone(inference['completion_tokens'])
+            self.assertIsNone(inference['inference_cost_estimate'])
+            self.assertEqual(next(row['status'] for row in spans if row['name'] == 'llm.catalog_plan'), 'ERROR')
+            self.assertEqual(loki.push_record.call_count, 3)
+
+    def test_final_receipt_write_failure_preserves_original_interruption_only(self):
+        for interruption in (asyncio.CancelledError('PRIVATE CANCEL'), None):
+            with self.subTest(interrupted=interruption is not None), tempfile.TemporaryDirectory() as directory, \
+                    self.environment(directory) as (output, audit_client, loki, model, shutdown), \
+                    patch.object(RUN, 'check_runtime', side_effect=interruption or RuntimeError('PRIVATE FAILURE')):
+                original_write = RUN.private_write
+                write_error = OSError('PRIVATE WRITE FAILURE')
+                final_attempts = []
+
+                def fail_final_write(path, value, **kwargs):
+                    if shutdown.call_count and path.name == 'result.json':
+                        final_attempts.append(value['result'])
+                        raise write_error
+                    return original_write(path, value, **kwargs)
+
+                with patch.object(RUN, 'private_write', side_effect=fail_final_write):
+                    with self.assertRaises(asyncio.CancelledError if interruption is not None else OSError) as raised:
+                        asyncio.run(RUN.run(config(), TOKEN, output))
+                self.assertIs(raised.exception, interruption if interruption is not None else write_error)
+                shutdown.assert_called_once_with()
+                self.assertEqual(final_attempts, ['interrupted' if interruption is not None else 'failed'])
+                self.assertEqual([(row['action_type'], row['status']) for row in audit_client.events],
+                                 [('bear.catalog.assess', 'failed')])
+                spans = [json.loads(line) for line in (output / 'spans.jsonl').read_text().splitlines()]
+                self.assertEqual(spans[0]['status'], 'ERROR')
+
+    def test_partial_metadata_progress_survives_interruption_without_repeat_or_rollback_claim(self):
+        interruption = RUN.SessionInterrupted(15)
+        journal = {'run_token': TOKEN, 'result': 'in-progress', 'confirmed_tables': {},
+                   'pending': {'operation': 'create_table', 'target': 'stg', 'outcome': 'unknown'},
+                   'verified_complete': False}
+
+        def interrupted_apply(client, source, state, *, progress):
+            progress(copy.deepcopy(journal))
+            raise interruption
+
+        with tempfile.TemporaryDirectory() as directory, \
+                self.environment(directory) as (output, audit_client, loki, model, shutdown), \
+                patch.object(RUN, 'check_runtime'), \
+                patch.object(RUN.curate, 'apply', side_effect=interrupted_apply) as apply:
+            with self.assertRaises(RUN.SessionInterrupted) as raised:
+                asyncio.run(RUN.run(config(), TOKEN, output))
+            self.assertIs(raised.exception, interruption)
+            shutdown.assert_called_once_with()
+            self.assertEqual(apply.call_count, 1)
+            self.check_interrupted(output, audit_client, application_started=True)
+            self.assertEqual(json.loads((output / 'apply-progress.json').read_text()), journal)
+            self.assertFalse((output / 'repeat.json').exists())
+            self.assertFalse((output / 'apply.json').exists())
+            actions = [(row['action_type'], row['status']) for row in audit_client.events]
+            self.assertIn(('bear.catalog.apply', 'failed'), actions)
+            self.assertNotIn(('bear.catalog.repeat', 'success'), actions)
 
 
 if __name__ == '__main__':

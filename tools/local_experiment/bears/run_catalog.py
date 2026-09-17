@@ -172,9 +172,11 @@ def build_graph(model, observe, apply, audit, tracer):
                 observation = validate_observation(await observe())
             except BaseException as error:
                 span.set_status(Status(StatusCode.ERROR, 'OBSERVATION_FAILED'))
-                audit('bear.catalog.observe', 'failed', unknown_metrics(int((time.monotonic() - started) * 1000)), span)
-                if not isinstance(error, Exception):
-                    raise
+                try:
+                    audit('bear.catalog.observe', 'failed', unknown_metrics(int((time.monotonic() - started) * 1000)), span)
+                finally:
+                    if not isinstance(error, Exception):
+                        raise error
                 raise CatalogError('catalog source or metadata observation failed') from None
             audit('bear.catalog.observe', 'success', unknown_metrics(int((time.monotonic() - started) * 1000)), span)
             span.set_status(Status(StatusCode.OK))
@@ -185,11 +187,15 @@ def build_graph(model, observe, apply, audit, tracer):
             started = time.monotonic()
             try:
                 response = await asyncio.to_thread(model.complete, 'catalog_plan', state['observation']['evidence'])
-            except Exception as error:
+            except BaseException as error:
                 metrics = safe_metrics(error.metrics if isinstance(error, ProviderError) else {},
                                        int((time.monotonic() - started) * 1000))
                 span.set_status(Status(StatusCode.ERROR, 'MODEL_RESPONSE_FAILED'))
-                audit('llm.catalog_plan', 'failed', metrics, span, inference=True)
+                try:
+                    audit('llm.catalog_plan', 'failed', metrics, span, inference=True)
+                finally:
+                    if not isinstance(error, Exception):
+                        raise error
                 raise CatalogError('catalog model response failed') from None
             metrics = safe_metrics(response, int((time.monotonic() - started) * 1000))
             try:
@@ -212,9 +218,11 @@ def build_graph(model, observe, apply, audit, tracer):
                 receipt = verify_receipt(receipt, state['observation'], previous=previous)
             except BaseException as error:
                 span.set_status(Status(StatusCode.ERROR, 'CURATION_OR_READBACK_FAILED'))
-                audit(action, 'failed', unknown_metrics(int((time.monotonic() - started) * 1000)), span)
-                if not isinstance(error, Exception):
-                    raise
+                try:
+                    audit(action, 'failed', unknown_metrics(int((time.monotonic() - started) * 1000)), span)
+                finally:
+                    if not isinstance(error, Exception):
+                        raise error
                 raise CatalogError('catalog application or authoritative readback failed') from None
             audit(action, 'success', unknown_metrics(int((time.monotonic() - started) * 1000)), span)
             span.set_status(Status(StatusCode.OK))
@@ -269,6 +277,7 @@ async def run(config: dict, token: str, output: Path) -> dict:
               'limits': ['Historical catalog entities do not imply live SQL tables.',
                          'Partial owned metadata is retained for verified retry; no rollback is claimed.']}
     started = time.monotonic()
+    interruption = None
     with trace_lifecycle(provider), tracer.start_as_current_span(
             'bear.catalog.assess', record_exception=False, set_status_on_exception=False) as root_span:
         trace_id = f'{root_span.get_span_context().trace_id:032x}'
@@ -289,8 +298,10 @@ async def run(config: dict, token: str, output: Path) -> dict:
                 verify_audit(audit_client, event)
                 loki.push_record({'task_id': task_id, 'trace_id': trace_id, 'span_id': record['span_id'],
                                   'action': action, 'status': status})
-            except Exception:
+            except BaseException as error:
                 record['audit_delivery'] = 'failed'
+                if not isinstance(error, Exception):
+                    raise
                 raise CatalogError('catalog audit delivery or readback failed') from None
             record['audit_delivery'] = 'delivered'
 
@@ -348,15 +359,20 @@ async def run(config: dict, token: str, output: Path) -> dict:
             verify_audits(rows, loki.query_task(task_id), [], records, task_id, trace_id)
             result.update(result='passed', correlated_events=len(rows))
             root_span.set_status(Status(StatusCode.OK))
-        except Exception:
-            result.update(result='failed', error_code='CATALOG_OBSERVATION_PLAN_APPLY_OR_AUDIT_FAILED')
+        except BaseException as error:
+            if not isinstance(error, Exception):
+                interruption = error
+            result.update(result='interrupted' if interruption is not None else 'failed',
+                          error_code='CATALOG_OBSERVATION_PLAN_APPLY_OR_AUDIT_FAILED')
             result.pop('checkpoint', None)
             root_span.set_status(Status(StatusCode.ERROR, result['error_code']))
             if not any(row['action_type'] == 'bear.catalog.assess' for row in records):
                 try:
                     audit('bear.catalog.assess', 'failed', unknown_metrics(int((time.monotonic() - started) * 1000)), root_span)
-                except Exception:
-                    pass
+                except BaseException as audit_error:
+                    if interruption is None and not isinstance(audit_error, Exception):
+                        interruption = audit_error
+                        result['result'] = 'interrupted'
     if result['result'] == 'passed':
         try:
             verify_saved_spans(output / 'spans.jsonl', records, trace_id)
@@ -364,7 +380,11 @@ async def run(config: dict, token: str, output: Path) -> dict:
         except Exception:
             result.update(result='failed', error_code='CATALOG_SAVED_TRACE_VERIFICATION_FAILED')
             result.pop('checkpoint', None)
-    private_write(output / 'result.json', result)
+    try:
+        private_write(output / 'result.json', result)
+    finally:
+        if interruption is not None:
+            raise interruption
     return result
 
 

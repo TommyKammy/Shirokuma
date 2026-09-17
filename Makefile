@@ -495,6 +495,21 @@ test-local-catalog-bear: local-llm-sync
 
 verify-local-experiment: test-local-catalog-bear
 
+.PHONY: local-data-catalog-smoke local-data-catalog-request local-data-catalog-resume test-local-data-catalog
+local-data-catalog-smoke: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/bears/run_data_catalog.py run
+
+local-data-catalog-request: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/bears/run_data_catalog.py run --request-stdin
+
+local-data-catalog-resume: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/bears/run_data_catalog.py resume --handoff-token "$(DATA_CATALOG_HANDOFF_TOKEN)"
+
+test-local-data-catalog: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_data_catalog.py'
+
+# test-local-data-bear already discovers test_local_data_catalog.py.
+
 .PHONY: local-lineage-coverage test-local-lineage-coverage
 local-lineage-coverage:
 	@$(PYTHON) tools/local_experiment/metadata/coverage.py

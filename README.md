@@ -89,6 +89,10 @@ small requests into a validated plan, generates fixed dbt templates, and checks
 disposable Iceberg results against an independent oracle before scoped cleanup.
 The [Catalog Curator Bear](tools/local_experiment/bears/CATALOG_CURATOR.md) records
 verified Data Engineer runs as historical metadata with fixed owners and lineage.
+The [Data → Catalog handoff](tools/local_experiment/bears/DATA_CATALOG.md) connects
+both workflows and resumes from saved evidence without invoking Data twice.
+Run `rtk make local-data-catalog-smoke` or supply a bounded request on standard
+input with `rtk make local-data-catalog-request`.
 The [lineage coverage report](tools/local_experiment/metadata/COVERAGE.md) compares
 verified Data Plan histories with saved OpenMetadata edges and distinguishes
 missing, conflicting and unknown observations. Run `rtk make local-lineage-coverage`

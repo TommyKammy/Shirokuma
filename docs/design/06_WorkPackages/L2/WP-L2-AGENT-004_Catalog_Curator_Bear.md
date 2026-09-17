@@ -5,7 +5,7 @@ title: "WP-L2-AGENT-004 Catalog Curator Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.5"
+version: "0.6"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -147,3 +147,44 @@ reportの全10edge verdictとmetadata aggregate hashも独立APIから再計算�
 本増分は既存実装を使う実験結果の更新で、直前の全949tests/設計80documents/14testsを継承する。
 次はData→Catalogの一連実行と中断再開を専用の小さな入口へまとめる。Data開始intentと保存先を
 先に固定し、同handoffでDataを二度呼ばず、成功証跡を検証できた場合だけ同Data PlanをCatalogへ渡す。
+
+## 2026-09-17: verified Data handoff and resumable Catalog attempts
+
+Data→Catalogの専用wrapperを実装した。固定fixture/3operationのData成功receiptと保存artifactを照合し、
+受け渡すData Plan token・projection hashを固定する。wrapperの永続journalはhost側の段階checkpointであり、
+既存LangGraphのin-memory checkpointを永続化したとは扱わない。
+Catalogは同sourceの新attemptだけを起動し、既存のmarker/owner/schema/lineage照合とreadbackを再利用する。
+部分成功の旧receipt/progressは変更せず保持し、人手編集や根拠不一致を上書きしない。
+
+Data handoff `cc018604c0b8407aadad52b0b0c58df7` から、成功source
+`bd490f27d89b45ebb22a6f34f2ef3b9e`（uppercase_names）を受領したCatalog run
+`175f84bd32a7403497bdfd7f884137af` が成功。historical2table/2edgeだけを4writesで追加し、
+同attempt内repeatは0writesだった。元のData生成2relationは既に限定cleanup済みである。
+新coverage `42c0b1bcdf0b45709d6c25119c0c71e0` は6成功run・12/12edgesを確認した。
+旧5runの10/10 reportも保持し、全catalogやlive tableの完全性へ範囲を広げない。
+
+実completed resumeは既存成功証跡を検証してreplayし、Data/Catalog child・API・model呼出しは0。
+前後1013files、独立metadata31endpoints、その時点のPawprints385行が不変だった。
+unsupported handoff `a30d6e1b7772494dbe50cf673068e6a3` はDataでexit2となり、Catalog起動は0。
+正常Data/Catalogとunsupportedの3実推論は合計1125入力/136出力tokens・6605ms、cost NULL、cloud/retry0。
+今回保存した実OTel10spansは、MCP2件の返却span IDを使った相関確認と分けて記録する。
+既存の評価120/120は別母集団として保持する。
+
+Catalogの推論・外側runも取消を捕捉し、unknown usage、failed監査、ERROR spanとinterrupted receiptを残す。
+OTel providerをshutdownした後で元の取消を再送出し、result保存が二次的に失敗しても元のsignal/取消を隠さない。
+rollbackや未確定API応答の成功は主張しない。これらの取消・部分再開境界はoffline testsの証拠であり、
+今回実機で途中取消を起こしたという意味ではない。
+
+handoff22＋Catalog55 focusedが成功。全local976件（975成功＋optional OTel1skip）も成功し、
+`data-catalog-checks/8ee9569b05a04b7ca389364576e3fcfb9/local-regression.log`に全文を保持した。
+[Data to Catalog runbook](../../../../tools/local_experiment/bears/DATA_CATALOG.md) に入口・再開・証拠境界を記録。
+WPはlocal-partialのまま。次はSREのcontainer termination/waiting観測を検討し、現時点で
+根拠のない原因推定はunknownとして維持する。
+
+独立最終監査 `data-catalog-preflight/de60ba1818d74bad9a0a289176e9f72f/verification.json` の
+107checks/metadata48checksが成功。新2table/2edgeだけを帰属させ、旧10table/10edge/anchorsを保持。
+fresh API hashから6run・12/12edgesを再計算し、Pawprints388＝旧376不変＋新12、Loki12件、
+保存実OTel10spans＋MCP2返却span ID相関を照合した。
+保持Kube/3Docker/履歴4tables/5DDL/fixture全履歴/全10table一覧は不変。
+旧964files中963は厳密不変、admin markerのmtimeだけ既知差（content/mode/.env不変）とし、
+新180artifactのhashを保存した。

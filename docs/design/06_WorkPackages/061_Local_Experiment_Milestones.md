@@ -5,22 +5,57 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "3.6"
+version: "3.7"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：lineage reportで検出した不足4edgesを既存Curatorで補完。
-検証済み5runの登録は6/10から10/10へ変化し、既存entity保持と再適用0writesを確認した。
-2回の実Qwen推論と各5監査eventを相関照合済み。次はData→Catalogの一連実行と中断再開へ。
+最新の到達点（2026-09-17）：自然文Data→Catalogのdurable handoffが実機成功。
+大文字化の結果・限定cleanup・履歴登録と、完了resumeでchild/API/model呼出し0を確認した。
+unsupportedはCatalog起動0。6成功Data PlansのLineageは12/12。次はSREのcontainer状態観測を検討する。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: durable Data to Catalog handoff
+
+[Data Engineer Bear](L2/WP-L2-AGENT-003_Data_Engineer_Bear.md)と
+[Catalog Curator](L2/WP-L2-AGENT-004_Catalog_Curator_Bear.md)を小さな専用wrapperで接続。
+固定保存先・排他lock・親directoryを含むfsync済みintentにより、同handoffのData起動は最大1回。
+保存成功receiptとsource証跡を検証後だけ同Data Planを渡し、Catalog部分失敗は新attemptで再開する。
+LangGraph自体の永続checkpointや副作用のexactly-onceとは区別し、unknownを再Data実行で埋めない。
+
+実自然文handoff `cc018604c0b8407aadad52b0b0c58df7`、Data Bear
+`e8ecab2de2c04627bbb10f78cf111537`、Data Plan `bd490f27d89b45ebb22a6f34f2ef3b9e`、
+Catalog `175f84bd32a7403497bdfd7f884137af` が成功。uppercase結果は `[[1,SHIROKUMA],[2,POLARIS]]`、
+materialization2回・owned2relation回収、historical2table/2edgeの4writes→repeat0writes。
+同IDの実completed resumeは保存証拠のreplayだけでchild/API/model0。
+前後1013files、独立metadata31endpoints、Pawprints385行が不変だった。
+新coverage `42c0b1bcdf0b45709d6c25119c0c71e0` は6run・12/12edges。古いreportは保持した。
+
+unsupported handoff `a30d6e1b7772494dbe50cf673068e6a3` / Data
+`c2f97b6d37c247c58024e5c0cbefe96b` はexit2、adapter0/Catalog0。
+実推論3callsは1125入力/136出力tokens・合計6605ms、cost NULL、cloud/retry0。
+保存実OTel10spansとMCP2件の返却span ID相関を分け、既存評価120/120には加算しない。
+Catalog取消はfailed監査/ERROR span/interrupted保存後に元の取消を再送出し、二次的な保存失敗でも維持する。
+取消・partial再開はoffline focusedの検証であり、実機途中取消の実績とはしない。
+
+handoff22/Catalog55 focused、全local976件（975成功＋標準環境optional OTel1skip）が成功。
+設計80documentsと設計関連14testsの検証も成功した。
+全文は`data-catalog-checks/8ee9569b05a04b7ca389364576e3fcfb9/local-regression.log`。
+新service/外部publication/本番受入はなく、両WPはlocal-partialを維持する。
+次はSREにcontainer termination/waitingの証拠を追加する範囲を検討し、現状のcause unknownを保持する。
+
+独立最終監査 `data-catalog-preflight/de60ba1818d74bad9a0a289176e9f72f/verification.json` の
+107checks/metadata48checksが成功。AH388＝旧376全行hash不変＋新12、Loki12件、保存実OTel10spansと
+MCP2返却span IDを照合。保持Kube/3Docker/履歴4tables5DDL/fixture全snapshots/history/refs/全10table一覧は不変。
+旧964files中963は厳密不変、admin markerのmtimeだけ既知差（content/mode/.env不変）、新180artifact hashを保存。
+新metadata2table/2edgeだけを帰属させ、旧10table/10edge/anchors保持とcoverage6run12edgeをfresh APIから再確認した。
 
 ## 2026-09-17: verified lineage gaps completed
 

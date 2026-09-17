@@ -5,7 +5,7 @@ title: "WP-L2-AGENT-003 Data Engineer Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.5"
+version: "0.6"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -169,3 +169,50 @@ Data91＋SRE64 focusedが成功、全local回帰867件（866成功＋標準環�
 
 追加評価を既存集計へ統合し、report `7252a562650c4c1292c6df462a832bc3` は10runs valid/complete。
 baselineとrequestsのcase signatureを分離し、固定dataset hash/IR/意味判定を確認する22focused testsが成功。
+
+## 2026-09-17: durable Data to Catalog handoff
+
+既存のData/Catalog async APIを使う専用入口 `run_data_catalog.py` を追加した。
+privateなhandoff UUIDごとに排他lockを取り、Dataの保存先と開始intentをatomic write・file/親directoryの
+fsyncで先に固定する。同じhandoffでDataを呼ぶのは最大1回。intent直後の中断では0回の可能性があり、
+分散transactionや副作用のexactly-onceを保証するものではない。結果不明を理由にDataを再起動しない。
+
+Dataの保存成功receipt、入力hash、adapter stdout/summaryの一致、独立結果oracle、dbt/Dagster証跡、
+query drain/cleanupを検証した場合だけ、同一Data Plan token/hashをCatalogへ渡す。
+自然文はstdinで受け取り、本文は保持しない。既存3caseも選択でき、任意SQL/保存先/API URLは受け付けない。
+Catalogの部分失敗は旧attemptを保持して同じsourceへの新attemptで再開する。
+完了済みresumeは保存証跡の再検証とreplayだけで、現在のcatalog状態を再観測したとは扱わない。
+
+実自然文handoff `cc018604c0b8407aadad52b0b0c58df7` が成功した。
+
+| 段階 | 保存token | 確認結果 |
+|---|---|---|
+| Data Bear | `e8ecab2de2c04627bbb10f78cf111537` | 採択operationはuppercase_names |
+| Data Plan | `bd490f27d89b45ebb22a6f34f2ef3b9e` | `[[1,SHIROKUMA],[2,POLARIS]]`、materialization2回、owned2relation回収 |
+| Catalog | `175f84bd32a7403497bdfd7f884137af` | historical2table/2edgeの4writes、repeat0writes |
+
+同handoffの実completed resumeはchild/API/model呼出し0で成功。前後1013files、metadata31endpoints、
+その時点のPawprints385行が不変だった。read-only coverage `42c0b1bcdf0b45709d6c25119c0c71e0` は
+検証済み6run・期待12edgesの12/12登録を確認した。履歴登録の充足であり、生成SQL tableの稼働率ではない。
+
+非対応要求のhandoff `a30d6e1b7772494dbe50cf673068e6a3` / Data Bear
+`c2f97b6d37c247c58024e5c0cbefe96b` はunsupported/exit2、adapter0・Catalog0で終了した。
+今回の正常Data/Catalogとunsupportedの実LLM計3callsは入力1125/出力136tokens、推論合計6605ms、
+cost NULL・cloud/retry0。保存した実OTel10spansとMCP2件の返却span ID相関を区別する。
+これらのworkflow観測は既存golden評価120/120へ加算しない。
+
+handoff focused22、Catalog focused55、全local回帰976件（975成功＋標準環境optional OTel1skip）が成功。
+全文logは `tmp/local-experiment/data-catalog-checks/8ee9569b05a04b7ca389364576e3fcfb9/local-regression.log`。
+中断・保存失敗・同時起動・部分適用の再開はoffline回帰で検証し、今回の実機で途中取消は行っていない。
+実行方法は [Data to Catalog runbook](../../../../tools/local_experiment/bears/DATA_CATALOG.md) を参照。
+`make local-data-catalog-request`、同IDの再開は `make local-data-catalog-resume DATA_CATALOG_HANDOFF_TOKEN=<32hex>`。
+新service/外部公開/保持データ破壊はなく、一般的な自然文意図の保証や本番受入は未達のままlocal-partialを維持する。
+
+独立最終監査 `data-catalog-preflight/de60ba1818d74bad9a0a289176e9f72f/verification.json` の
+107checksとmetadata48checksが成功。Pawprints388＝旧376全行hash不変＋新12、Loki12件、
+保存実OTel10spans＋MCP2件の返却span IDを照合した。保持Kube/3Docker、履歴4tables/5DDL、
+fixture全snapshots/history/refsとIceberg全10table一覧が不変で、生成2relationは残留しない。
+旧964保護files中963は厳密不変。既存admin-initialized markerのmtime更新のみを既知差とし、
+そのcontent/modeと.envは不変だった。新180artifactのhashも保存した。
+metadataの追加は2table/2edgeだけで旧10table/10edge/anchorsを保持し、6run・12/12のcoverageを
+fresh API hashから独立再計算した。
