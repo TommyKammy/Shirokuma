@@ -224,8 +224,19 @@ class QueryClient:
         return {'Accept': 'application/json', 'X-Trino-User': self.user, 'X-Trino-Source': self.source,
                 'X-Trino-Session': 'query_max_execution_time=30s,query_max_run_time=30s'}
 
-    def query(self, sql, label):
+    def _validate_sql(self, sql, label):
+        """Fixed Reader policy; bounded observation profiles may narrow this."""
         allowed_sql(sql, label, self.token, self.control)
+
+    def _validate_cell(self, value, kind, label):
+        cell(value, kind)
+
+    def _column_type(self, value, label):
+        """Reader scalar policy; observation profiles may normalize fixed types."""
+        return C.scalar_type(value)
+
+    def query(self, sql, label):
+        self._validate_sql(sql, label)
         require(not any(r['post_attempted'] and not r['response_complete'] for r in self.records), 'QUERY_OUTCOME_UNRESOLVED')
         row = {'operation_id': str(uuid.uuid4()), 'label': label, 'query_id': None,
                'sql_sha256': hashlib.sha256(sql.encode()).hexdigest(), 'started_at': stamp(),
@@ -289,7 +300,7 @@ class QueryClient:
                             set(c) <= {'name', 'type', 'typeSignature'} and type(c.get('name')) is str and
                             0 < len(c['name']) <= 128 and type(c.get('type')) is str for c in cs), 'QUERY_COLUMNS_INVALID')
                     new_columns = [c['name'] for c in cs]
-                    new_types = [C.scalar_type(c['type']) for c in cs]
+                    new_types = [self._column_type(c['type'], label) for c in cs]
                     require(len(set(new_columns)) == len(new_columns) and (columns is None or
                             columns == new_columns and types == new_types), 'QUERY_COLUMNS_CHANGED')
                     columns, types = new_columns, new_types
@@ -298,7 +309,7 @@ class QueryClient:
                 for item in data:
                     require(type(item) is list and len(item) == len(columns), 'QUERY_ROWS_INVALID')
                     require(len(rows) < MAX_ROWS, 'QUERY_ROW_BOUND')
-                    for value, kind in zip(item, types): cell(value, kind)
+                    for value, kind in zip(item, types): self._validate_cell(value, kind, label)
                     rows.append(item)
                 row['row_count'] = len(rows)
                 if terminal:
@@ -485,8 +496,10 @@ def trino_service_identity():
 
 
 @contextmanager
-def runtime(token, progress):
+def runtime(token, progress, *, _worker_factory=None):
     token_id(token); require(callable(progress), 'JOURNAL_REQUIRED')
+    worker_factory = QueryClient if _worker_factory is None else _worker_factory
+    require(callable(worker_factory), 'JOURNAL_AND_GUARD_REQUIRED')
     journal = {'state': 'pending', 'cleanup': {'verified': False}, 'trino': None, 'polaris': None}
     stack = ExitStack(); clients = None; error = None; cleanup_error = None
     def snapshot():
@@ -504,7 +517,7 @@ def runtime(token, progress):
             require(trino_service_identity() == before, 'TRINO_SERVICE_CHANGED')
         trino_guard(); journal['trino']['state'] = 'ready'; snapshot()
         polaris_guard = stack.enter_context(REFS.polaris_tunnel(polaris_progress))
-        clients = (QueryClient(url, token, progress=snapshot, guard=trino_guard),
+        clients = (worker_factory(url, token, progress=snapshot, guard=trino_guard),
                    QueryClient(url, token, control=True, progress=snapshot, guard=trino_guard),
                    CatalogRead(polaris_guard, progress=snapshot))
         journal['state'] = 'ready'; snapshot()

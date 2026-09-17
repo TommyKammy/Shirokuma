@@ -5,7 +5,7 @@ title: "WP-L2-AGENT-005 Query Doctor Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.7"
+version: "0.8"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -15,6 +15,68 @@ tags: [shirokuma, workpackage, l2, agentops]
 ## Summary
 
 EXPLAINとquery historyから改善案を出す
+
+## 2026-09-18: diagnose a completed Reader query
+
+`query diagnose --read-token TOKEN`を追加し、実際の成功selectの証拠から診断する。
+旧2query固定のQuery Doctor契約を維持し、新しいReader profileを分ける。
+
+- [x] privateで終了済みの成功selectだけを受理し、request・query ID・SQL hash・identityを照合する。
+- [x] 元SELECTは再送せず、同SQLのEXPLAIN1回、元queryの限定history1回、固定tableのSTATS1回を読む。
+- [x] UUID/schema/headの変化は診断前後で拒否し、履歴不在の原因を推測せず、欠測はunknownとして残す。
+- [x] SQL・table/列名・行値をモデルへ渡さず、限定数値・欠測・所見から既存Qwenを1回だけ呼ぶ。
+- [x] 固定のfinding/next-step IDsを検証し、root cause未確定・改善未測定を保つ。
+- [x] 保存監査/usage/終了・取消とCLI protocolを検証し、保持tableと別の所有tableで同じpathを実証する。
+
+追加followup選択、元SELECTの再実行、SQL rewrite、設定変更、resume、新service/model設定は追加しない。
+この増分の終了証拠は診断workflowの完了であり、性能改善や一般的原因究明の成功とは区別する。
+
+## 2026-09-18: completed Reader diagnosis evidence
+
+保持tableのread `e743a83a0d19bcbda85027ea8e67464b`から、diagnosis
+`4b43a8bea59facddb11b37242dcc22e0`が成功した。別の新規tableのread
+`988b515dae98fcca36266247cbce0a48`から、`22d2040ad8a6f9ed3aeb4146a96a0577`も成功した。
+どちらも元SELECT再送0、schema前後・EXPLAIN・history・STATSの5query＋drain1query、
+同UUID/schema/head、接続回収後のQwen1回、監査3eventsと保存OTel/Loki相関を照合した。
+両履歴は実際に残っており、created-to-endは1123/1182ms、queueは既知の0だった。
+planは2fragments/6nodes、一部見積りとtable統計の不足だけを所見として返した。
+これらの時間は今回取得した元queryの観測値であり、性能比較の結果ではない。
+
+Qwenのprompt/completion tokensは523/95と524/95、inferenceは4529/3158ms。
+modelは既存`qwen3.8-flash-next`、cloud/retryは0、costはNULLのまま保持した。
+SQL・行値・table/列名・raw plan/history/model responseはモデル入力と通常receiptに含めない。
+再現は[diagnosis runbook](../../../../tools/local_experiment/query_diagnose/README.md)を参照。
+
+実機でTrinoの長さ付き文字列型を受け取れず、最初の2実行は失敗した。
+`e782245c783568d49863b5ee83a8e9b8`はEXPLAIN、`b6c34fa67b13f88719f2ea59cdb2eb64`はhistoryで停止。
+どちらもmodel0・cleanup確認済みで、failed receiptを変更せず保存した。
+最初の捕捉queryへのGET1回はFINISHEDを確認したが、元receiptのunknownは成功に書き換えていない。
+二回目は所有historyをdrainでcancelし、query終端を確認した。
+Trino 483の[日時変換](https://raw.githubusercontent.com/trinodb/trino/483/core/trino-main/src/main/java/io/trino/operator/scalar/timestamptz/ToIso8601.java)
+と[EXPLAIN生成](https://raw.githubusercontent.com/trinodb/trino/483/core/trino-main/src/main/java/io/trino/sql/rewrite/ExplainRewrite.java)
+を確認し、診断のEXPLAIN/history/STATSだけstrict `varchar(n)`を正規化した。
+Readerの型制約、schema型、phase別byte上限は維持した。historyのprecision3はvarchar(32)に対応する。
+
+新Python76tests（contract25/observer25/owner18/audit8）、既存Reader95、
+Go132 top-level＋70subtests・実Python Owner結合6経路・vet/raceが成功。
+全local回帰54suites/1947件（1946成功＋既存optional OTel1skip）が通過した。
+実障害で確認した型差以外の取消・source改変・失敗注入はoffline回帰の証拠と区別する。
+実機記録・最終56source/binary sealは
+`tmp/local-experiment/query-diagnose-checks/4c56bd58726d4be7a68822bf9b43a903/`に保存した。
+
+専用fixture `ab8e0e7bd9da481d8ce875386e3b00c3`はUUID
+`275df25a-f3a0-4203-9888-f6218fcca806`、snapshot `7664669577755841607`。
+CREATE/INSERT各1回の2行・5scalar列をReaderで精度照合し、診断の終了・lock解放・同identityを確認後、
+fresh UUID/head/schema照合を経てDROP1回した。保持fixtureの6投影とtable一覧は元に戻った。
+失敗2診断のworker5/control3と成功2診断のworker10/control2、計20query IDsを保存した。
+query終了の確認は、失敗receiptの応答unknownを成功へ変更する根拠にはしていない。
+
+保存結果の独立検証94checksと、前後環境・監査相関の独立67checks（fresh21＋相関46）が成功。
+3712旧files、14Pods/27resources/3Docker/16policy、MLflow identityが不変、5ports空き・43locks非active。
+AHは旧470行の全hashを保持して480行へ増え、失敗4＋成功6の10event IDsがLokiと一致した。
+前後監査は`query-diagnose-preflight/0ffcec31a20e40f6a92a6bbbb9ebb88c/independent-verification.json`、
+保存結果は上記checkdirの`independent-saved-all-466b9876f7394242a52b05244ad85bf4.json`に保存した。
+保持table復帰は専用fixture cleanupが得た6投影の照合であり、監査による追加SELECTの結果ではない。
 
 ## 2026-09-18: bounded Lakehouse browsing plan
 

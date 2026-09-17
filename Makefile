@@ -810,3 +810,8 @@ verify-local-experiment: test-policy-candidate-cli
 test-local-query-read:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_query_read_*.py'
 verify-local-experiment: test-local-query-read
+
+.PHONY: test-local-query-diagnose
+test-local-query-diagnose: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -s tests -p 'test_query_diagnose_*.py'
+verify-local-experiment: test-local-query-diagnose

@@ -5,17 +5,30 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.22"
+version: "3.23"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-18）：Lakehouseのtable一覧・schema確認・snapshot固定の行取得を
-製品CLIから実行できる。保持tableと別の実験tableで精度保持と件数制限を確認し、実験tableを回収した。
-全local回帰1871件（1870成功/既存1skip）が通過した。
-次は実際に取得したqueryの保存証拠を、元SELECTを再送せずQuery Doctorへ接続する。
+最新の到達点（2026-09-18）：成功したLakehouse読取を、元SELECTを再送せずに
+EXPLAIN・history・STATSとQwenで診断できる。保持tableと別の実験tableで完了し、実験tableを回収した。
+全local回帰1947件（1946成功/既存1skip）が通過した。
+次はsnapshot一覧と過去snapshot指定読取を、現在headと混同せずCLIへ接続する。
+
+## 2026-09-18: diagnose a completed Reader SELECT
+
+`query diagnose --read-token TOKEN`を追加した。privateな成功Reader receiptと元query identityを
+照合し、同snapshotのEXPLAIN・限定history・STATSを取得、終了・接続回収後に既存Qwenを1回呼ぶ。
+SQL・行値・table/列名をモデルへ送らず、原因未確定・効果未測定を保つ限定所見を返す。
+
+保持tableと別の新tableで2診断が成功。元SELECT再送0、各5観測query＋drain1、
+Qwen合計1047prompt/190completion tokens・7687ms、監査6eventsと保存OTel/Lokiが一致した。
+初回2実行はTrinoの長さ付きvarchar応答で失敗し、各model0/cleanup済みの記録を保持。
+Reader制約を変えず、診断3phaseだけ型を正規化して修正した。
+新Python76件とGo/実Python結合・vet/race、全1947件が通過。
+詳細、失敗・成功run IDsと実験table回収は[WP-L2-AGENT-005](L2/WP-L2-AGENT-005_Query_Doctor_Bear.md)を参照。
 
 ## 2026-09-18: Lakehouse reader CLI
 

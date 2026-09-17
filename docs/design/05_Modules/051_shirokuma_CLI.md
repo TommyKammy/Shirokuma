@@ -5,12 +5,23 @@ title: "shirokuma CLI"
 status: draft
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.8.0"
+version: "0.9.0"
 area: "module"
 tags: [shirokuma, module]
 ---
 
 # shirokuma CLI
+
+### Diagnose a completed Reader SELECT
+
+`query diagnose --read-token TOKEN`は成功したReader selectの保存証跡から、
+元SELECTを再送せず同SQLのEXPLAIN・元queryの限定history・table statisticsを読む。
+UUID/schema/headの一致と接続回収後、名前・SQL・行値を除いた数値/欠測だけをQwenへ渡す。
+履歴の不在はnot-retainedとし、元read tokenと新diagnosis tokenを区別する。
+監査3event・Loki・保存span・最終receipt・child exitを確認してから固定所見と次の確認項目を返す。
+root causeはundetermined、performance gainはunmeasuredを維持する。
+旧`query run/status`を変更せず、診断のresume/任意SQL/自動書換えは追加しない。
+[Diagnosis runbook](../../../tools/local_experiment/query_diagnose/README.md)を参照。
 
 ### Local experimental Lakehouse reads
 
