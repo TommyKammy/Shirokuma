@@ -164,6 +164,7 @@ def main() -> int:
     dataops.add_argument("--exercise-failure", action="store_true")
     benchmark = commands.add_parser("benchmark")
     benchmark.add_argument("--cleanup-run")
+    commands.add_parser("iceberg-sandbox")
     args = parser.parse_args()
     try:
         with interruption_handlers():
@@ -181,6 +182,9 @@ def main() -> int:
                     command = [str(python), str(project / "run.py"), "--url", url]
                     if args.exercise_failure:
                         command.append("--exercise-failure")
+                elif args.command == "iceberg-sandbox":
+                    project = Path(__file__).with_name("iceberg_sandbox")
+                    command = [sys.executable, str(project / "run.py"), "--url", url]
                 else:
                     project = Path(__file__).with_name("benchmark")
                     command = [sys.executable, str(project / "run.py"), "--url", url,

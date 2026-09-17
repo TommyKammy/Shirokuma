@@ -74,6 +74,8 @@
     {"source": "06_WorkPackages/L2/WP-L2-AGENT-004_Catalog_Curator_Bear.md", "target": "docs/design/06_WorkPackages/L2/WP-L2-AGENT-004_Catalog_Curator_Bear.md"},
     {"source": "06_WorkPackages/L2/WP-L2-EVAL-001_Agent_evaluation_harness.md", "target": "docs/design/06_WorkPackages/L2/WP-L2-EVAL-001_Agent_evaluation_harness.md"},
     {"source": "06_WorkPackages/L2/WP-L2-AGENT-005_Query_Doctor_Bear.md", "target": "docs/design/06_WorkPackages/L2/WP-L2-AGENT-005_Query_Doctor_Bear.md"},
-    {"source": "06_WorkPackages/L2/WP-L2-POL-001_Policy_Gatekeeper_Bear.md", "target": "docs/design/06_WorkPackages/L2/WP-L2-POL-001_Policy_Gatekeeper_Bear.md"}
+    {"source": "06_WorkPackages/L2/WP-L2-POL-001_Policy_Gatekeeper_Bear.md", "target": "docs/design/06_WorkPackages/L2/WP-L2-POL-001_Policy_Gatekeeper_Bear.md"},
+    {"source": "06_WorkPackages/L3/WP-L3-ICE-001_Iceberg_branch_tag_clone_demo.md", "target": "docs/design/06_WorkPackages/L3/WP-L3-ICE-001_Iceberg_branch_tag_clone_demo.md"},
+    {"source": "06_WorkPackages/L3/WP-L3-CH-001_ClickHouse_AgentHouse.md", "target": "docs/design/06_WorkPackages/L3/WP-L3-CH-001_ClickHouse_AgentHouse.md"}
   ]
 }

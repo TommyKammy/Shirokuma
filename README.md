@@ -39,6 +39,9 @@ The DataOps command installs the locked Python dependencies in a project-local
 environment, materializes dbt staging/mart tables through Dagster, verifies repeat
 results and recovery from a controlled test failure, and removes its experiment
 tables. See [the runbook](tools/local_experiment/dataops/README.md).
+The [Iceberg snapshot sandbox](tools/local_experiment/iceberg_sandbox/README.md)
+demonstrates historical reads, a separate CTAS restoration and rollback on new
+disposable tables. Run it with `rtk make local-iceberg-sandbox`.
 The historical `make verify` retains publication checks and is separate from
 this local loop.
 

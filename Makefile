@@ -519,3 +519,12 @@ test-local-policy-bear: local-llm-sync
 	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_gatekeeper_observe.py'
 
 verify-local-experiment: test-local-policy-bear
+
+.PHONY: local-iceberg-sandbox test-local-iceberg-sandbox
+local-iceberg-sandbox:
+	@$(PYTHON) tools/local_experiment/local_session.py iceberg-sandbox
+
+test-local-iceberg-sandbox:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_iceberg_sandbox.py'
+
+verify-local-experiment: test-local-iceberg-sandbox

@@ -5,18 +5,17 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "2.2"
+version: "2.3"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：Policy Gatekeeperの実Qwen25分類とnative15dry-runが全件一致。
-7監査/保存OTel、既存6Podと16policy/binding不変、残存object0を確認した。
-8合成case×2は16/16成功。評価harnessは6suite全8receiptを検査し、入力16files不変。
-Qwen94callsとmock10を別groupで保持する。全回帰486 tests、設計73documentsを検証。
-次はWP-L3-ICE-001のsnapshot time-travel/復元sandboxを既存Lakehouseで実装する。
+最新の到達点（2026-09-17）：Iceberg snapshot A/Bの過去参照、別tableへのCTAS復元、
+元実験tableのAへのrollbackが実機成功。初回のTrino履歴意味の誤認をsource確認で修正した。
+2run合計4table/query残留0、保持fixtureのschema/rows/snapshots/history/refs不変を確認。
+全回帰506 tests、設計75documentsを検証。次は既存AgentHouseを読むGrafana dashboardを実装中。
 Cloud APIは無効のままローカル開発を継続する。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
@@ -24,6 +23,20 @@ repositoryの設計66 documentsを検証した。今回更新した12 materializ
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: Iceberg snapshot / restore sandbox
+
+[WP-L3-ICE-001](L3/WP-L3-ICE-001_Iceberg_branch_tag_clone_demo.md)の使い捨て2tableで
+A（2行）→B（3行）、Aの過去参照、別tableへAのCTAS復元、sourceのAへのrollback、
+rollback後のB過去参照が成功した。Run `94a2396b745747c693919337411acc9d`、24手順。
+初回`9c127032f70b4bad833a9d3141368081`はTrino483履歴期待の誤りでfailedを保持。
+固定versionのsourceに合わせ、current refs/祖先flag/実query結果を厳密照合して修正した。
+
+04:51 UTCに合計4生成table・owned active query残留0、保持fixtureの5種の観測が前後一致。
+`tmp/local-experiment/iceberg-sandbox-preflight/8ec05a4823724073bfbd070956af8ec2/`へ独立検証を保存。
+20 focused tests、全回帰506 tests、設計75documentsが成功。追加runtime/model呼出なし。
+CTASは物理コピーで、named branch/tag・zero-copy clone・保持dataの復元保証は未達。
+次は[WP-L3-CH-001](L3/WP-L3-CH-001_ClickHouse_AgentHouse.md)のGrafana read-only表示を進める。
 
 ## 2026-09-17: Qwen Policy Gatekeeper
 
