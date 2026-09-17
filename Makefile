@@ -687,3 +687,22 @@ test-local-warehouse-lifecycle:
 	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_warehouse_session*.py'
 	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_lifecycle_telemetry.py'
 verify-local-experiment: test-local-warehouse-lifecycle
+
+.PHONY: local-mlflow-sync local-mlflow-prepare local-mlflow-plan local-mlflow-import local-mlflow-start local-mlflow-status local-mlflow-stop test-local-mlflow
+local-mlflow-sync:
+	@uv sync --project tools/local_experiment/mlflow --locked --no-build
+local-mlflow-prepare:
+	@$(PYTHON) tools/local_experiment/mlflow/runtime.py prepare
+local-mlflow-plan:
+	@$(PYTHON) tools/local_experiment/mlflow/import_evaluations.py --plan
+local-mlflow-import:
+	@$(PYTHON) tools/local_experiment/mlflow/import_evaluations.py
+local-mlflow-start:
+	@$(PYTHON) tools/local_experiment/mlflow/runtime.py start
+local-mlflow-status:
+	@$(PYTHON) tools/local_experiment/mlflow/runtime.py status
+local-mlflow-stop:
+	@$(PYTHON) tools/local_experiment/mlflow/runtime.py stop
+test-local-mlflow:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_mlflow*.py'
+verify-local-experiment: test-local-mlflow

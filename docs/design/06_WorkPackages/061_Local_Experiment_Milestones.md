@@ -5,22 +5,53 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "3.8"
+version: "3.9"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：SREがcontainerの現在状態と過去終了履歴を分けて再観測する実機drillに成功。
-新規Failed Podの同UID・Error・exit1・時刻を確認し、限定cleanupを完了した。
-合成SRE評価32/32、正式全回帰1012件（1011成功・optional1skip）。原因診断・自動修復は未達を維持する。
+最新の到達点（2026-09-17）：保存済み11評価runsを専用local MLflowへ取り込み、標準UIで閲覧・比較した。
+1118 metric points、同一source再取込0/0、停止・再起動後の全59 tables/11 artifacts保持を確認。
+Qwen152＋mock10の母集団を分け、新推論は0。Spark/JupyterHub依存全体や本番受入は未達を維持する。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: local MLflow tracking for saved evaluation receipts
+
+[MLflow Tracking](L4/WP-L4-ML-001_MLflow_tracking.md)のlocal-partialを実機検証した。
+3.16.1/Python 3.12 native ARM64、専用lock91 entries/87 installed、venv約454 MiB・setup約532 MiB。
+保存11 evaluation runsを11 MLflow runs/1118 metric pointsへ取り込み、同一source再取込は追加0/0。
+Qwen152＋mock10＝全162評価をcase/provider別に保ち、新推論・新監査eventは生成していない。
+標準UIのModel training → Runsで11件とSRE16/6/8case比較、safe artifactのNULL/task/traceを確認した。
+GenAI trace画面の0表示とは区別し、取込時刻を過去評価の開始時刻へ流用しない。
+
+専用SQLite/artifacts/HOME/TMP、store UUID `f239d270-c987-430a-bd3b-031bcaeec9b0`、
+loopback18550のみ。server停止中のSDK importを共通lockで直列化する。
+unknown Host/foreign CORS拒否、稼働中import拒否、起動noop・停止・再起動保持を確認。
+UI telemetryはserver gateがdisabled/rollout0で、browser側の初期Onとは独立。検証browserもOffにした。
+停止失敗2試行を残し、macOSのS状態argv終了遷移を捕捉してTERM後の同一process消滅待ちを修正。
+`mlflow-checks/8bbe03ad6cd9488da46a486551f71b66/`で実停止・再起動が成功した。
+
+初回`mlflow-tracking/imports/86a99022a1a346cb937ace741d5bd4be/`、repeat `90cf426b6e3b4ecfad82c5d96aca1d67`。
+独立監査`mlflow-preflight/96cd337ad2a54b389c48c8cdf233854e/independent-summary.json`で
+全59 tablesのDDL/論理行と11 artifactsの取込後→再起動一致、旧2489files/985directoriesの厳密不変、
+AH428・履歴4tables5DDL・保持Kube6Pods/27resources/6CM/3Secret UID・Docker3不変を確認した。
+fixture/metadataは先行sealed証拠継承で、今回のfresh readではない。
+state実割当2334720 B、DB1314816 B、11 artifacts48091 B、owned2process RSS合計512688128 B
+（時点値・共有ページの重複を含み得る）。初回回帰のumask起因1偽失敗logと、次のoffline testが
+実18550へbindした2失敗logを保持。検証childを標準umask、socketをfake化し、衝突拒否1件を追加した。
+正式全回帰は42 suites・1064件（1063成功・従来optional OTel 1skip）、新MLflow52件（runtime30/importer22）を含む。
+`mlflow-checks/1251a41cfdc141ef8985546ab16fe925/local-regression-final.log`と`regression-summary.json`へ保存した。
+
+Registry/Serving/Assistant、Spark/JupyterHub依存全体、複数writer・export復元・本番受入は未達。
+次はSpark 4.1.3の最小native実験を検討。現k3s 1.33.4を維持し、この時点では純粋contract準備だけで、
+Spark image pull/runtimeは未実施。再現・停止は`tools/local_experiment/mlflow/README.md`を参照。
 
 ## 2026-09-17: SRE reported container states
 

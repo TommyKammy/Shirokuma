@@ -5,7 +5,7 @@ title: "WP-L2-EVAL-001 Agent evaluation harness"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.7"
+version: "0.8"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, evaluation]
 ---
@@ -163,3 +163,25 @@ SRE増分の独立最終監査`tmp/local-experiment/sre-container-preflight/0ac1
 は80checks成功。旧AH388件全hashと1151filesを保持し、追加AH40件を評価32/workflow8に分けて照合した。
 次はWP-L4-ML-001のTracking部分として、既存評価receiptを専用local SQLite/loopback MLflow標準UIへ
 取り込む限定実装を進める。本来のSpark/JupyterHub依存とMLflow全受入が完了したとは扱わない。
+
+## 2026-09-17: saved evaluations in local MLflow Tracking
+
+[WP-L4-ML-001](../L4/WP-L4-ML-001_MLflow_tracking.md)の専用MLflow 3.16.1標準UIへ、
+既存11評価runsを11 MLflow runs・1118 metric pointsとして取り込んだ。
+同じsourceの再取込は追加0/0。元receipt/attemptsの整合検証とhashによりIDを固定し、
+既知IDの部分書込はreadbackから再開、不明なcreate結果や改変sourceは自動再作成しない。
+
+Qwen152とmock10の全162評価を保持し、suite/provider/model/case signatureを別のまま表示する。
+SREの16/6/8case比較と個別safe artifactを実UIで確認した。過去開始日時・費用等のNULLは保持し、
+MLflowの取込時刻を評価の実行時刻にしない。元task/traceは保存済み相関で、新spanは生成しない。
+Model training → Runsが表示先で、GenAI overviewの0 tracesを評価件数として扱わない。
+
+初回import `86a99022a1a346cb937ace741d5bd4be`、repeat `90cf426b6e3b4ecfad82c5d96aca1d67`。
+独立監査`mlflow-preflight/96cd337ad2a54b389c48c8cdf233854e/independent-summary.json`は、
+元11 sourcesと全1118 points、取込後→再起動の59 tables/11 artifacts不変を確認した。
+既存2489files/985directoriesとAH428件を保持し、モデル/API再評価・新Pawprint書込は0。
+保存評価の閲覧・比較手段が増えた結果であり、評価品質の一般化やSpark/JupyterHub連携の受入ではない。
+
+MLflow focused52件（runtime30/importer22）と正式全回帰1064件（1063成功・従来optional OTel 1skip）が成功。
+private wrapperのumask継承とoffline testの実port bindによる失敗試行は保持し、
+検証childの標準umask・fake socketへ修正して確認した。評価sourceや製品の許容境界を緩和していない。
