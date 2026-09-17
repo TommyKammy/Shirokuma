@@ -5,23 +5,42 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "3.0"
+version: "3.1"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：Keycloak→Trino/OPAの新live実験が15case成功し、
-16Pawprints/16Loki/16OTelを照合。MCP経由の全16件読出しとGrafanaの拒否9件表示も確認。
-認証401とOPA拒否を分離し、期間/原判断の性能を補造しない。3run計12生成resources残留0。
-次はWP-L3-VW-001の隔離Gateway/2backendルーティング実験。Cloudは無効のまま。
+最新の到達点（2026-09-17）：隔離Gateway21/PG18.4/Trino483 XS・Sで8case成功。
+両backend履歴6query、逆経路header付き継続GET9回、未知/未指定route未到達、書込み拒否を確認。
+新規PGの別新規DB復元と元DB不変、4生成UID回収・recover追加削除0も成功。
+次はWP-L3-VW-002の分離backendによるidle停止・再開。Cloudは無効のまま。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: isolated Gateway VirtualWarehouse
+
+[WP-L3-VW-001](L3/WP-L3-VW-001_Trino_Gateway_VirtualWarehouse.md)のrun
+`2823f7f9bc0842c1adf54f37b0b9cc0e`で8/8case成功。XS/Sの実node ID＋25nation行、
+各3queryのterminal履歴、最初の逆class付き継続GET XS5/S4回を照合。
+未知/欠落routeは500・空bodyかつ両backendでSource0件。未知classにはlegacy groupも付与。
+両固定DROPはPERMISSION_DENIED、前後の正常SELECTは同じ結果。認証/warehouse権限の証明ではない。
+
+Gatewayのhistory保存falseをPG実データ0件で確認。PG18.4/Flyway4migration/backend2件、
+5363byteのprivate dump→別新規DB復元→schema/index/data＋元DB再読一致。
+前後readiness4チェック・両backend HEALTHY、4UID回収、recover追加削除0。
+XS/Sは同一Pod/hostを共有するのでtenant/fault isolation/HA/performanceは未観測。
+49 focusedを含む全回帰740成功＋標準環境1skip（同OTel結合は専用venvで成功）、78documents。
+証跡`gateway-warehouse-preflight/7c1d0d4027eb4e9aa03fbffc114fded5`。
+独立after照合で保持Kube6Pods/27resources/6CM/3Secret UIDs、Docker3の全設定/起動時刻/restarts、
+Pawprints311件＋履歴4表3/72/1/6の全行hash/5DDL、保護19filesのhash/mtime/modeが完全不変。
+live/plan-only計8資源名の残留0。保存historyはuser/rawrowsを省くため、その部分はlive producer検証、
+PG復元もprivate dump/hashとreceipt再照合であり独立再実行は行っていない。
 
 ## 2026-09-17: live identity audit visibility
 

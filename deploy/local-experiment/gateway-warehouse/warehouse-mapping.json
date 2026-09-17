@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "status": "local-routing-draft-not-crd-or-controller",
+  "header": "X-Shirokuma-Warehouse",
+  "default_routing_group": "local-unrouted",
+  "warehouses": [
+    {"class": "XS", "routing_group": "local-xs", "backend_suffix": "xs", "cpu_limit": "1", "memory_limit": "2Gi", "heap": "1G"},
+    {"class": "S", "routing_group": "local-s", "backend_suffix": "s", "cpu_limit": "2", "memory_limit": "4Gi", "heap": "2G"}
+  ],
+  "limits": ["same-pod-routing-only", "no-tenant-or-fault-isolation", "no-authentication", "no-autoscaling", "no-performance-comparison", "query-history-disabled"]
+}

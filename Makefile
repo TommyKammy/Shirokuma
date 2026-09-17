@@ -619,3 +619,16 @@ test-local-identity-telemetry:
 	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_identity_telemetry.py'
 	@PYTHONPATH=tests tools/local_experiment/llm/.venv/bin/python -m unittest -v test_local_trino_identity.IdentityRunnerTests.test_connected_run_exports_real_local_spans_with_fake_services
 verify-local-experiment: test-local-identity-telemetry
+
+.PHONY: local-gateway-warehouse-build local-gateway-warehouse-plan local-gateway-warehouse-run local-gateway-warehouse-recover test-local-gateway-warehouse
+local-gateway-warehouse-build:
+	@$(PYTHON) tools/local_experiment/gateway_warehouse/build.py
+local-gateway-warehouse-plan:
+	@$(PYTHON) tools/local_experiment/gateway_warehouse/run.py plan --build-token "$(GATEWAY_WAREHOUSE_BUILD_TOKEN)"
+local-gateway-warehouse-run:
+	@$(PYTHON) tools/local_experiment/gateway_warehouse/run.py run --build-token "$(GATEWAY_WAREHOUSE_BUILD_TOKEN)"
+local-gateway-warehouse-recover:
+	@$(PYTHON) tools/local_experiment/gateway_warehouse/run.py recover --run-token "$(GATEWAY_WAREHOUSE_RUN_TOKEN)"
+test-local-gateway-warehouse:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_gateway_warehouse*.py'
+verify-local-experiment: test-local-gateway-warehouse

@@ -426,3 +426,15 @@ runtime. That migration requires a separate decision.
 - `rosetta-accepted`: x86_64 image accepted for a specific experiment only.
 - `scope-out`: removed from local profile until cloud/x86 profile.
 - `side-only`: may be documented but not part of resident boot.
+
+## 2026-09-17 local Gateway warehouse evidence
+
+Gateway 21 official linux/arm64 image
+`trinodb/trino-gateway@sha256:b7fc3f836ff1d1bdb301b5a2f6c6b0675dd7b9b92cfcb8f99ac18f1320c55ef0`
+ran natively with PostgreSQL18.4 and two Trino483 coordinators in disposable run
+`2823f7f9bc0842c1adf54f37b0b9cc0e`. Build `b3811eea3c3c494d8641dff5ddd5f4cc`
+records the ARM64 config digests for all three images. Eight routing/read-only cases,
+six independent backend history rows and a new-database PostgreSQL dump/restore
+passed. Four generated resources were removed. No Rosetta fallback was used.
+This is local functional evidence, not a refresh of historical supply-chain or
+production approvals; the fixed pins are in `tools/local_experiment/gateway_warehouse/inputs.lock.json`.

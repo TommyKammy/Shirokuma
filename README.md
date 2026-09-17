@@ -100,6 +100,10 @@ propagation remain outside this experiment. Its explicit
 `rtk make local-trino-identity-telemetry TRINO_IDENTITY_BUILD_TOKEN=<token>`
 mode records a fresh run in Pawprints, Loki and OTel, with expected rejections
 kept visible as blocked requests. Existing MCP/Grafana reads expose the results.
+The [Gateway warehouse experiment](tools/local_experiment/gateway_warehouse/README.md)
+checks two disposable Trino routes, continuation stickiness, unknown-route and
+read-only denials, and an isolated PostgreSQL backup/restore. It does not install
+a warehouse controller or claim tenant isolation.
 The [evaluation report](tools/local_experiment/evaluation/README.md) checks all
 retained suite receipts and keeps failures, missing evidence and case differences visible.
 The [AgentHouse dashboard](tools/local_experiment/grafana/README.md) provides
