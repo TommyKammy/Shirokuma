@@ -26,13 +26,77 @@ KINDS = {'Namespace': ('v1', 'namespaces'), 'ResourceQuota': ('v1', 'resourcequo
          'LimitRange': ('v1', 'limitranges'), 'ServiceAccount': ('v1', 'serviceaccounts'),
          'Role': ('rbac.authorization.k8s.io/v1', 'roles'),
          'RoleBinding': ('rbac.authorization.k8s.io/v1', 'rolebindings'),
-         'ConfigMap': ('v1', 'configmaps'), 'Service': ('v1', 'services'),
+         'ConfigMap': ('v1', 'configmaps'), 'Secret': ('v1', 'secrets'), 'Service': ('v1', 'services'),
          'NetworkPolicy': ('networking.k8s.io/v1', 'networkpolicies'), 'Pod': ('v1', 'pods'),
          'Endpoints': ('v1', 'endpoints'), 'EndpointSlice': ('discovery.k8s.io/v1', 'endpointslices')}
 INVENTORY = ('pods,services,configmaps,serviceaccounts,roles,rolebindings,resourcequotas,'
              'limitranges,networkpolicies,persistentvolumeclaims,secrets,deployments,'
              'replicasets,statefulsets,daemonsets,jobs,cronjobs,endpoints,endpointslices,events')
 UUID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
+SECRET_KEYS = ['aws-credentials', 'polaris-token']
+
+
+def remote_contract():
+    # This is one fixed, reviewed profile, never an import path supplied by a caller.
+    from tools.local_experiment.spark_iceberg import remote_contract as remote
+    return remote
+
+
+def validate_profile(profile, inputs, mode='success'):
+    require(profile in ('native', 'iceberg-write'), 'PROFILE_INVALID')
+    if profile == 'native':
+        require(inputs is None, 'NATIVE_INPUTS_FORBIDDEN')
+        return None
+    require(mode == 'success', 'REMOTE_MODE_INVALID')
+    return deepcopy(remote_contract().validate_inputs(inputs))
+
+
+def safe_resource(value, redactor=None):
+    """Strip every Secret payload, including unknown objects in failed cleanup."""
+    if type(value) is list:
+        return [safe_resource(item, redactor) for item in value]
+    if type(value) is dict:
+        if value.get('kind') == 'Secret':
+            metadata = value.get('metadata', {})
+            safe = {key: metadata[key] for key in ('name', 'namespace', 'uid', 'resourceVersion') if key in metadata}
+            safe['labels'] = {key: item for key, item in metadata.get('labels', {}).items()
+                              if key in ('shirokuma.io/experiment', 'shirokuma.io/run-token', 'shirokuma.io/role')}
+            safe['annotations'] = {key: item for key, item in metadata.get('annotations', {}).items()
+                                   if key == 'shirokuma.io/owner'}
+            keys = set(value.get('keys', []))
+            for field in ('data', 'stringData'):
+                if type(value.get(field)) is dict:
+                    keys.update(value[field])
+            value = {'apiVersion': value.get('apiVersion'), 'kind': 'Secret', 'metadata': safe,
+                     'type': value.get('type'), 'immutable': value.get('immutable'), 'keys': sorted(keys)}
+        return {key: safe_resource(item, redactor) for key, item in value.items()}
+    if type(value) is str and redactor is not None:
+        result = redactor(value)
+        require(type(result) is str, 'REDACTOR_RESULT_INVALID')
+        return result
+    return value
+
+
+def validate_secret(obj, token, *, live=True):
+    require(type(obj) is dict and set(obj) == {'apiVersion', 'kind', 'metadata', 'type', 'immutable', 'keys'} and
+            obj['apiVersion'] == 'v1' and obj['kind'] == 'Secret' and obj['metadata'].get('name') == 'connection' and
+            obj['metadata'].get('namespace') == C.namespace(token) and obj['type'] == 'Opaque' and
+            obj['immutable'] is True and obj['keys'] == SECRET_KEYS, 'SECRET_SCOPE_CONFLICT')
+    if live:
+        owned(obj, token)
+
+
+def remote_image(inputs):
+    from tools.local_experiment.spark_iceberg import build as B
+    proof = B.read_verified_image(inputs['build_token'], command=P.command)
+    require(proof['image'] == inputs['image'], 'REMOTE_IMAGE_CHANGED')
+    cri = json.loads(P.command(P.ssh('sudo', 'k3s', 'crictl', '--timeout', '10s', 'inspecti',
+                                   '--output', 'json', inputs['image'])))
+    status = cri.get('status', {})
+    require(status.get('id') == proof['image_id'] and inputs['image'] in status.get('repoDigests', []),
+            'REMOTE_CRI_IMAGE_CHANGED')
+    return {key: proof[key] for key in ('build_token', 'image', 'image_id', 'architecture', 'os')} | {
+        'cri_exact_reference_verified': True}
 
 
 def save(path, value):
@@ -103,8 +167,14 @@ def api_addresses(service, endpoints):
 
 
 class Kube:
-    def __init__(self, token):
+    def __init__(self, token, *, profile='native', profile_inputs=None, secret_provider=None, redactor=None):
         self.token, self.namespace = token, C.namespace(token)
+        self.profile = profile
+        self.profile_inputs = validate_profile(profile, profile_inputs)
+        require(secret_provider is None or callable(secret_provider), 'SECRET_PROVIDER_INVALID')
+        require(redactor is None or callable(redactor), 'REDACTOR_INVALID')
+        require(profile != 'native' or (secret_provider is None and redactor is None), 'NATIVE_CALLBACKS_FORBIDDEN')
+        self.secret_provider, self.redactor = secret_provider, redactor
 
     def request(self, args, body=None, *, namespace=True):
         command = ['kubectl', '--context', CONTEXT, '--request-timeout=10s']
@@ -115,23 +185,36 @@ class Kube:
 
     def get(self, kind, name):
         raw = self.request(['get', kind, name, '--ignore-not-found=true', '-o', 'json'], namespace=kind != 'Namespace')
-        return json.loads(raw) if raw.strip() else None
+        return safe_resource(json.loads(raw)) if raw.strip() else None
 
     def create(self, obj):
-        return json.loads(self.request(['create', '-f', '-', '-o', 'json'], obj, namespace=obj['kind'] != 'Namespace'))
+        body = deepcopy(obj)
+        if obj['kind'] == 'Secret':
+            require(self.profile == 'iceberg-write' and callable(self.secret_provider), 'SECRET_PROVIDER_REQUIRED')
+            validate_secret(obj, self.token, live=False)
+            values = self.secret_provider()
+            require(type(values) is dict and sorted(values) == SECRET_KEYS and
+                    all(type(value) is str and 0 < len(value.encode('utf-8')) <= 32768 and '\0' not in value
+                        for value in values.values()), 'SECRET_PAYLOAD_INVALID')
+            body.pop('keys')
+            body['stringData'] = values
+        return safe_resource(json.loads(self.request(['create', '-f', '-', '-o', 'json'], body,
+                                      namespace=obj['kind'] != 'Namespace')))
 
     def inventory(self):
         values = json.loads(self.request(['get', INVENTORY, '-o', 'json']))['items']
         require(len(values) <= 128, 'NAMESPACE_INVENTORY_LIMIT')
-        return values
+        return safe_resource(values)
 
     def pods(self):
         values = json.loads(self.request(['get', 'pods', '-o', 'json']))['items']
         require(len(values) <= 2, 'UNEXPECTED_POD_COUNT')
-        return values
+        return safe_resource(values)
 
     def logs(self):
-        return self.request(['logs', 'driver', '-c', 'spark-driver', '--limit-bytes='+str(C.MAX_LOG_BYTES)])
+        require(self.profile == 'native' or callable(self.redactor), 'REDACTOR_REQUIRED')
+        return safe_resource(self.request(['logs', 'driver', '-c', 'spark-driver',
+                             '--limit-bytes='+str(C.MAX_LOG_BYTES)]), self.redactor)
 
     def delete(self, obj):
         kind, m = obj['kind'], obj['metadata']
@@ -145,7 +228,7 @@ class Kube:
 
     def preflight(self):
         runtime = P.guard()
-        cache = P.validate_cache(json.loads(P.command(P.docker('image', 'inspect', C.IMAGE))),
+        cache = remote_image(self.profile_inputs) if self.profile == 'iceberg-write' else P.validate_cache(json.loads(P.command(P.docker('image', 'inspect', C.IMAGE))),
             json.loads(P.command(P.ssh('sudo', 'k3s', 'crictl', '--timeout', '10s', 'inspecti', '--output', 'json', C.IMAGE))),
             P.cache_content())
         nodes = json.loads(self.request(['get', 'nodes', '-o', 'json'], namespace=False))['items']
@@ -169,9 +252,13 @@ class Kube:
                 used[key] += quantity(spec.get('overhead', {}).get(key, '0'), cpu=key == 'cpu')
         available = {k: quantity(node['status']['allocatable'][k], cpu=k == 'cpu') - used[k] for k in used}
         require(available['cpu'] >= 2 and available['memory'] >= 4*1024**3, 'INSUFFICIENT_CAPACITY')
+        resources = ('pods', 'services', 'configmaps', 'serviceaccounts', 'roles', 'rolebindings',
+                     'resourcequotas', 'limitranges', 'networkpolicies')
+        if self.profile == 'iceberg-write':
+            resources += ('secrets',)
         for verb, resource in [('create', 'namespaces'), ('delete', 'namespaces')] + [
                 (v, r) for v in ('create', 'delete', 'get', 'list') for r in
-                ('pods', 'services', 'configmaps', 'serviceaccounts', 'roles', 'rolebindings', 'resourcequotas', 'limitranges', 'networkpolicies')]:
+                resources]:
             require(self.request(['auth', 'can-i', verb, resource], namespace=resource != 'namespaces').strip() == 'yes', 'PERMISSION_DENIED')
         service = json.loads(self.request(['get', 'service', 'kubernetes', '-n', 'default', '-o', 'json'], namespace=False))
         endpoints = json.loads(self.request(['get', 'endpoints', 'kubernetes', '-n', 'default', '-o', 'json'], namespace=False))
@@ -183,9 +270,9 @@ class Kube:
         require(P.guard() == previous['runtime'], 'RECOVERY_RUNTIME_CHANGED')
 
 
-def validate_pod(pod, token, role, *, driver_uid=None):
+def validate_pod(pod, token, role, *, driver_uid=None, profile='native', inputs=None):
     result = owned(pod, token)
-    expected = C.pod_spec(role)
+    expected = C.pod_spec(role) if profile == 'native' else remote_contract().expected_pod_spec(token, role, inputs)
     spec = pod.get('spec', {})
     require(pod['metadata']['name'] == ('driver' if role == 'driver' else C.executor_name(token)) and
             pod['metadata']['labels'].get('shirokuma.io/role') == role, 'POD_NAME_CONFLICT')
@@ -217,6 +304,17 @@ def validate_pod(pod, token, role, *, driver_uid=None):
                     all(set(source) in ({'serviceAccountToken'}, {'configMap'}, {'downwardAPI'})
                         for source in volume['projected'].get('sources', [])), 'POD_VOLUME_CONFLICT')
     require(set(allowed) <= {v['name'] for v in volumes}, 'POD_VOLUME_MISSING')
+    if profile == 'iceberg-write':
+        # Spark may add its own configuration volume, but credentials remain file-only.
+        mounts = container.get('volumeMounts', [])
+        expected_mounts = template['volumeMounts']
+        require(all(mount in mounts for mount in expected_mounts) and
+                not any(set(env.get('valueFrom', {})) - {'fieldRef'} for env in container.get('env', [])),
+                'POD_CREDENTIAL_MOUNT_CONFLICT')
+        env = container.get('env', [])
+        expected_aws = [value for value in template['env'] if value['name'].startswith('AWS_')]
+        require([value for value in env if value.get('name', '').startswith('AWS_')] == expected_aws,
+                'POD_CREDENTIAL_ENV_CONFLICT')
     if role == 'executor':
         refs = pod['metadata'].get('ownerReferences', [])
         require(len(refs) == 1 and refs[0].get('kind') == 'Pod' and refs[0].get('name') == 'driver' and
@@ -225,39 +323,59 @@ def validate_pod(pod, token, role, *, driver_uid=None):
     require(len(statuses) <= 1, 'POD_STATUS_INVALID')
     image_id = statuses[0].get('imageID') if statuses else None
     if image_id:
-        aliases = {name+'@'+P.DIGEST for name in ('spark', 'library/spark', 'docker.io/library/spark')}
-        accepted = {P.CONFIG_DIGEST, P.DIGEST, 'docker://'+P.CONFIG_DIGEST, 'docker://'+P.DIGEST} | aliases | {
-            'docker-pullable://'+name for name in aliases}
+        if profile == 'iceberg-write':
+            ref = inputs['image']; digest = ref.split('@')[1]
+            accepted = {digest, 'docker://'+digest, ref, 'docker-pullable://'+ref}
+        else:
+            aliases = {name+'@'+P.DIGEST for name in ('spark', 'library/spark', 'docker.io/library/spark')}
+            accepted = {P.CONFIG_DIGEST, P.DIGEST, 'docker://'+P.CONFIG_DIGEST, 'docker://'+P.DIGEST} | aliases | {
+                'docker-pullable://'+name for name in aliases}
         require(image_id in accepted, 'POD_IMAGE_ID_CONFLICT')
     result.update(role=role, image_id=image_id, phase=pod.get('status', {}).get('phase'),
                   node_name=spec.get('nodeName'), hostname=spec.get('hostname', pod['metadata']['name']))
     return result
 
 
-def source_hashes():
+def source_hashes(profile='native'):
+    paths = [Path(__file__), Path(C.__file__), Path(P.__file__)]
+    if profile == 'iceberg-write':
+        from tools.local_experiment.spark_iceberg import build as B
+        paths += [Path(remote_contract().__file__), Path(B.__file__)]
     return {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in (Path(__file__), Path(C.__file__), Path(P.__file__))}
+            for path in paths}
 
 
 def validate_saved(plan, receipt):
     token = receipt['run_token']; C.validate_token(token); C.validate_mode(receipt['mode'])
+    profile = receipt.get('profile', 'native')
+    inputs = validate_profile(profile, receipt.get('profile_inputs'), receipt['mode'])
+    if profile == 'iceberg-write':
+        remote_contract().expected_pod_spec(token, 'driver', inputs)  # Bind scope/location to this run.
     require(type(plan) is list and C.plan_sha256(plan) == receipt['plan_sha256'], 'SAVED_PLAN_HASH_CONFLICT')
-    require(len(plan) == 14 and plan[0]['kind'] == 'Namespace' and plan[-1]['kind'] == 'Pod', 'SAVED_PLAN_SCOPE_INVALID')
+    require(len(plan) == (14 if profile == 'native' else 16) and plan[0]['kind'] == 'Namespace' and
+            plan[-1]['kind'] == 'Pod', 'SAVED_PLAN_SCOPE_INVALID')
     names = {('Namespace', C.namespace(token)), ('ResourceQuota', 'experiment-cap'), ('LimitRange', 'container-cap'),
              ('ServiceAccount', 'driver'), ('ServiceAccount', 'executor'), ('Role', 'spark-driver'),
              ('RoleBinding', 'spark-driver'), ('ConfigMap', 'workload'), ('Service', 'driver'), ('Pod', 'driver'),
              ('NetworkPolicy', 'default-deny'), ('NetworkPolicy', 'same-run-rpc'),
              ('NetworkPolicy', 'cluster-dns'), ('NetworkPolicy', 'driver-api')}
+    if profile == 'iceberg-write':
+        names |= {('Secret', 'connection'), ('NetworkPolicy', 'data-egress')}
     require(len(names) == len(plan) and {(x['kind'], x['metadata']['name']) for x in plan} == names, 'SAVED_PLAN_SCOPE_INVALID')
     for obj in plan:
         require(obj['kind'] in KINDS and obj['metadata'].get('labels', {}).items() >= C.labels(token).items() and
                 obj['metadata'].get('annotations', {}).get('shirokuma.io/owner') == C.OWNER and
                 (obj['metadata']['name'] == C.namespace(token) if obj['kind'] == 'Namespace' else
                  obj['metadata'].get('namespace') == C.namespace(token)), 'SAVED_PLAN_SCOPE_INVALID')
+        if obj['kind'] == 'Secret':
+            validate_secret(obj, token, live=False)
     known = receipt.get('known', [])
     allowed = names | {('Pod', C.executor_name(token))}
-    require(len(known) <= 15 and len({(x['kind'], x['name']) for x in known}) == len(known) and
-            all((x['kind'], x['name']) in allowed and UUID.fullmatch(x['uid']) for x in known), 'SAVED_IDENTITIES_INVALID')
+    require(type(known) is list and len(known) <= (15 if profile == 'native' else 17) and
+            all(type(x) is dict and set(x) == {'kind', 'name', 'uid', 'resource_version'} and
+                all(type(value) is str for value in x.values()) and (x['kind'], x['name']) in allowed and
+                UUID.fullmatch(x['uid']) and re.fullmatch(r'[0-9]{1,32}', x['resource_version']) for x in known) and
+            len({(x['kind'], x['name']) for x in known}) == len(known), 'SAVED_IDENTITIES_INVALID')
     auto = receipt.get('automatic_endpoints', [])
     service = next((x for x in known if (x['kind'], x['name']) == ('Service', 'driver')), None)
     code = 'SAVED_ENDPOINT_IDENTITIES_INVALID'
@@ -275,15 +393,32 @@ def validate_saved(plan, receipt):
 
 
 class Experiment:
-    def __init__(self, token, mode, output, kube=None, *, clock=time.monotonic, sleep=time.sleep):
+    def __init__(self, token, mode, output, kube=None, *, profile='native', profile_inputs=None,
+                 clock=time.monotonic, sleep=time.sleep):
         C.validate_token(token); C.validate_mode(mode)
+        self.profile = profile
+        self.inputs = validate_profile(profile, profile_inputs, mode)
+        if profile == 'iceberg-write':
+            remote_contract().expected_pod_spec(token, 'driver', self.inputs)
         self.token, self.mode, self.output = token, mode, Path(output)
-        self.kube, self.clock, self.sleep = kube or Kube(token), clock, sleep
+        self.kube = kube or Kube(token, profile=profile, profile_inputs=self.inputs)
+        self.clock, self.sleep = clock, sleep
         self.plan = []
         self.receipt = {'schema_version': 1, 'run_token': token, 'mode': mode, 'namespace': C.namespace(token),
+                        'profile': profile, 'profile_inputs': self.inputs,
                         'result': 'running', 'started_at': now(), 'known': [], 'pending': None,
                         'pods': {}, 'automatic_endpoints': [], 'cleanup': {'verified': False, 'deleted': []},
-                        'source_hashes': source_hashes()}
+                        'source_hashes': source_hashes(profile)}
+
+    def safe(self, value):
+        return safe_resource(value, getattr(self.kube, 'redactor', None))
+
+    def resource_owned(self, obj, *, uid=None):
+        value = owned(obj, self.token, uid=uid)
+        if obj.get('kind') == 'Secret':
+            require(self.profile == 'iceberg-write', 'SECRET_SCOPE_CONFLICT')
+            validate_secret(safe_resource(obj), self.token)
+        return value
 
     def persist(self):
         save(self.output / 'summary.json', self.receipt)
@@ -320,7 +455,7 @@ class Experiment:
               for obj in items:
                 key = (obj['kind'], obj['metadata']['name'])
                 if key in by_name:
-                    owned(obj, self.token, uid=by_name[key]['uid'])
+                    self.resource_owned(obj, uid=by_name[key]['uid'])
                 elif key in automatic or obj['kind'] == 'Event':
                     continue
                 elif obj['kind'] in ('Endpoints', 'EndpointSlice'):
@@ -343,7 +478,7 @@ class Experiment:
                 else:
                     raise ExperimentError('UNKNOWN_NAMESPACE_RESOURCE')
             inventory = self.kube.inventory()
-            save(self.output / 'cleanup-inventory-before.json', inventory)
+            save(self.output / 'cleanup-inventory-before.json', self.safe(inventory))
             check_inventory(inventory, capture=True)
             self.persist()  # Save generated endpoint UIDs before deleting their Service.
             for item in reversed(known):
@@ -351,7 +486,7 @@ class Experiment:
                     continue
                 current = self.kube.get(item['kind'], item['name'])
                 if current is not None:
-                    owned(current, self.token, uid=item['uid'])
+                    self.resource_owned(current, uid=item['uid'])
                     self.receipt['pending'] = {'operation': 'delete', **item}; self.persist()
                     self.kube.delete(current)
                 result['deleted'].append({**item, 'already_absent': current is None})
@@ -394,7 +529,13 @@ class Experiment:
             return
         for name, action in [('final-pods.json', self.kube.pods), ('driver-log.json', lambda: {'text': self.kube.logs()})]:
             try:
-                save(self.output / name, action())
+                value = self.safe(action())
+                save(self.output / name, value)
+                if name == 'driver-log.json' and self.profile == 'iceberg-write':
+                    diagnostic = remote_contract().parse_output(value['text'], self.token, self.inputs,
+                        executor_pod_name=C.executor_name(self.token))
+                    require(diagnostic['result'] == 'failed', 'DIAGNOSTIC_OUTPUT_NOT_FAILED')
+                    self.receipt['diagnostic_output'] = diagnostic
             except BaseException as error:
                 self.receipt.setdefault('diagnostic_errors', {})[name] = error_code(error)
 
@@ -402,8 +543,14 @@ class Experiment:
         original = None
         self.persist()
         try:
+            require(self.profile == 'native' or callable(getattr(self.kube, 'redactor', None)), 'REDACTOR_REQUIRED')
             self.receipt['preflight'] = self.kube.preflight()
-            self.plan = C.render(self.token, self.mode, api_endpoints=self.receipt['preflight']['api_endpoints'])
+            if self.profile == 'native':
+                self.plan = C.render(self.token, self.mode, api_endpoints=self.receipt['preflight']['api_endpoints'])
+            else:
+                require(self.receipt['preflight']['image']['image'] == self.inputs['image'], 'REMOTE_IMAGE_CHANGED')
+                self.plan = remote_contract().render(self.token, self.mode,
+                    api_endpoints=self.receipt['preflight']['api_endpoints'], inputs=self.inputs)
             self.receipt['plan_sha256'] = C.plan_sha256(self.plan)
             save(self.output / 'plan.json', self.plan); self.persist()
             require(self.kube.get('Namespace', self.receipt['namespace']) is None, 'NAMESPACE_ALREADY_EXISTS')
@@ -420,8 +567,8 @@ class Experiment:
                 require(current.get('kind') == obj['kind'] and current.get('metadata', {}).get('name') == obj['metadata']['name'],
                         'CREATE_RESPONSE_SCOPE_CONFLICT')
                 self.remember(current)  # Capture response UID before further interpretation.
-                save(self.output / ('created-'+obj['kind']+'-'+obj['metadata']['name']+'.json'), current)
-                owned(current, self.token)
+                save(self.output / ('created-'+obj['kind']+'-'+obj['metadata']['name']+'.json'), self.safe(current))
+                self.resource_owned(current)
                 self.receipt['pending'] = None; self.persist()
             driver = next(x for x in self.receipt['known'] if x['kind'] == 'Pod')
             deadline = self.clock() + 270
@@ -430,11 +577,12 @@ class Experiment:
                 require(self.clock() < deadline, 'WORKLOAD_TIMEOUT')
                 for pod in self.kube.pods():
                     role = 'driver' if pod['metadata']['name'] == 'driver' else 'executor'
-                    value = validate_pod(pod, self.token, role, driver_uid=driver['uid'])
+                    value = validate_pod(pod, self.token, role, driver_uid=driver['uid'],
+                                         profile=self.profile, inputs=self.inputs)
                     require(role != 'driver' or value['uid'] == driver['uid'], 'DRIVER_UID_CONFLICT')
                     self.remember(pod)
                     self.receipt['pods'][role] = value
-                    save(self.output / (role+'-pod.json'), pod)
+                    save(self.output / (role+'-pod.json'), self.safe(pod))
                     if role == 'driver':
                         statuses = pod.get('status', {}).get('containerStatuses', [])
                         candidate = statuses[0].get('state', {}).get('terminated') if statuses else None
@@ -449,9 +597,11 @@ class Experiment:
                         for x in self.receipt['pods'].values()), 'POD_EXECUTION_NOT_OBSERVED')
             executor = self.receipt['pods']['executor']
             require(executor['hostname'] == executor['name'], 'EXECUTOR_HOSTNAME_CONFLICT')
-            logs = self.kube.logs()
+            logs = self.safe(self.kube.logs())
             save(self.output / 'driver-log.json', {'text': logs})
-            output = C.parse_output(logs, self.token, self.mode, executor_pod_name=executor['name'])
+            output = C.parse_output(logs, self.token, self.mode, executor_pod_name=executor['name']) if self.profile == 'native' else \
+                remote_contract().parse_output(logs, self.token, self.inputs, executor_pod_name=executor['name'])
+            require(self.profile == 'native' or output['result'] == 'passed', 'REMOTE_JOB_NOT_PASSED')
             self.receipt['output'] = output
             self.receipt['driver_exit_code'] = terminal['exitCode']
             self.receipt['workload_verified'] = True
@@ -493,11 +643,14 @@ def recover(token, kube=None):
     require(receipt['run_token'] == token, 'RECOVERY_TOKEN_CONFLICT')
     validate_saved(plan, receipt)
     with run_lock(output):
-        selected_kube = kube or Kube(token)
+        profile = receipt.get('profile', 'native')
+        inputs = receipt.get('profile_inputs')
+        selected_kube = kube or Kube(token, profile=profile, profile_inputs=inputs)
         selected_kube.recovery_guard(receipt['preflight'])
         recovery = output / ('recovery-'+uuid.uuid4().hex)
         recovery.mkdir(mode=0o700)
-        instance = Experiment(token, receipt['mode'], recovery, kube=selected_kube)
+        instance = Experiment(token, receipt['mode'], recovery, kube=selected_kube,
+                              profile=profile, profile_inputs=inputs)
         instance.receipt = deepcopy(receipt)
         instance.receipt.update(result='recovery', recovered_from_sha256=hashlib.sha256((output/'summary.json').read_bytes()).hexdigest())
         instance.cleanup()

@@ -74,3 +74,9 @@ apply to every environment.
 
 Actual results and retained-state checks are recorded in the WP and local
 experiment milestones after the gate runs.
+
+The next bounded integration has a separate
+[native Spark write → Trino readback contract](REMOTE.md), including temporary
+Polaris access, static S3 credential limits and cleanup/recovery boundaries.
+That remote flow preserves an empty Trino-created initial snapshot when present
+and requires the Spark append to point to that exact parent snapshot.

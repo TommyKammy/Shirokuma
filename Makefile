@@ -734,3 +734,7 @@ local-spark-iceberg-recover:
 test-local-spark-iceberg:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_spark_iceberg*.py'
 # verify-local-experiment already includes these through test-local-spark.
+
+.PHONY: local-spark-iceberg-remote
+local-spark-iceberg-remote:
+	@$(PYTHON) tools/local_experiment/spark_iceberg/remote_run.py --build-token "$(SPARK_ICEBERG_BUILD_TOKEN)"

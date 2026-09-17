@@ -8,10 +8,41 @@ from unittest.mock import patch
 import uuid
 
 from tools.local_experiment.spark import run as R
+from tools.local_experiment.spark_iceberg import remote_contract as RC
 
 C = R.C
 TOKEN = 'a'*32
 ENDPOINTS = [{'ip': '10.43.0.1', 'port': 443}, {'ip': '192.168.5.1', 'port': 55737}]
+
+
+def remote_inputs():
+    return {'build_token': 'b'*32, 'image': RC.IMAGE,
+            'table_uuid': '11111111-1111-1111-1111-111111111111',
+            'initial_snapshot_id': 122,
+            'table_location': 's3://shirokuma-lakehouse/l1/local_experiment/spark_'+TOKEN,
+            'polaris_uri': RC.POLARIS_URI, 'polaris_realm': 'POLARIS', 'warehouse': 'shirokuma_l1',
+            'scope': 'PRINCIPAL_ROLE:spark_'+TOKEN, 's3_endpoint': RC.S3_ENDPOINT,
+            's3_region': 'us-east-1', 'data_egress': deepcopy(RC.DATA_EGRESS)}
+
+
+def remote_result():
+    inputs = remote_inputs(); location = inputs['table_location']
+    return {'schema_version': 1, 'run_token': TOKEN, 'namespace': C.namespace(TOKEN), 'scope': RC.SCOPE,
+            'mode': 'success', 'configured_image': RC.IMAGE, 'result': 'passed',
+            'spark_version': C.VERSION, 'iceberg_version': RC.L.ICEBERG_VERSION,
+            'master': 'k8s://https://kubernetes.default.svc:443', 'checks': dict.fromkeys(RC.CHECKS, True),
+            'row_count': 32, 'dataframe_rows': RC.L.oracle_rows(), 'sql_rows': RC.L.oracle_rows(),
+            'groups': RC.L.oracle_groups(), 'partitions': result()['partitions'], 'shuffle_observed': True,
+            'table_identity': {'uuid': inputs['table_uuid'], 'location': location, 'comment': RC.marker(TOKEN),
+                              'snapshot_id': 123, 'parent_snapshot_id': inputs['initial_snapshot_id'],
+                              'metadata_location': location+'/metadata/v1.metadata.json',
+                              'operation': 'append'},
+            'data_files': [{'path': location+'/data/test.parquet', 'record_count': 32, 'file_size_in_bytes': 123}],
+            'error_code': None, 'error_classes': []}
+
+
+def redact(value):
+    return value.replace('AWS_SENTINEL', '[redacted]').replace('JWT_SENTINEL', '[redacted]')
 
 
 def actual(obj):
@@ -113,6 +144,42 @@ class FakeKube:
         assert self.objects[key]['metadata']['uid'] == obj['metadata']['uid']
         self.deleted.append((*key, obj['metadata']['uid']))
         del self.objects[key]
+
+
+class RemoteKube(FakeKube):
+    redactor = staticmethod(redact)
+
+    def __init__(self):
+        super().__init__()
+        self.log = 'AWS_SENTINEL JWT_SENTINEL\n'+RC.RESULT_PREFIX+json.dumps(remote_result())
+        self.remote_mutate = None
+
+    def preflight(self):
+        value = super().preflight()
+        value['image'] = {'image': RC.IMAGE, 'image_id': RC.IMAGE.split('@')[1]}
+        return value
+
+    def create(self, obj):
+        value = super().create(obj)
+        if obj['kind'] == 'Secret':
+            value.pop('keys')
+            value['data'] = {'aws-credentials': 'AWS_SENTINEL', 'polaris-token': 'JWT_SENTINEL'}
+            value['metadata']['annotations']['raw'] = 'JWT_SENTINEL'
+            self.objects[('Secret', 'connection')] = deepcopy(value)
+        return value
+
+    def pods(self):
+        values = super().pods()
+        for pod in values:
+            role = pod['metadata']['labels']['shirokuma.io/role']
+            if role == 'executor':
+                pod['spec'] = RC.expected_pod_spec(TOKEN, role, remote_inputs())
+                pod['spec'].update(nodeName=R.CONTEXT, hostname=C.executor_name(TOKEN))
+            pod['status']['containerStatuses'][0]['imageID'] = 'docker://'+RC.IMAGE.split('@')[1]
+            if self.remote_mutate:
+                self.remote_mutate(pod)
+            self.objects[('Pod', pod['metadata']['name'])] = deepcopy(pod)
+        return values
 
 
 class RunnerTests(unittest.TestCase):
@@ -393,7 +460,299 @@ class RunnerTests(unittest.TestCase):
         self.assertFalse(kube.objects)
 
 
+class RemoteRunnerTests(unittest.TestCase):
+    setUp = RunnerTests.setUp
+    tearDown = RunnerTests.tearDown
+
+    def experiment(self, kube=None):
+        clock = Clock()
+        return R.Experiment(TOKEN, 'success', self.output, kube or RemoteKube(), profile='iceberg-write',
+                            profile_inputs=remote_inputs(), clock=clock.now, sleep=clock.sleep)
+
+    def assert_no_secrets_saved(self):
+        for path in self.output.rglob('*'):
+            if path.is_file():
+                with self.subTest(path=path.name):
+                    self.assertNotIn('SENTINEL', path.read_text())
+
+    def test_remote_pass_uses_shared_lifecycle_without_saving_raw_secret_or_log(self):
+        kube = RemoteKube(); exp = self.experiment(kube)
+        receipt = exp.run()
+        self.assertEqual(receipt['result'], 'passed')
+        self.assertEqual(len(exp.plan), 16)
+        self.assertEqual(len(receipt['known']), 17)
+        self.assertEqual(len(kube.deleted), 17)
+        self.assertFalse(kube.objects)
+        self.assertEqual(receipt['output']['row_count'], 32)
+        self.assertEqual(receipt['profile_inputs']['initial_snapshot_id'], 122)
+        self.assertEqual(receipt['output']['table_identity']['parent_snapshot_id'], 122)
+        for filename in ('plan.json', 'created-Secret-connection.json', 'cleanup-inventory-before.json'):
+            value = json.loads((self.output/filename).read_text())
+            obj = next(x for x in value if x['kind'] == 'Secret') if type(value) is list else value
+            R.validate_secret(obj, TOKEN, live=filename != 'plan.json')
+        self.assert_no_secrets_saved()
+
+    def test_remote_failure_diagnostics_and_inventory_do_not_save_secret_values(self):
+        kube = RemoteKube(); kube.exit = 17
+        exp = self.experiment(kube)
+        with self.assertRaisesRegex(R.ExperimentError, 'DRIVER_EXIT_MISMATCH'):
+            exp.run()
+        self.assertTrue(exp.receipt['cleanup']['verified'])
+        self.assertTrue((self.output/'final-pods.json').exists())
+        self.assertNotIn('diagnostic_output', exp.receipt)
+        self.assertEqual(exp.receipt['diagnostic_errors']['driver-log.json'], 'DIAGNOSTIC_OUTPUT_NOT_FAILED')
+        self.assert_no_secrets_saved()
+
+    @staticmethod
+    def failed_before_precreated_check():
+        # Same partial observation shape as live fa34d22d..., with the new class-only diagnostic field.
+        value = remote_result()
+        value.update(result='failed', checks=dict.fromkeys(RC.CHECKS, False), row_count=None,
+                     dataframe_rows=None, sql_rows=None, groups=None, partitions=None,
+                     shuffle_observed=False, table_identity=None, data_files=None,
+                     error_code='PRECREATED_IDENTITY_MISMATCH',
+                     error_classes=['py4j.protocol.Py4JJavaError', 'java.lang.IllegalArgumentException'])
+        value['checks']['classes_loaded'] = True
+        return value
+
+    def test_failed_driver_payload_is_diagnostic_only_even_without_executor(self):
+        kube = RemoteKube(); kube.exit = 1; kube.no_executor = True
+        failed = self.failed_before_precreated_check()
+        kube.log = 'JWT_SENTINEL AWS_SENTINEL\n'+RC.RESULT_PREFIX+json.dumps(failed)
+        exp = self.experiment(kube)
+        with self.assertRaisesRegex(R.ExperimentError, 'DRIVER_EXIT_MISMATCH'):
+            exp.run()
+        self.assertEqual(exp.receipt['diagnostic_output'], failed)
+        saved = json.loads((self.output/'summary.json').read_text())
+        self.assertEqual(saved['diagnostic_output'], failed)
+        self.assertEqual(saved['failure_code'], 'DRIVER_EXIT_MISMATCH')
+        self.assertEqual(saved['result'], 'failed')
+        self.assertNotIn('output', saved)
+        self.assertFalse(saved.get('workload_verified', False))
+        self.assertTrue(saved['cleanup']['verified'])
+        self.assert_no_secrets_saved()
+
+    def test_malformed_failed_diagnostic_does_not_replace_driver_error(self):
+        kube = RemoteKube(); kube.exit = 1
+        failed = self.failed_before_precreated_check(); failed['raw_error'] = 'JWT_SENTINEL'
+        kube.log = RC.RESULT_PREFIX+json.dumps(failed)
+        exp = self.experiment(kube)
+        with self.assertRaisesRegex(R.ExperimentError, 'DRIVER_EXIT_MISMATCH'):
+            exp.run()
+        self.assertNotIn('diagnostic_output', exp.receipt)
+        self.assertIn('driver-log.json', exp.receipt['diagnostic_errors'])
+        self.assertEqual(exp.receipt['failure_code'], 'DRIVER_EXIT_MISMATCH')
+        self.assertTrue(exp.receipt['cleanup']['verified'])
+        self.assert_no_secrets_saved()
+
+    def test_cancellation_survives_best_effort_failed_payload_diagnostics(self):
+        kube = RemoteKube(); cancel = KeyboardInterrupt()
+        kube.log = RC.RESULT_PREFIX+json.dumps(self.failed_before_precreated_check())
+        def interrupted():
+            raise cancel
+        kube.pods = interrupted
+        exp = self.experiment(kube)
+        with self.assertRaises(KeyboardInterrupt) as caught:
+            exp.run()
+        self.assertIs(caught.exception, cancel)
+        self.assertEqual(exp.receipt['diagnostic_output']['result'], 'failed')
+        self.assertEqual(exp.receipt['failure_code'], 'KeyboardInterrupt')
+        self.assertTrue(exp.receipt['cleanup']['verified'])
+        self.assertFalse(exp.receipt.get('workload_verified', False))
+
+    def test_failed_contract_output_with_exit_zero_cannot_pass(self):
+        kube = RemoteKube(); value = remote_result()
+        value.update(result='failed', error_code='SPARK_STOP_FAILED', error_classes=['builtins.RuntimeError'])
+        kube.log = RC.RESULT_PREFIX+json.dumps(value)
+        exp = self.experiment(kube)
+        with self.assertRaisesRegex(R.ExperimentError, 'REMOTE_JOB_NOT_PASSED'):
+            exp.run()
+        self.assertFalse(exp.receipt.get('workload_verified', False))
+        self.assertTrue(exp.receipt['cleanup']['verified'])
+
+    def test_remote_snapshot_parent_must_bind_precreated_initial_snapshot(self):
+        kube = RemoteKube(); value = remote_result()
+        value['table_identity']['parent_snapshot_id'] = None
+        kube.log = RC.RESULT_PREFIX+json.dumps(value)
+        exp = self.experiment(kube)
+        with self.assertRaises(C.ContractError):
+            exp.run()
+        self.assertFalse(exp.receipt.get('workload_verified', False))
+        self.assertTrue(exp.receipt['cleanup']['verified'])
+
+    def test_remote_initial_snapshot_can_be_absent_null_but_not_bool(self):
+        inputs = remote_inputs(); inputs['initial_snapshot_id'] = None
+        exp = R.Experiment(TOKEN, 'success', self.output, RemoteKube(), profile='iceberg-write', profile_inputs=inputs)
+        self.assertIsNone(exp.receipt['profile_inputs']['initial_snapshot_id'])
+        inputs['initial_snapshot_id'] = False
+        with self.assertRaises(C.ContractError):
+            R.Experiment(TOKEN, 'success', self.output, RemoteKube(), profile='iceberg-write', profile_inputs=inputs)
+
+    def test_remote_missing_redactor_stops_before_runtime_or_namespace_create(self):
+        kube = RemoteKube(); kube.redactor = None
+        with patch.object(kube, 'preflight') as preflight:
+            with self.assertRaisesRegex(R.ExperimentError, 'REDACTOR_REQUIRED'):
+                self.experiment(kube).run()
+            preflight.assert_not_called()
+        self.assertFalse(kube.created)
+
+    def test_remote_image_and_executor_secret_items_must_match_exactly(self):
+        for mutation in ('image', 'items'):
+            with self.subTest(mutation=mutation):
+                kube = RemoteKube()
+                def change(pod):
+                    if pod['metadata']['labels']['shirokuma.io/role'] != 'executor':
+                        return
+                    if mutation == 'image':
+                        pod['status']['containerStatuses'][0]['imageID'] = R.P.DIGEST
+                    else:
+                        pod['spec']['volumes'][-1]['secret']['items'].append({'key': 'polaris-token', 'path': 'polaris-token'})
+                kube.remote_mutate = change
+                exp = self.experiment(kube)
+                with self.assertRaises(R.ExperimentError):
+                    exp.run()
+                self.assertFalse(exp.receipt.get('workload_verified', False))
+                self.assert_no_secrets_saved()
+
+    def test_remote_secret_replacement_is_preserved_and_values_not_saved(self):
+        kube = RemoteKube(); original_inventory = kube.inventory
+        def inventory():
+            kube.objects[('Secret', 'connection')]['metadata']['uid'] = str(uuid.uuid4())
+            return original_inventory()
+        kube.inventory = inventory
+        exp = self.experiment(kube)
+        with self.assertRaisesRegex(R.ExperimentError, 'CLEANUP_NOT_VERIFIED'):
+            exp.run()
+        self.assertEqual(exp.receipt['cleanup']['deferred'], 'RESOURCE_UID_CONFLICT')
+        self.assertFalse(kube.deleted)
+        self.assert_no_secrets_saved()
+
+    def test_remote_recover_needs_no_provider_and_keeps_original_receipt(self):
+        kube = RemoteKube(); exp = self.experiment(kube); exp.run()
+        before = (self.output/'summary.json').read_bytes()
+        kube.redactor = None
+        with patch.object(R, 'STATE', self.root), patch.object(RC, 'render', side_effect=AssertionError('NO_RENDER')):
+            receipt = R.recover(TOKEN, kube)
+        self.assertTrue(receipt['cleanup']['verified'])
+        self.assertEqual((self.output/'summary.json').read_bytes(), before)
+        self.assert_no_secrets_saved()
+
+    def test_saved_remote_secret_payload_or_foreign_identity_refused(self):
+        exp = self.experiment(); exp.run()
+        for mutation in ('payload', 'name', 'keys', 'input'):
+            plan, receipt = deepcopy(exp.plan), deepcopy(exp.receipt)
+            secret = next(x for x in plan if x['kind'] == 'Secret')
+            if mutation == 'payload':
+                secret['data'] = {'polaris-token': 'JWT_SENTINEL'}
+            elif mutation == 'name':
+                next(x for x in receipt['known'] if x['kind'] == 'Secret')['name'] = 'foreign'
+            elif mutation == 'keys':
+                secret['keys'] = ['root-secret']
+            else:
+                receipt['profile_inputs']['scope'] = 'PRINCIPAL_ROLE:spark_'+'f'*32
+            receipt['plan_sha256'] = C.plan_sha256(plan)
+            with self.subTest(mutation=mutation), self.assertRaises((R.ExperimentError, C.ContractError)):
+                R.validate_saved(plan, receipt)
+
+    def test_legacy_native_receipt_without_profile_remains_recoverable(self):
+        kube = FakeKube(); clock = Clock()
+        exp = R.Experiment(TOKEN, 'success', self.output, kube, clock=clock.now, sleep=clock.sleep)
+        exp.run()
+        exp.receipt.pop('profile'); exp.receipt.pop('profile_inputs'); exp.persist()
+        with patch.object(R, 'STATE', self.root):
+            receipt = R.recover(TOKEN, kube)
+        self.assertTrue(receipt['cleanup']['verified'])
+
+    def test_fresh_cri_reference_and_build_identity_are_both_required(self):
+        from tools.local_experiment.spark_iceberg import build as B
+        inputs = remote_inputs(); digest = RC.IMAGE.split('@')[1]
+        proof = {'image': RC.IMAGE, 'image_id': digest, 'build_token': inputs['build_token'],
+                 'architecture': 'arm64', 'os': 'linux'}
+        with patch.object(B, 'read_verified_image', return_value=proof) as verify, \
+             patch.object(R.P, 'command', return_value=json.dumps({'status': {'id': digest, 'repoDigests': [RC.IMAGE]}})) as command:
+            self.assertTrue(R.remote_image(inputs)['cri_exact_reference_verified'])
+            self.assertEqual(verify.call_args.args, (inputs['build_token'],))
+            self.assertIn(RC.IMAGE, command.call_args.args[0])
+            command.return_value = json.dumps({'status': {'id': digest, 'repoDigests': ['other@'+digest]}})
+            with self.assertRaisesRegex(R.ExperimentError, 'REMOTE_CRI_IMAGE_CHANGED'):
+                R.remote_image(inputs)
+            command.return_value = json.dumps({'status': {'id': R.P.DIGEST, 'repoDigests': [RC.IMAGE]}})
+            with self.assertRaisesRegex(R.ExperimentError, 'REMOTE_CRI_IMAGE_CHANGED'):
+                R.remote_image(inputs)
+
+
 class BoundaryTests(unittest.TestCase):
+    def test_unknown_secret_projection_drops_values_and_arbitrary_annotations(self):
+        raw = {'apiVersion': 'v1', 'kind': 'Secret', 'metadata': {'name': 'foreign',
+            'namespace': C.namespace(TOKEN), 'annotations': {'copied': 'SENTINEL'}},
+            'type': 'Opaque', 'immutable': True, 'data': {'secret': 'SENTINEL'},
+            'stringData': {'other': 'SENTINEL'}}
+        safe = R.safe_resource([raw])[0]
+        self.assertEqual(safe['keys'], ['other', 'secret'])
+        self.assertNotIn('SENTINEL', json.dumps(safe))
+        self.assertNotIn('data', safe); self.assertNotIn('stringData', safe)
+
+    def test_native_inputs_and_unknown_profiles_rejected(self):
+        for profile, inputs in [('native', {}), ('extension', None)]:
+            with self.subTest(profile=profile), self.assertRaises(R.ExperimentError):
+                R.Kube(TOKEN, profile=profile, profile_inputs=inputs)
+
+    def test_native_secret_create_is_forbidden_before_any_http(self):
+        with patch.object(R.P, 'command', side_effect=AssertionError('NO_HTTP')):
+            with self.assertRaisesRegex(R.ExperimentError, 'SECRET_PROVIDER_REQUIRED'):
+                R.Kube(TOKEN).create({'kind': 'Secret'})
+
+    def test_remote_immutable_secret_injected_only_into_memory_request(self):
+        stub = {'apiVersion': 'v1', 'kind': 'Secret', 'metadata': {'name': 'connection',
+            'namespace': C.namespace(TOKEN), 'labels': C.labels(TOKEN),
+            'annotations': {'shirokuma.io/owner': C.OWNER}}, 'type': 'Opaque',
+            'immutable': True, 'keys': R.SECRET_KEYS}
+        payload = {'aws-credentials': 'AWS_SENTINEL', 'polaris-token': 'JWT_SENTINEL'}
+        response = actual(stub); response.pop('keys'); response['data'] = payload
+        with patch.object(R, 'validate_profile', return_value={}), \
+             patch.object(R.Kube, 'request', return_value=json.dumps(response)) as request:
+            kube = R.Kube(TOKEN, profile='iceberg-write', profile_inputs={}, secret_provider=lambda: payload,
+                          redactor=lambda value: value.replace('AWS_SENTINEL', '[redacted]').replace('JWT_SENTINEL', '[redacted]'))
+            safe = kube.create(stub)
+        body = request.call_args.args[1]
+        self.assertNotIn('keys', body)
+        self.assertEqual(body['stringData'], payload)
+        self.assertEqual(stub['keys'], R.SECRET_KEYS)
+        self.assertNotIn('data', safe); self.assertNotIn('stringData', safe)
+        self.assertNotIn('SENTINEL', json.dumps(safe))
+        R.validate_secret(safe, TOKEN)
+
+    def test_remote_bad_secret_keys_stop_before_http(self):
+        stub = {'apiVersion': 'v1', 'kind': 'Secret', 'metadata': {'name': 'connection',
+            'namespace': C.namespace(TOKEN)}, 'type': 'Opaque', 'immutable': True, 'keys': R.SECRET_KEYS}
+        with patch.object(R, 'validate_profile', return_value={}), \
+             patch.object(R.Kube, 'request', side_effect=AssertionError('NO_HTTP')):
+            kube = R.Kube(TOKEN, profile='iceberg-write', profile_inputs={}, secret_provider=lambda: {'root-secret': 'x'})
+            with self.assertRaisesRegex(R.ExperimentError, 'SECRET_PAYLOAD_INVALID'):
+                kube.create(stub)
+
+    def test_remote_logs_require_redactor_and_redact_before_return(self):
+        with patch.object(R, 'validate_profile', return_value={}), \
+             patch.object(R.Kube, 'request', return_value='raw JWT_SENTINEL') as request:
+            kube = R.Kube(TOKEN, profile='iceberg-write', profile_inputs={})
+            with self.assertRaisesRegex(R.ExperimentError, 'REDACTOR_REQUIRED'):
+                kube.logs()
+            request.assert_not_called()
+            kube.redactor = lambda value: value.replace('JWT_SENTINEL', '[redacted]')
+            self.assertEqual(kube.logs(), 'raw [redacted]')
+
+    def test_live_identity_validation_does_not_run_literal_log_redactor(self):
+        pod = actual(C.render(TOKEN, 'success', api_endpoints=ENDPOINTS)[-1])
+        destructive_mask = lambda value: value.replace('shirokuma', '[REDACTED]')
+        with patch.object(R, 'validate_profile', return_value={}), \
+             patch.object(R.Kube, 'request', return_value=json.dumps(pod)) as request:
+            kube = R.Kube(TOKEN, profile='iceberg-write', profile_inputs={}, redactor=destructive_mask)
+            self.assertEqual(kube.get('Pod', 'driver'), pod)
+            self.assertEqual(kube.create(pod), pod)
+            request.return_value = json.dumps({'items': [pod]})
+            self.assertEqual(kube.pods(), [pod])
+            self.assertEqual(kube.inventory(), [pod])
+
     def test_real_observed_high_api_port_is_projected_exactly(self):
         service = {'metadata': {'name': 'kubernetes', 'namespace': 'default'},
             'spec': {'clusterIP': '10.43.0.1', 'ports': [{'port': 443, 'targetPort': 55737, 'protocol': 'TCP'}]}}

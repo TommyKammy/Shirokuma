@@ -5,7 +5,7 @@ title: "WP-L4-SPARK-001 Spark on Kubernetes"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.5"
+version: "0.6"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, compute]
 ---
@@ -212,3 +212,72 @@ image inventoryは547→553、旧547全保持。final1に加えclassic Docker bu
 新推論/監査event0、Secretsなし。再現と回収は`tools/local_experiment/spark_iceberg/README.md`。
 次は新規tableだけのSpark write→Trino readbackへ進む。既存NPを編集せずrun専用の一時Ingress NPを
 追加する必要があり、資格情報を証跡へ保存しないscopeを具体化してから適用する。
+
+## 2026-09-17: native Spark write and independent Trino readback
+
+Spark4.1.3＋Iceberg1.11.0の既存固定imageで、native driver/executorから
+Polaris1.6・SeaweedFSへ接続し、Trino483で独立読戻しする限定実験が成功した。
+run `d1ba2d6ed7f84d49b9928aafffb26cd4`（12:14:04–12:15:47 UTC）は
+driver/executorともSucceeded、driver exit0、9checksすべて成功。
+executor1のstage6/tasks6・7、2partitions/attempt0とshuffleを観測した。
+
+hostが専用名・comment・明示S3 locationで空tableを作成し、UUID
+`242d28cd-9200-484e-9569-bdfe437d571d`と0rows/0filesを捕捉した。
+Trinoの空CREATEによる初期snapshot `2785399152784753098` を親として、Sparkが32行を1回INSERT。
+新snapshot `1477241556327226373` をfresh Spark sessionのDataFrame/SQLとTrinoへ照合した。
+全32行、groups `[[0,8,840],[1,8,896],[2,8,952],[3,8,1008]]`、
+2Parquet files（各16行、1337/1341 B）、UUID・metadata location・親snapshotが一致。
+snapshot IDはPython整数のまま保存し、JavaScript Numberへ変換しない。
+
+nativeの固定profile `iceberg-write` は16manifest＋executor＋自動Endpoints/EndpointSliceを使う。
+Secret1個のAWS credentials fileとPolaris tokenを実行時だけ注入し、plan/created receipt/inventoryへ
+data/stringDataを保存しない。Secret fileのBearerはdriverだけにmountし、SQLConfから初期化後に除去。
+既知secret値のログ秘匿とclass名だけの失敗診断を追加した。
+Iceberg FileIO内部のtask serializationまでBearerが渡らないという保証は未検証である。
+
+一時Polaris principal/principal-role/catalog-role各1、binding2、当該tableだけの
+TABLE_READ_PROPERTIES/TABLE_WRITE_PROPERTIES/TABLE_LISTを使用。
+専用tokenの実expires_inは3600秒、refresh/exchangeを無効にした。entity削除を
+発行済tokenの即時失効の実証とは扱わない。SeaweedFSのIAM readOnly設定は維持し、
+S3は既存のstatic bucket credentialsを使用。Polarisのtable限定権限をS3 prefix制限と混同しない。
+保持NPは編集せず、Polaris8181/SeaweedFS8333へ新namespace/runだけを許すIngress NP2を追加・UID回収した。
+
+Spark停止とown Trino query drain後、19個の既知UID、一時Ingress NP2・role bindings/3entities、
+同UUIDの新tableを回収。新tableのcatalog不存在を確認した。S3 prefixの直接LISTやorphan清掃は未実施。
+Secret／任意SQL／任意コード／任意tableを受け取るCLIにはせず、再現入口は
+`make local-spark-iceberg-remote SPARK_ICEBERG_BUILD_TOKEN=<verified-build-token>` に固定する。
+詳細は `tools/local_experiment/spark_iceberg/REMOTE.md`。
+
+### 実機で見つけた差分と失敗証跡
+
+- `c39f44bd7dc64e0cba26e998b3ef19ff`: 空CREATEにもsnapshotがあるため初期期待を拒否。
+  Spark/一時access作成前。confirmed CREATE queryと同UUID・0rows/0filesを別証跡で照合して回収し、
+  原failed receiptを保持。UUID捕捉は空判定より前へ修正した。
+- `fa34d22d4ff8472e85b5eb6c80b17511`: Iceberg HTTP retry=0はruntimeが拒否。
+  許容最小1へ修正。HTTP層には429とRetry-After付き503のPOST再試行もあり、INSERTの再実行0と区別する。
+- `482bc347555e4bd19ce35ae351a0ea3d`: Py4J CloseableIterableをPython iterableとして扱いTypeError。
+  Java iterator()/hasNext()/next()へ統一し、Python iteration不可のfakeで回帰化した。
+- `9bad9b32de304414982baa1df1bd4892`: INSERT後、fresh sessionの直接JVM catalog loadが
+  元sessionのSQLConfを参照し認証失敗。対象active sessionでloadし、finallyで元contextを復元した。
+  token除去を維持し、権限を拡大せず成功へ修正した。
+
+後続3失敗も各19UID・一時access・同UUID tableを回収し、fresh fixture不変を確認した。
+最初の回収証跡は `spark-remote-checks/1a85917c718b44acada8296899252182/first-recovery/`。
+初回4runの保存証跡だけの独立監査43checks/87filesも成功した。
+
+正式全回帰43suites・1306件（1305成功＋従来optional OTel1skip）。Spark関連242件は
+既存132＋新110（core追加22、remote contract27/access28/table21/runner12）。
+証跡は `spark-remote-checks/1a85917c718b44acada8296899252182/` に保存した。
+実行前後の独立監査 `spark-remote-preflight/670f955acf6d40348fe79384521b3ae9/` で、
+保持14Pods/27resources6CM3SecretUID、Docker3、AH428、履歴4tables5DDL、MLflow59tables/11artifacts、
+旧2609files/1033directories＋完成済Spark113files、cached553images、保持NP/Service/Endpointsが不変。
+fixtureのschema/2rows/snapshots/history/refs/alltablesはfresh Trino読戻しで一致。
+OpenMetadataの保持確認は先行seal継承で、今回のfresh API確認ではない。
+最終独立監査final-verification.jsonの27checksも成功し、4Spark namespacesと全5実験tablesのfresh不存在、
+初回4runの87files不変、成功/authの30files封印、20Secret projectionsのdata/stringData非保存を確認した。
+既存Polaris権限の6投影も内容不変。catalog-role配列の順序によるraw hash差は元のfalse検査を残し、
+2通りの順列hashで前後双方に一致することを別証跡 `access-order-verification.json` で補足した。
+
+これは固定32行・executor1台の機能証拠であり、一般的な性能評価、HA、本番受入を示すものではない。
+新LLM推論・AgentHouse eventは0。WPはlocal-partialを維持する。
+次は既存Data→Catalogを利用者向けCLIから実行・再開・read-only状態確認できる入口へ進む。
