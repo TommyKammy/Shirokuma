@@ -91,8 +91,10 @@ The [Catalog Curator Bear](tools/local_experiment/bears/CATALOG_CURATOR.md) reco
 verified Data Engineer runs as historical metadata with fixed owners and lineage.
 The [Data → Catalog handoff](tools/local_experiment/bears/DATA_CATALOG.md) connects
 both workflows and resumes from saved evidence without invoking Data twice.
-Run `rtk make local-data-catalog-smoke` or supply a bounded request on standard
-input with `rtk make local-data-catalog-request`.
+Use `shirokuma data run --case name_lengths_ja` or supply a bounded request with
+`shirokuma data run --request-stdin`. Inspect saved evidence with
+`shirokuma data status TOKEN`, or resume the same operation with
+`shirokuma data resume TOKEN`. The existing Make entrypoints remain available.
 The [lineage coverage report](tools/local_experiment/metadata/COVERAGE.md) compares
 verified Data Plan histories with saved OpenMetadata edges and distinguishes
 missing, conflicting and unknown observations. Run `rtk make local-lineage-coverage`

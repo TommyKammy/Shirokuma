@@ -511,6 +511,12 @@ test-local-data-catalog: local-llm-sync
 
 # test-local-data-bear already discovers test_local_data_catalog.py.
 
+.PHONY: test-data-catalog-cli
+test-data-catalog-cli: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_data_catalog_cli.py'
+
+verify-local-experiment: test-data-catalog-cli
+
 .PHONY: local-lineage-coverage test-local-lineage-coverage
 local-lineage-coverage:
 	@$(PYTHON) tools/local_experiment/metadata/coverage.py

@@ -5,7 +5,7 @@ title: "WP-L2-AGENT-004 Catalog Curator Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.6"
+version: "0.7"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -188,3 +188,50 @@ fresh API hashから6run・12/12edgesを再計算し、Pawprints388＝旧376不�
 保持Kube/3Docker/履歴4tables/5DDL/fixture全履歴/全10table一覧は不変。
 旧964files中963は厳密不変、admin markerのmtimeだけ既知差（content/mode/.env不変）とし、
 新180artifactのhashを保存した。
+
+
+## 2026-09-17: Data to Catalog product CLI
+
+`shirokuma data run --case NAME | --request-stdin`、`data resume TOKEN`、
+`data status TOKEN`を実装した。profileはlocal-experiment、checkoutと既存専用venvを検証して
+固定bridgeを起動する。環境install、service開始、GitHub操作、任意SQLやAPI URLの追加はない。
+stdin本文はメモリ/child stdinだけに渡し、argv/env/保存receiptへ残さない。
+早期allocatedは識別子であり永続intentやモデル呼出しの証明ではない。
+固定JSONLを厳密検証し、child終了とreceiptが一致してから最終成功行を返す。
+
+statusは既存lock/journal/receiptをread-onlyで検証し、busy、journal-only、saved-evidenceを区別する。
+statusのexit0は観測成功であり、処理結果の成功とは別。run/resumeは成功0、unsupported2、
+失敗・不明1。確認済み取消130/143を保持し、20分deadlineはunknown/1にする。
+取消時はPython ownerだけにSIGINTを送り最大240秒cleanupを待つ。強制killや自動再実行はしない。
+未確定ならtoken/PIDを返し、statusと保存証跡から状態を確認する。
+Dataは同handoffで最大1回、完了済みresumeは保存証拠の再検証だけである。
+
+実CLIによるname_lengthsの新規handoff `58aaec13018c59aee22eb33fcd3c13d0` がexit0で成功。
+Data `11985f9a806047cbb51e81449527b292` → Plan `9ac5fe34e1a4436a93854a09605ab240` →
+Catalog `9100587a19da4135884cf57adf2b3ea1` を記録した。結果 `[[1,9],[2,7]]`、
+materialization2回、query drain/生成2relation cleanup成功。Catalogはhistorical2table/2edgeを
+4writesで追加し、repeat0writes。保持fixture不変の判定と、履歴登録の証拠を分ける。
+非対応stdinのhandoff `d86dd23e921f4b40d9eb90205bcebea2` / Data
+`c139e7c97b5b47d3ad125a4f87f89245` はunsupported/exit2、adapter0・Catalog0。
+3実推論は入力1238/出力141tokens、推論計6779ms、cost NULL、cloud/retry0。
+既存golden評価の母集団へ追加せず、今回のworkflow実測として保持する。
+
+旧完了handoffの実CLI status/resume前後で2823files、AH428全行、既存6plansの
+OpenMetadata31endpoints（12table/12edge）が完全一致した。新完了handoffのstatus/resumeと
+unsupported statusも成功し、関連1181filesのhash/mode/mtimeは不変。
+不正stdinはchild起動前に拒否し、不存在statusはnot_found/exit1となった。
+実機での途中取消は今回実施しておらず、取消・deadline・protocol破損はoffline subprocess回帰の証拠である。
+
+Python bridge21 tests、Go Data17 testsが成功。Go全98tests、vet/raceが成功し、
+全local回帰は44suites/1327件（1326成功＋既存optional OTel1skip）。
+証跡は `tmp/local-experiment/data-cli-checks/7a23ef675b9f45eca8d7809090853ecf/`、
+独立保持監査は `data-cli-checks/9a53b66a39d045329f7383806eaabaa5/`。
+CLI/関連runbookを更新し、3操作のbounded機能、本番受入や一般自然文理解の未達を維持する。
+
+最終独立監査 `final-verification.json` の121checksが成功。AH428→440の追加12件は
+Data4＋Catalog5＋unsupported3に一致し、Loki12件、保存実spans10＋MCP返却span ID相関2も照合した。
+既存metadata30API応答hashは不変、anchorには新stg node/edgeだけが加わった。
+新sourceの2tables/2edgesを独立検証し、対象7plans/14tables/14edgesを確認。
+保持Kube/Docker/SQL履歴/fixture全履歴/MLflow59tables11artifacts/cached553imagesは不変。
+2823保護files中2820は完全不変、Gateway2logsは旧prefix不変＋各2追記、既存admin markerは
+content/mode不変・mtimeだけ更新。raw比較のchanged判定を保存し、許容差分を別証拠で説明した。
