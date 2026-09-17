@@ -706,3 +706,18 @@ local-mlflow-stop:
 test-local-mlflow:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_mlflow*.py'
 verify-local-experiment: test-local-mlflow
+
+.PHONY: local-spark-prepare local-spark-plan local-spark-run local-spark-failure local-spark-recover test-local-spark
+local-spark-prepare:
+	@$(PYTHON) tools/local_experiment/spark/prepare.py
+local-spark-plan:
+	@$(PYTHON) tools/local_experiment/spark/run.py plan
+local-spark-run:
+	@$(PYTHON) tools/local_experiment/spark/run.py run --mode success
+local-spark-failure:
+	@$(PYTHON) tools/local_experiment/spark/run.py run --mode failure
+local-spark-recover:
+	@$(PYTHON) tools/local_experiment/spark/run.py recover --run-token "$(SPARK_RUN_TOKEN)"
+test-local-spark:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_spark*.py'
+verify-local-experiment: test-local-spark

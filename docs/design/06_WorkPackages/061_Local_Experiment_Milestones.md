@@ -5,22 +5,66 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "3.9"
+version: "3.10"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：保存済み11評価runsを専用local MLflowへ取り込み、標準UIで閲覧・比較した。
-1118 metric points、同一source再取込0/0、停止・再起動後の全59 tables/11 artifacts保持を確認。
-Qwen152＋mock10の母集団を分け、新推論は0。Spark/JupyterHub依存全体や本番受入は未達を維持する。
+最新の到達点（2026-09-17）：既存ARM64 k3sでSpark4.1.3のnative driver/executor集計が成功。
+正常exit0と集計後の意図的exit17を区別し、各17UIDを回収。初回失敗も復旧証拠とともに保持した。
+1129件の回帰（1128成功/既存1skip）を確認。次は既存tableに触れないSpark–Icebergのclasspath試験へ進む。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: native Spark driver and executor
+
+[Spark on Kubernetes](L4/WP-L4-SPARK-001_Spark_on_Kubernetes.md)をlocal-partialとして実機検証。
+既存k3s1.33.4/Docker CRI/ARM64を維持し、公式Spark4.1.3の固定ARM64 digestを直接1回pullした。
+以前の546 image rowsを保持し、追加はSpark1行のみ。圧縮layers794127774 B、Docker報告794141545 B、
+filesystem使用増分1999745024 B（全FSの時点差分）、残容量346994528256 B。
+`spark-prepare/ad1a2bac18f445ecaee00fece9d873ef/pull-verification.json`にmanifest/config生byteshashとCRI照合を保存。
+Docker snapshotterのID/default null表現差で失敗したprepare2試行も残し、追加pullなしで修正した。
+
+毎回新namespaceにdriver/executor各1CPU2Gi・計2Pods上限、restricted PSA v1.33・non-root・read-only root・emptyDir。
+固定32行から21行/4groupを集計し、2partitionのTaskContext・executor1・実Pod hostnameと独立oracleを照合した。
+成功`e5b1bbad07a4471286d7e137ff065951`はdriver Succeeded/exit0、
+意図的失敗`cb316657a2064bdcb46b2891d25990a6`は同じ集計後にFailed/exit17、
+両方で15明示resource＋自動Endpoint2の計17UIDを記録してnamespaceごと回収した。
+新namespaceへの既存shirokuma-dev限定admission適用やNetworkPolicyの全拒否経路実証とは主張しない。
+Secrets/PVC/保持table/LLMにはアクセスしていない。
+
+初回`aec20a5cb0204d378ca2ffcee7eedc9a`は計算/exit0でもPod phase反映待ち不足でwrapper failed。
+Service Orphan削除でEndpointSlice ownerRefが失われたためcleanupも保留した。
+元failed receiptを維持し、run labels/既知driver target UIDを再確認してsliceと既知namespaceを限定回収。
+`spark-checks/b3d67df806554366bcf38ff0a2db774b/initial-recovery/verification.json`に別の復旧証拠を保存した。
+runnerは終端phase待ちと生成Endpoint UIDの先行保存・限定削除へ修正。
+Sparkの不要Service/PVC自動cleanupを設定で無効化し、RBACを拡張せずshutdown403を解消した。
+namespace置換・曖昧create・不正復旧入力は拒否し、取消の元例外を保持する。
+完了後recoverは原receiptを変えず、再Spark実行しないことも実確認した。
+
+正式全回帰43 suites・1129件（1128成功＋従来optional OTel 1skip）、新Spark65件
+（contract19/prepare18/runner28）。ログと集計は
+`spark-checks/b3d67df806554366bcf38ff0a2db774b/local-regression-final.log` / `regression-summary.json`。
+初回compute独立22checksは`spark-preflight/c957ac05ccaa4df4b7b9e5025d943a36/initial-compute-verification.json`
+に保存し、wrapperを遡及して合格化していない。
+
+
+独立fresh監査は`tmp/local-experiment/spark-preflight/c957ac05ccaa4df4b7b9e5025d943a36/final-runs-verification.json`の86checksと
+`success-recovery-verification.json`の追補4checksで成功。全14Pod/保持27resources6CM3SecretUID、Docker3、AH428、
+履歴4tables5DDL、MLflow59tables/11artifacts、旧2609files/1033directoriesが不変。MLflow DBbytesも一致しserver.logだけ更新。
+3実験namespaceのfresh GET不存在、原failed証跡と旧67runfiles不変を確認した。
+fixture/metadataは先行sealed証拠継承で、今回のfresh SQL/API確認ではない。設計82documents/関連14testsも成功した。
+
+再現/回収は`tools/local_experiment/spark/README.md`と`make local-spark-*`。
+benchmark、Iceberg/Polaris接続、JupyterHub/MLflow training、Comet、multi-node/HA、本番受入は未達。
+次はIceberg1.11.0/Spark4.1用JARの隔離classpath試験を進め、成功後に新規tableだけのSpark→Trino照合を検討する。
+この節目では次のJAR準備/純粋contractのみで、既存catalogへのSpark接続は未実施。
 
 ## 2026-09-17: local MLflow tracking for saved evaluation receipts
 
