@@ -4,8 +4,8 @@ doc_id: "WP-L4-ML-001"
 title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-17
-version: "0.4"
+updated: 2026-09-18
+version: "0.5"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -16,6 +16,28 @@ tags: [shirokuma, workpackage, l4, ml]
 
 MLflowで実験とAgent evalを記録する。ADR-0034のlocal実験では、保存済み評価receiptと
 Spark/Trino測定を専用SQLite/loopback標準UIへ取り込む。Notebook連携は未達。
+
+## 2026-09-18: observation-signals evaluation import
+
+新しいSRE `observation-signals-v1`評価を既存Trackingへ追記した。sourceは
+`sre/21b4281f95014941b91384825a4dcb7a`、8cases×2の16保存推論だけで、新推論は行わない。
+既存importerとstoreを使い、専用server停止→全state export→取込→同一取込→再起動を確認した。
+exportは31files/1,762,594 bytesをprivateに保持し、既存backupを置き換えていない。
+
+初回import `6ca069b53a5945109852226f7262b5a8`は1run/110 metric pointsを追加、
+再取込`d6fa8648596a446996ce881eea0d80a5`はrun/metric/params/artifactの追加0。
+新MLflow runは`d35f31449d054832a536f045d269d60a`で、FINISHED・index completedを確認した。
+全16runsは評価12＋benchmark4、全1320 metric points、全16artifactsとなった。
+旧15run・59tablesの全既存行・15artifactsを保持し、追加5tablesの全行が新runに帰属する。
+独立照合で110points・9params・10tagsとsourceのexact一致、元24source files不変を確認した。
+costはNULLのままで数値metricへ補完しない。suite/case signatureを分離し、一般診断品質とはしない。
+
+同じstore UUID・loopback `127.0.0.1:18550`設定でhealthyに再起動した。
+APIの固定run GET1回でも35 latest metrics・9params・10tagsが一致した。全110履歴はSQLiteで別途照合した。
+新API検証はMLflowに限定し、Qwen/AgentHouse/Loki/Trino/Sparkは再実行・再検査していない。
+製品source変更はなく、直前cc11ff9のlocal全2271tests（既存optional1skip）を継承する。
+証拠と完全exportは`tmp/local-experiment/mlflow-sre-signals-checks/f2c0f8f220a743409d6ffb1985e2e8c2/`。
+停止は既存`local-mlflow-stop`で行う。保持runの削除やexportの上書きをrollbackには使わない。
 
 ## Context
 

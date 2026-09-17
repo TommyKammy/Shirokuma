@@ -58,6 +58,17 @@ and compare known metrics within comparable groups. A successful Tracking
 import establishes saved-receipt integrity, not general model quality, current
 audit-service availability or production acceptance.
 
+On 2026-09-18 the saved SRE `observation-signals-v1` evaluation was added as
+one run with 16 inference samples and 110 metric points. The store contains
+12 evaluation runs and four benchmark runs, with 1320 metric points overall.
+The old 15 runs/artifacts and all existing SQLite rows were preserved; a repeat
+import added no runs, metrics, parameters or artifacts. The server was restarted
+on the same loopback address after retaining a complete private export.
+The new run is `d35f31449d054832a536f045d269d60a`; its 35 latest API metrics
+and full 110-point saved history were checked separately. No inference or audit
+was repeated. Evidence is under
+`tmp/local-experiment/mlflow-sre-signals-checks/f2c0f8f220a743409d6ffb1985e2e8c2/`.
+
 ## Saved Spark/Trino benchmarks
 
 ```sh

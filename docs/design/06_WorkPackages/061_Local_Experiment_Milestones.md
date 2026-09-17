@@ -5,16 +5,27 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.32"
+version: "3.33"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-18）：型付き等値Readerと歴史診断の実機検証に続き、
-保存済みSRE log観測のCLI表示を追加した。既存6記録の表示と証拠を保持し、追加採取なしで確認できる。
+最新の到達点（2026-09-18）：保存SRE log観測のCLI表示と、新SRE評価のMLflow取込を完了。
+Trackingは既存runを保持して12評価＋4benchmark、1320 metric pointsとなり、再取込追加0を確認した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-18: SRE observation-signals in MLflow
+
+既存MLflowを停止して完全exportを保持し、保存評価1run/16samples/110pointsを追記した。
+再取込は全追加0、同じloopback/storeで再起動healthy。旧15run・15artifacts・全59tablesの既存行は不変。
+新run `d35f31449d054832a536f045d269d60a`の全110points/9params/10tagsを独立照合し、
+元24source filesを保持した。APIの固定run読戻し1回は35 latest metricsと一致した。
+Qwen/監査/benchmark再実行0、costNULL・suite境界を維持。新たな一般品質の評価とはしない。
+製品source変更なし、全回帰は直前cc11ff9を継承。証拠は
+`tmp/local-experiment/mlflow-sre-signals-checks/f2c0f8f220a743409d6ffb1985e2e8c2/`。
+[WP-L4-ML-001](L4/WP-L4-ML-001_MLflow_tracking.md)を参照。
 
 ## 2026-09-18: saved SRE log status — local acceptance complete
 
