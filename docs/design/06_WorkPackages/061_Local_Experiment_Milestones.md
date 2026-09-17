@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.37"
+version: "3.38"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
@@ -18,7 +18,34 @@ Trackingは既存runを保持して12評価＋4benchmark、1320 metric pointsと
 登録Notebookを定型Dagster2assetsへ接続する実2回と独立最終照合42checksも成功した。
 保持exportの非稼働MLflow clone復元とSDK全履歴読取2回も成功し、稼働中storeを保持した。
 current/historical snapshotと型付き等値条件の正確なCount読取4件も成功した。
+固定Catalog Readerの実2回で説明/owner/schema/one-hop lineageを読戻し、公開結果の同一性を確認した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-18: fixed Catalog Reader — local acceptance complete
+
+`catalog describe --table smoke.fixture_v1 --profile local-experiment`で既存OpenMetadataを読む。
+既存accountのlogin1回＋5anchors/one-hop lineageを前後各1回、正常時は計12GET・retry0。
+root UUID/parent/owner/pinned runtimeを束縛し、全6応答のcanonical hashと安全射影の前後一致を要求する。
+これはtransaction snapshotではなく、`sql_presence: not-checked`を全table/nodeに維持する。
+raw応答/secret/connection/SQLを保存せず、API本文にない実SQL存在や実行履歴の保証を追加しない。
+各HTTP10秒・全HTTP120秒・owner180秒の期限内で閉じ、cleanup確認後だけ成功を公開する。
+
+実token `d85153baca5e5f26b880f7e6908549de` / `0230dc147b904219a47bb1088a2b9445`は
+0.716秒/0.567秒、passed/cleanup trueで公開9fieldsが完全一致した。
+catalog UUID `90725c41-7b04-483e-abe4-a59d4b9438e0`、descriptionあり、
+owner ShirokumaLocalExperiment、id BIGINT/name VARCHAR、8nodes/8edgesを確認した。
+新model/SQL/catalog write/service変更0。不正入力はallocation0で拒否し、準備段階のfake test
+assertion修正と元logを保持した。既存read-only runtime fileのmodeは変更していない。
+
+pure17/runtime19、Go race220 top/376 subtests・vet/build、全local66suites/2439tests
+（2438PASS・既存optional1skip、61.463秒）が成功。前後45sources/396保持files
+（旧384＋Count12）、MLflow59tables全行/16runs/1320points/16artifacts、AH519が一致した。
+保存のみの独立29checks/67inputsでも2公開結果・各13通信・8nodes/8edges・保持状態を照合した。
+追加API0、catalog全体の完全性や自動補完・本番受入を主張しない。
+証拠は`tmp/local-experiment/catalog-read-checks/c431c0633e2b4107826732277b3b9ab4/`。
+[Catalog Reader runbook](../../../tools/local_experiment/catalog_read/README.md)を参照。
+次はNB-001の限定増分として、固定登録templateへcurrent-head Readerの型付きrequestを渡す。
+任意Notebook/SQLは受け付けず、既存固定Notebook/Assetsの互換を維持する。
 
 ## 2026-09-18: exact snapshot count — local acceptance complete
 

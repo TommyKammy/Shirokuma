@@ -842,6 +842,11 @@ test-local-query-count:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_query_count_*.py'
 verify-local-experiment: test-local-query-count
 
+.PHONY: test-local-catalog-read
+test-local-catalog-read:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_catalog_read_*.py'
+verify-local-experiment: test-local-catalog-read
+
 .PHONY: local-notebook-sync local-notebook-run test-local-notebook
 local-notebook-sync:
 	@uv sync --project tools/local_experiment/notebook --locked --no-build --cache-dir tmp/local-experiment/notebook-cache
