@@ -2,10 +2,10 @@
 project: Shirokuma
 doc_id: "WP-L2-AGENT-005"
 title: "WP-L2-AGENT-005 Query Doctor Bear"
-status: active
+status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.3"
+version: "0.4"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -83,13 +83,41 @@ system.runtime.queriesにはCPU/processedRows/bytes/elapsed列が無い。
 EXPLAIN自身の時間を対象SELECTの実行時間へ置換せず、異なる結果意味のquery間で速さを比較しない。
 2行fixtureで性能改善や遅さ、pushdown失敗の原因を断定しない。
 
-- [ ] 2固定SELECTと同一SQLのplan、own query ID/userのhistoryを照合し、原文をモデルへ渡さない。
-- [ ] NaN、未知node/schema、複数estimate、欠測履歴、他query混入を明示的に扱う。
-- [ ] モデルは固定の追加readだけを選び、根拠IDと必要観測をgolden casesで照合する。
-- [ ] 実Qwen→追加read→結果照合→監査まで実環境で確認する。
-- [ ] 元fixtureが不変で、自身のqueryだけを終了・回収したことを確認する。
-- [ ] 実行証跡・制約・未解決の改善課題をRunbookとVaultへ記録する。
+- [x] 2固定SELECTと同一SQLのplan、own query ID/userのhistoryを照合し、原文をモデルへ渡さない。
+- [x] NaN、未知node/schema、複数estimate、欠測履歴、他query混入を明示的に扱う。
+- [x] モデルは固定の追加readだけを選び、根拠IDと必要観測をgolden casesで照合する。
+- [x] 実Qwen→追加read→結果照合→監査まで実環境で確認する。
+- [x] 元fixtureが不変で、自身のqueryだけを終了・回収したことを確認する。
+- [x] 実行証跡・制約・未解決の改善課題をRunbookとVaultへ記録する。
 
 本段階のassessmentは限定観測または追加根拠必要、root causeはundetermined、
 performance gainはunmeasuredとする。具体的な高速化変更・性能保証は別の実測課題として残す。
 追加resident serviceやCloud APIは不要。停止は新entrypointの利用停止で、保持データを変更しない。
+
+## 2026-09-17 local functional evidence
+
+8 golden case×2の実Qwen評価は16/16、16監査readbackが成功した。
+入力8022/出力586 tokens、推論合計27.881秒。
+`tmp/local-experiment/query-evaluation/90af6c7220a241a4b6521be414f36439/`。
+
+実workflowはQwenがfiltered planの推定欠測を根拠に`fixture_stats`を選択した。
+入力491/出力36 tokens、推論1.696秒。固定2SELECTの結果は2行/1行と独立期待値に一致。
+SHOW STATSでrow count estimate=2を取得したが、列統計6項目のunknownは残した。
+root cause=undetermined、performance gain=unmeasuredを維持し、改善成功とは扱わない。
+
+ClickHouse/Loki/保存OTelの4event相関、完了checkpoint、captured4 queryのhistory全terminal、
+全6requestのresponse完了・cleanup verifiedを確認。
+証跡は`tmp/local-experiment/query-bear/6aae039137f748548db53b59f8e2d3b7/`。
+04:20 UTCの独立検証で保存観測からmodel evidence/assessmentを再計算し一致。
+run user `shirokuma-query-doctor-7a73e325b46c4e75bd77e8b824c8fec1`の非terminal query残留0、
+元fixture2行不変を確認した。`independent-verification.json`に保持する。
+
+Query37 tests（observer18、workflow/provider19）に加え、評価harness14 testsを含む
+全回帰455 tests・設計73 documentsが成功した。推論途中cancelでも失敗Pawprintとunknown usageを残し、
+追加readへ進まない。同期HTTPとfinally receiptによりtunnel外へquery workerを残さない。
+request timeoutや中断時に未確認終了を成功と扱わず、serverの30秒run上限と
+captured/uncaptured request状態を記録する。API DELETEや広いquery killは行わない。
+
+再実行は`make local-query-bear-eval local-query-bear-smoke`。
+[Runbook](../../../../tools/local_experiment/bears/QUERY_DOCTOR.md)に測定境界と再実行を記録。
+一般的な遅延原因の特定、query rewrite、実性能改善、本番query品質は未達として保持する。

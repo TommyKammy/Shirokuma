@@ -82,6 +82,10 @@ small requests into a validated plan, generates fixed dbt templates, and checks
 disposable Iceberg results against an independent oracle before scoped cleanup.
 The [Catalog Curator Bear](tools/local_experiment/bears/CATALOG_CURATOR.md) records
 verified Data Engineer runs as historical metadata with fixed owners and lineage.
+The [Query Doctor Bear](tools/local_experiment/bears/QUERY_DOCTOR.md) selects bounded
+read-only follow-ups from verified Trino plan and query-history observations.
+The [evaluation report](tools/local_experiment/evaluation/README.md) checks all
+retained suite receipts and keeps failures, missing evidence and case differences visible.
 Superset is available at [the local dashboard](http://127.0.0.1:18088/superset/dashboard/shirokuma-local-lakehouse/),
 and OpenMetadata at [the local catalog](http://127.0.0.1:18585).
 Generated credentials stay in private ignored state; see the component runbooks

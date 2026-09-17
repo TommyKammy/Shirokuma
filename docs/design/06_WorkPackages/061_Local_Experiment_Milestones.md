@@ -5,18 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "2.0"
+version: "2.1"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：Qwen Catalog CuratorがData Planの3変換分を履歴登録した。
-実APIで6table/6lineage、同一run no-op、各workflow5監査event・保存OTel相関を確認。
-既存fixture/team/service/schemaは不変。6合成case×2回は12/12成功。
-Data Engineerの3変換実行・再実行、全回帰404 tests、設計72 documentsを検証済み。
-次は全評価receiptのread-only集計と、Query Doctorの限定追加観測を実装する。
+最新の到達点（2026-09-17）：Query Doctorの実Qwen→固定Trino観測→追加統計readが成功。
+残った6項目の欠測を保持し、4監査/保存OTel・query終了・元fixture不変を確認した。
+8合成case×2は16/16成功。評価harnessは5suiteの全7receiptを集計し、14入力hash不変を確認。
+mock10とQwen78calls、SREの旧/現case構成を分離する。全回帰455 tests、設計73 documentsを検証。
+次はPolicy Gatekeeperを既存の固定server dry-runへ接続する。モデルに権限を付与させない。
 Cloud APIは無効のままローカル開発を継続する。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
@@ -24,6 +24,22 @@ repositoryの設計66 documentsを検証した。今回更新した12 materializ
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: Query Doctorと全評価receipt集計
+
+[Query Doctor](L2/WP-L2-AGENT-005_Query_Doctor_Bear.md)は固定2SELECTの結果・同文JSON EXPLAIN・
+自身のquery historyを照合し、Qwenが固定SHOW STATSを追加選択した。491/36 tokens、1.696秒。
+row count estimate=2を取得し、列統計unknown6項目、root cause未確定、性能改善未測定を維持する。
+4監査/保存spanが一致。04:20 UTCにmodel evidence/assessmentを独立再計算し一致、
+自身の実行中query0、保持fixture不変。`query-bear/6aae039137f748548db53b59f8e2d3b7/`に保持。
+8 golden×2は16/16、16監査、8022/586 tokens、27.881秒。
+
+[評価harness](L2/WP-L2-EVAL-001_Agent_evaluation_harness.md)はモデル/APIを呼ばず全UUID receiptを検査。
+5suite・7receiptすべてvalidで、欠損/重複/不整合/保存failureは0。Qwen78/78監査済みcallsと
+mock10を分離し、SRE旧6case/現8caseも別groupにする。これは一般的なモデル品質の合算ではない。
+元14filesのhash不変を再確認。reportは`tmp/local-experiment/evaluation-reports/14f84889fc1f4fb99c2e4309113989d8/`。
+開始日時・code/fixture版・chronological初回成功率・費用はunknown、PR指標/MTTP等はN/Aとする。
+Query37＋harness14のfocused checksを含む全回帰455 tests、設計73 documentsが成功。
 
 ## 2026-09-17: Qwen Catalog Curator
 

@@ -488,3 +488,21 @@ test-local-catalog-bear: local-llm-sync
 	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_catalog_*.py'
 
 verify-local-experiment: test-local-catalog-bear
+
+.PHONY: local-query-bear-smoke local-query-bear-eval test-local-query-bear local-evaluation-report test-local-evaluation-report
+local-query-bear-smoke: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/bears/run_query.py
+
+local-query-bear-eval: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/bears/evaluate_query.py
+
+test-local-query-bear: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_query_*.py'
+
+local-evaluation-report:
+	@$(PYTHON) tools/local_experiment/evaluation/report.py
+
+test-local-evaluation-report:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_evaluation_report.py'
+
+verify-local-experiment: test-local-query-bear test-local-evaluation-report
