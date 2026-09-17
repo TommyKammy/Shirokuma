@@ -5,7 +5,8 @@ from datetime import datetime
 import re
 
 from diagnostics import (DiagnosticError, diagnose, identifier, count, container_observation,
-                         container_code, resource_usage, CONTAINER_CRITICAL, CONTAINER_HISTORICAL, CONTAINER_UNKNOWN)
+                         container_code, resource_usage, log_signals,
+                         CONTAINER_CRITICAL, CONTAINER_HISTORICAL, CONTAINER_UNKNOWN)
 
 TOOLS = ('shirokuma_doctor', 'k8s_read_pods', 'k8s_read_events', 'local_platform_status')
 SOURCES = dict(zip(TOOLS, ('doctor', 'pods', 'events', 'platform')))
@@ -116,6 +117,9 @@ def _observation(source, report):
         usage = resource_usage(report)
         if usage is not None:
             result['resource_usage'] = usage
+        logs = log_signals(report)
+        if logs is not None:
+            result['log_signals'] = logs
     return result
 
 
@@ -195,8 +199,9 @@ def validate_evidence(evidence: dict) -> dict:
     for source, observation in evidence['observations'].items():
         detailed = source == 'pods' and isinstance(observation, dict) and 'container_details' in observation
         usage_present = source == 'pods' and isinstance(observation, dict) and 'resource_usage' in observation
+        logs_present = source == 'pods' and isinstance(observation, dict) and 'log_signals' in observation
         _keys(observation, ('observed_at', 'completeness', 'count') + (('container_details',) if detailed else ())
-              + (('resource_usage',) if usage_present else ()))
+              + (('resource_usage',) if usage_present else ()) + (('log_signals',) if logs_present else ()))
         _timestamp(observation['observed_at'])
         count(observation['count'])
         if not isinstance(observation['completeness'], str) or observation['completeness'] not in {'complete', 'truncated', 'empty', 'unknown'}:
@@ -211,6 +216,8 @@ def validate_evidence(evidence: dict) -> dict:
                 raise DiagnosticError('container detail coverage disagrees with Pod count')
         if usage_present:
             resource_usage(observation)
+        if logs_present:
+            log_signals(observation)
     findings = evidence['findings']
     if not isinstance(findings, list) or len(findings) > MAX_FINDINGS:
         raise DiagnosticError('invalid bounded findings')
@@ -347,6 +354,8 @@ def project_observations(snapshots: dict) -> dict:
         projected = {'scope': 'local-experiment', 'observed_at': observation['observed_at']}
         if source == 'pods' and 'resource_usage' in observation:
             projected['resource_usage'] = observation['resource_usage']
+        if source == 'pods' and 'log_signals' in observation:
+            projected['log_signals'] = observation['log_signals']
         if source == 'doctor':
             projected.update(profile='local-experiment', context='colima-mac-studio-solo', checks=[])
         else:
@@ -454,6 +463,31 @@ def _compare_resource_usage(before, after, *, reobserved):
     return result
 
 
+def _compare_log_signals(before, after, *, reobserved):
+    """Compare requested/acquisition intervals, never fragment counts or events.
+
+    [since_time, observed_at] is a conservative request/collection interval; it
+    does not assert coverage, truthful prefix timestamps, or new measurements.
+    """
+    from tools.local_experiment.gateway.pod_logs import LIMITATIONS
+    from tools.local_experiment.gateway.pod_usage import timestamp_ns
+    result = {'before_state': before['state'] if before else 'not-observed',
+              'after_state': after['state'] if after else 'not-observed' if reobserved else 'not-reobserved',
+              'identity': 'unavailable', 'requested_window_overlap': None,
+              'limitations': list(LIMITATIONS) + ['no-count-delta-rate-or-recovery-claim']}
+    if not reobserved or before is None or after is None:
+        return result
+    if before['state'] != 'observed' or after['state'] != 'observed':
+        return result
+    result['identity'] = 'same' if before['identity'] == after['identity'] else 'different'
+    if (result['identity'] == 'same'
+            and timestamp_ns(before['request_started_at']) <= timestamp_ns(after['request_started_at'])
+            and timestamp_ns(before['observed_at']) <= timestamp_ns(after['observed_at'])):
+        result['requested_window_overlap'] = (max(timestamp_ns(row['since_time']) for row in (before, after))
+                                              <= min(timestamp_ns(row['observed_at']) for row in (before, after)))
+    return result
+
+
 def compare_observations(before: dict, after: dict) -> dict:
     """Compare only selected reads; absence is never proof of recovery/deletion."""
     if not isinstance(before, dict) or not isinstance(after, dict) or set(before) != set(TOOLS) or not set(after) <= set(TOOLS):
@@ -470,6 +504,9 @@ def compare_observations(before: dict, after: dict) -> dict:
                 resource_usage(after[tool]) if tool in after else None, reobserved=tool in after)
             item['resource_usage'] = usage
             usage_incomplete = usage['comparison'] == 'incomparable'
+        if source == 'pods' and ('log_signals' in prior or tool in after and 'log_signals' in after[tool]):
+            item['log_signals'] = _compare_log_signals(prior.get('log_signals'),
+                log_signals(after[tool]) if tool in after else None, reobserved=tool in after)
         if tool not in after:
             continue
         current = _observation(source, after[tool])

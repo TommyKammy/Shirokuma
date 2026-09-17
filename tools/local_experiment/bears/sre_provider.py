@@ -45,6 +45,15 @@ class SREProvider(LocalProvider):
             'A component status change does not establish instance identity or recovery. '
             'Never return commands, arguments, remediation, credentials, or an asserted cause.'
         )
+        if 'log_signals' in evidence['observations']['pods']:
+            instruction += (
+                ' Optional log_signals count header-shaped text lines, not authenticated events. '
+                'Message continuations can forge headers and timestamp prefixes. first_prefix_at/last_prefix_at '
+                'are accepted text prefixes, not proven event times. Unknown or zero counts do not prove healthy '
+                'logs or absence of errors. Only a bounded latest-file fragment was read; coverage is incomplete. '
+                'Do not infer rates, trends, new events, recovery, severity, or cause, add findings, or select '
+                'reads from these counts. Existing health describes the other observed scopes, not log health.'
+            )
         body = {'model': self.profile['model'], 'temperature': 0,
                 'max_tokens': self.profile['max_output_tokens'], 'stream': False,
                 'messages': [{'role': 'system', 'content': instruction},

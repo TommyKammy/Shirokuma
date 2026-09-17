@@ -22,7 +22,7 @@ protocol JSON continues to use MCP's standard field aliases.
 | `gateway_policy` | No arguments | Fixed allowlist and local scope |
 | `shirokuma_doctor` | No arguments | Existing `local-experiment` doctor report |
 | `local_platform_status` | No arguments | Fixed lakehouse, Superset, metadata, AgentHouse and Loki readiness, including unknown observations |
-| `k8s_read_pods` | Only `shirokuma-dev`; limit 1–50 | Names, phases, readiness/restart counts and bounded application-container states |
+| `k8s_read_pods` | Only `shirokuma-dev`; limit 1–50 | Names, phases, readiness/restart counts, bounded application-container states, and optional fixed Trino usage/log signals |
 | `k8s_read_events` | Only `shirokuma-dev`; limit 1–50 | Reasons and object identities; no free-text messages or Secret events |
 | `dbt_list_models` | No arguments | Fixed project and latest successful DataOps artifact dependencies |
 | `trino_explain_fixture` | No SQL argument | EXPLAIN of the fixed retained fixture SELECT through a temporary managed tunnel |
@@ -50,6 +50,33 @@ The scope check and all platform status reads share one 75-second worker
 deadline. On timeout, only that worker process group is terminated and reaped;
 resident services are untouched. This leaves time for audit delivery within
 the MCP client limit. Scope failures omit component data.
+
+`k8s_read_pods` shares one 20-second deadline across local context resolution,
+the fixed single ARM64/k3s Node guard, and the first `shirokuma-dev` Pod page
+(limit 50). Each API response is capped at 2 MiB; continuation is retained as
+incomplete coverage and never followed. An owned child has a further two-second
+cleanup allowance. Optional fixed Trino usage and log acquisitions each add at
+most 20 seconds, giving these acquisition paths a combined 62-second bound.
+This does not guarantee that the whole MCP operation, including other tools,
+audit delivery and CPU processing, completes within the client's 120 seconds.
+
+Optional `log_signals` reads only the current `trino` container, without follow
+or previous logs. It fixes `sinceTime` to the request's whole second minus 300
+seconds and `limitBytes` to 32768, with no `tailLines`. At most two application
+acquisition intents read the log fragment and the same Pod again; there is no
+application retry. Internal kubectl/client-go retries are not counted as these
+intents. Before/after Pod and container identities and times must match.
+
+Only a closed 12-field projection and eight fragment fields leave the parser:
+bounded byte/line counts and accepted prefix-shaped timestamp bounds. Raw text,
+SQL, tokens, logger/thread names, body hashes and error bodies are neither
+persisted nor sent to the model. WARN/ERROR header-shaped counts are not genuine
+event counts or lower bounds: message continuations can forge headers and
+timestamp prefixes. Only a fragment of the latest rotated file is covered.
+Invalid, unsupported, cut or capped fragments and identity drift remain unknown;
+an empty valid response remains observed zero. Neither proves healthy logs or
+absence of errors. Four fixed limitations travel with every projection. No
+new finding, cause, remediation or workload/configuration change is introduced.
 
 Every valid MCP `tools/call` request, including policy denials and backend
 failures, emits a normalized ClickHouse Pawprint and a Loki record. Unknown

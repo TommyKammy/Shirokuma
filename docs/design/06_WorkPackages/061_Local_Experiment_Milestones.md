@@ -5,17 +5,46 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.28"
+version: "3.29"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-18）：`sre status TOKEN --usage`で保存済みusageを表示する実装を追加した。
-既定CLIのschema1を維持し、明示表示だけschema2でinitial/followupと限定比較を返す。
-新しい観測やLLM呼出しはなく、保存CLI17回・入力/source不変・全2150回帰でlocal受入を完了した。
+最新の到達点（2026-09-18）：固定Trinoのcurrent consoleを対象に、本文を保持しないtyped log signalsを追加した。
+保存usage CLIの受入結果と公開schemaは維持し、header形テキストの限定集計・取得区間比較だけを扱う。
+実CLI1回は空fragmentを安全にobservedとして保存し、独立68checksと全2207回帰でlocal受入を完了した。
 一般的な原因診断・修復品質・本番受入は未達のまま維持する。
+
+## 2026-09-18: fixed Trino log signals — local acceptance complete
+
+[WP-L2-AGENT-002](L2/WP-L2-AGENT-002_SRE_Bear.md)のPod readへ、固定1Pod/1containerの
+current logのtyped集計をoptionalで追加した。raw本文・SQL・token・logger/thread・本文hashは保存も
+LLM転送もしない。Pod/container/timeを前後で束縛し、最新fileのbounded fragmentだけを扱う。
+header/prefixは本文中で偽装でき、WARN/ERROR header形行数とprefix時刻は真正event数・時刻ではない。
+unknownと空応答0を分け、ログ健全・原因・critical判定や新findingを追加しない。
+比較はstate/identity/要求取得区間のoverlapだけで、count差・合計・rate・回復へ進めない。
+
+Pod一覧の共通20秒＋cleanup2秒、usage最大20秒、logs最大20秒の取得上限は62秒。
+他tool/audit/CPU処理を含む全MCP120秒の保証とはしない。旧ログ未観測、既存usage比較、
+CLI既定13keysとusage表示14keysを維持する。host新15/既存込み110testsが成功し、
+保存6Pod＋最大synthetic集計は7932Bで8192B capを維持した。実機結果を以下に分離する。
+証拠は`sre-log-signals-checks/2e639ba4440c4efda65ce299a0b55fda/`、
+baselineは`sre-log-signals-preflight/0d901f7fe82e454287e15160a498c0d2/`。
+
+実CLI `67088c0df26da13728309bc95e6b8de2`はpassed/exit0、Qwen1callは2506/104tokens・6461ms・cost NULL。
+既存6warningからPod followup1種を選び、MCP5/attention-required/原因undetermined/修復falseを維持した。
+logs初期/followupはobserved空fragment/0、同identity/要求取得区間overlap=true。
+これはログ健全・要求窓完全・実format検出品質の証明ではない。usageは同timestamp/windowのcached再読取だった。
+全60suites/2207件（2206成功・既存1skip）、Go SRE30top/95sub・CLI logs5・dispatch4が成功。
+保存status8calls/40entriesとsource233不変を確認した。after元結果22/23 changedは保持し、
+4120旧files中4116完全一致、Gateway2files各5行append・runtime2filesのbyte/mode同一/mtime更新を分離した。
+独立68checks PASSで旧AH493行のwhole hashを保持し、新7events/Loki7/Gateway5＋local2spansを照合した。
+同taskのAH SELECT/Loki queryは各1回をcacheし、再照会0。57locks全てと新lock単体のinactive、
+source233、保存status8calls/40entriesの保持も確認した。証拠は同checkdirの`independent-verification.json`。
+deep retained SQL/Metadata logical/MLflow fullの保持根拠は先行sealを継承し、今回再スキャンしていない。
+この固定観測のlocal受入を完了したが、空fragmentは非空実logのformat検出品質・ログ健全性・原因診断の実証ではない。
 
 ## 2026-09-18: saved SRE usage status — local acceptance complete
 

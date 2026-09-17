@@ -5,7 +5,7 @@ title: "WP-L2-AGENT-002 SRE Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.9"
+version: "0.10"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -16,6 +16,83 @@ tags: [shirokuma, workpackage, l2, agentops]
 
 K8s Pod/Event・runtime状態の固定観測から実LLMが追加読取を選び、同一identityの変化を確認する。
 containerの現在状態と過去終了履歴を分離する。logs/metricsによる原因診断・自動修復は未達。
+
+## 2026-09-18: fixed Trino log signals — local acceptance complete
+
+既存`k8s_read_pods`へ、固定Trino 1Pod/1containerのcurrent consoleから得るoptional
+`log_signals`を追加した。保存するのは固定12fieldsと、最大32767Bの返却fragmentに対する
+8fieldsのtyped集計だけ。原文・SQL・token・logger/thread・本文hash・例外本文は保存せず、
+モデルへも渡さない。Pod UID・container identity hash・restart/start・context/namespaceと
+前後時刻を束縛し、同じPod一覧に基づくobserved usageとのidentity一致も要求する。
+
+WARN/ERRORの値はheader形に一致したテキスト行数であり、真正なevent件数やその下限ではない。
+本文内の改行でKubernetes prefixとAirlift headerを偽装できるため、`first_prefix_at`/`last_prefix_at`も
+範囲を検証したprefix形の値に留める。最新log fileの限定fragmentであり、全windowのcoverageは保証しない。
+切断・上限到達・未対応形式・identity drift等はunknown/fragment NULL、有効な空応答はobserved/0と分ける。
+どちらも「エラーなし」「ログ健全」の根拠にはせず、新finding・critical判定・原因・修復主張を追加しない。
+既存のhealthは他のPod/container/runtime観測scopeを指し、ログの健全性を意味しない。
+
+before/after比較はstate・同一identityか否か・要求/取得区間`[since_time, observed_at]`の重なりだけ。
+header件数やprefixを比較根拠にせず、差分・合計・rate・新測定・trend・回復は算出しない。
+4つの固定limitationsを保存・モデル入力に保持する。旧log field欠落は当時shapeのまま再構成し、
+既存usage比較、CLIの既定schema1/13keysと`status --usage`のschema2/14keysは変更しない。
+
+Pod一覧のlocal config/Node guard/固定namespace first page取得は共通20秒deadline＋所有child cleanup2秒。
+usageは最大20秒、logsは最大20秒で、これらの取得経路の上限は合計62秒となる。
+これは他tool・audit・CPU処理を含めた全MCP処理が120秒以内に必ず終わるという保証ではない。
+logsはcurrent/非follow、sinceTimeはrequest開始秒の300秒前、limitBytes32768、tailLines指定なし。
+追加するアプリ側取得intentはlogsと同Pod再読取の最大2で、アプリ側再試行はない。
+kubectl/client-go内部retryを含むHTTP送信総数とは区別し、未知の所有child残留は通常unknownに落とさない。
+
+- [x] optional projection・旧shape・Pod/container束縛・保存再構成・非集計比較と本文非漏洩をofflineで検証する。
+- [x] 既存6Pod/6findingと最大synthetic集計を、full safe shapeのままprovider上限8192B以内へ収める。
+- [x] 実CLI1回と旧保存CLI互換を確認し、空応答の意味を限定して記録する。
+- [x] 保持runtime/元証拠の限定差分と追加監査の最終相関を確認する。
+
+host checkpointは新15件・既存込みSRE110件が成功。保存済み6Pod＋最大synthetic集計のrequestは
+7932B、emptyは7856B、unknownは7654B、従来入力は6229Bだった。上限拡大・field縮小はない。
+最大32767Bのfake本文と偽装header canaryも保存・モデル入力へ漏れないことを確認した。
+これはoffline結果であり、実機のログ取得状態やcause品質の実証ではない。
+証拠は`sre-log-signals-checks/2e639ba4440c4efda65ce299a0b55fda/`、実行前baselineは
+`sre-log-signals-preflight/0d901f7fe82e454287e15160a498c0d2/`に分ける。実CLI結果と最終保持相関を以下に記録する。
+WPはlocal-partialを維持し、原因診断・修復品質・本番受入の未達を完了扱いにしない。
+
+### 実CLIと保存表示の確認
+
+実run `67088c0df26da13728309bc95e6b8de2`はpassed/exit0。
+workflowは`f5e99b4a91ac4b209acd051c5ac65f1e`、traceは`59d49a87b192b31629a4827e2c41e744`。
+Qwen1callは入力2506/出力104tokens、6461ms、cost NULLだった。既存6warningからPod followup1種を選び、
+MCP5件、attention-required・原因undetermined・修復falseを維持した。
+初期/followupのlogsは両方observedかつ空fragment/0。直近約5分の要求に対する空返却であり、
+ログ健全・要求窓の完全性・実データのformat検出品質を証明したものではない。
+両identityが同じでrequested_window_overlap=trueだったが、件数差や新eventは推定しない。
+
+usageも両観測で同一sample timestamp `2026-09-17T20:13:07Z`、window `14990000000`ns、
+CPU `11524216`nanocores、memory `2162425856`bytesだった。same-sample-windowはcached windowの再読取であり、
+独立した新測定や持続負荷の確認とはしない。旧usage比較と新log比較を分離して保存した。
+全local60suites/2207件（2206成功・既存optional1skip）、Go SRE30top/95subtests、
+CLI log結合5件・Pod dispatch4件が成功。保存status8calls/40entriesとsource233の不変を確認した。
+
+### 最終保持監査
+
+beforeは23checks、保護4120files、source233、14Pods/27resources/3Docker/16policies/56locks、AH493。
+afterの元結果は22/23でchangedのまま保持し、全file fingerprint一致の1項目だけがfalseだった。
+4120files中4116は完全一致。Gateway events/spansの2filesは旧prefixを保持して各MCP5行を追記し、
+Loki/Metadata runtimeの2filesはbyte/modeが同一でmtimeだけ更新した。その他のbefore/after項目は成功し、
+AH493→500の新7件、57locks inactive、source233不変を確認した。独立68checksは4差分を限定して全て成功した。
+既存deep retained SQL、Metadata logical、MLflow full検証は先行sealの継承で、今回は再スキャンしない。
+原before/after SHA256はそれぞれ
+`17b52c33ad48b58bc0916a0c2817ae49a53788cb942fde1e1240a9052e4246cf`、
+`7724bf067e2eba8267527e7fe1a6be5964de9d342e56c172707ee271914eed3c`。
+
+独立監査では旧AH493行のwhole hashを保持して500行への新7eventsだけを確認し、同taskのLoki7件、
+Gateway保存spans5件・local保存spans2件、MCP5件を束縛した。AHの同task SELECTとLoki queryは各1回で
+cacheを保存し、以後の再照会は0。新SRE lockも個別にinactiveを確認し、旧分と合わせ57locks、
+保存status8calls/40entriesとsource233の保持を再確認した。原afterのchangedは成功へ書換えていない。
+最終証拠は同checkdirの`independent-verification.json`（68checks PASS、SHA256
+`df8fe0d74e8b9b82c135fc698cfac19aec688d9ff812e3fcc6cc3344a8300405`）。
+固定ログ観測機能のlocal受入を完了した。空fragmentに対する安全動作と保持/相関の実証であり、
+非空の実log format検出品質・ログ健全性・原因診断・修復品質を検証したものではない。
 
 ## 2026-09-18: saved usage status — local acceptance complete
 

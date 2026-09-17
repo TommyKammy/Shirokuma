@@ -61,7 +61,8 @@ to repeat and the findings that justify those reads. Tool arguments, namespace
 and context are fixed by the host. No model-provided commands are executed.
 
 The model receives only bounded finding IDs, codes, severities, subjects,
-permitted tools, typed container-state facts and observation completeness/times. Raw doctor summaries,
+permitted tools, typed container-state facts, optional bounded resource/log
+signal projections and observation completeness/times. Raw doctor summaries,
 event messages, logs, credentials and arbitrary payload fields are excluded.
 Input is capped at 8 KiB, with at most 24 findings; all critical findings must
 fit or the task fails. Omitted warning counts stay visible. The profile bounds
@@ -115,6 +116,60 @@ their inputs and returned matching results. This completes local acceptance
 for the observation feature; causal diagnosis and repair remain unproven.
 See [WP-L2-AGENT-002](../../../docs/design/06_WorkPackages/L2/WP-L2-AGENT-002_SRE_Bear.md)
 for the recorded values, retention audit, helper corrections, and limitations.
+
+### Fixed Trino log signals
+
+The existing Pod read may include optional `log_signals` for the fixed Trino
+Pod's current `trino` container. A closed typed projection retains byte/line
+counts and accepted timestamp-prefix bounds, with four fixed limitations.
+Raw log text, SQL, tokens, logger/thread names, body hashes and error bodies
+are never saved or sent to the model. Pod UID, container identity, restart/start
+and observation times are bound before and after acquisition; when usage and
+logs are both observed, their container identities must also match.
+
+WARN/ERROR values count header-shaped text lines, not authenticated events or
+lower bounds on real events. A message continuation can forge both an Airlift
+header and Kubernetes timestamp prefix. `first_prefix_at`/`last_prefix_at` only
+describe accepted prefix-shaped values. Coverage is a bounded fragment of the
+latest file, not a complete five-minute history. Unknown has a null fragment;
+a valid empty response has observed zero counts. Neither proves healthy logs.
+The existing findings and health remain about the other observed scopes.
+
+Comparison retains before/after state, whether identities match, and overlap
+of the conservative requested/acquisition intervals `[since_time, observed_at]`.
+It never subtracts or sums counts, computes rates, or claims new measurements,
+trends, recovery or cause. Old receipts without log signals retain their shape;
+the existing usage comparison and public CLI schemas 1/13 fields and opt-in
+2/14 fields are unchanged.
+
+The Pod-list acquisition has one shared 20-second deadline and two-second owned
+cleanup allowance. Usage and log acquisition each add at most 20 seconds, for
+62 seconds across these paths. This is not a guarantee for the complete
+120-second MCP operation with other tools, audit and CPU processing. See the
+[Gateway boundary](../gateway/README.md) for the fixed current-log parameters.
+Offline host tests passed 15 new and 110 combined SRE cases. Six retained Pods
+plus the maximum synthetic safe projection fit in 7932 bytes of the unchanged
+8192-byte provider cap. A 32767-byte fake fragment containing a forged header
+and private canary stayed private.
+
+The one live CLI run (`67088c0df26da13728309bc95e6b8de2`) passed. Initial and
+follow-up logs were observed empty fragments with matching identity and
+requested-window overlap. This does not prove healthy logs, complete coverage,
+or detection quality for nonempty real logs. Usage returned the same cached
+sample window. The existing six historical warnings, attention-required
+assessment, undetermined cause and no-remediation result were retained.
+All 2207 local tests completed (2206 passed, one existing optional skip), and
+independent retention/correlation passed 68 checks. Of 4120 protected files,
+4116 matched exactly; two Gateway files retained old prefixes and appended five
+MCP records each, while two runtime files changed only mtime. The original
+22/23 changed-after receipt remains intact. The 493 old AgentHouse rows kept
+their whole hash, and seven new events matched Loki and five Gateway plus two
+local spans. AH/Loki task readbacks each ran once and were cached without
+re-querying. All 57 locks were inactive, 233 sources and 40 entries from eight
+saved-status calls stayed unchanged. Deep SQL, Metadata logical and full
+MLflow retention checks are inherited seals, not fresh scans in this increment.
+See [WP-L2-AGENT-002](../../../docs/design/06_WorkPackages/L2/WP-L2-AGENT-002_SRE_Bear.md)
+for exact evidence and the remaining cause/repair limitations.
 
 ### Inspect saved resource usage
 

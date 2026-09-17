@@ -77,6 +77,48 @@ def resource_usage(report: dict) -> dict | None:
     return usage
 
 
+def log_signals(report: dict) -> dict | None:
+    """Bind safe text-pattern counts to this Pod read, never to health or cause.
+
+    The four fixed limitations remain part of every projection: header-shaped
+    message continuations can imitate both timestamps and severity headers.
+    """
+    if 'log_signals' not in report:
+        return None
+    from tools.local_experiment.gateway.pod_logs import validate
+    from tools.local_experiment.gateway.pod_usage import timestamp_ns
+    try:
+        signals = validate(report['log_signals'])
+    except (ValueError, TypeError):
+        raise DiagnosticError('invalid bounded log signals') from None
+    if signals['state'] == 'observed':
+        try:
+            ordered = (timestamp_ns(report.get('observed_at')) <= timestamp_ns(signals['request_started_at'])
+                       <= timestamp_ns(signals['observed_at']))
+        except (ValueError, TypeError):
+            raise DiagnosticError('invalid log observation time') from None
+        if not ordered:
+            raise DiagnosticError('log request precedes its Pod observation')
+    identity = signals['identity']
+    if identity is not None and 'pods' in report:
+        matching = [pod for pod in report['pods'] if isinstance(pod, dict)
+                    and pod.get('name') == identity['pod_name'] and pod.get('uid') == identity['pod_uid']]
+        if (report.get('namespace') != identity['namespace'] or report.get('truncated') is not False
+                or len(matching) != 1 or matching[0].get('phase') != 'Running'):
+            raise DiagnosticError('log signals do not match the observed Pod')
+        details = container_observation(matching[0])
+        rows = details['containers'] if details is not None else []
+        if (len(rows) != 1 or rows[0]['name'] != identity['container']
+                or rows[0]['state']['kind'] != 'running' or rows[0]['restarts'] != identity['restart_count']
+                or rows[0]['state']['started_at'] != identity['started_at']):
+            raise DiagnosticError('log signals do not match the observed container')
+    usage = resource_usage(report)
+    if (signals['state'] == 'observed' and usage is not None and usage['state'] == 'observed'
+            and identity != usage['identity']):
+        raise DiagnosticError('log and resource observations have different container identities')
+    return signals
+
+
 def container_code(state: dict, *, historical=False) -> str | None:
     if state['kind'] == 'terminated':
         if state['reason'] == 'OOMKilled':
@@ -204,6 +246,7 @@ def diagnose(doctor: dict, pods: dict, events: dict) -> dict:
     findings.sort(key=lambda x: (x['severity'], x['code'], x['subject']))
     attention = any(x['severity'] in {'critical', 'warning'} and x['code'] not in CONTAINER_UNKNOWN for x in findings)
     usage = resource_usage(pods)
+    log_signals(pods)  # Validate optional coverage without changing existing health/findings.
     return {'mode': 'deterministic-read-only', 'llm_inference': False,
             'health': 'attention-required' if attention else 'unknown' if any(
                 x['code'] in CONTAINER_UNKNOWN for x in findings) or usage is not None and usage['state']=='unknown'

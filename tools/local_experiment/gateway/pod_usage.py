@@ -301,8 +301,9 @@ def _json(pairs):
     return result
 
 
-def _command(arguments, *, deadline, environment):
+def _command(arguments, *, deadline, environment, _raw=False, _max_bytes=MAX_BYTES):
     """Bound pipe reads while running; kill/reap only this newly owned group."""
+    require(type(_max_bytes) is int and 0 < _max_bytes <= 2 * 1024 * 1024, 'READ_LIMIT')
     process = None
     selector = None
     original = None
@@ -319,16 +320,18 @@ def _command(arguments, *, deadline, environment):
             require(remaining > 0, 'READ_TIMEOUT')
             if not selector.select(remaining):
                 raise PodUsageError('READ_TIMEOUT')
-            chunk = os.read(process.stdout.fileno(), min(4096, MAX_BYTES + 1 - len(chunks)))
+            chunk = os.read(process.stdout.fileno(), min(4096, _max_bytes + 1 - len(chunks)))
             if not chunk:
                 break
             chunks.extend(chunk)
-            require(len(chunks) <= MAX_BYTES, 'READ_LIMIT')
+            require(len(chunks) <= _max_bytes, 'READ_LIMIT')
         try:
             code = process.wait(timeout=max(0, deadline - time.monotonic()))
         except subprocess.TimeoutExpired:
             raise PodUsageError('READ_TIMEOUT') from None
         require(code == 0, 'READ_FAILED')
+        if _raw:
+            return bytes(chunks)
         try:
             result = json.loads(chunks, object_pairs_hook=_json,
                                 parse_constant=lambda _: (_ for _ in ()).throw(PodUsageError('READ_FAILED')))
@@ -377,12 +380,14 @@ def _command(arguments, *, deadline, environment):
                 raise cleanup_errors[0]
 
 
-def fixed_get(operation, pod_name):
-    """Local config guard then one metrics/Pod acquisition; HTTP retry is internal."""
-    require(operation in ('metrics', 'pod') and name(pod_name), 'READ_FAILED')
-    environment = {key: os.environ[key] for key in ('PATH', 'HOME', 'USER', 'TMPDIR', 'LANG', 'LC_ALL')
-                   if key in os.environ}
-    deadline = time.monotonic() + READ_SECONDS
+def _command_bytes(arguments, *, deadline, environment, max_bytes):
+    """Private bounded-byte transport; callers own their fixed path allowlist."""
+    require(type(max_bytes) is int and 0 < max_bytes <= 2 * 1024 * 1024, 'READ_LIMIT')
+    return _command(arguments, deadline=deadline, environment=environment,
+                    _raw=True, _max_bytes=max_bytes)
+
+
+def _local_server(*, deadline, environment):
     config = _command(['config', 'view', '--minify', '-o', 'json'], deadline=deadline, environment=environment)
     try:
         clusters = config['clusters']
@@ -394,6 +399,16 @@ def fixed_get(operation, pod_name):
                 parsed.path in ('', '/'), 'READ_FAILED')
     except (KeyError, TypeError, ValueError):
         raise PodUsageError('READ_FAILED') from None
+    return server
+
+
+def fixed_get(operation, pod_name):
+    """Local config guard then one metrics/Pod acquisition; HTTP retry is internal."""
+    require(operation in ('metrics', 'pod') and name(pod_name), 'READ_FAILED')
+    environment = {key: os.environ[key] for key in ('PATH', 'HOME', 'USER', 'TMPDIR', 'LANG', 'LC_ALL')
+                   if key in os.environ}
+    deadline = time.monotonic() + READ_SECONDS
+    server = _local_server(deadline=deadline, environment=environment)
     prefix = '/apis/metrics.k8s.io/v1beta1' if operation == 'metrics' else '/api/v1'
     path = f'{prefix}/namespaces/{NAMESPACE}/pods/{pod_name}'
     return _command(['--server', server, '--request-timeout=6s', 'get', '--raw', path],

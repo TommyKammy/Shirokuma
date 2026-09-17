@@ -211,7 +211,8 @@ class PodUsageTests(unittest.TestCase):
         backend.command_json = Mock(return_value={'items': [pod()]})
         backend.pod_usage_get = Mock(side_effect=[metrics(), pod()])
         times = ['2026-09-18T01:59:58.500000Z', REQUEST, OBSERVED]
-        with patch.object(G, 'observation_time', side_effect=times):
+        with patch.object(G, 'observation_time', side_effect=times), \
+                patch.object(G.POD_LOGS, 'collect', return_value=G.POD_LOGS.unknown('READ_FAILED')):
             result = backend.k8s_read_pods(U.NAMESPACE, 50)
         self.assertEqual(result['observed_at'], times[0])
         self.assertEqual(result['resource_usage']['request_started_at'], REQUEST)

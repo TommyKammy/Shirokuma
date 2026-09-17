@@ -404,6 +404,9 @@ test-local-gateway:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_gateway.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_gateway_container_status.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_gateway_pod_usage.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_gateway_pod_logs.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_gateway_pod_read.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_gateway_pod_dispatch.py'
 
 verify-local-experiment: test-local-gateway
 
@@ -797,6 +800,7 @@ verify-local-experiment: test-query-doctor-cli
 .PHONY: test-sre-bear-cli
 test-sre-bear-cli: local-llm-sync
 	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_sre_cli.py'
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_sre_cli_log_signals.py'
 
 verify-local-experiment: test-sre-bear-cli
 
