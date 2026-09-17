@@ -5,25 +5,35 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "2.4"
+version: "2.5"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：AgentHouseの読み取り専用Grafana画面を実機導入。
-Task/Trace絞り込み、失敗/ブロック、処理時間、モデルtokensの既知/欠測を表示する。
-5panel×8caseの40/40を実DBと照合し、停止・接続撤去・復元・冪等起動も成功。
-既存監査294件とDB runtime不変、全回帰552 tests、設計75documentsを検証。
-次は保存済みTPC-H証跡の成功1run・失敗2runを含むAgentHouse取込を実装中。
-Cloud APIは無効のままローカル開発を継続する。
+最新の到達点（2026-09-17）：既存TPC-H全3run（成功1・失敗2）の履歴をAgentHouseへ保存。
+実保存72query sides・記録36比較・未観測30比較を区別し、再取込は追加0/0で冪等。
+元137files・既存監査294件とschema不変、全回帰573 tests、設計75documentsを検証。
+読み取り専用Grafanaの40APIcases/復元試験も成功済み。
+次はQuery Doctorのcaptured own-query履歴を検証して持続化する。Cloudは無効のまま。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: failed runsを含むbenchmark履歴
+
+[WP-L3-CH-001](L3/WP-L3-CH-001_ClickHouse_AgentHouse.md)の追加2tableへ、保存済みSF10の
+成功1・失敗2runと72query sidesを取込。記録36比較を再照合し、予定残り30は未観測とした。
+旧SQL hash欠損はunknown group、NULLと測定0を分離。元SQL/結果行/生errorをDBへ渡さない。
+初回`e2c5fd7ea9c24fd1818846399aa2846b`は3/72行、再実行`998612d03fb44bbc86a8df3306262f10`は0/0。
+05:32 UTCに全論理行一致、元137filesとPawprint schema/294件不変を独立確認。
+固定runtime/所有table定義・衝突拒否・部分挿入の再開を21focused testsで検証。
+全回帰573 tests/75documents。証跡は`benchmark-events-preflight/013ba0f37c944c69a7f6710cd473ff7d`。
+新たなTPC-H/LLM呼出やruntimeは増やさず、Grafana readerの権限も変更しない。
 
 ## 2026-09-17: AgentHouse read-only Grafana
 

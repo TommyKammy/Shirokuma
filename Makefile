@@ -554,3 +554,15 @@ test-local-grafana:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_grafana_dashboard_verifier.py'
 
 verify-local-experiment: test-local-grafana
+
+.PHONY: local-benchmark-events-plan local-benchmark-events-import test-local-benchmark-events
+local-benchmark-events-plan:
+	@$(PYTHON) tools/local_experiment/benchmark_events/import_receipts.py plan
+
+local-benchmark-events-import:
+	@$(PYTHON) tools/local_experiment/benchmark_events/import_receipts.py apply
+
+test-local-benchmark-events:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_benchmark_events.py'
+
+verify-local-experiment: test-local-benchmark-events

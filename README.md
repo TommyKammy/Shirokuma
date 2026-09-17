@@ -95,6 +95,10 @@ The [AgentHouse dashboard](tools/local_experiment/grafana/README.md) provides
 read-only Task/Trace filters, recorded failures and blocks, phase latency and
 model token coverage at [local Grafana](http://127.0.0.1:18030/d/shirokuma-agenthouse-local).
 Run `rtk make local-grafana-up local-grafana-smoke` to start and verify it.
+The [benchmark receipt importer](tools/local_experiment/benchmark_events/README.md)
+preserves recorded successes, failures and missing comparisons in separate
+AgentHouse tables. `rtk make local-benchmark-events-import` reuses retained
+receipts and inserts nothing on a repeated import of the same input.
 Superset is available at [the local dashboard](http://127.0.0.1:18088/superset/dashboard/shirokuma-local-lakehouse/),
 and OpenMetadata at [the local catalog](http://127.0.0.1:18585).
 Generated credentials stay in private ignored state; see the component runbooks

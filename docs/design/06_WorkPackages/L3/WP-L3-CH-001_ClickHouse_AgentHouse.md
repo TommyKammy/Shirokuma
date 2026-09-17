@@ -5,7 +5,7 @@ title: "ClickHouse AgentHouse advanced dashboards"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.4"
+version: "0.5"
 area: "workpackage"
 tags: [shirokuma, wp, l3, observability]
 ---
@@ -108,3 +108,28 @@ CHのID/image/env/volume/port/start時刻/restart回数、監査294件の全byte
 
 focused46 tests（runtime26/dashboard7/verifier13）、全回帰552 testsと設計75documentsが成功。
 本WPはlocal-partialを維持し、次は保存済みbenchmark全3runの失敗を含む冪等取込を実装する。
+
+## 2026-09-17: retained benchmark events
+
+既存TPC-H SF10の全3run（成功1・失敗2）を検査し、専用`benchmark_runs`へ3行、
+`benchmark_queries`へ実保存query-sideの72行を登録した。summaryに記録された36比較は
+元result filesを再比較した。予定66比較の残り30は未観測で、失敗/実行済みと推定しない。
+旧receiptのSQL hash/adaptation欠損はunknown groupのままで、Q15修正版と性能合算しない。
+NULLと測定0を区別し、raw SQL/rows/errors/host pathsはDBへ渡さない。
+
+新規2tableは固定schema/owner COMMENT/engine/partition/TTL/default条件を照合し、
+既存PawprintsにはALTER/書込みを行わない。固定Colima runtimeのimage/loopback/volume/resourcesを
+確認してから既存private資格情報を使用する。固定sourceの全UUIDを検査し、malformed/incompleteを
+隠さずplanへ表示、apply全体を止める。保存failed runは正常な履歴として取り込む。
+
+初回`benchmark-events/e2c5fd7ea9c24fd1818846399aa2846b`で3/72行追加、
+再実行`998612d03fb44bbc86a8df3306262f10`は追加0/0・全論理行一致。
+05:32 UTCの独立検証で元137files、Pawprint schemaと294件の全hashが不変。
+証跡`benchmark-events-preflight/013ba0f37c944c69a7f6710cd473ff7d`。
+21focused tests（衝突・部分失敗/中断・再開・source改変・権限/定義逸脱など）、全回帰573件、
+設計75documentsが成功。追加benchmark/model/runtimeは実行せず、Grafana reader grantも維持。
+
+再実行: `rtk make local-benchmark-events-plan local-benchmark-events-import`。
+詳細: repository `tools/local_experiment/benchmark_events/README.md`。
+この増分は保存履歴の取込であり、公式TPC性能値、費用測定、新規Grafana benchmark panelではない。
+次はQuery Doctorのcaptured own-query履歴を同様に検証して持続化する。
