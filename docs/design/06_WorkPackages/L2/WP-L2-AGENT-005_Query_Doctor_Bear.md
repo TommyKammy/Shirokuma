@@ -44,7 +44,8 @@ planは2fragments/6nodes、一部見積りとtable統計の不足だけを所見
 
 Qwenのprompt/completion tokensは523/95と524/95、inferenceは4529/3158ms。
 modelは既存`qwen3.8-flash-next`、cloud/retryは0、costはNULLのまま保持した。
-SQL・行値・table/列名・raw plan/history/model responseはモデル入力と通常receiptに含めない。
+SQL・行値・table/列名・raw plan/history/model responseはモデル入力に含めない。
+通常receiptはtable/列名をidentity照合用に保持するが、SQL・行値・raw plan/history/model responseは保存しない。
 再現は[diagnosis runbook](../../../../tools/local_experiment/query_diagnose/README.md)を参照。
 
 実機でTrinoの長さ付き文字列型を受け取れず、最初の2実行は失敗した。

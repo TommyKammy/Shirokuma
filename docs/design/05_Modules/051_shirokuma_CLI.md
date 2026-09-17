@@ -5,12 +5,23 @@ title: "shirokuma CLI"
 status: draft
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.9.0"
+version: "0.10.0"
 area: "module"
 tags: [shirokuma, module]
 ---
 
 # shirokuma CLI
+
+### Read a retained snapshot
+
+`query snapshots --table schema.name`で最大64個の保持snapshotを一覧化し、
+`query select ... --snapshot-id ID`で明示選択した過去版を読む。
+通常のReader v1は維持し、明示指定だけ別のschema v2 profile/保存先を使用する。
+current headとselected snapshotを分け、同field IDs/name/type/nullability/orderのschemaだけ許容する。
+前後のmetadata/UUID/schema/head/一覧が変わった場合や未掲載IDは拒否し、再送・現在版へのfallbackは行わない。
+固定snapshot SELECTを所有query終了・接続回収・保存・child exitまで確認してから公開する。
+整数/decimalの精度と100行上限を継承し、モデル・書込み・named refs・cloneは追加しない。
+[Snapshot reader runbook](../../../tools/local_experiment/query_snapshots/README.md)を参照。
 
 ### Diagnose a completed Reader SELECT
 

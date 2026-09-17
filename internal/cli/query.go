@@ -101,6 +101,7 @@ func newQueryCommand(child dataChildRunner) *cobra.Command {
 		parent.AddCommand(newQueryReadCommand(action, execQueryReadChild{}, &repositoryRoot, &profile))
 	}
 	parent.AddCommand(newQueryDiagnoseCommand(execQueryDiagnoseChild{}, &repositoryRoot, &profile))
+	parent.AddCommand(newQuerySnapshotsCommand(execQuerySnapshotsChild{}, &repositoryRoot, &profile))
 	return parent
 }
 

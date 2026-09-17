@@ -81,7 +81,11 @@ type queryReadEvent struct {
 }
 
 func newQueryReadCommand(action string, child dataChildRunner, root, profile *string) *cobra.Command {
-	var schema, table, columns string
+	return newQueryReadCommandWithSnapshots(action, child, execQuerySnapshotsChild{}, root, profile)
+}
+
+func newQueryReadCommandWithSnapshots(action string, child, snapshots dataChildRunner, root, profile *string) *cobra.Command {
+	var schema, table, columns, snapshotID string
 	var limit int
 	command := &cobra.Command{Use: action, Short: map[string]string{"tables": "List the fixed Iceberg schema's tables", "describe": "Inspect a discovered Iceberg table", "select": "Read bounded columns from one fixed snapshot"}[action], Args: func(_ *cobra.Command, args []string) error {
 		if len(args) != 0 {
@@ -92,6 +96,9 @@ func newQueryReadCommand(action string, child dataChildRunner, root, profile *st
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if *profile != localExperimentProfile {
 				return errors.New("query reader requires --profile local-experiment")
+			}
+			if action == "select" && cmd.Flags().Changed("snapshot-id") {
+				return runQuerySnapshotsCLI(cmd, snapshots, *root, querySnapshotsRequest{Command: action, Table: table, Columns: strings.Split(columns, ","), Limit: limit, SnapshotID: snapshotID})
 			}
 			value := queryReadRequest{Command: action, Schema: schema, Table: table, Limit: limit}
 			if action == "select" {
@@ -129,6 +136,7 @@ func newQueryReadCommand(action string, child dataChildRunner, root, profile *st
 	if action == "select" {
 		command.Flags().StringVar(&columns, "columns", "", "1–16 distinct column names, separated by commas")
 		command.Flags().IntVar(&limit, "limit", 0, "maximum rows: 1–100 (required)")
+		command.Flags().StringVar(&snapshotID, "snapshot-id", "", "explicit retained positive int64 snapshot ID")
 	}
 	return command
 }

@@ -5,17 +5,28 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.23"
+version: "3.24"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-18）：成功したLakehouse読取を、元SELECTを再送せずに
-EXPLAIN・history・STATSとQwenで診断できる。保持tableと別の実験tableで完了し、実験tableを回収した。
-全local回帰1947件（1946成功/既存1skip）が通過した。
-次はsnapshot一覧と過去snapshot指定読取を、現在headと混同せずCLIへ接続する。
+最新の到達点（2026-09-18）：snapshot一覧と過去snapshot指定読取をCLIから利用できる。
+新規tableの過去版2行・現在版3行を同じschemaで読み分け、実験tableを回収した。
+全local回帰2018件（2017成功/既存1skip）が通過した。
+次は過去版の読取も、同snapshotの統計を使って既存Query Doctorへ接続する。
+
+## 2026-09-18: retained snapshot reader CLI
+
+`query snapshots`と`query select --snapshot-id`を追加。current headとselected snapshotを分け、
+同じfield IDs/name/type/nullability/orderのschemaだけを許容する。前後metadataが変化すれば公開を拒否する。
+6回の新profileで一覧・過去2行・現在3行・limit1・未掲載ID拒否を確認し、従来Readerも現在3行を返した。
+未掲載IDはdata SELECT0、不正IDはchild割当前に拒否、全31 CLI query IDsは終端。
+生成tableのA/B snapshotは数値が降順だったが、親子関係とcommit順を正しく扱えた。
+同UUIDを確認してDROP1回、保持fixtureの全6投影とtable一覧が復元。モデル/新service/image0。
+新Python71・Go/実Python7経路・vet/raceと全2018件が成功。
+詳細・run IDsは[WP-L3-ICE-001](L3/WP-L3-ICE-001_Iceberg_branch_tag_clone_demo.md)を参照。
 
 ## 2026-09-18: diagnose a completed Reader SELECT
 

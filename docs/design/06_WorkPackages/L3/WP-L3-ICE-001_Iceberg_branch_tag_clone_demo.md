@@ -5,7 +5,7 @@ title: "WP-L3-ICE-001 Iceberg branch/tag clone demo"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.8"
+version: "0.9"
 area: "workpackage"
 tags: [shirokuma, workpackage, l3, lakehouse]
 ---
@@ -15,6 +15,65 @@ tags: [shirokuma, workpackage, l3, lakehouse]
 ## Summary
 
 Time Travel/Clone風デモを作る
+
+## 2026-09-18: retained snapshot reader plan
+
+`query snapshots --table schema.name`と`query select ... --snapshot-id ID`を追加する。
+通常のcurrent-head Reader v1は維持し、明示snapshot指定だけ別のschema v2 profileに通す。
+
+- [x] fresh table発見・schema・Polaris metadataから最大64個の保持snapshotを一覧化する。
+- [x] ID/parent/sequenceを文字列で保持し、IDの大小を時系列・祖先関係として扱わない。
+- [x] 選択snapshotのfield IDs/name/type/nullability/orderが現schemaと一致する場合だけSELECTする。
+- [x] current headとselected snapshotを分け、前後metadata/UUID/schema/head/一覧の変化を拒否する。
+- [x] 未掲載ID・旧schema・未知queryは成功やcurrent headへのfallbackにせず、再送しない。
+- [x] 新規所有tableのA2行→B3行で一覧・過去/現在指定・limit・拒否を同じCLIから実証する。
+- [x] 全query終了・接続回収と同UUIDの専用table回収、保持table不変を照合する。
+
+過去版のschema変換、named refs指定、SQL一般化、clone、モデル呼出し、保持table変更は追加しない。
+旧Query Doctorへ歴史profileを暗黙接続せず、current STATSと過去snapshotを混同しない。
+
+## 2026-09-18: retained snapshot reader evidence
+
+6回のschema v2 CLIで、保持tableの一覧、新規所有tableの一覧・過去版2行・現在版3行・
+過去版limit1・未掲載ID拒否を確認した。5成功＋期待した拒否1で、全queryが終端・接続回収済み。
+snapshot指定なしのReader v1も同じ現在版3行を返した。不正ID `01`はchild/evidence割当より前に拒否した。
+
+専用fixture `f5063b822ee0429caeb96a3b788d9b88`、UUID `f13bf2e8-4253-4e1e-bc1b-be820290528a`。
+Trinoの空CREATEはsnapshot `2735408811170240157`を作り、INSERT1回でA=`696843948967848022`の2行、
+append1回でB=`176340221214278052`の3行になった。B.parent=A、A.parent=空版を確認した。
+snapshot IDsは新しいほど数値が小さいが、sequence/timestamp/parentで正しく一覧化できた。
+
+保持一覧 `6f0d4be7e3a075196913df1a0f604635`、所有一覧 `3263d761201e51692bfc4ca915af00fc`、
+過去読取 `4c33c07e37b6305f2bddc90274ef05a4`、現在指定 `b68c5714afe8a9b12d53728cc68b3fa2`、
+過去limit1 `4c16d688dc1ac5c103e8c46c7944c0a6`、未掲載ID `7dd47b77ce20c60ceccc427ae318d039`。
+未掲載IDは `SNAPSHOT_NOT_RETAINED`、inventory/schemaの2queryだけでdata SELECT0。
+通常Reader `6431c2acad27aa9bd2261779948da334`はschema v1・現在head Bを維持した。
+これら7実行のworker24/control7、計31 query IDsはすべて終端である。
+
+BIGINTの2^53超と最小値、DECIMAL(38,6)、日本語、NULL、DATE、BOOLEANを精度照合した。
+過去Aのrows SHAは`b5baedd878d293693ac734baa5fc4f2318dea54051f0d5d08c6bc9b77b28d415`、
+現在Bは`edd61b8d3ce96dcd2fcdef35dda1b22bc072fa498eccc08891f248f346ea4692`。
+limit1は取得2/返却1/truncated=true。current_snapshot_idはB、snapshot_idは選択したA/Bを明示する。
+全実行の終了・lock解放・同identity確認後、fresh UUID/head/schemaを照合して生成tableだけDROP1回。
+保持fixtureの全6投影とtable一覧は元に戻り、モデル・新service・新imageは0である。
+
+実機前にTrino 483の小さい整数literal型を確認し、新profileのsnapshot IDだけを
+明示 `BIGINT 'ID'`へ固定した。正のint64全範囲をfake HTTPで検証し、既存ReaderのSQL制約は維持。
+private fixtureもCatalogReadの2GET上限を維持して2個へ分け、append前A・後Bを照合した。
+unknown appendの再送/自動DROP禁止、原取消の保持を21 self-checksで確認した。
+新Python71tests（contract29/observer23/owner19）、Go149 top-level＋77subtests・実Python Owner7経路、
+vet/race、全local回帰55suites/2018件（2017成功＋既存optional OTel1skip）、設計83documents/14testsが成功。
+schema変更・中断・未知POST等の故障注入はofflineであり、実機失敗注入と混同しない。
+証跡・54source/test/binary/helper sealは
+`tmp/local-experiment/query-snapshots-checks/ab5aa55699064e728e47f6f0228721c8/`に保存した。
+利用方法は[Snapshot reader runbook](../../../../tools/local_experiment/query_snapshots/README.md)を参照。
+
+保存証跡の独立185checksと、保持環境・相関の独立46checks（fresh21＋bindings25）が成功した。
+3799旧files・14Pods/27resources/3Docker/16policy・MLflow identityは不変、AH480行も全hash一致で増分0。
+5portsが空き、locksは43→50（新CLI7実行分）で全非active。54 source/helper/binaryのhashも一致した。
+保存検証は上記checkdirの`independent-saved-ac8214ae28544b9a9e1d22963d023778.json`、
+前後監査は`query-snapshots-preflight/59bcacce1e6f498fa09915482426336b/independent-verification.json`に保存。
+保持fixture復帰は専用cleanupが取得した6投影の保存相関で、監査の追加Trino実行は0である。
 
 ## 2026-09-18 owned branch publish plan
 

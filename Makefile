@@ -815,3 +815,8 @@ verify-local-experiment: test-local-query-read
 test-local-query-diagnose: local-llm-sync
 	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -s tests -p 'test_query_diagnose_*.py'
 verify-local-experiment: test-local-query-diagnose
+
+.PHONY: test-local-query-snapshots
+test-local-query-snapshots:
+	@$(PYTHON) -m unittest discover -s tests -p 'test_query_snapshots_*.py'
+verify-local-experiment: test-local-query-snapshots
