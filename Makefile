@@ -718,6 +718,11 @@ local-mlflow-status:
 	@$(PYTHON) tools/local_experiment/mlflow/runtime.py status
 local-mlflow-stop:
 	@$(PYTHON) tools/local_experiment/mlflow/runtime.py stop
+local-mlflow-restore:
+	@$(PYTHON) tools/local_experiment/mlflow/restore.py --manifest "$${SHIROKUMA_MLFLOW_BACKUP_MANIFEST:?set the saved backup-manifest.json path}"
+local-mlflow-restore-readback:
+	@$(PYTHON) tools/local_experiment/mlflow/restore_readback.py --restore-token "$${SHIROKUMA_MLFLOW_RESTORE_TOKEN:?set the fresh restore token}"
+.PHONY: local-mlflow-restore local-mlflow-restore-readback
 test-local-mlflow:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_mlflow*.py'
 verify-local-experiment: test-local-mlflow

@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.35"
+version: "3.36"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
@@ -16,7 +16,27 @@ tags: [shirokuma, local, evidence]
 Trackingは既存runを保持して12評価＋4benchmark、1320 metric pointsとなり、再取込追加0を確認した。
 固定Notebookの実kernel2回と独立最終照合62checksも成功した。
 登録Notebookを定型Dagster2assetsへ接続する実2回と独立最終照合42checksも成功した。
+保持exportの非稼働MLflow clone復元とSDK全履歴読取2回も成功し、稼働中storeを保持した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-18: inactive MLflow clone restore and SDK readback
+
+[WP-L4-ML-001](L4/WP-L4-ML-001_MLflow_tracking.md)で、完全exportから新private cloneを作成した。
+export全体の複製は非稼働の証拠として保持し、cloneのexperiment/run artifact URI18箇所だけを再配置。
+全59tablesの他のschema/行、historical15runs（評価11＋benchmark4）/1210履歴/15artifactsを照合した。
+実restore `389807a736a74219a05e4d85dadd937a`へ専用SDK読取2回、3.287秒/3.251秒でpassed。
+各worker終了後もSQLite論理snapshot/export/artifact bytesは同一、独立clone検証も成功した。
+稼働中storeの16runs/1320points/16artifacts/全59tables/index、元export77entries、
+Notebook/assets80filesは保持した。元backup/失敗2restore/失敗3SDKの証跡を残し、
+missing artifact/外部URIの負例は使い捨て複製上でSDK前に拒否した。
+最終独立照合でも26保存inputs不変、SDK2回の同一view/正常終了、SDK後のclone全行・URI18差分・artifactsを確認。
+全local63suites/2363tests（2362PASS・既存optional1skip）が成功。
+成功restore/SDK全5attemptsは78files・3,241,218B（実割当3,420,160B）、追加env0。
+新service/model/Trino/外部API0、SDKguard前のlocal platform情報取得を
+除いてsubprocess禁止、限定Python audit guardをOS sandboxとはしない。
+cloneはactivation非対応で、既存serverを切り替えず、他host移行・本番復旧の主張もしない。
+証拠は`tmp/local-experiment/mlflow-restore-checks/e63090a6c3ad4e08a49161244f9a27ba/`。
+[復元runbook](../../../tools/local_experiment/mlflow/README.md#restore-an-inactive-local-clone)を参照。
 
 ## 2026-09-18: fixed Notebook to two assets — local acceptance complete
 

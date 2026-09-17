@@ -117,7 +117,7 @@ Numeric metrics omit unknowns and counters above the exact double range.
 
 ## Runtime and storage boundaries
 
-All state belongs to `tmp/local-experiment/mlflow-tracking/`, including the
+Active Tracking state belongs to `tmp/local-experiment/mlflow-tracking/`, including the
 SQLite database, artifact root, owner marker, process identity and private
 HOME/XDG/temp directories. New directories/files are private (0700/0600).
 The child receives a small explicit environment, telemetry and job execution
@@ -139,15 +139,64 @@ cache/evidence about 532 MiB on the verified ARM64 host; these are measured
 setup values, not permanent capacity limits. SQLite/artifacts add storage as
 receipts are imported. Retained source receipts are authoritative and unchanged.
 The MLflow store is derived data that can be rebuilt from retained sources.
-This implementation uses one fixed state path and provides no automatic
-deletion/reset or alternate-store command. Keep a damaged store intact before
+The service uses one fixed state path and provides no automatic deletion/reset
+or clone activation command. Keep a damaged store intact before
 planning a fresh replacement; do not remove it to make an import pass.
 
 For a consistent filesystem export, stop the owned server and importer, retain
 the complete private state directory with its owner/index files and artifacts,
 and preserve source receipts separately. A database-only copy omits artifacts
-and importer identity. This workflow does not delete or overwrite backups;
-restoring an export and migrating it between hosts are not yet verified.
+and importer identity. This workflow does not delete or overwrite backups.
+
+## Restore an inactive local clone
+
+Restore reads a completed private export and creates a new token directory. It
+does not replace the active store, start a server or require the current server
+to stop. Set the manifest path from the retained export; do not substitute a
+copy of the running SQLite file.
+
+```sh
+rtk proxy env SHIROKUMA_MLFLOW_BACKUP_MANIFEST=tmp/local-experiment/mlflow-sre-signals-checks/f2c0f8f220a743409d6ffb1985e2e8c2/backup-manifest.json make local-mlflow-restore
+rtk proxy env SHIROKUMA_MLFLOW_RESTORE_TOKEN=RESTORE_TOKEN make local-mlflow-restore-readback
+```
+
+Under `tmp/local-experiment/mlflow-restores/TOKEN/`, `export/` retains the whole
+export as inert evidence, including old runtime and importer records. The
+separate `clone/store/` contains SQLite and artifacts. Only experiment and run
+artifact URIs are rebased to that clone; all other schema and table rows must
+match the export. `clone.json` explicitly records `activation_supported: false`.
+Missing artifacts, external artifact URIs, unsupported schema and uncertain
+state fail closed. Existing exports and failed restore directories remain intact.
+
+Each readback gets a new private `readback/TOKEN/` with its own HOME/XDG/temp
+directories and process working directory. The pinned Python 3.12/MLflow 3.16.1
+SDK reads all experiment/run metadata, metric histories and artifacts from the
+clone. Artifact download with an empty path resolves the local run root; each
+expected filename and byte hash is then checked beneath it. No artifact copy to
+an SDK temporary download directory is needed. After the worker exits and is
+reaped, all SQLite logical rows and retained artifact/export bytes are compared.
+
+The worker prewarms stdlib `platform.platform()` before installing its audit
+hook; this may launch local CPU/binary metadata utilities. SDK network access,
+subprocesses and writes outside the clone/readback directories are then denied
+by the limited Python audit guard. Telemetry is disabled. This is not a general
+OS sandbox or a guarantee that SDK initialization cannot write: incompatible
+migration/default-state changes are rejected by prechecks and postcomparison.
+
+On 2026-09-18, restore `389807a736a74219a05e4d85dadd937a` recovered the historical
+export's **15 runs (11 evaluations + four benchmarks), 1210 metric points and
+15 artifacts**. Two SDK readbacks passed in 3.287/3.251 seconds. Independent
+clone checks covered all 59 tables and 15 artifacts, with exactly 18 artifact
+URI changes. The active store retained its newer **16 runs, 1320 metric points
+and 16 artifacts**; its tables/index, the original export and 80 Notebook/assets
+evidence files were unchanged. Disposable missing-artifact/external-URI cases
+were rejected before SDK execution. Early restore and SDK failures remain
+recorded, including platform probing and the SDK artifact-copy behavior.
+Evidence is under
+`tmp/local-experiment/mlflow-restore-checks/e63090a6c3ad4e08a49161244f9a27ba/`.
+Stopping use requires no activation rollback: retain the clone and its evidence.
+Cross-host migration, service cutover, training, registry and production
+recovery remain unverified.
 
 ## Primary references
 

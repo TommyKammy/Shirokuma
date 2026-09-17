@@ -5,7 +5,7 @@ title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.6"
+version: "0.7"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -16,7 +16,46 @@ tags: [shirokuma, workpackage, l4, ml]
 
 MLflowで実験とAgent evalを記録する。ADR-0034のlocal実験では、保存済み評価receiptと
 Spark/Trino測定を専用SQLite/loopback標準UIへ取り込む。固定Notebookからのread-only表示は実2回と
-独立最終照合が成功した。training/autolog、JupyterHub連携は未達。
+独立最終照合が成功した。完全exportから非稼働local cloneを復元し、専用SDK読取2回も成功した。
+training/autolog、JupyterHub連携、cloneのサービス切替・他host移行は未達。
+
+## 2026-09-18: inactive local clone restore and SDK readback
+
+保持済み完全exportを新規private `mlflow-restores/TOKEN/export/`へ複製し、旧runtime/indexは
+証拠として非稼働のまま保持する。別`clone/store/`のSQLite/artifactsだけを利用対象とし、
+experiment/runのartifact URI 18箇所以外は全59tablesのschema・行を維持する。
+`clone.json`はactivation非対応を明記し、既存Trackingのpath/server/設定を置換しない。
+
+実restore `389807a736a74219a05e4d85dadd937a`はhistorical exportの15runs
+（評価11＋benchmark4）・全1210 metric履歴・15artifactsを復元した。
+専用MLflow 3.16.1/Python 3.12 SDKの新private workerによる読取は実2回、3.287秒/3.251秒でpassed。
+各3experiments/15runsのmetadata・全metric履歴・artifact root/filename/SHAを照合し、
+worker終了後のSQLite全論理snapshotと保持bytesが不変だった。独立clone照合も全59tables・
+15artifacts・URI差分18のみを確認した。数値costの追加や旧import時刻の意味変更は行わない。
+
+SDKはclone固定URIと新private HOME/XDG/TMP/cwdを使う。audit hook前にstdlib
+`platform.platform()`でlocal CPU/binary情報をcacheし、hook後のnetwork/subprocessと
+clone/readback外書込みを拒否する。これはPythonの限定guardでありOS sandboxではない。
+SDK初期化のmigration能力は消しておらず、事前schema/Default確認と終了後全行比較で拒否する。
+artifactは空pathのSDK downloadでlocal rootを取得して配下のexpected fileを照合し、
+一時downloadへの複製を避ける。新service/model/Trino/APIへの接続や既存server停止は0。
+
+正規triggerとsource index意味差による初期restore失敗、platform probeとartifact-copy経路による
+SDK失敗3件を保持し、未知結果を成功へ書換えていない。使い捨て複製のmissing artifactと外部URIは
+SDK0で拒否した。前後で稼働中の59tables全行・16runs/1320points/16artifacts/index、
+元export77entries、Notebook/assets80filesが不変だった。元backupや失敗cloneを削除していない。
+
+最終独立照合は保存26inputs不変、SDK2回のowner/worker終端と共通view hash、
+失敗3SDKの保持、SDK後の全59tables/URI18差分/15artifacts/export77一致を確認した。
+`independent-clone-final.json`と`independent-sdk-final.json`へ結果を分離して保存する。
+
+全local回帰63suites/2363tests（2362PASS・既存optional1skip）が61.551秒で成功した。
+成功restoreとSDK全5attemptsは78files・3,241,218B（実割当3,420,160B）で、追加envは不要。
+証拠は
+`tmp/local-experiment/mlflow-restore-checks/e63090a6c3ad4e08a49161244f9a27ba/`。
+[復元runbook](../../../../tools/local_experiment/mlflow/README.md#restore-an-inactive-local-clone)を参照。
+利用停止時もclone/証跡/元exportを保持する。今回の機能はlocal-partialであり、サービス切替・
+他host移行・本番復旧や旧WP全体の受入を主張しない。
 
 ## 2026-09-18: fixed Notebook consumer — local acceptance complete
 
