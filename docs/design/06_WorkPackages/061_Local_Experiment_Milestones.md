@@ -5,17 +5,17 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "3.17"
+version: "3.18"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：Query Doctorを製品CLIへ接続し、実Qwenでの固定診断と
-保存statusの読取を確認した。durationのfloat丸めによる偽rejectも修正した。
-全local回帰1554件（1553成功/既存1skip）、Go114件とvet/raceが通過した。
-次は既存4観測源のSRE Bearを製品CLI run/statusへ接続する。
+最新の到達点（2026-09-17）：SRE Bearを製品CLIへ接続し、実Qwenで4観測源とPod再読取を
+確認した。過去exit/restartのwarningを現在障害と混同せず、保存statusも検証した。
+全local回帰1580件（1579成功/既存1skip）、Go78tests＋52subtestsとvet/raceが通過した。
+次はstdinの限定Pod候補をQwen分類とnative server dry-runへ接続する。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
@@ -1350,3 +1350,63 @@ history/fixture全履歴、Metadata35endpoints/7plans14tables14edges、MLflow59t
 15runs1210points15artifactsとbackupが不変だった。初回seal10filesと診断原証跡も保持した。
 監査tunnel終了、design83docs/14tests・secret scan・diff check成功。
 Query WP/MilestonesはVaultと一致し、MOD-051の既存言語差は維持して追記だけを揃えた。
+
+## 2026-09-17: SRE Bear product CLI
+
+`shirokuma sre run`と`sre status TOKEN`を追加し、既存Qwen・MCPによる診断へ接続した。
+初期4観測源と最大2種の固定followupを維持し、任意prompt/namespace/tool引数や修復は受け付けない。
+GoはData transportの所有childへのSIGINT・最大240秒cleanup待機を再利用する。
+厳密なallocated4/result13fieldsを照合し、finalとchild exitが整合してから結果を出す。
+workflowのpassedと環境のassessmentを分離し、attention-requiredを正常へ変換しない。
+
+`sre-cli/<token>`のintent/lock/hash sealと、既存`sre-llm/<token>`のworkflow証拠を分けた。
+呼出しは1回限りで、自動再送/resume/SIGKILLを追加していない。statusはAPI/model/write0。
+snapshotからevidence・triage・比較・hashを再計算し、MCP返却IDの相関と保存spanを区別する。
+旧3源、container詳細導入前の4源は当時のscopeだけを検証し、未観測情報を作らない。
+旧保存passedでも再構成に必要なobservationsが無ければunknown/journal-onlyとする。
+statusによって旧ファイルへ新たなhash sealを書き足さない。
+
+元取消の保持をmodel audit・最終保存・tracer shutdownまで補強した。
+MCP Clientの終了処理がOSErrorを上げる場合や取消を抑制する場合も、所有contextの終了を通った後に
+同じ取消objectを返す。通常cleanup失敗は握り潰さない。gateway stderrは作成時から0600とした。
+保存statusやCLI出力は原logs/manifest/prompt/応答/例外本文を転記しない。
+
+実CLI run `sre-llm/07ca3b1a93988ec2a92e53bf69639ca5/` はpassed。
+内部workflow token `bb3f4eee7c61490191dc0f76c6e694d4`、trace
+`37fd761746c93059112c86bc56e1d0fe`。Qwen1callは入力1458/出力104tokens、5788ms、cost NULL。
+初期doctor/Pods/Events/platformの4readから、3Podの過去非0終了とrestartの6warningを拾い、
+f01–f06に対するPod再読取1回を選択した。約6.828秒間で同UID/state/restartに変化は無かった。
+現在の障害・原因・回復とは断定せず、assessment=attention-required、root_cause=undetermined、
+remediation_executed=falseを維持した。他の3観測源はnot-reobservedのまま記録した。
+MCP5calls＋LLM/root各1の計7監査eventをAgentHouse/Lokiで照合した。
+保存された実OTel spanはmodel/rootの2件であり、MCP返却span ID相関5件とは区別する。
+
+旧run `0c69d3ef5ebc401ca3d27bdb4bd98ea7`と新runを各3回、計6回CLI statusで照会した。
+旧内部token `f4c7620dbba149bab92b0a8df95b78ca`は当時のattention-requiredを保ち、
+対象26files/directoriesのhash/mode/mtimeが不変だった。
+新Python26testsと既存SRE84tests、実run＋fake外部＋actual OTelの結合が成功。
+Goは78top-level tests＋52subtests（SRE16を含む）とvet/race、
+actual Python main/fake workflowの成功・失敗・不存在・取消4経路が成功した。
+全local回帰48suites/1580件（1579成功・既存optional OTel1skip）が成功した。
+
+build/source hash・全log・status前後比較は
+`tmp/local-experiment/sre-cli-checks/b851301006164c69ba8ca15587d2faba/`へ保存。
+独立監査は `sre-cli-preflight/912433d9483f46c991a362f5fa39a461/`。
+実行前は直前Query after/finalをhash参照で継承し、fresh14Pods・Docker3・context/node/VM・
+AH446件・MLflowの所有identity/healthy/store/indexを確認した。新Query証拠を加え3365filesを保全した。
+deepなDB/Metadata/fixture検証は直前Query sealの継承であり、SRE前に再度fresh全走査したとはしない。
+
+これはbounded観測CLIのlocal-partialであり、一般的なroot cause診断・自動修復・本番受入は未達。
+次は利用者がstdinで渡す限定Pod候補を、Qwen分類とnative server dry-runへ接続する。
+
+最終独立監査 `sre-cli-preflight/912433d9483f46c991a362f5fa39a461/independent-verification.json`
+は63checks成功。AH446→453の増分7件だけで旧446件の全行hashは不変、Loki7件も一致した。
+workflow保存span2件に加え、共有Gateway exporterの保存span5件を別ファイルとして照合した。
+返却ID・保存場所・parent edgeの証拠を混同せず、完全な親子trace graphは主張しない。
+14Pods/Docker3/MLflow等の軽量fresh identityは不変で、deep dataは直前Query sealを継承した。
+保全3365filesのうち3361は完全一致。Gatewayのevent/span JSONL2件は旧bytes prefixを保って
+今回MCP5件分だけを追記した。readiness処理によるLoki runtime.json/Metadata runtime.lockの
+2件は内容・mode同一でmtimeだけ更新された。strict比較falseの原after.jsonも保持している。
+CLI status自体の6回/26files・directories不変とは別に、これらrun中の更新を記録した。
+監査tunnel終了、design83docs/14tests・secret scan・diff check成功。
+SRE WP/MilestonesをVaultへ同期し、MOD-051の既存言語差を維持して追記した。

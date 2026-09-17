@@ -43,6 +43,7 @@ func newRootCommandWithWarehouse(output io.Writer, runner commandRunner, warehou
 	root.AddCommand(newWarehouseCommand("chill", warehouses), newWarehouseCommand("wake", warehouses))
 	root.AddCommand(newDataCommand(execDataChild{}))
 	root.AddCommand(newQueryCommand(execQueryChild{}))
+	root.AddCommand(newSRECommand(execSREChild{}))
 
 	return root
 }

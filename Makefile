@@ -778,3 +778,9 @@ test-query-doctor-cli: local-llm-sync
 	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_query_cli.py'
 
 verify-local-experiment: test-query-doctor-cli
+
+.PHONY: test-sre-bear-cli
+test-sre-bear-cli: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_sre_cli.py'
+
+verify-local-experiment: test-sre-bear-cli

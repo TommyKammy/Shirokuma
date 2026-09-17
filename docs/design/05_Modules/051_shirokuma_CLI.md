@@ -5,7 +5,7 @@ title: "shirokuma CLI"
 status: draft
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.4.0"
+version: "0.5.0"
 area: "module"
 tags: [shirokuma, module]
 ---
@@ -19,7 +19,7 @@ tags: [shirokuma, module]
 ## Commands
 
 ```text
-init, status, status --export, doctor, plan, pr, ask, data, query, warehouse, lineage, paws, chill, wake, nuke, restore, bench, version
+init, status, status --export, doctor, plan, pr, ask, data, query, sre, warehouse, lineage, paws, chill, wake, nuke, restore, bench, version
 ```
 
 ## Implementation
@@ -102,3 +102,15 @@ allocationは実行開始の証明ではなく、結果とchild exitの整合を
 `status`のexit0は読取成功であり、診断のpassedや最新runtimeの確認とは区別する。
 旧証跡のstatusは保存内容の検証で、過去に存在しなかったhash sealを作らない。
 詳細は[Query Doctor runbook](../../../tools/local_experiment/bears/QUERY_DOCTOR.md)を参照。
+
+### Local experimental SRE diagnosis
+
+`shirokuma sre run`は既存local Qwenを使い、doctor・Pod・Event・platformの4観測源から
+最大2種の固定追加readを選んで比較する。`sre status TOKEN`は保存結果だけを照会する。
+任意のprompt/namespace/tool引数・自動修復・resumeは受け付けない。
+
+CLIのpassedは診断workflowの完了を意味する。観測healthのattention-requiredやunknownを
+healthyへ変換せず、root_cause=undetermined、remediation_executed=falseを維持する。
+evidence_tokenは保存先、workflow_tokenは内部監査identityである。原logs/manifestや
+promptを出力せず、MCP返却span IDによる相関と保存model/root spanを区別する。
+取消・保存状態・exit契約は[SRE CLI runbook](../../../tools/local_experiment/bears/SRE_CLI.md)を参照。

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -32,6 +34,42 @@ AUDIT_FIELDS = ('event_id', 'task_id', 'trace_id', 'action_type', 'status', 'mod
 
 class SREError(RuntimeError):
     pass
+
+
+def preserve_interruption(call, *args, **kwargs):
+    """Keep a signal being unwound if secondary receipt/audit cleanup fails."""
+    original = sys.exc_info()[1]
+    try:
+        return call(*args, **kwargs)
+    except BaseException:
+        if original is not None and not isinstance(original, Exception):
+            raise original
+        raise
+
+
+@contextmanager
+def trace_lifecycle(provider):
+    try:
+        yield
+    finally:
+        preserve_interruption(provider.shutdown)
+
+
+@asynccontextmanager
+async def gateway_lifecycle(client):
+    """Allow owned MCP cleanup without replacing or suppressing a cancellation."""
+    interruption = None
+    try:
+        async with client as gateway:
+            try:
+                yield gateway
+            except BaseException as error:
+                if not isinstance(error, Exception):
+                    interruption = error
+                raise
+    finally:
+        if interruption is not None:
+            raise interruption
 
 
 class State(TypedDict, total=False):
@@ -72,11 +110,13 @@ def build_graph(model, read, audit, tracer):
             started = time.monotonic()
             try:
                 response = await asyncio.to_thread(model.complete, 'sre_triage', state['evidence'])
-            except Exception as error:
+            except BaseException as error:
                 metrics = safe_metrics(error.metrics if isinstance(error, ProviderError) else {},
                                        int((time.monotonic() - started) * 1000))
                 span.set_status(Status(StatusCode.ERROR, 'MODEL_RESPONSE_FAILED'))
-                audit('llm.sre_triage', 'failed', metrics, span, inference=True)
+                preserve_interruption(audit, 'llm.sre_triage', 'failed', metrics, span, inference=True)
+                if not isinstance(error, Exception):
+                    raise
                 raise SREError('SRE model response failed') from None
             metrics = safe_metrics(response, int((time.monotonic() - started) * 1000))
             try:
@@ -173,7 +213,7 @@ async def run(config: dict, output: Path) -> dict:
                          'Unselected sources are not rechecked.',
                          'A short comparison cannot establish continuous availability.']}
     started = time.monotonic()
-    with tracer.start_as_current_span('bear.sre.assess', record_exception=False, set_status_on_exception=False) as root_span:
+    with trace_lifecycle(provider), tracer.start_as_current_span('bear.sre.assess', record_exception=False, set_status_on_exception=False) as root_span:
         context = root_span.get_span_context()
         trace_id = f'{context.trace_id:032x}'
         result['trace_id'] = trace_id
@@ -204,8 +244,10 @@ async def run(config: dict, output: Path) -> dict:
             params = StdioServerParameters(command='rtk', args=['proxy', str(LOCAL / 'gateway/.venv/bin/python'),
                 str(LOCAL / 'gateway/server.py')], cwd=ROOT,
                 env=child_environment(task_id, f'00-{trace_id}-{context.span_id:016x}-01'))
-            with (output / 'gateway-stderr.log').open('w') as log:
-                async with Client(stdio_client(params, errlog=log)) as gateway:
+            # The child can write sensitive stderr before the workflow finishes.
+            fd = os.open(output / 'gateway-stderr.log', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            with os.fdopen(fd, 'w') as log:
+                async with gateway_lifecycle(Client(stdio_client(params, errlog=log))) as gateway:
                     async def read(tool, phase):
                         if tool not in TOOLS:
                             raise SREError('SRE read escaped the fixed tool allowlist')
@@ -238,17 +280,22 @@ async def run(config: dict, output: Path) -> dict:
             verify_audits(rows, loki.query_task(task_id), calls, records, task_id, trace_id)
             result.update(result='passed', correlated_events=len(rows))
             root_span.set_status(Status(StatusCode.OK))
-        except Exception:
-            result.update(result='failed', error_code='SRE_OBSERVATION_INFERENCE_OR_AUDIT_FAILED')
+        except BaseException as error:
+            result.update(result='failed' if isinstance(error, Exception) else 'interrupted',
+                          error_code='SRE_OBSERVATION_INFERENCE_OR_AUDIT_FAILED')
             for key in ('triage', 'comparisons', 'checkpoint'):
                 result.pop(key, None)
             root_span.set_status(Status(StatusCode.ERROR, result['error_code']))
             if not any(row['action_type'] == 'bear.sre.assess' for row in records):
                 try:
-                    audit('bear.sre.assess', 'failed', unknown_metrics(int((time.monotonic() - started) * 1000)), root_span)
+                    preserve_interruption(audit, 'bear.sre.assess', 'failed', unknown_metrics(int((time.monotonic() - started) * 1000)), root_span)
                 except Exception:
                     pass  # Local receipt retains the failed delivery and measured inference usage.
-    provider.shutdown()
+            if not isinstance(error, Exception):
+                try:
+                    private_write(output / 'result.json', result)
+                finally:
+                    raise error
     private_write(output / 'result.json', result)
     for file in output.iterdir():
         file.chmod(0o600)
