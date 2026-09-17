@@ -497,7 +497,8 @@ local-query-bear-eval: local-llm-sync
 	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/bears/evaluate_query.py
 
 test-local-query-bear: local-llm-sync
-	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_query_*.py'
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_query_bear.py'
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_query_observe.py'
 
 local-evaluation-report:
 	@$(PYTHON) tools/local_experiment/evaluation/report.py
@@ -566,3 +567,12 @@ test-local-benchmark-events:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_benchmark_events.py'
 
 verify-local-experiment: test-local-benchmark-events
+
+.PHONY: local-query-history-plan local-query-history-import test-local-query-history
+local-query-history-plan:
+	@$(PYTHON) tools/local_experiment/query_history/import_receipts.py plan
+local-query-history-import:
+	@$(PYTHON) tools/local_experiment/query_history/import_receipts.py apply
+test-local-query-history:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_query_history.py'
+verify-local-experiment: test-local-query-history

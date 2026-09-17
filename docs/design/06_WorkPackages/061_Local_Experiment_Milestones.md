@@ -5,24 +5,35 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "2.5"
+version: "2.6"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：既存TPC-H全3run（成功1・失敗2）の履歴をAgentHouseへ保存。
-実保存72query sides・記録36比較・未観測30比較を区別し、再取込は追加0/0で冪等。
-元137files・既存監査294件とschema不変、全回帰573 tests、設計75documentsを検証。
-読み取り専用Grafanaの40APIcases/復元試験も成功済み。
-次はQuery Doctorのcaptured own-query履歴を検証して持続化する。Cloudは無効のまま。
+最新の到達点（2026-09-17）：Query Doctorの保存履歴1run/6captured queriesをAgentHouseへ保存。
+4件の実測historyと2件の補助読取NULLを区別し、再取込は追加0/0で冪等。
+稼働中の初期failedを終端証拠なしで取り込まない。全回帰592 tests、設計76documentsを検証。
+次は既存Lakehouseへ接続しない隔離TrinoでOPA行制限/列マスクを確認する。Cloudは無効のまま。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: captured own-query history
+
+[WP-L3-CH-001](L3/WP-L3-CH-001_ClickHouse_AgentHouse.md)の追加2tableへ、既存Query Doctorの
+1run/6captured query IDsを保存。4件はhistory実測、2件の補助読取は`not_target`とNULLを維持。
+保存observer射影の由来を明示し、Gateway/server監査と混同しない。稼働中の初期failedは
+終了span・固定終端error等の証拠がない限り、inventoryに残してapplyを拒否する。
+初回`b26cf6f6c753459abfd49f581812391b`は1/6追加、再実行`bbe00a0c30c2485fa94d02ca3a94f07f`は0/0。
+19 focused testsを含む全回帰592件・設計76documentsが成功。新たなTrino/LLM呼出なし。
+独立再照合で元8filesと既存3tables（監査294・benchmark run3・query side72件）の全hash/DDL不変。
+private証跡は`query-history-preflight/509e684aee2b4c28a99cea9cffbdead8`。
+未達の継続収集/Gateway連携/履歴画面/実費計測を残し、隔離Trino OPA増分へ進む。
 
 ## 2026-09-17: failed runsを含むbenchmark履歴
 

@@ -99,6 +99,10 @@ The [benchmark receipt importer](tools/local_experiment/benchmark_events/README.
 preserves recorded successes, failures and missing comparisons in separate
 AgentHouse tables. `rtk make local-benchmark-events-import` reuses retained
 receipts and inserts nothing on a repeated import of the same input.
+The [Query Doctor history importer](tools/local_experiment/query_history/README.md)
+retains captured query identities and measured history separately from auxiliary
+reads. `rtk make local-query-history-import` checks terminal evidence and imports
+saved observations without sending new Trino or model requests.
 Superset is available at [the local dashboard](http://127.0.0.1:18088/superset/dashboard/shirokuma-local-lakehouse/),
 and OpenMetadata at [the local catalog](http://127.0.0.1:18585).
 Generated credentials stay in private ignored state; see the component runbooks

@@ -5,7 +5,7 @@ title: "ClickHouse AgentHouse advanced dashboards"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.5"
+version: "0.6"
 area: "workpackage"
 tags: [shirokuma, wp, l3, observability]
 ---
@@ -133,3 +133,27 @@ NULLと測定0を区別し、raw SQL/rows/errors/host pathsはDBへ渡さない�
 詳細: repository `tools/local_experiment/benchmark_events/README.md`。
 この増分は保存履歴の取込であり、公式TPC性能値、費用測定、新規Grafana benchmark panelではない。
 次はQuery Doctorのcaptured own-query履歴を同様に検証して持続化する。
+
+## 2026-09-17: retained Query Doctor history
+
+保存済みQuery Doctorの終端証跡を検証し、`query_history_runs`へ1行、
+`query_history_queries`へcaptured IDの6行を登録した。固定SELECT/EXPLAINの4件は
+保存historyの実測値、own-history/STATSの2件は補助読取で`not_target`・測定NULLを維持する。
+sourceはobserverが保存した射影であり、再取得したserver監査やGateway exportではない。
+証跡directory UUIDとobserver UUIDを区別し、query ID/user/history参照の結び付きを検証する。
+
+producerは稼働中も初期値`result=failed`を書き出すため、結果文字列だけでは取り込まない。
+成功は完了checkpoint・保存span検証・一致する終了root spanを要求し、失敗も固定終端errorと
+終了spanを要求する。未完了/終端未証明sourceはinventoryへ残し、apply全体を止める。
+固定runtimeを各mutation前に再確認し、source hash・正確な所有schema・既存全行を照合する。
+
+初回`query-history/b26cf6f6c753459abfd49f581812391b`で1/6行追加、
+再実行`bbe00a0c30c2485fa94d02ca3a94f07f`は0/0。19 focused tests、全回帰592 tests、
+設計76documentsが成功。新規Trino query/LLM推論、Grafana reader grant変更は行っていない。
+独立再照合で元8filesと既存3tables（監査294・benchmark run3・query side72件）の全hash/DDL不変。
+独立保全証跡は`query-history-preflight/509e684aee2b4c28a99cea9cffbdead8`。
+再実行: `rtk make local-query-history-plan local-query-history-import`。
+詳細: repository `tools/local_experiment/query_history/README.md`。
+
+本WPはlocal-partial。履歴の新規Grafana画面、全clusterの継続history収集、Gateway連携、
+実費計測は未達。次はWP-L3-SEC-001の隔離Trino OPA行制限/列マスクを検証する。
