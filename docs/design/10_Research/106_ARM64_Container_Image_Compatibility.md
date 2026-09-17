@@ -438,3 +438,25 @@ six independent backend history rows and a new-database PostgreSQL dump/restore
 passed. Four generated resources were removed. No Rosetta fallback was used.
 This is local functional evidence, not a refresh of historical supply-chain or
 production approvals; the fixed pins are in `tools/local_experiment/gateway_warehouse/inputs.lock.json`.
+
+## 2026-09-17 local warehouse lifecycle evidence
+
+WP-L3-VW-002 reused the same three pinned native ARM64 images and build receipt;
+no additional image or Rosetta path was introduced. Four containers ran across
+one Gateway 21/PostgreSQL 18.4 Pod and separate Trino 483 XS/S Deployments.
+Synchronous run `97b8a7289b2e42e496a1d87bddd2b4ad` passed seven fixed requests,
+busy-query deferral, XS idle suspension and wake with a new Pod UID/process,
+continued S queries, and rejection of fallback from suspended XS to another class.
+Seventeen generated resources were explicitly removed by known UID, with the
+previous XS Pod independently observed gone; four live audit events matched
+AgentHouse, Loki and saved OTel spans.
+
+CLI session `c41cf9f753c14275837ee9f453ed2ad0` also passed six actual Go commands:
+prepared wake noop, chill, same-ID chill replay, new-ID chill noop, wake, and
+same-ID wake replay. The private `cli-observations.json` records the binary hash
+and exact replay comparison; the session receipt confirms cleanup and four audit
+events. Both receipts remain under `tmp/local-experiment/warehouse-lifecycle/runs/`.
+Four earlier failed runs and a pre-Kubernetes CLI startup failure remain retained.
+This is local functional evidence only: generic CRD control, multi-worker drain,
+tenant isolation, HA, persistent session service and production acceptance remain
+unverified. Historical supply-chain decisions and expired approvals are unchanged.

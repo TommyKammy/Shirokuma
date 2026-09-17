@@ -5,23 +5,49 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "3.1"
+version: "3.2"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：隔離Gateway21/PG18.4/Trino483 XS・Sで8case成功。
-両backend履歴6query、逆経路header付き継続GET9回、未知/未指定route未到達、書込み拒否を確認。
-新規PGの別新規DB復元と元DB不変、4生成UID回収・recover追加削除0も成功。
-次はWP-L3-VW-002の分離backendによるidle停止・再開。Cloudは無効のまま。
+最新の到達点（2026-09-17）：分離したXS/Sのidle停止・再開が同期runnerと実CLIの両方で成功。
+未完了handleによる停止延期、XS停止中のS継続、XSの誤配送防止、新XS Pod/processでの再開を確認。
+CLI6commandのno-op/同ID再送、限定回収、各4件のPawprint/Loki/OTel照合も成功。
+次はData Bearの固定3operationを自然文入力から使う入口。Cloudは無効のまま。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: warehouse idle suspend/wake and local CLI
+
+[WP-L3-VW-002](L3/WP-L3-VW-002_Idle_suspend_and_wake.md)の同期run
+`97b8a7289b2e42e496a1d87bddd2b4ad`、CLI session `c41cf9f753c14275837ee9f453ed2ad0` が成功。
+各7固定requestで6SELECTの25nation行/実node IDを確認し、停止中XSはSへ未配送。
+full query一覧0件でも未消費handleがあればbusy-defer、完了後だけfresh idle/drainを確認し、
+Gateway deactivate→同UID Deployment scale0→scale1→新Pod UID/process ready→activate。
+保持Sのprocessは不変。一般の未追跡producerやmulti-worker drainの証明ではない。
+
+実Go CLI6commandでprepared wake noop、chill、chill同ID再送、別IDchill noop、wake、wake同ID再送。
+4owner操作のreceipt hashと6応答が一致し、再送でscale操作は増えない。private同UIDsocketで
+受付10分/16接続、wake後15秒replayのみ、ownerが処理と限定cleanupを完了する。
+各17UID明示回収＋旧XS Pod消失、4Pawprints/Loki/実OTel spanを保存・読戻し。
+同期trace `2823135a5def108632ed71493ce72530`、CLI trace `ced9a0cbc583bf91dbeed4541eddf247`。
+初期4実行失敗とrecover履歴、CLI runtime前import失敗はそのまま保持した。
+生成名/空EndpointSlice/終了Pod/非同期health/TCP再接続/script入口を実挙動へ合わせて修正。
+汎用CRD、HA/tenant認可/常駐service/本番受入は未達。次のData Bear入口へ進む。
+
+独立最終監査 `warehouse-lifecycle-audit/80d8bfbffe19418b82b249aed451dd92`（08:17:20 UTC）で、
+保持6Pods/27resources/6CM/3Secret UIDs、3Dockerの全設定/起動時刻/restarts、履歴4表の全行hash/5DDL、
+従来22証跡filesが不変。Pawprints330＝従来311件不変＋今回19件、同じLoki19件と保存span IDsを照合。
+失敗4runの11件も残し、成功2run各4件と区別した。全6runtime runsと初CLI startup failureの残留0。
+CLI6応答/4operationのraw SHA256、実binary hash、同IDの完全同一応答、scale2回だけを独立再確認。
+全回帰836件（835成功・標準環境のoptional OTel1skip）後、更新済みfocused112件がすべて成功。
+同OTel結合は専用venvで成功。Go test/vet/race、設計79documents/関連14tests、diff checkも成功。
 
 ## 2026-09-17: isolated Gateway VirtualWarehouse
 

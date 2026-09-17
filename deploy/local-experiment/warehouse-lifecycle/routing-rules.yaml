@@ -1,0 +1,21 @@
+---
+name: reject-unmatched
+description: Unmatched local classes never fall back to a real backend.
+condition: 'true'
+actions:
+  - 'result.put("routingGroup", "local-unrouted")'
+priority: 0
+---
+name: xs
+description: Fixed XS class.
+condition: '"XS".equals(request.getHeader("X-Shirokuma-Warehouse"))'
+actions:
+  - 'result.put("routingGroup", "local-xs")'
+priority: 10
+---
+name: s
+description: Fixed S class.
+condition: '"S".equals(request.getHeader("X-Shirokuma-Warehouse"))'
+actions:
+  - 'result.put("routingGroup", "local-s")'
+priority: 20

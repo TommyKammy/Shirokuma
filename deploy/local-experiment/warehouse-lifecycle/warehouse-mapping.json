@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "status": "local-controller-experiment-not-a-crd",
+  "header": "X-Shirokuma-Warehouse",
+  "default_routing_group": "local-unrouted",
+  "warehouses": [
+    {"class": "XS", "routing_group": "local-xs", "deployment_suffix": "xs", "service_suffix": "xs", "port": 18581, "replicas": [0, 1]},
+    {"class": "S", "routing_group": "local-s", "deployment_suffix": "s", "service_suffix": "s", "port": 18582, "replicas": [0, 1]}
+  ],
+  "scope": "new-owned-deployments-only",
+  "limits": ["no-native-trino-scale-to-zero", "no-tenant-isolation", "no-ha", "no-production-acceptance", "no-cost-or-performance-claim"]
+}

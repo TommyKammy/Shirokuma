@@ -79,6 +79,7 @@
     {"source": "06_WorkPackages/L3/WP-L3-CH-001_ClickHouse_AgentHouse.md", "target": "docs/design/06_WorkPackages/L3/WP-L3-CH-001_ClickHouse_AgentHouse.md"},
     {"source": "06_WorkPackages/L3/WP-L3-SEC-001_Keycloak_OPA_native_RBAC_integration.md", "target": "docs/design/06_WorkPackages/L3/WP-L3-SEC-001_Keycloak_OPA_native_RBAC_integration.md"},
     {"source": "06_WorkPackages/L3/WP-L3-VW-001_Trino_Gateway_VirtualWarehouse.md", "target": "docs/design/06_WorkPackages/L3/WP-L3-VW-001_Trino_Gateway_VirtualWarehouse.md"},
-    {"source": "05_Modules/053_VirtualWarehouse_Controller.md", "target": "docs/design/05_Modules/053_VirtualWarehouse_Controller.md"}
+    {"source": "05_Modules/053_VirtualWarehouse_Controller.md", "target": "docs/design/05_Modules/053_VirtualWarehouse_Controller.md"},
+    {"source": "06_WorkPackages/L3/WP-L3-VW-002_Idle_suspend_and_wake.md", "target": "docs/design/06_WorkPackages/L3/WP-L3-VW-002_Idle_suspend_and_wake.md"}
   ]
 }

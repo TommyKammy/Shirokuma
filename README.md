@@ -104,6 +104,11 @@ The [Gateway warehouse experiment](tools/local_experiment/gateway_warehouse/READ
 checks two disposable Trino routes, continuation stickiness, unknown-route and
 read-only denials, and an isolated PostgreSQL backup/restore. It does not install
 a warehouse controller or claim tenant isolation.
+The [warehouse lifecycle experiment](tools/local_experiment/warehouse_lifecycle/README.md)
+uses separate disposable XS/S Deployments to exercise idle checks, Gateway
+deactivation, scale-to-zero and wake with a new coordinator. A short-lived local
+session also accepts `shirokuma chill XS` and `shirokuma wake XS` commands and
+records the actual transitions in Pawprints, Loki and OTel.
 The [evaluation report](tools/local_experiment/evaluation/README.md) checks all
 retained suite receipts and keeps failures, missing evidence and case differences visible.
 The [AgentHouse dashboard](tools/local_experiment/grafana/README.md) provides
