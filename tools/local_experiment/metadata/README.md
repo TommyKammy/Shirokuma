@@ -80,6 +80,12 @@ The official Elasticsearch profile currently warns that its optional
 metadata APIs, native lineage and server health work; vector search is not
 claimed. MCP server CORS configuration is also outside this metadata profile.
 
+## Lineage coverage
+
+For a read-only view of verified Data Plan histories and their saved table-level
+edges, use the [lineage coverage report](COVERAGE.md). It keeps missing metadata,
+conflicts, unknown observations and invalid source evidence separate.
+
 ## Backup, stop and recovery
 
 ```sh

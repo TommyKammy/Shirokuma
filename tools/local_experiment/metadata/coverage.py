@@ -1,0 +1,461 @@
+#!/usr/bin/env python3
+"""Observe historical Data Plan lineage without changing catalog or source files.
+
+The denominator is fixed by verified source artifacts at the start. Unknown
+observations never become missing edges or disappear from that denominator.
+"""
+from __future__ import annotations
+
+import base64
+import copy
+import datetime as dt
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import sys
+import time
+import urllib.error
+import urllib.request
+from urllib.parse import quote
+import uuid
+
+LOCAL = Path(__file__).resolve().parents[1]
+ROOT = LOCAL.parents[1]
+sys.path.insert(0, str(LOCAL))
+from metadata import curate, data_plan_evidence as evidence
+from metadata.client import APIError, NoRedirect, URL
+
+SOURCE_ROOT = ROOT / 'tmp/local-experiment/data-plans'
+STATE = ROOT / 'tmp/local-experiment/metadata'
+OUTPUT_ROOT = ROOT / 'tmp/local-experiment/lineage-coverage'
+TOKEN = re.compile(r'[0-9a-f]{32}')
+MAX_RUNS, MAX_ENTRIES, MAX_FILES = 64, 128, 512
+MAX_FILE_BYTES, MAX_RUN_BYTES, MAX_RESPONSE = 16 * 1024 * 1024, 64 * 1024 * 1024, 2 * 1024 * 1024
+STATUSES = ('present', 'missing', 'conflict', 'unknown')
+LIMITS = [
+    'Only verified historical Data Plan runs define the expected lineage domain; this is not whole-catalog coverage.',
+    'Generated SQL tables were removed by verified cleanup. Historical catalog entities do not imply live tables.',
+    'Eligible runs are fixed at the first artifact verification. Later drift preserves their two expected edges as unknown.',
+    'A run-level catalog ownership, schema or lineage conflict conservatively marks both expected edges as conflict.',
+    'Unknown observations are not missing. Coverage rate is unavailable while any expected edge is unknown.',
+    'Two bounded observations detect observed changes, not changes that occur and revert between reads.',
+    'Artifacts establish local consistency, not cryptographic provenance against an actor replacing all evidence.',
+]
+
+
+class CoverageError(ValueError):
+    def __init__(self, code):
+        self.code = code
+        super().__init__(code)
+
+
+def require(condition, code):
+    if not condition:
+        raise CoverageError(code)
+
+
+def canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True, allow_nan=False)
+
+
+def digest(value):
+    return hashlib.sha256(canonical(value).encode()).hexdigest()
+
+
+def now():
+    return dt.datetime.now(dt.timezone.utc).isoformat().replace('+00:00', 'Z')
+
+
+def decode(raw):
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            require(key not in result, 'INVALID_JSON')
+            result[key] = value
+        return result
+    try:
+        return json.loads(raw, object_pairs_hook=pairs,
+                          parse_constant=lambda _: (_ for _ in ()).throw(CoverageError('INVALID_JSON')))
+    except (ValueError, UnicodeError, RecursionError):
+        raise CoverageError('INVALID_JSON') from None
+
+
+def directory(path, *, private=True):
+    # Do not silently traverse a substituted parent of a fixed host path.
+    if path.is_relative_to(ROOT):
+        for parent in (path, *path.parents):
+            require(not parent.is_symlink(), 'SOURCE_BOUNDARY_INVALID')
+            if parent == ROOT:
+                break
+    info = path.lstat()
+    require(stat.S_ISDIR(info.st_mode) and not path.is_symlink() and info.st_uid == os.getuid(),
+            'SOURCE_BOUNDARY_INVALID')
+    require(not private or stat.S_IMODE(info.st_mode) == 0o700, 'SOURCE_PRIVACY_INVALID')
+    return info
+
+
+def read_file(path, limit=MAX_FILE_BYTES):
+    before = path.lstat()
+    require(stat.S_ISREG(before.st_mode) and before.st_uid == os.getuid()
+            and stat.S_IMODE(before.st_mode) == 0o600 and before.st_size <= limit, 'SOURCE_FILE_INVALID')
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, 'rb') as stream:
+        opened = os.fstat(stream.fileno())
+        require((opened.st_dev, opened.st_ino) == (before.st_dev, before.st_ino), 'SOURCE_CHANGED')
+        raw = stream.read(limit + 1)
+        after = os.fstat(stream.fileno())
+    require(len(raw) <= limit and (before.st_size, before.st_mtime_ns, before.st_ctime_ns)
+            == (after.st_size, after.st_mtime_ns, after.st_ctime_ns), 'SOURCE_CHANGED')
+    return raw
+
+
+def source_snapshot(path):
+    """Hash every retained file, including artifacts not consumed by the verifier."""
+    directory(path)
+    files, total, nodes = {}, 0, 0
+
+    def visit(current, depth):
+        nonlocal total, nodes
+        require(depth <= 20, 'SOURCE_LIMIT_EXCEEDED')
+        directory(current)
+        files[str(current.relative_to(path)) + '/'] = {'directory': True}
+        for item in sorted(current.iterdir()):
+            nodes += 1
+            require(nodes <= 1024 and not item.is_symlink(), 'SOURCE_LIMIT_OR_SYMLINK')
+            info = item.lstat()
+            if stat.S_ISDIR(info.st_mode):
+                visit(item, depth + 1)
+            else:
+                require(sum('sha256' in entry for entry in files.values()) < MAX_FILES, 'SOURCE_LIMIT_EXCEEDED')
+                raw = read_file(item)
+                total += len(raw)
+                require(total <= MAX_RUN_BYTES, 'SOURCE_LIMIT_EXCEEDED')
+                files[str(item.relative_to(path))] = {
+                    'sha256': hashlib.sha256(raw).hexdigest(), 'bytes': len(raw),
+                    'inode': info.st_ino, 'mtime_ns': info.st_mtime_ns, 'mode': stat.S_IMODE(info.st_mode)}
+    visit(path, 0)
+    return digest(files)
+
+
+def listing(root):
+    directory(root, private=False)  # Existing collection root is 0755; each run is private.
+    names = []
+    with os.scandir(root) as entries:
+        for entry in entries:
+            names.append(entry.name)
+            require(len(names) <= MAX_ENTRIES, 'SOURCE_INVENTORY_LIMIT')
+    return sorted(names)
+
+
+def _entity_path(collection, name, owners=False):
+    return f'/{collection}/name/{quote(name, safe="")}?include=all' + ('&fields=owners' if owners else '')
+
+
+ANCHORS = {
+    _entity_path('teams', curate.TEAM),
+    _entity_path('services/databaseServices', curate.SERVICE),
+    _entity_path('databases', curate.DATABASE),
+    *(_entity_path('databaseSchemas', name) for name in (curate.SCHEMA, curate.SOURCE_SCHEMA)),
+    _entity_path('tables', curate.SOURCE, True),
+}
+
+
+def _safe_path(path):
+    return type(path) is str and (path in ANCHORS or re.fullmatch(
+        r'/tables/name/shirokuma_local\.iceberg\.local_experiment\.dataops_[0-9a-f]{32}_(stg|mart)\?include=all&fields=owners', path)
+        or re.fullmatch(r'/lineage/table/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\?upstreamDepth=1&downstreamDepth=1', path))
+
+
+class ReadOnlyClient:
+    """One login using existing private credentials, followed only by fixed GETs.
+
+    Does not inherit Client.authenticate: no password fallback/change or marker
+    touch. Proxy environment and redirects cannot select another destination.
+    """
+    def __init__(self, *, opener=None, state=STATE, timeout=300):
+        self.opener = opener or urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+        self.state, self.token = state, None
+        self.deadline = time.monotonic() + timeout
+        self.calls, self.login_attempted, self.login_error = 0, False, None
+
+    def _request(self, method, path, data=None):
+        require(self.calls < MAX_RUNS * 20 + 1, 'API_REQUEST_LIMIT')
+        remaining = self.deadline - time.monotonic()
+        require(remaining > 0, 'API_DEADLINE')
+        self.calls += 1
+        headers = {'Content-Type': 'application/json'}
+        if self.token:
+            headers['Authorization'] = 'Bearer ' + self.token
+        request = urllib.request.Request(URL + path, method=method, headers=headers,
+                                         data=canonical(data).encode() if data is not None else None)
+        try:
+            with self.opener.open(request, timeout=min(10, remaining)) as response:
+                require(response.status == 200, 'API_RESPONSE_INVALID')
+                chunks, count = [], 0
+                while True:
+                    require(time.monotonic() < self.deadline, 'API_DEADLINE')
+                    chunk = response.read(min(65536, MAX_RESPONSE + 1 - count))
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                    count += len(chunk)
+                    require(count <= MAX_RESPONSE, 'API_RESPONSE_TOO_LARGE')
+                return decode(b''.join(chunks))
+        except urllib.error.HTTPError as error:
+            status = error.code
+            error.close()
+            raise APIError(method, path, status) from None
+        except (OSError, RuntimeError):
+            raise CoverageError('API_UNAVAILABLE') from None
+
+    def login_existing(self):
+        require(not self.login_attempted, 'LOGIN_ALREADY_ATTEMPTED')
+        self.login_attempted = True
+        try:
+            directory(self.state)
+            raw = read_file(self.state / '.env', 4096)
+            values = {}
+            for line in raw.decode('utf-8').splitlines():
+                key, sep, value = line.partition('=')
+                require(sep and key not in values and value and len(value) <= 1024, 'CREDENTIALS_INVALID')
+                values[key] = value
+            require(set(values) == {'OM_STATE', 'OM_DB_PASSWORD', 'OM_POSTGRES_PASSWORD', 'OM_ADMIN_PASSWORD', 'OM_FERNET_KEY'}
+                    and values['OM_STATE'] == str(self.state), 'CREDENTIALS_INVALID')
+            password = values['OM_ADMIN_PASSWORD']
+            require(16 <= len(password) <= 256 and all(33 <= ord(char) <= 126 for char in password), 'CREDENTIALS_INVALID')
+            result = self._request('POST', '/users/login', {'email': 'admin@open-metadata.org',
+                                   'password': base64.b64encode(password.encode()).decode()})
+            token = result.get('accessToken') if type(result) is dict else None
+            require(type(token) is str and 1 <= len(token) <= 8192 and re.fullmatch(r'[A-Za-z0-9_.~+/=-]+', token),
+                    'LOGIN_RESPONSE_INVALID')
+            require(read_file(self.state / '.env', 4096) == raw, 'CREDENTIALS_CHANGED')
+            self.token = token
+        except Exception:
+            self.login_error = 'LOGIN_UNAVAILABLE'
+            raise CoverageError(self.login_error) from None
+
+    def request(self, method, path, data=None):
+        require(method == 'GET' and data is None and _safe_path(path), 'READ_ONLY_BOUNDARY')
+        if not self.login_attempted:
+            self.login_existing()
+        require(self.login_error is None and self.token is not None, 'LOGIN_UNAVAILABLE')
+        return self._request(method, path)
+
+
+class Observation:
+    """Scope even injected clients to the validated run and retain hashes only."""
+    def __init__(self, client, projection):
+        self.client, self.hashes, self.ids = client, {}, set()
+        self.allowed = ANCHORS | {_entity_path('tables', item['name'], True) for item in projection['entities']}
+
+    def request(self, method, path, data=None):
+        lineage = {f'/lineage/table/{identity}?upstreamDepth=1&downstreamDepth=1' for identity in self.ids}
+        require(method == 'GET' and data is None and path in self.allowed | lineage, 'READ_ONLY_BOUNDARY')
+        try:
+            value = self.client.request(method, path)
+        except APIError as error:
+            self.hashes[path] = digest({'http_status': error.status})
+            raise
+        require(type(value) is dict, 'CATALOG_RESPONSE_INVALID')
+        self.hashes[path] = digest(value)
+        if '/name/' in path:
+            try:
+                require(type(value.get('id')) is str and str(uuid.UUID(value['id'])) == value['id']
+                        and type(value.get('name')) is str and type(value.get('fullyQualifiedName')) is str,
+                        'CATALOG_RESPONSE_INVALID')
+                curate._revision(value)
+            except (ValueError, KeyError, AttributeError):
+                raise CoverageError('CATALOG_RESPONSE_INVALID') from None
+            if path not in ANCHORS:
+                self.ids.add(value['id'])
+        else:
+            # Curator's optional-field convenience must not turn a malformed
+            # response (false, {}, empty text) into evidence of edge absence.
+            require(all(type(value.get(key)) is list for key in ('upstreamEdges', 'downstreamEdges')),
+                    'CATALOG_RESPONSE_INVALID')
+            entity = value.get('entity')
+            require(type(entity) is dict and type(entity.get('id')) is str
+                    and type(entity.get('fullyQualifiedName')) is str and entity.get('type') == 'table',
+                    'CATALOG_RESPONSE_INVALID')
+        return copy.deepcopy(value)
+
+
+CONFLICTS = {
+    'catalog entity identity or deletion state differs', 'catalog parent reference differs',
+    'catalog owner differs', 'catalog column schema differs', 'generated catalog column was edited',
+    'generated catalog description or evidence marker differs', 'generated catalog has conflicting lineage',
+    'generated catalog lineage was edited or has another source', 'catalog owner is not the existing experiment group',
+    'catalog service is not the existing Trino service', 'catalog identities are not distinct',
+    'catalog lineage exceeds the generated scope',
+}
+
+
+def observe(client, projection):
+    observation = Observation(client, projection)
+    try:
+        state = curate.preflight(observation, projection)
+        statuses = {key: ('present' if state['targets'][key]['lineage'] else 'missing') for key in curate.TARGETS}
+        reasons = {key: ('VERIFIED_PRESENT' if statuses[key] == 'present' else 'VERIFIED_ABSENT') for key in curate.TARGETS}
+    except curate.CurateError as error:
+        conflict = str(error) in CONFLICTS
+        statuses = dict.fromkeys(curate.TARGETS, 'conflict' if conflict else 'unknown')
+        reasons = dict.fromkeys(curate.TARGETS, 'CATALOG_CONFLICT' if conflict else 'CATALOG_RESPONSE_INVALID')
+    except Exception:
+        statuses = dict.fromkeys(curate.TARGETS, 'unknown')
+        reasons = dict.fromkeys(curate.TARGETS, 'CATALOG_UNAVAILABLE')
+    return {'statuses': statuses, 'reasons': reasons, 'hashes': observation.hashes}
+
+
+def _source(path, reader):
+    status, code, projection, sha = 'invalid', 'SOURCE_INVALID', None, None
+    try:
+        sha = source_snapshot(path)
+        summary_path = path / 'summary.json'
+        if not summary_path.exists():
+            return 'incomplete', 'SUMMARY_MISSING', None, sha
+        summary = decode(read_file(summary_path))
+        require(type(summary) is dict and summary.get('run_token') == path.name, 'SOURCE_IDENTITY_INVALID')
+        require(type(summary.get('result')) is str, 'SOURCE_RESULT_INVALID')
+        if summary.get('result') in {'failed', 'interrupted'}:
+            return 'failed', 'RECORDED_RUN_FAILED', None, sha
+        if summary.get('result') != 'passed':
+            return 'incomplete', 'RUN_NOT_COMPLETE', None, sha
+        projection = evidence.validate_projection(reader(path))
+        require(projection['run_token'] == path.name, 'SOURCE_IDENTITY_INVALID')
+        require(source_snapshot(path) == sha, 'SOURCE_CHANGED')
+        status, code = 'valid', 'SOURCE_VERIFIED'
+    except CoverageError as error:
+        code = error.code
+        if code == 'SOURCE_CHANGED':
+            status = 'incomplete'
+    except evidence.EvidenceError:
+        code = 'ARTIFACT_VERIFICATION_FAILED'
+    except OSError:
+        status, code = 'incomplete', 'SOURCE_UNAVAILABLE'
+    return status, code, projection if status == 'valid' else None, sha
+
+
+def collect(client, *, source_root=SOURCE_ROOT, evidence_reader=evidence.read_evidence):
+    """Bounded read-only collection. Optional dependencies are for offline tests."""
+    started = now()
+    report = {'schema_version': 1, 'observed_at': started, 'scope': 'verified-historical-data-plan-lineage',
+              'observation': {'status': 'incomplete', 'source_stable': False, 'metadata_stable': None, 'reason_codes': []},
+              'inventory': {'entries': 0, 'uuid_runs': 0, 'eligible': 0, 'valid': 0, 'failed': 0,
+                            'incomplete': 0, 'invalid': 0, 'unrecognized_entries': 0, 'complete': False},
+              'coverage': {}, 'runs': [], 'limits': list(LIMITS)}
+    projections, initial, names = {}, {}, None
+    try:
+        names = listing(source_root)
+        tokens = [name for name in names if TOKEN.fullmatch(name)]
+        report['inventory'].update(entries=len(names), uuid_runs=len(tokens), unrecognized_entries=len(names) - len(tokens), complete=True)
+        if len(names) != len(tokens):
+            report['observation']['reason_codes'].append('UNRECOGNIZED_SOURCE_ENTRIES')
+        for token in tokens:
+            path = source_root / token
+            if len(tokens) > MAX_RUNS:
+                status, code, projection, sha = 'incomplete', 'SOURCE_RUN_LIMIT', None, None
+            else:
+                status, code, projection, sha = _source(path, evidence_reader)
+            row = {'run_token': token, 'operation': projection['operation'] if projection else None,
+                   'source_status': status, 'eligible': status == 'valid', 'reason_codes': [code],
+                   'source_sha256_before': sha, 'source_sha256_after': None,
+                   'metadata_sha256_before': None, 'metadata_sha256_after': None, 'edges': []}
+            if projection:
+                projections[token] = projection
+                row['edges'] = [{'target': target, **edge, 'status': 'unknown', 'reason_code': 'NOT_OBSERVED'}
+                                for target, edge in zip(curate.TARGETS, projection['lineage'])]
+            report['runs'].append(row)
+        # All first observations precede all final observations: shared anchor
+        # revisions changed during another run are also detected.
+        for token, projection in projections.items():
+            initial[token] = observe(client, projection)
+        stable = []
+        for row in report['runs']:
+            token = row['run_token']
+            if row['eligible']:
+                first, final = initial[token], observe(client, projections[token])
+                row['metadata_sha256_before'], row['metadata_sha256_after'] = digest(first['hashes']), digest(final['hashes'])
+                metadata_same = first == final and all(value != 'unknown' for value in final['statuses'].values())
+                stable.append(metadata_same)
+                for edge in row['edges']:
+                    key = edge['target']
+                    edge['status'] = final['statuses'][key] if first == final else 'unknown'
+                    edge['reason_code'] = final['reasons'][key] if first == final else 'CATALOG_CHANGED'
+            try:
+                row['source_sha256_after'] = source_snapshot(source_root / token)
+            except (CoverageError, OSError):
+                pass
+            if row['source_sha256_before'] is not None and row['source_sha256_before'] != row['source_sha256_after']:
+                row['source_status'] = 'incomplete'
+                row['reason_codes'].append('SOURCE_CHANGED_OR_UNVERIFIABLE')
+                for edge in row['edges']:
+                    edge.update(status='unknown', reason_code='SOURCE_CHANGED')
+        report['observation']['metadata_stable'] = all(stable) if stable else None
+        final_names = listing(source_root)
+        inventory_same = names == final_names
+        report['observation']['source_stable'] = inventory_same and all(
+            row['source_sha256_before'] is not None and row['source_sha256_before'] == row['source_sha256_after'] for row in report['runs'])
+        if not inventory_same:
+            report['inventory']['complete'] = False
+            report['observation']['reason_codes'].append('SOURCE_INVENTORY_CHANGED')
+    except (CoverageError, OSError):
+        report['observation']['reason_codes'].append('SOURCE_INVENTORY_UNAVAILABLE')
+        report['inventory']['complete'] = False
+    inv = report['inventory']
+    for row in report['runs']:
+        inv[row['source_status']] += 1
+        inv['eligible'] += int(row['eligible'])
+    counts = {status: sum(edge['status'] == status for row in report['runs'] for edge in row['edges']) for status in STATUSES}
+    denominator, known = inv['eligible'] * 2, sum(counts[status] for status in STATUSES if status != 'unknown')
+    report['coverage'] = {'denominator': denominator, **counts, 'known': known,
+                          'rate': counts['present'] / denominator if denominator and not counts['unknown'] else None,
+                          'observation_rate': known / denominator if denominator else None,
+                          'complete': denominator > 0 and counts['present'] == denominator}
+    if inv['invalid'] or inv['incomplete']:
+        report['observation']['reason_codes'].append('UNVERIFIED_SOURCE_RUNS')
+    if counts['unknown']:
+        report['observation']['reason_codes'].append('UNKNOWN_EXPECTED_EDGES')
+    if not report['observation']['reason_codes'] and report['observation']['source_stable']:
+        report['observation']['status'] = 'complete'
+    return report
+
+
+def write_report(report):
+    from metadata.coverage_render import render
+    OUTPUT_ROOT.mkdir(parents=True, exist_ok=True, mode=0o700)
+    directory(OUTPUT_ROOT)
+    output = OUTPUT_ROOT / uuid.uuid4().hex
+    output.mkdir(mode=0o700)
+    fd = os.open(output / 'report.json', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'w') as stream:
+        stream.write(canonical(report) + '\n')
+        stream.flush()
+        os.fsync(stream.fileno())
+    fd = os.open(output / 'report.html', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'w') as stream:
+        stream.write(render(report))
+        stream.flush()
+        os.fsync(stream.fileno())
+    return output
+
+
+def main():
+    require(len(sys.argv) == 1, 'NO_ARGUMENTS_ALLOWED')
+    report = collect(ReadOnlyClient())
+    output = write_report(report)
+    print(canonical({'observation': report['observation']['status'], 'coverage': report['coverage'],
+                     'evidence': str(output.relative_to(ROOT))}))
+    # Incomplete observation is an execution limitation. Fully observed missing
+    # or conflicting lineage is a valid report, not a collector transport error.
+    return 0 if report['observation']['status'] == 'complete' else 1
+
+
+if __name__ == '__main__':
+    try:
+        raise SystemExit(main())
+    except (CoverageError, OSError):
+        print('{"observation":"incomplete","reason":"REPORT_UNAVAILABLE"}')
+        raise SystemExit(1)

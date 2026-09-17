@@ -5,22 +5,35 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "3.4"
+version: "3.5"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：新規Iceberg tableでnamed tag/branchが実機成功。
-mainへのappend後の名前付き過去読取、branchの条件付き移動、古い条件のHTTP409拒否を確認。
-参照更新前後のsnapshot/file metadata不変、実験table回収、保持fixture全履歴/一覧不変を照合した。
+最新の到達点（2026-09-17）：既存Data Plan履歴のlineage充足をread-only reportで可視化。
+5検証済みrunの期待10edgesを照合し、登録6・未登録4・競合0・不明0を実機で確認した。
+観測完了と登録率60%を分けて表示し、元証跡とOpenMetadataの保持entityが不変であることを検証。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: read-only historical lineage coverage
+
+[WP-L5-LINEAGE-001](L5/WP-L5-LINEAGE-001_Lineage_completeness_dashboard.md)のrun
+`4ef6d7943baf4e8c914f32f63381b9c9` が初回成功。5成功Data Plans・期待10edges中、
+present6/missing4/conflict0/unknown0、観測complete・登録率60%・coverage未完了を分離した。
+UUIDや証跡が不正なrunも一覧から消さず、途中変化は分母を保持してunknownにする。
+API不達模擬はunknown10/missing0/rate NULL。HTMLの実表示・詳細展開・横はみ出し0を確認した。
+固定login以後GETだけで、新model/metadata変更/新serviceはなし。
+独立監査`metadata-coverage-preflight/18d58ceea4b34635be2e267336669a9f/verification.json`の31checksが成功。
+23API endpointsのUUID/version/full hash、5source、保持6table/6edges、892filesと資格情報が不変。
+focused34と全949件（948成功＋optional1skip）、設計80documents/14tests成功。local-partial。
+次は2runの未登録4edgesを既存Curatorで登録し、保持entity不変とcoverage変化を検証する。
 
 ## 2026-09-17: Iceberg named tag and branch
 

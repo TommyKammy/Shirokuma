@@ -495,6 +495,15 @@ test-local-catalog-bear: local-llm-sync
 
 verify-local-experiment: test-local-catalog-bear
 
+.PHONY: local-lineage-coverage test-local-lineage-coverage
+local-lineage-coverage:
+	@$(PYTHON) tools/local_experiment/metadata/coverage.py
+
+test-local-lineage-coverage:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_lineage_coverage*.py'
+
+verify-local-experiment: test-local-lineage-coverage
+
 .PHONY: local-query-bear-smoke local-query-bear-eval test-local-query-bear local-evaluation-report test-local-evaluation-report
 local-query-bear-smoke: local-llm-sync
 	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/bears/run_query.py

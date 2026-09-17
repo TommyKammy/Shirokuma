@@ -89,6 +89,10 @@ small requests into a validated plan, generates fixed dbt templates, and checks
 disposable Iceberg results against an independent oracle before scoped cleanup.
 The [Catalog Curator Bear](tools/local_experiment/bears/CATALOG_CURATOR.md) records
 verified Data Engineer runs as historical metadata with fixed owners and lineage.
+The [lineage coverage report](tools/local_experiment/metadata/COVERAGE.md) compares
+verified Data Plan histories with saved OpenMetadata edges and distinguishes
+missing, conflicting and unknown observations. Run `rtk make local-lineage-coverage`
+to produce private JSON and HTML reports.
 The [Query Doctor Bear](tools/local_experiment/bears/QUERY_DOCTOR.md) selects bounded
 read-only follow-ups from verified Trino plan and query-history observations.
 The [Policy Gatekeeper Bear](tools/local_experiment/bears/POLICY_GATEKEEPER.md)

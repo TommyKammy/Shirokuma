@@ -1,0 +1,189 @@
+"""Coverage semantics, escaping, and offline accessibility; no live services."""
+import copy
+from html.parser import HTMLParser
+from pathlib import Path
+import sys
+import unittest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tools.local_experiment.metadata.coverage_render import RenderError, render
+
+
+def run(number=1, statuses=('present', 'present'), *, source_status='valid', eligible=True):
+    token = f'{number:032x}'
+    return {'run_token': token, 'operation': 'name_lengths' if eligible else None,
+        'source_status': source_status, 'eligible': eligible, 'reason_codes': [],
+        'source_sha256_before': 'a' * 64 if eligible else None,
+        'source_sha256_after': 'a' * 64 if eligible else None,
+        'metadata_sha256_before': 'b' * 64 if eligible else None,
+        'metadata_sha256_after': 'b' * 64 if eligible else None,
+        'edges': [{'target': target, 'from': 'shirokuma_local.iceberg.smoke.fixture_v1' if target == 'stg'
+                  else f'shirokuma_local.iceberg.local_experiment.dataops_{token}_stg',
+                  'to': f'shirokuma_local.iceberg.local_experiment.dataops_{token}_{target}',
+                  'status': status, 'reason_code': status.upper()} for target, status in zip(('stg', 'mart'), statuses)]
+                  if eligible else []}
+
+
+def report(runs=None, unrecognized=0):
+    runs = [run()] if runs is None else runs
+    counts = {status: sum(edge['status'] == status for item in runs for edge in item['edges'])
+              for status in ('present', 'missing', 'conflict', 'unknown')}
+    eligible = sum(item['eligible'] for item in runs)
+    denominator = eligible * 2
+    known = denominator - counts['unknown']
+    return {'schema_version': 1, 'observed_at': '2026-09-17T07:30:00.000000Z',
+        'scope': 'verified-historical-data-plan-lineage',
+        'observation': {'status': 'incomplete' if counts['unknown'] else 'complete',
+            'source_stable': True, 'metadata_stable': None if counts['unknown'] else True, 'reason_codes': []},
+        'inventory': {'entries': len(runs) + unrecognized, 'uuid_runs': len(runs), 'eligible': eligible, 'complete': True,
+            **{state: sum(item['source_status'] == state for item in runs)
+               for state in ('valid', 'failed', 'incomplete', 'invalid')}, 'unrecognized_entries': unrecognized},
+        'coverage': {'denominator': denominator, **counts, 'known': known,
+            'rate': counts['present'] / denominator if denominator and not counts['unknown'] else None,
+            'observation_rate': known / denominator if denominator else None,
+            'complete': denominator > 0 and counts['present'] == denominator},
+        'runs': runs, 'limits': ['保存済みData Planの履歴だけを対象とします。']}
+
+
+class Document(HTMLParser):
+    def __init__(self, html):
+        super().__init__(convert_charrefs=True)
+        self.tags, self.text = [], []
+        self.feed(html)
+
+    def handle_starttag(self, tag, attrs):
+        self.tags.append((tag, dict(attrs)))
+
+    def handle_data(self, text):
+        self.text.append(text)
+
+
+class CoverageRenderTests(unittest.TestCase):
+    def test_render_is_pure_and_complete_coverage_is_explicitly_historical(self):
+        value = report()
+        saved = copy.deepcopy(value)
+        html = render(value)
+        self.assertEqual(value, saved)
+        self.assertEqual(render(value), html)
+        self.assertIn('2 / 2 エッジ', html)
+        self.assertIn('登録率 100.0%', html)
+        self.assertIn('実験の履歴metadata', html)
+        self.assertIn('live tableの存在・稼働状態・現在のデータ品質を表しません', html)
+        self.assertIn('生成テーブルは実験後に削除', html)
+        self.assertIn('観測時点の静的レポート', html)
+        self.assertIn('2026-09-17T07:30:00.000000Z', html)
+
+    def test_unknown_keeps_denominator_and_suppresses_success_rate(self):
+        value = report([run(1, ('present', 'missing')), run(2, ('conflict', 'unknown'))])
+        html = render(value)
+        self.assertIn('1 / 4 エッジ', html)
+        self.assertIn('登録率 算出しない', html)
+        self.assertIn('観測率 75.0%', html)
+        self.assertIn('観測済みのエッジだけへ分母を縮小しません', html)
+        self.assertIn('観測未完了', html)
+        document = Document(html)
+        self.assertEqual(sum(tag == 'details' and 'open' in attrs for tag, attrs in document.tags), 2)
+        for status in ('登録を確認', '欠落', '競合', '不明'):
+            self.assertIn(status, ''.join(document.text))
+
+    def test_zero_denominator_is_not_zero_or_full_coverage(self):
+        html = render(report([]))
+        self.assertIn('集計対象なし', html)
+        self.assertIn('分母が0のため登録率・観測率は算出できません', html)
+        self.assertNotIn('登録率 100.0%', html)
+        self.assertNotIn('登録率 0.0%', html)
+        self.assertIn('集計対象の実験履歴はありません', html)
+
+    def test_excluded_failed_invalid_and_incomplete_sources_remain_visible(self):
+        runs = [run(), run(2, source_status='failed', eligible=False),
+                run(3, source_status='invalid', eligible=False), run(4, source_status='incomplete', eligible=False)]
+        runs[2]['reason_codes'] = ['SOURCE_INVALID']
+        html = render(report(runs, unrecognized=2))
+        self.assertIn('3件を対象外', html)
+        self.assertIn('識別できない項目は2件', html)
+        self.assertIn('SOURCE_INVALID', html)
+        self.assertEqual(html.count('分母から除外'), 3)
+        for item in runs:
+            self.assertIn(item['run_token'], html)
+
+    def test_changed_eligible_source_remains_two_unknown_edges(self):
+        value = report([run(1, ('unknown', 'unknown'), source_status='incomplete')])
+        value['observation']['source_stable'] = False
+        value['runs'][0]['source_sha256_after'] = 'c' * 64
+        html = render(value)
+        self.assertIn('0 / 2 エッジ', html)
+        self.assertIn('分母を保持 / 2エッジ不明', html)
+        self.assertIn('観測途中に証跡が変化', html)
+
+    def test_partial_inventory_is_not_presented_as_the_complete_population(self):
+        value = report()
+        value['inventory']['complete'] = False
+        value['observation']['status'] = 'incomplete'
+        value['observation']['reason_codes'] = ['SOURCE_INVENTORY_CHANGED']
+        html = render(value)
+        self.assertIn('保存証跡の一覧取得は未完了です', html)
+        self.assertIn('取得できた範囲の集計', html)
+        self.assertIn('全実験を網羅した結果とは扱えません', html)
+
+    def test_all_data_strings_are_text_not_active_markup(self):
+        payload = '<img src="https://foreign.invalid/x" onerror="alert(1)"><script>alert(2)</script>&'
+        value = report()
+        value['runs'][0]['edges'][0]['from'] = payload
+        value['runs'][0]['edges'][0]['to'] = payload
+        value['runs'][0]['edges'][0]['reason_code'] = payload
+        value['runs'][0]['reason_codes'] = [payload]
+        value['limits'] = [payload]
+        html = render(value)
+        document = Document(html)
+        self.assertIn('&lt;img', html)
+        self.assertNotIn(payload, html)
+        self.assertFalse(any(tag in ('script', 'img', 'iframe', 'object', 'embed', 'link') for tag, _ in document.tags))
+        self.assertFalse(any(key.startswith('on') for _, attrs in document.tags for key in attrs))
+        self.assertIn(payload, ''.join(document.text))
+
+    def test_semantic_tables_keyboard_details_and_no_external_assets(self):
+        html = render(report())
+        document = Document(html)
+        self.assertIn(('html', {'lang': 'ja'}), document.tags)
+        self.assertTrue(any(tag == 'meta' and attrs.get('http-equiv') == 'Content-Security-Policy'
+                            and "default-src 'none'" in attrs.get('content', '') for tag, attrs in document.tags))
+        self.assertTrue(any(tag == 'main' for tag, _ in document.tags))
+        self.assertEqual(sum(tag == 'caption' for tag, _ in document.tags), 2)
+        self.assertTrue(any(tag == 'summary' for tag, _ in document.tags))
+        self.assertTrue(any(tag == 'div' and attrs.get('tabindex') == '0' and attrs.get('aria-label') for tag, attrs in document.tags))
+        self.assertTrue(all(attrs.get('href', '').startswith('#') for tag, attrs in document.tags if tag == 'a'))
+        self.assertFalse(any(key in attrs for _, attrs in document.tags for key in ('src', 'srcset')))
+
+    def test_inconsistent_counts_rates_and_denominator_are_rejected(self):
+        mutations = [lambda value: value['coverage'].update(present=1),
+                     lambda value: value['coverage'].update(denominator=1),
+                     lambda value: value['coverage'].update(known=0),
+                     lambda value: value['coverage'].update(rate=0.5),
+                     lambda value: value['coverage'].update(rate=True),
+                     lambda value: value['coverage'].update(complete=False),
+                     lambda value: value['inventory'].update(eligible=0),
+                     lambda value: value['inventory'].update(valid=0),
+                     lambda value: value['inventory'].update(entries=99)]
+        for mutate in mutations:
+            value = report()
+            mutate(value)
+            with self.assertRaises(RenderError):
+                render(value)
+        value = report([run(1, ('present', 'unknown'))])
+        value['coverage']['rate'] = 1.0
+        with self.assertRaises(RenderError):
+            render(value)
+
+    def test_invalid_operation_duplicate_run_and_unrecognized_status_do_not_render(self):
+        values = [report(), report(), report(), report()]
+        values[0]['runs'][0]['operation'] = '<script>private</script>'
+        values[1]['runs'].append(copy.deepcopy(values[1]['runs'][0]))
+        values[2]['runs'][0]['edges'][0]['status'] = 'healthy'
+        values[3]['runs'][0]['run_token'] = '<img src=x>'
+        for value in values:
+            with self.assertRaises(RenderError):
+                render(value)
+
+
+if __name__ == '__main__':
+    unittest.main()
