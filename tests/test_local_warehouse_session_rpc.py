@@ -44,10 +44,15 @@ class SessionRPCTest(unittest.TestCase):
 
     def response(self, action, request_id, result='verified'):
         request = self.request(action, request_id)
-        target = deepcopy(R.TARGETS[action])
+        target = deepcopy(R.TARGETS['wake' if action == 'query' else action])
         prior = deepcopy(R.TARGETS['wake' if action == 'chill' else 'chill'])
-        return {**request, 'result': result, 'before': target if result == 'noop' else prior,
+        value = {**request, 'result': result, 'before': target if result == 'noop' else prior,
                 'after': target, 'operation_id': str(uuid.uuid4()), 'receipt_sha256': 'a' * 64}
+        if action == 'query':
+            value['query'] = {'case': 'xs_caller', 'query_id': '20260918_010203_00001_abcde',
+                'rows_observed': 25, 'rows_sha256': 'b' * 64, 'post_count': 1,
+                'response_complete': True, 'matched': True} if result == 'verified' else None
+        return value
 
     def handler(self, action, request_id):
         self.calls.append((action, request_id))
@@ -99,6 +104,105 @@ class SessionRPCTest(unittest.TestCase):
         self.thread.join(5)
         self.assertFalse(self.thread.is_alive())
         self.assertEqual(self.errors, [])
+
+    def test_query_is_opt_in_and_cannot_add_sql_or_case_input(self):
+        request = self.request('query')
+        with self.assertRaises(R.RPCError):
+            R.parse_request(json.dumps(request).encode(), self.token)
+        self.assertEqual(R.parse_request(json.dumps(request).encode(), self.token, allow_query=True), request)
+        for key in ('sql', 'case', 'url', 'headers'):
+            with self.assertRaises(R.RPCError):
+                R.parse_request(json.dumps({**request, key: 'PRIVATE'}).encode(), self.token, allow_query=True)
+        with self.assertRaises(R.RPCError):
+            R.SessionRPC(self.token, self.output, self.handler, allow_query=1)
+        self.start()
+        self.assertEqual(self.exchange(request)[0], 400)
+        self.assertEqual(self.calls, [])
+
+    def test_query_proof_is_exact_complete_and_has_one_post_without_noop(self):
+        request = self.request('query')
+        response = self.response('query', request['request_id'])
+        self.assertEqual(R.validate_response(response, request), response)
+        variants = []
+        for key, bad in [('case', 'xs_after'), ('query_id', 'bad'), ('rows_observed', 24),
+                         ('rows_observed', True), ('rows_sha256', 'x' * 64), ('post_count', 2),
+                         ('post_count', True), ('response_complete', 1), ('matched', False)]:
+            value = deepcopy(response); value['query'][key] = bad; variants.append(value)
+        for change in ({'result': 'noop'}, {'query': None}, {'before': R.TARGETS['wake']},
+                       {'operation_id': None}, {'receipt_sha256': None}):
+            variants.append({**response, **change})
+        value = deepcopy(response); value['query']['sql'] = 'PRIVATE'; variants.append(value)
+        value = deepcopy(response); del value['query']['matched']; variants.append(value)
+        for value in variants:
+            with self.subTest(value=value), self.assertRaises(R.RPCError):
+                R.validate_response(value, request)
+        for result in ('busy', 'unknown', 'failed'):
+            valid = R._uncertain(request, result)
+            self.assertIsNone(valid['query'])
+            self.assertEqual(R.validate_response(valid, request), valid)
+            with self.assertRaises(R.RPCError):
+                R.validate_response({**valid, 'query': response['query']}, request)
+
+    def test_query_same_id_returns_saved_result_and_cross_action_is_not_reused(self):
+        self.start(allow_query=True)
+        request = self.request('query')
+        answer = self.exchange(request)
+        self.assertEqual(answer[0], 200)
+        self.assertEqual(answer[1]['query']['post_count'], 1)
+        self.assertEqual(self.exchange(request), answer)
+        status, wrong = self.exchange({**request, 'action': 'wake'})
+        self.assertEqual((status, wrong['result']), (409, 'unknown'))
+        self.assertNotIn('query', wrong)
+        self.assertEqual(self.exchange(request), answer)
+        self.assertEqual(self.calls, [('query', request['request_id'])])
+        saved = json.loads(self.rpc.journal_path.read_text())
+        self.assertEqual(saved['requests'][0]['response'], answer[1])
+
+    def test_query_disconnect_and_inflight_retry_do_not_repeat_owner_call(self):
+        entered = threading.Event()
+        def handler(action, request_id):
+            self.calls.append((action, request_id)); entered.set(); self.release.wait(3)
+            return self.response(action, request_id)
+        self.start(handler, allow_query=True)
+        request = self.request('query')
+        with socket.socket(socket.AF_UNIX) as connection:
+            connection.connect(str(self.rpc.socket_path)); connection.sendall(self.wire(request))
+        self.assertTrue(entered.wait(2))
+        status, pending = self.exchange(request)
+        self.assertEqual((status, pending['result'], pending['query']), (409, 'unknown', None))
+        competing = self.request('query')
+        busy = self.exchange(competing)
+        self.assertEqual((busy[0], busy[1]['result'], busy[1]['query']), (409, 'busy', None))
+        self.release.set()
+        deadline = time.monotonic() + 2
+        while self.rpc._active and time.monotonic() < deadline: time.sleep(0.01)
+        self.assertEqual(self.exchange(request)[0], 200)
+        self.assertEqual(self.exchange(competing), busy)
+        self.assertEqual(len(self.calls), 1)
+
+    def test_query_done_grace_replays_only_saved_identity_then_closes(self):
+        def handler(action, request_id):
+            self.calls.append((action, request_id)); self.done.set()
+            return self.response(action, request_id)
+        self.start(handler, allow_query=True, replay_grace_seconds=0.3)
+        request = self.request('query'); answer = self.exchange(request)
+        self.assertEqual(self.exchange(request), answer)
+        refused = self.exchange(self.request('query'))
+        self.assertEqual((refused[0], refused[1]['result'], refused[1]['query']), (409, 'unknown', None))
+        self.thread.join(3)
+        self.assertFalse(self.thread.is_alive()); self.assertEqual(len(self.calls), 1)
+        self.assertEqual(self.stats['result'], 'verified')
+
+    def test_query_invalid_owner_proof_is_unknown_durable_and_never_reexecuted(self):
+        def handler(action, request_id):
+            self.calls.append((action, request_id))
+            response = self.response(action, request_id); response['query']['post_count'] = 2
+            return response
+        self.start(handler, allow_query=True)
+        request = self.request('query'); answer = self.exchange(request)
+        self.assertEqual((answer[0], answer[1]['result'], answer[1]['query']), (409, 'unknown', None))
+        self.assertEqual(self.exchange(request), answer); self.assertEqual(len(self.calls), 1)
+        self.stop(); self.assertEqual(self.stats['result'], 'failed')
 
     def test_private_socket_same_uid_and_durable_replay(self):
         self.start()

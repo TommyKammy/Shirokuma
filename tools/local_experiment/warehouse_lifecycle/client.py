@@ -10,6 +10,7 @@ import re
 import time
 import urllib.error
 import urllib.request
+import uuid
 
 from tools.local_experiment.trino_opa.common import ExperimentError, canonical, digest, require, token
 from tools.local_experiment.gateway_warehouse.client import (
@@ -62,6 +63,8 @@ def expected_rows(run_token, size):
 
 
 class Client:
+    cases = CASES
+
     def __init__(self, run_token, service_ips):
         self.run_token = token(run_token)
         self.service_ips = copy.deepcopy(service_ips)
@@ -245,18 +248,19 @@ class Client:
         return copy.deepcopy(attempt)
 
     def _source(self, case):
-        require(case in CASES, 'CASE_INVALID')
+        require(case in self.cases, 'CASE_INVALID')
         return 'shirokuma-wl-' + self.run_token + '-' + case
 
     def _headers(self, case, *, followup=False):
-        route = CASES[case].upper()
+        route = self.cases[case].upper()
         return {'X-Trino-User': self.worker, 'X-Trino-Source': self._source(case),
                 'X-Trino-Session': 'query_max_execution_time=20s,query_max_run_time=30s',
                 HEADER: ('S' if route == 'XS' else 'XS') if followup else route}
 
-    def start(self, case):
-        require(case in CASES and case not in self.handles and self.journal['pending'] is None, 'QUERY_SEQUENCE_INVALID')
-        row = {'case': case, 'size': CASES[case], 'source': self._source(case), 'query_id': None,
+    def start(self, case, *, guard=None):
+        require(case in self.cases and case not in self.handles and self.journal['pending'] is None
+                and (guard is None or callable(guard)), 'QUERY_SEQUENCE_INVALID')
+        row = {'case': case, 'size': self.cases[case], 'source': self._source(case), 'query_id': None,
                'http_status': None, 'response_complete': False, 'result': 'pending', 'rows_observed': 0,
                'followup_gets': 0, 'opposite_route_gets': 0, 'sql_sha256': digest(SELECT.encode())}
         handle = {'row': row, 'path': None, 'rows': [], 'columns': None, 'pages': 0, 'bytes': 0,
@@ -267,6 +271,8 @@ class Client:
         self.epoch += 1
         self.last_activity = time.monotonic()
         self.notify()  # All POST intentions are durable before any request, even if no ID returns.
+        if guard is not None:
+            guard()
         response = self.request('gateway', '/v1/statement', data=SELECT.encode(), headers=self._headers(case))
         self._page(case, response, first=True)
         self.journal['pending'] = None
@@ -308,7 +314,7 @@ class Client:
             uri = value.get('nextUri')
             if uri is None:
                 rows = handle['rows']
-                require(handle['columns'] == SELECT_COLUMNS and rows == expected_rows(self.run_token, CASES[case])
+                require(handle['columns'] == SELECT_COLUMNS and rows == expected_rows(self.run_token, self.cases[case])
                         and all(type(r[2]) is bool and type(r[4]) is int for r in rows), 'QUERY_ORACLE_MISMATCH')
                 row.update(result='success', response_complete=True, rows_sha256=digest(rows), matched=True)
                 handle['finished'] = True
@@ -373,7 +379,39 @@ class Client:
         return copy.deepcopy(result)
 
     def require_seen_terminal(self, snapshot, cases):
-        require(type(cases) in (tuple, list) and all(case in CASES for case in cases), 'QUERY_EXPECTATION_INVALID')
+        require(type(cases) in (tuple, list) and all(case in self.cases for case in cases), 'QUERY_EXPECTATION_INVALID')
         found = {row['case']: row['state'] for row in snapshot['rows']}
         require(all(found.get(case) == 'FINISHED' for case in cases), 'QUERY_TERMINAL_EVIDENCE_MISSING')
         return True
+
+
+class QueryClient(Client):
+    """Opt-in, one fixed caller SELECT; no arbitrary SQL or request identity."""
+    cases = {**CASES, 'xs_caller': 'xs'}
+
+    def __init__(self, run_token, service_ips):
+        super().__init__(run_token, service_ips)
+        self.caller_request_id = None
+
+    def bind_caller(self, request_id):
+        try:
+            valid = type(request_id) is str and str(uuid.UUID(request_id)) == request_id
+        except (ValueError, TypeError, AttributeError):
+            valid = False
+        require(valid and self.caller_request_id is None, 'CALLER_REQUEST_INVALID')
+        self.caller_request_id = request_id
+
+    def _source(self, case):
+        source = super()._source(case)
+        if case == 'xs_caller':
+            require(self.caller_request_id is not None, 'CALLER_REQUEST_UNBOUND')
+            source += '-' + uuid.UUID(self.caller_request_id).hex
+        return source
+
+    def start(self, case, *, guard=None):
+        require(case != 'xs_caller' or callable(guard), 'CALLER_GUARD_REQUIRED')
+        return super().start(case, guard=guard)
+
+    def caller(self, *, guard):
+        self.start('xs_caller', guard=guard)
+        return self.finish('xs_caller')

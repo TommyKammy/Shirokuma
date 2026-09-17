@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.19"
+version: "3.20"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
@@ -1456,3 +1456,39 @@ vet/raceが成功。実Python bridge＋実workflow/外部fakeの7経路でexit/�
 対応Loki各4件、保持3410files、14Pods/3Docker/MLflow identity、16policy/bindingとnamespaceは不変、
 LimitRange空、candidate Pod残存0、既存tunnel閉鎖を確認した。深いDB/metadata/fixture観測は
 直前のQuery/SRE監査の保存証拠を継承し、今回は各ストアの全内容を再走査していない。
+
+## 2026-09-18 query-triggered wake evidence
+
+`warehouse query XS`をquery-modeの短命ownerへ接続した。旧chill/wakeと7固定caseは維持し、
+既存wake probes後に別source/request UUIDの`xs_caller`を追加した。callerのintent、POST intent、
+query ID、固定SQL/結果hash、終端履歴、UID/scale chain、監査を束縛してから成功応答を保存する。
+query CLIは240秒待機し、切断でownerを止めず、same-ID再照会以外の自動再実行をしない。
+
+実session `5edf12a5864e4a1391b8c4d1a7d309da`でGo CLIのchill→query→same-ID query再送が成功。
+caller request `7ce1b703-b16c-4375-8db6-ead09ae38485` はSQL POST1回、
+query `20260917_152707_00001_gps5i`の25nation行とXS nodeが一致した。
+結果hashは `eba954dccf4cef71463d4c4ffe8f7dfbd3777be9660c71265791467025f4acc1`。
+再送応答はbyte単位で同一、追加SQL/scaleは0。RPCは3接続・2実operationを記録した。
+全8caseの結果/handleを消費し、XS終端履歴はwake probeとcallerの2件、Sは既存3終端caseだけだった。
+
+同じXS Deploymentを1→0→1に変更し、新Pod/processを確認、SのPod/Deployment identityは不変。
+17既知UIDを明示回収、停止時にcontrollerが削除した旧XS Podも残存0、conflict/deferredは0。
+caller計測はwake待機26059ms、query client3283ms、監査前までの全体31581ms。
+前者には起動/probes/監査/guard、後者には結果取得/host処理が含まれ、cold-query性能とはしない。
+busy/chill/wake/query/rootの5件をAgentHouse/Loki/実保存OTelで照合し、
+traceは `dc95af2097fd91da1fe61ecaac05276e`。LLM/cloud呼出し0、usage/costはNULL。
+query成功応答後の回収と最終root監査まで含め、owner exit0・session passedを確認した。
+
+新query22・query telemetry15・RPC追加6のPython43件と新Go6件が成功。
+実Go→Unix RPC→実owner/controller/client（外部だけfake）結合で同ID再送とprechill拒否を確認した。
+厳密な型、scope/hash、UID/scale履歴、取消の原object、保存障害/監査失敗/改変したspanを確認。
+旧session/chill/wakeを含む全local回帰1701件（1700成功・既存optional OTel1skip）、
+Go97 top-level/59 subtests、vet/race、設計83documents/関連14tests、secret検査が成功した。
+
+実行・検証証拠は `tmp/local-experiment/warehouse-query-checks/f735cfb20dcc4bcd9c532b7d64f9f086/`、
+owner証拠は `warehouse-lifecycle/runs/5edf12a5864e4a1391b8c4d1a7d309da/`、
+独立監査は `warehouse-query-preflight/bded3460dc4d4afba5459680c4c3604c/`。
+fresh前後18checkで旧AH465全行hash、保持3478files、14Pods/27resources/3Docker/MLflow、
+16native policiesとnamespaceが不変、現AH470、生成resource残留0、ports/locks/socket閉鎖を確認した。
+fixture/SQL履歴/Metadata/MLflow全論理データは直前監査のsealを継承し、全再走査していない。
+任意SQL/warehouse、実tenant認可、owner再起動後復旧、常駐queue、HA、一般並行writer、本番受入は未達。

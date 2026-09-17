@@ -5,7 +5,7 @@ title: "shirokuma CLI"
 status: draft
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.6.0"
+version: "0.7.0"
 area: "module"
 tags: [shirokuma, module]
 ---
@@ -127,3 +127,16 @@ CLIはworkflowのpassedとadmissionのallowed/deniedを分ける。checkは許�
 LimitRange空、dry-run前後の不存在、pending intent、監査と4保存spanを検証する。
 defaultingが違反特徴を変える入力は事前拒否し、不明な結果を自動再送しない。
 詳細は[Policy CLI runbook](../../../tools/local_experiment/bears/POLICY_CLI.md)を参照。
+
+### Local experimental query-triggered wake
+
+`shirokuma warehouse query XS --session TOKEN`はquery-modeで起動した短命ownerへ、
+停止済みXSのwakeと固定TPCH SELECT1回を同じ要求IDで依頼する。ownerは既存wake probesの後に
+別caller queryを送信し、25行/結果hash/query ID/XS終端履歴/S不変/監査を確認して応答する。
+旧`chill`/`wake`とQuery Doctorの`query run/status`は既存契約を維持する。
+
+新query CLIは240秒待機する。切断はownerの処理を止めず、同じsession/request IDだけを
+生存ownerと終了後15秒のgrace内で再照会できる。完了応答は同一内容を返し、追加POST/scaleは0。
+任意SQL、owner再起動後の要求復旧、自動再送、tenant認可、cold-query性能を主張しない。
+caller成功後の回収・最終監査は別途ownerのsession receiptで確認する。
+[Runbook](../../../tools/local_experiment/warehouse_lifecycle/README.md#query-triggered-wake)を参照。

@@ -4,8 +4,8 @@ doc_id: "WP-L3-VW-002"
 title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-17
-version: "0.4"
+updated: 2026-09-18
+version: "0.5"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
@@ -18,6 +18,25 @@ tags: [shirokuma, wp, l3, warehouse]
 | Level | L3 |
 | Workstream | Warehouse |
 | Depends-on | WP-L3-VW-001, WP-L0-OBS-001 |
+
+## 2026-09-18 query-triggered wake plan
+
+停止中の生成XSへ固定SELECTを要求し、同じownerがwake完了後に一度だけ実行する。
+`session run --query-mode`と`shirokuma warehouse query XS --session TOKEN`を追加する。
+旧chill/wake、既存wakeのXS/S probeを維持し、callerは別case/query ID/sourceで束縛する。
+任意SQL・保持catalog・新resident service・LLM呼出しは追加しない。
+
+- [x] chill済みXSのquery要求をdurable intentで記録し、同じUIDのDeploymentをwakeする。
+- [x] Pod/process/Endpoint/registryの確認と既存probe完了後に、固定TPCH SELECTを一度だけPOSTする。
+- [x] 25nation結果・XS自身の終端履歴・Sへfallbackしないこと・全handle消費を照合する。
+- [x] 要求UUID・SQL/結果hash・query ID・監査を束縛し、完了応答の保存後だけ成功を返す。
+- [x] 生存ownerと終了後15秒grace内の同ID再送は同一応答で、追加scale/POSTを行わない。
+- [x] 失敗・取消・切断・不明結果で再POSTせず、所有資源の回収結果を保持する。
+- [x] 既存実験を保持して実CLI/監査/回帰を確認し、Vaultへ結果と制限を反映する。
+
+待機時間には既存wake probe・guard・監査が含まれ、cold-query性能の証明にはしない。
+短命・単一ownerの固定XSだけが対象であり、owner再起動後の要求復旧、任意warehouse/query、
+一般tenant認可、HA、常駐queue、実課金削減、本番受入は未実装として残す。
 
 ## Scope
 
@@ -108,3 +127,39 @@ UID/spec/配送対象の確認を維持して回帰テストを追加した。�
 CLI6応答/4operationのraw SHA256、実binary hash、同IDの完全同一応答、scale2回だけを独立再確認。
 全回帰836件（835成功・標準環境のoptional OTel1skip）後、更新済みfocused112件がすべて成功。
 同OTel結合は専用venvで成功。Go test/vet/race、設計79documents/関連14tests、diff checkも成功。
+
+## 2026-09-18 query-triggered wake evidence
+
+`warehouse query XS`をquery-modeの短命ownerへ接続した。旧chill/wakeと7固定caseは維持し、
+既存wake probes後に別source/request UUIDの`xs_caller`を追加した。callerのintent、POST intent、
+query ID、固定SQL/結果hash、終端履歴、UID/scale chain、監査を束縛してから成功応答を保存する。
+query CLIは240秒待機し、切断でownerを止めず、same-ID再照会以外の自動再実行をしない。
+
+実session `5edf12a5864e4a1391b8c4d1a7d309da`でGo CLIのchill→query→same-ID query再送が成功。
+caller request `7ce1b703-b16c-4375-8db6-ead09ae38485` はSQL POST1回、
+query `20260917_152707_00001_gps5i`の25nation行とXS nodeが一致した。
+結果hashは `eba954dccf4cef71463d4c4ffe8f7dfbd3777be9660c71265791467025f4acc1`。
+再送応答はbyte単位で同一、追加SQL/scaleは0。RPCは3接続・2実operationを記録した。
+全8caseの結果/handleを消費し、XS終端履歴はwake probeとcallerの2件、Sは既存3終端caseだけだった。
+
+同じXS Deploymentを1→0→1に変更し、新Pod/processを確認、SのPod/Deployment identityは不変。
+17既知UIDを明示回収、停止時にcontrollerが削除した旧XS Podも残存0、conflict/deferredは0。
+caller計測はwake待機26059ms、query client3283ms、監査前までの全体31581ms。
+前者には起動/probes/監査/guard、後者には結果取得/host処理が含まれ、cold-query性能とはしない。
+busy/chill/wake/query/rootの5件をAgentHouse/Loki/実保存OTelで照合し、
+traceは `dc95af2097fd91da1fe61ecaac05276e`。LLM/cloud呼出し0、usage/costはNULL。
+query成功応答後の回収と最終root監査まで含め、owner exit0・session passedを確認した。
+
+新query22・query telemetry15・RPC追加6のPython43件と新Go6件が成功。
+実Go→Unix RPC→実owner/controller/client（外部だけfake）結合で同ID再送とprechill拒否を確認した。
+厳密な型、scope/hash、UID/scale履歴、取消の原object、保存障害/監査失敗/改変したspanを確認。
+旧session/chill/wakeを含む全local回帰1701件（1700成功・既存optional OTel1skip）、
+Go97 top-level/59 subtests、vet/race、設計83documents/関連14tests、secret検査が成功した。
+
+実行・検証証拠は `tmp/local-experiment/warehouse-query-checks/f735cfb20dcc4bcd9c532b7d64f9f086/`、
+owner証拠は `warehouse-lifecycle/runs/5edf12a5864e4a1391b8c4d1a7d309da/`、
+独立監査は `warehouse-query-preflight/bded3460dc4d4afba5459680c4c3604c/`。
+fresh前後18checkで旧AH465全行hash、保持3478files、14Pods/27resources/3Docker/MLflow、
+16native policiesとnamespaceが不変、現AH470、生成resource残留0、ports/locks/socket閉鎖を確認した。
+fixture/SQL履歴/Metadata/MLflow全論理データは直前監査のsealを継承し、全再走査していない。
+任意SQL/warehouse、実tenant認可、owner再起動後復旧、常駐queue、HA、一般並行writer、本番受入は未達。

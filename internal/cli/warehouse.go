@@ -230,11 +230,29 @@ func transitionAtWarehouseSocket(ctx context.Context, request warehouseTransitio
 	if err := validateWarehouseRequest(request); err != nil {
 		return empty, err
 	}
-	before, err := checkWarehouseSocket(path)
+	status, data, err := exchangeWarehouseSocket(ctx, request, path, warehouseRequestTimeout)
 	if err != nil {
 		return empty, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, warehouseRequestTimeout)
+	report, err := decodeWarehouseResponse(data, request)
+	if err != nil {
+		return empty, err
+	}
+	expectedStatus := map[string]int{"verified": 200, "noop": 200, "busy": 409, "unknown": 409, "failed": 500}[report.Result]
+	if status != expectedStatus {
+		return empty, errors.New("warehouse response status and result disagree")
+	}
+	return report, nil
+}
+
+// Both fixed protocols use the same private socket checks and HTTP boundary.
+// The caller validates the action-specific request and exact response schema.
+func exchangeWarehouseSocket(ctx context.Context, request warehouseTransitionRequest, path string, timeout time.Duration) (int, []byte, error) {
+	before, err := checkWarehouseSocket(path)
+	if err != nil {
+		return 0, nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	transport := &http.Transport{
 		Proxy: nil, DisableKeepAlives: true, MaxResponseHeaderBytes: 8192,
@@ -264,36 +282,28 @@ func transitionAtWarehouseSocket(ctx context.Context, request warehouseTransitio
 	}}
 	body, err := json.Marshal(request)
 	if err != nil {
-		return empty, err
+		return 0, nil, err
 	}
 	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://warehouse.local/v1/transition", bytes.NewReader(body))
 	if err != nil {
-		return empty, err
+		return 0, nil, err
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
 	httpRequest.Header.Set("Accept", "application/json")
 	response, err := client.Do(httpRequest)
 	if err != nil {
-		return empty, err
+		return 0, nil, err
 	}
 	defer response.Body.Close()
 	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/json" {
-		return empty, errors.New("warehouse response content type invalid")
+		return 0, nil, errors.New("warehouse response content type invalid")
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, warehouseResponseLimit+1))
 	if err != nil || len(data) > warehouseResponseLimit {
-		return empty, errors.New("warehouse response incomplete or too large")
+		return 0, nil, errors.New("warehouse response incomplete or too large")
 	}
-	report, err := decodeWarehouseResponse(data, request)
-	if err != nil {
-		return empty, err
-	}
-	expectedStatus := map[string]int{"verified": 200, "noop": 200, "busy": 409, "unknown": 409, "failed": 500}[report.Result]
-	if response.StatusCode != expectedStatus {
-		return empty, errors.New("warehouse response status and result disagree")
-	}
-	return report, nil
+	return response.StatusCode, data, nil
 }
 
 func decodeWarehouseResponse(data []byte, request warehouseTransitionRequest) (warehouseTransitionResponse, error) {

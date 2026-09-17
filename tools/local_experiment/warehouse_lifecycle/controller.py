@@ -300,3 +300,68 @@ class Controller:
         self.prepare()
         self.chill()
         return self.wake()
+
+    def query(self, request_id, *, audit):
+        """Wake with existing probes, then submit the separate caller SELECT once.
+
+        The durable caller intent and the HTTP client's POST intent are separate.
+        An unknown response is never retried; only the RPC cache may replay a
+        completed response. Times include host guards, pages and durable writes.
+        """
+        require(self.journal['result'] == 'chilled' and 'caller' not in self.journal
+                and callable(audit) and callable(getattr(self.client, 'bind_caller', None)),
+                'CALLER_SEQUENCE_INVALID')
+        self.client.bind_caller(request_id)
+        started = time.monotonic()
+        caller = {'request_id': request_id, 'case': 'xs_caller', 'result': 'pending',
+                  'stage': 'wake', 'post_intents': 0, 'query': None, 'projection': None,
+                  'wake_wait_ms': None, 'query_client_ms': None, 'duration_ms': None,
+                  'audit_attempted': False, 'audit_verified': False, 'failure_code': None}
+        self.journal['caller'] = caller
+        try:
+            self.notify()  # Before any wake/control/scale activity for this request.
+            self.wake()  # xs_after and s_after are readiness probes, not the caller.
+            caller['wake_wait_ms'] = max(0, int((time.monotonic() - started) * 1000))
+            self.stage = None
+            self.journal.update(result='querying', pending={'operation': 'caller-query'})
+            self.client.journal['result'] = 'pending'
+            caller.update(stage='post-pending', post_intents=1)
+            self.notify()
+            query_started = time.monotonic()
+            row = self.client.caller(guard=self.checked_guard)
+            caller['query_client_ms'] = max(0, int((time.monotonic() - query_started) * 1000))
+            caller['stage'] = 'terminal-readback'
+            self.notify()
+            xs, s = self.client.queries('xs'), self.client.queries('s')
+            self.client.require_seen_terminal(xs, ('xs_after', 'xs_caller'))
+            self.client.require_seen_terminal(s, ('s_before', 's_chilled', 's_after'))
+            require({r['case'] for r in xs['rows']} == {'xs_after', 'xs_caller'}
+                    and xs['nonterminal_count'] == s['nonterminal_count'] == 0,
+                    'CALLER_HISTORY_IDENTITY_MISMATCH')
+            self.checked_guard()
+            self.client.registry()
+            ledger = self.client.ledger()
+            require(ledger['all_results_consumed'] and ledger['pending_handles'] == 0
+                    and ledger['uncaptured_requests'] == 0, 'QUERY_CLEANUP_UNVERIFIED')
+            caller['query'] = {key: copy.deepcopy(row[key]) for key in
+                               ('case', 'query_id', 'rows_observed', 'rows_sha256', 'response_complete', 'matched')}
+            caller['query']['post_count'] = 1
+            projection = {**copy.deepcopy(caller['query']), 'warehouse': 'XS', 'request_id': request_id,
+                          'source': row['source'], 'user': self.client.worker, 'sql_sha256': row['sql_sha256'],
+                          'wake_verified': True, 'terminal_verified': True, 'all_results_consumed': True,
+                          'wake_wait_ms': caller['wake_wait_ms'], 'query_client_ms': caller['query_client_ms']}
+            caller.update(stage='audit-pending', projection=projection, audit_attempted=True,
+                          duration_ms=max(0, int((time.monotonic() - started) * 1000)))
+            self.notify()
+            audit(copy.deepcopy(projection), caller['duration_ms'])
+            caller.update(result='verified', stage='complete', audit_verified=True)
+            self.client.journal['result'] = 'verified'
+            self.journal.update(result='verified', pending=None)
+            self.notify()
+            return copy.deepcopy(caller['query'])
+        except BaseException as error:
+            caller.update(result='unknown' if isinstance(error, Exception) else 'interrupted',
+                          failure_code=str(error) if isinstance(error, ExperimentError) else 'CALLER_FAILED',
+                          duration_ms=max(0, int((time.monotonic() - started) * 1000)))
+            self._failed(error)
+            raise

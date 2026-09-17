@@ -686,12 +686,17 @@ local-warehouse-lifecycle-run:
 	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/warehouse_lifecycle/run.py run --build-token "$(GATEWAY_WAREHOUSE_BUILD_TOKEN)"
 local-warehouse-lifecycle-session:
 	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/warehouse_lifecycle/session.py run --build-token "$(GATEWAY_WAREHOUSE_BUILD_TOKEN)"
+.PHONY: local-warehouse-query-session
+local-warehouse-query-session:
+	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/warehouse_lifecycle/session.py run --query-mode --build-token "$(GATEWAY_WAREHOUSE_BUILD_TOKEN)"
 local-warehouse-lifecycle-recover:
 	@$(PYTHON) tools/local_experiment/warehouse_lifecycle/run.py recover --run-token "$(WAREHOUSE_LIFECYCLE_RUN_TOKEN)"
 test-local-warehouse-lifecycle:
 	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_warehouse_lifecycle*.py'
 	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_warehouse_session*.py'
 	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_lifecycle_telemetry.py'
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_warehouse_query.py'
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_query_lifecycle_telemetry.py'
 verify-local-experiment: test-local-warehouse-lifecycle
 
 .PHONY: local-mlflow-sync local-mlflow-prepare local-mlflow-plan local-mlflow-import local-mlflow-start local-mlflow-status local-mlflow-stop test-local-mlflow

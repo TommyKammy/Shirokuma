@@ -23,6 +23,8 @@ import uuid
 SOCKET_ROOT = Path('/private/tmp')
 REQUEST_KEYS = {'schema_version', 'session_id', 'request_id', 'warehouse', 'action'}
 RESPONSE_KEYS = REQUEST_KEYS | {'result', 'before', 'after', 'operation_id', 'receipt_sha256'}
+QUERY_KEYS = {'case', 'query_id', 'rows_observed', 'rows_sha256', 'post_count',
+              'response_complete', 'matched'}
 STATUS = {'verified': 200, 'noop': 200, 'busy': 409, 'unknown': 409, 'failed': 500}
 TARGETS = {'chill': {'replicas': 0, 'backend_active': False},
            'wake': {'replicas': 1, 'backend_active': True}}
@@ -60,7 +62,8 @@ def _constant(_value):
     raise RPCError('INVALID_JSON')
 
 
-def parse_request(raw, session_id):
+def parse_request(raw, session_id, *, allow_query=False):
+    require(type(allow_query) is bool, 'INVALID_REQUEST')
     require(isinstance(raw, bytes) and 0 < len(raw) <= MAX_BODY, 'INVALID_REQUEST')
     try:
         value = json.loads(raw.decode('utf-8'), object_pairs_hook=_pairs, parse_constant=_constant)
@@ -71,13 +74,16 @@ def parse_request(raw, session_id):
             'INVALID_REQUEST')
     require(value['session_id'] == session_id and canonical_uuid(value['request_id']),
             'INVALID_REQUEST')
-    require(value['warehouse'] == 'XS' and value['action'] in ('chill', 'wake'),
+    actions = ('chill', 'wake', 'query') if allow_query else ('chill', 'wake')
+    require(value['warehouse'] == 'XS' and value['action'] in actions,
             'INVALID_REQUEST')
     return value
 
 
 def validate_response(value, request):
-    require(type(value) is dict and set(value) == RESPONSE_KEYS, 'INVALID_RESPONSE')
+    is_query = request['action'] == 'query'
+    require(type(value) is dict and set(value) == RESPONSE_KEYS | ({'query'} if is_query else set()),
+            'INVALID_RESPONSE')
     require(type(value['schema_version']) is int and value['schema_version'] == 1,
             'INVALID_RESPONSE')
     require(all(value[key] == request[key] for key in REQUEST_KEYS), 'INVALID_RESPONSE')
@@ -94,7 +100,25 @@ def validate_response(value, request):
     require((operation is None and receipt is None) or
             (canonical_uuid(operation) and isinstance(receipt, str) and
              re.fullmatch(r'[0-9a-f]{64}', receipt) is not None), 'INVALID_RESPONSE')
-    if value['result'] in ('verified', 'noop'):
+    if is_query:
+        require(value['result'] != 'noop', 'INVALID_RESPONSE')
+        query = value['query']
+        if value['result'] == 'verified':
+            require(operation is not None and value['before'] == TARGETS['chill']
+                    and value['after'] == TARGETS['wake'], 'INVALID_RESPONSE')
+            require(type(query) is dict and set(query) == QUERY_KEYS
+                    and query['case'] == 'xs_caller'
+                    and type(query['query_id']) is str
+                    and re.fullmatch(r'[0-9]{8}_[0-9]{6}_[0-9]{5}_[a-z0-9]{5}', query['query_id']) is not None
+                    and type(query['rows_observed']) is int and query['rows_observed'] == 25
+                    and type(query['rows_sha256']) is str
+                    and re.fullmatch(r'[0-9a-f]{64}', query['rows_sha256']) is not None
+                    and type(query['post_count']) is int and query['post_count'] == 1
+                    and query['response_complete'] is True and query['matched'] is True,
+                    'INVALID_RESPONSE')
+        else:
+            require(query is None, 'INVALID_RESPONSE')
+    elif value['result'] in ('verified', 'noop'):
         require(operation is not None and value['after'] == TARGETS[value['action']],
                 'INVALID_RESPONSE')
         prior = TARGETS['wake' if value['action'] == 'chill' else 'chill']
@@ -107,7 +131,8 @@ def _uncertain(request, result='unknown'):
     return {**request, 'result': result,
             'before': {'replicas': None, 'backend_active': None},
             'after': {'replicas': None, 'backend_active': None},
-            'operation_id': None, 'receipt_sha256': None}
+            'operation_id': None, 'receipt_sha256': None,
+            **({'query': None} if request['action'] == 'query' else {})}
 
 
 def _identity(path, kind, mode=None):
@@ -148,7 +173,7 @@ def peer_uid(connection):
 
 class SessionRPC:
     def __init__(self, session_id, output, handler, *, ttl_seconds=600, max_requests=16,
-                 replay_grace_seconds=15):
+                 replay_grace_seconds=15, allow_query=False):
         require(isinstance(session_id, str) and re.fullmatch(r'[0-9a-f]{32}', session_id),
                 'INVALID_SESSION')
         require(type(ttl_seconds) in (int, float) and 0 < ttl_seconds <= 600, 'INVALID_LIMIT')
@@ -156,6 +181,8 @@ class SessionRPC:
         require(type(replay_grace_seconds) in (int, float) and 0 < replay_grace_seconds <= 15,
                 'INVALID_LIMIT')
         require(callable(handler), 'INVALID_HANDLER')
+        require(type(allow_query) is bool, 'INVALID_QUERY_MODE')
+        self.allow_query = allow_query
         self.session_id, self.output, self.handler = session_id, Path(output), handler
         self.ttl_seconds, self.max_requests = ttl_seconds, max_requests
         self.replay_grace_seconds = replay_grace_seconds
@@ -280,7 +307,7 @@ class SessionRPC:
         while len(buffered) < length:
             receive(length - len(buffered))
         raw = bytes(buffered[:length])
-        return parse_request(raw, self.session_id)
+        return parse_request(raw, self.session_id, allow_query=self.allow_query)
 
     def _dispatch(self, request):
         request_id = request['request_id']

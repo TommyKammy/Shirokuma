@@ -53,6 +53,49 @@ cancel an operation already running in the owner. Inspect the private session
 receipt for the final outcome if the owner has closed. Recovery uses the same
 `local-warehouse-lifecycle-recover` target and the session ID as the run token.
 
+## Query-triggered wake
+
+The optional query session accepts a fixed caller SELECT after XS is chilled:
+
+```sh
+rtk make local-warehouse-query-session GATEWAY_WAREHOUSE_BUILD_TOKEN=<token>
+rtk proxy go run ./cmd/shirokuma chill XS --session <session-id>
+rtk proxy go run ./cmd/shirokuma warehouse query XS --session <session-id>
+```
+
+This mode retains the same disposable topology, local profile and existing
+ten-minute/sixteen-connection owner limit. It requires `chill` before `query`;
+standalone `wake` is unavailable in query mode. The original chill/wake session
+and Query Doctor's `query run/status` commands keep their existing contracts.
+
+One owner request records durable intent, wakes XS with the existing readiness
+probes, then sends the separate fixed `xs_caller` SELECT once through Gateway.
+It checks 25 TPCH nation rows, the XS node/result hash, terminal query history,
+unchanged S identity, no S fallback and complete consumption of all known results.
+The caller request UUID determines its distinct source header. These synthetic
+headers establish experiment provenance; they are not tenant authentication.
+
+The verified response includes a query ID, row count/hash and a single POST
+count. A wake or readiness probe alone cannot produce a successful caller
+response. SQL, tables and endpoints cannot be supplied by the caller. The
+measured wait includes probes and local audit/guard work and is not cold-query
+performance evidence.
+
+The query CLI waits up to 240 seconds. Disconnecting it does not cancel the
+owner's work. Retry only with the same session and `--request-id` while that
+owner is alive or in its fifteen-second replay grace. An in-flight or lost
+result remains unknown; no new POST is issued. A saved busy response is not
+converted into later execution. There is no restart recovery of request IDs,
+new-session resubmission or permanent queue.
+
+Query sessions add one verified caller-query audit to the existing three
+controller decisions and final run audit. Five local OTel spans correlate with
+Pawprints/Loki; the query audit span measures delivery, while separately stored
+durations describe the controller work. The owner returns query success only
+after caller verification and audit delivery, then replays the saved response
+briefly and cleans up its known resources. The final session receipt separately
+confirms cleanup and the complete five-event audit.
+
 ## What is verified
 
 The host journals every SQL POST intent before submission and holds an initial XS
