@@ -189,6 +189,9 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 4096
+        },
+        "enable_thinking": {
+          "type": "boolean"
         }
       }
     }

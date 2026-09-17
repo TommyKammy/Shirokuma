@@ -4,19 +4,84 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-09-16
-version: "1.3"
+updated: 2026-09-17
+version: "1.4"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最終確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
+最新の到達点（2026-09-17）：既存MTPLX Qwenで実MCP inventory workflowが成功。
+Cloud APIは無効のまま、ローカル実LLMを利用して開発を継続できる。
+稼働停止していた専用Colimaを既存設定で復旧し、5 component groupsすべてreadyを確認した。
+ローカル回帰185件・設計関連14件が成功し、設計66 documentsを検証した。
+
+前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
-Cloud APIは未実行で、provider/model・認証環境変数名・追加予算の判断だけを保留している。
+Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: 既存MTPLX Qwenへの実LLM接続
+
+**WP-L2-LLM-001のlocal実LLM機能検証**が成功した。OWNER指定の
+`qwen3.8-flash-next`を`http://127.0.0.1:8001/v1`で使用する。
+APIのmodel ID完全一致と32,768 context、hostの`127.0.0.1:8001` listenerを確認した。
+MTPLX 2.11.2・MTPなし・weights約115GBはOWNER提供の構成情報で、再インストールや
+weightsの取得、server設定・ログイン時自動起動の変更は行っていない。
+OpenAPIで確認した`enable_thinking=false`を明示し、出力512 tokens、timeout 60秒、retryなし。
+入力は最大8 KiBの固定instructionsと最大16個の短いmodel識別子に制限する。
+これはbyte境界であり、32K全長や最大context性能の評価ではない。
+
+最初の単純JSON probeは0.627秒、入力46・出力14 tokensで成功。
+続く実`plan → MCP dbt_list_models → summarize`は2回とも成功し、
+`mart_fixture` / `stg_fixture`、件数2、保持されたverified runの有無を完全照合した。
+モデルへ渡すのは識別子一覧とbooleanだけで、任意tool payload、path、run tokenは渡さない。
+verified runは過去の検証記録を表し、cleanup済み生成tableの現在存在を意味しない。
+
+実測4推論のclient wall timeは0.518 / 1.731 / 0.482 / 1.589秒、
+入力計376・出力計128 tokens。AgentHouseから8件を再読込し、task/trace、
+provider/model、実測tokens/latencyが元の応答と一致した。価格未評価のcostはNULL。
+別枠のColima→`host.lima.internal:8001`推論も0.811秒で成功した。
+証跡は`tmp/local-experiment/llm/cb4e7e837bc7425b9e634b23b7521ca7/summary.json`。
+mockの回帰2 runsも成功：`tmp/local-experiment/llm/859f888874934d569d1003f450fdf1fa/summary.json`。
+
+応答検証をhost/VMで共通化した最終run
+`tmp/local-experiment/llm/8c79338e13b2474784dc3f636f219f88/summary.json`も成功。
+VM probeの入力56・出力13 tokens、0.733秒をgraphとは別のreceiptへ保持した。
+後続graphの4推論は入力計376・出力計128 tokens、0.519–1.603秒で、8監査eventと一致した。
+途中で応答や監査保存が失敗しても、既知の使用量・時間・配送成否はprivate証跡に残す。
+
+さらに、空一覧、1件、別名3件、未検証記録、16件上限の5合成fixtureを各2回評価し、
+Qwenは**10/10**成功した。必須keys、モデル名、件数、booleanが毎回一致し、
+10件の`llm.eval_summary`をAgentHouseから即時読戻しした。入力計1,510・出力計644 tokens、
+推論時間合計19.110秒、1回0.782–4.910秒、観測した入力+出力の最大418 tokens。
+traceは評価相関用IDであり、この評価コマンドはOTel spanやMCP tool呼出しを生成しない。
+証跡は`tmp/local-experiment/llm-evaluation/478640a6721444be8e9b15ee6518dd18/summary.json`。
+mockも同じfixtureで10/10成功し、usage/cost NULLを保持した。
+再実行は`rtk make local-llm-qwen-eval`（mockは`local-llm-eval`）。
+これはWP-L2-LLM-001の入力追従検証であり、WP-L2-EVAL-001のPR成功率・修正率・MTTPは測っていない。
+
+focused testsはLLM31件＋評価10件。`make verify-local-experiment verify-design-context`は
+合計199 testsと設計66 documentsが成功した。fixture捏造、誤count/flag、incomplete JSON、
+fail時usage、監査障害時停止、VM失敗receipt、cloud実行拒否を検証する。
+
+Colima停止は検出時の事実で、停止原因は未特定。16 CPU / 96 GiB / 400 GiB設定を保持して
+再開し、既存container・volumeを使って5 component groupsを復旧した。
+Colima設定hash、active Docker/kube contextは不変。Seaweed8Gi、親Flux停止を維持した。
+非モデルMCP smokeは8 tools、11監査eventのClickHouse/Loki/OTel相関が成功。
+復旧証跡は`tmp/local-experiment/recovery-20260917/summary.json`。
+
+再実行：`rtk make local-llm-qwen-smoke`。専用profileは
+`tools/local_experiment/llm/providers.qwen-local.json`、default mockは変更していない。
+応答のmodel ID、finish_reason、JSON、要約事実の不一致は拒否し、失敗時も有効なusageを保持する。
+戻す場合は`rtk make local-llm-smoke`を使うだけで、既存MTPLX serviceや保持監査記録は削除しない。
+新規resident component・weights・tableはなく、追加保存は小さなコードと監査/証跡のみ。
+
+Cloud smokeは未達のまま保留するが、local実LLM作業の依存条件にはしない。
+この結果は固定の読み取りinventory taskの検証であり、汎用モデル品質、SRE診断、自動修復、
+本番・人間受入の完了ではない。
 
 ## 2026-09-16: TPC-H SF10 全22クエリの完走
 

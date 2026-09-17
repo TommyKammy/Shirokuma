@@ -404,15 +404,24 @@ test-local-gateway:
 
 verify-local-experiment: test-local-gateway
 
-.PHONY: local-llm-sync local-llm-smoke test-local-llm
+.PHONY: local-llm-sync local-llm-smoke local-llm-qwen-smoke local-llm-eval local-llm-qwen-eval test-local-llm
 local-llm-sync:
 	@uv sync --locked --no-dev --project tools/local_experiment/llm
 
 local-llm-smoke: local-llm-sync local-gateway-sync
 	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/llm/workflow.py
 
+local-llm-qwen-smoke: local-llm-sync local-gateway-sync
+	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/llm/workflow.py --config tools/local_experiment/llm/providers.qwen-local.json --probe-vm
+
+local-llm-eval: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/llm/evaluation.py
+
+local-llm-qwen-eval: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/llm/evaluation.py --config tools/local_experiment/llm/providers.qwen-local.json
+
 test-local-llm: local-llm-sync
-	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_llm.py'
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_llm*.py'
 
 verify-local-experiment: test-local-llm
 

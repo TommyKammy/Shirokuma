@@ -6,6 +6,8 @@ import http.server
 import json
 import threading
 
+from providers import validate_evidence
+
 MODEL = "shirokuma-deterministic-v1"
 
 
@@ -25,8 +27,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             phase = json.loads(data["messages"][-1]["content"])
             if phase["phase"] == "plan":
                 content = {"tool": "dbt_list_models", "arguments": {}}
-            elif phase["phase"] == "summarize" and phase.get("tool_status") == "success":
-                content = {"result": "complete", "summary": "The allowed Gateway tool returned the local dbt model inventory."}
+            elif phase["phase"] == "summarize":
+                evidence = validate_evidence(phase.get("tool_evidence"))
+                content = {"result": "complete", "model_count": len(evidence["models"]),
+                           "models": evidence["models"],
+                           "verified_run_available": evidence["verified_run_available"]}
             else:
                 raise ValueError("unknown phase")
             result = {"id": "shirokuma-deterministic-response", "object": "chat.completion", "model": MODEL,

@@ -49,13 +49,19 @@ Loki, an MCP stdio gateway and a bounded LangGraph workflow:
 rtk make local-platform-status
 rtk make local-superset-smoke local-metadata-ingest
 rtk make local-gateway-smoke local-llm-smoke
+rtk make local-llm-qwen-smoke
+rtk make local-llm-qwen-eval
 rtk make local-tpch-smoke
 ```
 
 The TPC-H target generates disposable SF10 Iceberg tables and compares 22 queries
 with the generator reference. This is a functional experiment on one shared
-host, not an official performance result. The LLM target uses a deterministic
-local mock; cloud provider/model/spending configuration remains pending.
+host, not an official performance result. `local-llm-smoke` uses a deterministic
+mock. `local-llm-qwen-smoke` uses the existing MTPLX `qwen3.8-flash-next` server
+at `127.0.0.1:8001`, validates real MCP inventory summaries, and reads back token
+counts and timing from AgentHouse. `local-llm-qwen-eval` checks five synthetic
+inventory cases twice each. See the [LLM runbook](tools/local_experiment/llm/README.md).
+Cloud execution remains disabled and is not required for this local loop.
 Superset is available at [the local dashboard](http://127.0.0.1:18088/superset/dashboard/shirokuma-local-lakehouse/),
 and OpenMetadata at [the local catalog](http://127.0.0.1:18585).
 Generated credentials stay in private ignored state; see the component runbooks

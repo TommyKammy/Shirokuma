@@ -16,7 +16,8 @@ import urllib.parse
 import uuid
 from typing import Any, TypedDict
 
-from providers import LocalProvider, ProviderError, configuration_presence, load_config
+from providers import (LocalProvider, ProviderError, configuration_presence, load_config,
+                       parse_completion, unknown_metrics, validate_evidence)
 from mock_provider import serve_mock
 
 HERE = Path(__file__).resolve().parent
@@ -33,6 +34,7 @@ class State(TypedDict, total=False):
     trace_id: str
     plan: dict
     tool_result: dict
+    tool_evidence: dict
     summary: dict
     model_calls: list[dict]
     event_ids: list[str]
@@ -52,12 +54,30 @@ def validate_plan(value: dict) -> dict:
     return value
 
 
-def validate_summary(value: dict) -> dict:
-    if (not isinstance(value, dict) or set(value) != {"result", "summary"}
-            or value["result"] != "complete" or not isinstance(value["summary"], str)
-            or not 1 <= len(value["summary"]) <= 256 or "\n" in value["summary"] or "\r" in value["summary"]):
-        raise WorkflowError("model summary is not a bounded completed result")
-    return value
+def inventory_evidence(data: dict) -> dict:
+    if not isinstance(data, dict) or "models" not in data or "latest_verified_run" not in data:
+        raise WorkflowError("Gateway did not supply model inventory evidence")
+    latest = data["latest_verified_run"]
+    if latest is not None and (not isinstance(latest, dict) or type(latest.get("verified")) is not bool):
+        raise WorkflowError("Gateway verification record has an invalid status")
+    try:
+        return validate_evidence({"models": data["models"], "verified_run_available": latest["verified"] if latest is not None else False})
+    except ProviderError as error:
+        raise WorkflowError(str(error)) from None
+
+
+def validate_summary(value: dict, evidence: dict) -> dict:
+    expected = validate_evidence(evidence)
+    if (not isinstance(value, dict) or set(value) != {"result", "model_count", "models", "verified_run_available"}
+            or value["result"] != "complete" or type(value["model_count"]) is not int):
+        raise WorkflowError("model summary is not a bounded completed inventory")
+    try:
+        actual = validate_evidence({key: value[key] for key in expected})
+    except ProviderError:
+        raise WorkflowError("model summary contains invalid inventory facts") from None
+    if actual != expected or value["model_count"] != len(expected["models"]):
+        raise WorkflowError("model summary differs from the delivered Gateway evidence")
+    return {"result": "complete", "model_count": len(expected["models"]), **expected}
 
 
 def build_graph(provider: Any, gateway_call: Any, audit: Any, tracer: Any):
@@ -79,8 +99,9 @@ def build_graph(provider: Any, gateway_call: Any, audit: Any, tracer: Any):
             started = time.monotonic()
             try:
                 response = await asyncio.to_thread(provider.complete, "plan")
-            except Exception:
-                model_event(state, "plan", {"duration_ms": max(0, int((time.monotonic() - started) * 1000))}, status="failed")
+            except Exception as error:
+                model_event(state, "plan", {"duration_ms": max(0, int((time.monotonic() - started) * 1000)),
+                    **(error.metrics if isinstance(error, ProviderError) else {})}, status="failed")
                 raise
             try:
                 proposed = validate_plan(response["content"])
@@ -98,16 +119,22 @@ def build_graph(provider: Any, gateway_call: Any, audit: Any, tracer: Any):
                     or payload.get("task_id") != state["task_id"] or payload.get("trace_id") != state["trace_id"]):
                 raise WorkflowError("Gateway did not return successful, delivered, correlated tool evidence")
             event_id = str(uuid.UUID(payload["event_id"]))
-            return {"tool_result": payload, "event_ids": state["event_ids"] + [event_id]}
+            evidence = inventory_evidence(payload.get("data"))
+            return {"tool_result": payload, "tool_evidence": evidence, "event_ids": state["event_ids"] + [event_id]}
 
     async def summarize(state):
         with tracer.start_as_current_span("llm.summarize"):
             started = time.monotonic()
             try:
-                response = await asyncio.to_thread(provider.complete, "summarize", state["tool_result"]["status"])
-                summary = validate_summary(response["content"])
-            except Exception:
-                model_event(state, "summarize", {"duration_ms": max(0, int((time.monotonic() - started) * 1000))}, status="failed")
+                response = await asyncio.to_thread(provider.complete, "summarize", state["tool_evidence"])
+            except Exception as error:
+                model_event(state, "summarize", {"duration_ms": max(0, int((time.monotonic() - started) * 1000)),
+                    **(error.metrics if isinstance(error, ProviderError) else {})}, status="failed")
+                raise
+            try:
+                summary = validate_summary(response["content"], state["tool_evidence"])
+            except WorkflowError:
+                model_event(state, "summarize", response, status="blocked")
                 raise
             event_id = model_event(state, "summarize", response)
             return {"summary": summary,
@@ -158,25 +185,41 @@ async def gateway_call(tool: str, arguments: dict, task_id: str, output: Path) -
             return payload
 
 
-def probe_vm_to_host(endpoint: str) -> dict:
+def probe_vm_to_host(endpoint: str, profile: dict | None = None) -> dict:
     port = urllib.parse.urlsplit(endpoint).port
     if port is None:
-        raise WorkflowError("mock endpoint must bind an explicit ephemeral port")
+        raise WorkflowError("VM probe requires an explicit endpoint port")
     payload = {"model": "shirokuma-deterministic-v1", "stream": False,
                "messages": [{"role": "user", "content": '{"phase":"plan"}'}]}
+    timeout = 10
+    if profile is not None:
+        if urllib.parse.urlsplit(endpoint).hostname not in {"127.0.0.1", "localhost", "host.lima.internal"}:
+            raise WorkflowError("VM probe requires an IPv4 host-local endpoint")
+        payload = LocalProvider(profile).request_body("plan")
+        timeout = profile["timeout_seconds"]
     url = f"http://host.lima.internal:{port}/v1/chat/completions"
-    process = subprocess.run(["rtk", "proxy", "colima", "ssh", "--profile", "mac-studio-solo", "--",
-        "curl", "--noproxy", "host.lima.internal", "--silent", "--show-error", "--fail", "--max-time", "10",
-        "--request", "POST", "--header", "Content-Type:application/json", "--data-binary", "@-", url],
-        input=json.dumps(payload), text=True, capture_output=True, timeout=20)
+    started = time.monotonic()
+    try:
+        process = subprocess.run(["rtk", "proxy", "colima", "ssh", "--profile", "mac-studio-solo", "--",
+            "curl", "--noproxy", "host.lima.internal", "--silent", "--show-error", "--fail", "--max-time", str(timeout),
+            "--max-filesize", "65536",
+            "--request", "POST", "--header", "Content-Type:application/json", "--data-binary", "@-", url],
+            input=json.dumps(payload), text=True, capture_output=True, timeout=timeout + 10)
+    except (OSError, subprocess.TimeoutExpired, UnicodeError):
+        raise ProviderError("Colima-to-host model probe failed",
+            unknown_metrics(int((time.monotonic() - started) * 1000))) from None
+    duration_ms = int((time.monotonic() - started) * 1000)
     if process.returncode:
-        raise WorkflowError("Colima-to-host loopback mock probe failed")
-    result = json.loads(process.stdout)
-    if result.get("model") != "shirokuma-deterministic-v1":
-        raise WorkflowError("Colima mock probe returned the wrong model identity")
-    validate_plan(json.loads(result["choices"][0]["message"]["content"]))
+        raise ProviderError("Colima-to-host model probe failed", unknown_metrics(duration_ms))
+    response = parse_completion(process.stdout.encode(), payload["model"], duration_ms)
+    metrics = {key: value for key, value in response.items() if key != "content"}
+    try:
+        validate_plan(response["content"])
+    except WorkflowError:
+        raise ProviderError("Colima probe plan exceeded the fixed read-only allowlist", metrics) from None
     return {"result": "passed", "source": "mac-studio-solo", "destination": "host.lima.internal",
-            "host_listener": "127.0.0.1", "model": result["model"], "public_listener": False}
+            "model": payload["model"], **metrics,
+            "server_configuration_changed": False}
 
 
 def agenthouse_module():
@@ -221,9 +264,16 @@ async def run_workflow(config: dict, endpoint: str, output: Path) -> dict:
         value = agenthouse.event(fields["action_type"], fields["target_system"],
             **{key: item for key, item in fields.items() if key not in {"action_type", "target_system"}},
             agent_id="local-langgraph")
-        agenthouse.insert(client, value)
-        records.append({key: value[key] for key in ("event_id", "task_id", "trace_id", "action_type", "status",
-            "model_provider", "model_name", "prompt_tokens", "completion_tokens", "inference_cost_estimate", "duration_ms")})
+        record = {key: value[key] for key in ("event_id", "task_id", "trace_id", "action_type", "status",
+            "model_provider", "model_name", "prompt_tokens", "completion_tokens", "inference_cost_estimate", "duration_ms")}
+        record["audit_delivery"] = "pending"
+        records.append(record)
+        try:
+            agenthouse.insert(client, value)
+        except Exception:
+            record["audit_delivery"] = "failed"
+            raise
+        record["audit_delivery"] = "delivered"
         return value["event_id"]
 
     runs = []
@@ -236,7 +286,8 @@ async def run_workflow(config: dict, endpoint: str, output: Path) -> dict:
                 graph_config = {"configurable": {"thread_id": task_id}, "recursion_limit": 8, "callbacks": []}
                 started = time.monotonic()
                 try:
-                    state = await asyncio.wait_for(graph.ainvoke({"task_id": task_id, "trace_id": trace_id}, graph_config), 90)
+                    state = await asyncio.wait_for(graph.ainvoke({"task_id": task_id, "trace_id": trace_id}, graph_config),
+                        2 * profile["timeout_seconds"] + 90)
                 except Exception:
                     audit({"action_type": "workflow.complete", "target_system": "langgraph", "task_id": task_id,
                         "trace_id": trace_id, "status": "failed", "model_provider": profile["provider"],
@@ -266,6 +317,18 @@ async def run_workflow(config: dict, endpoint: str, output: Path) -> dict:
                     raise WorkflowError("Pawprint trace/task correlation differs")
                 if profile["kind"] == "mock" and any(row[key] is not None for key in ("prompt_tokens", "completion_tokens", "inference_cost_estimate")):
                     raise WorkflowError("deterministic mock must not invent measured inference usage")
+            for phase, event_id, response in zip(("plan", "summarize"),
+                    (run["event_ids"][0], run["event_ids"][2]), run["model_calls"], strict=True):
+                row = indexed[event_id]
+                if (row["action_type"] != "llm." + phase or row["model_provider"] != profile["provider"]
+                        or row["model_name"] != profile["model"]):
+                    raise WorkflowError("Pawprint model identity differs")
+                for key in ("prompt_tokens", "completion_tokens", "duration_ms", "inference_cost_estimate"):
+                    observed = row[key]
+                    if key != "inference_cost_estimate" and observed is not None:
+                        observed = int(observed)  # ClickHouse may encode UInt64 as a JSON string.
+                    if observed != response[key]:
+                        raise WorkflowError("Pawprint inference metrics differ from the measured response")
         return {"result": "passed", "scope": "local-experiment-only", "provider_kind": profile["kind"],
             "provider": profile["provider"], "model": profile["model"], "runs": runs, "audited_events": rows,
             "deterministic_mock": profile["kind"] == "mock" and runs[0]["summary"] == runs[1]["summary"],
@@ -280,8 +343,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=HERE / "providers.example.json")
     parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument("--probe-vm", action="store_true", help="also test the selected local model from the dedicated Colima VM")
     args = parser.parse_args()
     output = ROOT / "tmp/local-experiment/llm" / uuid.uuid4().hex
+    vm_probe, vm_probe_key = None, None
+    stage = "configuration"
     try:
         config = load_config(args.config)
         presence = configuration_presence(config)
@@ -293,14 +359,27 @@ def main() -> int:
         output.mkdir(parents=True, mode=0o700)
         if config["active_provider"] == "mock":
             with serve_mock() as endpoint:
+                stage, vm_probe_key = "vm_probe", "vm_to_host_mock"
                 vm_probe = probe_vm_to_host(endpoint)
+                stage = "workflow"
                 report = asyncio.run(run_workflow(config, endpoint, output))
-                report["vm_to_host_mock"] = vm_probe
         else:
-            report = asyncio.run(run_workflow(config, config["providers"]["local"]["endpoint"], output))
+            profile = config["providers"]["local"]
+            if args.probe_vm:
+                stage, vm_probe_key = "vm_probe", "vm_to_host_local"
+                vm_probe = probe_vm_to_host(profile["endpoint"], profile)
+            stage = "workflow"
+            report = asyncio.run(run_workflow(config, profile["endpoint"], output))
         report["environment_names_present"] = presence
     except Exception as error:
-        report = {"result": "failed", "scope": "local-experiment-only", "error": type(error).__name__ + ": " + str(error)}
+        report = {"result": "failed", "scope": "local-experiment-only", "failure_stage": stage,
+                  "error": type(error).__name__ + ": " + str(error)}
+        if isinstance(error, ProviderError):
+            report["failed_model_metrics"] = error.metrics
+            if stage == "vm_probe":
+                vm_probe = {"result": "failed", **error.metrics}
+    if vm_probe is not None:
+        report[vm_probe_key] = vm_probe
     if output.exists():
         (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps({**report, "evidence": str(output) if output.exists() else None}))
