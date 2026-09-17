@@ -42,6 +42,10 @@ tables. See [the runbook](tools/local_experiment/dataops/README.md).
 The [Iceberg snapshot sandbox](tools/local_experiment/iceberg_sandbox/README.md)
 demonstrates historical reads, a separate CTAS restoration and rollback on new
 disposable tables. Run it with `rtk make local-iceberg-sandbox`.
+The [named-reference experiment](tools/local_experiment/iceberg_refs/README.md)
+creates a tag and branch on one disposable table, checks named historical reads,
+and verifies conditional branch updates and stale-update rejection.
+Run it with `rtk make local-iceberg-refs`.
 The historical `make verify` retains publication checks and is separate from
 this local loop.
 

@@ -5,22 +5,43 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "3.3"
+version: "3.4"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：Data Bearを自然文から利用できる入口が実Qwen・dbtで成功。
-新7case×2と旧6case×2の計26推論が期待どおり。文字数依頼の2回実行と、削除依頼の実行0/拒否を確認。
-拒否監査の照合不備も修正し、保持fixtureと生成relation回収を検証。Cloudは無効のまま。
+最新の到達点（2026-09-17）：新規Iceberg tableでnamed tag/branchが実機成功。
+mainへのappend後の名前付き過去読取、branchの条件付き移動、古い条件のHTTP409拒否を確認。
+参照更新前後のsnapshot/file metadata不変、実験table回収、保持fixture全履歴/一覧不変を照合した。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: Iceberg named tag and branch
+
+[WP-L3-ICE-001](L3/WP-L3-ICE-001_Iceberg_branch_tag_clone_demo.md)のrun
+`9ad2e966fd6c414698abca0706f97467` は08:53:27–08:56:17 UTCに初回成功。
+A=480567632882700496の2行にtag/branchを作成し、main appendでB=8990253737475478975の3行へ。
+名前付き読取はtag/branchともAを維持し、CASによるbranch移動後はtag A・branch/main Bを照合。
+古いexpected AはHTTP409拒否し、metadata不変。3成功＋1拒否それぞれで同current snapshotと
+file metadata一覧hashが不変。object内容byte hashの検証や別tableのzero-copy cloneとは区別する。
+85手順、worker32/control28 queries。UUID/COMMENT一致の生成1tableを回収し、fixture全履歴/refsと
+全10table一覧が元へ戻った。新service/image、権限変更、Pawprint追加、LLM呼出はなし。
+41 focused、全local915件（914成功＋標準環境optional OTel1skip）、設計79documents/14testsが成功。
+branchへの独立書込・保持table復元保証・本番受入は未検証でlocal-partial。次は既存Data履歴の
+OpenMetadata lineage充足状況を、read-only reportとして可視化する。
+
+
+独立最終監査 `iceberg-refs-preflight/8e22af705b4644928b783811e4fac7b7/final-verification.json` が成功。
+保持Kube6Pods/27resources/6CM/3Secret UIDs、Docker3、履歴4tables/5DDL、fixture全履歴/refsと
+全table一覧、Pawprints366全行hash、既存247証跡filesが前後不変。Pawprint追加は0。
+保存receiptの41項目を再計算し、実Trinoでも捕捉したworker/control全60IDsがFINISHED、active0。
+独立readback後に監査用tunnelも終了した。
 
 ## 2026-09-17: Data Bear natural-language entry
 

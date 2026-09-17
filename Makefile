@@ -536,6 +536,15 @@ test-local-iceberg-sandbox:
 
 verify-local-experiment: test-local-iceberg-sandbox
 
+.PHONY: local-iceberg-refs test-local-iceberg-refs
+local-iceberg-refs:
+	@$(PYTHON) tools/local_experiment/iceberg_refs/run.py
+
+test-local-iceberg-refs:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_iceberg_refs*.py'
+
+verify-local-experiment: test-local-iceberg-refs
+
 .PHONY: local-grafana-prepare local-grafana-up local-grafana-status local-grafana-smoke local-grafana-stop local-grafana-verify-dashboard test-local-grafana
 local-grafana-prepare:
 	@$(PYTHON) tools/local_experiment/grafana/manage.py prepare
