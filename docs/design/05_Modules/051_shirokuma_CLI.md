@@ -5,7 +5,7 @@ title: "shirokuma CLI"
 status: draft
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.10.0"
+version: "0.11.0"
 area: "module"
 tags: [shirokuma, module]
 ---
@@ -24,6 +24,11 @@ current headとselected snapshotを分け、同field IDs/name/type/nullability/o
 [Snapshot reader runbook](../../../tools/local_experiment/query_snapshots/README.md)を参照。
 
 ### Diagnose a completed Reader SELECT
+
+Reader v1に加え、明示snapshot読取のv2 source adapterを実装し、local実診断と保持状態復帰を確認した。
+現在のidentity Bと選択Aを分離し、前後の保持snapshot一覧を保存sourceと完全一致させる。
+EXPLAINは元AのSELECT、STATSは全compatible schema列をAへ固定したsubquery（LIMITなし）を使う。
+v1のstatement/journalは維持し、v2だけrowless snapshot catalogsを追加する。
 
 `query diagnose --read-token TOKEN`は成功したReader selectの保存証跡から、
 元SELECTを再送せず同SQLのEXPLAIN・元queryの限定history・table statisticsを読む。

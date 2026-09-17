@@ -23,6 +23,7 @@ from tools.local_experiment import local_session as SESSION
 
 STATE = ROOT / 'tmp/local-experiment/query-diagnose'
 READ_STATE = ROOT / 'tmp/local-experiment/query-read'
+SNAPSHOT_READ_STATE = ROOT / 'tmp/local-experiment/query-snapshots'
 ERROR_CODES = frozenset('''ARGUMENTS_INVALID REQUEST_INVALID SOURCE_NOT_FOUND SOURCE_BUSY SOURCE_INVALID
 SOURCE_CHANGED ENVIRONMENT_NOT_READY OBSERVATION_FAILED MODEL_FAILED MODEL_REJECTED AUDIT_FAILED
 DIAGNOSE_FAILED INTERRUPTED EVIDENCE_ALREADY_EXISTS'''.split())
@@ -65,36 +66,33 @@ def private_directory(path):
 def read_private(path, maximum=2*1024*1024):
     require(path.resolve() == path)
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    duplicate, stream, original, result = None, None, None, None
     try:
         before = os.fstat(fd)
         require(stat.S_ISREG(before.st_mode) and before.st_uid == os.getuid() and before.st_nlink == 1
                 and stat.S_IMODE(before.st_mode) == 0o600 and 0 < before.st_size <= maximum)
-        with os.fdopen(os.dup(fd), 'rb') as stream:
-            raw = stream.read(maximum + 1)
+        duplicate = os.dup(fd)
+        stream = os.fdopen(duplicate, 'rb')
+        duplicate = None
+        raw = stream.read(maximum + 1)
         require(len(raw) == before.st_size and fingerprint(before) == fingerprint(os.fstat(fd)))
-        return raw, fingerprint(before)
+        result = raw, fingerprint(before)
+    except BaseException as error:
+        original = error
     finally:
-        os.close(fd)
+        releases = [stream.close] if stream is not None else [lambda: os.close(duplicate)] if duplicate is not None else []
+        for release in [*releases, lambda: os.close(fd)]:
+            try:
+                release()
+            except BaseException as error:
+                original = R.retain(original, error)
+    if original is not None:
+        raise original
+    return result
 
 
-def validate_source(read_token, value, digest):
-    require(type(value) is dict and set(value) == SOURCE_KEYS)
-    require(type(value['schema_version']) is int and value['schema_version'] == 1
-            and value['evidence_token'] == read_token and value['result'] == 'passed'
-            and type(value['invocations']) is int and value['invocations'] == 1
-            and value['errors'] == [] and value['error_code'] is None)
-    start, end = (datetime.fromisoformat(value[k]) for k in ('started_at', 'finished_at'))
-    require(start.tzinfo is not None and end.tzinfo is not None and end >= start)
-    request = C.normalize_request(value['request'])
-    require(request['command'] == 'select' and value['request_sha256'] == C.digest(request))
-    C.verify_identity(value['identity_before'], value['identity_after'])
-    require(value['identity_unchanged'] is True and value['cleanup'] == {'verified': True})
-    hashes = value['source_hashes']
-    # Historical source digests remain provenance; legitimate code evolution
-    # does not turn an immutable, completed read into a fresh execution.
-    require(type(hashes) is dict and set(hashes) == set(R.sources()) and all(
-        type(h) is str and re.fullmatch('[0-9a-f]{64}', h) for h in hashes.values()))
-    queries, runtime, drain = value['queries'], value['runtime'], value['query_drain']
+def validate_transport(read_token, queries, runtime, drain, catalog, request):
+    """Shared terminal-query, provenance and read-only catalogue receipt checks."""
     require(type(queries) is dict and set(queries) == {'worker', 'control'}
             and type(queries['worker']) is list and len(queries['worker']) == 4
             and type(queries['control']) is list and 1 <= len(queries['control']) <= 32)
@@ -129,7 +127,6 @@ def validate_source(read_token, value, digest):
     require(drain['verified'] is True and drain['user'] == user and drain['source'] == source_name
             and all(drain[k] == [] for k in ('active', 'cancelled', 'cancel_errors', 'errors'))
             and sorted(drain['observed_query_ids']) == sorted(row['query_id'] for row in queries['worker']))
-    catalog = value['catalog']
     require(catalog == runtime['catalog'] and catalog['authenticated'] is True
             and catalog['authentication_attempted'] is True and len(catalog['reads']) == 2
             and catalog['reads'][0] == catalog['reads'][1] and catalog['reads'][0]['result'] == 'verified')
@@ -137,6 +134,27 @@ def validate_source(read_token, value, digest):
         require(set(read) == {'result', 'request_sha256', 'metadata_sha256'}
                 and read['request_sha256'] == C.digest(request)
                 and type(read['metadata_sha256']) is str and re.fullmatch('[0-9a-f]{64}', read['metadata_sha256']))
+
+
+def validate_source(read_token, value, digest):
+    require(type(value) is dict and set(value) == SOURCE_KEYS)
+    require(type(value['schema_version']) is int and value['schema_version'] == 1
+            and value['evidence_token'] == read_token and value['result'] == 'passed'
+            and type(value['invocations']) is int and value['invocations'] == 1
+            and value['errors'] == [] and value['error_code'] is None)
+    start, end = (datetime.fromisoformat(value[k]) for k in ('started_at', 'finished_at'))
+    require(start.tzinfo is not None and end.tzinfo is not None and end >= start)
+    request = C.normalize_request(value['request'])
+    require(request['command'] == 'select' and value['request_sha256'] == C.digest(request))
+    C.verify_identity(value['identity_before'], value['identity_after'])
+    require(value['identity_unchanged'] is True and value['cleanup'] == {'verified': True})
+    hashes = value['source_hashes']
+    # Historical source digests remain provenance; legitimate code evolution
+    # does not turn an immutable, completed read into a fresh execution.
+    require(type(hashes) is dict and set(hashes) == set(R.sources()) and all(
+        type(h) is str and re.fullmatch('[0-9a-f]{64}', h) for h in hashes.values()))
+    queries, runtime, drain = value['queries'], value['runtime'], value['query_drain']
+    validate_transport(read_token, queries, runtime, drain, value['catalog'], request)
     selected = queries['worker'][2]
     source = D.source_context(read_token, request, value['inventory'], value['identity_after'],
                               value['observation'], selected['query_id'], digest)
@@ -155,9 +173,28 @@ class SourceLease:
         self.folder, self.fd, self.source = READ_STATE / read_token, None, None
         self.raw = self.stat = None
 
+    def locate(self):
+        candidates = []
+        for base in (READ_STATE, SNAPSHOT_READ_STATE):
+            try:
+                base.lstat()
+            except FileNotFoundError:
+                continue
+            private_directory(base)
+            folder = base / self.token
+            try:
+                folder.lstat()
+            except FileNotFoundError:
+                continue
+            candidates.append((base, folder))
+        require(len(candidates) <= 1)
+        require(candidates, 'SOURCE_NOT_FOUND')
+        return candidates[0]
+
     def __enter__(self):
         try:
-            private_directory(READ_STATE); private_directory(self.folder)
+            base, self.folder = self.locate()
+            private_directory(self.folder)
             self.fd = os.open(self.folder / 'run.lock', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
             info = os.fstat(self.fd)
             require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_nlink == 1
@@ -167,7 +204,12 @@ class SourceLease:
             except BlockingIOError:
                 raise DiagnoseError('SOURCE_BUSY') from None
             self.raw, self.stat = read_private(self.folder / 'summary.json')
-            self.source = validate_source(self.token, Q.decode(self.raw), hashlib.sha256(self.raw).hexdigest())
+            value, digest = Q.decode(self.raw), hashlib.sha256(self.raw).hexdigest()
+            if base == READ_STATE:
+                self.source = validate_source(self.token, value, digest)
+            else:
+                from tools.local_experiment.query_diagnose.snapshot_source import validate
+                self.source = validate(self.token, value, digest, validate_transport)
             return self
         except BaseException as error:
             try:
@@ -180,6 +222,7 @@ class SourceLease:
 
     def unchanged(self):
         try:
+            require(self.locate()[1] == self.folder, 'SOURCE_CHANGED')
             raw, info = read_private(self.folder / 'summary.json')
             require(raw == self.raw and info == self.stat, 'SOURCE_CHANGED')
         except Exception:
@@ -188,10 +231,14 @@ class SourceLease:
     def __exit__(self, *_):
         if self.fd is not None:
             fd, self.fd = self.fd, None
-            try:
-                fcntl.flock(fd, fcntl.LOCK_UN)
-            finally:
-                os.close(fd)
+            error = None
+            for release in (lambda: fcntl.flock(fd, fcntl.LOCK_UN), lambda: os.close(fd)):
+                try:
+                    release()
+                except BaseException as other:
+                    error = R.retain(error, other)
+            if error is not None:
+                raise error
 
 
 def environment():
@@ -209,6 +256,8 @@ def environment():
 def sources():
     paths = [*Path(__file__).parent.glob('*.py')]
     result = R.sources()
+    from tools.local_experiment.query_snapshots.run import sources as snapshot_sources
+    result.update(snapshot_sources())
     for name in ('providers.py', 'evaluation.py', 'workflow.py'):
         paths.append(ROOT / 'tools/local_experiment/llm' / name)
     for name in ('run_sre.py', 'run_sre_llm.py', 'run_catalog.py'):

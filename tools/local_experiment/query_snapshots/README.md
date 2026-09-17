@@ -45,8 +45,15 @@ and receipt persistence finish, and Python's final status matches the Go
 protocol. Failure and cancellation retain safe evidence and the original
 interrupt, without resuming old tokens. No retained user data is modified.
 
-The existing `query diagnose` supports Reader v1. This snapshot profile is not
-silently accepted there: current SHOW STATS must not be mixed with historical
-data as if both described the same snapshot. Metadata checks cover the read
+`query diagnose --read-token TOKEN` now has a separate validator for successful
+snapshot Reader v2 sources while preserving Reader v1. It explains the original
+historical SELECT and requests statistics through a fixed snapshot-pinned
+subquery with all compatible schema columns and no LIMIT. The original SELECT
+is not executed again, and current identity and selected snapshot remain
+separate. This adapter has passed offline and actual historical/v1 diagnosis,
+disposable-table cleanup and retained-state checks. See the
+[diagnosis runbook](../query_diagnose/README.md).
+
+Metadata checks cover the read
 window; they are not an atomic guarantee against concurrent writers or future
 expiration. This is bounded local functionality, not production acceptance.

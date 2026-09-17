@@ -6,7 +6,13 @@ shirokuma query diagnose --read-token <successful-select-evidence-token>
 rtk make test-local-query-diagnose
 ```
 
-Use the `evidence_token` from a successful `query select`. `diagnose` creates a
+Use the `evidence_token` from a successful `query select`, including an explicit
+`--snapshot-id` read. Reader v1 and snapshot Reader v2 use separate source
+validators; both retain the same diagnosis command, model and public contract.
+Both source paths passed actual local diagnosis, disposable-table cleanup and
+retained-state checks. These are local functional results, not production acceptance.
+
+`diagnose` creates a
 different token under `tmp/local-experiment/query-diagnose/`. It uses the existing
 local Qwen profile and lab services; it installs or starts no persistent service.
 Use `--repo-root` outside the checkout. Only `local-experiment` is accepted.
@@ -21,8 +27,26 @@ This is host-local evidence validation, not a signature or tenant authorization.
 The original SELECT is reconstructed only for an exact hash check and EXPLAIN.
 It is never executed again. The diagnostic profile issues five bounded reads:
 schema before, EXPLAIN of that snapshot-pinned SELECT, history for its single
-query ID, SHOW STATS for that table, and schema after. Polaris metadata must
-match the original UUID/schema/head before and after. Changed or deleted tables,
+query ID, SHOW STATS, and schema after. Reader v1 keeps its existing table STATS
+statement. Snapshot Reader v2 instead compiles a fixed subquery:
+
+```sql
+SHOW STATS FOR (SELECT <all compatible current-schema columns>
+               FROM <fixed qualified table> FOR VERSION AS OF BIGINT '<selected-id>')
+```
+
+This is a host-generated statement, not a SQL input interface. It has no LIMIT:
+statistics describe the selected snapshot rather than the Reader's limited
+output. EXPLAIN uses the exact original selected-snapshot SELECT, including its
+limit+1. STATS planning does not resend the original data SELECT.
+
+For v2, the saved current identity B stays B while the selected snapshot A stays
+A. Fresh Polaris metadata and the complete retained-snapshot projection must
+match the source before observation and remain identical afterwards. A must
+still be retained with the same supported field IDs, names, types, nullability
+and order. The rowless journal adds the two snapshot catalogs only for v2; v1
+receipt semantics stay unchanged. Expiration, current-head or metadata changes,
+changed or deleted tables,
 unsupported plans and conflicting history provenance are refused before inference.
 Trino's bounded `varchar(n)` output is normalized only for EXPLAIN, history and
 STATS; per-phase byte limits remain in force. The ordinary Reader's type policy
@@ -31,7 +55,9 @@ is unchanged.
 An empty history result is `not-retained`; the command does not assume why the
 entry is missing. Returned history must match the original user, source and SQL
 hash. Estimates remain estimates, zero remains known, and NULL/missing timings
-remain unknown. Raw plan text, query text, low/high values, names and rows never
+remain unknown. Snapshot-pinned statistics are not a new exact row-count
+measurement; individual statistics may be missing or derived from retained
+statistics information. Raw plan text, query text, low/high values, names and rows never
 enter model evidence. Only bounded numeric observations and fixed findings do.
 
 After owned queries have ended and tunnels have closed, Qwen is called once.

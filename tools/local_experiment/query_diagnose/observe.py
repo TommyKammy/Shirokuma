@@ -6,6 +6,10 @@ must differ from the original read token. Raw plan/history/statistics cells
 remain in memory. Only contract projections and safe transport receipts reach
 progress callbacks. Model inference starts after this function has returned,
 when all observation queries and owned tunnels have finished.
+
+Snapshot Reader v2 keeps the truthful current identity and its retained snapshot
+catalog separate from the selected historical snapshot. Both fresh windows must
+match the saved source; only v2 adds those rowless catalogs to the journal.
 """
 from contextlib import contextmanager
 from copy import deepcopy
@@ -81,12 +85,14 @@ def runtime(token, source, progress):
 
 def _observe(source, worker, catalog, journal, save):
     statements = C.statements(source)
-    request = source['request']
+    request = C.base_request(source)
     before_columns = R.project_schema(worker.query(statements['schema_before'], 'schema_before'))
     catalog.authenticate()
-    before = R.project_identity(catalog.load(request), request, before_columns)
-    R.verify_identity(source['identity'], before)
-    journal['identity_before'] = before
+    before = C.project_source_window(catalog.load(request), source, before_columns)
+    C.verify_source_window(source, before)
+    journal['identity_before'] = before['identity']
+    if source['schema_version'] == 2:
+        journal['snapshot_catalog_before'] = before['snapshots']
     save()
     for label, projector in (('explain', C.project_plan), ('history', C.project_history), ('stats', C.project_stats)):
         raw = worker.query(statements[label], label)
@@ -95,9 +101,11 @@ def _observe(source, worker, catalog, journal, save):
         journal['plan' if label == 'explain' else label] = projected
         save()
     after_columns = R.project_schema(worker.query(statements['schema_after'], 'schema_after'))
-    after = R.project_identity(catalog.load(request), request, after_columns)
-    R.verify_identity(before, after)
-    journal['identity_after'] = after
+    after = C.project_source_window(catalog.load(request), source, after_columns)
+    C.verify_source_window(source, before, after)
+    journal['identity_after'] = after['identity']
+    if source['schema_version'] == 2:
+        journal['snapshot_catalog_after'] = after['snapshots']
     save()
 
 
@@ -132,6 +140,8 @@ def observe(source, token, progress, *, runtime_factory=None, drain_fn=None):
         source = validate_source(source)
         require(token != source['read_token'])
         journal['source_sha256'] = R.digest(source)
+        if source['schema_version'] == 2:
+            journal.update(snapshot_catalog_before=None, snapshot_catalog_after=None)
         save()
         factory = runtime if runtime_factory is None else runtime_factory
         drainer = Q.drain if drain_fn is None else drain_fn

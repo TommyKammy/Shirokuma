@@ -5,17 +5,38 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.24"
+version: "3.25"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-18）：snapshot一覧と過去snapshot指定読取をCLIから利用できる。
-新規tableの過去版2行・現在版3行を同じschemaで読み分け、実験tableを回収した。
-全local回帰2018件（2017成功/既存1skip）が通過した。
-次は過去版の読取も、同snapshotの統計を使って既存Query Doctorへ接続する。
+最新の到達点（2026-09-18）：過去snapshotの成功読取もQuery Doctorから診断できる。
+現在identity Bと選択Aを分け、A2行の統計を使う実診断と旧v1診断が成功し、生成tableを回収した。
+全local回帰2048件（2047成功/既存1skip）と独立保持監査60checksが通過した。
+次は`query diagnose report [--token TOKEN]`で実診断の保存記録を読み取り専用で一覧/単件表示する。
+
+## 2026-09-18: historical snapshot diagnosis
+
+`query diagnose --read-token TOKEN`へsnapshot Reader v2の検証経路を追加した。
+現在identity Bと選択Aを分け、保存sourceとfresh metadata/保持snapshot一覧を前後で完全一致させる。
+元SELECTを再送せずAのEXPLAIN、元query history、全compatible schema列をAへ固定した
+STATS subquery（LIMITなし）を使う。v1とmodel/public/監査/取消の契約は維持する。
+
+focused Python106件、Go150 top-level/83subtests・vet/raceが成功。
+fake HTTPで過去Aの統計2と現在Bの統計3、expiry/schema/metadata/headの拒否を確認した。
+実機前の全local回帰55suites/2048件（2047成功＋既存optional OTel1skip）も通過。
+実historical診断はA2行の統計を返し、current B3行と区別した。v1診断も成功し、
+実際に消失していた元query historyをnot-retained/timings NULLとして扱った。
+2診断は各5worker＋drain1、元SELECT再実行0、model1、監査3events、query/接続cleanup確認済み。
+Qwen合計1060prompt/209completion tokens・7833ms、costNULL、cloud/retry0。
+生成tableは同UUIDへDROP1回し、保持fixtureの6投影とtable一覧が復元した。
+Reader2＋診断2の計22query IDsは一意・終端、診断による元SELECT再送は0。
+独立60checks（fresh23＋保存束縛37）で3878旧files/70sources、保持runtime、AH旧480行のhashを確認。
+AH480→486の新6events/Loki6/spans6が一致し、5ports空き・54locks非activeだった。
+設計83documents/14tests、repo/Vault同期と関連リンク、secret/diff検査も成功した。
+scopeと受入は[WP-L2-AGENT-005](L2/WP-L2-AGENT-005_Query_Doctor_Bear.md)を参照。
 
 ## 2026-09-18: retained snapshot reader CLI
 

@@ -11,6 +11,13 @@ The original SELECT is reconstructed for a digest and EXPLAIN, never executed.
 Raw plans, query texts, descriptors, statistics low/high values and row data
 must remain in memory. Model evidence contains only counts, estimates, timing,
 and fixed finding IDs. Missing retained history is not proof of why it is absent.
+
+Reader v1 source_context keeps its original eleven fields and current-table
+statistics. snapshot_source_context adds an explicit snapshot-reader-v2 profile
+and retained snapshot catalog; its identity remains the real current head.
+Only this profile's SHOW STATS uses a fixed snapshot-pinned subquery. Estimates
+are not exact data validation: Trino may use NDV statistics from the selected
+snapshot's ancestors. No ANALYZE, current-head fallback or extra data read occurs.
 """
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -21,6 +28,7 @@ import math
 import re
 
 from tools.local_experiment.query_read import contract as R
+from tools.local_experiment.query_snapshots import contract as S
 
 SCOPE = 'saved-reader-query-diagnosis-v1'
 MAX_PLAN_BYTES = 128 * 1024
@@ -52,6 +60,8 @@ LIMITATIONS = ['ESTIMATES_ARE_NOT_MEASURED_USAGE', 'HISTORY_IS_NOT_DURABLE_AUDIT
               'NO_CAUSE_OR_GAIN_ESTABLISHED', 'NO_SQL_REWRITE_OR_EXECUTION_ADVICE']
 SOURCE_KEYS = {'schema_version', 'read_token', 'request', 'inventory', 'identity', 'selection',
                'query_id', 'user', 'source', 'sql_sha256', 'summary_sha256'}
+SNAPSHOT_PROFILE = 'snapshot-reader-v2'
+SNAPSHOT_SOURCE_KEYS = SOURCE_KEYS | {'profile', 'snapshot_catalog'}
 PLAN_KEYS = {'query_id', 'format', 'fragment_count', 'node_count', 'operator_counts',
              'estimate_slots', 'estimate_unknown_count', 'estimate_zero_count',
              'empty_estimate_nodes', 'estimates_complete'}
@@ -114,19 +124,7 @@ def source_context(read_token, request, inventory, identity, selection, query_id
         selected = R.selected_columns(request, identity['columns'])
     except R.ContractError:
         raise ContractError('READ_SOURCE_INVALID') from None
-    _keys(selection, R.RESULT_KEYS - {'rows'}, 'READ_SOURCE_SELECTION_INVALID')
-    require(type(selection['schema_version']) is int and selection['schema_version'] == 1
-            and selection['table'] == 'iceberg.' + request['table']
-            and selection['table_uuid'] == identity['table_uuid']
-            and selection['schema_sha256'] == identity['schema_sha256']
-            and selection['snapshot_id'] == identity['current_snapshot_id']
-            and canonical(selection['columns']) == canonical(selected)
-            and type(selection['requested_limit']) is int and selection['requested_limit'] == request['limit']
-            and selection['ordering'] == 'unspecified', 'READ_SOURCE_SELECTION_INVALID')
-    count, fetched, limit = selection['row_count'], selection['fetched_row_count'], request['limit']
-    _uint(count, limit); _uint(fetched, limit+1); _sha(selection['rows_sha256'])
-    require(count == min(fetched, limit) and type(selection['truncated']) is bool
-            and selection['truncated'] == (fetched > limit), 'READ_SOURCE_SELECTION_INVALID')
+    _selection(selection, request, identity, selected, identity['current_snapshot_id'], 1, R.RESULT_KEYS)
     owner = 'shirokuma-query-read-' + read_token
     return deepcopy({'schema_version': 1, 'read_token': read_token, 'request': request,
         'inventory': inventory, 'identity': identity, 'selection': selection, 'query_id': query_id,
@@ -134,19 +132,139 @@ def source_context(read_token, request, inventory, identity, selection, query_id
         'summary_sha256': summary_sha256})
 
 
+def _selection(selection, request, identity, selected, snapshot_id, version, keys):
+    """Shared rowless receipt facts; no reconstruction of discarded rows."""
+    _keys(selection, keys - {'rows'}, 'READ_SOURCE_SELECTION_INVALID')
+    require(type(selection['schema_version']) is int and selection['schema_version'] == version
+            and selection['table'] == 'iceberg.' + request['table']
+            and selection['table_uuid'] == identity['table_uuid']
+            and selection['schema_sha256'] == identity['schema_sha256']
+            and selection['snapshot_id'] == snapshot_id
+            and canonical(selection['columns']) == canonical(selected)
+            and type(selection['requested_limit']) is int and selection['requested_limit'] == request['limit']
+            and selection['ordering'] == 'unspecified', 'READ_SOURCE_SELECTION_INVALID')
+    count, fetched, limit = selection['row_count'], selection['fetched_row_count'], request['limit']
+    _uint(count, limit); _uint(fetched, limit+1); _sha(selection['rows_sha256'])
+    require(count == min(fetched, limit) and type(selection['truncated']) is bool
+            and selection['truncated'] == (fetched > limit), 'READ_SOURCE_SELECTION_INVALID')
+
+
+def snapshot_source_context(read_token, request, inventory, identity, selection, query_id,
+                            summary_sha256, snapshot_catalog):
+    """Bind a terminal snapshot Reader v2 receipt; never rewrite current identity.
+
+    The runner supplies authenticated receipt facts. Identity is the observed
+    current head B, selection is the actual read A, and snapshot_catalog is the
+    original complete retained-snapshot projection. A can equal B explicitly.
+    """
+    require(type(read_token) is str and TOKEN.fullmatch(read_token), 'READ_TOKEN_INVALID')
+    _query_id(query_id); _sha(summary_sha256)
+    try:
+        request = S.normalize_request(request)
+        require(request['command'] == 'select', 'READ_SOURCE_NOT_SELECT')
+        require(type(identity) is dict and type(identity.get('columns')) is list, 'READ_SOURCE_INVALID')
+        window = S.validate_window({'schema_version':2, 'identity':identity, 'snapshots':snapshot_catalog}, request)
+        identity = window['identity']
+        sql = S.select_sql(request, inventory, identity['columns'], window)
+        selected = S.selected_columns(request, identity['columns'])
+        snapshot = S.select_snapshot(window, request)
+    except R.ContractError:
+        raise ContractError('READ_SOURCE_INVALID') from None
+    _selection(selection, request, identity, selected, snapshot['snapshot_id'], 2, S.RESULT_KEYS)
+    require(selection['current_snapshot_id'] == identity['current_snapshot_id']
+            and canonical(selection['selected_snapshot']) == canonical(snapshot), 'READ_SOURCE_SELECTION_INVALID')
+    owner = 'shirokuma-query-read-' + read_token
+    return deepcopy({'schema_version':2, 'profile':SNAPSHOT_PROFILE,
+        'snapshot_catalog':window['snapshots'], 'read_token':read_token, 'request':request,
+        'inventory': inventory, 'identity': identity, 'selection': selection, 'query_id': query_id,
+        'user': owner, 'source': owner, 'sql_sha256': hashlib.sha256(sql.encode()).hexdigest(),
+        'summary_sha256': summary_sha256})
+
+
 def validate_source(value):
-    _keys(value, SOURCE_KEYS, 'READ_SOURCE_INVALID')
-    expected = source_context(*(value[k] for k in ('read_token', 'request', 'inventory', 'identity',
-                              'selection', 'query_id', 'summary_sha256')))
+    require(type(value) is dict and type(value.get('schema_version')) is int, 'READ_SOURCE_INVALID')
+    version = value['schema_version']
+    require(version in (1, 2), 'READ_SOURCE_INVALID')
+    _keys(value, SOURCE_KEYS if version == 1 else SNAPSHOT_SOURCE_KEYS, 'READ_SOURCE_INVALID')
+    arguments = tuple(value[k] for k in ('read_token', 'request', 'inventory', 'identity',
+                                        'selection', 'query_id', 'summary_sha256'))
+    if version == 1:
+        expected = source_context(*arguments)
+    else:
+        require(value['profile'] == SNAPSHOT_PROFILE, 'READ_SOURCE_INVALID')
+        expected = snapshot_source_context(*arguments, value['snapshot_catalog'])
     require(canonical(expected) == canonical(value), 'READ_SOURCE_INVALID')
     return expected
+
+
+def base_request(source):
+    """Return the existing fixed Reader request used by catalog/schema reads."""
+    source = validate_source(source)
+    return S.base_request(source['request']) if source['schema_version'] == 2 else deepcopy(source['request'])
+
+
+def _source_window(source):
+    return {'schema_version':source['schema_version'], 'identity':deepcopy(source['identity']),
+            'snapshots':deepcopy(source.get('snapshot_catalog'))}
+
+
+def select_sql(source):
+    """Reconstruct the source SELECT for hashing/EXPLAIN, never a new execution."""
+    source = validate_source(source)
+    if source['schema_version'] == 2:
+        return S.select_sql(source['request'], source['inventory'], source['identity']['columns'], _source_window(source))
+    return R.select_sql(source['request'], source['inventory'], source['identity']['columns'], source['identity'])
+
+
+def project_source_window(response, source, columns):
+    """Return {schema_version, identity, snapshots}; v1 snapshots is always None."""
+    source = validate_source(source)
+    try:
+        if source['schema_version'] == 2:
+            return S.project_window(response, source['request'], columns)
+        return {'schema_version':1, 'identity':R.project_identity(response, source['request'], columns), 'snapshots':None}
+    except R.ContractError:
+        raise ContractError('READ_SOURCE_INVALID') from None
+
+
+def verify_source_window(source, before, after=None):
+    """Require saved source == first fresh window == optional final fresh window.
+
+    Expiration, current-head movement, schema/spec/ref or metadata changes fail;
+    there is no fallback to a different snapshot. Inputs must be fresh guarded
+    projections, not trusted merely because their hashes have the right shape.
+    """
+    source = validate_source(source)
+    expected = _source_window(source)
+    for observed in (before,) if after is None else (before, after):
+        _keys(observed, {'schema_version', 'identity', 'snapshots'}, 'READ_SOURCE_INVALID')
+        require(type(observed['schema_version']) is int and observed['schema_version'] == source['schema_version'],
+                'READ_SOURCE_INVALID')
+        try:
+            if source['schema_version'] == 2:
+                S.verify_window(expected, observed)
+            else:
+                require(observed['snapshots'] is None, 'READ_SOURCE_INVALID')
+                R.verify_identity(expected['identity'], observed['identity'])
+        except R.ContractError:
+            raise ContractError('READ_SOURCE_INVALID') from None
+    return True
 
 
 def statements(source):
     """Exact five phase statements; never includes a standalone data SELECT."""
     source = validate_source(source)
-    request = source['request']
-    select = R.select_sql(request, source['inventory'], source['identity']['columns'], source['identity'])
+    request = base_request(source)
+    select = select_sql(source)
+    stats = 'SHOW STATS FOR ' + R.qualified(request['table'])
+    if source['schema_version'] == 2:
+        # Trino 483 ShowStatsRewrite plans this subquery without executing the
+        # data SELECT. Iceberg TableStatisticsReader uses the selected snapshot's
+        # data manifests; NDV can come from that snapshot or its ancestors.
+        # Full compatible schema and no LIMIT preserve whole-snapshot estimates.
+        stats = ('SHOW STATS FOR (SELECT ' + ', '.join(R.quote(c['name']) for c in source['identity']['columns'])
+                 + ' FROM ' + R.qualified(request['table'])
+                 + " FOR VERSION AS OF BIGINT '" + source['selection']['snapshot_id'] + "')")
     # Select by ID alone: foreign provenance must fail validation, not disappear
     # behind an owner predicate and be mislabeled as absent retained history.
     history = ('SELECT query_id, state, "user", source, query, queued_time_ms AS queued_ms, '
@@ -156,7 +274,7 @@ def statements(source):
         "WHERE query_id = '" + source['query_id'] + "' LIMIT 2")
     return {'schema_before': R.schema_sql(request),
             'explain': 'EXPLAIN (TYPE DISTRIBUTED, FORMAT JSON) ' + select,
-            'history': history, 'stats': 'SHOW STATS FOR ' + R.qualified(request['table']),
+            'history': history, 'stats': stats,
             'schema_after': R.schema_sql(request)}
 
 
@@ -208,7 +326,7 @@ def project_plan(result, source):
             and all(re.fullmatch(r'[0-9]{1,6}', key) for key in raw), 'DIAGNOSIS_PLAN_UNSUPPORTED')
     ids, counts, values = set(), {}, []
     empty = 0
-    expected_table = 'iceberg:' + source['request']['table'] + '$data@' + source['identity']['current_snapshot_id']
+    expected_table = 'iceberg:' + source['request']['table'] + '$data@' + source['selection']['snapshot_id']
 
     def visit(node, depth=0):
         nonlocal empty

@@ -8,6 +8,7 @@ import unittest
 from tools.local_experiment.query_diagnose import contract as C
 from tools.local_experiment.query_diagnose.provider import DiagnoseProvider, ProviderError
 from test_query_read_contract import identity, inventory, request, result, schema
+import test_query_snapshots_contract as H
 
 TOKEN = 'a' * 32
 IDS = ['20260918_000000_0000' + str(n) + '_abcde' for n in range(1, 5)]
@@ -19,6 +20,15 @@ def source(*, limit=2):
     return C.source_context(TOKEN, req, inventory(), identity(), selected, IDS[0], 'b' * 64)
 
 
+def snapshot_source(*, limit=2, raw=None, selected_id=None):
+    """Current head B and independently selected A, with no saved data rows."""
+    req = H.request(limit=limit, snapshot_id=selected_id)
+    window = C.S.project_window(H.metadata() if raw is None else raw, req, schema())
+    selected = C.S.receipt_projection(C.S.project_rows(H.result(req), req, schema(), window))
+    return C.snapshot_source_context(TOKEN, req, inventory(), window['identity'], selected,
+                                     IDS[0], 'b' * 64, window['snapshots'])
+
+
 def plan_result(src=None):
     src = src or source()
     def node(index, kind, children, descriptor=None):
@@ -26,7 +36,7 @@ def plan_result(src=None):
             'outputs':[], 'details':'private-plan-detail-sentinel',
             'estimates':[{key:0 for key in C.ESTIMATES}], 'children':children}
     scan = node(2, 'TableScan', [], {'table':'iceberg:' + src['request']['table'] + '$data@'
-                                  + src['identity']['current_snapshot_id']})
+                                  + src['selection']['snapshot_id']})
     limit = node(1, 'Limit', [scan], {'count':str(src['request']['limit']+1)})
     raw = {'0':node(0, 'Output', [limit])}
     return {'query_id':IDS[1], 'columns':['Query Plan'], 'column_types':['varchar'],
@@ -38,7 +48,7 @@ def history_result(src=None, *, missing=False, duration_ms=1001):
     begin = datetime(2026,9,18,tzinfo=timezone.utc)
     end = begin + timedelta(milliseconds=duration_ms)
     stamp = lambda t:t.isoformat(timespec='microseconds').replace('+00:00','Z')
-    select = C.R.select_sql(src['request'], src['inventory'], src['identity']['columns'], src['identity'])
+    select = C.select_sql(src)
     return {'query_id':IDS[2], 'columns':list(C.HISTORY_COLUMNS), 'column_types':list(C.HISTORY_TYPES),
             'rows':[] if missing else [[src['query_id'],'FINISHED',src['user'],src['source'],select,
                                       0,0,0,stamp(begin),stamp(begin),stamp(end),None,None]]}
@@ -103,6 +113,155 @@ class SourceContractTests(unittest.TestCase):
         original = C.R.select_sql(value['request'],value['inventory'],schema(),identity())
         self.assertNotIn(original, sql.values())
         self.assertEqual(sql['explain'], 'EXPLAIN (TYPE DISTRIBUTED, FORMAT JSON) ' + original)
+
+
+class SnapshotSourceTests(unittest.TestCase):
+    def test_explicit_profile_retains_true_head_and_independent_int64_selection(self):
+        value = snapshot_source()
+        self.assertEqual(set(value), C.SOURCE_KEYS | {'profile', 'snapshot_catalog'})
+        self.assertEqual(len(value), 13)
+        self.assertEqual(value['profile'], 'snapshot-reader-v2')
+        self.assertEqual(value['identity']['current_snapshot_id'], str(H.HEAD))
+        self.assertEqual(value['selection']['snapshot_id'], str(H.OLD))
+        self.assertGreater(H.OLD, H.HEAD)  # Snapshot IDs do not encode time/ancestry.
+        self.assertEqual(C.validate_source(value), value)
+        self.assertEqual(value['sql_sha256'], C.hashlib.sha256(C.select_sql(value).encode()).hexdigest())
+        self.assertNotIn('rows', value['selection'])
+        self.assertNotIn('SELECT ', C.canonical(value).decode())
+
+    def test_v1_shape_sql_and_uniform_window_remain_unchanged(self):
+        from test_query_read_contract import metadata
+        value = source()
+        self.assertEqual(set(value), C.SOURCE_KEYS)
+        self.assertEqual(len(value), 11)
+        self.assertEqual(C.select_sql(value), 'SELECT "id", "name" FROM "iceberg"."smoke"."fixture_v1" '
+                         'FOR VERSION AS OF 8088807033386546123 LIMIT 3')
+        self.assertEqual(C.statements(value)['stats'], 'SHOW STATS FOR "iceberg"."smoke"."fixture_v1"')
+        self.assertEqual(C.base_request(value), value['request'])
+        window = C.project_source_window(metadata(), value, schema())
+        self.assertEqual(window, {'schema_version':1, 'identity':value['identity'], 'snapshots':None})
+        self.assertTrue(C.verify_source_window(value, window, deepcopy(window)))
+        bad = deepcopy(window); bad['snapshots'] = []
+        with self.assertRaises(C.ContractError): C.verify_source_window(value, bad)
+
+    def test_snapshot_statements_pin_selected_ID_and_whole_schema_without_limit(self):
+        value = snapshot_source(limit=1)
+        statements = C.statements(value)
+        self.assertEqual(tuple(statements), C.PHASES)
+        self.assertEqual(C.base_request(value), request(limit=1))
+        self.assertEqual(statements['schema_before'], statements['schema_after'])
+        self.assertEqual(statements['stats'], 'SHOW STATS FOR (SELECT "id", "name", "amount", "day", "ok" '
+                         'FROM "iceberg"."smoke"."fixture_v1" FOR VERSION AS OF BIGINT '
+                         "'8088807033386546123')")
+        self.assertNotIn('LIMIT', statements['stats'])
+        self.assertNotIn(str(H.HEAD), statements['stats'])
+        self.assertEqual(statements['explain'], 'EXPLAIN (TYPE DISTRIBUTED, FORMAT JSON) ' + C.select_sql(value))
+        self.assertTrue(statements['explain'].endswith("BIGINT '8088807033386546123' LIMIT 2"))
+        self.assertNotIn(C.select_sql(value), statements.values())
+
+    def test_small_and_max_snapshot_IDs_have_exact_bigint_SQL(self):
+        for sid in (1, 2**63-1):
+            raw = H.metadata()
+            raw['metadata']['snapshots'][0]['snapshot-id'] = sid
+            raw['metadata']['snapshots'][1]['parent-snapshot-id'] = sid
+            value = snapshot_source(raw=raw, selected_id=str(sid))
+            with self.subTest(sid=sid):
+                self.assertIn("BIGINT '" + str(sid) + "'", C.select_sql(value))
+                self.assertIn("BIGINT '" + str(sid) + "'", C.statements(value)['stats'])
+                self.assertEqual(C.validate_source(value)['selection']['snapshot_id'], str(sid))
+        for sid in (True, H.OLD, float(H.OLD), '01', '+1', str(2**63), 'audit_branch'):
+            value = snapshot_source(); value['request']['snapshot_id'] = sid
+            with self.subTest(sid=sid), self.assertRaises(C.ContractError): C.validate_source(value)
+
+    def test_profile_version_selection_and_provenance_tamper_rejected(self):
+        mutations = (
+            lambda v:v.update(profile='arbitrary-reader'), lambda v:v.update(schema_version=1),
+            lambda v:v.update(schema_version=True), lambda v:v.update(snapshot_catalog=[]),
+            lambda v:v['identity'].update(current_snapshot_id=str(H.OLD)),
+            lambda v:v['selection'].update(current_snapshot_id=str(H.OLD)),
+            lambda v:v['selection']['selected_snapshot'].update(schema_id=9),
+            lambda v:v['selection'].update(rows=[]), lambda v:v['selection'].update(row_count=True),
+            lambda v:v.update(user='foreign'), lambda v:v.update(source='foreign'),
+            lambda v:v.update(sql_sha256='0'*64), lambda v:v.update(query_id='SELECT secret'),
+            lambda v:v['inventory'].update(complete=False))
+        for index, edit in enumerate(mutations):
+            value = snapshot_source(); edit(value)
+            with self.subTest(index=index), self.assertRaises(C.ContractError): C.validate_source(value)
+        old = source(); old['profile'] = C.SNAPSHOT_PROFILE
+        with self.assertRaises(C.ContractError): C.validate_source(old)
+
+    def test_uniform_fresh_windows_and_no_head_expiration_or_metadata_fallback(self):
+        value = snapshot_source()
+        before = C.project_source_window(H.metadata(), value, schema())
+        self.assertEqual(before, {'schema_version':2, 'identity':value['identity'],
+                                  'snapshots':value['snapshot_catalog']})
+        self.assertTrue(C.verify_source_window(value, before, deepcopy(before)))
+        def expired(raw):
+            raw['metadata']['snapshots'].pop(0)
+        def head_changed(raw):
+            raw['metadata']['current-snapshot-id'] = H.OLD
+            raw['metadata']['refs']['main']['snapshot-id'] = H.OLD
+        for change in (expired, head_changed,
+                       lambda r:r['metadata'].update(properties={'safe-property':'changed'}),
+                       lambda r:r.update(**{'metadata-location':r['metadata-location'].replace('00001','00002')}),
+                       lambda r:r['metadata']['snapshots'][0].update(**{'schema-id':None})):
+            raw = H.metadata(); change(raw)
+            with self.subTest(change=change), self.assertRaises(C.ContractError):
+                after = C.project_source_window(raw, value, schema())
+                C.verify_source_window(value, before, after)
+        bad = deepcopy(before); bad['identity']['metadata_sha256'] = 'c'*64
+        with self.assertRaises(C.ContractError): C.verify_source_window(value, bad)
+        bad = deepcopy(before); bad['schema_version'] = 1
+        with self.assertRaises(C.ContractError): C.verify_source_window(value, bad)
+
+    def test_same_fields_different_schema_ID_allowed_but_field_ID_drift_rejected(self):
+        raw = H.metadata()
+        old = deepcopy(raw['metadata']['schemas'][0]); old['schema-id'] = 7
+        raw['metadata']['schemas'].append(old)
+        raw['metadata']['snapshots'][0]['schema-id'] = 7
+        value = snapshot_source(raw=raw)
+        self.assertEqual(value['selection']['selected_snapshot']['schema_id'], 7)
+        before = C.project_source_window(raw, value, schema())
+        self.assertTrue(C.verify_source_window(value, before))
+        old['fields'][0]['id'] = 999
+        with self.assertRaises(C.R.ContractError): snapshot_source(raw=raw)
+
+    def test_shared_plan_and_history_validate_selected_snapshot_not_current_head(self):
+        value = snapshot_source()
+        self.assertEqual(C.project_plan(plan_result(value), value)['node_count'], 3)
+        self.assertEqual(C.project_history(history_result(value), value)['started_to_end_ms'], 1001)
+        self.assertEqual(C.project_history(history_result(value, missing=True), value)['status'], 'not-retained')
+        raw = plan_result(value); tree = json.loads(raw['rows'][0][0])
+        scan = tree['0']['children'][0]['children'][0]
+        scan['descriptor']['table'] += ' LIMIT 3'
+        raw['rows'][0][0] = json.dumps(tree)
+        self.assertEqual(C.project_plan(raw, value)['node_count'], 3)
+        scan['descriptor']['table'] = scan['descriptor']['table'].replace(str(H.OLD), str(H.HEAD))
+        raw['rows'][0][0] = json.dumps(tree)
+        with self.assertRaisesRegex(C.ContractError, 'DIAGNOSIS_PLAN_SOURCE_MISMATCH'): C.project_plan(raw, value)
+        raw = history_result(value)
+        raw['rows'][0][4] = raw['rows'][0][4].replace(str(H.OLD), str(H.HEAD))
+        with self.assertRaises(C.ContractError): C.project_history(raw, value)
+
+    def test_snapshot_estimates_nulls_and_safe_model_evidence_share_existing_contract(self):
+        value = snapshot_source()
+        projected = projections(value)
+        self.assertEqual(projected['stats']['row_count_estimate'], 2)
+        raw = stats_result(value); raw['rows'][-1][4] = None
+        unknown = C.project_stats(raw, value)
+        self.assertIsNone(unknown['row_count_estimate'])
+        self.assertFalse(unknown['estimates_complete'])
+        ev = C.build_evidence(value, **dict(projected, stats=unknown))
+        self.assertEqual(C.expected_diagnosis(ev)['finding_ids'], ['TABLE_STATISTICS_INCOMPLETE'])
+        text = C.canonical(ev).decode()
+        for secret in (str(H.OLD), str(H.HEAD), TOKEN, IDS[0], 'fixture_v1', 'SELECT ', 'private-', 'amount'):
+            self.assertNotIn(secret, text)
+        diagnosis = C.expected_diagnosis(ev)
+        public = C.public_summary(value, ev, diagnosis)
+        self.assertEqual(len(public), 10)
+        self.assertEqual(public['schema_version'], 1)
+        self.assertEqual(public['model_calls'], 1)
+        self.assertFalse(public['original_select_reexecuted'])
 
 
 class ProjectionTests(unittest.TestCase):

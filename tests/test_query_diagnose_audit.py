@@ -10,7 +10,7 @@ import uuid
 
 from tools.local_experiment.query_diagnose import audit as A, run as R, contract as D
 from test_query_diagnose_run import FakeLease, observation, TOKEN
-from test_query_diagnose_contract import source
+from test_query_diagnose_contract import source, snapshot_source, projections
 
 
 class Client:
@@ -133,6 +133,30 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(report['result'],'passed');self.assertEqual(public['model_calls'],1)
         self.assertTrue(report['audit']['verified']);self.assertTrue(report['cleanup_verified'])
         self.assertEqual(len(report['audit']['records']),3)
+
+    def test_snapshot_owner_reuses_real_audit_after_observation_cleanup(self):
+        src=snapshot_source(); lease=FakeLease(src['read_token']);lease.source=src
+        completed=[]
+        def observe(value,token,progress):
+            self.assertEqual(value,src)
+            journal={'state':'verified','cleanup_verified':True,**projections(src),
+                'identity_before':src['identity'],'identity_after':src['identity'],
+                'snapshot_catalog_before':src['snapshot_catalog'],'snapshot_catalog_after':src['snapshot_catalog']}
+            completed.append('closed');progress(journal);return journal
+        def infer(phase,evidence):
+            self.assertEqual(completed,['closed']);self.assertEqual(phase,'query_diagnose')
+            self.assertNotIn(src['request']['table'],json.dumps(evidence))
+            self.assertNotIn(src['selection']['snapshot_id'],json.dumps(evidence))
+            return {'content':D.expected_diagnosis(evidence),'prompt_tokens':125,'completion_tokens':24,'duration_ms':252}
+        report,public=R.Owner(TOKEN,src['read_token'],self.output).execute(
+            lease_factory=lambda _:lease,environment_factory=lambda:(self.profile,SimpleNamespace(complete=infer)),
+            observer=observe,audit_factory=lambda token,output,profile,progress:self.create(progress))
+        self.assertEqual(report['result'],'passed');self.assertTrue(lease.closed)
+        self.assertEqual(public['schema_version'],1);self.assertEqual(len(public),10)
+        self.assertEqual(report['source']['schema_version'],2)
+        self.assertEqual([r['status'] for r in report['audit']['records']],['success']*3)
+        self.assertTrue(report['audit']['verified']);self.assertTrue(report['audit']['saved_spans_verified'])
+        self.assertEqual(report['audit']['records'][1]['prompt_tokens'],125)
 
 
 if __name__=='__main__':unittest.main()

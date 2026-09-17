@@ -13,9 +13,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from tools.local_experiment.query_diagnose import observe as O
 from tools.local_experiment.query_diagnose import contract as D
 from tools.local_experiment.query_read import contract as R, client as Q
+from tools.local_experiment.query_snapshots import contract as S
 from test_query_read_contract import request, inventory, identity, schema, metadata, result
 from test_query_read_client import Response, Opener, page, URL, QID
 from test_query_diagnose_contract import plan_result, history_result, stats_result
+from test_query_snapshots_contract import metadata as snapshot_metadata, request as snapshot_request, result as snapshot_result
 
 TOKEN = 'b' * 32
 READ_TOKEN = 'a' * 32
@@ -26,6 +28,16 @@ def source():
     return D.source_context(READ_TOKEN, request(), inventory(), identity(), selection, QID, 'e' * 64)
 
 
+def snapshot_source(*, current=False):
+    raw = snapshot_metadata()
+    req = snapshot_request(limit=3, snapshot_id=str(raw['metadata']['current-snapshot-id'])) if current else snapshot_request()
+    window = S.project_window(raw, req, schema())
+    rows = [[1, 'old-a'], [2, 'old-b'], [3, 'current-only']] if current else None
+    selected = S.receipt_projection(S.project_rows(snapshot_result(req, rows), req, schema(), window))
+    return D.snapshot_source_context(READ_TOKEN, req, inventory(), window['identity'], selected,
+                                     QID, 'e' * 64, window['snapshots'])
+
+
 def schema_result():
     return {'columns': ['column_name', 'data_type', 'ordinal_position', 'is_nullable'],
             'column_types': ['varchar', 'varchar', 'bigint', 'varchar'],
@@ -34,7 +46,7 @@ def schema_result():
 
 class Fixture:
     def setup(self):
-        self.saved, self.events, self.closed = [], [], []
+        self.saved, self.events, self.closed, self.catalog_requests = [], [], [], []
         self.failure = None
         self.failure_at = 'explain'
         self.metadata = [metadata(), metadata()]
@@ -76,6 +88,7 @@ class Fixture:
             def authenticate(self): outer.events.append('authenticate')
             def load(self, request):
                 outer.events.append('metadata')
+                outer.catalog_requests.append(deepcopy(request))
                 return deepcopy(outer.metadata.pop(0))
         self.worker, self.control = Worker(False), Worker(True)
         error = None
@@ -122,6 +135,9 @@ class ObservationTests(Fixture, unittest.TestCase):
         self.assertNotIn('never-persist-credential', json.dumps(self.saved))
         self.assertNotIn('SELECT ', json.dumps(self.saved))
         self.assertEqual(observed, self.saved[-1])
+        self.assertEqual(set(observed), {'state', 'source_sha256', 'plan', 'history', 'stats',
+            'identity_before', 'identity_after', 'queries', 'query_drain', 'runtime', 'cleanup_verified', 'error_code'})
+        self.assertEqual(self.catalog_requests, [request(), request()])
 
     def test_source_or_same_token_invalid_is_before_runtime(self):
         for bad in ({**source(), 'query_id': 'invalid'}, {**source(), 'sql_sha256': '0'*64},
@@ -223,6 +239,94 @@ class ObservationTests(Fixture, unittest.TestCase):
         with self.assertRaises(O.ObservationError):
             self.invoke(progress=lambda _: (_ for _ in ()).throw(OSError('private-save')))
         self.assertEqual(self.events, [])
+
+
+class SnapshotObservationTests(Fixture, unittest.TestCase):
+    def setUp(self):
+        self.setup()
+        self.metadata = [snapshot_metadata(), snapshot_metadata()]
+
+    def test_v2_retains_truthful_current_identity_and_rowless_snapshot_catalog(self):
+        src = snapshot_source()
+        observed = self.invoke(src=src)
+        self.assertEqual(observed['state'], 'verified')
+        self.assertTrue(observed['cleanup_verified'])
+        self.assertNotEqual(src['identity']['current_snapshot_id'], src['selection']['snapshot_id'])
+        for phase in ('before', 'after'):
+            self.assertEqual(observed['identity_' + phase], src['identity'])
+            self.assertEqual(observed['snapshot_catalog_' + phase], src['snapshot_catalog'])
+        self.assertEqual(self.catalog_requests, [S.base_request(src['request'])] * 2)
+        self.assertEqual([r['label'] for r in observed['queries']['worker']], list(D.PHASES))
+        self.assertNotIn('rows', observed)
+        for private in ('PRIVATE-RAW', 'never-persist-credential', 'SELECT ', 'not-public'):
+            self.assertNotIn(private, json.dumps(self.saved))
+
+    def test_expired_selected_snapshot_before_observation_prevents_diagnostic_queries(self):
+        self.metadata[0]['metadata']['snapshots'].pop(0)
+        with self.assertRaisesRegex(O.ObservationError, '^OBSERVATION_FAILED$'):
+            self.invoke(src=snapshot_source())
+        self.assertNotIn('explain', self.events)
+        self.assertNotIn('stats', self.events)
+        self.assertEqual(self.events[-2:], ['drain', 'close'])
+        self.assertIsNone(self.saved[-1]['snapshot_catalog_before'])
+
+    def test_missing_or_incompatible_historical_schema_prevents_diagnostics(self):
+        for mutation in ('missing', 'different'):
+            self.metadata = [snapshot_metadata(), snapshot_metadata()]
+            self.schema_results = [schema_result(), schema_result()]
+            self.events.clear()
+            if mutation == 'missing':
+                del self.metadata[0]['metadata']['snapshots'][0]['schema-id']
+            else:
+                self.metadata[0]['metadata']['snapshots'][0]['schema-id'] = 7
+                old_schema = deepcopy(self.metadata[0]['metadata']['schemas'][0])
+                old_schema['schema-id'] = 7
+                old_schema['fields'][0]['type'] = 'int'
+                self.metadata[0]['metadata']['schemas'].append(old_schema)
+            with self.subTest(mutation=mutation), self.assertRaises(O.ObservationError):
+                self.invoke(src=snapshot_source())
+            self.assertNotIn('explain', self.events)
+            self.assertEqual(self.events[-2:], ['drain', 'close'])
+
+    def test_metadata_or_expiration_after_observation_does_not_release_verified_result(self):
+        for mutation in ('metadata', 'expiration', 'head'):
+            self.metadata = [snapshot_metadata(), snapshot_metadata()]
+            self.schema_results = [schema_result(), schema_result()]
+            self.events.clear()
+            raw = self.metadata[1]['metadata']
+            if mutation == 'metadata': raw.setdefault('properties', {})['new-private-property'] = 'private-change'
+            elif mutation == 'expiration': raw['snapshots'].pop(0)
+            else:
+                raw['current-snapshot-id'] = raw['snapshots'][0]['snapshot-id']
+                raw['refs']['main']['snapshot-id'] = raw['current-snapshot-id']
+            with self.subTest(mutation=mutation), self.assertRaises(O.ObservationError):
+                self.invoke(src=snapshot_source())
+            self.assertIn('stats', self.events)
+            self.assertEqual(self.saved[-1]['state'], 'failed')
+            self.assertIsNone(self.saved[-1]['identity_after'])
+            self.assertIsNone(self.saved[-1]['snapshot_catalog_after'])
+            self.assertEqual(self.events[-2:], ['drain', 'close'])
+
+    def test_snapshot_source_catalog_tampering_is_before_runtime(self):
+        src = snapshot_source()
+        src['snapshot_catalog'][0]['schema_compatibility'] = 'schema-missing'
+        with self.assertRaises(O.ObservationError): self.invoke(src=src)
+        self.assertEqual(self.events, [])
+
+    def test_historical_original_or_current_substitute_is_never_dispatched(self):
+        src = snapshot_source()
+        opener = Opener(Response(page(columns=[('Query Plan', 'varchar')], rows=[['plan']])))
+        client = O.DiagnosisClient(URL, TOKEN, source=src, opener=opener)
+        compiled = D.statements(src)
+        current = R.select_sql(D.base_request(src), src['inventory'], src['identity']['columns'], src['identity'])
+        for sql, label in ((D.select_sql(src), 'explain'), (D.select_sql(src), 'select'),
+                           ('EXPLAIN (TYPE DISTRIBUTED, FORMAT JSON) ' + current, 'explain'),
+                           ('SHOW STATS FOR ' + R.qualified(src['request']['table']), 'stats')):
+            with self.subTest(label=label), self.assertRaises(Q.ClientError): client.query(sql, label)
+        self.assertEqual(opener.requests, [])
+        client.query(compiled['explain'], 'explain')
+        with self.assertRaises(Q.ClientError): client.query(compiled['explain'], 'explain')
+        self.assertEqual([r.data.decode() for r in opener.requests], [compiled['explain']])
 
 
 class DiagnosisClientTests(unittest.TestCase):
@@ -346,7 +450,7 @@ class DiagnosisClientTests(unittest.TestCase):
 class RuntimeIntegrationTests(Fixture, unittest.TestCase):
     def setUp(self): self.setup()
 
-    def test_actual_runtime_clients_drain_and_hooks_with_fake_external_services(self):
+    def actual_runtime_observation(self, src, raw_metadata, *, stats_count=2):
         self.doCleanups()  # This integration uses the real contract projectors.
         ids = ['20260918_010101_%05d_abc12' % i for i in range(2, 7)]
         schema_page = schema_result()
@@ -361,11 +465,13 @@ class RuntimeIntegrationTests(Fixture, unittest.TestCase):
                 types[8:11] = ['varchar(32)'] * 3
             wire = page(qid=qid, columns=list(zip(raw['columns'], types)), rows=raw['rows'])
             return Response(raw=json.dumps(wire, default=float).encode())
+        statistics = stats_result(src)
+        statistics['rows'][-1][4] = stats_count
         worker_open = Opener(
             Response(page(qid=ids[0], columns=columns, rows=schema_page['rows'])),
-            response(ids[1], plan_result(source()), literal_types=True),
-            response(ids[2], history_result(source()), timestamp_types=True),
-            response(ids[3], stats_result(source()), literal_types=True),
+            response(ids[1], plan_result(src), literal_types=True),
+            response(ids[2], history_result(src), timestamp_types=True),
+            response(ids[3], statistics, literal_types=True),
             Response(page(qid=ids[4], columns=columns, rows=schema_page['rows'])))
         control_open = Opener(Response(page(qid='20260918_010101_00007_abc12',
             columns=[(name, 'varchar') for name in ('query_id', 'state', 'user', 'source')],
@@ -380,7 +486,8 @@ class RuntimeIntegrationTests(Fixture, unittest.TestCase):
             def authenticate(self): self.guard(); self.auth=True; self.progress()
             def load(self, request):
                 self.guard(); self.reads += 1; self.progress()
-                return metadata()
+                outer.catalog_requests.append(deepcopy(request))
+                return deepcopy(raw_metadata)
             def close(self): outer.closed.append('catalog')
         @contextmanager
         def trino():
@@ -397,13 +504,13 @@ class RuntimeIntegrationTests(Fixture, unittest.TestCase):
              patch.object(Q.REFS, 'polaris_tunnel', side_effect=polaris), \
              patch.object(Q, 'CatalogRead', Catalog), \
              patch.object(Q.urllib.request, 'build_opener', side_effect=[worker_open, control_open]):
-            observed = O.observe(source(), TOKEN, self.progress)
+            observed = O.observe(src, TOKEN, self.progress)
         self.assertEqual(observed['state'], 'verified')
         self.assertTrue(observed['cleanup_verified'])
         self.assertEqual(observed['query_drain']['observed_query_ids'], ids)
         self.assertEqual(observed['plan']['node_count'], 3)
         self.assertEqual(observed['history']['started_to_end_ms'], 1001)
-        self.assertEqual(observed['stats']['row_count_estimate'], 2)
+        self.assertEqual(observed['stats']['row_count_estimate'], stats_count)
         self.assertEqual(observed['plan']['query_id'], ids[1])
         self.assertEqual(observed['history']['query_id'], ids[2])
         self.assertEqual(observed['stats']['query_id'], ids[3])
@@ -413,14 +520,46 @@ class RuntimeIntegrationTests(Fixture, unittest.TestCase):
         self.assertEqual(self.closed, ['polaris', 'trino', 'catalog'])
         self.assertEqual([r.get_method() for r in worker_open.requests + control_open.requests], ['POST'] * 6)
         sent = [r.data.decode() for r in worker_open.requests]
-        sqls = D.statements(source())
+        sqls = D.statements(src)
         self.assertEqual(sent, [sqls[label] for label in ('schema_before', 'explain', 'history', 'stats', 'schema_after')])
-        self.assertNotIn(R.select_sql(request(), inventory(), schema(), identity()), sent)
+        self.assertNotIn(D.select_sql(src), sent)
         for private in ('private-plan-detail', 'private-low-value', 'private-high-value', 'SELECT '):
             self.assertNotIn(private, json.dumps(self.saved))
-        evidence = D.build_evidence(source(), observed['plan'], observed['history'], observed['stats'])
-        for private in ('fixture_v1', source()['query_id'], source()['read_token']):
+        evidence = D.build_evidence(src, observed['plan'], observed['history'], observed['stats'])
+        for private in ('fixture_v1', src['query_id'], src['read_token']):
             self.assertNotIn(private, json.dumps(evidence))
+        self.assertEqual(self.catalog_requests, [D.base_request(src)] * 2)
+        return observed, sent
+
+    def test_actual_runtime_clients_drain_and_hooks_with_fake_external_services(self):
+        observed, sent = self.actual_runtime_observation(source(), metadata())
+        self.assertNotIn('snapshot_catalog_before', observed)
+        self.assertNotIn('snapshot_catalog_after', observed)
+        self.assertEqual(sent[3], 'SHOW STATS FOR ' + R.qualified(source()['request']['table']))
+
+    def test_actual_historical_wire_projects_selected_a_stats_two_with_truthful_b_head(self):
+        src = snapshot_source()
+        observed, sent = self.actual_runtime_observation(src, snapshot_metadata(), stats_count=2)
+        a, b = src['selection']['snapshot_id'], src['identity']['current_snapshot_id']
+        self.assertNotEqual(a, b)
+        self.assertEqual(observed['identity_before']['current_snapshot_id'], b)
+        self.assertEqual(observed['identity_after'], observed['identity_before'])
+        self.assertEqual(observed['snapshot_catalog_before'], src['snapshot_catalog'])
+        self.assertEqual(observed['snapshot_catalog_after'], src['snapshot_catalog'])
+        self.assertIn("FOR VERSION AS OF BIGINT '" + a + "'", sent[1])
+        self.assertIn("FOR VERSION AS OF BIGINT '" + a + "'", sent[3])
+        self.assertNotIn('LIMIT', sent[3])
+        self.assertNotIn(b, sent[1] + sent[3])
+        self.assertEqual(observed['stats']['row_count_estimate'], 2)
+
+    def test_actual_explicit_current_wire_uses_b_stats_three_without_historical_substitution(self):
+        src = snapshot_source(current=True)
+        observed, sent = self.actual_runtime_observation(src, snapshot_metadata(), stats_count=3)
+        b = src['identity']['current_snapshot_id']
+        self.assertEqual(src['selection']['snapshot_id'], b)
+        self.assertEqual(observed['stats']['row_count_estimate'], 3)
+        self.assertIn("FOR VERSION AS OF BIGINT '" + b + "'", sent[1])
+        self.assertIn("FOR VERSION AS OF BIGINT '" + b + "'", sent[3])
 
 
 if __name__ == '__main__': unittest.main()

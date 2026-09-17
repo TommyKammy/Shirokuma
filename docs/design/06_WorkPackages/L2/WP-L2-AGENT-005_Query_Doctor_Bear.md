@@ -5,7 +5,7 @@ title: "WP-L2-AGENT-005 Query Doctor Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.8"
+version: "0.9"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -15,6 +15,60 @@ tags: [shirokuma, workpackage, l2, agentops]
 ## Summary
 
 EXPLAINとquery historyから改善案を出す
+
+## 2026-09-18: historical snapshot diagnosis
+
+成功したsnapshot Reader v2の`evidence_token`も、既存の
+`query diagnose --read-token TOKEN`から受理する。v1とv2のsource検証を分け、
+public/model/provider/監査契約とv1 journalを維持する。
+
+- [x] privateな終了済みv2 selectのrequest・元query identity・SQL hash・rowless selection・snapshot一覧を束縛する。
+- [x] 現在のidentity Bを保持したまま選択Aを区別し、fresh windowが保存sourceと前後で完全一致することを要求する。
+- [x] EXPLAINは元AのSELECTそのもの、STATSは全compatible current-schema列の固定subqueryを`FOR VERSION AS OF BIGINT 'A'`へ固定し、LIMITを付けない。
+- [x] 元SELECT再実行0、5観測phase・所有query drain・接続回収後のQwen1回という既存順序を維持する。
+- [x] fake HTTPでAの統計2/Bの統計3を区別し、expiry/schema不一致・metadata/head変化・型/byte制限・取消を検証する。
+- [x] 新規2version tableの実過去読取から診断し、typed source・同snapshot統計・監査・保持状態復帰を独立照合する。
+
+v2だけ`snapshot_catalog_before/after`をrowless journalへ追加する。選択Aの保持が失われた場合や
+現在Bのmetadata/schema/refsが変わった場合はモデル前に拒否し、別snapshotへfallbackしない。
+統計は選択snapshotを指定した見積りであり、実行による全件countや性能改善の測定ではない。
+元query historyはID/user/source/SQL hashを照合し、履歴不在は原因を推測せずnot-retainedとする。
+SQL・raw plan/history/statistics・行値はモデルへ渡さず、root cause未確定・改善未測定を維持する。
+
+現checkpointのfocused Python106件とGo150 top-level/83subtests・vet/raceは成功した。
+実機前の全local回帰55suites/2048件（2047成功＋既存optional OTel1skip）も通過した。
+これらはoffline/結合検証の結果であり、以下の実機観測と区別する。
+再現手順と制約は[diagnosis runbook](../../../../tools/local_experiment/query_diagnose/README.md)を参照。
+
+実機diagnosis `e0a40664f9a78d8cca182943b7677ac3`が成功した。source Aのreadは
+`b55da2066d6dbf6e7ec0af1a6d3c6bf3`、現在Bのreadは`68a6f2884d33e4d10508a371c4ea58ab`。
+生成fixture `bcda2957f5de4db39a5b41c5e1e1d261`のUUIDは
+`bb8fc5c5-ea93-4fdd-a655-95d267a9cd37`、A=`3046504324030823045`（2行）、
+B=`2518908696447467114`（3行）。historical STATSは5列・row estimate 2を返し、
+current Bの3行と混同しなかった。historyはobserved、queue0/analysis12/planning2ms、
+created-to-end1212ms/started-to-end1199msだった。Qwen usageは525/95tokens、inference4208ms。
+
+旧v1 source `e743a83a0d19bcbda85027ea8e67464b`からのdiagnosis
+`09117eca13f71fbf67f4a890577b9f28`も成功。実際のhistoryはnot-retainedで全timingsをNULLとし、
+STATSのrow estimate 2を保持した。Qwen usageは535/114tokens、inference3625ms。
+2診断とも各5worker＋drain1、元SELECT再実行0、model1、監査3events、query/接続cleanup確認済み。
+合計1060prompt/209completion tokens・7833ms、costはNULL、cloud/retry0。
+これは今回取得した統計・履歴・推論の観測であり、性能改善や原因確定の証拠ではない。
+
+実行記録と70source/binary sealは
+`tmp/local-experiment/query-diagnose-snapshot-checks/18efcc40b83e4b839c1747d6cbe5d5e5/`に保存する。
+生成fixtureはfresh identityと終了済みsource/diagnosisを確認後、同UUIDへDROP1回し、保持fixtureの6投影とtable一覧が復元した。
+Reader2回のworker8/control2と診断2回のworker10/control2、計22query IDsは一意・終端済み。
+Readerが元データをSELECTした回数は2、診断によるその再実行は0である。
+
+独立前後監査60checks（fresh23＋保存束縛37）が成功。3878旧filesと70source/binary/helperが不変、
+AHは旧480行の全hashを保持して486行へ増加し、新6event IDs/Loki6/保存spans6が一致した。
+保持Kube/Docker/MLflow/policy/networkは不変、5portsが空き、54locksは非active。
+監査と33保存inputsのhash束縛は
+`query-diagnose-snapshot-preflight/92bebffcde6b4bed8c3bd65127bfb163/independent-verification.json`に保存した。
+設計83documents/関連14tests、repo/Vaultの同期と関連リンク、secret/diff検査も成功した。
+この増分のlocal機能検証は完了したが、一般原因診断・性能改善・本番受入は主張しない。
+次は`query diagnose report [--token TOKEN]`で実診断の保存記録を読み取り専用で一覧/単件表示する。
 
 ## 2026-09-18: diagnose a completed Reader query
 
