@@ -5,7 +5,7 @@ title: "WP-L2-AGENT-005 Query Doctor Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.10"
+version: "0.11"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -15,6 +15,49 @@ tags: [shirokuma, workpackage, l2, agentops]
 ## Summary
 
 EXPLAINとquery historyから改善案を出す
+
+## 2026-09-18: typed equality Reader and diagnosis — local acceptance complete
+
+`query select`へ`--where-column COLUMN --equals VALUE`を対で指定する単一等値条件を追加した。
+型はfresh schemaから決定し、integer/bigint/decimal/date/booleanだけを受理する。
+値は128 bytes以内の非空ASCII、NULL・text/float・式・丸めを拒否する。decimalの余分な末尾zeroは許す。
+条件列は非投影でもfull schemaへ束縛する。投影される場合だけlimit+1を含む全返却cellの等値をhost照合し、
+非投影の場合はSQL/schema/snapshotの束縛までとし、非表示cellの追加取得は行わない。
+
+- [x] current headまたは明示historical snapshotへ同じ型付きSQLを固定し、前後window完全一致を要求する。
+- [x] filter無しv1/v2を保持し、新schema3/profile `filtered-snapshot-reader-v3`を別保存先へ分離する。
+- [x] 終了済みv3から元SELECTのSQL hash/EXPLAINを再構成し、同snapshot・同条件・全schema列・LIMIT無しのSTATSを使う。
+- [x] 保存reportはv3を別groupとし、23/27/29-file historical source manifestsを現在hashへ上書きしない。
+- [x] 新規所有A2→B3 fixtureのcurrent/historical型付き読取、限定拒否、診断1回と保存reportを実機で確認する。
+- [x] 同UUID cleanupと最終保持照合を完了する。
+
+literalはargv/shell history、private request、Trino SQL/historyに存在する。公開predicate metadataは
+column/type/operatorだけで、モデル・公開診断metadata・監査へ値を追加しない。明示select rowsには値を含み得る。
+元SELECT再実行0、診断Qwen最大1回、統計はfiltered scopeの見積りであり全件countや性能改善ではない。
+型不一致はschema取得後/data SELECT前、window変化・不明終了・cleanup不明は成功を公開しない。
+任意SQL・join・書込み・tenant認可・一般的最適化/原因診断・本番受入はこの増分に含めない。
+
+実機前の全local61suites/2260tests（2259成功・既存optional1skip）、Go186 top/232 subtests・vet/raceは成功。
+これらはoffline/結合検証として、以下の実機観測と区別する。手順と境界は
+[typed equality runbook](../../../../tools/local_experiment/query_filter/README.md)を参照。
+
+実機では新規fixture `eb49f6a1cf154a2ba76ec977b3746d9f`、UUID `23f17e71-ae15-4666-bfca-de709e7c9591`の
+A=`773671882174409544`（2行）→B=`6885010551020887483`（3行）に対し、filtered7件と旧v1 baseline1件が成功。
+不正literalはchild起動前にexit1、varchar条件はdata SELECT0・cleanup確認済みで拒否した。
+historical read `00ee728cbbcc1a6558993d6392737ba1`からdiagnosis `7ddb7a9d248ae9841b39eb5b99b81eb6`が成功。
+元SELECT再送0、5観測＋drain1、実ScanFilter1/history observed、同条件の5列STATS row estimate 1.0を確認した。
+Qwenは1回（528 prompt/95 completion tokens・4350ms）、cost NULL。AH/Loki/保存span各3が
+trace `655fbae2066f2840c1129b463c761626`へ相関し、親のfresh AH/Loki各1readは診断内部照合と別に記録した。
+保存reportは旧6＋新v3の7件をcompleteとして返した。元tableは同UUID照合後にDROP1回し、
+query `20260917_210805_01468_b69ae`の完了・table不在・retained fixture前後完全一致を確認した。
+証拠は`tmp/local-experiment/query-filter-checks/640deb117c414457bdccf23baca5e0b2/`の`fixture-identity.json`、`diagnose-historical.json`、
+`audit-readback.json`、`report-after.json`と各private CLI logに保存する。
+
+最終`after.json`で4231旧files・250sourcesの一致、AH516旧行の全hash保持＋期待する新3行だけの519行を確認した。
+`independent-saved-verification.json`の167 scoped assertionsが成功し、42保存inputsは不変、
+49個の一意なproduct query IDsはfinished/completeだった。fixture SQLと監査読取はこの49個へ混ぜない。
+これで本増分のlocal機能受入を完了する。一般条件式・原因診断・性能改善・本番受入は引き続き未達とする。
+
 
 ## 2026-09-18: saved diagnosis report — local acceptance complete
 

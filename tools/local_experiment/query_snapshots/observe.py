@@ -17,8 +17,9 @@ ERROR_CODES = frozenset(C.ERROR_CODES) | {'OBSERVATION_FAILED', 'INTERRUPTED'}
 
 
 class ObservationError(RuntimeError):
-    def __init__(self, code):
-        super().__init__(code if type(code) is str and code in ERROR_CODES else 'OBSERVATION_FAILED')
+    def __init__(self, code, *, _contract=C):
+        allowed = ERROR_CODES | _checked_contract(_contract).ERROR_CODES
+        super().__init__(code if type(code) is str and code in allowed else 'OBSERVATION_FAILED')
 
 
 def require(condition):
@@ -26,19 +27,28 @@ def require(condition):
         raise ObservationError('OBSERVATION_FAILED')
 
 
-def error_code(error):
+def _checked_contract(value):
+    if value is C:
+        return value
+    from tools.local_experiment.query_filter import contract as F
+    require(value is F)
+    return value
+
+
+def error_code(error, _contract=C):
     if error is None:
         return None
     if not isinstance(error, Exception):
         return 'INTERRUPTED'
-    if type(error) in (ObservationError, C.ContractError, R.ContractError) and str(error) in ERROR_CODES:
+    if type(error) in (ObservationError, C.ContractError, R.ContractError) and str(error) in ERROR_CODES | _contract.ERROR_CODES:
         return str(error)
     return 'OBSERVATION_FAILED'
 
 
 class SnapshotClient(Q.QueryClient):
     """Restrict the existing Reader transport to this request, once per phase."""
-    def __init__(self, url, token, *, request, **kwargs):
+    def __init__(self, url, token, *, request, _contract=C, **kwargs):
+        C = self._contract = _checked_contract(_contract)
         self._request = deepcopy(C.normalize_request(request))
         require(not kwargs.get('control', False))
         self._statements = {'inventory': C.discovery_sql(self._request),
@@ -48,6 +58,7 @@ class SnapshotClient(Q.QueryClient):
         super().__init__(url, token, **kwargs)
 
     def bind_select(self, inventory, columns, window):
+        C = self._contract
         require(self._request['command']=='select' and 'select' not in self._statements and
                 self._attempted_labels == {'inventory', 'schema_before'})
         # The only way to authorize a data statement is the pure fresh-window
@@ -67,14 +78,15 @@ class SnapshotClient(Q.QueryClient):
 
 
 @contextmanager
-def runtime(token, request, progress):
+def runtime(token, request, progress, *, _contract=C):
     def factory(url, run_token, **kwargs):
-        return SnapshotClient(url, run_token, request=request, **kwargs)
+        return SnapshotClient(url, run_token, request=request, _contract=_contract, **kwargs)
     with Q.runtime(token, progress, _worker_factory=factory) as clients:
         yield clients
 
 
-def _observe(request, worker, catalog, journal, save):
+def _observe(request, worker, catalog, journal, save, _contract=C):
+    C = _checked_contract(_contract)
     base = C.base_request(request)
     inventory = R.project_inventory(worker.query(C.discovery_sql(request), 'inventory'),
                                     base['table'].split('.')[0])
@@ -106,7 +118,7 @@ def _observe(request, worker, catalog, journal, save):
     return public
 
 
-def observe(request, token, progress, *, runtime_factory=None, drain_fn=None):
+def observe(request, token, progress, *, runtime_factory=None, drain_fn=None, _contract=C):
     """Return (rowless journal, public candidate) only after resource cleanup.
 
     Expected pure-contract refusals keep their fixed codes. Other errors become
@@ -114,6 +126,7 @@ def observe(request, token, progress, *, runtime_factory=None, drain_fn=None):
     drain, teardown and persistence failures and is rethrown as the same object.
     Dependency injection is only for offline tests; defaults use fixed runtime.
     """
+    C = _checked_contract(_contract)
     require(callable(progress))
     journal = {'state': 'pending', 'request_sha256': None, 'inventory': None,
                'identity_before': None, 'identity_after': None,
@@ -140,7 +153,7 @@ def observe(request, token, progress, *, runtime_factory=None, drain_fn=None):
         request = deepcopy(C.normalize_request(request))
         journal['request_sha256'] = R.digest(request)
         save()
-        factory = runtime if runtime_factory is None else runtime_factory
+        factory = (lambda token, request, progress: runtime(token, request, progress, _contract=C)) if runtime_factory is None else runtime_factory
         drainer = Q.drain if drain_fn is None else drain_fn
         require(callable(factory) and callable(drainer))
         with factory(token, request, runtime_progress) as current:
@@ -152,7 +165,7 @@ def observe(request, token, progress, *, runtime_factory=None, drain_fn=None):
             try:
                 journal['state'] = 'observing'
                 save()
-                public = _observe(request, worker, catalog, journal, save)
+                public = _observe(request, worker, catalog, journal, save, _contract=C)
             except BaseException as caught:
                 error = caught
             finally:
@@ -183,7 +196,7 @@ def observe(request, token, progress, *, runtime_factory=None, drain_fn=None):
         journal['runtime'].get('cleanup', {}).get('verified') is True and
         journal['query_drain'].get('verified') is True)
     journal['state'] = 'verified' if error is None else ('failed' if isinstance(error, Exception) else 'interrupted')
-    journal['error_code'] = error_code(error)
+    journal['error_code'] = error_code(error, C)
     try:
         save()
     except BaseException as caught:
@@ -191,5 +204,5 @@ def observe(request, token, progress, *, runtime_factory=None, drain_fn=None):
     if error is not None:
         if not isinstance(error, Exception):
             raise error
-        raise ObservationError(error_code(error)) from None
+        raise ObservationError(error_code(error, C), _contract=C) from None
     return deepcopy(journal), deepcopy(public)

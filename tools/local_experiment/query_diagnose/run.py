@@ -24,6 +24,7 @@ from tools.local_experiment import local_session as SESSION
 STATE = ROOT / 'tmp/local-experiment/query-diagnose'
 READ_STATE = ROOT / 'tmp/local-experiment/query-read'
 SNAPSHOT_READ_STATE = ROOT / 'tmp/local-experiment/query-snapshots'
+FILTER_READ_STATE = ROOT / 'tmp/local-experiment/query-filter'
 ERROR_CODES = frozenset('''ARGUMENTS_INVALID REQUEST_INVALID SOURCE_NOT_FOUND SOURCE_BUSY SOURCE_INVALID
 SOURCE_CHANGED ENVIRONMENT_NOT_READY OBSERVATION_FAILED MODEL_FAILED MODEL_REJECTED AUDIT_FAILED
 DIAGNOSE_FAILED INTERRUPTED EVIDENCE_ALREADY_EXISTS'''.split())
@@ -175,7 +176,7 @@ class SourceLease:
 
     def locate(self):
         candidates = []
-        for base in (READ_STATE, SNAPSHOT_READ_STATE):
+        for base in (READ_STATE, SNAPSHOT_READ_STATE, FILTER_READ_STATE):
             try:
                 base.lstat()
             except FileNotFoundError:
@@ -209,7 +210,8 @@ class SourceLease:
                 self.source = validate_source(self.token, value, digest)
             else:
                 from tools.local_experiment.query_diagnose.snapshot_source import validate
-                self.source = validate(self.token, value, digest, validate_transport)
+                self.source = validate(self.token, value, digest, validate_transport,
+                                       filtered=base == FILTER_READ_STATE)
             return self
         except BaseException as error:
             try:
@@ -258,6 +260,8 @@ def sources():
     result = R.sources()
     from tools.local_experiment.query_snapshots.run import sources as snapshot_sources
     result.update(snapshot_sources())
+    from tools.local_experiment.query_filter.run import sources as filter_sources
+    result.update(filter_sources())
     for name in ('providers.py', 'evaluation.py', 'workflow.py'):
         paths.append(ROOT / 'tools/local_experiment/llm' / name)
     for name in ('run_sre.py', 'run_sre_llm.py', 'run_catalog.py'):

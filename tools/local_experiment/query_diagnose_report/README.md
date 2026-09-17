@@ -49,10 +49,14 @@ is incomplete coverage, not permission to silently drop old runs.
 
 The validator recomputes the embedded source, observation, allowed findings,
 query ownership, cleanup and saved audit/span consistency. Reader v1 and snapshot
-Reader v2 remain separate profiles. Historical 23-file and 27-file source
+Reader v2 and filtered snapshot Reader v3 remain separate profiles. Historical
+23-file, 27-file and filtered 29-file source
 manifests are validated as stored provenance; their values need not equal
 today's code. This report does not prove that old source files, a table or remote
 audit records still exist.
+The filtered-reader acceptance returned a complete report of seven diagnoses: the
+previous six plus one new v3 diagnosis. Its source table cleanup and final
+preservation checks also passed and are recorded separately in `tmp/local-experiment/query-filter-checks/640deb117c414457bdccf23baca5e0b2/`.
 
 Saved audit records and spans can be matched locally. `producer_verified`
 retains the producer's earlier remote readback claim; it is not fresh

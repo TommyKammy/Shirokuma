@@ -21,7 +21,7 @@ MAX_METRIC = 10**12
 STATES = ('passed','failed','interrupted','active','incomplete','invalid','missing')
 READ_STATES = ('stable','active','incomplete','invalid','missing')
 VERIFICATIONS = ('saved-evidence','journal-only','not-checked')
-PROFILES = ('reader-v1','snapshot-reader-v2')
+PROFILES = ('reader-v1','snapshot-reader-v2','filtered-snapshot-reader-v3')
 INFERENCE_STATES = ('success','failed','blocked','not-recorded')
 CORRELATIONS = ('matched','partial','not-recorded')
 PRODUCER_CODES = frozenset('''ARGUMENTS_INVALID REQUEST_INVALID SOURCE_NOT_FOUND SOURCE_BUSY SOURCE_INVALID
@@ -78,6 +78,8 @@ query_diagnose/audit.py query_diagnose/contract.py query_diagnose/observe.py que
 query_diagnose/run.py query_read/client.py query_read/contract.py query_read/run.py trino_opa/common.py'''.split())
 HISTORICAL_27 = HISTORICAL_23 | frozenset('tools/local_experiment/'+p for p in
     ('query_diagnose/snapshot_source.py','query_snapshots/contract.py','query_snapshots/observe.py','query_snapshots/run.py'))
+FILTERED_29 = HISTORICAL_27 | frozenset('tools/local_experiment/'+p for p in
+    ('query_filter/contract.py','query_filter/run.py'))
 UUID = re.compile(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\Z')
 
 
@@ -215,7 +217,7 @@ def _runtime(observation, identity, source, complete):
 def _observation(value, source, identity, complete):
     if value is None: require(not complete);return
     require(source is not None)
-    expected = OBSERVATION_KEYS | ({'snapshot_catalog_before','snapshot_catalog_after'} if source['schema_version'] == 2 else set())
+    expected = OBSERVATION_KEYS | ({'snapshot_catalog_before','snapshot_catalog_after'} if source['schema_version'] >= 2 else set())
     keys(value,expected);require(value['state'] in ('pending','observing','verified','failed','interrupted'))
     require(value['source_sha256'] in (None,digest(source)) and type(value['cleanup_verified']) is bool
             and value['error_code'] in (None,'OBSERVATION_FAILED','INTERRUPTED'))
@@ -224,7 +226,7 @@ def _observation(value, source, identity, complete):
     for phase in ('before','after'):
         observed = value['identity_'+phase]
         if observed is not None:
-            D.verify_source_window(source,{'schema_version':source['schema_version'],'identity':observed,
+            D.verify_source_window(source,{'schema_version':2 if source['schema_version'] >= 2 else 1,'identity':observed,
                 'snapshots':value.get('snapshot_catalog_'+phase)})
         elif complete: require(False)
     _queries(value['queries'],identity,source,complete);_runtime(value,identity,source,complete)
@@ -232,6 +234,8 @@ def _observation(value, source, identity, complete):
         if value[kind] is not None:
             validator(value[kind]); require(len(value['queries']['worker']) > index
                 and value[kind]['query_id'] == value['queries']['worker'][index]['query_id'])
+            if kind == 'plan':
+                require(value[kind]['format'] == (D.FILTER_PLAN_FORMAT if source['schema_version'] == 3 else D.PLAN_FORMAT))
         elif complete: require(False)
 
 
@@ -318,11 +322,12 @@ def project_run(token_value, summary, spans, read_state='stable'):
                     and v['model_evidence'] is None and v['diagnosis'] is None and same(v['audit'],{'verified':False}))
         require(v['original_select_reexecuted'] is False and type(v['cloud_calls']) is int and v['cloud_calls']==0
                 and type(v['retries']) is int and v['retries']==0 and same(v['limits'],HEADER_LIMITS))
-        hashes=v['source_hashes'];require(type(hashes) is dict and set(hashes) in (HISTORICAL_23,HISTORICAL_27))
+        hashes=v['source_hashes'];require(type(hashes) is dict and set(hashes) in (HISTORICAL_23,HISTORICAL_27,FILTERED_29))
         for h in hashes.values():D._sha(h)
         source = None if v['source'] is None else D.validate_source(v['source'])
         if source is not None: require(source['read_token']==v['read_token'])
-        if source is not None and source['schema_version']==2:require(set(hashes)==HISTORICAL_27)
+        if source is not None and source['schema_version']==2:require(set(hashes) in (HISTORICAL_27,FILTERED_29))
+        if source is not None and source['schema_version']==3:require(set(hashes)==FILTERED_29)
         complete = v['result']=='passed' and end is not None
         if complete: require(source is not None and v['invocations']==v['model_calls']==1 and v['cleanup_verified'] and v['error_code'] is None)
         if v['result']=='running':require(end is None and v['error_code'] is None)
@@ -345,7 +350,7 @@ def project_run(token_value, summary, spans, read_state='stable'):
         result=minimal(identity,state)
         result.update(recorded_result=v['result'],verification='saved-evidence' if state!='incomplete' and source is not None and audit['correlation']=='matched' else 'journal-only',
             read_token=v['read_token'],query_id=source['query_id'] if source else None,
-            source_profile=('snapshot-reader-v2' if source['schema_version']==2 else 'reader-v1') if source else None,
+            source_profile=PROFILES[source['schema_version']-1] if source else None,
             started_at=start,finished_at=end,cleanup_verified=v['cleanup_verified'],error_code=v['error_code'] if state!='incomplete' else 'REPORT_INCOMPLETE',
             history=v['observation']['history']['status'] if v['observation'] and v['observation']['history'] else None,
             model=model,audit=audit,evidence=f'tmp/local-experiment/query-diagnose/{identity}/summary.json')

@@ -5,16 +5,34 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.30"
+version: "3.31"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-18）：SREのtyped usage/log signalsを誤ってincidentや原因へ昇格しないか、
-新しい明示8case suiteで評価し、16/16 samplesと監査が成功した。保存triageも固定oracleへ再照合した。
-直前の固定log観測のlocal受入は維持し、一般診断・実log検出・修復品質・本番受入とは区別する。
+最新の到達点（2026-09-18）：SRE observation-signals評価の16/16 samplesと保存triage照合を完了。
+次の型付き等値Reader7件と歴史診断1回も実機成功し、同UUID cleanup・最終保持照合まで完了。
+一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-18: typed equality Reader and diagnosis — local acceptance complete
+
+Readerへpaired `--where-column` / `--equals`を追加し、current/explicit historical snapshotへ
+integer/bigint/decimal/date/booleanの単一非NULL等値を固定する。filter無しv1/v2は維持する。
+新schema3 sourceからの診断は同snapshot・同条件のEXPLAIN/STATSを使い、元SELECT再送0。
+private request/argv/Trino SQLにliteralが存在するが、公開metadata・モデル・監査へ値を追加しない。
+条件列が投影される場合だけ返却cell等値を照合し、非投影条件はSQL/schema/snapshot束縛までとする。
+全local61suites/2260件（2259成功＋既存1skip）、Go186 top/232 subtests・vet/raceが成功した。
+新規所有A2→B3 fixtureのfiltered7件と旧v1 read1件が成功し、syntax拒否はchild0、varchar拒否はdata SELECT0だった。
+歴史診断1回は元SELECT再送0・Qwen528/95tokens/4350ms・cost NULL、同条件STATS row estimate 1.0、
+監査3件の相関を確認した。保存reportは旧6＋新v3の7件complete。
+同UUID DROP1回でtable不在・retained fixture前後完全一致を確認した。4231旧files/250sources一致、
+AH旧516行の全hash保持＋新3行、独立167検証/42inputs不変・product49query IDs終端済み。
+fixture SQL/監査読取はこのquery数と区別する。証拠は`tmp/local-experiment/query-filter-checks/640deb117c414457bdccf23baca5e0b2/`の
+`after.json`、`independent-saved-verification.json`。
+[WP-L2-AGENT-005](L2/WP-L2-AGENT-005_Query_Doctor_Bear.md)と
+[runbook](../../../tools/local_experiment/query_filter/README.md)を参照。
 
 ## 2026-09-18: SRE observation-signals evaluation — local acceptance passed
 

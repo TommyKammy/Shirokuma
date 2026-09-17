@@ -85,7 +85,11 @@ func newQueryReadCommand(action string, child dataChildRunner, root, profile *st
 }
 
 func newQueryReadCommandWithSnapshots(action string, child, snapshots dataChildRunner, root, profile *string) *cobra.Command {
-	var schema, table, columns, snapshotID string
+	return newQueryReadCommandWithProfiles(action, child, snapshots, execQueryFilterChild{}, root, profile)
+}
+
+func newQueryReadCommandWithProfiles(action string, child, snapshots, filtered dataChildRunner, root, profile *string) *cobra.Command {
+	var schema, table, columns, snapshotID, whereColumn, equals string
 	var limit int
 	command := &cobra.Command{Use: action, Short: map[string]string{"tables": "List the fixed Iceberg schema's tables", "describe": "Inspect a discovered Iceberg table", "select": "Read bounded columns from one fixed snapshot"}[action], Args: func(_ *cobra.Command, args []string) error {
 		if len(args) != 0 {
@@ -96,6 +100,16 @@ func newQueryReadCommandWithSnapshots(action string, child, snapshots dataChildR
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if *profile != localExperimentProfile {
 				return errors.New("query reader requires --profile local-experiment")
+			}
+			if action == "select" && (cmd.Flags().Changed("where-column") || cmd.Flags().Changed("equals")) {
+				if !cmd.Flags().Changed("where-column") || !cmd.Flags().Changed("equals") {
+					return errors.New("query reader requires both --where-column and --equals")
+				}
+				var selected *string
+				if cmd.Flags().Changed("snapshot-id") {
+					selected = &snapshotID
+				}
+				return runQueryFilterCLI(cmd, filtered, *root, queryFilterRequest{Command: action, Table: table, Columns: strings.Split(columns, ","), Limit: limit, SnapshotID: selected, Where: queryFilterWhere{Column: whereColumn, Literal: equals}})
 			}
 			if action == "select" && cmd.Flags().Changed("snapshot-id") {
 				return runQuerySnapshotsCLI(cmd, snapshots, *root, querySnapshotsRequest{Command: action, Table: table, Columns: strings.Split(columns, ","), Limit: limit, SnapshotID: snapshotID})
@@ -137,6 +151,8 @@ func newQueryReadCommandWithSnapshots(action string, child, snapshots dataChildR
 		command.Flags().StringVar(&columns, "columns", "", "1–16 distinct column names, separated by commas")
 		command.Flags().IntVar(&limit, "limit", 0, "maximum rows: 1–100 (required)")
 		command.Flags().StringVar(&snapshotID, "snapshot-id", "", "explicit retained positive int64 snapshot ID")
+		command.Flags().StringVar(&whereColumn, "where-column", "", "one column for typed equality (requires --equals)")
+		command.Flags().StringVar(&equals, "equals", "", "integer, decimal, date or boolean equality literal (requires --where-column)")
 	}
 	return command
 }

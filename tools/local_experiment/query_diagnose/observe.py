@@ -9,7 +9,9 @@ when all observation queries and owned tunnels have finished.
 
 Snapshot Reader v2 keeps the truthful current identity and its retained snapshot
 catalog separate from the selected historical snapshot. Both fresh windows must
-match the saved source; only v2 adds those rowless catalogs to the journal.
+match the saved source; v2/v3 add those rowless catalogs to the journal. The
+filtered v3 source keeps its exact typed predicate inside EXPLAIN/SHOW STATS;
+the original data SELECT is never executed by this observer.
 """
 from contextlib import contextmanager
 from copy import deepcopy
@@ -91,7 +93,7 @@ def _observe(source, worker, catalog, journal, save):
     before = C.project_source_window(catalog.load(request), source, before_columns)
     C.verify_source_window(source, before)
     journal['identity_before'] = before['identity']
-    if source['schema_version'] == 2:
+    if source['schema_version'] >= 2:
         journal['snapshot_catalog_before'] = before['snapshots']
     save()
     for label, projector in (('explain', C.project_plan), ('history', C.project_history), ('stats', C.project_stats)):
@@ -104,7 +106,7 @@ def _observe(source, worker, catalog, journal, save):
     after = C.project_source_window(catalog.load(request), source, after_columns)
     C.verify_source_window(source, before, after)
     journal['identity_after'] = after['identity']
-    if source['schema_version'] == 2:
+    if source['schema_version'] >= 2:
         journal['snapshot_catalog_after'] = after['snapshots']
     save()
 
@@ -140,7 +142,7 @@ def observe(source, token, progress, *, runtime_factory=None, drain_fn=None):
         source = validate_source(source)
         require(token != source['read_token'])
         journal['source_sha256'] = R.digest(source)
-        if source['schema_version'] == 2:
+        if source['schema_version'] >= 2:
             journal.update(snapshot_catalog_before=None, snapshot_catalog_after=None)
         save()
         factory = runtime if runtime_factory is None else runtime_factory

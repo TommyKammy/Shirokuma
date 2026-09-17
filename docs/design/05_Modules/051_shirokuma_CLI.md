@@ -5,12 +5,25 @@ title: "shirokuma CLI"
 status: draft
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.14.0"
+version: "0.15.0"
 area: "module"
 tags: [shirokuma, module]
 ---
 
 # shirokuma CLI
+
+### Select with one typed equality
+
+`query select ... --where-column COLUMN --equals VALUE`で単一の型付き等値を指定できる。
+`--snapshot-id ID`と併用可能で、未指定なら観測current headへ固定する。型はfresh schemaから取得し、
+integer/bigint/decimal/date/boolean、非NULL・128 bytes以内のASCII値に限定する。
+非投影の条件列もfull schemaへ束縛し、非表示cellを追加取得しない。
+filter無しv1/v2は維持し、新receipt/resultはschema3、sourceは`filtered-snapshot-reader-v3`へ分離する。
+literalはargv/shell history/private request/Trino SQLには残るが、公開predicate metadata・モデル・監査へは追加しない。
+明示rowsは値を含み得る。診断は同snapshot/同条件のEXPLAIN/STATSだけを読み、元SELECTを再送しない。
+保存reportはv3を別groupとして扱う。実filtered7件/旧v1 1件・限定拒否・歴史診断1回を確認済み、
+同UUID cleanup・保持状態復帰・保存167検証まで完了し、local機能受入済み。
+[Typed equality runbook](../../../tools/local_experiment/query_filter/README.md)を参照。
 
 ### Inspect saved Query Doctor runs
 
@@ -61,7 +74,7 @@ root causeはundetermined、performance gainはunmeasuredを維持する。
 limit+1行で省略を検出し、orderingは未指定と明示する。行は明示的なselect応答だけに含め、
 既定receiptには保存しない。結果公開前にschema/metadataの再照合、所有queryの終了、
 接続回収とchild exitを確認する。不正な式は実行前、未発見table/列は発見query後に拒否する。
-任意SQL・filter/join・書込み・tenant認可は追加しない。
+上記の単一等値以外の任意SQL・一般条件式/join・書込み・tenant認可は追加しない。
 [Reader runbook](../../../tools/local_experiment/query_read/README.md)を参照。
 
 ## Goal

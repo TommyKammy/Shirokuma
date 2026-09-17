@@ -203,7 +203,7 @@ func decodeQueryDiagnoseReport(line []byte, request dataChildRequest) (int, erro
 }
 
 func validQueryDiagnosisReportEntry(row queryDiagnosisReportEntry) bool {
-	if !warehouseSessionPattern.MatchString(row.EvidenceToken) || !dataOneOf(row.State, "passed", "failed", "interrupted", "active", "incomplete", "invalid", "missing") || !dataOneOf(row.Verification, "saved-evidence", "journal-only", "not-checked") || !qdrChoice(row.RecordedResult, "running", "passed", "failed", "interrupted") || !qdrChoice(row.SourceProfile, "reader-v1", "snapshot-reader-v2") {
+	if !warehouseSessionPattern.MatchString(row.EvidenceToken) || !dataOneOf(row.State, "passed", "failed", "interrupted", "active", "incomplete", "invalid", "missing") || !dataOneOf(row.Verification, "saved-evidence", "journal-only", "not-checked") || !qdrChoice(row.RecordedResult, "running", "passed", "failed", "interrupted") || !qdrChoice(row.SourceProfile, "reader-v1", "snapshot-reader-v2", "filtered-snapshot-reader-v3") {
 		return false
 	}
 	if row.ReadToken != nil && !warehouseSessionPattern.MatchString(*row.ReadToken) || row.QueryID != nil && !queryDiagnoseQueryID(*row.QueryID) || !qdrStamp(row.StartedAt) || !qdrStamp(row.FinishedAt) || row.StartedAt != nil && row.FinishedAt != nil && *row.FinishedAt < *row.StartedAt {

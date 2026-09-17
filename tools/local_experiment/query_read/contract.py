@@ -148,7 +148,12 @@ def request(command, *, schema=None, table=None, columns=None, limit=None):
 
 
 def parse_request(raw):
-    require(type(raw) is bytes and 0 < len(raw) <= MAX_INPUT_BYTES, 'INPUT_LIMIT')
+    return normalize_request(parse_json(raw, MAX_INPUT_BYTES))
+
+
+def parse_json(raw, maximum):
+    """Shared bounded JSON syntax parsing; each fixed profile validates keys."""
+    require(type(raw) is bytes and 0 < len(raw) <= maximum, 'INPUT_LIMIT')
     def pairs(items):
         result = {}
         for key, value in items:
@@ -160,7 +165,7 @@ def parse_request(raw):
                            parse_constant=lambda _: (_ for _ in ()).throw(ContractError('JSON_INVALID')))
     except (UnicodeError, ValueError, RecursionError):
         raise ContractError('JSON_INVALID') from None
-    return normalize_request(value)
+    return value
 
 
 def quote(value):

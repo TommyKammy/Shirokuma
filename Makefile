@@ -825,3 +825,8 @@ verify-local-experiment: test-local-query-diagnose
 test-local-query-snapshots:
 	@$(PYTHON) -m unittest discover -s tests -p 'test_query_snapshots_*.py'
 verify-local-experiment: test-local-query-snapshots
+
+.PHONY: test-local-query-filter
+test-local-query-filter:
+	@$(PYTHON) -m unittest discover -s tests -p 'test_query_filter_*.py'
+verify-local-experiment: test-local-query-filter

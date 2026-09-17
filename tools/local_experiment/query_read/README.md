@@ -22,7 +22,10 @@ Each read discovers current BASE TABLE names in `iceberg.smoke` or
 with Polaris metadata, including table UUID and current snapshot. Select accepts
 only discovered scalar columns and fixes `FOR VERSION AS OF` to that snapshot.
 Schema and metadata must still match afterward. There is no arbitrary SQL,
-expression, function, filter, join, write or caller-provided endpoint.
+expression, function, join, write or caller-provided endpoint. A separate
+[typed equality profile](../query_filter/README.md) accepts the paired
+`--where-column` / `--equals` flags, including with `--snapshot-id`. Reads without
+these flags preserve the existing v1/v2 request and result formats.
 
 Inventories are bounded at 100 tables, schemas at 32 columns and selections at
 16 columns and 100 rows. One extra row detects truncation. A complete response

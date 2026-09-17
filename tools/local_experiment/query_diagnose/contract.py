@@ -15,7 +15,10 @@ and fixed finding IDs. Missing retained history is not proof of why it is absent
 Reader v1 source_context keeps its original eleven fields and current-table
 statistics. snapshot_source_context adds an explicit snapshot-reader-v2 profile
 and retained snapshot catalog; its identity remains the real current head.
-Only this profile's SHOW STATS uses a fixed snapshot-pinned subquery. Estimates
+Retained profiles use a fixed snapshot-pinned SHOW STATS subquery; the explicit
+filtered v3 profile additionally keeps the same typed equality predicate.
+Its literal stays in private source metadata and compiled SQL, never model
+evidence or the public diagnosis. Estimates
 are not exact data validation: Trino may use NDV statistics from the selected
 snapshot's ancestors. No ANALYZE, current-head fallback or extra data read occurs.
 """
@@ -47,6 +50,11 @@ ESTIMATES = ('outputRowCount', 'outputSizeInBytes', 'cpuCost', 'memoryCost', 'ne
 # Trino 483 PlanPrinter names (including its LimitPartial spelling).
 OPERATORS = frozenset(('Output', 'Limit', 'LimitPartial', 'TableScan', 'Project',
                       'RemoteSource', 'LocalExchange', 'RemoteExchange', 'Values'))
+FILTER_OPERATORS = OPERATORS | frozenset(('Filter', 'FilterProject', 'ScanProject',
+                                        'ScanFilter', 'ScanFilterProject'))
+SCAN_OPERATORS = frozenset(('TableScan', 'ScanProject', 'ScanFilter', 'ScanFilterProject'))
+PLAN_FORMAT = 'trino-483-distributed-json'
+FILTER_PLAN_FORMAT = 'trino-483-distributed-json-filtered-v1'
 FINDING_STEPS = {
     'RESULT_LIMIT_REACHED': 'REVIEW_READER_LIMIT',
     'HISTORY_NOT_RETAINED': 'CAPTURE_HISTORY_PROMPTLY',
@@ -61,6 +69,7 @@ LIMITATIONS = ['ESTIMATES_ARE_NOT_MEASURED_USAGE', 'HISTORY_IS_NOT_DURABLE_AUDIT
 SOURCE_KEYS = {'schema_version', 'read_token', 'request', 'inventory', 'identity', 'selection',
                'query_id', 'user', 'source', 'sql_sha256', 'summary_sha256'}
 SNAPSHOT_PROFILE = 'snapshot-reader-v2'
+FILTER_PROFILE = 'filtered-snapshot-reader-v3'
 SNAPSHOT_SOURCE_KEYS = SOURCE_KEYS | {'profile', 'snapshot_catalog'}
 PLAN_KEYS = {'query_id', 'format', 'fragment_count', 'node_count', 'operator_counts',
              'estimate_slots', 'estimate_unknown_count', 'estimate_zero_count',
@@ -157,24 +166,43 @@ def snapshot_source_context(read_token, request, inventory, identity, selection,
     current head B, selection is the actual read A, and snapshot_catalog is the
     original complete retained-snapshot projection. A can equal B explicitly.
     """
+    return _retained_source_context(read_token, request, inventory, identity, selection,
+        query_id, summary_sha256, snapshot_catalog, S, 2, SNAPSHOT_PROFILE)
+
+
+def filtered_source_context(read_token, request, inventory, identity, selection, query_id,
+                            summary_sha256, snapshot_catalog):
+    """Bind the explicit filtered Reader profile without exposing its literal."""
+    from tools.local_experiment.query_filter import contract as F
+    return _retained_source_context(read_token, request, inventory, identity, selection,
+        query_id, summary_sha256, snapshot_catalog, F, 3, FILTER_PROFILE)
+
+
+def _retained_source_context(read_token, request, inventory, identity, selection, query_id,
+                             summary_sha256, snapshot_catalog, reader, version, profile):
     require(type(read_token) is str and TOKEN.fullmatch(read_token), 'READ_TOKEN_INVALID')
     _query_id(query_id); _sha(summary_sha256)
     try:
-        request = S.normalize_request(request)
+        request = reader.normalize_request(request)
         require(request['command'] == 'select', 'READ_SOURCE_NOT_SELECT')
         require(type(identity) is dict and type(identity.get('columns')) is list, 'READ_SOURCE_INVALID')
-        window = S.validate_window({'schema_version':2, 'identity':identity, 'snapshots':snapshot_catalog}, request)
+        window = reader.validate_window({'schema_version':2, 'identity':identity, 'snapshots':snapshot_catalog}, request)
         identity = window['identity']
-        sql = S.select_sql(request, inventory, identity['columns'], window)
-        selected = S.selected_columns(request, identity['columns'])
-        snapshot = S.select_snapshot(window, request)
+        sql = reader.select_sql(request, inventory, identity['columns'], window)
+        selected = reader.selected_columns(request, identity['columns'])
+        snapshot = reader.select_snapshot(window, request)
     except R.ContractError:
         raise ContractError('READ_SOURCE_INVALID') from None
-    _selection(selection, request, identity, selected, snapshot['snapshot_id'], 2, S.RESULT_KEYS)
+    _selection(selection, request, identity, selected, snapshot['snapshot_id'], version, reader.RESULT_KEYS)
     require(selection['current_snapshot_id'] == identity['current_snapshot_id']
             and canonical(selection['selected_snapshot']) == canonical(snapshot), 'READ_SOURCE_SELECTION_INVALID')
+    if version == 3:
+        predicate = reader.resolve_predicate(request, identity['columns'])
+        require(canonical(selection['where']) == canonical(
+            {'column': predicate['column'], 'type': predicate['type'], 'operator': 'eq'}),
+            'READ_SOURCE_SELECTION_INVALID')
     owner = 'shirokuma-query-read-' + read_token
-    return deepcopy({'schema_version':2, 'profile':SNAPSHOT_PROFILE,
+    return deepcopy({'schema_version':version, 'profile':profile,
         'snapshot_catalog':window['snapshots'], 'read_token':read_token, 'request':request,
         'inventory': inventory, 'identity': identity, 'selection': selection, 'query_id': query_id,
         'user': owner, 'source': owner, 'sql_sha256': hashlib.sha256(sql.encode()).hexdigest(),
@@ -184,35 +212,45 @@ def snapshot_source_context(read_token, request, inventory, identity, selection,
 def validate_source(value):
     require(type(value) is dict and type(value.get('schema_version')) is int, 'READ_SOURCE_INVALID')
     version = value['schema_version']
-    require(version in (1, 2), 'READ_SOURCE_INVALID')
+    require(version in (1, 2, 3), 'READ_SOURCE_INVALID')
     _keys(value, SOURCE_KEYS if version == 1 else SNAPSHOT_SOURCE_KEYS, 'READ_SOURCE_INVALID')
     arguments = tuple(value[k] for k in ('read_token', 'request', 'inventory', 'identity',
                                         'selection', 'query_id', 'summary_sha256'))
     if version == 1:
         expected = source_context(*arguments)
-    else:
+    elif version == 2:
         require(value['profile'] == SNAPSHOT_PROFILE, 'READ_SOURCE_INVALID')
         expected = snapshot_source_context(*arguments, value['snapshot_catalog'])
+    else:
+        require(value['profile'] == FILTER_PROFILE, 'READ_SOURCE_INVALID')
+        expected = filtered_source_context(*arguments, value['snapshot_catalog'])
     require(canonical(expected) == canonical(value), 'READ_SOURCE_INVALID')
     return expected
+
+
+def _retained_reader(source):
+    if source['schema_version'] == 3:
+        from tools.local_experiment.query_filter import contract as F
+        return F
+    return S
 
 
 def base_request(source):
     """Return the existing fixed Reader request used by catalog/schema reads."""
     source = validate_source(source)
-    return S.base_request(source['request']) if source['schema_version'] == 2 else deepcopy(source['request'])
+    return _retained_reader(source).base_request(source['request']) if source['schema_version'] >= 2 else deepcopy(source['request'])
 
 
 def _source_window(source):
-    return {'schema_version':source['schema_version'], 'identity':deepcopy(source['identity']),
+    return {'schema_version':2 if source['schema_version'] >= 2 else 1, 'identity':deepcopy(source['identity']),
             'snapshots':deepcopy(source.get('snapshot_catalog'))}
 
 
 def select_sql(source):
     """Reconstruct the source SELECT for hashing/EXPLAIN, never a new execution."""
     source = validate_source(source)
-    if source['schema_version'] == 2:
-        return S.select_sql(source['request'], source['inventory'], source['identity']['columns'], _source_window(source))
+    if source['schema_version'] >= 2:
+        return _retained_reader(source).select_sql(source['request'], source['inventory'], source['identity']['columns'], _source_window(source))
     return R.select_sql(source['request'], source['inventory'], source['identity']['columns'], source['identity'])
 
 
@@ -220,8 +258,8 @@ def project_source_window(response, source, columns):
     """Return {schema_version, identity, snapshots}; v1 snapshots is always None."""
     source = validate_source(source)
     try:
-        if source['schema_version'] == 2:
-            return S.project_window(response, source['request'], columns)
+        if source['schema_version'] >= 2:
+            return _retained_reader(source).project_window(response, source['request'], columns)
         return {'schema_version':1, 'identity':R.project_identity(response, source['request'], columns), 'snapshots':None}
     except R.ContractError:
         raise ContractError('READ_SOURCE_INVALID') from None
@@ -238,11 +276,11 @@ def verify_source_window(source, before, after=None):
     expected = _source_window(source)
     for observed in (before,) if after is None else (before, after):
         _keys(observed, {'schema_version', 'identity', 'snapshots'}, 'READ_SOURCE_INVALID')
-        require(type(observed['schema_version']) is int and observed['schema_version'] == source['schema_version'],
+        require(type(observed['schema_version']) is int and observed['schema_version'] == expected['schema_version'],
                 'READ_SOURCE_INVALID')
         try:
-            if source['schema_version'] == 2:
-                S.verify_window(expected, observed)
+            if source['schema_version'] >= 2:
+                _retained_reader(source).verify_window(expected, observed)
             else:
                 require(observed['snapshots'] is None, 'READ_SOURCE_INVALID')
                 R.verify_identity(expected['identity'], observed['identity'])
@@ -257,14 +295,18 @@ def statements(source):
     request = base_request(source)
     select = select_sql(source)
     stats = 'SHOW STATS FOR ' + R.qualified(request['table'])
-    if source['schema_version'] == 2:
+    if source['schema_version'] >= 2:
         # Trino 483 ShowStatsRewrite plans this subquery without executing the
         # data SELECT. Iceberg TableStatisticsReader uses the selected snapshot's
         # data manifests; NDV can come from that snapshot or its ancestors.
-        # Full compatible schema and no LIMIT preserve whole-snapshot estimates.
+        # Full compatible schema and no LIMIT preserve whole-snapshot estimates
+        # for v2, or estimates of the same filtered relation for v3.
         stats = ('SHOW STATS FOR (SELECT ' + ', '.join(R.quote(c['name']) for c in source['identity']['columns'])
                  + ' FROM ' + R.qualified(request['table'])
-                 + " FOR VERSION AS OF BIGINT '" + source['selection']['snapshot_id'] + "')")
+                 + " FOR VERSION AS OF BIGINT '" + source['selection']['snapshot_id'] + "'")
+        if source['schema_version'] == 3:
+            stats += ' WHERE ' + _retained_reader(source).predicate_sql(source['request'], source['identity']['columns'])
+        stats += ')'
     # Select by ID alone: foreign provenance must fail validation, not disappear
     # behind an owner predicate and be mislabeled as absent retained history.
     history = ('SELECT query_id, state, "user", source, query, queued_time_ms AS queued_ms, '
@@ -326,22 +368,31 @@ def project_plan(result, source):
             and all(re.fullmatch(r'[0-9]{1,6}', key) for key in raw), 'DIAGNOSIS_PLAN_UNSUPPORTED')
     ids, counts, values = set(), {}, []
     empty = 0
+    filtered = source['schema_version'] == 3
+    operators = FILTER_OPERATORS if filtered else OPERATORS
     expected_table = 'iceberg:' + source['request']['table'] + '$data@' + source['selection']['snapshot_id']
+    table_names = {expected_table}
+    if filtered:
+        # Trino 483 IcebergTableHandle.toString identifies an enforced
+        # single-column domain without printing its value. Never allow an
+        # arbitrary suffix or a second/foreign constraint column.
+        column = _retained_reader(source).resolve_predicate(source['request'], source['identity']['columns'])['column']
+        table_names.add(expected_table + ' constraint on [' + column + ']')
+    allowed_tables = table_names | {name + ' LIMIT ' + str(source['request']['limit'] + 1) for name in table_names}
 
     def visit(node, depth=0):
         nonlocal empty
         require(type(node) is dict and depth <= 16 and len(ids) < 64, 'DIAGNOSIS_PLAN_LIMIT')
         node_id, kind = node.get('id'), node.get('name')
         require(type(node_id) is str and re.fullmatch(r'[0-9]{1,12}', node_id) and node_id not in ids
-                and type(kind) is str and kind in OPERATORS, 'DIAGNOSIS_PLAN_UNSUPPORTED')
+                and type(kind) is str and kind in operators, 'DIAGNOSIS_PLAN_UNSUPPORTED')
         ids.add(node_id); counts[kind] = counts.get(kind, 0) + 1
         descriptor = node.get('descriptor')
         require(type(descriptor) is dict, 'DIAGNOSIS_PLAN_UNSUPPORTED')
-        if kind == 'TableScan':
+        if kind in SCAN_OPERATORS:
             # IcebergTableHandle.toString (Trino 483) appends the pushed-down
             # limit. It must be precisely the Reader's limit+1 sentinel bound.
-            require(descriptor.get('table') in (expected_table,
-                expected_table + ' LIMIT ' + str(source['request']['limit'] + 1)),
+            require(descriptor.get('table') in allowed_tables,
                 'DIAGNOSIS_PLAN_SOURCE_MISMATCH')
         if kind in ('Limit', 'LimitPartial'):
             require(descriptor.get('count') == str(source['request']['limit'] + 1), 'DIAGNOSIS_PLAN_LIMIT_MISMATCH')
@@ -357,10 +408,11 @@ def project_plan(result, source):
             visit(child, depth + 1)
     for fragment in sorted(raw, key=int):
         visit(raw[fragment])
-    require(counts.get('TableScan', 0) == 1 or counts.get('TableScan', 0) == 0
+    scans = sum(counts.get(kind, 0) for kind in SCAN_OPERATORS)
+    require(scans == 1 or scans == 0
             and counts.get('Values', 0) == 1 and source['selection']['fetched_row_count'] == 0,
             'DIAGNOSIS_PLAN_UNSUPPORTED')
-    projected = {'query_id': result['query_id'], 'format': 'trino-483-distributed-json',
+    projected = {'query_id': result['query_id'], 'format': FILTER_PLAN_FORMAT if filtered else PLAN_FORMAT,
         'fragment_count': len(raw), 'node_count': len(ids),
         'operator_counts': [{'kind': k, 'count': counts[k]} for k in sorted(counts)],
         'estimate_slots': len(values), 'estimate_unknown_count': values.count(None),
@@ -371,13 +423,14 @@ def project_plan(result, source):
 
 def validate_plan(value):
     _keys(value, PLAN_KEYS, 'DIAGNOSIS_PLAN_INVALID'); _query_id(value['query_id'])
-    require(value['format'] == 'trino-483-distributed-json', 'DIAGNOSIS_PLAN_INVALID')
+    require(value['format'] in (PLAN_FORMAT, FILTER_PLAN_FORMAT), 'DIAGNOSIS_PLAN_INVALID')
+    operators = FILTER_OPERATORS if value['format'] == FILTER_PLAN_FORMAT else OPERATORS
     fragments, nodes = _uint(value['fragment_count'], 8), _uint(value['node_count'], 64)
     require(1 <= fragments <= nodes and type(value['operator_counts']) is list, 'DIAGNOSIS_PLAN_INVALID')
     names, total = [], 0
     for row in value['operator_counts']:
         _keys(row, ('kind', 'count'), 'DIAGNOSIS_PLAN_INVALID')
-        require(type(row['kind']) is str and row['kind'] in OPERATORS, 'DIAGNOSIS_PLAN_INVALID')
+        require(type(row['kind']) is str and row['kind'] in operators, 'DIAGNOSIS_PLAN_INVALID')
         require(_uint(row['count'], nodes) > 0, 'DIAGNOSIS_PLAN_INVALID')
         names.append(row['kind']); total += row['count']
     require(names == sorted(set(names)) and total == nodes, 'DIAGNOSIS_PLAN_INVALID')
@@ -499,6 +552,8 @@ def _findings(reader, plan, history, stats):
 def build_evidence(source, plan, history, stats):
     source = validate_source(source)
     plan, history, stats = validate_plan(plan), validate_history(history), validate_stats(stats)
+    require(plan['format'] == (FILTER_PLAN_FORMAT if source['schema_version'] == 3 else PLAN_FORMAT),
+            'DIAGNOSIS_PLAN_INVALID')
     require(len({plan['query_id'], history['query_id'], stats['query_id'], source['query_id']}) == 4,
             'DIAGNOSIS_QUERY_ID_REUSED')
     require(stats['column_count'] == len(source['identity']['columns']), 'DIAGNOSIS_STATS_INVALID')
@@ -551,6 +606,8 @@ def validate_diagnosis(value, evidence):
 def public_summary(source, evidence, diagnosis):
     source = validate_source(source); evidence = validate_evidence(evidence)
     diagnosis = validate_diagnosis(diagnosis, evidence)
+    require(evidence['plan']['format'] == (FILTER_PLAN_FORMAT if source['schema_version'] == 3 else PLAN_FORMAT),
+            'DIAGNOSIS_PLAN_INVALID')
     # Bind the retained result facts even though the model never sees identity.
     require({k:source['selection'][k] for k in ('row_count','fetched_row_count','requested_limit','truncated')}
             == {k:evidence['reader'][k] for k in ('row_count','fetched_row_count','requested_limit','truncated')}

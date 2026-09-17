@@ -14,8 +14,11 @@ the listing can have been removed by retention and is marked `parent_retained:
 false`; the command does not invent its history.
 
 An explicit `--snapshot-id` uses the separate schema v2 profile and writes
-private evidence under `tmp/local-experiment/query-snapshots/`. Omitting this
-flag preserves the current-head Reader v1 command and receipt. Only the existing
+private evidence under `tmp/local-experiment/query-snapshots/`. Without filter
+flags, omitting this flag preserves the current-head Reader v1 command and receipt.
+The paired `--where-column` / `--equals` flags select a separate
+[typed equality v3 profile](../query_filter/README.md), with or without an explicit
+snapshot ID. Only the existing
 local-experiment profile, Iceberg catalog and smoke/local_experiment schemas are
 accepted. No SQL expressions, names of branches or tags, timestamps, writes,
 model calls, new services or fallback to the current head are added.

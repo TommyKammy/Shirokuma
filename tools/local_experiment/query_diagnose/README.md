@@ -12,6 +12,21 @@ validators; both retain the same diagnosis command, model and public contract.
 Both source paths passed actual local diagnosis, disposable-table cleanup and
 retained-state checks. These are local functional results, not production acceptance.
 
+Successful [typed equality reads](../query_filter/README.md) add the separate
+`filtered-snapshot-reader-v3` source validator. Its private request contains the
+typed predicate literal for exact SQL/hash reconstruction. EXPLAIN uses that
+same SELECT; STATS uses all compatible schema columns, the same selected snapshot
+and equality, without LIMIT. The original SELECT is never replayed. Filtered
+statistics remain estimates of the matching scope, including NULL/unknown
+estimates; they are not unfiltered table statistics or a new exact count.
+Literal values, SQL, plan text and row values are not added to model evidence,
+public diagnosis metadata or audit events. Reader v1/v2 and the public diagnosis
+contract remain unchanged. One actual historical filtered diagnosis passed with
+ScanFilter, observed history and a filtered row estimate of 1.0. One Qwen call used
+528 prompt / 95 completion tokens in 4350 ms, with cost NULL; these are recorded
+run metrics, not an optimization result. Same-UUID fixture cleanup, retained-state
+preservation and independent saved-evidence checks passed. Evidence: `tmp/local-experiment/query-filter-checks/640deb117c414457bdccf23baca5e0b2/`.
+
 `diagnose` creates a
 different token under `tmp/local-experiment/query-diagnose/`. It uses the existing
 local Qwen profile and lab services; it installs or starts no persistent service.
@@ -44,7 +59,7 @@ For v2, the saved current identity B stays B while the selected snapshot A stays
 A. Fresh Polaris metadata and the complete retained-snapshot projection must
 match the source before observation and remain identical afterwards. A must
 still be retained with the same supported field IDs, names, types, nullability
-and order. The rowless journal adds the two snapshot catalogs only for v2; v1
+and order. The rowless journal adds the two snapshot catalogs for v2/v3; v1
 receipt semantics stay unchanged. Expiration, current-head or metadata changes,
 changed or deleted tables,
 unsupported plans and conflicting history provenance are refused before inference.
