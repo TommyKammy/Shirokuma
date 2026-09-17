@@ -5,17 +5,40 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.27"
+version: "3.28"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-18）：`sre run`の固定Trino観測にCPU平均とmemory working-setを追加した。
-実Qwen1回で初期/followupともobserved、保存status再読取も成功。独立保持監査73checksを通過した。
-Pod状態差分0と異なるusage sample windowを区別し、原因undetermined・修復なしを維持する。
-この観測機能はlocal受入を完了したが、一般的な原因診断・修復品質・本番受入は未達である。
+最新の到達点（2026-09-18）：`sre status TOKEN --usage`で保存済みusageを表示する実装を追加した。
+既定CLIのschema1を維持し、明示表示だけschema2でinitial/followupと限定比較を返す。
+新しい観測やLLM呼出しはなく、保存CLI17回・入力/source不変・全2150回帰でlocal受入を完了した。
+一般的な原因診断・修復品質・本番受入は未達のまま維持する。
+
+## 2026-09-18: saved SRE usage status — local acceptance complete
+
+[WP-L2-AGENT-002](L2/WP-L2-AGENT-002_SRE_Bear.md)の保存表示を、明示
+`sre status TOKEN --usage`へ追加した。最終frameだけschema2/14keys、既定status/runは
+schema1/13keys、allocatedはschema1/4keysを維持する。改行込み4096Bの固定JSONとして、
+同じlock/raw snapshotで検証したinitial/followup usageとsample-window比較だけを公開する。
+
+保存field有りのavailable（state unknownも含む）、旧未観測のlegacy-absent、失敗/busy/不正等の
+unverifiedを分け、後者2つのpayloadはNULL。明示0を欠測にせず、現在の負荷やtrendを再評価しない。
+新API/model/audit・元証拠書換え・新tokenは0、前段AH493は今回再照会しない継承値である。
+証拠は`sre-saved-usage-checks/e4c49ef987d34d078b0884e6102f4b6c/`。
+製品CLI17回（5tokens×plain前/usage/plain後15＋新usage再読取1＋missing1）が受入成功。
+全5件のschema1結果を保持し、旧3件legacy-absent・旧observations欠落1件unverifiedを確認した。
+新`52aa250a1b92b29d90205836a6ea0a3a`は保存2samples/different-sample-windowを表示し、再読取も同一。
+入力32dir/file entriesと2parent inventory、2inactive locks、Gateway監査2files、source223が不変だった。
+全local56suites/2150件（2149成功・既存optional1skip）、Go full/race各171top/212subtests・vet、
+Go SRE30top/95subtests（実Python main11case含む）、PythonCLI40件が成功した。
+独立reviewのGo schema2 failed条件の指摘を修正し、追加負例を含めてPASSした。
+別の保存受入68checksもPASS。API/CLI再実行なしで31evidence filesを束縛し、
+32入力entries/source223/binary/2lockの不変を確認した。`independent-acceptance.json`に保存する。
+証拠は同checkdirの`acceptance.json`、`source-seal.json`、`independent-review.json`。
+
 
 ## 2026-09-18: fixed Trino resource usage — local acceptance complete
 

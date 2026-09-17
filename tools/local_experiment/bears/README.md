@@ -116,6 +116,35 @@ for the observation feature; causal diagnosis and repair remain unproven.
 See [WP-L2-AGENT-002](../../../docs/design/06_WorkPackages/L2/WP-L2-AGENT-002_SRE_Bear.md)
 for the recorded values, retention audit, helper corrections, and limitations.
 
+### Inspect saved resource usage
+
+```sh
+rtk proxy tmp/shirokuma sre status <evidence-token> --usage
+```
+
+The opt-in final frame uses schema 2 with the existing 13 fields plus
+`resource_usage`. Default status and run retain schema 1; the allocated frame
+also stays schema 1. `run --usage` is rejected. The final JSON frame, including
+its newline, is limited to 4096 bytes.
+
+The display uses the same locked, verified saved snapshot. It adds no model,
+API or audit calls, new token or changes to the original evidence. `available`
+contains saved initial/follow-up usage and the verified comparison, including
+an unknown state with a null sample. `legacy-absent` means the old receipt did
+not observe usage. Failed, busy, missing or unverified receipts return
+`unverified`; `legacy-absent` and `unverified` have null payloads.
+
+Values remain exact integer strings at their saved observation times. Same or
+different sample windows do not establish a trend, current load or cause.
+Saved-CLI acceptance passed 17 calls, preserving the five default results and
+the new two-sample projection, legacy absence and unverified old evidence. The
+32 input directory/file entries, two parent inventories, two inactive locks,
+two Gateway audit files and 223 source files were unchanged. All 2,150 local
+tests completed (2,149 passed and one existing optional skip), with independent
+review and 68 independent saved-acceptance checks. The latter used saved outputs
+and 31 evidence files without rerunning the CLI or APIs. The preceding AgentHouse count of 493 is inherited and was not queried
+again for this display increment. See [the SRE CLI runbook](SRE_CLI.md).
+
 Application-container observations distinguish the current state from the last
 reported termination. The Gateway binds status names to the Pod's declared
 application containers and retains at most eight rows, with explicit incomplete

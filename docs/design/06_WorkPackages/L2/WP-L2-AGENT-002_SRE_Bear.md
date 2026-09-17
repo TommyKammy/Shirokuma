@@ -5,7 +5,7 @@ title: "WP-L2-AGENT-002 SRE Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.8"
+version: "0.9"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -16,6 +16,58 @@ tags: [shirokuma, workpackage, l2, agentops]
 
 K8s Pod/Event・runtime状態の固定観測から実LLMが追加読取を選び、同一identityの変化を確認する。
 containerの現在状態と過去終了履歴を分離する。logs/metricsによる原因診断・自動修復は未達。
+
+## 2026-09-18: saved usage status — local acceptance complete
+
+`sre status TOKEN --usage`は、既に保存・検証されたinitial/followupのtyped usageと比較を表示する。
+flag無しのstatusとrunはschema1/13keysを維持し、明示`--usage`の最終frameだけschema2/14keysとする。
+allocatedは従来どおりschema1/4keys、`run --usage`は実行前に拒否する。最終frameは改行込み4096B以内。
+
+追加`resource_usage`はsource・availability・initial・followup・comparisonの固定5keys。
+passed/saved-evidenceが検証できた場合だけ、保存fieldがあればavailable、旧field欠落ならlegacy-absentとする。
+保存unknownもavailableの中でstate=unknown/sample=NULLを保持し、明示0と区別する。
+failed/busy/missing/invalid/journal-onlyはunverifiedで3payloadを全てNULLにし、部分値を公開しない。
+
+同じrun.lock下の読み取り済みraw snapshotから再構成し、既存evidence/hash/比較/監査・span検証と
+後snapshot/intent不変確認が終わってlockを解放してから公開する。別scan・新token・元証拠の書換えはない。
+保存時刻をそのまま示し、新しいAPI/model/auditや現在時刻での負荷再評価は行わない。
+same-sample-windowは同じcached window、different-sample-windowは異なるwindowという範囲に留め、
+trend・高負荷・原因・回復を意味しない。followup欠落と旧未観測をNULL/固定stateで区別する。
+
+- [x] opt-in schema2、既定schema1、legacy/unknown/0、保存改変・busy・取消・出力上限をofflineで検証する。
+- [x] 製品CLIの保存読取と旧出力・入力不変、最終回帰・独立確認を完了する。
+
+今回の証拠は`sre-saved-usage-checks/e4c49ef987d34d078b0884e6102f4b6c/`へ保存する。
+前段のAH493・resource usage実機観測は継承値であり、この増分でAHやMetricsを再照会しない。
+保存表示のlocal受入を完了した。logsを含む原因診断・修復品質とWPのlocal-partialは維持する。
+
+### 保存CLIの受入と検証
+
+製品CLI17回を確認した。旧4件＋新usage保存`52aa250a1b92b29d90205836a6ea0a3a`の5tokensを
+plain前/usage/plain後の計15回で読み、新usage再読取1回とmissing1回を追加した。
+全5件のschema1出力は元の結果と一致し、旧3件はlegacy-absent、observationsのない旧1件は
+unverifiedだった。新1件はavailableでinitial/followupの保存2samplesとdifferent-sample-windowが一致し、
+再読取も同一だった。missingはnot_found/unverified・expected exit1として確認した。
+
+入力32entries（directory/file）のSHA・mode・uid/gid・inode・mtime/ctime・nlinkと
+2parent inventory、state lock2件のinactive、Gateway監査2files、source223の不変を確認した。
+これは保存読取の受入であり、新しいMetrics/Pod/AgentHouse/Loki観測は行っていない。
+前段AH493は継承値、API/model/audit・新token・元証拠書込みは0である。
+
+全local56suites/2150件（2149成功・既存optional1skip）、Go full/race各171 top-level/212subtests、
+vetが成功。Go SRE focused30 top-level/95subtests（実Python main11caseを含む）、PythonCLI40件も成功した。
+独立reviewではschema2 failedのworkflow_token/saved-evidence必須条件をGoへ補い、負例2件を追加した。
+修正後の整合・取消・同lock/raw・int64/ns・4096B上限を確認してPASS。これらのcheckpoint件数は加算しない。
+保存CLIの独立受入も68checks PASS。API/CLIを再実行せず保存ログと31evidence filesを束縛し、
+現在の32入力entries・source223・binary・2lock不変を確認した。Go実testsのskipは0。
+証拠`independent-acceptance.json`のSHA256は
+`4e84b1decc1ede2ba105fab1bf7bd09a9b1108bcbad3888d6f652e55ad05a11b`。
+
+証拠は同checkdirの`acceptance.json`（SHA256
+`4c016c9e13d8a2a3311d75b22aedc935900693fd292fca7bca2c7d79489bb2fd`）、
+`source-seal.json`、`independent-review.json`（SHA256
+`94ecd529b38dba36dd6223336a7616a1ee7f5f6c91c32bdba1b02864bd42711e`）。
+検証binaryのSHA256は`b05ad38c5de515ee872724ee283703f550bc297ffc7d629ae354634f3418ed99`。
 
 ## 2026-09-18: fixed Trino resource usage — local acceptance complete
 

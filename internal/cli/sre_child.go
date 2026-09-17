@@ -27,11 +27,14 @@ func (runner execSREChild) Run(ctx context.Context, request dataChildRequest, em
 }
 
 func sreCommand(request dataChildRequest) (*exec.Cmd, error) {
-	if !warehouseSessionPattern.MatchString(request.Token) || !dataOneOf(request.Action, "run", "status") ||
+	if !warehouseSessionPattern.MatchString(request.Token) || !dataOneOf(request.Action, "run", "status", sreUsageAction) ||
 		request.Request != nil || request.Case != "" {
 		return nil, errors.New("invalid fixed SRE invocation")
 	}
-	args := []string{"-I", "-B", filepath.Join(request.Root, sreScript), request.Action, "--evidence-token", request.Token}
+	args := []string{"-I", "-B", filepath.Join(request.Root, sreScript), srePublicAction(request.Action), "--evidence-token", request.Token}
+	if request.Action == sreUsageAction {
+		args = append(args, "--usage")
+	}
 	cmd := exec.Command(filepath.Join(request.Root, dataPython), args...)
 	cmd.Dir = request.Root
 	cmd.Env = []string{}

@@ -30,6 +30,7 @@ STATE = ROOT / "tmp/local-experiment/sre-cli"
 EVIDENCE = ROOT / "tmp/local-experiment/sre-llm"
 CASE = "local-lab"
 MAX_BYTES = 1024 * 1024
+MAX_PUBLIC_BYTES = 4096
 FILES = frozenset({"result.json", "spans.jsonl", "observations.json", "gateway-stderr.log",
                    "replay-verification.json", "interruption.json"})
 ERROR_CODES = frozenset({"ARGUMENTS_INVALID", "EVIDENCE_TOKEN_INVALID", "ENVIRONMENT_NOT_READY",
@@ -38,6 +39,7 @@ ERROR_CODES = frozenset({"ARGUMENTS_INVALID", "EVIDENCE_TOKEN_INVALID", "ENVIRON
 RESULTS = frozenset({"passed", "failed", "unknown", "not_started", "not_found", "busy"})
 FINAL_KEYS = frozenset({"schema_version", "event", "command", "evidence_token", "workflow_token",
     "result", "execution", "verification", "assessment", "root_cause", "remediation_executed", "error_code", "evidence"})
+USAGE_KEYS = frozenset({"source", "availability", "initial", "followup", "comparison"})
 
 
 class CLIError(ValueError):
@@ -66,16 +68,55 @@ def snapshot(directory):
 
 
 def projection(command, identity, *, result="unknown", execution="not-started", verification="not-checked",
-               workflow_token=None, assessment=None, error_code=None, has_evidence=False):
-    return validate_projection(dict(schema_version=1, event="result", command=command, evidence_token=identity,
+               workflow_token=None, assessment=None, error_code=None, has_evidence=False,
+               usage=False, resource_usage=None):
+    require(type(usage) is bool and (not usage or command == "status"))
+    value = dict(schema_version=2 if usage else 1, event="result", command=command, evidence_token=identity,
         workflow_token=workflow_token, result=result, execution=execution, verification=verification,
         assessment=assessment, root_cause="undetermined", remediation_executed=False, error_code=error_code,
-        evidence="tmp/local-experiment/sre-llm/" + identity if has_evidence else None))
+        evidence="tmp/local-experiment/sre-llm/" + identity if has_evidence else None)
+    if usage:
+        value["resource_usage"] = resource_usage if resource_usage is not None else usage_projection()
+    else:
+        require(resource_usage is None)
+    return validate_projection(value)
+
+
+def usage_projection(initial=None, followup=None, comparison=None, *, verified=False):
+    """Only values derived inside the verified saved snapshot reach schema2."""
+    return dict(source="saved-evidence", availability=("available" if initial is not None or followup is not None
+                else "legacy-absent") if verified else "unverified",
+                initial=copy.deepcopy(initial) if verified else None,
+                followup=copy.deepcopy(followup) if verified else None,
+                comparison=copy.deepcopy(comparison) if verified and (initial is not None or followup is not None) else None)
+
+
+def validate_public_usage(value, *, verified):
+    require(type(value) is dict and set(value) == USAGE_KEYS and value["source"] == "saved-evidence" and
+            value["availability"] in ("available", "legacy-absent", "unverified"))
+    require((value["availability"] != "unverified") == verified)
+    if value["availability"] != "available":
+        require(all(value[key] is None for key in ("initial", "followup", "comparison")))
+        return
+    initial, followup, comparison = (value[key] for key in ("initial", "followup", "comparison"))
+    require(initial is not None or followup is not None)
+    from tools.local_experiment.gateway.pod_usage import validate as validate_usage
+    try:
+        for item in (initial, followup):
+            if item is not None: validate_usage(item)
+        require(type(comparison) is dict and set(comparison) == {"before_state", "after_state", "comparison", "limitations"})
+        expected = C._compare_resource_usage(initial, followup,
+                                             reobserved=comparison["after_state"] != "not-reobserved")
+        require(same(comparison, expected))
+    except (ValueError, TypeError, KeyError):
+        raise CLIError("SRE_EVIDENCE_INVALID") from None
 
 
 def validate_projection(value):
-    require(type(value) is dict and set(value) == FINAL_KEYS and type(value["schema_version"]) is int
-        and value["schema_version"] == 1 and value["event"] == "result" and value["command"] in ("run", "status")
+    require(type(value) is dict and type(value.get("schema_version")) is int and value["schema_version"] in (1, 2))
+    usage = value["schema_version"] == 2
+    require(set(value) == FINAL_KEYS | ({"resource_usage"} if usage else set()) and
+        (not usage or value["command"] == "status") and value["event"] == "result" and value["command"] in ("run", "status")
         and value["result"] in RESULTS and value["execution"] in ("not-started", "invoked", "read-only")
         and value["verification"] in ("not-checked", "journal-only", "saved-evidence")
         and value["assessment"] in (None, "attention-required", "healthy-observed-scope", "unknown")
@@ -91,6 +132,9 @@ def validate_projection(value):
             and value["verification"] == "saved-evidence" and value["evidence"] is not None and value["error_code"] is None)
     if value["result"] == "failed":
         require(value["workflow_token"] is not None and value["verification"] == "saved-evidence")
+    if usage:
+        validate_public_usage(value["resource_usage"], verified=value["result"] == "passed" and
+                              value["verification"] == "saved-evidence")
     return value
 
 
@@ -246,7 +290,7 @@ def audits_and_spans(docs, result):
     return root
 
 
-def verify_documents(raw):
+def verify_documents(raw, *, usage=False):
     # stderr remains a hashed, private opaque file. It never enters a parser,
     # safe projection, diagnosis, assessment or model-facing evidence.
     docs = {name: ([loads(line) for line in value.splitlines() if line] if name == "spans.jsonl" else loads(value))
@@ -289,7 +333,12 @@ def verify_documents(raw):
             and type(result.get("correlated_events")) is int and result["correlated_events"] == len(records)+len(receipts))
         require(type(result.get("inference")) is dict and all(same(result["inference"].get(k),records[0].get(k))
             for k in ("prompt_tokens","completion_tokens","duration_ms","inference_cost_estimate")))
-        return dict(result="passed",verification="saved-evidence",workflow_token=inner,assessment=triage["assessment"])
+        view = dict(result="passed",verification="saved-evidence",workflow_token=inner,assessment=triage["assessment"])
+        if usage:
+            view["resource_usage"] = usage_projection(initial["k8s_read_pods"].get("resource_usage"),
+                followup.get("k8s_read_pods", {}).get("resource_usage"),
+                result["comparisons"]["sources"]["k8s_read_pods"].get("resource_usage"), verified=True)
+        return view
     if root is not None:
         require("checkpoint" not in result and result.get("error_code") in
                 ("SRE_OBSERVATION_INFERENCE_OR_AUDIT_FAILED","SRE_SAVED_TRACE_VERIFICATION_FAILED"))
@@ -324,25 +373,27 @@ def validate_journal(value, identity):
     return value
 
 
-def inspect_saved(identity, *, command="status", journal=None):
+def inspect_saved(identity, *, command="status", journal=None, usage=False):
+    require(type(usage) is bool and (not usage or command == "status"))
     output = EVIDENCE / identity
     if EVIDENCE.exists() or EVIDENCE.is_symlink():
         private_directory(EVIDENCE, legacy_parent=True)
     if not output.exists() and not output.is_symlink():
         return projection(command, identity, execution="read-only" if command == "status" else "invoked",
             result="unknown" if journal else "not_found", verification="journal-only" if journal else "not-checked",
-            error_code=None if journal else "SRE_NOT_FOUND"), 0 if journal else 1
+            error_code=None if journal else "SRE_NOT_FOUND", usage=usage), 0 if journal else 1
     private_directory(EVIDENCE, legacy_parent=True)
     raw, hashes = snapshot(output)
     if journal is not None and journal["files"] is not None:
         require(journal["files"] == hashes)
-    view = verify_documents(raw)
+    view = verify_documents(raw, usage=usage)
     require(snapshot(output) == (raw, hashes))
     return projection(command, identity, execution="read-only" if command == "status" else "invoked",
-        has_evidence=True, error_code="SRE_FAILED" if view["result"] == "failed" else None, **view), 0
+        has_evidence=True, error_code="SRE_FAILED" if view["result"] == "failed" else None, usage=usage, **view), 0
 
 
-def inspect_sre(identity):
+def inspect_sre(identity, *, usage=False):
+    require(type(usage) is bool)
     token(identity)
     try:
         directory = STATE / identity
@@ -356,14 +407,14 @@ def inspect_sre(identity):
                 journal = validate_journal(loads(original), identity)
                 if busy:
                     return projection("status", identity, result="busy", execution="read-only",
-                        verification="journal-only", error_code="SRE_BUSY"), 0
-                view = inspect_saved(identity, journal=journal)
+                        verification="journal-only", error_code="SRE_BUSY", usage=usage), 0
+                view = inspect_saved(identity, journal=journal, usage=usage)
                 require(read(directory / "intent.json") == original, "SRE_JOURNAL_INVALID")
                 return view
-        return inspect_saved(identity)
+        return inspect_saved(identity, usage=usage)
     except Exception as error:
         code = error.code if isinstance(error, CLIError) else "SRE_EVIDENCE_INVALID"
-        return projection("status", identity, execution="read-only", error_code=code), 1
+        return projection("status", identity, execution="read-only", error_code=code, usage=usage), 1
 
 
 def runner():
@@ -429,24 +480,34 @@ def arguments(argv):
     for action in ("run", "status"):
         command = sub.add_parser(action, allow_abbrev=False)
         command.add_argument("--evidence-token", required=True)
+        if action == "status":
+            command.add_argument("--usage", action="store_true")
     return parser.parse_args(argv)
 
 
 def emit(stream, value):
-    stream.write(canonical(value) + "\n"); stream.flush()
+    encoded = canonical(value) + "\n"
+    require(len(encoded.encode("utf-8")) <= MAX_PUBLIC_BYTES)
+    stream.write(encoded); stream.flush()
 
 
 def main(argv=None, *, stdout=None):
     stream = stdout or sys.stdout
     action, identity = "run", None
+    usage = False
     lifecycle = {"invoked": False}
     try:
         args = arguments(argv)
+        # Once the opt-in is parsed, even a rejected token uses its schema2
+        # status failure frame; no allocation or saved-file read has occurred.
+        if args.command == "status" and args.usage:
+            action, usage = "status", True
         action, identity = args.command, token(args.evidence_token)
+        usage = action == "status" and args.usage
         emit(stream, dict(schema_version=1, event="allocated", command=action, evidence_token=identity))
         with redirect_stdout(Discard()), redirect_stderr(Discard()):
             if action == "status":
-                report, code = inspect_sre(identity)
+                report, code = inspect_sre(identity, usage=usage)
             else:
                 report, code = invoke(identity, lifecycle)
         emit(stream, report)
@@ -458,8 +519,13 @@ def main(argv=None, *, stdout=None):
         # An allocated identity alone cannot prove that run() was invoked.
         intent = lifecycle["invoked"]
         report = projection(action, identity, result="unknown" if intent or action == "status" else "not_started",
-            execution="read-only" if action == "status" else "invoked" if intent else "not-started", error_code=code)
-        emit(stream, report)
+            execution="read-only" if action == "status" else "invoked" if intent else "not-started", error_code=code, usage=usage)
+        try:
+            emit(stream, report)
+        except BaseException:
+            if not isinstance(error, Exception):
+                raise error
+            raise
         return 128 + getattr(error, "signum", 2) if not isinstance(error, Exception) else 1
 
 

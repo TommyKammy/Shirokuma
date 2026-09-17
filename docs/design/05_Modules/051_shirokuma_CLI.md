@@ -5,7 +5,7 @@ title: "shirokuma CLI"
 status: draft
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.13.0"
+version: "0.14.0"
 area: "module"
 tags: [shirokuma, module]
 ---
@@ -174,6 +174,18 @@ memory working-set bytesをoptionalで追加した。実CLI1回がpassed/exit0�
 有効0と欠測NULLを区別し、名前・時刻による対応付けとsample windowを保存する。
 cached sampleを新しい測定とは扱わず、数値だけで高負荷・原因・回復を断定しない。
 旧usage欠落は過去のshapeで照会し、公開CLI schemaと自動修復なしの契約は維持する。
+
+保存usageの表示には`sre status TOKEN --usage`を使う。既定status/runのschema1/13keysを維持し、
+このflagの最終frameだけschema2/14keys、allocatedはschema1/4keysとする。runへのflag指定は拒否する。
+`resource_usage`のinitial/followupは保存されたexact整数文字列・時刻・identityだけを表示し、
+比較は同window/別window/未再観測の既存判定を用いる。現在の負荷・trend・原因とは解釈しない。
+verified passedではfield有りがavailable、旧未観測がlegacy-absent。保存unknownはsample NULLのまま、
+失敗・busy・未検証はunverifiedで全payload NULLとなる。最終frame上限は改行込み4096B。
+同じlock/snapshot内の保存検証を再利用し、追加API/model/audit・新token・元証拠書換えは0。
+保存CLI17回で全5件の既定結果を保持し、新usage2samples・旧legacy-absent/unverifiedを確認した。
+入力32dir/file entries・2parent inventory・2locks・Gateway監査2files・source223の不変を確認し、
+全local2150件（既存1skip）・独立review・保存受入68checksを通過した。
+前段AH493は再照会せず継承する。
 
 ### Local experimental Pod policy check
 

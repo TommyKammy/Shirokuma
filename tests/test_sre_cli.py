@@ -25,7 +25,7 @@ TOKEN, INNER, TRACE = '1'*32, '2'*32, '3'*32
 PRIVATE = 'PRIVATE_GATEWAY_SECRET_PROMPT_PATH'
 
 
-def fixture_documents(*, legacy=False, three=False, initial_snapshots=None):
+def fixture_documents(*, legacy=False, three=False, initial_snapshots=None, followup_snapshots=None):
     C = CLI.C
     stamp = '2026-09-17T06:00:00.000000Z'
     initial = C.project_observations({
@@ -52,6 +52,8 @@ def fixture_documents(*, legacy=False, three=False, initial_snapshots=None):
         followup = {'k8s_read_pods':copy.deepcopy(initial['k8s_read_pods'])}
         before_time = datetime.fromisoformat(initial['k8s_read_pods']['observed_at'].replace('Z', '+00:00'))
         followup['k8s_read_pods']['observed_at'] = (before_time + timedelta(seconds=1)).isoformat(timespec='microseconds').replace('+00:00', 'Z')
+    if followup_snapshots is not None:
+        followup = C.project_observations(copy.deepcopy(followup_snapshots))
     comparisons = CLI.compatible_comparison(initial,followup,old_three=three,legacy_details=legacy or three)
     observations = [dict(tool=t,phase='initial',snapshot=s) for t,s in initial.items()]
     observations += [dict(tool=t,phase='followup',snapshot=s) for t,s in followup.items()]
@@ -73,6 +75,26 @@ def fixture_documents(*, legacy=False, three=False, initial_snapshots=None):
         initial_sha256=CLI.source_hash(initial),followup_sha256={t:CLI.source_hash(s) for t,s in followup.items()},
         checkpoint='completed-in-memory',correlated_events=len(calls)+2)
     return {'result.json':result,'observations.json':observations,'spans.jsonl':spans,'gateway-stderr.log':PRIVATE.encode()}
+
+
+def usage_documents(*, state='observed', followup='none', zero=False):
+    """Actual saved-validation fixtures shared with offline Go/Python integration."""
+    from test_local_sre_contract import usage_snapshots, usage_observed, usage_unknown
+    usage = usage_unknown() if state == 'unknown' else usage_observed()
+    if zero and usage['sample'] is not None:
+        usage['sample'].update(cpu_nanocores='0', memory_working_set_bytes='0')
+    initial = usage_snapshots(usage)
+    after = None
+    if followup != 'none':
+        initial['k8s_read_pods']['pods'][0]['ready_containers'] = 0
+        initial['k8s_read_pods']['pods'][0]['container_observation']['containers'][0]['ready'] = False
+        after = {'k8s_read_pods': copy.deepcopy(initial['k8s_read_pods'])}
+        after['k8s_read_pods']['observed_at'] = '2026-09-17T02:00:01.000000Z'
+        value = after['k8s_read_pods']['resource_usage']
+        value.update(request_started_at='2026-09-17T02:00:02.000000000Z', observed_at='2026-09-17T02:00:03.000000000Z')
+        if followup == 'different':
+            value['sample'].update(timestamp='2026-09-17T02:00:01.000000001Z', cpu_nanocores='1')
+    return fixture_documents(initial_snapshots=initial, followup_snapshots=after)
 
 
 def encode(documents):
@@ -102,7 +124,8 @@ class SRECLITests(unittest.TestCase):
     def main(self,action='run',args=None):
         out=io.StringIO();code=CLI.main(args if args is not None else [action,'--evidence-token',TOKEN],stdout=out)
         rows=[json.loads(line) for line in out.getvalue().splitlines()]
-        self.assertIn(len(rows),(1,2));self.assertEqual(set(rows[-1]),CLI.FINAL_KEYS)
+        self.assertIn(len(rows),(1,2));self.assertEqual(set(rows[-1]),CLI.FINAL_KEYS |
+            ({'resource_usage'} if rows[-1]['schema_version'] == 2 else set()))
         self.assertNotIn(PRIVATE,out.getvalue());self.assertNotIn(str(self.root),out.getvalue())
         return code,rows
 
@@ -233,6 +256,169 @@ class SRECLITests(unittest.TestCase):
         docs['result.json']['triage']['assessment'] = 'healthy-observed-scope'
         with self.assertRaises((ValueError, CLI.C.DiagnosticError)):
             CLI.verify_documents(encode(docs))
+
+    def test_usage_optin_values_unknown_zero_and_cached_comparisons(self):
+        self.evidence.mkdir(mode=0o700)
+        variants = [dict(), dict(zero=True), dict(state='unknown'), dict(followup='same'), dict(followup='different')]
+        for index, options in enumerate(variants, 4):
+            identity = f'{index:032x}'
+            docs = usage_documents(**options)
+            write_fixture(self.evidence / identity, docs)
+            before = self.files()
+            code, rows = self.main('status', ['status', '--evidence-token', identity, '--usage'])
+            result = rows[-1]
+            self.assertEqual((code, rows[0]['schema_version'], result['schema_version']), (0, 1, 2))
+            self.assertEqual(set(rows[0]), {'schema_version', 'event', 'command', 'evidence_token'})
+            actual = result['resource_usage']
+            self.assertEqual(actual['availability'], 'available')
+            self.assertEqual(actual['initial'], docs['observations.json'][1]['snapshot']['resource_usage'])
+            self.assertEqual(actual['comparison'], docs['result.json']['comparisons']['sources']['k8s_read_pods']['resource_usage'])
+            self.assertEqual(actual['followup'] is None, options.get('followup', 'none') == 'none')
+            self.assertLessEqual(len((CLI.canonical(result) + '\n').encode()), 4096)
+            self.assertEqual(self.files(), before)
+        self.configured.assert_not_called()
+        self.fake.run.assert_not_called()
+        self.assertFalse(self.state.exists())
+
+    def test_usage_legacy_absence_preserves_old_three_and_four_source_shapes(self):
+        self.evidence.mkdir(mode=0o755)
+        for index, options in enumerate(({}, {'legacy': True}, {'three': True}), 4):
+            identity = f'{index:032x}'
+            write_fixture(self.evidence / identity, fixture_documents(**options))
+            before = self.files()
+            code, rows = self.main('status', ['status', '--evidence-token', identity, '--usage'])
+            self.assertEqual(code, 0)
+            self.assertEqual(rows[-1]['resource_usage'], dict(source='saved-evidence', availability='legacy-absent',
+                initial=None, followup=None, comparison=None))
+            self.assertEqual(self.files(), before)
+
+    def test_usage_default_status_and_run_remain_schema1_exact13(self):
+        async def run(config, output): return write_fixture(output, usage_documents())
+        self.fake.run.side_effect = run
+        code, run_rows = self.main()
+        self.assertEqual(code, 0)
+        self.assertEqual((run_rows[-1]['schema_version'], set(run_rows[-1])), (1, CLI.FINAL_KEYS))
+        _, old_rows = self.main('status')
+        old_bytes = CLI.canonical(old_rows[-1])
+        self.main('status', ['status', '--evidence-token', TOKEN, '--usage'])
+        _, later_rows = self.main('status')
+        self.assertEqual(CLI.canonical(later_rows[-1]), old_bytes)
+        self.assertNotIn('resource_usage', later_rows[-1])
+        self.assertEqual(self.fake.run.call_count, 1)
+
+    def test_usage_flag_is_status_only_and_invalid_input_does_not_allocate(self):
+        for arguments in (['run', '--evidence-token', TOKEN, '--usage'],
+                          ['status', '--evidence-token', TOKEN, '--usage=true']):
+            code, rows = self.main(args=arguments)
+            self.assertEqual((code, len(rows), rows[-1]['error_code']), (1, 1, 'ARGUMENTS_INVALID'))
+            self.assertEqual(rows[-1]['schema_version'], 1)
+        code, rows = self.main(args=['status', '--evidence-token', 'invalid', '--usage'])
+        self.assertEqual((code, len(rows), rows[-1]['schema_version']), (1, 1, 2))
+        self.assertEqual(rows[-1]['resource_usage'], CLI.usage_projection())
+        self.assertEqual(rows[-1]['error_code'], 'EVIDENCE_TOKEN_INVALID')
+        self.configured.assert_not_called()
+        self.assertFalse(self.state.exists())
+
+    def test_usage_busy_does_not_open_evidence_and_exposes_no_payload(self):
+        self.main(); before = self.files()
+        with (self.state/TOKEN/'run.lock').open('rb') as stream:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with patch.object(CLI, 'snapshot', side_effect=AssertionError('busy snapshot')):
+                code, rows = self.main('status', ['status', '--evidence-token', TOKEN, '--usage'])
+        self.assertEqual((code, rows[-1]['result']), (0, 'busy'))
+        self.assertEqual(rows[-1]['resource_usage'], CLI.usage_projection())
+        self.assertEqual(self.files(), before)
+
+    def test_usage_missing_journal_only_and_failed_never_publish_partial_values(self):
+        code, rows = self.main('status', ['status', '--evidence-token', TOKEN, '--usage'])
+        self.assertEqual((code, rows[-1]['result']), (1, 'not_found'))
+        self.assertEqual(rows[-1]['resource_usage'], CLI.usage_projection())
+        self.evidence.mkdir(mode=0o700)
+        for index, mode in enumerate(('journal', 'failed'), 4):
+            docs = usage_documents()
+            if mode == 'journal': docs.pop('observations.json')
+            else:
+                result = docs['result.json']
+                result.update(result='failed', error_code='SRE_OBSERVATION_INFERENCE_OR_AUDIT_FAILED')
+                result.pop('checkpoint')
+                result['audit_records'][-1]['status'] = 'failed'
+                docs['spans.jsonl'][-1]['status'] = 'ERROR'
+            identity = f'{index:032x}'; write_fixture(self.evidence/identity, docs)
+            code, rows = self.main('status', ['status', '--evidence-token', identity, '--usage'])
+            self.assertEqual(code, 0)
+            self.assertEqual(rows[-1]['resource_usage'], CLI.usage_projection())
+
+    def test_usage_projection_is_derived_once_under_existing_lock_and_snapshot(self):
+        async def run(config, output): return write_fixture(output, usage_documents(followup='same'))
+        self.fake.run.side_effect = run; self.main()
+        before = self.files(); original = CLI.verify_documents
+        def verify(raw, *, usage=False):
+            self.assertTrue(usage)
+            with (self.state/TOKEN/'run.lock').open('rb') as stream:
+                with self.assertRaises(BlockingIOError):
+                    fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return original(raw, usage=usage)
+        with patch.object(CLI, 'verify_documents', side_effect=verify) as verifier, \
+             patch.object(CLI, 'snapshot', wraps=CLI.snapshot) as snapshot, \
+             patch.object(CLI, 'persist', side_effect=AssertionError('status write')):
+            code, rows = self.main('status', ['status', '--evidence-token', TOKEN, '--usage'])
+        self.assertEqual(code, 0)
+        self.assertEqual(verifier.call_count, 1)
+        self.assertEqual(snapshot.call_count, 2)
+        self.assertEqual(rows[-1]['resource_usage']['comparison']['comparison'], 'same-sample-window')
+        self.assertEqual(self.files(), before)
+        with (self.state/TOKEN/'run.lock').open('rb') as stream:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def test_usage_changed_second_snapshot_discards_previously_valid_values(self):
+        self.legacy(usage_documents())
+        original = CLI.snapshot; calls = 0
+        def snapshot(directory):
+            nonlocal calls
+            calls += 1
+            raw, hashes = original(directory)
+            if calls == 2: hashes['result.json'] = '0'*64
+            return raw, hashes
+        with patch.object(CLI, 'snapshot', side_effect=snapshot):
+            code, rows = self.main('status', ['status', '--evidence-token', TOKEN, '--usage'])
+        self.assertEqual((code, rows[-1]['result']), (1, 'unknown'))
+        self.assertEqual(rows[-1]['resource_usage'], CLI.usage_projection())
+
+    def test_usage_public_tamper_exact_types_enums_and_consistent_comparison(self):
+        view = CLI.verify_documents(encode(usage_documents(followup='same')), usage=True)
+        value = CLI.projection('status', TOKEN, execution='read-only', has_evidence=True, usage=True, **view)
+        changes = [lambda v: v['resource_usage'].update(source=PRIVATE),
+            lambda v: v['resource_usage']['initial']['sample'].update(cpu_nanocores=True),
+            lambda v: v['resource_usage']['initial']['sample'].update(memory_working_set_bytes='9223372036854775808'),
+            lambda v: v['resource_usage']['initial']['sample'].update(window_ns='01'),
+            lambda v: v['resource_usage']['comparison'].update(comparison='different-sample-window'),
+            lambda v: v['resource_usage'].update(availability='legacy-absent'),
+            lambda v: v['resource_usage'].update(raw_log=PRIVATE),
+            lambda v: v.update(schema_version=1), lambda v: v.update(command='run', execution='invoked')]
+        for change in changes:
+            damaged = copy.deepcopy(value); change(damaged)
+            with self.assertRaises(ValueError): CLI.validate_projection(damaged)
+
+    def test_usage_final_frame_cap_fails_without_releasing_passed_payload(self):
+        view = CLI.verify_documents(encode(usage_documents()), usage=True)
+        value = CLI.projection('status', TOKEN, execution='read-only', has_evidence=True, usage=True, **view)
+        value['resource_usage']['initial']['identity']['pod_name'] = PRIVATE * 500
+        with patch.object(CLI, 'inspect_sre', return_value=(value, 0)):
+            code, rows = self.main('status', ['status', '--evidence-token', TOKEN, '--usage'])
+        self.assertEqual((code, rows[-1]['schema_version'], rows[-1]['result']), (1, 2, 'unknown'))
+        self.assertEqual(rows[-1]['error_code'], 'SRE_EVIDENCE_INVALID')
+        self.assertEqual(rows[-1]['resource_usage'], CLI.usage_projection())
+
+    def test_usage_cancellation_and_secondary_output_failure_preserve_first_object(self):
+        cancel = asyncio.CancelledError()
+        with patch.object(CLI, 'inspect_sre', side_effect=cancel):
+            code, rows = self.main('status', ['status', '--evidence-token', TOKEN, '--usage'])
+        self.assertEqual((code, rows[-1]['schema_version'], rows[-1]['error_code']), (130, 2, 'INTERRUPTED'))
+        self.assertEqual(rows[-1]['resource_usage'], CLI.usage_projection())
+        stream = Mock(); stream.write.side_effect = [None, OSError(PRIVATE)]
+        with patch.object(CLI, 'inspect_sre', side_effect=cancel), self.assertRaises(asyncio.CancelledError) as caught:
+            CLI.main(['status', '--evidence-token', TOKEN, '--usage'], stdout=stream)
+        self.assertIs(caught.exception, cancel)
 
     def test_legacy_missing_snapshots_stays_unknown(self):
         docs=fixture_documents();docs.pop('observations.json');self.legacy(docs)
