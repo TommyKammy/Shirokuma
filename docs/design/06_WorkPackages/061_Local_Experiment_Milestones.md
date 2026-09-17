@@ -5,23 +5,35 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "2.6"
+version: "2.7"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：Query Doctorの保存履歴1run/6captured queriesをAgentHouseへ保存。
-4件の実測historyと2件の補助読取NULLを区別し、再取込は追加0/0で冪等。
-稼働中の初期failedを終端証拠なしで取り込まない。全回帰592 tests、設計76documentsを検証。
-次は既存Lakehouseへ接続しない隔離TrinoでOPA行制限/列マスクを確認する。Cloudは無効のまま。
+最新の到達点（2026-09-17）：保存したbenchmark/Query Doctor履歴のread-only Grafana画面を追加。
+5panelのAPI/DB照合が全件一致し、失敗run・未知値・補助読取を区別して実表示した。
+5tablesと元145files・credentials・両runtimeを保全。全回帰609 tests、設計76documentsを検証。
+次は隔離TrinoのOPA行制限/列マスクを実機確認する。Cloudは無効のまま。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: retained history read-only UI
+
+[クエリ実験の履歴](http://127.0.0.1:18030/d/shirokuma-query-history-local)へ5表を追加。
+benchmark成功1/失敗2と72query sides、Query Doctorの1run・実測4件・補助2件を表示。
+全期間の固定SELECT/FINAL/行数上限で、来歴不明・未観測・測定0を区別する。
+既存readerの4table SELECT追加を既知XMLの原本保存・hash照合・atomic replaceで実施し、
+同credentials/limits/containersを維持。再enableは変更なし、up/smokeもready。
+5panelのAPI/専用reader前後SELECT一致、UIの失敗filterとNULL・精度表示を確認。
+API証跡`grafana-history-verification/e4f54e9e4d2740c5809b2afc5150c025`。
+保全54項目、5tables全hash/DDLと145元files不変。全回帰609 tests/76documents。
+証跡`grafana-history-preflight/8e1933d437a44e36ae11923a3f0f17f2`。
 
 ## 2026-09-17: captured own-query history
 

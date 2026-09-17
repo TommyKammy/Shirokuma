@@ -16,7 +16,14 @@
     "from": "now-7d",
     "to": "now"
   },
-  "links": [],
+  "links": [
+    {
+      "title": "クエリ実験の履歴",
+      "type": "link",
+      "url": "/d/shirokuma-query-history-local",
+      "targetBlank": false
+    }
+  ],
   "annotations": {
     "list": []
   },

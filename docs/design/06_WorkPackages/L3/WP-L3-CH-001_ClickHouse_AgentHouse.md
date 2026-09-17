@@ -5,7 +5,7 @@ title: "ClickHouse AgentHouse advanced dashboards"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.6"
+version: "0.7"
 area: "workpackage"
 tags: [shirokuma, wp, l3, observability]
 ---
@@ -157,3 +157,31 @@ producerは稼働中も初期値`result=failed`を書き出すため、結果文
 
 本WPはlocal-partial。履歴の新規Grafana画面、全clusterの継続history収集、Gateway連携、
 実費計測は未達。次はWP-L3-SEC-001の隔離Trino OPA行制限/列マスクを検証する。
+
+## 2026-09-17: retained history dashboard
+
+[クエリ実験の履歴](http://127.0.0.1:18030/d/shirokuma-query-history-local)に保存履歴の5表を追加。
+benchmark全3run（失敗2を含む）と72query sides、Query Doctorの1run・実測4件・補助2件を表示する。
+全期間の固定SELECT/FINAL/行数制限を使い、timestamp不明をtime filterで隠さない。
+列filterは取得行だけが対象。失敗・来歴不明・未観測・測定0を区別し、run間で性能平均しない。
+補助読取の履歴時間はNULLのまま「未観測」。query時間はミリ秒精度の表示を維持する。
+
+明示的なhistory-enableで、既存専用readerに上記4history tablesのSELECTだけを追加した。
+既存1tableまたは固定5tablesの正確なgrant集合だけを認め、制限・書込拒否・credentialsは維持。
+既知XMLの完全照合→private backup/pending→hash再照合→atomic replace→reload/読戻しを実装。
+同CH/Grafana containerを維持し、サービス再起動は不要。再enableはchanged=false、up/smokeもready。
+復元は`manage.py history-disable`でreaderを元のPawprintsだけに戻し、データは削除しない。
+
+5panelのanonymous APIと専用reader前後SELECTの型/値/NULLが全件一致。
+API証跡`grafana-history-verification/e4f54e9e4d2740c5809b2afc5150c025`。
+実UIで全3run→失敗2run→全3run、実測4件、補助2件の対象外/NULL表示を確認。
+本文の見切れを解消し、元画面と履歴画面の相互linkを追加した。SQL入力filterは追加していない。
+
+保全54項目に合格し、既存5tablesの全hash/DDL（294/3/72/1/6件）、元145files、credentials、
+両containerのID/image/設定/volume/resource/port/network/start/restartが不変。
+Docker mount配列の順序差だけは、完全な各属性集合の一致で判定した。
+証跡`grafana-history-preflight/8e1933d437a44e36ae11923a3f0f17f2`。
+focused17 tests追加、全回帰609 testsと設計76documentsが成功。
+
+再実行: `rtk make local-grafana-history-enable local-grafana-verify-history`。
+本WPはlocal-partial。継続history収集/Gateway連携/実費測定は未達のまま。

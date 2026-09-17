@@ -1,0 +1,1466 @@
+{
+  "uid": "shirokuma-query-history-local",
+  "title": "Shirokuma · クエリ実験の履歴",
+  "description": "保持したローカル実験と自身のクエリ履歴の読み取り専用ビュー",
+  "tags": [
+    "shirokuma-local",
+    "retained-history"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "",
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {
+    "hidden": true
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [
+    {
+      "title": "AgentHouse のイベント",
+      "type": "link",
+      "url": "/d/shirokuma-agenthouse-local?theme=light",
+      "targetBlank": false
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "保存されたクエリ実験",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 7
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "保存済みの全期間を表示します。列のフィルターは、取得した行だけを絞り込みます。行数上限と対象範囲は各表の説明を確認してください。\n\n**ローカル実験の記録です。TPC-H の公式性能値や、実行間の性能改善を示しません。** 「未観測」と実測の 0 は区別します。旧証跡の来歴不明もそのまま表示します。\n\nQuery Doctor は固定2行データの読取診断です。自身が捕捉した ID の保存証跡であり、サーバー監査・クラスタ全体の履歴ではありません。Trino Gateway は未導入です。"
+      }
+    },
+    {
+      "id": 2,
+      "type": "table",
+      "title": "Benchmark · 実行と失敗",
+      "description": "失敗を含む保存済み実行。最大128件、開始時刻の降順（時刻未観測は末尾）。比較記録数は完了・成功を意味しません。予定数との差と照合未観測を確認してください。",
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "shirokuma-agenthouse-readonly"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "shirokuma-agenthouse-readonly"
+          },
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT result, provenance_status, recorded_pairs, comparison_unknown_pairs,\nexpected_pairs, wall_seconds, started_at, run_token\nFROM agenthouse.benchmark_runs FINAL\nORDER BY started_at DESC NULLS LAST, run_token LIMIT 128",
+          "pluginVersion": "4.21.3"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "未観測",
+          "decimals": 0,
+          "custom": {
+            "filterable": true,
+            "minWidth": 80,
+            "inspect": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "result"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "実験結果"
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "passed": {
+                        "text": "成功",
+                        "color": "#087443"
+                      },
+                      "completed": {
+                        "text": "完了",
+                        "color": "#087443"
+                      },
+                      "failed": {
+                        "text": "失敗",
+                        "color": "#b91c1c"
+                      },
+                      "interrupted": {
+                        "text": "中断",
+                        "color": "#b91c1c"
+                      },
+                      "incomplete": {
+                        "text": "未完了",
+                        "color": "#855a00"
+                      },
+                      "running": {
+                        "text": "実行中",
+                        "color": "#855a00"
+                      },
+                      "unobserved": {
+                        "text": "未観測",
+                        "color": "#855a00"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "provenance_status"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "来歴"
+              },
+              {
+                "id": "custom.width",
+                "value": 130
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "recorded": {
+                        "text": "記録あり",
+                        "color": "#475569"
+                      },
+                      "unknown": {
+                        "text": "不明・旧証跡",
+                        "color": "#855a00"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "recorded_pairs"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "比較記録数"
+              },
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "comparison_unknown_pairs"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "照合未観測"
+              },
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "expected_pairs"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "予定クエリ数"
+              },
+              {
+                "id": "custom.width",
+                "value": 130
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "wall_seconds"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "実測・壁時計"
+              },
+              {
+                "id": "custom.width",
+                "value": 150
+              },
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "started_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "開始時刻"
+              },
+              {
+                "id": "custom.width",
+                "value": 200
+              },
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_token"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "実験ID"
+              },
+              {
+                "id": "custom.width",
+                "value": 300
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "enablePagination": true,
+        "frozenColumns": {
+          "left": 1
+        },
+        "footer": {
+          "show": false
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "Benchmark · クエリごとの観測",
+      "description": "実験ID・クエリ番号順に最大1000件。生成データとIcebergは別行です。来歴や環境が異なる実行を合算・平均しません。各時間は同じ指標ではありません。",
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 24,
+        "h": 11
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "shirokuma-agenthouse-readonly"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "shirokuma-agenthouse-readonly"
+          },
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT query_number, side, comparison_status, wall_seconds,\nengine_elapsed_ms, cpu_ms, peak_memory_bytes, provenance_status, run_token\nFROM agenthouse.benchmark_queries FINAL\nORDER BY run_token, query_number, side LIMIT 1000",
+          "pluginVersion": "4.21.3"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "未観測",
+          "decimals": 0,
+          "custom": {
+            "filterable": true,
+            "minWidth": 80,
+            "inspect": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "provenance_status"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "来歴"
+              },
+              {
+                "id": "custom.width",
+                "value": 130
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "recorded": {
+                        "text": "記録あり",
+                        "color": "#475569"
+                      },
+                      "unknown": {
+                        "text": "不明・旧証跡",
+                        "color": "#855a00"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "comparison_status"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "結果の照合"
+              },
+              {
+                "id": "custom.width",
+                "value": 120
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "matched": {
+                        "text": "一致確認",
+                        "color": "#087443"
+                      },
+                      "unobserved": {
+                        "text": "照合未観測",
+                        "color": "#855a00"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "wall_seconds"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "実測・壁時計"
+              },
+              {
+                "id": "custom.width",
+                "value": 150
+              },
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_token"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "実験ID"
+              },
+              {
+                "id": "custom.width",
+                "value": 300
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "query_number"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "クエリ番号"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "side"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "実行先"
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "reference": {
+                        "text": "生成データ",
+                        "color": "#475569"
+                      },
+                      "iceberg": {
+                        "text": "Iceberg",
+                        "color": "#475569"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "engine_elapsed_ms"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Trino経過時間"
+              },
+              {
+                "id": "custom.width",
+                "value": 150
+              },
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cpu_ms"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "CPU時間"
+              },
+              {
+                "id": "custom.width",
+                "value": 130
+              },
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "peak_memory_bytes"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "最大メモリ"
+              },
+              {
+                "id": "custom.width",
+                "value": 140
+              },
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "enablePagination": true,
+        "frozenColumns": {
+          "left": 1
+        },
+        "footer": {
+          "show": false
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Query Doctor · 履歴の取得範囲",
+      "description": "最大128実行。SELECT・EXPLAINの履歴あり／不在／未観測を分け、補助読取とID未捕捉を別に数えます。対象外・未捕捉を成功や0件の履歴に置き換えません。",
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "shirokuma-agenthouse-readonly"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "shirokuma-agenthouse-readonly"
+          },
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT workflow_result, observer_outcome, observed_history_count,\nhistory_missing_count, history_unobserved_count, auxiliary_query_count,\nuncaptured_count, query_run_token\nFROM agenthouse.query_history_runs FINAL\nORDER BY query_run_token LIMIT 128",
+          "pluginVersion": "4.21.3"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "未観測",
+          "decimals": 0,
+          "custom": {
+            "filterable": true,
+            "minWidth": 80,
+            "inspect": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "workflow_result"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "診断の結果"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "passed": {
+                        "text": "成功",
+                        "color": "#087443"
+                      },
+                      "completed": {
+                        "text": "完了",
+                        "color": "#087443"
+                      },
+                      "failed": {
+                        "text": "失敗",
+                        "color": "#b91c1c"
+                      },
+                      "interrupted": {
+                        "text": "中断",
+                        "color": "#b91c1c"
+                      },
+                      "incomplete": {
+                        "text": "未完了",
+                        "color": "#855a00"
+                      },
+                      "running": {
+                        "text": "実行中",
+                        "color": "#855a00"
+                      },
+                      "unobserved": {
+                        "text": "未観測",
+                        "color": "#855a00"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "observer_outcome"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "読取の終了"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "passed": {
+                        "text": "成功",
+                        "color": "#087443"
+                      },
+                      "completed": {
+                        "text": "完了",
+                        "color": "#087443"
+                      },
+                      "failed": {
+                        "text": "失敗",
+                        "color": "#b91c1c"
+                      },
+                      "interrupted": {
+                        "text": "中断",
+                        "color": "#b91c1c"
+                      },
+                      "incomplete": {
+                        "text": "未完了",
+                        "color": "#855a00"
+                      },
+                      "running": {
+                        "text": "実行中",
+                        "color": "#855a00"
+                      },
+                      "unobserved": {
+                        "text": "未観測",
+                        "color": "#855a00"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "query_run_token"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "診断実行ID"
+              },
+              {
+                "id": "custom.width",
+                "value": 300
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "observed_history_count"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "履歴あり"
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "history_missing_count"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "履歴に不在"
+              },
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "history_unobserved_count"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "履歴未観測"
+              },
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "auxiliary_query_count"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "補助読取"
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "uncaptured_count"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "ID未捕捉"
+              },
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "enablePagination": true,
+        "frozenColumns": {
+          "left": 1
+        },
+        "footer": {
+          "show": false
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Query Doctor · SELECT と EXPLAIN",
+      "description": "診断実行順に最大512件。最新の保存履歴を表示します。作成→終了と開始→終了は待ち時間の含み方が異なり、合計しません。NULLは未観測です。",
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "shirokuma-agenthouse-readonly"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "shirokuma-agenthouse-readonly"
+          },
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT case_id, kind, response_state, history_status,\ncreated_to_end_ms, started_to_end_ms, query_id\nFROM agenthouse.query_history_queries FINAL\nWHERE kind IN ('select', 'explain')\nORDER BY query_run_token, request_index LIMIT 512",
+          "pluginVersion": "4.21.3"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "未観測",
+          "decimals": 0,
+          "custom": {
+            "filterable": true,
+            "minWidth": 80,
+            "inspect": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "case_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "対象SELECT"
+              },
+              {
+                "id": "custom.width",
+                "value": 140
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "projection": {
+                        "text": "ID列の読取",
+                        "color": "#475569"
+                      },
+                      "filtered": {
+                        "text": "id=1の読取",
+                        "color": "#475569"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "kind"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "種類"
+              },
+              {
+                "id": "custom.width",
+                "value": 160
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "select": {
+                        "text": "SELECT",
+                        "color": "#475569"
+                      },
+                      "explain": {
+                        "text": "EXPLAIN",
+                        "color": "#475569"
+                      },
+                      "own_query_history": {
+                        "text": "自身の履歴読取",
+                        "color": "#475569"
+                      },
+                      "fixture_stats": {
+                        "text": "統計の読取",
+                        "color": "#475569"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "response_state"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Trino状態"
+              },
+              {
+                "id": "custom.width",
+                "value": 130
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "FINISHED": {
+                        "text": "完了",
+                        "color": "#087443"
+                      },
+                      "FAILED": {
+                        "text": "失敗",
+                        "color": "#b91c1c"
+                      },
+                      "RUNNING": {
+                        "text": "実行中の観測",
+                        "color": "#855a00"
+                      },
+                      "QUEUED": {
+                        "text": "待機中の観測",
+                        "color": "#855a00"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "history_status"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "履歴の観測"
+              },
+              {
+                "id": "custom.width",
+                "value": 150
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "observed": {
+                        "text": "観測済み",
+                        "color": "#475569"
+                      },
+                      "missing": {
+                        "text": "履歴に不在",
+                        "color": "#855a00"
+                      },
+                      "unobserved": {
+                        "text": "未観測",
+                        "color": "#855a00"
+                      },
+                      "not_target": {
+                        "text": "測定対象外",
+                        "color": "#475569"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "created_to_end_ms"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "作成→終了"
+              },
+              {
+                "id": "custom.width",
+                "value": 150
+              },
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "started_to_end_ms"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "開始→終了"
+              },
+              {
+                "id": "custom.width",
+                "value": 150
+              },
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "query_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Trino query ID"
+              },
+              {
+                "id": "custom.width",
+                "value": 320
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "enablePagination": true,
+        "frozenColumns": {
+          "left": 1
+        },
+        "footer": {
+          "show": false
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Query Doctor · 補助読取",
+      "description": "自身の履歴・統計を読む補助リクエスト。最大384件。Trino応答は保存していますが履歴時間の測定対象外なので、時間はNULLのままです。性能集計に混ぜません。",
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "shirokuma-agenthouse-readonly"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "shirokuma-agenthouse-readonly"
+          },
+          "editorType": "sql",
+          "queryType": "table",
+          "format": 1,
+          "rawSql": "SELECT kind, response_state, response_complete, history_status,\ncreated_to_end_ms, query_id\nFROM agenthouse.query_history_queries FINAL\nWHERE kind IN ('own_query_history', 'fixture_stats')\nORDER BY query_run_token, request_index LIMIT 384",
+          "pluginVersion": "4.21.3"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "未観測",
+          "decimals": 0,
+          "custom": {
+            "filterable": true,
+            "minWidth": 80,
+            "inspect": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "kind"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "種類"
+              },
+              {
+                "id": "custom.width",
+                "value": 160
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "select": {
+                        "text": "SELECT",
+                        "color": "#475569"
+                      },
+                      "explain": {
+                        "text": "EXPLAIN",
+                        "color": "#475569"
+                      },
+                      "own_query_history": {
+                        "text": "自身の履歴読取",
+                        "color": "#475569"
+                      },
+                      "fixture_stats": {
+                        "text": "統計の読取",
+                        "color": "#475569"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "response_state"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Trino状態"
+              },
+              {
+                "id": "custom.width",
+                "value": 130
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "FINISHED": {
+                        "text": "完了",
+                        "color": "#087443"
+                      },
+                      "FAILED": {
+                        "text": "失敗",
+                        "color": "#b91c1c"
+                      },
+                      "RUNNING": {
+                        "text": "実行中の観測",
+                        "color": "#855a00"
+                      },
+                      "QUEUED": {
+                        "text": "待機中の観測",
+                        "color": "#855a00"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "response_complete"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "応答の受取"
+              },
+              {
+                "id": "custom.width",
+                "value": 130
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "true": {
+                        "text": "受取完了",
+                        "color": "#475569"
+                      },
+                      "false": {
+                        "text": "未完了",
+                        "color": "#855a00"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "history_status"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "履歴の観測"
+              },
+              {
+                "id": "custom.width",
+                "value": 150
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "observed": {
+                        "text": "観測済み",
+                        "color": "#475569"
+                      },
+                      "missing": {
+                        "text": "履歴に不在",
+                        "color": "#855a00"
+                      },
+                      "unobserved": {
+                        "text": "未観測",
+                        "color": "#855a00"
+                      },
+                      "not_target": {
+                        "text": "測定対象外",
+                        "color": "#475569"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "created_to_end_ms"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "作成→終了"
+              },
+              {
+                "id": "custom.width",
+                "value": 150
+              },
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "query_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Trino query ID"
+              },
+              {
+                "id": "custom.width",
+                "value": 320
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "enablePagination": true,
+        "frozenColumns": {
+          "left": 1
+        },
+        "footer": {
+          "show": false
+        }
+      }
+    }
+  ]
+}

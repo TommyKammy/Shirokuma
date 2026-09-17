@@ -103,6 +103,10 @@ The [Query Doctor history importer](tools/local_experiment/query_history/README.
 retains captured query identities and measured history separately from auxiliary
 reads. `rtk make local-query-history-import` checks terminal evidence and imports
 saved observations without sending new Trino or model requests.
+The [query experiment history](http://127.0.0.1:18030/d/shirokuma-query-history-local)
+displays retained failures, missing comparisons and Query Doctor measurements.
+After importing receipts, enable its bounded reader with
+`rtk make local-grafana-history-enable local-grafana-verify-history`.
 Superset is available at [the local dashboard](http://127.0.0.1:18088/superset/dashboard/shirokuma-local-lakehouse/),
 and OpenMetadata at [the local catalog](http://127.0.0.1:18585).
 Generated credentials stay in private ignored state; see the component runbooks

@@ -62,7 +62,7 @@ remain unchanged.
 
 Anonymous access is Viewer only on the loopback endpoint. Grafana admin and
 database credentials are generated in private ignored files. The dedicated
-database reader has SELECT on `agenthouse.pawprints` only, with resource limits;
+database reader starts with SELECT on `agenthouse.pawprints` only, with resource limits;
 the existing writer credentials are not used by the dashboard.
 The database enforces a 30-second maximum. The plugin timeout is 25 seconds,
 because its pinned clickhouse-go driver adds five seconds to the context deadline
@@ -75,9 +75,53 @@ adds a user and profile without replacing existing configuration. Its password
 is stored as a SHA-256 hash in that XML. The original private credentials are
 required on subsequent starts; missing credentials do not trigger rotation.
 
-No retention policy or table migration is introduced. Benchmark-event import,
-persistent Trino query-history ingestion and measured monetary cost remain
-outside this increment.
+No retention policy or table migration is introduced by the dashboards.
+Measured monetary cost remains unobserved.
+
+## Retained experiment history
+
+[Query experiment history](http://127.0.0.1:18030/d/shirokuma-query-history-local)
+shows five fixed tables: benchmark runs (including failures), observed query
+sides, Query Doctor history coverage, workload measurements, and auxiliary reads.
+The all-time view has no time filter that could hide unknown timestamps. Native
+column filters narrow only fetched rows; each panel describes its fixed row cap.
+Missing measurements display as unknown, separately from zero. Old unknown
+provenance stays visible, and metrics are not averaged across runs. This is
+neither an official TPC-H result nor a cluster-wide server audit.
+
+First import retained receipts with `local-benchmark-events-import` and
+`local-query-history-import`. Then run:
+
+```sh
+rtk make local-grafana-history-enable
+rtk make local-grafana-verify-history
+```
+
+The explicit enable step checks the four already populated history tables with
+their importer schema and physical-payload validators. It adds SELECT only on
+`benchmark_runs`, `benchmark_queries`, `query_history_runs` and
+`query_history_queries` to the existing reader. The only valid grant sets are
+Pawprints alone or all five fixed tables, with unchanged limits and no writes or
+role inheritance. Restarts preserve the selected scope. Credentials and
+containers are reused.
+
+Migration accepts only the exact known XML for those same credentials, saves a
+private original and pending receipt, checks its digest immediately before an
+atomic replacement, reloads configuration and verifies the effective grants.
+Evidence lives in `tmp/local-experiment/grafana/reader-scope-<UUID>/`. Interrupted
+attempts retain their journal; rerunning enable recognizes either complete XML
+and reconciles it. Unknown configuration is never overwritten. To restore only
+the original grants, run `rtk proxy python3 tools/local_experiment/grafana/manage.py history-disable`.
+The retained dashboard then lacks history access until re-enabled; no history
+data is deleted. No ClickHouse or Grafana restart is needed.
+
+`history_dashboard.py` generates the staged `history_dashboard.json` outside the
+watched directory. The enable target then verifies the reader and generated
+content before atomically publishing `dashboards/history.json`. Grafana's
+existing provider picks it up. For definition edits, regenerate, run
+`manage.py history-publish`, and verify. The verifier compares all five anonymous
+API frames with before/after reader SELECTs, including types and NULL values,
+and saves evidence in `tmp/local-experiment/grafana-history-verification/`.
 
 ## Stop and recover
 

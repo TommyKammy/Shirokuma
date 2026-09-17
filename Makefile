@@ -553,6 +553,15 @@ test-local-grafana:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_grafana_runtime.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_agenthouse_dashboard.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_grafana_dashboard_verifier.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_grafana_history_*.py'
+
+.PHONY: local-grafana-history-enable local-grafana-verify-history
+local-grafana-history-enable:
+	@$(PYTHON) tools/local_experiment/grafana/manage.py history-enable
+	@$(PYTHON) tools/local_experiment/grafana/manage.py history-publish
+
+local-grafana-verify-history:
+	@$(PYTHON) tools/local_experiment/grafana/verify_history_dashboard.py
 
 verify-local-experiment: test-local-grafana
 

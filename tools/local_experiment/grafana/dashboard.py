@@ -150,7 +150,9 @@ def dashboard():
     return {'uid': UID, 'title': 'Shirokuma · AgentHouse', 'description': 'ローカルPawprintの読み取り専用ビュー',
         'tags': ['shirokuma-local', 'agenthouse'], 'timezone': 'browser', 'schemaVersion': 39,
         'version': 1, 'editable': False, 'graphTooltip': 1, 'refresh': '',
-        'time': {'from': 'now-7d', 'to': 'now'}, 'links': [], 'annotations': {'list': []},
+        'time': {'from': 'now-7d', 'to': 'now'},
+        'links': [{'title': 'クエリ実験の履歴', 'type': 'link', 'url': '/d/shirokuma-query-history-local', 'targetBlank': False}],
+        'annotations': {'list': []},
         'templating': {'list': [
             {'name': name, 'label': label, 'type': 'textbox', 'hide': 0, 'query': '',
              'current': {'text': '', 'value': ''}, 'options': []}

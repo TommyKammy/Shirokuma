@@ -40,6 +40,8 @@ DASHBOARD_UID = 'shirokuma-agenthouse-local'
 CH_CONFIG = '/etc/clickhouse-server/users.d/shirokuma-grafana-reader.xml'
 CONTEXT = 'colima-mac-studio-solo'
 PLUGIN_QUERY_TIMEOUT = 25
+BASE_READER_TABLES = ('pawprints',)
+HISTORY_READER_TABLES = ('pawprints', 'benchmark_runs', 'benchmark_queries', 'query_history_runs', 'query_history_queries')
 SETTINGS = {'readonly': '1', 'max_threads': '2', 'max_memory_usage': '268435456',
             'max_execution_time': '30', 'max_rows_to_read': '1000000', 'max_result_rows': '10000',
             'max_result_bytes': '4194304', 'result_overflow_mode': 'throw', 'read_overflow_mode': 'throw'}
@@ -248,7 +250,8 @@ def agenthouse():
     return value
 
 
-def reader_xml(credential):
+def reader_xml(credential, tables=BASE_READER_TABLES):
+    require(tables in (BASE_READER_TABLES, HISTORY_READER_TABLES), 'reader scope is not a fixed table set')
     user = credential['reader_user']
     profile_name = user + '_profile'
     root = ET.Element('clickhouse')
@@ -270,15 +273,19 @@ def reader_xml(credential):
     ET.SubElement(ET.SubElement(account, 'networks'), 'ip').text = '::/0'
     ET.SubElement(account, 'profile').text = profile_name
     ET.SubElement(account, 'quota').text = 'default'
-    ET.SubElement(ET.SubElement(account, 'grants'), 'query').text = 'GRANT SELECT ON agenthouse.pawprints'
+    grants = ET.SubElement(account, 'grants')
+    for table in tables:
+        ET.SubElement(grants, 'query').text = 'GRANT SELECT ON agenthouse.' + table
     return ET.tostring(root, encoding='unicode') + '\n'
 
 
 def ensure_reader(credential, current):
-    content = reader_xml(credential)
-    private_write(STATE / 'reader-users.xml', content)
     old = docker('exec', '--user', 'root', current['Id'], 'cat', CH_CONFIG, required=False)
-    require(old is None or old == content, 'existing reader config differs; refusing overwrite or credential rotation')
+    base, history = reader_xml(credential), reader_xml(credential, HISTORY_READER_TABLES)
+    require(old is None or old in (base, history), 'existing reader config differs; refusing overwrite or credential rotation')
+    # Restart preserves the exact known scope. Only history-enable widens it.
+    content = old if old is not None else base
+    private_write(STATE / 'reader-users.xml', content)
     receipt = {'agenthouse_id': current['Id'], 'config_path': CH_CONFIG,
                'config_sha256': hashlib.sha256(content.encode()).hexdigest(), 'owner_token': credential['owner_token']}
     private_write(STATE / 'reader-config-receipt.json', {**receipt, 'outcome': 'pending'})
@@ -338,8 +345,12 @@ def verify_reader(credential):
     require(reader_query(credential, 'SELECT currentUser()').strip() == user, 'dedicated reader authentication differs')
     admin = AH.Client()
     rows = json.loads(admin.query("SELECT access_type,database,table,column,is_partial_revoke,grant_option FROM system.grants WHERE user_name='" + user + "' FORMAT JSON"))['data']
-    require(rows == [{'access_type': 'SELECT', 'database': 'agenthouse', 'table': 'pawprints', 'column': None,
-                      'is_partial_revoke': 0, 'grant_option': 0}], 'reader grants exceed the single retained table')
+    tables = tuple(sorted(row.get('table', '') for row in rows))
+    require(tables in (tuple(sorted(BASE_READER_TABLES)), tuple(sorted(HISTORY_READER_TABLES)))
+            and sorted(rows, key=lambda row: row['table']) == [
+                {'access_type': 'SELECT', 'database': 'agenthouse', 'table': table, 'column': None,
+                 'is_partial_revoke': 0, 'grant_option': 0} for table in tables],
+            'reader grants differ from a fixed read-only scope')
     roles = json.loads(admin.query("SELECT granted_role_name FROM system.role_grants WHERE user_name='" + user + "' FORMAT JSON"))['data']
     require(not roles, 'reader must not inherit roles')
     selected = ','.join("'" + key + "'" for key in SETTINGS)
@@ -354,13 +365,15 @@ def verify_reader(credential):
                     'constraint probe failed without the expected database rejection')
         else:
             raise GrafanaError('reader can bypass a mandatory query constraint')
-    for privilege in ('INSERT', 'ALTER', 'DROP TABLE', 'CREATE TABLE', 'TRUNCATE', 'SELECT ON system.users'):
-        clause = privilege if ' ON ' in privilege else privilege + ' ON agenthouse.pawprints'
-        require(reader_query(credential, 'CHECK GRANT ' + clause).strip() == '0', 'reader has an unexpected data or administrative privilege')
-    rows = int(reader_query(credential, 'SELECT count() FROM agenthouse.pawprints FINAL').strip())
-    require(rows >= 0 and reader_query(credential, 'SELECT currentUser(), 1').strip() == user + '\t1',
+    for table in tables:
+        for privilege in ('INSERT', 'ALTER', 'DROP TABLE', 'CREATE TABLE', 'TRUNCATE'):
+            require(reader_query(credential, 'CHECK GRANT ' + privilege + ' ON agenthouse.' + table).strip() == '0',
+                    'reader has an unexpected write privilege')
+    require(reader_query(credential, 'CHECK GRANT SELECT ON system.users').strip() == '0', 'reader has an administrative privilege')
+    counts = {table: int(reader_query(credential, 'SELECT count() FROM agenthouse.' + table + ' FINAL').strip()) for table in tables}
+    require(all(value >= 0 for value in counts.values()) and reader_query(credential, 'SELECT currentUser(), 1').strip() == user + '\t1',
             'positive reader confirmation failed after denial probes')
-    return {'reader': user, 'select_only': True, 'logical_pawprints': rows,
+    return {'reader': user, 'select_only': True, 'logical_pawprints': counts['pawprints'], 'logical_rows': counts,
             'max_execution_seconds': 30, 'max_result_rows': 10000, 'max_memory_bytes': 268435456}
 
 
@@ -604,7 +617,7 @@ def stop(*, disconnect=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['prepare', 'up', 'status', 'smoke', 'stop', 'disconnect'])
+    parser.add_argument('command', choices=['prepare', 'up', 'status', 'smoke', 'stop', 'disconnect', 'history-enable', 'history-disable', 'history-publish'])
     args = parser.parse_args()
     try:
         check_context()
@@ -622,6 +635,12 @@ def main():
                 result = up()
             elif args.command in {'stop', 'disconnect'}:
                 result = stop(disconnect=args.command == 'disconnect')
+            elif args.command in {'history-enable', 'history-disable'}:
+                from history_access import change_scope
+                result = change_scope(sys.modules[__name__], args.command == 'history-enable')
+            elif args.command == 'history-publish':
+                from history_access import publish_dashboard
+                result = publish_dashboard(sys.modules[__name__])
             else:
                 result = status()
                 if args.command == 'smoke':
