@@ -5,7 +5,7 @@ title: "WP-L3-ICE-001 Iceberg branch/tag clone demo"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.6"
+version: "0.7"
 area: "workpackage"
 tags: [shirokuma, workpackage, l3, lakehouse]
 ---
@@ -167,3 +167,91 @@ branchへの独立書込み、保持tableの復元保証、汎用コンソール
 全table一覧、Pawprints366全行hash、既存247証跡filesが前後不変。Pawprint追加は0。
 保存receiptの41項目を再計算し、実Trinoでも捕捉したworker/control全60IDsがFINISHED、active0。
 独立readback後に監査用tunnelも終了した。
+
+## 2026-09-17: independent branch write plan
+
+既存Spark 4.1.3/Iceberg 1.11.0のverified imageで、named branchへの独立書込みを検証する。
+新規owned `spark_<token>` tableだけを使い、既存4列の固定データで次を確認する。
+
+- [x] base2行でAを作り、baseline_tag/audit_branchを条件付きRESTでAへ作成する。
+- [x] mainだけへid3の行を追加してBとし、tag/branchはAのまま保持する。
+- [x] Sparkからbranch_audit_branchへid4の別行を1回appendしてCとする。
+- [x] main=B/tag=A/branch=C、B.parent=A/C.parent=A、BとCの内容相違をSpark/Trinoで照合する。
+- [x] A/B metadata・files不変、CがAのfilesを保ちbranch分だけ追加することを照合する。
+- [x] native終了・owned query drain・権限回収・既知write結果の後、同UUID tableだけを回収する。
+- [x] 保持fixture全履歴/refs・table一覧・既存runtime/data不変とlocal testsを確認する。
+
+Trino483の`$files`はcurrent main Bの確認に使用し、branch Cのfile一覧と取り違えない。
+各snapshotのfilesはSpark Java scan.useSnapshotで取得する。
+Trinoは名前付き/数値snapshot読取で独立固定oracleへ照合する。
+初期empty snapshot Eが存在する場合はE/A/B/Cを区別する。
+
+新image build/追加service/model呼出しは不要。既存2CPU/4Gi・一時table role/NPを再利用する。
+任意SQL/ref/接続先は受け付けず、REST/Spark writeの不明結果は再送・再INSERTせず保持する。
+既存S3 bucket scope、内部Iceberg HTTP/commit retryの境界は変更しない。
+branch別認可、異なるtableのzero-copy clone、並行writer、汎用復旧や本番受入は対象外。
+再現とcleanup境界は[Runbook](../../../../tools/local_experiment/spark_branch/README.md)に記録する。
+
+## 2026-09-17: Spark independent Iceberg branch write
+
+WP-L3-ICE-001のbranch独立書込みを、既存Spark4.1.3/Iceberg1.11.0 imageと
+Polaris/SeaweedFS/Trino483で実証した。新service/image/build/model呼出しは0。
+成功runは `2ab07312d48a4ff89c8ce62cf5b98b41`（13:55:16–13:57:57 UTC）、
+table UUIDは `3d6063f9-56e4-4467-93e6-bb04284785dd`。
+
+| snapshot | ID | 内容 | parent |
+|---|---|---|---|
+| E | 5816371238383776775 | 初期empty | NULL |
+| A | 8820611245447280854 | base-a/base-bの2行 | E |
+| B | 6408387352553140918 | A＋id3 main-only | A |
+| C | 8114339936233885914 | A＋id4 branch-only | A |
+
+条件付きREST2回でtag/branchをAへ作り、mainへid3を追加後、Sparkからbranchだけへ
+id4を1回INSERTした。main=B/tag=A/branch=C、BとCが兄弟であることを照合した。
+Spark freshSessionのDataFrame/SQL読取とTrinoのnamed/numeric snapshot全6読取が
+固定oracleへ一致し、B/Cの行数が同じ3でも内容差を検出できる。
+branchのgroup結果はbucket0=1行/合計10、bucket1=2行/合計60。
+executorはstage8、task9/8、partition0/1、attempt0の別2tasksで確認した。
+
+Sparkのsnapshot指定scanでA/B/Cを確認し、Aは1file/612B、Bは2files/1228B、
+Cは2files/1801Bだった。BとCはAの612B fileを共有し、mainの追加616Bと
+branchの追加1189Bは別path。旧E/A/Bのsnapshot metadata hashとA/Bfilesは不変。
+Trinoの`$files`はcurrent main Bだけへ使用し、Cの一覧と取り違えていない。
+これはtyped file metadataの照合であり、各object全byte hashの保証ではない。
+
+31host手順、2成功CAS、native19UIDと一時NP2・Polaris権限entity3/2bindingsを回収した。
+owned query drain後に元UUID/marker/locationのtableだけをDROPし、保持fixture全履歴/refsと
+全table一覧が実行前と一致した。S3 orphan不存在・即時JWT失効・汎用rollbackは主張しない。
+
+初回 `02c0424ff30845cf9a5a2e58a1f55321` はINSERT応答後のtag読取で失敗として保持した。
+Spark4.1用Iceberg1.11.0は旧DataFrame `tag` optionをIllegalArgumentExceptionで拒否する。
+tag側だけbuilt-in `versionAsOf`へ1行修正し、旧optionの書込み後READ_FAILEDと
+修正版の成功をgenerated-job fakeで再現する回帰を追加した。branch option/SQLは変更していない。
+
+初回はunknownを成功にせずtableを保留し、再INSERTしなかった。別private recovery
+`spark-branch-recovery/0e7f5f5031ed4011a5f7cf54f7c9cb56/`で、元UUIDのmain/tag/branch全6read、
+兄弟parent、旧snapshot hash/mainfiles、fresh native namespace・NP・entity不存在を確認。
+C=`7301240948059612366`の書込みをhost readbackで確認してから同UUIDだけを1回DROPした。
+保持fixture全履歴/table一覧は復帰し、原失敗27filesのbytes/mode/mtimeは不変。
+原Sparkのfresh read/executor/after file検証は未達のままで、host recoveryを完全成功へ読み替えない。
+inspection/cleanupのquery drainはcancel0。汎用の自動replay/recovery commandは追加していない。
+
+新61tests（contract17/table27/workflow17）、既存を含むSpark392testsが成功。
+全local回帰46suites/1525件（1524成功＋既存optional OTel1skip）が成功した。
+実行・全log・集計は `tmp/local-experiment/spark-branch-checks/18a8dcbd983046b99e466b8d8f1d80d8/`。
+事前/独立監査は `spark-branch-preflight/05f3546728dc4fa5a445221c3e4b143c/`。
+事前はAH440、Metadata7plans/14tables/14edges、MLflow15runs/1210points/15artifacts、
+14Pods/27resources6CM3SecretUID・Docker3・images553・保持3179filesと22file backupを保存した。
+
+named referenceへの独立書込みを満たしたが、branch別認可、異なるtableのzero-copy clone、
+並行writer、汎用復旧、保持tableの復元保証や本番受入は未検証のためlocal-partialを維持する。
+次は既存Query Doctorを製品CLIのrun/statusから安全に実行・照会できるようにする。
+
+独立監査 `spark-branch-preflight/05f3546728dc4fa5a445221c3e4b143c/independent-verification-final.json`
+は109checks成功。fresh after/extra-afterで保持AH440件、Metadata7plans/14tables/14edges、
+MLflow59tables/15runs/1210points/15artifacts、14Pods/27resources/6CM/3SecretUID、
+Docker3/images553、旧3179files、停止時backup22files/34dirsが不変と確認した。
+両trial namespace不存在、監査用tunnel終了も確認した。保存証跡の44query完了と31steps、
+19UID回収、同tableのSpark/Trino出力・snapshot int64・file metadataを独立照合した。
+削除後tableの再読取やobject全byte hashは主張しない。監査側のshape仮定2点の修正前receiptも保持。
+design83docs/14tests・secret scan・diff checkが成功し、関連WP/MilestonesをVaultへ同期した。

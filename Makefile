@@ -765,3 +765,10 @@ test-local-mlflow-benchmark:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_spark_benchmark_report.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_mlflow_benchmark_import.py'
 verify-local-experiment: test-local-mlflow-benchmark
+
+.PHONY: local-spark-branch test-local-spark-branch
+local-spark-branch:
+	@$(PYTHON) tools/local_experiment/spark_branch/run.py --build-token "$(SPARK_ICEBERG_BUILD_TOKEN)"
+test-local-spark-branch:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_spark_branch*.py'
+# verify-local-experiment includes these through test-local-spark.

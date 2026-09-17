@@ -5,17 +5,17 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "3.15"
+version: "3.16"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：保存済みSpark/Trino測定をMLflowの専用experimentへ取り込み、
-4 runs/92 pointsを追加した。既存11評価は不変、再取込0件、再起動後保持も確認。
-全local回帰1464件（1463成功/既存1skip）が通過した。
-次はIceberg branchへの独立書込みとmain/tag不変を検証する。
+最新の到達点（2026-09-17）：SparkでIceberg branchだけへ書き込み、main/tag不変と
+兄弟snapshotをSpark/Trinoで照合した。一時資源・同UUID tableを回収済み。
+全local回帰1525件（1524成功/既存1skip）が通過した。
+次は既存Query Doctorの製品CLI run/statusを実装する。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
@@ -1233,3 +1233,67 @@ export復元/移行、一般的な性能比較、本番/人間受入の完了は
 serializerの末尾LF欠落によるもので、元結果を保持して契約どおり修正した。
 semantic JSONに不一致はなく、製品code/runtimeの修正は不要だった。
 設計83documents/関連14tests、secret filenames・diff検査も通過し、repo/Vaultの更新2ノートは一致した。
+
+## 2026-09-17: Spark independent Iceberg branch write
+
+WP-L3-ICE-001のbranch独立書込みを、既存Spark4.1.3/Iceberg1.11.0 imageと
+Polaris/SeaweedFS/Trino483で実証した。新service/image/build/model呼出しは0。
+成功runは `2ab07312d48a4ff89c8ce62cf5b98b41`（13:55:16–13:57:57 UTC）、
+table UUIDは `3d6063f9-56e4-4467-93e6-bb04284785dd`。
+
+| snapshot | ID | 内容 | parent |
+|---|---|---|---|
+| E | 5816371238383776775 | 初期empty | NULL |
+| A | 8820611245447280854 | base-a/base-bの2行 | E |
+| B | 6408387352553140918 | A＋id3 main-only | A |
+| C | 8114339936233885914 | A＋id4 branch-only | A |
+
+条件付きREST2回でtag/branchをAへ作り、mainへid3を追加後、Sparkからbranchだけへ
+id4を1回INSERTした。main=B/tag=A/branch=C、BとCが兄弟であることを照合した。
+Spark freshSessionのDataFrame/SQL読取とTrinoのnamed/numeric snapshot全6読取が
+固定oracleへ一致し、B/Cの行数が同じ3でも内容差を検出できる。
+branchのgroup結果はbucket0=1行/合計10、bucket1=2行/合計60。
+executorはstage8、task9/8、partition0/1、attempt0の別2tasksで確認した。
+
+Sparkのsnapshot指定scanでA/B/Cを確認し、Aは1file/612B、Bは2files/1228B、
+Cは2files/1801Bだった。BとCはAの612B fileを共有し、mainの追加616Bと
+branchの追加1189Bは別path。旧E/A/Bのsnapshot metadata hashとA/Bfilesは不変。
+Trinoの`$files`はcurrent main Bだけへ使用し、Cの一覧と取り違えていない。
+これはtyped file metadataの照合であり、各object全byte hashの保証ではない。
+
+31host手順、2成功CAS、native19UIDと一時NP2・Polaris権限entity3/2bindingsを回収した。
+owned query drain後に元UUID/marker/locationのtableだけをDROPし、保持fixture全履歴/refsと
+全table一覧が実行前と一致した。S3 orphan不存在・即時JWT失効・汎用rollbackは主張しない。
+
+初回 `02c0424ff30845cf9a5a2e58a1f55321` はINSERT応答後のtag読取で失敗として保持した。
+Spark4.1用Iceberg1.11.0は旧DataFrame `tag` optionをIllegalArgumentExceptionで拒否する。
+tag側だけbuilt-in `versionAsOf`へ1行修正し、旧optionの書込み後READ_FAILEDと
+修正版の成功をgenerated-job fakeで再現する回帰を追加した。branch option/SQLは変更していない。
+
+初回はunknownを成功にせずtableを保留し、再INSERTしなかった。別private recovery
+`spark-branch-recovery/0e7f5f5031ed4011a5f7cf54f7c9cb56/`で、元UUIDのmain/tag/branch全6read、
+兄弟parent、旧snapshot hash/mainfiles、fresh native namespace・NP・entity不存在を確認。
+C=`7301240948059612366`の書込みをhost readbackで確認してから同UUIDだけを1回DROPした。
+保持fixture全履歴/table一覧は復帰し、原失敗27filesのbytes/mode/mtimeは不変。
+原Sparkのfresh read/executor/after file検証は未達のままで、host recoveryを完全成功へ読み替えない。
+inspection/cleanupのquery drainはcancel0。汎用の自動replay/recovery commandは追加していない。
+
+新61tests（contract17/table27/workflow17）、既存を含むSpark392testsが成功。
+全local回帰46suites/1525件（1524成功＋既存optional OTel1skip）が成功した。
+実行・全log・集計は `tmp/local-experiment/spark-branch-checks/18a8dcbd983046b99e466b8d8f1d80d8/`。
+事前/独立監査は `spark-branch-preflight/05f3546728dc4fa5a445221c3e4b143c/`。
+事前はAH440、Metadata7plans/14tables/14edges、MLflow15runs/1210points/15artifacts、
+14Pods/27resources6CM3SecretUID・Docker3・images553・保持3179filesと22file backupを保存した。
+
+named referenceへの独立書込みを満たしたが、branch別認可、異なるtableのzero-copy clone、
+並行writer、汎用復旧、保持tableの復元保証や本番受入は未検証のためlocal-partialを維持する。
+次は既存Query Doctorを製品CLIのrun/statusから安全に実行・照会できるようにする。
+
+独立監査 `spark-branch-preflight/05f3546728dc4fa5a445221c3e4b143c/independent-verification-final.json`
+は109checks成功。fresh after/extra-afterで保持AH440件、Metadata7plans/14tables/14edges、
+MLflow59tables/15runs/1210points/15artifacts、14Pods/27resources/6CM/3SecretUID、
+Docker3/images553、旧3179files、停止時backup22files/34dirsが不変と確認した。
+両trial namespace不存在、監査用tunnel終了も確認した。保存証跡の44query完了と31steps、
+19UID回収、同tableのSpark/Trino出力・snapshot int64・file metadataを独立照合した。
+削除後tableの再読取やobject全byte hashは主張しない。監査側のshape仮定2点の修正前receiptも保持。
+design83docs/14tests・secret scan・diff checkが成功し、関連WP/MilestonesをVaultへ同期した。
