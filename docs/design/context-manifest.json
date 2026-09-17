@@ -83,6 +83,7 @@
     {"source": "06_WorkPackages/L3/WP-L3-VW-002_Idle_suspend_and_wake.md", "target": "docs/design/06_WorkPackages/L3/WP-L3-VW-002_Idle_suspend_and_wake.md"},
     {"source": "06_WorkPackages/L5/WP-L5-LINEAGE-001_Lineage_completeness_dashboard.md", "target": "docs/design/06_WorkPackages/L5/WP-L5-LINEAGE-001_Lineage_completeness_dashboard.md"},
     {"source": "06_WorkPackages/L4/WP-L4-ML-001_MLflow_tracking.md", "target": "docs/design/06_WorkPackages/L4/WP-L4-ML-001_MLflow_tracking.md"},
-    {"source": "06_WorkPackages/L4/WP-L4-SPARK-001_Spark_on_Kubernetes.md", "target": "docs/design/06_WorkPackages/L4/WP-L4-SPARK-001_Spark_on_Kubernetes.md"}
+    {"source": "06_WorkPackages/L4/WP-L4-SPARK-001_Spark_on_Kubernetes.md", "target": "docs/design/06_WorkPackages/L4/WP-L4-SPARK-001_Spark_on_Kubernetes.md"},
+    {"source": "06_WorkPackages/L4/WP-L4-BENCH-001_Spark_benchmark_suite.md", "target": "docs/design/06_WorkPackages/L4/WP-L4-BENCH-001_Spark_benchmark_suite.md"}
   ]
 }

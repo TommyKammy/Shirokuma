@@ -5,17 +5,17 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "3.13"
+version: "3.14"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：Data→Catalogを製品CLIから実行・再開・read-only確認できる。
-実Qwenによる新規処理とunsupported拒否、完了済み再開での不変を確認。
-1327件のlocal回帰（1326成功/既存1skip）、Go98tests/vet/raceが成功。
-次は同じIceberg snapshotを使うSpark/Trinoの最小基準測定へ進む。
+最新の到達点（2026-09-17）：60万572行の同一Iceberg snapshotを使うSpark/Trino測定が成功。
+16観測すべてが独立Decimal oracleと一致し、一時資源・同UUID tableを回収した。
+1416件のlocal回帰（1415成功/既存1skip）と保持データ・runtime不変を確認。
+次は保存測定を既存MLflowの別experimentへ取り込む。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
@@ -1128,3 +1128,57 @@ Data4＋Catalog5＋unsupported3に一致し、Loki12件、保存実spans10＋MCP
 保持Kube/Docker/SQL履歴/fixture全履歴/MLflow59tables11artifacts/cached553imagesは不変。
 2823保護files中2820は完全不変、Gateway2logsは旧prefix不変＋各2追記、既存admin markerは
 content/mode不変・mtimeだけ更新。raw比較のchanged判定を保存し、許容差分を別証拠で説明した。
+
+
+## 2026-09-17: Spark / Trino same-snapshot baseline
+
+WP-L4-BENCH-001の最小測定を実装・実機検証した。固定TPCH SF0.1 lineitemの9列、
+Decimal正規化、独立Python oracleを使う。元データのNULL/finite/型/往復検査後、
+sourceと作成後snapshot全行をstreamし、件数・logical SHA・期待集計が一致した。
+hostに全datasetは保存しない。実sourceは600,572行、受信38,853,382bytes、
+IcebergはParquet 1file/5,011,080bytes。data-file予算32個/256MiB内である。
+
+run `e727a68de2b64313bc3fa3dc98817dac` は13:00:58–13:05:01 UTCに成功した。
+同UUID `e6abed5b-9cda-4d8c-9d29-a71e42aac122`、snapshot `8013311425425878260`（親なし）、
+同metadata locationとfile一覧を両engineで確認し、snapshot指定の16測定がすべてoracleと一致。
+logical SHAは `87e3f2d1f7cca433c559c2f183baae1c78b37a26358223000bc0039a20f9ffbe`。
+Q1由来の4SUM/countは4group、Q6 revenueは `11803420.253400`。
+Spark4.1.3/Iceberg1.11.0の既存ARM64 imageを使い、新build/download/model呼出しはない。
+
+| 固定query | Trino初回client秒 | Trino反復3回中央値秒 | Spark初回秒 | Spark反復3回中央値秒 |
+|---|---:|---:|---:|---:|
+| q1_sums | 2.563 | 2.568 | 6.484 | 0.677 |
+| q6 | 3.062 | 3.076 | 0.442 | 0.252 |
+
+TrinoはPOSTから最終page消費までのclient wallで、network/JSON/row処理・途中のdurable journal保存を含む。
+serverのelapsedTimeMillisは1075–1542ms、wallTimeMillisは17–139msとして別に保存した。
+Sparkはsql→collect完了までで、結果正規化/oracleは計測外。SparkSession開始6.358秒、
+nativeのpreflight→cleanup全体38.305秒も分離した。executor readinessは初回queryへ残りうる。
+元stream/guard/権限準備、別executor probeとcleanupをquery時間へ足していない。
+shared cache既温、Trino先行・Spark後行、resource配分差、各query3反復という条件の観測であり、
+一般的なengine速度順位・cold cache・標準TPC-H性能・統計的有意差は主張しない。
+
+source/schema/query/result/hashを型付き固定契約にし、任意SQL/endpoint/SFはCLIから受け付けない。
+実Trinoのdecimal型名に含まれるcomma後空白を狭く正規化し、precision/scale変更は拒否する。
+Spark4.1.3で未対応のDECIMAL型付きliteralは両engine共通の固定CASTへ変更した。
+AVGの型推論差は今回のSUM/count比較へ混入させない。
+
+Polaris一時roleはTABLE_LIST/READ_PROPERTIESの2権限だけ。READ_ONLYはcatalog権限の意味で、
+既存S3資格情報がbucket scopeのままである点は維持する。token実TTL3600秒。
+native19UID（17明示/owned＋2自動Endpoints系）、一時ingress NP2・Polaris3entities/2bindingsを回収し、
+owned query drain後に同UUID tableをDROPした。保持fixture/全table一覧の前後一致を確認。
+executor別probeはstage28/task36,37/partition0,1/attempt0で、query計測へ加算していない。
+Secret本文は保存projectionへ入れず、未知POSTの再送・不明な同名table削除を禁止する。
+S3 orphan不存在・即時JWT失効・完全rollback・本番受入とは区別する。
+
+benchmark79＋native/access追加10を含むSpark331 testsが成功。
+全local回帰44suites/1416件（1415成功＋既存optional OTel1skip）が成功。
+全logと集計は `tmp/local-experiment/spark-benchmark-checks/3a7b51d8f277490aa1fd457dc2e18bde/`。
+fresh前後保持監査は `spark-benchmark-preflight/f8a7fdda5ed342eebb75780cf7d6431b/`。
+AH440増分0、Metadata7plans/14tables/14edgesの35endpoints、保持3044files、
+14Pods/27resources6CM3SecretUID、Docker3、SQL履歴4tables/5DDL、fixture全歴史、
+MLflow59tables/11artifacts、images553、Polaris6権限一覧の内容が不変。
+開始前の空き容量はhost2,486,954,598,400bytes/VM346,868,105,216bytesで5GiB以上。
+
+WPはlocal-partialを維持する。Comet/Gluten、複数規模/資源条件の評価は後続。
+次は保存済み16測定を既存MLflowの別experimentへ取り込み、観測範囲を保って検索・比較できるようにする。

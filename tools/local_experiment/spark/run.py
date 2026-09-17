@@ -34,21 +34,26 @@ INVENTORY = ('pods,services,configmaps,serviceaccounts,roles,rolebindings,resour
              'replicasets,statefulsets,daemonsets,jobs,cronjobs,endpoints,endpointslices,events')
 UUID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
 SECRET_KEYS = ['aws-credentials', 'polaris-token']
+REMOTE_PROFILES = ('iceberg-write', 'iceberg-benchmark')
 
 
-def remote_contract():
-    # This is one fixed, reviewed profile, never an import path supplied by a caller.
-    from tools.local_experiment.spark_iceberg import remote_contract as remote
+def remote_contract(profile='iceberg-write'):
+    # Two fixed modules only; callers cannot supply an import path or job.
+    require(profile in REMOTE_PROFILES, 'PROFILE_INVALID')
+    if profile == 'iceberg-benchmark':
+        from tools.local_experiment.spark_benchmark import contract as remote
+    else:
+        from tools.local_experiment.spark_iceberg import remote_contract as remote
     return remote
 
 
 def validate_profile(profile, inputs, mode='success'):
-    require(profile in ('native', 'iceberg-write'), 'PROFILE_INVALID')
+    require(profile in ('native', *REMOTE_PROFILES), 'PROFILE_INVALID')
     if profile == 'native':
         require(inputs is None, 'NATIVE_INPUTS_FORBIDDEN')
         return None
     require(mode == 'success', 'REMOTE_MODE_INVALID')
-    return deepcopy(remote_contract().validate_inputs(inputs))
+    return deepcopy(remote_contract(profile).validate_inputs(inputs))
 
 
 def safe_resource(value, redactor=None):
@@ -190,7 +195,7 @@ class Kube:
     def create(self, obj):
         body = deepcopy(obj)
         if obj['kind'] == 'Secret':
-            require(self.profile == 'iceberg-write' and callable(self.secret_provider), 'SECRET_PROVIDER_REQUIRED')
+            require(self.profile in REMOTE_PROFILES and callable(self.secret_provider), 'SECRET_PROVIDER_REQUIRED')
             validate_secret(obj, self.token, live=False)
             values = self.secret_provider()
             require(type(values) is dict and sorted(values) == SECRET_KEYS and
@@ -228,7 +233,7 @@ class Kube:
 
     def preflight(self):
         runtime = P.guard()
-        cache = remote_image(self.profile_inputs) if self.profile == 'iceberg-write' else P.validate_cache(json.loads(P.command(P.docker('image', 'inspect', C.IMAGE))),
+        cache = remote_image(self.profile_inputs) if self.profile in REMOTE_PROFILES else P.validate_cache(json.loads(P.command(P.docker('image', 'inspect', C.IMAGE))),
             json.loads(P.command(P.ssh('sudo', 'k3s', 'crictl', '--timeout', '10s', 'inspecti', '--output', 'json', C.IMAGE))),
             P.cache_content())
         nodes = json.loads(self.request(['get', 'nodes', '-o', 'json'], namespace=False))['items']
@@ -254,7 +259,7 @@ class Kube:
         require(available['cpu'] >= 2 and available['memory'] >= 4*1024**3, 'INSUFFICIENT_CAPACITY')
         resources = ('pods', 'services', 'configmaps', 'serviceaccounts', 'roles', 'rolebindings',
                      'resourcequotas', 'limitranges', 'networkpolicies')
-        if self.profile == 'iceberg-write':
+        if self.profile in REMOTE_PROFILES:
             resources += ('secrets',)
         for verb, resource in [('create', 'namespaces'), ('delete', 'namespaces')] + [
                 (v, r) for v in ('create', 'delete', 'get', 'list') for r in
@@ -272,7 +277,7 @@ class Kube:
 
 def validate_pod(pod, token, role, *, driver_uid=None, profile='native', inputs=None):
     result = owned(pod, token)
-    expected = C.pod_spec(role) if profile == 'native' else remote_contract().expected_pod_spec(token, role, inputs)
+    expected = C.pod_spec(role) if profile == 'native' else remote_contract(profile).expected_pod_spec(token, role, inputs)
     spec = pod.get('spec', {})
     require(pod['metadata']['name'] == ('driver' if role == 'driver' else C.executor_name(token)) and
             pod['metadata']['labels'].get('shirokuma.io/role') == role, 'POD_NAME_CONFLICT')
@@ -304,7 +309,7 @@ def validate_pod(pod, token, role, *, driver_uid=None, profile='native', inputs=
                     all(set(source) in ({'serviceAccountToken'}, {'configMap'}, {'downwardAPI'})
                         for source in volume['projected'].get('sources', [])), 'POD_VOLUME_CONFLICT')
     require(set(allowed) <= {v['name'] for v in volumes}, 'POD_VOLUME_MISSING')
-    if profile == 'iceberg-write':
+    if profile in REMOTE_PROFILES:
         # Spark may add its own configuration volume, but credentials remain file-only.
         mounts = container.get('volumeMounts', [])
         expected_mounts = template['volumeMounts']
@@ -323,7 +328,7 @@ def validate_pod(pod, token, role, *, driver_uid=None, profile='native', inputs=
     require(len(statuses) <= 1, 'POD_STATUS_INVALID')
     image_id = statuses[0].get('imageID') if statuses else None
     if image_id:
-        if profile == 'iceberg-write':
+        if profile in REMOTE_PROFILES:
             ref = inputs['image']; digest = ref.split('@')[1]
             accepted = {digest, 'docker://'+digest, ref, 'docker-pullable://'+ref}
         else:
@@ -338,9 +343,12 @@ def validate_pod(pod, token, role, *, driver_uid=None, profile='native', inputs=
 
 def source_hashes(profile='native'):
     paths = [Path(__file__), Path(C.__file__), Path(P.__file__)]
-    if profile == 'iceberg-write':
+    if profile in REMOTE_PROFILES:
         from tools.local_experiment.spark_iceberg import build as B
-        paths += [Path(remote_contract().__file__), Path(B.__file__)]
+        paths += [Path(remote_contract(profile).__file__), Path(B.__file__)]
+        if profile == 'iceberg-benchmark':
+            from tools.local_experiment.spark_benchmark import workload as W
+            paths += [Path(remote_contract().__file__), Path(W.__file__)]
     return {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in paths}
 
@@ -349,8 +357,8 @@ def validate_saved(plan, receipt):
     token = receipt['run_token']; C.validate_token(token); C.validate_mode(receipt['mode'])
     profile = receipt.get('profile', 'native')
     inputs = validate_profile(profile, receipt.get('profile_inputs'), receipt['mode'])
-    if profile == 'iceberg-write':
-        remote_contract().expected_pod_spec(token, 'driver', inputs)  # Bind scope/location to this run.
+    if profile in REMOTE_PROFILES:
+        remote_contract(profile).expected_pod_spec(token, 'driver', inputs)  # Bind scope/location to this run.
     require(type(plan) is list and C.plan_sha256(plan) == receipt['plan_sha256'], 'SAVED_PLAN_HASH_CONFLICT')
     require(len(plan) == (14 if profile == 'native' else 16) and plan[0]['kind'] == 'Namespace' and
             plan[-1]['kind'] == 'Pod', 'SAVED_PLAN_SCOPE_INVALID')
@@ -359,7 +367,7 @@ def validate_saved(plan, receipt):
              ('RoleBinding', 'spark-driver'), ('ConfigMap', 'workload'), ('Service', 'driver'), ('Pod', 'driver'),
              ('NetworkPolicy', 'default-deny'), ('NetworkPolicy', 'same-run-rpc'),
              ('NetworkPolicy', 'cluster-dns'), ('NetworkPolicy', 'driver-api')}
-    if profile == 'iceberg-write':
+    if profile in REMOTE_PROFILES:
         names |= {('Secret', 'connection'), ('NetworkPolicy', 'data-egress')}
     require(len(names) == len(plan) and {(x['kind'], x['metadata']['name']) for x in plan} == names, 'SAVED_PLAN_SCOPE_INVALID')
     for obj in plan:
@@ -398,8 +406,8 @@ class Experiment:
         C.validate_token(token); C.validate_mode(mode)
         self.profile = profile
         self.inputs = validate_profile(profile, profile_inputs, mode)
-        if profile == 'iceberg-write':
-            remote_contract().expected_pod_spec(token, 'driver', self.inputs)
+        if profile in REMOTE_PROFILES:
+            remote_contract(profile).expected_pod_spec(token, 'driver', self.inputs)
         self.token, self.mode, self.output = token, mode, Path(output)
         self.kube = kube or Kube(token, profile=profile, profile_inputs=self.inputs)
         self.clock, self.sleep = clock, sleep
@@ -416,7 +424,7 @@ class Experiment:
     def resource_owned(self, obj, *, uid=None):
         value = owned(obj, self.token, uid=uid)
         if obj.get('kind') == 'Secret':
-            require(self.profile == 'iceberg-write', 'SECRET_SCOPE_CONFLICT')
+            require(self.profile in REMOTE_PROFILES, 'SECRET_SCOPE_CONFLICT')
             validate_secret(safe_resource(obj), self.token)
         return value
 
@@ -531,8 +539,8 @@ class Experiment:
             try:
                 value = self.safe(action())
                 save(self.output / name, value)
-                if name == 'driver-log.json' and self.profile == 'iceberg-write':
-                    diagnostic = remote_contract().parse_output(value['text'], self.token, self.inputs,
+                if name == 'driver-log.json' and self.profile in REMOTE_PROFILES:
+                    diagnostic = remote_contract(self.profile).parse_output(value['text'], self.token, self.inputs,
                         executor_pod_name=C.executor_name(self.token))
                     require(diagnostic['result'] == 'failed', 'DIAGNOSTIC_OUTPUT_NOT_FAILED')
                     self.receipt['diagnostic_output'] = diagnostic
@@ -549,7 +557,7 @@ class Experiment:
                 self.plan = C.render(self.token, self.mode, api_endpoints=self.receipt['preflight']['api_endpoints'])
             else:
                 require(self.receipt['preflight']['image']['image'] == self.inputs['image'], 'REMOTE_IMAGE_CHANGED')
-                self.plan = remote_contract().render(self.token, self.mode,
+                self.plan = remote_contract(self.profile).render(self.token, self.mode,
                     api_endpoints=self.receipt['preflight']['api_endpoints'], inputs=self.inputs)
             self.receipt['plan_sha256'] = C.plan_sha256(self.plan)
             save(self.output / 'plan.json', self.plan); self.persist()
@@ -600,7 +608,7 @@ class Experiment:
             logs = self.safe(self.kube.logs())
             save(self.output / 'driver-log.json', {'text': logs})
             output = C.parse_output(logs, self.token, self.mode, executor_pod_name=executor['name']) if self.profile == 'native' else \
-                remote_contract().parse_output(logs, self.token, self.inputs, executor_pod_name=executor['name'])
+                remote_contract(self.profile).parse_output(logs, self.token, self.inputs, executor_pod_name=executor['name'])
             require(self.profile == 'native' or output['result'] == 'passed', 'REMOTE_JOB_NOT_PASSED')
             self.receipt['output'] = output
             self.receipt['driver_exit_code'] = terminal['exitCode']

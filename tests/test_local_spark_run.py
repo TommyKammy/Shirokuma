@@ -149,14 +149,17 @@ class FakeKube:
 class RemoteKube(FakeKube):
     redactor = staticmethod(redact)
 
-    def __init__(self):
+    def __init__(self, *, profile='iceberg-write', inputs=None, output=None):
         super().__init__()
-        self.log = 'AWS_SENTINEL JWT_SENTINEL\n'+RC.RESULT_PREFIX+json.dumps(remote_result())
+        self.remote = R.remote_contract(profile)
+        self.inputs = remote_inputs() if inputs is None else inputs
+        self.log = 'AWS_SENTINEL JWT_SENTINEL\n'+self.remote.RESULT_PREFIX+json.dumps(
+            remote_result() if output is None else output)
         self.remote_mutate = None
 
     def preflight(self):
         value = super().preflight()
-        value['image'] = {'image': RC.IMAGE, 'image_id': RC.IMAGE.split('@')[1]}
+        value['image'] = {'image': self.inputs['image'], 'image_id': self.inputs['image'].split('@')[1]}
         return value
 
     def create(self, obj):
@@ -173,9 +176,9 @@ class RemoteKube(FakeKube):
         for pod in values:
             role = pod['metadata']['labels']['shirokuma.io/role']
             if role == 'executor':
-                pod['spec'] = RC.expected_pod_spec(TOKEN, role, remote_inputs())
+                pod['spec'] = self.remote.expected_pod_spec(TOKEN, role, self.inputs)
                 pod['spec'].update(nodeName=R.CONTEXT, hostname=C.executor_name(TOKEN))
-            pod['status']['containerStatuses'][0]['imageID'] = 'docker://'+RC.IMAGE.split('@')[1]
+            pod['status']['containerStatuses'][0]['imageID'] = 'docker://'+self.inputs['image'].split('@')[1]
             if self.remote_mutate:
                 self.remote_mutate(pod)
             self.objects[('Pod', pod['metadata']['name'])] = deepcopy(pod)
@@ -474,6 +477,15 @@ class RemoteRunnerTests(unittest.TestCase):
             if path.is_file():
                 with self.subTest(path=path.name):
                     self.assertNotIn('SENTINEL', path.read_text())
+
+    def test_fixed_profile_dispatch_rejects_import_paths_and_benchmark_failure_mode(self):
+        self.assertIs(R.remote_contract(), RC)
+        self.assertIs(R.remote_contract('iceberg-write'), RC)
+        for profile in ('os', 'tools.local_experiment.spark_benchmark.contract', '', None, True):
+            with self.subTest(profile=profile), self.assertRaisesRegex(R.ExperimentError, 'PROFILE_INVALID'):
+                R.remote_contract(profile)
+        with self.assertRaisesRegex(R.ExperimentError, 'REMOTE_MODE_INVALID'):
+            R.validate_profile('iceberg-benchmark', {}, 'failure')
 
     def test_remote_pass_uses_shared_lifecycle_without_saving_raw_secret_or_log(self):
         kube = RemoteKube(); exp = self.experiment(kube)
@@ -785,6 +797,82 @@ class BoundaryTests(unittest.TestCase):
         self.assertIn('--raw=/api/v1/namespaces/'+C.namespace(TOKEN), args[0])
         self.assertEqual(json.loads(kwargs['body'])['preconditions'],
                          {'uid': obj['metadata']['uid'], 'resourceVersion': '10'})
+
+
+
+class BenchmarkRunnerTests(unittest.TestCase):
+    setUp = RunnerTests.setUp
+    tearDown = RunnerTests.tearDown
+    assert_no_secrets_saved = RemoteRunnerTests.assert_no_secrets_saved
+
+    def fixture(self):
+        from test_local_spark_benchmark_contract import inputs, output
+        return inputs(), output()
+
+    def experiment(self, kube=None):
+        inputs, output = self.fixture(); clock = Clock()
+        kube = kube or RemoteKube(profile='iceberg-benchmark', inputs=inputs, output=output)
+        return R.Experiment(TOKEN, 'success', self.output, kube, profile='iceberg-benchmark',
+                            profile_inputs=inputs, clock=clock.now, sleep=clock.sleep)
+
+    def test_benchmark_lifecycle_accepts_measurements_without_write_output_fields(self):
+        exp = self.experiment(); receipt = exp.run()
+        self.assertEqual(receipt['result'], 'passed')
+        self.assertEqual(receipt['profile'], 'iceberg-benchmark')
+        self.assertEqual(len(receipt['output']['measurements']), 8)
+        self.assertNotIn('row_count', receipt['output'])
+        self.assertNotIn('table_identity', receipt['output'])
+        self.assertEqual(receipt['output']['sealed_before'], receipt['output']['sealed_after'])
+        self.assertEqual(len(exp.plan), 16)
+        self.assertEqual(len(receipt['known']), 17)
+        self.assertEqual(len(exp.kube.deleted), 17)
+        self.assertFalse(exp.kube.objects)
+        for name in ('spark_benchmark/contract.py', 'spark_benchmark/workload.py',
+                     'spark_iceberg/remote_contract.py', 'spark_iceberg/build.py'):
+            self.assertIn('tools/local_experiment/'+name, receipt['source_hashes'])
+        R.validate_saved(exp.plan, receipt)
+        self.assert_no_secrets_saved()
+
+    def test_benchmark_mutated_seal_rejected_before_create(self):
+        inputs, output = self.fixture()
+        inputs['sealed']['identity']['snapshot_id'] += 1
+        kube = RemoteKube(profile='iceberg-benchmark', inputs=inputs, output=output)
+        with self.assertRaisesRegex(C.ContractError, 'BENCH_IDENTITY_INVALID'):
+            R.Experiment(TOKEN, 'success', self.output, kube,
+                profile='iceberg-benchmark', profile_inputs=inputs)
+        self.assertFalse(kube.created)
+        self.assertFalse(list(self.output.iterdir()))
+
+    def test_benchmark_result_seal_drift_fails_and_owned_resources_are_cleaned(self):
+        inputs, output = self.fixture()
+        output['sealed_after']['identity']['snapshot_id'] += 1
+        kube = RemoteKube(profile='iceberg-benchmark', inputs=inputs, output=output)
+        exp = self.experiment(kube)
+        with self.assertRaisesRegex(C.ContractError, 'BENCH_OUTPUT_INVALID'):
+            exp.run()
+        self.assertEqual(exp.receipt['result'], 'failed')
+        self.assertEqual(exp.receipt['failure_code'], 'BENCH_OUTPUT_INVALID')
+        self.assertNotIn('workload_verified', exp.receipt)
+        self.assertTrue(exp.receipt['cleanup']['verified'])
+        self.assertFalse(kube.objects)
+        self.assert_no_secrets_saved()
+
+    def test_benchmark_recovery_needs_no_secret_callback_or_current_render(self):
+        exp = self.experiment(); exp.run()
+        original = (self.output/'summary.json').read_bytes()
+        exp.kube.redactor = None
+        module = R.remote_contract('iceberg-benchmark')
+        with patch.object(R, 'STATE', self.root), patch.object(module, 'render', side_effect=AssertionError('NO_RENDER')):
+            recovered = R.recover(TOKEN, exp.kube)
+        self.assertTrue(recovered['cleanup']['verified'])
+        self.assertEqual((self.output/'summary.json').read_bytes(), original)
+        self.assert_no_secrets_saved()
+
+    def test_benchmark_receipt_cannot_change_profile_to_write(self):
+        exp = self.experiment(); exp.run()
+        receipt = deepcopy(exp.receipt); receipt['profile'] = 'iceberg-write'
+        with self.assertRaises(C.ContractError):
+            R.validate_saved(exp.plan, receipt)
 
 
 if __name__ == '__main__':

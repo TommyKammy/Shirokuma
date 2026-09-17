@@ -145,6 +145,11 @@ Superset is available at [the local dashboard](http://127.0.0.1:18088/superset/d
 and OpenMetadata at [the local catalog](http://127.0.0.1:18585).
 Generated credentials stay in private ignored state; see the component runbooks
 linked from [the local runner guide](docs/LOCAL_EXPERIMENT_RUNNER.md).
+The [Spark/Trino snapshot measurements](tools/local_experiment/spark_benchmark/README.md)
+compare fixed decimal aggregates against an independent oracle on one disposable
+Iceberg snapshot. Run `rtk make local-spark-benchmark` with the verified Spark
+classpath build token. First-observed and repeated timings retain their cache,
+resource and startup boundaries; they do not imply a general engine ranking.
 
 ## Design context
 

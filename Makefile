@@ -744,3 +744,12 @@ test-local-spark-iceberg:
 .PHONY: local-spark-iceberg-remote
 local-spark-iceberg-remote:
 	@$(PYTHON) tools/local_experiment/spark_iceberg/remote_run.py --build-token "$(SPARK_ICEBERG_BUILD_TOKEN)"
+
+.PHONY: local-spark-benchmark test-local-spark-benchmark
+local-spark-benchmark:
+	@$(PYTHON) tools/local_experiment/spark_benchmark/run.py --build-token "$(SPARK_ICEBERG_BUILD_TOKEN)"
+
+test-local-spark-benchmark:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_spark_benchmark_*.py'
+
+# test-local-spark already discovers test_local_spark_benchmark_*.py.

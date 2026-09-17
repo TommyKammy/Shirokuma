@@ -129,6 +129,58 @@ class AccessTests(unittest.TestCase):
     def prepare(self):
         return self.access.prepare(TABLE, A.discover_services(self.kube))
 
+    def read_only_access(self):
+        self.access = A.RemoteAccess(TOKEN, self.output, admin=self.admin, kube=self.kube,
+            table_guard=lambda: None, read_only=True,
+            secret_reader=lambda: {'access_key': ACCESS, 'secret_key': S3SECRET})
+        return self.access
+
+    def test_read_only_exact_grants_token_and_owned_cleanup(self):
+        access = self.read_only_access()
+        self.prepare()
+        expected = [A.grant(TOKEN, privilege) for privilege in A.READ_ONLY_PRIVILEGES]
+        self.assertEqual(self.admin.grants, expected)
+        issued = [body['grant'] for method, path, body in self.admin.calls
+                  if method == 'PUT' and path == self.admin.p['grants']]
+        self.assertEqual(issued, expected)
+        self.assertEqual(access.receipt()['polaris_access'], 'read-only')
+        self.assertIn('static-bucket-s3-credentials', access.receipt()['limits'])
+        self.assertEqual(set(access.secret_provider()), {'aws-credentials', 'polaris-token'})
+        self.assertEqual(self.admin.issue_count, 1)
+        self.assertTrue(access.cleanup()['verified'])
+        self.assertFalse(self.admin.entities)
+        self.assertEqual(len(self.kube.deletes), 2)
+
+    def test_read_only_rejects_live_write_grant_before_token_then_removes_own_roles(self):
+        access = self.read_only_access()
+        self.prepare()
+        self.admin.grants.append(A.grant(TOKEN, 'TABLE_WRITE_PROPERTIES'))
+        with self.assertRaisesRegex(A.AccessError, 'GRANTS_MISMATCH'):
+            access.secret_provider()
+        self.assertEqual(self.admin.issue_count, 0)
+        self.assertTrue(access.cleanup()['verified'])
+        self.assertFalse(self.admin.entities)
+
+    def test_read_only_saved_write_or_partial_grants_cannot_issue_token(self):
+        access = self.read_only_access()
+        self.prepare()
+        for grants in (list(A.PRIVILEGES), ['TABLE_LIST'], ['TABLE_READ_PROPERTIES', 'TABLE_LIST']):
+            with self.subTest(grants=grants):
+                access.journal['grants'] = grants
+                before = len(self.admin.calls)
+                with self.assertRaisesRegex(A.AccessError, 'GRANTS_SCOPE_INVALID'):
+                    access.secret_provider()
+                self.assertEqual(len(self.admin.calls), before)
+                self.assertEqual(self.admin.issue_count, 0)
+
+    def test_read_only_mode_requires_boolean_before_any_request_or_file(self):
+        for value in (None, 0, 1, 'true', [], {}):
+            with self.subTest(value=value), self.assertRaisesRegex(A.AccessError, 'READ_ONLY_MODE_INVALID'):
+                A.RemoteAccess(TOKEN, self.output, admin=self.admin, kube=self.kube,
+                    table_guard=lambda: None, read_only=value)
+        self.assertFalse(self.admin.calls)
+        self.assertFalse(list(self.output.iterdir()))
+
     def test_complete_scope_secret_and_cleanup(self):
         safe = self.prepare()
         self.assertEqual(safe['scope'], 'PRINCIPAL_ROLE:spark_' + TOKEN)

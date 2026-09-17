@@ -39,6 +39,7 @@ POLARIS_URI = 'http://polaris.shirokuma-dev.svc.cluster.local:8181/api/catalog'
 S3_ENDPOINT = 'http://seaweedfs-s3.shirokuma-storage.svc.cluster.local:8333'
 S3_REGION = 'us-east-1'
 PRIVILEGES = ('TABLE_LIST', 'TABLE_READ_PROPERTIES', 'TABLE_WRITE_PROPERTIES')
+READ_ONLY_PRIVILEGES = ('TABLE_LIST', 'TABLE_READ_PROPERTIES')
 MAX_RESPONSE = 2 * 1024**2
 SERVICES = (
     ('shirokuma-dev', 'polaris', 'polaris', 'catalog-server', 8181, 'http'),
@@ -321,14 +322,18 @@ def read_s3_credentials():
 
 
 class RemoteAccess:
-    def __init__(self, run_token, output, *, admin, kube, table_guard, secret_reader=read_s3_credentials):
+    def __init__(self, run_token, output, *, admin, kube, table_guard, secret_reader=read_s3_credentials,
+                 read_only=False):
+        require(type(read_only) is bool, 'READ_ONLY_MODE_INVALID')
         self.token, self.output = token(run_token), Path(output)
+        self.privileges = READ_ONLY_PRIVILEGES if read_only else PRIVILEGES
         self.admin, self.kube, self.table_guard, self.secret_reader = admin, kube, table_guard, secret_reader
         self.p, self.name = paths(run_token), 'spark_' + run_token
         self._credentials, self._material, self._secrets = None, None, set()
         self._identifiers = set()
         self.services, self.table = None, None
         self.journal = {'schema_version': 1, 'run_token': run_token, 'result': 'new', 'pending': None,
+            'polaris_access': 'read-only' if read_only else 'read-write',
             'entities': {}, 'policies': {}, 'bindings': [], 'grants': [], 'events': [],
             'token': {'issued': False, 'expires_in': None, 'scope': 'PRINCIPAL_ROLE:' + self.name},
             'cleanup': {'verified': False, 'removed': [], 'deferred': []},
@@ -437,7 +442,7 @@ class RemoteAccess:
                 self._secrets.add(client_secret)
             self._verify_entities()
             self._confirmed()
-        for privilege in PRIVILEGES:
+        for privilege in self.privileges:
             self._verify_entities()
             self._mutate('grant-table', privilege, lambda: self.admin.request('PUT', self.p['grants'],
                                                                            {'grant': grant(self.token, privilege)}))
@@ -467,8 +472,11 @@ class RemoteAccess:
                                 for x in self.services], **table}
 
     def _verify_grants(self):
+        privileges = self.journal['grants']
+        require(type(privileges) is list and privileges == list(self.privileges[:len(privileges)]),
+                'GRANTS_SCOPE_INVALID')
         rows = self.admin.request('GET', self.p['grants']).get('grants')
-        expected = [grant(self.token, p) for p in self.journal['grants']]
+        expected = [grant(self.token, p) for p in privileges]
         require(type(rows) is list and len(rows) == len(expected)
                 and sorted(rows, key=C.canonical) == sorted(expected, key=C.canonical), 'GRANTS_MISMATCH')
 
@@ -493,6 +501,7 @@ class RemoteAccess:
 
     def secret_provider(self):
         require(self.journal['result'] == 'prepared' and self.journal['pending'] is None, 'ACCESS_NOT_PREPARED')
+        require(self.journal['grants'] == list(self.privileges), 'GRANTS_SCOPE_INVALID')
         self._guard(); self._verify_entities(); self._verify_grants()
         for target in self.journal['bindings']:
             self._verify_binding(target)
