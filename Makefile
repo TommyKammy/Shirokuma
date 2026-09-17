@@ -585,3 +585,16 @@ local-query-history-import:
 test-local-query-history:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_query_history.py'
 verify-local-experiment: test-local-query-history
+
+.PHONY: local-trino-opa-build local-trino-opa-plan local-trino-opa-run local-trino-opa-recover test-local-trino-opa
+local-trino-opa-build:
+	@$(PYTHON) tools/local_experiment/trino_opa/build.py --trino-archive "$(TRINO_ARCHIVE)"
+local-trino-opa-plan:
+	@$(PYTHON) tools/local_experiment/trino_opa/run.py plan --build-token "$(TRINO_OPA_BUILD_TOKEN)"
+local-trino-opa-run:
+	@$(PYTHON) tools/local_experiment/trino_opa/run.py run --build-token "$(TRINO_OPA_BUILD_TOKEN)"
+local-trino-opa-recover:
+	@$(PYTHON) tools/local_experiment/trino_opa/run.py recover --run-token "$(TRINO_OPA_RUN_TOKEN)"
+test-local-trino-opa:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_trino_opa.py'
+verify-local-experiment: test-local-trino-opa

@@ -89,6 +89,10 @@ The [Query Doctor Bear](tools/local_experiment/bears/QUERY_DOCTOR.md) selects bo
 read-only follow-ups from verified Trino plan and query-history observations.
 The [Policy Gatekeeper Bear](tools/local_experiment/bears/POLICY_GATEKEEPER.md)
 classifies fixed policy candidates and verifies native admission through server dry-runs.
+The [isolated Trino/OPA experiment](tools/local_experiment/trino_opa/README.md)
+checks row filters, column masks, denials and an unavailable policy backend on
+disposable TPCH-only Pods. Its synthetic user headers demonstrate authorization
+behavior; authenticated identity is a separate next increment.
 The [evaluation report](tools/local_experiment/evaluation/README.md) checks all
 retained suite receipts and keeps failures, missing evidence and case differences visible.
 The [AgentHouse dashboard](tools/local_experiment/grafana/README.md) provides

@@ -5,23 +5,40 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "2.7"
+version: "2.8"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：保存したbenchmark/Query Doctor履歴のread-only Grafana画面を追加。
-5panelのAPI/DB照合が全件一致し、失敗run・未知値・補助読取を区別して実表示した。
-5tablesと元145files・credentials・両runtimeを保全。全回帰609 tests、設計76documentsを検証。
-次は隔離TrinoのOPA行制限/列マスクを実機確認する。Cloudは無効のまま。
+最新の到達点（2026-09-17）：隔離Trino/OPAの行制限・列マスク・拒否・policy不達を8caseで検証。
+59decisionsを限定相関し、3実機試行で作成した15resourcesは残留0、既存6Pods/27resources/6CM不変。
+全回帰632 tests・native OPA policy8 tests・設計76documentsが成功。認証は未達として明示する。
+次はKeycloak発行tokenとTrino identity bindingの隔離実験を進める。Cloudは無効のまま。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: isolated Trino OPA authorization
+
+[WP-L3-SEC-001](L3/WP-L3-SEC-001_Keycloak_OPA_native_RBAC_integration.md)の使い捨てTPCH-only Podで
+全25行・行制限1行・列mask25行・複合1行・user/column拒否0行・header偽装の限界・OPA不達0行を確認。
+成功run`02986c45d05247d0918cd7cae440f380`。正常decision59件はquery ID+user52件、
+query IDなしExecuteQueryの限定照合7件として保存。認証済みidentityとは主張しない。
+起動完了とHTTP200の差、Java例外名のJSON表記差を検出・修正し、先行failed2runも保持。
+別PodのOPA不達は固定QueryFailed＋ConnectExceptionを要求し、一般errorを合格にしない。
+個別readiness応答は保存しておらず、query前後の必須チェックを通ったコード経路として記録。
+
+既知UID/resourceVersionだけを削除し、未知createはdeferred。保存manifestを独立検証する復旧は
+現行renderer/config/Rego/PINS変更に依存しない。初回failedrunのrecoverは削除0で成功。
+独立検証で3run合計15生成UID残留0、既存6Pods/27resources/6CMが完全一致。
+全回帰632 tests、native OPA policy8 tests、設計76documents。保持Trino/Lakehouseへの接続なし。
+証跡`trino-opa-preflight/d14316b781e74ec0ab18804df9ac8739`。
+本WPはlocal-partialで、次はKeycloak tokenとTrinoのidentity bindingを確認する。
 
 ## 2026-09-17: retained history read-only UI
 

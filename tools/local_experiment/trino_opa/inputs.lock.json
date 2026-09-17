@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "trino": {
+    "version": "483",
+    "archive_sha256": "4f3978428f26f36398c94b85a3e03b5301394919c8a4271b497b0fcd1698d0cb",
+    "archive_bytes": 851844304,
+    "plugins": ["opa", "tpch"],
+    "base_image": "docker.io/library/maven@sha256:7e461cec477077c1d9e50b13df8aef9018764410f4c4cd7c34803f10c4c99e4c",
+    "source": "https://github.com/trinodb/trino/tree/483/plugin/trino-opa"
+  },
+  "opa": {
+    "version": "1.20.2",
+    "url": "https://github.com/open-policy-agent/opa/releases/download/v1.20.2/opa_linux_arm64_static",
+    "sha256": "431bed5a365578241ab06c7cc1c7d0cdff8c11dcbc6f12c3488590deb8b8d66d",
+    "bytes": 59740800,
+    "release": "https://github.com/open-policy-agent/opa/releases/tag/v1.20.2"
+  }
+}
