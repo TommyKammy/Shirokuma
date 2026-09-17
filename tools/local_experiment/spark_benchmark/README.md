@@ -117,3 +117,13 @@ acceptance. Unknown outcomes remain in their original receipts for scoped
 inspection. The existing native recovery mechanism can inspect its saved exact
 profile; the complete benchmark orchestrator has no automatic recovery/retry
 command.
+
+## Track saved measurements
+
+`rtk make local-spark-benchmark-report` validates all saved benchmark evidence
+without starting Spark, Trino queries or model calls. The
+[MLflow importer](../mlflow/README.md#saved-sparktrino-benchmarks) retains four
+engine/case runs per source in its own experiment. Exact durations and snapshot
+identity stay in a fixed safe artifact; measurement scope, missing values and
+failed sources remain visible. This is saved-evidence tracking, not a fresh
+runtime or performance verification.

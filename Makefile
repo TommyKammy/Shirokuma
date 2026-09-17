@@ -753,3 +753,15 @@ test-local-spark-benchmark:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_spark_benchmark_*.py'
 
 # test-local-spark already discovers test_local_spark_benchmark_*.py.
+
+.PHONY: local-spark-benchmark-report local-mlflow-benchmark-plan local-mlflow-benchmark-import test-local-mlflow-benchmark
+local-spark-benchmark-report:
+	@$(PYTHON) tools/local_experiment/spark_benchmark/report.py
+local-mlflow-benchmark-plan:
+	@$(PYTHON) tools/local_experiment/mlflow/import_benchmarks.py --plan
+local-mlflow-benchmark-import:
+	@$(PYTHON) tools/local_experiment/mlflow/import_benchmarks.py
+test-local-mlflow-benchmark:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_spark_benchmark_report.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_mlflow_benchmark_import.py'
+verify-local-experiment: test-local-mlflow-benchmark

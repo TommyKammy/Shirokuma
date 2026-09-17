@@ -5,17 +5,17 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "3.14"
+version: "3.15"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：60万572行の同一Iceberg snapshotを使うSpark/Trino測定が成功。
-16観測すべてが独立Decimal oracleと一致し、一時資源・同UUID tableを回収した。
-1416件のlocal回帰（1415成功/既存1skip）と保持データ・runtime不変を確認。
-次は保存測定を既存MLflowの別experimentへ取り込む。
+最新の到達点（2026-09-17）：保存済みSpark/Trino測定をMLflowの専用experimentへ取り込み、
+4 runs/92 pointsを追加した。既存11評価は不変、再取込0件、再起動後保持も確認。
+全local回帰1464件（1463成功/既存1skip）が通過した。
+次はIceberg branchへの独立書込みとmain/tag不変を検証する。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
@@ -1182,3 +1182,54 @@ MLflow59tables/11artifacts、images553、Polaris6権限一覧の内容が不変�
 
 WPはlocal-partialを維持する。Comet/Gluten、複数規模/資源条件の評価は後続。
 次は保存済み16測定を既存MLflowの別experimentへ取り込み、観測範囲を保って検索・比較できるようにする。
+
+## 2026-09-17: saved Spark benchmark MLflow Tracking
+
+WP-L4-ML-001に保存測定のTrackingを追加した。source run
+`e727a68de2b64313bc3fa3dc98817dac` の16観測を再実行せず、
+専用experiment `shirokuma-local-spark-benchmark-v1`（ID2）へ4 runs・92 metric pointsとして取り込んだ。
+既存11評価runs/1118 pointsを保持し、全体は15 runs/1210 points/15 artifactsになった。
+モデル呼出し・新benchmark query・新AgentHouseイベントは0。
+
+取り込み前に所有するserverを停止し、排他lock下で全state22files/1,532,300bytesを保存。
+停止前後で59tablesのDDL/全logical rows・11 artifacts・旧index/store markerが一致した。
+backupは新規private directoryに保持し、source/copy/sourceのhash/mode/mtimeを照合、
+全file/directoryのfsync後に完了manifestを保存した。既存backupを上書きしていない。
+
+新reporterは固定receipt7filesの前後同一性と型付き相関を検証し、
+同UID Pod resource・snapshot・結果hash・cleanup/query drain・欠測をallowlistで射影する。
+失敗/中断はFAILEDのまま、running/不正/改変sourceは取り込み前に拒否する。
+snapshot `8013311425425878260` は文字列、durationはexact nsとして保持。
+Trino client時間は途中journal書込を含み、server時間/cpu/inputを別metricへ分離した。
+Spark startup/native全体は共通contextで、4個の独立metricとして加算していない。
+Trino observed version/resourceとSpark sample日時のunknownを維持し、import日時で補完しない。
+raw SQL/Pod/log/credentialは取り込まない。
+
+初回import journalは `benchmark-imports/8f7ec0bad7404ec4b58281ffb0826b7c/`、
+再importは `benchmark-imports/278165a319df40719bd5fdf903e308ea/`。
+SQLite変更はexperiment1/tag2、runs4、params120、tags44、metric92/latest38の追加のみ。
+旧全行・旧11 artifacts・旧index/store markerの不変を照合した。
+同一source再importはrun/metric追加0、59tables全行・全15 artifacts・新旧indexの
+hash/mode/mtimeが不変。新操作journalだけが残る。
+
+同store UUIDのserverをloopback18550へ再起動し、healthyを確認。
+再起動後もDB/全artifacts/indexが不変で、標準UIが使用するAPIから既存評価11件と
+新測定4件をreadbackした。新画面は `http://127.0.0.1:18550/#/experiments/2/runs?workflowType=machine_learning`。
+専用HOME/TMP/PATH・telemetry/job無効の既存runtime境界を維持する。
+
+report25/importer23の48focused tests、全local回帰46suites/1464件
+（1463成功＋既存optional OTel1skip）が成功した。
+証跡・全state backupは `tmp/local-experiment/mlflow-benchmark-checks/9331444153084c8a969690d8ec26fece/`。
+先行benchmarkの独立最終監査も123 checksが成功し、16測定・19UID回収・保持3044files等を照合した。
+その全行hashは保存されたsource/snapshotの2 complete streamsを継承し、追加全行queryは行っていない。
+
+到達点は保存証跡に基づくlocal Trackingである。Notebook/autolog・Registry/Serving、
+export復元/移行、一般的な性能比較、本番/人間受入の完了は主張しない。
+次は既存Spark imageを使い、Iceberg branchへの独立書込みとmain/tag不変を検証する。
+
+独立after監査 `independent-after-verification-final.json` は121 checks成功。
+保存sourceから92points/latest38を独立再計算し、旧全行・DDL・旧11artifacts・index保持、
+再取込とfresh再起動後の全store不変を照合した。監査の初回artifact hash不一致12項目は
+serializerの末尾LF欠落によるもので、元結果を保持して契約どおり修正した。
+semantic JSONに不一致はなく、製品code/runtimeの修正は不要だった。
+設計83documents/関連14tests、secret filenames・diff検査も通過し、repo/Vaultの更新2ノートは一致した。

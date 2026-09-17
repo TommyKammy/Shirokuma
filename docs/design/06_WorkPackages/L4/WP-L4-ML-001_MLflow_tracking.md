@@ -5,7 +5,7 @@ title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.3"
+version: "0.4"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -14,8 +14,8 @@ tags: [shirokuma, workpackage, l4, ml]
 
 ## Summary
 
-MLflowで実験とAgent evalを記録する。ADR-0034のlocal実験では、保存済み評価receiptを
-専用SQLite/loopback標準UIへ取り込むTracking部分から進める。Spark/JupyterHub連携は未達。
+MLflowで実験とAgent evalを記録する。ADR-0034のlocal実験では、保存済み評価receiptと
+Spark/Trino測定を専用SQLite/loopback標準UIへ取り込む。Notebook連携は未達。
 
 ## Context
 
@@ -150,3 +150,80 @@ Trackingのlocal-partialであり、Spark/JupyterHub依存全体、Registry/Serv
 複数writer、export復元、本番・人間受入の完了は主張しない。
 次の独立候補はSpark 4.1.3の最小native実験。必要なKubernetes 1.32以上は現k3s 1.33.4で満たすが、
 この節目では純粋contractの準備だけで、Spark image pull・runtime実行はまだ行っていない。
+
+## 2026-09-17: saved Spark benchmark Tracking
+
+WP-L4-BENCH-001の保存済み成功/失敗receiptを新規推論やquery実行なしで読み取り、
+別experiment `shirokuma-local-spark-benchmark-v1`へ取り込む。
+1 sourceをengine（Spark/Trino）×case（q1_sums/q6）の4 runsに分け、
+各sampleの順序、exact結果hash、文字列snapshot ID、測定条件と欠測数を保持する。
+元11評価runsのexperiment/index/artifactsは独立して保持する。
+
+読取処理は固定receipt bundleの所有者・権限・symlink・前後hashと型を検証する。
+outer/native/access/tunnel、同UID Pod、snapshot/file seal、queryと結果を相関し、
+allowlist JSONだけを出力する。不正・稼働中・source変更はimport前に拒否し、
+validな失敗/中断sourceはpartial観測のままFAILEDとして扱う。
+
+`client_observed_ms`は両engineのclient境界であり、TrinoはHTTP/JSON処理と途中の
+durable journal書込を含む。Sparkはsql→collectで、Trinoのserver時間/CPU/inputは
+`trino_server_*`へ分ける。Trino先行・共有cache・異なるresource条件のため性能順位を主張しない。
+SparkSession startup/native全体時間はsource共通contextとexact ns artifactに保持し、
+4回の独立観測として加算しない。過去のTrino version/resourceはunknown、期待versionは別項目。
+MLflow日時はimport時刻。保存済みTrino query開始時刻は別context、Spark sample日時はunknown。
+
+既存停止/排他lock/専用workerを再利用し、取り込み前に全stateをprivate保存する。
+既知runの部分書込だけreadbackで補い、create応答不明は採用も再作成もしない。
+同一sourceの再取込はrun/metric/artifact/indexを変えず、操作journalだけを新規に残す。
+raw SQL/log/Pod/credentialはMLflowに複製しない。
+Notebook/autolog・Registry/Serving・復元/移行・本番受入は本増分の対象外。
+
+## 2026-09-17: saved Spark benchmark MLflow Tracking
+
+WP-L4-ML-001に保存測定のTrackingを追加した。source run
+`e727a68de2b64313bc3fa3dc98817dac` の16観測を再実行せず、
+専用experiment `shirokuma-local-spark-benchmark-v1`（ID2）へ4 runs・92 metric pointsとして取り込んだ。
+既存11評価runs/1118 pointsを保持し、全体は15 runs/1210 points/15 artifactsになった。
+モデル呼出し・新benchmark query・新AgentHouseイベントは0。
+
+取り込み前に所有するserverを停止し、排他lock下で全state22files/1,532,300bytesを保存。
+停止前後で59tablesのDDL/全logical rows・11 artifacts・旧index/store markerが一致した。
+backupは新規private directoryに保持し、source/copy/sourceのhash/mode/mtimeを照合、
+全file/directoryのfsync後に完了manifestを保存した。既存backupを上書きしていない。
+
+新reporterは固定receipt7filesの前後同一性と型付き相関を検証し、
+同UID Pod resource・snapshot・結果hash・cleanup/query drain・欠測をallowlistで射影する。
+失敗/中断はFAILEDのまま、running/不正/改変sourceは取り込み前に拒否する。
+snapshot `8013311425425878260` は文字列、durationはexact nsとして保持。
+Trino client時間は途中journal書込を含み、server時間/cpu/inputを別metricへ分離した。
+Spark startup/native全体は共通contextで、4個の独立metricとして加算していない。
+Trino observed version/resourceとSpark sample日時のunknownを維持し、import日時で補完しない。
+raw SQL/Pod/log/credentialは取り込まない。
+
+初回import journalは `benchmark-imports/8f7ec0bad7404ec4b58281ffb0826b7c/`、
+再importは `benchmark-imports/278165a319df40719bd5fdf903e308ea/`。
+SQLite変更はexperiment1/tag2、runs4、params120、tags44、metric92/latest38の追加のみ。
+旧全行・旧11 artifacts・旧index/store markerの不変を照合した。
+同一source再importはrun/metric追加0、59tables全行・全15 artifacts・新旧indexの
+hash/mode/mtimeが不変。新操作journalだけが残る。
+
+同store UUIDのserverをloopback18550へ再起動し、healthyを確認。
+再起動後もDB/全artifacts/indexが不変で、標準UIが使用するAPIから既存評価11件と
+新測定4件をreadbackした。新画面は `http://127.0.0.1:18550/#/experiments/2/runs?workflowType=machine_learning`。
+専用HOME/TMP/PATH・telemetry/job無効の既存runtime境界を維持する。
+
+report25/importer23の48focused tests、全local回帰46suites/1464件
+（1463成功＋既存optional OTel1skip）が成功した。
+証跡・全state backupは `tmp/local-experiment/mlflow-benchmark-checks/9331444153084c8a969690d8ec26fece/`。
+先行benchmarkの独立最終監査も123 checksが成功し、16測定・19UID回収・保持3044files等を照合した。
+その全行hashは保存されたsource/snapshotの2 complete streamsを継承し、追加全行queryは行っていない。
+
+到達点は保存証跡に基づくlocal Trackingである。Notebook/autolog・Registry/Serving、
+export復元/移行、一般的な性能比較、本番/人間受入の完了は主張しない。
+次は既存Spark imageを使い、Iceberg branchへの独立書込みとmain/tag不変を検証する。
+
+独立after監査 `independent-after-verification-final.json` は121 checks成功。
+保存sourceから92points/latest38を独立再計算し、旧全行・DDL・旧11artifacts・index保持、
+再取込とfresh再起動後の全store不変を照合した。監査の初回artifact hash不一致12項目は
+serializerの末尾LF欠落によるもので、元結果を保持して契約どおり修正した。
+semantic JSONに不一致はなく、製品code/runtimeの修正は不要だった。
+設計83documents/関連14tests、secret filenames・diff検査も通過し、repo/Vaultの更新2ノートは一致した。

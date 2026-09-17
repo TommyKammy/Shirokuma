@@ -1,8 +1,8 @@
-# Local MLflow evaluation tracking
+# Local MLflow evaluation and benchmark tracking
 
-WP-L4-ML-001 starts with saved Agent evaluation receipts. This is a dedicated
-single-user local Tracking service, not completion of the Spark/JupyterHub,
-training, registry, serving or production work packages.
+WP-L4-ML-001 tracks saved Agent evaluation and Spark/Trino benchmark receipts.
+This is a dedicated single-user local Tracking service. Notebook integration,
+training, registry, serving and production work packages remain separate.
 
 MLflow **3.16.1** and Python **3.12** run in their own pinned environment. The UI
 and API use **http://127.0.0.1:18550**. No launchd or global host settings change.
@@ -57,6 +57,52 @@ metrics. Use the run table to filter by suite/provider/case signature
 and compare known metrics within comparable groups. A successful Tracking
 import establishes saved-receipt integrity, not general model quality, current
 audit-service availability or production acceptance.
+
+## Saved Spark/Trino benchmarks
+
+```sh
+rtk make local-spark-benchmark-report
+rtk make local-mlflow-benchmark-plan
+# Retain a complete private state export while stopped, before adding sources.
+rtk make local-mlflow-stop
+rtk make local-mlflow-benchmark-import
+rtk make local-mlflow-start
+rtk make test-local-mlflow-benchmark
+```
+
+The report and plan read saved files only. Import creates the fixed experiment
+`shirokuma-local-spark-benchmark-v1`, with four runs per source: Spark and Trino
+each have `q1_sums` and `q6`. It does not rerun the benchmark or call an LLM.
+The existing evaluation experiment and `import-index.json` retain their original
+meaning. Benchmark identities use `benchmark-import-index.json`, journals use
+`benchmark-imports/`, and safe artifacts use `store/artifacts/spark-benchmarks/`.
+
+The reporter validates the terminal orchestration and native receipts, saved
+Pod identity, source hashes, snapshot/file seal and exact result evidence.
+Every discovered source contributes to inventory coverage. Invalid or running
+sources block import; a valid failed or interrupted terminal source remains
+failed, with missing observations explicitly counted. Import does not promote
+partial evidence into a passed measurement. Changed sources and ambiguous
+creates are visible errors. Reimport of identical completed sources is a no-op;
+an identified partial write is read back before filling only missing fields.
+
+`client_observed_ms` uses source sample indices 0–3. First-observed and repeat
+median metrics stay separate; the first observation is not a cold-cache claim.
+Trino `trino_server_*` counters retain their server boundary. The Trino client
+clock includes response processing and intermediate durable journal writes;
+Spark measures SQL submission through `collect`. Source preparation, shared
+cache warming, Trino-first execution and different resources limit comparison.
+See the [benchmark timing contract](../spark_benchmark/README.md#what-timing-means).
+
+The fixed JSON artifact preserves integer nanoseconds and string snapshot IDs,
+the shared Spark startup/native workflow context, observed versions/resources,
+result hashes and coverage. Startup is source context, not four independent
+measurements. Unknown Trino version/resources and absent server counters remain
+unknown; expected versions are separate. MLflow metric timestamps describe
+import activity. Saved Trino query start times remain historical context;
+Spark per-sample timestamps remain unknown. Source logs,
+SQL, Pod documents, credentials and unrestricted receipt fields are not copied.
+Numeric metrics omit unknowns and counters above the exact double range.
 
 ## Runtime and storage boundaries
 
