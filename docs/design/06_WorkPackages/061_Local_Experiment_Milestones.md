@@ -5,22 +5,71 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "3.10"
+version: "3.11"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：既存ARM64 k3sでSpark4.1.3のnative driver/executor集計が成功。
-正常exit0と集計後の意図的exit17を区別し、各17UIDを回収。初回失敗も復旧証拠とともに保持した。
-1129件の回帰（1128成功/既存1skip）を確認。次は既存tableに触れないSpark–Icebergのclasspath試験へ進む。
+最新の到達点（2026-09-17）：Spark4.1.3＋Iceberg1.11.0の隔離読み書きが成功。
+32行を新sessionのDataFrame/SQLで再読込し、集計・UUID/snapshot・同table削除を確認した。
+1196件の回帰（1195成功/既存1skip）を確認。次は新規tableだけのSpark→Trino照合の接続準備へ進む。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: isolated Spark–Iceberg classpath and read/write gate
+
+Spark4.1.3＋Iceberg1.11.0/Scala2.13の隔離gateが成功。
+Maven Centralの固定JAR2本111572756 Bを公開SHA512/SHA256・全ZIP CRCで検証し、
+PGP signatureは保存のみ/未検証として区別した。prepare成功`99e250c5978244b3ab00105aba975f4b`。
+公式JARのLICENSE/NOTICE重複を初回に厳密拒否した失敗を保持し、既知legal entriesだけを
+occurrence/CRC付きで許容、code重複は拒否する。準備証跡は124023450 B。
+
+公式Spark baseの11layersを保持し、JAR2本＋固定scriptだけを1COPY layer追加。
+network-none/no-pull build `b8bea1b087b44b4eb53e1351f156e9cf` のimageは
+`shirokuma.local/spark-iceberg-classpath@sha256:b7632ecd9a1b619a2836f6de23a27e0a7d13ade09d614fcfe1cc4e23401c8b43`。
+Docker報告894722788 B、reuse `9f72a0b92f6c47bc96bd8aaff7d00018` は同一imageでbuild0。
+input/source/context前後hashと固定tagを検証し、既存tagを上書きしない。
+
+初回run `2008311aa12e49308e83e09cf91d25b2` はWRITE_FAILED/exit1。
+Docker tmpfs既定noexecでARM64 Zstd JNIをmmapできず、誤って一般的なARM64非対応とは判断しなかった。
+同UUIDの新tableと既知containerを回収し、failed receipt/logを保持した。
+使い捨て/tmpだけexecを明示し（512MiB）、work-dir64MiBはnoexec、network noneのまま
+hostnameをlocalhostに固定。root filesystem/UID185/1CPU2Gi/256PIDs/host mount0を維持した。
+
+同image再実行 `61c875252b61416d8e3fb3237cfb0eee` はexit0・7checksすべて成功。
+32固定行を新HadoopCatalog tableへ書き、新sessionのDataFrame/SQL全行と集計を独立oracle照合。
+groupsは`[[0,8,840],[1,8,896],[2,8,952],[3,8,1008]]`。
+table UUID `ee09c58d-0fb7-417d-8c95-78a3fdb65b50`、snapshot `8088807033386546123` を
+Pythonの整数でmetadata v2へ照合し、同UUIDをDROPした。64bit IDをJavaScript Number経由で保存しない。
+container `ee15ada82dfc7d57613b4275d4a17ffe4acf1f35a73f63cf71220812688da536` は回収し、
+実recoverは追加create/start/remove0・原receipt保持。成功時ERROR/Exception log0。
+報告済みclasspath issue16856はこの固定構成/範囲では再現せず、他構成全体の解決とは主張しない。
+
+正式全回帰43 suites・1196件（1195成功＋従来optional OTel 1skip）。
+新67testsはcontract16/prepare20/build15/runner16、既存native65と同じtest-local-sparkへ含まれる。
+`spark-iceberg-checks/2e44ac11e1584fb9b7fa8880541b0e19/local-regression.log` / `regression-summary.json`へ保存した。
+read helperがbytesを返す境界とmacOS /var symlinkで落ちた初期offline logsも保持して修正・回帰追加済み。
+
+
+独立監査`tmp/local-experiment/spark-iceberg-preflight/ea0173dfc7cf45a7ba295d483e4d5bbe/verification.json`の56checksが成功。
+14Pod/保持27resources6CM3SecretUID、Docker3、AH428、履歴4tables5DDL、MLflow59tables/11artifacts、
+旧2609files/1033directoriesとnative Sparkの67files（初回29inputsも）が不変。両CIDのfresh不存在を確認した。
+fixture/metadataは先行sealed証拠継承で、このgateではfresh readしていない。
+image inventoryは547→553、旧547全保持。final1に加えclassic Docker buildのUSER＋4LABELの5中間imageがあり、
+各build Step ID/actualinspect/config変化とbase11layersを照合した。1追加を期待した最初の検査failedを残し、
+上記監査で6追加の由来を補足した。削除なし、全FS時点使用増259411968 B・残容量346592722944 B。
+新37inputfilesを封印し、設計82documents/関連14testsも成功した。
+
+これはlocal[1]/local filesystemのclasspath gateであり、Polaris/S3・分散Iceberg・Trino readbackではない。
+新推論/監査event0、Secretsなし。再現と回収は`tools/local_experiment/spark_iceberg/README.md`。
+次は新規tableだけのSpark write→Trino readbackへ進む。既存NPを編集せずrun専用の一時Ingress NPを
+追加する必要があり、資格情報を証跡へ保存しないscopeを具体化してから適用する。
 
 ## 2026-09-17: native Spark driver and executor
 

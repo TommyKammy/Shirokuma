@@ -721,3 +721,16 @@ local-spark-recover:
 test-local-spark:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_spark*.py'
 verify-local-experiment: test-local-spark
+
+.PHONY: local-spark-iceberg-prepare local-spark-iceberg-build local-spark-iceberg-run local-spark-iceberg-recover test-local-spark-iceberg
+local-spark-iceberg-prepare:
+	@$(PYTHON) tools/local_experiment/spark_iceberg/prepare.py
+local-spark-iceberg-build:
+	@$(PYTHON) tools/local_experiment/spark_iceberg/build.py --prepare-token "$(SPARK_ICEBERG_PREPARE_TOKEN)"
+local-spark-iceberg-run:
+	@$(PYTHON) tools/local_experiment/spark_iceberg/run.py run --build-token "$(SPARK_ICEBERG_BUILD_TOKEN)"
+local-spark-iceberg-recover:
+	@$(PYTHON) tools/local_experiment/spark_iceberg/run.py recover --run-token "$(SPARK_ICEBERG_RUN_TOKEN)"
+test-local-spark-iceberg:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_spark_iceberg*.py'
+# verify-local-experiment already includes these through test-local-spark.

@@ -5,7 +5,7 @@ title: "WP-L4-SPARK-001 Spark on Kubernetes"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.4"
+version: "0.5"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, compute]
 ---
@@ -147,3 +147,68 @@ fixture/metadataは先行sealed証拠継承で、今回のfresh SQL/API確認で
 benchmark、Iceberg/Polaris接続、JupyterHub/MLflow training、Comet、multi-node/HA、本番受入は未達。
 次はIceberg1.11.0/Spark4.1用JARの隔離classpath試験を進め、成功後に新規tableだけのSpark→Trino照合を検討する。
 この節目では次のJAR準備/純粋contractのみで、既存catalogへのSpark接続は未実施。
+
+## 2026-09-17 isolated Spark–Iceberg classpath plan
+
+既存Polaris/SeaweedFSへSparkを接続する前に、公式Iceberg1.11.0のSpark4.1/Scala2.13 runtimeとaws-bundleを
+固定hashで準備し、既存公式Spark4.1.3 imageへ追加したlocal imageを使う。既知classpath報告#16856は
+この組合せで実際に再現するかを検証し、成功を前提に保持catalogへ接続しない。
+
+- [x] JAR2本の公開SHA512/SHA256・サイズ・ZIP CRCを検証し、PGP未検証を区別する。
+- [x] network-none/no-pull buildと全input/context/image identityを検証し、既存imageを保持する。
+- [x] Docker network none、host mount0、UID185、1CPU2Gi、bounded tmpfsでlocal[1]を起動する。
+- [x] 新HadoopCatalog tableへ32行を書き、fresh DataFrame/SQL/集計を独立oracleで照合する。
+- [x] UUID/snapshot/metadataを照合し、同tableのDROPと既知container ID回収を確認する。
+- [x] 初回失敗も保持し、retained runtime/MLflow/AH/旧証跡不変を確認する。
+
+このgateはsingle-process local-filesystem試験であり、分散Iceberg・S3接続・Polaris認証・Trino readbackではない。
+class存在だけをAWS接続成功としない。詳細と復旧は`tools/local_experiment/spark_iceberg/README.md`。
+
+## 2026-09-17: isolated Spark–Iceberg classpath and read/write gate
+
+Spark4.1.3＋Iceberg1.11.0/Scala2.13の隔離gateが成功。
+Maven Centralの固定JAR2本111572756 Bを公開SHA512/SHA256・全ZIP CRCで検証し、
+PGP signatureは保存のみ/未検証として区別した。prepare成功`99e250c5978244b3ab00105aba975f4b`。
+公式JARのLICENSE/NOTICE重複を初回に厳密拒否した失敗を保持し、既知legal entriesだけを
+occurrence/CRC付きで許容、code重複は拒否する。準備証跡は124023450 B。
+
+公式Spark baseの11layersを保持し、JAR2本＋固定scriptだけを1COPY layer追加。
+network-none/no-pull build `b8bea1b087b44b4eb53e1351f156e9cf` のimageは
+`shirokuma.local/spark-iceberg-classpath@sha256:b7632ecd9a1b619a2836f6de23a27e0a7d13ade09d614fcfe1cc4e23401c8b43`。
+Docker報告894722788 B、reuse `9f72a0b92f6c47bc96bd8aaff7d00018` は同一imageでbuild0。
+input/source/context前後hashと固定tagを検証し、既存tagを上書きしない。
+
+初回run `2008311aa12e49308e83e09cf91d25b2` はWRITE_FAILED/exit1。
+Docker tmpfs既定noexecでARM64 Zstd JNIをmmapできず、誤って一般的なARM64非対応とは判断しなかった。
+同UUIDの新tableと既知containerを回収し、failed receipt/logを保持した。
+使い捨て/tmpだけexecを明示し（512MiB）、work-dir64MiBはnoexec、network noneのまま
+hostnameをlocalhostに固定。root filesystem/UID185/1CPU2Gi/256PIDs/host mount0を維持した。
+
+同image再実行 `61c875252b61416d8e3fb3237cfb0eee` はexit0・7checksすべて成功。
+32固定行を新HadoopCatalog tableへ書き、新sessionのDataFrame/SQL全行と集計を独立oracle照合。
+groupsは`[[0,8,840],[1,8,896],[2,8,952],[3,8,1008]]`。
+table UUID `ee09c58d-0fb7-417d-8c95-78a3fdb65b50`、snapshot `8088807033386546123` を
+Pythonの整数でmetadata v2へ照合し、同UUIDをDROPした。64bit IDをJavaScript Number経由で保存しない。
+container `ee15ada82dfc7d57613b4275d4a17ffe4acf1f35a73f63cf71220812688da536` は回収し、
+実recoverは追加create/start/remove0・原receipt保持。成功時ERROR/Exception log0。
+報告済みclasspath issue16856はこの固定構成/範囲では再現せず、他構成全体の解決とは主張しない。
+
+正式全回帰43 suites・1196件（1195成功＋従来optional OTel 1skip）。
+新67testsはcontract16/prepare20/build15/runner16、既存native65と同じtest-local-sparkへ含まれる。
+`spark-iceberg-checks/2e44ac11e1584fb9b7fa8880541b0e19/local-regression.log` / `regression-summary.json`へ保存した。
+read helperがbytesを返す境界とmacOS /var symlinkで落ちた初期offline logsも保持して修正・回帰追加済み。
+
+
+独立監査`tmp/local-experiment/spark-iceberg-preflight/ea0173dfc7cf45a7ba295d483e4d5bbe/verification.json`の56checksが成功。
+14Pod/保持27resources6CM3SecretUID、Docker3、AH428、履歴4tables5DDL、MLflow59tables/11artifacts、
+旧2609files/1033directoriesとnative Sparkの67files（初回29inputsも）が不変。両CIDのfresh不存在を確認した。
+fixture/metadataは先行sealed証拠継承で、このgateではfresh readしていない。
+image inventoryは547→553、旧547全保持。final1に加えclassic Docker buildのUSER＋4LABELの5中間imageがあり、
+各build Step ID/actualinspect/config変化とbase11layersを照合した。1追加を期待した最初の検査failedを残し、
+上記監査で6追加の由来を補足した。削除なし、全FS時点使用増259411968 B・残容量346592722944 B。
+新37inputfilesを封印し、設計82documents/関連14testsも成功した。
+
+これはlocal[1]/local filesystemのclasspath gateであり、Polaris/S3・分散Iceberg・Trino readbackではない。
+新推論/監査event0、Secretsなし。再現と回収は`tools/local_experiment/spark_iceberg/README.md`。
+次は新規tableだけのSpark write→Trino readbackへ進む。既存NPを編集せずrun専用の一時Ingress NPを
+追加する必要があり、資格情報を証跡へ保存しないscopeを具体化してから適用する。
