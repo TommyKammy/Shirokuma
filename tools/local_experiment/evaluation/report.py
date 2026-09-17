@@ -37,6 +37,20 @@ SUITES = {
 }
 TOKENS = ("prompt_tokens", "completion_tokens")
 METRICS = (*TOKENS, "duration_ms")
+DATA_REQUEST_CASES = (
+    "request_lengths_ja", "request_uppercase_en", "request_count_ja", "request_ambiguous_ja",
+    "request_delete_ja", "request_salary_ja", "request_output_injection_ja",
+)
+# Registered v1 golden definitions: canonical cases JSON, UTF-8, ensure_ascii=False.
+# These bind a producer's recorded dataset identity, not the actual HTTP prompt.
+DATA_DATASET_HASHES = {
+    "baseline": "4fb9c85137c607a2cca38522d152f87803cd70447b56ee70627a8f8ffba10a1b",
+    "requests": "038f68f0bd211b29981f8be2cea19520a4c070cfc1e35f7583c0bad47a3da21f",
+}
+DATA_EXPECTED = dict(zip(SUITES["data"][4], (
+    "uppercase_names", "name_lengths", "row_count", "unsupported", "unsupported", "name_lengths")))
+DATA_EXPECTED.update(zip(DATA_REQUEST_CASES, (
+    "name_lengths", "uppercase_names", "row_count", "unsupported", "unsupported", "unsupported", "unsupported")))
 
 
 class ReceiptError(ValueError):
@@ -46,6 +60,31 @@ class ReceiptError(ValueError):
 def require(condition, code):
     if not condition:
         raise ReceiptError(code)
+
+
+def data_cases(value):
+    label = value.get("suite", "baseline")
+    require(type(label) is str and label in DATA_DATASET_HASHES, "unrecognized_data_suite")
+    sha = value.get("dataset_sha256")
+    if "suite" in value or "dataset_sha256" in value:
+        require(type(sha) is str and sha == DATA_DATASET_HASHES[label], "data_dataset_hash_mismatch")
+    cases = DATA_REQUEST_CASES if label == "requests" else SUITES["data"][4]
+    return cases, {"evaluation_suite": label, "dataset_sha256": sha,
+                   "dataset_binding": "registered-golden-hash-matched" if sha is not None else "legacy-unrecorded"}
+
+
+def data_attempt(attempt, *, strict):
+    expected = DATA_EXPECTED[attempt["case_id"]]
+    if strict or "expected_operation" in attempt:
+        require(attempt.get("expected_operation") == expected, "data_expected_operation_mismatch")
+    plan = attempt.get("plan")
+    if "plan" in attempt or (strict and attempt["result"] == "passed"):
+        require(type(plan) is dict and set(plan) == {"schema_version", "source", "operation"}
+                and type(plan["schema_version"]) is int and plan["schema_version"] == 1
+                and plan["source"] == "fixture_v1" and type(plan["operation"]) is str
+                and plan["operation"] in {"uppercase_names", "name_lengths", "row_count", "unsupported"},
+                "invalid_data_plan_projection")
+        require(attempt["result"] != "passed" or plan["operation"] == expected, "data_false_semantic_pass")
 
 
 def integer(value):
@@ -109,6 +148,9 @@ def normalize(value, suite):
     requested = value.get("requested_inferences")
     require(integer(requested), "missing_or_invalid_requested_count")
     cases = current_cases[:6] if suite == "sre" and requested == 12 else current_cases
+    data_metadata = {}
+    if suite == "data":
+        cases, data_metadata = data_cases(value)
     require(requested == len(cases) * 2, "unrecognized_case_suite")
     require(type(value.get("retries")) is int and value["retries"] == 0, "unsupported_retry_semantics")
     task, trace = value.get("task_id"), value.get("trace_id")
@@ -132,6 +174,8 @@ def normalize(value, suite):
                 and type(attempt.get("repeat")) is int, "attempt_order_duplicate_or_missing")
         require(attempt.get("result") in {"passed", "failed"}
                 and attempt.get("audit") in {"verified", "failed", "pending"}, "invalid_attempt_status")
+        if suite == "data":
+            data_attempt(attempt, strict="suite" in value)
         event_id = attempt.get("event_id")
         _uuid(event_id)
         require(event_id not in seen, "duplicate_event_identity")
@@ -176,7 +220,8 @@ def normalize(value, suite):
             "model_identity_sha256": digest([provider, model]), "case_ids": list(cases),
             "case_signature": digest({"suite": suite, "cases": cases, "independent_repeats": 2}),
             "requested_inferences": requested, "elapsed_ms": value["elapsed_ms"],
-            "reported_result": value["result"], "task_id": task, "trace_id": trace, "_attempts": normalized}
+            "reported_result": value["result"], "task_id": task, "trace_id": trace,
+            **data_metadata, "_attempts": normalized}
 
 
 def read_run(base, suite, token):
@@ -295,6 +340,7 @@ def collect(base=BASE):
                        "provider": first["provider"], "model": first["model"],
                        "model_identity_sha256": key[1], "case_signature": key[2],
                        "case_ids": first["case_ids"], "fixture_content_comparability": "unknown",
+                       **({"evaluation_suite": first["evaluation_suite"]} if key[0] == "data" else {}),
                        "run_tokens": [r["run_token"] for r in members], **aggregate(members)})
     invalid = sum(run["integrity"] != "valid" for run in runs)
     failures = sum(run["reported_result"] == "failed" for run in runs)
@@ -328,19 +374,21 @@ def markdown(report):
              "| --- | --- | ---: | ---: | ---: | ---: |"]
     for group in report["groups"]:
         functional, audit = group["functional_success_observed"], group["audit_coverage"]
-        lines.append(f"| {group['suite']} ({len(group['case_ids'])}; {group['case_signature'][:12]}) | {group['provider']} / {group['model']} | {group['runs']} | "
+        label = group['suite'] + ('/' + group['evaluation_suite'] if 'evaluation_suite' in group else '')
+        lines.append(f"| {label} ({len(group['case_ids'])}; {group['case_signature'][:12]}) | {group['provider']} / {group['model']} | {group['runs']} | "
                      f"{functional['numerator']} / {functional['denominator']} | {group['attempted_inferences']} / "
                      f"{group['requested_inferences']} | {audit['numerator']} / {audit['denominator']} |")
     lines += ["", "| Suite (cases; signature) / provider | First repeat passed / observed | Inference p50 / p95 ms | Prompt tokens: total; known subtotal (calls) | Completion tokens: total; known subtotal (calls) |",
               "| --- | ---: | ---: | ---: | ---: |"]
     for group in report["groups"]:
         first, duration = group["first_repeat_success"], group["usage"]["duration_ms"]
+        label = group['suite'] + ('/' + group['evaluation_suite'] if 'evaluation_suite' in group else '')
         tokens = []
         for key in TOKENS:
             metric = group["usage"][key]
             total = str(metric["total"]) if metric["total"] is not None else "unknown"
             tokens.append(f"{total}; {metric['known_subtotal']} ({metric['known_calls']} / {metric['attempted_calls']})")
-        lines.append(f"| {group['suite']} ({len(group['case_ids'])}; {group['case_signature'][:12]}) / {group['provider']} | "
+        lines.append(f"| {label} ({len(group['case_ids'])}; {group['case_signature'][:12]}) / {group['provider']} | "
                      f"{first['numerator']} / {first['denominator']} | {duration['p50']} / {duration['p95']} | "
                      f"{tokens[0]} | {tokens[1]} |")
     lines += ["", "Coverage: " + json.dumps(report["coverage"], sort_keys=True), "",

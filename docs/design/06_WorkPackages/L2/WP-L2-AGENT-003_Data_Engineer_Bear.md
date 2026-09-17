@@ -5,7 +5,7 @@ title: "WP-L2-AGENT-003 Data Engineer Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.4"
+version: "0.5"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -123,3 +123,49 @@ ClickHouse/Loki/OTelの4監査event相関が成功した。
 失敗・中断時も自身のchild processと専用relationだけを回収し、保存receiptでcleanup成否を確認する。
 実験を使わない場合はentrypointを実行しない。新しいresident componentや保持データの変更はない。
 一般的なデータ設計や任意コード生成の品質を示す結果ではなく、3変換に限定した機能証拠である。
+
+## 2026-09-17: bounded natural-language entry
+
+`--request` / `--request-stdin` から利用者の依頼文を受け取れるようにした。
+従来の `--case` とdefaultは互換維持し、入力方式は排他。UTF-8の1行・512文字上限。
+sourceは引き続きfixture_v1、許可operationはuppercase_names/name_lengths/row_countのみ。
+Qwenを1回呼び、hostの固定templateだけを実行する。raw要求文/応答を通常出力・receipt・監査へ
+保存せず、要求hash/長さ・採択plan・実usageを記録する。対応外はDataOpsを起動せずexit2で返す。
+採択IRとの結果一致を実証し、任意の自然文の意図を常に正解するとは主張しない。
+
+新7golden×2の実Qwen評価は14/14成功（`d87069723481431f96e87cc0d9d17b2c`）。
+日本語文字数/英語大文字化/日本語件数の言い換えと、曖昧・全行削除・未知列・出力契約overrideの
+4拒否を検証した。旧6golden×2も12/12成功（`fb2781b2c73a442facafd74a8ac913a6`）。
+新評価は入力6274/出力294 tokens・17.099秒、旧評価再確認は5078/272・14.838秒。
+26推論すべてAgentHouseの実eventとusageを読戻し、cloud/retryは0・costはNULL。
+評価traceは相関IDでありexported spanではない。自然文実行traceと混同しない。
+
+日本語の文字数依頼を実stdinから渡した `fc906b457f834162acd80a35204a7c1c` が成功。
+1推論440/23 tokens・2.753秒、採択name_lengthsを2回materializeし、結果 `[[1,9],[2,7]]` が一致。
+DataOps run `396f97befadd41b3af49bf4db9be4b1c` のdbt tests/readback/drain/owned2relation回収が成功。
+MCP/model/materialize/assessmentの4eventをAH/Loki/実OTelへ相関させた。
+trace `ee24f3ab7ca20b8a1dbdc38bc68370e5`。
+
+削除依頼の初回 `3f4315b3e32e410fbd9f14e25c1a4486` はモデルが正しくunsupportedを返し、
+DataOps起動0だったが、共通監査helperがsuccessだけを認める不備でfinal failedになった。
+期待statusをsuccess/blocked/failedの範囲でAHとLokiの両方へ厳密一致させる修正と、
+実run/main/helperを通す拒否・status改ざん回帰を追加した。元failed証拠は保持。
+再実行 `cffc3740880c437aa883ee7d887b94c1` はunsupported/exit2・materialization0・3event相関まで成功。
+414/22 tokens・1.267秒、trace `027f56a5c2c2881d4153cdba44889327`。
+
+再現: `make local-data-bear-request` にstdinを渡し、`make local-data-bear-request-eval`で追加評価。
+新規service/image、MTPLX設定・自動起動の変更、保持データへの書込みはない。
+一般SQL/code generation、任意データセット、一般的な意図解釈品質・本番受入は引き続き未達。
+
+独立最終監査 `data-request-audit/34a457215c244a589c790d06ab8a16e4`（08:32:49 UTC）が成功。
+保持Kube6Pods/27resources/6CM/3Secret、3Docker、履歴4表/5DDL、fixtureのschema/rows/
+全snapshots/history/refs/headとIceberg全table一覧、旧330eventsが不変。
+全5試行の36追加event（success32/blocked4）を帰属させ、AH366件、workflowのLoki/実spanも一致。
+正常runのowned2tablesとactive query残留0、拒否2試行はadapter生成なし。
+失敗試行を含む29推論の実測usageは12620入力/633出力tokens、cost NULL、cloud/retry0。
+既存62証跡と今回163filesが監査中不変で、workflow証跡にraw要求全文の保持は検出されなかった。
+Data91＋SRE64 focusedが成功、全local回帰867件（866成功＋標準環境optional OTel1skip）も成功。
+同OTel結合は専用venvで成功している。
+
+追加評価を既存集計へ統合し、report `7252a562650c4c1292c6df462a832bc3` は10runs valid/complete。
+baselineとrequestsのcase signatureを分離し、固定dataset hash/IR/意味判定を確認する22focused testsが成功。

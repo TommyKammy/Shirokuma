@@ -117,7 +117,10 @@ def verify_audits(rows: list, logs: list, calls: list, records: list, task_id: s
         raise SREError('retained SRE audit identities differ')
     for row in rows:
         source = expected[row['event_id']]
-        if (row['task_id'] != task_id or row['trace_id'] != trace_id or row['status'] != 'success'
+        status = source.get('status', 'success')
+        if type(status) is not str or status not in {'success', 'blocked', 'failed'}:
+            raise SREError('expected audit status is invalid')
+        if (row['task_id'] != task_id or row['trace_id'] != trace_id or row['status'] != status
                 or row['action_type'] != source['action_type']):
             raise SREError('retained SRE audit correlation differs')
         for key in ('model_provider', 'model_name', 'prompt_tokens', 'completion_tokens', 'inference_cost_estimate'):
@@ -137,7 +140,7 @@ def verify_audits(rows: list, logs: list, calls: list, records: list, task_id: s
             if type(duration) is not int or not 0 <= duration <= 2**64 - 1 or duration != source['duration_ms']:
                 raise SREError('retained SRE latency differs')
         if not any(log.get('task_id') == task_id and log.get('trace_id') == trace_id
-                   and log.get('span_id') == source['span_id'] and log.get('status') == 'success'
+                   and log.get('span_id') == source['span_id'] and log.get('status') == status
                    and log.get('action') == source['action_type'] for log in logs):
             raise SREError('Loki is missing a correlated SRE span/action')
 

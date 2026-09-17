@@ -14,8 +14,32 @@ rtk make test-local-data-bear
 The smoke defaults to `name_lengths_ja`. To exercise the other two fixed
 requests, invoke the same runner with `--case uppercase_names_ja` or
 `--case row_count_ja` using `tools/local_experiment/llm/.venv/bin/python`.
-Only these three case identifiers are accepted; no free-form executable
-request or output path is a smoke argument.
+The fixed-case path checks the model's selection against a known expected
+operation. Existing case names and the default are unchanged.
+
+To provide a natural-language request, use the bounded stdin entry point:
+
+```sh
+rtk make local-data-bear-request <<'REQUEST'
+fixture_v1の各レコードについて、idとnameの文字数を返してください。
+REQUEST
+```
+
+The Python runner also accepts `--request '...'`. `--request`, `--request-stdin`
+and `--case` are mutually exclusive. Input is one UTF-8 line with at most 512
+characters; stdin allows one final line ending. Raw request text and model
+responses are not retained in receipts or audit events. The receipt records
+the input hash/length, selected typed plan and observed token usage instead.
+
+The model is called once, with retries and cloud calls disabled. A supported
+selection runs the same fixed templates twice and verifies the output against
+the selected plan's independent oracle. This verifies execution of that plan;
+it does not independently establish that every free-text intention was
+interpreted correctly. Inspect the returned `plan.operation` and verification.
+An unsupported request performs no DataOps materialization and returns
+`result: unsupported` with exit status 2. Successful execution returns 0;
+execution or validation failure returns 1. The observation and refusal are
+still audited.
 
 The evaluation checks six fixed requests twice each: five Japanese requests
 and one English paraphrase, covering three supported transformations and two
@@ -23,6 +47,10 @@ unsupported requests. It compares the chosen operation with each request's
 expected meaning. Valid JSON alone is insufficient. Evaluation does not
 materialize tables or inject faults, and every inference is audited and read
 back from AgentHouse. An audit failure stops the suite.
+`rtk make local-data-bear-request-eval` runs a separate seven-case suite twice:
+new Japanese/English paraphrases plus ambiguous, destructive, unknown-column
+and output-contract override requests. These are fixed examples with explicit
+expected operations, not a general guarantee of language understanding.
 
 The plan has exactly three fields: integer `schema_version: 1`,
 `source: "fixture_v1"`, and one `operation` from this table:
@@ -37,8 +65,8 @@ The plan has exactly three fields: integer `schema_version: 1`,
 The source is always `iceberg.smoke.fixture_v1(id bigint, name varchar)`.
 The model receives its fixed schema and a bounded request; it cannot choose
 SQL, shell commands, filenames, catalogs, namespaces, output aliases or other
-data sources. The smoke checks its requested operation before any table
-materialization. Source rows remain in the local execution boundary.
+data sources. Fixed-case smoke also checks the expected operation before any
+table materialization. Source rows remain in the local execution boundary.
 
 The generated project retains the existing `stg_fixture` and `mart_fixture`
 asset identities. Both relations use host-generated UUID names in

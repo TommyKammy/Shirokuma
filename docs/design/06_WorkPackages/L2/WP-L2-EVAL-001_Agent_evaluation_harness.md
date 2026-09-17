@@ -5,7 +5,7 @@ title: "WP-L2-EVAL-001 Agent evaluation harness"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.5"
+version: "0.6"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, evaluation]
 ---
@@ -127,3 +127,18 @@ Mock10callsは別groupでtokens欠測を保持する。異なるsuiteの一般�
 独立検証は入力16filesと従来report9filesのSHA256前後不変、case/provider別分母、
 latency quantiles、saved audit metrics、unique IDsを再計算して一致。
 既存5suite complete reportも保持。全回帰486 testsと設計73documentsが成功。
+
+## 2026-09-17: Data natural-language evaluation coverage
+
+Data Bear追加requests suiteの7case×2とbaseline再確認6case×2を評価reportへ統合した。
+固定case IDs/順序/回数/expected operation/strict IRと保存監査を検証し、baseline/requestsを
+別case signature・表示名で集計する。新receiptは固定dataset SHA256へ束縛する。
+古いsuite/hash未記録receiptはbaseline互換のまま、hashはlegacy-unrecordedとして扱う。
+保存producerのdataset宣言とtyped verdict/監査整合の証拠であり、当時のHTTP prompt自体を証明しない。
+
+report `7252a562650c4c1292c6df462a832bc3` がcomplete、10/10retained evaluation runsがvalid。
+invalid/incomplete/duplicate/unobserved suites/evaluation failuresは0。
+Qwen固定評価は合計120/120、実測58326入力/7226出力tokens。mock10件は別群、usage NULLを維持。
+新Data requests14件とbaseline24件（旧12＋今回12）は別集計。旧SRE6case/新8caseも混在させない。
+このreportは評価suiteだけを集計し、別workflow実行で発生した失敗を削除・成功化するものではない。
+追加report focused22件が成功。実機生成にはmodel/API呼出や外部書込みを追加していない。

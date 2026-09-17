@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import copy
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -16,7 +17,7 @@ import time
 from typing import TypedDict
 import uuid
 
-from data_provider import DataProvider
+from data_provider import DataProvider, validate_input
 from data_contract import columns, expected_rows, model_cases, schema_evidence, validate_plan
 from providers import ProviderError, load_config, unknown_metrics, validate_config
 from evaluation import private_write, safe_metrics, verify_audit
@@ -50,6 +51,33 @@ def smoke_case(case_id: str = DEFAULT_CASE) -> dict:
     return next(case for case in model_cases() if case['case_id'] == case_id)
 
 
+def request_spec(*, case_id: str | None = None, request: str | None = None) -> dict:
+    """Plain text stays in memory; only metadata() belongs in durable evidence."""
+    if request is not None and case_id is not None:
+        raise DataError('choose one fixed case or one bounded natural-language request')
+    if request is None:
+        case = smoke_case(DEFAULT_CASE if case_id is None else case_id)
+        return {'request': case['request'], 'case_id': case['case_id'],
+                'expected_operation': case['expected_operation'], 'input_mode': 'fixed-case'}
+    text = validate_input({'request': request, 'schema': schema_evidence()})['request']
+    return {'request': text, 'case_id': None, 'expected_operation': None, 'input_mode': 'natural-language'}
+
+
+def request_metadata(spec: dict) -> dict:
+    raw = spec['request'].encode('utf-8')
+    return {key: spec[key] for key in ('case_id', 'expected_operation', 'input_mode')} | {
+        'request_sha256': hashlib.sha256(raw).hexdigest(), 'request_characters': len(spec['request']),
+        'request_bytes': len(raw), 'raw_request_retained': False,
+        'interpretation_verification': 'fixed-golden-operation' if spec['case_id'] else
+            'model-selected-typed-plan; free-text-intent-not-independently-verified'}
+
+
+def selected_plan(value: dict, case_id: str | None, *, executable: bool = False) -> dict:
+    if case_id is not None:
+        return validate_smoke_plan(value, case_id)
+    return dict(validate_plan(value, executable=executable))
+
+
 def validate_observation(value: dict) -> dict:
     if (not isinstance(value, dict) or set(value) != {'schema', 'inventory', 'fixture_verified'}
             or value['schema'] != schema_evidence() or value['fixture_verified'] is not True
@@ -81,8 +109,8 @@ def validate_smoke_plan(value: dict, case_id: str = DEFAULT_CASE) -> dict:
     return dict(plan)
 
 
-def verify_materialization(receipt: dict, plan: dict, case_id: str = DEFAULT_CASE) -> dict:
-    plan = validate_smoke_plan(plan, case_id)
+def verify_materialization(receipt: dict, plan: dict, case_id: str | None = DEFAULT_CASE) -> dict:
+    plan = selected_plan(plan, case_id, executable=True)
     if not isinstance(receipt, dict):
         raise DataError('DataOps receipt is missing')
     if (receipt.get('result') != 'passed' or receipt.get('plan') != plan
@@ -132,10 +160,12 @@ class State(TypedDict, total=False):
     verification: dict
 
 
-def build_graph(model, read, execute, audit, tracer, *, case_id: str = DEFAULT_CASE):
+def build_graph(model, read, execute, audit, tracer, *, case_id: str | None = None,
+                request: str | None = None):
     from langgraph.graph import StateGraph, START, END
     from langgraph.checkpoint.memory import InMemorySaver
-    case = smoke_case(case_id)
+    spec = request_spec(case_id=case_id, request=request)
+    case_id = spec['case_id']
 
     async def observe(state):
         return {'observation': validate_observation(await read())}
@@ -147,21 +177,26 @@ def build_graph(model, read, execute, audit, tracer, *, case_id: str = DEFAULT_C
             started = time.monotonic()
             try:
                 response = await asyncio.to_thread(model.complete, 'data_plan',
-                    {'request': case['request'], 'schema': state['observation']['schema']})
-            except Exception as error:
+                    {'request': spec['request'], 'schema': state['observation']['schema']})
+            except BaseException as error:
                 metrics = safe_metrics(error.metrics if isinstance(error, ProviderError) else {},
                                        int((time.monotonic() - started) * 1000))
                 span.set_status(Status(StatusCode.ERROR, 'MODEL_RESPONSE_FAILED'))
-                audit('llm.data_plan', 'failed', metrics, span, inference=True)
+                try:
+                    audit('llm.data_plan', 'failed', metrics, span, inference=True)
+                finally:
+                    if not isinstance(error, Exception):
+                        raise error
                 raise DataError('Data Bear model response failed') from None
             metrics = safe_metrics(response, int((time.monotonic() - started) * 1000))
             try:
-                selected = validate_smoke_plan(response['content'], case_id)
+                selected = selected_plan(response['content'], case_id)
             except Exception:
                 span.set_status(Status(StatusCode.ERROR, 'MODEL_PLAN_REJECTED'))
                 audit('llm.data_plan', 'blocked', metrics, span, inference=True)
-                raise DataError('Data Bear plan did not match the bounded smoke request') from None
-            audit('llm.data_plan', 'success', metrics, span, inference=True)
+                raise DataError('Data Bear plan did not match the bounded request contract') from None
+            audit('llm.data_plan', 'blocked' if selected['operation'] == 'unsupported' else 'success',
+                  metrics, span, inference=True)
             span.set_status(Status(StatusCode.OK))
             return {'plan': selected, 'inference': metrics}
 
@@ -184,6 +219,9 @@ def build_graph(model, read, execute, audit, tracer, *, case_id: str = DEFAULT_C
             return {'execution_receipt': receipt}
 
     async def verify(state):
+        if state['plan']['operation'] == 'unsupported':
+            return {'verification': {'result': 'not-executed', 'reason': 'unsupported-request',
+                    'plan': state['plan'], 'materializations': 0, 'dataops_started': False}}
         return {'verification': verify_materialization(state['execution_receipt'], state['plan'], case_id)}
 
     graph = StateGraph(State)
@@ -191,7 +229,8 @@ def build_graph(model, read, execute, audit, tracer, *, case_id: str = DEFAULT_C
         graph.add_node(name, node)
     graph.add_edge(START, 'observe')
     graph.add_edge('observe', 'plan')
-    graph.add_edge('plan', 'execute')
+    graph.add_conditional_edges('plan', lambda state: 'verify' if state['plan']['operation'] == 'unsupported'
+                                else 'execute', {'verify': 'verify', 'execute': 'execute'})
     graph.add_edge('execute', 'verify')
     graph.add_edge('verify', END)
     return graph.compile(checkpointer=InMemorySaver())
@@ -221,9 +260,9 @@ def verify_adapter_receipt(receipt: dict) -> None:
         raise DataError('DataOps stdout and saved receipt differ')
 
 
-async def execute_adapter(plan: dict, url: str, output: Path, *, case_id: str = DEFAULT_CASE) -> dict:
+async def execute_adapter(plan: dict, url: str, output: Path, *, case_id: str | None = DEFAULT_CASE) -> dict:
     """No model-controlled executable, SQL, argument, URL or path reaches the child."""
-    plan = validate_smoke_plan(plan, case_id)
+    plan = selected_plan(plan, case_id, executable=True)
     TrinoClient(url)  # Validate the host-created tunnel endpoint before spawning anything.
     private_write(output / 'plan.json', plan)
     private_write(output / 'adapter-stdout.json', {})
@@ -257,7 +296,8 @@ async def execute_adapter(plan: dict, url: str, output: Path, *, case_id: str = 
     return receipt
 
 
-async def run(config: dict, output: Path, *, case_id: str = DEFAULT_CASE) -> dict:
+async def run(config: dict, output: Path, *, case_id: str | None = None,
+              request: str | None = None) -> dict:
     from mcp import Client, StdioServerParameters, stdio_client
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
@@ -266,7 +306,8 @@ async def run(config: dict, output: Path, *, case_id: str = DEFAULT_CASE) -> dic
     validate_config(config)
     if config['active_provider'] != 'local':
         raise DataError('Data Bear requires an explicitly configured local model')
-    case = smoke_case(case_id)
+    spec = request_spec(case_id=case_id, request=request)
+    case_id = spec['case_id']
     profile = config['providers']['local']
     model = DataProvider(profile)
     disable_external_tracing()
@@ -279,11 +320,13 @@ async def run(config: dict, output: Path, *, case_id: str = DEFAULT_CASE) -> dic
     provider.add_span_processor(SimpleSpanProcessor(SpanFile(output / 'spans.jsonl')))
     tracer = provider.get_tracer('shirokuma.bears.data', '0.1.0')
     calls, records = [], []
-    result = {'result': 'failed', 'scope': 'fixed-fixture-owned-table-smoke', 'task_id': task_id,
+    result = {'result': 'failed', 'scope': 'fixed-fixture-owned-table-smoke' if case_id else
+              'natural-language-fixed-fixture-three-operation-experiment', 'task_id': task_id,
               'provider': profile['provider'], 'model': profile['model'], 'evidence_path': str(output),
-              'case_id': case_id, 'expected_operation': case['expected_operation'], 'tool_calls': calls, 'audit_records': records,
+              **request_metadata(spec), 'tool_calls': calls, 'audit_records': records,
               'retries': 0, 'cloud_calls': 0, 'retained_data_mutation_authorized': False}
     started = time.monotonic()
+    interruption = None
     with tracer.start_as_current_span('bear.data.assess', record_exception=False, set_status_on_exception=False) as root_span:
         context = root_span.get_span_context()
         trace_id = f'{context.trace_id:032x}'
@@ -335,45 +378,66 @@ async def run(config: dict, output: Path, *, case_id: str = DEFAULT_CASE) -> dic
                             private_write(output / 'result.json', result)
                             return await execute_adapter(plan, url, output, case_id=case_id)
 
-                        graph = build_graph(model, read, execute, audit, tracer, case_id=case_id)
+                        graph = build_graph(model, read, execute, audit, tracer, case_id=case_id,
+                                            request=spec['request'] if case_id is None else None)
                         options = {'configurable': {'thread_id': task_id}, 'recursion_limit': 10, 'callbacks': []}
                         state = await graph.ainvoke({}, options)
                         checkpoint = graph.get_state(options)
                         if checkpoint.next or checkpoint.values.get('verification') != state['verification']:
                             raise DataError('Data Bear completed checkpoint differs')
+            unsupported = state['plan']['operation'] == 'unsupported'
             result.update(plan=state['plan'], inference=state['inference'], verification=state['verification'],
-                          adapter_evidence=state['execution_receipt'].get('evidence'), checkpoint='completed-in-memory')
-            audit('bear.data.assess', 'success', unknown_metrics(int((time.monotonic() - started) * 1000)), root_span)
+                          adapter_evidence=state.get('execution_receipt', {}).get('evidence'),
+                          checkpoint='completed-in-memory')
+            audit('bear.data.assess', 'blocked' if unsupported else 'success',
+                  unknown_metrics(int((time.monotonic() - started) * 1000)), root_span)
             ids = [str(uuid.UUID(row['event_id'])) for row in calls + records]
             quoted = ','.join("'" + value + "'" for value in ids)
             rows = json.loads(client.query('SELECT ' + ', '.join(AUDIT_FIELDS) +
                 ' FROM agenthouse.pawprints FINAL WHERE event_id IN (' + quoted + ') FORMAT JSON'))['data']
             verify_audits(rows, loki.query_task(task_id), calls, records, task_id, trace_id)
-            result.update(result='passed', correlated_events=len(rows))
+            result.update(result='unsupported' if unsupported else 'passed', correlated_events=len(rows))
             root_span.set_status(Status(StatusCode.OK))
-        except Exception:
-            result.update(result='failed', error_code='DATA_OBSERVATION_PLAN_EXECUTION_OR_AUDIT_FAILED')
+        except BaseException as error:
+            if not isinstance(error, Exception):
+                interruption = error
+            result.update(result='interrupted' if interruption is not None else 'failed',
+                          error_code='DATA_OBSERVATION_PLAN_EXECUTION_OR_AUDIT_FAILED')
             result.pop('checkpoint', None)
             root_span.set_status(Status(StatusCode.ERROR, result['error_code']))
             if not any(row['action_type'] == 'bear.data.assess' for row in records):
                 try:
                     audit('bear.data.assess', 'failed', unknown_metrics(int((time.monotonic() - started) * 1000)), root_span)
-                except Exception:
-                    pass
+                except BaseException as audit_error:
+                    if interruption is None and not isinstance(audit_error, Exception):
+                        interruption = audit_error
+                        result['result'] = 'interrupted'
     provider.shutdown()
     private_write(output / 'result.json', result)
+    if interruption is not None:
+        raise interruption
     return result
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=LOCAL / 'llm/providers.qwen-local.json')
-    parser.add_argument('--case', choices=CASE_IDS, default=DEFAULT_CASE)
+    inputs = parser.add_mutually_exclusive_group()
+    inputs.add_argument('--case', choices=CASE_IDS)
+    inputs.add_argument('--request', help='At most 512 plain-text characters over the fixed fixture')
+    inputs.add_argument('--request-stdin', action='store_true', help='Read bounded UTF-8 text from stdin')
     args = parser.parse_args()
     output = ROOT / 'tmp/local-experiment/data-bear' / uuid.uuid4().hex
     try:
+        request = args.request
+        if args.request_stdin:
+            raw = sys.stdin.buffer.read(4097)
+            if len(raw) > 4096:
+                raise DataError('stdin request exceeds its input limit')
+            request = raw.decode('utf-8').removesuffix('\n').removesuffix('\r')
+        request_spec(case_id=args.case, request=request)
         with SESSION.interruption_handlers():
-            report = asyncio.run(run(load_config(args.config), output, case_id=args.case))
+            report = asyncio.run(run(load_config(args.config), output, case_id=args.case, request=request))
     except SESSION.SessionInterrupted as error:
         # asyncio.run cancels and awaits the graph; execute_adapter finishes its
         # bounded child cleanup before the managed tunnel is allowed to close.
@@ -388,7 +452,7 @@ def main() -> int:
         output.mkdir(parents=True, exist_ok=True, mode=0o700)
         private_write(output / 'result.json', report)
     print(json.dumps(report))
-    return 0 if report['result'] == 'passed' else 1
+    return 0 if report['result'] == 'passed' else 2 if report['result'] == 'unsupported' else 1
 
 
 if __name__ == '__main__':

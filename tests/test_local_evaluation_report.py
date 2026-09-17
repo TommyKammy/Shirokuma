@@ -1,5 +1,6 @@
 """A retained-receipt report must not improve results by hiding failed evidence."""
 import copy
+import hashlib
 import importlib.util
 import json
 import os
@@ -8,6 +9,7 @@ import stat
 import tempfile
 import unittest
 import uuid
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("evaluation_report", ROOT / "tools/local_experiment/evaluation/report.py")
@@ -15,10 +17,13 @@ REPORT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(REPORT)
 
 
-def receipt(suite="inventory", *, mock=False, old_sre=False, failed_index=None, truncate=None, unknown_tokens=False):
+def receipt(suite="inventory", *, mock=False, old_sre=False, failed_index=None, truncate=None, unknown_tokens=False,
+            data_variant=None):
     _, _, prefix, action, cases = REPORT.SUITES[suite]
     if old_sre:
         cases = cases[:6]
+    if suite == "data" and data_variant == "requests":
+        cases = REPORT.DATA_REQUEST_CASES
     provider, model = ("shirokuma-mock", "shirokuma-deterministic-v1") if mock else ("mtplx", "qwen3.8-flash-next")
     task, trace = prefix + uuid.uuid4().hex, uuid.uuid4().hex
     attempts = []
@@ -35,6 +40,10 @@ def receipt(suite="inventory", *, mock=False, old_sre=False, failed_index=None, 
                     "trace_id": trace, "model_provider": provider, "model_name": model,
                     "target_system": "llm-mock" if mock else "llm-local-compatible",
                     "status": "success" if passed else "failed", **metrics}})
+            if suite == "data" and data_variant is not None:
+                operation = REPORT.DATA_EXPECTED[case]
+                attempts[-1].update(expected_operation=operation,
+                    plan={"schema_version": 1, "source": "fixture_v1", "operation": operation})
     if truncate is not None:
         attempts = attempts[:truncate]
     usage = {key: sum(a["metrics"][key] for a in attempts) if key == "duration_ms" or (attempts and not unknown_tokens) else None
@@ -45,7 +54,9 @@ def receipt(suite="inventory", *, mock=False, old_sre=False, failed_index=None, 
             "requested_inferences": len(cases) * 2, "attempted_inferences": len(attempts),
             "passed_inferences": sum(a["result"] == "passed" for a in attempts),
             "audited_inferences": len(attempts), "elapsed_ms": 1000,
-            "attempts": attempts, "usage": usage}
+            "attempts": attempts, "usage": usage,
+            **({"suite": data_variant, "dataset_sha256": REPORT.DATA_DATASET_HASHES[data_variant]}
+               if suite == "data" and data_variant is not None else {})}
 
 
 class EvaluationReportTests(unittest.TestCase):
@@ -248,6 +259,122 @@ class EvaluationReportTests(unittest.TestCase):
         self.assertIn("known subtotal (calls)", content)
         metric = result["groups"][0]["usage"]["duration_ms"]
         self.assertEqual(metric["p95"], 111)
+
+    def test_data_legacy_baseline_and_requests_have_separate_case_signatures(self):
+        self.complete_all()
+        self.save("data", receipt("data", data_variant="baseline"))
+        self.save("data", receipt("data", data_variant="requests"))
+        with patch('urllib.request.urlopen', side_effect=AssertionError('no HTTP')), patch('socket.create_connection', side_effect=AssertionError('no HTTP')):
+            report = REPORT.collect(self.base)
+        groups = {g["evaluation_suite"]: g for g in report["groups"] if g["suite"] == "data"}
+        self.assertEqual(set(groups), {"baseline", "requests"})
+        self.assertEqual(groups["baseline"]["runs"], 2)
+        self.assertEqual(groups["baseline"]["requested_inferences"], 24)
+        self.assertEqual(groups["requests"]["requested_inferences"], 14)
+        self.assertNotEqual(groups["baseline"]["case_signature"], groups["requests"]["case_signature"])
+        data_runs = [r for r in report["runs"] if r["suite"] == "data"]
+        legacy = next(r for r in data_runs if r["dataset_binding"] == "legacy-unrecorded")
+        self.assertIsNone(legacy["dataset_sha256"])
+        self.assertTrue(all(r["integrity"] == "valid" for r in data_runs))
+        rendered = REPORT.markdown(report)
+        self.assertIn('data/baseline (6;', rendered)
+        self.assertIn('data/requests (7;', rendered)
+
+    def test_data_unknown_suite_missing_hash_or_altered_registered_hash_rejected(self):
+        for field, altered, code in [
+            ('suite', 'other', 'unrecognized_data_suite'),
+            ('suite', None, 'unrecognized_data_suite'),
+            ('dataset_sha256', None, 'data_dataset_hash_mismatch'),
+            ('dataset_sha256', 'f' * 64, 'data_dataset_hash_mismatch'),
+            ('dataset_sha256', REPORT.DATA_DATASET_HASHES['baseline'], 'data_dataset_hash_mismatch'),
+        ]:
+            value = receipt('data', data_variant='requests')
+            value[field] = altered
+            with self.subTest(field=field, altered=altered), self.assertRaisesRegex(REPORT.ReceiptError, code):
+                REPORT.normalize(value, 'data')
+        for variant in ('baseline', 'requests'):
+            value = receipt('data', data_variant=variant)
+            del value['dataset_sha256']
+            with self.subTest(missing=variant), self.assertRaisesRegex(REPORT.ReceiptError, 'data_dataset_hash_mismatch'):
+                REPORT.normalize(value, 'data')
+        value = receipt('data', data_variant='requests')
+        del value['suite']; del value['dataset_sha256']
+        with self.assertRaisesRegex(REPORT.ReceiptError, 'unrecognized_case_suite'):
+            REPORT.normalize(value, 'data')
+
+    def test_data_requests_requires_exact_seven_case_order_count_and_expected_operation(self):
+        variants = []
+        value = receipt('data', data_variant='requests'); value['requested_inferences'] = 12
+        variants.append((value, 'unrecognized_case_suite'))
+        value = receipt('data', data_variant='requests'); value['attempts'][0]['case_id'] = 'altered'
+        variants.append((value, 'attempt_order_duplicate_or_missing'))
+        value = receipt('data', data_variant='requests'); value['attempts'][0], value['attempts'][2] = value['attempts'][2], value['attempts'][0]
+        variants.append((value, 'attempt_order_duplicate_or_missing'))
+        value = receipt('data', data_variant='requests'); value['attempts'][6]['expected_operation'] = 'row_count'
+        variants.append((value, 'data_expected_operation_mismatch'))
+        value = receipt('data', data_variant='requests'); del value['attempts'][0]['expected_operation']
+        variants.append((value, 'data_expected_operation_mismatch'))
+        for value, code in variants:
+            with self.subTest(code=code), self.assertRaisesRegex(REPORT.ReceiptError, code):
+                REPORT.normalize(value, 'data')
+
+    def test_data_false_semantic_pass_and_raw_sql_plan_are_rejected(self):
+        value = receipt('data', data_variant='requests')
+        value['attempts'][6]['plan']['operation'] = 'row_count'
+        with self.assertRaisesRegex(REPORT.ReceiptError, 'data_false_semantic_pass'):
+            REPORT.normalize(value, 'data')
+        for change in ('sql', 'version', 'missing'):
+            value = receipt('data', data_variant='requests')
+            if change == 'sql':
+                value['attempts'][0]['plan']['sql'] = 'DO NOT COPY MODEL SQL'
+            elif change == 'version':
+                value['attempts'][0]['plan']['schema_version'] = True
+            else:
+                del value['attempts'][0]['plan']
+            with self.subTest(change=change), self.assertRaisesRegex(REPORT.ReceiptError, 'invalid_data_plan_projection'):
+                REPORT.normalize(value, 'data')
+
+    def test_data_failed_and_incomplete_request_runs_are_not_hidden(self):
+        failed = receipt('data', data_variant='requests', failed_index=0)
+        failed['attempts'][0]['plan']['operation'] = 'row_count'
+        self.save('data', failed)
+        partial = receipt('data', data_variant='requests', truncate=1)
+        self.save('data', partial)
+        self.save('data', receipt('data', data_variant='requests'))
+        report = REPORT.collect(self.base)
+        group = next(g for g in report['groups'] if g['suite'] == 'data')
+        self.assertEqual(group['runs'], 3)
+        self.assertEqual(group['failed_runs'], 2)
+        self.assertEqual(group['requested_inferences'], 42)
+        self.assertEqual(group['attempted_inferences'], 29)
+        self.assertEqual(group['functional_success_observed']['numerator'], 28)
+
+    def test_data_raw_requests_responses_and_free_text_are_not_projected(self):
+        value = receipt('data', data_variant='requests')
+        value['raw_request'] = 'PRIVATE REQUEST'
+        value['attempts'][0]['raw_response'] = 'PRIVATE MODEL RESPONSE'
+        self.save('data', value)
+        report = REPORT.collect(self.base)
+        rendered = json.dumps(report) + REPORT.markdown(report)
+        self.assertNotIn('PRIVATE REQUEST', rendered)
+        self.assertNotIn('PRIVATE MODEL RESPONSE', rendered)
+        run = next(r for r in report['runs'] if r['suite'] == 'data')
+        self.assertEqual(run['dataset_sha256'], REPORT.DATA_DATASET_HASHES['requests'])
+        self.assertIsNone(run['fixture_content_sha256'])
+        self.assertIsNone(run['evaluator_revision'])
+
+    def test_registered_data_hashes_match_checked_in_canonical_golden_definitions(self):
+        spec = importlib.util.spec_from_file_location('report_data_contract', ROOT / 'tools/local_experiment/bears/data_contract.py')
+        contract = importlib.util.module_from_spec(spec); spec.loader.exec_module(contract)
+        datasets = {'baseline': contract.model_cases(),
+                    'requests': json.loads((ROOT / 'tools/local_experiment/bears/data_request_cases.json').read_text())['cases']}
+        for label, cases in datasets.items():
+            actual = hashlib.sha256(json.dumps(cases, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode('utf-8')).hexdigest()
+            self.assertEqual(actual, REPORT.DATA_DATASET_HASHES[label])
+            expected_ids = REPORT.DATA_REQUEST_CASES if label == 'requests' else REPORT.SUITES['data'][4]
+            self.assertEqual(tuple(case['case_id'] for case in cases), expected_ids)
+            self.assertEqual({case['case_id']: case['expected_operation'] for case in cases},
+                             {case: REPORT.DATA_EXPECTED[case] for case in expected_ids})
 
 
 if __name__ == "__main__":

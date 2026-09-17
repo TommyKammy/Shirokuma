@@ -5,23 +5,49 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "3.2"
+version: "3.3"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：分離したXS/Sのidle停止・再開が同期runnerと実CLIの両方で成功。
-未完了handleによる停止延期、XS停止中のS継続、XSの誤配送防止、新XS Pod/processでの再開を確認。
-CLI6commandのno-op/同ID再送、限定回収、各4件のPawprint/Loki/OTel照合も成功。
-次はData Bearの固定3operationを自然文入力から使う入口。Cloudは無効のまま。
+最新の到達点（2026-09-17）：Data Bearを自然文から利用できる入口が実Qwen・dbtで成功。
+新7case×2と旧6case×2の計26推論が期待どおり。文字数依頼の2回実行と、削除依頼の実行0/拒否を確認。
+拒否監査の照合不備も修正し、保持fixtureと生成relation回収を検証。Cloudは無効のまま。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: Data Bear natural-language entry
+
+[WP-L2-AGENT-003](L2/WP-L2-AGENT-003_Data_Engineer_Bear.md)にUTF-8/512文字の
+`--request`/`--request-stdin`を追加。固定fixture/3operationだけを型付きIRで選び、
+採択IRの実行結果を独立oracleへ照合する。一般の自由文意図を常に正解するという主張はしない。
+unsupportedはmaterialization0/exit2。本文/モデル生応答を保存せずhashとplan/usageを保持する。
+
+新言い換え・曖昧/削除/未知列/injectionの7×2は14/14、既存6×2は12/12成功。
+評価run `d87069723481431f96e87cc0d9d17b2c` / `fb2781b2c73a442facafd74a8ac913a6`。
+自然文文字数実行 `fc906b457f834162acd80a35204a7c1c` はdbt2回・結果 `[[1,9],[2,7]]`、
+4AH/Loki/実span相関と生成2relation回収が成功。DataOps `396f97befadd41b3af49bf4db9be4b1c`。
+削除依頼の初回 `3f4315b3e32e410fbd9f14e25c1a4486` は正しく拒否したが監査helperの
+success固定でfailedとなり、期待statusの両store照合を修正。元証拠を保持し、再実行
+`cffc3740880c437aa883ee7d887b94c1` はunsupported/実行0/3event相関まで成功。
+新service/image・MTPLX設定変更・cloud呼出はなし。新評価のcase群は既存評価と分離して集計する。
+
+
+独立最終監査 `data-request-audit/34a457215c244a589c790d06ab8a16e4`（08:32:49 UTC）が成功。
+保持Kube6Pods/27resources/6CM/3Secret、3Docker、履歴4表/5DDL、fixtureのschema/rows/
+全snapshots/history/refs/headとIceberg全table一覧、旧330eventsが不変。
+全5試行の36追加event（success32/blocked4）を帰属させ、AH366件、workflowのLoki/実spanも一致。
+正常runのowned2tablesとactive query残留0、拒否2試行はadapter生成なし。
+失敗試行を含む29推論の実測usageは12620入力/633出力tokens、cost NULL、cloud/retry0。
+既存62証跡と今回163filesが監査中不変で、workflow証跡にraw要求全文の保持は検出されなかった。
+Data91＋SRE64 focusedが成功、全local回帰867件（866成功＋標準環境optional OTel1skip）も成功。
+同OTel結合は専用venvで成功している。
 
 ## 2026-09-17: warehouse idle suspend/wake and local CLI
 

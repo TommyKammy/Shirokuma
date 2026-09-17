@@ -29,7 +29,10 @@ service readiness or general model quality.
 
 - Groups separate suite, provider/model and case signature. Mock results stay
   separate from local Qwen; older six-case SRE results stay separate from the
-  newer eight-case suite.
+  newer eight-case suite. Data `baseline` (six cases × two) and `requests`
+  (seven cases × two) have separate signatures and labels. A Data receipt with
+  no `suite` field retains legacy baseline compatibility; unknown suite names,
+  changed case order/IDs/counts, or altered expected operations are rejected.
 - Functional success includes both observed-attempt and requested-call
   denominators. Attempt coverage shows how much of a run actually executed.
 - Audit coverage means saved, internally consistent readback evidence. It does
@@ -44,8 +47,17 @@ service readiness or general model quality.
 The old receipts do not retain evaluator code revision, fixture content hashes
 or reliable start timestamps. These remain unknown; file modification times do
 not fill the gap. Case signatures identify case IDs and repeat counts, not
-identical historical prompts, implementations or datasets. The report's source
-hashes provide local change detection, not signed provenance.
+identical historical prompts or implementations. New Data receipts additionally
+require their `dataset_sha256` to match the registered v1 golden cases (canonical
+JSON, sorted keys, compact separators, UTF-8 with `ensure_ascii=False`). Focused
+tests recompute those registered hashes from the checked-in golden definitions.
+Legacy Data receipts without a suite/hash keep `dataset_binding=legacy-unrecorded`;
+no hash is invented for them. A matching recorded hash binds the producer's
+declared dataset identity and typed semantic verdict, but cannot prove which
+prompt was actually sent or independently rescore an unsaved raw model response.
+The report never loads or copies raw requests. Saved audit consistency remains
+distinct from fresh AgentHouse verification, and source hashes provide local
+change detection, not signed provenance.
 
 PR success/revision rates, MTTP, runtime success and production readiness are
 N/A for this read-only synthetic evaluation report. Inference cost remains
