@@ -40,6 +40,7 @@ RESULTS = frozenset({"passed", "failed", "unknown", "not_started", "not_found", 
 FINAL_KEYS = frozenset({"schema_version", "event", "command", "evidence_token", "workflow_token",
     "result", "execution", "verification", "assessment", "root_cause", "remediation_executed", "error_code", "evidence"})
 USAGE_KEYS = frozenset({"source", "availability", "initial", "followup", "comparison"})
+LOG_KEYS = frozenset({"source", "availability", "initial", "followup", "comparison"})
 
 
 class CLIError(ValueError):
@@ -69,9 +70,10 @@ def snapshot(directory):
 
 def projection(command, identity, *, result="unknown", execution="not-started", verification="not-checked",
                workflow_token=None, assessment=None, error_code=None, has_evidence=False,
-               usage=False, resource_usage=None):
-    require(type(usage) is bool and (not usage or command == "status"))
-    value = dict(schema_version=2 if usage else 1, event="result", command=command, evidence_token=identity,
+               usage=False, resource_usage=None, logs=False, log_signals=None):
+    require(type(usage) is bool and type(logs) is bool and not (usage and logs)
+            and (not (usage or logs) or command == "status"))
+    value = dict(schema_version=3 if logs else 2 if usage else 1, event="result", command=command, evidence_token=identity,
         workflow_token=workflow_token, result=result, execution=execution, verification=verification,
         assessment=assessment, root_cause="undetermined", remediation_executed=False, error_code=error_code,
         evidence="tmp/local-experiment/sre-llm/" + identity if has_evidence else None)
@@ -79,6 +81,10 @@ def projection(command, identity, *, result="unknown", execution="not-started", 
         value["resource_usage"] = resource_usage if resource_usage is not None else usage_projection()
     else:
         require(resource_usage is None)
+    if logs:
+        value["log_signals"] = log_projection() if log_signals is None else log_signals
+    else:
+        require(log_signals is None)
     return validate_projection(value)
 
 
@@ -112,11 +118,43 @@ def validate_public_usage(value, *, verified):
         raise CLIError("SRE_EVIDENCE_INVALID") from None
 
 
+def log_projection(initial=None, followup=None, comparison=None, *, verified=False):
+    """Saved bounded header signals only; never raw log text or fresh reads."""
+    return dict(source="saved-evidence", availability=("available" if initial is not None or followup is not None
+                else "legacy-absent") if verified else "unverified",
+                initial=copy.deepcopy(initial) if verified else None,
+                followup=copy.deepcopy(followup) if verified else None,
+                comparison=copy.deepcopy(comparison) if verified and (initial is not None or followup is not None) else None)
+
+
+def validate_public_logs(value, *, verified):
+    require(type(value) is dict and set(value) == LOG_KEYS and value["source"] == "saved-evidence" and
+            value["availability"] in ("available", "legacy-absent", "unverified"))
+    require((value["availability"] != "unverified") == verified)
+    if value["availability"] != "available":
+        require(all(value[key] is None for key in ("initial", "followup", "comparison")))
+        return
+    initial, followup, comparison = (value[key] for key in ("initial", "followup", "comparison"))
+    require(initial is not None or followup is not None)
+    from tools.local_experiment.gateway.pod_logs import validate as validate_logs
+    try:
+        for item in (initial, followup):
+            if item is not None: validate_logs(item)
+        require(type(comparison) is dict and set(comparison) == {
+            "before_state", "after_state", "identity", "requested_window_overlap", "limitations"})
+        expected = C._compare_log_signals(initial, followup,
+                                         reobserved=comparison["after_state"] != "not-reobserved")
+        require(same(comparison, expected))
+    except (ValueError, TypeError, KeyError):
+        raise CLIError("SRE_EVIDENCE_INVALID") from None
+
+
 def validate_projection(value):
-    require(type(value) is dict and type(value.get("schema_version")) is int and value["schema_version"] in (1, 2))
+    require(type(value) is dict and type(value.get("schema_version")) is int and value["schema_version"] in (1, 2, 3))
     usage = value["schema_version"] == 2
-    require(set(value) == FINAL_KEYS | ({"resource_usage"} if usage else set()) and
-        (not usage or value["command"] == "status") and value["event"] == "result" and value["command"] in ("run", "status")
+    logs = value["schema_version"] == 3
+    require(set(value) == FINAL_KEYS | ({"resource_usage"} if usage else {"log_signals"} if logs else set()) and
+        (not (usage or logs) or value["command"] == "status") and value["event"] == "result" and value["command"] in ("run", "status")
         and value["result"] in RESULTS and value["execution"] in ("not-started", "invoked", "read-only")
         and value["verification"] in ("not-checked", "journal-only", "saved-evidence")
         and value["assessment"] in (None, "attention-required", "healthy-observed-scope", "unknown")
@@ -135,6 +173,9 @@ def validate_projection(value):
     if usage:
         validate_public_usage(value["resource_usage"], verified=value["result"] == "passed" and
                               value["verification"] == "saved-evidence")
+    if logs:
+        validate_public_logs(value["log_signals"], verified=value["result"] == "passed" and
+                             value["verification"] == "saved-evidence")
     return value
 
 
@@ -290,7 +331,8 @@ def audits_and_spans(docs, result):
     return root
 
 
-def verify_documents(raw, *, usage=False):
+def verify_documents(raw, *, usage=False, logs=False):
+    require(type(usage) is bool and type(logs) is bool and not (usage and logs))
     # stderr remains a hashed, private opaque file. It never enters a parser,
     # safe projection, diagnosis, assessment or model-facing evidence.
     docs = {name: ([loads(line) for line in value.splitlines() if line] if name == "spans.jsonl" else loads(value))
@@ -338,6 +380,10 @@ def verify_documents(raw, *, usage=False):
             view["resource_usage"] = usage_projection(initial["k8s_read_pods"].get("resource_usage"),
                 followup.get("k8s_read_pods", {}).get("resource_usage"),
                 result["comparisons"]["sources"]["k8s_read_pods"].get("resource_usage"), verified=True)
+        if logs:
+            view["log_signals"] = log_projection(initial["k8s_read_pods"].get("log_signals"),
+                followup.get("k8s_read_pods", {}).get("log_signals"),
+                result["comparisons"]["sources"]["k8s_read_pods"].get("log_signals"), verified=True)
         return view
     if root is not None:
         require("checkpoint" not in result and result.get("error_code") in
@@ -373,27 +419,28 @@ def validate_journal(value, identity):
     return value
 
 
-def inspect_saved(identity, *, command="status", journal=None, usage=False):
-    require(type(usage) is bool and (not usage or command == "status"))
+def inspect_saved(identity, *, command="status", journal=None, usage=False, logs=False):
+    require(type(usage) is bool and type(logs) is bool and not (usage and logs)
+            and (not (usage or logs) or command == "status"))
     output = EVIDENCE / identity
     if EVIDENCE.exists() or EVIDENCE.is_symlink():
         private_directory(EVIDENCE, legacy_parent=True)
     if not output.exists() and not output.is_symlink():
         return projection(command, identity, execution="read-only" if command == "status" else "invoked",
             result="unknown" if journal else "not_found", verification="journal-only" if journal else "not-checked",
-            error_code=None if journal else "SRE_NOT_FOUND", usage=usage), 0 if journal else 1
+            error_code=None if journal else "SRE_NOT_FOUND", usage=usage, logs=logs), 0 if journal else 1
     private_directory(EVIDENCE, legacy_parent=True)
     raw, hashes = snapshot(output)
     if journal is not None and journal["files"] is not None:
         require(journal["files"] == hashes)
-    view = verify_documents(raw, usage=usage)
+    view = verify_documents(raw, usage=usage, logs=True) if logs else verify_documents(raw, usage=usage)
     require(snapshot(output) == (raw, hashes))
     return projection(command, identity, execution="read-only" if command == "status" else "invoked",
-        has_evidence=True, error_code="SRE_FAILED" if view["result"] == "failed" else None, usage=usage, **view), 0
+        has_evidence=True, error_code="SRE_FAILED" if view["result"] == "failed" else None, usage=usage, logs=logs, **view), 0
 
 
-def inspect_sre(identity, *, usage=False):
-    require(type(usage) is bool)
+def inspect_sre(identity, *, usage=False, logs=False):
+    require(type(usage) is bool and type(logs) is bool and not (usage and logs))
     token(identity)
     try:
         directory = STATE / identity
@@ -407,14 +454,14 @@ def inspect_sre(identity, *, usage=False):
                 journal = validate_journal(loads(original), identity)
                 if busy:
                     return projection("status", identity, result="busy", execution="read-only",
-                        verification="journal-only", error_code="SRE_BUSY", usage=usage), 0
-                view = inspect_saved(identity, journal=journal, usage=usage)
+                        verification="journal-only", error_code="SRE_BUSY", usage=usage, logs=logs), 0
+                view = inspect_saved(identity, journal=journal, usage=usage, logs=logs)
                 require(read(directory / "intent.json") == original, "SRE_JOURNAL_INVALID")
                 return view
-        return inspect_saved(identity, usage=usage)
+        return inspect_saved(identity, usage=usage, logs=logs)
     except Exception as error:
         code = error.code if isinstance(error, CLIError) else "SRE_EVIDENCE_INVALID"
-        return projection("status", identity, execution="read-only", error_code=code, usage=usage), 1
+        return projection("status", identity, execution="read-only", error_code=code, usage=usage, logs=logs), 1
 
 
 def runner():
@@ -481,7 +528,9 @@ def arguments(argv):
         command = sub.add_parser(action, allow_abbrev=False)
         command.add_argument("--evidence-token", required=True)
         if action == "status":
-            command.add_argument("--usage", action="store_true")
+            views = command.add_mutually_exclusive_group()
+            views.add_argument("--usage", action="store_true")
+            views.add_argument("--logs", action="store_true")
     return parser.parse_args(argv)
 
 
@@ -494,20 +543,21 @@ def emit(stream, value):
 def main(argv=None, *, stdout=None):
     stream = stdout or sys.stdout
     action, identity = "run", None
-    usage = False
+    usage = logs = False
     lifecycle = {"invoked": False}
     try:
         args = arguments(argv)
-        # Once the opt-in is parsed, even a rejected token uses its schema2
+        # Once the opt-in is parsed, even a rejected token uses its chosen
         # status failure frame; no allocation or saved-file read has occurred.
-        if args.command == "status" and args.usage:
-            action, usage = "status", True
+        if args.command == "status" and (args.usage or args.logs):
+            action, usage, logs = "status", args.usage, args.logs
         action, identity = args.command, token(args.evidence_token)
         usage = action == "status" and args.usage
+        logs = action == "status" and args.logs
         emit(stream, dict(schema_version=1, event="allocated", command=action, evidence_token=identity))
         with redirect_stdout(Discard()), redirect_stderr(Discard()):
             if action == "status":
-                report, code = inspect_sre(identity, usage=usage)
+                report, code = inspect_sre(identity, usage=usage, logs=logs)
             else:
                 report, code = invoke(identity, lifecycle)
         emit(stream, report)
@@ -519,7 +569,7 @@ def main(argv=None, *, stdout=None):
         # An allocated identity alone cannot prove that run() was invoked.
         intent = lifecycle["invoked"]
         report = projection(action, identity, result="unknown" if intent or action == "status" else "not_started",
-            execution="read-only" if action == "status" else "invoked" if intent else "not-started", error_code=code, usage=usage)
+            execution="read-only" if action == "status" else "invoked" if intent else "not-started", error_code=code, usage=usage, logs=logs)
         try:
             emit(stream, report)
         except BaseException:

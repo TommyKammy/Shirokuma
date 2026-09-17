@@ -11,6 +11,7 @@ rtk go build -o tmp/shirokuma ./cmd/shirokuma
 rtk proxy tmp/shirokuma sre run
 rtk proxy tmp/shirokuma sre status <evidence-token>
 rtk proxy tmp/shirokuma sre status <evidence-token> --usage
+rtk proxy tmp/shirokuma sre status <evidence-token> --logs
 ```
 
 Both commands use the `local-experiment` profile. Use `--repo-root` to select
@@ -62,6 +63,21 @@ windows describe the original observation. `same-sample-window` can be a
 cached sample; `different-sample-window` is not a trend or cause assessment.
 Missing follow-up stays unobserved rather than borrowing the initial sample.
 
+`status TOKEN --logs` shows the saved typed log observations. Its final frame
+is schema 3: the original 13 keys plus `log_signals`, with the same five-field
+saved-evidence envelope and availability rules as usage. The allocated frame
+stays schema 1. `--usage` and `--logs` cannot both be true; each display keeps
+the 4096-byte limit. Both are status-only flags.
+
+Initial and follow-up values contain the verified fixed 12-field log projection,
+including its eight-field fragment and four limitations. Unknown acquisition
+has a null fragment; a valid empty fragment has observed zero counts. Neither
+establishes healthy logs or absence of errors. Header counts describe matching
+text lines, not authenticated events. The five-field comparison preserves
+identity and requested-window overlap, without deriving count deltas, rates,
+trends or recovery. Old receipts without log observations stay `legacy-absent`.
+This display repeats no collection, model, API or audit operation.
+
 Cancellation signals only the CLI's own child and allows up to 240 seconds for
 cleanup. An unconfirmed completion retains an unknown outcome, token and child
 PID. The CLI does not send SIGKILL, replay an attempt or provide `resume`.
@@ -80,3 +96,12 @@ input or source changes. API/model/audit calls were not added; the earlier
 AgentHouse count of 493 was inherited rather than queried. An independent
 saved-only audit passed 68 checks without rerunning the CLI or APIs. Acceptance evidence
 is under `tmp/local-experiment/sre-saved-usage-checks/e4c49ef987d34d078b0884e6102f4b6c/`.
+
+The saved-log display passed 30 product-CLI invocations across six retained
+tokens: 12 baseline views and 18 views with the new build. All 12 prior default
+and usage outputs were byte-identical, and all 40 saved directory/file entries
+were unchanged. Four log views were legacy-absent, one was unverified, and the
+existing log-aware run retained both observed empty fragments and its saved
+identity/window comparison. The largest actual final frame was 2639 bytes;
+the conservative maximum allowed fixture was 3266 bytes, both including newline.
+Evidence is under `tmp/local-experiment/sre-saved-logs-checks/fb4d3d0240354c7985a9a2bdb94cf00a/`.

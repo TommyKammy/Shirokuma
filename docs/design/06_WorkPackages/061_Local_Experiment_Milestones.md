@@ -5,16 +5,29 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.31"
+version: "3.32"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-18）：SRE observation-signals評価の16/16 samplesと保存triage照合を完了。
-次の型付き等値Reader7件と歴史診断1回も実機成功し、同UUID cleanup・最終保持照合まで完了。
+最新の到達点（2026-09-18）：型付き等値Readerと歴史診断の実機検証に続き、
+保存済みSRE log観測のCLI表示を追加した。既存6記録の表示と証拠を保持し、追加採取なしで確認できる。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-18: saved SRE log status — local acceptance complete
+
+`sre status TOKEN --logs`が保存済みtyped log観測のinitial/followup/comparisonを表示する。
+新schema3/14keysだけを追加し、通常schema1とusage schema2を維持する。両flag trueはchild前拒否。
+passed証拠だけを投影し、旧未観測・未検証・unknown・有効なempty/0を区別する。
+raw本文や追加API/model/auditは0、header件数をevent数やログ健全性・回復とは扱わない。
+実CLI30回で旧12出力がbyte一致、40保存entries不変。新logsはavailable1/legacy-absent4/unverified1。
+実最大2639B、offline最大長3266Bで4096B以内。全local61suites/2271tests（既存optional1skip）が成功した。
+runtimeとAH519は直前証拠を継承し、今回再観測していない。
+証拠は`tmp/local-experiment/sre-saved-logs-checks/fb4d3d0240354c7985a9a2bdb94cf00a/`。
+[WP-L2-AGENT-002](L2/WP-L2-AGENT-002_SRE_Bear.md)と
+[SRE runbook](../../../tools/local_experiment/bears/SRE_CLI.md)を参照。
 
 ## 2026-09-18: typed equality Reader and diagnosis — local acceptance complete
 

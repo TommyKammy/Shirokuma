@@ -5,7 +5,7 @@ title: "shirokuma CLI"
 status: draft
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.15.0"
+version: "0.16.0"
 area: "module"
 tags: [shirokuma, module]
 ---
@@ -199,6 +199,14 @@ verified passedではfield有りがavailable、旧未観測がlegacy-absent。�
 入力32dir/file entries・2parent inventory・2locks・Gateway監査2files・source223の不変を確認し、
 全local2150件（既存1skip）・独立review・保存受入68checksを通過した。
 前段AH493は再照会せず継承する。
+
+保存log観測は`sre status TOKEN --logs`で表示する。最終frameはschema3/14keys、
+`log_signals`はsource/availability/initial/followup/comparisonの5fieldsで、通常schema1とusage schema2を保つ。
+両flag trueはchild起動前に拒否し、最終frame上限4096Bを維持する。passed/saved-evidenceだけを公開し、
+旧field欠落はlegacy-absent、それ以外の未検証状態はunverified・全payload NULLとする。
+unknownのfragment NULLと有効なempty/0を区別する。comparisonは保存identityと要求窓overlapだけで、
+header形の件数をevent数・ログ健全性・原因・回復へ拡大しない。同じlockと前後snapshotで再検証し、
+追加API/model/audit・原文出力・証拠書換えは行わない。
 
 ### Local experimental Pod policy check
 

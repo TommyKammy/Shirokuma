@@ -5,7 +5,7 @@ title: "WP-L2-AGENT-002 SRE Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.11"
+version: "0.12"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -16,6 +16,37 @@ tags: [shirokuma, workpackage, l2, agentops]
 
 K8s Pod/Event・runtime状態の固定観測から実LLMが追加読取を選び、同一identityの変化を確認する。
 containerの現在状態と過去終了履歴を分離する。logs/metricsによる原因診断・自動修復は未達。
+
+## 2026-09-18: saved log status — local acceptance complete
+
+保存されたlog観測を`shirokuma sre status TOKEN --logs`で参照できるようにした。
+既存default schema1/13keys・usage schema2/14keysを維持し、新flagだけschema3/14keysとする。
+`log_signals`はsource/availability/initial/followup/comparisonのexact5fields。
+両flag trueはchild前拒否、false指定は非選択、allocated schema1/4keysと4096B上限を保つ。
+
+同じlockとraw証拠検証・前後snapshot照合を共有し、passed/saved-evidenceだけを投影する。
+旧log field無しはlegacy-absent、failed/busy/不正/欠落/journal-onlyはunverified・3payload NULL。
+取得unknownはavailableでもfragment NULL、有効なemptyはobserved/0のまま区別する。
+両側の既存log contractと比較を再検証し、identity/要求窓overlap以外の差・rate・回復を導かない。
+原文・新API/model/audit・書換え・再採取は追加しない。現在のruntime状態やログ健全性は主張しない。
+rollbackはこのCLI変更のlocal revertで、保存証拠のmigrationやruntime変更は不要。
+
+- [x] 新opt-inの型・時刻・比較・失敗境界と旧表示互換を確認する。
+- [x] 実保存6tokensの通常/usage表示とfilesを保持し、log表示を検証する。
+
+実保存CLIは変更前12回＋変更後18回の計30回。旧通常/usageの12出力がbyte単位で一致し、
+対象40dir/file entriesのhash・mode・mtime/ctime・inode・sizeは完全一致した。
+logs表示は4件legacy-absent、1件journal-only/unverified、1件available。
+既存run `67088c0df26da13728309bc95e6b8de2`のinitial/followupは両方observed emptyで、
+同identity・要求窓overlap trueを保存値どおり表示した。実最大最終frameは改行込み2639B、
+validator許可最大長を組み合わせたoffline frameは3266Bで、4096B以内だった。
+新Python11件を含む全local61suites/2271tests（2270成功・既存optional1skip）が通過した。
+Go full/race各201 top/363 subtests・vetも成功。新Go15 top/131 subtestsには
+pure Python契約24ケースと実Python main14ケースを含む。独立reviewのPython5件・Go5 top/66 subtestsも成功した。
+API/model/audit再呼出しは0。AH519と直前のruntime保持証拠は継承し、新runtime検査とはしない。
+
+検証先：`tmp/local-experiment/sre-saved-logs-checks/fb4d3d0240354c7985a9a2bdb94cf00a/`。
+WPの一般原因診断・自動修復・本番受入は引き続き未達とする。
 
 ## 2026-09-18: observation-signals evaluation — local acceptance passed
 

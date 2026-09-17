@@ -20,9 +20,10 @@ import (
 
 const sreScript = "tools/local_experiment/bears/sre_cli.py"
 const sreUsageAction = "status-usage"
+const sreLogsAction = "status-logs"
 
 func srePublicAction(action string) string {
-	if action == sreUsageAction {
+	if action == sreUsageAction || action == sreLogsAction {
 		return "status"
 	}
 	return action
@@ -43,6 +44,7 @@ type sreEvent struct {
 	ErrorCode           *string         `json:"error_code"`
 	Evidence            *string         `json:"evidence"`
 	ResourceUsage       *sreUsageReport `json:"resource_usage,omitempty"`
+	LogSignals          *sreLogsReport  `json:"log_signals,omitempty"`
 }
 
 func newSRECommand(child dataChildRunner) *cobra.Command {
@@ -53,7 +55,7 @@ func newSRECommand(child dataChildRunner) *cobra.Command {
 	parent.PersistentFlags().StringVar(&profile, "profile", localExperimentProfile, "SRE profile: local-experiment")
 	for _, action := range []string{"run", "status"} {
 		action := action
-		var showUsage bool
+		var showUsage, showLogs bool
 		use := "status TOKEN"
 		if action == "run" {
 			use = "run"
@@ -73,9 +75,15 @@ func newSRECommand(child dataChildRunner) *cobra.Command {
 				if profile != localExperimentProfile {
 					return errors.New("SRE requires --profile local-experiment")
 				}
+				if showUsage && showLogs {
+					return errors.New("SRE status accepts either --usage or --logs")
+				}
 				request := dataChildRequest{Action: action}
 				if showUsage {
 					request.Action = sreUsageAction
+				}
+				if showLogs {
+					request.Action = sreLogsAction
 				}
 				if action == "run" {
 					var token [16]byte
@@ -103,6 +111,7 @@ func newSRECommand(child dataChildRunner) *cobra.Command {
 		}
 		if action == "status" {
 			command.Flags().BoolVar(&showUsage, "usage", false, "Include verified saved CPU and memory observations")
+			command.Flags().BoolVar(&showLogs, "logs", false, "Include verified saved log-shaped counts and observation windows")
 		}
 		parent.AddCommand(command)
 	}
@@ -198,13 +207,14 @@ func decodeSREEvent(line []byte, request dataChildRequest) (sreEvent, error) {
 	var value sreEvent
 	invalid := errors.New("SRE child response failed the fixed protocol")
 	showUsage := request.Action == sreUsageAction
+	showLogs := request.Action == sreLogsAction
 	action := srePublicAction(request.Action)
 	uniqueJSON := uniqueWarehouseJSON
-	if showUsage {
+	if showUsage || showLogs {
 		uniqueJSON = uniqueQueryReadJSON
 	}
-	if !dataOneOf(request.Action, "run", "status", sreUsageAction) || len(line) > dataResponseLimit ||
-		(showUsage && len(line)+1 > dataResponseLimit) || !utf8.Valid(line) || uniqueJSON(line) != nil {
+	if !dataOneOf(request.Action, "run", "status", sreUsageAction, sreLogsAction) || len(line) > dataResponseLimit ||
+		((showUsage || showLogs) && len(line)+1 > dataResponseLimit) || !utf8.Valid(line) || uniqueJSON(line) != nil {
 		return value, invalid
 	}
 	var fields map[string]json.RawMessage
@@ -220,6 +230,9 @@ func decodeSREEvent(line []byte, request dataChildRequest) (sreEvent, error) {
 		keys = append(keys, "workflow_token", "result", "execution", "verification", "assessment", "root_cause", "remediation_executed", "error_code", "evidence")
 		if showUsage {
 			keys = append(keys, "resource_usage")
+		}
+		if showLogs {
+			keys = append(keys, "log_signals")
 		}
 	} else if kind != "allocated" {
 		return value, invalid
@@ -237,6 +250,9 @@ func decodeSREEvent(line []byte, request dataChildRequest) (sreEvent, error) {
 	wantSchema := 1
 	if showUsage && kind == "result" {
 		wantSchema = 2
+	}
+	if showLogs && kind == "result" {
+		wantSchema = 3
 	}
 	if decoder.Decode(&value) != nil || value.SchemaVersion != wantSchema || value.Command != action || value.EvidenceToken != request.Token {
 		return value, invalid
@@ -273,15 +289,24 @@ func decodeSREEvent(line []byte, request dataChildRequest) (sreEvent, error) {
 		value.Verification != "saved-evidence" || (action == "run" && value.Execution != "invoked")) {
 		return value, invalid
 	}
-	if showUsage {
+	if showUsage || showLogs {
 		if value.Result == "failed" && (value.WorkflowToken == nil || value.Verification != "saved-evidence") {
 			return value, invalid
 		}
+	}
+	if showUsage {
 		usage, err := decodeSREUsage(fields["resource_usage"], value)
 		if err != nil {
 			return value, invalid
 		}
 		value.ResourceUsage = usage
+	}
+	if showLogs {
+		logs, err := decodeSRELogs(fields["log_signals"], value)
+		if err != nil {
+			return value, invalid
+		}
+		value.LogSignals = logs
 	}
 	return value, nil
 }
