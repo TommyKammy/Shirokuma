@@ -17,8 +17,16 @@ REPORT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(REPORT)
 
 
+def signal_triage(case):
+    expected = case['expected']
+    tools = expected['required_tools'] or (expected['allowed_tools'][:1] if case['evidence']['findings'] else [])
+    return {'assessment': expected['assessment'], 'root_cause': expected['root_cause'],
+            'checks': [{'tool': tool, 'finding_ids': [finding['id'] for finding in case['evidence']['findings']
+                        if tool in finding['allowed_tools']]} for tool in tools]}
+
+
 def receipt(suite="inventory", *, mock=False, old_sre=False, failed_index=None, truncate=None, unknown_tokens=False,
-            data_variant=None, platform_sre=False):
+            data_variant=None, platform_sre=False, sre_signals=False):
     _, _, prefix, action, cases = REPORT.SUITES[suite]
     if old_sre:
         cases = cases[:6]
@@ -26,6 +34,10 @@ def receipt(suite="inventory", *, mock=False, old_sre=False, failed_index=None, 
         cases = cases[:8]
     if suite == "data" and data_variant == "requests":
         cases = REPORT.DATA_REQUEST_CASES
+    signal_definitions = None
+    if suite == "sre" and sre_signals:
+        cases = REPORT.SRE_SIGNAL_CASES
+        signal_definitions, _ = REPORT.registered_sre_signals()
     provider, model = ("shirokuma-mock", "shirokuma-deterministic-v1") if mock else ("mtplx", "qwen3.8-flash-next")
     task, trace = prefix + uuid.uuid4().hex, uuid.uuid4().hex
     attempts = []
@@ -46,6 +58,9 @@ def receipt(suite="inventory", *, mock=False, old_sre=False, failed_index=None, 
                 operation = REPORT.DATA_EXPECTED[case]
                 attempts[-1].update(expected_operation=operation,
                     plan={"schema_version": 1, "source": "fixture_v1", "operation": operation})
+            if signal_definitions is not None and passed:
+                triage = signal_triage(signal_definitions[case])
+                attempts[-1].update(triage=triage, selected_tools=[check['tool'] for check in triage['checks']])
     if truncate is not None:
         attempts = attempts[:truncate]
     usage = {key: sum(a["metrics"][key] for a in attempts) if key == "duration_ms" or (attempts and not unknown_tokens) else None
@@ -58,7 +73,9 @@ def receipt(suite="inventory", *, mock=False, old_sre=False, failed_index=None, 
             "audited_inferences": len(attempts), "elapsed_ms": 1000,
             "attempts": attempts, "usage": usage,
             **({"suite": data_variant, "dataset_sha256": REPORT.DATA_DATASET_HASHES[data_variant]}
-               if suite == "data" and data_variant is not None else {})}
+               if suite == "data" and data_variant is not None else {}),
+            **({"suite": REPORT.SRE_SIGNAL_SUITE, "dataset_sha256": REPORT.SRE_DATASET_HASHES[REPORT.SRE_SIGNAL_SUITE]}
+               if suite == "sre" and sre_signals else {})}
 
 
 class EvaluationReportTests(unittest.TestCase):
@@ -393,6 +410,148 @@ class EvaluationReportTests(unittest.TestCase):
             self.assertEqual(tuple(case['case_id'] for case in cases), expected_ids)
             self.assertEqual({case['case_id']: case['expected_operation'] for case in cases},
                              {case: REPORT.DATA_EXPECTED[case] for case in expected_ids})
+
+    def test_sre_signal_identity_precedes_old_sixteen_requested_case_selection(self):
+        self.complete_all()
+        self.save('sre', receipt('sre', old_sre=True))
+        self.save('sre', receipt('sre', platform_sre=True))
+        self.save('sre', receipt('sre', sre_signals=True))
+        with patch('urllib.request.urlopen', side_effect=AssertionError('no HTTP')), patch('socket.create_connection', side_effect=AssertionError('no HTTP')):
+            result = REPORT.collect(self.base)
+        groups = [g for g in result['groups'] if g['suite'] == 'sre']
+        self.assertEqual(len(groups), 4)
+        self.assertEqual(sorted(g['requested_inferences'] for g in groups), [12, 16, 16, 32])
+        self.assertEqual(len({g['case_signature'] for g in groups}), 4)
+        new = next(g for g in groups if 'evaluation_suite' in g)
+        self.assertEqual(new['evaluation_suite'], 'observation-signals-v1')
+        self.assertEqual(new['case_ids'], list(REPORT.SRE_SIGNAL_CASES))
+        self.assertEqual(new['fixture_content_comparability'], 'unknown')
+        run = next(r for r in result['runs'] if r.get('evaluation_suite') == REPORT.SRE_SIGNAL_SUITE)
+        self.assertEqual(run['dataset_binding'], 'registered-golden-hash-matched')
+        self.assertIsNone(run['fixture_content_sha256'])
+        self.assertIsNone(run['evaluator_revision'])
+        self.assertIn('sre/observation-signals-v1 (8;', REPORT.markdown(result))
+        self.assertNotIn('triage', json.dumps(result))
+
+    def test_sre_field_free_legacy_shape_and_case_signatures_are_unchanged(self):
+        variants = [({'old_sre': True}, 'bef9b768328073392dae32d319304b066eda3ae8be0564d0abb3335317cd080b'),
+                    ({'platform_sre': True}, '8a0a0ad37b19f9c9556c0e3a2286dfd647cd82626be53fecd8ec6a96f4548746'),
+                    ({}, '8a98e35c3f8fc420758c7dda693574d6a746652b8bb3abcc39078816e340f23d')]
+        expected_keys = {'_attempts', 'case_ids', 'case_signature', 'elapsed_ms', 'model',
+            'model_identity_sha256', 'provider', 'provider_kind', 'reported_result', 'requested_inferences',
+            'task_id', 'trace_id'}
+        with patch.object(REPORT, 'registered_sre_signals', side_effect=AssertionError('legacy must not load new cases')):
+            for variant, signature in variants:
+                value = receipt('sre', **variant)
+                with self.subTest(variant=variant):
+                    result = REPORT.normalize(value, 'sre')
+                    self.assertEqual(set(result), expected_keys)
+                    self.assertEqual(result['case_signature'], signature)
+                    self.assertTrue(all('triage' not in row for row in value['attempts']))
+
+    def test_sre_unknown_suite_bad_hash_and_partial_identity_never_fall_back(self):
+        for field, altered, code in [
+            ('suite', 'baseline', 'unrecognized_sre_suite'),
+            ('suite', 'requests', 'unrecognized_sre_suite'),
+            ('suite', 'UNTRUSTED_LABEL', 'unrecognized_sre_suite'),
+            ('suite', None, 'unrecognized_sre_suite'),
+            ('suite', [], 'unrecognized_sre_suite'),
+            ('dataset_sha256', None, 'sre_dataset_hash_mismatch'),
+            ('dataset_sha256', False, 'sre_dataset_hash_mismatch'),
+            ('dataset_sha256', 'f' * 64, 'sre_dataset_hash_mismatch'),
+            ('dataset_sha256', REPORT.DATA_DATASET_HASHES['baseline'], 'sre_dataset_hash_mismatch'),
+        ]:
+            value = receipt('sre', sre_signals=True)
+            value[field] = altered
+            with self.subTest(field=field, altered=altered), self.assertRaisesRegex(REPORT.ReceiptError, code):
+                REPORT.normalize(value, 'sre')
+        for missing in ('suite', 'dataset_sha256'):
+            value = receipt('sre', sre_signals=True)
+            del value[missing]
+            with self.subTest(missing=missing), self.assertRaisesRegex(REPORT.ReceiptError, 'incomplete_sre_suite_identity'):
+                REPORT.normalize(value, 'sre')
+        value = receipt('sre', sre_signals=True)
+        del value['suite']; del value['dataset_sha256']
+        with self.assertRaisesRegex(REPORT.ReceiptError, 'attempt_order_duplicate_or_missing'):
+            REPORT.normalize(value, 'sre')
+
+    def test_sre_new_suite_requires_exact_count_order_and_unique_attempts(self):
+        edits = [
+            (lambda x: x.update(requested_inferences=32), 'unrecognized_case_suite'),
+            (lambda x: x['attempts'][0].update(case_id='intentional_flux_only'), 'attempt_order_duplicate_or_missing'),
+            (lambda x: x['attempts'][1].update(repeat=1), 'attempt_order_duplicate_or_missing'),
+            (lambda x: x['attempts'][1].update(repeat=True), 'attempt_order_duplicate_or_missing'),
+            (lambda x: x['attempts'].__setitem__(slice(0, 2), list(reversed(x['attempts'][:2]))), 'attempt_order_duplicate_or_missing'),
+            (lambda x: x['attempts'][1].update(event_id=x['attempts'][0]['event_id']), 'duplicate_event_identity'),
+        ]
+        for edit, code in edits:
+            value = receipt('sre', sre_signals=True)
+            edit(value)
+            with self.subTest(code=code), self.assertRaisesRegex(REPORT.ReceiptError, code):
+                REPORT.normalize(value, 'sre')
+        legacy = receipt('sre', platform_sre=True)
+        legacy.update(suite=REPORT.SRE_SIGNAL_SUITE, dataset_sha256=REPORT.SRE_DATASET_HASHES[REPORT.SRE_SIGNAL_SUITE])
+        with self.assertRaisesRegex(REPORT.ReceiptError, 'attempt_order_duplicate_or_missing'):
+            REPORT.normalize(legacy, 'sre')
+
+    def test_sre_signal_duplicate_execution_is_visible_and_not_double_counted(self):
+        value = receipt('sre', sre_signals=True)
+        self.save('sre', value); self.save('sre', copy.deepcopy(value))
+        result = REPORT.collect(self.base)
+        self.assertEqual(result['coverage']['duplicate_runs'], 2)
+        self.assertEqual(result['groups'], [])
+        self.assertTrue(all(row['issues'] == ['duplicate_execution_identity'] for row in result['runs']))
+
+    def test_sre_signal_pass_requires_exact_safe_triage_critical_coverage_and_selected_tools(self):
+        edits = [lambda a: a.pop('triage'), lambda a: a.update(triage=None),
+                 lambda a: a['triage'].update(raw_response='PRIVATE MODEL TEXT'),
+                 lambda a: a['triage'].update(root_cause='OOM'),
+                 lambda a: a['triage'].update(assessment='healthy-observed-scope'),
+                 lambda a: a['triage']['checks'][0].update(tool='shell'),
+                 lambda a: a['triage']['checks'][0].update(finding_ids=['fabricated']),
+                 lambda a: a['triage']['checks'].pop()]
+        for edit in edits:
+            value = receipt('sre', sre_signals=True)
+            attempt = next(a for a in value['attempts'] if a['case_id'] == 'signals_dual_critical')
+            edit(attempt)
+            with self.subTest(edit=edit), self.assertRaisesRegex(REPORT.ReceiptError, 'invalid_sre_signal_triage'):
+                REPORT.normalize(value, 'sre')
+        for altered in (None, [], ['shell']):
+            value = receipt('sre', sre_signals=True)
+            attempt = next(a for a in value['attempts'] if a['case_id'] == 'signals_dual_critical')
+            attempt['selected_tools'] = altered
+            with self.subTest(selected=altered), self.assertRaisesRegex(REPORT.ReceiptError, 'sre_selected_tools_mismatch'):
+                REPORT.normalize(value, 'sre')
+
+    def test_sre_failed_partial_signals_keep_denominator_without_fabricating_triage(self):
+        partial = receipt('sre', sre_signals=True, failed_index=0, truncate=1)
+        self.assertNotIn('triage', partial['attempts'][0])
+        partial['attempts'][0]['raw_response'] = 'PRIVATE FAILED PROPOSAL'
+        self.save('sre', partial)
+        self.save('sre', receipt('sre', sre_signals=True))
+        result = REPORT.collect(self.base)
+        group = result['groups'][0]
+        self.assertEqual((group['runs'], group['failed_runs']), (2, 1))
+        self.assertEqual((group['requested_inferences'], group['attempted_inferences']), (32, 17))
+        self.assertEqual(group['functional_success_observed'], {'numerator': 16, 'denominator': 17, 'value': 16 / 17})
+        self.assertEqual(group['functional_success_requested']['denominator'], 32)
+        self.assertNotIn('PRIVATE FAILED PROPOSAL', json.dumps(result))
+        self.assertNotIn('triage', json.dumps(result))
+
+    def test_sre_registered_golden_hash_and_ids_are_checked_before_rescoring(self):
+        definitions, validate = REPORT.registered_sre_signals()
+        self.assertEqual(tuple(definitions), REPORT.SRE_SIGNAL_CASES)
+        self.assertFalse(set(definitions) & set(REPORT.SUITES['sre'][4]))
+        self.assertEqual(len(definitions), 8)
+        raw = json.dumps(list(definitions.values()), sort_keys=True, separators=(',', ':'),
+                         ensure_ascii=False).encode('utf-8')
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), REPORT.SRE_DATASET_HASHES[REPORT.SRE_SIGNAL_SUITE])
+        for case in definitions.values():
+            triage = signal_triage(case)
+            self.assertEqual(validate(case, triage), triage)
+        with patch.dict(REPORT.SRE_DATASET_HASHES, {REPORT.SRE_SIGNAL_SUITE: 'f' * 64}):
+            with self.assertRaisesRegex(REPORT.ReceiptError, 'sre_registered_dataset_mismatch'):
+                REPORT.registered_sre_signals()
 
 
 if __name__ == "__main__":

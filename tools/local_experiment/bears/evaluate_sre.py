@@ -6,11 +6,14 @@ import argparse
 import copy
 import json
 from pathlib import Path
+import sys
 import time
 import uuid
 
 from sre_provider import SREProvider
 from sre_contract import COMPONENTS, build_evidence, validate_triage
+from sre_evaluation_cases import (SIGNAL_SUITE, SIGNAL_DATASET_SHA256, signal_cases,
+                                  dataset_sha256, validate_signal_triage)
 from providers import ProviderError, load_config, validate_config
 from evaluation import private_write, safe_metrics, verify_audit
 from workflow import agenthouse_module, disable_external_tracing
@@ -21,7 +24,11 @@ ROOT = HERE.parents[2]
 REPEATS = 2
 
 
-def cases() -> list[dict]:
+def cases(suite: str = 'baseline') -> list[dict]:
+    if suite == SIGNAL_SUITE:
+        return signal_cases()
+    if suite != 'baseline':
+        raise ValueError('unknown fixed SRE evaluation suite')
     stamp = '2026-09-17T00:00:00.000000Z'
     doctor = {'profile': 'local-experiment', 'context': 'colima-mac-studio-solo', 'observed_at': stamp,
               'checks': [{'name': 'cluster', 'status': 'healthy', 'summary': 'fixture'},
@@ -93,11 +100,21 @@ def cases() -> list[dict]:
     return result
 
 
-def evaluate(config: dict, output: Path, *, model=None, client=None, audit_module=None) -> dict:
+def evaluate(config: dict, output: Path, *, model=None, client=None, audit_module=None,
+             suite: str = 'baseline') -> dict:
+    fixed_cases = cases(suite)
     validate_config(config)
     if config['active_provider'] != 'local':
         raise ValueError('SRE evaluation requires the explicitly configured local model')
     profile = config['providers']['local']
+    signals = suite == SIGNAL_SUITE
+    if signals:
+        if dataset_sha256(fixed_cases) != SIGNAL_DATASET_SHA256:
+            raise ValueError('fixed SRE signal dataset changed')
+        # Validate every actual request body offline before any client or output.
+        body_provider = SREProvider(profile)
+        for case in fixed_cases:
+            body_provider.request_body('sre_triage', case['evidence'])
     disable_external_tracing()
     model = model if model is not None else SREProvider(profile)
     agenthouse = audit_module if audit_module is not None else agenthouse_module()
@@ -108,12 +125,15 @@ def evaluate(config: dict, output: Path, *, model=None, client=None, audit_modul
               'trace_kind': 'evaluation correlation identifier; no exported spans',
               'scope': 'synthetic read-selection contract; no MCP calls, fault injection or remediation',
               'provider': profile['provider'], 'model': profile['model'], 'retries': 0,
-              'requested_inferences': len(cases()) * REPEATS, 'attempts': [], 'evidence_path': str(output)}
+              'requested_inferences': len(fixed_cases) * REPEATS, 'attempts': [], 'evidence_path': str(output)}
+    if signals:
+        report.update(suite=SIGNAL_SUITE, dataset_sha256=SIGNAL_DATASET_SHA256)
+        private_write(output / 'result.json', report)
     started = time.monotonic()
     try:
         if client.query('SELECT 1').strip() != '1':
             raise ValueError('audit preflight failed')
-        for case in cases():
+        for case in fixed_cases:
             for repeat in range(1, REPEATS + 1):
                 attempt = {'case_id': case['case_id'], 'repeat': repeat, 'result': 'failed',
                            'expected_health': case['evidence']['health'], 'audit': 'pending'}
@@ -127,8 +147,11 @@ def evaluate(config: dict, output: Path, *, model=None, client=None, audit_modul
                     attempt['failure_code'] = 'model_response_failed'
                 else:
                     try:
-                        proposal = validate_triage(response['content'], case['evidence'])
+                        proposal = (validate_signal_triage(case, response['content']) if signals
+                                    else validate_triage(response['content'], case['evidence']))
                         attempt.update(result='passed', selected_tools=[x['tool'] for x in proposal['checks']])
+                        if signals:
+                            attempt['triage'] = proposal
                     except Exception:
                         attempt['failure_code'] = 'triage_contract_rejected'
                 report['attempts'].append(attempt)
@@ -145,11 +168,32 @@ def evaluate(config: dict, output: Path, *, model=None, client=None, audit_modul
                     attempt['audit'] = 'failed'
                     raise ValueError('audit delivery or readback failed') from None
                 finally:
-                    private_write(output / 'attempts.jsonl', attempt, append=True)
+                    original = sys.exc_info()[1]
+                    try:
+                        private_write(output / 'attempts.jsonl', attempt, append=True)
+                    except BaseException:
+                        if signals and original is not None and not isinstance(original, Exception):
+                            raise original
+                        raise
         if all(x['result'] == 'passed' for x in report['attempts']):
             report['result'] = 'passed'
     except Exception:
         report['failure_code'] = 'evaluation_audit_or_storage_failed'
+    except BaseException:
+        # Preserve the first cancellation even if saving the partial run fails.
+        # There is no automatic resume/retry; an unfinished call stays unknown.
+        if signals:
+            report['failure_code'] = 'evaluation_interrupted'
+            try:
+                _finish_report(report, started, output)
+            except BaseException:
+                pass
+        raise
+    _finish_report(report, started, output)
+    return report
+
+
+def _finish_report(report, started, output):
     attempts = report['attempts']
     report.update(attempted_inferences=len(attempts), passed_inferences=sum(x['result'] == 'passed' for x in attempts),
                   audited_inferences=sum(x['audit'] == 'verified' for x in attempts),
@@ -159,16 +203,16 @@ def evaluate(config: dict, output: Path, *, model=None, client=None, audit_modul
         values = [x['metrics'][key] for x in attempts]
         report['usage'][key] = sum(values) if values and all(x is not None for x in values) else None
     private_write(output / 'result.json', report)
-    return report
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=LOCAL / 'llm/providers.qwen-local.json')
+    parser.add_argument('--suite', choices=('baseline', SIGNAL_SUITE), default='baseline')
     args = parser.parse_args()
     output = ROOT / 'tmp/local-experiment/sre-evaluation' / uuid.uuid4().hex
     try:
-        report = evaluate(load_config(args.config), output)
+        report = evaluate(load_config(args.config), output, suite=args.suite)
     except Exception:
         report = {'result': 'failed', 'failure_code': 'configuration_or_setup_failed', 'evidence_path': str(output)}
         output.mkdir(parents=True, exist_ok=True, mode=0o700)

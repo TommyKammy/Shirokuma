@@ -254,7 +254,7 @@ findings and comparisons. Hashes cover these retained projections. Arbitrary
 snapshot fields and raw model responses are not written. A successful workflow may still report
 `attention-required`; it has verified its procedure, not repaired the lab.
 
-The evaluation command sends sixteen synthetic cases twice each. Its original
+The default evaluation command sends sixteen synthetic cases twice each. Its original
 eight cases cover intentional Flux
 only, historical restarts, two critical Pods, a Warning event, degraded doctor,
 truncated events, simultaneous Pod/runtime unavailability, and unknown runtime
@@ -267,6 +267,54 @@ written to AgentHouse and read back; an audit failure stops the suite. Evaluatio
 trace IDs are correlation identifiers, not exported spans. Evidence stays in
 `tmp/local-experiment/sre-evaluation/<uuid>/` without raw prompts/responses.
 The report preserves earlier six/eight-case receipts as separate case groups.
+
+### Explicit observation-signals evaluation
+
+```sh
+rtk proxy tools/local_experiment/llm/.venv/bin/python tools/local_experiment/bears/evaluate_sre.py --suite observation-signals-v1
+```
+
+This opt-in suite sends eight fixed synthetic cases twice each: 16 independent
+local Qwen samples in one run, without retries, MCP calls or fault injection.
+The default `baseline` remains the existing sixteen cases × two and retains its
+old receipt shape. Each new inference still requires its own AgentHouse write
+and readback. Raw log text and the fixed expected oracle are not model inputs.
+
+| Case ID | Fixed contrast and scoring boundary |
+| --- | --- |
+| `signals_known_zero` | Known zero usage and empty log counts add no finding or follow-up. |
+| `signals_usage_unknown` | Unknown usage keeps assessment unknown; missing values do not become zero. |
+| `signals_logs_unknown` | Unknown logs do not change the other observed health scopes or add a finding. |
+| `signals_noisy_headers` | Large synthetic usage and WARN/ERROR header-shaped counts alone add no incident, cause or follow-up. |
+| `signals_runtime_critical` | Runtime not-ready requires a platform read despite supplementary signals. |
+| `signals_current_container_failure` | Current nonzero exit and Failed Pod require a Pod read; exit 137 alone is not an OOM report. |
+| `signals_previous_oom` | Previous OOM/restart remain historical warnings; at least one justified Pod/Event read is selected. |
+| `signals_dual_critical` | Both Pod and platform reads must cover their critical finding IDs within the two-read budget. |
+
+Checks and finding IDs have no prescribed order. The host preserves the supplied
+assessment and requires an undetermined cause, allowed tools, literal case
+oracles and all critical coverage. High values and noisy headers cannot create
+new findings. A healthy observed scope in these synthetic cases excludes any
+claim that the logs are healthy or that the fragment covers a complete window.
+
+Only new-suite passed attempts retain validated `triage` with exactly
+`assessment`, `checks` (tool and finding IDs) and `root_cause`, alongside the
+matching `selected_tools`. Failed attempts are not supplied with a fabricated
+valid triage. The retained report rechecks passed triage against the registered
+case evidence and oracle; it never publishes triage or raw responses.
+
+The explicit suite and canonical dataset SHA256
+`b2757e1e198c1212c0e21459a6f882967168db34e6371a3c647337922175c732`
+identify this eight-case group before legacy requested-count inference. Old
+six/eight/sixteen-case receipts are unchanged; in particular, old and new runs
+requesting 16 calls remain different groups. The hash binds the producer's
+declared synthetic dataset, not the actual HTTP prompt, signed provenance or
+general model quality. This one-run synthetic evaluation does not establish
+real log-format detection quality, causal diagnosis, repair or production
+readiness. The 2026-09-18 local run passed all 16 samples with 16 audit
+readbacks and no retries; this is one synthetic run. Results and preservation
+evidence are recorded in
+[WP-L2-AGENT-002](../../../docs/design/06_WorkPackages/L2/WP-L2-AGENT-002_SRE_Bear.md).
 
 No server settings, weights, resident services, volumes or workload state are
 changed. Run the original `local-sre-smoke` to use the deterministic baseline;

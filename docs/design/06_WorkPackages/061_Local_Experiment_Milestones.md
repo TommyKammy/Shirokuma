@@ -5,17 +5,33 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.29"
+version: "3.30"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-18）：固定Trinoのcurrent consoleを対象に、本文を保持しないtyped log signalsを追加した。
-保存usage CLIの受入結果と公開schemaは維持し、header形テキストの限定集計・取得区間比較だけを扱う。
-実CLI1回は空fragmentを安全にobservedとして保存し、独立68checksと全2207回帰でlocal受入を完了した。
-一般的な原因診断・修復品質・本番受入は未達のまま維持する。
+最新の到達点（2026-09-18）：SREのtyped usage/log signalsを誤ってincidentや原因へ昇格しないか、
+新しい明示8case suiteで評価し、16/16 samplesと監査が成功した。保存triageも固定oracleへ再照合した。
+直前の固定log観測のlocal受入は維持し、一般診断・実log検出・修復品質・本番受入とは区別する。
+
+## 2026-09-18: SRE observation-signals evaluation — local acceptance passed
+
+[WP-L2-AGENT-002](L2/WP-L2-AGENT-002_SRE_Bear.md)と
+[WP-L2-EVAL-001](L2/WP-L2-EVAL-001_Agent_evaluation_harness.md)へ、明示
+`observation-signals-v1`の8cases×2独立samplesを追加する。明示0、usage/log不明、noisy header、
+runtime critical、現在container異常、過去OOM、Pod/runtime双方criticalを固定oracleで区別する。
+モデルにexpected/raw logは渡さず、check順序不問で既存health/critical根拠/許可read/原因未確定を要求する。
+
+新passedだけsafe triageを保存し、reportで登録case/hashと既存validator/literal oracleへ再照合する。
+旧6/8/16casesは互換を保持し、requested16だけで新旧8caseを混ぜない。失敗・未実行分母は保持する。
+登録dataset hashはproducer宣言の一致であり、実HTTP入力や実log品質・一般診断品質の証明ではない。
+実1runは16/16 passed・監査16・retry0。保存reportは12valid runs/11groupsへ増え、旧11run/10groupsを保持。
+受入21checks、4,192入力/238source不変、fresh AH500→516の新16件を照合した。
+全回帰60suites/2,232tests（2,231PASS・既存optional1skip）。証拠は
+`sre-observation-eval-checks/6bf0f90b299b4b3880bb9644fada1a32/`。runtime保持は前段db54cd5を継承し、
+新runtime再観測とはしない。詳細はAGENT-002/EVAL-001へ集約する。
 
 ## 2026-09-18: fixed Trino log signals — local acceptance complete
 

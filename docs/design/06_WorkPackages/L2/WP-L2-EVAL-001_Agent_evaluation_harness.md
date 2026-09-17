@@ -5,7 +5,7 @@ title: "WP-L2-EVAL-001 Agent evaluation harness"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.9"
+version: "0.10"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, evaluation]
 ---
@@ -16,6 +16,40 @@ tags: [shirokuma, workpackage, l2, evaluation]
 
 Agentの評価結果を同じ定義で比較する。ADR-0034のlocal実験では、
 functional success、監査coverage、latency、tokensと欠損を集計し、PR指標は対象外とする。
+
+## 2026-09-18: explicit SRE observation-signals suite — local acceptance passed
+
+SREへ明示`observation-signals-v1`の固定8cases×2独立samplesを追加する。
+caseの根拠・コマンド・literal oracleは[WP-L2-AGENT-002](WP-L2-AGENT-002_SRE_Bear.md)を参照。
+既存の6/8/16case群はfield無し旧shapeとsignatureを維持し、新suiteをrequested16だけで判定しない。
+
+新receiptはsuiteと登録dataset SHA256の両方を要求する。登録hash
+`b2757e1e198c1212c0e21459a6f882967168db34e6371a3c647337922175c732`を照合してから、
+8case IDs/順序/2repeatsと保存監査/usage整合を検証する。未知suite・部分field・不一致hash・
+重複attempt/event/実行を受理せず、失敗・不完全・重複の存在と未実行分母をreportから隠さない。
+新旧8caseはいずれも16要求だが、異なるcase signature/groupとして表示する。
+
+新passed attemptはexact safe triage（assessment/checks tool+finding_ids/root_cause）が必須。
+固定pure moduleのcanonical datasetを登録hashへ再照合し、既存validator＋literal oracleで
+health/許可read/critical根拠coverage/原因undeterminedを再検証する。check/根拠IDの並び順は自由で、
+selected_toolsは実際に保存されたそのcheck順と一致させる。failedを成功triageで補完せず、
+公開reportにはtriage/raw responseを含めない。新suite以外へこの必須条件を広げない。
+
+hashはproducer宣言datasetの一致までで、HTTP送信入力の実証や署名ではない。
+fixture-content comparability・旧evaluator revisionはunknownを保持し、raw応答の再採点とは区別する。
+16独立synthetic samplesの1runは、一般診断品質・実log format検出品質・原因/修復品質・本番受入を保証しない。
+reportは保存fileだけを読み、model/runtime/auditの再呼出しを行わない。
+
+- [x] 新profileと旧receiptを分離し、新passed safe triageの再検証と拒否境界をofflineで確認する。
+- [x] 実16samplesと監査の結果を保持し、全保存reportへの別group追加と元入力不変を確認する。
+
+実行`21b4281f95014941b91384825a4dcb7a`は16/16 passed・監査16/16・retry0。
+保存report `9cf6b2194813478d84c57dd2af66fc3e`は12valid runs/11groups、invalid/failed/duplicate各0で、
+旧11run projections/10groupsは不変。新suiteの16件を旧requested16群へ混ぜないことを実保存でも確認した。
+証拠は`sre-observation-eval-checks/6bf0f90b299b4b3880bb9644fada1a32/`。
+21checks成功、4,192入力/238source不変、AH500→516の新16件を照合した。
+全回帰60suites/2,232tests（2,231PASS・既存optional1skip）。既存runtime保持は前段db54cd5を継承し、
+新しいruntime検査とはしない。実測の詳細と限界はAGENT-002へ集約し、WPはlocal-partialを維持する。
 
 ## 2026-09-18: saved Query Doctor report — local acceptance complete
 

@@ -45,6 +45,39 @@ service readiness or general model quality.
 - First-repeat success is the first independent sample in each saved case. It
   is not chronological first-attempt success, correction rate or retry quality.
 
+### Explicit SRE observation-signals receipts
+
+`observation-signals-v1` is eight fixed cases × two independent samples. Its
+explicit `suite` and registered `dataset_sha256` are checked before interpreting
+the old requested-count branches. Requesting 16 calls alone never identifies
+this profile: the old eight-case SRE run and new signal cases have distinct IDs,
+signatures and groups. Field-free legacy six/eight/sixteen-case receipts keep
+their exact previous interpretation. Partial identity fields, unknown suites,
+wrong hashes, changed case order/counts and duplicate executions are rejected
+or excluded with explicit coverage issues.
+
+For the new profile only, each passed attempt must contain safe exact `triage`
+and a matching `selected_tools` list. The fixed pure case module is checked
+against registered SHA256
+`b2757e1e198c1212c0e21459a6f882967168db34e6371a3c647337922175c732`,
+then the existing triage validator and literal case oracle recheck assessment,
+allowed reads, critical finding coverage and an undetermined cause. Check order
+is not prescribed; the saved tool list must match that attempt's own check
+order. Failed attempts receive no synthesized valid proposal, and partial runs
+keep the full 16-call denominator. Triages are not copied into report output.
+
+This verifies a saved proposal against registered synthetic evidence. A matched
+producer-declared dataset hash does not prove the actual HTTP model input or
+rescore an unsaved raw response. Fixture-content comparability remains unknown.
+The evaluation is one bounded synthetic run, not a general diagnostic-quality
+or real-log-quality guarantee. See the
+[SRE evaluation command and eight-case oracle](../bears/README.md#explicit-observation-signals-evaluation).
+
+The 2026-09-18 saved report added one valid signal run and one group: 12 valid
+runs / 11 groups, while preserving all prior 11 run projections and 10 groups.
+The new run passed 16 / 16 samples and 16 / 16 audit checks; this report read
+saved evidence without new model or audit calls.
+
 The old receipts do not retain evaluator code revision, fixture content hashes
 or reliable start timestamps. These remain unknown; file modification times do
 not fill the gap. Case signatures identify case IDs and repeat counts, not

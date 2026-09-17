@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import importlib.util
 import json
 import math
 import os
 from pathlib import Path
 import re
 import stat
+import sys
 import uuid
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -49,6 +51,15 @@ DATA_DATASET_HASHES = {
     "baseline": "4fb9c85137c607a2cca38522d152f87803cd70447b56ee70627a8f8ffba10a1b",
     "requests": "038f68f0bd211b29981f8be2cea19520a4c070cfc1e35f7583c0bad47a3da21f",
 }
+SRE_SIGNAL_SUITE = "observation-signals-v1"
+SRE_SIGNAL_CASES = (
+    "signals_known_zero", "signals_usage_unknown", "signals_logs_unknown", "signals_noisy_headers",
+    "signals_runtime_critical", "signals_current_container_failure", "signals_previous_oom", "signals_dual_critical",
+)
+# The producer's frozen canonical dataset hash is registered here, as for Data.
+SRE_DATASET_HASHES = {
+    "observation-signals-v1": "b2757e1e198c1212c0e21459a6f882967168db34e6371a3c647337922175c732",
+}
 DATA_EXPECTED = dict(zip(SUITES["data"][4], (
     "uppercase_names", "name_lengths", "row_count", "unsupported", "unsupported", "name_lengths")))
 DATA_EXPECTED.update(zip(DATA_REQUEST_CASES, (
@@ -73,6 +84,58 @@ def data_cases(value):
     cases = DATA_REQUEST_CASES if label == "requests" else SUITES["data"][4]
     return cases, {"evaluation_suite": label, "dataset_sha256": sha,
                    "dataset_binding": "registered-golden-hash-matched" if sha is not None else "legacy-unrecorded"}
+
+
+def sre_signal_cases(value):
+    """Explicit identity only: never infer this eight-case suite from count 16."""
+    require("suite" in value and "dataset_sha256" in value, "incomplete_sre_suite_identity")
+    label, sha = value["suite"], value["dataset_sha256"]
+    require(type(label) is str and label in SRE_DATASET_HASHES, "unrecognized_sre_suite")
+    require(type(sha) is str and sha == SRE_DATASET_HASHES[label], "sre_dataset_hash_mismatch")
+    return SRE_SIGNAL_CASES, {"evaluation_suite": label, "dataset_sha256": sha,
+                            "dataset_binding": "registered-golden-hash-matched"}
+
+
+def registered_sre_signals():
+    """Load only the fixed pure golden/validator, with no evaluator or provider.
+
+    The declared dataset hash is not proof of the actual HTTP model input.
+    Passed saved triage is rechecked against the registered synthetic oracle.
+    """
+    before = sys.path[:]
+    try:
+        directory = ROOT / "tools/local_experiment/bears"
+        sys.path.insert(0, str(directory))
+        spec = importlib.util.spec_from_file_location("report_sre_signal_cases", directory / "sre_evaluation_cases.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        definitions = module.signal_cases()
+        require(type(definitions) is list and module.SIGNAL_SUITE == SRE_SIGNAL_SUITE and
+                tuple(case["case_id"] for case in definitions) == SRE_SIGNAL_CASES,
+                "sre_registered_dataset_mismatch")
+        canonical = json.dumps(definitions, sort_keys=True, separators=(",", ":"),
+                               ensure_ascii=False, allow_nan=False).encode("utf-8")
+        require(hashlib.sha256(canonical).hexdigest() == SRE_DATASET_HASHES[SRE_SIGNAL_SUITE],
+                "sre_registered_dataset_mismatch")
+        return {case["case_id"]: case for case in definitions}, module.validate_signal_triage
+    except ReceiptError:
+        raise
+    except (ImportError, OSError, AttributeError, KeyError, TypeError, ValueError):
+        raise ReceiptError("sre_registered_dataset_unavailable") from None
+    finally:
+        sys.path[:] = before
+
+
+def sre_signal_attempt(attempt, definitions, validate_triage):
+    if attempt["result"] != "passed":
+        return  # Failed proposals are not repaired or promoted into valid triage.
+    try:
+        triage = validate_triage(definitions[attempt["case_id"]], attempt.get("triage"))
+    except (TypeError, KeyError, ValueError):
+        raise ReceiptError("invalid_sre_signal_triage") from None
+    require(type(attempt.get("selected_tools")) is list and
+            attempt["selected_tools"] == [check["tool"] for check in triage["checks"]],
+            "sre_selected_tools_mismatch")
 
 
 def data_attempt(attempt, *, strict):
@@ -149,12 +212,18 @@ def normalize(value, suite):
     directory, filename, task_prefix, action, current_cases = SUITES[suite]
     requested = value.get("requested_inferences")
     require(integer(requested), "missing_or_invalid_requested_count")
-    # Keep the original six-case and five-runtime-source eight-case receipts
-    # separate from the later container-state suite. Old evidence is unchanged.
-    cases = current_cases[:{12: 6, 16: 8}[requested]] if suite == "sre" and requested in (12, 16) else current_cases
-    data_metadata = {}
+    cases, suite_metadata = current_cases, {}
+    signal_contract = None
     if suite == "data":
-        cases, data_metadata = data_cases(value)
+        cases, suite_metadata = data_cases(value)
+    elif suite == "sre":
+        if "suite" in value or "dataset_sha256" in value:
+            cases, suite_metadata = sre_signal_cases(value)
+            signal_contract = registered_sre_signals()
+        elif requested in (12, 16):
+            # Field-free historical six/eight-case runs remain distinct from
+            # both the 16-case container suite and the explicit signal suite.
+            cases = current_cases[:{12: 6, 16: 8}[requested]]
     require(requested == len(cases) * 2, "unrecognized_case_suite")
     require(type(value.get("retries")) is int and value["retries"] == 0, "unsupported_retry_semantics")
     task, trace = value.get("task_id"), value.get("trace_id")
@@ -180,6 +249,8 @@ def normalize(value, suite):
                 and attempt.get("audit") in {"verified", "failed", "pending"}, "invalid_attempt_status")
         if suite == "data":
             data_attempt(attempt, strict="suite" in value)
+        if signal_contract is not None:
+            sre_signal_attempt(attempt, *signal_contract)
         event_id = attempt.get("event_id")
         _uuid(event_id)
         require(event_id not in seen, "duplicate_event_identity")
@@ -225,7 +296,7 @@ def normalize(value, suite):
             "case_signature": digest({"suite": suite, "cases": cases, "independent_repeats": 2}),
             "requested_inferences": requested, "elapsed_ms": value["elapsed_ms"],
             "reported_result": value["result"], "task_id": task, "trace_id": trace,
-            **data_metadata, "_attempts": normalized}
+            **suite_metadata, "_attempts": normalized}
 
 
 def read_run(base, suite, token):
@@ -344,7 +415,7 @@ def collect(base=BASE):
                        "provider": first["provider"], "model": first["model"],
                        "model_identity_sha256": key[1], "case_signature": key[2],
                        "case_ids": first["case_ids"], "fixture_content_comparability": "unknown",
-                       **({"evaluation_suite": first["evaluation_suite"]} if key[0] == "data" else {}),
+                       **({"evaluation_suite": first["evaluation_suite"]} if "evaluation_suite" in first else {}),
                        "run_tokens": [r["run_token"] for r in members], **aggregate(members)})
     invalid = sum(run["integrity"] != "valid" for run in runs)
     failures = sum(run["reported_result"] == "failed" for run in runs)

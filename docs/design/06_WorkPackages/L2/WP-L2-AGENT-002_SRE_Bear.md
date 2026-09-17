@@ -5,7 +5,7 @@ title: "WP-L2-AGENT-002 SRE Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.10"
+version: "0.11"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -16,6 +16,64 @@ tags: [shirokuma, workpackage, l2, agentops]
 
 K8s Pod/Event・runtime状態の固定観測から実LLMが追加読取を選び、同一identityの変化を確認する。
 containerの現在状態と過去終了履歴を分離する。logs/metricsによる原因診断・自動修復は未達。
+
+## 2026-09-18: observation-signals evaluation — local acceptance passed
+
+新しい明示suite `observation-signals-v1`で、固定8synthetic casesを2回ずつ独立に推論する。
+1run/16 local Qwen samplesであり、再試行やMCP実呼出し・障害注入は行わない。
+従来baselineの16cases×2とfield無しreceiptはそのまま維持する。
+
+```sh
+rtk proxy tools/local_experiment/llm/.venv/bin/python tools/local_experiment/bears/evaluate_sre.py --suite observation-signals-v1
+```
+
+モデルへ渡すのはtyped evidenceだけで、固定expected oracle・raw logs・SQL・tokenは渡さない。
+全caseで既存healthを保持し、原因はundetermined、追加readは最大2種の許可toolと根拠IDに限定する。
+
+| Case ID | 固定oracleの要点 |
+| --- | --- |
+| signals_known_zero | usage明示0・空logから新findingを作らず、追加readなし。 |
+| signals_usage_unknown | usage欠測を0にせずassessment unknown、追加readなし。 |
+| signals_logs_unknown | log不明を新findingにせず、他の観測scopeのhealthを保持。 |
+| signals_noisy_headers | 大きいsynthetic usageとWARN/ERROR header形件数だけでincident/原因/readを追加しない。 |
+| signals_runtime_critical | runtime not-readyのcritical根拠はplatform再読取が必須。 |
+| signals_current_container_failure | 現在の非0終了・Failed PodはPod再読取が必須。exit137だけでOOMとしない。 |
+| signals_previous_oom | 過去OOM/restartはhistorical warningのまま、根拠付きPod/Event readを1種以上選ぶ。 |
+| signals_dual_critical | Podとplatform双方のcritical IDsを2種以内のreadで全て覆う。 |
+
+checkとfinding IDsの順序は規定しない。固定case/繰返しの実行順序は別に検証する。
+noisy/unknown/zeroをログ健全性や新しいseverityへ昇格しない。healthy-observed-scopeは他の観測scopeの値で、
+ログ全窓の完全性やエラー不存在を表さない。
+
+新suiteのpassed attemptだけ、検証済みsafe triageのexact3fields（assessment/checks/root_cause）と
+selected_toolsを保存する。checksはtool/finding_idsだけで、raw responseを保存しない。
+reportは登録case evidenceへ既存triage validatorとliteral oracleを再適用し、critical IDsの脱落や
+原因主張を拒否する。selected_toolsはそのattemptのcheck順と一致させるが、globalなcheck順は強制しない。
+failedにvalid triageを補完せず、失敗・未実行分も分母に残す。公開reportへtriageは転記しない。
+
+登録dataset SHA256は`b2757e1e198c1212c0e21459a6f882967168db34e6371a3c647337922175c732`。
+explicit suite/hashを旧requested16分岐より先に検証し、新8casesと旧8casesの16要求を別groupへ分ける。
+旧6/8/16casesのshape・signatureを維持し、未知suite・欠損field・hash不一致・重複は明示拒否する。
+hashはproducerが宣言したcanonical synthetic datasetの一致であり、実HTTP入力・署名・一般品質の実証ではない。
+fixture_content_comparabilityはunknownのまま。1runの合成評価から一般診断品質、実log検出品質、
+原因診断・修復品質、本番受入を保証しない。WPはlocal-partialを維持する。
+
+- [x] 固定8case/oracleと安全triage保存・再採点、旧receipt互換・別group化のoffline境界を用意する。
+- [x] 1run/16 samplesの実結果と推論ごとの監査読戻し、保存reportの整合を記録する。
+
+実行`21b4281f95014941b91384825a4dcb7a`は16/16 passed・監査16/16・retry0。
+経過34,551ms、推論合計34,324ms、prompt24,334/completion766tokens、cost NULL。
+trace `57b23e4d3b44403f8ebda10b8b771895`は相関IDだけで、exported spansは0。
+保存report `9cf6b2194813478d84c57dd2af66fc3e`は12valid runs/11groupsとなり、
+旧11run projections/10groupsを保持した。全保存Qwen168/168・mock10/10は異なるsuiteの履歴集計で、
+今回の新評価16件や一般品質指標と混同しない。
+
+今回の証拠は`sre-observation-eval-checks/6bf0f90b299b4b3880bb9644fada1a32/`。
+`acceptance.json`の21checksが成功し、4,192保存入力/238sourceが不変。
+独立保存監査`independent-saved-verification.json`も41checks成功（追加API/model呼出し0）。
+fresh AgentHouseは旧500件のwhole hashを保持して516件となり、新16件をtask/attemptへ照合した。
+MCP/Kubernetes/Trino/Metadata/MLflow/Lokiやruntime lifecycleの新検査は行わず、
+前段db54cd5のruntime保持証拠を継承する。全回帰は60suites/2,232tests（2,231PASS・既存optional1skip）。
 
 ## 2026-09-18: fixed Trino log signals — local acceptance complete
 
