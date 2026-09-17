@@ -5,17 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "1.8"
+version: "1.9"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：native admissionの15ケースと限定撤去・再適用が成功。
-Qwen SREはKubernetesに加えてDocker側を含む5群の状態を観測し、8合成ケース×2回が16/16成功。
-実Failed Pod drillもadmission適用後・4観測源で再成功し、保持6 PodのUID/状態/restartsは不変。
-5 runtime groups ready。全ローカル295 tests＋設計14 testsの計309件、設計68 documentsを検証。
+最新の到達点（2026-09-17）：Qwen Data Engineer Bearの3変換を実Icebergで実行・再実行し、
+独立期待値・dbt tests・各4監査event相関・完了checkpointを確認した。
+日本語/英語6 golden要求×2回は12/12成功。意図的dbt失敗→retryも成功。
+保持fixture不変、生成8relation/当該runの実行中query残留0、5 runtime groups ready。
+全ローカル340 tests＋設計14 testsの計354件、設計69 documentsを検証。
 Cloud APIは無効のままローカル開発を継続する。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
@@ -23,6 +24,24 @@ repositoryの設計66 documentsを検証した。今回更新した12 materializ
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: Qwen Data Engineer Bear
+
+[WP-L2-AGENT-003](L2/WP-L2-AGENT-003_Data_Engineer_Bear.md)をlocal-partialとして実装。
+モデルは固定fixtureに対する3変換の型付き計画だけを返し、hostが専用dbt projectを生成する。
+文字数・大文字化・行数を実データで検証し、それぞれ2回のmaterializationと全dbt testsが成功。
+入力/出力tokensは478/23、430/23、400/23、推論秒は1.335、1.328、1.310。
+各4件の監査eventがClickHouse/Loki/OTel間で相関一致した。
+6 golden要求×2回は12/12成功（4754/262 tokens、15.723秒、12監査読戻し）。
+
+Data Bear証跡UUIDは`a95175c8abc74dd897699a8e38f3acc6`、
+`ddf4422d47294b8d912172d284024f49`、`e364c200e2c648e3b1ec79923c6acbff`。
+別途`data-plans/eb8902c0a4e54c8591dcbfee02550927/`で意図的test失敗→retry成功を確認。
+03:43 UTCに4runのhash/dbt lineage/resultsと実fixtureを再照合し、生成8relation/query残留0。
+詳細receiptは`tmp/local-experiment/data-bear-preflight/b09b846899ac41d0847f8c6eb612fb81/`。
+全回帰354 tests、設計69 documents。範囲は固定2列2行・3変換だけで、
+一般的なデータモデリングや任意コード生成、業務データ変更、本番受入は含めない。
+次はこの成功証跡を使うCatalog Curatorの限定履歴登録へ進む。
 
 ## 2026-09-17: 5 runtime groupsを含むQwen SRE
 

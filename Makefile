@@ -464,3 +464,15 @@ test-local-policy:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_policy.py'
 
 verify-local-experiment: test-local-policy
+
+.PHONY: local-data-bear-smoke local-data-bear-eval test-local-data-bear
+local-data-bear-smoke: local-gateway-sync local-llm-sync local-dataops-sync
+	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/bears/run_data.py
+
+local-data-bear-eval: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/bears/evaluate_data.py
+
+test-local-data-bear: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_data_*.py'
+
+verify-local-experiment: test-local-data-bear

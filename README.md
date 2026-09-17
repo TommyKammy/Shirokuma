@@ -53,6 +53,7 @@ rtk make local-llm-qwen-smoke
 rtk make local-llm-qwen-eval
 rtk make local-sre-qwen-smoke local-sre-qwen-eval
 rtk make local-sre-qwen-drill
+rtk make local-data-bear-eval local-data-bear-smoke
 rtk make local-policy-status local-policy-smoke
 rtk make local-tpch-smoke
 ```
@@ -76,6 +77,9 @@ The [local admission baseline](tools/local_experiment/policy/README.md) reuses
 seven repository CEL rules through native Kubernetes policies scoped to
 `shirokuma-dev`. Its smoke requests are server-side dry-runs. This local bridge
 does not install Kyverno or attest image signatures/vulnerabilities.
+The [Data Engineer Bear](tools/local_experiment/bears/DATA_ENGINEER.md) converts
+small requests into a validated plan, generates fixed dbt templates, and checks
+disposable Iceberg results against an independent oracle before scoped cleanup.
 Superset is available at [the local dashboard](http://127.0.0.1:18088/superset/dashboard/shirokuma-local-lakehouse/),
 and OpenMetadata at [the local catalog](http://127.0.0.1:18585).
 Generated credentials stay in private ignored state; see the component runbooks

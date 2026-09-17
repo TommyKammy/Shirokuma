@@ -186,12 +186,13 @@ def prepare_profile(output: Path, url: str, token: str) -> Path:
     return profiles
 
 
-def dbt_command(command: str, attempt: Path, profiles: Path, token: str, fail: bool) -> list[str]:
+def dbt_command(command: str, attempt: Path, profiles: Path, token: str, fail: bool,
+                *, project: Path | None = None) -> list[str]:
     names_for(token)
     return [
         "rtk", "proxy", str(Path(sys.executable).parent / "dbt"),
         "--no-send-anonymous-usage-stats", "--no-use-colors", "--no-partial-parse",
-        command, "--project-dir", str(HERE / "dbt"), "--profiles-dir", str(profiles),
+        command, "--project-dir", str(HERE / "dbt" if project is None else project), "--profiles-dir", str(profiles),
         "--target-path", str(attempt / f"{command}-target"),
         "--log-path", str(attempt / f"{command}-logs"),
         "--vars", json.dumps({"relation_prefix": f"dataops_{token}", "run_token": token,
@@ -231,7 +232,7 @@ def result_nodes(path: Path) -> list[dict[str, Any]]:
 
 
 def materialize_dbt(attempt: Path, profiles: Path, token: str, fail: bool,
-                    timeout: float, env: dict[str, str]) -> dict[str, Any]:
+                    timeout: float, env: dict[str, str], *, project: Path | None = None) -> dict[str, Any]:
     from dagster import DagsterInstance, asset, materialize
 
     attempt.mkdir()
@@ -245,7 +246,8 @@ def materialize_dbt(attempt: Path, profiles: Path, token: str, fail: bool,
             invocations.append(entry)
             try:
                 entry["exit_code"] = run_command(
-                    dbt_command(command, attempt, profiles, token, fail), logfile, env, timeout)
+                    dbt_command(command, attempt, profiles, token, fail,
+                                **({"project": project} if project is not None else {})), logfile, env, timeout)
             except BaseException as error:
                 entry["process_error"] = f"{type(error).__name__}: {error}"
                 raise
@@ -280,7 +282,17 @@ def expected_test_failure(attempt: dict[str, Any]) -> bool:
 
 def run_experiment(client: Any, output: Path, exercise_failure: bool = False,
                    timeout: float = 300, token: str | None = None,
-                   materializer: Callable[..., dict[str, Any]] = materialize_dbt) -> dict[str, Any]:
+                   materializer: Callable[..., dict[str, Any]] = materialize_dbt, *,
+                   project: Path | None = None, expected_columns: list[str] | None = None,
+                   expected_rows: list[list] | None = None) -> dict[str, Any]:
+    # Optional host-generated plans can change only these fixed projections.
+    # The legacy call path retains its original SELECT and expected-row checks.
+    custom_readback = expected_columns is not None or expected_rows is not None
+    if custom_readback and (not isinstance(expected_columns, list)
+            or any(not isinstance(column, str) for column in expected_columns)
+            or tuple(expected_columns) not in {('id', 'name_upper'), ('id', 'name_length'), ('row_count',)}
+            or not isinstance(expected_rows, list) or not expected_rows):
+        raise DataOpsError("invalid bounded plan readback contract")
     token = token or uuid.uuid4().hex
     names = names_for(token)
     output.mkdir(parents=True, exist_ok=False)
@@ -309,7 +321,8 @@ def run_experiment(client: Any, output: Path, exercise_failure: bool = False,
                 for name in names:
                     verify_marker(client, name, token)
             mutation_started = True
-            result = materializer(output / label, profiles, token, fail, timeout, env)
+            result = materializer(output / label, profiles, token, fail, timeout, env,
+                                  **({"project": project} if project is not None else {}))
             result["label"] = label
             report["attempts"].append(result)
             if fail:
@@ -321,9 +334,15 @@ def run_experiment(client: Any, output: Path, exercise_failure: bool = False,
                 raise DataOpsError(f"Dagster asset materialization failed during {label}")
             for name in names:
                 verify_marker(client, name, token)
-            readback = client.query(f"SELECT id, name_upper FROM {NAMESPACE}.{names[1]} ORDER BY id")
+            columns = expected_columns if custom_readback else ["id", "name_upper"]
+            selected = ", ".join(columns)
+            ordering = " ORDER BY id" if columns[0] == "id" else ""
+            readback = client.query(f"SELECT {selected} FROM {NAMESPACE}.{names[1]}{ordering}")
             result["readback"] = readback
-            if readback["rows"] != MART_ROWS:
+            if custom_readback and (readback.get("columns") != expected_columns
+                    or json.dumps(readback["rows"]) != json.dumps(expected_rows)):
+                raise DataOpsError(f"plan mart returned unexpected columns or rows during {label}")
+            if not custom_readback and readback["rows"] != MART_ROWS:
                 raise DataOpsError(f"mart returned unexpected rows during {label}")
             readbacks.append(readback["rows"])
         report["deterministic"] = len(readbacks) >= 2 and all(rows == readbacks[0] for rows in readbacks)
