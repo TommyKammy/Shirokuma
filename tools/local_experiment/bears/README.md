@@ -79,6 +79,43 @@ historical restart or Warning event is not proof of a current outage. The
 contract deliberately leaves `root_cause: undetermined`; this is an evidence
 collection assistant, not a general causal diagnosis or repair agent.
 
+### Fixed Trino resource usage
+
+The Pod read can additionally observe average CPU nanocores and memory
+working-set bytes for the fixed Trino Pod's single `trino` container. Values are
+exact integer strings. Missing or unsupported metrics remain `unknown` with a
+null sample; an observed zero remains zero. Existing receipts without this field
+retain their original shape. The model input remains bounded to 8 KiB.
+
+This adds at most two application-level kubectl acquisition intents per Pod
+read: Metrics API and the same Pod again, without application retries.
+`get_attempts` counts these intents. Each has an eight-second deadline and a
+64 KiB stdout cap, plus up to two seconds to reap its owned child. Internal
+[client-go HTTP retries](https://raw.githubusercontent.com/kubernetes/client-go/v0.33.4/rest/request.go)
+may occur within that deadline; wire-level GET counts and existing
+context/readiness checks are outside this two-operation bound. Before/after container
+identity and request/sample times are checked; the sample is correlated by name
+and time, not authenticated by Pod UID. Repeated cached windows are not new
+measurements. No load threshold, trend, peak/RSS, OOM-cause or repair inference
+is added. A Pod comparison of `no-change-observed` concerns Pod/container state;
+usage has a separate sample-window comparison and may contain different values.
+
+Pure evidence/provider regressions and legacy compatibility checks have passed.
+The first CLI run with usage (`52aa250a1b92b29d90205836a6ea0a3a`) passed with
+both initial and follow-up samples observed for the same Pod/container identity.
+The windows and values differed; Pod/container state had no observed changes.
+The result remained attention-required with an undetermined cause and no repair.
+The final independent audit passed 73 checks. Of 4,003 retained files, 3,999
+matched their saved SHA, mode, mtime, size, uid and link count. Two Gateway files retained
+their old prefixes and appended five records each; two runtime files changed
+only their mtime, retaining content and mode. The 486 old AgentHouse rows were
+unchanged, with exactly seven new events matching Loki and the saved spans.
+All 219 source files were unchanged. New and legacy status reads preserved
+their inputs and returned matching results. This completes local acceptance
+for the observation feature; causal diagnosis and repair remain unproven.
+See [WP-L2-AGENT-002](../../../docs/design/06_WorkPackages/L2/WP-L2-AGENT-002_SRE_Bear.md)
+for the recorded values, retention audit, helper corrections, and limitations.
+
 Application-container observations distinguish the current state from the last
 reported termination. The Gateway binds status names to the Pod's declared
 application containers and retains at most eight rows, with explicit incomplete

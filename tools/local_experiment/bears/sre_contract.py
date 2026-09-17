@@ -5,7 +5,7 @@ from datetime import datetime
 import re
 
 from diagnostics import (DiagnosticError, diagnose, identifier, count, container_observation,
-                         container_code, CONTAINER_CRITICAL, CONTAINER_HISTORICAL, CONTAINER_UNKNOWN)
+                         container_code, resource_usage, CONTAINER_CRITICAL, CONTAINER_HISTORICAL, CONTAINER_UNKNOWN)
 
 TOOLS = ('shirokuma_doctor', 'k8s_read_pods', 'k8s_read_events', 'local_platform_status')
 SOURCES = dict(zip(TOOLS, ('doctor', 'pods', 'events', 'platform')))
@@ -113,6 +113,9 @@ def _observation(source, report):
             observed = container_observation(pod)
             details[observed['status'] if observed is not None else 'not_observed'] += 1
         result['container_details'] = details
+        usage = resource_usage(report)
+        if usage is not None:
+            result['resource_usage'] = usage
     return result
 
 
@@ -131,6 +134,11 @@ def _allowed(code, subject):
 def _unknown_container_coverage(observations):
     details = observations['pods'].get('container_details', {})
     return bool(details.get('unknown') or details.get('truncated'))
+
+
+def _unknown_usage_coverage(observations):
+    usage = observations['pods'].get('resource_usage')
+    return usage is not None and usage['state'] == 'unknown'
 
 
 def build_evidence(doctor: dict, pods: dict, events: dict, platform: dict | None = None) -> dict:
@@ -165,7 +173,7 @@ def build_evidence(doctor: dict, pods: dict, events: dict, platform: dict | None
         'omitted_findings': max(0, len(findings) - MAX_FINDINGS),
     }
     result['health'] = ('attention-required' if any(x['code'] not in UNKNOWN_FINDINGS for x in findings)
-                        else 'unknown' if findings or _unknown_container_coverage(observations)
+                        else 'unknown' if findings or _unknown_container_coverage(observations) or _unknown_usage_coverage(observations)
                         or any(item['completeness'] != 'complete' for item in observations.values())
                         else 'healthy-observed-scope')
     validate_evidence(result)
@@ -186,7 +194,9 @@ def validate_evidence(evidence: dict) -> dict:
     _keys(evidence['observations'], SOURCES.values())
     for source, observation in evidence['observations'].items():
         detailed = source == 'pods' and isinstance(observation, dict) and 'container_details' in observation
-        _keys(observation, ('observed_at', 'completeness', 'count') + (('container_details',) if detailed else ()))
+        usage_present = source == 'pods' and isinstance(observation, dict) and 'resource_usage' in observation
+        _keys(observation, ('observed_at', 'completeness', 'count') + (('container_details',) if detailed else ())
+              + (('resource_usage',) if usage_present else ()))
         _timestamp(observation['observed_at'])
         count(observation['count'])
         if not isinstance(observation['completeness'], str) or observation['completeness'] not in {'complete', 'truncated', 'empty', 'unknown'}:
@@ -199,6 +209,8 @@ def validate_evidence(evidence: dict) -> dict:
             if details['scope'] != 'application-containers' or sum(
                     count(details[key]) for key in ('complete', 'truncated', 'unknown', 'not_observed')) != observation['count']:
                 raise DiagnosticError('container detail coverage disagrees with Pod count')
+        if usage_present:
+            resource_usage(observation)
     findings = evidence['findings']
     if not isinstance(findings, list) or len(findings) > MAX_FINDINGS:
         raise DiagnosticError('invalid bounded findings')
@@ -217,13 +229,14 @@ def validate_evidence(evidence: dict) -> dict:
             _validate_container_context(finding)
     if evidence['health'] == 'healthy-observed-scope' and (findings or evidence['omitted_findings']
             or _unknown_container_coverage(evidence['observations'])
+            or _unknown_usage_coverage(evidence['observations'])
             or any(x['completeness'] != 'complete' for x in evidence['observations'].values())):
         raise DiagnosticError('incomplete or abnormal evidence cannot assert observed health')
     if evidence['health'] == 'attention-required' and not findings:
         raise DiagnosticError('attention requires a bounded finding')
     observed_attention = any(x['code'] not in UNKNOWN_FINDINGS for x in findings)
     expected_health = ('attention-required' if observed_attention else 'unknown' if findings
-        or _unknown_container_coverage(evidence['observations']) or any(
+        or _unknown_container_coverage(evidence['observations']) or _unknown_usage_coverage(evidence['observations']) or any(
         x['completeness'] != 'complete' for x in evidence['observations'].values()) else 'healthy-observed-scope')
     if evidence['health'] != expected_health:
         raise DiagnosticError('observed health disagrees with bounded findings')
@@ -332,6 +345,8 @@ def project_observations(snapshots: dict) -> dict:
             continue
         observation = _observation(source, report)
         projected = {'scope': 'local-experiment', 'observed_at': observation['observed_at']}
+        if source == 'pods' and 'resource_usage' in observation:
+            projected['resource_usage'] = observation['resource_usage']
         if source == 'doctor':
             projected.update(profile='local-experiment', context='colima-mac-studio-solo', checks=[])
         else:
@@ -409,6 +424,36 @@ def _rows(source, report):
     return result
 
 
+def _compare_resource_usage(before, after, *, reobserved):
+    """Compare sample identity/windows only; never infer pressure or a trend."""
+    result = {'before_state': before['state'] if before else 'not-observed',
+              'after_state': after['state'] if after else 'not-observed' if reobserved else 'not-reobserved',
+              'comparison': 'incomparable' if reobserved else 'not-reobserved',
+              'limitations': ['name-time-correlation-only', 'no-trend-or-cause-claim']}
+    if not reobserved:
+        return result
+    if before is None or after is None:
+        result['limitations'].append('resource-usage-not-observed')
+    elif before['state'] != 'observed' or after['state'] != 'observed':
+        result['limitations'].append('resource-usage-unknown')
+    elif before['identity'] != after['identity']:
+        result['limitations'].append('resource-usage-identity-changed')
+    else:
+        from tools.local_experiment.gateway.pod_usage import timestamp_ns
+        left, right = before['sample'], after['sample']
+        if timestamp_ns(right['timestamp']) < timestamp_ns(left['timestamp']):
+            result['limitations'].append('resource-usage-time-reversed')
+        elif (timestamp_ns(left['timestamp']), left['window_ns']) == (timestamp_ns(right['timestamp']), right['window_ns']):
+            if all(left[key] == right[key] for key in ('cpu_nanocores', 'memory_working_set_bytes')):
+                result['comparison'] = 'same-sample-window'
+                result['limitations'].append('cached-sample-not-new-measurement')
+            else:
+                result['limitations'].append('resource-usage-sample-inconsistent')
+        else:
+            result['comparison'] = 'different-sample-window'
+    return result
+
+
 def compare_observations(before: dict, after: dict) -> dict:
     """Compare only selected reads; absence is never proof of recovery/deletion."""
     if not isinstance(before, dict) or not isinstance(after, dict) or set(before) != set(TOOLS) or not set(after) <= set(TOOLS):
@@ -419,6 +464,12 @@ def compare_observations(before: dict, after: dict) -> dict:
         item = {'status': 'not-reobserved', 'before_observed_at': prior['observed_at'],
                 'after_observed_at': None, 'changes': [], 'limitations': ['bounded-snapshots-only']}
         sources[tool] = item
+        usage_incomplete = False
+        if source == 'pods' and ('resource_usage' in prior or tool in after and 'resource_usage' in after[tool]):
+            usage = _compare_resource_usage(prior.get('resource_usage'),
+                resource_usage(after[tool]) if tool in after else None, reobserved=tool in after)
+            item['resource_usage'] = usage
+            usage_incomplete = usage['comparison'] == 'incomparable'
         if tool not in after:
             continue
         current = _observation(source, after[tool])
@@ -446,8 +497,9 @@ def compare_observations(before: dict, after: dict) -> dict:
             item.update(status='incomparable')
             item['limitations'].append('missing-object-uid')
             continue
-        incomplete = any(x['completeness'] != 'complete' for x in (prior, current))
-        if incomplete:
+        list_incomplete = any(x['completeness'] != 'complete' for x in (prior, current))
+        incomplete = list_incomplete or usage_incomplete
+        if list_incomplete:
             item['limitations'].append('incomplete-observation-lists')
         changes = item['changes']
         replacements = set()

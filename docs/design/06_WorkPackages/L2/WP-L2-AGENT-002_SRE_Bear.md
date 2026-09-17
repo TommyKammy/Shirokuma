@@ -4,8 +4,8 @@ doc_id: "WP-L2-AGENT-002"
 title: "WP-L2-AGENT-002 SRE Bear"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-17
-version: "0.7"
+updated: 2026-09-18
+version: "0.8"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -16,6 +16,80 @@ tags: [shirokuma, workpackage, l2, agentops]
 
 K8s Pod/Event・runtime状態の固定観測から実LLMが追加読取を選び、同一identityの変化を確認する。
 containerの現在状態と過去終了履歴を分離する。logs/metricsによる原因診断・自動修復は未達。
+
+## 2026-09-18: fixed Trino resource usage — local acceptance complete
+
+既存`k8s_read_pods`へ、固定Trino 1Pod・application container `trino`のCPU平均nanocoresと
+memory working-set bytesをoptional `resource_usage`として追加した。新usageを含む実CLI1回が
+passed/exit0となり、初期・followupでobservedを確認した。独立保持監査73checksが成功し、
+この観測機能のlocal受入を完了した。一般的な原因診断は未達で、WPはlocal-partialを維持する。
+
+Pod一覧の固定labelから対象を一意に選び、pods呼出しごとにアプリ側kubectl取得操作を最大2回
+（Metrics APIと同Podの再読取）追加し、アプリ側では再試行しない。各操作は8秒deadline、
+所有childのcleanup猶予2秒、返却64KiB以内に制限する。`get_attempts`は取得intent数であり、
+kubectl/client-go内部の429/Retry-After再試行を含むHTTP送信総数や、既存context確認の回数ではない。
+Pod UID・container identity hash・restart/start時刻を前後照合し、Pod観測→request→取得終了と
+sample windowを整数nsで比較する。Metrics APIの名前・時刻に基づく相関であり、
+UIDで認証されたsample、独立した2実測点、CPU peak/RSS/持続負荷・OOM原因とは主張しない。
+
+有効な値はexact int64文字列、明示0と欠測を分離する。unknownではsampleをNULLにし、
+既存Pod readinessの件数を書き換えず新scopeのcoverageをunknownとする。
+過去3/4源・container詳細なし・usage fieldなしは当時のshapeで再構成し、新観測を補わない。
+同じtimestamp/windowの再読取はcached sampleとして扱い、trendや回復を判定しない。
+Pod比較の`no-change-observed`は従来のPod/container状態の比較であり、usage値の同一性を意味しない。
+`resource_usage.comparison=different-sample-window`は別windowとして分離し、数値差をtrendへ昇格しない。
+追加finding・tool・remediationはなく、root_cause=undetermined、公開CLI schemaは不変。
+
+- [x] pure evidence・保存projection・sample-window比較とprovider 8KiB上限を検証する。
+- [x] 旧SRE84件を含む95 focused tests、新usage/provider11件の独立確認を通す。
+- [x] 製品CLIを1回実行し、usage observedまたは固定reason付きunknownを原結果のまま保存する。
+- [x] 保持runtime/data・元証跡の差分を限定し、追加監査とsource bindingを確認する。
+
+実装・受入記録は`tmp/local-experiment/sre-usage-checks/8aa1e4d2d00c419e8c1d35ca8ab7752b/`。
+一般的なlogs/metrics原因診断、修復案の品質、自動修復、本番受入の未達条件は保持する。
+
+### 実CLIの観測結果
+
+`sre-llm/52aa250a1b92b29d90205836a6ea0a3a/`のworkflowは
+`0c461cecb373405ab2809ee5245045a1`、traceは`c6f208e7ec9493673b4306c59ff852f2`。
+初期・followupともPod UID `117b813d-42aa-48d1-86db-56430424d624`、container identity hash、
+restartCount 1、Running開始時刻`2026-09-17T00:51:07Z`が一致した。
+
+| 観測 | sample timestamp (UTC) | window ns | CPU平均 nanocores | memory working-set bytes |
+| --- | --- | ---: | ---: | ---: |
+| initial | 2026-09-17T19:18:52Z | 15014000000 | 11121886 | 2162106368 |
+| followup | 2026-09-17T19:19:07Z | 14990000000 | 11591194 | 2162118656 |
+
+usage比較は`different-sample-window`。Pod/container状態の差分は0だが、usage値が不変とはしない。
+過去の終了/restartに関する6warningからQwenはPod再読取1種を選び、assessmentは
+attention-required、root_causeはundetermined、remediation_executedはfalseを維持した。
+Qwen1callは入力1956/出力104tokens、6550ms、cost NULL。これは品質評価caseへの追加ではない。
+producerはMCP5件とLLM/root各1の7監査eventを検証した。workflow保存span2件と
+Gateway保存span5件を区別し、MCP返却span ID5件との相関を独立に確認した。
+
+実行前23checks、保持4003files、AH486、14Pods/27resources/3Docker/16policies/54locksをbaselineとした。
+source219の不変と、全local56suites/2139件（2138成功・既存optional1skip）、Go SRE16件、
+CLI29件の成功を確認した。
+
+### 最終保持監査
+
+独立73checksは成功。保持4003filesのうち3999は保存fingerprint（SHA・mode・mtime・size・uid・nlink）が一致し、
+Gatewayの2filesは旧prefixを保持して各5recordsだけ追記した。残るruntime2filesは内容・modeが同一で、
+mtimeのみ更新した。全件fingerprint一致を要求した親afterの元結果は22/23成功として保持し、
+この4差分の限定確認を独立結果へ記録した。
+AHは旧486行のSHAを全て保持して493行となり、新7eventsだけが増えた。
+同taskのAH/Loki各7件、local2/Gateway5の保存spans、MCP5件が対応する。
+source219は不変、旧観測lock54件と新SRE lockはそれぞれinactiveだった。
+
+新status2回はJSON全体が一致し、対象8entriesは不変。旧4件のbefore/after計8照会も
+JSON一致・対象24entries不変を確認した。初回status helperのcommand名期待誤りと、
+独立helperのmodel spanへのtask_id誤要求は、元の失敗記録を保存してhelperだけ訂正した。
+製品失敗は0で、再検証のためのmodel再呼出しはない。独立相関確認のAH/Loki読取は各2回で、
+保存cache取得後はsaved-onlyで検証した。
+
+最終証拠は上記checkdirの`independent-verification.json`（SHA256
+`fe588433bbe73546366cf72991dd11a3cf6a664f8a74cb84fbc39361e6869715`）と
+`audit-readback-clarification.json`。CPU/memoryのtrend、原因・修復品質、本番受入はこの受入に含めない。
 
 ## 2026-09-17: product CLI plan
 

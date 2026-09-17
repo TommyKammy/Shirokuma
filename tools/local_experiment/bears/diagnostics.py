@@ -44,6 +44,39 @@ def container_observation(pod: dict) -> dict | None:
         raise DiagnosticError('invalid bounded container observation') from None
 
 
+def resource_usage(report: dict) -> dict | None:
+    """Legacy absence stays unobserved; reject raw or malformed usage fields."""
+    if 'resource_usage' not in report:
+        return None
+    from tools.local_experiment.gateway.pod_usage import validate, timestamp_ns
+    try:
+        usage = validate(report['resource_usage'])
+    except (ValueError, TypeError):
+        raise DiagnosticError('invalid bounded resource usage') from None
+    if usage['state'] == 'observed':
+        try:
+            ordered = (timestamp_ns(report.get('observed_at')) <= timestamp_ns(usage['request_started_at'])
+                       <= timestamp_ns(usage['observed_at']))
+        except (ValueError, TypeError):
+            raise DiagnosticError('invalid resource observation time') from None
+        if not ordered:
+            raise DiagnosticError('resource request precedes its Pod observation')
+    if usage['state'] == 'observed' and 'pods' in report:
+        identity = usage['identity']
+        matching = [pod for pod in report['pods'] if isinstance(pod, dict)
+                    and pod.get('name') == identity['pod_name'] and pod.get('uid') == identity['pod_uid']]
+        if (report.get('namespace') != identity['namespace'] or report.get('truncated') is not False
+                or len(matching) != 1 or matching[0].get('phase') != 'Running'):
+            raise DiagnosticError('resource usage does not match the observed Pod')
+        details = container_observation(matching[0])
+        rows = details['containers'] if details is not None else []
+        if (len(rows) != 1 or rows[0]['name'] != identity['container']
+                or rows[0]['state']['kind'] != 'running' or rows[0]['restarts'] != identity['restart_count']
+                or rows[0]['state']['started_at'] != identity['started_at']):
+            raise DiagnosticError('resource usage does not match the observed container')
+    return usage
+
+
 def container_code(state: dict, *, historical=False) -> str | None:
     if state['kind'] == 'terminated':
         if state['reason'] == 'OOMKilled':
@@ -170,9 +203,11 @@ def diagnose(doctor: dict, pods: dict, events: dict) -> dict:
                 f'Kubernetes reported {reason}; free-text messages are deliberately omitted.')
     findings.sort(key=lambda x: (x['severity'], x['code'], x['subject']))
     attention = any(x['severity'] in {'critical', 'warning'} and x['code'] not in CONTAINER_UNKNOWN for x in findings)
+    usage = resource_usage(pods)
     return {'mode': 'deterministic-read-only', 'llm_inference': False,
             'health': 'attention-required' if attention else 'unknown' if any(
-                x['code'] in CONTAINER_UNKNOWN for x in findings) else 'healthy-observed-scope',
+                x['code'] in CONTAINER_UNKNOWN for x in findings) or usage is not None and usage['state']=='unknown'
+                else 'healthy-observed-scope',
             'intentional_flux_suspension': intentional_flux, 'findings': findings,
             'pod_count': len(pods['pods']), 'event_count': len(events['events']),
             'actions_executed': [],

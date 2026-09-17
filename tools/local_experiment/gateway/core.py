@@ -80,6 +80,7 @@ def load_module(name: str, path: Path):
 
 
 CONTAINER_STATUS = load_module('gateway_container_status', HERE / 'container_status.py')
+POD_USAGE = load_module('gateway_pod_usage', HERE / 'pod_usage.py')
 
 
 def safe_name(value: Any, maximum: int = 128) -> str:
@@ -247,7 +248,12 @@ class Backends:
                          'container_observation': CONTAINER_STATUS.project_container_observation(
                              item, timestamp=safe_timestamp)})
         return {'namespace': namespace, 'observed_at': observed_at, 'pods': pods,
-                'truncated': len(data.get('items', [])) > limit}
+                'truncated': len(data.get('items', [])) > limit,
+                'resource_usage': POD_USAGE.collect(data, limit=limit, fetch=self.pod_usage_get,
+                                                     now=observation_time)}
+
+    def pod_usage_get(self, operation: str, pod_name: str) -> dict:
+        return POD_USAGE.fixed_get(operation, pod_name)
 
     def k8s_read_events(self, namespace: str, limit: int) -> dict:
         data = self.command_json(['kubectl', '--context', CONTEXT, '-n', namespace,

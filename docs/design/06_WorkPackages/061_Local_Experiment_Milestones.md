@@ -5,17 +5,51 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.26"
+version: "3.27"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-18）：`query diagnose report [--token TOKEN]`から、
-実診断の保存6件を再実行せず一覧/単件表示できる。4passed/2failed・3groupsを保持し、
-実CLI9回でall/single一致・再読取一致・missing/exit1と全入力不変を確認した。
-API/model/新診断/audit/runtime0。直前の独立保持監査60checksとAH486は継承baselineである。
+最新の到達点（2026-09-18）：`sre run`の固定Trino観測にCPU平均とmemory working-setを追加した。
+実Qwen1回で初期/followupともobserved、保存status再読取も成功。独立保持監査73checksを通過した。
+Pod状態差分0と異なるusage sample windowを区別し、原因undetermined・修復なしを維持する。
+この観測機能はlocal受入を完了したが、一般的な原因診断・修復品質・本番受入は未達である。
+
+## 2026-09-18: fixed Trino resource usage — local acceptance complete
+
+[WP-L2-AGENT-002](L2/WP-L2-AGENT-002_SRE_Bear.md)の次の小増分として、既存Pod readへ
+固定Trino 1Pod/1containerのCPU平均nanocores・memory working-set bytesを追加した。
+新usageを含む実CLI1回がpassed/exit0、初期/followupともobserved。独立保持監査73checksも成功し、
+この観測機能のlocal受入を完了した。一般的な原因診断の完了とはしない。
+pods呼出しごとに追加するアプリ側kubectl取得操作はMetricsと同Pod再読取の最大2回で、
+アプリ側再試行はない。各操作8秒＋所有child cleanup猶予2秒、返却64KiBを上限とする。
+`get_attempts`は取得intent数で、kubectl/client-go内部の429/Retry-After再試行を含むHTTP総数ではない。
+
+前後Pod/container identityとrequest/sample時刻をexact nsで照合し、値はint64文字列で保存する。
+unknownを0へ変換せず、旧field欠落の保存形式を維持する。同一cached windowは新測定としない。
+新しい負荷findingや原因推論・自動修復は加えず、公開SRE CLI schemaとroot_cause=undeterminedを保持。
+旧SRE84を含む95 focused testsと新11件の独立確認が成功、providerの8KiB上限も維持した。
+実runは`sre-llm/52aa250a1b92b29d90205836a6ea0a3a/`。同Pod/container identity・restart1・
+Running開始時刻を前後で確認した。UTC 19:18:52/19:19:07のsampleはそれぞれ
+window 15014000000/14990000000ns、CPU 11121886/11591194nanocores、
+memory 2162106368/2162118656bytes。`different-sample-window`として分離し、trendを判定しない。
+Pod/container状態に差分はないが、usage数値も不変だったとは述べない。
+過去warning6件に対してPod read1種を選び、attention-required/原因undetermined/修復falseを維持した。
+Qwen1callは1956入力/104出力tokens、6550ms、cost NULL。producerは監査7件を検証し、
+workflow保存span2件とGateway保存span5件を区別し、MCP返却ID5件との相関も確認した。
+全local56suites/2139件（2138成功・既存optional1skip）、Go SRE16件、CLI29件、source219不変を確認。
+before23checks/保持4003files/AH486をbaselineとした。独立73checksで3999files完全一致、
+Gateway2filesの旧prefix保持＋各5records追記、runtime2filesの内容/mode同一・mtime更新だけを確認。
+親afterの厳密fingerprint不一致は原結果22/23成功のまま保存し、4差分の限定確認を追加した。
+AH旧486行のSHAを保持して493行となり、新AH/Loki各7eventsと保存spans7件が一致した。
+source219不変、旧lock54件と新SRE lockはinactive。新status2回/対象8entries、
+旧status4件のbefore/after計8回/対象24entriesもJSON一致と保持不変を確認した。
+status helperのcommand期待名と独立helperのmodel span task_id期待は各1回訂正し、原失敗を保存。
+製品失敗0/model再実行0。独立確認のAH/Loki読取は各2回、cache保存後はsaved-onlyで検証した。
+受入証拠は`sre-usage-checks/8aa1e4d2d00c419e8c1d35ca8ab7752b/`の
+`independent-verification.json`（73checks）と`audit-readback-clarification.json`に保存する。
 
 ## 2026-09-18: saved diagnosis report — local acceptance complete
 

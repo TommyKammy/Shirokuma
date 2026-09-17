@@ -165,6 +165,35 @@ class EvaluationClient:
 
 
 class SRELLMTests(unittest.TestCase):
+    def test_resource_usage_projection_stays_typed_bounded_and_advisory(self):
+        from test_local_sre_contract import usage_snapshots, usage_unknown
+        model = PROVIDER.SREProvider(local_profile())
+        model.opener.open = Mock()
+        for observations in (usage_snapshots(), usage_snapshots(usage_unknown())):
+            evidence = evidence_from(observations)
+            body = model.request_body('sre_triage', evidence)
+            self.assertLessEqual(len(json.dumps(body).encode()), 8192)
+            retained = json.loads(body['messages'][-1]['content'])['evidence']
+            self.assertEqual(retained['observations']['pods']['resource_usage'], observations['k8s_read_pods']['resource_usage'])
+            CONTRACT.validate_triage({'assessment': evidence['health'], 'checks': [], 'root_cause': 'undetermined'}, retained)
+            self.assertIn('Unknown usage is missing, never zero', body['messages'][0]['content'])
+            self.assertIn('not a UID-authenticated metric', body['messages'][0]['content'])
+        model.opener.open.assert_not_called()
+
+    def test_resource_usage_never_bypasses_existing_eight_kib_limit(self):
+        from test_local_sre_contract import usage_observed
+        evidence = copy.deepcopy(EVALUATION.cases()[8]['evidence'])
+        evidence['observations']['pods']['resource_usage'] = usage_observed()
+        evidence['observations']['pods']['observed_at'] = '2026-09-17T01:59:59.000000Z'
+        finding = next(x for x in evidence['findings'] if x['code'] == 'CONTAINER_EXIT_NONZERO')
+        evidence['findings'] = [dict(copy.deepcopy(finding), id=f'f{i:02d}', subject=f'pod-{i}') for i in range(1, 25)]
+        CONTRACT.validate_evidence(evidence)
+        model = PROVIDER.SREProvider(local_profile())
+        model.opener.open = Mock()
+        with self.assertRaisesRegex(ProviderError, 'bounded input'):
+            model.complete('sre_triage', evidence)
+        model.opener.open.assert_not_called()
+
     def test_container_golden_cases_keep_old_ids_response_shape_and_bounded_inputs(self):
         fixtures = EVALUATION.cases()
         self.assertEqual([x['case_id'] for x in fixtures], [

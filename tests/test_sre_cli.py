@@ -1,6 +1,7 @@
 """Bounded SRE bridge, saved evidence and interruption tests; no live services."""
 import asyncio
 import copy
+from datetime import datetime, timedelta
 import fcntl
 import hashlib
 import importlib.util
@@ -24,7 +25,7 @@ TOKEN, INNER, TRACE = '1'*32, '2'*32, '3'*32
 PRIVATE = 'PRIVATE_GATEWAY_SECRET_PROMPT_PATH'
 
 
-def fixture_documents(*, legacy=False, three=False):
+def fixture_documents(*, legacy=False, three=False, initial_snapshots=None):
     C = CLI.C
     stamp = '2026-09-17T06:00:00.000000Z'
     initial = C.project_observations({
@@ -35,6 +36,8 @@ def fixture_documents(*, legacy=False, three=False):
         'k8s_read_events': dict(namespace='shirokuma-dev',observed_at=stamp,truncated=False,events=[]),
         'local_platform_status':dict(profile='local-experiment',observed_at=stamp,ready=True,
             components={name:dict(ready=True,status='ready') for name in C.COMPONENTS})})
+    if initial_snapshots is not None:
+        initial = C.project_observations(copy.deepcopy(initial_snapshots))
     if three: initial.pop('local_platform_status')
     evidence = C.build_evidence(*(initial[t] for t in C.TOOLS[:3]),initial.get('local_platform_status'))
     if three:
@@ -42,10 +45,13 @@ def fixture_documents(*, legacy=False, three=False):
         evidence['findings'] = [f for f in evidence['findings'] if f['subject'] != 'platform']
         for i,f in enumerate(evidence['findings'],1): f['id'] = f'f{i:02}'
     if legacy or three: evidence['observations']['pods'].pop('container_details')
-    triage = dict(assessment='attention-required',root_cause='undetermined',
-        checks=[dict(tool='k8s_read_pods',finding_ids=[f['id'] for f in evidence['findings']])])
-    followup = {'k8s_read_pods':copy.deepcopy(initial['k8s_read_pods'])}
-    followup['k8s_read_pods']['observed_at'] = '2026-09-17T06:00:01.000000Z'
+    triage = dict(assessment=evidence['health'],root_cause='undetermined',
+        checks=[dict(tool='k8s_read_pods',finding_ids=[f['id'] for f in evidence['findings']])] if evidence['findings'] else [])
+    followup = {}
+    if triage['checks']:
+        followup = {'k8s_read_pods':copy.deepcopy(initial['k8s_read_pods'])}
+        before_time = datetime.fromisoformat(initial['k8s_read_pods']['observed_at'].replace('Z', '+00:00'))
+        followup['k8s_read_pods']['observed_at'] = (before_time + timedelta(seconds=1)).isoformat(timespec='microseconds').replace('+00:00', 'Z')
     comparisons = CLI.compatible_comparison(initial,followup,old_three=three,legacy_details=legacy or three)
     observations = [dict(tool=t,phase='initial',snapshot=s) for t,s in initial.items()]
     observations += [dict(tool=t,phase='followup',snapshot=s) for t,s in followup.items()]
@@ -186,6 +192,47 @@ class SRECLITests(unittest.TestCase):
         self.legacy(fixture_documents(legacy=True));before=self.files()
         code,rows=self.main('status');self.assertEqual(code,0);self.assertEqual(rows[-1]['result'],'passed')
         self.assertEqual(self.files(),before)
+
+    def test_saved_resource_usage_roundtrip_and_unknown_scope_are_readonly(self):
+        from test_local_sre_contract import usage_snapshots, usage_observed, usage_unknown
+        for build, assessment in ((usage_observed, 'healthy-observed-scope'), (usage_unknown, 'unknown')):
+            with self.subTest(state=assessment):
+                docs = fixture_documents(initial_snapshots=usage_snapshots(build()))
+                view = CLI.verify_documents(encode(docs))
+                self.assertEqual(view['result'], 'passed')
+                self.assertEqual(view['assessment'], assessment)
+                target = self.evidence / (TOKEN if assessment == 'unknown' else '4'*32)
+                self.evidence.mkdir(mode=0o700, exist_ok=True)
+                write_fixture(target, docs)
+                before = self.files()
+                code, rows = self.main('status', ['status', '--evidence-token', target.name])
+                self.assertEqual(code, 0)
+                self.assertEqual(rows[-1]['assessment'], assessment)
+                self.assertEqual(self.files(), before)
+        self.configured.assert_not_called()
+        self.fake.run.assert_not_called()
+
+    def test_saved_resource_usage_must_match_evidence_and_exact_quantities(self):
+        from test_local_sre_contract import usage_snapshots
+        original = fixture_documents(initial_snapshots=usage_snapshots())
+        edits = (
+            lambda d: d['result.json']['evidence']['observations']['pods']['resource_usage']['sample'].update(cpu_nanocores='0'),
+            lambda d: d['observations.json'][1]['snapshot']['resource_usage']['sample'].update(cpu_nanocores=123),
+            lambda d: d['observations.json'][1]['snapshot']['resource_usage']['identity'].update(pod_uid='2'*36),
+            lambda d: d['observations.json'][1]['snapshot']['resource_usage'].update(raw_log=PRIVATE),
+        )
+        for edit in edits:
+            docs = copy.deepcopy(original); edit(docs)
+            with self.subTest(edit=edit), self.assertRaises((ValueError, CLI.C.DiagnosticError)):
+                CLI.verify_documents(encode(docs))
+
+    def test_unknown_usage_cannot_be_relabelled_healthy_in_saved_result(self):
+        from test_local_sre_contract import usage_snapshots, usage_unknown
+        docs = fixture_documents(initial_snapshots=usage_snapshots(usage_unknown()))
+        docs['result.json']['evidence']['health'] = 'healthy-observed-scope'
+        docs['result.json']['triage']['assessment'] = 'healthy-observed-scope'
+        with self.assertRaises((ValueError, CLI.C.DiagnosticError)):
+            CLI.verify_documents(encode(docs))
 
     def test_legacy_missing_snapshots_stays_unknown(self):
         docs=fixture_documents();docs.pop('observations.json');self.legacy(docs)

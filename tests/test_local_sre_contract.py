@@ -579,5 +579,143 @@ class ContainerComparisonTests(unittest.TestCase):
         self.assertIn('no-recovery-claim', observed['limitations'])
 
 
+def usage_observed():
+    return {'schema_version': 1, 'scope': 'fixed-trino-container', 'state': 'observed', 'reason': None,
+            'binding': 'name-time-correlated', 'request_started_at': '2026-09-17T01:59:59.000000000Z',
+            'observed_at': '2026-09-17T02:00:00.000000000Z', 'get_attempts': 2,
+            'identity': {'namespace': 'shirokuma-dev', 'pod_name': 'trino-local-abcde',
+                         'pod_uid': '11111111-1111-4111-8111-111111111111', 'container': 'trino',
+                         'container_id_sha256': 'a'*64, 'restart_count': 0,
+                         'started_at': '2026-09-17T01:00:00.000000Z'},
+            'sample': {'timestamp': '2026-09-17T01:59:58.000000000Z', 'window_ns': '30000000000',
+                       'cpu_nanocores': '123456789', 'memory_working_set_bytes': '1234567890'}}
+
+
+def usage_unknown():
+    value = usage_observed()
+    value.update(state='unknown', reason='READ_FAILED', binding=None, sample=None, get_attempts=1)
+    return value
+
+
+def usage_snapshots(usage=None):
+    value = snapshots()
+    usage = usage_observed() if usage is None else copy.deepcopy(usage)
+    identity = usage['identity']
+    details = container_details()
+    details['containers'][0]['name'] = 'trino'
+    value['k8s_read_pods']['pods'] = [{'name': identity['pod_name'], 'uid': identity['pod_uid'],
+        'phase': 'Running', 'ready_containers': 1, 'total_containers': 1, 'restarts': 0,
+        'container_observation': details}]
+    value['k8s_read_pods']['observed_at'] = '2026-09-17T01:59:59.000000Z'
+    value['k8s_read_pods']['resource_usage'] = usage
+    return value
+
+
+def usage_reread(before):
+    after = reread(before, 'k8s_read_pods')
+    after['k8s_read_pods']['resource_usage'].update(request_started_at='2026-09-17T02:00:02.000000000Z',
+        observed_at='2026-09-17T02:00:03.000000000Z')
+    return after
+
+
+class ResourceUsageTests(unittest.TestCase):
+    def evidence(self, value):
+        return contract.build_evidence(*(value[tool] for tool in contract.TOOLS))
+
+    def test_old_shape_is_unchanged_and_missing_is_not_new_coverage(self):
+        before = snapshots()
+        projected = contract.project_observations(before)
+        self.assertNotIn('resource_usage', projected['k8s_read_pods'])
+        self.assertNotIn('resource_usage', self.evidence(before)['observations']['pods'])
+        self.assertNotIn('resource_usage', contract.compare_observations(before, reread(before, 'k8s_read_pods'))['sources']['k8s_read_pods'])
+
+    def test_observed_exact_values_and_zero_do_not_create_load_findings(self):
+        for quantity in ('0', '9223372036854775807'):
+            before = usage_snapshots()
+            before['k8s_read_pods']['resource_usage']['sample'].update(cpu_nanocores=quantity, memory_working_set_bytes=quantity)
+            evidence = self.evidence(before)
+            self.assertEqual(evidence['health'], 'healthy-observed-scope')
+            self.assertEqual(evidence['findings'], [])
+            self.assertEqual(evidence['observations']['pods']['resource_usage']['sample']['cpu_nanocores'], quantity)
+            contract.validate_triage(triage(evidence), evidence)
+            with self.assertRaises(contract.DiagnosticError):
+                contract.validate_triage(dict(triage(evidence), root_cause='high-cpu'), evidence)
+
+    def test_unknown_is_missing_coverage_not_zero_or_a_new_incident(self):
+        before = usage_snapshots(usage_unknown())
+        evidence = self.evidence(before)
+        self.assertEqual(evidence['health'], 'unknown')
+        self.assertEqual(evidence['findings'], [])
+        self.assertIsNone(evidence['observations']['pods']['resource_usage']['sample'])
+        contract.validate_triage(triage(evidence), evidence)
+        with self.assertRaises(contract.DiagnosticError):
+            contract.validate_evidence(dict(evidence, health='healthy-observed-scope'))
+        before['k8s_read_pods']['pods'][0]['ready_containers'] = 0
+        self.assertEqual(self.evidence(before)['health'], 'attention-required')
+
+    def test_unsafe_or_unbound_usage_is_rejected_before_evidence(self):
+        edits = [lambda x: x.update(raw_body='private'), lambda x: x['sample'].update(cpu_nanocores=0),
+                 lambda x: x['sample'].update(cpu_nanocores=True), lambda x: x['sample'].update(memory_working_set_bytes=0.5),
+                 lambda x: x['identity'].update(pod_uid='22222222-2222-4222-8222-222222222222'),
+                 lambda x: x['identity'].update(pod_name='trino-other'), lambda x: x['identity'].update(restart_count=1),
+                 lambda x: x['identity'].update(started_at='2026-09-17T01:01:00.000000Z')]
+        for edit in edits:
+            before = usage_snapshots();edit(before['k8s_read_pods']['resource_usage'])
+            with self.subTest(edit=edit), self.assertRaises(contract.DiagnosticError):self.evidence(before)
+
+    def test_outer_pod_clock_binds_to_the_metrics_request_without_float_rounding(self):
+        before = usage_snapshots()
+        before['k8s_read_pods']['resource_usage']['request_started_at'] = '2026-09-17T01:59:59.000000001Z'
+        self.assertEqual(self.evidence(before)['health'], 'healthy-observed-scope')
+        before['k8s_read_pods']['observed_at'] = '2026-09-17T01:59:59.000001Z'
+        with self.assertRaises(contract.DiagnosticError):self.evidence(before)
+
+    def test_saved_projection_roundtrip_preserves_usage_without_aliases(self):
+        before = usage_snapshots();saved = contract.project_observations(before)
+        self.assertEqual(self.evidence(before), self.evidence(saved))
+        self.assertEqual(saved['k8s_read_pods']['resource_usage'], before['k8s_read_pods']['resource_usage'])
+        saved['k8s_read_pods']['resource_usage']['sample']['cpu_nanocores'] = '0'
+        self.assertEqual(before['k8s_read_pods']['resource_usage']['sample']['cpu_nanocores'], '123456789')
+
+    def test_cached_sample_is_not_a_new_measurement_and_conflicting_values_are_incomparable(self):
+        before = usage_snapshots();after = usage_reread(before)
+        comparison = contract.compare_observations(before, after)
+        usage = comparison['sources']['k8s_read_pods']['resource_usage']
+        self.assertEqual(usage['comparison'], 'same-sample-window')
+        self.assertIn('cached-sample-not-new-measurement', usage['limitations'])
+        self.assertEqual(comparison, contract.compare_observations(contract.project_observations(before), contract.project_observations(after)))
+        after['k8s_read_pods']['resource_usage']['sample']['timestamp'] = '2026-09-17T01:59:58.000000Z'
+        self.assertEqual(contract.compare_observations(before, after)['sources']['k8s_read_pods']['resource_usage']['comparison'], 'same-sample-window')
+        after['k8s_read_pods']['resource_usage']['sample']['cpu_nanocores'] = '0'
+        item = contract.compare_observations(before, after)['sources']['k8s_read_pods']
+        self.assertEqual(item['status'], 'incomparable')
+        self.assertIn('resource-usage-sample-inconsistent', item['resource_usage']['limitations'])
+
+    def test_different_window_is_not_a_trend_or_recovery(self):
+        before = usage_snapshots();after = usage_reread(before)
+        after['k8s_read_pods']['resource_usage']['sample'].update(timestamp='2026-09-17T02:00:00.000000000Z', cpu_nanocores='0')
+        comparison = contract.compare_observations(before, after)
+        item = comparison['sources']['k8s_read_pods']
+        self.assertEqual(item['resource_usage']['comparison'], 'different-sample-window')
+        self.assertEqual(item['changes'], [])
+        self.assertIn('no-trend-or-cause-claim', item['resource_usage']['limitations'])
+        self.assertEqual(comparison['root_cause'], 'undetermined')
+
+    def test_missing_unknown_and_changed_identity_do_not_report_equal_usage(self):
+        before = usage_snapshots()
+        for mode in ('missing', 'unknown', 'identity'):
+            after = usage_reread(before)
+            if mode == 'missing':after['k8s_read_pods'].pop('resource_usage')
+            elif mode == 'unknown':after['k8s_read_pods']['resource_usage'] = usage_unknown()
+            else:
+                after['k8s_read_pods']['resource_usage']['identity']['container_id_sha256'] = 'b'*64
+            item = contract.compare_observations(before, after)['sources']['k8s_read_pods']
+            self.assertEqual(item['resource_usage']['comparison'], 'incomparable')
+            self.assertEqual(item['status'], 'incomparable')
+            self.assertNotIn('incomplete-observation-lists', item['limitations'])
+        item = contract.compare_observations(before, {})['sources']['k8s_read_pods']
+        self.assertEqual(item['resource_usage']['comparison'], 'not-reobserved')
+
+
 if __name__ == '__main__':
     unittest.main()

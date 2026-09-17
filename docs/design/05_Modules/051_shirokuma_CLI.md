@@ -5,7 +5,7 @@ title: "shirokuma CLI"
 status: draft
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.12.0"
+version: "0.13.0"
 area: "module"
 tags: [shirokuma, module]
 ---
@@ -166,6 +166,14 @@ healthyへ変換せず、root_cause=undetermined、remediation_executed=falseを
 evidence_tokenは保存先、workflow_tokenは内部監査identityである。原logs/manifestや
 promptを出力せず、MCP返却span IDによる相関と保存model/root spanを区別する。
 取消・保存状態・exit契約は[SRE CLI runbook](../../../tools/local_experiment/bears/SRE_CLI.md)を参照。
+
+2026-09-18の小増分では、既存Pod readへ固定Trino 1containerのCPU平均nanocoresと
+memory working-set bytesをoptionalで追加した。実CLI1回がpassed/exit0となり、初期・followupの
+両方でobservedを確認した。独立保持監査73checksも成功し、この観測機能のlocal受入を完了した。
+保持4003files中3999は完全一致し、監査2filesの限定追記とruntime2filesのmtime更新を別途確認した。
+有効0と欠測NULLを区別し、名前・時刻による対応付けとsample windowを保存する。
+cached sampleを新しい測定とは扱わず、数値だけで高負荷・原因・回復を断定しない。
+旧usage欠落は過去のshapeで照会し、公開CLI schemaと自動修復なしの契約は維持する。
 
 ### Local experimental Pod policy check
 
