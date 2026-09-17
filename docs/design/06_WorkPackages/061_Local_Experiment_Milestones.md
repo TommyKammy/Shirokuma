@@ -5,17 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "2.3"
+version: "2.4"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：Iceberg snapshot A/Bの過去参照、別tableへのCTAS復元、
-元実験tableのAへのrollbackが実機成功。初回のTrino履歴意味の誤認をsource確認で修正した。
-2run合計4table/query残留0、保持fixtureのschema/rows/snapshots/history/refs不変を確認。
-全回帰506 tests、設計75documentsを検証。次は既存AgentHouseを読むGrafana dashboardを実装中。
+最新の到達点（2026-09-17）：AgentHouseの読み取り専用Grafana画面を実機導入。
+Task/Trace絞り込み、失敗/ブロック、処理時間、モデルtokensの既知/欠測を表示する。
+5panel×8caseの40/40を実DBと照合し、停止・接続撤去・復元・冪等起動も成功。
+既存監査294件とDB runtime不変、全回帰552 tests、設計75documentsを検証。
+次は保存済みTPC-H証跡の成功1run・失敗2runを含むAgentHouse取込を実装中。
 Cloud APIは無効のままローカル開発を継続する。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
@@ -23,6 +24,26 @@ repositoryの設計66 documentsを検証した。今回更新した12 materializ
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: AgentHouse read-only Grafana
+
+[WP-L3-CH-001](L3/WP-L3-CH-001_ClickHouse_AgentHouse.md)へnative ARM64 Grafana13.2.2と
+署名確認済みClickHouse plugin4.21.3を追加。`127.0.0.1:18030`のanonymous Viewerで
+既存Pawprintsの失敗/ブロック、Task/Trace、処理別p50/p95、モデルtokensの欠測を確認できる。
+専用SELECT-only readerとDB側の30秒/256MiB/1万結果行制限を使用し、writer資格情報を渡さない。
+未測定費用はNULL、event成功とTask/PR全体の成功は区別する。
+
+内部bridge単独のport publish不成立とdriverのtimeout+5秒を実機で検出し、
+Grafanaだけのfrontend bridgeとplugin25秒設定で解決。全パネルの厳密percentencode filterを
+実DB/画面で確認し、40APIcasesの列型/値/NULLを前後SELECTで一致させた。
+empty resultのplugin形式差は初回failed証跡を残して検証器を修正した。
+
+停止中network attachmentの誤報も修正し、05:25 UTCに実切断→復元を確認。
+同Grafana ID/volume/env/credential、既存CH ID/image/env/mount/port/start/restartを保持し、
+監査294件の全bytes/hash不変。05:26 UTCの再API照合40/40、全回帰552 testsが成功。
+最終API証跡`grafana-verification/9785773e72e540f2ad63c014db659b70`、
+保全/復元証跡`grafana-preflight/b781f2d079d8469c9e1bf274ab83d374`。
+実費計測・benchmark取込・Trino query履歴持続化は未達で、後続増分として扱う。
 
 ## 2026-09-17: Iceberg snapshot / restore sandbox
 

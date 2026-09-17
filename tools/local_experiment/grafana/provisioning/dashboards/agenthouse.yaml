@@ -1,0 +1,12 @@
+apiVersion: 1
+providers:
+  - name: Shirokuma local AgentHouse
+    orgId: 1
+    folder: Shirokuma
+    folderUid: shirokuma-local
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 15
+    options:
+      path: /etc/grafana/shirokuma-dashboards

@@ -528,3 +528,29 @@ test-local-iceberg-sandbox:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_iceberg_sandbox.py'
 
 verify-local-experiment: test-local-iceberg-sandbox
+
+.PHONY: local-grafana-prepare local-grafana-up local-grafana-status local-grafana-smoke local-grafana-stop local-grafana-verify-dashboard test-local-grafana
+local-grafana-prepare:
+	@$(PYTHON) tools/local_experiment/grafana/manage.py prepare
+
+local-grafana-up:
+	@$(PYTHON) tools/local_experiment/grafana/manage.py up
+
+local-grafana-status:
+	@$(PYTHON) tools/local_experiment/grafana/manage.py status
+
+local-grafana-smoke:
+	@$(PYTHON) tools/local_experiment/grafana/manage.py smoke
+
+local-grafana-verify-dashboard:
+	@$(PYTHON) tools/local_experiment/grafana/verify_dashboard.py
+
+local-grafana-stop:
+	@$(PYTHON) tools/local_experiment/grafana/manage.py stop
+
+test-local-grafana:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_grafana_runtime.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_agenthouse_dashboard.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_grafana_dashboard_verifier.py'
+
+verify-local-experiment: test-local-grafana

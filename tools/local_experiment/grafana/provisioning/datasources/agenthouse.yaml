@@ -1,0 +1,30 @@
+apiVersion: 1
+datasources:
+  - name: Shirokuma AgentHouse read-only
+    uid: shirokuma-agenthouse-readonly
+    type: grafana-clickhouse-datasource
+    access: proxy
+    isDefault: true
+    editable: false
+    version: 1
+    jsonData:
+      host: shirokuma-local-agenthouse
+      port: 8123
+      protocol: http
+      username: $SHIROKUMA_GRAFANA_READER
+      defaultDatabase: agenthouse
+      defaultTable: pawprints
+      dialTimeout: 5
+      # clickhouse-go v2.48.0 adds 5s to its context deadline for
+      # max_execution_time; keep that value within the immutable DB 30s cap.
+      queryTimeout: 25
+      maxOpenConns: 4
+      maxIdleConns: 2
+      connMaxLifetime: 1
+      secure: false
+      tlsSkipVerify: false
+      validateSql: true
+      enableRowLimit: true
+      enableMapKeysDiscovery: false
+    secureJsonData:
+      password: $SHIROKUMA_GRAFANA_READER_PASSWORD

@@ -91,6 +91,10 @@ The [Policy Gatekeeper Bear](tools/local_experiment/bears/POLICY_GATEKEEPER.md)
 classifies fixed policy candidates and verifies native admission through server dry-runs.
 The [evaluation report](tools/local_experiment/evaluation/README.md) checks all
 retained suite receipts and keeps failures, missing evidence and case differences visible.
+The [AgentHouse dashboard](tools/local_experiment/grafana/README.md) provides
+read-only Task/Trace filters, recorded failures and blocks, phase latency and
+model token coverage at [local Grafana](http://127.0.0.1:18030/d/shirokuma-agenthouse-local).
+Run `rtk make local-grafana-up local-grafana-smoke` to start and verify it.
 Superset is available at [the local dashboard](http://127.0.0.1:18088/superset/dashboard/shirokuma-local-lakehouse/),
 and OpenMetadata at [the local catalog](http://127.0.0.1:18585).
 Generated credentials stay in private ignored state; see the component runbooks
