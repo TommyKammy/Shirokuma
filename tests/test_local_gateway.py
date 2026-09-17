@@ -138,6 +138,100 @@ class GatewayTests(unittest.TestCase):
         self.assertNotIn('hidden', json.dumps(result))
         self.assertNotIn('private', json.dumps(result))
 
+    def test_pod_identity_and_collection_time_distinguish_recreated_pods(self):
+        backend = MODULE.Backends.__new__(MODULE.Backends)
+        backend.command_json = Mock(return_value={'items': [
+            {'metadata': {'name': 'same-name', 'uid': 'pod-before'}, 'status': {'phase': 'Running'}},
+            {'metadata': {'name': 'same-name', 'uid': 'pod-after'}, 'status': {'phase': 'Pending'}},
+            {'metadata': {'name': 'unknown-identity'}, 'status': {}},
+        ]})
+        timestamp = '2026-09-17T03:04:05.123456Z'
+        with patch.object(MODULE, 'observation_time', return_value=timestamp):
+            result = backend.k8s_read_pods(MODULE.NAMESPACE, 3)
+        self.assertEqual(result['observed_at'], timestamp)
+        self.assertEqual([pod['uid'] for pod in result['pods']], ['pod-before', 'pod-after', None])
+        self.assertFalse(result['truncated'])
+        self.assertTrue(backend.k8s_read_pods(MODULE.NAMESPACE, 2)['truncated'])
+        backend.command_json.assert_called_with(['kubectl', '--context', MODULE.CONTEXT, '-n', MODULE.NAMESPACE,
+                                                 'get', 'pods', '--chunk-size=50', '-o', 'json'])
+
+    def test_uid_is_opaque_bounded_and_unknown_is_not_an_identity(self):
+        self.assertEqual(MODULE.safe_uid('pod-opaque_123'), 'pod-opaque_123')
+        for value in (None, '', 'private\nvalue', 'x' * 129, 'spaces are not identifiers', 1, True):
+            with self.subTest(value=value):
+                self.assertIsNone(MODULE.safe_uid(value))
+
+    def test_event_last_occurrence_prefers_series_then_last_timestamp(self):
+        value = {'series': {'lastObservedTime': '2026-09-17T03:04:05.123456Z'},
+                 'lastTimestamp': '2026-09-17T01:00:00Z', 'eventTime': '2026-09-16T01:00:00Z',
+                 'metadata': {'creationTimestamp': '2026-09-17T05:00:00Z'}}
+        self.assertEqual(MODULE.event_last_observed_at(value), '2026-09-17T03:04:05.123456Z')
+        value['series']['lastObservedTime'] = 'invalid-private-value'
+        self.assertEqual(MODULE.event_last_observed_at(value), '2026-09-17T01:00:00.000000Z')
+        value['lastTimestamp'] = None
+        self.assertIsNone(MODULE.event_last_observed_at(value))
+
+    def test_first_observed_event_time_is_last_only_for_singleton(self):
+        first = '2026-09-17T12:00:00+09:00'
+        self.assertEqual(MODULE.event_last_observed_at({'eventTime': first}), '2026-09-17T03:00:00.000000Z')
+        self.assertEqual(MODULE.event_last_observed_at({'eventTime': first, 'count': 1}),
+                         '2026-09-17T03:00:00.000000Z')
+        for extra in ({'count': 2}, {'count': True}, {'count': '1'}, {'count': None},
+                      {'series': {'count': 5}}, {'series': {}}):
+            with self.subTest(extra=extra):
+                self.assertIsNone(MODULE.event_last_observed_at({'eventTime': first, **extra}))
+        self.assertIsNone(MODULE.event_last_observed_at({'metadata': {'creationTimestamp': first}}))
+        self.assertIsNone(MODULE.event_last_observed_at({'firstTimestamp': first}))
+
+    def test_timestamps_reject_missing_invalid_and_free_text_values(self):
+        for value in (None, '', 123, 'private-value', '2026-09-17', '2026-09-17T03:00:00',
+                      '2026-02-30T03:00:00Z', '2026-09-17T25:00:00Z', '2026-09-17T03:00:00+25:00',
+                      '2026-09-17T03:00:00Z\nprivate', '2026-09-17T03:00:00.' + '1' * 100 + 'Z'):
+            with self.subTest(value=value):
+                self.assertIsNone(MODULE.safe_timestamp(value))
+        self.assertEqual(MODULE.safe_timestamp('2026-09-17T03:00:00.1Z'), '2026-09-17T03:00:00.100000Z')
+        self.assertRegex(MODULE.observation_time(), r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$')
+
+    def test_event_selection_uses_last_occurrence_and_truncates_after_secret_filter(self):
+        backend = MODULE.Backends.__new__(MODULE.Backends)
+        secret = {'metadata': {'uid': 'private-secret-event'}, 'involvedObject': {'kind': 'Secret'},
+                  'lastTimestamp': '2026-09-17T10:00:00Z', 'message': 'private-secret-message'}
+        recent_recurrence = {'metadata': {'uid': 'recent-event', 'creationTimestamp': '2026-09-01T01:00:00Z'},
+                            'involvedObject': {'kind': 'Pod', 'name': 'pod-1', 'uid': 'current-pod'},
+                            'lastTimestamp': '2026-09-17T03:00:00Z', 'count': 5,
+                            'reason': 'BackOff', 'type': 'Warning', 'message': 'private-free-text'}
+        new_old_occurrence = {'metadata': {'uid': 'older-event', 'creationTimestamp': '2026-09-17T04:00:00Z'},
+                             'involvedObject': {'kind': 'Pod', 'name': 'pod-1', 'uid': 'previous-pod'},
+                             'lastTimestamp': '2026-09-17T02:00:00Z', 'reason': 'Started', 'type': 'Normal'}
+        unknown = {'metadata': {'creationTimestamp': '2026-09-17T06:00:00Z'},
+                   'involvedObject': {'kind': 'Pod', 'name': 'pod-2'}}
+        backend.command_json = Mock(return_value={'items': [secret, unknown, new_old_occurrence, recent_recurrence]})
+        timestamp = '2026-09-17T05:00:00.000000Z'
+        with patch.object(MODULE, 'observation_time', return_value=timestamp):
+            result = backend.k8s_read_events(MODULE.NAMESPACE, 1)
+        self.assertEqual(result['observed_at'], timestamp)
+        self.assertTrue(result['truncated'])
+        self.assertEqual(result['events'][0]['uid'], 'recent-event')
+        self.assertEqual(result['events'][0]['object_uid'], 'current-pod')
+        self.assertEqual(result['events'][0]['last_observed_at'], '2026-09-17T03:00:00.000000Z')
+        self.assertNotIn('private-', json.dumps(result))
+        all_visible = backend.k8s_read_events(MODULE.NAMESPACE, 3)
+        self.assertFalse(all_visible['truncated'])
+        self.assertEqual([event['uid'] for event in all_visible['events']], ['recent-event', 'older-event', None])
+        self.assertIsNone(all_visible['events'][-1]['last_observed_at'])
+        self.assertIsNone(all_visible['events'][-1]['object_uid'])
+        backend.command_json.assert_called_with(['kubectl', '--context', MODULE.CONTEXT, '-n', MODULE.NAMESPACE,
+                                                 'get', 'events', '--chunk-size=50', '-o', 'json'])
+
+    def test_secret_only_events_are_empty_without_false_truncation(self):
+        backend = MODULE.Backends.__new__(MODULE.Backends)
+        backend.command_json = Mock(return_value={'items': [
+            {'involvedObject': {'kind': 'Secret', 'name': 'private'}} for _ in range(3)]})
+        result = backend.k8s_read_events(MODULE.NAMESPACE, 1)
+        self.assertEqual(result['events'], [])
+        self.assertFalse(result['truncated'])
+        self.assertEqual(result['free_text_messages'], 'omitted')
+
 
 if __name__ == '__main__':
     unittest.main()

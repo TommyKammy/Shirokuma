@@ -5,23 +5,71 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "1.4"
+version: "1.5"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：既存MTPLX Qwenで実MCP inventory workflowが成功。
+最新の到達点（2026-09-17）：QwenによるSRE確認項目の選択、実MCP再観測、UID比較が成功。
 Cloud APIは無効のまま、ローカル実LLMを利用して開発を継続できる。
 稼働停止していた専用Colimaを既存設定で復旧し、5 component groupsすべてreadyを確認した。
-ローカル回帰185件・設計関連14件が成功し、設計66 documentsを検証した。
+ローカル回帰231件・設計関連14件が成功し、設計66 documentsを検証した。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: QwenによるSRE読み取り確認と再観測
+
+**WP-L2-AGENT-002のlocal機能**としてLangGraph `collect → triage → followup`を追加した。
+初回MCP doctor/Pod/Eventの3観測を分類し、Qwenが根拠IDに対応する最大2種類の追加readを選ぶ。
+固定のcontext/namespace/引数だけで再観測し、Pod/Event UID・状態・count・取得時刻を比較する。
+モデルが生成したshellや引数は使わず、重大Pod所見の確認脱落・未知の根拠・不適切なtool・
+healthの改変・root-cause断定は実行前に拒否する。Cloud、GitHub、workload修復は実行しない。
+
+実機では6 PodのうちPolaris/PostgreSQL/Trinoの過去restartを根拠にPod再観測を選んだ。
+最新runの累計restartはそれぞれ6/4/1、約3.56秒の間隔でUID・状態・回数に変化なし。
+`attention-required`と`root_cause: undetermined`を保持し、障害発生中や回復とは断定しない。
+doctor/Eventは再選択されておらず`not-reobserved`を明記する。
+Qwen入力656・出力83 tokens、推論3.127秒、cost NULL。4 MCP + 1 model + 1 assessmentの
+6件をClickHouseから読戻し、Lokiのtask/trace/span/actionとモデルusage/latencyを照合した。
+LangGraphの完了checkpointとlocal OTel spanも確認した。
+
+最新証跡は`tmp/local-experiment/sre-llm/0979b832f0284b15a733cb7ee1ccdd25/`。
+`observations.json`には自由記述を除いた固定項目を保持する。保存した4 receiptを再読込し、
+元観測hash、followup hash、モデル向け根拠、比較結果の4項目が再計算で一致した。
+結果は`replay-verification.json`。最初の成功runも`3a6c80e230094f329228e4e6c2f2fbe4`に保持。
+
+正常/意図Flux停止、過去restart、2つの重大Pod異常、Warning、doctor degraded、Event打切りの
+6合成ケースを各2回評価し、**12/12成功**した。入力計6,244・出力計538 tokens、
+推論合計23.506秒、12件すべてのPawprintを即時読戻しした。
+証跡は`tmp/local-experiment/sre-evaluation/2670bf3683a94a19aa6d79ea48423090/result.json`。
+合成評価はMCP呼出し・故障注入をせず、traceは相関IDでありOTel spanを生成しない。
+
+Gateway観測にはUIDと取得時刻、Event最終観測時刻とtruncatedを追加した。
+Eventの初回時刻を繰返しEventの直近時刻へ流用せず、作成時刻も発生時刻と混同しない。
+再作成Podの同名・UID差、欠測、不完全一覧、逆順時刻、未再観測を区別する。
+Python 3.9と3.12の小数秒解析の差を回帰で発見し、明示的な精度正規化で修正した。
+
+focused testsはcontract22、runner/provider/evaluation17、Gateway19件。
+全ローカル回帰231件＋設計14件と設計66 documentsが成功。
+既存の固定ルールSREも4監査eventで成功した：`tmp/local-experiment/bears/f78c933a281f4675972ce8c7d8f62436/`。
+
+```sh
+rtk make local-sre-qwen-smoke
+rtk make local-sre-qwen-eval
+rtk make test-local-sre-llm
+rtk make verify-local-experiment verify-design-context
+```
+
+既存MTPLX設定・weightsとworkloadは変更せず、追加常駐サービス・volumeはない。
+保存増分は小さなprivate観測receiptと監査。戻す場合は`local-sre-smoke`を使い、保持証跡は削除しない。
+これは読み取り確認を選んで比較する機能であり、logs/metricsに基づく原因診断や自動修復、
+監視の常駐化、本番・人間受入は未達のまま残る。
 
 ## 2026-09-17: 既存MTPLX Qwenへの実LLM接続
 

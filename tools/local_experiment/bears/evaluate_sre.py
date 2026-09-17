@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""Evaluate local SRE read selection against synthetic healthy and adverse snapshots."""
+from __future__ import annotations
+
+import argparse
+import copy
+import json
+from pathlib import Path
+import time
+import uuid
+
+from sre_provider import SREProvider
+from sre_contract import build_evidence, validate_triage
+from providers import ProviderError, load_config, validate_config
+from evaluation import private_write, safe_metrics, verify_audit
+from workflow import agenthouse_module, disable_external_tracing
+
+HERE = Path(__file__).resolve().parent
+LOCAL = HERE.parent
+ROOT = HERE.parents[2]
+REPEATS = 2
+
+
+def cases() -> list[dict]:
+    stamp = '2026-09-17T00:00:00.000000Z'
+    doctor = {'profile': 'local-experiment', 'context': 'colima-mac-studio-solo', 'observed_at': stamp,
+              'checks': [{'name': 'cluster', 'status': 'healthy', 'summary': 'fixture'},
+                         {'name': 'flux', 'status': 'informational', 'summary':
+                          'root Kustomization/flux-system/flux-system is intentionally suspended for local-experiment'}]}
+    pods = {'namespace': 'shirokuma-dev', 'observed_at': stamp, 'truncated': False,
+            'pods': [{'name': 'sample-pod', 'uid': 'pod-1', 'phase': 'Running',
+                      'ready_containers': 1, 'total_containers': 1, 'restarts': 0}]}
+    events = {'namespace': 'shirokuma-dev', 'observed_at': stamp, 'truncated': False, 'events': []}
+    result = []
+    for name in ('intentional_flux_only', 'historical_restart', 'critical_pod',
+                 'warning_event', 'doctor_degraded', 'event_list_truncated'):
+        d, p, e = copy.deepcopy((doctor, pods, events))
+        if name == 'historical_restart':
+            p['pods'][0]['restarts'] = 4
+        elif name == 'critical_pod':
+            p['pods'][0].update(phase='Pending', ready_containers=0)
+            p['pods'].append({'name': 'second-unready', 'uid': 'pod-2', 'phase': 'Running',
+                              'ready_containers': 0, 'total_containers': 1, 'restarts': 2})
+        elif name == 'warning_event':
+            e['events'] = [{'uid': 'event-1', 'object_uid': 'node-1', 'type': 'Warning',
+                            'object_kind': 'Node', 'object_name': 'fixture-node',
+                            'reason': 'MemoryPressure', 'count': 1, 'last_observed_at': stamp}]
+        elif name == 'doctor_degraded':
+            d['checks'][0]['status'] = 'degraded'
+        elif name == 'event_list_truncated':
+            e['truncated'] = True
+        result.append({'case_id': name, 'evidence': build_evidence(d, p, e)})
+    return result
+
+
+def evaluate(config: dict, output: Path, *, model=None, client=None, audit_module=None) -> dict:
+    validate_config(config)
+    if config['active_provider'] != 'local':
+        raise ValueError('SRE evaluation requires the explicitly configured local model')
+    profile = config['providers']['local']
+    disable_external_tracing()
+    model = model if model is not None else SREProvider(profile)
+    agenthouse = audit_module if audit_module is not None else agenthouse_module()
+    client = client if client is not None else agenthouse.Client()
+    output.mkdir(parents=True, mode=0o700)
+    task_id, trace_id = 'sre-eval-' + uuid.uuid4().hex, uuid.uuid4().hex
+    report = {'result': 'failed', 'task_id': task_id, 'trace_id': trace_id,
+              'trace_kind': 'evaluation correlation identifier; no exported spans',
+              'scope': 'synthetic read-selection contract; no MCP calls, fault injection or remediation',
+              'provider': profile['provider'], 'model': profile['model'], 'retries': 0,
+              'requested_inferences': len(cases()) * REPEATS, 'attempts': [], 'evidence_path': str(output)}
+    started = time.monotonic()
+    try:
+        if client.query('SELECT 1').strip() != '1':
+            raise ValueError('audit preflight failed')
+        for case in cases():
+            for repeat in range(1, REPEATS + 1):
+                attempt = {'case_id': case['case_id'], 'repeat': repeat, 'result': 'failed',
+                           'expected_health': case['evidence']['health'], 'audit': 'pending'}
+                call_started = time.monotonic()
+                try:
+                    response = model.complete('sre_triage', case['evidence'])
+                    attempt['metrics'] = safe_metrics(response, int((time.monotonic() - call_started) * 1000))
+                except Exception as error:
+                    attempt['metrics'] = safe_metrics(error.metrics if isinstance(error, ProviderError) else {},
+                                                      int((time.monotonic() - call_started) * 1000))
+                    attempt['failure_code'] = 'model_response_failed'
+                else:
+                    try:
+                        proposal = validate_triage(response['content'], case['evidence'])
+                        attempt.update(result='passed', selected_tools=[x['tool'] for x in proposal['checks']])
+                    except Exception:
+                        attempt['failure_code'] = 'triage_contract_rejected'
+                report['attempts'].append(attempt)
+                value = agenthouse.event('llm.sre_eval', 'llm-local-compatible', agent_id='sre-local-evaluation',
+                    task_id=task_id, trace_id=trace_id, status='success' if attempt['result'] == 'passed' else 'failed',
+                    model_provider=profile['provider'], model_name=profile['model'], **attempt['metrics'])
+                attempt['event_id'] = value['event_id']
+                private_write(output / 'result.json', report)
+                try:
+                    agenthouse.insert(client, value)
+                    attempt['audited_event'] = verify_audit(client, value)
+                    attempt['audit'] = 'verified'
+                except Exception:
+                    attempt['audit'] = 'failed'
+                    raise ValueError('audit delivery or readback failed') from None
+                finally:
+                    private_write(output / 'attempts.jsonl', attempt, append=True)
+        if all(x['result'] == 'passed' for x in report['attempts']):
+            report['result'] = 'passed'
+    except Exception:
+        report['failure_code'] = 'evaluation_audit_or_storage_failed'
+    attempts = report['attempts']
+    report.update(attempted_inferences=len(attempts), passed_inferences=sum(x['result'] == 'passed' for x in attempts),
+                  audited_inferences=sum(x['audit'] == 'verified' for x in attempts),
+                  elapsed_ms=max(0, int((time.monotonic() - started) * 1000)))
+    report['usage'] = {'inference_cost_estimate': None, 'duration_ms': sum(x['metrics']['duration_ms'] for x in attempts)}
+    for key in ('prompt_tokens', 'completion_tokens'):
+        values = [x['metrics'][key] for x in attempts]
+        report['usage'][key] = sum(values) if values and all(x is not None for x in values) else None
+    private_write(output / 'result.json', report)
+    return report
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--config', type=Path, default=LOCAL / 'llm/providers.qwen-local.json')
+    args = parser.parse_args()
+    output = ROOT / 'tmp/local-experiment/sre-evaluation' / uuid.uuid4().hex
+    try:
+        report = evaluate(load_config(args.config), output)
+    except Exception:
+        report = {'result': 'failed', 'failure_code': 'configuration_or_setup_failed', 'evidence_path': str(output)}
+        output.mkdir(parents=True, exist_ok=True, mode=0o700)
+        private_write(output / 'result.json', report)
+    print(json.dumps({key: value for key, value in report.items() if key != 'attempts'}))
+    return 0 if report['result'] == 'passed' else 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

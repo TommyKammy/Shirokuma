@@ -9,6 +9,7 @@ import sys
 import time
 import uuid
 from contextlib import nullcontext
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -80,6 +81,55 @@ def safe_name(value: Any, maximum: int = 128) -> str:
     return value if re.fullmatch(r'[A-Za-z0-9_.:/-]+', value) else 'redacted'
 
 
+def safe_uid(value: Any) -> str | None:
+    # UIDs are opaque identifiers; do not merge an unknown identity with a
+    # literal "unavailable" marker, or normalize it as if every UID were a UUID.
+    return value if isinstance(value, str) and re.fullmatch(r'[A-Za-z0-9_-]{1,128}', value) else None
+
+
+def safe_timestamp(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    matched = re.fullmatch(
+        r'([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(?:\.([0-9]{1,9}))?(Z|[+-][0-9]{2}:[0-9]{2})', value)
+    if matched is None:
+        return None
+    try:
+        # Python 3.9 accepts only three or six fractional digits. Normalize to
+        # microseconds explicitly; sub-microsecond digits remain truncated as
+        # in newer datetime versions and in this fixed-microsecond contract.
+        clock, fraction, zone = matched.groups()
+        normalized = clock + '.' + (fraction or '').ljust(6, '0')[:6] + zone.replace('Z', '+00:00')
+        parsed = datetime.fromisoformat(normalized).astimezone(timezone.utc)
+        return parsed.isoformat(timespec='microseconds').replace('+00:00', 'Z')
+    except (ValueError, OverflowError):
+        return None
+
+
+def observation_time() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec='microseconds').replace('+00:00', 'Z')
+
+
+def event_last_observed_at(item: dict) -> str | None:
+    # core/v1 Event: series.lastObservedTime and lastTimestamp describe the
+    # latest occurrence; eventTime describes the FIRST observed occurrence.
+    # https://kubernetes.io/docs/reference/kubernetes-api/core/event-v1/
+    series = item.get('series')
+    if isinstance(series, dict):
+        observed = safe_timestamp(series.get('lastObservedTime'))
+        if observed is not None:
+            return observed
+    observed = safe_timestamp(item.get('lastTimestamp'))
+    if observed is not None:
+        return observed
+    count = item.get('count', 1)
+    if series is None and type(count) is int and count == 1:
+        return safe_timestamp(item.get('eventTime'))
+    # Repeated events with no usable last-occurrence field remain unknown.
+    # metadata.creationTimestamp is API-object creation, not event recurrence.
+    return None
+
+
 class Backends:
     def __init__(self):
         self.agenthouse = load_module('gateway_agenthouse', LOCAL / 'agenthouse/manage.py')
@@ -109,28 +159,37 @@ class Backends:
     def k8s_read_pods(self, namespace: str, limit: int) -> dict:
         data = self.command_json(['kubectl', '--context', CONTEXT, '-n', namespace,
                                   'get', 'pods', '--chunk-size=50', '-o', 'json'])
+        observed_at = observation_time()
         pods = []
         for item in data.get('items', [])[:limit]:
             status = item.get('status', {})
             containers = status.get('containerStatuses', [])
             pods.append({'name': safe_name(item.get('metadata', {}).get('name')),
+                         'uid': safe_uid(item.get('metadata', {}).get('uid')),
                          'phase': safe_name(status.get('phase')),
                          'ready_containers': sum(x.get('ready') is True for x in containers),
                          'total_containers': len(containers),
                          'restarts': sum(x.get('restartCount', 0) for x in containers)})
-        return {'namespace': namespace, 'pods': pods, 'truncated': len(data.get('items', [])) > limit}
+        return {'namespace': namespace, 'observed_at': observed_at, 'pods': pods,
+                'truncated': len(data.get('items', [])) > limit}
 
     def k8s_read_events(self, namespace: str, limit: int) -> dict:
         data = self.command_json(['kubectl', '--context', CONTEXT, '-n', namespace,
                                   'get', 'events', '--chunk-size=50', '-o', 'json'])
+        observed_at = observation_time()
         items = [item for item in data.get('items', [])
                  if item.get('involvedObject', {}).get('kind') != 'Secret']
-        items.sort(key=lambda x: x.get('metadata', {}).get('creationTimestamp', ''), reverse=True)
         events = [{'reason': safe_name(x.get('reason')), 'type': safe_name(x.get('type')),
+                   'uid': safe_uid(x.get('metadata', {}).get('uid')),
                    'object_kind': safe_name(x.get('involvedObject', {}).get('kind')),
                    'object_name': safe_name(x.get('involvedObject', {}).get('name')),
-                   'count': x.get('count', 1)} for x in items[:limit]]
-        return {'namespace': namespace, 'events': events, 'free_text_messages': 'omitted'}
+                   'object_uid': safe_uid(x.get('involvedObject', {}).get('uid')),
+                   'last_observed_at': event_last_observed_at(x),
+                   'count': x.get('count', 1)} for x in items]
+        events.sort(key=lambda event: (event['last_observed_at'] or '', event['uid'] or '', event['object_name']),
+                    reverse=True)
+        return {'namespace': namespace, 'observed_at': observed_at, 'events': events[:limit],
+                'truncated': len(events) > limit, 'free_text_messages': 'omitted'}
 
     def dbt_list_models(self) -> dict:
         models = sorted(p.stem for p in (LOCAL / 'dataops/dbt/models').glob('*.sql'))

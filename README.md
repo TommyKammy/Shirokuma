@@ -51,6 +51,7 @@ rtk make local-superset-smoke local-metadata-ingest
 rtk make local-gateway-smoke local-llm-smoke
 rtk make local-llm-qwen-smoke
 rtk make local-llm-qwen-eval
+rtk make local-sre-qwen-smoke local-sre-qwen-eval
 rtk make local-tpch-smoke
 ```
 
@@ -62,6 +63,9 @@ at `127.0.0.1:8001`, validates real MCP inventory summaries, and reads back toke
 counts and timing from AgentHouse. `local-llm-qwen-eval` checks five synthetic
 inventory cases twice each. See the [LLM runbook](tools/local_experiment/llm/README.md).
 Cloud execution remains disabled and is not required for this local loop.
+The [SRE workflow](tools/local_experiment/bears/README.md) uses Qwen to select
+follow-up MCP reads, verifies the evidence references, and compares selected
+Pod/Event observations by UID. It does not perform workload remediation.
 Superset is available at [the local dashboard](http://127.0.0.1:18088/superset/dashboard/shirokuma-local-lakehouse/),
 and OpenMetadata at [the local catalog](http://127.0.0.1:18585).
 Generated credentials stay in private ignored state; see the component runbooks
