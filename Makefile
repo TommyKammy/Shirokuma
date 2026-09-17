@@ -381,6 +381,7 @@ local-loki-start:
 	@$(PYTHON) tools/local_experiment/loki/manage.py up
 
 test-local-platform:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_platform_status.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_superset.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_metadata.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_tpch.py'
@@ -445,3 +446,21 @@ test-local-bears:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_bears.py'
 
 verify-local-experiment: test-local-bears test-local-sre-llm
+
+.PHONY: local-policy-status local-policy-apply local-policy-smoke local-policy-withdraw test-local-policy
+local-policy-status:
+	@$(PYTHON) tools/local_experiment/policy/manage.py status
+
+local-policy-apply:
+	@$(PYTHON) tools/local_experiment/policy/manage.py apply
+
+local-policy-smoke:
+	@$(PYTHON) tools/local_experiment/policy/manage.py smoke
+
+local-policy-withdraw:
+	@$(PYTHON) tools/local_experiment/policy/manage.py rollback-bindings
+
+test-local-policy:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_policy.py'
+
+verify-local-experiment: test-local-policy

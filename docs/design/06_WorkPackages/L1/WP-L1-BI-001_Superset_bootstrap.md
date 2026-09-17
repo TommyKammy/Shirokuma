@@ -4,8 +4,8 @@ doc_id: "WP-L1-BI-001"
 title: "WP-L1-BI-001 Superset bootstrap against Trino only"
 status: local-verified
 created: 2026-07-05
-updated: 2026-09-16
-version: "0.7"
+updated: 2026-09-17
+version: "0.8"
 area: "workpackage"
 tags: [shirokuma, workpackage, l1, bi]
 ---
@@ -114,3 +114,12 @@ Cube/StarRocks integration belongs to WP-L3-CUBE-001 and WP-L3-SR-001.
 Superset 6.1.0 native ARM64をloopback限定で導入した。Trino経由で既存Iceberg fixtureの2行を取得し、dataset/chart/dashboardを保存した。再起動・container再作成後の保持とSQLite online backup integrityを確認した。11 focused tests成功。
 
 [ADR-0034](../../07_ADR/ADR-0034_Use_autonomous_local_experimental_development.md)に基づくlocal functional検証。旧PR/CI/Flux公開gateの履歴は保持し、GitHub完了や本番受入へ読み替えない。実行手順・証跡・復元・未達事項は[Local Experiment Milestones](../061_Local_Experiment_Milestones.md)を参照。
+
+## 2026-09-17 local readiness correction
+
+`local-platform-status`はSupersetのcontainer runningだけをreadyとする判定を修正した。
+owned containerの稼働に加え、既存固定loopback URLへの単発3秒`/health`で
+HTTP 200・上限16bytes内の`OK`を要求する。proxy/redirect/認証送信は使わない。
+HTTP異常や停止はnot-ready、通信不能・不正report・終了コード矛盾はunknown。
+10 focused testsと実HTTP読み取りが成功した。保存dashboardやSQLの機能検証は
+既存のSuperset smokeで別に行う。この変更にcontainer再起動やデータ変更はない。

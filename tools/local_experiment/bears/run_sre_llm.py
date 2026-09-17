@@ -24,7 +24,8 @@ from run_sre import module, SpanFile
 HERE = Path(__file__).resolve().parent
 LOCAL = HERE.parent
 ROOT = HERE.parents[2]
-TOOLS = {'shirokuma_doctor': {}, 'k8s_read_pods': {'limit': 50}, 'k8s_read_events': {'limit': 50}}
+TOOLS = {'shirokuma_doctor': {}, 'k8s_read_pods': {'limit': 50}, 'k8s_read_events': {'limit': 50},
+         'local_platform_status': {}}
 AUDIT_FIELDS = ('event_id', 'task_id', 'trace_id', 'action_type', 'status', 'model_provider',
                 'model_name', 'prompt_tokens', 'completion_tokens', 'inference_cost_estimate', 'duration_ms')
 
@@ -60,7 +61,8 @@ def build_graph(model, read, audit, tracer):
 
     async def collect(state):
         snapshots = {tool: await read(tool, 'initial') for tool in TOOLS}
-        evidence = build_evidence(snapshots['shirokuma_doctor'], snapshots['k8s_read_pods'], snapshots['k8s_read_events'])
+        evidence = build_evidence(snapshots['shirokuma_doctor'], snapshots['k8s_read_pods'], snapshots['k8s_read_events'],
+                                  snapshots['local_platform_status'])
         return {'snapshots': snapshots, 'evidence': evidence}
 
     async def triage(state):
@@ -216,7 +218,8 @@ async def run(config: dict, output: Path) -> dict:
                         return data
                     graph = build_graph(model, read, audit, tracer)
                     graph_config = {'configurable': {'thread_id': task_id}, 'recursion_limit': 8, 'callbacks': []}
-                    state = await asyncio.wait_for(graph.ainvoke({}, graph_config), profile['timeout_seconds'] + 660)
+                    deadline = profile['timeout_seconds'] + (len(TOOLS) + 2) * 120 + 60
+                    state = await asyncio.wait_for(graph.ainvoke({}, graph_config), deadline)
                     checkpoint = graph.get_state(graph_config)
                     if checkpoint.next or checkpoint.values.get('comparisons') != state['comparisons']:
                         raise SREError('SRE completed checkpoint differs')

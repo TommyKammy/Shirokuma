@@ -23,7 +23,9 @@ def observations():
              'pods': [{'name': 'seaweedfs-0', 'uid': 'pod-old', 'phase': 'Running',
                        'ready_containers': 1, 'total_containers': 1, 'restarts': 0}]},
             {'namespace': 'shirokuma-dev', 'observed_at': stamp, 'truncated': False,
-             'events': []})
+             'events': []},
+            {'profile': 'local-experiment', 'observed_at': stamp, 'ready': True,
+             'components': {name: {'ready': True, 'status': 'ready'} for name in contract.COMPONENTS}})
 
 
 def warning_event(uid='event-1', count=1):
@@ -56,6 +58,47 @@ class EvidenceTests(unittest.TestCase):
         self.assertNotIn('private', str(evidence))
         self.assertIs(contract.validate_evidence(evidence), evidence)
         contract.validate_triage(triage(evidence), evidence)
+
+    def test_omitted_platform_remains_unknown_and_requires_its_own_read(self):
+        evidence = contract.build_evidence(*observations()[:3])
+        self.assertEqual(evidence['health'], 'unknown')
+        self.assertEqual(evidence['observations']['platform'],
+                         {'observed_at': None, 'completeness': 'unknown', 'count': 0})
+        self.assertEqual([(row['code'], row['subject'], row['allowed_tools']) for row in evidence['findings']],
+                         [('OBSERVATION_UNKNOWN', 'platform', ['local_platform_status'])])
+        contract.validate_triage(triage(evidence, {'tool': 'local_platform_status', 'finding_ids': ['f01']}), evidence)
+
+    def test_runtime_not_ready_is_critical_and_unknown_does_not_assert_health(self):
+        for status, code, severity, health in [('not-ready', 'RUNTIME_NOT_READY', 'critical', 'attention-required'),
+                                             ('unknown', 'RUNTIME_STATUS_UNKNOWN', 'warning', 'unknown')]:
+            data = observations()
+            data[3]['ready'] = False
+            data[3]['components']['superset'] = {'ready': False, 'status': status}
+            evidence = contract.build_evidence(*data)
+            self.assertEqual(evidence['health'], health)
+            self.assertEqual([(x['code'], x['subject'], x['severity'], x['allowed_tools']) for x in evidence['findings']],
+                             [(code, 'superset', severity, ['local_platform_status'])])
+            for bad_health in ('healthy-observed-scope', 'attention-required' if health == 'unknown' else 'unknown'):
+                bad = dict(evidence, health=bad_health)
+                with self.assertRaises(contract.DiagnosticError):
+                    contract.validate_evidence(bad)
+
+    def test_runtime_projection_rejects_wrong_scope_components_and_conflicting_readiness(self):
+        edits = [lambda x: x.update(profile='production'), lambda x: x.update(ready=False),
+                 lambda x: x.update(ready=1), lambda x: x.update(observed_at='private date text'),
+                 lambda x: x['components'].pop('loki'),
+                 lambda x: x['components'].update(unrelated={'ready': True, 'status': 'ready'}),
+                 lambda x: x['components']['loki'].update(ready=False),
+                 lambda x: x['components']['loki'].update(status='unknown'),
+                 lambda x: x['components']['loki'].update(ready='true'),
+                 lambda x: x['components']['loki'].update(status=['private']),
+                 lambda x: x['components']['loki'].update(reason='private reason')]
+        for edit in edits:
+            data = observations()
+            edit(data[3])
+            with self.subTest(edit=edit), self.assertRaises(contract.DiagnosticError) as error:
+                contract.build_evidence(*data)
+            self.assertNotIn('private', str(error.exception))
 
     def test_incomplete_events_do_not_prove_health_or_no_warnings(self):
         data = observations()
@@ -148,8 +191,68 @@ class TriageTests(unittest.TestCase):
         with self.assertRaisesRegex(contract.DiagnosticError, 'unrelated'):
             contract.validate_triage(triage(evidence, self.pods), evidence)
 
+    def test_all_runtime_and_pod_critical_findings_require_both_reads_within_budget(self):
+        data = observations()
+        data[1]['pods'][0]['ready_containers'] = 0
+        data[3]['ready'] = False
+        for component in ('superset', 'metadata'):
+            data[3]['components'][component] = {'ready': False, 'status': 'not-ready'}
+        evidence = contract.build_evidence(*data)
+        runtime_ids = [row['id'] for row in evidence['findings'] if row['code'] == 'RUNTIME_NOT_READY']
+        pod_ids = [row['id'] for row in evidence['findings'] if row['code'] in contract.POD_CRITICAL]
+        runtime = {'tool': 'local_platform_status', 'finding_ids': runtime_ids}
+        pods = {'tool': 'k8s_read_pods', 'finding_ids': pod_ids}
+        contract.validate_triage(triage(evidence, runtime, pods), evidence)
+        for checks in ([runtime], [pods], [dict(runtime, finding_ids=runtime_ids[:1]), pods],
+                       [dict(runtime, tool='shirokuma_doctor'), pods]):
+            with self.subTest(checks=checks), self.assertRaises(contract.DiagnosticError):
+                contract.validate_triage(triage(evidence, *checks), evidence)
+
+    def test_runtime_subject_cannot_select_unrelated_tool_or_invent_component(self):
+        data = observations()
+        data[3]['ready'] = False
+        data[3]['components']['loki'] = {'ready': False, 'status': 'unknown'}
+        evidence = contract.build_evidence(*data)
+        with self.assertRaises(contract.DiagnosticError):
+            contract.validate_triage(triage(evidence, {'tool': 'k8s_read_pods', 'finding_ids': ['f01']}), evidence)
+        evidence['findings'][0]['subject'] = 'arbitrary-service'
+        with self.assertRaises(contract.DiagnosticError):
+            contract.validate_evidence(evidence)
+
 
 class ComparisonTests(unittest.TestCase):
+    def test_runtime_status_change_is_bounded_without_identity_or_recovery_claim(self):
+        before = snapshots()
+        before['local_platform_status']['ready'] = False
+        before['local_platform_status']['components']['superset'] = {'ready': False, 'status': 'not-ready'}
+        after = reread(before, 'local_platform_status')
+        after['local_platform_status']['ready'] = True
+        after['local_platform_status']['components']['superset'] = {'ready': True, 'status': 'ready'}
+        result = contract.compare_observations(before, after)['sources']['local_platform_status']
+        self.assertEqual(result['status'], 'changed')
+        self.assertFalse(result['before_ready'])
+        self.assertTrue(result['after_ready'])
+        self.assertEqual(result['changes'], [{'kind': 'runtime-status-changed', 'subject': 'superset',
+            'before': {'ready': False, 'status': 'not-ready'}, 'after': {'ready': True, 'status': 'ready'}}])
+        self.assertIn('component-identity-not-observed', result['limitations'])
+        self.assertIn('no-recovery-claim', result['limitations'])
+        self.assertEqual(contract.compare_observations(before, {})['sources']['local_platform_status']['status'], 'not-reobserved')
+
+    def test_runtime_unknown_or_missing_reversed_time_cannot_claim_no_change(self):
+        before = snapshots()
+        after = reread(before, 'local_platform_status')
+        self.assertEqual(contract.compare_observations(before, after)['sources']['local_platform_status']['status'], 'no-change-observed')
+        for stamp in (None, '2026-09-17T01:59:59Z'):
+            after['local_platform_status']['observed_at'] = stamp
+            result = contract.compare_observations(before, after)['sources']['local_platform_status']
+            self.assertEqual(result['status'], 'incomparable')
+        before['local_platform_status']['ready'] = False
+        before['local_platform_status']['components']['loki'] = {'ready': False, 'status': 'unknown'}
+        after = reread(before, 'local_platform_status')
+        result = contract.compare_observations(before, after)['sources']['local_platform_status']
+        self.assertEqual(result['status'], 'incomparable')
+        self.assertIn('unknown-runtime-status', result['limitations'])
+
     def test_unselected_sources_are_not_claimed_unchanged(self):
         before = snapshots()
         result = contract.compare_observations(before, reread(before, 'k8s_read_pods'))

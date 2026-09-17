@@ -53,7 +53,10 @@ def proof(creation):
         'k8s_read_pods': {'namespace': D.NAMESPACE, 'observed_at': stamp, 'truncated': False, 'pods': [
             {'name': creation['name'], 'uid': creation['uid'], 'phase': 'Failed',
              'ready_containers': 0, 'total_containers': 1, 'restarts': 0}]},
-        'k8s_read_events': {'namespace': D.NAMESPACE, 'observed_at': stamp, 'truncated': False, 'events': []}}
+        'k8s_read_events': {'namespace': D.NAMESPACE, 'observed_at': stamp, 'truncated': False, 'events': []},
+        'local_platform_status': {'profile': 'local-experiment', 'observed_at': stamp, 'ready': True,
+            'components': {name: {'ready': True, 'status': 'ready'} for name in
+                ('lakehouse', 'superset', 'metadata', 'agenthouse', 'loki')}}}
     after = copy.deepcopy(initial['k8s_read_pods'])
     after['observed_at'] = '2026-09-17T03:00:01.000000Z'
     observations = [{'tool': tool, 'phase': 'initial', 'snapshot': snapshot} for tool, snapshot in initial.items()]

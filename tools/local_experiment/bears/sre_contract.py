@@ -6,11 +6,14 @@ import re
 
 from diagnostics import DiagnosticError, diagnose, identifier, count
 
-TOOLS = ('shirokuma_doctor', 'k8s_read_pods', 'k8s_read_events')
-SOURCES = dict(zip(TOOLS, ('doctor', 'pods', 'events')))
+TOOLS = ('shirokuma_doctor', 'k8s_read_pods', 'k8s_read_events', 'local_platform_status')
+SOURCES = dict(zip(TOOLS, ('doctor', 'pods', 'events', 'platform')))
+COMPONENTS = ('lakehouse', 'superset', 'metadata', 'agenthouse', 'loki')
 MAX_FINDINGS = 24
 INTENTIONAL_FLUX_MARKER = 'root Kustomization/flux-system/flux-system is intentionally suspended for local-experiment'
 POD_CRITICAL = {'WORKLOAD_FAILED', 'WORKLOAD_UNAVAILABLE', 'WORKLOAD_NOT_READY'}
+RUNTIME_CRITICAL = {'RUNTIME_NOT_READY'}
+UNKNOWN_FINDINGS = {'EVENT_OBSERVATION_TRUNCATED', 'OBSERVATION_UNKNOWN', 'RUNTIME_STATUS_UNKNOWN'}
 ALLOWED = {
     'CHECK_DEGRADED': (TOOLS[0],),
     'WORKLOAD_FAILED': (TOOLS[1], TOOLS[2]),
@@ -21,6 +24,8 @@ ALLOWED = {
     'POD_OBSERVATION_TRUNCATED': (TOOLS[1],),
     'WARNING_EVENT': (TOOLS[2], TOOLS[1]),
     'EVENT_OBSERVATION_TRUNCATED': (TOOLS[2],),
+    'RUNTIME_NOT_READY': (TOOLS[3],),
+    'RUNTIME_STATUS_UNKNOWN': (TOOLS[3],),
     'OBSERVATION_UNKNOWN': TOOLS,
 }
 
@@ -50,7 +55,35 @@ def _uid(value):
     return value
 
 
+def _platform(report):
+    """Validate the fixed five-component observation without retaining raw reasons."""
+    if not isinstance(report, dict) or report.get('profile') != 'local-experiment':
+        raise DiagnosticError('platform is outside the local experiment scope')
+    _timestamp(report.get('observed_at'))
+    _keys(report.get('components'), COMPONENTS)
+    components = {}
+    for name in COMPONENTS:
+        row = report['components'][name]
+        _keys(row, ('ready', 'status'))
+        if (type(row['ready']) is not bool or not isinstance(row['status'], str)
+                or row['status'] not in {'ready', 'not-ready', 'unknown'}
+                or row['ready'] != (row['status'] == 'ready')):
+            raise DiagnosticError('invalid runtime component status')
+        components[name] = {'ready': row['ready'], 'status': row['status']}
+    ready = report.get('ready')
+    if type(ready) is not bool or ready != all(row['ready'] for row in components.values()):
+        raise DiagnosticError('runtime aggregate readiness disagrees with components')
+    return {'profile': 'local-experiment', 'observed_at': report.get('observed_at'),
+            'ready': ready, 'components': components}
+
+
 def _observation(source, report):
+    if source == 'platform':
+        platform = _platform(report)
+        unknown = (platform['observed_at'] is None
+                   or any(row['status'] == 'unknown' for row in platform['components'].values()))
+        return {'observed_at': platform['observed_at'], 'completeness': 'unknown' if unknown else 'complete',
+                'count': len(COMPONENTS)}
     if not isinstance(report, dict):
         raise DiagnosticError('missing bounded observation')
     values = report.get('checks' if source == 'doctor' else source)
@@ -79,20 +112,29 @@ def _allowed(code, subject):
         return [next(tool for tool, source in SOURCES.items() if source == subject)]
     if code == 'WARNING_EVENT' and not subject.startswith('Pod/'):
         return [TOOLS[2]]
+    if code in RUNTIME_CRITICAL | {'RUNTIME_STATUS_UNKNOWN'} and subject not in COMPONENTS:
+        raise DiagnosticError('invalid runtime component subject')
     return list(ALLOWED[code])
 
 
-def build_evidence(doctor: dict, pods: dict, events: dict) -> dict:
+def build_evidence(doctor: dict, pods: dict, events: dict, platform: dict | None = None) -> dict:
     """Project no raw summaries, messages, logs, commands, credentials or causes."""
     reports = dict(zip(('doctor', 'pods', 'events'), (doctor, pods, events)))
     observations = {source: _observation(source, report) for source, report in reports.items()}
+    observations['platform'] = (_observation('platform', platform) if platform is not None else
+                                {'observed_at': None, 'completeness': 'unknown', 'count': 0})
     baseline = diagnose(doctor, pods, events)
     findings = [{key: item[key] for key in ('code', 'severity', 'subject')}
                 for item in baseline['findings'] if item['severity'] in {'warning', 'critical'}]
     if events.get('truncated'):
         findings.append({'code': 'EVENT_OBSERVATION_TRUNCATED', 'severity': 'warning', 'subject': 'events'})
+    if platform is not None:
+        for name, row in _platform(platform)['components'].items():
+            if row['status'] != 'ready':
+                findings.append({'code': 'RUNTIME_NOT_READY' if row['status'] == 'not-ready' else 'RUNTIME_STATUS_UNKNOWN',
+                                 'severity': 'critical' if row['status'] == 'not-ready' else 'warning', 'subject': name})
     for source, item in observations.items():
-        if item['completeness'] == 'unknown':
+        if item['completeness'] == 'unknown' and (source != 'platform' or item['observed_at'] is None):
             findings.append({'code': 'OBSERVATION_UNKNOWN', 'severity': 'warning', 'subject': source})
     findings.sort(key=lambda item: (item['severity'] != 'critical', item['code'], item['subject']))
     if sum(item['severity'] == 'critical' for item in findings) > MAX_FINDINGS:
@@ -105,9 +147,9 @@ def build_evidence(doctor: dict, pods: dict, events: dict) -> dict:
                      for index, item in enumerate(findings[:MAX_FINDINGS], 1)],
         'omitted_findings': max(0, len(findings) - MAX_FINDINGS),
     }
-    if result['health'] == 'healthy-observed-scope' and any(
-            item['completeness'] != 'complete' for item in observations.values()):
-        result['health'] = 'unknown'
+    result['health'] = ('attention-required' if any(x['code'] not in UNKNOWN_FINDINGS for x in findings)
+                        else 'unknown' if any(item['completeness'] != 'complete' for item in observations.values())
+                        else 'healthy-observed-scope')
     validate_evidence(result)
     return result
 
@@ -123,7 +165,7 @@ def validate_evidence(evidence: dict) -> dict:
     if type(evidence['intentional_flux_suspension']) is not bool:
         raise DiagnosticError('invalid intentional suspension flag')
     count(evidence['omitted_findings'])
-    _keys(evidence['observations'], ('doctor', 'pods', 'events'))
+    _keys(evidence['observations'], SOURCES.values())
     for observation in evidence['observations'].values():
         _keys(observation, ('observed_at', 'completeness', 'count'))
         _timestamp(observation['observed_at'])
@@ -141,7 +183,7 @@ def validate_evidence(evidence: dict) -> dict:
         if finding['id'] != f'f{index:02d}' or not isinstance(code, str) or code not in ALLOWED:
             raise DiagnosticError('invalid finding identity')
         identifier(finding['subject'])
-        if finding['severity'] != ('critical' if code in POD_CRITICAL else 'warning'):
+        if finding['severity'] != ('critical' if code in POD_CRITICAL | RUNTIME_CRITICAL else 'warning'):
             raise DiagnosticError('invalid finding severity')
         if finding['allowed_tools'] != _allowed(code, finding['subject']):
             raise DiagnosticError('invalid finding read tools')
@@ -150,7 +192,7 @@ def validate_evidence(evidence: dict) -> dict:
         raise DiagnosticError('incomplete or abnormal evidence cannot assert observed health')
     if evidence['health'] == 'attention-required' and not findings:
         raise DiagnosticError('attention requires a bounded finding')
-    observed_attention = any(x['code'] not in {'EVENT_OBSERVATION_TRUNCATED', 'OBSERVATION_UNKNOWN'} for x in findings)
+    observed_attention = any(x['code'] not in UNKNOWN_FINDINGS for x in findings)
     expected_health = ('attention-required' if observed_attention else 'unknown' if any(
         x['completeness'] != 'complete' for x in evidence['observations'].values()) else 'healthy-observed-scope')
     if evidence['health'] != expected_health:
@@ -167,7 +209,7 @@ def validate_triage(response: dict, evidence: dict) -> dict:
     if not isinstance(checks, list) or len(checks) > 2:
         raise DiagnosticError('triage exceeds two bounded reads')
     findings = {item['id']: item for item in evidence['findings']}
-    seen, covered_pods = set(), set()
+    seen, covered_pods, covered_runtime = set(), set(), set()
     for check in checks:
         _keys(check, ('tool', 'finding_ids'))
         tool, ids = check['tool'], check['finding_ids']
@@ -181,9 +223,14 @@ def validate_triage(response: dict, evidence: dict) -> dict:
             raise DiagnosticError('triage selected a read unrelated to its evidence')
         if tool == TOOLS[1]:
             covered_pods.update(ids)
-    critical = {key for key, item in findings.items() if item['severity'] == 'critical'}
-    if not critical <= covered_pods:
+        if tool == TOOLS[3]:
+            covered_runtime.update(ids)
+    critical_pods = {key for key, item in findings.items() if item['code'] in POD_CRITICAL}
+    critical_runtime = {key for key, item in findings.items() if item['code'] in RUNTIME_CRITICAL}
+    if not critical_pods <= covered_pods:
         raise DiagnosticError('triage omitted a critical Pod readiness observation')
+    if not critical_runtime <= covered_runtime:
+        raise DiagnosticError('triage omitted a critical runtime readiness observation')
     if bool(findings) != bool(checks):
         raise DiagnosticError('triage reads must match the presence of findings')
     return response
@@ -192,7 +239,7 @@ def validate_triage(response: dict, evidence: dict) -> dict:
 def project_observations(snapshots: dict) -> dict:
     """Retain replayable fixed fields, never free-text summaries or messages.
 
-    Accept the three initial reads or any subset of follow-up reads. Missing
+    Accept the four initial reads or any subset of follow-up reads. Missing
     timestamps, truncation flags and UIDs remain unknown, rather than becoming
     evidence of completeness. The one recognized Flux marker is reconstructed
     from a constant so its informational meaning survives evidence replay.
@@ -202,6 +249,9 @@ def project_observations(snapshots: dict) -> dict:
     result = {}
     for tool, report in snapshots.items():
         source = SOURCES[tool]
+        if source == 'platform':
+            result[tool] = _platform(report)
+            continue
         observation = _observation(source, report)
         projected = {'scope': 'local-experiment', 'observed_at': observation['observed_at']}
         if source == 'doctor':
@@ -293,6 +343,19 @@ def compare_observations(before: dict, after: dict) -> dict:
         if None in stamps or stamps[1] < stamps[0]:
             item.update(status='incomparable')
             item['limitations'].append('missing-or-reversed-observation-time')
+            continue
+        if source == 'platform':
+            left, right = _platform(before[tool]), _platform(after[tool])
+            item['limitations'].extend(['component-identity-not-observed', 'no-recovery-claim'])
+            item.update(before_ready=left['ready'], after_ready=right['ready'])
+            for name in COMPONENTS:
+                if left['components'][name] != right['components'][name]:
+                    item['changes'].append({'kind': 'runtime-status-changed', 'subject': name,
+                                            'before': left['components'][name], 'after': right['components'][name]})
+            incomplete = any(x['completeness'] != 'complete' for x in (prior, current))
+            if incomplete:
+                item['limitations'].append('unknown-runtime-status')
+            item['status'] = ('changed' if item['changes'] else 'incomparable' if incomplete else 'no-change-observed')
             continue
         left, right = _rows(source, before[tool]), _rows(source, after[tool])
         if left is None or right is None:

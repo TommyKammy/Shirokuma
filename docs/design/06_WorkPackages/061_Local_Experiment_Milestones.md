@@ -5,24 +5,80 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "1.6"
+version: "1.8"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：新規使い捨てFailed PodをQwenが重大所見として選択・再観測し、
-同UIDだけを削除する実機drillが成功。既存6 PodのUID・状態・restart回数は前後一致した。
-Cloud APIは無効のまま、ローカル実LLMを利用して開発を継続できる。
-稼働停止していた専用Colimaを既存設定で復旧し、5 component groupsすべてreadyを確認した。
-ローカル回帰245件・設計関連14件が成功し、設計66 documentsを検証した。
+最新の到達点（2026-09-17）：native admissionの15ケースと限定撤去・再適用が成功。
+Qwen SREはKubernetesに加えてDocker側を含む5群の状態を観測し、8合成ケース×2回が16/16成功。
+実Failed Pod drillもadmission適用後・4観測源で再成功し、保持6 PodのUID/状態/restartsは不変。
+5 runtime groups ready。全ローカル295 tests＋設計14 testsの計309件、設計68 documentsを検証。
+Cloud APIは無効のままローカル開発を継続する。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: 5 runtime groupsを含むQwen SRE
+
+Supersetのready判定をowned container running＋固定loopback `/health`のHTTP200/OKへ修正。
+停止/HTTP異常と通信不能/観測不明を区別する。proxy/redirect/認証なし・単発3秒・body上限16bytes。
+10 testsと実HTTP確認が成功した。
+
+引数なしMCP `local_platform_status`を追加し、Gatewayは9固定read toolsとなった。
+5群の固定名・bool/status・全体集計・取得時刻を検証し、reason/free textをモデル出力から除く。
+Scope確認＋statusを75秒worker deadlineへ入れ、timeoutでは新規process groupだけを回収する。
+Gateway31 tests、実MCP12 callsのCH/Loki/OTel相関が成功。最終証跡は
+`tmp/local-experiment/gateway/smoke-1aff3c763c9c41e490cc59a16d51505a.json`。
+
+SREの初期観測はdoctor/Pods/Events/platformの4源。Runtime not-readyをcritical、unknownを
+未観測として区別し、critical Pod＋runtime同時発生時には両方のreadを必須にする。
+実Qwenは5群readyと過去restartを区別し、Pod再観測を選択。773/51 tokens、3.675秒、7監査相関。
+保存射影からhash/evidence/triage/comparisonの再計算一致を確認した。
+`tmp/local-experiment/sre-llm/0c69d3ef5ebc401ca3d27bdb4bd98ea7/`に保持する。
+
+8合成ケース×2で16/16成功・16監査readback、入力10308/出力1000tokens、推論合計40.678秒。
+証跡は`tmp/local-experiment/sre-evaluation/22615db4c5344a81a261a2086437113b/`。
+Runtime差分は状態だけの比較で、instance identity・復旧・原因を断定しない。
+
+Admission適用後の実Failed Pod drillも成功。4初期read＋Pod/Event followupの計6read、
+8監査相関、854/146 tokens、4.930秒。作成UID `6f55c9f5-83e9-47a9-b69d-4bedfdadbb89`だけを削除。
+既存6 PodのUID/phase/ready/restartsは前後一致、drill残留0。
+`tmp/local-experiment/sre-drill/4a856109b32f408185aebe247508c1b2/`に保持する。
+
+全回帰はローカル295＋設計14＝309 tests、設計68 documents。SRE64、Gateway31、
+platform-status10、native-policy17のfocused checksを含む。課題はlogs/metricsを使う原因診断、
+一般的な修復案の品質と自動修復、production/human受入。これらの達成は主張しない。
+
+## 2026-09-17: namespace限定native admission baseline
+
+**WP-L0-POL-001のlocal機能**として、7種類の既存CEL制約を8個のnative VAPと8 Deny bindingsへ
+投影した。Service/Ingressはnativeの型検査に合わせて分割。他6制約の式と元Kyverno source、
+過去のimage/CVE判定は変更しない。追加controller/image/volumeなし。
+[ADR-0035](../07_ADR/ADR-0035_Use_native_admission_baseline_for_local_experiments.md)と
+[WP](L0/WP-L0-POL-001_OPA_Kyverno_baseline_policies.md)に判断・境界・再実行を記録した。
+
+既存6 Pods/3 Services/6 templatesの事前照合は違反0。初回の共通式はIngress型警告で
+binding有効化前に停止したため、型別に分割し、今回作成した未稼働の定義1個だけを
+UID/RV条件付きで再作成した。最終8 policiesはcurrent generationの明示的な型検査完了・警告0。
+
+実APIでallow2、deny12、対象外namespace control1の15/15が成功。全件server dry-runで
+Pod/Service/Ingressは永続化していない。拒否のpolicy/binding/messageを照合し、
+単なる通信・RBAC・Schema・CEL評価エラーを成功と数えない。専用BindingのみをUID/RV条件付きで
+撤去して再適用し、policy UIDを保持、新Binding UIDを確認後、15/15が再成功した。
+既存6 PodのUID/phase/ready/restartsは前後一致、2026-09-17 03:04 UTCの5群はready。
+
+証跡: `tmp/local-experiment/policy/411294d0640a43d1a59155a834469301`（初回成功）、
+`4259b9e128b0448b86c20e05336c173b`（撤去）、`539ef89674b746859a443f60afb51c2d`（再適用）、
+`3a501f3b4d384238bf0ece97ab6db566`（最終smoke）。保持Pod比較は
+`tmp/local-experiment/policy-validation/0acf015be3674b6397524e22f17c919b/after.json`。
+17 focused testsが成功。`rtk make local-policy-status local-policy-smoke`で再確認できる。
+controller autogen/background report、live ephemeral probe、image attestation、本番受入は未達。
 
 ## 2026-09-17: 使い捨てFailed Podの実機SRE drill
 
@@ -53,7 +109,7 @@ restartNever、deadline60秒。事前server dry-run成功、専用labelsは既�
 
 事前調査時のlive clusterにはKyverno CRD・追加admission policy/webhookが存在しなかった。
 従ってこのdrillのガードをcluster-wide policyの適用証拠にはしない。
-該当するローカルpolicy導入は独立した次の検証事項として扱う。
+その後のローカルpolicy導入結果は上記native admission節に分けて記録した。
 
 ## 2026-09-17: QwenによるSRE読み取り確認と再観測
 

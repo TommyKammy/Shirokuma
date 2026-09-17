@@ -3,8 +3,9 @@
 WP-L2-AGENT-002 has a deterministic baseline and a local Qwen workflow. Both
 read the actual MCP Gateway's `shirokuma_doctor`, `k8s_read_pods`, and
 `k8s_read_events`. The baseline below classifies observations using fixed rules
-without model inference. The Qwen workflow additionally chooses and executes
-bounded follow-up reads. Neither performs remediation or creates PRs.
+without model inference. The Qwen workflow also reads `local_platform_status`
+for the five fixed runtime groups and chooses bounded follow-up reads. Neither
+performs remediation or creates PRs.
 
 Run from the repository root with the existing Gateway environment:
 
@@ -54,7 +55,7 @@ rtk make test-local-sre-llm
 
 The smoke uses the existing `qwen3.8-flash-next` MTPLX endpoint and the locked
 LLM environment. Its LangGraph executes `collect → triage → followup` and checks
-the completed in-memory checkpoint. It makes three initial MCP reads, one model
+the completed in-memory checkpoint. It makes four initial MCP reads, one model
 request, and at most two follow-up reads. The model chooses which observations
 to repeat and the findings that justify those reads. Tool arguments, namespace
 and context are fixed by the host. No model-provided commands are executed.
@@ -68,7 +69,10 @@ output to 512 tokens with a 60-second network timeout and no automatic retry.
 
 The response must preserve the observed health, reference known findings and
 select at most two distinct allowed reads. Every critical Pod finding must be
-covered by a Pod re-observation. Invented evidence, omitted critical findings,
+covered by a Pod re-observation. Every `RUNTIME_NOT_READY` finding must be covered
+by `local_platform_status`; simultaneous Pod/runtime problems require both
+reads. Runtime `unknown` stays distinct from observed unavailability and health.
+Invented evidence, omitted critical findings,
 irrelevant tools, extra arguments and root-cause claims are rejected before any
 follow-up executes. Intentional root Flux suspension is informational. A
 historical restart or Warning event is not proof of a current outage. The
@@ -81,6 +85,12 @@ compared only for the same Event UID. Missing UIDs/times, backwards acquisition
 time and truncated lists are explicit comparison limitations. Sources the
 model did not select are `not-reobserved`, never unchanged. Even
 `no-change-observed` covers only the short interval between these two snapshots.
+The platform observation checks Lakehouse, Superset, OpenMetadata, AgentHouse
+and Loki. Superset readiness requires its owned container to be running and a
+bounded, proxy-free, non-redirecting HTTP `/health` request to return `200 OK`
+with body `OK`. Only fixed status/ready fields and time reach the model.
+Platform comparisons cover component status changes; instance identity is not
+observed, so a changed status is not labeled recovery.
 
 Gateway events include `last_observed_at`, using `series.lastObservedTime` or
 `lastTimestamp`. The Event API defines `eventTime` as first observation, so it
@@ -105,11 +115,12 @@ findings and comparisons. Hashes cover these retained projections. Arbitrary
 snapshot fields and raw model responses are not written. A successful workflow may still report
 `attention-required`; it has verified its procedure, not repaired the lab.
 
-The evaluation command sends six synthetic cases twice each: intentional Flux
+The evaluation command sends eight synthetic cases twice each: intentional Flux
 only, historical restarts, two critical Pods, a Warning event, degraded doctor,
-and truncated events. It verifies evidence references, critical coverage,
+truncated events, simultaneous Pod/runtime unavailability, and unknown runtime
+status. It verifies evidence references, critical coverage,
 uncertainty, and allowed read selection using the same validator. It performs
-no MCP calls or fault injection. Twelve inference events are individually
+no MCP calls or fault injection. Sixteen inference events are individually
 written to AgentHouse and read back; an audit failure stops the suite. Evaluation
 trace IDs are correlation identifiers, not exported spans. Evidence stays in
 `tmp/local-experiment/sre-evaluation/<uuid>/` without raw prompts/responses.

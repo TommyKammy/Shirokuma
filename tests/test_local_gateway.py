@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
+import os
 import re
+import subprocess
+import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -12,9 +17,196 @@ SPEC = importlib.util.spec_from_file_location(
     'local_gateway', Path(__file__).resolve().parents[1] / 'tools/local_experiment/gateway/core.py')
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
+WORKER_SPEC = importlib.util.spec_from_file_location(
+    'local_platform_worker', Path(__file__).resolve().parents[1]
+    / 'tools/local_experiment/gateway/platform_worker.py')
+WORKER = importlib.util.module_from_spec(WORKER_SPEC)
+WORKER_SPEC.loader.exec_module(WORKER)
+
+
+def platform_report():
+    return {'profile': 'local-experiment', 'observed_at': '2026-09-17T12:00:00+09:00',
+            'ready': True, 'scope': 'private-free-text', 'components': {
+                name: {'ready': True, 'status': 'ready', 'reason': 'private-component-reason'}
+                for name in MODULE.PLATFORM_COMPONENTS}}
 
 
 class GatewayTests(unittest.TestCase):
+    def test_platform_projection_retains_only_fixed_readiness_facts(self):
+        result = MODULE.platform_projection(platform_report())
+        self.assertEqual(set(result), {'profile', 'observed_at', 'ready', 'components'})
+        self.assertEqual(result['observed_at'], '2026-09-17T03:00:00.000000Z')
+        self.assertEqual(set(result['components']), set(MODULE.PLATFORM_COMPONENTS))
+        self.assertTrue(result['ready'])
+        for value in result['components'].values():
+            self.assertEqual(value, {'ready': True, 'status': 'ready'})
+        self.assertNotIn('private-', json.dumps(result))
+
+    def test_platform_projection_preserves_not_ready_and_unknown(self):
+        for status in ('not-ready', 'unknown'):
+            report = platform_report()
+            report['ready'] = False
+            report['components']['superset'] = {'ready': False, 'status': status}
+            result = MODULE.platform_projection(report)
+            self.assertFalse(result['ready'])
+            self.assertEqual(result['components']['superset'], {'ready': False, 'status': status})
+
+    def test_platform_projection_refuses_malformed_or_inconsistent_reports(self):
+        cases = [None, [], {}, {**platform_report(), 'profile': 'remote'},
+                 {**platform_report(), 'observed_at': None},
+                 {**platform_report(), 'observed_at': '2026-09-17T03:00:00+05:60'},
+                 {**platform_report(), 'observed_at': '2026-09-17T03:00:00'},
+                 {**platform_report(), 'ready': 1}, {**platform_report(), 'ready': False},
+                 {**platform_report(), 'unexpected': 'private'}]
+        for value in (None, [], {}, {'ready': 'true', 'status': 'ready'},
+                      {'ready': True, 'status': 'unknown'}, {'ready': False, 'status': 'ready'},
+                      {'ready': False, 'status': 'other'}, {'ready': False, 'status': []},
+                      {'ready': True, 'status': 'ready', 'unexpected': 'private'}):
+            report = platform_report()
+            report['components']['superset'] = value
+            cases.append(report)
+        for name in ('missing', 'extra'):
+            report = platform_report()
+            if name == 'missing':
+                del report['components']['loki']
+            else:
+                report['components']['unknown-group'] = {'ready': True, 'status': 'ready'}
+            cases.append(report)
+        for report in cases:
+            with self.subTest(report=report):
+                with self.assertRaises(MODULE.BackendError):
+                    MODULE.platform_projection(report)
+
+    def test_platform_command_is_fixed_scoped_and_has_minimal_environment(self):
+        backend = MODULE.Backends.__new__(MODULE.Backends)
+        process = Mock(returncode=0)
+        process.communicate.return_value = (json.dumps(platform_report()), '')
+        environment = {'PATH': '/fixed/bin', 'HOME': '/fixed/home', 'USER': 'local', 'LANG': 'C',
+                       'TMPDIR': '/tmp', 'LC_ALL': 'C', 'KUBECONFIG': 'private-override',
+                       'DOCKER_HOST': 'remote', 'HTTP_PROXY': 'private-proxy',
+                       'API_KEY': 'private-credential', 'PYTHONPATH': 'private-injection'}
+        with patch.object(MODULE.subprocess, 'Popen', return_value=process) as popen, patch.dict(MODULE.os.environ, environment, clear=True):
+            backend.local_platform_status()
+        popen.assert_called_once_with(
+            ['rtk', 'proxy', MODULE.sys.executable, str(MODULE.HERE / 'platform_worker.py')],
+            cwd=MODULE.ROOT, stdout=MODULE.subprocess.PIPE, stderr=MODULE.subprocess.PIPE,
+            text=True, start_new_session=True, env={key: environment[key]
+                for key in ('PATH', 'HOME', 'USER', 'TMPDIR', 'LANG', 'LC_ALL')})
+        process.communicate.assert_called_once_with(timeout=75)
+
+    def test_platform_scope_failure_prevents_status_read_inside_worker(self):
+        scope = Mock()
+        scope.check_context.side_effect = RuntimeError('private invalid scope')
+        with patch.object(WORKER, 'load_module', return_value=scope) as load, patch('sys.stdout', new_callable=io.StringIO) as output:
+            self.assertEqual(WORKER.main(), 2)
+        load.assert_called_once_with('gateway_platform_scope', WORKER.LOCAL / 'local_experiment.py')
+        self.assertEqual(json.loads(output.getvalue()), {'error_code': 'LOCAL_PLATFORM_SCOPE_OR_STATUS_FAILED'})
+        self.assertNotIn('private', output.getvalue())
+
+    def test_platform_worker_runs_status_only_after_scope_check(self):
+        scope, status = Mock(), Mock()
+        status.main.return_value = 1
+        calls = []
+        scope.check_context.side_effect = lambda: calls.append('scope')
+        status.main.side_effect = lambda: calls.append('status') or 1
+        with patch.object(WORKER, 'load_module', side_effect=[scope, status]):
+            self.assertEqual(WORKER.main(), 1)
+        self.assertEqual(calls, ['scope', 'status'])
+
+    def test_platform_timeout_kills_only_owned_process_group_and_reaps(self):
+        backend = MODULE.Backends.__new__(MODULE.Backends)
+        process = Mock(pid=54321)
+        process.communicate.side_effect = [subprocess.TimeoutExpired('fixed worker', 75), ('', '')]
+        with patch.object(MODULE.subprocess, 'Popen', return_value=process), patch.object(MODULE.os, 'killpg') as kill:
+            with self.assertRaisesRegex(MODULE.BackendError, 'timed out'):
+                backend.local_platform_status()
+        kill.assert_called_once_with(54321, MODULE.signal.SIGKILL)
+        self.assertEqual([call.kwargs for call in process.communicate.call_args_list], [{'timeout': 75}, {'timeout': 2}])
+
+    def test_platform_cleanup_race_or_stuck_pipe_does_not_extend_deadline(self):
+        process = Mock(pid=54321)
+        process.communicate.side_effect = subprocess.TimeoutExpired('fixed worker', 2)
+        with patch.object(MODULE.os, 'killpg', side_effect=ProcessLookupError):
+            MODULE.stop_platform_worker(process)
+        process.communicate.assert_called_once_with(timeout=2)
+        process.stdout.close.assert_called_once_with()
+        process.stderr.close.assert_called_once_with()
+        process.poll.assert_called_once_with()
+
+    def test_platform_timeout_closes_pipes_held_by_real_worker_descendant(self):
+        # A surviving descendant keeps stdout open after its parent dies. This
+        # exercises actual process-group cleanup without waiting 75 seconds or
+        # starting any lab service.
+        backend = MODULE.Backends.__new__(MODULE.Backends)
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / 'child-started'
+            code = ('import subprocess,sys,time; from pathlib import Path; '
+                    'subprocess.Popen([sys.executable,"-c","import time; time.sleep(20)"]); '
+                    f'Path({str(marker)!r}).write_text("started"); time.sleep(20)')
+            process = subprocess.Popen(['rtk', 'proxy', MODULE.sys.executable, '-c', code],
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                       text=True, start_new_session=True)
+            communicate = process.communicate
+            expired = []
+            def short_initial_deadline(*, timeout):
+                try:
+                    return communicate(timeout=0.01 if timeout == 75 else timeout)
+                except subprocess.TimeoutExpired:
+                    expired.append(timeout)
+                    raise
+            try:
+                deadline = time.monotonic() + 3
+                while not marker.exists() and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertTrue(marker.exists(), 'isolated fixture child did not start')
+                with patch.object(MODULE.subprocess, 'Popen', return_value=process), patch.object(process, 'communicate', side_effect=short_initial_deadline):
+                    with self.assertRaisesRegex(MODULE.BackendError, 'timed out'):
+                        backend.local_platform_status()
+                self.assertEqual(expired, [75], 'descendant kept pipes open during cleanup')
+                self.assertIsNotNone(process.returncode)
+            finally:
+                try:
+                    os.killpg(process.pid, MODULE.signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                communicate(timeout=2)
+
+    def test_platform_scope_worker_failure_is_not_an_unknown_successful_read(self):
+        backend = MODULE.Backends.__new__(MODULE.Backends)
+        process = Mock(returncode=2)
+        process.communicate.return_value = ('{"error_code":"LOCAL_PLATFORM_SCOPE_OR_STATUS_FAILED"}', 'private')
+        with patch.object(MODULE.subprocess, 'Popen', return_value=process):
+            with self.assertRaises(MODULE.BackendError) as error:
+                backend.local_platform_status()
+        self.assertNotIn('private', str(error.exception))
+
+    def test_non_ready_platform_exit_one_is_successful_audited_read(self):
+        report = platform_report()
+        report['ready'] = False
+        report['components']['superset'] = {'ready': False, 'status': 'unknown'}
+        backend = MODULE.Backends.__new__(MODULE.Backends)
+        dispatcher, _, events = self.dispatcher()
+        dispatcher.backends = backend
+        process = Mock(returncode=1)
+        process.communicate.return_value = (json.dumps(report), 'private-backend-error')
+        with patch.object(MODULE.subprocess, 'Popen', return_value=process):
+            result = dispatcher.call('local_platform_status', {})
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(result['audit'], 'delivered')
+        self.assertFalse(result['data']['ready'])
+        self.assertEqual(result['data']['components']['superset']['status'], 'unknown')
+        self.assertEqual(events[0][0]['action_type'], 'mcp.local_platform_status')
+        self.assertEqual(events[0][0]['status'], 'success')
+        self.assertNotIn('private-', json.dumps([result, events]))
+
+    def test_platform_arguments_are_rejected_before_backend_and_audited(self):
+        dispatcher, backend, events = self.dispatcher()
+        result = dispatcher.call('local_platform_status', {'url': 'private-alternate-url'})
+        self.assertEqual(result['status'], 'blocked')
+        self.assertEqual(events[0][0]['action_type'], 'mcp.local_platform_status')
+        backend.execute.assert_not_called()
+        self.assertNotIn('private-', json.dumps([result, events]))
+
     def test_changed_kubernetes_context_prevents_backend_request(self):
         backend = MODULE.Backends.__new__(MODULE.Backends)
         scope = Mock()

@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -19,6 +21,7 @@ LOCAL = HERE.parent
 CONTEXT = 'colima-mac-studio-solo'
 STATE = ROOT / 'tmp/local-experiment/gateway'
 NAMESPACE = 'shirokuma-dev'
+PLATFORM_COMPONENTS = ('lakehouse', 'superset', 'metadata', 'agenthouse', 'loki')
 NO_ARGS = {'type': 'object', 'properties': {}, 'additionalProperties': False}
 SCOPED_ARGS = {'type': 'object', 'properties': {
     'namespace': {'type': 'string', 'enum': [NAMESPACE], 'default': NAMESPACE},
@@ -30,6 +33,7 @@ RECENT_ARGS = {'type': 'object', 'properties': {
     'additionalProperties': False}
 TOOLS = {
     'shirokuma_doctor': ('Report bounded local experiment readiness.', 'shirokuma', NO_ARGS),
+    'local_platform_status': ('Observe five fixed local runtime groups; unknown is distinct from not-ready.', 'shirokuma', NO_ARGS),
     'k8s_read_pods': ('List sanitized pod readiness in the Shirokuma development namespace.', 'kubernetes', SCOPED_ARGS),
     'k8s_read_events': ('List event reasons and object identities; omit free-text messages and Secret events.', 'kubernetes', SCOPED_ARGS),
     'dbt_list_models': ('List the fixed local dbt project models and latest verified run dependencies.', 'dbt', NO_ARGS),
@@ -91,7 +95,7 @@ def safe_timestamp(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
     matched = re.fullmatch(
-        r'([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(?:\.([0-9]{1,9}))?(Z|[+-][0-9]{2}:[0-9]{2})', value)
+        r'([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(?:\.([0-9]{1,9}))?(Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])', value)
     if matched is None:
         return None
     try:
@@ -108,6 +112,49 @@ def safe_timestamp(value: Any) -> str | None:
 
 def observation_time() -> str:
     return datetime.now(timezone.utc).isoformat(timespec='microseconds').replace('+00:00', 'Z')
+
+
+def platform_projection(report: Any) -> dict:
+    """Validate fixed readiness facts and omit component reasons and other text."""
+    required = {'profile', 'observed_at', 'ready', 'components'}
+    if (not isinstance(report, dict) or not required <= set(report)
+            or set(report) - required - {'scope'} or report['profile'] != 'local-experiment'
+            or type(report['ready']) is not bool):
+        raise BackendError('invalid local platform report')
+    observed_at = safe_timestamp(report['observed_at'])
+    components = report['components']
+    if observed_at is None or not isinstance(components, dict) or set(components) != set(PLATFORM_COMPONENTS):
+        raise BackendError('invalid local platform observation scope')
+    projected = {}
+    for name in PLATFORM_COMPONENTS:
+        value = components[name]
+        if (not isinstance(value, dict) or not {'ready', 'status'} <= set(value)
+                or set(value) - {'ready', 'status', 'reason'} or type(value['ready']) is not bool
+                or not isinstance(value['status'], str) or value['status'] not in {'ready', 'not-ready', 'unknown'}
+                or value['ready'] != (value['status'] == 'ready')):
+            raise BackendError('invalid local platform component readiness')
+        projected[name] = {'ready': value['ready'], 'status': value['status']}
+    if report['ready'] != all(value['ready'] for value in projected.values()):
+        raise BackendError('local platform aggregate readiness disagrees')
+    return {'profile': 'local-experiment', 'observed_at': observed_at,
+            'ready': report['ready'], 'components': projected}
+
+
+def stop_platform_worker(process) -> None:
+    """Reap only the freshly created worker group, including its CLI children."""
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
+        process.communicate(timeout=2)
+    except subprocess.TimeoutExpired:
+        # Detached descendants are not expected from these fixed read helpers;
+        # never extend cleanup into a name-based kill of other host processes.
+        for stream in (process.stdout, process.stderr):
+            if stream is not None:
+                stream.close()
+        process.poll()
 
 
 def event_last_observed_at(item: dict) -> str | None:
@@ -155,6 +202,30 @@ class Backends:
         # Bounded doctor data is already a repository-defined structured contract;
         # never return arbitrary CLI stderr or command text.
         return report
+
+    def local_platform_status(self) -> dict:
+        # Match the workflow's minimal child environment. Do not inherit proxy,
+        # tracing, cloud credentials, or alternate Kubernetes/Docker settings.
+        environment = {key: value for key, value in os.environ.items()
+                       if key in {'PATH', 'HOME', 'USER', 'TMPDIR', 'LANG', 'LC_ALL'}}
+        # The worker checks scope before any status read, inside this same
+        # deadline. Its new process group lets timeout cleanup include kubectl,
+        # Docker clients and helper subprocesses without touching their services.
+        process = subprocess.Popen(['rtk', 'proxy', sys.executable, str(HERE / 'platform_worker.py')],
+                                   cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   text=True, env=environment, start_new_session=True)
+        try:
+            stdout, _stderr = process.communicate(timeout=75)
+        except subprocess.TimeoutExpired:
+            stop_platform_worker(process)
+            raise BackendError('local platform worker timed out') from None
+        except BaseException:
+            stop_platform_worker(process)
+            raise
+        if process.returncode not in (0, 1) or len(stdout) > 2 * 1024 * 1024:
+            raise BackendError('local platform worker failed or exceeded the output limit')
+        return platform_projection(json.loads(stdout))
+
 
     def k8s_read_pods(self, namespace: str, limit: int) -> dict:
         data = self.command_json(['kubectl', '--context', CONTEXT, '-n', namespace,

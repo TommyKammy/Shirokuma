@@ -50,6 +50,8 @@ def snapshots(*, critical=True):
             'events': [{'uid': 'event-1', 'object_uid': 'pod-1', 'object_name': 'trino', 'object_kind': 'Pod',
                         'last_observed_at': stamp, 'count': 1, 'type': 'Warning', 'reason': 'Unhealthy',
                         'message': 'private-event-detail'}] if critical else []},
+        'local_platform_status': {'profile': 'local-experiment', 'observed_at': stamp, 'ready': True,
+            'components': {name: {'ready': True, 'status': 'ready'} for name in CONTRACT.COMPONENTS}},
     }
 
 
@@ -59,11 +61,15 @@ def evidence_from(value):
 
 def valid_triage(evidence):
     checks = []
-    critical_ids = [finding['id'] for finding in evidence['findings'] if finding['severity'] == 'critical']
+    critical_ids = [finding['id'] for finding in evidence['findings'] if finding['code'] in CONTRACT.POD_CRITICAL]
     if critical_ids:
         checks.append({'tool': 'k8s_read_pods', 'finding_ids': critical_ids})
+    runtime_ids = [finding['id'] for finding in evidence['findings']
+                   if finding['code'] in CONTRACT.RUNTIME_CRITICAL | {'RUNTIME_STATUS_UNKNOWN'}]
+    if runtime_ids:
+        checks.append({'tool': 'local_platform_status', 'finding_ids': runtime_ids})
     warning_ids = [finding['id'] for finding in evidence['findings'] if finding['code'] == 'WARNING_EVENT']
-    if warning_ids:
+    if warning_ids and len(checks) < 2:
         checks.append({'tool': 'k8s_read_events', 'finding_ids': warning_ids})
     return {'assessment': evidence['health'], 'checks': checks, 'root_cause': 'undetermined'}
 
@@ -125,7 +131,7 @@ class FixtureSelector:
         for finding in evidence['findings']:
             if self.omit_critical and finding['severity'] == 'critical':
                 continue
-            tool = 'k8s_read_pods' if finding['severity'] == 'critical' else finding['allowed_tools'][0]
+            tool = 'k8s_read_pods' if finding['code'] in CONTRACT.POD_CRITICAL else finding['allowed_tools'][0]
             selected.setdefault(tool, []).append(finding['id'])
         return inference({'assessment': evidence['health'], 'root_cause': 'undetermined',
                           'checks': [{'tool': tool, 'finding_ids': ids} for tool, ids in selected.items()]})
@@ -301,9 +307,69 @@ class SRELLMTests(unittest.TestCase):
         graph, options, read, _, _ = self.run_graph(model, before=before)
         result = asyncio.run(graph.ainvoke({}, options))
         self.assertEqual(result['triage']['checks'], [])
-        self.assertEqual(read.await_count, 3)
+        self.assertEqual(read.await_count, 4)
         self.assertEqual(result['followup_evidence'], {})
         self.assertFalse(graph.get_state(options).next)
+
+    def test_runtime_and_pod_critical_findings_use_both_followups_and_preserve_bounded_comparison(self):
+        before = snapshots()
+        before['local_platform_status']['ready'] = False
+        before['local_platform_status']['components']['superset'] = {'ready': False, 'status': 'not-ready'}
+        after = copy.deepcopy(before)
+        after['local_platform_status']['observed_at'] = '2026-09-17T02:00:01.000000Z'
+        after['local_platform_status']['ready'] = True
+        after['local_platform_status']['components']['superset'] = {'ready': True, 'status': 'ready'}
+        model = Mock()
+        model.complete.return_value = inference(valid_triage(evidence_from(before)))
+        graph, options, read, audit, _ = self.run_graph(model, before=before, after=after)
+        result = asyncio.run(graph.ainvoke({}, options))
+        self.assertEqual([call.args for call in read.await_args_list], [(tool, 'initial') for tool in RUN.TOOLS]
+                         + [('k8s_read_pods', 'followup'), ('local_platform_status', 'followup')])
+        self.assertEqual(result['comparisons']['sources']['k8s_read_events']['status'], 'not-reobserved')
+        runtime = result['comparisons']['sources']['local_platform_status']
+        self.assertEqual(runtime['status'], 'changed')
+        self.assertIn('component-identity-not-observed', runtime['limitations'])
+        self.assertEqual(audit.call_args.args[:2], ('llm.sre_triage', 'success'))
+        self.assertFalse(graph.get_state(options).next)
+
+    def test_runtime_critical_omission_is_audited_before_any_followup(self):
+        before = snapshots()
+        before['local_platform_status']['ready'] = False
+        before['local_platform_status']['components']['metadata'] = {'ready': False, 'status': 'not-ready'}
+        proposed = valid_triage(evidence_from(before))
+        proposed['checks'] = [check for check in proposed['checks'] if check['tool'] == 'k8s_read_pods']
+        model = Mock()
+        model.complete.return_value = inference(proposed)
+        graph, options, read, audit, _ = self.run_graph(model, before=before)
+        with self.assertRaises(RUN.SREError):
+            asyncio.run(graph.ainvoke({}, options))
+        self.assertEqual([call.args[1] for call in read.await_args_list], ['initial'] * 4)
+        self.assertEqual(audit.call_args.args[:2], ('llm.sre_triage', 'blocked'))
+        self.assertEqual(audit.call_args.args[2]['prompt_tokens'], 123)
+        self.assertNotIn('comparisons', graph.get_state(options).values)
+
+    def test_invalid_platform_observation_stops_before_model_inference(self):
+        before = snapshots(critical=False)
+        before['local_platform_status']['components']['loki']['ready'] = False
+        model = Mock()
+        graph, options, read, audit, _ = self.run_graph(model, before=before)
+        with self.assertRaises(CONTRACT.DiagnosticError):
+            asyncio.run(graph.ainvoke({}, options))
+        self.assertEqual(read.await_count, 4)
+        model.complete.assert_not_called()
+        audit.assert_not_called()
+
+    def test_platform_mcp_audit_is_required_by_dynamic_exact_audit_set(self):
+        rows, logs, calls, records = audit_fixture()
+        event_id, span_id = '33333333-3333-3333-3333-333333333333', '3' * 16
+        calls.append({'event_id': event_id, 'span_id': span_id, 'action_type': 'mcp.local_platform_status'})
+        rows.append({**rows[0], 'event_id': event_id, 'action_type': 'mcp.local_platform_status'})
+        logs.append({**logs[0], 'span_id': span_id, 'action': 'mcp.local_platform_status'})
+        RUN.verify_audits(rows, logs, calls, records, TASK_ID, TRACE_ID)
+        with self.assertRaises(RUN.SREError):
+            RUN.verify_audits(rows[:-1], logs, calls, records, TASK_ID, TRACE_ID)
+        with self.assertRaises(RUN.SREError):
+            RUN.verify_audits(rows, logs[:-1], calls, records, TASK_ID, TRACE_ID)
 
     def test_invalid_model_plan_is_audited_blocked_before_any_followup_read(self):
         evidence = evidence_from(snapshots())
@@ -319,7 +385,7 @@ class SRELLMTests(unittest.TestCase):
                 graph, options, read, audit, _ = self.run_graph(model)
                 with self.assertRaises(RUN.SREError):
                     asyncio.run(graph.ainvoke({}, options))
-                self.assertEqual([call.args[1] for call in read.await_args_list], ['initial'] * 3)
+                self.assertEqual([call.args[1] for call in read.await_args_list], ['initial'] * 4)
                 self.assertEqual(audit.call_args.args[:2], ('llm.sre_triage', 'blocked'))
                 self.assertEqual(audit.call_args.args[2]['completion_tokens'], 45)
                 self.assertNotIn('triage', graph.get_state(options).values)
@@ -333,7 +399,7 @@ class SRELLMTests(unittest.TestCase):
         with self.assertRaises(RUN.SREError) as raised:
             asyncio.run(graph.ainvoke({}, options))
         self.assertNotIn('private-provider-error', str(raised.exception))
-        self.assertEqual([call.args[1] for call in read.await_args_list], ['initial'] * 3)
+        self.assertEqual([call.args[1] for call in read.await_args_list], ['initial'] * 4)
         self.assertEqual(audit.call_args.args[:2], ('llm.sre_triage', 'failed'))
         self.assertEqual(audit.call_args.args[2], {'prompt_tokens': 123, 'completion_tokens': 45,
                                                 'duration_ms': 12, 'inference_cost_estimate': None})
@@ -345,7 +411,7 @@ class SRELLMTests(unittest.TestCase):
         graph, options, read, _, _ = self.run_graph(model, audit=audit)
         with self.assertRaises(RUN.SREError):
             asyncio.run(graph.ainvoke({}, options))
-        self.assertEqual([call.args[1] for call in read.await_args_list], ['initial'] * 3)
+        self.assertEqual([call.args[1] for call in read.await_args_list], ['initial'] * 4)
         self.assertNotIn('comparisons', graph.get_state(options).values)
         model.complete.assert_called_once()
 
@@ -368,18 +434,23 @@ class SRELLMTests(unittest.TestCase):
             saved = json.loads((Path(directory) / 'evidence/result.json').read_text())
         self.assertEqual(report, saved)
         self.assertEqual(report['result'], 'passed')
-        self.assertEqual(report['requested_inferences'], 12)
-        self.assertEqual(report['attempted_inferences'], 12)
-        self.assertEqual(report['passed_inferences'], 12)
-        self.assertEqual(report['audited_inferences'], 12)
+        self.assertEqual(report['requested_inferences'], 16)
+        self.assertEqual(report['attempted_inferences'], 16)
+        self.assertEqual(report['passed_inferences'], 16)
+        self.assertEqual(report['audited_inferences'], 16)
         self.assertEqual(report['retries'], 0)
-        self.assertEqual(len(model.calls), 12)
+        self.assertEqual(len(model.calls), 16)
         self.assertEqual(model.calls, [('sre_triage', case['evidence']) for case in EVALUATION.cases() for _ in range(2)])
         first_case = [item for item in report['attempts'] if item['case_id'] == 'intentional_flux_only']
         self.assertEqual([item['selected_tools'] for item in first_case], [[], []])
         critical = [item for item in report['attempts'] if item['case_id'] == 'critical_pod']
         self.assertTrue(all('k8s_read_pods' in item['selected_tools'] for item in critical))
-        self.assertEqual(len({event['event_id'] for event in client.events}), 12)
+        runtime = [item for item in report['attempts'] if item['case_id'] == 'runtime_degraded']
+        self.assertTrue(all(set(item['selected_tools']) == {'local_platform_status', 'k8s_read_pods'} for item in runtime))
+        unknown = [item for item in report['attempts'] if item['case_id'] == 'runtime_unknown']
+        self.assertTrue(all(item['expected_health'] == 'unknown' and item['selected_tools'] == ['local_platform_status']
+                            for item in unknown))
+        self.assertEqual(len({event['event_id'] for event in client.events}), 16)
         for event in client.events:
             self.assertEqual(event['task_id'], report['task_id'])
             self.assertEqual(event['trace_id'], report['trace_id'])
@@ -391,14 +462,15 @@ class SRELLMTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             report = self.evaluate(directory, model, client)
         self.assertEqual(report['result'], 'failed')
-        self.assertEqual(report['attempted_inferences'], 12)
-        self.assertEqual(report['passed_inferences'], 10)
-        self.assertEqual(report['audited_inferences'], 12)
+        self.assertEqual(report['attempted_inferences'], 16)
+        self.assertEqual(report['passed_inferences'], 12)
+        self.assertEqual(report['audited_inferences'], 16)
         rejected = [item for item in report['attempts'] if item['result'] == 'failed']
-        self.assertEqual([item['case_id'] for item in rejected], ['critical_pod', 'critical_pod'])
+        self.assertEqual([item['case_id'] for item in rejected], ['critical_pod', 'critical_pod',
+                                                               'runtime_degraded', 'runtime_degraded'])
         self.assertTrue(all(item['failure_code'] == 'triage_contract_rejected' for item in rejected))
-        self.assertEqual([event['status'] for event in client.events].count('failed'), 2)
-        self.assertEqual(len(model.calls), 12)
+        self.assertEqual([event['status'] for event in client.events].count('failed'), 4)
+        self.assertEqual(len(model.calls), 16)
 
     def test_synthetic_sre_evaluation_retains_failed_inference_usage_but_not_raw_error(self):
         model, client = FixtureSelector(fail_first=True), EvaluationClient()
@@ -406,17 +478,17 @@ class SRELLMTests(unittest.TestCase):
             report = self.evaluate(directory, model, client)
             saved = '\n'.join(file.read_text() for file in (Path(directory) / 'evidence').iterdir())
         self.assertEqual(report['result'], 'failed')
-        self.assertEqual(report['passed_inferences'], 11)
-        self.assertEqual(report['audited_inferences'], 12)
+        self.assertEqual(report['passed_inferences'], 15)
+        self.assertEqual(report['audited_inferences'], 16)
         self.assertEqual(report['attempts'][0]['failure_code'], 'model_response_failed')
         self.assertEqual(report['attempts'][0]['metrics']['completion_tokens'], 45)
-        self.assertEqual(report['usage']['prompt_tokens'], 123 * 12)
-        self.assertEqual(report['usage']['completion_tokens'], 45 * 12)
+        self.assertEqual(report['usage']['prompt_tokens'], 123 * 16)
+        self.assertEqual(report['usage']['completion_tokens'], 45 * 16)
         self.assertIsNone(report['usage']['inference_cost_estimate'])
         self.assertNotIn('private-model-error', saved)
         self.assertNotIn('private-output', saved)
         self.assertEqual(client.events[0]['status'], 'failed')
-        self.assertEqual(len(model.calls), 12)
+        self.assertEqual(len(model.calls), 16)
 
     def test_synthetic_sre_evaluation_audit_outage_stops_further_inference(self):
         for preflight in (False, True):

@@ -53,6 +53,7 @@ rtk make local-llm-qwen-smoke
 rtk make local-llm-qwen-eval
 rtk make local-sre-qwen-smoke local-sre-qwen-eval
 rtk make local-sre-qwen-drill
+rtk make local-policy-status local-policy-smoke
 rtk make local-tpch-smoke
 ```
 
@@ -66,9 +67,15 @@ inventory cases twice each. See the [LLM runbook](tools/local_experiment/llm/REA
 Cloud execution remains disabled and is not required for this local loop.
 The [SRE workflow](tools/local_experiment/bears/README.md) uses Qwen to select
 follow-up MCP reads, verifies the evidence references, and compares selected
-Pod/Event observations by UID. It does not perform workload remediation.
+Pod/Event observations by UID. It also observes all five runtime groups,
+distinguishes unavailable services from unknown status, and requires critical
+runtime findings to be re-observed. It does not perform workload remediation.
 The optional drill creates one disposable Failed Pod, verifies that Qwen selects
 its re-observation, and removes only the creation receipt's matching UID.
+The [local admission baseline](tools/local_experiment/policy/README.md) reuses
+seven repository CEL rules through native Kubernetes policies scoped to
+`shirokuma-dev`. Its smoke requests are server-side dry-runs. This local bridge
+does not install Kyverno or attest image signatures/vulnerabilities.
 Superset is available at [the local dashboard](http://127.0.0.1:18088/superset/dashboard/shirokuma-local-lakehouse/),
 and OpenMetadata at [the local catalog](http://127.0.0.1:18585).
 Generated credentials stay in private ignored state; see the component runbooks

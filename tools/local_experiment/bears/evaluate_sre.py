@@ -10,7 +10,7 @@ import time
 import uuid
 
 from sre_provider import SREProvider
-from sre_contract import build_evidence, validate_triage
+from sre_contract import COMPONENTS, build_evidence, validate_triage
 from providers import ProviderError, load_config, validate_config
 from evaluation import private_write, safe_metrics, verify_audit
 from workflow import agenthouse_module, disable_external_tracing
@@ -31,10 +31,13 @@ def cases() -> list[dict]:
             'pods': [{'name': 'sample-pod', 'uid': 'pod-1', 'phase': 'Running',
                       'ready_containers': 1, 'total_containers': 1, 'restarts': 0}]}
     events = {'namespace': 'shirokuma-dev', 'observed_at': stamp, 'truncated': False, 'events': []}
+    platform = {'profile': 'local-experiment', 'observed_at': stamp, 'ready': True,
+                'components': {name: {'ready': True, 'status': 'ready'} for name in COMPONENTS}}
     result = []
     for name in ('intentional_flux_only', 'historical_restart', 'critical_pod',
-                 'warning_event', 'doctor_degraded', 'event_list_truncated'):
-        d, p, e = copy.deepcopy((doctor, pods, events))
+                 'warning_event', 'doctor_degraded', 'event_list_truncated',
+                 'runtime_degraded', 'runtime_unknown'):
+        d, p, e, runtime = copy.deepcopy((doctor, pods, events, platform))
         if name == 'historical_restart':
             p['pods'][0]['restarts'] = 4
         elif name == 'critical_pod':
@@ -49,7 +52,16 @@ def cases() -> list[dict]:
             d['checks'][0]['status'] = 'degraded'
         elif name == 'event_list_truncated':
             e['truncated'] = True
-        result.append({'case_id': name, 'evidence': build_evidence(d, p, e)})
+        elif name == 'runtime_degraded':
+            runtime['ready'] = False
+            runtime['components']['superset'] = {'ready': False, 'status': 'not-ready'}
+            runtime['components']['metadata'] = {'ready': False, 'status': 'not-ready'}
+            # Both critical source classes must fit within the two-read budget.
+            p['pods'][0].update(phase='Failed', ready_containers=0)
+        elif name == 'runtime_unknown':
+            runtime['ready'] = False
+            runtime['components']['loki'] = {'ready': False, 'status': 'unknown'}
+        result.append({'case_id': name, 'evidence': build_evidence(d, p, e, runtime)})
     return result
 
 

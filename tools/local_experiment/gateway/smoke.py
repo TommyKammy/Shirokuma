@@ -9,13 +9,14 @@ import uuid
 
 from mcp import Client, StdioServerParameters, stdio_client
 
-from core import Backends, HERE, LOCAL, STATE, TOOLS, load_module
+from core import Backends, HERE, LOCAL, STATE, TOOLS, load_module, platform_projection
 
 
 async def smoke() -> dict:
     STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
     logs = (STATE / 'server-stderr.log').open('a')
     calls = []
+    platform = None
     try:
         params = StdioServerParameters(command='rtk', args=['proxy', sys.executable, str(HERE / 'server.py')])
         async with Client(stdio_client(params, errlog=logs)) as client:
@@ -24,6 +25,7 @@ async def smoke() -> dict:
                 raise RuntimeError('MCP tool inventory differs from the fixed allowlist')
             for name, arguments in [
                 ('gateway_policy', {}), ('shirokuma_doctor', {}),
+                ('local_platform_status', {}),
                 ('k8s_read_pods', {'limit': 5}), ('k8s_read_events', {'limit': 5}),
                 ('dbt_list_models', {}), ('trino_explain_fixture', {}),
                 ('openmetadata_get_lineage', {}), ('agenthouse_recent', {'limit': 3}),
@@ -38,6 +40,10 @@ async def smoke() -> dict:
                 expected = 'blocked' if name == 'github_issue_write' or 'sql' in arguments or arguments.get('namespace') == 'kube-system' else 'success'
                 if payload['status'] != expected or payload.get('audit') != 'delivered':
                     raise RuntimeError(f'MCP integration call {name} returned {payload.get("error_code", payload["status"])}')
+                if name == 'local_platform_status':
+                    platform = platform_projection(payload.get('data'))
+                    if platform != payload['data']:
+                        raise RuntimeError('platform MCP observation differs from its safe projection')
                 calls.append({'tool': name, 'status': payload['status'], 'event_id': payload['event_id'],
                               'task_id': payload['task_id'], 'trace_id': payload['trace_id'],
                               'span_id': payload['span_id']})
@@ -71,6 +77,7 @@ async def smoke() -> dict:
         if key not in spans or spans[key]['attributes'].get('task_id') != call['task_id']:
             raise RuntimeError('OpenTelemetry did not emit the correlated MCP span')
     result = {'result': 'passed', 'transport': 'stdio', 'tools': len(TOOLS), 'calls': calls,
+              'platform_observation': platform,
               'audited_calls': len(rows), 'loki_correlated_calls': len(calls),
               'otel_correlated_spans': len(calls),
               'policy_denials': sum(x['status'] == 'blocked' for x in calls)}

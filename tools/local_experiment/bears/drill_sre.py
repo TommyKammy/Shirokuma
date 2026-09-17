@@ -182,10 +182,10 @@ def verify_detection(report: dict, observations: list, receipt: dict) -> dict:
     selected = [check for check in report['triage']['checks'] if check.get('tool') == 'k8s_read_pods']
     if len(selected) != 1 or findings[0]['id'] not in selected[0]['finding_ids']:
         raise DrillError('SRE did not select the required Pod re-observation')
-    if not isinstance(observations, list) or not 4 <= len(observations) <= 5:
+    if not isinstance(observations, list) or not len(TOOLS) + 1 <= len(observations) <= len(TOOLS) + 2:
         raise DrillError('missing bounded workflow observations')
     initial = {item['tool']: item['snapshot'] for item in observations if item.get('phase') == 'initial'}
-    if set(initial) != set(TOOLS) or sum(item.get('phase') == 'initial' for item in observations) != 3:
+    if set(initial) != set(TOOLS) or sum(item.get('phase') == 'initial' for item in observations) != len(TOOLS):
         raise DrillError('initial workflow observations differ')
     if hashlib.sha256(json.dumps(initial, sort_keys=True).encode()).hexdigest() != report['initial_sha256']:
         raise DrillError('initial workflow observation digest differs')

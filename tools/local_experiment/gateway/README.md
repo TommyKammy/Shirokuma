@@ -21,6 +21,7 @@ protocol JSON continues to use MCP's standard field aliases.
 |---|---|---|
 | `gateway_policy` | No arguments | Fixed allowlist and local scope |
 | `shirokuma_doctor` | No arguments | Existing `local-experiment` doctor report |
+| `local_platform_status` | No arguments | Fixed lakehouse, Superset, metadata, AgentHouse and Loki readiness, including unknown observations |
 | `k8s_read_pods` | Only `shirokuma-dev`; limit 1–50 | Names, phases, readiness and restart counts |
 | `k8s_read_events` | Only `shirokuma-dev`; limit 1–50 | Reasons and object identities; no free-text messages or Secret events |
 | `dbt_list_models` | No arguments | Fixed project and latest successful DataOps artifact dependencies |
@@ -35,6 +36,20 @@ Kubernetes context, service names, local API endpoints and repository paths are
 fixed. Backend errors return a bounded code rather than raw command stderr or
 exception details. A successful doctor tool call means the report was read;
 its reported component readiness remains distinct.
+
+`local_platform_status` runs the fixed local status command with a minimal child
+environment and validates all five component identities, the observation time,
+and readiness consistency. Its result contains only `profile`, UTC `observed_at`,
+aggregate `ready`, and `components`; each component has `ready` and
+`status` (`ready`, `not-ready`, or `unknown`). A component is ready only when its
+status is `ready`; unknown is never healthy. Component reasons, endpoint details,
+and raw backend errors are omitted. A valid non-ready report remains a successful
+read. Superset readiness requires both a running owned container and its fixed
+loopback `/health` endpoint returning HTTP 200 with a bounded `OK` body.
+The scope check and all platform status reads share one 75-second worker
+deadline. On timeout, only that worker process group is terminated and reaped;
+resident services are untouched. This leaves time for audit delivery within
+the MCP client limit. Scope failures omit component data.
 
 Every valid MCP `tools/call` request, including policy denials and backend
 failures, emits a normalized ClickHouse Pawprint and a Loki record. Unknown
@@ -69,9 +84,10 @@ Otherwise each server session creates its own task ID and each call creates its
 own trace. Correlation values are not tool arguments and do not authorize any
 additional backend action.
 
-The integration smoke lists eight tools, successfully calls every backend,
+The integration smoke lists nine tools, successfully calls every backend,
 rejects arbitrary SQL, an alternate namespace and an inactive GitHub tool, and
-verifies all eleven calls in ClickHouse, Loki and exported OpenTelemetry spans.
+verifies all twelve calls in ClickHouse, Loki and exported OpenTelemetry spans.
+It retains the safe platform observation alongside the audit correlations.
 It retains its result under ignored `tmp/local-experiment/gateway/smoke-*.json`.
 Stopping the MCP host closes the stdio server; the temporary Trino port-forward
 is always stopped after its call. Read-only backend calls and audit rows require

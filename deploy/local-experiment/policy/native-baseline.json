@@ -1,0 +1,704 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicy",
+      "metadata": {
+        "name": "shirokuma-local-disallow-privileged-containers",
+        "labels": {
+          "app.kubernetes.io/part-of": "shirokuma",
+          "shirokuma.dev/scope": "local-experiment",
+          "shirokuma.dev/policy-owner": "native-baseline-v1"
+        },
+        "annotations": {
+          "shirokuma.dev/source": "policies/kyverno/baseline.yaml",
+          "shirokuma.dev/source-sha256": "2ab159a9870b5b1b6f7508b77dbf97ceb2a55d5bd80bb04db0f3ebbbe1a3b94e",
+          "shirokuma.dev/coverage": "pods-services-ingresses-no-controller-autogen"
+        }
+      },
+      "spec": {
+        "failurePolicy": "Fail",
+        "matchConstraints": {
+          "resourceRules": [
+            {
+              "apiGroups": [
+                ""
+              ],
+              "apiVersions": [
+                "v1"
+              ],
+              "operations": [
+                "CREATE",
+                "UPDATE"
+              ],
+              "resources": [
+                "pods",
+                "pods/ephemeralcontainers"
+              ],
+              "scope": "Namespaced"
+            }
+          ],
+          "namespaceSelector": {
+            "matchLabels": {
+              "kubernetes.io/metadata.name": "shirokuma-dev"
+            }
+          },
+          "matchPolicy": "Equivalent"
+        },
+        "validations": [
+          {
+            "expression": "variables.allContainers.all(container, container.?securityContext.?privileged.orValue(false) == false)",
+            "message": "Privileged containers are forbidden."
+          }
+        ],
+        "variables": [
+          {
+            "expression": "object.spec.containers + object.spec.?initContainers.orValue([]) + object.spec.?ephemeralContainers.orValue([])",
+            "name": "allContainers"
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicyBinding",
+      "metadata": {
+        "name": "shirokuma-local-disallow-privileged-containers",
+        "labels": {
+          "app.kubernetes.io/part-of": "shirokuma",
+          "shirokuma.dev/scope": "local-experiment",
+          "shirokuma.dev/policy-owner": "native-baseline-v1"
+        },
+        "annotations": {
+          "shirokuma.dev/source": "policies/kyverno/baseline.yaml",
+          "shirokuma.dev/source-sha256": "2ab159a9870b5b1b6f7508b77dbf97ceb2a55d5bd80bb04db0f3ebbbe1a3b94e",
+          "shirokuma.dev/coverage": "pods-services-ingresses-no-controller-autogen"
+        }
+      },
+      "spec": {
+        "policyName": "shirokuma-local-disallow-privileged-containers",
+        "validationActions": [
+          "Deny"
+        ],
+        "matchResources": {
+          "namespaceSelector": {
+            "matchLabels": {
+              "kubernetes.io/metadata.name": "shirokuma-dev"
+            }
+          },
+          "matchPolicy": "Equivalent"
+        }
+      }
+    },
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicy",
+      "metadata": {
+        "name": "shirokuma-local-disallow-host-namespaces",
+        "labels": {
+          "app.kubernetes.io/part-of": "shirokuma",
+          "shirokuma.dev/scope": "local-experiment",
+          "shirokuma.dev/policy-owner": "native-baseline-v1"
+        },
+        "annotations": {
+          "shirokuma.dev/source": "policies/kyverno/baseline.yaml",
+          "shirokuma.dev/source-sha256": "2ab159a9870b5b1b6f7508b77dbf97ceb2a55d5bd80bb04db0f3ebbbe1a3b94e",
+          "shirokuma.dev/coverage": "pods-services-ingresses-no-controller-autogen"
+        }
+      },
+      "spec": {
+        "failurePolicy": "Fail",
+        "matchConstraints": {
+          "resourceRules": [
+            {
+              "apiGroups": [
+                ""
+              ],
+              "apiVersions": [
+                "v1"
+              ],
+              "operations": [
+                "CREATE",
+                "UPDATE"
+              ],
+              "resources": [
+                "pods"
+              ],
+              "scope": "Namespaced"
+            }
+          ],
+          "namespaceSelector": {
+            "matchLabels": {
+              "kubernetes.io/metadata.name": "shirokuma-dev"
+            }
+          },
+          "matchPolicy": "Equivalent"
+        },
+        "validations": [
+          {
+            "expression": "!object.spec.?hostNetwork.orValue(false) && !object.spec.?hostIPC.orValue(false) && !object.spec.?hostPID.orValue(false)",
+            "message": "Host network, IPC, and PID namespaces are forbidden."
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicyBinding",
+      "metadata": {
+        "name": "shirokuma-local-disallow-host-namespaces",
+        "labels": {
+          "app.kubernetes.io/part-of": "shirokuma",
+          "shirokuma.dev/scope": "local-experiment",
+          "shirokuma.dev/policy-owner": "native-baseline-v1"
+        },
+        "annotations": {
+          "shirokuma.dev/source": "policies/kyverno/baseline.yaml",
+          "shirokuma.dev/source-sha256": "2ab159a9870b5b1b6f7508b77dbf97ceb2a55d5bd80bb04db0f3ebbbe1a3b94e",
+          "shirokuma.dev/coverage": "pods-services-ingresses-no-controller-autogen"
+        }
+      },
+      "spec": {
+        "policyName": "shirokuma-local-disallow-host-namespaces",
+        "validationActions": [
+          "Deny"
+        ],
+        "matchResources": {
+          "namespaceSelector": {
+            "matchLabels": {
+              "kubernetes.io/metadata.name": "shirokuma-dev"
+            }
+          },
+          "matchPolicy": "Equivalent"
+        }
+      }
+    },
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicy",
+      "metadata": {
+        "name": "shirokuma-local-disallow-host-path",
+        "labels": {
+          "app.kubernetes.io/part-of": "shirokuma",
+          "shirokuma.dev/scope": "local-experiment",
+          "shirokuma.dev/policy-owner": "native-baseline-v1"
+        },
+        "annotations": {
+          "shirokuma.dev/source": "policies/kyverno/baseline.yaml",
+          "shirokuma.dev/source-sha256": "2ab159a9870b5b1b6f7508b77dbf97ceb2a55d5bd80bb04db0f3ebbbe1a3b94e",
+          "shirokuma.dev/coverage": "pods-services-ingresses-no-controller-autogen"
+        }
+      },
+      "spec": {
+        "failurePolicy": "Fail",
+        "matchConstraints": {
+          "resourceRules": [
+            {
+              "apiGroups": [
+                ""
+              ],
+              "apiVersions": [
+                "v1"
+              ],
+              "operations": [
+                "CREATE",
+                "UPDATE"
+              ],
+              "resources": [
+                "pods"
+              ],
+              "scope": "Namespaced"
+            }
+          ],
+          "namespaceSelector": {
+            "matchLabels": {
+              "kubernetes.io/metadata.name": "shirokuma-dev"
+            }
+          },
+          "matchPolicy": "Equivalent"
+        },
+        "validations": [
+          {
+            "expression": "!has(object.spec.volumes) || object.spec.volumes.all(volume, !has(volume.hostPath))",
+            "message": "hostPath volumes are forbidden."
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicyBinding",
+      "metadata": {
+        "name": "shirokuma-local-disallow-host-path",
+        "labels": {
+          "app.kubernetes.io/part-of": "shirokuma",
+          "shirokuma.dev/scope": "local-experiment",
+          "shirokuma.dev/policy-owner": "native-baseline-v1"
+        },
+        "annotations": {
+          "shirokuma.dev/source": "policies/kyverno/baseline.yaml",
+          "shirokuma.dev/source-sha256": "2ab159a9870b5b1b6f7508b77dbf97ceb2a55d5bd80bb04db0f3ebbbe1a3b94e",
+          "shirokuma.dev/coverage": "pods-services-ingresses-no-controller-autogen"
+        }
+      },
+      "spec": {
+        "policyName": "shirokuma-local-disallow-host-path",
+        "validationActions": [
+          "Deny"
+        ],
+        "matchResources": {
+          "namespaceSelector": {
+            "matchLabels": {
+              "kubernetes.io/metadata.name": "shirokuma-dev"
+            }
+          },
+          "matchPolicy": "Equivalent"
+        }
+      }
+    },
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicy",
+      "metadata": {
+        "name": "shirokuma-local-require-pod-resources",
+        "labels": {
+          "app.kubernetes.io/part-of": "shirokuma",
+          "shirokuma.dev/scope": "local-experiment",
+          "shirokuma.dev/policy-owner": "native-baseline-v1"
+        },
+        "annotations": {
+          "shirokuma.dev/source": "policies/kyverno/baseline.yaml",
+          "shirokuma.dev/source-sha256": "2ab159a9870b5b1b6f7508b77dbf97ceb2a55d5bd80bb04db0f3ebbbe1a3b94e",
+          "shirokuma.dev/coverage": "pods-services-ingresses-no-controller-autogen"
+        }
+      },
+      "spec": {
+        "failurePolicy": "Fail",
+        "matchConstraints": {
+          "resourceRules": [
+            {
+              "apiGroups": [
+                ""
+              ],
+              "apiVersions": [
+                "v1"
+              ],
+              "operations": [
+                "CREATE",
+                "UPDATE"
+              ],
+              "resources": [
+                "pods"
+              ],
+              "scope": "Namespaced"
+            }
+          ],
+          "namespaceSelector": {
+            "matchLabels": {
+              "kubernetes.io/metadata.name": "shirokuma-dev"
+            }
+          },
+          "matchPolicy": "Equivalent"
+        },
+        "validations": [
+          {
+            "expression": "variables.workloadContainers.all(container, has(container.resources) && has(container.resources.requests) && has(container.resources.requests.cpu) && container.resources.requests.cpu != '' && has(container.resources.requests.memory) && container.resources.requests.memory != '' && has(container.resources.limits) && has(container.resources.limits.cpu) && container.resources.limits.cpu != '' && has(container.resources.limits.memory) && container.resources.limits.memory != '')",
+            "message": "Every container requires CPU and memory requests and limits."
+          }
+        ],
+        "variables": [
+          {
+            "expression": "object.spec.containers + object.spec.?initContainers.orValue([])",
+            "name": "workloadContainers"
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicyBinding",
+      "metadata": {
+        "name": "shirokuma-local-require-pod-resources",
+        "labels": {
+          "app.kubernetes.io/part-of": "shirokuma",
+          "shirokuma.dev/scope": "local-experiment",
+          "shirokuma.dev/policy-owner": "native-baseline-v1"
+        },
+        "annotations": {
+          "shirokuma.dev/source": "policies/kyverno/baseline.yaml",
+          "shirokuma.dev/source-sha256": "2ab159a9870b5b1b6f7508b77dbf97ceb2a55d5bd80bb04db0f3ebbbe1a3b94e",
+          "shirokuma.dev/coverage": "pods-services-ingresses-no-controller-autogen"
+        }
+      },
+      "spec": {
+        "policyName": "shirokuma-local-require-pod-resources",
+        "validationActions": [
+          "Deny"
+        ],
+        "matchResources": {
+          "namespaceSelector": {
+            "matchLabels": {
+              "kubernetes.io/metadata.name": "shirokuma-dev"
+            }
+          },
+          "matchPolicy": "Equivalent"
+        }
+      }
+    },
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicy",
+      "metadata": {
+        "name": "shirokuma-local-disallow-host-ports",
+        "labels": {
+          "app.kubernetes.io/part-of": "shirokuma",
+          "shirokuma.dev/scope": "local-experiment",
+          "shirokuma.dev/policy-owner": "native-baseline-v1"
+        },
+        "annotations": {
+          "shirokuma.dev/source": "policies/kyverno/baseline.yaml",
+          "shirokuma.dev/source-sha256": "2ab159a9870b5b1b6f7508b77dbf97ceb2a55d5bd80bb04db0f3ebbbe1a3b94e",
+          "shirokuma.dev/coverage": "pods-services-ingresses-no-controller-autogen"
+        }
+      },
+      "spec": {
+        "failurePolicy": "Fail",
+        "matchConstraints": {
+          "resourceRules": [
+            {
+              "apiGroups": [
+                ""
+              ],
+              "apiVersions": [
+                "v1"
+              ],
+              "operations": [
+                "CREATE",
+                "UPDATE"
+              ],
+              "resources": [
+                "pods"
+              ],
+              "scope": "Namespaced"
+            }
+          ],
+          "namespaceSelector": {
+            "matchLabels": {
+              "kubernetes.io/metadata.name": "shirokuma-dev"
+            }
+          },
+          "matchPolicy": "Equivalent"
+        },
+        "validations": [
+          {
+            "expression": "variables.allContainers.all(container, !has(container.ports) || container.ports.all(port, !has(port.hostPort) || port.hostPort == 0))",
+            "message": "hostPort access is forbidden."
+          }
+        ],
+        "variables": [
+          {
+            "expression": "object.spec.containers + object.spec.?initContainers.orValue([]) + object.spec.?ephemeralContainers.orValue([])",
+            "name": "allContainers"
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicyBinding",
+      "metadata": {
+        "name": "shirokuma-local-disallow-host-ports",
+        "labels": {
+          "app.kubernetes.io/part-of": "shirokuma",
+          "shirokuma.dev/scope": "local-experiment",
+          "shirokuma.dev/policy-owner": "native-baseline-v1"
+        },
+        "annotations": {
+          "shirokuma.dev/source": "policies/kyverno/baseline.yaml",
+          "shirokuma.dev/source-sha256": "2ab159a9870b5b1b6f7508b77dbf97ceb2a55d5bd80bb04db0f3ebbbe1a3b94e",
+          "shirokuma.dev/coverage": "pods-services-ingresses-no-controller-autogen"
+        }
+      },
+      "spec": {
+        "policyName": "shirokuma-local-disallow-host-ports",
+        "validationActions": [
+          "Deny"
+        ],
+        "matchResources": {
+          "namespaceSelector": {
+            "matchLabels": {
+              "kubernetes.io/metadata.name": "shirokuma-dev"
+            }
+          },
+          "matchPolicy": "Equivalent"
+        }
+      }
+    },
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicy",
+      "metadata": {
+        "name": "shirokuma-local-require-image-digest",
+        "labels": {
+          "app.kubernetes.io/part-of": "shirokuma",
+          "shirokuma.dev/scope": "local-experiment",
+          "shirokuma.dev/policy-owner": "native-baseline-v1"
+        },
+        "annotations": {
+          "shirokuma.dev/source": "policies/kyverno/baseline.yaml",
+          "shirokuma.dev/source-sha256": "2ab159a9870b5b1b6f7508b77dbf97ceb2a55d5bd80bb04db0f3ebbbe1a3b94e",
+          "shirokuma.dev/coverage": "pods-services-ingresses-no-controller-autogen"
+        }
+      },
+      "spec": {
+        "failurePolicy": "Fail",
+        "matchConstraints": {
+          "resourceRules": [
+            {
+              "apiGroups": [
+                ""
+              ],
+              "apiVersions": [
+                "v1"
+              ],
+              "operations": [
+                "CREATE",
+                "UPDATE"
+              ],
+              "resources": [
+                "pods",
+                "pods/ephemeralcontainers"
+              ],
+              "scope": "Namespaced"
+            }
+          ],
+          "namespaceSelector": {
+            "matchLabels": {
+              "kubernetes.io/metadata.name": "shirokuma-dev"
+            }
+          },
+          "matchPolicy": "Equivalent"
+        },
+        "validations": [
+          {
+            "expression": "variables.allContainers.all(container, container.image.matches('^[a-zA-Z0-9._-]+(:[0-9]+)?(/[a-zA-Z0-9._-]+)+@sha256:[0-9a-f]{64}$'))",
+            "message": "Images must use an exact untagged repository@sha256 digest."
+          }
+        ],
+        "variables": [
+          {
+            "expression": "object.spec.containers + object.spec.?initContainers.orValue([]) + object.spec.?ephemeralContainers.orValue([])",
+            "name": "allContainers"
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicyBinding",
+      "metadata": {
+        "name": "shirokuma-local-require-image-digest",
+        "labels": {
+          "app.kubernetes.io/part-of": "shirokuma",
+          "shirokuma.dev/scope": "local-experiment",
+          "shirokuma.dev/policy-owner": "native-baseline-v1"
+        },
+        "annotations": {
+          "shirokuma.dev/source": "policies/kyverno/baseline.yaml",
+          "shirokuma.dev/source-sha256": "2ab159a9870b5b1b6f7508b77dbf97ceb2a55d5bd80bb04db0f3ebbbe1a3b94e",
+          "shirokuma.dev/coverage": "pods-services-ingresses-no-controller-autogen"
+        }
+      },
+      "spec": {
+        "policyName": "shirokuma-local-require-image-digest",
+        "validationActions": [
+          "Deny"
+        ],
+        "matchResources": {
+          "namespaceSelector": {
+            "matchLabels": {
+              "kubernetes.io/metadata.name": "shirokuma-dev"
+            }
+          },
+          "matchPolicy": "Equivalent"
+        }
+      }
+    },
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicy",
+      "metadata": {
+        "name": "shirokuma-local-deny-public-service",
+        "labels": {
+          "app.kubernetes.io/part-of": "shirokuma",
+          "shirokuma.dev/scope": "local-experiment",
+          "shirokuma.dev/policy-owner": "native-baseline-v1"
+        },
+        "annotations": {
+          "shirokuma.dev/source": "policies/kyverno/baseline.yaml",
+          "shirokuma.dev/source-sha256": "2ab159a9870b5b1b6f7508b77dbf97ceb2a55d5bd80bb04db0f3ebbbe1a3b94e",
+          "shirokuma.dev/coverage": "pods-services-ingresses-no-controller-autogen",
+          "shirokuma.dev/source-policy": "deny-public-service",
+          "shirokuma.dev/native-adaptation": "split-service-ingress-types-preserving-source-predicates"
+        }
+      },
+      "spec": {
+        "failurePolicy": "Fail",
+        "matchConstraints": {
+          "resourceRules": [
+            {
+              "apiGroups": [
+                ""
+              ],
+              "apiVersions": [
+                "v1"
+              ],
+              "operations": [
+                "CREATE",
+                "UPDATE"
+              ],
+              "resources": [
+                "services"
+              ],
+              "scope": "Namespaced"
+            }
+          ],
+          "namespaceSelector": {
+            "matchLabels": {
+              "kubernetes.io/metadata.name": "shirokuma-dev"
+            }
+          },
+          "matchPolicy": "Equivalent"
+        },
+        "validations": [
+          {
+            "expression": "object.kind == 'Service' ? !['NodePort', 'LoadBalancer'].exists(type, object.spec.?type.orValue('ClusterIP') == type) && object.spec.?externalIPs.orValue([]).size() == 0 : object.kind != 'Ingress'",
+            "message": "NodePort, LoadBalancer, externalIPs, and Ingress exposure is forbidden by default."
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicyBinding",
+      "metadata": {
+        "name": "shirokuma-local-deny-public-service",
+        "labels": {
+          "app.kubernetes.io/part-of": "shirokuma",
+          "shirokuma.dev/scope": "local-experiment",
+          "shirokuma.dev/policy-owner": "native-baseline-v1"
+        },
+        "annotations": {
+          "shirokuma.dev/source": "policies/kyverno/baseline.yaml",
+          "shirokuma.dev/source-sha256": "2ab159a9870b5b1b6f7508b77dbf97ceb2a55d5bd80bb04db0f3ebbbe1a3b94e",
+          "shirokuma.dev/coverage": "pods-services-ingresses-no-controller-autogen",
+          "shirokuma.dev/source-policy": "deny-public-service",
+          "shirokuma.dev/native-adaptation": "split-service-ingress-types-preserving-source-predicates"
+        }
+      },
+      "spec": {
+        "policyName": "shirokuma-local-deny-public-service",
+        "validationActions": [
+          "Deny"
+        ],
+        "matchResources": {
+          "namespaceSelector": {
+            "matchLabels": {
+              "kubernetes.io/metadata.name": "shirokuma-dev"
+            }
+          },
+          "matchPolicy": "Equivalent"
+        }
+      }
+    },
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicy",
+      "metadata": {
+        "name": "shirokuma-local-deny-ingress",
+        "labels": {
+          "app.kubernetes.io/part-of": "shirokuma",
+          "shirokuma.dev/scope": "local-experiment",
+          "shirokuma.dev/policy-owner": "native-baseline-v1"
+        },
+        "annotations": {
+          "shirokuma.dev/source": "policies/kyverno/baseline.yaml",
+          "shirokuma.dev/source-sha256": "2ab159a9870b5b1b6f7508b77dbf97ceb2a55d5bd80bb04db0f3ebbbe1a3b94e",
+          "shirokuma.dev/coverage": "pods-services-ingresses-no-controller-autogen",
+          "shirokuma.dev/source-policy": "deny-public-service",
+          "shirokuma.dev/native-adaptation": "split-service-ingress-types-preserving-source-predicates"
+        }
+      },
+      "spec": {
+        "failurePolicy": "Fail",
+        "matchConstraints": {
+          "resourceRules": [
+            {
+              "apiGroups": [
+                "networking.k8s.io"
+              ],
+              "apiVersions": [
+                "v1"
+              ],
+              "operations": [
+                "CREATE",
+                "UPDATE"
+              ],
+              "resources": [
+                "ingresses"
+              ],
+              "scope": "Namespaced"
+            }
+          ],
+          "namespaceSelector": {
+            "matchLabels": {
+              "kubernetes.io/metadata.name": "shirokuma-dev"
+            }
+          },
+          "matchPolicy": "Equivalent"
+        },
+        "validations": [
+          {
+            "expression": "object.kind != 'Ingress'",
+            "message": "NodePort, LoadBalancer, externalIPs, and Ingress exposure is forbidden by default."
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "admissionregistration.k8s.io/v1",
+      "kind": "ValidatingAdmissionPolicyBinding",
+      "metadata": {
+        "name": "shirokuma-local-deny-ingress",
+        "labels": {
+          "app.kubernetes.io/part-of": "shirokuma",
+          "shirokuma.dev/scope": "local-experiment",
+          "shirokuma.dev/policy-owner": "native-baseline-v1"
+        },
+        "annotations": {
+          "shirokuma.dev/source": "policies/kyverno/baseline.yaml",
+          "shirokuma.dev/source-sha256": "2ab159a9870b5b1b6f7508b77dbf97ceb2a55d5bd80bb04db0f3ebbbe1a3b94e",
+          "shirokuma.dev/coverage": "pods-services-ingresses-no-controller-autogen",
+          "shirokuma.dev/source-policy": "deny-public-service",
+          "shirokuma.dev/native-adaptation": "split-service-ingress-types-preserving-source-predicates"
+        }
+      },
+      "spec": {
+        "policyName": "shirokuma-local-deny-ingress",
+        "validationActions": [
+          "Deny"
+        ],
+        "matchResources": {
+          "namespaceSelector": {
+            "matchLabels": {
+              "kubernetes.io/metadata.name": "shirokuma-dev"
+            }
+          },
+          "matchPolicy": "Equivalent"
+        }
+      }
+    }
+  ]
+}

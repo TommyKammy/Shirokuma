@@ -5,7 +5,7 @@ title: "WP-L2-AGENT-002 SRE Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.4"
+version: "0.5"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -116,3 +116,23 @@ restart前後一致を確認した。既存サービスを故障させたり修�
 14 drill testsを含む計259回帰/設計testsが成功。再実行は`rtk make local-sre-qwen-drill`。
 証跡・所有確認付きcleanup・未適用のlive admission境界は[Local Experiment Milestones](../061_Local_Experiment_Milestones.md)を参照。
 logs/metricsによる原因診断と既存サービスの自動修復は未達として保持する。
+
+## 2026-09-17 five runtime groups in Qwen evidence
+
+Qwen workflowの初期観測に`local_platform_status`を加え、doctor/Pods/Eventsと合わせ4源とした。
+5群のnot-readyをcomponentごとのcritical、unknownを警告として区別し、未観測は正常扱いしない。
+critical Podとcritical runtimeが同時にある場合は最大2回のreadで両方を必ず再観測する。
+Platformの差分はready/statusの変化だけを述べ、instance identityや復旧・原因は断定しない。
+
+実機4源のSREは成功し、5群readyと既存Podの過去restartを区別してPod再観測を選んだ。
+Qwen入力773・出力51 tokens、3.675秒、7監査event相関を確認した。
+`tmp/local-experiment/sre-llm/0c69d3ef5ebc401ca3d27bdb4bd98ea7/`の安全な保存射影から
+根拠・triage・比較・hashを再計算して一致した。8合成ケース×2回の16/16評価でも、
+同時Pod/runtime障害と観測不能を含む読み取り選択・16監査のreadbackが成功。
+評価証跡は`tmp/local-experiment/sre-evaluation/22615db4c5344a81a261a2086437113b/`。
+評価には実service停止や故障注入を含まない。SRE tests64件成功。
+
+Native admission適用後にも新規Failed Pod drillを再実行した。
+4初期観測＋Pod/Eventの2followups、8監査event相関が成功。入力854・出力146 tokens、4.930秒。
+作成UID `6f55c9f5-83e9-47a9-b69d-4bedfdadbb89`だけを削除し、既存6 Pod前後一致・残留0。
+証跡は`tmp/local-experiment/sre-drill/4a856109b32f408185aebe247508c1b2/`。
