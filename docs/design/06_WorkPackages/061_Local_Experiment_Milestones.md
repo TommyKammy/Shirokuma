@@ -5,18 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "1.9"
+version: "2.0"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：Qwen Data Engineer Bearの3変換を実Icebergで実行・再実行し、
-独立期待値・dbt tests・各4監査event相関・完了checkpointを確認した。
-日本語/英語6 golden要求×2回は12/12成功。意図的dbt失敗→retryも成功。
-保持fixture不変、生成8relation/当該runの実行中query残留0、5 runtime groups ready。
-全ローカル340 tests＋設計14 testsの計354件、設計69 documentsを検証。
+最新の到達点（2026-09-17）：Qwen Catalog CuratorがData Planの3変換分を履歴登録した。
+実APIで6table/6lineage、同一run no-op、各workflow5監査event・保存OTel相関を確認。
+既存fixture/team/service/schemaは不変。6合成case×2回は12/12成功。
+Data Engineerの3変換実行・再実行、全回帰404 tests、設計72 documentsを検証済み。
+次は全評価receiptのread-only集計と、Query Doctorの限定追加観測を実装する。
 Cloud APIは無効のままローカル開発を継続する。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
@@ -24,6 +24,24 @@ repositoryの設計66 documentsを検証した。今回更新した12 materializ
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: Qwen Catalog Curator
+
+[WP-L2-AGENT-004](L2/WP-L2-AGENT-004_Catalog_Curator_Bear.md)をlocal-partialとして実装。
+固定Data Planのproject/SQL/hash・dbt結果/依存・Dagster保存DB・cleanupを照合し、
+Qwenは不足6項目と固定evidence IDsだけを選ぶ。Hostが履歴説明と既存experiment ownerを生成する。
+新規6table/6lineageを実OpenMetadataで読戻し、全3caseの再適用は0writes。
+name_lengthsのworkflow全体再実行ではQwenもnoopと判断し、table ID不変・0writesだった。
+
+4workflowで計20監査eventと保存OTelを照合。推論は314/96 tokens・2.978秒、
+再実行296/42・1.590秒、他2caseは314/96・2.958秒と314/96・2.980秒。
+6合成case×2は12/12（3682/862 tokens、28.491秒、12監査読戻し）。
+03:59 UTCの独立検証で事前のfixture/team/service/schema API結果が完全一致した。
+`tmp/local-experiment/catalog-preflight/a17284a0e35441e09ac690855ace15bf/`に保持。
+実行UUID・backup・再実行方法はWP参照。Catalog50 tests、全回帰404 tests、設計72 documents。
+
+LineageはManual sourceで、削除済みSQL relationの履歴である。一般的な説明/owner推定、
+任意entity更新、本番受入は対象外。API部分失敗はsafe journalへ残し、rollback成功と誤認しない。
 
 ## 2026-09-17: Qwen Data Engineer Bear
 

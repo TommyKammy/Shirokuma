@@ -476,3 +476,15 @@ test-local-data-bear: local-llm-sync
 	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_data_*.py'
 
 verify-local-experiment: test-local-data-bear
+
+.PHONY: local-catalog-bear-smoke local-catalog-bear-eval test-local-catalog-bear
+local-catalog-bear-smoke: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/bears/run_catalog.py --data-plan-token "$(CATALOG_DATA_PLAN_TOKEN)"
+
+local-catalog-bear-eval: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/bears/evaluate_catalog.py
+
+test-local-catalog-bear: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_catalog_*.py'
+
+verify-local-experiment: test-local-catalog-bear

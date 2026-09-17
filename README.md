@@ -80,6 +80,8 @@ does not install Kyverno or attest image signatures/vulnerabilities.
 The [Data Engineer Bear](tools/local_experiment/bears/DATA_ENGINEER.md) converts
 small requests into a validated plan, generates fixed dbt templates, and checks
 disposable Iceberg results against an independent oracle before scoped cleanup.
+The [Catalog Curator Bear](tools/local_experiment/bears/CATALOG_CURATOR.md) records
+verified Data Engineer runs as historical metadata with fixed owners and lineage.
 Superset is available at [the local dashboard](http://127.0.0.1:18088/superset/dashboard/shirokuma-local-lakehouse/),
 and OpenMetadata at [the local catalog](http://127.0.0.1:18585).
 Generated credentials stay in private ignored state; see the component runbooks

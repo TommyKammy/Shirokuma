@@ -70,6 +70,9 @@
     {"source": "06_WorkPackages/L2/WP-L2-AGENT-002_SRE_Bear.md", "target": "docs/design/06_WorkPackages/L2/WP-L2-AGENT-002_SRE_Bear.md"},
     {"source": "06_WorkPackages/L0/WP-L0-POL-001_OPA_Kyverno_baseline_policies.md", "target": "docs/design/06_WorkPackages/L0/WP-L0-POL-001_OPA_Kyverno_baseline_policies.md"},
     {"source": "07_ADR/ADR-0035_Use_native_admission_baseline_for_local_experiments.md", "target": "docs/design/07_ADR/ADR-0035_Use_native_admission_baseline_for_local_experiments.md"},
-    {"source": "06_WorkPackages/L2/WP-L2-AGENT-003_Data_Engineer_Bear.md", "target": "docs/design/06_WorkPackages/L2/WP-L2-AGENT-003_Data_Engineer_Bear.md"}
+    {"source": "06_WorkPackages/L2/WP-L2-AGENT-003_Data_Engineer_Bear.md", "target": "docs/design/06_WorkPackages/L2/WP-L2-AGENT-003_Data_Engineer_Bear.md"},
+    {"source": "06_WorkPackages/L2/WP-L2-AGENT-004_Catalog_Curator_Bear.md", "target": "docs/design/06_WorkPackages/L2/WP-L2-AGENT-004_Catalog_Curator_Bear.md"},
+    {"source": "06_WorkPackages/L2/WP-L2-EVAL-001_Agent_evaluation_harness.md", "target": "docs/design/06_WorkPackages/L2/WP-L2-EVAL-001_Agent_evaluation_harness.md"},
+    {"source": "06_WorkPackages/L2/WP-L2-AGENT-005_Query_Doctor_Bear.md", "target": "docs/design/06_WorkPackages/L2/WP-L2-AGENT-005_Query_Doctor_Bear.md"}
   ]
 }
