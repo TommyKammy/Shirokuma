@@ -5,7 +5,7 @@ title: "WP-L2-AGENT-004 Catalog Curator Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.4"
+version: "0.5"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -125,3 +125,25 @@ source検証はData Planのmaterialization成果物が境界で、別directory�
 部分API失敗時はwrite前pending、確認済みID、成否未確定のsafe private journalを保持する。
 複数APIは単一transactionではなく、失敗時rollbackや外部同時編集との原子的分離は保証しない。
 再実行方法は[Catalog Curator runbook](../../../../tools/local_experiment/bears/CATALOG_CURATOR.md)。
+
+## 2026-09-17: observed gaps completed with Catalog Curator
+
+初回reportでmissingだったData Plans `396f97befadd41b3af49bf4db9be4b1c` と
+`eb8902c0a4e54c8591dcbfee02550927` に既存Curatorを適用し、historical4table/4edgesだけ追加した。
+Catalog runs `48c698b868ad4b18bc69c5c3bebc65de` / `1bfb893944c04f98a463484e7386affb` は成功。
+各初回は2table/2edgeの4writes、再適用は0writes。同一taskの実Qwen推論は各314入力/96出力tokens、
+4106ms / 2950ms。cloud/retry0、cost NULL、2run合計628入力/192出力tokens。
+traceは`a5898cccc00b61dd68f7d5a00fecca87` / `8ec47c336227cc55a056a130a960bd5f`。
+
+補完後のread-only report `ea83feab78db4e2189d8adab339af346`（09:16:39 UTC）は5run・10/10edges、
+missing/conflict/unknown0、observation/coverageともcomplete。元の60%reportは変更せず保持した。
+独立監査 `catalog-completion-audit/fdcf070415da47f082d8e0e5a39521dc/verification.json` の84checksと
+metadata比較45checksが成功。既存6tables/6edges/anchorsは不変、新4tables/4edgesだけを帰属させた。
+旧Pawprints366行のhash不変＋新10行（現376）、Loki10件/保存実OTel10spansの相関・usageを照合。
+保持Kube/3Docker、履歴4tables/5DDL不変。934保護files中933は完全不変、既存認証入口の
+admin-initialized markerだけmtime更新（content/mode/.env不変）を既知差として記録した。
+reportの全10edge verdictとmetadata aggregate hashも独立APIから再計算済み。
+
+本増分は既存実装を使う実験結果の更新で、直前の全949tests/設計80documents/14testsを継承する。
+次はData→Catalogの一連実行と中断再開を専用の小さな入口へまとめる。Data開始intentと保存先を
+先に固定し、同handoffでDataを二度呼ばず、成功証跡を検証できた場合だけ同Data PlanをCatalogへ渡す。

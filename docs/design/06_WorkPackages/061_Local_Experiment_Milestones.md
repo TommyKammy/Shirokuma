@@ -5,22 +5,33 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "3.5"
+version: "3.6"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：既存Data Plan履歴のlineage充足をread-only reportで可視化。
-5検証済みrunの期待10edgesを照合し、登録6・未登録4・競合0・不明0を実機で確認した。
-観測完了と登録率60%を分けて表示し、元証跡とOpenMetadataの保持entityが不変であることを検証。
+最新の到達点（2026-09-17）：lineage reportで検出した不足4edgesを既存Curatorで補完。
+検証済み5runの登録は6/10から10/10へ変化し、既存entity保持と再適用0writesを確認した。
+2回の実Qwen推論と各5監査eventを相関照合済み。次はData→Catalogの一連実行と中断再開へ。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
 Obsidian sourceと一致する。`local-platform-status`の5 component groupsはすべてready。
 Pawprintをprivate JSONEachRowへexportし、OpenMetadataの追加backupも保存した。
 Cloud APIは未実行。provider/model・認証環境変数名・追加予算は外部利用時の別判断として保持する。
+
+## 2026-09-17: verified lineage gaps completed
+
+Catalog runs `48c698b868ad4b18bc69c5c3bebc65de` / `1bfb893944c04f98a463484e7386affb` で
+未登録2 Data Plansにhistorical4tables/4edgesを追加。各4writes後のrepeatは0writes。
+Qwen各314/96tokens、4106/2950ms、cloud/retry0・cost NULL。新coverage
+`ea83feab78db4e2189d8adab339af346` は5run・10/10edges（09:16:39 UTC）。旧60%reportを保持。
+独立audit `catalog-completion-audit/fdcf070415da47f082d8e0e5a39521dc` の84checks/metadata45checks成功。
+旧6tables/6edges/anchors、Pawprints366全hash、Kube/3Docker/history4/5DDLを保全し、現Pawprints376。
+新AH/Loki/実OTel各10件を相関照合、933files完全不変・認証markerのmtimeのみ既知差。
+直前全949tests/80documentsを継承。次は同handoffでDataを二度生成しないdurableな連携入口。
 
 ## 2026-09-17: read-only historical lineage coverage
 
