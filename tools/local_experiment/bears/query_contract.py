@@ -173,7 +173,12 @@ def history_summary(value: dict, captured: dict) -> dict:
         if state not in {'FINISHED', 'FAILED'} and any(item is not None for item in duration_fields):
             raise ContractError('nonterminal query cannot claim terminal durations')
         for begin, recorded in zip(dates[:2], duration_fields):
-            expected = int((dates[2] - begin).total_seconds() * 1000) if begin is not None and dates[2] is not None and state in {'FINISHED', 'FAILED'} else None
+            expected = None
+            if begin is not None and dates[2] is not None and state in {'FINISHED', 'FAILED'}:
+                delta = dates[2] - begin
+                # Match the observer's integer millisecond projection exactly;
+                # float total_seconds() can turn 1011 ms into 1010.999... ms.
+                expected = delta.days * 86400000 + delta.seconds * 1000 + delta.microseconds // 1000
             if recorded != expected:
                 raise ContractError('query duration does not match its retained timestamps')
         durations.extend(duration_fields)

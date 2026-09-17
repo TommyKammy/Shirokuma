@@ -5,7 +5,7 @@ title: "shirokuma CLI"
 status: draft
 created: 2026-07-05
 updated: 2026-09-17
-version: "0.3.0"
+version: "0.4.0"
 area: "module"
 tags: [shirokuma, module]
 ---
@@ -19,7 +19,7 @@ tags: [shirokuma, module]
 ## Commands
 
 ```text
-init, status, status --export, doctor, plan, pr, ask, data, warehouse, lineage, paws, chill, wake, nuke, restore, bench, version
+init, status, status --export, doctor, plan, pr, ask, data, query, warehouse, lineage, paws, chill, wake, nuke, restore, bench, version
 ```
 
 ## Implementation
@@ -88,3 +88,17 @@ shirokuma warehouse scale analyst-m --size L --as-pr
 shirokuma nuke --yes-i-know-this-deletes-colima
 shirokuma restore --profile demo
 ```
+
+### Local experimental Query Doctor
+
+`shirokuma query run --case retained-fixture`は、保持2行fixtureの固定SELECTと
+同一SQLのJSON EXPLAIN、自身のquery historyを観測し、local Qwenの選択に従って
+固定statistics/historyだけを追加確認する。`query status TOKEN`は保存証跡のみを読む。
+任意SQL・設定変更・自動再実行・resumeは受け付けない。
+
+JSONLの`evidence_token`は保存先、`query_run_token`は内部query identityである。
+allocationは実行開始の証明ではなく、結果とchild exitの整合を確認後にfinalを返す。
+取消時はownerのcleanupを待ち、不明ならtoken/PIDを残す。原SQLやpromptは出力しない。
+`status`のexit0は読取成功であり、診断のpassedや最新runtimeの確認とは区別する。
+旧証跡のstatusは保存内容の検証で、過去に存在しなかったhash sealを作らない。
+詳細は[Query Doctor runbook](../../../tools/local_experiment/bears/QUERY_DOCTOR.md)を参照。

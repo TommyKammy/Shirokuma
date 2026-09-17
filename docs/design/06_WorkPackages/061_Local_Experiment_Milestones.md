@@ -5,17 +5,17 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-17
-version: "3.16"
+version: "3.17"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-17）：SparkでIceberg branchだけへ書き込み、main/tag不変と
-兄弟snapshotをSpark/Trinoで照合した。一時資源・同UUID tableを回収済み。
-全local回帰1525件（1524成功/既存1skip）が通過した。
-次は既存Query Doctorの製品CLI run/statusを実装する。
+最新の到達点（2026-09-17）：Query Doctorを製品CLIへ接続し、実Qwenでの固定診断と
+保存statusの読取を確認した。durationのfloat丸めによる偽rejectも修正した。
+全local回帰1554件（1553成功/既存1skip）、Go114件とvet/raceが通過した。
+次は既存4観測源のSRE Bearを製品CLI run/statusへ接続する。
 
 前回確認（2026-09-16 09:55 UTC）：ローカル回帰157件と設計関連14件が成功し、
 repositoryの設計66 documentsを検証した。今回更新した12 materialized documentsは
@@ -1297,3 +1297,56 @@ Docker3/images553、旧3179files、停止時backup22files/34dirsが不変と確�
 19UID回収、同tableのSpark/Trino出力・snapshot int64・file metadataを独立照合した。
 削除後tableの再読取やobject全byte hashは主張しない。監査側のshape仮定2点の修正前receiptも保持。
 design83docs/14tests・secret scan・diff checkが成功し、関連WP/MilestonesをVaultへ同期した。
+
+## 2026-09-17: Query Doctor product CLI
+
+`shirokuma query run --case retained-fixture`と`query status TOKEN`を追加した。
+既存Qwen・固定2SELECT/同SQLのEXPLAIN/自身のhistory・最大2種のfollowupを使う。
+GoはDataの既存owner取消transportを変更せず再利用し、厳密なJSONLとchild exitを照合する。
+early allocationは永続intentや実行開始とは別で、出力はallowlistされた固定summaryのみ。
+取消はownerへのSIGINTと最大240秒のcleanup待機、未確定はtoken/PID付きunknownとする。
+SIGKILL・自動replay・resume・任意SQL入口は追加していない。
+
+Pythonは`query-cli/<token>`へ一度だけのinvoke intent/lock/hash seal、
+`query-bear/<token>`へ既存workflowの証跡を分けた。directoryのevidence_tokenと
+内部query/user tokenは別のまま保持する。statusはrunner/modelをimportせず保存内容を読む。
+旧成功証跡も検証できるが、新hash sealやfresh runtime観測へ読み替えない。
+initial failed receiptはclosed root span・observer・保存内容が揃うまでterminal failureにしない。
+graph auditやobserver保存の二次失敗が元の取消を置換する経路も修正し、実body fakeで回帰した。
+
+実CLI成功は `query-bear/20e5c3b825be6c74e58b0ce8ab88a361/`、
+内部tokenは `9de355caddb74fd299fd7b7711acdb3c`、traceは `0bd4e45890d24dc76376cade8399ab7b`。
+Qwenを1回呼び、入力491/出力36tokens、2682ms、cost NULL・cloud0・retry0。
+不足estimateのf01に対してfixture_statsだけを選択した。row estimate2、column stats未知6件を保持し、
+root_cause=undetermined、performance_gain=unmeasuredとした。6requestsはすべてFINISHEDで
+response_complete、cleanup_verified=true。AgentHouse/Lokiの4監査eventと保存OTel4spanが相関した。
+
+初回 `b0ca236012e18f8c4a1728a5022e22f4` はモデル前observeで失敗し、失敗のまま保全した。
+固定5queryは完了済みで、observe/assessの失敗監査2件・model0。CLIはexit1、
+保存statusはexit0で診断failedを維持し、状態読取成功と診断成功を混同しなかった。
+元4query IDと専用userに限定したhistory1回で、実started_to_end=1011msに対し
+検証側のfloat式が1010msへ丸める原因を確定した。SELECT/EXPLAINを再送せず、
+新規固定観測5readsと限定history1readだけで調査し、どちらもmodel0・tunnel終了。
+query_contractのdurationをobserverと同じ整数演算へ修正し、1001/1003/1011ms、subms端数、
+日跨ぎ・改ざん拒否を回帰した。元保存historyの全8durationも修正版で一致した。
+診断は `query-cli-diagnostics/e50551a64ae94f33b7afa906e8bb59fb/`へ保存した。
+
+旧成功・今回失敗・今回成功を各3回、計9回status照会した。対象27files/directoriesの
+hash/mode/mtimeは不変。model/API/write0は隔離statusテストと固定codepathで確認した。
+新Python29tests、Query Go16testsを追加し、全Go114件とvet/raceが成功。
+全local回帰47suites/1554件（1553成功・既存optional OTel1skip）が成功した。
+実行・build/source hash・status比較・全logは
+`tmp/local-experiment/query-cli-checks/c88902c4e4b844c3bc2e7d38845fc0c2/`、独立監査は
+`query-cli-preflight/831f61fbef894f3b8854e4aadd038798/`へ保存した。
+
+2行fixtureの観測と製品入口までのlocal-partialであり、一般SQLの根本原因・性能改善・
+本番受入を主張しない。次は既存4観測源のSRE Bearを製品CLI run/statusへ接続する。
+
+独立監査 `query-cli-preflight/831f61fbef894f3b8854e4aadd038798/independent-verification.json`
+は78checks成功。AH440→446の増分は失敗2＋成功4だけで、旧440件は不変。
+Loki2＋4、保存span2＋4、実Qwen1回、固定6requests、整数duration8値、未知stats6を照合した。
+保持旧3288files、Kube14Pods/27resources/6CM/3SecretUID、Docker3/images553、
+history/fixture全履歴、Metadata35endpoints/7plans14tables14edges、MLflow59tables/
+15runs1210points15artifactsとbackupが不変だった。初回seal10filesと診断原証跡も保持した。
+監査tunnel終了、design83docs/14tests・secret scan・diff check成功。
+Query WP/MilestonesはVaultと一致し、MOD-051の既存言語差は維持して追記だけを揃えた。

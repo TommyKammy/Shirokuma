@@ -772,3 +772,9 @@ local-spark-branch:
 test-local-spark-branch:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_spark_branch*.py'
 # verify-local-experiment includes these through test-local-spark.
+
+.PHONY: test-query-doctor-cli
+test-query-doctor-cli: local-llm-sync
+	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -v -s tests -p 'test_query_cli.py'
+
+verify-local-experiment: test-query-doctor-cli

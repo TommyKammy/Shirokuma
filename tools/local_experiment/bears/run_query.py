@@ -32,6 +32,17 @@ class QueryError(RuntimeError):
     pass
 
 
+def preserve_interruption(call, *args, **kwargs):
+    """Secondary audit/receipt failures must not replace a signal being unwound."""
+    original = sys.exc_info()[1]
+    try:
+        return call(*args, **kwargs)
+    except BaseException:
+        if original is not None and not isinstance(original, Exception):
+            raise original
+        raise
+
+
 class State(TypedDict, total=False):
     observation: dict
     evidence: dict
@@ -54,7 +65,7 @@ def build_graph(model, observe, followup, audit, tracer):
                 evidence = project_observation(observed)
             except BaseException as error:
                 span.set_status(Status(StatusCode.ERROR, 'OBSERVATION_FAILED'))
-                audit('bear.query.observe', 'failed', unknown_metrics(int((time.monotonic() - started) * 1000)), span)
+                preserve_interruption(audit, 'bear.query.observe', 'failed', unknown_metrics(int((time.monotonic() - started) * 1000)), span)
                 if not isinstance(error, Exception):
                     raise
                 raise QueryError('fixed query observation failed') from None
@@ -71,7 +82,7 @@ def build_graph(model, observe, followup, audit, tracer):
                 metrics = safe_metrics(error.metrics if isinstance(error, ProviderError) else {},
                                        int((time.monotonic() - started) * 1000))
                 span.set_status(Status(StatusCode.ERROR, 'MODEL_RESPONSE_FAILED'))
-                audit('llm.query_plan', 'failed', metrics, span, inference=True)
+                preserve_interruption(audit, 'llm.query_plan', 'failed', metrics, span, inference=True)
                 if not isinstance(error, Exception):
                     raise
                 raise QueryError('query model response failed') from None
@@ -99,7 +110,7 @@ def build_graph(model, observe, followup, audit, tracer):
                     followup_summary(state['observation'], tool, observed)
                 except BaseException as error:
                     span.set_status(Status(StatusCode.ERROR, 'FOLLOWUP_FAILED'))
-                    audit(action, 'failed', unknown_metrics(int((time.monotonic() - started) * 1000)), span)
+                    preserve_interruption(audit, action, 'failed', unknown_metrics(int((time.monotonic() - started) * 1000)), span)
                     if not isinstance(error, Exception):
                         raise
                     raise QueryError('fixed query follow-up failed') from None
@@ -195,7 +206,7 @@ async def run(config: dict, output: Path) -> dict:
                         private_write(output / 'model-evidence.json', evidence)
                         return value
                     finally:
-                        save_receipt()
+                        preserve_interruption(save_receipt)
 
                 async def followup(tool):
                     try:
@@ -203,7 +214,7 @@ async def run(config: dict, output: Path) -> dict:
                         private_write(output / (tool + '.json'), value)
                         return value
                     finally:
-                        save_receipt()
+                        preserve_interruption(save_receipt)
 
                 try:
                     graph = build_graph(model, observe, followup, audit, tracer)
@@ -215,7 +226,7 @@ async def run(config: dict, output: Path) -> dict:
                     result.update(plan=state['plan'], inference=state['inference'], assessment=state['assessment'])
                     private_write(output / 'plan.json', state['plan'])
                 finally:
-                    receipt = save_receipt()
+                    receipt = preserve_interruption(save_receipt)
                 if (receipt.get('run_token') != token or receipt.get('cleanup_verified') is not True
                         or receipt.get('target_history_verified') is not True or receipt.get('outcome') != 'completed'):
                     raise QueryError('query completion was not verified; inspect the observer receipt')
@@ -234,12 +245,18 @@ async def run(config: dict, output: Path) -> dict:
             root_span.set_status(Status(StatusCode.ERROR, result['error_code']))
             if not any(row['action_type'] == 'bear.query.assess' for row in records):
                 try:
-                    audit('bear.query.assess', 'failed', unknown_metrics(int((time.monotonic() - started) * 1000)), root_span)
+                    preserve_interruption(audit, 'bear.query.assess', 'failed', unknown_metrics(int((time.monotonic() - started) * 1000)), root_span)
                 except Exception:
                     pass
-            private_write(output / 'result.json', result)
             if not isinstance(error, Exception):
-                raise
+                result['result'] = 'interrupted'
+                # A secondary receipt write failure must not replace the original
+                # cancellation signal. The closed ERROR span remains evidence.
+                try:
+                    private_write(output / 'result.json', result)
+                finally:
+                    raise error
+            private_write(output / 'result.json', result)
     if result['result'] == 'passed':
         try:
             verify_saved_spans(output / 'spans.jsonl', records, trace_id)
