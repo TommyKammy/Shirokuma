@@ -805,3 +805,8 @@ test-policy-candidate-cli: local-llm-sync
 	@tools/local_experiment/llm/.venv/bin/python -m unittest discover -s tests -p 'test_policy_cli.py'
 
 verify-local-experiment: test-policy-candidate-cli
+
+.PHONY: test-local-query-read
+test-local-query-read:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_query_read_*.py'
+verify-local-experiment: test-local-query-read

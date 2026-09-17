@@ -20,8 +20,9 @@ const dataCleanupGrace = 240 * time.Second
 var errDataInterrupted = errors.New("data invocation interrupted; completion requires saved evidence")
 
 type execDataChild struct {
-	command func(dataChildRequest) (*exec.Cmd, error) // offline subprocess tests only
-	grace   time.Duration
+	command       func(dataChildRequest) (*exec.Cmd, error) // offline subprocess tests only
+	grace         time.Duration
+	responseLimit int // fixed by the owning command; zero retains Data's bound
 }
 
 func dataCommand(request dataChildRequest) (*exec.Cmd, error) {
@@ -93,8 +94,12 @@ func (runner execDataChild) Run(ctx context.Context, request dataChildRequest, e
 		}
 	}
 	go func() {
+		limit := runner.responseLimit
+		if limit <= 0 {
+			limit = dataResponseLimit
+		}
 		scanner := bufio.NewScanner(stdout)
-		scanner.Buffer(make([]byte, 1024), dataResponseLimit+1)
+		scanner.Buffer(make([]byte, 1024), limit+1)
 		for scanner.Scan() {
 			if !send(dataChildMessage{line: append([]byte(nil), scanner.Bytes()...)}) {
 				break

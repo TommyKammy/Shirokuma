@@ -5,17 +5,31 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.21"
+version: "3.22"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-18）：Policy CLIの実Qwen/native dry-runとWarehouseのquery起動を検証した。
-続いて新規Iceberg tableのbranchをmainへ条件付きで反映し、mainが分岐した場合の送信前拒否も確認。
-全local回帰1776件（1775成功/既存1skip）が通過した。
-次は現存table・列を選び、snapshotを固定して少量の行を取得する読み取りCLIへ進む。
+最新の到達点（2026-09-18）：Lakehouseのtable一覧・schema確認・snapshot固定の行取得を
+製品CLIから実行できる。保持tableと別の実験tableで精度保持と件数制限を確認し、実験tableを回収した。
+全local回帰1871件（1870成功/既存1skip）が通過した。
+次は実際に取得したqueryの保存証拠を、元SELECTを再送せずQuery Doctorへ接続する。
+
+## 2026-09-18: Lakehouse reader CLI
+
+`query tables`、`query describe`、`query select`を追加した。
+発見済みtable/列だけを固定snapshotから最大100行読み、整数・decimal・snapshot IDの精度を保持する。
+結果公開前にUUID/schema/head、query終了、接続回収とchild exitを確認する。既定receiptに行値は保存しない。
+
+実10実行で2schemaの一覧、2tableのdescribe/select/limit1、未発見table/列拒否が成功。
+不正な式は実行前に拒否した。新規専用tableでBIGINT境界・38桁decimal・日本語・NULL・date・boolを照合し、
+同UUIDをDROP後、保持fixture全履歴/refsとtable一覧が復元した。LLM・新image/serviceは0。
+新Python95tests、Go/実Python結合、全1871件が成功し、source/binary41filesは不変。
+独立監査122checksで3590旧files・14Pods/27resources/3Docker・既存policyと接続回収を確認した。
+private検証の型想定integer→bigint訂正は保存結果だけで行い、元の失敗記録を保持した。
+詳細とrun IDsは[WP-L2-AGENT-005](L2/WP-L2-AGENT-005_Query_Doctor_Bear.md)を参照。
 
 ## 2026-09-18: Iceberg branch publication and divergence refusal
 

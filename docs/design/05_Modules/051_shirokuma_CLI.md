@@ -5,12 +5,26 @@ title: "shirokuma CLI"
 status: draft
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.7.0"
+version: "0.8.0"
 area: "module"
 tags: [shirokuma, module]
 ---
 
 # shirokuma CLI
+
+### Local experimental Lakehouse reads
+
+`query tables --schema smoke|local_experiment`で一覧を確認し、
+`query describe --table schema.name`で型とsnapshotを確認できる。
+`query select --table schema.name --columns id,name --limit 1..100`は
+発見済み列だけを観測snapshotへ固定して読む。これらはLLMを呼ばない。
+
+整数・decimal・snapshot IDはJSONの文字列で精度を保持する。
+limit+1行で省略を検出し、orderingは未指定と明示する。行は明示的なselect応答だけに含め、
+既定receiptには保存しない。結果公開前にschema/metadataの再照合、所有queryの終了、
+接続回収とchild exitを確認する。不正な式は実行前、未発見table/列は発見query後に拒否する。
+任意SQL・filter/join・書込み・tenant認可は追加しない。
+[Reader runbook](../../../tools/local_experiment/query_read/README.md)を参照。
 
 ## Goal
 

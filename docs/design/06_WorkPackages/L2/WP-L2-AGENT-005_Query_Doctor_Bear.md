@@ -4,8 +4,8 @@ doc_id: "WP-L2-AGENT-005"
 title: "WP-L2-AGENT-005 Query Doctor Bear"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-17
-version: "0.5"
+updated: 2026-09-18
+version: "0.7"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -15,6 +15,64 @@ tags: [shirokuma, workpackage, l2, agentops]
 ## Summary
 
 EXPLAINとquery historyから改善案を出す
+
+## 2026-09-18: bounded Lakehouse browsing plan
+
+診断の前提となる実table・schema・行を利用者が確認できる入口を追加する。
+`query tables --schema smoke|local_experiment`、`query describe --table schema.name`、
+`query select --table schema.name --columns id,name --limit 1..100`を固定local profileへ接続する。
+既存のQwenを使う`query run/status`は維持し、新しいread commands自体はmodelを呼ばない。
+
+- [x] fresh inventoryで確認したIceberg tableと列だけから、hostが引用済SQLを組み立てる。
+- [x] PolarisのUUID/schema/current snapshotとTrino schemaを照合し、SELECTを観測snapshotへ固定する。
+- [x] 最大100行・型付き値を明示要求への応答として返す。整数/decimal/snapshot IDの精度を保持する。
+- [x] limit+1の取得でtruncatedを区別し、ページ・byte・時間・列数にも上限を設ける。
+- [x] 原SQL/行値を既定receiptへ保存せず、型・件数・hash・query identity・終了証拠を記録する。
+- [x] 未発見table/列、式・任意SQL・複合型・schema/head変更・不明終了を成功として扱わない。
+- [x] 取消・切断時にPOSTを再送せず、所有queryだけを終了確認し、保持fixture/環境不変を照合する。
+- [x] 保持fixtureと別の新規所有tableで同一コードを実証し、Go/純粋contract/transport/ownerを検証する。
+
+catalogはiceberg、schemaは上記2個に固定する。一般SQL、式、filter/join、書込み、認可一般化、
+新service/package/model設定、保持tableの変更は追加しない。存在しないtable/列の判定には
+発見用queryが必要であり、構文不正のPOST0と混同しない。orderingは未指定と明示する。
+
+## 2026-09-18: bounded Lakehouse reader evidence
+
+Go CLIから実Trino/Polarisへ接続し、2schemaの一覧、保持tableと別の所有tableの
+describe/select/limit1、未発見table/列の拒否を確認した。10実行はすべてquery終了・
+接続回収済み。不正な列式はchild起動・query・evidence割当の前に拒否した。
+保持`smoke.fixture_v1`のUUID/current snapshot/schema/2行は不変である。
+
+専用fixture `930449df6e38434185609d5c26063db4`では、BIGINTの2^53超と最小値、
+DECIMAL(38,6)の38桁、Unicode日本語、NULL、DATE、BOOLEANを厳密照合した。
+UUIDは`7694c343-4c25-4a2e-b8dc-16f336df5970`、snapshotは`2490578739455839616`。
+describe `7439b55d46088b6dd546b877926410b2`、select `79cd344264406716a517d833b5b3f7cf`、
+limit1 `237b37a4190258b517b3b8c671b9ece7`が成功。limit1は取得2/返却1/truncated=trueを返す。
+CREATE/INSERT各1回の新tableだけを同UUID確認後にDROP1回し、保持fixtureの6投影とtable一覧が復元した。
+prepare/cleanupのquery identityは別であり、旧terminal queryを新処理のqueryへ取り込まない。
+
+private検証scriptは初回保持selectのid型をintegerと誤想定したためfailedを残した。
+既存fixture契約と実metadataはbigintで一致しており、保存結果だけの7checksで訂正した。
+製品CLIは初回からexit0、元SELECTの再送・製品code修正は0である。
+実行記録と41source/binary sealは
+`tmp/local-experiment/query-read-checks/09e90ea75a6149a3a109d37b06e4ab79/`に保存した。
+通常receiptはrows/SQL/credentialsを含めず、この専用検証だけ明示stdoutをprivate fileへ保存した。
+
+新Python95tests（contract32/client36/owner27）、Goの実Python owner結合とscalar照合、
+全local回帰53suites/1871件（1870成功・既存optional OTel1skip）が成功した。
+取消中の二次保存失敗、終端保存失敗、source/schema/head変更、未知POST、型・サイズ上限は
+offline回帰で確認し、実機で故障注入したとは主張しない。独立review指摘はすべて修正済み。
+再現方法は[Reader runbook](../../../../tools/local_experiment/query_read/README.md)を参照。
+
+独立監査`query-read-preflight/5a085f17eb6e4a9d840d2d023f047dce/independent-verification.json`
+は122checks成功（fresh保持20＋保存相関102）。3590旧files、14Pods/27resources/3Docker、
+16policy、MLflow、NP/Serviceが不変。Readerのworker27/control10の37query IDsはすべて別で、
+8成功＋2発見後拒否、SQL hash、drain/cleanup、同UUIDのfixture回収を照合した。
+AH470やMetadata等のdeep確認は先行seal継承であり、この監査のfresh SQL/API確認ではない。
+設計83documents/14tests、secret scan、diff checkも成功した。
+
+一般SQL、filter/join、tenant認可、並行writer保証、性能改善、本番受入は未達としてlocal-partialを維持。
+次はこの成功selectの保存証拠から元SQLを再送せず、限定EXPLAIN/historyとQwen診断へ接続する。
 
 ## 2026-09-17: product CLI plan
 

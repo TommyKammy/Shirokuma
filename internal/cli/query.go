@@ -97,6 +97,9 @@ func newQueryCommand(child dataChildRunner) *cobra.Command {
 		}
 		parent.AddCommand(command)
 	}
+	for _, action := range []string{"tables", "describe", "select"} {
+		parent.AddCommand(newQueryReadCommand(action, execQueryReadChild{}, &repositoryRoot, &profile))
+	}
 	return parent
 }
 
