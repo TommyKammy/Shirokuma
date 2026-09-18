@@ -5,7 +5,7 @@ title: "WP-L4-NB-001 JupyterHub bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.3"
+version: "0.4"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, notebook]
 ---
@@ -16,8 +16,46 @@ tags: [shirokuma, workpackage, l4, notebook]
 
 Notebook環境を整備する。ADR-0034のlocal実験では、固定Notebookを専用Python kernelで実行し、
 既存ReaderとMLflow Trackingの読取へ接続する最小部分を先行した。実kernel2回と
-独立した保存証拠の62項目照合が成功した。
+独立した保存証拠の62項目照合が成功した。さらに別の登録templateへcurrent-head Readerの
+型付きrequestを渡し、選択tableのpreviewと従来無指定実行の互換を実kernelで確認した。
 JupyterHub、複数ユーザー、直接PySpark、学習・autologの完了は含めない。
+
+## 2026-09-18: selected-table Notebook preview — local acceptance complete
+
+`local-notebook-preview`はstdinのReader v1 requestを、別登録template
+`examples/local_table_preview.ipynb`へ渡す。exact4keysはcommand=select/table/columns/limit、
+4096B以下、許可schema smoke/local_experiment・1–16列・strict整数limit1–100とする。
+current headだけを読み、任意Notebook/code/SQL、snapshot指定、filterは受け付けない。
+既存無指定template/read_fixtureとNotebookAssetsの固定profileは維持する。
+private canonical request.jsonとSHAを保存し、Reader argv・所有PID・返却typedrowsを同じrequestへ束縛する。
+改変や未確認cleanupを成功へ補完せず、従来の取消grace/query drainを再利用する。
+
+custom `fa53c3cc80924087af29586b02cd339e`は18.009秒、Reader
+`a48a672833e70cdb5829c4860562c541`で新所有5列fixtureを読み、
+columns=[ok,id,amount,name,day]/limit2からreturned2/fetched3/truncated trueを確認した。
+その時点のtable UUIDは`96a4df79-78a0-4b85-a906-da654bf4200e`、
+headは`1152123351964077594`。要求SHAは
+`3fc19978f04ef6d92f02eea12dbfd71249dfd567cd869fff5ff26f5e7589b05e`。
+無指定互換 `53a2f8a2603a4453a6937d20fff2e550`は18.262秒、Reader
+`264e609249cf2d04e27ff4f3b2f86c39`で従来固定2行を保持した。
+各3code cells・MLflow評価12run表示/別benchmark4run除外、Reader/kernel cleanup true。
+新model/MLflow write0、今回の実Notebook失敗0。表示上限を全件数や一般性能保証とはしない。
+
+selection14＋parameterized15＋既存fake24の53focused testsが成功。
+全local68suites/2468tests（2467PASS・既存optional1skip、62.027秒）とsecret scanも成功した。
+使い捨てfixtureは同UUIDでDROP1回、35.587秒で回収し、retained10tables/6projectionsの復帰、
+pending null/cleanup trueを確認した。前後63sources/400保持files、MLflow16runs/1320points/16artifacts、
+AH519は一致。新2runは33files・20,424,079B（実割当20,516,864B）。
+private700配下で機密・rows・receiptは600、binary700、IPythonの公共startup/README複製だけ644を許容する。
+独立保存検証は451checks（51意味検査＋400保持file個別）/110inputsで成功。
+custom合法typedrows subsetと既定旧shape、各Reader4worker＋1drainの10distinct terminal Query IDs、
+Reader/kernel計4PIDの不在・connectionfile削除、同UUID回収・保持状態を照合した。fixture SQLは別枠。
+追加API0で、proof `independent-saved-verification.json` のSHA256は
+`6d5f6ec59ad6053e51dae078e27b0b43fd698bae9587c93744886edf55526a5c`。
+証拠は`tmp/local-experiment/notebook-selection-checks/59d9d0ca8ab741f4903ad9371fa05a88/`、
+after SHA256は`614b4438f38fb061d958088df80bb5a97f38766d7754885611204d997c384edf`。
+[Notebook runbook](../../../../tools/local_experiment/notebook/README.md)を参照。
+local-partialを維持し、Hub/複数ユーザー/直接PySpark/学習/autologの受入へ拡大しない。
 
 ## 2026-09-18: fixed local Notebook — local acceptance complete
 

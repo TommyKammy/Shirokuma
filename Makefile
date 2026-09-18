@@ -847,14 +847,21 @@ test-local-catalog-read:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_catalog_read_*.py'
 verify-local-experiment: test-local-catalog-read
 
-.PHONY: local-notebook-sync local-notebook-run test-local-notebook
+.PHONY: local-notebook-sync local-notebook-run local-notebook-preview test-local-notebook test-local-notebook-selection
 local-notebook-sync:
 	@uv sync --project tools/local_experiment/notebook --locked --no-build --cache-dir tmp/local-experiment/notebook-cache
 local-notebook-run:
 	@tools/local_experiment/notebook/.venv/bin/python tools/local_experiment/notebook/runner.py
+local-notebook-preview:
+	@tools/local_experiment/notebook/.venv/bin/python tools/local_experiment/notebook/runner.py --request-stdin
 test-local-notebook:
 	@tools/local_experiment/notebook/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_notebook*.py'
 verify-local-experiment: test-local-notebook
+
+test-local-notebook-selection:
+	@tools/local_experiment/notebook/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_selection.py'
+	@tools/local_experiment/notebook/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_parameterized.py'
+verify-local-experiment: test-local-notebook-selection
 
 .PHONY: local-notebook-assets-run test-local-notebook-assets
 local-notebook-assets-run: local-dataops-sync

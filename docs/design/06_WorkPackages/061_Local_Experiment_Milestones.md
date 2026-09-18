@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.38"
+version: "3.39"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
@@ -19,7 +19,29 @@ Trackingは既存runを保持して12評価＋4benchmark、1320 metric pointsと
 保持exportの非稼働MLflow clone復元とSDK全履歴読取2回も成功し、稼働中storeを保持した。
 current/historical snapshotと型付き等値条件の正確なCount読取4件も成功した。
 固定Catalog Readerの実2回で説明/owner/schema/one-hop lineageを読戻し、公開結果の同一性を確認した。
+登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-18: selected-table Notebook preview — local acceptance complete
+
+[NB-001](L4/WP-L4-NB-001_JupyterHub_bootstrap.md)のlocal-partialとして、
+stdinでReader v1 JSONを受ける`local-notebook-preview`を追加。
+exact command/table/columns/limitを4096B以内で受け、private canonical request/SHAから
+Reader argv・所有PID・返却typedrowsを束縛する。current head限定の別登録templateで、
+元の無指定Notebook/Assetsは維持し、任意Notebook/SQL/snapshot/filterは受け付けない。
+
+custom実行18.009秒は新所有5列fixtureの[ok,id,amount,name,day]/limit2から
+returned2/fetched3/truncated true、無指定互換18.262秒は従来固定2行でpassed。
+各3code cells・Reader/kernel cleanup true・MLflow評価12run表示/benchmark4run除外、
+新model/MLflow write0、今回の実Notebook失敗0。
+同UUID DROP1回でfixtureを回収し、retained10tables/6projectionsを復帰確認した。
+前後63sources/400保持files・MLflow16runs/1320points/16artifacts・AH519は一致。
+53focusedと全local68suites/2468tests（2467PASS・既存optional1skip、62.027秒）が成功した。
+独立保存451checks（51意味検査＋400保持file個別）/110inputsも成功。
+10 distinct terminal Reader query IDs・計4PID終了/connection削除・回収/保持状態を照合した。
+fixture SQLは別枠で、追加API0。一般Notebook実行/Hub/multi-user/PySpark/trainingの保証には広げない。
+証拠は`tmp/local-experiment/notebook-selection-checks/59d9d0ca8ab741f4903ad9371fa05a88/`。
+[Notebook runbook](../../../tools/local_experiment/notebook/README.md)を参照。
 
 ## 2026-09-18: fixed Catalog Reader — local acceptance complete
 

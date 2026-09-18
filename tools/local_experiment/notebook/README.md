@@ -1,17 +1,21 @@
 # Fixed local lakehouse Notebook
 
-Two explicit real-kernel executions and independent saved-evidence verification
-passed. This increment connects one fixed Notebook to the
-existing Reader CLI and local MLflow evaluation experiment. It is a local partial implementation of
+The original fixed profile passed two explicit real-kernel executions and
+independent saved-evidence verification. The runner connects registered Notebook
+templates to the existing Reader CLI and local MLflow evaluation experiment.
+The optional request profile below adds a bounded table preview. The dated
+verification sections distinguish the original fixed profile from the selected-table
+preview and its default compatibility run. This is a local partial implementation of
 [WP-L4-NB-001](../../../docs/design/06_WorkPackages/L4/WP-L4-NB-001_JupyterHub_bootstrap.md).
 
 The dedicated Python 3.12 environment pins nbclient 0.11.0, nbformat 5.11.1 and
 ipykernel 7.3.0 in `pyproject.toml` and `uv.lock`. It does not install a global
-kernelspec or start JupyterHub. The runner uses the repository template
-`examples/local_lakehouse.ipynb`; accepting arbitrary notebooks is outside this
-profile.
+kernelspec or start JupyterHub. Without input, the runner uses
+`examples/local_lakehouse.ipynb`. With `--request-stdin`, it uses the separately
+registered `examples/local_table_preview.ipynb`. Neither profile accepts a
+caller-provided Notebook path or code.
 
-## Fixed observations
+## Default observations
 
 The Notebook invokes the existing Go Reader once for
 `query select --table smoke.fixture_v1 --columns id,name --limit 10`. The Reader discovers
@@ -27,9 +31,43 @@ unknown values, including null cost. MLflow run times describe import activity,
 not the original inference timeline. This read performs no new inference,
 evaluation, MLflow logging, training, or autologging.
 
+## Preview a selected table
+
+Pass a Reader v1 request from this checkout:
+
+```sh
+rtk proxy printf '%s\n' '{"command":"select","table":"smoke.fixture_v1","columns":["name"],"limit":1}' | rtk make local-notebook-preview
+```
+
+`local-notebook-preview` passes stdin directly to the dedicated environment's
+`runner.py --request-stdin`; it does not run dependency sync. The dedicated
+selection tests are available through `rtk make test-local-notebook-selection`.
+
+Input is at most 4096 bytes and has exactly four fields: `command: "select"`,
+`table`, `columns` and `limit`. It reuses the [Reader's validation](../query_read/README.md):
+an existing table in `smoke` or `local_experiment`, 1–16 distinct scalar column
+names and an integer limit of 1–100. Table and column existence/type are checked
+by the Reader during discovery. No SQL, snapshot ID, filter, extra request keys
+or arbitrary endpoint is accepted. This profile reads the current head discovered
+by the Reader, with its usual before/after identity checks and truncation flag.
+
+The normalized request is saved as private canonical `request.json` with its
+SHA-256 before use. The selected registered template calls `read_requested_table`;
+the default template retains its fixed `read_fixture` wrapper. Reader argv,
+process ownership checks and the typed result must all match the same validated
+request. Changing the request or returning another table/column selection does
+not authorize a successful Notebook result.
+
+The custom preview still makes one Reader invocation, then reads the same MLflow
+evaluation experiment: 12 evaluation runs, excluding four benchmark runs. It
+does not change inference, logging, cost-null or import-time semantics. Existing
+no-argument execution and the fixed NotebookAssets profile remain unchanged.
+Rows appear in the explicit Notebook output and its private executed artifact;
+this is not a facility for executing arbitrary Notebook code.
+
 ## Execution and evidence
 
-The entry points are fixed and take no notebook, SQL or prompt input:
+The default entry points keep their existing no-argument behavior:
 
 ```sh
 rtk make local-notebook-sync
@@ -47,7 +85,7 @@ Notebook output, private kernel connection information, Reader logs and receipts
 stay under `tmp/local-experiment/notebook-runs/<token>/`. The output includes
 `executed.ipynb`, `result.json`, Reader stdout/intent/status and
 `evaluations.json`. They are not copied back into the template.
-The normal Notebook result may contain the fixed query's typed table rows;
+The Notebook result may contain the selected query's typed table rows;
 credentials, raw driver errors and connection secrets are not public output.
 
 Success requires the Reader receipt to prove its query drain and cleanup and the
@@ -60,6 +98,42 @@ owned process. If cleanup cannot be confirmed, it retains an unknown result,
 PID and evidence; it does not automatically retry, kill or rerun the operation.
 Only processes created by the run are eligible for cleanup. Existing MLflow
 services, stored runs, artifacts and backups remain in place.
+
+## 2026-09-18 selected-table preview verification
+
+The custom preview `fa53c3cc80924087af29586b02cd339e` passed in 18.009 seconds.
+It selected `[ok,id,amount,name,day]` with limit 2 from a newly owned five-column
+fixture. The Reader returned two typed rows, fetched three and reported
+`truncated: true`; the display limit is not the table row count. The private
+request SHA-256 was `3fc19978f04ef6d92f02eea12dbfd71249dfd567cd869fff5ff26f5e7589b05e`.
+The no-argument compatibility run `53a2f8a2603a4453a6937d20fff2e550`
+passed in 18.262 seconds and retained the original fixed two-row result.
+These are separate custom/default executions, not retry or performance evidence.
+
+Both runs executed three code cells, displayed the same 12 evaluation runs with
+four benchmark runs excluded, and confirmed Reader and kernel cleanup. There
+were no new model calls or MLflow writes and no failed actual Notebook attempt
+in this increment. Selection14, parameterized15 and existing fake24 tests passed;
+full local regression passed 68 suites / 2468 tests (2467 passed and one existing
+optional skip). The original fixed Notebook and NotebookAssets remain unchanged.
+
+The disposable fixture was dropped once with the same table UUID, with all ten
+retained tables and six retained projections restored. Before/after guards
+matched 63 sources, 400 retained files, MLflow's 16 runs / 1320 metric points /
+16 artifacts and AgentHouse's 519 rows. Independent saved verification passed
+451 checks (51 semantic checks plus 400 retained-file checks) across 110 inputs.
+It confirmed ten distinct terminal Reader query IDs, both kernels and Reader
+processes gone, connection files removed and fixture restoration. Fixture setup
+and cleanup SQL are separate from those ten Reader queries.
+Evidence is under
+`tmp/local-experiment/notebook-selection-checks/59d9d0ca8ab741f4903ad9371fa05a88/`.
+
+The two new Notebook run directories contain 33 files, 20,424,079 bytes
+(20,516,864 bytes allocated). Run directories are private mode 700; sensitive
+files, rows and receipts are mode 600 and owned binaries are mode 700. IPython's
+copied public startup/README files can be mode 644 under those private ancestors.
+This does not establish JupyterHub, multi-user isolation, arbitrary Notebook
+execution, PySpark, training/autolog or production acceptance.
 
 ## 2026-09-18 verification
 
@@ -122,8 +196,10 @@ Hub service to remove; deleting retained data is not a rollback step.
 ## Remaining work outside this increment
 
 JupyterHub, authentication and multi-user isolation, notebook editing/upload,
-direct Spark sessions, model training/autolog, Registry/Serving, restoring or
-migrating exports, and production acceptance remain unimplemented or unverified.
+direct Spark sessions, model training/autolog, Registry/Serving, activating a
+restored MLflow store, cross-host migration and production acceptance remain
+unimplemented or unverified. The separate MLflow runbook covers the verified
+inactive local clone restore.
 The historical GitHub/PR gates in the original WP are not local execution gates
 under ADR-0034.
 

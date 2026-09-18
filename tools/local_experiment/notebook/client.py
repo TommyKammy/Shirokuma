@@ -20,6 +20,7 @@ import urllib.parse
 import urllib.request
 
 from tools.local_experiment.query_read import contract as C
+from tools.local_experiment.notebook import selection as S
 
 ROOT = Path(__file__).resolve().parents[3]
 INDEX = ROOT / 'tmp/local-experiment/mlflow-tracking/import-index.json'
@@ -101,8 +102,9 @@ def _read(path, maximum):
     return raw
 
 
-def _reader_frames(raw, exit_code):
+def _reader_frames(raw, exit_code, request=REQUEST):
     """Reuse Reader's typed row/hash validator after the exact public envelope."""
+    request = S.normalize_request(request)
     lines = raw.splitlines()
     _require(len(lines) == 2 and raw.endswith(b'\n')
              and all(len(line) <= C.MAX_PUBLIC_BYTES for line in lines), 'NOTEBOOK_READER_INVALID')
@@ -132,8 +134,9 @@ def _reader_frames(raw, exit_code):
     public = final['observation']
     try:
         C.receipt_projection(public)
-        _require(public['table'] == 'iceberg.smoke.fixture_v1' and public['requested_limit'] == 10
-                 and [x['name'] for x in public['columns']] == ['id', 'name'], 'NOTEBOOK_READER_INVALID')
+        _require(public['table'] == 'iceberg.' + request['table']
+                 and public['requested_limit'] == request['limit']
+                 and [x['name'] for x in public['columns']] == request['columns'], 'NOTEBOOK_READER_INVALID')
     except C.ContractError:
         raise NotebookError('NOTEBOOK_READER_INVALID') from None
     return token, public, True
@@ -172,17 +175,18 @@ def _process_start(pid):
     return value
 
 
-def read_fixture():
-    """Run the fixed Go Reader once; return its verified public observation.
+def read_select(request):
+    """Run one typed current-head Go Reader request and return its verified observation.
 
     Writes reader-intent.json before spawn, reader.stdout.jsonl and an atomic
     reader-status.json. Unknown cleanup remains false even when Go has exited.
     KeyboardInterrupt survives signal/wait/status-save failures unchanged.
     """
+    request = S.normalize_request(request)
     directory = _directory()
     binary = Path(os.environ.get('SHIROKUMA_NOTEBOOK_BINARY', ''))
     _require(binary.is_absolute() and binary.is_file() and not binary.is_symlink(), 'NOTEBOOK_BINARY_INVALID')
-    _write(directory / 'reader-intent.json', {'schema_version': 1, 'command': 'query select', 'request': REQUEST})
+    _write(directory / 'reader-intent.json', {'schema_version': 1, 'command': 'query select', 'request': request})
     status = dict(schema_version=1, state='pending', pid=None, pgid=None, process_start=None,
                   evidence_token=None, exit_code=None,
                   child_exited=False, cleanup_verified=False, error_code=None)
@@ -191,8 +195,7 @@ def read_fixture():
         _write(directory / 'reader-status.json', status, replace=True)
         fd = os.open(directory / 'reader.stdout.jsonl', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, 'wb') as output:
-            child = subprocess.Popen([str(binary), '--repo-root', str(ROOT), '--profile', 'local-experiment',
-                'query', 'select', '--table', 'smoke.fixture_v1', '--columns', 'id,name', '--limit', '10'],
+            child = subprocess.Popen(S.arguments(binary, ROOT, request),
                 stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.DEVNULL,
                 cwd=ROOT, start_new_session=True,
                 env={key: value for key, value in os.environ.items()
@@ -216,7 +219,8 @@ def read_fixture():
             os.fsync(output.fileno())
         status.update(exit_code=child.poll(), child_exited=child.poll() is not None)
         if status['child_exited']:
-            token, public, cleanup = _reader_frames(_read(directory / 'reader.stdout.jsonl', C.MAX_PUBLIC_BYTES * 2 + 2), child.returncode)
+            token, public, cleanup = _reader_frames(_read(directory / 'reader.stdout.jsonl', C.MAX_PUBLIC_BYTES * 2 + 2),
+                                                    child.returncode, request=request)
             status.update(evidence_token=token, cleanup_verified=cleanup)
             if public is None:
                 raise NotebookError('NOTEBOOK_READER_FAILED')
@@ -250,6 +254,29 @@ def read_fixture():
         if not isinstance(original, Exception):
             raise original
         raise NotebookError('NOTEBOOK_READER_FAILED') from None
+    return public
+
+
+def read_fixture():
+    """Preserve the original fixed fixture entry point and request exactly."""
+    return read_select(REQUEST)
+
+
+def read_requested_table():
+    """Read only the runner's canonical private request, bound before and after the child."""
+    directory = _directory()
+    path = directory / 'request.json'
+    _require(os.environ.get('SHIROKUMA_NOTEBOOK_REQUEST_PATH') == str(path), 'NOTEBOOK_REQUEST_INVALID')
+    expected = os.environ.get('SHIROKUMA_NOTEBOOK_REQUEST_SHA256', '')
+    try:
+        request = S.load_request(path, expected)
+    except ValueError:
+        raise NotebookError('NOTEBOOK_REQUEST_INVALID') from None
+    public = read_select(request)
+    try:
+        _require(S.load_request(path, expected) == request, 'NOTEBOOK_REQUEST_INVALID')
+    except ValueError:
+        raise NotebookError('NOTEBOOK_REQUEST_INVALID') from None
     return public
 
 

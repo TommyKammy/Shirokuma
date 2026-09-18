@@ -26,8 +26,15 @@ from jupyter_client import AsyncKernelManager
 from jupyter_client.kernelspec import KernelSpecManager
 
 ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from tools.local_experiment.notebook import selection as S
+from tools.local_experiment.notebook.client import REQUEST
+
 HERE = Path(__file__).resolve().parent
 TEMPLATE = ROOT / 'examples/local_lakehouse.ipynb'
+PREVIEW_TEMPLATE = ROOT / 'examples/local_table_preview.ipynb'
+PREVIEW_PROFILE = 'table-preview-v1'
 STATE = ROOT / 'tmp/local-experiment/notebook-runs'
 EXECUTION_SECONDS = 900
 READER_GRACE_SECONDS = 260
@@ -111,7 +118,7 @@ def process_identity(pid):
                 process_start=' '.join(fields[2:7]), command=fields[7])
 
 
-def bind_reader(directory, kernel_pid):
+def bind_reader(directory, kernel_pid, *, request=None):
     saved = reader_status(directory)
     if not saved or saved.get('state') != 'running' or not saved.get('process_start'):
         return None
@@ -119,9 +126,8 @@ def bind_reader(directory, kernel_pid):
     if (current is None or current['ppid'] != kernel_pid or current['pgid'] != current['pid']
             or current['pgid'] != saved.get('pgid')
             or current['process_start'] != ' '.join(saved['process_start'].split())
-            or current['command'] != ' '.join([str(directory / 'shirokuma'), '--repo-root', str(ROOT),
-                '--profile', 'local-experiment', 'query', 'select', '--table', 'smoke.fixture_v1',
-                '--columns', 'id,name', '--limit', '10'])):
+            or current['command'] != ' '.join(S.arguments(directory / 'shirokuma', ROOT,
+                                                          REQUEST if request is None else request))):
         return None
     write_json(directory / 'reader-owner.json', current)
     return current
@@ -175,8 +181,9 @@ async def run_cells(client):
 
 async def execute_owned(client, manager, directory, *, stop=None,
                         timeout=EXECUTION_SECONDS, reader_grace=READER_GRACE_SECONDS,
-                        kernel_grace=KERNEL_GRACE_SECONDS):
+                        kernel_grace=KERNEL_GRACE_SECONDS, request=None):
     """Keep the first cancellation and wait for the Reader before kernel shutdown."""
+    request = None if request is None else S.normalize_request(request)
     stop = stop if stop is not None else {'reason': None}
     if stop['reason'] is not None:
         cleaned, closed = False, False
@@ -195,7 +202,8 @@ async def execute_owned(client, manager, directory, *, stop=None,
         try:
             while not task.done():
                 if reader_owner is None:
-                    reader_owner = bind_reader(directory, kernel_pid)
+                    reader_owner = (bind_reader(directory, kernel_pid) if request is None
+                                    else bind_reader(directory, kernel_pid, request=request))
                 if stop['reason'] is not None:
                     first_error = stop['reason']
                     break
@@ -265,7 +273,7 @@ async def execute_owned(client, manager, directory, *, stop=None,
                 await task
 
 
-def kernel_environment(directory, binary):
+def kernel_environment(directory, binary, *, request=None):
     environment = {k: os.environ[k] for k in ('PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'TMPDIR')
                    if k in os.environ}
     for name, relative in [('IPYTHONDIR', 'ipython'), ('JUPYTER_CONFIG_DIR', 'jupyter-config'),
@@ -275,10 +283,19 @@ def kernel_environment(directory, binary):
         environment[name] = str(path)
     environment.update(PYTHONNOUSERSITE='1', PYTHONDONTWRITEBYTECODE='1',
         SHIROKUMA_NOTEBOOK_RUN_DIR=str(directory), SHIROKUMA_NOTEBOOK_BINARY=str(binary))
+    if request is not None:
+        request = S.normalize_request(request)
+        expected = S.digest(request)
+        S.load_request(directory / 'request.json', expected)
+        environment.update(SHIROKUMA_NOTEBOOK_REQUEST_PATH=str(directory / 'request.json'),
+                           SHIROKUMA_NOTEBOOK_REQUEST_SHA256=expected)
     return environment
 
 
-async def execute(directory, binary, notebook):
+async def execute(directory, binary, notebook, *, request=None):
+    request = None if request is None else S.normalize_request(request)
+    if request is not None:
+        S.load_request(directory / 'request.json', S.digest(request))
     specs = directory / 'kernels'
     spec = specs / 'shirokuma-local'
     spec.mkdir(parents=True, mode=0o700)
@@ -302,7 +319,9 @@ async def execute(directory, binary, notebook):
     started = False
     try:
         with (directory / 'kernel.log').open('xb') as kernel_log:
-            await manager.start_kernel(cwd=str(ROOT), env=kernel_environment(directory, binary),
+            environment = (kernel_environment(directory, binary) if request is None
+                           else kernel_environment(directory, binary, request=request))
+            await manager.start_kernel(cwd=str(ROOT), env=environment,
                                        stdout=kernel_log, stderr=kernel_log)
             started = True
             kernel_pid = manager.provisioner.pid
@@ -311,7 +330,8 @@ async def execute(directory, binary, notebook):
             client.kc = manager.client()
             client.kc.start_channels()
             await client.kc.wait_for_ready(timeout=30)
-            result = await execute_owned(client, manager, directory, stop=stop)
+            result = (await execute_owned(client, manager, directory, stop=stop) if request is None else
+                      await execute_owned(client, manager, directory, stop=stop, request=request))
             result['kernel_pid'] = kernel_pid
             return result
     except BaseException as error:
@@ -332,19 +352,41 @@ async def execute(directory, binary, notebook):
             signal.signal(sig, handler)
 
 
-def main(argv=None):
-    if (sys.argv[1:] if argv is None else argv):
+def main(argv=None, *, stdin=None):
+    arguments = sys.argv[1:] if argv is None else argv
+    if arguments not in ([], ['--request-stdin']):
         print(json.dumps({'result': 'failed', 'error_code': 'ARGUMENTS_INVALID'}))
         return 1
+    request = None
+    if arguments:
+        try:
+            request = S.parse_request((stdin or sys.stdin.buffer).read(4097))
+        except Exception:
+            print(json.dumps({'result': 'failed', 'error_code': 'NOTEBOOK_REQUEST_INVALID'}))
+            return 1
     os.umask(0o077)
     STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
     directory = STATE / uuid.uuid4().hex
     directory.mkdir(mode=0o700)
     result = dict(schema_version=1, run_token=directory.name, result='failed', error_code=None,
                   reader_cleanup_confirmed=True, kernel_cleanup_confirmed=True, kernel_pid=None)
+    if request is not None:
+        result.update(profile=PREVIEW_PROFILE, request_sha256=S.digest(request))
     notebook = None
+    first_error = None
     try:
-        raw = TEMPLATE.read_bytes()
+        raw = (TEMPLATE if request is None else PREVIEW_TEMPLATE).read_bytes()
+        if request is not None:
+            S.validate_template(raw)
+            fd = os.open(directory / 'request.json', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            with os.fdopen(fd, 'wb') as stream:
+                stream.write(S.canonical_bytes(request)); stream.flush(); os.fsync(stream.fileno())
+            fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+            S.load_request(directory / 'request.json', S.digest(request))
         notebook = nbformat.reads(raw.decode(), as_version=4)
         if any(c.get('outputs') or c.get('execution_count') is not None for c in notebook.cells if c.cell_type == 'code'):
             raise ValueError('Notebook template must not contain outputs')
@@ -352,25 +394,36 @@ def main(argv=None):
         with (directory / 'build.log').open('xb') as build:
             subprocess.run(['go', 'build', '-o', str(binary), './cmd/shirokuma'], cwd=ROOT,
                            stdout=build, stderr=build, check=True, timeout=60)
-        write_json(directory / 'inputs.json', dict(template_sha256=hashlib.sha256(raw).hexdigest(),
+        inputs = dict(template_sha256=hashlib.sha256(raw).hexdigest(),
                    binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
-                   python=sys.version.split()[0], scope='fixed Notebook; Reader one SELECT and read-only MLflow evaluations'))
-        observed = asyncio.run(execute(directory, binary, notebook))
+                   python=sys.version.split()[0], scope='fixed Notebook; Reader one SELECT and read-only MLflow evaluations')
+        if request is not None:
+            inputs.update(profile=PREVIEW_PROFILE, request_file='request.json', request_sha256=S.digest(request))
+            S.load_request(directory / 'request.json', S.digest(request))
+        write_json(directory / 'inputs.json', inputs)
+        observed = asyncio.run(execute(directory, binary, notebook) if request is None else
+                               execute(directory, binary, notebook, request=request))
         error = observed.pop('error')
+        first_error = error
         result.update(observed)
         result['error_code'] = ('INTERRUPTED' if isinstance(error, NotebookInterrupted) else
                                 'NOTEBOOK_TIMEOUT' if isinstance(error, TimeoutError) else
                                 'NOTEBOOK_EXECUTION_FAILED' if error is not None else None)
         if isinstance(error, NotebookInterrupted):
             result['signal'] = error.signum
+        if request is not None:
+            S.load_request(directory / 'request.json', S.digest(request))
         status = reader_status(directory)
         result['reader_evidence_token'] = status.get('evidence_token') if status else None
         result['code_cells'] = sum(c.cell_type == 'code' for c in notebook.cells)
     except BaseException as error:
-        result['error_code'] = result['error_code'] or ('INTERRUPTED' if not isinstance(error, Exception)
+        first_error = preserve_error(first_error, error)
+        result['error_code'] = result['error_code'] or ('INTERRUPTED' if not isinstance(first_error, Exception)
                                                        else 'NOTEBOOK_SETUP_FAILED')
         result['result'] = ('unknown' if not result['reader_cleanup_confirmed'] or not result['kernel_cleanup_confirmed']
-                            else 'interrupted' if not isinstance(error, Exception) else 'failed')
+                            else 'interrupted' if not isinstance(first_error, Exception) else 'failed')
+        if isinstance(first_error, NotebookInterrupted):
+            result['signal'] = first_error.signum
     finally:
         try:
             if notebook is not None:
