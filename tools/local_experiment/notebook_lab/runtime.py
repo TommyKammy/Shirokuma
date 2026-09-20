@@ -41,6 +41,7 @@ TABLE_TEMPLATE = ROOT / 'examples/local_table_workbench.ipynb'
 SNAPSHOT_TEMPLATE = ROOT / 'examples/local_snapshot_workbench.ipynb'
 DIAGNOSE_TEMPLATE = ROOT / 'examples/local_query_diagnose_workbench.ipynb'
 CATALOG_TEMPLATE = ROOT / 'examples/local_catalog_workbench.ipynb'
+TUNING_TEMPLATE = ROOT / 'examples/local_tuning_workbench.ipynb'
 COMPARISON_TEMPLATE = ROOT / 'examples/local_ridge_comparison.ipynb'
 COMPARISON_PREDICTION_TEMPLATE = ROOT / 'examples/local_comparison_prediction.ipynb'
 REGISTRY_PREDICTION_TEMPLATE = ROOT / 'examples/local_registry_prediction.ipynb'
@@ -215,7 +216,8 @@ def _prepare():
                            ('snapshot_workbench.ipynb', SNAPSHOT_TEMPLATE),
                            ('registry_prediction.ipynb', REGISTRY_PREDICTION_TEMPLATE),
                            ('query_diagnose_workbench.ipynb', DIAGNOSE_TEMPLATE),
-                           ('catalog_workbench.ipynb', CATALOG_TEMPLATE)):
+                           ('catalog_workbench.ipynb', CATALOG_TEMPLATE),
+                           ('tuning_workbench.ipynb', TUNING_TEMPLATE)):
         destination = STATE / 'workspace' / name
         if not destination.exists() and not destination.is_symlink():
             _exclusive(destination, template.read_bytes())
@@ -240,6 +242,16 @@ def _comparisons_idle():
     from tools.local_experiment.notebook_lab import compare
     require(compare.LAB_STATE == STATE, 'LAB_COMPARISON_STATE_CHANGED')
     return compare.check_idle()
+
+
+def _tunings_idle():
+    path = STATE / 'tunings'
+    M.no_symlinks(path)
+    if not path.exists():
+        return True
+    from tools.local_experiment.notebook_lab import tune
+    require(tune.LAB_STATE == STATE, 'LAB_TUNING_STATE_CHANGED')
+    return tune.check_idle()
 
 
 def _trainings_idle():
@@ -450,6 +462,7 @@ def _port_free():
 
 def start():
     with _lock():
+        require(_tunings_idle(), 'LAB_TUNING_ACTIVE_OR_UNKNOWN')
         require(_recordings_idle(), 'LAB_RECORD_ACTIVE_OR_UNKNOWN')
         require(_trainings_idle(), 'LAB_TRAINING_ACTIVE_OR_UNKNOWN')
         owner = _prepare()
@@ -638,6 +651,7 @@ def stop():
         require(current['state'] == 'uninitialized', 'LAB_STOP_UNCONFIRMED')
         return current
     with _lock():
+        require(_tunings_idle(), 'LAB_TUNING_ACTIVE_OR_UNKNOWN')
         require(_recordings_idle(), 'LAB_RECORD_ACTIVE_OR_UNKNOWN')
         require(_trainings_idle(), 'LAB_TRAINING_ACTIVE_OR_UNKNOWN')
         require(_queries_idle(), 'LAB_QUERY_ACTIVE_OR_UNKNOWN')

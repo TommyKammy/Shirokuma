@@ -5,7 +5,7 @@ title: "WP-L4-NB-001 JupyterHub bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.21"
+version: "0.22"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, notebook]
 ---
@@ -14,6 +14,7 @@ tags: [shirokuma, workpackage, l4, notebook]
 
 ## Summary
 
+保存48train内の固定3foldによるRidge候補選択は実UI初回で成功し、追加fitなしの保存再表示・reloadと既存データ保持を確認した。既視holdoutは保存モデルより悪化し、改善とは扱わない。
 固定fixtureのCatalog/LineageをLabで読取り、所有者・説明・列・記録された関連と保存再表示を確認した。
 保存previewからQuery Doctorへ接続し、診断API1回と保存結果のUI再表示/save-reloadを確認した。
 固定Registry名/versionから保存モデルを解決し、2行予測・詳細表示・保存/再読込をLabで確認した。
@@ -36,6 +37,14 @@ Labから自然文table previewを呼ぶ別Notebookも、修正後の等値previ
 保存比較一覧から候補を選び、再fitせず新入力を予測するLab入口も実UI受入を確認した。
 Labの固定学習workbenchで、初回unknownを追加fitなしで回復し、別の新規正常実行とレビュー/一覧/編集予測・保存/再読込を確認した。
 JupyterHub、複数ユーザー、直接PySpark、kernel内fit・autologの完了は含めない。
+
+## 2026-09-20: train-only offline Ridge CV: local acceptance complete
+
+既存Lab比較workerの所有・取消・保存closureを再利用し、明示training tokenから固定train-only CVを実行するworkbenchを接続した。初回Run Allは4code cells・outputs0・fit0。実UIの明示操作1attemptで3alpha×3fold＋選択後1refitを行い、alpha0.1が選ばれた。48train内のvalidation MSEだけで選択し、既視holdout16行は選択後の参考評価とする。holdout RMSEは保存alpha1より悪化したため、性能改善とは扱わない。
+
+新ownerや常駐serviceは増やさず、既存ML専用workerを使用する。旧kernel cacheへ新tuningsの残留guardを適用するため、12idle kernel確認後の所有Lab stop/startを7.406秒で実施した。旧12冊のbytesを保持し、13冊目だけをseedした。LabはPID66067→20940、観測時13kernelでhealthy、MLflow/Servingは変更していない。
+
+Lab側140fake・独立review・全回帰が成功し、845保護filesと既存ML/Registry/AgentHouse/Serving・旧比較7filesを保持した。保存再表示・save/reloadは追加fit/新attempt0、実行7filesとNotebook bytesが不変で、実画面の候補表・留保も確認した。reload後は13kernelがIdle、旧12冊も保持した。最終保持と容量は[[../061_Local_Experiment_Milestones|Milestones]]に記録する。固定offline実験の範囲に留め、kernel内fit/autolog・Hub・一般モデル品質・本番の受入範囲は広げない。
 
 ## 2026-09-20: Lab fixed Catalog/Lineage: local read-only workbench
 

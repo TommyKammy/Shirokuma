@@ -1127,3 +1127,10 @@ test-local-notebook-catalog-client:
 test-local-notebook-lab-catalog:
 	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_catalog.py'
 verify-local-experiment: test-local-notebook-catalog-client test-local-notebook-lab-catalog
+
+.PHONY: test-local-mlflow-tune test-local-notebook-lab-tune
+test-local-mlflow-tune:
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_mlflow_tune.py'
+test-local-notebook-lab-tune:
+	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_tune.py'
+verify-local-experiment: test-local-mlflow-tune test-local-notebook-lab-tune

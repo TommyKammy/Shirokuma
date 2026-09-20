@@ -5,7 +5,7 @@ title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "1.13"
+version: "1.14"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -14,6 +14,7 @@ tags: [shirokuma, workpackage, l4, ml]
 
 ## Summary
 
+保存48train内の固定3foldによるRidge候補選択は実UI初回で成功し、追加fitなしの保存再表示・reloadと既存データ保持を確認した。既視holdoutは保存モデルより悪化し、改善とは扱わない。
 MLflow起動中だけの有界待機と厳密な所有確認を接続し、実所有restart・既存データ保持を確認した。短命member待機はfakeで確認し、元incident原因は未確定とする。
 保存48学習行の固定sklearn autologを実証した。初回HTML検証失敗を追加fitなしで回復し、完成再表示・非稼働clone復元・既存データ保持を確認した。
 固定Registry versionをloopbackのsafe JSON推論APIへ接続し、修正後の予測・認証拒否・所有停止/再起動と既存データ保持を確認した。
@@ -33,6 +34,16 @@ Notebookから所有workerへ固定学習を依頼し、1runを追加する実�
 保存比較候補の一覧・再fit不要な新入力予測も、cold計算とLab実UIで確認した。
 Labの固定学習workbenchで、初回unknownの保存結果を追加fitなしで回復し、別の新規正常実行から表示・編集予測・保存/再読込も確認した。
 Hub連携・kernel内fit/autolog、Registryのalias/stage運用・標準MLflow pyfunc Serving、clone切替・他host移行は未達。
+
+## 2026-09-20: train-only offline Ridge CV: local acceptance complete
+
+保存Icebergの48学習行だけをseed20260920で固定3foldへ分け、alpha0.1/1/10を各32fit・16validationで比較した。validation MSEの3fold平均が最小の候補を選び、完全同値ならalpha昇順とする。選択後だけ48行へ1refitし、合計9＋1fit。既存Ridgeのsolver=svd・fit_interceptを維持し、新scalerは導入しない。既視holdout16行は選択後の参考表示に限定し、独立した最終評価・品質昇格とは扱わない。
+
+実UIの初回attemptでalpha0.1を選択した。平均CV MSEは0.1/1/10の順に0.019861617866539588／0.03206013615899863／0.7121637298204719。一方、選択後holdout RMSEは0.16823847635350103で、保存alpha1の0.16304261434308936より悪化した。改善や自動昇格を主張せず、選択基準と参考評価を区別する。
+
+既存保存source検証・比較算術・ML専用workerを再利用し、safe JSONのfold indices/model/metrics/refitを追加fitなしで再算術した。独立60桁Decimal照合は9fold models＋1refit、42metrics、holdout32predictionsで成功。Reader/LLM/Tracking/Registry書込・新serviceは0、845保護filesとML全23runs/1388points/23artifacts・Registry1/1・AgentHouse585行・Servingを保持した。
+
+core fake新11＋旧比較10、Lab側140fake、独立review、全回帰119suites/3630実行（3629PASS＋既存1skip）が成功した。保存再表示・reloadでも追加fit/新attemptは0、実行7filesとNotebook bytesを保持した。最終保持と新9filesの保存容量も確認し、[[../061_Local_Experiment_Milestones|Milestones]]へ記録した。WPはlocal-partialを維持する。
 
 ## 2026-09-20: bounded MLflow startup observation: local acceptance complete
 

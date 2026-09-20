@@ -42,10 +42,11 @@ def _private(path):
     require(stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid() and stat.S_IMODE(info.st_mode) == 0o700)
 
 
-def _directory(value):
+def _directory(value, *, state=None):
+    state = STATE if state is None else state
     directory = Path(value)
-    require(directory.is_absolute() and directory.parent == STATE and N.TOKEN.fullmatch(directory.name))
-    _private(STATE)
+    require(directory.is_absolute() and directory.parent == state and N.TOKEN.fullmatch(directory.name))
+    _private(state)
     _private(directory)
     return directory
 
@@ -66,8 +67,8 @@ def _input(directory):
     return value
 
 
-def comparison_status(directory):
-    directory = _directory(directory)
+def comparison_status(directory, *, state=None):
+    directory = _directory(directory) if state is None else _directory(directory, state=state)
     path = directory / 'status.json'
     if not path.exists() and not path.is_symlink():
         return None
@@ -121,6 +122,7 @@ def _lock():
     try:
         with R._lock():
             try:
+                require(R._tunings_idle(), 'LAB_COMPARISON_CLEANUP_UNKNOWN')
                 require(R._recordings_idle(), 'LAB_COMPARISON_CLEANUP_UNKNOWN')
                 require(R._trainings_idle(), 'LAB_COMPARISON_CLEANUP_UNKNOWN')
                 require(R._queries_idle(), 'LAB_COMPARISON_CLEANUP_UNKNOWN')
@@ -199,25 +201,31 @@ def compare(training_token, alpha=10.0):
         request = C.normalize_request(dict(schema_version=1, training_token=training_token, alpha=alpha))
     except Exception:
         raise N.NotebookError('LAB_COMPARISON_INVALID') from None
-    with _lock():
-        if not STATE.exists():
-            STATE.mkdir(mode=0o700)
-        _private(STATE)
-        require(len(list(STATE.iterdir())) < MAX_ATTEMPTS, 'LAB_COMPARISON_BUSY')
-        directory = STATE / uuid.uuid4().hex
+    return _execute(request, state=STATE, profile=PROFILE, arguments_fn=arguments,
+                    environment_fn=environment, result_fn=_result, lock_fn=_lock, request_digest=C.digest(request))
+
+
+def _execute(request, *, state, profile, arguments_fn, environment_fn, result_fn, lock_fn, request_digest):
+    """Shared bounded owned-worker lifecycle; callers supply only fixed local adapters."""
+    with lock_fn():
+        if not state.exists():
+            state.mkdir(mode=0o700)
+        _private(state)
+        require(len(list(state.iterdir())) < MAX_ATTEMPTS, 'LAB_COMPARISON_BUSY')
+        directory = state / uuid.uuid4().hex
         directory.mkdir(mode=0o700)
         (directory / 'tmp').mkdir(mode=0o700)
         N._write(directory / 'input.json', request)
-        N._write(directory / 'intent.json', dict(schema_version=1, profile=PROFILE,
-                 argv=arguments(directory), request_sha256=C.digest(request)))
+        N._write(directory / 'intent.json', dict(schema_version=1, profile=profile,
+                 argv=arguments_fn(directory), request_sha256=request_digest))
         status = dict(schema_version=1, state='pending', pid=None, pgid=None, process_start=None,
                       evidence_token=directory.name, exit_code=None, child_exited=False, cleanup_verified=False, error_code=None)
         child, first, public, interrupted = None, None, None, False
         try:
             N._write(directory / 'status.json', status, replace=True)
             with _outputs(directory) as (stdout, stderr):
-                child = subprocess.Popen(arguments(directory), cwd=ROOT, stdin=subprocess.DEVNULL,
-                    stdout=stdout, stderr=stderr, env=environment(directory), start_new_session=True, umask=0o077)
+                child = subprocess.Popen(arguments_fn(directory), cwd=ROOT, stdin=subprocess.DEVNULL,
+                    stdout=stdout, stderr=stderr, env=environment_fn(directory), start_new_session=True, umask=0o077)
                 status.update(state='running', pid=child.pid, pgid=child.pid)
                 status['process_start'] = N._process_start(child.pid)
                 N._write(directory / 'status.json', status, replace=True)
@@ -242,7 +250,7 @@ def compare(training_token, alpha=10.0):
                     status['cleanup_verified'] = code is not None and T.group_empty(child.pid)
                 require(status['cleanup_verified'], 'LAB_COMPARISON_CLEANUP_UNKNOWN')
                 if first is None:
-                    public = _result(directory, request, status['exit_code'])
+                    public = result_fn(directory, request, status['exit_code'])
                     N._write(directory / 'result.json', public)
             except BaseException as error:
                 first = T._keep(first, error)

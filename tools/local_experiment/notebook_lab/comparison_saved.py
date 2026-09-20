@@ -35,22 +35,24 @@ def normalize_token(token):
     return token
 
 
-def _parents(path):
-    require(path.is_absolute() and path.parent.parent == STATE)
+def _parents(path, *, state=None, lab_state=None):
+    state = STATE if state is None else state
+    lab_state = LAB_STATE if lab_state is None else lab_state
+    require(path.is_absolute() and path.parent.parent == state)
     result = []
     for parent in path.parents:
         info = parent.lstat()
         require(stat.S_ISDIR(info.st_mode))
-        if parent == LAB_STATE or parent.is_relative_to(LAB_STATE):
+        if parent == lab_state or parent.is_relative_to(lab_state):
             require(stat.S_IMODE(info.st_mode) == 0o700 and info.st_uid == os.getuid())
         result.append((str(parent), info.st_dev, info.st_ino, info.st_mode, info.st_uid))
     return result
 
 
-def _read(path, maximum):
+def _read(path, maximum, *, state=None, lab_state=None):
     # Same stable-file pattern as the existing saved training reader, bound to
     # comparisons instead of its MLflow-only directory.
-    before, parents = path.lstat(), _parents(path)
+    before, parents = path.lstat(), _parents(path, state=state, lab_state=lab_state)
     T._file(before, maximum)
     fd, first, raw = None, None, b''
     try:
@@ -77,14 +79,17 @@ def _read(path, maximum):
                 first = T._keep(first, error)
     if first is not None:
         raise first
-    require(T._signature(path.lstat()) == T._signature(before) and _parents(path) == parents)
+    require(T._signature(path.lstat()) == T._signature(before) and _parents(path, state=state, lab_state=lab_state) == parents)
     return raw, (T._signature(before), parents)
 
 
-def _validate(raw, token, directory):
-    request = C.parse_request(raw['input.json'])
+def _validate(raw, token, directory, *, core=None, profile=None, arguments_fn=None):
+    core = C if core is None else core
+    profile = B.PROFILE if profile is None else profile
+    arguments_fn = B.arguments if arguments_fn is None else arguments_fn
+    request = core.parse_request(raw['input.json'])
     require(raw['input.json'] == N._canonical(request))
-    intent = dict(schema_version=1, profile=B.PROFILE, argv=B.arguments(directory), request_sha256=C.digest(request))
+    intent = dict(schema_version=1, profile=profile, argv=arguments_fn(directory), request_sha256=core.digest(request))
     require(raw['intent.json'] == N._canonical(intent))
     status = N._parse(raw['status.json'])
     require(type(status) is dict and set(status) == B.T.STATUS_KEYS
@@ -104,31 +109,34 @@ def _validate(raw, token, directory):
     require(raw['launch.json'] == N._canonical(expected_launch))
     output = raw['worker.stdout.json']
     require(output.endswith(b'\n') and len(output.splitlines()) == 1)
-    comparison = C.validate_result(N._parse(output), request)
+    comparison = core.validate_result(N._parse(output), request)
     require(output == N._canonical(comparison))
-    expected = dict(schema_version=1, profile=B.PROFILE, result='passed', attempt_token=token,
+    expected = dict(schema_version=1, profile=profile, result='passed', attempt_token=token,
                     cleanup_verified=True, comparison=comparison)
     require(raw['result.json'] == N._canonical(expected))
     return expected
 
 
-def load_saved(token):
+def load_saved(token, *, state=None, lab_state=None, validator=None, file_limits=None):
     """Load only a passed, cleanup-confirmed snapshot; never fit or launch."""
     token = normalize_token(token)
-    directory = STATE / token
+    directory = (STATE if state is None else state) / token
+    read = _read if state is None and lab_state is None else lambda path, maximum: _read(
+        path, maximum, state=state, lab_state=lab_state)
+    validate = _validate if validator is None else validator
     saved, first, public = {}, None, None
     try:
-        for name, maximum in FILES.items():
+        for name, maximum in (FILES if file_limits is None else file_limits).items():
             path = directory / name
-            raw, signature = _read(path, maximum)
+            raw, signature = read(path, maximum)
             saved[path] = raw, signature, maximum
-        public = _validate({path.name: item[0] for path, item in saved.items()}, token, directory)
+        public = validate({path.name: item[0] for path, item in saved.items()}, token, directory)
     except BaseException as error:
         first = error
     finally:
         for path, (raw, signature, maximum) in saved.items():
             try:
-                current, current_signature = _read(path, maximum)
+                current, current_signature = read(path, maximum)
                 require(current == raw and current_signature == signature)
             except BaseException as error:
                 first = T._keep(first, error)

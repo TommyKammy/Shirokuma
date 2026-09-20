@@ -137,6 +137,7 @@ def _lock():
     try:
         with R._lock():
             try:
+                require(R._tunings_idle(), 'LAB_RECORD_CLEANUP_UNKNOWN')
                 require(R._queries_idle() and R._comparisons_idle() and R._trainings_idle()
                         and check_idle(), 'LAB_RECORD_CLEANUP_UNKNOWN')
                 yield

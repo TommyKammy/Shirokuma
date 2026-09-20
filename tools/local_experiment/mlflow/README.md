@@ -556,6 +556,17 @@ recovery remain unverified.
 
 ## Saved Ridge comparisons
 
+The separate `saved-ridge-cv-v1` profile selects alpha `0.1`, `1` or `10` by
+three-fold validation within the saved 48 training rows, then fits the selected
+candidate on all 48 rows. Its 16 holdout rows are inspected only afterward and
+remain a previously seen reference set. Fold models, indices and metrics are
+saved as safe JSON and can be validated without fitting again. This offline
+calculation uses the ML environment but writes no Tracking or Registry records.
+Use the [Lab tuning workbench](../notebook_lab/README.md#select-ridge-alpha-within-the-saved-training-data)
+to retain the owned execution and display the selection and saved result.
+The existing comparison importer below accepts its original single-candidate
+profile; CV results are not silently imported as that profile.
+
 `comparison_recording.ipynb` in the local Lab records an existing verified
 comparison in `shirokuma-local-ridge-comparisons-v1`. It stores the candidate,
 reference and six differences as 18 metric points, along with 34 parameters and

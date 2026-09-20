@@ -5,13 +5,14 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.71"
+version: "3.72"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
+保存48train内の固定offline CVは実UI初回・独立算術・全回帰で成功した。既視holdoutの悪化を明記し、追加fitなしの保存/reload・容量・最終保持も確認した。
 Labの固定Catalog/Lineage読取が初回で成功し、所有者・列・8件の関連と追加GETなしの保存再表示を確認した。
 MLflow起動限定の最大2秒待機をfakeで確認し、実所有restartと全既存データ保持が成功した。元incident原因は未確定のまま維持する。
 固定sklearn autologは48学習行で1fitし、初回HTML検証失敗を追加fitなしで回復した。完成再表示・clone復元・全回帰が成功した。
@@ -53,6 +54,24 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: train-only offline Ridge CV: local acceptance complete
+
+保存Iceberg training `c60d6f25d2944c249c811e800ce2b637`の48train内だけでalpha0.1/1/10の固定3fold CVを行った。seed20260920の16validation/32train、3fold平均validation MSEで選択、完全同値はalpha昇順。Ridge(solver=svd, fit_intercept=True)の9fold fitと選択後48行refit1回に限定し、scalerは追加しない。既視holdout16行は選択後の参考評価のみで、独立した最終評価・一般品質保証とは扱わない。
+
+apply01は7.406秒で、旧12idle kernel確認→所有Lab stop/startを実施しPID66067→20940となった。旧12Notebookのbytesと845保護stateを保持して13冊目だけをseedした。初回Run Allは4code cells・outputs0・fit0（ui-initial01、0.482秒）で、意図しない学習を開始しなかった。
+
+実UIの初回attempt `f82431d0507a4a67b80bf8dfb3f95eba`は成功し、alpha0.1を選択した。平均CV MSEはalpha0.1=0.019861617866539588、1=0.03206013615899863、10=0.7121637298204719。選択後holdoutはMAE0.15325254050200443、RMSE0.16823847635350103、R²0.9971502161378184。保存alpha1のholdout RMSE0.16304261434308936より悪化しており、CV最良とholdout改善を混同しない。observation01の1.028秒は保存結果/保持の検査helper時間であり、実fitの壁時計時間ではない。
+
+60桁Decimalの独立算術は9fold models＋1refit model・42metrics・holdout32predictionsを照合し、最大勾配絶対値7.38268e-14／最大数値差1.14194e-15で成功した（numeric01、0.078秒、追加fit0）。845保護files、MLflow23runs/1388metric points/23artifacts・Registry1model/1version・AgentHouse585行・旧比較7files・Serving PID95852は不変。Lab PID20940・13kernelはhealthy、新Reader/LLM/Tracking/Registry書込は0。
+
+core新11＋既存比較10fakeは専用ML環境で21PASS、標準Pythonの新11もPASS。Lab側140fakeと独立read-only reviewは成功・未解決0。全回帰は119suites・3630実行（3629PASS＋既存1skip）、91.123秒で成功した（full01 log SHA256 `df58e0286ee79877b01fdec3abeba748d4e31b6ec525d87a134cf491d732f605`）。
+
+UIの保存再表示とsave/reloadは各0.805秒／0.757秒で成功し、追加fit0・新attempt0・実行7files不変だった。Notebookの保存前後bytesは完全一致（SHA256 `564c1b8b03b1e0cf52fffecfce1ef2109552527164b5aa43bd2b560ddb876de9`）。実画面で候補表と留保を確認し、reload後は13kernelがIdle、旧12冊も不変だった。最終acceptance01は0.989秒で845files・ML23runs/1388points/23artifacts・Registry1/1・AgentHouse585行・Serving PID95852を保持し、Lab PID20940/13kernelsはhealthy。
+
+保存容量は新9files、34,816 logical bytes／65,536 allocated bytes、全files600。対象はCV実行証拠7filesとNotebook/checkpoint2filesであり、checksと通常Lab lifecycle/log変更は除く。APFS上の一意な物理占有量とは扱わない。`storage-and-usage.json`、`final-retention.json`、`final-acceptance.json`、`ui-acceptance.json`に最終結果を保持する。
+
+証跡は`tmp/local-experiment/notebook-tuning-checks/fbfa6fffba7c4e9587f9fcb273540b91/`の`apply01.json`、`ui-initial01.json`、`observation-acceptance.json`、`independent-numeric.json`、`full01.json`、core/Lab checkpointsへ保持する。新service・自動昇格・本番品質保証は範囲外である。
 
 ## 2026-09-20: Lab fixed Catalog/Lineage: local read-only workbench
 

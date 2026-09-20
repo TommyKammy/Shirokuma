@@ -333,6 +333,7 @@ def _lock(*, recovery_token=None):
     first = None
     try:
         with R._lock():
+            require(R._tunings_idle(), 'LAB_QUERY_CLEANUP_UNKNOWN')
             require(R._recordings_idle(), 'LAB_QUERY_CLEANUP_UNKNOWN')
             require(R._trainings_idle(), 'LAB_QUERY_CLEANUP_UNKNOWN')
             require(R._comparisons_idle(), 'LAB_QUERY_CLEANUP_UNKNOWN')

@@ -4,6 +4,58 @@ A single-user JupyterLab for exploring saved Shirokuma training runs. This uses
 a dedicated environment and workspace. The existing fixed Notebook runner and
 its environment remain available separately.
 
+## Select Ridge alpha within the saved training data
+
+`tuning_workbench.ipynb` compares alpha `0.1`, `1` and `10` using only the
+saved 48 training rows. A fixed seed (`20260920`) divides those rows into three
+validation folds of 16 rows. Each candidate is fitted on the other 32 rows;
+intercept centering uses only that fold's training rows. No new scaler is added.
+The lowest mean validation MSE selects the candidate, with lower alpha breaking
+an exact tie. The selected alpha is then fitted once on all 48 training rows.
+One execution performs nine fold fits and one final fit.
+
+Run `make local-notebook-lab-start` to seed the Notebook. Set `training_token`
+to a completed Iceberg training token and `run_tuning = True`, then run the
+execution cell once. Enter the returned `attempt_token` in `tuning_attempt`
+to display its saved result. Re-executing the fit cell starts a new experiment;
+use the recovery cell to avoid another ten fits.
+
+The existing 16 holdout rows are used only after selection, for reference
+metrics and predictions. They have already been inspected in earlier
+experiments, so their displayed scores are not an independent final evaluation.
+The fixed split and candidate grid are an exploratory experiment; the result
+does not promote or replace the registered model.
+
+The initial Notebook makes no fit. An explicit execution uses the existing ML
+environment and saves a private result after its owned worker exits. Saved
+recovery verifies the source, fold models, arithmetic and selection without
+fitting again. An interrupted or failed attempt does not retry automatically;
+unconfirmed cleanup blocks other Lab work. No Reader, model endpoint, MLflow
+write, Registry change or service restart is required.
+
+The Python helpers are `tune`, `recover_tuning` and `render_tuning` in
+`tools.local_experiment.notebook_lab.tune`. Attempts are retained under
+`tmp/local-experiment/notebook-lab/tunings/`, separately from single-candidate
+comparisons, with the same Lab ownership lock.
+
+```sh
+rtk proxy make test-local-mlflow-tune test-local-notebook-lab-tune
+```
+
+Local acceptance completed one ten-fit experiment and selected alpha `0.1`.
+Mean validation MSE was `0.019862`, compared with `0.032060` for alpha `1`
+and `0.712164` for alpha `10`. The selected model's reference holdout RMSE was
+`0.168238`, slightly worse than the saved alpha `1` model's `0.163043`; this
+does not demonstrate a quality improvement. Independent 60-digit arithmetic
+verified all ten models, 42 metrics and 32 reference/candidate predictions.
+
+Saved recovery and browser reload preserved the result without another fit.
+All 845 protected files, existing MLflow/Registry records and 585 audit rows
+were unchanged. Applying the new ownership checks restarted the Lab after
+confirming its 12 kernels were idle; all 12 existing Notebook files and outputs
+were preserved. The new execution and Notebook added nine private files,
+34,816 logical bytes, excluding checks and ordinary Lab lifecycle/log changes.
+
 ## Read catalog descriptions and lineage
 
 Run `make local-notebook-lab-start` to seed `catalog_workbench.ipynb` once.
