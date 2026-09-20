@@ -960,3 +960,8 @@ local-notebook-lab-stop:
 test-local-notebook-lab:
 	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_runtime.py'
 verify-local-experiment: test-local-notebook-lab
+
+.PHONY: test-local-notebook-lab-query
+test-local-notebook-lab-query:
+	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_query.py'
+verify-local-experiment: test-local-notebook-lab-query

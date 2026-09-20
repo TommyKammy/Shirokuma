@@ -337,6 +337,22 @@ class RunnerTests(unittest.TestCase):
 
 
 class TunnelAndJournalTests(unittest.TestCase):
+    def test_service_read_forwards_kubeconfig_without_other_ambient_values(self):
+        value = {'kind':'Service','metadata':{'name':'polaris','namespace':R.NAMESPACE,'uid':UUID},
+                 'spec':{'type':'ClusterIP','ports':[{'port':8181,'targetPort':8181}]}}
+        environment = {'PATH':'/usr/bin:/bin', 'KUBECONFIG':'/fixed/kubeconfig',
+                       'PRIVATE_SENTINEL':'must-not-reach-child', 'HTTP_PROXY':'must-not-reach-child'}
+        completed = subprocess.CompletedProcess([], 0, stdout=json.dumps(value).encode())
+        with patch.dict(R.os.environ, environment, clear=True), \
+                patch.object(R.subprocess, 'run', return_value=completed) as run:
+            self.assertEqual(R.service_identity()['uid'], UUID)
+            self.assertEqual(dict(R.os.environ), environment)
+        self.assertEqual(run.call_args.args[0], ['rtk','proxy','kubectl','--context',R.CONTEXT,
+                         '-n',R.NAMESPACE,'--request-timeout=30s','get','service','polaris','-o','json'])
+        self.assertEqual(run.call_args.kwargs['env'],
+                         {'PATH':environment['PATH'], 'KUBECONFIG':environment['KUBECONFIG']})
+        self.assertEqual(run.call_args.kwargs['timeout'], 35)
+
     def test_script_import_entry_rejects_arguments_before_runtime(self):
         result = subprocess.run(['rtk','proxy',sys.executable,R.__file__,'--not-allowed'],
                                 capture_output=True, timeout=10)

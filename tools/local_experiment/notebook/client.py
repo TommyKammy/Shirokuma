@@ -232,7 +232,7 @@ def _read_owned(request, arguments, validate_frames):
                 stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.DEVNULL,
                 cwd=ROOT, start_new_session=True,
                 env={key: value for key, value in os.environ.items()
-                     if key in ('PATH', 'HOME', 'USER', 'LOGNAME', 'TMPDIR', 'LANG', 'LC_ALL')})
+                                             if key in ('PATH', 'HOME', 'USER', 'LOGNAME', 'TMPDIR', 'LANG', 'LC_ALL', 'KUBECONFIG')})
             status.update(state='running', pid=child.pid, pgid=child.pid)
             _write(directory / 'reader-status.json', status, replace=True)
             try:

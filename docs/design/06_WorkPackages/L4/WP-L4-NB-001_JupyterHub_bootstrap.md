@@ -5,7 +5,7 @@ title: "WP-L4-NB-001 JupyterHub bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.10"
+version: "0.11"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, notebook]
 ---
@@ -24,7 +24,29 @@ Notebook環境を整備する。ADR-0034のlocal実験では、固定Notebookを
 Notebookから所有workerへ固定Iceberg学習を依頼する入口も、初回86.739秒で成功した。
 型付き単一等値条件の登録previewも自然文から定型assetsへ接続し、実3caseと独立保存照合で確認した。
 保存学習を選択・編集・予測する単一ユーザーJupyterLabで、画面実行・保存/再読込を確認した。所有kernel/serverの停止・再起動後の保持も確認した。
+Labから自然文table previewを呼ぶ別Notebookも、修正後の等値preview/unsupportedを実画面で確認した。
 JupyterHub、複数ユーザー、直接PySpark、kernel内fit・autologの完了は含めない。
+
+## 2026-09-20: interactive natural-language query workbench — local acceptance complete
+
+JupyterLabに[query workbench例](../../../../examples/local_query_workbench.ipynb)を追加した。
+`query_workbench.ipynb`でtable・自然文request・`filtered`の真偽を明示し、`preview()`を1回実行する。
+kernelが専用DataOps workerを起動し、既存Qwen Assistへ接続する。モデルはschema/依頼だけで1回提案し、
+host検証済みのReader previewを、列名・値・NULLをescapeしたHTML表として表示する。
+`filtered=True`は型付き単一等値条件、falseは従来の列/件数だけ。対応範囲は[Assist WP](WP-L4-AGENT-001_Notebook_to_Dagster_Agent.md)を継承する。
+
+新依存・serviceは追加せず、親kernel環境と既存の保存学習Notebookを保持する。初回配置後の編集Notebookを上書きしない。
+query全体とcleanupの間はLab所有lockを共有し、start/stopとの競合を防ぐ。取消はInterruptを1回使い、
+所有workerの既存cleanup待機を行う。過去queryのcleanup不明時は新実行・start/stopを拒否し、自動retryしない。
+依頼・選択行はprivate query証跡や保存Notebookへ残る。Labのhost権限kernelという境界は変わらない。
+
+初回queryのchild設定不足は失敗証拠を保持して修正した。修正後は画面からbigint等値条件の1行を表示し、
+範囲指定はunsupportedとなった。両結果のNotebook保存/再読込、worker/Reader終了、query中の所有lockを確認した。
+新依頼を増やさず保存証拠だけで、検証helperのsnapshot型誤期待も訂正した。
+全回帰85suites/2990実行（2989PASS・既存1skip）が成功。その後CLI stopのimport pathを修正し、
+runtime31testsと実stop/restartを別途確認した。旧32filesとMLflow19runs/1347points/19artifactsを保持した。
+手順は[Lab runbook](../../../../tools/local_experiment/notebook_lab/README.md)、実測は[Milestones](../061_Local_Experiment_Milestones.md)を参照。
+任意SQL/Notebook生成・一般的自然文理解、Hub/複数ユーザー分離、直接PySpark/autologの受入は含めない。
 
 ## 2026-09-20: single-user local training workbench — local acceptance complete
 

@@ -20,6 +20,7 @@ import secrets
 import socket
 import stat
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -28,10 +29,13 @@ import uuid
 from jupyter_client.kernelspec import KernelSpecManager
 
 ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 VENV = Path(__file__).resolve().parent / '.venv'
 PYTHON = VENV / 'bin/python'
 STATE = ROOT / 'tmp/local-experiment/notebook-lab'
 TEMPLATE = ROOT / 'examples/local_training_workbench.ipynb'
+QUERY_TEMPLATE = ROOT / 'examples/local_query_workbench.ipynb'
 PORT = 18560
 URL = 'http://127.0.0.1:' + str(PORT)
 VERSION = '4.6.3'
@@ -190,10 +194,22 @@ def _prepare():
         _save('config/jupyter_server_config.json', _config(_token()))
         _save('data/kernels/' + KERNEL + '/kernel.json', _kernelspec())
     # A user-edited notebook is retained byte-for-byte, including saved outputs.
-    destination = STATE / 'workspace/training_workbench.ipynb'
-    if not destination.exists() and not destination.is_symlink():
-        _exclusive(destination, TEMPLATE.read_bytes())
+    for name, template in (('training_workbench.ipynb', TEMPLATE),
+                           ('query_workbench.ipynb', QUERY_TEMPLATE)):
+        destination = STATE / 'workspace' / name
+        if not destination.exists() and not destination.is_symlink():
+            _exclusive(destination, template.read_bytes())
     return _owner()
+
+
+def _queries_idle():
+    path = STATE / 'queries'
+    M.no_symlinks(path)
+    if not path.exists():
+        return True
+    from tools.local_experiment.notebook_lab import query
+    require(query.LAB_STATE == STATE, 'LAB_QUERY_STATE_CHANGED')
+    return query.check_idle()
 
 
 def _owner():
@@ -390,6 +406,7 @@ def start():
             require(current['healthy'], 'LAB_SERVER_UNHEALTHY')
             return current
         require(current['state'] == 'stopped', 'LAB_START_UNCONFIRMED')
+        require(_queries_idle(), 'LAB_QUERY_ACTIVE_OR_UNKNOWN')
         _port_free()
         require(PYTHON.is_file(), 'LAB_ENVIRONMENT_MISSING')
         log = STATE / 'server.log'
@@ -568,6 +585,7 @@ def stop():
         require(current['state'] == 'uninitialized', 'LAB_STOP_UNCONFIRMED')
         return current
     with _lock():
+        require(_queries_idle(), 'LAB_QUERY_ACTIVE_OR_UNKNOWN')
         owner_path = STATE / 'owner.json'
         if not owner_path.exists() and not owner_path.is_symlink():
             require({path.name for path in STATE.iterdir()} == {'owner.lock'}, 'LAB_STOP_UNCONFIRMED')

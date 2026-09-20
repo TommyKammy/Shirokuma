@@ -152,6 +152,9 @@ func TestQueryReadRootAndFixedChildPrivacy(t *testing.T) {
 	t.Setenv("PYTHONPATH", "private-path")
 	t.Setenv("PRIVATE_TOKEN", "private-secret")
 	t.Setenv("HTTP_PROXY", "private-proxy")
+	kubeconfig := filepath.Join(root, "kubeconfig")
+	t.Setenv("KUBECONFIG", kubeconfig)
+	before := strings.Join(os.Environ(), "\n")
 	command, err := queryReadCommand(request)
 	if err != nil {
 		t.Fatal(err)
@@ -168,6 +171,9 @@ func TestQueryReadRootAndFixedChildPrivacy(t *testing.T) {
 		if strings.Contains(entry, "private-") {
 			t.Fatal("ambient secret inherited")
 		}
+	}
+	if !strings.Contains("\n"+strings.Join(command.Env, "\n")+"\n", "\nKUBECONFIG="+kubeconfig+"\n") || strings.Join(os.Environ(), "\n") != before {
+		t.Fatal("KUBECONFIG forwarding changed the parent environment or lost its fixed path")
 	}
 	for _, mutate := range []func(*dataChildRequest){func(r *dataChildRequest) { r.Case = "retained-fixture" }, func(r *dataChildRequest) { r.Action = "run" }, func(r *dataChildRequest) { r.Token = "../escape" }, func(r *dataChildRequest) { r.Root = filepath.Dir(root) }} {
 		bad := request

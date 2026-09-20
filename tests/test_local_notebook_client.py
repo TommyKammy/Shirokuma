@@ -117,6 +117,21 @@ class ClientTests(unittest.TestCase):
             with self.assertRaises(OSError): N.read_fixture()
             spawn.assert_not_called()
 
+    def test_reader_forwards_kubeconfig_only_in_child_environment(self):
+        with patch.dict(os.environ, {'KUBECONFIG':str(self.path / 'kubeconfig'),
+                                     'PRIVATE_SENTINEL':'must-not-reach-child',
+                                     'HTTP_PROXY':'must-not-reach-child'}):
+            before = dict(os.environ)
+            with patch.object(N.subprocess, 'Popen', side_effect=self.fake_spawn(Child())) as spawn, \
+                    patch.object(N, '_process_start', return_value='start'):
+                N.read_fixture()
+            child_env = spawn.call_args.kwargs['env']
+            self.assertEqual(child_env['KUBECONFIG'], before['KUBECONFIG'])
+            self.assertNotIn('PRIVATE_SENTINEL', child_env)
+            self.assertNotIn('HTTP_PROXY', child_env)
+            self.assertNotIn('SHIROKUMA_NOTEBOOK_RUN_DIR', child_env)
+            self.assertEqual(dict(os.environ), before)
+
     def test_envelope_tampering_false_cleanup_exit_and_row_hash_refused(self):
         cases = []
         for mutator in (lambda f:f[1].update(cleanup_verified=False),

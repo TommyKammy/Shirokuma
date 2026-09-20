@@ -339,13 +339,20 @@ func TestQueryFilterFixedChildUsesStdinAndFilteredEnvironment(t *testing.T) {
 	r := filterRequest(false)
 	r.Root = filterRoot(t)
 	t.Setenv("PRIVATE_SENTINEL", "must-not-reach-child")
+	t.Setenv("HTTP_PROXY", "must-not-reach-child")
+	kubeconfig := filepath.Join(r.Root, "kubeconfig")
+	t.Setenv("KUBECONFIG", kubeconfig)
+	before := strings.Join(os.Environ(), "\n")
 	cmd, e := queryFilterCommand(r)
 	if e != nil {
 		t.Fatal(e)
 	}
 	args := strings.Join(cmd.Args, " ")
-	if !strings.Contains(args, queryFilterScript) || !strings.Contains(args, "--request-stdin") || strings.Contains(args, "fixture_v1") || strings.Contains(args, "literal") || strings.Contains(strings.Join(cmd.Env, " "), "PRIVATE_SENTINEL") {
+	if !strings.Contains(args, queryFilterScript) || !strings.Contains(args, "--request-stdin") || strings.Contains(args, "fixture_v1") || strings.Contains(args, "literal") || strings.Contains(strings.Join(cmd.Env, " "), "PRIVATE_SENTINEL") || strings.Contains(strings.Join(cmd.Env, " "), "HTTP_PROXY") {
 		t.Fatal("child argument/environment leakage")
+	}
+	if !strings.Contains("\n"+strings.Join(cmd.Env, "\n")+"\n", "\nKUBECONFIG="+kubeconfig+"\n") || strings.Join(os.Environ(), "\n") != before {
+		t.Fatal("KUBECONFIG forwarding changed the parent environment or lost its fixed path")
 	}
 	raw, e := io.ReadAll(cmd.Stdin)
 	if e != nil || !bytes.Equal(raw, r.Request) {

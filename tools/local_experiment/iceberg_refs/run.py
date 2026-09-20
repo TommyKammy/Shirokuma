@@ -77,7 +77,7 @@ def save(path, value):
 
 
 def command(*args):
-    environment = {key: os.environ[key] for key in ('PATH', 'HOME', 'USER', 'TMPDIR', 'LANG', 'LC_ALL') if key in os.environ}
+    environment = {key: os.environ[key] for key in ('PATH', 'HOME', 'USER', 'TMPDIR', 'LANG', 'LC_ALL', 'KUBECONFIG') if key in os.environ}
     result = subprocess.run(['rtk', 'proxy', *args], cwd=ROOT, env=environment,
                             capture_output=True, timeout=35)
     require(result.returncode == 0 and len(result.stdout) <= 1024 * 1024, 'SCOPED_COMMAND_FAILED')

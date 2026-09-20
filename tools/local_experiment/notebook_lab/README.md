@@ -58,3 +58,39 @@ server restarts. A two-kernel shutdown and immediate restart also passed.
 Interrupted shutdown can resume from the saved ownership record; it does not
 restart kernels or stop an unidentified process. Initial configuration and
 shutdown failures are retained in the local experiment evidence.
+
+## Natural-language table preview
+
+Run `make local-notebook-lab-start` again to add `query_workbench.ipynb` to an
+existing workspace. Existing Notebooks and saved results are preserved.
+
+Open that Notebook, run the imports, then edit the table and request cell. The
+example table is `smoke.fixture_v1` in the fixed `iceberg` catalog. Set
+`filtered = True` for a supported single equality condition, for example
+`idが1の行からnameとidを1件表示`. Run the last cell to display the typed rows.
+An unsupported request displays its status and does not execute a data SELECT.
+Each execution makes a fresh attempt; there is no automatic retry.
+
+The existing local Qwen Assist receives the schema and request. The existing
+Reader validates the selected columns, limit and optional equality condition;
+row data is displayed in the Notebook. Save it to retain the request and output.
+
+The worker uses the dedicated DataOps environment and project-local Go caches.
+It reads the existing `~/.kube/config` for `colima-mac-studio-solo`; the existing
+context checks require the local ARM64 Colima environment. No global environment
+or kubeconfig is changed. Lab lifecycle operations and query execution share an
+ownership lock. Use Interrupt once and allow the existing worker cleanup to
+finish. An unresolved attempt remains recorded and blocks further execution or
+shutdown until its cleanup is verified.
+
+Interactive verification displayed the requested equality-filtered row and
+refused an unsupported range condition without a data SELECT. Both requests and
+outputs survived save and reload. Query workers and Readers exited, and the Lab
+lifecycle lock was held during a real query. Existing training data and MLflow
+records were preserved.
+
+The first attempt failed during connection setup before model inference or any
+data query. After verifying that no resources remained, its original failed
+records were retained under `queries-closed-failures`; the connection-setting
+propagation was repaired before a fresh attempt. This recovery is specific to
+that verified pre-resource failure, not permission to disregard unknown cleanup.

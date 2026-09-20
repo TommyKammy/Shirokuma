@@ -69,6 +69,29 @@ class LabRuntimeTests(unittest.TestCase):
         for path in self.state.rglob('*'):
             self.assertEqual(path.stat().st_mode & 0o777, 0o700 if path.is_dir() else 0o600)
 
+    def test_new_query_example_is_seeded_once_and_preserves_user_edit(self):
+        self.prepared()
+        destination = self.state / 'workspace/query_workbench.ipynb'
+        self.assertEqual(destination.read_bytes(), R.QUERY_TEMPLATE.read_bytes())
+        destination.write_bytes(b'user query and saved results')
+        before = destination.stat().st_mtime_ns
+        R._prepare()
+        self.assertEqual(destination.read_bytes(), b'user query and saved results')
+        self.assertEqual(destination.stat().st_mtime_ns, before)
+
+    def test_pending_query_prevents_stop_before_any_service_operation(self):
+        self.prepared()
+        with patch.object(R, '_queries_idle', return_value=False):
+            with self.assertRaisesRegex(R.LabError, 'LAB_QUERY_ACTIVE_OR_UNKNOWN'):
+                R.stop()
+
+    def test_pending_query_prevents_starting_a_new_server(self):
+        self.prepared()
+        with patch.object(R, 'status', return_value=R._public('stopped', kernels=0)), \
+                patch.object(R, '_queries_idle', return_value=False):
+            with self.assertRaisesRegex(R.LabError, 'LAB_QUERY_ACTIVE_OR_UNKNOWN'):
+                R.start()
+
     def test_config_blocks_global_inputs_and_optional_network_features(self):
         self.prepared()
         with patch.dict(os.environ, {'HTTP_PROXY': 'secret', 'JUPYTER_TOKEN': 'secret',

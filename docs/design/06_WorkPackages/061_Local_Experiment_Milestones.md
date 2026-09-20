@@ -5,14 +5,15 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.52"
+version: "3.53"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-20）：単一ユーザーJupyterLabで保存学習の選択・入力編集・予測・保存/再読込とstop/restartが成功。
+最新の到達点（2026-09-20）：Labの自然文queryで等値preview/範囲拒否と保存/再読込が修正後に成功。
+単一ユーザーJupyterLabの保存学習の選択・入力編集・予測・保存/再読込とstop/restartも成功。
 型付き単一等値の自然文previewも実3caseと独立保存照合で確認した。
 保存学習3件の一覧からtokenを選び、既存batch予測2行へ接続する実受入も成功。
 Notebookから所有workerを起動する固定Iceberg学習が初回86.739秒で成功。
@@ -34,6 +35,42 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: interactive natural-language query workbench — local acceptance complete
+
+Labの`query_workbench.ipynb`から、明示table/request/filtered真偽を専用DataOps workerへ渡す入口を追加した。
+既存Qwen Assistを1回呼び、host検証済みのtyped previewをescaped HTML表で表示する。
+filteredは単一型付き等値、従来profileは列/件数だけ。新依存・service追加や親kernel環境の変更はない。
+既存training Notebookを保持し、両templateは初回だけ配置する。query/cleanup中はLab所有lockを共有し、
+未確認queryは新実行・start/stopを拒否する。Interruptは1回、既存cleanup完了を待ち、自動再送しない。
+
+43focused tests（runtime31/query12、1.637秒）が成功。初回query
+`4f2804e3e7834b92aa7abd307728d0e5`はchildへのkubeconfig伝播不足で失敗し、Qwen0、Trino/Polaris未取得だった。
+所有worker/ReaderのPID・PGID不在を確認し、この新queryだけを`queries-closed-failures/`へ移した。
+6filesのSHAと元unknown/failed状態を変えず、失敗Notebook・監査2件も保存した（AH545→547）。
+固定kubeconfigをchildだけへ明示伝播する修正を行い、host環境/configは変更しない。
+回収証拠は`failed-attempt-recovery.json`。修正後に実UIで次の2依頼を確認した。
+
+| Query token | Assist処理時間* | 結果 |
+|---|---:|---|
+| `2ba8e08d0764466e9b2ee8cf91b5b822` | 36.432秒 | bigint `id=1`の`name,id` 1行（shirokuma,1）を表示 |
+| `e0ab417e2f184e6d8e563cf8ed3cbf0b` | 15.749秒 | 範囲はunsupported、data SELECT0/assetsなし |
+
+*外側workerのbuild時間を除く。両Notebookの保存/再読込と、実query中の所有lock busyを確認した。
+検証helperのsnapshot stringを整数と期待した誤りは、保存出力のみの再照合0.272秒で訂正した。
+helper修正のためのQwen/Reader再実行はない。修正後の合計2model callsはinput925/output44 tokens、
+inference3521ms/cost null。全worker/Readerは終了し、追加監査7件を保存した（初回失敗2件を含めAH545→547→554）。
+
+保持7checksが0.424秒で成功し、40sources・32保持files（従来31files＋編集training Notebook）、
+MLflow59tables/19runs/1347points/19artifacts・runtimeと旧監査を照合した。
+全回帰は85suites/2990実行（2989PASS・既存1skip、71.615秒）。
+後続CLI stopでlazy query importのROOT path不足を修正し、runtime31testsを1.315秒で別途確認した。
+元stop失敗logを残し、実stop 1.411秒・restart 1.797秒が成功、kernel0で再利用可能となった。
+再起動前後も32保持files・MLflow・AH554・保存query Notebookが一致した。受入後の製品変更はこのimport修正だけである。
+専用Go cache126,788KiB（prewarm3.608秒）を追加した。新venv・依存・serviceは追加していない。
+証跡：`tmp/local-experiment/notebook-lab-query-checks/10b8b52d43a1473383d30cfffd7b6573/`。
+[Lab runbook](../../../tools/local_experiment/notebook_lab/README.md)に操作と保存範囲を記録する。
+一般自然文理解や任意SQL/code生成、Hub・本番受入をこの例の完了と混同しない。保持証拠やbackupを回復のために削除しない。
 
 ## 2026-09-20: single-user local training workbench — local acceptance complete
 
