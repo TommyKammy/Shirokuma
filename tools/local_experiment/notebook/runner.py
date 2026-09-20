@@ -274,12 +274,21 @@ async def execute_owned(client, manager, directory, *, stop=None,
                 await task
 
 
-def kernel_environment(directory, binary, *, request=None, training_token=None):
-    if training_token is not None:
-        from tools.local_experiment.notebook import training as T
-        if request is not None or binary is not None:
-            raise ValueError('Training review must not have a Reader request or binary')
-        training_token = T.normalize_token(training_token)
+def training_inputs(binary, request, training_token, kind):
+    if type(kind) is not str or kind not in ('synthetic', 'iceberg'):
+        raise ValueError('Unknown training review kind')
+    if training_token is None:
+        if kind != 'synthetic':
+            raise ValueError('Training review kind requires a token')
+        return None
+    from tools.local_experiment.notebook import training as T
+    if request is not None or binary is not None:
+        raise ValueError('Training review must not have a Reader request or binary')
+    return T.normalize_token(training_token)
+
+
+def kernel_environment(directory, binary, *, request=None, training_token=None, kind='synthetic'):
+    training_token = training_inputs(binary, request, training_token, kind)
     environment = {k: os.environ[k] for k in ('PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'TMPDIR')
                    if k in os.environ}
     for name, relative in [('IPYTHONDIR', 'ipython'), ('JUPYTER_CONFIG_DIR', 'jupyter-config'),
@@ -292,7 +301,10 @@ def kernel_environment(directory, binary, *, request=None, training_token=None):
     if binary is not None:
         environment['SHIROKUMA_NOTEBOOK_BINARY'] = str(binary)
     if training_token is not None:
+        from tools.local_experiment.notebook import training as T
         environment[T.TOKEN_ENV] = training_token
+        if kind == 'iceberg':
+            environment[T.KIND_ENV] = kind
     if request is not None:
         request = S.normalize_request(request)
         expected = S.digest(request)
@@ -302,12 +314,8 @@ def kernel_environment(directory, binary, *, request=None, training_token=None):
     return environment
 
 
-async def execute(directory, binary, notebook, *, request=None, training_token=None):
-    if training_token is not None:
-        from tools.local_experiment.notebook import training as T
-        if request is not None or binary is not None:
-            raise ValueError('Training review must not have a Reader request or binary')
-        training_token = T.normalize_token(training_token)
+async def execute(directory, binary, notebook, *, request=None, training_token=None, kind='synthetic'):
+    training_token = training_inputs(binary, request, training_token, kind)
     request = None if request is None else S.normalize_request(request)
     if request is not None:
         S.load_request(directory / 'request.json', S.digest(request))
@@ -335,7 +343,10 @@ async def execute(directory, binary, notebook, *, request=None, training_token=N
     try:
         with (directory / 'kernel.log').open('xb') as kernel_log:
             if training_token is not None:
-                environment = kernel_environment(directory, binary, training_token=training_token)
+                if kind == 'iceberg':
+                    environment = kernel_environment(directory, binary, training_token=training_token, kind=kind)
+                else:
+                    environment = kernel_environment(directory, binary, training_token=training_token)
             elif request is None:
                 environment = kernel_environment(directory, binary)
             else:
@@ -375,17 +386,23 @@ async def execute(directory, binary, notebook, *, request=None, training_token=N
             signal.signal(sig, handler)
 
 
-def training_sources():
+def training_sources(kind='synthetic'):
+    if type(kind) is not str or kind not in ('synthetic', 'iceberg'):
+        raise ValueError('Unknown training review kind')
+    template = 'examples/local_lake_training_review.ipynb' if kind == 'iceberg' else 'examples/local_training_review.ipynb'
     names = ('tools/local_experiment/notebook/runner.py', 'tools/local_experiment/notebook/client.py',
              'tools/local_experiment/notebook/training.py', 'tools/local_experiment/notebook/pyproject.toml',
-             'tools/local_experiment/notebook/uv.lock', 'examples/local_training_review.ipynb')
+             'tools/local_experiment/notebook/uv.lock', template)
+    if kind == 'iceberg':
+        names += ('tools/local_experiment/query_read/contract.py',)
     return {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in names}
 
 
 def main(argv=None, *, stdin=None):
     arguments = sys.argv[1:] if argv is None else argv
     training_token = None
-    training_mode = len(arguments) == 2 and arguments[0] == '--training-token'
+    training_mode = len(arguments) == 2 and arguments[0] in ('--training-token', '--lake-training-token')
+    kind = 'iceberg' if training_mode and arguments[0] == '--lake-training-token' else 'synthetic'
     if arguments not in ([], ['--request-stdin']) and not training_mode:
         print(json.dumps({'result': 'failed', 'error_code': 'ARGUMENTS_INVALID'}))
         return 1
@@ -412,16 +429,25 @@ def main(argv=None, *, stdin=None):
     if request is not None:
         result.update(profile=PREVIEW_PROFILE, request_sha256=S.digest(request))
     if training_token is not None:
-        result.update(profile='training-review-v1', training_token=training_token)
+        result.update(profile=T.LAKE_PROFILE if kind == 'iceberg' else 'training-review-v1', training_token=training_token)
+        if kind == 'iceberg':
+            result['kind'] = kind
     notebook = None
     first_error = None
     try:
-        raw = (T.TEMPLATE_PATH if training_token is not None else
-               TEMPLATE if request is None else PREVIEW_TEMPLATE).read_bytes()
+        if training_token is not None:
+            template = T.template_path(kind) if kind == 'iceberg' else T.TEMPLATE_PATH
+        else:
+            template = TEMPLATE if request is None else PREVIEW_TEMPLATE
+        raw = template.read_bytes()
         sealed = None
         if training_token is not None:
-            T.validate_template(raw)
-            sealed = training_sources()
+            if kind == 'iceberg':
+                T.validate_template(raw, kind=kind)
+                sealed = training_sources(kind)
+            else:
+                T.validate_template(raw)
+                sealed = training_sources()
         if request is not None:
             S.validate_template(raw)
             fd = os.open(directory / 'request.json', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -445,14 +471,19 @@ def main(argv=None, *, stdin=None):
                    binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest() if binary is not None else None,
                    python=sys.version.split()[0], scope='fixed Notebook; Reader one SELECT and read-only MLflow evaluations')
         if training_token is not None:
-            inputs.update(profile='training-review-v1', training_token=training_token, source_sha256=sealed,
+            inputs.update(profile=result['profile'], training_token=training_token, source_sha256=sealed,
                           scope='fixed training result review; two MLflow GETs; no Reader or training')
+            if kind == 'iceberg':
+                inputs['kind'] = kind
         if request is not None:
             inputs.update(profile=PREVIEW_PROFILE, request_file='request.json', request_sha256=S.digest(request))
             S.load_request(directory / 'request.json', S.digest(request))
         write_json(directory / 'inputs.json', inputs)
         if training_token is not None:
-            observed = asyncio.run(execute(directory, binary, notebook, training_token=training_token))
+            if kind == 'iceberg':
+                observed = asyncio.run(execute(directory, binary, notebook, training_token=training_token, kind=kind))
+            else:
+                observed = asyncio.run(execute(directory, binary, notebook, training_token=training_token))
         elif request is None:
             observed = asyncio.run(execute(directory, binary, notebook))
         else:
@@ -468,7 +499,8 @@ def main(argv=None, *, stdin=None):
         if request is not None:
             S.load_request(directory / 'request.json', S.digest(request))
         if training_token is not None:
-            if training_sources() != sealed:
+            current_sources = training_sources(kind) if kind == 'iceberg' else training_sources()
+            if current_sources != sealed:
                 raise ValueError('Training review source changed')
             if any((directory / name).exists() or (directory / name).is_symlink()
                    for name in ('reader-intent.json', 'reader-status.json', 'build.log', 'shirokuma')):
@@ -479,7 +511,17 @@ def main(argv=None, *, stdin=None):
                 T.validate_public(public)
                 if public['identity']['attempt_token'] != training_token:
                     raise ValueError('Training review attempt changed')
-                T.verify_saved_review(public, training_token)
+                if kind == 'iceberg':
+                    intent = N._parse(N._read(directory / 'training-intent.json', 16384))
+                    if (type(intent) is not dict or type(intent.get('schema_version')) is not int
+                            or intent != {'schema_version': 1, 'profile': T.LAKE_PROFILE,
+                                          'attempt_token': training_token, 'kind': kind}):
+                        raise ValueError('Training review intent changed')
+                    if public['profile'] != T.LAKE_PROFILE:
+                        raise ValueError('Training review profile changed')
+                    T.verify_saved_review(public, training_token, kind=kind)
+                else:
+                    T.verify_saved_review(public, training_token)
         status = reader_status(directory)
         result['reader_evidence_token'] = status.get('evidence_token') if status else None
         result['code_cells'] = sum(c.cell_type == 'code' for c in notebook.cells)

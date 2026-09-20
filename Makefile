@@ -908,3 +908,9 @@ local-notebook-training-review:
 test-local-notebook-training:
 	@tools/local_experiment/notebook/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_training*.py'
 verify-local-experiment: test-local-notebook-training
+.PHONY: local-notebook-lake-training-review test-local-notebook-lake-training
+local-notebook-lake-training-review:
+	@tools/local_experiment/notebook/.venv/bin/python -B tools/local_experiment/notebook/runner.py --lake-training-token "$${SHIROKUMA_LAKE_TRAINING_TOKEN:?set a saved Iceberg training attempt token}"
+test-local-notebook-lake-training:
+	@tools/local_experiment/notebook/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lake_training*.py'
+verify-local-experiment: test-local-notebook-lake-training

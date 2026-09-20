@@ -4,7 +4,8 @@ The original fixed profile passed two explicit real-kernel executions and
 independent saved-evidence verification. The runner connects registered Notebook
 templates to the existing Reader CLI and local MLflow evaluation experiment.
 The request profile adds a bounded table preview, and the training-review profile
-reads one explicitly selected saved training attempt. The dated
+reads one explicitly selected saved training attempt. A separate lake-training
+review profile adds saved Iceberg provenance and holdout rows. The dated
 verification sections distinguish the original fixed profile from the selected-table
 preview and its default compatibility run. This is a local partial implementation of
 [WP-L4-NB-001](../../../docs/design/06_WorkPackages/L4/WP-L4-NB-001_JupyterHub_bootstrap.md).
@@ -14,8 +15,78 @@ ipykernel 7.3.0 in `pyproject.toml` and `uv.lock`. It does not install a global
 kernelspec or start JupyterHub. Without input, the runner uses
 `examples/local_lakehouse.ipynb`. With `--request-stdin`, it uses the separately
 registered `examples/local_table_preview.ipynb`. With `--training-token`, it uses
-`examples/local_training_review.ipynb`. These profiles accept no caller-provided
+`examples/local_training_review.ipynb`. With `--lake-training-token`, it uses
+`examples/local_lake_training_review.ipynb`. These profiles accept no caller-provided
 Notebook path or code.
+
+## Review saved Iceberg training
+
+Select the saved **ML training attempt token**, rather than the Iceberg source
+attempt token or MLflow run ID:
+
+```sh
+rtk proxy env SHIROKUMA_LAKE_TRAINING_TOKEN=3da0a631a0e549f29aac96f9998da5bb make local-notebook-lake-training-review
+```
+
+The target passes the explicit 32-character lowercase hexadecimal token to
+`runner.py --lake-training-token` in the existing Notebook environment. It uses
+the separately registered `examples/local_lake_training_review.ipynb`, with
+three code cells and a 60-second execution deadline. The owned loopback MLflow
+server must already be running. There is no dependency sync, caller-supplied
+Notebook path, code or endpoint.
+
+The review binds the completed private training receipt, workload and safe JSON
+artifact. Its typed `lake_input` supplies the 64 rows, explicit 48/16 split and
+provenance needed to check coefficients, predictions and nine metrics. Two
+fixed GETs to the owned experiment 4 and selected run check FINISHED status,
+identity, parameters, tags and latest metrics. The removed source fixture,
+original Reader and live lake pipeline are not required. This performs no new
+Reader execution, fit, MLflow write or LLM call.
+
+The fixed output displays table UUID, snapshot, schema hash, rows hash and Reader
+evidence token; three partitions' metrics; and 16 holdout rows with actual,
+predicted, baseline and residual values. A residual SVG follows the saved holdout
+order, not time. Residual means actual minus prediction. The original synthetic
+training template and public result shape remain separate and unchanged.
+Evidence is private under `tmp/local-experiment/notebook-runs/<token>/`; this
+Notebook execution token differs from the selected ML training attempt token.
+
+### 2026-09-20 Iceberg review acceptance
+
+Review `2b8906fbc5ee4e258b64accd864d1622` passed on its first make invocation
+in 1.108 seconds. Three cells reviewed training attempt
+`3da0a631a0e549f29aac96f9998da5bb`, experiment 4 and run
+`ae5e1ff478ae4a3493c437009be2d6b6`, with profile `lake-training-review-v1`.
+The owned kernel PID 29776 exited and its connection file was removed. Both
+cleanup flags were true; no Reader ran and its evidence token was null.
+`training-intent.json` and `training-review.json` bind the selected saved result,
+which the parent revalidates after kernel shutdown.
+
+Five retention checks preserved 12 sources, 842 protected files, all 59 MLflow
+tables / 18 runs / 1,338 metric points / 18 artifacts, 535 AgentHouse rows and
+the running server identity at PID 23897. Client tests passed 45 cases in
+0.550 seconds (18 new); runner tests passed 25 in 0.112 seconds (11 new). Full
+local regression passed 77 suites / 2,820 tests: 2,819 passed and one existing
+optional test skipped, in 67.325 seconds. Independent saved-evidence verification
+passed first: 58 checks across 871 inputs in 0.351 seconds. It matched 256 typed
+numeric values, the 48/16 split, normal equations, nine metrics, 16 predictions
+and residuals, and the complete public result. Saved HTML has two tables and
+21 rows (two headers, three metric rows and 16 holdout rows); the SVG has 16
+points. No external reference or executable element was found. Three completed
+cells and kernel cleanup also matched. These checks added no API, SDK, fit,
+Reader or product import. The two GETs follow from the frozen successful code
+path; they are not a captured network measurement.
+
+The new run contains ten files / 44,560 bytes (73,728 allocated). Data files use
+mode 600 and parent directories mode 700. Library defaults are recorded
+separately: jupyter-runtime mode 01700 and the static IPython startup/README
+mode 0644 inside a private mode-700 parent. Evidence is under
+`tmp/local-experiment/notebook-lake-training-checks/daac544b51dd41c8a4ea4480565dd9ca/`.
+
+Pixel QA remains unverified; the earlier Browser file-URL policy block is not
+bypassed. These views describe the fixed saved experiment, not general model
+quality, prediction on new input, Notebook training, autolog or JupyterHub
+integration.
 
 ## Default observations
 

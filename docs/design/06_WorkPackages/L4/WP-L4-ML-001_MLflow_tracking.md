@@ -5,7 +5,7 @@ title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "1.1"
+version: "1.2"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -20,7 +20,43 @@ Icebergの固定64行を既存Readerから学習へ接続する実1回も、初�
 固定Notebookのread-only表示と旧import profileの完全export・非稼働clone復元も確認済み。
 完成training receiptsを含む5experiments/18runsの非稼働clone復元とSDK読戻しも初回で成功した。
 保存学習をNotebookの指標表・holdout行・残差SVGで確認する実kernel実行も初回で成功した。
+Iceberg学習も保存artifactと所有MLflow読取からNotebook表示へ接続し、実kernel初回で成功した。
 Notebook/Hubからの学習・autolog、Registry/Serving、clone切替・他host移行は未達。
+
+## 2026-09-20: saved Iceberg training Notebook review — local acceptance complete
+
+`local-notebook-lake-training-review`で保存Iceberg学習attemptを明示選択し、別登録template
+`examples/local_lake_training_review.ipynb`を実行した。`SHIROKUMA_LAKE_TRAINING_TOKEN`には
+32桁lowercase hexのML training attempt tokenを渡す。source tokenやMLflow run IDではない。
+既存Notebook環境の`--lake-training-token`を使い、固定3code cellsの実行期限は60秒とする。
+
+private receipt/workload/safe artifact内の型付きlake_inputから64行・48train/16holdout・係数・9指標と
+provenanceを照合する。所有MLflow experiment4/runへの固定2GETでFINISHED・identity・params/tags/latest metricsを確認する。
+table UUID/snapshot/schema SHA/rows SHA/Reader evidence token、3群のmetric表、16holdout行と残差SVGを表示する。
+削除済み一時tableや元Reader、外部pipelineの再実行は不要。新Reader/fit/MLflow write/LLM/依存追加は0。
+旧synthetic template bytes/public shapeを維持し、親もkernel終了後のpublic結果を保存元へ再束縛する。
+
+実review `2b8906fbc5ee4e258b64accd864d1622`はmake経由の初回1.108秒でpassed、3code cellsが完了した。
+保存training attempt `3da0a631a0e549f29aac96f9998da5bb`、experiment4/run
+`ae5e1ff478ae4a3493c437009be2d6b6`を選び、profile `lake-training-review-v1`の表示を保存した。
+kernel PID29776の終了・connection回収と両cleanup true、Readerなし/evidence token NULLを確認した。
+保持検証5checksで12sources/842保持files、MLflow全59tables/18runs/1338points/18artifacts、
+AgentHouse535rowsと稼働server PID23897の同一性を確認した。
+新29tests（client18/runner11）を含むclient45tests（0.550秒）・runner25tests（0.112秒）が成功した。
+全local77suites/2820tests（2819PASS・既存optional1skip、67.325秒）も成功した。
+独立保存58checks/871inputs（0.351秒）も初回成功。256型付き数値・48/16分割・正規方程式・9指標・
+16予測/残差・public全体とHTML/SVGを照合した。HTML2tables/21rows（見出し2＋指標3＋holdout16）、
+SVG16点、外部参照/実行要素なし、3cellsとkernel回収を確認した。追加API/SDK/fit/Reader/product importは0。
+2GETは固定された成功経路からの推定であり、通信捕捉による測定ではない。
+新10filesは44,560B（実割当73,728B）。データ600/親dir700を維持し、ライブラリ既定の
+jupyter-runtime01700とprivate700親内の静的IPython startup/README0644を区別する。
+
+画面pixel QAは未検証。以前のfile URLに対するBrowser policy拒否を迂回せず、保存値・構造検証と区別する。
+一般モデル品質、新規入力のbatch prediction、任意Notebookコード、Notebook内学習・autolog、
+JupyterHub/複数ユーザー、本番受入は対象外。詳細証跡は
+`tmp/local-experiment/notebook-lake-training-checks/daac544b51dd41c8a4ea4480565dd9ca/`に保持する。
+
+手順：[saved Iceberg training review](../../../../tools/local_experiment/notebook/README.md#review-saved-iceberg-training)。
 
 ## 2026-09-20: completed training clone restore — local acceptance complete
 
