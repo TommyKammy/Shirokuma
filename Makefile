@@ -1026,6 +1026,15 @@ test-local-notebook-lab-record-comparison:
 	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_record_comparison.py'
 verify-local-experiment: test-local-mlflow-comparison-import test-local-notebook-lab-record-comparison
 
+.PHONY: local-mlflow-register-ridge local-mlflow-resolve-ridge test-local-mlflow-registry
+local-mlflow-register-ridge:
+	@tools/local_experiment/mlflow/.venv/bin/python -B tools/local_experiment/mlflow/registry.py register --training-token "$${SHIROKUMA_LAKE_TRAINING_TOKEN:?set a completed Iceberg training token}" --backup-manifest "$${SHIROKUMA_MLFLOW_BACKUP_MANIFEST:?set a fresh stopped-store backup-manifest.json path}"
+local-mlflow-resolve-ridge:
+	@$(PYTHON) -B tools/local_experiment/mlflow/registry.py resolve --name shirokuma-local-ridge --version "$${SHIROKUMA_MLFLOW_MODEL_VERSION:?set an explicit numeric model version}"
+test-local-mlflow-registry:
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_mlflow_registry*.py'
+verify-local-experiment: test-local-mlflow-registry
+
 .PHONY: local-spark-comet-prepare local-spark-comet-build local-spark-comet-run local-spark-comet-recover test-local-spark-comet
 local-spark-comet-prepare:
 	@$(PYTHON) -B tools/local_experiment/spark_comet/prepare.py

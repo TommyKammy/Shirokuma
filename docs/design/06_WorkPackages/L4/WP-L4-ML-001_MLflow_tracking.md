@@ -5,7 +5,7 @@ title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "1.9"
+version: "1.10"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -14,6 +14,7 @@ tags: [shirokuma, workpackage, l4, ml]
 
 ## Summary
 
+固定local Ridge Registryへの初回登録・同token再利用の追加write0・明示version解決と予測・非稼働clone復元を確認した。
 保存比較候補のMLflow記録と同token再表示による追加write0を実UIで確認した。完成profileを含む非稼働clone復元とSDK読戻しも成功した。
 MLflowで固定合成データの学習、保存Agent evalとSpark/Trino測定を記録する。
 Icebergの固定64行を既存Readerから学習へ接続する実1回も、初回失敗の修正・別回収後に成功した。
@@ -28,7 +29,25 @@ Notebookから所有workerへ固定学習を依頼し、1runを追加する実�
 保存Icebergモデルの同一分割でalphaを変える未登録のoffline比較も、実1fitとLab表示で確認した。
 保存比較候補の一覧・再fit不要な新入力予測も、cold計算とLab実UIで確認した。
 Labの固定学習workbenchで、初回unknownの保存結果を追加fitなしで回復し、別の新規正常実行から表示・編集予測・保存/再読込も確認した。
-Hub連携・kernel内fit/autolog、Registry/Serving、clone切替・他host移行は未達。
+Hub連携・kernel内fit/autolog、Registryのalias/stage運用・Serving、clone切替・他host移行は未達。
+
+## 2026-09-20: fixed local Ridge Registry — local acceptance complete
+
+完成した保存Iceberg学習を、固定model `shirokuma-local-ridge`／profile `local-ridge-registry-v1`の明示versionへ登録する入口を実受入した。既存`safe-projection.json`のbytesと学習/run/storeを束縛し、初回だけ同storeを停止してcold exportを保存した後に登録、元runtime状態へ復帰する。同tokenの完成記録は元source/index/receiptを再検証して返すため、SDK・runtime・backup作成・追加writeは0。pending/unknownは再送せず原記録を保持する。version解決は別の読取専用SQLite snapshotで、保存再表示と現在DBの観測を区別する。
+
+実登録は学習`c60d6f25d2944c249c811e800ce2b637`／run `4c298d5871c444dab289a41da84f6006`から初回11.720秒で成功した。model1件/version1件、model tags3/version tags5、stageは文字列`None`、aliases0。artifact SHAは`542d1d920caddc3e944d90f31b64c6f34396bbd7830b2dfe45347d291a09509b`、model SHAは`fbb44bb3315b2701df1f78f0af89d04d1672daa946ee46684ec227cc28e9ecb2`。標準MLflow UIでもsource run・owner/profile・version・stageを確認した。
+
+同token再呼出しは0.864秒で同じ公開結果を返し、58state filesとruntime/DB snapshotが同一、追加write0だった。明示version1の解決から既存予測へ渡した2入力は0.896秒で`4.016354700969291`／`4.425673825468169`となり、登録前の保存モデル予測と一致した。新fit・Reader・LLM・Tracking run/artifact・AgentHouse writeは0。
+
+登録後exportから非稼働cloneへの復元・SDK全履歴読戻しは4.146秒で成功した。全59tables／6experiments／22runs／1383metric points／22artifactsとmodel1/version1を照合し、URI変更はexperiments6・runs22・model source1・storage_location1の計30値だけに限定した。元export/liveデータを保持し、cloneは非稼働のままとした。
+
+保持監査は327観測filesのうち324不変filesが一致し、計画済みの`tracking.sqlite`・`runtime.json`・`start-intent.json`の3変更を分離した。他55tables・既存22artifacts・AgentHouse582行は不変。初回の監査helperは全327files不変という過剰assertで失敗したが、差分3filesの原結果を保存し、範囲を正した再確認は成功した。製品の登録自体は初回成功である。
+
+保存容量はpre-backup56files/2,892,831 bytes、登録後export60files/2,900,944 bytes、clone全体91files/4,566,817 bytes、Registry receipt3files/2,633 bytes、index1file/1,882 bytesの計211files/10,365,107 logical bytes。checks/UIを除き、clone内export/readbackはclone全体へ含めて二重計上しない。全回帰110suites/3466実行（3465PASS・既存1skip）、85.592秒。独立read-only reviewは13inputsで追加指摘0。
+
+操作は[MLflow runbook](../../../../tools/local_experiment/mlflow/README.md)。私有証跡は`tmp/local-experiment/mlflow-registry-checks/662d81493e734ad68f1cfe22f0c029ab/`の`register01.json/log`、`repeat01.json`、`resolve-predict01.json`、`ui-acceptance.json`、`clone01.json`、`retention-first-observation.json`、`retention-final01.json`、`storage-and-usage.json`、`full01.json/log`。登録receiptは`tmp/local-experiment/mlflow-tracking/registry/58c76ee09dde4d8e8061176b6f4d1b7b/result.json`に保持した。
+
+これは固定safe JSONモデルの登録・明示version解決であり、alias/stage運用・品質昇格・pickle/pyfunc読込・Serving・clone切替は未達。新しいNotebookによるRegistry操作は今回の受入に含めず、WPはlocal-partialを維持する。
 
 ## 2026-09-20: saved comparison recording in MLflow — local acceptance complete
 

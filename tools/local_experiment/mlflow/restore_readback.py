@@ -175,13 +175,65 @@ def expected_view(checked):
             'artifacts': {k: {'is_dir': v['kind'] == 'directory', 'size': v.get('size'), 'sha256': v.get('sha256')}
                           for k, v in files.items() if k != '.'}}
     require(0 < len(runs) <= MAX_RUNS, 'READBACK_RUN_LIMIT')
-    return {'experiments': experiments, 'runs': runs}
+    view = {'experiments': experiments, 'runs': runs}
+    registry = R.registry_view(tables)
+    if registry is not None:
+        for key, version in registry['versions'].items():
+            require(version['run_id'] in runs, 'READBACK_REGISTRY_MISMATCH')
+            run = runs[version['run_id']]
+            source = uri_path(version['source'], checked['clone_artifacts'],
+                expected=uri_path(run['info']['artifact_uri'], checked['clone_artifacts']) / 'safe-projection.json')
+            require(registry['storage_locations'][key] in (None, source.as_uri()), 'READBACK_REGISTRY_MISMATCH')
+        view['registry'] = registry
+    return view
 
 
 def counts(view):
-    return {'experiments': len(view['experiments']), 'runs': len(view['runs']),
+    result = {'experiments': len(view['experiments']), 'runs': len(view['runs']),
             'metrics': sum(len(points) for run in view['runs'].values() for points in run['histories'].values()),
             'artifacts': sum(not x['is_dir'] for run in view['runs'].values() for x in run['artifacts'].values())}
+    if 'registry' in view:
+        result.update(registered_models=1, model_versions=len(view['registry']['versions']))
+    return result
+
+
+def version_id(value):
+    # A SQL-backed pinned SDK returns int; its HTTP transport returns str.
+    require(type(value) in (int, str), 'READBACK_REGISTRY_MISMATCH')
+    text = str(value)
+    require(text.isascii() and text.isdigit() and text == str(int(text))
+            and 0 < int(text) <= 2**31 - 1, 'READBACK_REGISTRY_MISMATCH')
+    return text
+
+
+def sdk_registry(client, checked, expected):
+    """Read explicit versions and their URI; never load or deserialize a model."""
+    code = 'READBACK_REGISTRY_MISMATCH'
+    registry = expected['registry']; model = registry['model']; versions = registry['versions']
+    found = client.search_registered_models(max_results=2)
+    require(getattr(found, 'token', None) is None and len(found) == 1 and found[0].name == model['name'], code)
+    actual_model = client.get_registered_model(model['name'])
+    require(R.canonical({key: getattr(actual_model, key) for key in model}) == R.canonical(model), code)
+    def checked_version(actual, wanted):
+        values = {key: getattr(actual, key) for key in wanted}
+        values['version'] = version_id(values['version'])
+        require(R.canonical(values) == R.canonical(wanted), code)
+        uri_path(values['source'], checked['clone_artifacts'])
+    latest = actual_model.latest_versions
+    require(type(latest) is list and len(latest) == 1, code)
+    checked_version(latest[0], versions[max(versions, key=int)])
+    found = client.search_model_versions(max_results=MAX_RUNS + 1)
+    require(getattr(found, 'token', None) is None and len(found) == len(versions)
+            and all(item.name == model['name'] for item in found)
+            and {version_id(item.version) for item in found} == set(versions), code)
+    for key, version in versions.items():
+        checked_version(client.get_model_version(model['name'], key), version)
+        download = client.get_model_version_download_uri(model['name'], key)
+        require(download == version['source'], code)
+        artifact = uri_path(download, checked['clone_artifacts'], expected=uri_path(version['source'], checked['clone_artifacts']))
+        raw = R.read(artifact)
+        expected_artifact = expected['runs'][version['run_id']]['artifacts']['safe-projection.json']
+        require(len(raw) == expected_artifact['size'] and R.digest(raw) == expected_artifact['sha256'], code)
 
 
 def sdk_read(checked, expected, *, factory=None):
@@ -238,6 +290,8 @@ def sdk_read(checked, expected, *, factory=None):
                     require(type(item.file_size) is int and item.file_size == len(raw), 'READBACK_ARTIFACT_MISMATCH')
                     actual_files[relative] = {'is_dir': False, 'size': len(raw), 'sha256': R.digest(raw)}
         require(actual_files == expected_run['artifacts'], 'READBACK_ARTIFACT_MISMATCH')
+    if 'registry' in expected:
+        sdk_registry(client, checked, expected)
     return {'schema_version': 1, 'result': 'passed', 'restore_token': checked['root'].name,
             'counts': counts(expected), 'sdk_view_sha256': R.digest(R.canonical(expected))}
 

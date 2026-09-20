@@ -5,13 +5,14 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.64"
+version: "3.65"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
+固定local Ridge Registryの初回登録・同token追加write0・明示version予測とclone全履歴読戻しが成功した。
 Labの保持snapshot一覧と直列COUNT比較が実UIで成功した。専用fixtureの2件→3件、保存再表示・回収・既存データ保持を確認した。
 Labの固定2schema一覧と明示tableの列情報表示を実UIで確認した。metadata3attempt・モデル呼出し0、保存再表示と既存データ保持が成功した。
 自然文からsnapshotの全件/typed単一等値件数を得るLab/Assist入口が、修正後5caseと保存再表示で成功した。
@@ -46,6 +47,20 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: fixed local Ridge Registry — local acceptance complete
+
+固定model `shirokuma-local-ridge`／profile `local-ridge-registry-v1`へ、完成した保存Iceberg学習を新fitなしで登録した。初回は同storeの停止→cold export→登録→元runtime状態復帰、完成同tokenは保存source/index/receiptの検証だけで再利用する。pending/unknownの再送を拒否し、明示versionの解決は別の読取専用SQLite snapshotとする。
+
+学習`c60d6f25d2944c249c811e800ce2b637`／run `4c298d5871c444dab289a41da84f6006`の初回登録は11.720秒で成功し、model1/version1・model tags3/version tags5・stage文字列`None`・aliases0を保存した。標準MLflow UIでsource run・owner/profile・versionを確認。同token再呼出し0.864秒は同一公開結果、58state files/runtime/DB snapshotが不変で追加write0。明示version1から既存予測へ渡した2入力は0.896秒で登録前と一致した。新fit/Reader/LLM/Tracking run/artifact/AgentHouse writeは0。
+
+登録後の非稼働clone復元とSDK全履歴読戻しは4.146秒で成功した（restore `6973797f616d45a793d77e987cf8743c`／readback `0e3e1cb107f746ac902254a21274d9cd`）。59tables・6experiments・22runs・1383metric points・22artifacts＋model1/version1を保持し、変更はexperiment/run/source/storage_locationのURI計30値だけ。元export/liveデータを保持し、cloneは起動・切替しない。
+
+保持監査は324不変filesと他55tables/22artifacts/AgentHouse582行が一致。全327filesを不変とした初回helperの過剰assert失敗は原記録を残し、計画済み`tracking.sqlite`/`runtime.json`/`start-intent.json`の3変更だけを分離した再確認が成功した。製品登録は初回成功。pre-backup56files/2,892,831 bytes、登録後export60files/2,900,944 bytes、clone全体91files/4,566,817 bytes、Registry receipt3files/2,633 bytes、index1file/1,882 bytesの計211files/10,365,107 logical bytesを保存した。checks/UIを除き、clone内export/readbackは二重計上しない。
+
+全回帰110suites/3466実行（3465PASS・既存1skip）、85.592秒、独立read-only review13inputsで追加指摘0。私有証跡は`tmp/local-experiment/mlflow-registry-checks/662d81493e734ad68f1cfe22f0c029ab/`の`register01.json/log`、`repeat01.json`、`resolve-predict01.json`、`ui-acceptance.json`、`clone01.json`、`retention-first-observation.json`、`retention-final01.json`、`storage-and-usage.json`、`full01.json/log`。全回帰log SHAは`cff27faee067fbce3ead441df12f210feb2b8a3662971ccbd64eeb37010ab837`。
+
+alias/stage運用・品質昇格・Serving・clone切替は未達で、WP-L4-ML-001はlocal-partial。新NotebookからのRegistry操作は今回未受入。操作は[MLflow runbook](../../../tools/local_experiment/mlflow/README.md)、範囲は[MLflow WP](L4/WP-L4-ML-001_MLflow_tracking.md)を参照する。
 
 ## 2026-09-20: Lab retained snapshot count comparison — local acceptance complete
 

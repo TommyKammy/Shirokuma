@@ -2,8 +2,9 @@
 
 WP-L4-ML-001 tracks a fixed supervised training workload, saved Agent evaluation
 and Spark/Trino benchmark receipts. This is a dedicated single-user local
-Tracking service. Hub integration, autolog, registry, serving and production
-work packages remain separate.
+Tracking service with a limited local Registry for completed Iceberg Ridge
+models. Hub integration, autolog, Serving and production work packages remain
+separate.
 
 MLflow **3.16.1** and Python **3.12** run in their own pinned environment. The UI
 and API use **http://127.0.0.1:18550**. No launchd or global host settings change.
@@ -355,9 +356,10 @@ as inert evidence. An invalid referenced receipt or partial run is rejected.
 
 Under `tmp/local-experiment/mlflow-restores/TOKEN/`, `export/` retains the whole
 export as inert evidence, including old runtime and importer records. The
-separate `clone/store/` contains SQLite and artifacts. Only experiment and run
-artifact URIs are rebased to that clone; all other schema and table rows must
-match the export. `clone.json` explicitly records `activation_supported: false`.
+separate `clone/store/` contains SQLite and artifacts. Experiment and run artifact
+URIs, plus the supported Registry version's `source` and non-null
+`storage_location`, are rebased to that clone. All other schema and table rows
+must match the export. `clone.json` explicitly records `activation_supported: false`.
 Missing artifacts, external artifact URIs, unsupported schema and uncertain
 state fail closed. Existing exports and failed restore directories remain intact.
 
@@ -464,6 +466,78 @@ read back all six experiments, 22 runs, 1,383 points and 22 artifacts. Exactly
 28 artifact URI fields changed in the clone. No model was fitted, promoted or
 served. The exploratory holdout RMSE was worse for alpha 10 than for alpha 1;
 recording a comparison does not endorse its candidate.
+
+## Local Ridge Model Registry
+
+The fixed model name `shirokuma-local-ridge` holds explicit numeric versions of
+completed Iceberg Ridge training. The `local-ridge-registry-v1` profile points to
+the existing `safe-projection.json` artifact and binds its bytes, model hash,
+training token, run and source identity. Registration creates no fit, run,
+metric or artifact copy. This JSON profile supports Shirokuma's arithmetic
+prediction path; it is not a general MLflow model flavor or a Serving endpoint.
+
+For a new registration, stop the owned server and retain a cold backup first;
+the CLI validates that backup before writing to the stopped store. Restore the
+server's prior running/stopped state afterward. A completed registration of the
+same training token returns its saved receipt without another write or version;
+that receipt does not claim a fresh database read. Pending or uncertain attempts
+remain as evidence and cannot be automatically resubmitted. Explicit name/version
+resolution reads the current local database and validates the stored identity
+before prediction. No alias, stage promotion or automatic best-model selection
+is performed.
+
+For a new version, use the completed training token and the manifest of a fresh
+cold export. Create that export with the existing `backup.export_stopped`
+helper while the server is stopped; keep the export and any failed attempt.
+
+```sh
+rtk make local-mlflow-stop
+rtk proxy tools/local_experiment/mlflow/.venv/bin/python -B - <<'PY'
+from uuid import uuid4
+from tools.local_experiment.mlflow import backup, runtime
+directory = runtime.ROOT / 'tmp/local-experiment' / ('mlflow-registry-backup-' + uuid4().hex)
+directory.mkdir(mode=0o700)
+backup.export_stopped(directory / 'cold-backup')
+print((directory / 'backup-manifest.json').relative_to(runtime.ROOT))
+PY
+# BACKUP_MANIFEST is the fresh stopped-state export's backup-manifest.json.
+rtk proxy env SHIROKUMA_LAKE_TRAINING_TOKEN=TRAINING_TOKEN SHIROKUMA_MLFLOW_BACKUP_MANIFEST=BACKUP_MANIFEST make local-mlflow-register-ridge
+# Restart only if the server was running before this operation.
+rtk make local-mlflow-start
+rtk proxy env SHIROKUMA_MLFLOW_MODEL_VERSION=1 make local-mlflow-resolve-ridge
+```
+
+Use the returned `binding.training_token` with the existing `predict.py` input contract
+above. Select an explicit numeric version; a missing version or an alias is not
+a prediction choice. The standard MLflow UI's **Model registry** page exposes
+the registered model, its version and originating training run.
+
+A cold export containing this profile can be restored into a new inactive
+clone. The Registry owner, tags, run and exact safe artifact are checked before
+rebasing its local artifact URIs. Aliases and unsupported Registry contents
+fail closed; restoration does not activate the clone or serve the model.
+
+Local acceptance on 2026-09-20 registered version `1` from training
+`c60d6f25d2944c249c811e800ce2b637` (run
+`4c298d5871c444dab289a41da84f6006`). The standard UI showed that version, its
+source run and stage `None`. Registering the same token again preserved all
+58 store-state files checked and the running server identity. Explicit version
+resolution produced the same two predictions as the saved-token path, with no
+write, fit, Reader or model call.
+
+The original 22 runs, 1,383 metric points, 22 artifacts and 582 AgentHouse rows
+were retained. Of 327 observed files, 324 remained identical; the active database
+and two lifecycle records changed through registration and the recorded server
+restarts. A new cold export restored into an inactive clone with all 59 tables
+compared. SDK readback verified six experiments, 22 runs, 1,383 points,
+22 artifacts and the one registered model/version. Exactly 30 URI fields changed in that clone:
+six experiment roots, 22 run roots and the version's two artifact URI fields.
+
+The two cold exports, clone and Registry records contain 211 files totaling
+10,365,107 logical bytes, excluding check logs and scripts. The full local
+regression passed 3,465 tests with one existing skip. Detailed receipts and
+retention observations are retained under
+`tmp/local-experiment/mlflow-registry-checks/662d81493e734ad68f1cfe22f0c029ab/`.
 
 ## Primary references
 

@@ -1,7 +1,7 @@
 """Restore a verified local Tracking export into a fresh, inactive private clone.
 
 ``restore(manifest_path)`` copies the complete export as inert provenance, then
-copies its store into a separate clone and changes only two artifact URI columns.
+copies its store into a separate clone and changes only owned artifact URI columns.
 It neither imports MLflow nor opens the live store. No restart, adoption, retry,
 source deletion, migration, or replacement of an existing clone is performed.
 """
@@ -52,6 +52,11 @@ TRAINING_RESULT_KEYS = {'schema_version', 'result', 'phase', 'token', 'store_id'
                         'workload_sha256', 'failure_code'}
 TRACKING_TABLES = {'alembic_version', 'experiments', 'experiment_tags', 'runs',
                    'metrics', 'latest_metrics', 'params', 'tags'}
+REGISTRY_TABLES = {'registered_models', 'registered_model_tags', 'model_versions', 'model_version_tags'}
+URI_COLUMNS = (('experiments', ('experiment_id',), 'artifact_location', 'experiments'),
+               ('runs', ('run_uuid',), 'artifact_uri', 'runs'),
+               ('model_versions', ('workspace', 'name', 'version'), 'source', 'model_versions.source'),
+               ('model_versions', ('workspace', 'name', 'version'), 'storage_location', 'model_versions.storage_location'))
 DEFAULT_WORKSPACE = {'name': 'default', 'description': 'Default workspace for legacy resources',
                      'default_artifact_root': None, 'trace_archival_location': None,
                      'trace_archival_retention': None}
@@ -325,7 +330,7 @@ def database_snapshot(connection):
     require([dict(zip(tables['workspaces']['columns'], row)) for row in tables['workspaces']['rows']]
             == [DEFAULT_WORKSPACE], 'RESTORE_PROFILE_UNSUPPORTED')
     require(all(not table['rows'] for name, table in tables.items()
-                if name not in TRACKING_TABLES | {'workspaces'}), 'RESTORE_PROFILE_UNSUPPORTED')
+                if name not in TRACKING_TABLES | REGISTRY_TABLES | {'workspaces'}), 'RESTORE_PROFILE_UNSUPPORTED')
     require(not any(row[0] == 'trigger' for row in schema)
             or ('secrets' in tables and not tables['secrets']['rows']), 'RESTORE_PROFILE_UNSUPPORTED')
     return schema, tables
@@ -346,6 +351,49 @@ def artifact_suffix(uri, old_root):
     except ValueError:
         raise RestoreError('RESTORE_ARTIFACT_URI_INVALID') from None
     return relative(suffix)
+
+
+def registry_view(tables):
+    """Project the pinned Registry tables without SDK imports or URI access."""
+    code = 'RESTORE_REGISTRY_INVALID'
+    if not any(tables.get(name, {}).get('rows') for name in REGISTRY_TABLES):
+        return None
+    expected_columns = {
+        'registered_models': {'workspace', 'name', 'creation_time', 'last_updated_time', 'description'},
+        'registered_model_tags': {'workspace', 'name', 'key', 'value'},
+        'model_versions': {'workspace', 'name', 'version', 'creation_time', 'last_updated_time', 'description',
+            'user_id', 'current_stage', 'source', 'storage_location', 'run_id', 'run_link', 'status', 'status_message'},
+        'model_version_tags': {'workspace', 'name', 'version', 'key', 'value'},
+    }
+    require(REGISTRY_TABLES | {'registered_model_aliases'} <= tables.keys()
+            and not tables['registered_model_aliases']['rows'], code)
+    require(all(set(tables[name]['columns']) == columns for name, columns in expected_columns.items()), code)
+    rows = {name: [dict(zip(tables[name]['columns'], row)) for row in tables[name]['rows']] for name in REGISTRY_TABLES}
+    require(len(rows['registered_models']) == 1 and 0 < len(rows['model_versions']) <= 1024, code)
+    model = rows['registered_models'][0]
+    require(model['workspace'] == 'default'
+            and all(row['workspace'] == model['workspace'] and row['name'] == model['name']
+                    for values in rows.values() for row in values), code)
+    def tags(values):
+        require(all(type(row['key']) is str and type(row['value']) is str for row in values)
+                and len({row['key'] for row in values}) == len(values), code)
+        return {row['key']: row['value'] for row in values}
+    def public(row):
+        return {('creation_timestamp' if key == 'creation_time' else
+                 'last_updated_timestamp' if key == 'last_updated_time' else key): value
+                for key, value in row.items() if key != 'storage_location'}
+    projected = public(model)
+    projected.update(tags=tags(rows['registered_model_tags']), aliases={})
+    versions, locations = {}, {}
+    ids = set()
+    for row in rows['model_versions']:
+        require(type(row['version']) is int and 0 < row['version'] <= 2**31 - 1 and row['version'] not in ids, code)
+        ids.add(row['version'])
+        key = str(row['version']); version = public(row); version['version'] = key
+        version.update(tags=tags([tag for tag in rows['model_version_tags'] if tag['version'] == row['version']]), aliases=[])
+        versions[key], locations[key] = version, row['storage_location']
+    require(all(type(tag['version']) is int and tag['version'] in ids for tag in rows['model_version_tags']), code)
+    return {'model': projected, 'versions': versions, 'storage_locations': locations}
 
 
 def training_receipt(run, key, tags, export, artifact, store_id):
@@ -457,6 +505,76 @@ def comparison_plan(records, export, clone_artifacts, store_id):
         raise RestoreError(code) from None
 
 
+def registry_plan(before, export, clone_artifacts, store_id, *, root):
+    """Bind the one owned Registry to retained training and completed registration."""
+    code = 'RESTORE_REGISTRY_INVALID'
+    view = registry_view(before)
+    index_path = export / 'registry-index.json'
+    if view is None:
+        require(not index_path.exists() and not index_path.is_symlink(), code)
+        return {}
+    try:
+        code_root = str(Path(__file__).resolve().parents[3])
+        if code_root not in sys.path:
+            sys.path.insert(0, code_root)
+        from tools.local_experiment.mlflow import registry_contract as K
+        index = parse(read(index_path, MAX_MANIFEST))
+        public = lambda record: {key: value for key, value in record.items() if key != 'workspace'}
+        model = public(view['model'])
+        K.validate_model(model, store_id=store_id)
+        require(index['model'] == model and type(index['entries']) is dict
+                and len(index['entries']) == len(view['versions']), code)
+        old_artifacts = root / SOURCE / 'store/artifacts'
+        records = lambda table: [dict(zip(before[table]['columns'], row)) for row in before[table]['rows']]
+        runs = {run['run_uuid']: run for run in records('runs') if str(run['experiment_id']) == '4'}
+        seen = set(); mutations = {'model_versions.source': [], 'model_versions.storage_location': []}
+        for training_token, entry in index['entries'].items():
+            require(type(training_token) is str and TOKEN.fullmatch(training_token), code)
+            directory = export / 'lake-training' / training_token
+            receipt = parse(read(directory / 'result.json', MAX_MANIFEST))
+            workload = parse(read(directory / 'workload.json', 128 * 1024))
+            binding = K.binding(receipt, workload, store_id=store_id)
+            require(binding['training_token'] == training_token and binding['run_id'] in runs, code)
+            artifact = clone_artifacts / binding['artifact_relpath']
+            tags = [tag for tag in records('tags') if tag['run_uuid'] == binding['run_id']]
+            require(training_receipt(runs[binding['run_id']], '4', tags, export, artifact, store_id) == training_token, code)
+            evidence_token = entry['evidence_token']
+            require(type(evidence_token) is str and TOKEN.fullmatch(evidence_token), code)
+            evidence = export / 'registry' / evidence_token
+            private(evidence, True)
+            require({path.name for path in evidence.iterdir()} == {'source.json', 'result.json', 'backup.json'}, code)
+            # The completed registration's backup identity is inert provenance.
+            # Its referenced pre-registration export need not exist at restore time.
+            backup = parse(read(evidence / 'backup.json', MAX_MANIFEST))
+            require(type(backup) is dict and set(backup) == {'manifest', 'sha256', 'store_id'}
+                    and backup['store_id'] == store_id and type(backup['sha256']) is str
+                    and HEX.fullmatch(backup['sha256']), code)
+            manifest = relative(backup['manifest'])
+            require(manifest.startswith('tmp/local-experiment/')
+                    and Path(manifest).name == 'backup-manifest.json', code)
+            source = parse(read(evidence / 'source.json', MAX_MANIFEST))
+            result = parse(read(evidence / 'result.json', MAX_MANIFEST))
+            K.validate_completed(index, evidence_token, source, result, binding)
+            version = entry['version']['version']
+            require(version in view['versions'] and version not in seen, code); seen.add(version)
+            record = public(view['versions'][version])
+            source_uri = (old_artifacts / binding['artifact_relpath']).as_uri()
+            K.validate_version(record, binding, source_uri=source_uri, storage_location=view['storage_locations'][version])
+            require(record == entry['version'] and result['model_version'] == record
+                    and artifact_suffix(record['source'], old_artifacts) == binding['artifact_relpath'], code)
+            key = ('default', K.MODEL_NAME, int(version))
+            mutations['model_versions.source'].append((key, artifact.as_uri()))
+            if view['storage_locations'][version] is not None:
+                require(artifact_suffix(view['storage_locations'][version], old_artifacts) == binding['artifact_relpath'], code)
+                mutations['model_versions.storage_location'].append((key, artifact.as_uri()))
+        require(seen == set(view['versions']), code)
+        return mutations
+    except Exception as error:
+        if isinstance(error, RestoreError):
+            raise
+        raise RestoreError(code) from None
+
+
 def profile_plan(before, export, clone_artifacts, *, root):
     """Validate saved profile/index/artifacts and plan URI changes without SQL writes."""
     records = lambda table: [dict(zip(before[table]['columns'], row)) for row in before[table]['rows']]
@@ -542,7 +660,23 @@ def profile_plan(before, export, clone_artifacts, *, root):
         comparison_plan(records, export, clone_artifacts, store_id)
     else:
         require(not (export / 'comparison-import-index.json').exists(), 'RESTORE_COMPARISON_INVALID')
+    mutations.update(registry_plan(before, export, clone_artifacts, store_id, root=root))
     return mutations
+
+
+def changed_tables(before, mutations):
+    """Compute precisely the declared URI delta, including composite Registry keys."""
+    expected = {name: {'columns': table['columns'], 'rows': list(table['rows'])} for name, table in before.items()}
+    for table, identifiers, column, mutation in URI_COLUMNS:
+        if mutation not in mutations:
+            continue
+        positions = [before[table]['columns'].index(name) for name in identifiers]
+        uri_at = before[table]['columns'].index(column)
+        changes = {(key,) if len(identifiers) == 1 else key: uri for key, uri in mutations[mutation]}
+        require(len(changes) == len(mutations[mutation]), 'RESTORE_DATABASE_CHANGED')
+        expected[table]['rows'] = [tuple(changes.get(tuple(row[i] for i in positions), value) if at == uri_at else value
+                                         for at, value in enumerate(row)) for row in expected[table]['rows']]
+    return expected
 
 
 def rewrite_database(path, export, clone_artifacts, *, root):
@@ -553,15 +687,13 @@ def rewrite_database(path, export, clone_artifacts, *, root):
         connection.execute('PRAGMA foreign_keys=ON')
         schema, before = database_snapshot(connection)
         mutations = profile_plan(before, export, clone_artifacts, root=root)
-        expected = {name: {'columns': table['columns'], 'rows': list(table['rows'])} for name, table in before.items()}
-        for table, identifier, column in [('experiments', 'experiment_id', 'artifact_location'),
-                                           ('runs', 'run_uuid', 'artifact_uri')]:
-            id_at, uri_at = before[table]['columns'].index(identifier), before[table]['columns'].index(column)
-            changes = dict(mutations[table])
-            expected[table]['rows'] = [tuple(changes[row[id_at]] if i == uri_at else value
-                                                for i, value in enumerate(row)) for row in before[table]['rows']]
-            connection.executemany('UPDATE "' + table + '" SET "' + column + '"=? WHERE "' + identifier + '"=?',
-                                   [(uri, key) for key, uri in mutations[table]])
+        expected = changed_tables(before, mutations)
+        for table, identifiers, column, mutation in URI_COLUMNS:
+            if mutation not in mutations:
+                continue
+            where = ' AND '.join('"' + name + '"=?' for name in identifiers)
+            connection.executemany('UPDATE "' + table + '" SET "' + column + '"=? WHERE ' + where,
+                [(uri, *((key,) if len(identifiers) == 1 else key)) for key, uri in mutations[mutation]])
         connection.commit()
         after_schema, after = database_snapshot(connection)
         require(schema == after_schema and before.keys() == after.keys(), 'RESTORE_DATABASE_CHANGED')
@@ -659,22 +791,17 @@ def inspect_completed(token, *, root=ROOT):
                 and type(saved['rows']) is int and saved['rows'] == len(table['rows'])
                 and saved['after_sha256'] == row_hash(table['rows']),
                 'RESTORE_DATABASE_CHANGED')
-    # Recompute the exact two-column delta from the untouched provenance DB.
+    # Recompute only declared URI changes from the untouched provenance DB.
     old_schema, old_tables = logical_snapshot(output / 'export/store/tracking.sqlite')
     require(schema == old_schema, 'RESTORE_DATABASE_CHANGED')
+    mutations = profile_plan(old_tables, output / 'export', clone / 'store/artifacts', root=root)
+    expected_tables = changed_tables(old_tables, mutations)
     for name, table in old_tables.items():
-        expected_rows = table['rows']
-        if name in ('experiments', 'runs'):
-            column = 'artifact_location' if name == 'experiments' else 'artifact_uri'
-            position = table['columns'].index(column)
-            expected_rows = [tuple((clone / 'store/artifacts' / artifact_suffix(value, root / SOURCE / 'store/artifacts')).as_uri()
-                                   if i == position else value for i, value in enumerate(row)) for row in expected_rows]
         require(table['columns'] == tables[name]['columns']
-                and row_hash(expected_rows) == row_hash(tables[name]['rows'])
+                and row_hash(expected_tables[name]['rows']) == row_hash(tables[name]['rows'])
                 and receipt['database']['tables'][name]['before_sha256'] == row_hash(table['rows']),
                 'RESTORE_DATABASE_CHANGED')
-    require(receipt['database']['artifact_uri_updates'] == {
-        'experiments': len(tables['experiments']['rows']), 'runs': len(tables['runs']['rows'])}
+    require(receipt['database']['artifact_uri_updates'] == {key: len(value) for key, value in mutations.items()}
         and all(type(n) is int for n in receipt['database']['artifact_uri_updates'].values()),
         'RESTORE_RESULT_INVALID')
     return {'root': output, 'clone_db': database, 'clone_artifacts': clone / 'store/artifacts',
