@@ -842,6 +842,11 @@ test-local-query-count:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_query_count_*.py'
 verify-local-experiment: test-local-query-count
 
+.PHONY: test-local-query-reads
+test-local-query-reads:
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_query_reads.py'
+verify-local-experiment: test-local-query-reads
+
 .PHONY: test-local-catalog-read
 test-local-catalog-read:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_catalog_read_*.py'

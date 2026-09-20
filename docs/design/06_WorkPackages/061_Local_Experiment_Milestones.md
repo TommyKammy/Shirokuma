@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-18
-version: "3.39"
+version: "3.40"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
@@ -20,7 +20,33 @@ Trackingは既存runを保持して12評価＋4benchmark、1320 metric pointsと
 current/historical snapshotと型付き等値条件の正確なCount読取4件も成功した。
 固定Catalog Readerの実2回で説明/owner/schema/one-hop lineageを読戻し、公開結果の同一性を確認した。
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
+Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-18: saved Reader metadata inspection — local acceptance complete
+
+`query reads [--token TOKEN]`はReader v1–v4の4固定rootを読み、既存summaryのmetadataを一覧化する。
+v1のtables/describeも含め、同tokenが複数版にあれば版別に表示する。
+公開entry12fieldsにはtable/snapshot/記録result/cleanupを含むが、rows・Count値・SQL・literal・columnsは出さない。
+recorded result/cleanupはproducer claimsの局所整合までで、再実行・現存table/稼働状態の確認とはしない。
+新API/SQL/model/kernel/state/receipt作成0、stdout1lineはchild終了一致後だけ公開する。
+shared lock busyはactive/nullでpayload未読、欠損/不完全/不正/変更/unsafe pathを明示する。
+128runs・summary2MiB・総読取32MiB（再照合含む）・公開256KiBを超えたprefixをcompleteにしない。
+
+実保存一覧は42entries（記録passed36/failed6、v1/v2/v3/v4各21/7/8/6）、complete/exit0・0.337秒。
+これは今回の保存inventoryで、固定必要件数や42件の新実行ではない。
+Count0を記録したtokenの単独表示は1saved passed・0.047秒で、Count値自体は非公開。
+保存failed tokenも1saved failed/cleanup falseを保ち、inspectionはcomplete/exit0・0.043秒。
+missing tokenは0entries/incomplete/exit1・0.044秒で、未観測を成功/ゼロへ補完しない。
+前後58sources/505保持files/8root inventoriesはexact一致、API/SQL/model/kernel0。
+Python19・Go10 top/42 subtests（実Python main9経路/公開fixture16を含む）、
+全local69suites/2487tests（2486PASS・既存optional1skip、62.738秒）が成功。
+Go race230 top/418 subtests・vet/build/secret scanも成功し、初回negative testのfixture誤りと元logは保持した。
+独立保存166checks/125inputsも成功し、保存出力4回と42entries、保持file/root/sourceを照合した。
+検証helperの初回table名grammar誤りは訂正し、元logを保持した。製品・receiptは変更していない。
+証拠は`tmp/local-experiment/query-reads-checks/58d1e8dd958d4658acabd38e1a65243f/`。
+[Query Reads runbook](../../../tools/local_experiment/query_reads/README.md)を参照。
+新たなReader実行品質、現在のcleanup、本番受入へ主張を広げない。
 
 ## 2026-09-18: selected-table Notebook preview — local acceptance complete
 
