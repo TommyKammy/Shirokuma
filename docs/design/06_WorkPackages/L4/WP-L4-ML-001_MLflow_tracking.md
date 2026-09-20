@@ -5,7 +5,7 @@ title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "1.4"
+version: "1.5"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -23,7 +23,29 @@ Icebergの固定64行を既存Readerから学習へ接続する実1回も、初�
 Iceberg学習も保存artifactと所有MLflow読取からNotebook表示へ接続し、実kernel初回で成功した。
 保存Icebergモデルへ新入力を渡すbatch prediction CLIも実22行で成功し、独立算術と一致した。
 Notebookから所有workerへ固定学習を依頼し、1runを追加する実行も初回で成功した。
+保存学習3件のtoken・指標・provenance一覧と、選択tokenによる既存予測も実受入で成功した。
 Hub連携・kernel内fit/autolog、Registry/Serving、clone切替・他host移行は未達。
+
+## 2026-09-20: saved training inventory — local acceptance complete
+
+`local-training-runs`で固定synthetic/Icebergの保存学習候補を最大128件まで一覧する入口を追加した。
+共有saved-review検証済みのtoken・identity・完了時刻・test/baseline metrics・lake provenanceをstdoutへ返し、行/係数は表示しない。
+kind→finished_ms降順→token順で、kind対応Notebook reviewやIceberg batch predictionへtokenを渡す。
+root不正・不明名・衝突・上限超過・走査中変化はincomplete/空配列/exit1とし、候補数はnull、verified/unavailable数は0にする。
+安定した個別候補は、必須result/workload欠損をpartial、保存reviewとして検証できないものをinvalidとしてunavailableへ明示する。
+invalidは未完了/失敗も含む分類で、破損の断定ではない。全候補を走査できればcomplete/exit0と件数を返す。
+
+実一覧は初回0.086秒でcomplete、3候補＝3verified/0unavailable（Iceberg2/synthetic1）。
+時刻順の先頭Iceberg token `6df9b9e5a40b4035b7865f8435fdd291`を明示選択し、
+既存offline予測2行も0.081秒で成功、Decimal独立算術と一致した。一覧/予測の保存SHAと選択identity/provenanceを束縛した。
+7sourcesと31保持filesのbytes/mode/mtimeは不変。新13tests（0.356秒）が成功した。
+全回帰は81suites/2896 test実行（2895PASS・既存optional1skip、68.703秒）。
+同じ新13testsをstdlib単独targetとML専用環境の両方で実行した分を含む。
+固定製品経路はHTTP/SDK/fit/Reader/サービス操作・出力fileを追加しない。証跡は検証側が
+`tmp/local-experiment/mlflow-training-runs-checks/05e9f543b6df4632842f85ba4289682f/`に保持する。
+これは保存学習の一覧であり、一般品質・自動model選定、Registry/Serving、本番受入は対象外。
+
+手順：[saved training inventory](../../../../tools/local_experiment/mlflow/README.md#list-saved-training-runs)。
 
 ## 2026-09-20: Notebook-triggered Iceberg training — local acceptance complete
 

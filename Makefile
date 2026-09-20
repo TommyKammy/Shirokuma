@@ -929,3 +929,10 @@ local-notebook-lake-training:
 test-local-notebook-train:
 	@tools/local_experiment/notebook/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_train_*.py'
 verify-local-experiment: test-local-notebook-train
+
+.PHONY: local-training-runs test-local-training-runs
+local-training-runs:
+	@$(PYTHON) -B tools/local_experiment/mlflow/training_runs.py
+test-local-training-runs:
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_mlflow_training_runs.py'
+verify-local-experiment: test-local-training-runs

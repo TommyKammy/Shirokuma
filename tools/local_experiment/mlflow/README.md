@@ -27,6 +27,57 @@ exclusive lock. Unknown listeners and process identities are rejected; stopping
 the service checks its saved ownership before signalling its process group.
 Stopping preserves the SQLite database, artifacts and importer records.
 
+## List saved training runs
+
+```sh
+rtk proxy make local-training-runs
+```
+
+The bounded inventory covers the two fixed saved-training profiles, synthetic
+and Iceberg, with at most 128 candidates. Shared saved-review validation produces
+verified metadata: kind, training token, run/experiment/store identity, workload
+hash, finish time, test/baseline metrics and lake provenance. Rows and model
+coefficients are omitted. Use the matching
+[synthetic Notebook review](../notebook/README.md#review-saved-training) or
+[Iceberg Notebook review](../notebook/README.md#review-saved-iceberg-training).
+Iceberg tokens also feed [batch prediction](#predict-with-saved-iceberg-training).
+
+Output uses profile `saved-training-runs-v1`. Runs are ordered by kind, then
+finish time descending and token; this is not a model-quality ranking. A stable
+unavailable candidate is classified as `partial` when required result/workload
+files are missing, or `invalid` when it cannot be validated as a saved review.
+Invalid includes unfinished/failed attempts and does not diagnose corruption.
+A complete inventory returns `result: complete` and exit 0, with unavailable
+entries and their counts explicit. An invalid root, unknown name, token
+collision, cap or inventory change returns `result: incomplete`, empty arrays
+and exit 1. In that case `counts.candidates` is null (unknown), while verified
+and unavailable counts are zero, matching the empty arrays. Public output is
+bounded to 256 KiB. The listing makes no API, SDK, fit or Reader call and writes
+no output file.
+
+### 2026-09-20 inventory acceptance
+
+The first listing completed in 0.086 seconds: three candidates, all verified,
+with two Iceberg runs, one synthetic run and no unavailable entries. The latest
+Iceberg token `6df9b9e5a40b4035b7865f8435fdd291` was explicitly selected by
+finish time and passed two rows to the existing offline predictor in
+0.081 seconds. Independent Decimal arithmetic matched the predictions.
+Seven sources and 31 retained files preserved bytes, modes and modification
+times. Thirteen new tests passed in 0.356 seconds. Full regression passed
+81 suites / 2,896 test executions: 2,895 passed and one existing optional test
+skipped, in 68.703 seconds. The same 13 new cases ran in the standalone stdlib
+target and again in the existing MLflow environment; both runs are included.
+
+The saved list SHA-256 is
+`b4309b93bfc7f452ecd82ef1f94f2b79a4bf82635d031476017b9e7c93375fbc`;
+the prediction SHA-256 is
+`30bf87dab77dccceea5dfda5f72aff18c2a2c09a6f95f2740ea05e14684aac40`.
+Private input/output, selected identity/provenance and retention evidence are
+under `tmp/local-experiment/mlflow-training-runs-checks/05e9f543b6df4632842f85ba4289682f/`.
+The product path adds no HTTP, SDK, fit, Reader or service operation. This is
+source-based evidence, not network capture. General model quality, automatic
+model selection, Registry/Serving and production acceptance remain outside scope.
+
 ## Predict with saved Iceberg training
 
 Select a completed **ML training attempt token** and pass a bounded JSON batch:
