@@ -1098,3 +1098,14 @@ test-local-notebook-diagnose-client:
 test-local-notebook-lab-diagnose:
 	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_diagnose.py'
 verify-local-experiment: test-local-notebook-diagnose-client test-local-notebook-lab-diagnose
+
+.PHONY: local-mlflow-serving-start local-mlflow-serving-status local-mlflow-serving-stop test-local-mlflow-serving
+local-mlflow-serving-start:
+	@tools/local_experiment/mlflow/.venv/bin/python -B -m tools.local_experiment.mlflow.serving_runtime start --version "$${SHIROKUMA_MLFLOW_MODEL_VERSION:?set the explicit local Registry version}"
+local-mlflow-serving-status:
+	@tools/local_experiment/mlflow/.venv/bin/python -B -m tools.local_experiment.mlflow.serving_runtime status
+local-mlflow-serving-stop:
+	@tools/local_experiment/mlflow/.venv/bin/python -B -m tools.local_experiment.mlflow.serving_runtime stop
+test-local-mlflow-serving:
+	@tools/local_experiment/mlflow/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_mlflow_serving*.py'
+verify-local-experiment: test-local-mlflow-serving

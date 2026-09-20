@@ -5,13 +5,14 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.67"
+version: "3.68"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
+固定Registry versionのloopback推論APIは、初回自己検査の修正後に84行予測・拒否/timeout・所有再起動を確認した。全回帰も成功した。
 保存previewからのQuery Doctor診断1回とLab保存再表示が成功した。元SELECT再送0、全回帰と最終保持・容量確認も成功した。
 固定Registry名/versionを明示する新Notebookの予測・保存/再読込が成功し、既存Lab processと9冊を保持した。
 固定local Ridge Registryの初回登録・同token追加write0・明示version予測とclone全履歴読戻しが成功した。
@@ -49,6 +50,18 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: fixed-version loopback inference: local acceptance complete
+
+固定Registry versionを起動時の保存bindingへ束縛し、既存モデル算術だけを使うloopback推論APIを追加した。新依存はなく、private token・厳密なHost/Origin/JSON制約・直列処理・入力/応答非保存を採用する。モデル変更や不明な所有状態を自動採用せず、所有確認後のTERM1回で停止する。
+
+初回start01は、workerが自己確認に起動したpsを同PGIDの別processと誤認して失敗した。原failure/logを保持し、stopped/cleanupとport解放を確認した。内部serveの確認だけをnative PID/PGID/UID/PPIDと親の保存launchへ限定し、外側のstart-time/全group検査を維持した。start02は1.553秒で成功、同version再startは同PID、異versionは拒否した。
+
+HTTP01は5.676秒で3requests/82行が既存predictorと独立算術に一致し、11negativeを想定どおり拒否した。partial bodyは5.003秒で408となり、その後もhealth正常。stop/即時restartは2.440秒で成功し、一時的な検証用別listenerを変更せずstart拒否できた。最終受入0.979秒の再起動後2行を加え、計4requests/84行が一致した。最終PID95852は`127.0.0.1:18570`でhealthy。モデルversion1を固定し、入力・応答保存や新fit/Reader/LLM/MLflow書込は0。
+
+旧590filesとMLflow全データ（22runs/1383metric points/22artifacts、Registry model1/version1）、AgentHouse585行を保持した。stateは7files/2,462 logical bytes/24,576 allocated bytes、観測RSS32,656KiB。tokenは値を公開せずhashで保持を照合し、server logには初回の固定failure codeだけを残した。新core14/runtime24fakeと、全回帰114suites/3542 test executions＝3541PASS＋既存1skip（86.098秒）が成功した。最終Makeの同version start/statusも0.588秒で同PID95852・healthyを確認し、追加予測は行っていない。
+
+初回preflightの要求shape、算術helperのmodel比較範囲、acceptance helperのHTTPConnection context管理は保存logを残してhelperのみ訂正した（後者はPOST前）。製品起動失敗と区別し、受入の予測を追加fitや性能改善の証拠とはしない。証跡は`tmp/local-experiment/serving-checks/77462e1938b14406a428be343ac2e627/`の`http01.json`・`restart01.json`・`acceptance02.json`・`storage-and-usage.json`・`full01.json`・`make-start01.json`・`independent-code-review-final.json`。標準pyfunc・multi-user・productionは未達、[ML WP](L4/WP-L4-ML-001_MLflow_tracking.md)はlocal-partialを維持する。
 
 ## 2026-09-20: Lab saved preview diagnosis: local acceptance complete
 

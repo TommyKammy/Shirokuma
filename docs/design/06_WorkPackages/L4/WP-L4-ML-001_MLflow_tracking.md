@@ -5,7 +5,7 @@ title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "1.10"
+version: "1.11"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -14,6 +14,7 @@ tags: [shirokuma, workpackage, l4, ml]
 
 ## Summary
 
+固定Registry versionをloopbackのsafe JSON推論APIへ接続し、修正後の予測・認証拒否・所有停止/再起動と既存データ保持を確認した。
 固定local Ridge Registryへの初回登録・同token再利用の追加write0・明示version解決と予測・非稼働clone復元を確認した。
 保存比較候補のMLflow記録と同token再表示による追加write0を実UIで確認した。完成profileを含む非稼働clone復元とSDK読戻しも成功した。
 MLflowで固定合成データの学習、保存Agent evalとSpark/Trino測定を記録する。
@@ -29,7 +30,15 @@ Notebookから所有workerへ固定学習を依頼し、1runを追加する実�
 保存Icebergモデルの同一分割でalphaを変える未登録のoffline比較も、実1fitとLab表示で確認した。
 保存比較候補の一覧・再fit不要な新入力予測も、cold計算とLab実UIで確認した。
 Labの固定学習workbenchで、初回unknownの保存結果を追加fitなしで回復し、別の新規正常実行から表示・編集予測・保存/再読込も確認した。
-Hub連携・kernel内fit/autolog、Registryのalias/stage運用・Serving、clone切替・他host移行は未達。
+Hub連携・kernel内fit/autolog、Registryのalias/stage運用・標準MLflow pyfunc Serving、clone切替・他host移行は未達。
+
+## 2026-09-20: fixed-version loopback inference: local acceptance complete
+
+固定`shirokuma-local-ridge`の明示versionを起動時に束縛し、`127.0.0.1:18570`の`/health`・`/predict`へ接続するlocal safe JSON inference prototypeを追加した。private bearer tokenで認証し、予測前後にfresh Registryとtoken/run/store/modelの一致を確認する。既存predictorによる1–64行/32KiBの有限数値JSONを直列処理し、入力・予測・tokenを通常logへ保存しない。異versionへ自動切替しない。
+
+初回起動はworkerの自己psを別processと誤認して失敗した。原記録と停止/port解放の確認を保持し、内部をnative自己identity照合へ限定、外側の所有/全process group検査を維持して再起動した。修正後は同versionの起動再利用、異version拒否、HTTP予測・認証等の拒否、timeout後health、所有停止・即時再起動・別listener非変更を実証した。合計4予測requests/84行が既存算術と一致した。
+
+旧590files、MLflow22runs/1383metric points/22artifacts・Registry model1/version1・AgentHouse585行を保持し、新fit/Reader/LLM/MLflow書込は0。これは単一ユーザーの固定safe JSONモデル用で、標準MLflow pyfunc Serving・多ユーザー/tenant認可・一般モデル品質/本番は未達。全回帰も成功し、WPはlocal-partialを維持する。操作は[MLflow runbook](../../../../tools/local_experiment/mlflow/README.md)、実測と失敗/回復の区別は[Milestones](../061_Local_Experiment_Milestones.md)を参照する。
 
 ## 2026-09-20: fixed local Ridge Registry — local acceptance complete
 

@@ -3,11 +3,81 @@
 WP-L4-ML-001 tracks a fixed supervised training workload, saved Agent evaluation
 and Spark/Trino benchmark receipts. This is a dedicated single-user local
 Tracking service with a limited local Registry for completed Iceberg Ridge
-models. Hub integration, autolog, Serving and production work packages remain
-separate.
+models. A separate loopback API provides bounded predictions from an explicit
+Registry version. Hub integration, autolog, MLflow pyfunc Serving and production
+work packages remain separate.
 
 MLflow **3.16.1** and Python **3.12** run in their own pinned environment. The UI
 and API use **http://127.0.0.1:18550**. No launchd or global host settings change.
+
+## Serve an explicit local Ridge version
+
+The local safe JSON inference prototype serves the fixed
+`shirokuma-local-ridge` model on `http://127.0.0.1:18570`. It uses the existing
+ML environment and saved-model arithmetic; it does not load pickle or pyfunc
+models, train, query Iceberg, invoke an LLM or write to MLflow.
+
+```sh
+SHIROKUMA_MLFLOW_MODEL_VERSION=1 rtk proxy make local-mlflow-serving-start
+rtk proxy make local-mlflow-serving-status
+rtk proxy make local-mlflow-serving-stop
+```
+
+Start pins the explicit Registry version and its training, store, artifact and
+model identity. Requests verify that binding against the current read-only
+Registry before returning a prediction. Source changes fail the request;
+another version is never selected automatically. Starting an already running
+service with a different version does not replace it. Stop only terminates the
+recorded, verified serving process; a foreign process using the port is retained.
+
+Both `GET /health` and `POST /predict` require the private serving bearer token.
+Prediction accepts the existing batch request: schema version 1 and 1–64 rows
+containing finite numeric `x1`, `x2` and `x3` values. The body is limited to
+32 KiB. The server processes requests serially, closes each connection and
+rejects browser cross-origin requests. It does not persist input rows or
+predictions. Runtime records stay in `tmp/local-experiment/ridge-serving/`.
+The bearer token is stored in that directory's private `token.json`; status
+omits it. From the checkout, this example reads it directly into the HTTP header
+without adding it to command arguments or printing it:
+
+```sh
+rtk proxy tools/local_experiment/mlflow/.venv/bin/python -B - <<'PY'
+import json
+from pathlib import Path
+from urllib.request import Request, build_opener, ProxyHandler
+
+token = json.loads(Path('tmp/local-experiment/ridge-serving/token.json').read_bytes())['token']
+body = json.dumps({'schema_version': 1, 'rows': [
+    {'x1': 0.0, 'x2': 0.0, 'x3': 0.0},
+    {'x1': 1.0, 'x2': 2.0, 'x3': 3.0},
+]}).encode('ascii')
+request = Request('http://127.0.0.1:18570/predict', data=body, headers={
+    'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json',
+})
+with build_opener(ProxyHandler({})).open(request, timeout=20) as response:
+    print(response.read().decode('ascii'))
+PY
+```
+
+This is a single-user localhost prototype, not MLflow standard model Serving,
+multi-tenant authorization, public hosting or evidence of general model quality.
+It does not change the existing MLflow Tracking service or Registry aliases.
+
+Local acceptance served version 1 and matched 82 predictions across requests
+of 2, 16 and 64 rows to the saved batch predictor and independent arithmetic.
+Eleven rejection cases covered authentication, Host/Origin, invalid or oversized
+JSON and incomplete bodies; the latter timed out in about five seconds.
+Same-version start kept the same process, another version was refused, and
+stop/restart preserved predictions. A separate temporary listener was retained
+and prevented startup. Two more predictions after restart also matched.
+
+The first startup exposed a process-inspection defect: the worker counted its
+own temporary `ps` as an unexpected child. The worker now checks its native
+identity without launching `ps`; the parent retains the full group and start-time
+checks. The failed attempt and cleanup result remain recorded. The final service
+used about 32 MiB RSS at observation, and its seven private state files totaled
+2,462 logical bytes. The prior 590 protected files, 22 MLflow runs, 1,383 metric
+points, 22 artifacts, one Registry model/version and 585 audit rows were unchanged.
 
 ```sh
 rtk make local-mlflow-sync
