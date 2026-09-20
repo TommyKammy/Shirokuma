@@ -4,15 +4,16 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-09-18
-version: "3.40"
+updated: 2026-09-20
+version: "3.41"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-18）：保存SRE log観測のCLI表示と、新SRE評価のMLflow取込を完了。
+最新の到達点（2026-09-20）：選択tableの登録Notebookを定型Dagster2assetsへ接続し、実1回と独立照合が成功。
+これまでに保存SRE log観測のCLI表示と、新SRE評価のMLflow取込を完了。
 Trackingは既存runを保持して12評価＋4benchmark、1320 metric pointsとなり、再取込追加0を確認した。
 固定Notebookの実kernel2回と独立最終照合62checksも成功した。
 登録Notebookを定型Dagster2assetsへ接続する実2回と独立最終照合42checksも成功した。
@@ -22,6 +23,30 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: selected-table Notebook to assets — local acceptance complete
+
+[AGENT-001](L4/WP-L4-AGENT-001_Notebook_to_Dagster_Agent.md)のlocal-partialとして、
+`local-notebook-assets-preview`へexact current-head Reader requestを渡す入口を追加した。
+登録table-preview templateとprivate canonical request/SHAからschema2の
+`table_preview`→`saved_evaluation_summary`を実行し、元の無指定schema1/defs bytesは維持する。
+生成Pythonにrequest値を埋め込まず、runnerは動的importせずhost定義を使用する。
+request/table/column order/requested_limit、exportと取消時のenv復元を照合する。
+
+実1回20.064秒で保持fixtureの[name,id]・limit1からreturned1/fetched2/truncated true、
+12評価run読取・2materializations・業務/owner passed・Reader cleanup trueとなった。
+行順保証はなく合法な1行subsetを検証した。benchmark4runは除外し、新fixture/model/kernelは0。
+不正bool limitは0.046秒でNOTEBOOK_REQUEST_INVALID/exit1として拒否した。
+35focused（新16/既存19）と全local70suites/2503tests（2502PASS・既存optional1skip、60.303秒）、
+secret scanが成功。Go製品変更はなく、先行Go raceの件数を今回へ加算しない。
+前後64sources/505保持files・MLflow59tables/16runs/1320points/16artifacts・AH519は一致。
+独立保存533checks（28意味検査＋505files）/590inputsも初回成功した。
+SQLite1SUCCESS/2materializations・retry/failure0、5distinct terminal Reader query IDs、
+Go owner終了、選択行/評価projection/cleanupを照合し、追加API/model呼出しは0。
+新run20filesの実割当は10,809,344B。保持table/MLflow/backupの削除は不要。
+証拠は`tmp/local-experiment/notebook-assets-selection-checks/b9a9c4d7271d494fbb7c645c78dde93b/`。
+[assets runbook](../../../tools/local_experiment/notebook_assets/README.md)を参照。
+一般Notebook/LLM変換、training/autolog、本番受入へ主張を広げない。
 
 ## 2026-09-18: saved Reader metadata inspection — local acceptance complete
 

@@ -1,4 +1,4 @@
-# Fixed Notebook to Dagster assets
+# Registered Notebook to Dagster assets
 
 This local profile converts the registered, output-free
 [lakehouse Notebook](../../../examples/local_lakehouse.ipynb) into two host-defined
@@ -31,6 +31,54 @@ Notebook execution order. This dependency does **not** claim that the saved
 evaluations were derived from the fixture rows. Evaluation suite/provider/case
 boundaries and missing usage remain as reported by the existing client; this run
 does not perform inference, evaluation, training, data mutation or MLflow writes.
+
+## Select a table for the registered preview
+
+A second profile uses the registered, output-free
+[table preview Notebook](../../../examples/local_table_preview.ipynb). Supply an
+exact Reader v1 select request on stdin:
+
+```sh
+rtk make local-notebook-assets-preview <<'JSON'
+{"command":"select","table":"smoke.fixture_v1","columns":["name","id"],"limit":1}
+JSON
+```
+
+The request has exactly `command`, `table`, `columns` and `limit` fields and must
+fit within 4096 bytes. `command` is `select`, the table and ordered column list
+follow the existing Reader contract, and the integer limit is 1 through 100.
+Only the current snapshot is read. Snapshot selection, filters, arbitrary SQL,
+Notebook paths and Python source are not request inputs. Invalid input is
+rejected before a run directory, Go build or Reader invocation is started.
+
+This target directly uses the existing DataOps Python environment; it does not
+synchronize or install dependencies. It invokes `run.py --request-stdin`. The
+argument-free command and `local-notebook-assets-run` keep the original fixed
+profile and asset names.
+
+The selected profile materializes `table_preview` followed by
+`saved_evaluation_summary`. The first asset calls the existing `read_select()`
+client once and verifies the requested table, column order and limit. The second
+performs the same saved evaluation read as the fixed profile. This dependency
+records execution order; it does not assert that evaluations came from the
+selected rows. Each asset has retry count zero, with the same Reader ownership
+and cleanup rules below.
+
+The canonical request is stored in private `request.json`. Its SHA-256 binds the
+registered template, export, asset metadata and terminal records. The manifest,
+execution intent, business result and owner result use schema version 2 and
+profile `selected-table-notebook-assets-v2`. The original profile keeps schema
+version 1 and its generated definitions unchanged.
+
+Generated `defs.py` calls a fixed host helper with `__file__` and the expected
+request SHA-256. Table names, columns and other request values are never embedded
+in generated Python. The helper validates the adjacent private request and
+export before constructing definitions. The owned runner builds its definitions
+from trusted host code and checks the export before and after materialization;
+it does not dynamically import the generated file or execute Notebook cells.
+A modified request or export cannot become a successful owner result. The
+existing distinction between materialization success and later owner
+interruption remains in effect.
 
 ## Generated files and results
 
@@ -71,6 +119,50 @@ The focused suite has **19 passing tests**, including two real Dagster engine
 cases with fake clients: successful execution records two materializations;
 failure in the second read records only the first and a failed run. These tests
 make no real Reader, MLflow or model calls.
+
+## 2026-09-20 selected preview verification
+
+Run `5b50cb221dcb4bcfb267c3fa205fa4a5` passed in 20.064 seconds using the request
+shown above: `smoke.fixture_v1`, columns `name,id`, limit 1. It returned one row,
+fetched two and marked the result truncated. The returned row was checked as a
+valid subset; the query does not promise which row appears first. Both business
+and owner results passed, with confirmed Reader cleanup. The second asset read
+the same 12 saved evaluation runs and excluded the four benchmark runs.
+
+The private Dagster instance recorded one successful run and exactly two
+materializations, with no failed or retried steps. The five distinct Reader
+query IDs are terminal in saved records, and the Go owner exited. This execution
+created no fixture, kernel or model call and made no data or MLflow writes.
+An invalid boolean limit was refused with `NOTEBOOK_REQUEST_INVALID`, exit 1,
+in 0.046 seconds.
+
+All 35 focused tests passed (16 new and 19 existing, including three real Dagster
+engine cases with fake clients). The full local regression passed 70 suites and
+2503 tests: 2502 passed and one existing optional skip, in 60.303 seconds.
+Review corrections to `requested_limit` validation and interruption during
+environment setup were included before acceptance. Go product code was unchanged;
+prior Go race results are not counted as a new run for this increment.
+
+The before/after guard retained 64 source hashes, 505 earlier files, all 59
+MLflow table row multisets, 16 runs, 1320 metric points, 16 artifacts and the
+519 AgentHouse rows. Independent verification passed 533 checks (28 semantic
+checks plus 505 retained-file checks) across 590 saved inputs on its first run.
+It checked read-only immutable Dagster SQLite state, request/export binding,
+selected typed rows, evaluation projections, saved cleanup and process exit.
+It made no application API, SDK or model calls and did not replay Reader queries.
+
+Evidence is under
+`tmp/local-experiment/notebook-assets-selection-checks/b9a9c4d7271d494fbb7c645c78dde93b/`.
+The after guard SHA-256 is
+`ca3592c2370cd074e1025892282a2d3f135d9b1c7fd4b3060a47dcbcf013a158`.
+The independent proof SHA-256 is
+`f791711346342a1c2d36475d6ec90e2c234e2724a88f63ec0250714265db5b05`.
+The new run contains 20 files totaling 10,674,195 bytes and allocates 10,809,344
+bytes. Directories are 0700, files are 0600 and the Go binary is 0700. Stop using
+the profile by ceasing new invocations and confirming the owned Reader has
+exited; retain its receipts and the existing data, MLflow store and backups.
+General Notebook conversion, LLM conversion, training and production acceptance
+remain outside these results.
 
 ## 2026-09-18 local verification
 

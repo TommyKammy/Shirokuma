@@ -4,8 +4,8 @@ doc_id: "WP-L4-AGENT-001"
 title: "WP-L4-AGENT-001 Notebook to Dagster Agent"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-18
-version: "0.3"
+updated: 2026-09-20
+version: "0.4"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, agentops]
 ---
@@ -16,7 +16,54 @@ tags: [shirokuma, workpackage, l4, agentops]
 
 Notebookを再現可能なDagster assetへ接続する。ADR-0034のlocal実験では、登録済みの固定Notebookだけを
 hostの定型2assetsへ対応付ける最小部分を実装し、実2回と独立最終照合が成功した。
+選択tableの登録previewもschema2の2assetsへ接続し、実1回と独立保存照合が成功した。
 任意NotebookやLLM変換は含めない。
+
+## 2026-09-20: selected-table Notebook to assets — local acceptance complete
+
+`local-notebook-assets-preview`へexact Reader v1 request（command/table/columns/limit）をstdinで渡し、
+登録`examples/local_table_preview.ipynb`の定型2assetsを実行する。4096B・current head限定、
+columns順序とlimit1–100を検証し、未知入力はallocation/build/read前に拒否する。
+既存DataOps環境を直接使い、依存同期・新service・kernel起動を追加しない。
+元の無指定profile/schema1/生成defs bytesを維持し、新profileはschema2の
+`selected-table-notebook-assets-v2`とする。
+
+`table_preview`は既存`read_select(request)`を1回呼び、table/columns/requested_limitを照合する。
+続く`saved_evaluation_summary`は保存評価12runを読み、benchmark4runを除外する。
+この依存は実行順だけを表し、選択行から評価を生成したというlineageにはしない。
+private canonical `request.json`のSHAをmanifest/intent/asset metadata/result/ownerへ束縛し、
+生成`defs.py`は`definitions_from_export(__file__, expected_sha)`だけを呼ぶ。
+request値をPythonへ埋め込まず、runnerは生成物を動的importせずhost定義を使う。
+実行前後・取消時もrequest/exportを照合し、環境設定途中の取消を含めて元envを復元する。
+業務結果とowner終端を区別し、retry0・既存Reader cleanup/取消猶予を維持する。
+
+実run `5b50cb221dcb4bcfb267c3fa205fa4a5`は20.064秒、owner/business passed・cleanup true。
+保持`smoke.fixture_v1`の[name,id]・limit1からreturned1/fetched2/truncated trueを確認した。
+SQLに行順保証はなく、2行のうち合法な1行subsetであることを照合した。
+同snapshot `7141845066324476177`、選択行hash
+`87783371544aa96b0a70f4bfea8c909a48ab3da442c88bcc06baea6e9528fb56`、
+request SHA `eff87a349d77f9a21e9e3cfdb8e214521f78bf8abf0f65877373d546e8df6a85`を保持する。
+新Readerは`9253036c8456cde6cfb0c186548bf88d`、Dagster runは
+`6f671d00-0bdb-498f-9e0c-079224647a3c`で1SUCCESS/2materializations・retry/failure0。
+新fixtureは作らず、今回の実materialization失敗は0、model/kernel呼出しも0だった。
+不正bool limitは0.046秒でNOTEBOOK_REQUEST_INVALID/exit1として拒否した。
+
+35focused（新16/既存19、実Dagster＋fake client計3cases）と、全local70suites/2503tests
+（2502PASS・既存optional1skip、60.303秒）が成功した。requested_limit照合と環境設定中取消の
+レビュー指摘は受入前に修正済み。Go製品変更はなく、前増分のGo race数を今回の回帰へ加算しない。
+64sources/505保持files、MLflow59tables・16runs/1320points/16artifacts、AgentHouse519は前後一致。
+独立保存533checks（28意味検査＋505保持files）/590inputsも初回成功した。
+SQLiteをread-only/immutable/query_onlyで読み、2materializationsのmetadata、5distinct terminal
+Reader query IDs、Go owner終了、選択行/評価射影/cleanupを照合した。独立検証の追加API/model0。
+
+証拠は`tmp/local-experiment/notebook-assets-selection-checks/b9a9c4d7271d494fbb7c645c78dde93b/`。
+`before.json` SHA256は`d01ebda98c23d1490e85a0a224af39b650a750cd0a645ba5b543bdf2565905d6`、
+`after.json` SHA256は`ca3592c2370cd074e1025892282a2d3f135d9b1c7fd4b3060a47dcbcf013a158`。
+独立proof SHA256は`f791711346342a1c2d36475d6ec90e2c234e2724a88f63ec0250714265db5b05`。
+新assets runは20files・10,674,195B（実割当10,809,344B）、dir0700/files0600/binary0700。
+停止時は所有Reader終了を確認して証拠を残す。保持table/MLflow/backupを削除する復旧は不要。
+一般Notebook変換・LLM変換・Hub・複数ユーザー・training/autolog・本番受入は未達として維持する。
+[assets runbook](../../../../tools/local_experiment/notebook_assets/README.md)に新入口と既存境界を記載する。
 
 ## 2026-09-18: fixed Notebook to two assets — local acceptance complete
 

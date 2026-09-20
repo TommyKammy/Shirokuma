@@ -22,6 +22,7 @@ import uuid
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 from tools.local_experiment.notebook import client as N
+from tools.local_experiment.notebook import selection as S
 
 STATE = ROOT / 'tmp/local-experiment/notebook-assets'
 TEMPLATE = ROOT / 'examples/local_lakehouse.ipynb'
@@ -33,6 +34,10 @@ CODE_CELLS = (
 )
 ASSETS = ('fixture_preview', 'saved_evaluation_summary')
 PROFILE = 'fixed-local-lakehouse-notebook-assets-v1'
+SELECTED_ASSETS = ('table_preview', 'saved_evaluation_summary')
+SELECTED_PROFILE = 'selected-table-notebook-assets-v2'
+ENV_KEYS = ('SHIROKUMA_NOTEBOOK_RUN_DIR', 'SHIROKUMA_NOTEBOOK_BINARY',
+            S.REQUEST_PATH_ENV, S.REQUEST_SHA_ENV)
 DEFINITIONS = b'''"""Generated fixed definitions; run through the owned notebook-assets runner."""
 from tools.local_experiment.notebook_assets.run import definitions
 
@@ -85,7 +90,34 @@ def _private_directory(path):
             and info.st_uid == os.getuid(), 'NOTEBOOK_ASSETS_DIRECTORY_INVALID')
 
 
-def _template_manifest():
+def _selected_definitions(request):
+    # Only a validated digest enters generated Python; values stay in request.json.
+    return ('"""Generated selected-table definitions; use the owned asset runner."""\n'
+            'from tools.local_experiment.notebook_assets.run import definitions_from_export\n\n'
+            f'defs = definitions_from_export(__file__, "{S.digest(request)}")\n').encode('ascii')
+
+
+def _binding(request):
+    return {} if request is None else dict(request_sha256=S.digest(request), template_sha256=S.TEMPLATE_SHA256)
+
+
+def _template_manifest(*, request=None):
+    if request is not None:
+        request = S.normalize_request(request)
+        template = ROOT / S.TEMPLATE_PATH
+        require(not template.is_symlink() and template.stat().st_size <= 32768, 'NOTEBOOK_TEMPLATE_INVALID')
+        S.validate_template(template.read_bytes())
+        return dict(schema_version=2, profile=SELECTED_PROFILE, template=S.TEMPLATE_PATH,
+                    template_sha256=S.TEMPLATE_SHA256, request_sha256=S.digest(request),
+                    code_cell_sha256=[digest(cell.encode()) for cell in S.CODE_CELLS],
+                    client_sha256=digest(Path(N.__file__).read_bytes()),
+                    selection_sha256=digest(Path(S.__file__).read_bytes()),
+                    definitions_sha256=digest(_selected_definitions(request)),
+                    converter_sha256=digest(Path(__file__).read_bytes()),
+                    assets=[dict(key=SELECTED_ASSETS[0], read='read_select', depends_on=[], max_calls=1, max_retries=0),
+                            dict(key=SELECTED_ASSETS[1], read='read_evaluations', depends_on=[SELECTED_ASSETS[0]],
+                                 max_calls=1, max_retries=0)],
+                    dependency_semantics='execution-order; evaluations are not derived from selected table rows')
     require(not TEMPLATE.is_symlink() and TEMPLATE.stat().st_size <= 65536, 'NOTEBOOK_TEMPLATE_INVALID')
     raw = TEMPLATE.read_bytes()
     require(digest(raw) == TEMPLATE_SHA256, 'NOTEBOOK_TEMPLATE_CHANGED')
@@ -103,9 +135,10 @@ def _template_manifest():
                 dependency_semantics='execution-order; evaluations are not derived from fixture rows')
 
 
-def export(output: Path):
+def export(output: Path, *, request=None):
     """Create a fresh 0700 directory, fixed 0600 defs.py and conversion manifest."""
-    manifest = _template_manifest()
+    request = S.normalize_request(request) if request is not None else None
+    manifest = _template_manifest(request=request)
     output = Path(output)
     require(output.is_absolute() and all(not p.is_symlink() for p in output.parents),
             'NOTEBOOK_ASSETS_DIRECTORY_INVALID')
@@ -113,23 +146,35 @@ def export(output: Path):
     _private_directory(output)
     fd = os.open(output / 'defs.py', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, 'wb') as stream:
-        stream.write(DEFINITIONS)
+        stream.write(DEFINITIONS if request is None else _selected_definitions(request))
         stream.flush()
         os.fsync(stream.fileno())
+    if request is not None:
+        fd = os.open(output / S.REQUEST_FILENAME, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(S.canonical(request))
+            stream.flush()
+            os.fsync(stream.fileno())
+        require(S.load_request(output / S.REQUEST_FILENAME, S.digest(request)) == request,
+                'NOTEBOOK_REQUEST_CHANGED')
     N._write(output / 'manifest.json', manifest)
     return manifest
 
 
-def verify_export(output):
+def verify_export(output, *, request=None):
     _private_directory(output)
-    expected = _template_manifest()
-    require(N._read(output / 'defs.py', 4096) == DEFINITIONS
+    request = S.normalize_request(request) if request is not None else None
+    if request is not None:
+        require(S.load_request(output / S.REQUEST_FILENAME, S.digest(request)) == request,
+                'NOTEBOOK_REQUEST_CHANGED')
+    expected = _template_manifest(request=request)
+    require(N._read(output / 'defs.py', 4096) == (DEFINITIONS if request is None else _selected_definitions(request))
             and N._parse(N._read(output / 'manifest.json', 16384)) == expected,
             'NOTEBOOK_EXPORT_CHANGED')
     return expected
 
 
-def reader_closed(output):
+def reader_closed(output, *, request=None):
     """No API: require both the client status and existing Reader public proof."""
     intent = output / 'reader-intent.json'
     if not intent.exists() and not intent.is_symlink():
@@ -151,7 +196,7 @@ def reader_closed(output):
                 and type(status['exit_code']) is int and status['exit_code'] in (0,1,130,143)
                 and (status['state'] != 'passed' or status['exit_code'] == 0), 'NOTEBOOK_READER_UNVERIFIED')
         token, _, cleanup = N._reader_frames(N._read(output / 'reader.stdout.jsonl', N.C.MAX_PUBLIC_BYTES*2+2),
-                                             status['exit_code'])
+                                             status['exit_code'], request=N.REQUEST if request is None else request)
         return cleanup is True and token == status['evidence_token']
     except Exception:
         return False
@@ -161,14 +206,17 @@ def _state():
     return {'started': set(), 'metadata': {}, 'first_error': None}
 
 
-def build_assets(state, api=None, client=N):
+def build_assets(state, api=None, client=N, *, request=None):
     """Construct trusted host definitions. api/client injection is only for tests."""
     if api is None:
         import dagster as api
+    request = S.normalize_request(request) if request is not None else None
+    keys = ASSETS if request is None else SELECTED_ASSETS
+    template_sha = TEMPLATE_SHA256 if request is None else S.TEMPLATE_SHA256
     def call(name, function):
         require(name not in state['started'], 'NOTEBOOK_ASSET_RETRY_REFUSED')
-        if name == ASSETS[1]:
-            require(ASSETS[0] in state['metadata'], 'NOTEBOOK_ASSET_ORDER_INVALID')
+        if name == keys[1]:
+            require(keys[0] in state['metadata'], 'NOTEBOOK_ASSET_ORDER_INVALID')
         state['started'].add(name)
         try:
             with _signals():
@@ -181,34 +229,53 @@ def build_assets(state, api=None, client=N):
             state['first_error'] = _keep(state['first_error'], error)
             raise state['first_error']
 
-    @api.asset(name=ASSETS[0], retry_policy=api.RetryPolicy(max_retries=0))
+    @api.asset(name=keys[0], retry_policy=api.RetryPolicy(max_retries=0))
     def fixture_preview():
-        public = call(ASSETS[0], client.read_fixture)
+        public = call(keys[0], client.read_fixture if request is None else lambda: client.read_select(request))
         N.C.receipt_projection(public)
+        if request is not None:
+            require(public['table'] == 'iceberg.' + request['table']
+                    and [column['name'] for column in public['columns']] == request['columns']
+                    and public['requested_limit'] == request['limit'], 'NOTEBOOK_READER_INVALID')
         metadata = dict(row_count=public['row_count'], rows_sha256=public['rows_sha256'],
                         snapshot_id=public['snapshot_id'], artifact='reader.stdout.jsonl',
-                        template_sha256=TEMPLATE_SHA256)
-        state['metadata'][ASSETS[0]] = metadata
+                        template_sha256=template_sha)
+        if request is not None:
+            metadata['request_sha256'] = S.digest(request)
+        state['metadata'][keys[0]] = metadata
         return api.MaterializeResult(metadata=metadata)
 
-    @api.asset(name=ASSETS[1], deps=[ASSETS[0]], retry_policy=api.RetryPolicy(max_retries=0))
+    @api.asset(name=keys[1], deps=[keys[0]], retry_policy=api.RetryPolicy(max_retries=0))
     def saved_evaluation_summary():
-        public = call(ASSETS[1], client.read_evaluations)
+        public = call(keys[1], client.read_evaluations)
         metadata = dict(run_count=public['count'], evaluations_sha256=digest(N._canonical(public)),
                         artifact='evaluations.json', cost=api.MetadataValue.null(),
-                        template_sha256=TEMPLATE_SHA256)
-        state['metadata'][ASSETS[1]] = {**metadata, 'cost': None}
+                        template_sha256=template_sha)
+        if request is not None:
+            metadata['request_sha256'] = S.digest(request)
+        state['metadata'][keys[1]] = {**metadata, 'cost': None}
         return api.MaterializeResult(metadata=metadata)
     return [fixture_preview, saved_evaluation_summary]
 
 
-def definitions():
+def definitions(*, request=None):
     """Public generated-definitions entrypoint; constructing it executes no reads."""
     import dagster
-    return dagster.Definitions(assets=build_assets(_state(), dagster))
+    return dagster.Definitions(assets=build_assets(_state(), dagster, request=request))
 
 
-def execute(output: Path, binary: Path, *, materializer=None, instance_factory=None, api=None, client=N):
+def definitions_from_export(definitions_path, expected_sha):
+    """Validate a private export and construct definitions, without running reads."""
+    path = Path(definitions_path)
+    require(path.is_absolute() and path.name == 'defs.py' and not path.is_symlink(),
+            'NOTEBOOK_EXPORT_CHANGED')
+    _private_directory(path.parent)
+    request = S.load_request(path.parent / S.REQUEST_FILENAME, expected_sha)
+    verify_export(path.parent, request=request)
+    return definitions(request=request)
+
+
+def execute(output: Path, binary: Path, *, request=None, materializer=None, instance_factory=None, api=None, client=N):
     """Materialize once in process, with a fresh private instance and retry zero.
 
     The client owns the Go process and its 240/245-second execution/cleanup
@@ -218,22 +285,30 @@ def execute(output: Path, binary: Path, *, materializer=None, instance_factory=N
     the owner to force an unknown Reader to look complete.
     """
     output, binary = Path(output), Path(binary)
-    manifest = verify_export(output)
+    request = S.normalize_request(request) if request is not None else None
+    manifest = verify_export(output, request=request)
+    keys = ASSETS if request is None else SELECTED_ASSETS
+    schema, profile = (1, PROFILE) if request is None else (2, SELECTED_PROFILE)
     require(binary.is_absolute() and binary.is_file() and not binary.is_symlink(), 'NOTEBOOK_BINARY_INVALID')
-    N._write(output / 'execution-intent.json', dict(schema_version=1, profile=PROFILE,
-                manifest_sha256=digest(N._canonical(manifest)), binary_sha256=digest(binary.read_bytes())))
+    N._write(output / 'execution-intent.json', dict(schema_version=schema, profile=profile,
+                manifest_sha256=digest(N._canonical(manifest)), binary_sha256=digest(binary.read_bytes()),
+                **_binding(request)))
     if api is None:
         import dagster as api
     materializer = materializer or api.materialize
     instance_factory = instance_factory or api.DagsterInstance.local_temp
     state, original, run_id = _state(), None, None
-    result = dict(schema_version=1, profile=PROFILE, result='failed', dagster_run_id=None,
-                  assets=[], reader_cleanup_confirmed=False, error_code=None)
+    result = dict(schema_version=schema, profile=profile, result='failed', dagster_run_id=None,
+                  assets=[], reader_cleanup_confirmed=False, error_code=None, **_binding(request))
     env = {'SHIROKUMA_NOTEBOOK_RUN_DIR':str(output), 'SHIROKUMA_NOTEBOOK_BINARY':str(binary)}
-    previous = {name:os.environ.get(name) for name in env}
-    os.environ.update(env)
+    if request is not None:
+        env.update({S.REQUEST_PATH_ENV:str(output / S.REQUEST_FILENAME), S.REQUEST_SHA_ENV:S.digest(request)})
+    previous = {name:os.environ.get(name) for name in ENV_KEYS}
     try:
-        assets = build_assets(state, api, client)
+        for name in ENV_KEYS:
+            os.environ.pop(name, None)
+        os.environ.update(env)
+        assets = build_assets(state, api, client, request=request)
         (output / 'dagster').mkdir(mode=0o700)
         with instance_factory(str(output / 'dagster'), overrides={'telemetry':{'enabled':False}}) as instance:
             try:
@@ -241,25 +316,28 @@ def execute(output: Path, binary: Path, *, materializer=None, instance_factory=N
                 run_id = str(uuid.UUID(outcome.run_id))
                 events = outcome.get_asset_materialization_events()
                 event_keys = [tuple(event.asset_key.path) for event in events]
-                require(outcome.success is True and sorted(event_keys) == [(key,) for key in ASSETS]
-                        and set(state['metadata']) == set(ASSETS) and state['first_error'] is None,
+                require(outcome.success is True and sorted(event_keys) == sorted((key,) for key in keys)
+                        and set(state['metadata']) == set(keys) and state['first_error'] is None,
                         'NOTEBOOK_MATERIALIZATION_INCOMPLETE')
             except BaseException as error:
                 original = _keep(state['first_error'], error)
                 raise original
-        verify_export(output)
-        require(reader_closed(output), 'NOTEBOOK_READER_UNVERIFIED')
+        require(reader_closed(output, request=request), 'NOTEBOOK_READER_UNVERIFIED')
     except BaseException as error:
         original = _keep(original, error)
     finally:
         original = _keep(state['first_error'], original) if original is not None else state['first_error']
+        try:
+            verify_export(output, request=request)
+        except BaseException as error:
+            original = _keep(original, error)
         for name, value in previous.items():
             if value is None:
                 os.environ.pop(name, None)
             else:
                 os.environ[name] = value
         try:
-            closed = reader_closed(output)
+            closed = reader_closed(output, request=request)
         except BaseException as error:
             original = _keep(original, error)
             closed = False
@@ -280,22 +358,30 @@ def execute(output: Path, binary: Path, *, materializer=None, instance_factory=N
     return result
 
 
-def main(argv=None):
-    if (sys.argv[1:] if argv is None else argv):
+def main(argv=None, *, stdin=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if argv not in ([], ['--request-stdin']):
         print(json.dumps({'result':'failed','error_code':'ARGUMENTS_INVALID'}))
         return 1
+    request = None
+    if argv:
+        try:
+            request = S.parse_request((sys.stdin.buffer if stdin is None else stdin).read(S.MAX_REQUEST_BYTES + 1))
+        except Exception:
+            print(json.dumps({'result':'failed','error_code':'NOTEBOOK_REQUEST_INVALID'}))
+            return 1
     os.umask(0o077)
     STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
     output = STATE / uuid.uuid4().hex
     business, original = None, None
     try:
         with _signals():
-            export(output)
+            export(output, request=request) if request is not None else export(output)
             binary = output / 'shirokuma'
             with (output / 'build.log').open('xb') as log:
                 subprocess.run(['go','build','-o',str(binary),'./cmd/shirokuma'], cwd=ROOT,
                                stdout=log, stderr=log, check=True, timeout=60)
-            business = execute(output, binary)
+            business = execute(output, binary, request=request) if request is not None else execute(output, binary)
     except BaseException as error:
         original = error
         try:
@@ -303,18 +389,24 @@ def main(argv=None):
         except BaseException as secondary:
             original = _keep(original, secondary)
     try:
-        closed = reader_closed(output)
+        closed = reader_closed(output, request=request)
     except BaseException as error:
         original, closed = _keep(original, error), False
     if not closed and original is None:
         original = AssetError('NOTEBOOK_READER_UNVERIFIED')
-    owner = dict(schema_version=1, profile=PROFILE,
+    if request is not None and output.exists():
+        try:
+            verify_export(output, request=request)
+        except BaseException as error:
+            original = _keep(original, error)
+    schema, profile = (1, PROFILE) if request is None else (2, SELECTED_PROFILE)
+    owner = dict(schema_version=schema, profile=profile,
                  result=business['result'] if original is None and business is not None else
                         'unknown' if not closed else 'interrupted' if not isinstance(original,Exception) else 'failed',
                  materialization_result=business['result'] if business is not None else None,
                  reader_cleanup_confirmed=closed,
                  error_code=None if original is None else 'INTERRUPTED' if not isinstance(original,Exception)
-                            else 'NOTEBOOK_ASSETS_FAILED')
+                             else 'NOTEBOOK_ASSETS_FAILED', **_binding(request))
     saved = False
     try:
         N._write(output / 'owner-result.json', owner)

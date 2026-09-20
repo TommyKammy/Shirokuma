@@ -868,9 +868,15 @@ test-local-notebook-selection:
 	@tools/local_experiment/notebook/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_parameterized.py'
 verify-local-experiment: test-local-notebook-selection
 
-.PHONY: local-notebook-assets-run test-local-notebook-assets
+.PHONY: local-notebook-assets-run local-notebook-assets-preview test-local-notebook-assets test-local-notebook-assets-selection
 local-notebook-assets-run: local-dataops-sync
 	@tools/local_experiment/dataops/.venv/bin/python -B tools/local_experiment/notebook_assets/run.py
+local-notebook-assets-preview:
+	@tools/local_experiment/dataops/.venv/bin/python -B tools/local_experiment/notebook_assets/run.py --request-stdin
 test-local-notebook-assets: local-dataops-sync
 	@tools/local_experiment/dataops/.venv/bin/python -B -m unittest -v tests.test_notebook_dagster_assets
 verify-local-experiment: test-local-notebook-assets
+
+test-local-notebook-assets-selection:
+	@tools/local_experiment/dataops/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_assets_selection.py'
+verify-local-experiment: test-local-notebook-assets-selection
