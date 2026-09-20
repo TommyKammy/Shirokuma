@@ -93,6 +93,45 @@ Interrupted shutdown can resume from the saved ownership record; it does not
 restart kernels or stop an unidentified process. Initial configuration and
 shutdown failures are retained in the local experiment evidence.
 
+## Compare two snapshot counts
+
+`make local-notebook-lab-start` seeds `snapshot_workbench.ipynb` once. Select a
+fixed local table and list its retained snapshots. The initial Run All only
+lists snapshots; it does not count rows or call a model. Snapshot order follows
+recorded timestamps, not the numeric order of snapshot IDs.
+
+Set two different snapshot IDs from the displayed compatible snapshots and
+enable the comparison flag to request two sequential COUNT reads. Each can
+scan its full snapshot and retains the existing Reader timeout. Both reads
+must finish and close cleanly, with the same table UUID and schema hash and the
+requested snapshot IDs, before `right count - left count` is shown. Counts and
+the difference remain exact decimal strings. A failed or unconfirmed side never
+becomes zero or a difference. The result compares total row counts; it does not
+identify added or deleted rows.
+
+The Python entrypoints are `snapshots(table)` and
+`compare_counts(table, left_id, right_id)`. Use `recover_snapshots(attempt_token)`
+and `render_snapshots(result)` to display a saved observation without a new
+Reader or model call. Each current head and the acquisition time describe the
+saved reads; an explicit snapshot comparison does not require the current head
+to stay fixed between its two reads. Historical results are checked against
+their saved evidence, and remain readable after source changes or fixture
+cleanup. The existing 64-snapshot limit remains in force; an over-limit response
+fails instead of becoming a partial list.
+
+Local acceptance on 2026-09-20 used a fresh disposable table containing an
+initial empty snapshot, a two-row snapshot and a three-row snapshot. Initial
+Run All listed them once with zero COUNT reads. The selected pair returned exact
+counts `2` and `3`, with difference `1`; the two COUNT Readers ran sequentially
+and closed cleanly. Saved recovery and Notebook save/reload added no reads.
+After an owned describe, the fixture helper dropped only that new table and
+verified the retained fixture's six observations were unchanged. Saved results
+remained readable after cleanup. The prior 267 protected files, MLflow's
+22 runs / 1,383 metric points / 22 artifacts, and 582 AgentHouse rows were
+preserved. No model calls or audit events were added. Full local regression:
+3,435 tests executed (3,434 passed, one skipped); `go test ./...` also passed.
+Evidence: `tmp/local-experiment/notebook-snapshot-checks/fbcaa2d1d4044f4a9beaf85f6e1f5e4f/`.
+
 ## Browse tables and columns
 
 Run `make local-notebook-lab-start` to add `table_workbench.ipynb` once. The

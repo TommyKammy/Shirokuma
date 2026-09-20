@@ -1070,3 +1070,10 @@ test-local-notebook-metadata-client:
 test-local-notebook-lab-metadata:
 	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_metadata.py'
 verify-local-experiment: test-local-notebook-metadata-client test-local-notebook-lab-metadata
+
+.PHONY: test-local-notebook-snapshot-client test-local-notebook-lab-snapshots
+test-local-notebook-snapshot-client:
+	@tools/local_experiment/notebook/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_snapshot_client.py'
+test-local-notebook-lab-snapshots:
+	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_snapshots.py'
+verify-local-experiment: test-local-notebook-snapshot-client test-local-notebook-lab-snapshots

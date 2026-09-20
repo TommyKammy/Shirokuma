@@ -23,6 +23,7 @@ from tools.local_experiment.query_read import contract as C
 from tools.local_experiment.notebook import selection as S
 from tools.local_experiment.notebook import filtered_selection as FS
 from tools.local_experiment.query_count import contract as QC
+from tools.local_experiment.query_snapshots import contract as QS
 
 ROOT = Path(__file__).resolve().parents[3]
 INDEX = ROOT / 'tmp/local-experiment/mlflow-tracking/import-index.json'
@@ -373,8 +374,7 @@ def _count_arguments(binary, request):
     return arguments
 
 
-def _count_reader_frames(raw, exit_code, request):
-    request = _count_request(request)
+def _count_result_frames(raw, exit_code, request):
     token, public, cleanup = _reader_envelope(raw, exit_code, 'query count',
                                              schema_version=4, evidence_root='query-count')
     if public is None:
@@ -384,11 +384,70 @@ def _count_reader_frames(raw, exit_code, request):
     return token, public, True
 
 
+def _count_reader_frames(raw, exit_code, request):
+    return _count_result_frames(raw, exit_code, _count_request(request))
+
+
 def read_count(request):
     """One exact current-snapshot COUNT through the existing owned Go Reader."""
     request = _count_request(request)
     return _read_owned(request, _count_arguments,
                        lambda raw, code: _count_reader_frames(raw, code, request))
+
+
+def _snapshots_request(table):
+    try:
+        return QS.normalize_request({'command': 'snapshots', 'table': table})
+    except QS.ContractError:
+        raise NotebookError('NOTEBOOK_REQUEST_INVALID') from None
+
+
+def _snapshots_arguments(binary, request):
+    return [str(binary), '--repo-root', str(ROOT), '--profile', 'local-experiment',
+            'query', 'snapshots', '--table', request['table']]
+
+
+def _snapshots_reader_frames(raw, exit_code, table):
+    request = _snapshots_request(table)
+    token, public, cleanup = _reader_envelope(raw, exit_code, 'query snapshots',
+                                             schema_version=2, evidence_root='query-snapshots')
+    if public is None:
+        return token, None, cleanup
+    try:
+        public = QS.validate_public(public, request)
+    except QS.ContractError:
+        raise NotebookError('NOTEBOOK_READER_INVALID') from None
+    return token, public, True
+
+
+def read_snapshots(table):
+    """Observe one table's retained snapshot catalog through the owned Reader."""
+    request = _snapshots_request(table)
+    return _read_owned(request, _snapshots_arguments,
+                       lambda raw, code: _snapshots_reader_frames(raw, code, request['table']))
+
+
+def _snapshot_count_request(request):
+    request = QC.normalize_request(request)
+    _require(request['snapshot_id'] is not None, 'NOTEBOOK_REQUEST_INVALID')
+    return request
+
+
+def _snapshot_count_arguments(binary, request):
+    request = _snapshot_count_request(request)
+    return (_count_arguments(binary, dict(request, snapshot_id=None))
+            + ['--snapshot-id', request['snapshot_id']])
+
+
+def _snapshot_count_reader_frames(raw, exit_code, request):
+    return _count_result_frames(raw, exit_code, _snapshot_count_request(request))
+
+
+def read_snapshot_count(request):
+    """COUNT one explicit snapshot; the current-only read_count entry is unchanged."""
+    request = _snapshot_count_request(request)
+    return _read_owned(request, _snapshot_count_arguments,
+                       lambda raw, code: _snapshot_count_reader_frames(raw, code, request))
 
 
 def read_tables(schema):

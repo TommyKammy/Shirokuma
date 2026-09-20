@@ -75,10 +75,14 @@ def _input(directory):
         from tools.local_experiment.notebook_lab import metadata as M
         require(set(value) == {'schema_version', 'mode', 'input'} and value['mode'] == 'metadata')
         value['input'] = M.normalize_request(value['input'])
+    elif value['schema_version'] == 4:
+        from tools.local_experiment.notebook_lab import snapshots as S
+        require(set(value) == {'schema_version', 'mode', 'input'} and value['mode'] == 'snapshots')
+        value['input'] = S.normalize_request(value['input'])
     else:
         require(set(value) == {'schema_version', 'filtered', 'input'}
                 and value['schema_version'] == 1 and type(value['filtered']) is bool)
-    if value['schema_version'] != 3:
+    if value['schema_version'] in (1, 2):
         value['input'] = C.normalize_input(value['input'])
     require(N._read(directory / 'input.json', 16384) == N._canonical(value))
     return value
@@ -110,13 +114,17 @@ def query_status(directory):
     return value
 
 
-def terminal_receipt(directory, exit_code, *, verify_count_source=False, verify_metadata_source=False):
+def terminal_receipt(directory, exit_code, *, verify_count_source=False, verify_metadata_source=False,
+                     verify_snapshot_source=False):
     """Rebind terminal owner, original input, cleanup and typed Reader frames."""
     directory = _directory(directory)
     requested = _input(directory)
     if requested['schema_version'] == 3:
         from tools.local_experiment.notebook_lab import metadata as M
         return M.terminal_receipt(directory, exit_code, verify_source=verify_metadata_source)
+    if requested['schema_version'] == 4:
+        from tools.local_experiment.notebook_lab import snapshots as S
+        return S.terminal_receipt(directory, exit_code, verify_source=verify_snapshot_source)
     counting = requested['schema_version'] == 2
     filtered, request = requested.get('filtered', False), requested['input']
     if counting:
@@ -233,7 +241,7 @@ def query_closed(directory):
         return True
     if value is None or not value['child_exited'] or not value['cleanup_verified']:
         return False
-    if _input(directory)['schema_version'] in (2, 3) and value['state'] in ('passed', 'unsupported'):
+    if _input(directory)['schema_version'] in (2, 3, 4) and value['state'] in ('passed', 'unsupported'):
         # The parent verified its owned process group before saving this result.
         # A later process with the same PID is not this completed COUNT's owner.
         token, public = terminal_receipt(directory, value['exit_code'])
@@ -386,6 +394,29 @@ def render_metadata(result):
     return M.render(result)
 
 
+def snapshots(table):
+    from tools.local_experiment.notebook_lab import snapshots as S
+    return _execute({'schema_version': 4, 'mode': 'snapshots',
+                     'input': S.normalize_request({'command': 'snapshots', 'table': table})})
+
+
+def compare_counts(table, left_id, right_id):
+    from tools.local_experiment.notebook_lab import snapshots as S
+    return _execute({'schema_version': 4, 'mode': 'snapshots',
+                     'input': S.normalize_request({'command': 'compare_counts', 'table': table,
+                                                   'left_id': left_id, 'right_id': right_id})})
+
+
+def recover_snapshots(attempt_token):
+    from tools.local_experiment.notebook_lab import snapshots as S
+    return S.recover(attempt_token)
+
+
+def render_snapshots(result):
+    from tools.local_experiment.notebook_lab import snapshots as S
+    return S.render(result)
+
+
 def _execute(value):
     """Both modes share the same locks, worker ownership and residual checks."""
     with _lock():
@@ -437,7 +468,8 @@ def _execute(value):
                         else:
                             token, public = terminal_receipt(directory, child.returncode,
                                 verify_count_source=value['schema_version'] == 2,
-                                verify_metadata_source=value['schema_version'] == 3)
+                                verify_metadata_source=value['schema_version'] == 3,
+                                verify_snapshot_source=value['schema_version'] == 4)
                             status.update(evidence_token=token, cleanup_verified=public['cleanup_verified'])
                 require(status['cleanup_verified'], 'LAB_QUERY_CLEANUP_UNKNOWN')
                 if first is None:
@@ -478,6 +510,9 @@ def worker(directory, *, assist=None):
     if value['schema_version'] == 3:
         from tools.local_experiment.notebook_lab import metadata as M
         return M.worker(directory)
+    if value['schema_version'] == 4:
+        from tools.local_experiment.notebook_lab import snapshots as S
+        return S.worker(directory)
     flag = '--count-request-stdin' if value['schema_version'] == 2 else (
         '--filtered-request-stdin' if value['filtered'] else '--request-stdin')
     return (assist or A.main)([flag],

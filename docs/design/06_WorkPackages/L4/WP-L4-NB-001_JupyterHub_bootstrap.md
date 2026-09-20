@@ -5,7 +5,7 @@ title: "WP-L4-NB-001 JupyterHub bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.17"
+version: "0.18"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, notebook]
 ---
@@ -14,6 +14,7 @@ tags: [shirokuma, workpackage, l4, notebook]
 
 ## Summary
 
+保持snapshotの2件/3件をLabで比較し、差分1・fixture回収後の保存再表示を確認した。
 固定schemaの一覧からtableを選び、列情報を確認するLab探索入口を実UIで検証した。モデル呼出しなしで保存再表示・save/reloadを確認した。
 自然文からsnapshotの正確な件数を表示する限定Lab入口は、修正後5caseと保存再表示で受入を確認した。
 保存比較候補をMLflowへ1回記録し、同tokenの再表示で追加writeを避けるLab入口を実UIで確認した。最終保持・非稼働clone復元も成功した。
@@ -32,6 +33,14 @@ Labから自然文table previewを呼ぶ別Notebookも、修正後の等値previ
 保存比較一覧から候補を選び、再fitせず新入力を予測するLab入口も実UI受入を確認した。
 Labの固定学習workbenchで、初回unknownを追加fitなしで回復し、別の新規正常実行とレビュー/一覧/編集予測・保存/再読込を確認した。
 JupyterHub、複数ユーザー、直接PySpark、kernel内fit・autologの完了は含めない。
+
+## 2026-09-20: Lab retained snapshot count comparison — local acceptance complete
+
+[snapshot workbench](../../../../examples/local_snapshot_workbench.ipynb)で保持snapshot一覧を表示し、互換な2つのIDを明示して件数を比較できる。初回Run Allは一覧1回だけでCOUNT/modelは0。`compare_counts(table, left_id, right_id)`は既存COUNTを直列実行し、両側の成功・cleanup・table UUID/schema SHA・選択ID一致を確認した場合だけ、正確な整数文字列で右−左を返す。current head更新は許容し、片側失敗/unknownを0件や完了差分にしない。
+
+専用fixtureの作成時空snapshotを含む3件を実UIで列挙し、明示したAの2件とBの3件から差分1を確認した。モデル/監査追加は0。保存再表示・save/reloadでNotebook bytes/mode/mtimeを保持し、fixtureのtable DROP後も追加読取なしで保存結果を表示できた。保持fixtureの6観測値、旧267files、MLflow・監査データも元へ一致した。
+
+件数差は追加/削除行の内訳や行内容一致を示さない。任意SQL・行差分・一般catalog/JupyterHubは未達で、WPはlocal-partialを維持する。既存8Notebookの編集は保持する。操作は[Lab runbook](../../../../tools/local_experiment/notebook_lab/README.md)、実測と証跡は[Milestones](../061_Local_Experiment_Milestones.md)へ記録する。
 
 ## 2026-09-20: Lab table and schema exploration — local acceptance complete
 

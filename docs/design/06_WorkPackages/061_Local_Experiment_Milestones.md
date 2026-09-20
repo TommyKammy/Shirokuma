@@ -5,13 +5,14 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.63"
+version: "3.64"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
+Labの保持snapshot一覧と直列COUNT比較が実UIで成功した。専用fixtureの2件→3件、保存再表示・回収・既存データ保持を確認した。
 Labの固定2schema一覧と明示tableの列情報表示を実UIで確認した。metadata3attempt・モデル呼出し0、保存再表示と既存データ保持が成功した。
 自然文からsnapshotの全件/typed単一等値件数を得るLab/Assist入口が、修正後5caseと保存再表示で成功した。
 FinOpsの固定3component・disk watermark・宣言model eventの読取レポートが修正後completeとなった。全FinOps受入とは区別する。
@@ -45,6 +46,18 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: Lab retained snapshot count comparison — local acceptance complete
+
+既存snapshots/COUNT Readerを、初回だけ配置する`snapshot_workbench.ipynb`へ接続した。初回Run Allは一覧だけで、明示した互換な2IDと実行フラグが揃うまでCOUNT/modelは0。比較はCOUNT直列・同table UUID/schema SHA・各selected IDの厳密照合後だけ採用し、右−左を正確な符号付き整数文字列で返す。片側unknown/取消から差分を作らず、保存再表示は当時の証跡だけを使う。Go snapshots childにも既存Reader同様のKUBECONFIG継承だけを追加した。
+
+実UIでは専用fixture `be894ccf7b604d8396df76290b3afa05`の保持3snapshot（作成時空を含む）を1回で列挙した（13.603秒）。A `3145407830105344396`は2件、B `8553937116168238619`は3件。2COUNTは16.623秒/17.757秒で順に終了し、比較token `84449660dcf241218687e49b5e550528`で差分1を表示した。model/新監査eventは0。保存再表示とsave/reloadでNotebook bytes/mode/mtimeを保持した。
+
+fixture準備44.486秒、同一所有tableの回収35.867秒が成功し、保持fixtureの6観測値を完全に復帰した。DROP後も追加読取0で保存比較を再表示できた。旧267files、MLflow全59tables/22runs/1383metric points/22artifacts、AgentHouse582行とMLflow runtimeは不変。Labはhealthy、PID66067・9kernelsで継続稼働する。新Lab/Readerの7実行directoriesとfixture証跡1directoryは59files/30,732,277 logical bytes（allocated 30,879,744 bytes）。cache・workspace Notebook・checksは別で、物理一意使用量ではない。
+
+全回帰109suites/3435実行（3434PASS・既存1skip）、83.620秒、Go全体16.372秒PASS。独立read-only reviewで10fileのfreezeを照合し追加指摘なし。私有証跡は`tmp/local-experiment/notebook-snapshot-checks/fbcaa2d1d4044f4a9beaf85f6e1f5e4f/`の`acceptance.json`、`ui-initial.json`、`ui-acceptance.json`、`storage-and-usage.json`、`full01.json/log`、`go01.json/log`。全回帰log SHAは`f07330e2ca0c893061dbfa931e36b661396217e5ecf77467bd40e73af8461b05`。
+
+これは保持snapshotの件数比較で、追加/削除行の内訳・行内容一致やS3 orphan不在を主張しない。新サービス/依存/LLMはなく、WP-L4-NB-001はlocal-partial。操作は[Lab runbook](../../../tools/local_experiment/notebook_lab/README.md)、機能境界は[NB WP](L4/WP-L4-NB-001_JupyterHub_bootstrap.md)を参照する。
 
 ## 2026-09-20: Lab table and schema exploration — local acceptance complete
 

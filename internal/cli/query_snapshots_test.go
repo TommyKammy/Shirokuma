@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -171,6 +172,10 @@ func TestQuerySnapshotsFixedChildPrivacyAndDiscriminator(t *testing.T) {
 	root := snapshotRoot(t)
 	r := snapshotRequest("select")
 	r.Root = root
+	readerHome := filepath.Join(t.TempDir(), "dedicated-home")
+	kubeconfig := filepath.Join(t.TempDir(), "fixed kubeconfig")
+	t.Setenv("HOME", readerHome)
+	t.Setenv("KUBECONFIG", kubeconfig)
 	t.Setenv("PRIVATE_CREDENTIAL", "secret")
 	t.Setenv("PYTHONPATH", "private")
 	cmd, e := querySnapshotsCommand(r)
@@ -189,6 +194,9 @@ func TestQuerySnapshotsFixedChildPrivacyAndDiscriminator(t *testing.T) {
 		if strings.HasPrefix(e, "PRIVATE_") || strings.HasPrefix(e, "PYTHONPATH=") {
 			t.Fatal("environment leaked")
 		}
+	}
+	if !slices.Contains(cmd.Env, "HOME="+readerHome) || !slices.Contains(cmd.Env, "KUBECONFIG="+kubeconfig) {
+		t.Fatal("explicit kubeconfig was lost under the dedicated home")
 	}
 	for _, bad := range []string{"", "select", "snapshots-v1"} {
 		r.Case = bad
