@@ -2,14 +2,15 @@
 
 Translate a short request into a bounded current-head table preview, then
 materialize the two registered Notebook assets. The table is an explicit input;
-the model selects column names and a row limit. It does not generate SQL,
+the model selects column names, a row limit and, in the filtered variant, one
+host-validated equality. It does not generate SQL,
 Notebook code or executable commands.
 
 From this checkout, with the dedicated DataOps environment and local services
 already available:
 
 ```sh
-rtk make local-notebook-assist <<'JSON'
+rtk proxy make local-notebook-assist <<'JSON'
 {"table":"smoke.fixture_v1","request":"nameとidを1件表示"}
 JSON
 ```
@@ -36,7 +37,7 @@ The existing configured local Qwen endpoint is used for at most one inference
 attempt, without cloud fallback or retry. The request body is capped at 8 KiB;
 the provider retains the configured timeout and output-token bounds.
 
-The model is instructed to support only explicitly named columns in the stated
+The original `local-notebook-assist` profile supports only explicitly named columns in the stated
 order and an explicit integer limit from 1 through 100. Its exact proposal is
 `columns`, `limit` and `unsupported`. A supported proposal selects 1–16 unique
 known columns. Unsupported is represented by `unsupported: true` with null
@@ -53,7 +54,7 @@ only their stated scope.
 
 ## Describe, select and materialize
 
-An accepted proposal flows through the existing
+An accepted original-profile proposal flows through the existing
 [selection contract](../notebook/README.md) and
 [registered assets runner](../notebook_assets/README.md). It materializes
 `table_preview` followed by `saved_evaluation_summary`, using the registered
@@ -77,6 +78,50 @@ attempt. It performs no select, asset materialization or evaluation read.
 A missing or unverifiable result is never converted into an empty successful
 preview, zero count or unsupported response.
 
+## Preview with one typed equality
+
+```sh
+rtk proxy make local-notebook-assist-filtered <<'JSON'
+{"table":"smoke.fixture_v1","request":"idが1の行からnameとidを1件表示"}
+JSON
+```
+
+This target uses `run.py --filtered-request-stdin` in the same existing DataOps
+environment. It keeps the exact input and schema-only model context above, with
+one local Qwen call. The requested columns, numeric limit and one equality must
+all be explicit. The exact proposal is `{columns,limit,where,unsupported}`;
+`where` is `{column,literal}` and the literal is a string. Normal unsupported
+has null columns, limit and where, with `unsupported: true`.
+
+The host reuses the [typed equality contract](../query_filter/README.md) against
+the described schema. Integer/bigint, decimal(p,s), calendar date and boolean
+are supported; varchar, floating-point, NULL, ranges and multiple predicates
+are refused. Literals are nonempty ASCII strings of at most 128 bytes, fit the
+declared type without rounding, and use no whitespace, leading plus or exponent.
+The equality column can be outside the selected columns. This scope validation
+does not establish general natural-language correctness or override resistance.
+
+Accepted proposals become exact six-field Reader requests:
+`command,table,columns,limit,snapshot_id,where`, with `snapshot_id: null`.
+The Reader resolves the current snapshot and verifies its typed predicate;
+the final table UUID/schema must still match the earlier describe. It
+materializes `filtered_table_preview` then `saved_evaluation_summary` using
+[the fixed filtered template](../../../examples/local_filtered_table_preview.ipynb).
+No generated code or Notebook cell is executed.
+
+Filtered owner/summary records use schema 2 and
+`natural-language-filtered-notebook-preview-v2` under
+`tmp/local-experiment/notebook-assist-filtered/<token>/`. Assets use schema 3,
+`filtered-table-notebook-assets-v3`. The original Assist and asset profiles keep
+their existing contracts. Both variants use the audit actions below; private
+profile/owner records distinguish the variant.
+
+The literal is present in the natural-language request, private proposal/request,
+Reader arguments and Trino SQL, so it can appear in process or query history.
+Public predicate metadata omits the literal, but selected rows can contain it.
+Audit payloads do not include prompts, schema, literals or row data. Unknown
+results, save failures and cancellation retain evidence without automatic retry.
+
 ## Results and retained evidence
 
 The runner's final stdout JSON contains `result`, `error_code`, `model_calls`,
@@ -91,7 +136,8 @@ can print its own nonzero-exit diagnostic separately. The Python owner exits:
 | `failed` or `unknown` | 1 | No successful completion claim; inspect private evidence |
 | Interrupted | Signal-derived nonzero | Original cancellation retained; cleanup can remain unknown |
 
-Evidence stays under `tmp/local-experiment/notebook-assist/<token>/`. Private
+Original-profile evidence stays under `tmp/local-experiment/notebook-assist/<token>/`;
+the filtered variant uses the separate directory above. Private
 `input.json` retains the supplied request; `model-context.json` retains the
 bounded schema input, and `model-response.json` retains the parsed proposal and
 measured usage. These are private experiment files, not committed documents or
@@ -128,9 +174,10 @@ proposal is audited as blocked with successful local span completion. Malformed
 proposal rejection, infrastructure failure and cancellation remain distinct
 from that normal outcome. No failed audit is silently retried.
 
-The dedicated DataOps lock adds `opentelemetry-sdk==1.44.0` and its required
+The original Assist increment added `opentelemetry-sdk==1.44.0` and its required
 `opentelemetry-semantic-conventions==0.65b0`; all prior 96 package versions remain
-unchanged. MCP and LangGraph are not added to this environment.
+unchanged at that increment. The filtered variant adds no dependency or resident
+service. MCP and LangGraph are not added to this environment.
 
 The existing Reader's synchronous ownership, 240-second execution and
 245-second cleanup bounds are retained. Allow at least 260 seconds after an
@@ -141,6 +188,43 @@ cleanup failures.
 
 General natural-language analysis, arbitrary Notebook conversion, training,
 multi-user operation and production acceptance remain outside this profile.
+
+## 2026-09-20 filtered preview verification
+
+Three actual local Qwen cases each made one model call:
+
+| Case / token | Time | Product result |
+| --- | ---: | --- |
+| bigint `id=1`, `name,id`, limit1 / `36916e8d87434f8e999eb465be1d9c96` | 36.311s* | First execution passed; one row `["shirokuma",1]`, two assets and 12 saved evaluations |
+| Range / `7d3af76a18dc4de0a6e1ffe44388fa91` | 16.357s | First execution unsupported/exit2; no select/assets |
+| Contract override / `3418f01ee10345a8a4c441c04610774e` | 15.188s | First execution unsupported/exit2; no select/assets |
+
+*The accepted time includes the outer verifier failure: it incorrectly expected
+integer instead of the observed bigint. The original failure/log is retained.
+A saved-output correction passed in 0.034s without another model or Reader run.
+All Reader cleanup completed. Summed measured usage is 1394 input/62 output
+tokens and 4723ms inference duration; cost remains null. Ten audit events were
+added while the prior 535 events, 822 protected files, 37 source inputs and
+MLflow's 19 runs/1347 points/19 artifacts were retained.
+
+The new 48 tests cover client14/assets14/Assist20. Full regression passed
+82 suites/2930 test executions (2929 passed, one existing optional skip, 69.611s).
+The missing Make registration for the new asset target was then added and its
+14 tests passed separately in 0.952s: 2944 executions total, 2943 passed/one skip.
+Product sources stayed unchanged; only that Make registration changed after
+actual acceptance. Independent saved-only review passed 251 assertions over 72 inputs in 0.049s.
+It checked 17 terminal queries, the typed row/SQL SHA and two materializations,
+binding four Reader closures to saved owner/root PID probes. Retention relies
+on the root guard; the reviewer did not re-read all 822 retained files.
+Two verifier expectation errors (nullable column and relative guard key) were
+corrected with the original helpers/logs retained. No extra product, API or
+Reader execution was performed.
+
+The seven nonoverlapping output directories contain 61 files/31,114,905 bytes
+(31,358,976 allocated); verification files are separate. Evidence is private at
+`tmp/local-experiment/notebook-assist-filtered-checks/e719c8b8661a42e591fa2e7cb3826615/`.
+These three cases establish neither general language understanding nor general
+resistance to contract-override requests.
 
 ## 2026-09-20 local verification
 

@@ -26,8 +26,11 @@ from tools.local_experiment.notebook import client as N
 from tools.local_experiment.notebook import selection as S
 from tools.local_experiment.notebook_assets import run as A
 from tools.local_experiment.notebook_assist import contract as C
+from tools.local_experiment.notebook_assist import filtered as F
+from tools.local_experiment.query_filter import contract as QF
 
 STATE = ROOT / 'tmp/local-experiment/notebook-assist'
+FILTERED_STATE = ROOT / 'tmp/local-experiment/notebook-assist-filtered'
 PROFILE = 'natural-language-notebook-preview-v1'
 DESCRIBE = 'bear.notebook_preview.describe'
 INFER = 'llm.notebook_preview'
@@ -63,7 +66,7 @@ def error_code(error):
     return str(error) if isinstance(error, (AssistRunError, C.AssistError)) and str(error) in ERROR_CODES else 'NOTEBOOK_ASSIST_FAILED'
 
 
-def sources():
+def sources(*, filtered=False):
     paths = [*Path(__file__).parent.glob('*.py')]
     paths += [ROOT / name for name in (
         'tools/local_experiment/notebook/client.py', 'tools/local_experiment/notebook/selection.py',
@@ -72,18 +75,25 @@ def sources():
         'tools/local_experiment/dataops/pyproject.toml', 'tools/local_experiment/dataops/uv.lock',
         S.TEMPLATE_PATH, 'go.mod', 'go.sum')]
     from tools.local_experiment.query_read.run import sources as reader_sources
+    if filtered:
+        from tools.local_experiment.notebook import filtered_selection as FS
+        from tools.local_experiment.query_filter.run import sources as reader_sources
+        paths += [ROOT / name for name in (
+            'tools/local_experiment/notebook/filtered_selection.py',
+            'tools/local_experiment/query_filter/contract.py',
+            'tools/local_experiment/query_snapshots/contract.py', FS.TEMPLATE_PATH)]
     value = reader_sources()
     value.update({str(path.relative_to(ROOT)):digest(path.read_bytes()) for path in paths})
     return value
 
 
-def environment():
-    from tools.local_experiment.notebook_assist.provider import NotebookAssistProvider
+def environment(*, filtered=False):
+    from tools.local_experiment.notebook_assist.provider import NotebookAssistProvider, FilteredNotebookAssistProvider
     from tools.local_experiment.llm.providers import load_config
     config = load_config(ROOT / 'tools/local_experiment/llm/providers.qwen-local.json')
     require(config['active_provider'] == 'local', 'NOTEBOOK_ASSIST_ENVIRONMENT_INVALID')
     profile = config['providers']['local']
-    return deepcopy(profile), NotebookAssistProvider(profile)
+    return deepcopy(profile), (FilteredNotebookAssistProvider if filtered else NotebookAssistProvider)(profile)
 
 
 @contextmanager
@@ -143,19 +153,27 @@ def describe_closed(output, table):
         return False
 
 
-def execute(output, binary, request, *, environment_factory=environment, audit_factory=None,
-            describe=None, materialize=None, source_factory=sources):
+def execute(output, binary, request, *, environment_factory=None, audit_factory=None,
+            describe=None, materialize=None, source_factory=None, filtered=False):
     """One attempt; dependencies are injectable for offline lifecycle tests."""
     request = C.normalize_input(request)
+    require(type(filtered) is bool, 'NOTEBOOK_ASSIST_INPUT_INVALID')
+    schema, active_profile = (2, F.PROFILE) if filtered else (1, PROFILE)
+    phase = F.PHASE if filtered else 'notebook_preview'
+    asset_options = {'filtered':True} if filtered else {}
+    if environment_factory is None:
+        environment_factory = lambda: environment(filtered=filtered)
+    if source_factory is None:
+        source_factory = lambda: sources(filtered=filtered)
     output, binary = Path(output), Path(binary)
     A._private_directory(output)
     require(binary.is_absolute() and binary.is_file() and not binary.is_symlink(), 'NOTEBOOK_ASSIST_ENVIRONMENT_INVALID')
     # An exclusive intent makes accidental same-directory execution impossible.
     binary_sha = digest(binary.read_bytes())
-    N._write(output / 'execution-intent.json', {'schema_version':1, 'profile':PROFILE,
+    N._write(output / 'execution-intent.json', {'schema_version':schema, 'profile':active_profile,
                 'input_sha256':digest(N._canonical(request)), 'binary_sha256':binary_sha})
     N._write(output / 'input.json', request)
-    report = dict(schema_version=1, profile=PROFILE, result='running', started_at=stamp(), finished_at=None,
+    report = dict(schema_version=schema, profile=active_profile, result='running', started_at=stamp(), finished_at=None,
         input_sha256=digest(N._canonical(request)), source_hashes=source_factory(), model_calls=0,
         cloud_calls=0, retries=0, selection=None, description=None, audit=None, asset_result=None,
         describe_cleanup_confirmed=False, asset_cleanup_confirmed=False, error_code=None)
@@ -199,7 +217,7 @@ def execute(output, binary, request, *, environment_factory=environment, audit_f
         context = C.model_context(request, identity)
         N._write(output / 'model-context.json', context)
         # Validate the bounded request body before recording an inference attempt.
-        model.request_body('notebook_preview', context)
+        model.request_body(phase, context)
         unchanged()
 
         def infer():
@@ -207,12 +225,12 @@ def execute(output, binary, request, *, environment_factory=environment, audit_f
             require(report['model_calls'] == 0, 'NOTEBOOK_ASSIST_MODEL_FAILED')
             report['model_calls'] = 1
             save()
-            return model.complete('notebook_preview', context)
+            return model.complete(phase, context)
 
         def validate_response(response):
             # The audit phase has already retained measured usage at this point.
             N._write(output / 'model-response.json', response)
-            return C.validate_proposal(response['content'], context)
+            return (F if filtered else C).validate_proposal(response['content'], context)
 
         selected = audit.phase(INFER, infer, inference=True,
                                validate=validate_response)
@@ -225,16 +243,23 @@ def execute(output, binary, request, *, environment_factory=environment, audit_f
         else:
             def preview():
                 unchanged()
-                A.export(asset_dir, request=selected)
-                result = (materialize or A.execute)(asset_dir, binary, request=selected)
+                A.export(asset_dir, request=selected, **asset_options)
+                result = (materialize or A.execute)(asset_dir, binary, request=selected, **asset_options)
                 report['asset_result'] = deepcopy(result)
                 save()
                 require(result['result'] == 'passed' and result['reader_cleanup_confirmed'] is True,
                         'NOTEBOOK_ASSIST_ASSETS_FAILED')
-                _, public, cleanup = N._reader_frames(N._read(asset_dir / 'reader.stdout.jsonl',
+                frame_reader = N._filtered_reader_frames if filtered else N._reader_frames
+                _, public, cleanup = frame_reader(N._read(asset_dir / 'reader.stdout.jsonl',
                         N.C.MAX_PUBLIC_BYTES*2+2), 0, request=selected)
                 require(cleanup is True and public is not None and public['table_uuid'] == identity['table_uuid']
                         and public['schema_sha256'] == identity['schema_sha256'], 'NOTEBOOK_ASSIST_IDENTITY_CHANGED')
+                if filtered:
+                    # The predicate column need not appear in projected rows.
+                    # Bind its public type to the full schema seen before inference.
+                    predicate = QF.resolve_predicate(selected, identity['columns'])
+                    require(public['where'] == {'column':predicate['column'], 'type':predicate['type'],
+                                                'operator':'eq'}, 'NOTEBOOK_ASSIST_IDENTITY_CHANGED')
                 return result
 
             audit.phase(MATERIALIZE, preview)
@@ -255,7 +280,7 @@ def execute(output, binary, request, *, environment_factory=environment, audit_f
             original = A._keep(original, error)
         try:
             report['describe_cleanup_confirmed'] = describe_closed(describe_dir, request['table'])
-            report['asset_cleanup_confirmed'] = A.reader_closed(asset_dir, request=selected) if selected is not None else not asset_dir.exists()
+            report['asset_cleanup_confirmed'] = A.reader_closed(asset_dir, request=selected, **asset_options) if selected is not None else not asset_dir.exists()
             if asset_dir.exists() and report['asset_result'] is None:
                 try:
                     report['asset_result'] = N._parse(N._read(asset_dir / 'result.json', 65536))
@@ -283,24 +308,27 @@ def execute(output, binary, request, *, environment_factory=environment, audit_f
 def main(argv=None, *, stdin=None):
     argv = sys.argv[1:] if argv is None else argv
     try:
-        require(argv == ['--request-stdin'], 'NOTEBOOK_ASSIST_INPUT_INVALID')
+        require(argv in (['--request-stdin'], ['--filtered-request-stdin']), 'NOTEBOOK_ASSIST_INPUT_INVALID')
+        filtered = argv == ['--filtered-request-stdin']
         value = C.parse_input((sys.stdin.buffer if stdin is None else stdin).read(C.MAX_INPUT_BYTES + 1))
     except Exception:
         print(json.dumps({'result':'failed','error_code':'NOTEBOOK_ASSIST_INPUT_INVALID','evidence':None}))
         return 1
+    state = FILTERED_STATE if filtered else STATE
+    schema, active_profile = (2, F.PROFILE) if filtered else (1, PROFILE)
     os.umask(0o077)
     output, report, original = None, None, None
     try:
         with A._signals():
-            STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
-            A._private_directory(STATE)
-            output = STATE / uuid.uuid4().hex
+            state.mkdir(parents=True, exist_ok=True, mode=0o700)
+            A._private_directory(state)
+            output = state / uuid.uuid4().hex
             output.mkdir(mode=0o700)
             binary = output / 'shirokuma'
             with (output / 'build.log').open('xb') as log:
                 subprocess.run(['go','build','-o',str(binary),'./cmd/shirokuma'], cwd=ROOT,
                                stdout=log, stderr=log, check=True, timeout=60)
-            report = execute(output, binary, value)
+            report = execute(output, binary, value, **({'filtered':True} if filtered else {}))
     except BaseException as error:
         original = error
         if output is not None:
@@ -315,7 +343,7 @@ def main(argv=None, *, stdin=None):
         closed = not any((output / directory).exists() for directory in ('describe','assets'))
     if original is not None:
         result = 'unknown' if not closed else 'interrupted' if not isinstance(original, Exception) else 'failed'
-    owner = dict(schema_version=1, profile=PROFILE, result=result,
+    owner = dict(schema_version=schema, profile=active_profile, result=result,
                  summary_result=report['result'] if report is not None else None,
                  error_code=error_code(original) if original is not None else None,
                  model_calls=report['model_calls'] if report is not None else 0,
@@ -330,7 +358,7 @@ def main(argv=None, *, stdin=None):
             result = 'unknown' if not closed else 'interrupted' if not isinstance(original, Exception) else 'failed'
     public = dict(result=result, error_code=error_code(original) if original is not None else None,
                   model_calls=owner['model_calls'], reader_cleanup_confirmed=bool(closed),
-                  evidence=f'tmp/local-experiment/notebook-assist/{output.name}/owner-result.json' if saved else None)
+                  evidence=f'tmp/local-experiment/{state.name}/{output.name}/owner-result.json' if saved else None)
     print(json.dumps(public))
     if original is not None and not isinstance(original, Exception):
         return 128 + original.signum if isinstance(original, A.AssetsInterrupted) else 130

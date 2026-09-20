@@ -896,6 +896,17 @@ verify-local-experiment: test-local-notebook-assets-selection
 .PHONY: local-notebook-assist test-local-notebook-assist
 local-notebook-assist:
 	@tools/local_experiment/dataops/.venv/bin/python -B tools/local_experiment/notebook_assist/run.py --request-stdin
+.PHONY: local-notebook-assist-filtered local-notebook-assets-filtered test-local-notebook-filtered test-local-notebook-assets-filtered
+local-notebook-assist-filtered:
+	@tools/local_experiment/dataops/.venv/bin/python -B tools/local_experiment/notebook_assist/run.py --filtered-request-stdin
+local-notebook-assets-filtered:
+	@tools/local_experiment/dataops/.venv/bin/python -B tools/local_experiment/notebook_assets/run.py --filtered-request-stdin
+test-local-notebook-filtered:
+	@tools/local_experiment/notebook/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_filtered_*.py'
+verify-local-experiment: test-local-notebook-filtered
+test-local-notebook-assets-filtered:
+	@tools/local_experiment/dataops/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_assets_filtered.py'
+verify-local-experiment: test-local-notebook-assets-filtered
 test-local-notebook-assist:
 	@tools/local_experiment/dataops/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_assist_*.py'
 	@tools/local_experiment/notebook/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_describe_client.py'

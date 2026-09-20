@@ -135,7 +135,7 @@ def _retain(first, later):
     return first
 
 
-def load_request(path, expected_sha):
+def _load_canonical_request(path, expected_sha, parser, encoder):
     """Read one stable private canonical file without following symlinks.
 
     Both the exact bytes and the canonical selected request are bound to the
@@ -182,6 +182,10 @@ def load_request(path, expected_sha):
     except OSError:
         raise SelectionError('NOTEBOOK_SELECTION_CHANGED') from None
     _require(hashlib.sha256(raw).hexdigest() == expected_sha, 'NOTEBOOK_SELECTION_CHANGED')
-    request = parse_request(raw)
-    _require(canonical(request) == raw, 'NOTEBOOK_SELECTION_NONCANONICAL')
+    request = parser(raw)
+    _require(encoder(request) == raw, 'NOTEBOOK_SELECTION_NONCANONICAL')
     return request
+
+
+def load_request(path, expected_sha):
+    return _load_canonical_request(path, expected_sha, parse_request, canonical)

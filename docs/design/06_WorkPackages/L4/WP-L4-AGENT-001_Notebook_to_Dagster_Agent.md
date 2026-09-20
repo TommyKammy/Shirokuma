@@ -5,7 +5,7 @@ title: "WP-L4-AGENT-001 Notebook to Dagster Agent"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.5"
+version: "0.6"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, agentops]
 ---
@@ -18,7 +18,32 @@ Notebookを再現可能なDagster assetへ接続する。ADR-0034のlocal実験�
 hostの定型2assetsへ対応付ける最小部分を実装し、実2回と独立最終照合が成功した。
 選択tableの登録previewもschema2の2assetsへ接続し、実1回と独立保存照合が成功した。
 さらに自然文から検証済みselectionを作る限定Assistを接続し、実5caseが期待どおりとなった。
+型付き単一等値条件の自然文previewも実3caseと独立保存照合で確認した。
 任意Notebookの解析・生成や一般的なLLM変換は含めない。
+
+## 2026-09-20: natural-language typed equality preview — local acceptance complete
+
+`local-notebook-assist-filtered`（`--filtered-request-stdin`）を追加した。exact `{table,request}`を受け、
+describe由来の列名/型と依頼だけをQwenへ1回渡し、明示列・limit・単一等値のproposalをhostで検証する。
+integer/bigint/decimal/date/booleanだけを対象とし、varchar/float/NULL・範囲・複数条件を許可しない。
+6key Reader request（`snapshot_id:null`）から固定`filtered_table_preview`→`saved_evaluation_summary`を実行する。
+Assist schema2/profile `natural-language-filtered-notebook-preview-v2`、assets schema3/profile
+`filtered-table-notebook-assets-v3`で区別し、監査actionと旧v1の契約は維持する。
+head更新は許容し、describeとSELECTの最終UUID/schemaを照合する。生成code・kernel実行、新依存・常駐追加は0。
+
+実3caseは等値previewがpassed、範囲/契約上書き依頼がunsupported（SELECT/assets0）となり、全cleanupを確認した。
+acceptedはbigint `id=1`の`[name,id]` 1行と2assets/保存評価12件を取得した。
+外側検証helperのinteger誤期待は失敗記録を残し、保存出力だけで再照合した。製品・モデル・Readerの再実行はない。
+新48testsを確認し、全回帰2930実行に登録補完target14実行を加え2944実行（2943PASS・既存1skip）が成功した。
+独立保存照合251assertions/72inputsが成功した。helperの期待値誤り2件を訂正し、元logを保持した。
+
+literalは依頼/保存request/Reader引数/Trino SQLに残り、監査payloadには載せない。
+失敗/取消/unknownの証拠と保持データ・MLflow・backupを残し、自動retryや削除を行わない。
+一般的な自然文理解・override耐性、任意Notebook変換、Hub/複数ユーザー・本番受入を示すものではない。
+
+操作：[Assist runbook](../../../../tools/local_experiment/notebook_assist/README.md)、
+[型付きReader境界](../../../../tools/local_experiment/query_filter/README.md)。
+実測・保持・証跡は[Milestones](../061_Local_Experiment_Milestones.md)の同日最新節に記録する。
 
 ## 2026-09-20: natural-language Notebook preview — local acceptance complete
 

@@ -29,6 +29,9 @@ INSTRUCTION = (
 
 
 class NotebookAssistProvider(LocalProvider):
+    phase = PHASE
+    instruction = INSTRUCTION
+
     def __init__(self, profile):
         code = 'NOTEBOOK_ASSIST_PROVIDER_INVALID'
         valid = (type(profile) is dict and PROFILE_FIELDS <= set(profile)
@@ -52,7 +55,7 @@ class NotebookAssistProvider(LocalProvider):
             raise ProviderError(code) from None
 
     def request_body(self, phase, tool_evidence=None):
-        if phase != PHASE:
+        if phase != self.phase:
             raise ProviderError('NOTEBOOK_ASSIST_PHASE_INVALID')
         try:
             context = C.normalize_context(tool_evidence)
@@ -60,10 +63,15 @@ class NotebookAssistProvider(LocalProvider):
             raise ProviderError('NOTEBOOK_ASSIST_CONTEXT_INVALID') from None
         body = {'model':self.profile['model'], 'temperature':0,
                 'max_tokens':self.profile['max_output_tokens'], 'stream':False,
-                'messages':[{'role':'system','content':INSTRUCTION},
+                'messages':[{'role':'system','content':self.instruction},
                             {'role':'user','content':json.dumps(context, ensure_ascii=False)}]}
         if 'enable_thinking' in self.profile:
             body['enable_thinking'] = self.profile['enable_thinking']
         if len(json.dumps(body).encode()) > C.MAX_MODEL_BODY_BYTES:
             raise ProviderError('NOTEBOOK_ASSIST_INPUT_LIMIT')
         return body
+
+
+class FilteredNotebookAssistProvider(NotebookAssistProvider):
+    """Same local transport and schema-only context; a separate fixed proposal."""
+    from tools.local_experiment.notebook_assist.filtered import PHASE as phase, INSTRUCTION as instruction

@@ -80,6 +80,39 @@ A modified request or export cannot become a successful owner result. The
 existing distinction between materialization success and later owner
 interruption remains in effect.
 
+## Preview with one typed equality
+
+The registered [filtered preview Notebook](../../../examples/local_filtered_table_preview.ipynb)
+adds a third profile. Pass an exact six-field current-snapshot request:
+
+```sh
+rtk proxy make local-notebook-assets-filtered <<'JSON'
+{"command":"select","table":"smoke.fixture_v1","columns":["name","id"],"limit":1,"snapshot_id":null,"where":{"column":"id","literal":"1"}}
+JSON
+```
+
+This target invokes `run.py --filtered-request-stdin` in the existing DataOps
+environment without dependency synchronization. The private canonical request
+uses the same 4096-byte limit, `snapshot_id: null` and exactly one
+`where:{column,literal}`. The [typed equality contract](../query_filter/README.md)
+checks integer/bigint, decimal, date or boolean against the observed schema.
+Varchar/float/NULL, ranges, multiple conditions and caller-selected historical
+snapshots are outside this profile. The filter column may be unprojected.
+
+The fixed assets are `filtered_table_preview` → `saved_evaluation_summary`;
+their dependency still means execution order, with no evaluation lineage claim.
+Manifest, intent, result and owner use schema 3 and
+`filtered-table-notebook-assets-v3`. Request SHA/template/export checks apply
+before and after execution. Fixed helper calls contain no request values;
+generated definitions and Notebook code are not executed. Original schema 1
+and selected schema 2 profiles retain their contracts.
+
+For natural-language input, [filtered Assist](../notebook_assist/README.md)
+describes the table and validates one local Qwen proposal before invoking this
+profile. The literal remains in private requests, Reader arguments and Trino
+SQL/history; public predicate metadata excludes it, although selected cells can
+contain it. No dependency, kernel or resident service is added.
+
 ## Generated files and results
 
 Evidence stays under `tmp/local-experiment/notebook-assets/<token>/`. The run
@@ -115,10 +148,23 @@ an exit code alone does not prove it. Unconfirmed cleanup remains `unknown`,
 retains evidence and is not automatically retried, resumed or deleted. Source
 Notebook and retained services/data are not cleanup targets.
 
-The focused suite has **19 passing tests**, including two real Dagster engine
+The original fixed-profile focused suite has **19 passing tests**, including two real Dagster engine
 cases with fake clients: successful execution records two materializations;
 failure in the second read records only the first and a failed run. These tests
 make no real Reader, MLflow or model calls.
+
+## 2026-09-20 filtered preview verification
+
+The first accepted filtered Assist execution materialized both fixed assets,
+returning the bigint `id=1` row in `name,id` order and the 12 saved evaluations.
+The outer verifier's integer expectation was corrected using saved output;
+the product/Reader was not rerun. Range and contract-override model requests
+were unsupported before asset execution. New filtered asset tests14 passed,
+including the explicitly registered Make target after full regression.
+Independent saved-only review also passed, including two materializations read
+from Dagster SQLite without SDK calls. Tokens, timings,
+retention and aggregate test accounting are in the
+[Assist verification record](../notebook_assist/README.md#2026-09-20-filtered-preview-verification).
 
 ## 2026-09-20 selected preview verification
 

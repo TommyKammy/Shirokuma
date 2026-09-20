@@ -5,14 +5,15 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.50"
+version: "3.51"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-20）：保存学習3件の一覧からtokenを選び、既存batch予測2行へ接続する実受入が成功。
+最新の到達点（2026-09-20）：型付き単一等値の自然文previewを実3caseと独立保存照合で確認した。
+保存学習3件の一覧からtokenを選び、既存batch予測2行へ接続する実受入も成功。
 Notebookから所有workerを起動する固定Iceberg学習が初回86.739秒で成功。
 保存Icebergモデルのbatch predictionが実22行・初回0.075秒で成功。
 保存Iceberg学習のNotebook表示が実kernel初回1.108秒で成功。
@@ -32,6 +33,35 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: natural-language typed equality preview — local acceptance complete
+
+`local-notebook-assist-filtered`で、schema-only Qwen 1回の提案をhostの型検証に通し、
+current snapshotの単一等値条件から定型2assetsへ接続した。旧v1 Assistは維持する。
+integer/bigint/decimal/date/booleanだけを対象とし、範囲/複数条件/NULL/文字列・浮動小数条件は対象外。
+生成code・kernel実行、新依存・常駐追加はない。操作と詳細境界は[Assist runbook](../../../tools/local_experiment/notebook_assist/README.md)。
+
+| Case | 時間 | 結果 |
+|---|---:|---|
+| bigint `id=1`、`name,id`を1件 | 36.311秒* | 製品初回passed、1行/2assets/保存評価12件 |
+| 範囲 | 16.357秒 | 初回unsupported/exit2、SELECT/assets0 |
+| 契約上書き依頼 | 15.188秒 | 初回unsupported/exit2、SELECT/assets0 |
+
+*acceptedの時間は外側検証helperの失敗までを含む。実schemaはbigintだがhelperがintegerを期待したため停止し、
+元logを保持して保存出力だけを0.034秒で再照合した。製品・Qwen・Readerを再実行していない。
+合計Qwen3call、input1394/output62 tokens、計測inference4723ms、cost null。10auditを保存し全Reader cleanupを確認した。
+保持6checksで37sources/822旧files/ML59tables・19runs/1347points/19artifactsとruntimeを保持、
+AgentHouse旧535件を変えず期待する新10件だけを追加した（計545件）。
+新7個の非重複出力directoryは61files/31,114,905B（allocated31,358,976B、checks領域は別）。
+
+新48testsはclient14/assets14/Assist20。全回帰82suites/2930実行（2929PASS・既存1skip、69.611秒）後、
+Makeのassets新target登録漏れを補完し、追加14testsを0.952秒で確認した。合計2944実行＝2943PASS＋1skip。
+受入時から製品sourceは不変で、Makeだけがtarget登録分変わった。独立保存照合251assertions/72inputsが0.049秒で成功した。
+17terminal queries・4Reader終了証拠・typed行/SQL SHA・2materializationsを照合し、保持はrootのguard証拠を参照した。
+独立helperのnullable列/guard keyの誤期待2件は元helper/logを保持して訂正した。製品/API/Readerの追加実行は0。
+証跡：`tmp/local-experiment/notebook-assist-filtered-checks/e719c8b8661a42e591fa2e7cb3826615/`。
+モデルの一般理解やoverride耐性、Hub、任意Notebook変換、本番受入はこの3caseから主張しない。
+失敗/取消/unknownと保持データ・backupを残し、回復のための自動retry・削除を行わない。
 
 ## 2026-09-20: saved training inventory — local acceptance complete
 

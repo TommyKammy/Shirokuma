@@ -21,6 +21,7 @@ import urllib.request
 
 from tools.local_experiment.query_read import contract as C
 from tools.local_experiment.notebook import selection as S
+from tools.local_experiment.notebook import filtered_selection as FS
 
 ROOT = Path(__file__).resolve().parents[3]
 INDEX = ROOT / 'tmp/local-experiment/mlflow-tracking/import-index.json'
@@ -102,24 +103,24 @@ def _read(path, maximum):
     return raw
 
 
-def _reader_envelope(raw, exit_code, command):
-    """Validate the shared v1 envelope, without interpreting an observation."""
+def _reader_envelope(raw, exit_code, command, *, schema_version=1, evidence_root='query-read'):
+    """Validate a fixed Reader envelope, retaining the original v1 defaults."""
     lines = raw.splitlines()
     _require(len(lines) == 2 and raw.endswith(b'\n')
              and all(len(line) <= C.MAX_PUBLIC_BYTES for line in lines), 'NOTEBOOK_READER_INVALID')
     allocated, final = map(_parse, lines)
     _require(type(allocated) is dict and set(allocated) == {'schema_version', 'event', 'command', 'evidence_token'}
-             and type(allocated['schema_version']) is int and allocated['schema_version'] == 1
+             and type(allocated['schema_version']) is int and allocated['schema_version'] == schema_version
              and allocated['event'] == 'allocated' and allocated['command'] == command
              and type(allocated['evidence_token']) is str and TOKEN.fullmatch(allocated['evidence_token']),
              'NOTEBOOK_READER_INVALID')
     token = allocated['evidence_token']
     _require(type(final) is dict and set(final) == {'schema_version', 'event', 'command', 'evidence_token',
              'result', 'observation', 'error_code', 'cleanup_verified', 'evidence'}
-             and type(final['schema_version']) is int and final['schema_version'] == 1
+             and type(final['schema_version']) is int and final['schema_version'] == schema_version
              and final['event'] == 'result' and final['command'] == command
              and final['evidence_token'] == token
-             and final['evidence'] == f'tmp/local-experiment/query-read/{token}/summary.json'
+             and final['evidence'] == f'tmp/local-experiment/{evidence_root}/{token}/summary.json'
              and type(final['cleanup_verified']) is bool, 'NOTEBOOK_READER_INVALID')
     if final['result'] != 'passed':
         _require(final['observation'] is None and type(final['error_code']) is str
@@ -296,6 +297,26 @@ def read_select(request):
                        lambda raw, code: _reader_frames(raw, code, request=request))
 
 
+def _filtered_reader_frames(raw, exit_code, request):
+    request = FS.normalize_request(request)
+    token, public, cleanup = _reader_envelope(raw, exit_code, 'query select',
+                                             schema_version=3, evidence_root='query-filter')
+    if public is None:
+        return token, None, cleanup
+    try:
+        public = FS.F.validate_public(public, request)
+    except FS.F.ContractError:
+        raise NotebookError('NOTEBOOK_READER_INVALID') from None
+    return token, public, True
+
+
+def read_filtered(request):
+    """One current-head schema-bound equality through the existing Reader owner."""
+    request = FS.normalize_request(request)
+    return _read_owned(request, lambda binary, value: FS.arguments(binary, ROOT, value),
+                       lambda raw, code: _filtered_reader_frames(raw, code, request))
+
+
 def read_describe(table):
     """Read only the named table's typed metadata through the owned Go Reader."""
     request = _describe_request(table)
@@ -321,6 +342,24 @@ def read_requested_table():
     public = read_select(request)
     try:
         _require(S.load_request(path, expected) == request, 'NOTEBOOK_REQUEST_INVALID')
+    except ValueError:
+        raise NotebookError('NOTEBOOK_REQUEST_INVALID') from None
+    return public
+
+
+def read_requested_filtered_table():
+    """Use only the runner's immutable private filtered request; never print its literal."""
+    directory = _directory()
+    path = directory / FS.REQUEST_FILENAME
+    _require(os.environ.get(FS.REQUEST_PATH_ENV) == str(path), 'NOTEBOOK_REQUEST_INVALID')
+    expected = os.environ.get(FS.REQUEST_SHA_ENV, '')
+    try:
+        request = FS.load_request(path, expected)
+    except ValueError:
+        raise NotebookError('NOTEBOOK_REQUEST_INVALID') from None
+    public = read_filtered(request)
+    try:
+        _require(FS.load_request(path, expected) == request, 'NOTEBOOK_REQUEST_INVALID')
     except ValueError:
         raise NotebookError('NOTEBOOK_REQUEST_INVALID') from None
     return public

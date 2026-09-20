@@ -5,7 +5,7 @@ title: "WP-L4-NB-001 JupyterHub bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.8"
+version: "0.9"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, notebook]
 ---
@@ -22,7 +22,18 @@ Notebook環境を整備する。ADR-0034のlocal実験では、固定Notebookを
 保存済み固定学習結果を表と残差SVGで読む別templateも、実kernel初回で成功した。
 保存Iceberg学習のprovenance・16holdoutを確認する別templateも、実kernel初回1.108秒で成功した。
 Notebookから所有workerへ固定Iceberg学習を依頼する入口も、初回86.739秒で成功した。
+型付き単一等値条件の登録previewも自然文から定型assetsへ接続し、実3caseと独立保存照合で確認した。
 JupyterHub、複数ユーザー、直接PySpark、kernel内fit・autologの完了は含めない。
+
+## 2026-09-20: natural-language typed equality preview — local acceptance complete
+
+別の固定[filtered preview template](../../../../examples/local_filtered_table_preview.ipynb)を定型2assetsへ対応付けた。
+`local-notebook-assist-filtered`からschemaだけを使うQwenの1提案を検証し、型付き単一等値条件で読取る。
+実3caseは等値preview 1行/2assetsがpassed、範囲と契約上書き依頼がunsupportedとなった。
+この入口はkernel・生成codeを実行せず、従来Notebook/Assistのprofileを維持する。Hub/任意Notebook変換の完了ではない。
+独立保存照合も成功した。条件・literalの保持範囲・失敗時の扱いは
+[Assist runbook](../../../../tools/local_experiment/notebook_assist/README.md)、
+実測は[Milestones](../061_Local_Experiment_Milestones.md)を参照する。
 
 ## 2026-09-20: Notebook-triggered Iceberg training — local acceptance complete
 
