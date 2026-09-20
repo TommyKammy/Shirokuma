@@ -33,8 +33,8 @@ Stopping preserves the SQLite database, artifacts and importer records.
 the existing Reader to one Ridge fit and a separate Tracking experiment. See
 [the Iceberg training runbook](../lake_training/README.md) for the automatic
 stop, complete cold backup, write verification and restoration of the original
-server state. The existing clone restore profile supports experiments 0/1/2;
-restoring the newer training experiments is not implemented.
+server state. Inactive-clone restoration also accepts completed fixed synthetic
+and Iceberg training receipts; see the current restore scope and acceptance below.
 
 ## Fixed supervised training
 
@@ -244,12 +244,23 @@ and importer identity. This workflow does not delete or overwrite backups.
 Restore reads a completed private export and creates a new token directory. It
 does not replace the active store, start a server or require the current server
 to stop. Set the manifest path from the retained export; do not substitute a
-copy of the running SQLite file.
+copy of the running SQLite file. The supported profile includes the original
+experiments 0/1/2 and optional experiment 3 (fixed supervised training) and 4
+(fixed Iceberg training). The accepted export below includes all five.
 
 ```sh
-rtk proxy env SHIROKUMA_MLFLOW_BACKUP_MANIFEST=tmp/local-experiment/mlflow-sre-signals-checks/f2c0f8f220a743409d6ffb1985e2e8c2/backup-manifest.json make local-mlflow-restore
+rtk proxy env SHIROKUMA_MLFLOW_BACKUP_MANIFEST=tmp/local-experiment/mlflow-training-restore-checks/0a4ab297acad46ee9d68982b0a0fce61/backup-manifest.json make local-mlflow-restore
+# Replace RESTORE_TOKEN with the token returned by the restore command.
 rtk proxy env SHIROKUMA_MLFLOW_RESTORE_TOKEN=RESTORE_TOKEN make local-mlflow-restore-readback
 ```
+
+The manifest above selects the retained export with both completed training
+runs. Each referenced training run must be FINISHED and have a valid saved
+training receipt, workload
+and matching safe artifact. Historical source hashes remain evidence of the
+original execution; restoration does not require those hashes to match current
+HEAD or rerun the live source pipeline. Unreferenced failed journals are copied
+as inert evidence. An invalid referenced receipt or partial run is rejected.
 
 Under `tmp/local-experiment/mlflow-restores/TOKEN/`, `export/` retains the whole
 export as inert evidence, including old runtime and importer records. The
@@ -273,6 +284,45 @@ subprocesses and writes outside the clone/readback directories are then denied
 by the limited Python audit guard. Telemetry is disabled. This is not a general
 OS sandbox or a guarantee that SDK initialization cannot write: incompatible
 migration/default-state changes are rejected by prechecks and postcomparison.
+
+### Completed-training restore acceptance — 2026-09-20
+
+A new complete cold export retained 42 files / 2,636,371 bytes. The owned
+stop/export/restart cycle passed in 7.907 seconds and restored the same store to
+healthy PID 23897. Restore `71b8d03059f24b2ea0594624692027c3` passed on its
+first execution in 0.164 seconds with activation disabled. SDK readback
+`bfd76a06c9b548bc9903b3ff526e4a2a` passed first in 3.335 seconds, reading
+five experiments, 18 runs, 1,338 metric points and 18 artifacts.
+
+Checks before export and after export, restore and readback preserved all 59
+active-store tables, 18 runs / 1,338 metric points / 18 artifacts, ten sources,
+730 protected files and 535 AgentHouse rows. Restore/readback added no fit,
+Reader, LLM, kernel or API call; the SDK read only the clone. Runtime health GETs
+in the export stop/restart cycle are recorded separately.
+
+The 20 new tests (12 restore and eight readback) plus 47 existing tests passed
+in 3.269 seconds. Full local regression passed 76 suites / 2,791 tests: 2,790
+passed and one existing optional test skipped, in 67.282 seconds. Independent
+saved-evidence verification passed 23 meaningful checks across 888 inputs in
+0.489 seconds. All 59 tables' typed rows and DDL matched except for 23 artifact
+URI values (five experiments and 18 runs). Both training receipts, model and
+provenance data, and the 42-file export were preserved. Rebuilding the SDK view
+from all saved parameters, tags, metric histories and artifacts reproduced its
+hash. The worker and old server were gone; the new server's start/argv matched.
+The checks added no API, SDK, fit, Reader or product import. The audit helper's
+first run needed a count-key correction; its earlier log is retained, with no
+product or actual-restore change.
+
+The whole restore directory holds 70 files / 4,188,383 bytes
+(4,321,280 allocated), including its export, clone and readback directories.
+The separate source cold backup holds 42 files / 2,636,371 bytes
+(2,707,456 allocated). Do not add the restore's included subdirectories
+again. All files are mode 600 and directories mode 700. Detailed receipts and
+hashes are retained beside the manifest under
+`tmp/local-experiment/mlflow-training-restore-checks/0a4ab297acad46ee9d68982b0a0fce61/`.
+Clone activation, service cutover, cross-host migration, Registry/Serving and
+production recovery remain separate. The following import-only acceptance is
+historical and is unchanged.
 
 On 2026-09-18, restore `389807a736a74219a05e4d85dadd937a` recovered the historical
 export's **15 runs (11 evaluations + four benchmarks), 1210 metric points and

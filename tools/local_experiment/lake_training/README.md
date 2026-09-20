@@ -81,7 +81,7 @@ Cancellation preserves the first interruption and closes only owned processes.
 Unverified cleanup stays unknown, and an unclosed tracker prevents server
 restart. Keep the receipts, database, artifacts and backup for diagnosis.
 
-## Scope and backup limitation
+## Scope and backup restoration
 
 This is a fixed 64-row synthetic Iceberg fixture, not arbitrary lake data,
 general model quality, Notebook/Hub training, autolog, Registry or Serving.
@@ -90,12 +90,20 @@ It uses no LLM, cloud API or Notebook kernel. The
 reference for the owned Tracking store.
 
 The complete cold export preserves all source files, including newer training
-experiments. The current inactive-clone restore profile accepts only experiments
-0/1/2 (Default, imported evaluations and benchmarks). Restoring exports that
-include fixed synthetic or Iceberg training experiments is not implemented.
-A verified complete export therefore does not establish restore acceptance for
-this expanded store. This pipeline neither activates a clone nor rolls back by
-deleting retained runs, artifacts or backups.
+experiments. The inactive-clone restore profile supports experiments 0/1/2 and
+optional completed fixed synthetic and Iceberg training experiments 3/4. It
+requires valid FINISHED training receipts, matching workload
+and safe artifact bytes. Historical source hashes remain evidence; restoration
+does not rerun this pipeline or require its current code to match those hashes.
+Unreferenced failed journals are inert evidence, while referenced invalid
+receipts or partial runs are rejected. A subsequent complete export containing
+both training experiments was restored and read through the SDK on 2026-09-20:
+five experiments, 18 runs, 1,338 metric points and 18 artifacts. See the
+[restore runbook](../mlflow/README.md#restore-an-inactive-local-clone) for the
+accepted manifest, tokens and completed independent verification.
+This pipeline neither activates a clone nor rolls back by deleting retained
+runs, artifacts or backups. The dated acceptance below preserves the limitation
+that applied before this new restore increment.
 
 ## Local acceptance — 2026-09-20
 

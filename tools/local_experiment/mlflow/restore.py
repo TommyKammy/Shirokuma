@@ -42,6 +42,13 @@ TABLE = re.compile(r'[A-Za-z_][A-Za-z_0-9]*\Z')
 EXPERIMENTS = {'0': ('Default', '0'),
                '1': ('shirokuma-local-evaluation-receipts-v1', 'evaluations'),
                '2': ('shirokuma-local-spark-benchmark-v1', 'spark-benchmarks')}
+TRAINING_EXPERIMENTS = {'3': ('shirokuma-local-supervised-training-v1', 'supervised-training'),
+                        '4': ('shirokuma-local-iceberg-training-v1', 'iceberg-training')}
+TRAINING_PROFILES = {'3': ('training', 'fixed-supervised-regression-v1', 'fixed-ridge-'),
+                     '4': ('lake-training', 'fixed-iceberg-regression-v1', 'lake-ridge-')}
+TRAINING_RESULT_KEYS = {'schema_version', 'result', 'phase', 'token', 'store_id', 'source_sha256',
+                        'experiment_id', 'run_id', 'started_ms', 'training_finished_ms', 'finished_ms',
+                        'workload_sha256', 'failure_code'}
 TRACKING_TABLES = {'alembic_version', 'experiments', 'experiment_tags', 'runs',
                    'metrics', 'latest_metrics', 'params', 'tags'}
 DEFAULT_WORKSPACE = {'name': 'default', 'description': 'Default workspace for legacy resources',
@@ -340,35 +347,93 @@ def artifact_suffix(uri, old_root):
     return relative(suffix)
 
 
+def training_receipt(run, key, tags, export, artifact, store_id):
+    """Bind a finished run to its inert, exported training evidence only."""
+    code = 'RESTORE_TRAINING_INVALID'
+    require(len(tags) == 6 and len({item['key'] for item in tags}) == 6, code)
+    values = {item['key']: item['value'] for item in tags}
+    attempt = values.get('shirokuma.attempt')
+    require(type(attempt) is str and TOKEN.fullmatch(attempt), code)
+    folder, profile, prefix = TRAINING_PROFILES[key]
+    directory = export / folder / attempt
+    require(directory.is_dir(), code)
+    private(directory, True)
+    require({path.name for path in directory.iterdir()} == {'result.json', 'workload.json'}, code)
+    receipt = parse(read(directory / 'result.json', MAX_MANIFEST))
+    require(type(receipt) is dict and set(receipt) == TRAINING_RESULT_KEYS
+            and type(receipt['schema_version']) is int and receipt['schema_version'] == 1
+            and receipt['result'] == receipt['phase'] == 'verified' and receipt['failure_code'] is None
+            and receipt['token'] == attempt and receipt['run_id'] == run['run_uuid']
+            and receipt['experiment_id'] == key and receipt['store_id'] == store_id, code)
+    require(all(type(receipt[name]) is int and 0 < receipt[name] <= 2**53
+                for name in ('started_ms', 'training_finished_ms', 'finished_ms'))
+            and receipt['started_ms'] <= receipt['training_finished_ms'] <= receipt['finished_ms']
+            and type(run['start_time']) is int and run['start_time'] == receipt['started_ms']
+            and type(run.get('end_time')) is int and run['end_time'] == receipt['finished_ms'], code)
+    hashes = receipt['source_sha256']
+    require(type(hashes) is dict and 0 < len(hashes) <= 64
+            and all(type(name) is str and re.fullmatch(r'[A-Za-z0-9_./-]{1,128}', name)
+                    and type(value) is str and HEX.fullmatch(value) for name, value in hashes.items()), code)
+    expected = {'shirokuma.owner': TRAINING_EXPERIMENTS[key][0], 'shirokuma.store_id': store_id,
+                'shirokuma.attempt': attempt, 'shirokuma.workload_sha256': receipt['workload_sha256'],
+                'shirokuma.time_semantics': 'actual-local-training-and-tracking',
+                'mlflow.runName': prefix + attempt[:8]}
+    require(values == expected and run.get('name') == expected['mlflow.runName'], code)
+    raw = read(directory / 'workload.json', 128 * 1024)
+    workload = parse(raw)
+    keys = {'schema_version', 'profile', 'dataset', 'split', 'params', 'model', 'baseline',
+            'metrics', 'test_predictions', 'hashes', 'versions'} | ({'lake_input'} if key == '4' else set())
+    require(type(workload) is dict and set(workload) == keys
+            and type(workload['schema_version']) is int and workload['schema_version'] == 1
+            and workload['profile'] == profile, code)
+    try:
+        require(raw == canonical(workload) + b'\n', code)
+    except (ValueError, OverflowError):
+        raise RestoreError(code) from None
+    require(type(receipt['workload_sha256']) is str and HEX.fullmatch(receipt['workload_sha256'])
+            and digest(raw) == receipt['workload_sha256'] and read(artifact, 128 * 1024) == raw, code)
+    return attempt
+
+
 def profile_plan(before, export, clone_artifacts, *, root):
     """Validate saved profile/index/artifacts and plan URI changes without SQL writes."""
     records = lambda table: [dict(zip(before[table]['columns'], row)) for row in before[table]['rows']]
     experiments, runs = records('experiments'), records('runs')
-    require(len(experiments) == 3 and {str(x['experiment_id']) for x in experiments} == set(EXPERIMENTS),
+    known = {**EXPERIMENTS, **TRAINING_EXPERIMENTS}
+    ids = {str(x['experiment_id']) for x in experiments}
+    require(len(experiments) == len(ids) and set(EXPERIMENTS) <= ids <= set(known),
             'RESTORE_PROFILE_UNSUPPORTED')
+    store_id = parse(read(export / 'store.json'))['store_id']
     old_artifacts = root / SOURCE / 'store/artifacts'
     mutations = {'experiments': [], 'runs': []}
     for item in experiments:
         key = str(item['experiment_id'])
-        name, suffix = EXPERIMENTS[key]
+        name, suffix = known[key]
         require(item['name'] == name and item['lifecycle_stage'] == 'active'
                 and artifact_suffix(item['artifact_location'], old_artifacts) == suffix,
                 'RESTORE_ARTIFACT_URI_INVALID')
         mutations['experiments'].append((item['experiment_id'], (clone_artifacts / suffix).as_uri()))
+        if key in TRAINING_EXPERIMENTS:
+            tags = [x for x in records('experiment_tags') if str(x['experiment_id']) == key]
+            require(len(tags) == 2 and {x['key']: x['value'] for x in tags} == {
+                    'shirokuma.owner': name, 'shirokuma.store_id': store_id}, 'RESTORE_TRAINING_INVALID')
     require(0 < len(runs) <= 1024 and len({x['run_uuid'] for x in runs}) == len(runs),
             'RESTORE_PROFILE_UNSUPPORTED')
     for item in runs:
         key, run_id = str(item['experiment_id']), item['run_uuid']
-        require(key in ('1', '2') and type(run_id) is str and TOKEN.fullmatch(run_id)
+        require(key in ids - {'0'} and type(run_id) is str and TOKEN.fullmatch(run_id)
                 and item['status'] == 'FINISHED' and item['lifecycle_stage'] == 'active',
                 'RESTORE_PROFILE_UNSUPPORTED')
-        suffix = EXPERIMENTS[key][1] + '/' + run_id + '/artifacts'
+        suffix = known[key][1] + '/' + run_id + '/artifacts'
         require(artifact_suffix(item['artifact_uri'], old_artifacts) == suffix,
                 'RESTORE_ARTIFACT_URI_INVALID')
         target = clone_artifacts / suffix
         require(target.exists(), 'RESTORE_ARTIFACT_MISSING')
         private(target, True)
         require({p.name for p in target.iterdir()} == {'safe-projection.json'}, 'RESTORE_ARTIFACT_MISSING')
+        if key in TRAINING_EXPERIMENTS:
+            tags = [x for x in records('tags') if x['run_uuid'] == run_id]
+            training_receipt(item, key, tags, export, target / 'safe-projection.json', store_id)
         mutations['runs'].append((run_id, target.as_uri()))
     for key, index_name in [('1', 'import-index.json'), ('2', 'benchmark-import-index.json')]:
         index = parse(read(export / index_name, MAX_MANIFEST))

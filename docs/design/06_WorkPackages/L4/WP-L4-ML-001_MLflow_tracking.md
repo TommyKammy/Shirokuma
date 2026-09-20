@@ -5,7 +5,7 @@ title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "1.0"
+version: "1.1"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -18,8 +18,47 @@ MLflowで固定合成データの学習、保存Agent evalとSpark/Trino測定�
 Icebergの固定64行を既存Readerから学習へ接続する実1回も、初回失敗の修正・別回収後に成功した。
 専用SQLite/loopback標準UIで旧16runsと固定合成・Iceberg学習の各1runを保持し、metric履歴・JSON artifactを照合した。
 固定Notebookのread-only表示と旧import profileの完全export・非稼働clone復元も確認済み。
+完成training receiptsを含む5experiments/18runsの非稼働clone復元とSDK読戻しも初回で成功した。
 保存学習をNotebookの指標表・holdout行・残差SVGで確認する実kernel実行も初回で成功した。
 Notebook/Hubからの学習・autolog、Registry/Serving、clone切替・他host移行は未達。
+
+## 2026-09-20: completed training clone restore — local acceptance complete
+
+完全cold exportから、既存experiment0/1/2とoptionalの固定合成学習experiment3・Iceberg学習experiment4を
+非稼働cloneへ復元した。対象はFINISHEDで、所有experiment/runと整合する完成receipt・workload・safe artifactを持つrun。
+保存source hashesは当時の証跡として保持し、current HEADとの一致やlive source pipeline再実行を要求しない。
+未参照の失敗journalはinertなexport証拠としてコピーし、参照receipt不正・partial runは拒否する。
+
+experiment/runのartifact URIの2列だけをcloneの所有pathへ変換し、他のschema/全論理行を維持する。
+既存`local-mlflow-restore`/`local-mlflow-restore-readback`を使い、専用SDK workerで全metadata・
+metric histories・artifact bytesを読戻す。cloneをactivateせず、稼働storeや過去の証跡を置換しない。
+新export作成時だけ所有serverを停止・再起動し、完成exportからの復元・読戻し自体はserver停止を要求しない。
+
+新cold export42files/2,636,371Bを7.907秒で保存し、同じstoreをhealthy/PID23897へ戻した。
+restore `71b8d03059f24b2ea0594624692027c3`は初回0.164秒でverified、activation_supported false。
+SDK readback `bfd76a06c9b548bc9903b3ff526e4a2a`は初回3.335秒でpassed、
+5experiments/18runs/1338points/18artifactsの読戻しとclone保存状態を照合した。
+export前後・restore後・readback後の各境界で10sources/730保持files、MLflow全59tables/18runs/
+1338points/18artifacts、AgentHouse535rowsが一致した。新fit/Reader/LLM/kernel/API呼出しはなく、
+SDKはcloneのみを読む。export停止・再起動に伴うruntime health GETは別の操作として記録した。
+新20tests（restore12/readback8）と旧47testsの計67testsが3.269秒で成功。
+全local76suites/2791tests（2790PASS・既存optional1skip、67.282秒）も成功した。
+独立保存23意味checks/888inputs（0.489秒）も成功。59tablesの型付き全行・DDLを照合し、
+変更はartifact URIの23値（experiment5＋run18）のみ。2training receipts/model/provenanceと42file exportを保持した。
+SDKの全params/tags/full metric histories/artifactsから保存view hashを独立再構築して一致した。
+worker24501と旧server19331の終了、新server23897のstart/argv一致も確認した。
+追加API/SDK/fit/Reader/product importは0。監査helper初回の集計キー修正は別logに保持し、製品・実復元の変更は0。
+復元全体70files/4,188,383B（実割当4,321,280B）はexport/clone/readbackを内包する。
+別の元cold backup42files/2,636,371B（実割当2,707,456B）と区別し、内訳を重複合算しない。
+全files600/dirs700を確認した。
+
+再現manifestと詳細証跡は
+`tmp/local-experiment/mlflow-training-restore-checks/0a4ab297acad46ee9d68982b0a0fce61/`に保持する。
+従来の「training復元未対応」という節は当時の境界として以下に保存する。
+clone activation、service切替、他host移行、Registry/Serving、本番復旧受入は対象外。
+失敗clone・元export・稼働storeを削除して成功に補完しない。
+
+手順：[MLflow restore runbook](../../../../tools/local_experiment/mlflow/README.md#restore-an-inactive-local-clone)。
 
 ## 2026-09-20: fixed Iceberg training — local acceptance complete
 
