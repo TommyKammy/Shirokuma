@@ -5,7 +5,7 @@ title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "1.3"
+version: "1.4"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -16,13 +16,46 @@ tags: [shirokuma, workpackage, l4, ml]
 
 MLflowで固定合成データの学習、保存Agent evalとSpark/Trino測定を記録する。
 Icebergの固定64行を既存Readerから学習へ接続する実1回も、初回失敗の修正・別回収後に成功した。
-専用SQLite/loopback標準UIで旧16runsと固定合成・Iceberg学習の各1runを保持し、metric履歴・JSON artifactを照合した。
+専用SQLite/loopback標準UIで旧16runsと固定合成1run・Iceberg2runsを保持し、metric履歴・JSON artifactを照合した。
 固定Notebookのread-only表示と旧import profileの完全export・非稼働clone復元も確認済み。
 完成training receiptsを含む5experiments/18runsの非稼働clone復元とSDK読戻しも初回で成功した。
 保存学習をNotebookの指標表・holdout行・残差SVGで確認する実kernel実行も初回で成功した。
 Iceberg学習も保存artifactと所有MLflow読取からNotebook表示へ接続し、実kernel初回で成功した。
 保存Icebergモデルへ新入力を渡すbatch prediction CLIも実22行で成功し、独立算術と一致した。
-Notebook/Hubからの学習・autolog、Registry/Serving、clone切替・他host移行は未達。
+Notebookから所有workerへ固定学習を依頼し、1runを追加する実行も初回で成功した。
+Hub連携・kernel内fit/autolog、Registry/Serving、clone切替・他host移行は未達。
+
+## 2026-09-20: Notebook-triggered Iceberg training — local acceptance complete
+
+`local-notebook-lake-training`（runner `--train-lake`）から固定3cellsの
+`examples/local_lake_training.ipynb`で学習を起動した。実行期限と取消cleanup猶予は各600秒。
+kernelが専用workerを起動し、親runnerが所有関係を照合して開始を許可した後に、
+workerが既存lake pipelineを1回だけ呼ぶ。
+workerが固定64行のIceberg fixture→Reader→所有table回収→MLflow停止/cold backup→1fit/run→元server状態復元を行う。
+同じ完成attemptの保存review helperがprovenance・3群metrics・16holdout・残差SVGを表示し、この読取はHTTPを使わない。
+kernelは既存Notebook環境、workerは既存MLflow環境を使う。依存・常駐service・LLM追加は0、kernel内fit/autologではない。
+
+実Notebook `a074314c6580479ebeb45d0b33802a62`は初回86.739秒でpassed、3cellsと全cleanup true。
+source `07c524979e4341649de1297cc51a3c05`、Reader `3ad5d0b8df6b7d1add5da259073c7f75`から、
+training attempt `6df9b9e5a40b4035b7865f8435fdd291`、experiment4/run
+`1ee733efdf1e428da531f522f2d42c70`を作成した。kernel PID38498の終了を確認した。
+保持14checksで37sources/852files、59tablesの旧行・18runs・旧artifactsとAgentHouse535rowsを保持した。
+追加は1run/24params/6tags/9metric points/9latest metrics/1artifactで、計19runs/1347points/19artifacts。
+同じstoreのserverをhealthyに復元した。新33tests（client15/runner18、0.602秒）が成功した。
+全local80suites/2870tests（2869PASS・既存optional1skip、70.443秒）も成功した。
+独立保存81checks/114inputs（0.118秒）は初回成功。9指標・16予測/残差、cold backupと所有process終了を照合した。
+新学習のworkloadはprovenanceのlake_inputを除く旧11keysと一致した。保持は上記before/after guard証跡を束縛して確認し、
+独立検証で追加API/SDK/fit/Reader/kernel/product importは0。kernel/worker/Reader/trackerの4PIDが消失し、
+server PID39313の同一storeでのhealthy復帰を確認した。
+新5領域（Notebook/source/Reader/ML attempt/artifact）は計80files/12,996,025B（実割当13,164,544B）。
+source内のcold backup42files/2,638,481Bを含む合計で、backupを重複加算しない。
+
+取消時はworkerの後片付けを待ってからkernelを閉じ、不明cleanupと失敗証跡を保持して自動再試行しない。
+作成済みrun/artifact/cold backupは、後続の表示失敗や利用停止でも削除して戻さない。
+一般モデル品質、任意Notebook/モデル学習、JupyterHub/複数ユーザー、Registry/Serving、本番受入は対象外。
+詳細証跡は`tmp/local-experiment/notebook-train-checks/6155edd59ccc4214b58c3a6d0156d5b0/`に保持する。
+
+手順：[Notebook-triggered training](../../../../tools/local_experiment/notebook/README.md#trigger-fixed-iceberg-training)。
 
 ## 2026-09-20: saved Iceberg batch prediction — local acceptance complete
 

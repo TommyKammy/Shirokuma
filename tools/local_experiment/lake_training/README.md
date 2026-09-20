@@ -17,6 +17,22 @@ allocates a new private source token and performs at most one training fit.
 The test target uses fake runtime/Tracking boundaries and fixed workload tests;
 it does not run the live pipeline.
 
+## Request this pipeline from a Notebook
+
+`rtk proxy make local-notebook-lake-training` adds a fixed Notebook entry point
+that requests one owned worker to run this same pipeline once. It uses the
+existing Notebook environment and a registered three-cell template; its worker
+uses the existing MLflow environment and performs the fit there. No environment
+sync or installation is added. The saved result is displayed without another HTTP read.
+See the [Notebook runbook](../notebook/README.md#trigger-fixed-iceberg-training)
+for ownership, cancellation and acceptance. The first Notebook-triggered run
+passed in 86.739 seconds on 2026-09-20 and added one retained training run,
+bringing the store to 19 runs / 1,347 metric points / 19 artifacts. Full regression
+and 81 independent saved-evidence checks passed; the Notebook runbook records
+the retention evidence and non-overlapping storage totals. Completed
+runs, artifacts and cold backups remain retained even if later display fails;
+deleting them is not rollback.
+
 ## Data and operation
 
 1. Build one owned Go Reader binary. Create the uniquely owned temporary table
@@ -84,8 +100,9 @@ restart. Keep the receipts, database, artifacts and backup for diagnosis.
 ## Scope and backup restoration
 
 This is a fixed 64-row synthetic Iceberg fixture, not arbitrary lake data,
-general model quality, Notebook/Hub training, autolog, Registry or Serving.
-It uses no LLM, cloud API or Notebook kernel. The
+general model quality, arbitrary Notebook/Hub training, autolog, Registry or Serving.
+The core pipeline uses no LLM or cloud API. Its direct CLI does not require a
+Notebook kernel; the fixed Notebook entry point above requests an owned worker. The
 [existing MLflow training and backup runbook](../mlflow/README.md) remains the
 reference for the owned Tracking store.
 

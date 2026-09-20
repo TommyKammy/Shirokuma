@@ -1,4 +1,4 @@
-# Fixed local lakehouse and training-review Notebooks
+# Fixed local lakehouse, training and review Notebooks
 
 The original fixed profile passed two explicit real-kernel executions and
 independent saved-evidence verification. The runner connects registered Notebook
@@ -17,7 +17,72 @@ kernelspec or start JupyterHub. Without input, the runner uses
 registered `examples/local_table_preview.ipynb`. With `--training-token`, it uses
 `examples/local_training_review.ipynb`. With `--lake-training-token`, it uses
 `examples/local_lake_training_review.ipynb`. These profiles accept no caller-provided
-Notebook path or code.
+Notebook path or code. The new `--train-lake` profile uses the fixed
+`examples/local_lake_training.ipynb` to request one owned training worker.
+
+## Trigger fixed Iceberg training
+
+```sh
+rtk proxy make local-notebook-lake-training
+```
+
+The target uses the existing Notebook environment and `runner.py --train-lake`.
+The kernel stays in that environment; its worker uses the existing MLflow
+environment, including NumPy for workload normalization. Neither environment is
+synchronized or installed by this target.
+Its registered template has exactly three code cells and a 600-second execution
+deadline. It accepts no caller Notebook code, table, model or training parameters.
+Before the pipeline starts, an ownership handshake binds the outer runner to
+one worker requested by the kernel. That worker invokes the unchanged
+[fixed Iceberg pipeline](../lake_training/README.md) once.
+
+The worker creates 64 fixed Iceberg rows, reads them through the owned Reader
+and cleans up its table. It then stops the owned MLflow server if running,
+retains a complete cold backup, fits and records one run, and restores the
+initial server state. The Notebook loads that same completed attempt through
+the saved-review helper, displaying provenance, three groups of metrics,
+16 holdout rows and residual SVG without an additional HTTP read.
+
+Cancellation allows up to 600 seconds for owned worker cleanup before closing
+the kernel, separately from the 600-second execution deadline. Uncertain closure
+stays unknown and retains evidence; there is no
+automatic retry. Private pipeline intent, owner, launch and status receipts bind
+the worker before it may start the pipeline. The final result records pipeline
+cleanup, source/training tokens, Reader evidence and training identity;
+`training-review.json` retains the displayed result.
+This is a Notebook entry point to an owned worker, not a fit
+inside the kernel or autolog. No dependency, service or LLM is added.
+Keep any newly completed run, artifact and pre-write cold backup even if later
+Notebook display fails or use stops. Deleting them is not a rollback step.
+
+### 2026-09-20 worker-training acceptance
+
+Notebook `a074314c6580479ebeb45d0b33802a62` passed first in 86.739 seconds,
+with three completed cells and all cleanup flags true. Kernel PID 38498 exited.
+Source `07c524979e4341649de1297cc51a3c05` and Reader evidence
+`3ad5d0b8df6b7d1add5da259073c7f75` produced training attempt
+`6df9b9e5a40b4035b7865f8435fdd291`, experiment 4 and run
+`1ee733efdf1e428da531f522f2d42c70`.
+
+Fourteen retention checks preserved 37 sources, 852 files, all old rows across
+59 MLflow tables, the previous 18 runs and artifacts, and 535 AgentHouse rows.
+One run, 24 parameters, six tags, nine metric points/latest metrics and one
+artifact were added: totals are 19 runs / 1,347 points / 19 artifacts. The same
+store returned to a healthy server. All 33 new focused tests passed in
+0.602 seconds (15 client and 18 runner tests). Full regression passed 80 suites /
+2,870 tests: 2,869 passed and one existing optional test skipped, in 70.443 seconds.
+Independent saved verification passed first: 81 checks across 114 inputs in
+0.118 seconds. Nine metrics and 16 predictions/residuals matched; all 11 workload
+keys other than the new lake_input provenance reproduced the earlier fixed fit.
+The checks bound the before/after retention-guard receipts rather than repeating
+a live file audit, and added no API, SDK, fit, Reader, kernel or product import.
+
+Kernel, worker, Reader and tracker processes were gone. The same store returned
+to healthy server PID 39313. Five non-overlapping output areas (Notebook, source,
+Reader, ML attempt and artifact) total 80 files / 12,996,025 bytes (13,164,544
+allocated). This includes the source's 42-file / 2,638,481-byte cold backup;
+do not add that backup again. Evidence is retained under
+`tmp/local-experiment/notebook-train-checks/6155edd59ccc4214b58c3a6d0156d5b0/`.
 
 ## Review saved Iceberg training
 
@@ -247,11 +312,13 @@ Git contains the template with empty outputs and null execution counts. Executed
 Notebook output, private kernel connection information, Reader logs and receipts
 stay under `tmp/local-experiment/notebook-runs/<token>/`. The default and preview outputs include
 `executed.ipynb`, `result.json`, Reader stdout/intent/status and
-`evaluations.json`. Training-review output is described above. They are not copied back into the template.
+`evaluations.json`. Training-review and worker-training outputs are described above.
+They are not copied back into the template.
 The Notebook result may contain the selected query's typed table rows;
 credentials, raw driver errors and connection secrets are not public output.
 
-Success requires the Reader receipt to prove its query drain and cleanup and the
+For the default and table-preview Reader profiles, success requires the Reader
+receipt to prove its query drain and cleanup and the
 owner to close its kernel. Failure and cancellation retain private evidence and
 must not turn an uncertain Reader result into success or an automatic retry.
 The Reader's normal wait is 240 seconds and its interrupt cleanup wait is 245
@@ -359,7 +426,8 @@ Hub service to remove; deleting retained data is not a rollback step.
 ## Remaining work outside this increment
 
 JupyterHub, authentication and multi-user isolation, notebook editing/upload,
-direct Spark sessions, model training/autolog, Registry/Serving, activating a
+direct Spark sessions, arbitrary or kernel-hosted model training/autolog,
+Registry/Serving, activating a
 restored MLflow store, cross-host migration and production acceptance remain
 unimplemented or unverified. The separate MLflow runbook covers the verified
 inactive local clone restore.

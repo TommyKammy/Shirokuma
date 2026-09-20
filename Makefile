@@ -922,3 +922,10 @@ test-local-lake-predict:
 	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_mlflow_predict.py'
 	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_saved_training_reader.py'
 verify-local-experiment: test-local-lake-predict
+
+.PHONY: local-notebook-lake-training test-local-notebook-train
+local-notebook-lake-training:
+	@tools/local_experiment/notebook/.venv/bin/python -B tools/local_experiment/notebook/runner.py --train-lake
+test-local-notebook-train:
+	@tools/local_experiment/notebook/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_train_*.py'
+verify-local-experiment: test-local-notebook-train
