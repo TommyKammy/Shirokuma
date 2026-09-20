@@ -5,7 +5,7 @@ title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "1.12"
+version: "1.13"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -14,6 +14,7 @@ tags: [shirokuma, workpackage, l4, ml]
 
 ## Summary
 
+MLflow起動中だけの有界待機と厳密な所有確認を接続し、実所有restart・既存データ保持を確認した。短命member待機はfakeで確認し、元incident原因は未確定とする。
 保存48学習行の固定sklearn autologを実証した。初回HTML検証失敗を追加fitなしで回復し、完成再表示・非稼働clone復元・既存データ保持を確認した。
 固定Registry versionをloopbackのsafe JSON推論APIへ接続し、修正後の予測・認証拒否・所有停止/再起動と既存データ保持を確認した。
 固定local Ridge Registryへの初回登録・同token再利用の追加write0・明示version解決と予測・非稼働clone復元を確認した。
@@ -32,6 +33,14 @@ Notebookから所有workerへ固定学習を依頼し、1runを追加する実�
 保存比較候補の一覧・再fit不要な新入力予測も、cold計算とLab実UIで確認した。
 Labの固定学習workbenchで、初回unknownの保存結果を追加fitなしで回復し、別の新規正常実行から表示・編集予測・保存/再読込も確認した。
 Hub連携・kernel内fit/autolog、Registryのalias/stage運用・標準MLflow pyfunc Serving、clone切替・他host移行は未達。
+
+## 2026-09-20: bounded MLflow startup observation: local acceptance complete
+
+起動中の未確認memberだけを、健在な所有leaderと既存の起動期限の下で一度・最大2秒待つ。許可argvは増やさず、解消後も従来の全所有・listener・health検査を必須とする。既知identity変更や継続する未知memberは拒否し、起動後処理も同じ厳密な観測を通すまでsignalを送らない。元取消を保持し、既存private logには件数上限付きの固定分類・command SHA/長さだけを追記する。
+
+標準Python／専用ML環境のfake37件がそれぞれ成功し、独立読取レビューの未解決指摘は0。実所有stop/startは8.857秒でhealthyへ復帰し、同じstartの再呼出しは同PIDを保持した。実短命memberの観測は0で、2秒待機の分岐はfakeの証拠に限る。元incidentの原因は未確定のままである。
+
+827観測files中825immutable・Tracking DB全bytes・23runs/1388metric points/23artifacts・Registry1/1・AgentHouse585行・Servingを保持した。元server.log prefixも不変で、追記は1,496 bytes。新fit/Reader/LLMは0。全回帰の実施状態と証跡は[[../061_Local_Experiment_Milestones|Milestones]]へ集約し、WPはlocal-partialを維持する。
 
 ## 2026-09-20: fixed train-only sklearn autolog: local acceptance complete
 

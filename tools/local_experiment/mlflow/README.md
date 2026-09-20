@@ -414,6 +414,14 @@ Numeric metrics omit unknowns and counters above the exact double range.
 
 ## Runtime and storage boundaries
 
+Startup allows one bounded wait of up to two seconds for an unconfirmed new
+child process to disappear. It then applies the original complete process,
+listener and health checks; no additional command is accepted as an owned
+worker. A changed known identity is rejected immediately. Persistent unknown
+processes are retained without signalling them. Ordinary status and stop keep
+their strict ownership checks. If the wait is used, the private server log
+records a bounded identity summary and command hashes, without raw arguments.
+
 Active Tracking state belongs to `tmp/local-experiment/mlflow-tracking/`, including the
 SQLite database, artifact root, owner marker, process identity and private
 HOME/XDG/temp directories. New directories/files are private (0700/0600).

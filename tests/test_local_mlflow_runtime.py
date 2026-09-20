@@ -1,5 +1,7 @@
 """No MLflow imports, server launches, or retained store writes in these tests."""
 import importlib.util
+from contextlib import contextmanager, ExitStack
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -56,6 +58,124 @@ class RuntimeTests(unittest.TestCase):
                'argv':R.server_argv(),'leader':self.leader(),'members':[self.leader(),self.worker()]}
         R.write_private(R.STATE/'runtime.json',value)
         return value
+
+    @contextmanager
+    def startup(self, rows, *, healthy=True):
+        """Fake every process, clock, listener and signal used by start()."""
+        clock=[0.0]
+        child=Mock(pid=9001);child.poll.return_value=None
+        self.listener.side_effect=lambda: ([{'pid':9002,'address':'127.0.0.1:18550'}]
+            if (R.STATE/'runtime.json').exists() else [])
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(R,'require_stopped'))
+            stack.enter_context(patch.object(R,'_isolated_runtime',return_value=R.environment()))
+            stack.enter_context(patch.object(R.subprocess,'Popen',return_value=child))
+            stack.enter_context(patch.object(R,'processes',side_effect=rows))
+            stack.enter_context(patch.object(R,'_healthy',side_effect=healthy if callable(healthy) else None,
+                                            return_value=healthy))
+            stack.enter_context(patch.object(R.time,'monotonic',side_effect=lambda:clock[0]))
+            sleep=stack.enter_context(patch.object(R.time,'sleep',side_effect=lambda n:clock.__setitem__(0,clock[0]+n)))
+            kill=stack.enter_context(patch.object(R.os,'killpg'))
+            yield clock,sleep,kill
+
+    def startup_events(self):
+        return [json.loads(line.split(' shirokuma-start-observation ',1)[1])
+                for line in (R.STATE/'server.log').read_text().splitlines()]
+
+    def test_start_waits_for_new_member_but_never_owns_its_command(self):
+        self.prepare();clean={9001:self.leader(),9002:self.worker()}
+        unknown=dict(self.worker(),pid=9003,command='uname -p')
+        observed=[clean,{**clean,9003:unknown},clean,clean,clean]
+        with self.startup(lambda:observed.pop(0)) as (clock,sleep,kill):
+            self.assertTrue(R.start()['healthy'])
+            self.assertEqual(clock[0],0.05);kill.assert_not_called()
+        self.assertEqual(R._record()['members'],list(clean.values()))
+        self.assertEqual([x['event'] for x in self.startup_events()],['waiting','resolved'])
+        # The same command remains unowned for ordinary status and stop.
+        with patch.object(R,'processes',return_value={**clean,9003:unknown}),patch.object(R.os,'killpg') as kill:
+            self.assertEqual(R.status()['state'],'unknown')
+            with self.assertRaises(R.RuntimeError):R.stop()
+            kill.assert_not_called()
+
+    def test_start_wait_handles_unknown_in_exact_status_snapshot(self):
+        self.prepare();clean={9001:self.leader(),9002:self.worker()}
+        unknown={**clean,9003:dict(self.worker(),pid=9003,command='/private/unknown-command')}
+        # The first outer ownership read passes, but strict status sees a child.
+        observed=[clean,clean,unknown,clean,clean,clean]
+        with self.startup(lambda:observed.pop(0)) as (_,sleep,kill):
+            self.assertTrue(R.start()['healthy']);sleep.assert_called_once_with(0.05)
+            kill.assert_not_called()
+        self.assertEqual([x['event'] for x in self.startup_events()],['waiting','resolved'])
+
+    def test_persistent_new_member_exhausts_two_seconds_without_signal(self):
+        self.prepare();rows={9001:self.leader(),9002:self.worker(),
+            9003:dict(self.worker(),pid=9003,command='/private/secret-command --token private-secret')}
+        with self.startup(lambda:rows) as (clock,_,kill):
+            with self.assertRaisesRegex(R.RuntimeError,'START_UNCONFIRMED_TIMEOUT'):R.start()
+            self.assertEqual(clock[0],2.0);kill.assert_not_called()
+        raw=(R.STATE/'server.log').read_bytes()
+        self.assertNotIn(b'secret-command',raw);self.assertNotIn(b'private-secret',raw)
+        self.assertEqual([x['event'] for x in self.startup_events()],['waiting','failed'])
+        self.assertLessEqual(len(raw),8192)
+
+    def test_start_grace_is_not_renewed_after_member_disappears(self):
+        self.prepare();clean={9001:self.leader(),9002:self.worker()}
+        unknown={**clean,9003:dict(self.worker(),pid=9003,command='uname -p')}
+        calls=[0]
+        def rows():
+            calls[0]+=1
+            return unknown if calls[0]==2 or calls[0]>=5 else clean
+        with self.startup(rows,healthy=False) as (clock,_,kill):
+            with self.assertRaisesRegex(R.RuntimeError,'START_UNCONFIRMED_TIMEOUT'):R.start()
+            self.assertEqual(clock[0],2.0);kill.assert_not_called()
+        self.assertEqual([x['event'] for x in self.startup_events()],['waiting','failed'])
+
+    def test_known_identity_change_fails_immediately_and_cleanup_never_signals(self):
+        for target,field,value in [(9001,'start_time','new leader'),(9002,'start_time','reused pid'),
+                                   (9002,'ppid',42)]:
+            with self.subTest(target=target,field=field):
+                self.prepare();clean={9001:self.leader(),9002:self.worker()}
+                changed={pid:dict(row) for pid,row in clean.items()}
+                changed[target][field]=value
+                if target != 9002 or field != 'start_time':
+                    changed[9003]=dict(self.worker(),pid=9003,command='uname -p')
+                calls=[0]
+                def rows():
+                    calls[0]+=1
+                    return clean if calls[0]<=2 else changed
+                with self.startup(rows) as (clock,sleep,kill):
+                    with self.assertRaisesRegex(R.RuntimeError,'PROCESS_IDENTITY_CONFLICT'):R.start()
+                    self.assertEqual(clock[0],0);sleep.assert_not_called();kill.assert_not_called()
+                # Each case uses an independent fake owned store.
+                (R.STATE/'runtime.json').unlink();(R.STATE/'start-intent.json').unlink()
+
+    def test_start_original_interrupt_survives_log_and_cleanup_failures(self):
+        self.prepare();rows={9001:self.leader(),9002:self.worker(),
+                            9003:dict(self.worker(),pid=9003,command='uname -p')}
+        original=KeyboardInterrupt('first')
+        with self.startup(lambda:rows) as (_,sleep,kill), \
+                patch.object(R,'_start_diagnostic',side_effect=[None,OSError('log failure')]), \
+                patch.object(R,'_terminate',side_effect=KeyboardInterrupt('later')) as terminate:
+            sleep.side_effect=original
+            with self.assertRaises(KeyboardInterrupt) as caught:R.start()
+            self.assertIs(caught.exception,original);kill.assert_not_called()
+            self.assertTrue(terminate.call_args.kwargs['startup'])
+
+    def test_start_diagnostic_is_private_bounded_and_hash_only(self):
+        self.prepare();record=self.record();log=R.STATE/'server.log'
+        log.write_bytes(b'');log.chmod(0o600)
+        command='/private/secret-name --token arbitrary-token'
+        rows={i:dict(self.worker(),pid=i,command=command) for i in range(9010,9020)}
+        R._start_diagnostic(record,rows,'waiting')
+        raw=log.read_bytes();event=self.startup_events()[0]
+        self.assertLessEqual(len(raw),4096);self.assertEqual(log.stat().st_mode & 0o777,0o600)
+        self.assertEqual(event['group_members'],10);self.assertTrue(event['truncated'])
+        self.assertEqual(len(event['members']),8)
+        self.assertNotIn(b'secret-name',raw);self.assertNotIn(b'arbitrary-token',raw)
+        for row in event['members']:
+            self.assertEqual(row['classification'],'unclassified')
+            self.assertEqual(row['command_sha256'],hashlib.sha256(command.encode()).hexdigest())
+            self.assertEqual(row['command_bytes'],len(command.encode()))
 
     def test_status_uninitialized_does_not_create_store(self):
         self.assertEqual(R.status()['state'],'uninitialized')

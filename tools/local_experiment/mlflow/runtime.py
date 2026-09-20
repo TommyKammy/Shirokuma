@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 from contextlib import contextmanager
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -33,6 +34,7 @@ PORT = 18550
 URL = 'http://127.0.0.1:' + str(PORT)
 VERSION = '3.16.1'
 OWNER = 'shirokuma-local-mlflow'
+START_MEMBER_GRACE = 2.0
 
 
 class RuntimeError(Exception):
@@ -302,6 +304,11 @@ def _healthy():
 
 def status():
     """Read-only; does not create directories, import the SDK, or repair state."""
+    return _status()
+
+
+def _status(startup_check=None):
+    """The same strict status checks, with an optional start-only observation hook."""
     result = {'schema_version':1,'state':'uninitialized','store_id':None,'identity':None,'healthy':False}
     no_symlinks(STATE)
     port = listeners()
@@ -325,6 +332,8 @@ def status():
         result['state'] = 'unknown' if port else 'stopped'
         return result
     rows = processes()
+    if startup_check is not None:
+        startup_check(rows)
     try:
         members = _owned_group(record, rows)
     except RuntimeError:
@@ -348,6 +357,69 @@ def status():
     result['state'] = 'running'
     result['healthy'] = bool(port) and _healthy()
     return result
+
+
+class _UnconfirmedStartMember(RuntimeError):
+    """An observation to wait on, never an accepted process identity."""
+
+
+def _start_members(record, rows):
+    leader = record['leader']
+    require(_same(rows.get(leader['pid']), leader)
+            and not rows[leader['pid']].get('state', '').startswith('Z'), 'PROCESS_IDENTITY_CONFLICT')
+    known = {row['pid']: row for row in record['members']}
+    known[leader['pid']] = leader
+    for pid, saved in known.items():
+        current = rows.get(pid)
+        if current is None or _known_zombie(current, saved):
+            continue
+        require(_same(current, saved) and current.get('ppid') == saved.get('ppid'), 'PROCESS_IDENTITY_CONFLICT')
+    try:
+        return _owned_group(record, rows)
+    except RuntimeError:
+        # Known identities have already passed. Only a newly observed group
+        # member can cause a short wait; no new command becomes owned here.
+        if any(row['pgid'] == leader['pgid'] and row['pid'] not in known for row in rows.values()):
+            raise _UnconfirmedStartMember('START_UNCONFIRMED_MEMBER') from None
+        raise
+
+
+def _first_error(first, later):
+    # Preserve an existing cancellation, including across close/log/cleanup.
+    return first if first is not None and (not isinstance(first, Exception) or isinstance(later, Exception)) else later
+
+
+def _start_diagnostic(record, rows, event):
+    """Bounded private diagnostics, without arbitrary argv, names or environment."""
+    require(event in ('waiting', 'resolved', 'failed'), 'START_DIAGNOSTIC_INVALID')
+    group = sorted((r for r in rows.values() if r['pgid'] == record['leader']['pgid']), key=lambda r:r['pid'])
+    members = []
+    for row in group[:8]:
+        command = row['command']
+        classification = ('server' if command == ' '.join(server_argv()) else
+                          'worker' if command == ' '.join(worker_argv()) else
+                          'platform-probe' if command in ('uname -p', '/usr/bin/uname -p') else 'unclassified')
+        members.append(dict(pid=row['pid'], ppid=row['ppid'], pgid=row['pgid'], uid=row['uid'],
+            start_time=row['start_time'][:64], state=row.get('state', '')[:8], classification=classification,
+            command_sha256=hashlib.sha256(command.encode()).hexdigest(), command_bytes=len(command.encode())))
+    value = dict(schema_version=1, event=event, leader_pid=record['leader']['pid'],
+                 group_members=len(group), truncated=len(group)>8, members=members)
+    raw = b' shirokuma-start-observation ' + json.dumps(value, sort_keys=True, separators=(',', ':')).encode() + b'\n'
+    require(len(raw) <= 4096, 'START_DIAGNOSTIC_TOO_LARGE')
+    path = STATE/'server.log'; no_symlinks(path)
+    fd = os.open(path, os.O_WRONLY|os.O_APPEND|os.O_NOFOLLOW)
+    first = None
+    try:
+        info = os.fstat(fd)
+        require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_nlink == 1
+                and stat.S_IMODE(info.st_mode) == 0o600, 'UNSAFE_LOG')
+        require(os.write(fd, raw) == len(raw), 'START_DIAGNOSTIC_WRITE_FAILED')
+        os.fsync(fd)
+    except BaseException as error:
+        first = error
+    try: os.close(fd)
+    except BaseException as error: first = _first_error(first, error)
+    if first is not None: raise first
 
 
 def require_stopped():
@@ -379,8 +451,11 @@ def prepare():
         return status()
 
 
-def _terminate(record):
-    members = _owned_group(record, processes())
+def _terminate(record, *, startup=False):
+    rows = processes()
+    # Startup's stronger saved-identity check must also guard its sole signal,
+    # using this exact snapshot rather than a separate preflight observation.
+    members = _start_members(record, rows) if startup else _owned_group(record, rows)
     require(members, 'OWNED_PROCESS_MISSING')
     known = {row['pid']:row for row in members}
     os.killpg(record['leader']['pgid'], signal.SIGTERM)
@@ -438,6 +513,8 @@ def start():
         finally:
             os.close(fd)
         record=None
+        wait_deadline=None
+        last_rows={}
         try:
             for _ in range(20):
                 leader=processes().get(child.pid)
@@ -453,27 +530,49 @@ def start():
             launch['state']='identified'
             write_private(STATE/'start-intent.json',launch)
             deadline=time.monotonic()+60
+            def inspect(rows):
+                nonlocal last_rows
+                last_rows=rows
+                return _start_members(record, rows)
             while time.monotonic()<deadline:
-                members=_owned_group(record,processes())
-                if members != record['members']:
-                    record['members']=members
-                    write_private(STATE/'runtime.json',record)
-                require(child.poll() is None,'SERVER_EXITED')
-                observed=status()
-                require(observed['state']=='running','START_IDENTITY_CONFLICT')
-                if observed['healthy']:
-                    record['members']=_owned_group(record,processes())
-                    write_private(STATE/'runtime.json',record)
-                    return observed
+                try:
+                    members=inspect(processes())
+                    if members != record['members']:
+                        record['members']=members
+                        write_private(STATE/'runtime.json',record)
+                    require(child.poll() is None,'SERVER_EXITED')
+                    # Classify the exact snapshot used by strict status, avoiding
+                    # retries of unknown listeners or unrelated status failures.
+                    observed=_status(startup_check=inspect)
+                    require(observed['state']=='running','START_IDENTITY_CONFLICT')
+                    if observed['healthy']:
+                        record['members']=inspect(processes())
+                        write_private(STATE/'runtime.json',record)
+                        if wait_deadline is not None:
+                            _start_diagnostic(record, last_rows, 'resolved')
+                        return observed
+                except _UnconfirmedStartMember:
+                    now=time.monotonic()
+                    if wait_deadline is None:
+                        wait_deadline=min(deadline, now+START_MEMBER_GRACE)
+                        _start_diagnostic(record, last_rows, 'waiting')
+                    require(now<wait_deadline, 'START_UNCONFIRMED_TIMEOUT')
+                    time.sleep(min(0.05, wait_deadline-now))
+                    continue
                 time.sleep(0.2)
             raise RuntimeError('START_TIMEOUT')
-        except BaseException:
+        except BaseException as error:
+            first=error
             if record is not None:
                 try:
-                    _terminate(record)
-                except (RuntimeError,OSError):
-                    pass
-            raise
+                    _start_diagnostic(record, last_rows, 'failed')
+                except BaseException as later:
+                    first=_first_error(first, later)
+                try:
+                    _terminate(record, startup=True)
+                except BaseException as later:
+                    first=_first_error(first, later)
+            raise first
 
 
 def stop():

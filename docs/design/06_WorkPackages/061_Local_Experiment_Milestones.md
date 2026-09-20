@@ -5,13 +5,14 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.69"
+version: "3.70"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
+MLflow起動限定の最大2秒待機をfakeで確認し、実所有restartと全既存データ保持が成功した。元incident原因は未確定のまま維持する。
 固定sklearn autologは48学習行で1fitし、初回HTML検証失敗を追加fitなしで回復した。完成再表示・clone復元・全回帰が成功した。
 固定Registry versionのloopback推論APIは、初回自己検査の修正後に84行予測・拒否/timeout・所有再起動を確認した。全回帰も成功した。
 保存previewからのQuery Doctor診断1回とLab保存再表示が成功した。元SELECT再送0、全回帰と最終保持・容量確認も成功した。
@@ -51,6 +52,18 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: bounded MLflow startup observation: local acceptance complete
+
+起動限定の未確認member待機を、一度・最大2秒へ制限した。固定server/workerの許可argv、起動後の全所有・loopback listener・health確認は維持する。既知PID/start/parent identityの変更は即時拒否し、起動失敗の後処理でも同じfresh観測が通るまでTERMを送らない。診断は既存600 logへ最大8member・4,096 bytes/件を最大2件追記し、任意argvや環境値は保存しない。
+
+標準Python／専用ML環境のfake37件が各PASS、独立read-only reviewは未解決0。実restart01は8.857秒でPID6141→11348・同store・healthyへ復帰し、startの再呼出しは同PIDだった。今回の実起動では短命memberを観測していないため、grace分岐の確認はfakeに限定する。先のPROCESS_IDENTITY_CONFLICTの原因は未確定で、今回を根本原因の確定・再現とは主張しない。
+
+827観測files中825immutable、Tracking DB全bytesと23runs/1388metric points/23artifacts・Registry model1/version1・AgentHouse585行を保持した。Serving PID95852は不変、元server.log prefixを保持して1,496 bytesだけ追記した。新fit/Reader/LLM/監査書込は0、保持データやbackupの削除はない。
+
+全回帰: 起動安定化と並行Catalogの変更を含む一括回帰は、117suites・3605実行（3604PASS＋既存1skip）、89.804秒で成功した。証跡は`tmp/local-experiment/notebook-catalog-checks/32ef3a2bda83494ab77fa266afc22816/full01.json`と`full01.log`（log SHA256 `430e101c36868027939038496d035d4558352ec3584bc00d3a6f79f01b8b2d61`）へ保持する。これは回帰検査の結果であり、進行中のCatalog実受入とは区別する。
+
+証跡は`tmp/local-experiment/mlflow-startup-checks/95f1950df93d40cb8c9e430ef849edf8/`の`author-checkpoint.json`、`independent-code-review.json`、`restart01.json`、`final-acceptance.json`、`actual-startup-observation.json`へ保持する。標準MLflow pyfunc Serving・Hub/kernel内autolog・本番運用の受入範囲は広げない。
 
 ## 2026-09-20: fixed train-only sklearn autolog: local acceptance complete
 
