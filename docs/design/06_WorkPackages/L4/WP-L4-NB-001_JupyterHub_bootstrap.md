@@ -5,7 +5,7 @@ title: "WP-L4-NB-001 JupyterHub bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.18"
+version: "0.19"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, notebook]
 ---
@@ -14,6 +14,7 @@ tags: [shirokuma, workpackage, l4, notebook]
 
 ## Summary
 
+固定Registry名/versionから保存モデルを解決し、2行予測・詳細表示・保存/再読込をLabで確認した。
 保持snapshotの2件/3件をLabで比較し、差分1・fixture回収後の保存再表示を確認した。
 固定schemaの一覧からtableを選び、列情報を確認するLab探索入口を実UIで検証した。モデル呼出しなしで保存再表示・save/reloadを確認した。
 自然文からsnapshotの正確な件数を表示する限定Lab入口は、修正後5caseと保存再表示で受入を確認した。
@@ -33,6 +34,14 @@ Labから自然文table previewを呼ぶ別Notebookも、修正後の等値previ
 保存比較一覧から候補を選び、再fitせず新入力を予測するLab入口も実UI受入を確認した。
 Labの固定学習workbenchで、初回unknownを追加fitなしで回復し、別の新規正常実行とレビュー/一覧/編集予測・保存/再読込を確認した。
 JupyterHub、複数ユーザー、直接PySpark、kernel内fit・autologの完了は含めない。
+
+## 2026-09-20: Lab explicit Registry version prediction: local acceptance complete
+
+[Registry予測Notebook](../../../../examples/local_registry_prediction.ipynb)で固定モデル名`shirokuma-local-ridge`とversionを明示し、SQLite読取で対応する保存学習を解決して既存predictorへ渡す。token/run/store/workload/model SHAの一致を確認し、1–64行の有限数値入力と予測を表に表示する。初期versionは空で、初回Run Allは案内だけを表示する。未知versionや不整合で別モデルへ代替せず、失敗・中断時は古い表示用結果と中間結果を消す。
+
+既存9Notebookと同じLab processを保持して新規1冊だけを配置した。実UIでversion 1と入力2行を選び、予測・元学習の詳細・保存/再読込を確認した。APIでも同じ2値を確認し、合計resolve/predict各2回、新fit/Reader/LLM/登録・MLflow/監査書込は0。538保持files、既存MLflow/Registry/監査データは不変だった。
+
+初回の呼出し0は実行済み保存cells・分岐/出力とfakeテストで確認した範囲で、DBアクセスの独立観測ではない。alias/stage運用・品質昇格・Serving・JupyterHub/複数ユーザーは未達、WPはlocal-partialを維持する。操作は[Lab runbook](../../../../tools/local_experiment/notebook_lab/README.md)、実測と証跡は[Milestones](../061_Local_Experiment_Milestones.md)を参照する。
 
 ## 2026-09-20: Lab retained snapshot count comparison — local acceptance complete
 

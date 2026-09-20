@@ -1035,6 +1035,11 @@ test-local-mlflow-registry:
 	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_mlflow_registry*.py'
 verify-local-experiment: test-local-mlflow-registry
 
+.PHONY: test-local-notebook-registry
+test-local-notebook-registry:
+	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_registry.py'
+verify-local-experiment: test-local-notebook-registry
+
 .PHONY: local-spark-comet-prepare local-spark-comet-build local-spark-comet-run local-spark-comet-recover test-local-spark-comet
 local-spark-comet-prepare:
 	@$(PYTHON) -B tools/local_experiment/spark_comet/prepare.py

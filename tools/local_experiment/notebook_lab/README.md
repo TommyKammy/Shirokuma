@@ -50,6 +50,43 @@ The environment uses a private kernelspec and project-local Jupyter/IPython
 directories. No global kernelspec, login item or host-wide configuration is
 installed.
 
+## Predict with a registered model version
+
+Run `make local-notebook-lab-start` to seed `registry_prediction.ipynb` once.
+An already healthy Lab stays running, and existing Notebooks retain their
+edited cells and saved outputs. The initial Run All leaves the version empty
+and performs no database read or prediction.
+
+1. Look up the version in the local MLflow **Model registry** page.
+2. Set `model_version` to its explicit numeric string and run that selection cell.
+3. Edit the `x1`, `x2`, `x3` input rows and run the prediction cell.
+4. Save the Notebook to retain the selected version, inputs and output table.
+
+The fixed name is `shirokuma-local-ridge`. Each prediction resolves that version
+through a read-only SQLite snapshot, then calls the existing saved-model
+predictor. The training token, run, store, workload and model hash must match.
+The table shows the input rows in order and the model identity in an expandable
+detail. Invalid input, an unavailable version or a mismatched identity clears
+the prior result; interruption also clears intermediate results and propagates
+the original cancellation.
+
+The Python helpers are `notebook.registry.predict_registered(name, version,
+request)` and `render_prediction(result)`. Rendering uses only the saved public
+result. This path creates no fit, registration, Tracking write, Reader or LLM
+call, and does not use an alias, stage or Serving endpoint.
+
+Local acceptance on 2026-09-20 added the Notebook to the healthy running Lab
+without a restart, preserving the nine existing Notebooks. Initial Run All
+requested an explicit version and produced no prediction. Selecting version `1`
+and editing the input rows to `(0, 0, 0)` and `(1, 2, 3)` produced
+`4.016354700969291` and `4.425673825468169`, matching the direct helper result.
+The model details, save and reload were verified in the UI. All 538 retained
+files and the MLflow/Registry/AgentHouse snapshots stayed identical. The saved
+Notebook and its checkpoint total 9,966 logical bytes; the Lab keeps the same
+server PID with ten kernels. Full local regression passed 3,477 tests with one
+existing skip. Receipts are under
+`tmp/local-experiment/notebook-registry-checks/b27f070865ae43bab94d82b8307c2158/`.
+
 ## Start a fixed Iceberg training run
 
 Run `make local-notebook-lab-start` to seed `lake_training_workbench.ipynb` once.

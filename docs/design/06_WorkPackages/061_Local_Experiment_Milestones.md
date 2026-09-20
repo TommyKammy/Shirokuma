@@ -5,13 +5,14 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.65"
+version: "3.66"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
+固定Registry名/versionを明示する新Notebookの予測・保存/再読込が成功し、既存Lab processと9冊を保持した。
 固定local Ridge Registryの初回登録・同token追加write0・明示version予測とclone全履歴読戻しが成功した。
 Labの保持snapshot一覧と直列COUNT比較が実UIで成功した。専用fixtureの2件→3件、保存再表示・回収・既存データ保持を確認した。
 Labの固定2schema一覧と明示tableの列情報表示を実UIで確認した。metadata3attempt・モデル呼出し0、保存再表示と既存データ保持が成功した。
@@ -47,6 +48,16 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: Lab explicit Registry version prediction: local acceptance complete
+
+[Registry予測Notebook](../../../examples/local_registry_prediction.ipynb)を初回だけ配置し、固定モデル名と明示versionから保存モデルの入力予測へ接続した。seedは0.719秒で、同Lab PIDと既存9冊を保持し再起動は0。空versionの初回Run Allは3cellsの案内だけとなり、実行済み保存cells・分岐/出力とfake呼出し検査でresolve/predict 0を確認した（独立DB観測probeではない）。
+
+実APIとUIでversion 1、入力`[0,0,0]`/`[1,2,3]`から`4.016354700969291`/`4.425673825468169`を確認した。UIでは元token/run/model SHAの詳細とsave/reloadも確認し、Notebook bytes/mode/mtimeを保持した。機能実行はresolve/predict各2回・計4予測行で、render/保存表示に追加呼出しはない。新fit/Reader/LLM/登録・MLflow/AgentHouse書込は0。
+
+最終保持検査は0.723秒で、旧538filesのbytes/mode/mtime、MLflow全59tables・22runs/1383metric points/22artifacts、Registry model1/version1、AgentHouse582行が一致した。同Lab PID 66067はhealthy、10kernels。新workspace Notebookとcheckpointの2filesは計9,966 logical bytes/16,384 allocated bytes（checks別）。業務試行は初回から成功し、失敗・中断はfakeでのみ検証した。
+
+新11fake、runtime45tests、全回帰111suites/3478 test executions＝3477PASS＋既存1skip（84.101秒）が成功した。独立コードレビューに未解決指摘はない。証跡は`tmp/local-experiment/notebook-registry-checks/b27f070865ae43bab94d82b8307c2158/`の`api01.json`・`ui-initial01.json`・`acceptance01.json`・`storage-and-usage.json`・`full01.json`・`independent-final-code-review.json`。alias/stage運用・品質昇格・Serving・Hubは含めず、[NB WP](L4/WP-L4-NB-001_JupyterHub_bootstrap.md)はlocal-partialを維持する。
 
 ## 2026-09-20: fixed local Ridge Registry — local acceptance complete
 

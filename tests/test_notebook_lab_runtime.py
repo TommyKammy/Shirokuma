@@ -222,7 +222,7 @@ class LabRuntimeTests(unittest.TestCase):
         self.assertEqual(destination.read_bytes(), R.COUNT_TEMPLATE.read_bytes())
         destination.unlink()  # Simulate a workspace prepared before COUNT existed.
         before = {}
-        self.assertEqual(len(list(workspace.iterdir())), 8)
+        self.assertEqual(len(list(workspace.iterdir())), 9)
         for path in workspace.iterdir():
             path.write_bytes(b'saved user cells and outputs: ' + path.name.encode())
             before[path.name] = (path.read_bytes(), path.stat().st_mtime_ns, path.stat().st_mode)
@@ -242,7 +242,7 @@ class LabRuntimeTests(unittest.TestCase):
         self.assertEqual(destination.read_bytes(), R.TABLE_TEMPLATE.read_bytes())
         destination.unlink()
         before = {}
-        self.assertEqual(len(list(workspace.iterdir())), 8)
+        self.assertEqual(len(list(workspace.iterdir())), 9)
         for path in workspace.iterdir():
             path.write_bytes(b'user cells and saved output: ' + path.name.encode())
             before[path.name] = (path.read_bytes(), path.stat().st_mtime_ns, path.stat().st_mode)
@@ -255,14 +255,14 @@ class LabRuntimeTests(unittest.TestCase):
         R._prepare()
         self.assertEqual((destination.read_bytes(), destination.stat().st_mtime_ns, destination.stat().st_mode), saved)
 
-    def test_snapshot_seed_preserves_all_eight_existing_notebooks_and_saved_comparison(self):
+    def test_snapshot_seed_preserves_other_notebooks_and_saved_comparison(self):
         self.prepared()
         workspace = self.state / 'workspace'
         destination = workspace / 'snapshot_workbench.ipynb'
         self.assertEqual(destination.read_bytes(), R.SNAPSHOT_TEMPLATE.read_bytes())
         destination.unlink()
         before = {}
-        self.assertEqual(len(list(workspace.iterdir())), 8)
+        self.assertEqual(len(list(workspace.iterdir())), 9)
         for path in workspace.iterdir():
             path.write_bytes(b'user cells and saved output: ' + path.name.encode())
             before[path.name] = (path.read_bytes(), path.stat().st_mtime_ns, path.stat().st_mode)
@@ -271,6 +271,26 @@ class LabRuntimeTests(unittest.TestCase):
                                 (workspace / name).stat().st_mode) for name in before}, before)
         self.assertEqual(destination.read_bytes(), R.SNAPSHOT_TEMPLATE.read_bytes())
         destination.write_bytes(b'saved snapshot comparison')
+        saved = (destination.read_bytes(), destination.stat().st_mtime_ns, destination.stat().st_mode)
+        R._prepare()
+        self.assertEqual((destination.read_bytes(), destination.stat().st_mtime_ns, destination.stat().st_mode), saved)
+
+    def test_registry_seed_preserves_existing_notebooks_and_saved_prediction(self):
+        self.prepared()
+        workspace = self.state / 'workspace'
+        destination = workspace / 'registry_prediction.ipynb'
+        self.assertEqual(destination.read_bytes(), R.REGISTRY_PREDICTION_TEMPLATE.read_bytes())
+        destination.unlink()
+        before = {}
+        self.assertEqual(len(list(workspace.iterdir())), 9)
+        for path in workspace.iterdir():
+            path.write_bytes(b'user cells and saved output: ' + path.name.encode())
+            before[path.name] = (path.read_bytes(), path.stat().st_mtime_ns, path.stat().st_mode)
+        R._prepare()
+        self.assertEqual({name: ((workspace / name).read_bytes(), (workspace / name).stat().st_mtime_ns,
+                                (workspace / name).stat().st_mode) for name in before}, before)
+        self.assertEqual(destination.read_bytes(), R.REGISTRY_PREDICTION_TEMPLATE.read_bytes())
+        destination.write_bytes(b'saved registry prediction')
         saved = (destination.read_bytes(), destination.stat().st_mtime_ns, destination.stat().st_mode)
         R._prepare()
         self.assertEqual((destination.read_bytes(), destination.stat().st_mtime_ns, destination.stat().st_mode), saved)
