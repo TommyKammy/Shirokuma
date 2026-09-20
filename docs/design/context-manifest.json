@@ -85,6 +85,7 @@
     {"source": "06_WorkPackages/L5/WP-L5-ACT-001_Data_Activator_style_alerts.md", "target": "docs/design/06_WorkPackages/L5/WP-L5-ACT-001_Data_Activator_style_alerts.md"},
     {"source": "06_WorkPackages/L4/WP-L4-RAY-001_Ray_integration.md", "target": "docs/design/06_WorkPackages/L4/WP-L4-RAY-001_Ray_integration.md"},
     {"source": "06_WorkPackages/L4/WP-L4-ML-001_MLflow_tracking.md", "target": "docs/design/06_WorkPackages/L4/WP-L4-ML-001_MLflow_tracking.md"},
+    {"source": "06_WorkPackages/L4/WP-L4-SPARK-002_Gluten_and_Comet_benchmark.md", "target": "docs/design/06_WorkPackages/L4/WP-L4-SPARK-002_Gluten_and_Comet_benchmark.md"},
     {"source": "06_WorkPackages/L4/WP-L4-SPARK-001_Spark_on_Kubernetes.md", "target": "docs/design/06_WorkPackages/L4/WP-L4-SPARK-001_Spark_on_Kubernetes.md"},
     {"source": "06_WorkPackages/L4/WP-L4-BENCH-001_Spark_benchmark_suite.md", "target": "docs/design/06_WorkPackages/L4/WP-L4-BENCH-001_Spark_benchmark_suite.md"},
     {"source": "06_WorkPackages/L4/WP-L4-NB-001_JupyterHub_bootstrap.md", "target": "docs/design/06_WorkPackages/L4/WP-L4-NB-001_JupyterHub_bootstrap.md"},

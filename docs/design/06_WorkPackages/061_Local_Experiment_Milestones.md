@@ -5,13 +5,14 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.59"
+version: "3.60"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
+CometのARM64 native gateと同一remote snapshotのstock Spark比較が成功した。固定順序の相対測定として記録し、Glutenは互換binary未確認につきskipped。
 保存比較のMLflow記録・同token再表示の追加write0は実UIで成功した。clone復元・SDK読戻しと最終回帰も成功した。
 Rayの保存64行/固定2actor予測は、初回unknownを原記録保持のまま閉鎖した後、新規実02で逐次一致・loopback・所有終了を確認した。
 最新の到達点（2026-09-20）：Labの固定学習で初回unknownを追加fitなしで回復し、別途明示した新規正常実行からレビュー・一覧・編集予測・保存/再読込まで成功した。
@@ -41,6 +42,26 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: Comet ARM64 same-snapshot benchmark — local acceptance complete
+
+[WP-L4-SPARK-002](L4/WP-L4-SPARK-002_Gluten_and_Comet_benchmark.md)で、Spark4.1.3/Scala2.13/Java17/Iceberg1.11.0にComet1.0.0を追加した。prepare1.396秒/build11.673秒/native14.203秒は初回passed。Linux ARM64・networkなしlocal[1]の32行/4集約がoracleと一致し、native scan/HashAggregate、所有tableのUUID drop・container exit0/回収を確認した。独立保存照合81checks/31inputs（0.849秒）と、別途rootのruntime readback3.344秒でexact container ID/name不在・同runtime・CRI image identityも確認した。
+
+remote benchmark `922b6d777da849f1a95674e62f4d24b3` は初回218.856秒でpassed。600,572行・UUID `5e390d20-f086-47e9-8b09-d052230c0ada`・snapshot `8732990294717971534` を固定し、stock→Comet各8測定/各7受入checksが成功した。16結果は同じ保存Decimal oracleと一致し、Comet全8測定のphysical planにnative Iceberg scanとHashAggregateがある。
+
+| repeat3回の中央値 | stock Spark | Comet |
+|---|---:|---:|
+| q1 sums | 688.041 ms | 437.773 ms |
+| q6 | 195.601 ms | 197.370 ms |
+
+初回を分け、同じdriver/executor資源条件で測った。stock先行の固定順序でsource準備/先行queryの共有cache効果を除けないため、一般的な高速化・標準TPC-H score・multi-node性能を主張しない。両applicationの別namespace UID/不在、同UUID table drop、access回収・26 query terminal/drain・既存fixture保持を確認した。catalog read-only grantとS3のwrite拒否は別で、S3 orphan不在は検証していない。
+
+独立保存検証191checks/68inputs（0.020秒）は16結果・plan/native分類・snapshot・resource条件・保存cleanupを照合し、追加runtime/API/SDKは0。600,572行を再生成する独立oracleではない。focused542PASS（3.407秒）、全回帰102suites/3295実行＝3294PASS＋既存1skip（80.523秒）。保持検証0.401秒で旧44files/MLflow全59tables・22runs/1383points/22artifacts・AgentHouse560とMLruntimeが不変だった。secret scanは誤targetの初回呼出しを保持し、正しいscannerを新files stage後に実行してPASSした。
+
+容量はJAR87,971,336 B、prepare6files89,216,195 B、context3files87,984,368 B、native記録6files90,848 B、remote記録48files1,237,591 B（allocated1,368,064 B）。加えてchecks領域にも公式download JARの別regular copy87,971,336 Bを保持する。Docker報告image981,333,755 B、旧imageとの差86,610,967 Bは追加1layerに対応する。これらはAPFS固有の物理容量として合算しない。全署名検証は未実施で、公開SHA-1・固定SHA-256照合と今回のnative実行範囲を受入とする。
+
+Glutenはskipped。2026-09-20の[公式downloads](https://gluten.apache.org/downloads/)で選定Spark4.1.3/ARM64用binaryを確認できなかったためで、一般的なARM64非対応や実行失敗の断定ではない。任意source build検証を後続に残す。
+証跡は `tmp/local-experiment/comet-checks/78a053785007426a8bd31ddd42386f1e/` のprepare01/build01/native01/benchmark01、`gate-proof.json` と `benchmark-proof.json`（SHA `bd5fd1c13ed32e23474a63cd658a235b5cecda5a21651b7b063f224a734581bf`）、full01・retention-after。旧image・証跡・backupを保持し、追加常駐service/外部公開は行わない。
 
 ## 2026-09-20: saved comparison recording in MLflow — local acceptance complete
 

@@ -34,7 +34,7 @@ INVENTORY = ('pods,services,configmaps,serviceaccounts,roles,rolebindings,resour
              'replicasets,statefulsets,daemonsets,jobs,cronjobs,endpoints,endpointslices,events')
 UUID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
 SECRET_KEYS = ['aws-credentials', 'polaris-token']
-REMOTE_PROFILES = ('iceberg-write', 'iceberg-benchmark', 'iceberg-branch', 'iceberg-publish')
+REMOTE_PROFILES = ('iceberg-write', 'iceberg-benchmark', 'iceberg-branch', 'iceberg-publish', 'iceberg-comet-benchmark')
 
 
 def remote_contract(profile='iceberg-write'):
@@ -42,6 +42,8 @@ def remote_contract(profile='iceberg-write'):
     require(profile in REMOTE_PROFILES, 'PROFILE_INVALID')
     if profile == 'iceberg-benchmark':
         from tools.local_experiment.spark_benchmark import contract as remote
+    elif profile == 'iceberg-comet-benchmark':
+        from tools.local_experiment.spark_comet import remote_contract as remote
     elif profile == 'iceberg-branch':
         from tools.local_experiment.spark_branch import contract as remote
     elif profile == 'iceberg-publish':
@@ -95,8 +97,15 @@ def validate_secret(obj, token, *, live=True):
         owned(obj, token)
 
 
-def remote_image(inputs):
-    from tools.local_experiment.spark_iceberg import build as B
+def remote_image(inputs, profile='iceberg-write'):
+    if profile == 'iceberg-comet-benchmark':
+        inputs = remote_contract(profile).validate_inputs(inputs)
+        if inputs['variant'] == 'comet':
+            from tools.local_experiment.spark_comet import build as B
+        else:
+            from tools.local_experiment.spark_iceberg import build as B
+    else:
+        from tools.local_experiment.spark_iceberg import build as B
     proof = B.read_verified_image(inputs['build_token'], command=P.command)
     require(proof['image'] == inputs['image'], 'REMOTE_IMAGE_CHANGED')
     cri = json.loads(P.command(P.ssh('sudo', 'k3s', 'crictl', '--timeout', '10s', 'inspecti',
@@ -222,8 +231,9 @@ class Kube:
 
     def logs(self):
         require(self.profile == 'native' or callable(self.redactor), 'REDACTOR_REQUIRED')
+        limit = remote_contract(self.profile).MAX_LOG_BYTES if self.profile == 'iceberg-comet-benchmark' else C.MAX_LOG_BYTES
         return safe_resource(self.request(['logs', 'driver', '-c', 'spark-driver',
-                             '--limit-bytes='+str(C.MAX_LOG_BYTES)]), self.redactor)
+                             '--limit-bytes='+str(limit)]), self.redactor)
 
     def delete(self, obj):
         kind, m = obj['kind'], obj['metadata']
@@ -237,9 +247,14 @@ class Kube:
 
     def preflight(self):
         runtime = P.guard()
-        cache = remote_image(self.profile_inputs) if self.profile in REMOTE_PROFILES else P.validate_cache(json.loads(P.command(P.docker('image', 'inspect', C.IMAGE))),
-            json.loads(P.command(P.ssh('sudo', 'k3s', 'crictl', '--timeout', '10s', 'inspecti', '--output', 'json', C.IMAGE))),
-            P.cache_content())
+        if self.profile == 'iceberg-comet-benchmark':
+            cache = remote_image(self.profile_inputs, self.profile)
+        elif self.profile in REMOTE_PROFILES:
+            cache = remote_image(self.profile_inputs)
+        else:
+            cache = P.validate_cache(json.loads(P.command(P.docker('image', 'inspect', C.IMAGE))),
+                json.loads(P.command(P.ssh('sudo', 'k3s', 'crictl', '--timeout', '10s', 'inspecti', '--output', 'json', C.IMAGE))),
+                P.cache_content())
         nodes = json.loads(self.request(['get', 'nodes', '-o', 'json'], namespace=False))['items']
         require(len(nodes) == 1, 'NODE_COUNT_CHANGED')
         node = nodes[0]
@@ -353,6 +368,11 @@ def source_hashes(profile='native'):
         if profile == 'iceberg-benchmark':
             from tools.local_experiment.spark_benchmark import workload as W
             paths += [Path(remote_contract().__file__), Path(W.__file__)]
+        elif profile == 'iceberg-comet-benchmark':
+            from tools.local_experiment.spark_comet import build as CB, contract as CC
+            from tools.local_experiment.spark_benchmark import contract as BC, workload as W
+            paths += [Path(remote_contract().__file__), Path(W.__file__), Path(BC.__file__),
+                      Path(CC.__file__), Path(CC.I.__file__), Path(CB.__file__), Path(CB.J.__file__)]
         elif profile == 'iceberg-publish':
             # The new fixed job embeds the connection helpers from this source.
             paths += [Path(remote_contract().__file__)]

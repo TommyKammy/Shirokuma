@@ -1023,3 +1023,22 @@ test-local-mlflow-comparison-import:
 test-local-notebook-lab-record-comparison:
 	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_record_comparison.py'
 verify-local-experiment: test-local-mlflow-comparison-import test-local-notebook-lab-record-comparison
+
+.PHONY: local-spark-comet-prepare local-spark-comet-build local-spark-comet-run local-spark-comet-recover test-local-spark-comet
+local-spark-comet-prepare:
+	@$(PYTHON) -B tools/local_experiment/spark_comet/prepare.py
+local-spark-comet-build:
+	@$(PYTHON) -B tools/local_experiment/spark_comet/build.py --prepare-token "$(SPARK_COMET_PREPARE_TOKEN)" --base-build-token "$(SPARK_ICEBERG_BUILD_TOKEN)"
+local-spark-comet-run:
+	@$(PYTHON) -B tools/local_experiment/spark_comet/run.py run --build-token "$(SPARK_COMET_BUILD_TOKEN)"
+local-spark-comet-recover:
+	@$(PYTHON) -B tools/local_experiment/spark_comet/run.py recover --run-token "$(SPARK_COMET_RUN_TOKEN)"
+test-local-spark-comet:
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_spark_comet_*.py'
+verify-local-experiment: test-local-spark-comet
+
+.PHONY: local-spark-comet-benchmark local-spark-comet-benchmark-recover
+local-spark-comet-benchmark:
+	@$(PYTHON) -B tools/local_experiment/spark_comet/benchmark.py run --stock-build-token "$(SPARK_ICEBERG_BUILD_TOKEN)" --comet-build-token "$(SPARK_COMET_BUILD_TOKEN)"
+local-spark-comet-benchmark-recover:
+	@$(PYTHON) -B tools/local_experiment/spark_comet/benchmark.py recover --run-token "$(SPARK_COMET_BENCHMARK_TOKEN)" --variant "$(SPARK_COMET_VARIANT)"
