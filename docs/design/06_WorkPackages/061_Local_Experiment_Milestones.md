@@ -5,13 +5,14 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.70"
+version: "3.71"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
+Labの固定Catalog/Lineage読取が初回で成功し、所有者・列・8件の関連と追加GETなしの保存再表示を確認した。
 MLflow起動限定の最大2秒待機をfakeで確認し、実所有restartと全既存データ保持が成功した。元incident原因は未確定のまま維持する。
 固定sklearn autologは48学習行で1fitし、初回HTML検証失敗を追加fitなしで回復した。完成再表示・clone復元・全回帰が成功した。
 固定Registry versionのloopback推論APIは、初回自己検査の修正後に84行予測・拒否/timeout・所有再起動を確認した。全回帰も成功した。
@@ -52,6 +53,18 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: Lab fixed Catalog/Lineage: local read-only workbench
+
+固定Catalog describeのLab実読取は初回で成功した。Lab attempt `e649d4a8126f4f2bbd232bd4d77fe970`からReader `eb010312cd0e074db5bbf0d0e71f7a5f`を1回実行し、1login POST＋12GET・SQL/LLM/Catalog書込0を確認した。owner `ShirokumaLocalExperiment`、2列/comment未記録、8nodes/8edges、Catalog version0.1を表示した。これは保存Catalog情報であり、関連するSQLテーブルの現在の実在は未確認である。
+
+初期4code cellsのRun Allは未選択で呼出し0、保存再表示は追加GET0。seed0.712秒で同Lab PID66067と既存11冊を保持し、12冊目を配置した。UI保存は0.519秒、Notebookは9,601 bytes。読取後の保存照合helper1.065秒は、製品読取全体の所要時間ではない。
+
+旧827files・MLflow23runs/1388metric points/23artifacts・Registry1/1・AgentHouse585行を保持した。新Catalog/seedの14fakeを含む互換確認と独立コードレビューが成功し、runtimeと合同の全回帰は117suites/3605実行（3604PASS＋既存1skip）、89.804秒。任意Catalog/全Lineage・欠落自動補完・Hub・本番は未達を維持する。
+
+UI保存・実再読込後の照合が成功し、Notebookの9,601 bytes・mode/mtimeとHTMLを保持、追加Catalog GETと新queryは0だった。0.519秒/0.510秒は各helperの検証所要時間であり、UI操作や製品読取の壁時計時間ではない。最終保持の検証も1.096秒で成功し、827files・MLflow/Registry/AgentHouse・metadata state/container・Serving PID95852・旧11冊を保持、Labは同PID66067/12kernelsでhealthyだった。
+
+新規保存は18files、10,238,231 logical bytes／10,276,864 allocated bytes。filesは600、所有Go binaryだけ700で、APFSの一意な物理占有量とは区別する。実証と容量の詳細は`tmp/local-experiment/notebook-catalog-checks/32ef3a2bda83494ab77fa266afc22816/`の`ui-acceptance.json`、`final-acceptance.json`、`final-retention.json`、`storage-and-usage.json`、`full01.json`へ保持する。
 
 ## 2026-09-20: bounded MLflow startup observation: local acceptance complete
 

@@ -4,6 +4,44 @@ A single-user JupyterLab for exploring saved Shirokuma training runs. This uses
 a dedicated environment and workspace. The existing fixed Notebook runner and
 its environment remain available separately.
 
+## Read catalog descriptions and lineage
+
+Run `make local-notebook-lab-start` to seed `catalog_workbench.ipynb` once.
+Its initial Run All makes no catalog request. Set `table = "smoke.fixture_v1"`
+and `run_catalog = True` in the selection cell, then run the observation cell
+to read its description, owner, columns and one-hop lineage from the existing
+local OpenMetadata service.
+
+The workbench uses the existing bounded Catalog Reader: one login and at most
+12 metadata GETs, with two matching observation windows. It runs no SQL or LLM
+request and writes no catalog metadata. `null` descriptions remain distinct
+from empty text. Lineage may include historical generated-table records;
+the workbench does not verify that the SQL tables still exist.
+
+Set the returned Lab attempt token in the recovery cell to display the saved
+result without logging in or reading the catalog again. Save and reload keeps
+the selected inputs and displayed result. Failed or interrupted observations
+clear their candidate output, and unconfirmed cleanup prevents another call.
+
+The Python helpers are `query.catalog`, `query.recover_catalog` and
+`query.render_catalog`; direct owned-client use is
+`notebook.client.read_catalog(table)`. The underlying scope and limits are
+documented in the [Catalog Reader runbook](../catalog_read/README.md).
+
+```sh
+rtk proxy make test-local-notebook-catalog-client test-local-notebook-lab-catalog
+```
+
+Local acceptance observed the retained fixture's description, owner, two
+columns and eight lineage edges with one login and 12 GETs. The initial
+Notebook made no request; saved recovery and browser reload preserved both
+displays without another GET. All 827 protected files, 23 MLflow runs, 1,388
+metric points, 23 artifacts, the registered model/version and 585 audit rows
+were unchanged. The Lab retained its server process and other 11 Notebooks.
+The new Notebook and private execution evidence added 18 files and 10,238,231
+logical bytes, including the owned client binary. No service was added or
+restarted, and SQL table presence remains unchecked.
+
 ## Diagnose a saved preview
 
 Run `make local-notebook-lab-start` to seed `query_diagnose_workbench.ipynb`.
@@ -46,6 +84,8 @@ save and reload without another SQL or model call. The prior 540 protected
 files, 38 source files, all MLflow records and 582 audit rows were preserved;
 the diagnosis added exactly three audit rows. The Lab stayed on the same server
 process and preserved its other ten Notebooks.
+
+## Open the workbench
 
 ```sh
 rtk proxy make local-notebook-lab-sync

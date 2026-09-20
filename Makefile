@@ -1120,3 +1120,10 @@ verify-local-experiment: test-local-mlflow-autolog
 .PHONY: local-mlflow-autolog-recover
 local-mlflow-autolog-recover:
 	@tools/local_experiment/mlflow/.venv/bin/python -B tools/local_experiment/mlflow/autolog.py --training-token "$${SHIROKUMA_LAKE_TRAINING_TOKEN:?set the saved Iceberg training token}" --recover
+
+.PHONY: test-local-notebook-catalog-client test-local-notebook-lab-catalog
+test-local-notebook-catalog-client:
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_notebook_catalog_client.py'
+test-local-notebook-lab-catalog:
+	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_catalog.py'
+verify-local-experiment: test-local-notebook-catalog-client test-local-notebook-lab-catalog

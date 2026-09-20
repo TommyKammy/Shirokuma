@@ -83,6 +83,10 @@ def _input(directory):
         from tools.local_experiment.notebook_lab import diagnose as D
         require(set(value) == {'schema_version', 'mode', 'input'} and value['mode'] == 'diagnose')
         value['input'] = D.normalize_request(value['input'])
+    elif value['schema_version'] == 6:
+        from tools.local_experiment.notebook_lab import catalog as G
+        require(set(value) == {'schema_version', 'mode', 'input'} and value['mode'] == 'catalog')
+        value['input'] = G.normalize_request(value['input'])
     else:
         require(set(value) == {'schema_version', 'filtered', 'input'}
                 and value['schema_version'] == 1 and type(value['filtered']) is bool)
@@ -119,7 +123,7 @@ def query_status(directory):
 
 
 def terminal_receipt(directory, exit_code, *, verify_count_source=False, verify_metadata_source=False,
-                     verify_snapshot_source=False, verify_diagnose_source=False):
+                     verify_snapshot_source=False, verify_diagnose_source=False, verify_catalog_source=False):
     """Rebind terminal owner, original input, cleanup and typed Reader frames."""
     directory = _directory(directory)
     requested = _input(directory)
@@ -132,6 +136,9 @@ def terminal_receipt(directory, exit_code, *, verify_count_source=False, verify_
     if requested['schema_version'] == 5:
         from tools.local_experiment.notebook_lab import diagnose as D
         return D.terminal_receipt(directory, exit_code, verify_source=verify_diagnose_source)
+    if requested['schema_version'] == 6:
+        from tools.local_experiment.notebook_lab import catalog as G
+        return G.terminal_receipt(directory, exit_code, verify_source=verify_catalog_source)
     counting = requested['schema_version'] == 2
     filtered, request = requested.get('filtered', False), requested['input']
     if counting:
@@ -248,7 +255,7 @@ def query_closed(directory):
         return True
     if value is None or not value['child_exited'] or not value['cleanup_verified']:
         return False
-    if _input(directory)['schema_version'] in (2, 3, 4, 5) and value['state'] in ('passed', 'unsupported'):
+    if _input(directory)['schema_version'] in (2, 3, 4, 5, 6) and value['state'] in ('passed', 'unsupported'):
         # The parent verified its owned process group before saving this result.
         # A later process with the same PID is not this completed COUNT's owner.
         token, public = terminal_receipt(directory, value['exit_code'])
@@ -447,6 +454,22 @@ def render_diagnose(result):
     return D.render(result)
 
 
+def catalog(table):
+    from tools.local_experiment.notebook_lab import catalog as G
+    request = G.normalize_request({'command': 'describe', 'table': table})
+    return _execute({'schema_version': 6, 'mode': 'catalog', 'input': request})
+
+
+def recover_catalog(attempt_token):
+    from tools.local_experiment.notebook_lab import catalog as G
+    return G.recover(attempt_token)
+
+
+def render_catalog(result):
+    from tools.local_experiment.notebook_lab import catalog as G
+    return G.render(result)
+
+
 def _execute(value):
     """Both modes share the same locks, worker ownership and residual checks."""
     with _lock():
@@ -500,7 +523,8 @@ def _execute(value):
                                 verify_count_source=value['schema_version'] == 2,
                                 verify_metadata_source=value['schema_version'] == 3,
                                 verify_snapshot_source=value['schema_version'] == 4,
-                                verify_diagnose_source=value['schema_version'] == 5)
+                                verify_diagnose_source=value['schema_version'] == 5,
+                                verify_catalog_source=value['schema_version'] == 6)
                             status.update(evidence_token=token, cleanup_verified=public['cleanup_verified'])
                 require(status['cleanup_verified'], 'LAB_QUERY_CLEANUP_UNKNOWN')
                 if first is None:
@@ -547,6 +571,9 @@ def worker(directory, *, assist=None):
     if value['schema_version'] == 5:
         from tools.local_experiment.notebook_lab import diagnose as D
         return D.worker(directory)
+    if value['schema_version'] == 6:
+        from tools.local_experiment.notebook_lab import catalog as G
+        return G.worker(directory)
     flag = '--count-request-stdin' if value['schema_version'] == 2 else (
         '--filtered-request-stdin' if value['filtered'] else '--request-stdin')
     return (assist or A.main)([flag],

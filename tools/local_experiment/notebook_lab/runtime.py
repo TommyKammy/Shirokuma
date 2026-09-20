@@ -40,6 +40,7 @@ COUNT_TEMPLATE = ROOT / 'examples/local_count_workbench.ipynb'
 TABLE_TEMPLATE = ROOT / 'examples/local_table_workbench.ipynb'
 SNAPSHOT_TEMPLATE = ROOT / 'examples/local_snapshot_workbench.ipynb'
 DIAGNOSE_TEMPLATE = ROOT / 'examples/local_query_diagnose_workbench.ipynb'
+CATALOG_TEMPLATE = ROOT / 'examples/local_catalog_workbench.ipynb'
 COMPARISON_TEMPLATE = ROOT / 'examples/local_ridge_comparison.ipynb'
 COMPARISON_PREDICTION_TEMPLATE = ROOT / 'examples/local_comparison_prediction.ipynb'
 REGISTRY_PREDICTION_TEMPLATE = ROOT / 'examples/local_registry_prediction.ipynb'
@@ -213,7 +214,8 @@ def _prepare():
                            ('table_workbench.ipynb', TABLE_TEMPLATE),
                            ('snapshot_workbench.ipynb', SNAPSHOT_TEMPLATE),
                            ('registry_prediction.ipynb', REGISTRY_PREDICTION_TEMPLATE),
-                           ('query_diagnose_workbench.ipynb', DIAGNOSE_TEMPLATE)):
+                           ('query_diagnose_workbench.ipynb', DIAGNOSE_TEMPLATE),
+                           ('catalog_workbench.ipynb', CATALOG_TEMPLATE)):
         destination = STATE / 'workspace' / name
         if not destination.exists() and not destination.is_symlink():
             _exclusive(destination, template.read_bytes())

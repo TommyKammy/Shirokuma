@@ -4,8 +4,8 @@ doc_id: "WP-L2-AGENT-004"
 title: "WP-L2-AGENT-004 Catalog Curator Bear"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-17
-version: "0.7"
+updated: 2026-09-20
+version: "0.8"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -14,6 +14,7 @@ tags: [shirokuma, workpackage, l2, agentops]
 
 ## Summary
 
+固定fixtureのCatalog/LineageをLabで読取り・保存再表示できる入口を追加した。今回のmetadata書込・欠落補完・LLM呼出しは0で、一般Curator受入とは区別する。
 OpenMetadataの説明、Owner、Lineage欠落を補完する
 
 ## Context
@@ -69,6 +70,12 @@ Do not add unrelated dependencies or bypass policy checks.
 - [ ] 変更対象がIssue範囲内である。
 - [ ] Security/Policy gateを通過する。
 - [ ] Agent Pawprintが記録される、または記録設計が更新される。
+
+## 2026-09-20: Lab fixed Catalog/Lineage: local read-only workbench
+
+固定`smoke.fixture_v1`の既存Catalog describeをLabへ接続し、所有者・説明・列と記録された1 hopの関連を読む入口を実証した。既存9fields/最大64nodes・64edges/12GETの契約を再利用し、schema6の保存結果を追加GETなしで再表示する。今回のSQL・LLM・Catalog書込は0で、欠落情報を推測して補完しない。
+
+実初回でowner `ShirokumaLocalExperiment`、2列、未記録の列comment、8nodes/8edgesを確認した。説明の未記録と空文字を区別し、Catalogの過去Lineageを現在のSQL実在や実行provenanceと扱わない。これは読取導線のlocal受入であり、一般Curatorの自動提案/補完・任意table・本番の受入を追加するものではない。WPはlocal-partialを維持し、この増分はADR-0034のローカル検証で進めた。操作は[Lab runbook](../../../../tools/local_experiment/notebook_lab/README.md)、実測は[Milestones](../061_Local_Experiment_Milestones.md)を参照する。
 
 ## 2026-09-17 local bounded implementation plan
 

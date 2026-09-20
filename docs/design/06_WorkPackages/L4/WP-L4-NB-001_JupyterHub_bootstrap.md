@@ -5,7 +5,7 @@ title: "WP-L4-NB-001 JupyterHub bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.20"
+version: "0.21"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, notebook]
 ---
@@ -14,6 +14,7 @@ tags: [shirokuma, workpackage, l4, notebook]
 
 ## Summary
 
+固定fixtureのCatalog/LineageをLabで読取り、所有者・説明・列・記録された関連と保存再表示を確認した。
 保存previewからQuery Doctorへ接続し、診断API1回と保存結果のUI再表示/save-reloadを確認した。
 固定Registry名/versionから保存モデルを解決し、2行予測・詳細表示・保存/再読込をLabで確認した。
 保持snapshotの2件/3件をLabで比較し、差分1・fixture回収後の保存再表示を確認した。
@@ -35,6 +36,12 @@ Labから自然文table previewを呼ぶ別Notebookも、修正後の等値previ
 保存比較一覧から候補を選び、再fitせず新入力を予測するLab入口も実UI受入を確認した。
 Labの固定学習workbenchで、初回unknownを追加fitなしで回復し、別の新規正常実行とレビュー/一覧/編集予測・保存/再読込を確認した。
 JupyterHub、複数ユーザー、直接PySpark、kernel内fit・autologの完了は含めない。
+
+## 2026-09-20: Lab fixed Catalog/Lineage: local read-only workbench
+
+新`catalog_workbench.ipynb`を一度だけ配置し、固定`smoke.fixture_v1`の所有者・説明・列・1 hopのLineageを既存Catalog Reader経由で表示した。初回Run Allは未選択で呼出し0。明示実行は1login POST＋12GET、SQL・LLM・Catalog書込0で、保存再表示にも追加GETはない。説明の未記録/空文字・関連0件を区別し、過去の関連を含むCatalog情報であることと現在のSQL実在未確認を明示する。
+
+実初回の読取・HTML表示・保存再表示を確認し、既存11冊と同Lab processを保持して12冊目を追加した。失敗/中断時は以前の結果と表示候補を消去し、unknown cleanupは共有ownerで後続実行を止める。保存再表示は当時のsummary/Reader証跡を照合し、現在のsourceや過去PIDの再利用に依存しない。Hub・任意Catalog探索・一般Lineage検証・本番は未達、WPはlocal-partialを維持する。操作は[Lab runbook](../../../../tools/local_experiment/notebook_lab/README.md)、最終実測は[Milestones](../061_Local_Experiment_Milestones.md)を参照する。
 
 ## 2026-09-20: Lab saved preview diagnosis: local acceptance complete
 

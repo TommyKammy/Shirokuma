@@ -142,14 +142,14 @@ def count_closed(output, request):
     return _reader_closed(output, request, lambda raw, code: N._count_reader_frames(raw, code, request))
 
 
-def _reader_closed(output, request, frames):
+def _reader_closed(output, request, frames, *, command=None):
     names = ('reader-intent.json', 'reader-status.json', 'reader.stdout.jsonl')
     if not any((output / name).exists() or (output / name).is_symlink() for name in names):
         return True
     try:
         intent = N._parse(N._read(output / names[0], 16384))
         require(type(intent) is dict and type(intent.get('schema_version')) is int
-                and intent == {'schema_version':1, 'command':'query '+request['command'],
+                and intent == {'schema_version':1, 'command':command or 'query '+request['command'],
                                'request':request}, 'NOTEBOOK_ASSIST_DESCRIBE_FAILED')
         status = N._parse(N._read(output / names[1], 16384))
         require(type(status) is dict and set(status) == {'schema_version','state','pid','pgid','process_start',

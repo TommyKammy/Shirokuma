@@ -25,6 +25,7 @@ from tools.local_experiment.notebook import filtered_selection as FS
 from tools.local_experiment.query_count import contract as QC
 from tools.local_experiment.query_snapshots import contract as QS
 from tools.local_experiment.query_diagnose import contract as D
+from tools.local_experiment.catalog_read import contract as CR
 
 ROOT = Path(__file__).resolve().parents[3]
 INDEX = ROOT / 'tmp/local-experiment/mlflow-tracking/import-index.json'
@@ -220,6 +221,52 @@ def read_diagnose(read_token):
                        lambda raw, rc: _diagnose_reader_frames(raw, rc, request['read_token']))
 
 
+CATALOG_MAX_FRAME = 96 * 1024
+CATALOG_ERROR_CODES = CR.ERROR_CODES | frozenset('''CATALOG_RUNTIME_INVALID CATALOG_RUNTIME_CHANGED
+CATALOG_STATE_CHANGED CATALOG_SOURCE_CHANGED CATALOG_READ_FAILED CATALOG_DEADLINE CATALOG_REQUEST_LIMIT
+CATALOG_READ_ONLY_BOUNDARY EVIDENCE_ALREADY_EXISTS EVIDENCE_INVALID INTERRUPTED READ_FAILED ARGUMENTS_INVALID'''.split())
+
+
+def _catalog_request(table):
+    try:
+        return CR.normalize_request({'command': 'describe', 'table': table})
+    except CR.ContractError:
+        raise NotebookError('NOTEBOOK_REQUEST_INVALID') from None
+
+
+def _catalog_arguments(binary, request):
+    request = _catalog_request(request['table'])
+    return [str(binary), '--repo-root', str(ROOT), '--profile', 'local-experiment',
+            'catalog', 'describe', '--table', request['table']]
+
+
+def _catalog_public(public, table):
+    """Keep the Catalog Reader's projection, including unknown SQL presence."""
+    request = _catalog_request(table)
+    try:
+        return CR.validate_public(public, request)
+    except CR.ContractError:
+        raise NotebookError('NOTEBOOK_READER_INVALID') from None
+
+
+def _catalog_reader_frames(raw, exit_code, table):
+    request = _catalog_request(table)
+    _require(all(len(line) + 1 <= CATALOG_MAX_FRAME for line in raw.splitlines()), 'NOTEBOOK_READER_INVALID')
+    token, public, cleanup = _reader_envelope(raw, exit_code, 'catalog describe', evidence_root='catalog-read')
+    if public is None:
+        _require(_parse(raw.splitlines()[-1])['error_code'] in CATALOG_ERROR_CODES, 'NOTEBOOK_READER_INVALID')
+        return token, None, cleanup
+    return token, _catalog_public(public, request['table']), True
+
+
+def read_catalog(table):
+    """Read the retained fixture's catalog metadata; no SQL, model or entity write."""
+    request = _catalog_request(table)
+    return _read_owned(request, _catalog_arguments,
+                       lambda raw, rc: _catalog_reader_frames(raw, rc, request['table']),
+                       command='catalog describe')
+
+
 def _tables_request(schema):
     try:
         return C.normalize_request({'command': 'tables', 'schema': schema})
@@ -318,7 +365,7 @@ def _process_start(pid):
     return value
 
 
-def _read_owned(request, arguments, validate_frames):
+def _read_owned(request, arguments, validate_frames, *, command=None):
     """Own one fixed Reader call; public entry points supply its typed boundary.
 
     Writes reader-intent.json before spawn, reader.stdout.jsonl and an atomic
@@ -328,7 +375,8 @@ def _read_owned(request, arguments, validate_frames):
     directory = _directory()
     binary = Path(os.environ.get('SHIROKUMA_NOTEBOOK_BINARY', ''))
     _require(binary.is_absolute() and binary.is_file() and not binary.is_symlink(), 'NOTEBOOK_BINARY_INVALID')
-    _write(directory / 'reader-intent.json', {'schema_version': 1, 'command': 'query ' + request['command'], 'request': request})
+    _write(directory / 'reader-intent.json', {'schema_version': 1,
+           'command': command if command is not None else 'query ' + request['command'], 'request': request})
     status = dict(schema_version=1, state='pending', pid=None, pgid=None, process_start=None,
                   evidence_token=None, exit_code=None,
                   child_exited=False, cleanup_verified=False, error_code=None)
