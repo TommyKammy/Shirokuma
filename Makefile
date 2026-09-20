@@ -1003,3 +1003,11 @@ verify-local-experiment: test-local-activation
 test-local-notebook-lab-train:
 	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_train.py'
 verify-local-experiment: test-local-notebook-lab-train
+
+.PHONY: local-ray-predict test-local-ray
+local-ray-predict:
+	@tools/local_experiment/ray/.venv/bin/python -B tools/local_experiment/ray/run.py --training-token "$${TRAINING_TOKEN:-}"
+test-local-ray:
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_local_ray_prediction.py'
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_local_ray_runtime.py'
+verify-local-experiment: test-local-ray

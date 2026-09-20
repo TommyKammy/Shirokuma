@@ -5,13 +5,14 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.57"
+version: "3.58"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
+Rayの保存64行/固定2actor予測は、初回unknownを原記録保持のまま閉鎖した後、新規実02で逐次一致・loopback・所有終了を確認した。
 最新の到達点（2026-09-20）：Labの固定学習で初回unknownを追加fitなしで回復し、別途明示した新規正常実行からレビュー・一覧・編集予測・保存/再読込まで成功した。
 固定Data Activatorのalert→Dagster sensor→SRE診断1回と重複抑止・normal復帰も、修正後28.475秒で成功した。
 保存比較一覧→候補選択→新入力予測→保存/再読込がLabで成功、cold予測18行も独立算術と一致。
@@ -39,6 +40,23 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: local Ray saved prediction — local acceptance complete
+
+[WP-L4-RAY-001](L4/WP-L4-RAY-001_Ray_integration.md)の保存Iceberg 64行を、単一ホストの固定2actorへ32行ずつ分ける予測を実証した。
+専用Python 3.12 ARM64/Ray 2.58.0（wheel commit `cec0a091b12675bbf101cf8a350c8706107baee1`）、論理CPU 2/0 GPU・object store 128 MiB・loopbackに限定する。OS資源の強制隔離ではない。
+実02 `e9b10fce7b474d5e879bb62350690edc` は4.932秒でpassed/cleanup true。異なる2actor（PID8374/8373）の64予測が逐次結果と全件一致（最大差0・同一SHA）し、driverを含むTCP listener 7件は全て127.0.0.1、所有processも終了した。
+元training `c60d6f25d2944c249c811e800ce2b637`の保存モデルを使い、新fit・MLflow処理API/書込み・Reader・LLMは0。43保護files・MLflow21runs/1365points/21artifacts・AgentHouse560件は保持照合0.402秒で不変だった。
+
+初回 `f3bc42678039419c832d3fa5d8777194` は5.890秒で所有/cleanupがunknown、結果は未採用。macOS固定 `/bin/ps` のreal UID501/effective UID0という所有判定差をRay専用検査で修正した。
+2件の独立したprocess/listener/file閉鎖照合後、owner lock下で初回dirを `ray-closed-failures/`へ移し、原bytes/status unknownを保持した。signal/削除0の明示閉鎖後に新規実02を実行し、自動retryや初回成功とは扱わない。
+private外側0700内のRay inner0777を保持し、180秒の実行期限＋60秒の所有終了待機を設ける。未解消unknownは次回起動を止める。
+全回帰98suites/3173実行＝3172PASS＋既存1skip（77.470秒）。依存lock0.170秒/sync1.268秒も成功した。
+独立60桁Decimalによる64行の係数×入力の再計算は最大差8.90e-16（許容1e-14）で一致した。既知15PIDの消失・driver process groupが空・session open files 0・外側0700も確認した。
+専用venvは3,254files/194,340,268 B（allocated 201,437,184 B、約192.11 MiB）。uv hardlink分は物理unique使用量と一致するとは限らない。
+成功receipt/sessionは計52files/97,221 B（allocated 184,320 B）、初回失敗分は別に51files/76,505 B（allocated 143,360 B）を保持した。既存backup削除0。算術・終了・容量は `final-proof.json` に束縛した。
+multi-node/高速化/学習/Serving/一般品質・本番受入は主張しない。手順は[Ray README](../../../tools/local_experiment/ray/README.md)。
+証跡：`tmp/local-experiment/ray-checks/cebc2440e1a04fb9a0c848855a8b533f/`のactual-02/retention-02/full-01、初回failure-archiveとclosure-proof2件。
 
 ## 2026-09-20: Lab fixed Iceberg training and prediction — local acceptance complete
 
