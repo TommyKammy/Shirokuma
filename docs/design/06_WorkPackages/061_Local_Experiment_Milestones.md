@@ -5,14 +5,15 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.54"
+version: "3.55"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-20）：LabでRidge alpha10の候補1fitと保存モデル比較・保存/再読込が成功。同じholdoutでRMSEは悪化。
+最新の到達点（2026-09-20）：保存比較一覧→候補選択→新入力予測→保存/再読込がLabで成功、cold予測18行も独立算術と一致。
+LabのRidge alpha10候補1fitと保存モデル比較も成功。同じholdoutでRMSEは悪化。
 Labの自然文queryの等値preview/範囲拒否と保存/再読込も修正後に成功。
 単一ユーザーJupyterLabの保存学習の選択・入力編集・予測・保存/再読込とstop/restartも成功。
 型付き単一等値の自然文previewも実3caseと独立保存照合で確認した。
@@ -36,6 +37,24 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: saved comparison model prediction — local acceptance complete
+
+保存比較一覧から明示tokenを選び、再読込した候補で新しい1–64行の`x1,x2,x3`を予測するLab Notebookを追加した。
+一覧は固定private directoryの最大128件をverified/partial/invalidへ分け、token順でalpha・指標・source identityを表示する。
+必須receipt欠損はpartial、検証不可はinvalid。品質/新しさの順位や破損の断定とは区別する。
+完了比較の6filesを前後照合し、元学習への検証を再利用する。過去PIDをlive processとして照合・操作しない。
+追加fit・MLflow登録/処理API・Reader・LLMはない。元の比較は既視holdoutでの探索であり、新入力の正解精度を保証しない。
+cold CLIの18行（新入力2＋保存holdout16）は独立Decimalと全件一致（最大差約8.44e-16）、保存8inputsを保持し、追加fitは0。
+このcold実行・照合は0.104秒。実CLI一覧（0.084秒）とUI一覧は同じ1verifiedを表示した。
+比較token`b393842b6c9a4f8db7da8da19672c449`を明示選択し、2入力（先頭`x1=0.5`）を編集した予測
+`[5.168163743403972,7.091488489135352]`を表示、保存/再読込を確認した。
+
+新26fake tests（0.871秒）とruntime34（1.357秒）、全回帰90suites/3043実行（3042PASS・既存1skip、74.570秒）が成功。
+保持41files・MLflow19runs/1347points/19artifacts・AH554は一致（0.393秒）、4kernelsのstop2.032秒/restart1.850秒後も同一（0.380秒）。
+予測Notebookのbytes/mode/mtimeも保持し、Labはkernel0で利用可能。候補の追加fit/Reader/LLM/MLflow処理API、新依存/serviceは0。
+[Lab runbook](../../../tools/local_experiment/notebook_lab/README.md)に操作を記録し、旧編集Notebook・元比較・学習・backupを保持する。
+証跡：`tmp/local-experiment/comparison-prediction-checks/7abaf7ea7c174c109dd2db735e56bfb5/`。
 
 ## 2026-09-20: offline Ridge comparison — local acceptance complete
 

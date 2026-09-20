@@ -5,7 +5,7 @@ title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "1.6"
+version: "1.7"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -25,7 +25,21 @@ Iceberg学習も保存artifactと所有MLflow読取からNotebook表示へ接続
 Notebookから所有workerへ固定学習を依頼し、1runを追加する実行も初回で成功した。
 保存学習3件のtoken・指標・provenance一覧と、選択tokenによる既存予測も実受入で成功した。
 保存Icebergモデルの同一分割でalphaを変える未登録のoffline比較も、実1fitとLab表示で確認した。
+保存比較候補の一覧・再fit不要な新入力予測も、cold計算とLab実UIで確認した。
 Hub連携・kernel内fit/autolog、Registry/Serving、clone切替・他host移行は未達。
+
+## 2026-09-20: saved comparison model prediction — local acceptance complete
+
+保存した探索比較の候補モデルを、再fitせず別の実行から読み直して新入力へ予測する入口を追加した。
+`predict(comparison_token,request)`は完了・cleanup確認済みの保存6filesと元学習を検証し、
+有限数値の`x1,x2,x3`を持つ1–64行へ、保存係数による予測とmodel/request/比較の同一性を返す。
+読み直し中のbytes/identity変化や未完了比較は拒否する。過去PIDの確認は保存記録内だけで行う。
+追加fit・MLflow登録/処理API・Reader・LLMを行わず、cold予測18行が独立Decimalと一致した。
+保存比較一覧も最大128件のverified/partial/invalidを分け、token順でalpha・指標・source identityを返す。
+必須receipt欠損はpartial、検証不可はinvalidで、品質順位や破損の断定とはしない。
+実一覧1verified→候補選択→2入力予測→保存/再読込も成功した。既存41files・MLflow19runs/1347points/19artifacts・AH554を保持した。
+未知入力の正解精度は示さない。
+[Notebook WP](WP-L4-NB-001_JupyterHub_bootstrap.md)と[Milestones](../061_Local_Experiment_Milestones.md)へ手順・結果を記録する。
 
 ## 2026-09-20: offline Ridge comparison — local acceptance complete
 

@@ -972,3 +972,14 @@ test-local-mlflow-compare:
 test-local-notebook-lab-compare:
 	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_compare.py'
 verify-local-experiment: test-local-mlflow-compare test-local-notebook-lab-compare
+
+.PHONY: test-local-comparison-prediction local-comparison-runs test-local-comparison-runs
+test-local-comparison-prediction:
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_notebook_lab_comparison_saved.py'
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_mlflow_comparison_predict.py'
+verify-local-experiment: test-local-comparison-prediction
+local-comparison-runs:
+	@$(PYTHON) -B tools/local_experiment/mlflow/comparison_runs.py
+test-local-comparison-runs:
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_mlflow_comparison_runs.py'
+verify-local-experiment: test-local-comparison-runs

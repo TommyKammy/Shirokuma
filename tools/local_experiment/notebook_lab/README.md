@@ -121,3 +121,31 @@ Interactive verification fitted alpha 10 once, displayed its metrics and all
 16 prediction differences, and retained them through save and reload. The
 reused holdout RMSE rose from about 0.163 to 0.544 for this dataset. Existing
 training files, MLflow runs and audit records were preserved.
+
+## Predict with a saved comparison model
+
+Start the Lab again to seed `comparison_prediction.ipynb`. Run its first cell
+to list saved comparisons, then copy a `comparison_token` from `runs` and edit
+the feature rows. The last cell shows the candidate's alpha and one prediction
+per input row. Save the Notebook to retain those inputs and results.
+
+The same inventory is available through `make local-comparison-runs`. Entries
+that lack required receipts appear as `partial`; entries whose saved contract
+cannot be verified appear as `invalid`. Only verified comparisons appear in
+`runs`. The list sorts by token, not quality or completion time, and makes no
+automatic model choice. An incomplete inventory is not a selectable result.
+
+The reader checks six saved comparison files and the original training data,
+including their bytes and identities before and after reading. It checks the
+historical worker identity within the receipts without inspecting a potentially
+reused PID. Prediction uses the saved coefficients and accepts 1–64 rows of
+finite `x1`, `x2`, `x3` values. It performs no new fit, Reader, LLM or MLflow API
+operation. It does not measure accuracy on the new inputs or serve an online
+model endpoint.
+
+Interactive verification listed the saved alpha 10 candidate, selected its
+token, edited two feature rows and displayed both predictions. Saving and
+reloading retained the inputs and outputs. A separate cold CLI check matched
+18 predictions to independent arithmetic, including the original 16 holdout
+rows. The existing saved files, MLflow records and audit rows were unchanged;
+the edited Notebook also survived a Lab stop and restart.

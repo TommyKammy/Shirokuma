@@ -37,6 +37,7 @@ STATE = ROOT / 'tmp/local-experiment/notebook-lab'
 TEMPLATE = ROOT / 'examples/local_training_workbench.ipynb'
 QUERY_TEMPLATE = ROOT / 'examples/local_query_workbench.ipynb'
 COMPARISON_TEMPLATE = ROOT / 'examples/local_ridge_comparison.ipynb'
+COMPARISON_PREDICTION_TEMPLATE = ROOT / 'examples/local_comparison_prediction.ipynb'
 PORT = 18560
 URL = 'http://127.0.0.1:' + str(PORT)
 VERSION = '4.6.3'
@@ -197,7 +198,8 @@ def _prepare():
     # A user-edited notebook is retained byte-for-byte, including saved outputs.
     for name, template in (('training_workbench.ipynb', TEMPLATE),
                            ('query_workbench.ipynb', QUERY_TEMPLATE),
-                           ('ridge_comparison.ipynb', COMPARISON_TEMPLATE)):
+                           ('ridge_comparison.ipynb', COMPARISON_TEMPLATE),
+                           ('comparison_prediction.ipynb', COMPARISON_PREDICTION_TEMPLATE)):
         destination = STATE / 'workspace' / name
         if not destination.exists() and not destination.is_symlink():
             _exclusive(destination, template.read_bytes())

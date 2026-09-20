@@ -5,7 +5,7 @@ title: "WP-L4-NB-001 JupyterHub bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.12"
+version: "0.13"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, notebook]
 ---
@@ -26,7 +26,23 @@ Notebookから所有workerへ固定Iceberg学習を依頼する入口も、初�
 保存学習を選択・編集・予測する単一ユーザーJupyterLabで、画面実行・保存/再読込を確認した。所有kernel/serverの停止・再起動後の保持も確認した。
 Labから自然文table previewを呼ぶ別Notebookも、修正後の等値preview/unsupportedを実画面で確認した。
 保存データでRidgeのalphaを変えるoffline比較も、Labで実1fit・表示/保存/再読込を確認した。
+保存比較一覧から候補を選び、再fitせず新入力を予測するLab入口も実UI受入を確認した。
 JupyterHub、複数ユーザー、直接PySpark、kernel内fit・autologの完了は含めない。
+
+## 2026-09-20: saved comparison model prediction — local acceptance complete
+
+Labの[保存比較予測例](../../../../examples/local_comparison_prediction.ipynb)から、完成した比較tokenを再読込する入口を追加した。
+`comparison_prediction.ipynb`の保存比較一覧からtokenを明示選択し、`x1,x2,x3`の新入力1–64行を指定する。
+一覧は固定private directoryの最大128件を対象に、verified/partial/invalidを分け、
+比較/元学習token・alpha・metrics・source identityをtoken順に表示する。品質/新しさによる順位ではない。
+必須receipt欠損はpartial、検証不可はinvalidで、破損の断定とは区別する。選択候補の予測は入力順で返す。
+`load_saved()`/`predict()`は保存6filesのbytes/identityを前後照合し、元学習への`validate_result`束縛を再確認する。
+過去PIDは記録内の整合確認だけに使い、実行中processとして扱わない。追加fit・Reader・LLM・MLflow処理APIはない。
+既存編集Notebookを保持して初回だけ配置し、入力と予測はNotebook保存で残す。
+別processのcold予測18行と独立Decimal一致を確認した。実UIでは一覧1verifiedから候補を選び、2入力を編集して予測・保存/再読込が成功した。
+全回帰90suites/3043実行（3042PASS・既存1skip）と、4kernelsのstop/restart後のNotebook/旧保持データ一致を確認した。
+未知データでの正解精度や元の探索比較の独立評価は主張しない。[Lab runbook](../../../../tools/local_experiment/notebook_lab/README.md)、
+[Milestones](../061_Local_Experiment_Milestones.md)を参照する。
 
 ## 2026-09-20: offline Ridge comparison — local acceptance complete
 
