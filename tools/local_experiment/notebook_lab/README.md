@@ -40,8 +40,8 @@ cleanup is reported and retained. Workspace files survive stop and restart.
 The Python kernel runs with the host user's permissions. The workspace root is
 the file browser's starting boundary, not a kernel sandbox. This is a local
 single-user experiment, not JupyterHub, multi-user isolation or public hosting.
-The fixed training worker's outer-runner handshake is not provided by this Lab.
-Use the existing fixed runner to start that training workflow.
+The fixed Iceberg training example uses an owned worker with the existing
+pipeline's launch handshake and cleanup receipts.
 
 Dependencies are pinned in `pyproject.toml` and `uv.lock`: JupyterLab 4.6.3,
 ipykernel 7.3.0 and nbformat 5.11.1, using Python 3.12. Authentication and server
@@ -50,11 +50,45 @@ The environment uses a private kernelspec and project-local Jupyter/IPython
 directories. No global kernelspec, login item or host-wide configuration is
 installed.
 
-Local verification opened this Notebook in JupyterLab, listed three saved
-training runs, selected an Iceberg run, edited the inputs and displayed two
-predictions. Saving and reloading retained the inputs, HTML review, residual
-chart and predictions. Unauthenticated API requests were rejected. The edited file retained its bytes, permissions and modification time across
-server restarts. A two-kernel shutdown and immediate restart also passed.
+## Start a fixed Iceberg training run
+
+Run `make local-notebook-lab-start` to seed `lake_training_workbench.ipynb` once.
+Open it and run the import and training cells. The training cell creates one new
+MLflow run from the fixed 64-row Iceberg fixture, then displays its metrics and
+holdout residuals. The next cell refreshes the saved-run inventory; the final
+cell predicts two editable feature rows with this same new saved model.
+Save the Notebook to retain the result and inputs.
+
+With `recovery_attempt` empty, each execution of the training cell starts a fresh fixed pipeline. It accepts
+no SQL, arbitrary training program or model choice and makes no LLM call. The
+pipeline owns the temporary table, Reader, tracking write, backup and cleanup.
+The Lab worker reuses its existing ML environment and the project-local Go
+cache. Existing saved runs remain available.
+
+Training, queries, comparisons and Lab lifecycle commands share one ownership
+lock. Interrupt once and let the worker finish its cleanup. An incomplete or
+unknown attempt prevents further execution and stop/start until its owned
+cleanup is established. Inputs, launch/status records, pipeline output and the
+validated review are retained under `tmp/local-experiment/notebook-lab/trainings/`.
+
+If training was saved and only MLflow restoration failed, restore the owned
+MLflow server and set `recovery_attempt` to that Lab attempt directory's token.
+`recover_training(token)` checks its original evidence, exited workers and the
+same healthy store, then returns the saved model review without running training.
+It writes a separate immutable recovery receipt; the failed status and pipeline
+records remain unchanged. Other incomplete cleanup still blocks recovery.
+After recovery, an intentional MLflow stop or restart does not reopen the closed
+attempt. Clear the token only when a new training run is intended.
+
+Local verification trained from this Notebook, recovered a saved result after
+one MLflow restoration failure, and then completed a separate new training run
+with all cleanup confirmed. The initial failure's exact cause was not recorded;
+later failures retain a fixed restoration phase and error code. Recovery did not
+repeat training. The inventory showed five saved training runs, and predictions
+for two edited inputs matched independent decimal arithmetic. The recovered
+Notebook retained its bytes, permissions and modification time through a
+five-kernel shutdown and server restart; the later normal result survived reload.
+Earlier verification also rejected unauthenticated API requests.
 Interrupted shutdown can resume from the saved ownership record; it does not
 restart kernels or stop an unidentified process. Initial configuration and
 shutdown failures are retained in the local experiment evidence.

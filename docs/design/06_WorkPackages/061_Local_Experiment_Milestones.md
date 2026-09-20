@@ -5,14 +5,15 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.56"
+version: "3.57"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-20）：固定Data Activatorのalert→Dagster sensor→SRE診断1回と重複抑止・normal復帰が、修正後28.475秒で成功した。
+最新の到達点（2026-09-20）：Labの固定学習で初回unknownを追加fitなしで回復し、別途明示した新規正常実行からレビュー・一覧・編集予測・保存/再読込まで成功した。
+固定Data Activatorのalert→Dagster sensor→SRE診断1回と重複抑止・normal復帰も、修正後28.475秒で成功した。
 保存比較一覧→候補選択→新入力予測→保存/再読込がLabで成功、cold予測18行も独立算術と一致。
 LabのRidge alpha10候補1fitと保存モデル比較も成功。同じholdoutでRMSEは悪化。
 Labの自然文queryの等値preview/範囲拒否と保存/再読込も修正後に成功。
@@ -29,7 +30,7 @@ Iceberg Reader→学習→MLflowの固定実験が修正後82.149秒で成功。
 自然文から検証済みselectionを作るNotebook Assistの実5caseと独立照合も成功。
 選択tableの登録Notebookを定型Dagster2assetsへ接続する実1回も成功した。
 これまでに保存SRE log観測のCLI表示と、新SRE評価のMLflow取込を完了。
-Trackingは旧12評価＋4benchmarkと固定合成学習を保持し、Iceberg学習2runsを加えて19runs/1347 metric pointsとなった。
+Trackingは旧12評価＋4benchmarkと固定合成学習を保持し、Iceberg学習4runsで21runs/1365 metric pointsを保存した。初回Labのunknownと回復、別の新規正常実行を区別して保持した。
 固定Notebookの実kernel2回と独立最終照合62checksも成功した。
 登録Notebookを定型Dagster2assetsへ接続する実2回と独立最終照合42checksも成功した。
 保持exportの非稼働MLflow clone復元とSDK全履歴読取2回も成功し、稼働中storeを保持した。
@@ -38,6 +39,25 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: Lab fixed Iceberg training and prediction — local acceptance complete
+
+単一ユーザーLabの[固定学習workbench](../../../examples/local_lake_training_workbench.ipynb)で、固定64行・48/16分割の新規学習→review/残差→保存一覧→編集入力2行の予測→保存/再読込を確認した。
+既存ML worker/pipelineとGo cacheを再利用し、全cleanupまで共有owner lockを保持する。未解消unknownは次の学習/query/比較/start/stopを止める。初回seedのみで既存Notebookを保持し、新dependency/serviceを増やさない。
+
+初回Lab `761fe6c99bd644cab5bba2e507db038c` / pipeline `c382d851243c4d7fa3d2ff07e952d650`はfit/保存後、runtime復帰の例外でunknownとなった。
+training `674ae81dccda4a6f835d1cc0a55c36bb` / run `ed1a43988e44418db210aaf1a16f55ba`と原unknownを保持した。その他3cleanupとfixture inventoryは一致し、元例外の原因は未記録・未確定のまま。
+MLflowを別操作で6.152秒・同store/healthyへ復帰後、`recover_training()`が追加fit・process操作なしに保存結果と復帰を照合し、不変のrecovery receiptを追加した。
+回復UIのreview/編集予測・保存/再読込に成功し、Lab stop2.373秒/start2.051秒後も回復Notebookのbytes/mode/mtimeを保持した。
+
+その後、別途明示した新規Lab `20efcfbca5424c7e98eb47fcabf5d5c6` / pipeline `4444604ccea84e17a6fe89c9200cdb67`は全cleanup/runtime復帰までpassed。
+training `c60d6f25d2944c249c811e800ce2b637` / ML run `4c298d5871c444dab289a41da84f6006`を追加し、現在21runs/1365points/21artifacts。直前20runsの全行/schema/artifactと39不変filesを保持した。runtime/start/SQLiteの3filesは予定された更新として検証し、AgentHouse560件は不変。
+新規正常実行のUIも一覧5 verified→レビュー→編集2行予測→保存/再読込に成功。予測0.2827625964974939/9.078697905740079は60桁Decimal算術と最大差3.90e-16で一致した。正常Notebook20,932 B/0600は再読込後もbytes/mode/mtimeが同一だった。
+
+初回保持helperは可変3filesと追加監査を誤期待して失敗したため、原記録を保って訂正し、保持照合に成功した。pipelineには復帰phase/固定error codeを追加したが、過去例外の原因が判明したとはしない。
+元unknown・回復receiptを変えず、別の新規正常実行を記録した。2 pipeline dirsは63/66 files、計25,941,700 B（allocated26,198,016 B、両cold backup/binaryを含む）を保持し、これを他の証跡容量と重複合算しない。
+最終全回帰は96suites/3153実行＝3152PASS＋既存1skip（78.314秒）。Hub・kernel内fit/autolog・一般品質保証は未達。
+証跡：`tmp/local-experiment/notebook-lab-training-checks/1ca0ff4357bd43f0b6a74a1f153def51/`のrecovered-ui-proof/direct-ui-proof/direct-reload-retentionと保持・回復・テスト記録。
 
 ## 2026-09-20: fixed Data Activator alert-to-diagnosis — local acceptance complete
 

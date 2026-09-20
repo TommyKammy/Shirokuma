@@ -253,6 +253,7 @@ def _lock():
     first = None
     try:
         with R._lock():
+            require(R._trainings_idle(), 'LAB_QUERY_CLEANUP_UNKNOWN')
             require(R._comparisons_idle(), 'LAB_QUERY_CLEANUP_UNKNOWN')
             with _query_lock():
                 try:

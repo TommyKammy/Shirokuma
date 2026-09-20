@@ -135,6 +135,8 @@ class PipelineTests(unittest.TestCase):
         result = self.execute()
         self.assertEqual(result['result'],'passed')
         self.assertIsNone(result['failure_phase'])
+        self.assertIsNone(result['runtime_restore_phase'])
+        self.assertIsNone(result['runtime_restore_error_code'])
         self.assertEqual(self.events,['fixture','reader','fixture-finished','stop','backup','tracking','verify','start'])
         self.assertFalse(self.harness.exists)
         self.assertEqual(self.runtime.state,'running')
@@ -252,10 +254,55 @@ class PipelineTests(unittest.TestCase):
 
     def test_first_cancel_survives_restart_failure(self):
         first=KeyboardInterrupt('first');self.tracker_error=first
-        self.runtime.start_error=ValueError('restart failed')
+        self.runtime.start_error=P.R.RuntimeError('PROCESS_IDENTITY_CONFLICT')
         with self.assertRaises(KeyboardInterrupt) as caught:self.execute()
         self.assertIs(caught.exception,first)
-        self.assertEqual(N._parse((self.output/'summary.json').read_bytes())['result'],'unknown')
+        saved=N._parse((self.output/'summary.json').read_bytes())
+        self.assertEqual(saved['result'],'unknown')
+        self.assertEqual(saved['runtime_restore_phase'],'start')
+        self.assertEqual(saved['runtime_restore_error_code'],'PROCESS_IDENTITY_CONFLICT')
+
+    def test_restart_failure_preserves_typed_diagnostic_and_successful_tracking_without_retry(self):
+        self.runtime.start_error=P.R.RuntimeError('START_IDENTITY_CONFLICT')
+        report=self.execute()
+        self.assertEqual(report['result'],'unknown')
+        self.assertEqual(report['failure_phase'],'restore-runtime')
+        self.assertEqual(report['runtime_restore_phase'],'start')
+        self.assertEqual(report['runtime_restore_error_code'],'START_IDENTITY_CONFLICT')
+        self.assertEqual(report['tracking']['run_id'],'e'*32)
+        self.assertTrue(all(report[key] for key in ('reader_cleanup_confirmed','fixture_cleanup_confirmed',
+                                                   'tracker_cleanup_confirmed')))
+        self.assertFalse(report['runtime_restored'])
+        self.assertEqual(self.events.count('tracking'),1); self.assertEqual(self.events.count('start'),1)
+        self.assertEqual(N._parse((self.output/'summary.json').read_bytes()),report)
+
+    def test_restore_untrusted_exception_text_is_not_saved_or_stringified(self):
+        class PrivateError(Exception):
+            def __str__(self):raise AssertionError('must not stringify')
+        self.runtime.start_error=PrivateError('private credential or subprocess body')
+        report=self.execute()
+        self.assertEqual(report['runtime_restore_error_code'],'LAKE_MLFLOW_RESTORE_FAILED')
+        self.assertNotIn(b'private credential',(self.output/'summary.json').read_bytes())
+        for error in (ValueError('START_TIMEOUT'),P.R.RuntimeError('ARBITRARY_PRIVATE_TEXT'),
+                      P.R.RuntimeError('START_TIMEOUT','private detail')):
+            self.assertEqual(P._restore_error_code(error),'LAKE_MLFLOW_RESTORE_FAILED')
+        self.assertEqual(P._restore_error_code(KeyboardInterrupt('private')),'LAKE_PIPELINE_INTERRUPTED')
+
+    def test_restore_post_start_identity_failure_has_distinct_phase(self):
+        status=self.runtime.status
+        launched=[]
+        def observed():
+            value=status()
+            if launched:value['store_id']='00000000-0000-4000-8000-000000000002'
+            return value
+        def started():
+            self.events.append('start'); self.runtime.state='running'; launched.append(True)
+        self.runtime.status=observed; self.runtime.start=started
+        report=self.execute()
+        self.assertEqual(report['result'],'unknown')
+        self.assertEqual(report['runtime_restore_phase'],'status-after')
+        self.assertEqual(report['runtime_restore_error_code'],'LAKE_MLFLOW_IDENTITY_UNKNOWN')
+        self.assertEqual(self.events.count('start'),1)
 
     def test_store_identity_change_prevents_restart(self):
         def changed(output,token):

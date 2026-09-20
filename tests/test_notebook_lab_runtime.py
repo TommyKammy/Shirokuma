@@ -69,6 +69,98 @@ class LabRuntimeTests(unittest.TestCase):
         for path in self.state.rglob('*'):
             self.assertEqual(path.stat().st_mode & 0o777, 0o700 if path.is_dir() else 0o600)
 
+    def test_lake_training_template_seed_preserves_all_edited_notebooks(self):
+        self.prepared()
+        workspace = self.state / 'workspace'
+        destination = workspace / 'lake_training_workbench.ipynb'
+        self.assertEqual(destination.read_bytes(), R.LAKE_TRAINING_TEMPLATE.read_bytes())
+        before = {}
+        for path in workspace.iterdir():
+            path.write_bytes(b'edited cells and outputs: ' + path.name.encode())
+            before[path.name] = (path.read_bytes(), path.stat().st_mtime_ns, path.stat().st_mode)
+        R._prepare()
+        self.assertEqual({path.name: (path.read_bytes(), path.stat().st_mtime_ns, path.stat().st_mode)
+                          for path in workspace.iterdir()}, before)
+
+    def test_unknown_training_blocks_start_and_stop_before_service_or_seed(self):
+        from tools.local_experiment.notebook_lab import train
+        self.state.mkdir(mode=0o700)
+        trainings = self.state / 'trainings'; trainings.mkdir(mode=0o700)
+        with patch.object(train, 'LAB_STATE', self.state), patch.object(train, 'check_idle', return_value=False) as check:
+            for action in (R.start, R.stop):
+                with self.subTest(action=action.__name__), self.assertRaisesRegex(R.LabError, 'LAB_TRAINING_ACTIVE_OR_UNKNOWN'):
+                    action()
+        self.assertEqual(check.call_count, 2)
+        self.assertFalse((self.state / 'owner.json').exists())
+        self.assertFalse((self.state / 'workspace').exists())
+
+    def test_training_guard_rejects_state_mismatch_and_dangling_symlink(self):
+        from tools.local_experiment.notebook_lab import train
+        self.state.mkdir(mode=0o700)
+        trainings = self.state / 'trainings'; trainings.mkdir(mode=0o700)
+        with patch.object(train, 'LAB_STATE', self.directory / 'different'), patch.object(train, 'check_idle') as check:
+            with self.assertRaisesRegex(R.LabError, 'LAB_TRAINING_STATE_CHANGED'):
+                R._trainings_idle()
+            check.assert_not_called()
+        trainings.rmdir(); trainings.symlink_to(self.directory / 'missing')
+        with patch.object(train, 'check_idle') as check:
+            with self.assertRaises(Exception):
+                R._trainings_idle()
+            check.assert_not_called()
+
+    def test_training_template_uses_new_token_and_clears_failed_results(self):
+        cells = [''.join(c['source']) for c in json.loads(R.LAKE_TRAINING_TEMPLATE.read_bytes())['cells']
+                 if c['cell_type'] == 'code']
+        class FixedError(Exception):
+            pass
+        current = {'identity': {'attempt_token': 'b' * 32}}
+        scope = dict(NotebookError=FixedError, PredictionError=FixedError, TrainingRunsError=FixedError,
+                     HTML=lambda value: value, SVG=lambda value: value, JSON=lambda value: value,
+                     display=Mock(), train_lake=Mock(return_value=current), render_review=Mock(return_value='HTML'),
+                     residual_svg=Mock(return_value='SVG'), predict=Mock(return_value={'predictions': [1, 2]}),
+                     collect=Mock(return_value={'runs': [{'training_token': 'b' * 32}]}))
+        exec(cells[1], scope)
+        scope['train_lake'].assert_called_once_with()
+        exec(cells[2], scope); exec(cells[3], scope)
+        self.assertEqual(scope['saved_runs']['runs'][0]['training_token'], 'b' * 32)
+        self.assertEqual(scope['predict'].call_args.args[0], 'b' * 32)
+        self.assertEqual(len(scope['predict'].call_args.args[1]['rows']), 2)
+        scope['predict'].reset_mock()
+        scope['train_lake'].side_effect = FixedError('raw-sensitive-body')
+        with patch('sys.stdout', new_callable=io.StringIO) as output:
+            exec(cells[1], scope); exec(cells[3], scope)
+        self.assertIsNone(scope['review']); self.assertIsNone(scope['prediction']); self.assertIsNone(scope['saved_runs'])
+        scope['predict'].assert_not_called()
+        self.assertNotIn('raw-sensitive-body', output.getvalue())
+        scope['review'] = current; scope['prediction'] = {'stale': True}
+        scope['predict'].side_effect = FixedError('raw-prediction-body')
+        with patch('sys.stdout', new_callable=io.StringIO) as output:
+            exec(cells[3], scope)
+        self.assertIsNone(scope['prediction'])
+        self.assertNotIn('raw-prediction-body', output.getvalue())
+
+    def test_training_template_recovery_never_starts_new_fit(self):
+        cells = [''.join(c['source']) for c in json.loads(R.LAKE_TRAINING_TEMPLATE.read_bytes())['cells']
+                 if c['cell_type'] == 'code']
+        class FixedError(Exception):
+            pass
+        current = {'identity': {'attempt_token': 'b' * 32}}
+        scope = dict(NotebookError=FixedError, HTML=lambda x: x, SVG=lambda x: x,
+                     display=Mock(), train_lake=Mock(), recover_training=Mock(return_value=current),
+                     render_review=Mock(return_value='HTML'), residual_svg=Mock(return_value='SVG'))
+        recovery_cell = cells[1].replace('recovery_attempt = ""', 'recovery_attempt = "' + 'a' * 32 + '"')
+        exec(recovery_cell, scope)
+        scope['recover_training'].assert_called_once_with('a' * 32)
+        scope['train_lake'].assert_not_called()
+        self.assertEqual(scope['review'], current)
+        scope['recover_training'].side_effect = FixedError('private-details')
+        with patch('sys.stdout', new_callable=io.StringIO) as output:
+            exec(recovery_cell, scope)
+        self.assertIsNone(scope['review'])
+        self.assertIsNone(scope['prediction'])
+        scope['train_lake'].assert_not_called()
+        self.assertNotIn('private-details', output.getvalue())
+
     def test_new_query_example_is_seeded_once_and_preserves_user_edit(self):
         self.prepared()
         destination = self.state / 'workspace/query_workbench.ipynb'

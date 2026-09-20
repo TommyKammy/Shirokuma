@@ -5,7 +5,7 @@ title: "WP-L4-NB-001 JupyterHub bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.13"
+version: "0.14"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, notebook]
 ---
@@ -27,7 +27,21 @@ Notebookから所有workerへ固定Iceberg学習を依頼する入口も、初�
 Labから自然文table previewを呼ぶ別Notebookも、修正後の等値preview/unsupportedを実画面で確認した。
 保存データでRidgeのalphaを変えるoffline比較も、Labで実1fit・表示/保存/再読込を確認した。
 保存比較一覧から候補を選び、再fitせず新入力を予測するLab入口も実UI受入を確認した。
+Labの固定学習workbenchで、初回unknownを追加fitなしで回復し、別の新規正常実行とレビュー/一覧/編集予測・保存/再読込を確認した。
 JupyterHub、複数ユーザー、直接PySpark、kernel内fit・autologの完了は含めない。
+
+## 2026-09-20: Lab fixed Iceberg training and prediction — local acceptance complete
+
+Labの[固定学習workbench](../../../../examples/local_lake_training_workbench.ipynb)で、新しい固定学習→指標/16holdout/残差SVG→保存学習一覧→編集入力2行の予測→保存/再読込を確認した。
+引数なし`train_lake()`が既存ML専用workerで64行・48/16分割のpipelineを1回実行する。初回seedだけを行い、既存Notebookの編集と保存出力は保持する。
+学習セルの再実行は新runを追加するが、予測セルだけの再実行では学習しない。実行前に古いreview/predictionを消し、固定例外を日本語で表示する。
+
+初回はfit/保存済みだがruntime復帰の例外でpipeline/親statusがunknownとなった。原因は未記録・未確定のまま、原証跡を保持した。
+同storeのruntimeを別操作で復帰後、`recovery_attempt`に元のLab実行IDを指定する`recover_training()`で、追加fit・process操作なしに保存結果を照合した。原unknownを変更せず、不変のrecovery receiptを追加する。
+回復結果のUI表示/2行予測・保存/再読込とLab stop/restart後の保持に成功した。その後、別途明示した新規学習1回は全cleanup/runtime復帰が正常で、UI一覧5 verified・レビュー・編集予測・保存/再読込にも成功した。
+
+未解消unknownは次の学習/query/比較/start/stopを拒否し、全cleanupまで共通owner lockを保持する。既存Go cacheを共有し、新dependency/serviceは追加しない。
+これは単一ユーザーLabの固定実験であり、Hub/複数ユーザー・kernel内fit/autolog・一般品質保証は未達。失敗と回復・検証は[Milestones](../061_Local_Experiment_Milestones.md)に記録した。
 
 ## 2026-09-20: saved comparison model prediction — local acceptance complete
 

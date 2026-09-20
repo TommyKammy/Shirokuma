@@ -5,7 +5,7 @@ title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "1.7"
+version: "1.8"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -16,7 +16,7 @@ tags: [shirokuma, workpackage, l4, ml]
 
 MLflowで固定合成データの学習、保存Agent evalとSpark/Trino測定を記録する。
 Icebergの固定64行を既存Readerから学習へ接続する実1回も、初回失敗の修正・別回収後に成功した。
-専用SQLite/loopback標準UIで旧16runsと固定合成1run・Iceberg2runsを保持し、metric履歴・JSON artifactを照合した。
+専用SQLite/loopback標準UIで旧16runsと固定合成1run・Iceberg4runsの計21runsを保存した。初回Lab試行のunknownと回復証跡を保持し、別の新規正常実行も確認した。
 固定Notebookのread-only表示と旧import profileの完全export・非稼働clone復元も確認済み。
 完成training receiptsを含む5experiments/18runsの非稼働clone復元とSDK読戻しも初回で成功した。
 保存学習をNotebookの指標表・holdout行・残差SVGで確認する実kernel実行も初回で成功した。
@@ -26,7 +26,21 @@ Notebookから所有workerへ固定学習を依頼し、1runを追加する実�
 保存学習3件のtoken・指標・provenance一覧と、選択tokenによる既存予測も実受入で成功した。
 保存Icebergモデルの同一分割でalphaを変える未登録のoffline比較も、実1fitとLab表示で確認した。
 保存比較候補の一覧・再fit不要な新入力予測も、cold計算とLab実UIで確認した。
+Labの固定学習workbenchで、初回unknownの保存結果を追加fitなしで回復し、別の新規正常実行から表示・編集予測・保存/再読込も確認した。
 Hub連携・kernel内fit/autolog、Registry/Serving、clone切替・他host移行は未達。
+
+## 2026-09-20: Lab fixed Iceberg training and prediction — local acceptance complete
+
+Labの[固定学習workbench](../../../../examples/local_lake_training_workbench.ipynb)から既存Iceberg→Reader→Ridge→MLflow pipelineを実行し、保存結果のレビュー・一覧・新入力予測へ接続した。
+固定64行・48/16分割を使い、一時tableを回収し、cold backupと新run/metric/artifactを保持する。予測には今回の保存training tokenを使い、追加fit/MLflow書込はない。
+
+初回はfit/保存検証後にruntime復帰が例外となったため、20番目のrunとunknownを保持した。元例外の原因は未記録・未確定である。
+同storeのruntimeを別操作で戻し、追加fit・runtime変更なしの`recover_training()`で元結果を照合する不変receiptを追加した。回復UI/保存結果の予測に成功後、別途明示した新規1実行も全cleanup/runtime復帰まで成功した。
+現在21runs/1365points/21artifacts。新規正常実行の前にあった20runsの全行/schema/artifactと39不変filesを保持し、AgentHouseは560件のまま。
+Lab一覧は今回5 verifiedを確認した。旧3件を確認した過去の受入とは区別する。編集2行の予測は60桁Decimal算術と最大差3.90e-16で一致した。
+
+元unknown・回復receipt・正常実行・両cold backupを保持し、初回成功や自動retryとは記さない。未解消unknownは次の仕事を抑止する。
+Hub・kernel内fit/autolog・Registry/Serving・一般データセット学習は未達。実測と検証は[Milestones](../061_Local_Experiment_Milestones.md)を参照する。
 
 ## 2026-09-20: saved comparison model prediction — local acceptance complete
 

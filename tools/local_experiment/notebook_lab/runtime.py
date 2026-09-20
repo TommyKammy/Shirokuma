@@ -38,6 +38,7 @@ TEMPLATE = ROOT / 'examples/local_training_workbench.ipynb'
 QUERY_TEMPLATE = ROOT / 'examples/local_query_workbench.ipynb'
 COMPARISON_TEMPLATE = ROOT / 'examples/local_ridge_comparison.ipynb'
 COMPARISON_PREDICTION_TEMPLATE = ROOT / 'examples/local_comparison_prediction.ipynb'
+LAKE_TRAINING_TEMPLATE = ROOT / 'examples/local_lake_training_workbench.ipynb'
 PORT = 18560
 URL = 'http://127.0.0.1:' + str(PORT)
 VERSION = '4.6.3'
@@ -199,7 +200,8 @@ def _prepare():
     for name, template in (('training_workbench.ipynb', TEMPLATE),
                            ('query_workbench.ipynb', QUERY_TEMPLATE),
                            ('ridge_comparison.ipynb', COMPARISON_TEMPLATE),
-                           ('comparison_prediction.ipynb', COMPARISON_PREDICTION_TEMPLATE)):
+                           ('comparison_prediction.ipynb', COMPARISON_PREDICTION_TEMPLATE),
+                           ('lake_training_workbench.ipynb', LAKE_TRAINING_TEMPLATE)):
         destination = STATE / 'workspace' / name
         if not destination.exists() and not destination.is_symlink():
             _exclusive(destination, template.read_bytes())
@@ -224,6 +226,16 @@ def _comparisons_idle():
     from tools.local_experiment.notebook_lab import compare
     require(compare.LAB_STATE == STATE, 'LAB_COMPARISON_STATE_CHANGED')
     return compare.check_idle()
+
+
+def _trainings_idle():
+    path = STATE / 'trainings'
+    M.no_symlinks(path)
+    if not path.exists():
+        return True
+    from tools.local_experiment.notebook_lab import train
+    require(train.LAB_STATE == STATE, 'LAB_TRAINING_STATE_CHANGED')
+    return train.check_idle()
 
 
 def _owner():
@@ -414,6 +426,7 @@ def _port_free():
 
 def start():
     with _lock():
+        require(_trainings_idle(), 'LAB_TRAINING_ACTIVE_OR_UNKNOWN')
         owner = _prepare()
         current = status()
         if current['state'] == 'running':
@@ -600,6 +613,7 @@ def stop():
         require(current['state'] == 'uninitialized', 'LAB_STOP_UNCONFIRMED')
         return current
     with _lock():
+        require(_trainings_idle(), 'LAB_TRAINING_ACTIVE_OR_UNKNOWN')
         require(_queries_idle(), 'LAB_QUERY_ACTIVE_OR_UNKNOWN')
         require(_comparisons_idle(), 'LAB_COMPARISON_ACTIVE_OR_UNKNOWN')
         owner_path = STATE / 'owner.json'

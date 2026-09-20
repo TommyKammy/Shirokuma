@@ -121,6 +121,7 @@ def _lock():
     try:
         with R._lock():
             try:
+                require(R._trainings_idle(), 'LAB_COMPARISON_CLEANUP_UNKNOWN')
                 require(R._queries_idle(), 'LAB_COMPARISON_CLEANUP_UNKNOWN')
                 require(check_idle(), 'LAB_COMPARISON_CLEANUP_UNKNOWN')
                 yield

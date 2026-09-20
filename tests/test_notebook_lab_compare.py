@@ -166,6 +166,15 @@ class LabComparisonTests(unittest.TestCase):
             with self.assertRaisesRegex(R.LabError, 'LAB_BUSY'), R._lock():
                 self.fail('runtime acquired the active comparison lock')
 
+    def test_unknown_training_blocks_comparison_before_allocation(self):
+        from tools.local_experiment.notebook_lab import train
+        (self.lab / 'trainings').mkdir(mode=0o700)
+        with patch.object(train, 'LAB_STATE', self.lab), patch.object(train, 'check_idle', return_value=False) as check:
+            with self.assertRaisesRegex(B.N.NotebookError, 'LAB_COMPARISON_CLEANUP_UNKNOWN'):
+                B.compare(V.TOKEN, 10)
+        check.assert_called_once_with()
+        self.assertFalse(self.state.exists())
+
     def test_unknown_query_blocks_comparison_before_allocation(self):
         with patch.object(R, '_queries_idle', return_value=False) as check:
             with self.assertRaisesRegex(B.N.NotebookError, 'LAB_COMPARISON_CLEANUP_UNKNOWN'):

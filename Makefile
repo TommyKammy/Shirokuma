@@ -998,3 +998,8 @@ test-local-activation:
 	@tools/local_experiment/dataops/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_local_activation_sensor.py'
 	@tools/local_experiment/dataops/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_local_activation_run.py'
 verify-local-experiment: test-local-activation
+
+.PHONY: test-local-notebook-lab-train
+test-local-notebook-lab-train:
+	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_train.py'
+verify-local-experiment: test-local-notebook-lab-train

@@ -201,6 +201,16 @@ class LabQueryTests(unittest.TestCase):
             with self.assertRaisesRegex(R.LabError, 'LAB_BUSY'), R._lock():
                 self.fail('Lab stop acquired a running query owner lock')
 
+    def test_unknown_training_blocks_query_without_query_directory(self):
+        from tools.local_experiment.notebook_lab import train
+        self.state.rmdir()
+        (self.lab / 'trainings').mkdir(mode=0o700)
+        with patch.object(train, 'LAB_STATE', self.lab), patch.object(train, 'check_idle', return_value=False) as check:
+            with self.assertRaisesRegex(Q.N.NotebookError, 'LAB_QUERY_CLEANUP_UNKNOWN'):
+                Q.preview('smoke.fixture_v1', 'nameとidを1件表示')
+        check.assert_called_once_with()
+        self.assertFalse(self.state.exists())
+
     def test_unknown_comparison_blocks_query_even_without_query_directory(self):
         self.state.rmdir()
         with patch.object(R, '_comparisons_idle', return_value=False) as check:

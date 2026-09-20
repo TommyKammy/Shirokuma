@@ -28,6 +28,15 @@ STATE = ROOT / 'tmp/local-experiment/lake-training'
 PROFILE = 'fixed-iceberg-training-pipeline-v1'
 TRACKER_SECONDS, TRACKER_GRACE_SECONDS = 240, 60
 ENV_KEYS = A.ENV_KEYS
+RESTORE_RUNTIME_CODES = frozenset({
+    'OWNED_SERVER_UNHEALTHY', 'SERVER_NOT_STOPPED', 'PORT_UNAVAILABLE',
+    'START_INTENT_CONFLICT', 'RUNTIME_RECORD_CONFLICT', 'STORE_MARKER_CONFLICT',
+    'PROCESS_INSPECTION_TOO_LARGE', 'PROCESS_INSPECTION_FAILED', 'PROCESS_INSPECTION_INVALID',
+    'LISTENER_INSPECTION_FAILED', 'LISTENER_INSPECTION_INVALID',
+    'PROCESS_IDENTITY_CONFLICT', 'PROCESS_GROUP_CONFLICT',
+    'START_IDENTITY_UNCONFIRMED', 'START_IDENTITY_CONFLICT', 'SERVER_EXITED', 'START_TIMEOUT',
+    'OWNED_PROCESS_MISSING', 'STOP_PROCESS_GROUP_CHANGED', 'STOP_PROCESS_IDENTITY_CHANGED', 'STOP_TIMEOUT',
+})
 
 
 class PipelineError(ValueError):
@@ -39,6 +48,17 @@ def require(condition, code='LAKE_PIPELINE_FAILED'):
 
 
 def digest(raw): return hashlib.sha256(raw).hexdigest()
+
+
+def _restore_error_code(error):
+    """Preserve known lifecycle codes without copying arbitrary exception text."""
+    if not isinstance(error, Exception): return 'LAKE_PIPELINE_INTERRUPTED'
+    if len(error.args) == 1 and type(error.args[0]) is str:
+        code = error.args[0]
+        if type(error) is R.RuntimeError and code in RESTORE_RUNTIME_CODES: return code
+        if type(error) is PipelineError and code in ('LAKE_MLFLOW_IDENTITY_UNKNOWN', 'LAKE_TRACKER_CLEANUP_UNKNOWN'):
+            return code
+    return 'LAKE_MLFLOW_RESTORE_FAILED'
 
 
 def sources():
@@ -208,7 +228,7 @@ def execute(output, binary, token, *, fixture_runner=F.run, read_select=N.read_s
         source_sha256=code, binary_sha256=binary_sha, query_evidence_token=None, fixture_result=None, tracking=None,
         store_id=None, runtime_before=None, runtime_after=None, backup=None, reader_cleanup_confirmed=True,
         fixture_cleanup_confirmed=True, tracker_cleanup_confirmed=True, runtime_restored=True, error_code=None,
-        failure_phase=None)
+        failure_phase=None, runtime_restore_phase=None, runtime_restore_error_code=None)
     original, fixture_started, tracker_started, stop_attempted, source = None, False, False, False, None
     before = None
 
@@ -299,15 +319,19 @@ def execute(output, binary, token, *, fixture_runner=F.run, read_select=N.read_s
             except BaseException as error:
                 report['tracker_cleanup_confirmed'] = False; original = A._keep(original, error)
         if before is not None:
+            restore_phase = 'status-before'
             try:
                 current = _runtime_status(runtime, before['store_id'])
                 if stop_attempted and current['state'] == 'stopped':
                     require(report['tracker_cleanup_confirmed'], 'LAKE_TRACKER_CLEANUP_UNKNOWN')
+                    restore_phase = 'start'
                     runtime.start()
+                    restore_phase = 'status-after'
                     current = _runtime_status(runtime, before['store_id'])
                 report['runtime_after'] = current
                 report['runtime_restored'] = current['state'] == before['state']
             except BaseException as error:
+                report.update(runtime_restore_phase=restore_phase, runtime_restore_error_code=_restore_error_code(error))
                 report['runtime_restored'] = False; original = A._keep(original, error)
                 if report['failure_phase'] is None: report['failure_phase'] = 'restore-runtime'
         try: guard()
