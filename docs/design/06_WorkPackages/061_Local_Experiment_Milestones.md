@@ -5,14 +5,15 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.41"
+version: "3.42"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-20）：選択tableの登録Notebookを定型Dagster2assetsへ接続し、実1回と独立照合が成功。
+最新の到達点（2026-09-20）：自然文から検証済みselectionを作るNotebook Assistの実5caseと独立照合が成功。
+選択tableの登録Notebookを定型Dagster2assetsへ接続する実1回も成功した。
 これまでに保存SRE log観測のCLI表示と、新SRE評価のMLflow取込を完了。
 Trackingは既存runを保持して12評価＋4benchmark、1320 metric pointsとなり、再取込追加0を確認した。
 固定Notebookの実kernel2回と独立最終照合62checksも成功した。
@@ -23,6 +24,28 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: natural-language Notebook preview — local acceptance complete
+
+明示tableと短い自然文から、describe→Qwen1call→検証済みselection→登録Notebook2assetsを実行する
+`local-notebook-assist`を追加した。モデルにはtable/request/列名型だけを渡し、SQL/codeを受け取らない。
+明示列順序とlimit1–100を対象とし、describe/SELECT別時点のUUID/schema一致を検査する。
+current head更新は許容するが、意味解釈の一般保証やsnapshot固定transactionとはしない。
+
+実5case各1回：name,id/1件は35.124秒でpassed/2materializations、filter16.129秒・未知列15.531秒・
+曖昧14.978秒・SQL15.648秒は全unsupported/exit2となり、SELECT/assets0、describeは全5回先行した。
+acceptedはreturned1/fetched2/truncated true・保存評価12run、全case cleanup true・model各1call・retry/cloud0。
+usage合計は入力1681/出力72tokens、推論duration6044ms、cost NULL。不正bool requestは0.057秒で拒否した。
+新80tests・全local73suites/2583tests（2582PASS・既存optional1skip、60.169秒）とsecret scanが成功。
+前後65sources/527保持files・MLflow59tables/16runs/1320points/16artifactsは一致、AH旧519行を保持し新16events→535。
+SDK1.44.0＋必須semantic-conventionsだけを専用DataOpsへ追加し、旧96 lock versionsを維持した。
+独立保存670checks（143意味＋527files）/693inputsが初回成功。16監査/local spans、2assets/12評価、
+6Reader owner終了・25distinct terminal queriesを照合し、追加API/SDK/model/Reader実行0。
+5新run77filesの実割当は51,728,384B。新fixture/kernel/service0、保持data/backup削除なし。
+証拠は`tmp/local-experiment/notebook-assist-checks/b0398f85421f4100a8737a6d05c12ff5/`。
+[Assist runbook](../../../tools/local_experiment/notebook_assist/README.md)と
+[AGENT-001](L4/WP-L4-AGENT-001_Notebook_to_Dagster_Agent.md)を参照。
+この5要求の機能証拠を、自然文一般品質・任意Notebook自動変換・training・本番受入へ広げない。
 
 ## 2026-09-20: selected-table Notebook to assets — local acceptance complete
 

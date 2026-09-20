@@ -102,23 +102,22 @@ def _read(path, maximum):
     return raw
 
 
-def _reader_frames(raw, exit_code, request=REQUEST):
-    """Reuse Reader's typed row/hash validator after the exact public envelope."""
-    request = S.normalize_request(request)
+def _reader_envelope(raw, exit_code, command):
+    """Validate the shared v1 envelope, without interpreting an observation."""
     lines = raw.splitlines()
     _require(len(lines) == 2 and raw.endswith(b'\n')
              and all(len(line) <= C.MAX_PUBLIC_BYTES for line in lines), 'NOTEBOOK_READER_INVALID')
     allocated, final = map(_parse, lines)
     _require(type(allocated) is dict and set(allocated) == {'schema_version', 'event', 'command', 'evidence_token'}
              and type(allocated['schema_version']) is int and allocated['schema_version'] == 1
-             and allocated['event'] == 'allocated' and allocated['command'] == 'query select'
+             and allocated['event'] == 'allocated' and allocated['command'] == command
              and type(allocated['evidence_token']) is str and TOKEN.fullmatch(allocated['evidence_token']),
              'NOTEBOOK_READER_INVALID')
     token = allocated['evidence_token']
     _require(type(final) is dict and set(final) == {'schema_version', 'event', 'command', 'evidence_token',
              'result', 'observation', 'error_code', 'cleanup_verified', 'evidence'}
              and type(final['schema_version']) is int and final['schema_version'] == 1
-             and final['event'] == 'result' and final['command'] == 'query select'
+             and final['event'] == 'result' and final['command'] == command
              and final['evidence_token'] == token
              and final['evidence'] == f'tmp/local-experiment/query-read/{token}/summary.json'
              and type(final['cleanup_verified']) is bool, 'NOTEBOOK_READER_INVALID')
@@ -131,7 +130,16 @@ def _reader_frames(raw, exit_code, request=REQUEST):
         return token, None, final['cleanup_verified']
     _require(exit_code == 0 and final['error_code'] is None and final['cleanup_verified'] is True,
              'NOTEBOOK_READER_UNVERIFIED')
-    public = final['observation']
+    _require(type(final['observation']) is dict, 'NOTEBOOK_READER_INVALID')
+    return token, final['observation'], True
+
+
+def _reader_frames(raw, exit_code, request=REQUEST):
+    """Reuse Reader's typed row/hash validator after the exact public envelope."""
+    request = S.normalize_request(request)
+    token, public, cleanup = _reader_envelope(raw, exit_code, 'query select')
+    if public is None:
+        return token, None, cleanup
     try:
         C.receipt_projection(public)
         _require(public['table'] == 'iceberg.' + request['table']
@@ -140,6 +148,31 @@ def _reader_frames(raw, exit_code, request=REQUEST):
     except C.ContractError:
         raise NotebookError('NOTEBOOK_READER_INVALID') from None
     return token, public, True
+
+
+def _describe_request(table):
+    try:
+        return C.normalize_request({'command': 'describe', 'table': table})
+    except C.ContractError:
+        raise NotebookError('NOTEBOOK_REQUEST_INVALID') from None
+
+
+def _describe_reader_frames(raw, exit_code, table):
+    """Accept only the matching describe identity, never a select observation."""
+    request = _describe_request(table)
+    token, public, cleanup = _reader_envelope(raw, exit_code, 'query describe')
+    if public is None:
+        return token, None, cleanup
+    try:
+        public = C.validate_identity(public, request, public['columns'])
+    except (C.ContractError, KeyError, TypeError):
+        raise NotebookError('NOTEBOOK_READER_INVALID') from None
+    return token, public, True
+
+
+def _describe_arguments(binary, request):
+    return [str(binary), '--repo-root', str(ROOT), '--profile', 'local-experiment',
+            'query', 'describe', '--table', request['table']]
 
 
 def _interrupt_and_wait(child, original):
@@ -175,18 +208,17 @@ def _process_start(pid):
     return value
 
 
-def read_select(request):
-    """Run one typed current-head Go Reader request and return its verified observation.
+def _read_owned(request, arguments, validate_frames):
+    """Own one fixed Reader call; public entry points supply its typed boundary.
 
     Writes reader-intent.json before spawn, reader.stdout.jsonl and an atomic
     reader-status.json. Unknown cleanup remains false even when Go has exited.
     KeyboardInterrupt survives signal/wait/status-save failures unchanged.
     """
-    request = S.normalize_request(request)
     directory = _directory()
     binary = Path(os.environ.get('SHIROKUMA_NOTEBOOK_BINARY', ''))
     _require(binary.is_absolute() and binary.is_file() and not binary.is_symlink(), 'NOTEBOOK_BINARY_INVALID')
-    _write(directory / 'reader-intent.json', {'schema_version': 1, 'command': 'query select', 'request': request})
+    _write(directory / 'reader-intent.json', {'schema_version': 1, 'command': 'query ' + request['command'], 'request': request})
     status = dict(schema_version=1, state='pending', pid=None, pgid=None, process_start=None,
                   evidence_token=None, exit_code=None,
                   child_exited=False, cleanup_verified=False, error_code=None)
@@ -195,7 +227,7 @@ def read_select(request):
         _write(directory / 'reader-status.json', status, replace=True)
         fd = os.open(directory / 'reader.stdout.jsonl', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, 'wb') as output:
-            child = subprocess.Popen(S.arguments(binary, ROOT, request),
+            child = subprocess.Popen(arguments(binary, request),
                 stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.DEVNULL,
                 cwd=ROOT, start_new_session=True,
                 env={key: value for key, value in os.environ.items()
@@ -219,8 +251,8 @@ def read_select(request):
             os.fsync(output.fileno())
         status.update(exit_code=child.poll(), child_exited=child.poll() is not None)
         if status['child_exited']:
-            token, public, cleanup = _reader_frames(_read(directory / 'reader.stdout.jsonl', C.MAX_PUBLIC_BYTES * 2 + 2),
-                                                    child.returncode, request=request)
+            token, public, cleanup = validate_frames(_read(directory / 'reader.stdout.jsonl', C.MAX_PUBLIC_BYTES * 2 + 2),
+                                                       child.returncode)
             status.update(evidence_token=token, cleanup_verified=cleanup)
             if public is None:
                 raise NotebookError('NOTEBOOK_READER_FAILED')
@@ -255,6 +287,20 @@ def read_select(request):
             raise original
         raise NotebookError('NOTEBOOK_READER_FAILED') from None
     return public
+
+
+def read_select(request):
+    """Run one typed current-head select through the owned Go Reader."""
+    request = S.normalize_request(request)
+    return _read_owned(request, lambda binary, value: S.arguments(binary, ROOT, value),
+                       lambda raw, code: _reader_frames(raw, code, request=request))
+
+
+def read_describe(table):
+    """Read only the named table's typed metadata through the owned Go Reader."""
+    request = _describe_request(table)
+    return _read_owned(request, _describe_arguments,
+                       lambda raw, code: _describe_reader_frames(raw, code, request['table']))
 
 
 def read_fixture():

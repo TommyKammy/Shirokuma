@@ -27,13 +27,32 @@ def unknown_metrics(duration_ms: int) -> dict:
             "inference_cost_estimate": None, "duration_ms": max(0, duration_ms)}
 
 
+def _strict_json(raw):
+    """Reject ambiguous members and nonfinite numbers at every object depth."""
+    def pairs(items):
+        value = {}
+        for key, item in items:
+            if key in value:
+                raise ValueError('duplicate JSON member')
+            value[key] = item
+        return value
+    def finite(text):
+        value = float(text)
+        if not math.isfinite(value):
+            raise ValueError('nonfinite JSON number')
+        return value
+    def constant(_):
+        raise ValueError('nonfinite JSON number')
+    return json.loads(raw, object_pairs_hook=pairs, parse_constant=constant, parse_float=finite)
+
+
 def parse_completion(raw: bytes, model: str, duration_ms: int) -> dict[str, Any]:
     """Validate one response and retain only safe measured metrics on rejection."""
     metrics = unknown_metrics(duration_ms)
     try:
         if len(raw) > 64 * 1024:
             raise ProviderError("model response exceeds the bounded limit")
-        result = json.loads(raw)
+        result = _strict_json(raw)
         if not isinstance(result, dict):
             raise ProviderError("model response must be an object")
         usage = result.get("usage")
@@ -59,7 +78,7 @@ def parse_completion(raw: bytes, model: str, duration_ms: int) -> dict[str, Any]
         content = choices[0]["message"]["content"]
         if not isinstance(content, str) or len(content) > 4096:
             raise ProviderError("model content is not bounded structured text")
-        parsed = json.loads(content)
+        parsed = _strict_json(content)
         if not isinstance(parsed, dict):
             raise ProviderError("model content must be a JSON object")
     except ProviderError as error:

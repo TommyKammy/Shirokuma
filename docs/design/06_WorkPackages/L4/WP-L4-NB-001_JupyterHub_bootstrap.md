@@ -4,8 +4,8 @@ doc_id: "WP-L4-NB-001"
 title: "WP-L4-NB-001 JupyterHub bootstrap"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-18
-version: "0.4"
+updated: 2026-09-20
+version: "0.5"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, notebook]
 ---
@@ -18,7 +18,31 @@ Notebook環境を整備する。ADR-0034のlocal実験では、固定Notebookを
 既存ReaderとMLflow Trackingの読取へ接続する最小部分を先行した。実kernel2回と
 独立した保存証拠の62項目照合が成功した。さらに別の登録templateへcurrent-head Readerの
 型付きrequestを渡し、選択tableのpreviewと従来無指定実行の互換を実kernelで確認した。
+同じ登録templateのrequestを自然文から選ぶAssistも定型2assets経由で実5case確認した。
 JupyterHub、複数ユーザー、直接PySpark、学習・autologの完了は含めない。
+
+## 2026-09-20: natural-language Notebook preview — local acceptance complete
+
+登録table-preview templateの選択requestを、短い自然文から生成する限定入口
+`local-notebook-assist`を追加した。明示tableを既存Readerでdescribeし、列名/型と依頼だけをQwenへ渡す。
+columns順序・limitをhost検証した後、同じ登録templateに対応する`table_preview`と
+`saved_evaluation_summary`をDagsterでmaterializeする。今回の実行はhost定義の2assetsで、
+新しいkernel実行やHub統合、任意Notebook/code生成の受入ではない。
+
+実5caseを各1回実行し、明示name,id/1件だけがpassed/2assets、filter・未知列・曖昧・SQLは
+unsupported/exit2でSELECT/assets0だった。describeは全5caseで先行し、Qwen各1call、retry/cloud0。
+acceptedは35.124秒、returned1/fetched2/truncated true・12保存評価run、全case cleanup true。
+describeとSELECTは別時点でcurrent head更新を許容し、table UUID/schema SHAを最終照合する。
+モデルの意味解釈保証や行順保証とは区別する。元の明示request入口・無指定Notebookは保持した。
+
+新80testsを含む全local73suites/2583tests（2582PASS・既存optional1skip）が成功。
+65sources/527保持files・MLflow16runs/1320points/16artifactsは前後一致し、AH旧519行を保持して新監査16件を追加した。
+独立保存670checks（143意味＋527files）/693inputsが初回成功。16監査/local spans、2assets/12評価、
+6Reader owner終了・25distinct terminal queriesを照合し、追加API/SDK/model/Reader実行0。
+証拠は`tmp/local-experiment/notebook-assist-checks/b0398f85421f4100a8737a6d05c12ff5/`。
+[Notebook Assist runbook](../../../../tools/local_experiment/notebook_assist/README.md)と
+[Notebook Assets WP](WP-L4-AGENT-001_Notebook_to_Dagster_Agent.md)に操作・保存・取消の詳細を記載する。
+JupyterHub・複数ユーザー・直接PySpark・学習/autolog・自然文一般品質・本番受入は未達を維持する。
 
 ## 2026-09-18: selected-table Notebook preview — local acceptance complete
 

@@ -880,3 +880,12 @@ verify-local-experiment: test-local-notebook-assets
 test-local-notebook-assets-selection:
 	@tools/local_experiment/dataops/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_assets_selection.py'
 verify-local-experiment: test-local-notebook-assets-selection
+
+.PHONY: local-notebook-assist test-local-notebook-assist
+local-notebook-assist:
+	@tools/local_experiment/dataops/.venv/bin/python -B tools/local_experiment/notebook_assist/run.py --request-stdin
+test-local-notebook-assist:
+	@tools/local_experiment/dataops/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_assist_*.py'
+	@tools/local_experiment/notebook/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_describe_client.py'
+	@tools/local_experiment/llm/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_local_provider_strict_json.py'
+verify-local-experiment: test-local-notebook-assist

@@ -5,7 +5,7 @@ title: "WP-L4-AGENT-001 Notebook to Dagster Agent"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.4"
+version: "0.5"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, agentops]
 ---
@@ -17,7 +17,63 @@ tags: [shirokuma, workpackage, l4, agentops]
 Notebookを再現可能なDagster assetへ接続する。ADR-0034のlocal実験では、登録済みの固定Notebookだけを
 hostの定型2assetsへ対応付ける最小部分を実装し、実2回と独立最終照合が成功した。
 選択tableの登録previewもschema2の2assetsへ接続し、実1回と独立保存照合が成功した。
-任意NotebookやLLM変換は含めない。
+さらに自然文から検証済みselectionを作る限定Assistを接続し、実5caseが期待どおりとなった。
+任意Notebookの解析・生成や一般的なLLM変換は含めない。
+
+## 2026-09-20: natural-language Notebook preview — local acceptance complete
+
+`make local-notebook-assist`はexact JSON `{table,request}`をstdinで受け、明示tableをdescribeしてから、
+Qwenの1回の提案を既存selectionへ渡し、登録previewの2assetsを実行する。全体4096B、依頼512文字/
+UTF-8 2048B、明示した1–16列と整数limit1–100だけを対象とし、モデルはSQL/codeを生成しない。
+モデルに渡すのはtable/request/columns{name,type}だけで、行・UUID・snapshot/head・hashは渡さない。
+proposalはexact columns/limit/unsupported。型・既知列・上限をhostで検証するが、自然文の意味が
+常に正しく解釈されたという保証はしない。既存Data Engineerの固定3変換とは独立したread入口である。
+
+accepted時だけ`table_preview`→`saved_evaluation_summary`をmaterializeする。unsupportedはexit2、
+SELECT/assets/MLflow評価読取0だが、describeとQwenは実行済みである。describeとSELECTは別時点で、
+current headの更新を許し、最終table UUID/schema SHAを一致確認する。snapshot固定transactionではない。
+生成Python/任意Notebookの実行、kernel起動、データ/catalog/MLflowへの書込みは追加しない。
+旧Notebook/Assets入口と登録templateを保ち、2assetsの依存は実行順だけで評価由来のlineageとはしない。
+
+実5caseをそれぞれ1回逐次実行し、期待どおりとなった。
+
+| Case / token | 時間 | 結果 |
+|---|---:|---|
+| 明示name,id/1件 `1cdcb3db503849aa97d7df7df59a727b` | 35.124秒 | passed/exit0、2assets、returned1/fetched2/truncated true |
+| filter `293e038ad96f4f218059d572ab06236f` | 16.129秒 | unsupported/exit2、SELECT/assets0 |
+| 未知列 `d6ba248034f849a29ba70a12393e8d7e` | 15.531秒 | unsupported/exit2、SELECT/assets0 |
+| 曖昧 `5de46db8487f449fac806128ad986d29` | 14.978秒 | unsupported/exit2、SELECT/assets0 |
+| SQL要求 `7ca4e594cedb4a16ad6127873a8fa7cd` | 15.648秒 | unsupported/exit2、SELECT/assets0 |
+
+全caseでdescribe/owner cleanup true、model各1call・retry/cloud0。acceptedは既存fixtureの
+[name,id]/limit1から合法な1行subsetを読み、保存評価12runを表示、benchmark4runを除外した。
+5responseのusage合計は入力1681/出力72tokens、推論duration合計6044ms、costは全件NULL。
+不正bool requestは0.057秒でINPUT_INVALID/exit1・evidence NULLとしてallocation前に拒否した。
+この5caseの観測を一般的な自然文品質や任意Notebook自動変換の保証へ拡大しない。
+
+private `notebook-assist/<token>/`にinput/context/parsed model response、describe/とaccepted assets/を保存する。
+入力やresponseの本文は監査へ流さず、固定action/status/相関/既知またはNULLのusageだけを保存する。
+accepted4events、unsupported各3eventsをAgentHouse/Loki/local OTelへ照合し、AHは保持519行の全hashを
+保って新16eventsだけ増加し535行となった。正常unsupportedのblocked auditと不正応答/失敗/取消を区別する。
+保存失敗後も既知usageを保持し、最初の取消、業務summaryとowner終端、unknown cleanupを維持する。
+SDK1.44.0と必須semantic-conventions0.65b0だけを専用DataOps環境へ追加し、旧96 lock versionsを維持した。
+MCP/LangGraphや新常駐serviceを追加せず、global tracerも設定しない。
+
+新80tests（contract/provider18・runtime28・audit18・describe client8・strict parser8）と、
+全local73suites/2583tests（2582PASS・既存optional1skip、60.169秒）が成功した。
+65sources/527保持files・MLflow59tables/16runs/1320points/16artifactsは前後一致した。
+独立保存670checks（143意味検査＋527保持files）/693inputsが初回成功。16監査とlocal spans、
+2materializations/12評価、6Reader owner PID終了、25distinct terminal queriesを照合した。
+追加API/SDK/model/Reader実行0。モデルbodyは封印source/configと保存contextからの再構成で、
+HTTP捕捉ではない。保存監査・cleanup・保持guardの検証を現在のserver再観測とはしない。
+独立proof SHA256は`d271c5bfa6e0a6aed67180946d03b11a7b9bd020040d3a2057c0891639187800`。
+証拠は`tmp/local-experiment/notebook-assist-checks/b0398f85421f4100a8737a6d05c12ff5/`。
+`before.json` SHA256は`5caef43881b0ab39dfcaf972f81fa03f25bc2ec56daede5474cd77b520c63fd6`、
+`after.json` SHA256は`75d670ea4da08ce4842a58df625b38b2365e99260c8f2db949564eb8a5340d8b`。
+5新runは77files・51,409,880B（実割当51,728,384B）、dir0700/files0600/Go binary0700。
+停止時は新規実行を止め所有Reader終了を確認し、保持table/MLflow/backupと今回証拠を残す。
+[Notebook Assist runbook](../../../../tools/local_experiment/notebook_assist/README.md)に操作と境界を記載する。
+一般Notebook変換・Hub・複数ユーザー・直接PySpark・training/autolog・本番受入は未達として維持する。
 
 ## 2026-09-20: selected-table Notebook to assets — local acceptance complete
 
