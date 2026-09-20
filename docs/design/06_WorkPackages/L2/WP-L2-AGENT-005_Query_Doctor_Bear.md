@@ -4,8 +4,8 @@ doc_id: "WP-L2-AGENT-005"
 title: "WP-L2-AGENT-005 Query Doctor Bear"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-18
-version: "0.11"
+updated: 2026-09-20
+version: "0.12"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, agentops]
 ---
@@ -14,7 +14,16 @@ tags: [shirokuma, workpackage, l2, agentops]
 
 ## Summary
 
+保存された成功SELECTの限定観測とQwen1回の診断をLabへ接続した。元SELECTを再送せず、保存診断の再表示も追加モデル呼出しなしで確認した。
 EXPLAINとquery historyから改善案を出す
+
+## 2026-09-20: Lab saved preview diagnosis: local acceptance complete
+
+成功したLab previewの保存receiptから実際のSELECT Reader tokenを抽出し、既存Query Doctorへ接続する入口を追加した。`preview_read_token`と`diagnose`を分け、Lab/Assist/COUNT tokenをSELECT tokenの代わりに扱わない。sourceの受理は既存SourceLeaseへ一元化し、完成SELECT v1–v3だけを対象とする。公開診断10項目・履歴/所見の対応・所有終了を検証してから表示する。
+
+実APIの診断1回は26.945秒で成功し、5観測＋drainの全6queriesが終了した。元SELECT再送は0、schema/windowと保存sourceを保持した。Qwenは1回、536 input/114 output tokens・4555ms・cost=null。履歴はnot-retained、計画/統計の一部は不明として表示し、根本原因未確定・改善未測定を維持した。保存診断のAPI/UI再表示とsave/reloadには追加モデル呼出しがなく、旧540files・MLflow・旧582監査行を保持して新3監査だけを追加した。
+
+新規実行のsource前後照合と、当時のsummary/spans sealに基づく保存再表示を区別する。未解消unknownは後続実行を抑止し、失敗後のmodel呼出し数が不明ならnullのまま保持する。一般原因診断・SQL rewrite・性能改善・tenant認可/本番受入は未達、WPはlocal-partialを維持する。全回帰と最終保持・容量確認も成功した。操作は[Lab runbook](../../../../tools/local_experiment/notebook_lab/README.md)、実測と証跡は[Milestones](../061_Local_Experiment_Milestones.md)を参照する。
 
 ## 2026-09-18: typed equality Reader and diagnosis — local acceptance complete
 

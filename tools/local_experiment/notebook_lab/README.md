@@ -4,6 +4,49 @@ A single-user JupyterLab for exploring saved Shirokuma training runs. This uses
 a dedicated environment and workspace. The existing fixed Notebook runner and
 its environment remain available separately.
 
+## Diagnose a saved preview
+
+Run `make local-notebook-lab-start` to seed `query_diagnose_workbench.ipynb`.
+The initial Run All makes no diagnosis call. Enter a successful Lab preview's
+`attempt_token` in `preview_attempt_token`, or a successful SELECT Reader token
+in `read_token`, and set `run_diagnose = True`. Use exactly one token field.
+The preview helper verifies saved completion and extracts the actual Reader
+token; Lab, Assist and COUNT tokens are not interchangeable with it.
+
+The existing Query Doctor reads the current schema, EXPLAIN, retained history
+and statistics, verifies the saved source identity, then calls the configured
+local Qwen model once. It does not execute the original SELECT again. Findings
+and next steps remain bounded: root cause is undetermined, performance gain is
+not measured, missing history is not a diagnosis, and estimates are not actual
+resource usage. No SQL rewrite, model promotion or new service is performed.
+
+Set the resulting Lab `attempt_token` in the final recovery cell to display
+the saved result. Recovery validates historical completion, summary and span
+seals without invoking SQL or the model. Save and reload retains the displayed
+result. A failed or interrupted call clears its candidate output; uncertain
+cleanup remains blocking. Diagnostic attempts share the existing Lab worker
+ownership and are saved under `tmp/local-experiment/notebook-lab/queries/`.
+
+Python entry points are `query.preview_read_token`, `query.diagnose`,
+`query.recover_diagnose` and `query.render_diagnose` in
+`tools.local_experiment.notebook_lab`. Direct client use is
+`tools.local_experiment.notebook.client.read_diagnose(read_token)`.
+
+```sh
+rtk proxy make test-local-notebook-diagnose-client test-local-notebook-lab-diagnose
+```
+
+Local acceptance used a retained filtered preview and completed one diagnosis
+through Qwen (`qwen3.8-flash-next`, 536 prompt / 114 completion tokens).
+All five observations and the drain query finished, with the original SELECT
+unreplayed. Its history was no longer retained; the result preserved that gap
+and incomplete plan/statistics estimates. The initial Notebook ran four code
+cells without a diagnostic call. Saved recovery displayed the result through
+save and reload without another SQL or model call. The prior 540 protected
+files, 38 source files, all MLflow records and 582 audit rows were preserved;
+the diagnosis added exactly three audit rows. The Lab stayed on the same server
+process and preserved its other ten Notebooks.
+
 ```sh
 rtk proxy make local-notebook-lab-sync
 rtk proxy make local-notebook-lab-start

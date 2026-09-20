@@ -24,6 +24,7 @@ from tools.local_experiment.notebook import selection as S
 from tools.local_experiment.notebook import filtered_selection as FS
 from tools.local_experiment.query_count import contract as QC
 from tools.local_experiment.query_snapshots import contract as QS
+from tools.local_experiment.query_diagnose import contract as D
 
 ROOT = Path(__file__).resolve().parents[3]
 INDEX = ROOT / 'tmp/local-experiment/mlflow-tracking/import-index.json'
@@ -151,6 +152,72 @@ def _reader_frames(raw, exit_code, request=REQUEST):
     except C.ContractError:
         raise NotebookError('NOTEBOOK_READER_INVALID') from None
     return token, public, True
+
+
+DIAGNOSE_ERROR_CODES = frozenset('''ARGUMENTS_INVALID REQUEST_INVALID SOURCE_NOT_FOUND SOURCE_BUSY SOURCE_INVALID
+SOURCE_CHANGED ENVIRONMENT_NOT_READY OBSERVATION_FAILED MODEL_FAILED MODEL_REJECTED AUDIT_FAILED
+DIAGNOSE_FAILED INTERRUPTED EVIDENCE_ALREADY_EXISTS'''.split())
+
+
+def _diagnose_request(read_token):
+    _require(type(read_token) is str and TOKEN.fullmatch(read_token), 'NOTEBOOK_REQUEST_INVALID')
+    return {'command': 'diagnose', 'read_token': read_token}
+
+
+def _diagnose_arguments(binary, request):
+    request = _diagnose_request(request['read_token'])
+    return [str(binary), '--repo-root', str(ROOT), '--profile', 'local-experiment',
+            'query', 'diagnose', '--read-token', request['read_token']]
+
+
+def _diagnose_public(public, read_token):
+    """Validate Doctor's small public projection; source eligibility stays in its SourceLease."""
+    _diagnose_request(read_token)
+    _require(type(public) is dict and set(public) == {
+        'schema_version', 'read_token', 'query_id', 'history', 'findings', 'next_steps',
+        'root_cause', 'performance_gain', 'original_select_reexecuted', 'model_calls'},
+        'NOTEBOOK_READER_INVALID')
+    _require(type(public['schema_version']) is int and public['schema_version'] == 1
+             and public['read_token'] == read_token
+             and type(public['query_id']) is str and D.QUERY_ID.fullmatch(public['query_id'])
+             and public['history'] in ('observed', 'not-retained')
+             and public['root_cause'] == 'undetermined' and public['performance_gain'] == 'unmeasured'
+             and public['original_select_reexecuted'] is False
+             and type(public['model_calls']) is int and public['model_calls'] == 1,
+             'NOTEBOOK_READER_INVALID')
+    findings, steps = public['findings'], public['next_steps']
+    for values, allowed, maximum in ((findings, D.FINDING_STEPS, 5), (steps, D.NEXT_STEPS, 6)):
+        _require(type(values) is list and len(values) <= maximum
+                 and all(type(value) is str and value in allowed for value in values)
+                 and values == sorted(set(values)), 'NOTEBOOK_READER_INVALID')
+    missing = public['history'] == 'not-retained'
+    _require(missing == ('HISTORY_NOT_RETAINED' in findings)
+             and not (missing and any(value in findings for value in ('HISTORY_TIMING_INCOMPLETE', 'QUEUE_TIME_OBSERVED')))
+             and steps == sorted({'MEASURE_BEFORE_OPTIMIZING'} | {D.FINDING_STEPS[value] for value in findings})
+             and len(_canonical(public)) <= D.MAX_PUBLIC_BYTES, 'NOTEBOOK_READER_INVALID')
+    return public
+
+
+def _diagnose_reader_frames(raw, exit_code, read_token):
+    _diagnose_request(read_token)
+    _require(all(len(line) + 1 <= D.MAX_PUBLIC_BYTES for line in raw.splitlines()), 'NOTEBOOK_READER_INVALID')
+    token, public, cleanup = _reader_envelope(raw, exit_code, 'query diagnose', evidence_root='query-diagnose')
+    _require(token != read_token, 'NOTEBOOK_READER_INVALID')
+    if public is None:
+        _require(_parse(raw.splitlines()[-1])['error_code'] in DIAGNOSE_ERROR_CODES, 'NOTEBOOK_READER_INVALID')
+        return token, None, cleanup
+    return token, _diagnose_public(public, read_token), True
+
+
+def read_diagnose(read_token):
+    """Diagnose one retained successful SELECT (v1–v3), without replaying that SELECT.
+
+    The existing Doctor SourceLease validates the retained source. A COUNT,
+    unfinished or invalid source is a failure, never a new SELECT request.
+    """
+    request = _diagnose_request(read_token)
+    return _read_owned(request, _diagnose_arguments,
+                       lambda raw, rc: _diagnose_reader_frames(raw, rc, request['read_token']))
 
 
 def _tables_request(schema):

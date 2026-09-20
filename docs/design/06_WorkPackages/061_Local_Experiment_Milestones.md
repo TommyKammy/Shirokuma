@@ -5,13 +5,14 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.66"
+version: "3.67"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
+保存previewからのQuery Doctor診断1回とLab保存再表示が成功した。元SELECT再送0、全回帰と最終保持・容量確認も成功した。
 固定Registry名/versionを明示する新Notebookの予測・保存/再読込が成功し、既存Lab processと9冊を保持した。
 固定local Ridge Registryの初回登録・同token追加write0・明示version予測とclone全履歴読戻しが成功した。
 Labの保持snapshot一覧と直列COUNT比較が実UIで成功した。専用fixtureの2件→3件、保存再表示・回収・既存データ保持を確認した。
@@ -48,6 +49,18 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: Lab saved preview diagnosis: local acceptance complete
+
+[Query Doctor Notebook](../../../examples/local_query_diagnose_workbench.ipynb)で、保存previewから正しいSELECT Reader tokenを選び、既存Doctorへ接続した。初回Run Allは4cells・出力0・診断/モデル呼出し0。新11冊目だけをseedし、同Lab PID 66067と既存10冊を保持した。
+
+実APIの診断1回は26.945秒で成功。5観測＋drainが全終了し、元SELECT再送0、schema/windowと38sourceを保持した。Qwen1回は536 input/114 output tokens・4555ms、costはnull。所見は履歴非保持・計画推定/統計の一部不明で、根本原因はundetermined、性能改善はunmeasuredのまま。保存summary/spansを検証したAPI/UI再表示とsave/reloadは追加モデル呼出し0で、Notebook bytes/mode/mtimeも同一だった。
+
+旧540files・MLflow全データを保持し、AgentHouse旧582行に期待する3監査だけを追加して585行となった。業務診断と保存表示は初回から成功し、最終保持検査も0.934秒で成功した。証跡は`tmp/local-experiment/notebook-diagnose-checks/dd4ed866db064baa8b2302b334e242b4/`の`api01.json`・`api-acceptance.json`・`ui-initial01.json`・`ui-save01.json`・`ui-reload01.json`・`independent-code-review.json`・`independent-code-review-final.json`。今回の到達点は限定診断のLab接続で、一般原因究明・SQL rewrite・性能改善・tenant本番受入を含めない。
+
+最終検証は新client10/新Lab15fakeと既存互換、Go全体17.100秒、全回帰113suites/3504 test executions＝3503PASS＋既存1skip（86.220秒）が成功した。最終Labは同PIDでhealthy・11kernels、既存10冊を保持。新19filesは10,238,148 logical bytes/10,285,056 allocated bytes（Doctor/Lab証跡とworkspace Notebook/checkpoint、checks別）。owned Go binaryは700、その他filesは600。詳細は同checksの`acceptance03.json`・`storage-and-usage.json`・`full01.json`を参照する。
+
+初回の保持検証helperはPIDキー、次はGo binaryのmodeの期待を誤り、原logを残してhelperだけを訂正した。Lab fakeの初期終了130もテストfixtureを修正して最終15＋旧61がexit0となった。これらを製品の診断失敗や再診断とは扱わず、実モデル呼出しは合計1回のまま。
 
 ## 2026-09-20: Lab explicit Registry version prediction: local acceptance complete
 

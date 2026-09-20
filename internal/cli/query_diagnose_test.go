@@ -125,6 +125,8 @@ func TestQueryDiagnoseFixedCommandStdinAndFilteredEnvironment(t *testing.T) {
 	t.Setenv("PYTHONPATH", "PRIVATE_PATH")
 	t.Setenv("TOKEN", "PRIVATE_TOKEN")
 	t.Setenv("HTTP_PROXY", "PRIVATE_PROXY")
+	kubeconfig := filepath.Join(root, "fixed-kube-config")
+	t.Setenv("KUBECONFIG", kubeconfig)
 	command, err := queryDiagnoseCommand(request)
 	if err != nil {
 		t.Fatal(err)
@@ -137,10 +139,17 @@ func TestQueryDiagnoseFixedCommandStdinAndFilteredEnvironment(t *testing.T) {
 	if !bytes.Equal(raw, request.Request) {
 		t.Fatal("stdin differs")
 	}
+	kubeconfigCount := 0
 	for _, entry := range command.Env {
+		if entry == "KUBECONFIG="+kubeconfig {
+			kubeconfigCount++
+		}
 		if strings.Contains(entry, "PRIVATE_") {
 			t.Fatal("ambient configuration leaked")
 		}
+	}
+	if kubeconfigCount != 1 || os.Getenv("KUBECONFIG") != kubeconfig {
+		t.Fatal("fixed kubeconfig was not forwarded without changing the parent")
 	}
 	if strings.Contains(strings.Join(command.Args, " "), strings.Repeat("b", 32)) {
 		t.Fatal("source token put in argv")

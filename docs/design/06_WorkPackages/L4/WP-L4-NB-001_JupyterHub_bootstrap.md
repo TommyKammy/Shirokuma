@@ -5,7 +5,7 @@ title: "WP-L4-NB-001 JupyterHub bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.19"
+version: "0.20"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, notebook]
 ---
@@ -14,6 +14,7 @@ tags: [shirokuma, workpackage, l4, notebook]
 
 ## Summary
 
+保存previewからQuery Doctorへ接続し、診断API1回と保存結果のUI再表示/save-reloadを確認した。
 固定Registry名/versionから保存モデルを解決し、2行予測・詳細表示・保存/再読込をLabで確認した。
 保持snapshotの2件/3件をLabで比較し、差分1・fixture回収後の保存再表示を確認した。
 固定schemaの一覧からtableを選び、列情報を確認するLab探索入口を実UIで検証した。モデル呼出しなしで保存再表示・save/reloadを確認した。
@@ -34,6 +35,14 @@ Labから自然文table previewを呼ぶ別Notebookも、修正後の等値previ
 保存比較一覧から候補を選び、再fitせず新入力を予測するLab入口も実UI受入を確認した。
 Labの固定学習workbenchで、初回unknownを追加fitなしで回復し、別の新規正常実行とレビュー/一覧/編集予測・保存/再読込を確認した。
 JupyterHub、複数ユーザー、直接PySpark、kernel内fit・autologの完了は含めない。
+
+## 2026-09-20: Lab saved preview diagnosis: local acceptance complete
+
+[Query Doctor Notebook](../../../../examples/local_query_diagnose_workbench.ipynb)から、成功Lab previewのattempt tokenまたはSELECT Reader tokenの片方を明示して限定診断を呼べる。初回Run Allは4cellsで診断/モデル呼出し0、実行フラグは無効。新しい診断前に古い表示結果を消し、失敗・中断時は中間結果も残さない。共有Lab所有処理でcleanupを確認してから公開する。
+
+新11冊目だけを配置し、同Lab PIDと既存10冊を保持した。実APIで元SELECTを再送しない診断1回が成功し、保存結果のAPI/UI再表示・save/reloadを追加モデル呼出しなしで確認した。保存結果は取得時点の限定観測で、根本原因未確定・改善未測定・履歴非保持をそのまま表示する。
+
+540保持files・既存MLflow/旧監査は不変で、診断の新監査3件だけを追加した。全回帰と最終保持・容量確認も成功した。一般的な遅延原因の特定・改善効果・JupyterHub/複数ユーザーは未達で、WPはlocal-partial。診断境界は[Query Doctor WP](../L2/WP-L2-AGENT-005_Query_Doctor_Bear.md)、操作は[Lab runbook](../../../../tools/local_experiment/notebook_lab/README.md)、証跡は[Milestones](../061_Local_Experiment_Milestones.md)を参照する。
 
 ## 2026-09-20: Lab explicit Registry version prediction: local acceptance complete
 

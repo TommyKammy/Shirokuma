@@ -1091,3 +1091,10 @@ test-local-notebook-snapshot-client:
 test-local-notebook-lab-snapshots:
 	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_snapshots.py'
 verify-local-experiment: test-local-notebook-snapshot-client test-local-notebook-lab-snapshots
+
+.PHONY: test-local-notebook-diagnose-client test-local-notebook-lab-diagnose
+test-local-notebook-diagnose-client:
+	@tools/local_experiment/notebook/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_diagnose_client.py'
+test-local-notebook-lab-diagnose:
+	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_diagnose.py'
+verify-local-experiment: test-local-notebook-diagnose-client test-local-notebook-lab-diagnose
