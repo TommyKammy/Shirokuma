@@ -142,7 +142,44 @@ def credentials(*, create=False):
     return value
 
 
-def environment(credential):
+def alerting_mode(credential):
+    """Read the local migration selection; absence preserves the old runtime."""
+    path = STATE / 'alerting-mode.json'
+    if not path.exists() and not path.is_symlink():
+        return None
+    value = private_read(path)
+    require(type(value) is dict and set(value) == {'schema_version', 'owner_token', 'operation_token',
+            'state', 'alerting', 'container_id', 'original_id', 'retained_name', 'backup_sha256'}
+            and type(value['schema_version']) is int and value['schema_version'] == 1
+            and value['owner_token'] == credential['owner_token']
+            and type(value['operation_token']) is str and re.fullmatch('[0-9a-f]{32}', value['operation_token'])
+            and value['state'] in {'pending', 'active', 'rolled-back'} and type(value['alerting']) is bool
+            and type(value['original_id']) is str and re.fullmatch('[0-9a-f]{64}', value['original_id'])
+            and value['retained_name'] == NAME + '-before-alerting-' + value['operation_token'],
+            'Grafana alerting selection is not an owned known mode')
+    for key in ('container_id', 'backup_sha256'):
+        require(value[key] is None and (value['state'] == 'pending' or key == 'backup_sha256' and value['state'] == 'rolled-back')
+                or type(value[key]) is str and re.fullmatch('[0-9a-f]{64}', value[key]),
+                'Grafana alerting selection is incomplete')
+    require(value['state'] != 'active' or value['alerting'] is True,
+            'active Grafana alerting selection differs')
+    require(value['state'] != 'rolled-back' or value['alerting'] is False and value['container_id'] == value['original_id'],
+            'rolled back Grafana selection differs')
+    return value
+
+
+def selected_alerting(credential, explicit=None, *, mutation=False):
+    if explicit is not None:
+        require(type(explicit) is bool, 'invalid Grafana runtime mode')
+        return explicit
+    mode = alerting_mode(credential)
+    require(not mutation or mode is None or mode['state'] != 'pending',
+            'resume or roll back the pending Grafana migration first')
+    return mode['alerting'] if mode else False
+
+
+def environment(credential, *, alerting=False):
+    require(type(alerting) is bool, 'invalid Grafana runtime mode')
     return {'GF_SERVER_HTTP_PORT': '3000', 'GF_SERVER_ROOT_URL': URL + '/', 'GF_SERVER_DOMAIN': '127.0.0.1',
         'GF_SECURITY_ADMIN_USER': 'admin', 'GF_SECURITY_ADMIN_PASSWORD': credential['admin_password'],
         'GF_SECURITY_SECRET_KEY': credential['secret_key'], 'GF_SECURITY_COOKIE_SAMESITE': 'strict',
@@ -156,7 +193,7 @@ def environment(credential):
         'GF_PLUGINS_PREINSTALL_AUTO_UPDATE': 'false', 'GF_PLUGINS_PLUGIN_ADMIN_ENABLED': 'false',
         'GF_PLUGINS_PUBLIC_KEY_RETRIEVAL_DISABLED': 'true', 'GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS': '',
         'GF_PATHS_PLUGINS': '/opt/grafana/plugins', 'GF_LOG_MODE': 'console',
-        'GF_UNIFIED_ALERTING_ENABLED': 'false', 'GF_EXPLORE_ENABLED': 'false',
+        'GF_UNIFIED_ALERTING_ENABLED': 'true' if alerting else 'false', 'GF_EXPLORE_ENABLED': 'false',
         'SHIROKUMA_GRAFANA_READER': credential['reader_user'],
         'SHIROKUMA_GRAFANA_READER_PASSWORD': credential['reader_password']}
 
@@ -228,10 +265,11 @@ def prepare_plugin():
     return {'id': pin['id'], 'version': pin['version'], 'sha256': pin['sha256'], 'native_arm64': True}
 
 
-def prepare():
+def prepare(*, alerting=None):
     credential = credentials(create=True)
+    selected = selected_alerting(credential, alerting, mutation=True)
     plugin = prepare_plugin()
-    private_write(STATE / 'container.env', ''.join(key + '=' + value + '\n' for key, value in environment(credential).items()))
+    private_write(STATE / 'container.env', ''.join(key + '=' + value + '\n' for key, value in environment(credential, alerting=selected).items()))
     return {'result': 'prepared', 'plugin': plugin, 'runtime_started': False, 'reader_created': False}
 
 
@@ -437,7 +475,8 @@ def attach_frontend(network, own, credential):
     private_write(receipt_path, {**receipt, 'outcome': 'connected'})
 
 
-def validate_container(value, credential):
+def validate_container(value, credential, *, alerting=None):
+    selected = selected_alerting(credential, alerting)
     config, host = value['Config'], value['HostConfig']
     mounts = {(m['Type'], m.get('Name') if m['Type'] == 'volume' else m.get('Source'), m['Destination'], m['RW'])
               for m in value['Mounts']}
@@ -454,20 +493,27 @@ def validate_container(value, credential):
             and host.get('CapDrop') == ['ALL'] and not host.get('CapAdd') and not host.get('Devices')
             and host.get('SecurityOpt') in (['no-new-privileges'], ['no-new-privileges:true'])
             and set(value['NetworkSettings']['Networks']) <= {NETWORK, FRONTEND_NETWORK}
-            and all(env.get(key) == expected for key, expected in environment(credential).items()),
+            and all(env.get(key) == expected for key, expected in environment(credential, alerting=selected).items()),
             'existing Grafana scope differs; refusing mutation')
     require(not any(key in env for key in ('HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy')),
             'Grafana must not inherit an external proxy')
+    if alerting is None:
+        mode = alerting_mode(credential)
+        if mode:
+            require(mode['container_id'] == value['Id'], 'Grafana selected container identity differs')
     return value
 
 
-def up():
-    prepare()
-    credential = credentials()
-    current = agenthouse()
+def up(*, alerting=None):
+    credential = credentials(create=True)
+    selected = selected_alerting(credential, alerting, mutation=True)
     own = inspect('container', NAME)
     if own:
-        validate_container(own, credential)
+        validate_container(own, credential, alerting=alerting)
+    elif alerting is None:
+        require(alerting_mode(credential) is None, 'selected Grafana container is missing; refusing recreation')
+    prepare(alerting=selected)
+    current = agenthouse()
     require((HERE / 'dashboards/agenthouse.json').is_file(), 'owned AgentHouse dashboard is not prepared')
     network = ensure_network(current)
     frontend = ensure_frontend(credential, own)
@@ -482,7 +528,12 @@ def up():
             docker('volume', 'create', '--label', LABEL + '=' + OWNER, VOLUME)
         else:
             require(volume['Driver'] == 'local' and not volume.get('Options'), 'owned Grafana volume has unexpected storage options')
-        docker('create', '--name', NAME, '--label', LABEL + '=' + OWNER, '--platform', 'linux/arm64', '--user', '472',
+        activation_labels = []
+        if selected:
+            mode = alerting_mode(credential)
+            require(mode is not None and mode['state'] == 'pending', 'alerting creation requires an owned migration')
+            activation_labels = ['--label', 'shirokuma.dev.activation=' + mode['operation_token']]
+        docker('create', '--name', NAME, '--label', LABEL + '=' + OWNER, *activation_labels, '--platform', 'linux/arm64', '--user', '472',
             '--cpus', '1', '--memory', '1g', '--pids-limit', '256', '--cap-drop', 'ALL',
             '--security-opt', 'no-new-privileges', '--read-only', '--tmpfs', '/tmp:rw,noexec,nosuid,size=64m',
             '--network', FRONTEND_NETWORK, '--publish', '127.0.0.1:18030:3000', '--env-file', str(STATE / 'container.env'),
@@ -499,7 +550,7 @@ def up():
     deadline = time.monotonic() + 90
     while True:
         try:
-            result = status()
+            result = status(alerting=alerting)
             if result['ready']:
                 return {**result, 'reader_permissions': reader}
         except (GrafanaError, OSError, ValueError):
@@ -514,12 +565,12 @@ def api(path, credential=None):
     return json.loads(request(URL + path, username='admin', password=credential['admin_password'], timeout=10))
 
 
-def status():
+def status(*, alerting=None):
     credential = credentials()
     own = inspect('container', NAME)
     if own is None:
         return {'ready': False, 'running': False, 'url': URL, 'image': IMAGE, 'volume_retained': True}
-    validate_container(own, credential)
+    validate_container(own, credential, alerting=alerting)
     running = own['State']['Running'] is True
     if not running:
         return {'ready': False, 'running': False, 'url': URL, 'image': IMAGE, 'volume_retained': True}
@@ -549,7 +600,7 @@ def status():
             'plugin_signature': 'valid', 'datasource_uid': DATASOURCE_UID, 'anonymous_role': 'Viewer', 'volume_retained': True}
 
 
-def disconnect_grafana(network_name, network_id, own, credential):
+def disconnect_grafana(network_name, network_id, own, credential, *, alerting=None):
     """Docker network inspect omits stopped endpoints; container inspect does not."""
     if own is None:
         return None
@@ -559,16 +610,16 @@ def disconnect_grafana(network_name, network_id, own, credential):
         docker('network', 'disconnect', '--force', network_id, own['Id'])
     refreshed = inspect('container', own['Id'])
     require(refreshed is not None and refreshed['Id'] == own['Id'], 'Grafana identity changed during disconnect')
-    validate_container(refreshed, credential)
+    validate_container(refreshed, credential, alerting=alerting)
     require(network_name not in refreshed['NetworkSettings']['Networks'], 'Grafana network attachment remains after disconnect')
     return refreshed
 
 
-def stop(*, disconnect=False):
+def stop(*, disconnect=False, alerting=None):
     credential = credentials()
     own = inspect('container', NAME)
     if own:
-        validate_container(own, credential)
+        validate_container(own, credential, alerting=alerting)
         if own['State']['Running']:
             docker('stop', '--time', '30', own['Id'])
     if disconnect:
@@ -582,7 +633,7 @@ def stop(*, disconnect=False):
             allowed = {current['Id']} | ({own['Id']} if own else set())
             require(set(network.get('Containers', {})) <= allowed, 'network has unrelated endpoints; refusing disconnect')
             private_write(STATE / 'network-receipt.json', {**receipt, 'outcome': 'disconnecting'})
-            own = disconnect_grafana(NETWORK, network['Id'], own, credential)
+            own = disconnect_grafana(NETWORK, network['Id'], own, credential, alerting=alerting)
             attachment = current['NetworkSettings']['Networks'].get(NETWORK)
             if attachment is not None:
                 require(attachment.get('NetworkID') == network['Id'], 'AgentHouse attachment network identity differs')
@@ -606,7 +657,7 @@ def stop(*, disconnect=False):
             if own and FRONTEND_NETWORK in own['NetworkSettings']['Networks']:
                 require(receipt['grafana_id'] == own['Id'], 'frontend Grafana identity changed; refusing disconnect')
             private_write(receipt_path, {**receipt, 'outcome': 'disconnecting'})
-            own = disconnect_grafana(FRONTEND_NETWORK, frontend['Id'], own, credential)
+            own = disconnect_grafana(FRONTEND_NETWORK, frontend['Id'], own, credential, alerting=alerting)
             private_write(receipt_path, {**receipt, 'outcome': 'disconnected'})
         else:
             require(own is None or FRONTEND_NETWORK not in own['NetworkSettings']['Networks'],

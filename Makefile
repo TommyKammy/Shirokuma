@@ -983,3 +983,18 @@ local-comparison-runs:
 test-local-comparison-runs:
 	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_mlflow_comparison_runs.py'
 verify-local-experiment: test-local-comparison-runs
+
+.PHONY: local-activation-enable local-activation-status local-activation-run test-local-activation
+local-activation-enable:
+	@$(PYTHON) -B tools/local_experiment/activation/runtime.py enable
+local-activation-status:
+	@$(PYTHON) -B tools/local_experiment/activation/runtime.py status
+local-activation-run:
+	@tools/local_experiment/dataops/.venv/bin/python -B tools/local_experiment/activation/run.py
+test-local-activation:
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_activation_runtime.py'
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_local_activation_grafana.py'
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_local_activation_fixture.py'
+	@tools/local_experiment/dataops/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_local_activation_sensor.py'
+	@tools/local_experiment/dataops/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_local_activation_run.py'
+verify-local-experiment: test-local-activation

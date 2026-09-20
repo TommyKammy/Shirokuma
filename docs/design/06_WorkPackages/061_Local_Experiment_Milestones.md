@@ -5,14 +5,15 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.55"
+version: "3.56"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-20）：保存比較一覧→候補選択→新入力予測→保存/再読込がLabで成功、cold予測18行も独立算術と一致。
+最新の到達点（2026-09-20）：固定Data Activatorのalert→Dagster sensor→SRE診断1回と重複抑止・normal復帰が、修正後28.475秒で成功した。
+保存比較一覧→候補選択→新入力予測→保存/再読込がLabで成功、cold予測18行も独立算術と一致。
 LabのRidge alpha10候補1fitと保存モデル比較も成功。同じholdoutでRMSEは悪化。
 Labの自然文queryの等値preview/範囲拒否と保存/再読込も修正後に成功。
 単一ユーザーJupyterLabの保存学習の選択・入力編集・予測・保存/再読込とstop/restartも成功。
@@ -37,6 +38,29 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: fixed Data Activator alert-to-diagnosis — local acceptance complete
+
+[WP-L5-ACT-001](L5/WP-L5-ACT-001_Data_Activator_style_alerts.md)をdesign contextへ収録し、固定1rule/専用taskのalertから決定的SRE診断を起動するコマンド1回の実験を完了した。
+実03 `d25e482899e8405db6ce701981301499`は28.475秒でpassed。fresh normal→firing→同じfingerprintのfresh firing/再tick→normalを確認した。
+Dagster `b8602456-bb6c-4fa0-9007-62d0d3f73f89`でSRE1回・3MCP read・監査4件、重複実行0。
+fixture2件との計6件だけを追加し、AgentHouse旧554件を保って560件となった。保護42filesとMLflow19runs/1347points/19artifactsも保持した。新証跡98filesは0600。
+SREのattention-requiredは過去のrestart/previous-exitを含む観測結果で、対象の現在状態はready。合成fixtureの根本原因や修復効果は証明しない。
+
+Grafana13.2.2 Linux ARM64のengineを同volume/認証/network/Readerで移行し、旧containerを停止保持した。
+専用ruleをpausedで作り、v1beta1 Receiver POST1回・RoutingTree PUT1回で送信なしcontact point/routeを構成してreadback後にunpauseした。
+旧通知設定を保ち、自動生成branchは専用receiver子routeの追加だけを許容する。並び順の正規化はその自動生成兄弟だけに限定した。
+既存1 CPU/1 GiB・loopback18030・read-only rootfsを維持する。cold tarは1,909,760 B/8 entries/1 file、検証DBを含む移行記録6 filesは3,818,893 B（allocated 3,833,856 B）。
+rollbackは同じvolumeで元の構成へ戻す操作で、DBを巻き戻さずbackupと両containerを残す。
+
+停止前のmount列挙順差を原receipt保持のまま修正し、明示resumeは3.772秒で成功した。
+paused ruleのqueryType/省略field差はreadback照合で復旧し、rule再PUTは行わなかった。旧通知API POST404のbefore/intentも保持した。
+実01/02はnormalの親inactive/子Normal表現差でfixture前に停止。各fixture/診断/claim0、旧データ保持とrule pausedを確認し、原記録・active markerをclosed-failuresに保持してから実03へ進んだ。
+unknown claimは自動retryせず、解消前は別alertも抑止する。resident sensor daemon・無人監視・一般rule・LLM・自動修復は今回の完了範囲外。
+
+全回帰は途中の版で95suites/3113実行＝3112PASS＋既存1skip（76.916秒）。現行API対応後のfocusedは5suites/77tests PASS（2.366秒）、runtime/dashboard回帰40casesもPASS。
+この後者を最終版の全回帰とは扱わない。操作は[README](../../../tools/local_experiment/activation/README.md)。
+証跡：`tmp/local-experiment/activation-checks/71950c2bda334b7cbe645e7d4bca56a8/actual-proof.json`、同dirの通知/失敗回復/保持記録。
 
 ## 2026-09-20: saved comparison model prediction — local acceptance complete
 
