@@ -947,3 +947,16 @@ local-training-runs:
 test-local-training-runs:
 	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_mlflow_training_runs.py'
 verify-local-experiment: test-local-training-runs
+
+.PHONY: local-notebook-lab-sync local-notebook-lab-start local-notebook-lab-status local-notebook-lab-stop test-local-notebook-lab
+local-notebook-lab-sync:
+	@uv sync --project tools/local_experiment/notebook_lab --locked --no-build --cache-dir tmp/local-experiment/notebook-lab-cache
+local-notebook-lab-start:
+	@tools/local_experiment/notebook_lab/.venv/bin/python -B tools/local_experiment/notebook_lab/runtime.py start
+local-notebook-lab-status:
+	@tools/local_experiment/notebook_lab/.venv/bin/python -B tools/local_experiment/notebook_lab/runtime.py status
+local-notebook-lab-stop:
+	@tools/local_experiment/notebook_lab/.venv/bin/python -B tools/local_experiment/notebook_lab/runtime.py stop
+test-local-notebook-lab:
+	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_runtime.py'
+verify-local-experiment: test-local-notebook-lab

@@ -5,14 +5,15 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.51"
+version: "3.52"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-20）：型付き単一等値の自然文previewを実3caseと独立保存照合で確認した。
+最新の到達点（2026-09-20）：単一ユーザーJupyterLabで保存学習の選択・入力編集・予測・保存/再読込とstop/restartが成功。
+型付き単一等値の自然文previewも実3caseと独立保存照合で確認した。
 保存学習3件の一覧からtokenを選び、既存batch予測2行へ接続する実受入も成功。
 Notebookから所有workerを起動する固定Iceberg学習が初回86.739秒で成功。
 保存Icebergモデルのbatch predictionが実22行・初回0.075秒で成功。
@@ -33,6 +34,34 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: single-user local training workbench — local acceptance complete
+
+保存学習を自分で選び、予測入力を編集・再実行できる単一ユーザーのJupyterLab入口を追加した。
+専用環境とprivate workspace、loopback `127.0.0.1:18560/lab`、private token、固定`shirokuma-local` kernelを使う。
+[workbench例](../../../examples/local_training_workbench.ipynb)は既存の一覧/review/predict helperを再利用し、
+新fit/Reader/LLM/MLflow書込みを行わない。既存Notebook runnerは別に維持する。
+実IABでlogin後、保存3runsから`6df9b9e5a40b4035b7865f8435fdd291`を選び、HTML review/残差SVGを確認した。
+`x1=0.5`へ編集した2入力の予測は`[5.254972560326459,6.61365872720864]`で、独立50桁Decimal計算と一致した。
+保存/再読込後も入力・出力が保持され、4code cells/error0。UI操作中に一覧cellを1回再実行した。
+認証なしAPIは403、kernelspecは`shirokuma-local`だけ、起動時kernel0を確認した。
+初回stopはkernel終了後の`LAB_PROCESS_IDENTITY_CHANGED`で中断し、所有stop intentとlogを保持した。
+process再観測と停止済kernelの所有確認を修正し、0.852秒で回復停止した。
+直後のrestartはTIME_WAITで`LAB_PORT_CONFLICT`となったため、active listenerの拒否を維持したprobeを修正した。
+restartは1.710秒で成功し、編集Notebookのbytes/mode/mtimeと再読込cell/実行回数は一致した。
+さらに所有2kernelsの通常stopが1.319秒、直後のrestartが1.721秒で成功、kernel0で利用可能となった。
+新runtime28testsを含む全回帰は84suites/2972実行（2971PASS・既存1skip、72.309秒）。
+最終保持照合は0.261秒で成功し、baselineの31保存filesとAgentHouse545件は一致、最終13sourcesを記録した。
+保持MLflowは19runs/1347points/19artifacts。保存例の利用に新fit/Reader/LLM呼出し・MLflow書込みはない。
+
+専用環境はPython3.12.12/arm64・JupyterLab4.6.3の91distributions。
+venv166,552KiB、cache182,784KiBを追加し、従来Notebook環境やglobal kernelspecを変更しない。
+
+保存学習3件の一覧・入力編集・予測は今回の固定例で確認した範囲であり、一般的なmodel品質保証ではない。
+証跡：`tmp/local-experiment/notebook-lab-checks/88faf4f147504fbbbf9a7185b2f90ada/`。
+操作とtokenの扱いは[Lab runbook](../../../tools/local_experiment/notebook_lab/README.md)を参照。
+kernelはhostユーザー権限で動く。Hub/複数ユーザー分離やsandbox、一般モデル品質、本番受入は対象外。
+workspaceと証跡はstop/restart後も保持し、回復手段として保持学習やbackupを削除しない。
 
 ## 2026-09-20: natural-language typed equality preview — local acceptance complete
 

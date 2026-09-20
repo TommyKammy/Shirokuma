@@ -5,7 +5,7 @@ title: "WP-L4-NB-001 JupyterHub bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.9"
+version: "0.10"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, notebook]
 ---
@@ -23,7 +23,34 @@ Notebook環境を整備する。ADR-0034のlocal実験では、固定Notebookを
 保存Iceberg学習のprovenance・16holdoutを確認する別templateも、実kernel初回1.108秒で成功した。
 Notebookから所有workerへ固定Iceberg学習を依頼する入口も、初回86.739秒で成功した。
 型付き単一等値条件の登録previewも自然文から定型assetsへ接続し、実3caseと独立保存照合で確認した。
+保存学習を選択・編集・予測する単一ユーザーJupyterLabで、画面実行・保存/再読込を確認した。所有kernel/serverの停止・再起動後の保持も確認した。
 JupyterHub、複数ユーザー、直接PySpark、kernel内fit・autologの完了は含めない。
+
+## 2026-09-20: single-user local training workbench — local acceptance complete
+
+保存した学習をブラウザーで試す単一ユーザーのJupyterLab作業台を追加した。
+専用環境・private workspaceを使い、`127.0.0.1:18560/lab`だけで待受ける。
+private tokenで認証し、利用可能なkernelは`shirokuma-local`だけとする。既存固定Notebook runner/環境は維持する。
+`local-notebook-lab-sync/start/status/stop`の手順は[Lab runbook](../../../../tools/local_experiment/notebook_lab/README.md)を参照。
+
+[登録workbench例](../../../../examples/local_training_workbench.ipynb)は保存学習の一覧からtokenを選び、
+metrics・holdout・残差を表示し、Iceberg学習では`x1,x2,x3`を編集して保存modelの予測を計算する。
+syntheticのreviewにも対応する。新fit/Reader/LLM/MLflow書込みは行わず、Notebook保存で入力・出力をworkspaceに残す。
+再起動時に利用者の編集をtemplateで上書きしない。stopは所有kernelを閉じてserverを停止し、不明なcleanupは記録に残す。
+
+実ブラウザーで認証し、保存学習3件からIceberg学習を選択してHTML reviewと残差SVGを表示した。
+入力`x1=0.5`へ編集した2行の予測が独立Decimal計算と一致し、Notebook保存/再読込で入力・結果が残った。
+4code cellsを実行し、表示errorは0。UI操作中の一覧cell再実行1回を含み、新Reader/fit/LLMはない。
+初回stopの一時的なprocess照合差を修正し、所有証拠を再利用して停止を完了した。
+TIME_WAITによる再起動拒否も、active listenerを迂回しないprobeの修正後に回復した。
+保存Notebookのbytes/mode/mtimeと再読込cellは不変。所有2kernelsの通常stopと直後のrestartも成功した。
+新runtime28testsを含む全回帰84suites/2972実行（2971PASS・既存1skip、72.309秒）が成功した。
+最終保持照合で旧31保存filesとAgentHouse545件は不変。初回失敗のlog/所有証拠は保持する。
+kernelはhostユーザー権限で動き、workspaceはsandboxではない。この例の読取範囲と任意の追加cellの権限は区別する。
+JupyterHub/複数ユーザー分離、直接PySpark、kernel内fit/autolog、本番運用は未達のまま。
+固定学習workerの外側runner handshakeはLabへ移植せず、学習起動には既存固定runnerを使う。
+保持対象は保存学習3件とMLflow19runs/1347points/19artifacts・AgentHouse545件。検証結果は
+[Milestones](../061_Local_Experiment_Milestones.md)へ記録する。
 
 ## 2026-09-20: natural-language typed equality preview — local acceptance complete
 
