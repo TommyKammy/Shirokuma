@@ -5,7 +5,7 @@ title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.8"
+version: "0.9"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -17,7 +17,38 @@ tags: [shirokuma, workpackage, l4, ml]
 MLflowで固定合成データの学習、保存Agent evalとSpark/Trino測定を記録する。
 専用SQLite/loopback標準UIで新学習1runと旧16runsを保持し、明示metric履歴・安全なJSON artifactを照合した。
 固定Notebookのread-only表示と完全exportの非稼働clone復元も確認済み。
+保存学習をNotebookの指標表・holdout行・残差SVGで確認する実kernel実行も初回で成功した。
 Notebook/Hubからの学習・autolog、Registry/Serving、clone切替・他host移行は未達。
+
+## 2026-09-20: saved training Notebook review — local acceptance complete
+
+[NB-001](WP-L4-NB-001_JupyterHub_bootstrap.md)に、保存済みtraining attemptを明示選択する
+`local-notebook-training-review`を追加した。private receipt/workload/artifactと所有storeを照合し、
+loopbackのexperiment/run GET2回からFINISHED/identity/params/tags/9 latest metricsを確認する。
+固定3code cellsで3partitionの指標表・32holdout行・残差SVGを表示し、parentも保存元へ再束縛する。
+係数replay・正規方程式・固定dataset/splitの検査は読取であり、新fitや全metric history再読取ではない。
+Go build/Reader/LLM/MLflow write/SDK/autologを追加せず、旧評価/benchmark/学習runとbackupを保持する。
+
+既存Notebook環境を使い依存追加0。source/template変化、別run/指標へのすり替え、unsafe path、
+不明cleanupは成功にしない。取消は所有kernelだけを対象とし、失敗時も新review証拠を保持する。
+実review `351ceabb39344dc7a678022579727b0f`は初回1.041秒でpassed、3code cellsが完了した。
+保存training attempt `e65bbc1bd3dc4ca3843ca5c502a53ff8`のexperiment3/run
+`0c2a0a34683545d3acd580642a9bb30d`を選び、3partition指標・32holdout行と残差SVGを保存した。
+kernel PID9124の終了・connection file回収と両cleanup true、Readerなし/evidence token NULLを確認した。
+Go build/Reader/新fit/LLM/MLflow write/依存追加は0。前後8sources/653保持filesと
+MLflow59tables/17runs/1329points/17artifacts/indexは一致し、元学習記録/backupを保持した。
+新41tests（client27/runner14）・既存Notebook53回帰、全local75suites/2671tests
+（2670PASS・既存optional1skip、62.182秒）が成功した。
+独立保存23意味checks/699inputsも初回成功。保存元から32予測とpublic全体、HTML9指標/32行、
+SVG32点の座標/tooltip/尺度、保持状態、kernel/connection回収を照合し、追加API/SDK/fit/kernel/product importは0。
+GET2回は固定sourceの成功経路に基づき、HTTP通信の捕捉測定ではない。
+新10filesは48,388B（実割当77,824B）。データ600/親dir700を維持し、ライブラリ既定の
+jupyter-runtime01700とprivate700親内の静的IPython startup/README0644だけを区別する。
+保存HTMLの2tables/37rows（見出し2＋指標3＋holdout32）とSVG32pointsの構造、
+外部参照/実行要素なしを確認した。画面の見た目は未検証で、数値・構造検証と区別する。
+証拠は`tmp/local-experiment/notebook-training-checks/dadcbad093704ff8862a9cca46b51209/`。
+[レビューrunbook](../../../../tools/local_experiment/notebook/README.md#review-saved-training)を参照。
+Notebookからの学習・autolog、Hub、Registry/Serving、一般モデル品質・本番受入は未達を維持する。
 
 ## 2026-09-20: fixed supervised training — local acceptance complete
 

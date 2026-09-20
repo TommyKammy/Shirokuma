@@ -5,7 +5,7 @@ title: "WP-L4-NB-001 JupyterHub bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.5"
+version: "0.6"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, notebook]
 ---
@@ -19,7 +19,47 @@ Notebook環境を整備する。ADR-0034のlocal実験では、固定Notebookを
 独立した保存証拠の62項目照合が成功した。さらに別の登録templateへcurrent-head Readerの
 型付きrequestを渡し、選択tableのpreviewと従来無指定実行の互換を実kernelで確認した。
 同じ登録templateのrequestを自然文から選ぶAssistも定型2assets経由で実5case確認した。
-JupyterHub、複数ユーザー、直接PySpark、学習・autologの完了は含めない。
+保存済み固定学習結果を表と残差SVGで読む別templateも、実kernel初回で成功した。
+JupyterHub、複数ユーザー、直接PySpark、Notebook内の学習・autologの完了は含めない。
+
+## 2026-09-20: saved training Notebook review — local acceptance complete
+
+`local-notebook-training-review`で明示した32桁lowercase hexの学習attempt tokenを、
+別登録template `examples/local_training_review.ipynb`へ渡す。既存専用環境の3code cellsで、
+保存済みRidge結果のtrain96/holdout32/平均baseline指標表、32holdout行と残差SVGを表示する。
+表示対象は固定合成データの過去の学習結果で、Notebook内の新学習や汎化品質評価ではない。
+元の無指定Reader/評価Notebookとtable-previewは維持し、依存・常駐service・global kernelspecは追加しない。
+
+所有store marker/完了receipt/workload hash/artifact bytes、固定dataset/split、係数replayと指標を照合し、
+既存MLflowへexperiment/runのGET2回だけを行う。FINISHED/identity/params/tags/9 latest metricsを要求し、
+新SDK/Reader/Go build/LLM/fit/MLflow write/autologは0。全metric historyの再読取とは区別する。
+parentはkernel終了後もpublic-shaped結果をprivate保存元へ束縛し、同tokenでの別run/係数/指標を拒否する。
+source/template変化、unsafe path、Reader証跡混入、保存失敗やunknown cleanupを成功にしない。
+
+明示tokenは親環境のReader/request値から分離する。新review token配下のprivate
+`training-review.json`/`executed.ipynb`/kernel証拠を保持し、元training attemptのtokenと区別する。
+残差はactual−predictionで、横軸は固定holdout順序。公開形JSONにも係数/holdout値を含むが外部公開しない。
+3code cellsの実行期限は合計60秒で、kernel準備/終了時間は別。元Reader profileの900秒は維持する。
+利用停止は新reviewを止め、既存の所有kernel取消処理を使う。元run/証跡/backupは保持する。
+
+実review `351ceabb39344dc7a678022579727b0f`は初回1.041秒でpassed、3code cellsが完了した。
+保存training attempt `e65bbc1bd3dc4ca3843ca5c502a53ff8`のexperiment3/run
+`0c2a0a34683545d3acd580642a9bb30d`を選び、3partition指標・32holdout行と残差SVGを保存した。
+kernel PID9124の終了・connection file回収と両cleanup true、Readerなし/evidence token NULLを確認した。
+Go build/Reader/新fit/LLM/MLflow write/依存追加は0。前後8sources/653保持filesと
+MLflow59tables/17runs/1329points/17artifacts/indexは一致し、元学習記録/backupを保持した。
+新41tests（client27/runner14）・既存Notebook53回帰、全local75suites/2671tests
+（2670PASS・既存optional1skip、62.182秒）が成功した。
+独立保存23意味checks/699inputsも初回成功。保存元から32予測とpublic全体、HTML9指標/32行、
+SVG32点の座標/tooltip/尺度、保持状態、kernel/connection回収を照合し、追加API/SDK/fit/kernel/product importは0。
+GET2回は固定sourceの成功経路に基づき、HTTP通信の捕捉測定ではない。
+新10filesは48,388B（実割当77,824B）。データ600/親dir700を維持し、ライブラリ既定の
+jupyter-runtime01700とprivate700親内の静的IPython startup/README0644だけを区別する。
+保存HTMLの2tables/37rows（見出し2＋指標3＋holdout32）とSVG32pointsの構造、
+外部参照/実行要素なしを確認した。画面の見た目は未検証で、数値・構造検証と区別する。
+証拠は`tmp/local-experiment/notebook-training-checks/dadcbad093704ff8862a9cca46b51209/`。
+[学習レビューrunbook](../../../../tools/local_experiment/notebook/README.md#review-saved-training)を参照。
+local-partialを維持し、Hub/複数ユーザー/直接PySpark/Notebook学習/autolog/本番受入は未達。
 
 ## 2026-09-20: natural-language Notebook preview — local acceptance complete
 

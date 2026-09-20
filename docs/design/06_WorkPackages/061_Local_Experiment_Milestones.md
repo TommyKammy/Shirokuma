@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.43"
+version: "3.44"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
@@ -13,6 +13,7 @@ tags: [shirokuma, local, evidence]
 # Local Experiment Milestones
 
 最新の到達点（2026-09-20）：固定合成データの学習→MLflow Tracking実1回が成功。
+保存学習のNotebook指標/holdout/残差表示も実kernel初回1.041秒で成功した。
 自然文から検証済みselectionを作るNotebook Assistの実5caseと独立照合も成功。
 選択tableの登録Notebookを定型Dagster2assetsへ接続する実1回も成功した。
 これまでに保存SRE log観測のCLI表示と、新SRE評価のMLflow取込を完了。
@@ -25,6 +26,37 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: saved training Notebook review — local acceptance complete
+
+明示training attempt tokenから、固定登録Notebookで保存学習の3partition指標表、
+32holdout行と残差SVGを表示する`local-notebook-training-review`を追加した。
+private receipt/workload/artifactと所有store、MLflow experiment/runのGET2回による
+FINISHED/identity/params/tags/9 latest metricsを照合し、parentもkernel終了後に保存元へ再束縛する。
+固定dataset/split・係数replay・正規方程式・指標の検査は新学習や全履歴API読取とは区別する。
+Go build/Reader/fit/LLM/MLflow write/SDKは0、依存追加0。元default/preview profileを維持する。
+source/template変化、unsafe path、保存失敗やunknown cleanupを成功へ補完しない。
+
+実review `351ceabb39344dc7a678022579727b0f`は初回1.041秒でpassed、3code cellsが完了した。
+保存training attempt `e65bbc1bd3dc4ca3843ca5c502a53ff8`のexperiment3/run
+`0c2a0a34683545d3acd580642a9bb30d`を選び、3partition指標・32holdout行と残差SVGを保存した。
+kernel PID9124の終了・connection file回収と両cleanup true、Readerなし/evidence token NULLを確認した。
+Go build/Reader/新fit/LLM/MLflow write/依存追加は0。前後8sources/653保持filesと
+MLflow59tables/17runs/1329points/17artifacts/indexは一致し、元学習記録/backupを保持した。
+新41tests（client27/runner14）・既存Notebook53回帰、全local75suites/2671tests
+（2670PASS・既存optional1skip、62.182秒）が成功した。
+独立保存23意味checks/699inputsも初回成功。保存元から32予測とpublic全体、HTML9指標/32行、
+SVG32点の座標/tooltip/尺度、保持状態、kernel/connection回収を照合し、追加API/SDK/fit/kernel/product importは0。
+GET2回は固定sourceの成功経路に基づき、HTTP通信の捕捉測定ではない。
+新10filesは48,388B（実割当77,824B）。データ600/親dir700を維持し、ライブラリ既定の
+jupyter-runtime01700とprivate700親内の静的IPython startup/README0644だけを区別する。
+保存HTMLの2tables/37rows（見出し2＋指標3＋holdout32）とSVG32pointsの構造、
+外部参照/実行要素なしを確認した。画面の見た目は未検証で、数値・構造検証と区別する。
+証拠は`tmp/local-experiment/notebook-training-checks/dadcbad093704ff8862a9cca46b51209/`。
+[NB-001](L4/WP-L4-NB-001_JupyterHub_bootstrap.md)、
+[ML-001](L4/WP-L4-ML-001_MLflow_tracking.md)と
+[レビューrunbook](../../../tools/local_experiment/notebook/README.md#review-saved-training)を参照。
+これは保存結果の説明機能で、Notebook学習/Hub/autolog/Registry/Serving/一般品質/本番受入は未達。
 
 ## 2026-09-20: fixed supervised training — local acceptance complete
 

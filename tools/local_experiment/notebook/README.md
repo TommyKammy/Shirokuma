@@ -1,9 +1,10 @@
-# Fixed local lakehouse Notebook
+# Fixed local lakehouse and training-review Notebooks
 
 The original fixed profile passed two explicit real-kernel executions and
 independent saved-evidence verification. The runner connects registered Notebook
 templates to the existing Reader CLI and local MLflow evaluation experiment.
-The optional request profile below adds a bounded table preview. The dated
+The request profile adds a bounded table preview, and the training-review profile
+reads one explicitly selected saved training attempt. The dated
 verification sections distinguish the original fixed profile from the selected-table
 preview and its default compatibility run. This is a local partial implementation of
 [WP-L4-NB-001](../../../docs/design/06_WorkPackages/L4/WP-L4-NB-001_JupyterHub_bootstrap.md).
@@ -12,8 +13,9 @@ The dedicated Python 3.12 environment pins nbclient 0.11.0, nbformat 5.11.1 and
 ipykernel 7.3.0 in `pyproject.toml` and `uv.lock`. It does not install a global
 kernelspec or start JupyterHub. Without input, the runner uses
 `examples/local_lakehouse.ipynb`. With `--request-stdin`, it uses the separately
-registered `examples/local_table_preview.ipynb`. Neither profile accepts a
-caller-provided Notebook path or code.
+registered `examples/local_table_preview.ipynb`. With `--training-token`, it uses
+`examples/local_training_review.ipynb`. These profiles accept no caller-provided
+Notebook path or code.
 
 ## Default observations
 
@@ -65,6 +67,96 @@ no-argument execution and the fixed NotebookAssets profile remain unchanged.
 Rows appear in the explicit Notebook output and its private executed artifact;
 this is not a facility for executing arbitrary Notebook code.
 
+## Review saved training
+
+Select the completed **training attempt token**, not the MLflow run ID. For the
+saved 2026-09-20 training attempt:
+
+```sh
+rtk proxy env SHIROKUMA_TRAINING_TOKEN=e65bbc1bd3dc4ca3843ca5c502a53ff8 make local-notebook-training-review
+rtk make test-local-notebook-training
+```
+
+The target passes the explicit 32-character lowercase hexadecimal token to
+`runner.py --training-token` in the existing dedicated Notebook environment.
+It does not synchronize dependencies. MLflow must already be running at its
+owned loopback address. The registered template has three code cells; it neither
+builds nor invokes the Go Reader and performs no new training, LLM call,
+MLflow write, model download or autologging. The default and table-preview
+entry points keep their existing behavior.
+
+The review first validates the selected private completed receipt, store marker,
+workload hash and byte-identical safe JSON artifact. It checks the fixed dataset
+and split fingerprints, replays coefficients and holdout predictions, and
+recomputes the training, holdout and training-mean baseline metrics. Only two
+fixed MLflow GETs follow: the owned training experiment and its selected run.
+They must match the saved identity, FINISHED state, parameters, tags and nine
+latest metrics. There is no automatic retry or alternate endpoint. This is not
+a fresh metric-history readback or a transaction spanning local files and HTTP.
+
+The Notebook displays all three partitions' MAE/RMSE/R², the 32 held-out rows'
+actual/predicted/baseline/residual values, and a residual SVG. Residual means
+actual minus prediction. The x-axis follows the fixed holdout order; it is not
+a time series. Row indices identify the generated dataset. These views explain
+the saved synthetic result and do not establish general model quality.
+
+`training-intent.json` and the public-shaped `training-review.json` remain
+private under `tmp/local-experiment/notebook-runs/<token>/`, alongside
+`inputs.json`, `executed.ipynb`, kernel evidence and `result.json`. Here the run
+directory token identifies this review; `training_token` identifies the earlier
+training attempt. Public-shaped JSON includes model coefficients and holdout
+values; it is not automatically published. The template retains empty outputs.
+
+The parent rechecks the saved review against the private receipt/workload/artifact
+after the kernel exits, and seals the review source and template hashes before
+and after execution. A different run, changed metrics, unsafe files, unexpected
+Reader evidence, failure to save output or unknown kernel cleanup cannot become
+a passed result. The kernel receives only the explicit training token; inherited
+Reader/request/training variables cannot select its inputs. No Reader exists
+in this profile, so a true Reader-cleanup field does not imply a new query drain.
+
+The three code cells share a 60-second execution deadline; kernel startup and
+shutdown are separate. The default and Reader-preview execution deadline remains
+900 seconds. Stop further review invocations to disable this entry point.
+Cancellation follows the existing owned-kernel shutdown path and retains uncertain results. Keep the
+review outputs, original training run and backups; a read-only review requires
+no store rollback. This increment adds no dependency, resident service, global
+kernelspec, Hub integration, Notebook-triggered training or model serving.
+### 2026-09-20 acceptance
+
+Review `351ceabb39344dc7a678022579727b0f` passed on its first actual kernel
+execution in **1.041 seconds**, completing three code cells. It selected training
+attempt `e65bbc1bd3dc4ca3843ca5c502a53ff8` and the existing experiment 3 run
+`0c2a0a34683545d3acd580642a9bb30d`. The saved Notebook contains all three
+metric partitions, 32 held-out rows and the residual SVG.
+
+Kernel PID 9124 exited and its connection file was removed. Both cleanup fields
+were true, with no Reader and a null Reader evidence token. No Go build, Reader,
+new fit, LLM call, MLflow write or dependency installation occurred. The before
+and after guards matched eight sources, 653 retained files and MLflow's
+59 tables / 17 runs / 1329 metric points / 17 artifacts and indexes.
+
+The 41 new tests (27 client and 14 runner), 53 existing Notebook regression
+tests, and full local regression passed. The full result was 75 suites /
+2671 tests: 2670 passed and one existing optional skip in 62.182 seconds.
+Saved display structure passed: two HTML tables with 37 rows (two headers,
+three metric partitions and 32 holdout rows), plus 32 SVG points, with no external
+references or executable elements. On-screen appearance was not inspected.
+A standalone HTML copy is private verification evidence, separate from the
+Notebook run directory. Independent saved verification passed 23 meaningful
+checks across 699 bound inputs: all saved predictions and the public projection,
+nine HTML metric cells, 32 held-out rows, SVG coordinates/tooltips/scale,
+retained state and kernel cleanup matched. It made no additional API, SDK, fit,
+kernel or product-module call. The two GETs describe the frozen successful code
+path; they were not measured by capturing network traffic.
+
+The new review contains 10 files, 48,388 bytes (77,824 allocated). Data files
+are 0600 under private 0700 parents. The library-created exceptions are the
+01700 Jupyter runtime directory and static IPython startup README at 0644
+inside private parents.
+Evidence is under
+`tmp/local-experiment/notebook-training-checks/dadcbad093704ff8862a9cca46b51209/`.
+
 ## Execution and evidence
 
 The default entry points keep their existing no-argument behavior:
@@ -82,9 +174,9 @@ without arguments.
 
 Git contains the template with empty outputs and null execution counts. Executed
 Notebook output, private kernel connection information, Reader logs and receipts
-stay under `tmp/local-experiment/notebook-runs/<token>/`. The output includes
+stay under `tmp/local-experiment/notebook-runs/<token>/`. The default and preview outputs include
 `executed.ipynb`, `result.json`, Reader stdout/intent/status and
-`evaluations.json`. They are not copied back into the template.
+`evaluations.json`. Training-review output is described above. They are not copied back into the template.
 The Notebook result may contain the selected query's typed table rows;
 credentials, raw driver errors and connection secrets are not public output.
 

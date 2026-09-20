@@ -37,6 +37,7 @@ PREVIEW_TEMPLATE = ROOT / 'examples/local_table_preview.ipynb'
 PREVIEW_PROFILE = 'table-preview-v1'
 STATE = ROOT / 'tmp/local-experiment/notebook-runs'
 EXECUTION_SECONDS = 900
+TRAINING_REVIEW_SECONDS = 60
 READER_GRACE_SECONDS = 260
 KERNEL_GRACE_SECONDS = 30
 
@@ -273,7 +274,12 @@ async def execute_owned(client, manager, directory, *, stop=None,
                 await task
 
 
-def kernel_environment(directory, binary, *, request=None):
+def kernel_environment(directory, binary, *, request=None, training_token=None):
+    if training_token is not None:
+        from tools.local_experiment.notebook import training as T
+        if request is not None or binary is not None:
+            raise ValueError('Training review must not have a Reader request or binary')
+        training_token = T.normalize_token(training_token)
     environment = {k: os.environ[k] for k in ('PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'TMPDIR')
                    if k in os.environ}
     for name, relative in [('IPYTHONDIR', 'ipython'), ('JUPYTER_CONFIG_DIR', 'jupyter-config'),
@@ -282,7 +288,11 @@ def kernel_environment(directory, binary, *, request=None):
         path.mkdir(mode=0o700)
         environment[name] = str(path)
     environment.update(PYTHONNOUSERSITE='1', PYTHONDONTWRITEBYTECODE='1',
-        SHIROKUMA_NOTEBOOK_RUN_DIR=str(directory), SHIROKUMA_NOTEBOOK_BINARY=str(binary))
+        SHIROKUMA_NOTEBOOK_RUN_DIR=str(directory))
+    if binary is not None:
+        environment['SHIROKUMA_NOTEBOOK_BINARY'] = str(binary)
+    if training_token is not None:
+        environment[T.TOKEN_ENV] = training_token
     if request is not None:
         request = S.normalize_request(request)
         expected = S.digest(request)
@@ -292,7 +302,12 @@ def kernel_environment(directory, binary, *, request=None):
     return environment
 
 
-async def execute(directory, binary, notebook, *, request=None):
+async def execute(directory, binary, notebook, *, request=None, training_token=None):
+    if training_token is not None:
+        from tools.local_experiment.notebook import training as T
+        if request is not None or binary is not None:
+            raise ValueError('Training review must not have a Reader request or binary')
+        training_token = T.normalize_token(training_token)
     request = None if request is None else S.normalize_request(request)
     if request is not None:
         S.load_request(directory / 'request.json', S.digest(request))
@@ -319,8 +334,12 @@ async def execute(directory, binary, notebook, *, request=None):
     started = False
     try:
         with (directory / 'kernel.log').open('xb') as kernel_log:
-            environment = (kernel_environment(directory, binary) if request is None
-                           else kernel_environment(directory, binary, request=request))
+            if training_token is not None:
+                environment = kernel_environment(directory, binary, training_token=training_token)
+            elif request is None:
+                environment = kernel_environment(directory, binary)
+            else:
+                environment = kernel_environment(directory, binary, request=request)
             await manager.start_kernel(cwd=str(ROOT), env=environment,
                                        stdout=kernel_log, stderr=kernel_log)
             started = True
@@ -330,8 +349,12 @@ async def execute(directory, binary, notebook, *, request=None):
             client.kc = manager.client()
             client.kc.start_channels()
             await client.kc.wait_for_ready(timeout=30)
-            result = (await execute_owned(client, manager, directory, stop=stop) if request is None else
-                      await execute_owned(client, manager, directory, stop=stop, request=request))
+            if training_token is not None:
+                result = await execute_owned(client, manager, directory, stop=stop, timeout=TRAINING_REVIEW_SECONDS)
+            elif request is None:
+                result = await execute_owned(client, manager, directory, stop=stop)
+            else:
+                result = await execute_owned(client, manager, directory, stop=stop, request=request)
             result['kernel_pid'] = kernel_pid
             return result
     except BaseException as error:
@@ -352,13 +375,29 @@ async def execute(directory, binary, notebook, *, request=None):
             signal.signal(sig, handler)
 
 
+def training_sources():
+    names = ('tools/local_experiment/notebook/runner.py', 'tools/local_experiment/notebook/client.py',
+             'tools/local_experiment/notebook/training.py', 'tools/local_experiment/notebook/pyproject.toml',
+             'tools/local_experiment/notebook/uv.lock', 'examples/local_training_review.ipynb')
+    return {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in names}
+
+
 def main(argv=None, *, stdin=None):
     arguments = sys.argv[1:] if argv is None else argv
-    if arguments not in ([], ['--request-stdin']):
+    training_token = None
+    training_mode = len(arguments) == 2 and arguments[0] == '--training-token'
+    if arguments not in ([], ['--request-stdin']) and not training_mode:
         print(json.dumps({'result': 'failed', 'error_code': 'ARGUMENTS_INVALID'}))
         return 1
     request = None
-    if arguments:
+    if training_mode:
+        try:
+            from tools.local_experiment.notebook import training as T
+            training_token = T.normalize_token(arguments[1])
+        except Exception:
+            print(json.dumps({'result': 'failed', 'error_code': 'NOTEBOOK_TRAINING_TOKEN_INVALID'}))
+            return 1
+    elif arguments:
         try:
             request = S.parse_request((stdin or sys.stdin.buffer).read(4097))
         except Exception:
@@ -372,10 +411,17 @@ def main(argv=None, *, stdin=None):
                   reader_cleanup_confirmed=True, kernel_cleanup_confirmed=True, kernel_pid=None)
     if request is not None:
         result.update(profile=PREVIEW_PROFILE, request_sha256=S.digest(request))
+    if training_token is not None:
+        result.update(profile='training-review-v1', training_token=training_token)
     notebook = None
     first_error = None
     try:
-        raw = (TEMPLATE if request is None else PREVIEW_TEMPLATE).read_bytes()
+        raw = (T.TEMPLATE_PATH if training_token is not None else
+               TEMPLATE if request is None else PREVIEW_TEMPLATE).read_bytes()
+        sealed = None
+        if training_token is not None:
+            T.validate_template(raw)
+            sealed = training_sources()
         if request is not None:
             S.validate_template(raw)
             fd = os.open(directory / 'request.json', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -390,19 +436,27 @@ def main(argv=None, *, stdin=None):
         notebook = nbformat.reads(raw.decode(), as_version=4)
         if any(c.get('outputs') or c.get('execution_count') is not None for c in notebook.cells if c.cell_type == 'code'):
             raise ValueError('Notebook template must not contain outputs')
-        binary = directory / 'shirokuma'
-        with (directory / 'build.log').open('xb') as build:
-            subprocess.run(['go', 'build', '-o', str(binary), './cmd/shirokuma'], cwd=ROOT,
-                           stdout=build, stderr=build, check=True, timeout=60)
+        binary = None if training_token is not None else directory / 'shirokuma'
+        if binary is not None:
+            with (directory / 'build.log').open('xb') as build:
+                subprocess.run(['go', 'build', '-o', str(binary), './cmd/shirokuma'], cwd=ROOT,
+                               stdout=build, stderr=build, check=True, timeout=60)
         inputs = dict(template_sha256=hashlib.sha256(raw).hexdigest(),
-                   binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
+                   binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest() if binary is not None else None,
                    python=sys.version.split()[0], scope='fixed Notebook; Reader one SELECT and read-only MLflow evaluations')
+        if training_token is not None:
+            inputs.update(profile='training-review-v1', training_token=training_token, source_sha256=sealed,
+                          scope='fixed training result review; two MLflow GETs; no Reader or training')
         if request is not None:
             inputs.update(profile=PREVIEW_PROFILE, request_file='request.json', request_sha256=S.digest(request))
             S.load_request(directory / 'request.json', S.digest(request))
         write_json(directory / 'inputs.json', inputs)
-        observed = asyncio.run(execute(directory, binary, notebook) if request is None else
-                               execute(directory, binary, notebook, request=request))
+        if training_token is not None:
+            observed = asyncio.run(execute(directory, binary, notebook, training_token=training_token))
+        elif request is None:
+            observed = asyncio.run(execute(directory, binary, notebook))
+        else:
+            observed = asyncio.run(execute(directory, binary, notebook, request=request))
         error = observed.pop('error')
         first_error = error
         result.update(observed)
@@ -413,6 +467,19 @@ def main(argv=None, *, stdin=None):
             result['signal'] = error.signum
         if request is not None:
             S.load_request(directory / 'request.json', S.digest(request))
+        if training_token is not None:
+            if training_sources() != sealed:
+                raise ValueError('Training review source changed')
+            if any((directory / name).exists() or (directory / name).is_symlink()
+                   for name in ('reader-intent.json', 'reader-status.json', 'build.log', 'shirokuma')):
+                raise ValueError('Unexpected Reader activity during training review')
+            if result['result'] == 'passed':
+                from tools.local_experiment.notebook import client as N
+                public = N._parse(N._read(directory / 'training-review.json', N.MAX_HTTP))
+                T.validate_public(public)
+                if public['identity']['attempt_token'] != training_token:
+                    raise ValueError('Training review attempt changed')
+                T.verify_saved_review(public, training_token)
         status = reader_status(directory)
         result['reader_evidence_token'] = status.get('evidence_token') if status else None
         result['code_cells'] = sum(c.cell_type == 'code' for c in notebook.cells)

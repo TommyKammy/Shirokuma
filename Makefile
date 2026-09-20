@@ -895,3 +895,10 @@ test-local-notebook-assist:
 	@tools/local_experiment/notebook/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_describe_client.py'
 	@tools/local_experiment/llm/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_local_provider_strict_json.py'
 verify-local-experiment: test-local-notebook-assist
+
+.PHONY: local-notebook-training-review test-local-notebook-training
+local-notebook-training-review:
+	@tools/local_experiment/notebook/.venv/bin/python -B tools/local_experiment/notebook/runner.py --training-token "$${SHIROKUMA_TRAINING_TOKEN:?set the saved training attempt token}"
+test-local-notebook-training:
+	@tools/local_experiment/notebook/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_training*.py'
+verify-local-experiment: test-local-notebook-training
