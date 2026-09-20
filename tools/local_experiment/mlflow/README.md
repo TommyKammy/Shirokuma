@@ -27,6 +27,15 @@ exclusive lock. Unknown listeners and process identities are rejected; stopping
 the service checks its saved ownership before signalling its process group.
 Stopping preserves the SQLite database, artifacts and importer records.
 
+## Train from the fixed Iceberg Reader source
+
+`rtk proxy make local-lake-training` connects an owned 64-row Iceberg fixture through
+the existing Reader to one Ridge fit and a separate Tracking experiment. See
+[the Iceberg training runbook](../lake_training/README.md) for the automatic
+stop, complete cold backup, write verification and restoration of the original
+server state. The existing clone restore profile supports experiments 0/1/2;
+restoring the newer training experiments is not implemented.
+
 ## Fixed supervised training
 
 ```sh

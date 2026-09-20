@@ -33,6 +33,11 @@ def sources():
 class Trainer:
     """One owned run, explicit metric logging and a non-executable JSON model."""
     artifact = E.Importer.artifact
+    experiment_name = EXPERIMENT
+    owner = OWNER
+    artifact_namespace = 'supervised-training'
+    attempt_folder = 'training'
+    run_name_prefix = 'fixed-ridge-'
 
     def __init__(self, client, *, state, artifacts, store_id, guard=lambda: None,
                  entities=None, train=None, validate=None):
@@ -43,6 +48,9 @@ class Trainer:
             train, validate = train or W.train, validate or W.validate_result
         self.train, self.validate = train, validate
 
+    def source_hashes(self):
+        return sources()
+
     def save(self, phase=None):
         if phase is not None:
             self.result['phase'] = phase
@@ -50,16 +58,16 @@ class Trainer:
 
     def checked(self):
         self.guard()
-        require(sources() == self.result['source_sha256'], 'TRAINING_SOURCE_CHANGED')
+        require(self.source_hashes() == self.result['source_sha256'], 'TRAINING_SOURCE_CHANGED')
 
     def experiment(self):
-        location = (self.artifacts / 'supervised-training').as_uri()
-        tags = {'shirokuma.owner': OWNER, 'shirokuma.store_id': self.store_id}
-        current = self.client.get_experiment_by_name(EXPERIMENT)
+        location = (self.artifacts / self.artifact_namespace).as_uri()
+        tags = {'shirokuma.owner': self.owner, 'shirokuma.store_id': self.store_id}
+        current = self.client.get_experiment_by_name(self.experiment_name)
         if current is None:
             self.save('create-experiment-pending')
             self.checked()
-            identity = self.client.create_experiment(EXPERIMENT, artifact_location=location, tags=tags)
+            identity = self.client.create_experiment(self.experiment_name, artifact_location=location, tags=tags)
             require(type(identity) is str and identity.isascii() and identity.isdecimal()
                     and len(identity) <= 20, 'TRAINING_EXPERIMENT_ID_INVALID')
             self.result['experiment_id'] = identity
@@ -67,7 +75,7 @@ class Trainer:
             current = self.client.get_experiment(identity)
         require(current is not None and type(current.experiment_id) is str
                 and current.experiment_id.isascii() and current.experiment_id.isdecimal()
-                and len(current.experiment_id) <= 20 and current.name == EXPERIMENT
+                and len(current.experiment_id) <= 20 and current.name == self.experiment_name
                 and self.result['experiment_id'] in (None, current.experiment_id)
                 and current.lifecycle_stage == 'active' and current.artifact_location == location
                 and current.tags == tags, 'TRAINING_EXPERIMENT_CONFLICT')
@@ -87,11 +95,11 @@ class Trainer:
                       model_artifact='safe-projection.json',
                       scope='fixed-synthetic-holdout; not general model quality')
         params.update({'version_' + key: value for key, value in workload['versions'].items()})
-        tags = {'shirokuma.owner': OWNER, 'shirokuma.store_id': self.store_id,
+        tags = {'shirokuma.owner': self.owner, 'shirokuma.store_id': self.store_id,
                 'shirokuma.attempt': self.result['token'],
                 'shirokuma.workload_sha256': self.result['workload_sha256'],
                 'shirokuma.time_semantics': 'actual-local-training-and-tracking',
-                'mlflow.runName': 'fixed-ridge-' + self.result['token'][:8]}
+                'mlflow.runName': self.run_name_prefix + self.result['token'][:8]}
         points = [dict(key=group + '_' + key, value=value, step=0,
                        timestamp=self.result['training_finished_ms'])
                   for group, metrics in workload['metrics'].items() for key, value in metrics.items()]
@@ -100,7 +108,7 @@ class Trainer:
     def inspect(self, workload, params, tags, points, *, finished):
         identity = self.result['run_id']
         run = self.client.get_run(identity)
-        artifact = self.artifacts / 'supervised-training' / identity / 'artifacts'
+        artifact = self.artifacts / self.artifact_namespace / identity / 'artifacts'
         require(run.info.run_id == identity and run.info.experiment_id == self.result['experiment_id']
                 and run.info.lifecycle_stage == 'active' and run.info.artifact_uri == artifact.as_uri()
                 and run.info.start_time == self.result['started_ms']
@@ -125,13 +133,13 @@ class Trainer:
 
     def run(self):
         E.private_directory(self.state)
-        directory = self.state / 'training'
+        directory = self.state / self.attempt_folder
         E.private_directory(directory, create=True)
         token = uuid.uuid4().hex
         self.output = directory / token
         self.output.mkdir(mode=0o700)
         self.result = dict(schema_version=1, result='running', phase='allocated', token=token,
-                           store_id=self.store_id, source_sha256=sources(), experiment_id=None,
+                           store_id=self.store_id, source_sha256=self.source_hashes(), experiment_id=None,
                            run_id=None, started_ms=int(time.time() * 1000), training_finished_ms=None,
                            finished_ms=None, workload_sha256=None, failure_code=None)
         try:
@@ -158,7 +166,7 @@ class Trainer:
                     and created.info.lifecycle_stage == 'active'
                     and created.info.start_time == self.result['started_ms']
                     and created.info.end_time is None
-                    and created.info.artifact_uri == (self.artifacts / 'supervised-training' / identity / 'artifacts').as_uri()
+                    and created.info.artifact_uri == (self.artifacts / self.artifact_namespace / identity / 'artifacts').as_uri()
                     and created.data.params == {} and created.data.metrics == {} and created.data.tags == tags,
                     'TRAINING_CREATED_RUN_CONFLICT')
             self.save('log-batch-pending')
@@ -169,7 +177,7 @@ class Trainer:
             self.client.log_batch(identity, metrics=metrics, params=parameters, synchronous=True)
             self.save('artifact-pending')
             self.checked()
-            artifact = self.artifacts / 'supervised-training' / identity / 'artifacts'
+            artifact = self.artifacts / self.artifact_namespace / identity / 'artifacts'
             self.artifact(artifact, workload, completed=False)
             self.inspect(workload, params, tags, points, finished=False)
             self.checked()

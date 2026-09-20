@@ -718,6 +718,12 @@ test-local-mlflow-training:
 	@tools/local_experiment/mlflow/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_mlflow_training*.py'
 .PHONY: local-mlflow-train test-local-mlflow-training
 verify-local-experiment: test-local-mlflow-training
+.PHONY: local-lake-training test-local-lake-training
+local-lake-training:
+	@tools/local_experiment/mlflow/.venv/bin/python -B tools/local_experiment/lake_training/run.py
+test-local-lake-training:
+	@tools/local_experiment/mlflow/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_lake_training*.py'
+verify-local-experiment: test-local-lake-training
 local-mlflow-start:
 	@$(PYTHON) tools/local_experiment/mlflow/runtime.py start
 local-mlflow-status:

@@ -5,19 +5,20 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.44"
+version: "3.45"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-20）：固定合成データの学習→MLflow Tracking実1回が成功。
+最新の到達点（2026-09-20）：Iceberg Reader→学習→MLflowの固定実験が修正後82.149秒で成功。
+固定合成データの学習→MLflow Tracking実1回が成功。
 保存学習のNotebook指標/holdout/残差表示も実kernel初回1.041秒で成功した。
 自然文から検証済みselectionを作るNotebook Assistの実5caseと独立照合も成功。
 選択tableの登録Notebookを定型Dagster2assetsへ接続する実1回も成功した。
 これまでに保存SRE log観測のCLI表示と、新SRE評価のMLflow取込を完了。
-Trackingは旧12評価＋4benchmarkを保持し、training1runを追加して17runs/1329 metric pointsとなった。
+Trackingは旧12評価＋4benchmarkと固定合成学習を保持し、Iceberg学習を加えて18runs/1338 metric pointsとなった。
 固定Notebookの実kernel2回と独立最終照合62checksも成功した。
 登録Notebookを定型Dagster2assetsへ接続する実2回と独立最終照合42checksも成功した。
 保持exportの非稼働MLflow clone復元とSDK全履歴読取2回も成功し、稼働中storeを保持した。
@@ -26,6 +27,52 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: fixed Iceberg training — local acceptance complete
+
+`local-lake-training`で、一時Iceberg tableの64行を既存SELECT Readerから取得し、
+返却行を使ってRidgeを1回学習し、専用MLflow experimentへ記録した。
+列はrow_id/x1/x2/x3/target、limit100、全64行・非truncated・同一UUID/snapshot/schemaを要求する。
+型付き値・rows SHA・Reader evidenceを保存し、row_id整列後のseed1730で48train/16holdoutへ分割する。
+alpha1/SVDのfitはtrainだけを使い、3partitionのMAE/RMSE/R²を9points、source/分割/係数/予測を
+非実行JSON artifactに保存する。LLM/Notebook kernel/依存・常駐service追加は0。
+
+fixtureの所有identity付き除去・query drain・Reader終了と保持inventoryを確認してsourceを封印する。
+所有MLflowを停止して全bytesのcold exportを検証し、排他lock内のfresh workerで記録後、元のserver状態へ戻す。
+source/code変化、保存失敗、不明cleanupを成功に補完しない。同じsourceの再試行はexclusive intentで拒否する。
+未知SDK write/partial batchは再試行も追加FAILED/KILLED writeもせず、RUNNINGのpartial runを含め証跡を保持する。
+最初の取消を保持し、所有process groupの終了未確認時はserverを再起動しない。
+
+初回source `1bbf9a7b0c044e42b18d84a8c92ef3fb`は49.710秒でunknownとなった。
+SHOW返却型varchar(438)を固定varchar判定が拒否し、Reader callback/MLflow停止/fit/write前に止まった。
+query drainとtunnel終了を確認し、失敗証跡を不変保存した。追加SHOW1回（3.940秒）で原因を確認し修正した。
+別recovery-01は25.958秒で成功。保存UUID/markerに一致する旧fixtureだけを除去し、
+保持6projectionsと10table inventoryの復元を確認した。初回を成功へ書き換えていない。
+
+修正後の新source `05f5892e679e49df8d964dc86e574ecd`は82.149秒でpassed、全cleanup true。
+Reader `971a99232c9768a950841d686f6b0ed9`の64行からtrain48/test16を作り、
+training attempt `3da0a631a0e549f29aac96f9998da5bb`、experiment4/run
+`ae5e1ff478ae4a3493c437009be2d6b6`をFINISHEDとして保存した。
+RMSEはtrain0.142460、holdout0.163043、train平均baseline3.885825（丸め値）。
+新1run/9points/24params/6tags/1artifactを追加し、合計18runs/1338points/18artifactsとなった。
+旧17runsを含む59tablesの旧行・669files・AgentHouse535rowsを保持し、retention13checksが成功した。
+新cold backupは39files/2,594,008Bを保持。同じstoreをhealthy/PID19331で再起動し、
+GET2回（0.129秒）でexperiment/run identity・9 latest metrics・paramsを再照合した。
+新100tests（3.499秒）、全local76suites/2771tests（2770PASS・既存optional1skip、66.464秒）が成功した。
+独立数値432照合/15inputs（0.041秒）とlifecycle43意味checks/801inputs（0.333秒）も初回成功。
+Reader64×4値・48/16分割・係数replay/正規方程式・9指標、保存API/SQLite/artifactと旧状態を照合した。
+記録された48terminal query IDs、Reader/tracker/旧serverの消失と新server identityを確認した。
+追加API/SDK/fit/Reader/product importは0。分割は保存IDsの全64件・非重複を照合し、PRNG独立再生成は対象外。
+成功source（cold backup込み）/Reader/ML attempt/artifactの計62filesは12,899,886B（実割当13,017,088B）。
+初回失敗source＋別回収は計7files/10,198,912B（実割当10,207,232B）として分けて保持する。
+データ600/親dir700、所有Go executableだけ700を確認した。
+
+既存clone restore profileはexperiment0/1/2だけで、固定合成学習や今回のIceberg学習を含むexportの復元は未対応。
+全bytes backupの検証を復元受入としない。一般データのモデル品質、任意table/SQL、Hubからの学習、
+Registry/Serving、本番受入は別途とする。詳細証跡は
+`tmp/local-experiment/lake-training-checks/f864d8a881734779a7d0da2997b4ffa6/`に保持する。
+
+手順：[local Iceberg training](../../../tools/local_experiment/lake_training/README.md)。
 
 ## 2026-09-20: saved training Notebook review — local acceptance complete
 
