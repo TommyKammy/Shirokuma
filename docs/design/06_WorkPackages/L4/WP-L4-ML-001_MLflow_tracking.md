@@ -5,7 +5,7 @@ title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "1.2"
+version: "1.3"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -21,7 +21,27 @@ Icebergの固定64行を既存Readerから学習へ接続する実1回も、初�
 完成training receiptsを含む5experiments/18runsの非稼働clone復元とSDK読戻しも初回で成功した。
 保存学習をNotebookの指標表・holdout行・残差SVGで確認する実kernel実行も初回で成功した。
 Iceberg学習も保存artifactと所有MLflow読取からNotebook表示へ接続し、実kernel初回で成功した。
+保存Icebergモデルへ新入力を渡すbatch prediction CLIも実22行で成功し、独立算術と一致した。
 Notebook/Hubからの学習・autolog、Registry/Serving、clone切替・他host移行は未達。
+
+## 2026-09-20: saved Iceberg batch prediction — local acceptance complete
+
+`local-lake-predict`で完成Iceberg学習attemptを選び、新しい特徴量をbatch予測するCLIを追加した。
+tokenは`SHIROKUMA_LAKE_TRAINING_TOKEN`、入力はJSON stdinのschema_version1と1–64行のx1/x2/x3。
+32KiB・exact keys・有限数値を要求し、bool/重複key/追加keyを拒否する。
+共有saved-review検証でreceipt/model/provenanceを照合し、入力順の予測とidentity/source・request/model SHAをstdoutへ返す。
+入力不正・source不整合・演算overflowは全体を失敗とし、部分予測を返さない。製品の入力・結果・journal保存は0。
+
+実22行（新入力6＋保存holdout16）は初回0.075秒でpassed（外側harness0.123秒）。
+保存係数と入力のDecimal独立計算との差は最大8.88e-16で、16holdoutは保存予測と一致した。
+6source hashesと、MLflow store/保存training/markerの28filesのbytes・mode・mtimeは不変だった。
+新17tests（predict11/saved reader6、0.263秒）、全local79suites/2837tests
+（2836PASS・既存optional1skip、67.537秒）が成功した。
+HTTP/SDK/Reader/新fit/LLM/DB query/サービス操作は固定製品経路に含まれず、通信捕捉による測定とは区別する。
+private受入証跡は検証側が`tmp/local-experiment/mlflow-predict-checks/1f0b58e727e743b2a8735feb959aa692/`へ保存する。
+固定保存モデルの有界batch算術であり、新入力の正解精度、一般モデル品質、Registry/online Serving、本番受入は含めない。
+
+手順：[saved Iceberg prediction](../../../../tools/local_experiment/mlflow/README.md#predict-with-saved-iceberg-training)。
 
 ## 2026-09-20: saved Iceberg training Notebook review — local acceptance complete
 

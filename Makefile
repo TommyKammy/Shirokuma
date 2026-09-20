@@ -914,3 +914,11 @@ local-notebook-lake-training-review:
 test-local-notebook-lake-training:
 	@tools/local_experiment/notebook/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lake_training*.py'
 verify-local-experiment: test-local-notebook-lake-training
+
+.PHONY: local-lake-predict test-local-lake-predict
+local-lake-predict:
+	@$(PYTHON) -B tools/local_experiment/mlflow/predict.py --training-token "$${SHIROKUMA_LAKE_TRAINING_TOKEN:?set a saved Iceberg training attempt token}" --request-stdin
+test-local-lake-predict:
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_mlflow_predict.py'
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_saved_training_reader.py'
+verify-local-experiment: test-local-lake-predict

@@ -5,14 +5,15 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.47"
+version: "3.48"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-20）：保存Iceberg学習のNotebook表示が実kernel初回1.108秒で成功。
+最新の到達点（2026-09-20）：保存Icebergモデルのbatch predictionが実22行・初回0.075秒で成功。
+保存Iceberg学習のNotebook表示が実kernel初回1.108秒で成功。
 完成trainingを含む18runsの非稼働clone復元・SDK読戻しが初回成功。
 Iceberg Reader→学習→MLflowの固定実験が修正後82.149秒で成功。
 固定合成データの学習→MLflow Tracking実1回が成功。
@@ -29,6 +30,25 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: saved Iceberg batch prediction — local acceptance complete
+
+`local-lake-predict`で完成Iceberg学習attemptを選び、新しい特徴量をbatch予測するCLIを追加した。
+tokenは`SHIROKUMA_LAKE_TRAINING_TOKEN`、入力はJSON stdinのschema_version1と1–64行のx1/x2/x3。
+32KiB・exact keys・有限数値を要求し、bool/重複key/追加keyを拒否する。
+共有saved-review検証でreceipt/model/provenanceを照合し、入力順の予測とidentity/source・request/model SHAをstdoutへ返す。
+入力不正・source不整合・演算overflowは全体を失敗とし、部分予測を返さない。製品の入力・結果・journal保存は0。
+
+実22行（新入力6＋保存holdout16）は初回0.075秒でpassed（外側harness0.123秒）。
+保存係数と入力のDecimal独立計算との差は最大8.88e-16で、16holdoutは保存予測と一致した。
+6source hashesと、MLflow store/保存training/markerの28filesのbytes・mode・mtimeは不変だった。
+新17tests（predict11/saved reader6、0.263秒）、全local79suites/2837tests
+（2836PASS・既存optional1skip、67.537秒）が成功した。
+HTTP/SDK/Reader/新fit/LLM/DB query/サービス操作は固定製品経路に含まれず、通信捕捉による測定とは区別する。
+private受入証跡は検証側が`tmp/local-experiment/mlflow-predict-checks/1f0b58e727e743b2a8735feb959aa692/`へ保存する。
+固定保存モデルの有界batch算術であり、新入力の正解精度、一般モデル品質、Registry/online Serving、本番受入は含めない。
+
+手順：[saved Iceberg prediction](../../../tools/local_experiment/mlflow/README.md#predict-with-saved-iceberg-training)。
 
 ## 2026-09-20: saved Iceberg training Notebook review — local acceptance complete
 

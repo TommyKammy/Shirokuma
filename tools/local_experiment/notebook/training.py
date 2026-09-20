@@ -1,8 +1,9 @@
 """Read one owned saved training run and render its held-out predictions.
 
-Only standard-library validation and two fixed MLflow GETs are used. The JSON
-model is arithmetic data, never executable serialization. No training, SDK,
-Reader, evaluation experiment, metric-history claim or automatic retry.
+Notebook reads add two fixed MLflow GETs to standard-library saved validation;
+the shared offline loader performs no HTTP. The JSON model is arithmetic data,
+never executable serialization. No training, SDK, Reader, evaluation experiment,
+metric-history claim or automatic retry.
 """
 from __future__ import annotations
 
@@ -440,6 +441,25 @@ def _project(receipt, workload, *, kind='synthetic'):
                    **deepcopy(workload['model'])),metrics=deepcopy(workload['metrics']),holdout=holdout)
     if kind == 'iceberg': _,public['lake_source'] = _lake_input(workload['lake_input'],workload['split'])
     validate_public(public)
+    return public
+
+
+def load_saved_review(token, *, kind='synthetic'):
+    """Load a validated saved model snapshot without HTTP or run allocation."""
+    token = normalize_token(token)
+    profile(kind)
+    saved, original, public = {}, None, None
+    try:
+        receipt, workload, _, saved = _sources(token, kind=kind)
+        public = _project(receipt, workload, kind=kind)
+    except BaseException as error:
+        original = error
+    finally:
+        original = _recheck(saved, original)
+    if original is not None:
+        if not isinstance(original, Exception):
+            raise original
+        raise N.NotebookError('NOTEBOOK_TRAINING_SAVED_INVALID') from None
     return public
 
 

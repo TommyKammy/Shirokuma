@@ -27,6 +27,46 @@ exclusive lock. Unknown listeners and process identities are rejected; stopping
 the service checks its saved ownership before signalling its process group.
 Stopping preserves the SQLite database, artifacts and importer records.
 
+## Predict with saved Iceberg training
+
+Select a completed **ML training attempt token** and pass a bounded JSON batch:
+
+```sh
+rtk proxy printf '%s\n' '{"schema_version":1,"rows":[{"x1":0,"x2":0,"x3":0}]}' | rtk proxy env SHIROKUMA_LAKE_TRAINING_TOKEN=3da0a631a0e549f29aac96f9998da5bb make local-lake-predict
+```
+
+The input limit is 32 KiB and 1–64 rows. The top-level keys are exactly
+`schema_version` and `rows`; each row has exactly `x1`, `x2` and `x3`, all finite
+numbers; booleans, duplicate keys and extra keys are rejected. The saved-review
+validator checks the completed receipt, model and
+provenance before computing predictions. The stdout result preserves input row
+order and includes model identity, source provenance and canonical request/model
+SHA-256 hashes. The result profile is `lake-batch-prediction-v1`. Invalid input,
+source mismatch or numeric overflow fails the whole batch with a fixed error
+code, null predictions and exit 1; it never returns partial predictions.
+
+This command makes no HTTP, SDK or Reader call, fit, MLflow write or service
+lifecycle operation. The predictor itself persists no input, result or journal;
+private acceptance evidence is written by the verification harness. It does not
+provide Registry integration, online Serving or a general model-quality claim.
+### 2026-09-20 batch acceptance
+
+The first real invocation passed in 0.075 seconds (0.123 seconds for the outer
+harness), predicting 22 rows: six new inputs and all 16 saved holdout rows.
+Independent Decimal arithmetic over the saved coefficients and inputs differed
+by at most 8.88e-16; the 16 holdout outputs matched their saved predictions.
+Six source hashes and 28 retained store/training/marker files preserved bytes,
+modes and modification times. The 17 new tests (11 prediction and six saved
+reader tests) passed in 0.263 seconds. Full local regression passed 79 suites /
+2,837 tests: 2,836 passed and one existing optional test skipped, in 67.537 seconds.
+
+The frozen product path includes no HTTP, SDK, Reader, fit, LLM, database query
+or service lifecycle operation; this is source-based evidence, not captured
+network telemetry. The product wrote no file. Its verification harness retained
+private input/output and receipts under
+`tmp/local-experiment/mlflow-predict-checks/1f0b58e727e743b2a8735feb959aa692/`.
+Arithmetic agreement does not measure prediction accuracy on the six new rows.
+
 ## Train from the fixed Iceberg Reader source
 
 `rtk proxy make local-lake-training` connects an owned 64-row Iceberg fixture through
