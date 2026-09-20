@@ -1,8 +1,9 @@
-# Local MLflow evaluation and benchmark tracking
+# Local MLflow training, evaluation and benchmark tracking
 
-WP-L4-ML-001 tracks saved Agent evaluation and Spark/Trino benchmark receipts.
-This is a dedicated single-user local Tracking service. Notebook integration,
-training, registry, serving and production work packages remain separate.
+WP-L4-ML-001 tracks a fixed supervised training workload, saved Agent evaluation
+and Spark/Trino benchmark receipts. This is a dedicated single-user local
+Tracking service. Hub integration, autolog, registry, serving and production
+work packages remain separate.
 
 MLflow **3.16.1** and Python **3.12** run in their own pinned environment. The UI
 and API use **http://127.0.0.1:18550**. No launchd or global host settings change.
@@ -25,6 +26,87 @@ Import requires the server to be stopped. Start, stop and import share an
 exclusive lock. Unknown listeners and process identities are rejected; stopping
 the service checks its saved ownership before signalling its process group.
 Stopping preserves the SQLite database, artifacts and importer records.
+
+## Fixed supervised training
+
+```sh
+rtk make local-mlflow-stop
+# Retain a complete private cold export before the first new training write.
+rtk make local-mlflow-train
+rtk make local-mlflow-start
+rtk make test-local-mlflow-training
+```
+
+The training target uses the existing locked MLflow Python environment and does
+not synchronize dependencies. It requires the owned server to be stopped and
+shares the runtime's exclusive store lock. It leaves the server stopped; restart
+it explicitly after checking the result. No cloud service, LLM, data warehouse,
+Notebook kernel, Registry or Serving operation is involved.
+
+Each invocation generates the same small synthetic regression dataset: 128 rows,
+three features, seed 1729, and an independent seed 1730 partition into 96 training
+and 32 holdout rows. Ridge with alpha 1 and the SVD solver fits only training
+rows. Train and holdout MAE, RMSE and R² are recorded separately; the holdout
+also has a baseline using only the training-target mean. This checks an
+executable learning path on a fixed synthetic task, not general model quality.
+
+An attempt creates one run in `shirokuma-local-supervised-training-v1`, separate
+from imported evaluation and benchmark runs. Its timestamps describe the actual
+local training and tracking operation. Parameters include the data/split hashes,
+package versions, feature order and model settings. Nine metric points are
+logged once. `safe-projection.json` contains the generated numeric data, split,
+coefficients, intercept, predictions and metrics; it contains no executable
+pickle. Readback reconstructs predictions from the saved JSON coefficients and
+checks the training normal equation, metrics, exact SDK histories and artifact
+bytes before and after marking the run FINISHED.
+
+Private attempt records live at `mlflow-tracking/training/<token>/` and artifacts
+at `store/artifacts/supervised-training/<run-id>/artifacts/`. Each invocation is
+a new attempt. A durable phase precedes experiment/run creation, metric logging
+and termination. Failures and cancellation retain their phase and known run ID;
+unknown write outcomes are neither retried nor silently repaired. A partial run
+may remain RUNNING in Tracking even though the local worker has stopped; the
+attempt's `result.json` is the workflow outcome. Inspect it before starting a new
+attempt. Existing evaluation/benchmark records and indexes are untouched.
+
+Stopping further attempts is sufficient to disable this feature. Preserve new
+runs and evidence; reverting code does not delete them. Earlier cold backups do
+not contain newly created training runs, so export the stopped store again when
+these new records need to be included in a backup.
+
+### 2026-09-20 acceptance
+
+One actual invocation completed in **5.616 seconds**, with local result
+`verified` and Tracking status `FINISHED`. Experiment **3** contains run
+`0c2a0a34683545d3acd580642a9bb30d`; the attempt token is
+`e65bbc1bd3dc4ca3843ca5c502a53ff8`. The 32-row holdout had MAE **0.145263**,
+RMSE **0.181238** and R² **0.993176**; its training-mean baseline RMSE was
+**2.203076**. These rounded values describe this fixed synthetic split only.
+
+The previous 16 runs, 1320 metric points and 16 artifacts were preserved.
+One training run, nine points and one artifact produced totals of
+**17 runs / 1329 points / 17 artifacts**. A complete private cold export before
+the write retained **36 files / 2,562,597 bytes**; earlier backups remain intact.
+Retention checks passed, and the same store restarted healthy on loopback port 18550
+in 6.881 seconds. Two API GETs checked the experiment and finished run, including
+nine latest metrics, 17 parameters and actual start/end times. A running-server
+preflight was rejected before allocation; the actual training attempt succeeded.
+
+The existing NumPy **2.5.3** and scikit-learn **1.9.1** became direct pinned
+requirements. All 92 package versions and distribution records were retained;
+only the root project’s direct dependency declarations changed. The dedicated
+locked environment retained 87 installed packages. All 47 new focused tests
+and the full local regression passed: 74 suites, 2630 tests, with 2629 passing
+and one existing optional skip in 62.366 seconds. Secret scanning passed.
+Independent saved-evidence verification passed 39 checks over 85 inputs: the
+coefficient replay, training normal equations, nine metrics, old SQLite rows
+and artifacts, cold backup, saved API bodies and owned server identity matched.
+It made no additional API, SDK or fit call and did not independently regenerate
+the NumPy random dataset. The three new training files occupy 25,276 bytes
+(28,672 allocated), with 0600 files and 0700 directories.
+Evidence, retention snapshots and the cold export are under
+`tmp/local-experiment/mlflow-training-checks/c28faf05befa48d49a3792a01128326f/`.
+No LLM, warehouse, Spark, kernel or Agent audit operation was added.
 
 ## What is imported
 

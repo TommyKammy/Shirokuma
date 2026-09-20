@@ -712,6 +712,12 @@ local-mlflow-plan:
 	@$(PYTHON) tools/local_experiment/mlflow/import_evaluations.py --plan
 local-mlflow-import:
 	@$(PYTHON) tools/local_experiment/mlflow/import_evaluations.py
+local-mlflow-train:
+	@$(PYTHON) tools/local_experiment/mlflow/train.py
+test-local-mlflow-training:
+	@tools/local_experiment/mlflow/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_mlflow_training*.py'
+.PHONY: local-mlflow-train test-local-mlflow-training
+verify-local-experiment: test-local-mlflow-training
 local-mlflow-start:
 	@$(PYTHON) tools/local_experiment/mlflow/runtime.py start
 local-mlflow-status:

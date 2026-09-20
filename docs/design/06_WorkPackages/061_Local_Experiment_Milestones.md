@@ -5,17 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.42"
+version: "3.43"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-20）：自然文から検証済みselectionを作るNotebook Assistの実5caseと独立照合が成功。
+最新の到達点（2026-09-20）：固定合成データの学習→MLflow Tracking実1回が成功。
+自然文から検証済みselectionを作るNotebook Assistの実5caseと独立照合も成功。
 選択tableの登録Notebookを定型Dagster2assetsへ接続する実1回も成功した。
 これまでに保存SRE log観測のCLI表示と、新SRE評価のMLflow取込を完了。
-Trackingは既存runを保持して12評価＋4benchmark、1320 metric pointsとなり、再取込追加0を確認した。
+Trackingは旧12評価＋4benchmarkを保持し、training1runを追加して17runs/1329 metric pointsとなった。
 固定Notebookの実kernel2回と独立最終照合62checksも成功した。
 登録Notebookを定型Dagster2assetsへ接続する実2回と独立最終照合42checksも成功した。
 保持exportの非稼働MLflow clone復元とSDK全履歴読取2回も成功し、稼働中storeを保持した。
@@ -24,6 +25,32 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: fixed supervised training — local acceptance complete
+
+`local-mlflow-train`で固定合成128行/3特徴量をtrain96/holdout32へ分け、Ridgeをtrainだけにfitする。
+明示Trackingへ設定・データ/split hash・versions・train/test/baselineの9 metric pointsを保存し、
+非実行JSONの係数から予測・正規方程式・指標、SDK全履歴/artifact bytesを読戻す。
+停止中storeの共通lock/隔離workerを用い、durable intent後の不明応答・部分書込は再試行しない。
+partial runがRUNNINGで残る場合もattempt resultで失敗/取消を維持し、既存artifactを上書きしない。
+
+実初回5.616秒でverified/FINISHED、holdout MAE0.145263/RMSE0.181238/R²0.993176。
+train平均baselineのholdout RMSE2.203076との比較は、この固定合成split内の観測に限る。
+旧16runs/1320points/16artifactsを保持し、新1run/9points/1artifact→計17/1329/17となった。
+書込前cold export36files/2,562,597Bと旧backupを保持し、retention11checksが成功。
+同storeのloopback18550再起動6.881秒/healthyとAPI GET2回の9 latest metrics/17params等を確認した。
+稼働中preflightは書込前に拒否、実training失敗0。LLM/Trino/Spark/kernel/Agent監査の追加0。
+既存NumPy2.5.3/sklearn1.9.1を直接依存へ明示し、lock全92package versions/配布情報と専用環境87installedを維持した。
+新47focused tests（workload15/runtime32）と全local74suites/2630tests
+（2629PASS・既存optional1skip、62.366秒）、secret scanが成功。
+独立保存39checks/85inputsも初回成功し、係数replay/正規方程式/9指標、旧59tablesの全行・
+16artifacts/index/cold backup、保存API2応答とSQLite、所有PID同一性を照合した。
+追加API/SDK/fit/product importは0で、NumPy PRNGの独立再生成は含めない。
+新training3filesは25,276B（実割当28,672B）、file600/dir700で保持する。
+証拠は`tmp/local-experiment/mlflow-training-checks/c28faf05befa48d49a3792a01128326f/`。
+[ML-001](L4/WP-L4-ML-001_MLflow_tracking.md)と
+[学習runbook](../../../tools/local_experiment/mlflow/README.md#fixed-supervised-training)を参照。
+local-partialを維持し、一般モデル品質、Notebook/Hub学習、autolog、Registry/Serving、本番受入へ広げない。
 
 ## 2026-09-20: natural-language Notebook preview — local acceptance complete
 

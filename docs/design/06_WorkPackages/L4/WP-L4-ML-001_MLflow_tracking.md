@@ -4,8 +4,8 @@ doc_id: "WP-L4-ML-001"
 title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-18
-version: "0.7"
+updated: 2026-09-20
+version: "0.8"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -14,10 +14,59 @@ tags: [shirokuma, workpackage, l4, ml]
 
 ## Summary
 
-MLflowで実験とAgent evalを記録する。ADR-0034のlocal実験では、保存済み評価receiptと
-Spark/Trino測定を専用SQLite/loopback標準UIへ取り込む。固定Notebookからのread-only表示は実2回と
-独立最終照合が成功した。完全exportから非稼働local cloneを復元し、専用SDK読取2回も成功した。
-training/autolog、JupyterHub連携、cloneのサービス切替・他host移行は未達。
+MLflowで固定合成データの学習、保存Agent evalとSpark/Trino測定を記録する。
+専用SQLite/loopback標準UIで新学習1runと旧16runsを保持し、明示metric履歴・安全なJSON artifactを照合した。
+固定Notebookのread-only表示と完全exportの非稼働clone復元も確認済み。
+Notebook/Hubからの学習・autolog、Registry/Serving、clone切替・他host移行は未達。
+
+## 2026-09-20: fixed supervised training — local acceptance complete
+
+`local-mlflow-train`で固定合成データのRidge学習と明示的なTracking記録を追加した。
+128行・3特徴量をseed 1729で生成し、別seed 1730でtrain96/holdout32へ固定分割する。
+alpha1/SVDでtrainだけをfitし、train/testとtrain target平均baselineのholdout指標を分離する。
+データ・split hash、特徴順序、設定、package versionと9 metric pointsを記録する。
+これは固定合成課題の学習経路の証拠で、一般データでの品質や最適なモデル選択を保証しない。
+
+停止中の所有storeと共通排他lock・隔離workerを使う。実行ごとに新attemptを作り、
+experiment/run作成・metric batch・FINISHED更新の前にdurable intentを保存する。
+応答不明や部分書込を再試行・自動修復せず、既知ID/phaseと失敗・取消を保持する。
+部分runはTracking上RUNNINGのまま残り得るため、業務結果はattemptの`result.json`で確認する。
+artifactは非実行JSONのデータ/split/係数/予測/指標で、pickle/autologを用いない。
+係数からの予測再計算とRidge正規方程式、exact metadata/metric履歴・artifact bytesを
+FINISHED更新前後に照合する。保持artifactの上書き、unsafe path、source変化を拒否する。
+
+実attempt `e65bbc1bd3dc4ca3843ca5c502a53ff8`は初回5.616秒でverified、
+experiment3のrun `0c2a0a34683545d3acd580642a9bb30d`はFINISHEDとなった。
+
+| 評価範囲 | MAE | RMSE | R² |
+| --- | ---: | ---: | ---: |
+| train96 | 0.153680 | 0.191315 | 0.996371 |
+| holdout32 | 0.145263 | 0.181238 | 0.993176 |
+| train平均baseline / holdout32 | 1.802236 | 2.203076 | -0.008340 |
+
+表示値は6桁へ丸め、元の数値はprivate workload/artifactとTrackingに保持する。
+旧16runs/1320points/16artifactsを保持し、新1run/9points/1artifactだけを追加して
+計17runs/1329points/17artifactsとなった。保存評価12・benchmark4・training1の範囲は分ける。
+書込前の完全cold export36files/2,562,597Bを新規private領域に保持し、旧backupを上書きしていない。
+retention11checksが成功し、同store UUID・loopback18550で6.881秒の再起動後healthyを確認した。
+API GET2回はexperiment3/runのidentity、FINISHED、9 latest metrics/17params/開始終了時刻を照合した。
+server稼働中のpreflightは書込前に拒否し、実training失敗は0。新LLM/Trino/Spark/kernel/Agent監査0。
+
+専用MLflow環境の既存NumPy2.5.3/scikit-learn1.9.1を直接依存として明示した。
+lock全92package versions/配布情報を維持し、rootの直接依存宣言だけを変更した。
+専用環境のlocked syncで87installed packagesを確認した。
+新47focused tests（workload15/runtime32）と全local74suites/2630tests
+（2629PASS・既存optional1skip、62.366秒）、secret scanが成功。
+独立保存39checks/85inputsも初回成功し、係数replay/正規方程式/9指標、旧59tablesの全行・
+16artifacts/index/cold backup、保存API2応答とSQLite、所有PID同一性を照合した。
+追加API/SDK/fit/product importは0で、NumPy PRNGの独立再生成は含めない。
+新training3filesは25,276B（実割当28,672B）、file600/dir700で保持する。
+証拠とcold exportは`tmp/local-experiment/mlflow-training-checks/c28faf05befa48d49a3792a01128326f/`。
+[学習runbook](../../../../tools/local_experiment/mlflow/README.md#fixed-supervised-training)を参照。
+利用停止は追加attemptを止め、必要なら所有serverを停止する。新run/証跡を削除せず、
+新学習記録もbackupへ含める場合は停止中の完全exportを追加する。
+WPはlocal-partialを維持し、Notebook/Hubからの学習、autolog、Registry/Serving、
+別データでの汎化、clone切替・他host移行、本番/人間受入は未達である。
 
 ## 2026-09-18: inactive local clone restore and SDK readback
 
