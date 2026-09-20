@@ -5,13 +5,14 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.68"
+version: "3.69"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
+固定sklearn autologは48学習行で1fitし、初回HTML検証失敗を追加fitなしで回復した。完成再表示・clone復元・全回帰が成功した。
 固定Registry versionのloopback推論APIは、初回自己検査の修正後に84行予測・拒否/timeout・所有再起動を確認した。全回帰も成功した。
 保存previewからのQuery Doctor診断1回とLab保存再表示が成功した。元SELECT再送0、全回帰と最終保持・容量確認も成功した。
 固定Registry名/versionを明示する新Notebookの予測・保存/再読込が成功し、既存Lab processと9冊を保持した。
@@ -50,6 +51,18 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: fixed train-only sklearn autolog: local acceptance complete
+
+保存48train/16holdoutのうちtrainだけでRidge alpha1を1fitし、8params・5training metrics・HTML1件（41,437 bytes）を記録した。初回はHTML開始タグ属性の検証差異でfailedとなり、元記録を残して狭く修正した。60桁Decimalによる5指標の独立再計算は最大差5.07e-17。標準UIではFinished・指標・params・HTML一覧を確認したが、HTML本文はblankで表示成功とは扱わない。
+
+停止storeのSQLite・source/model/HTMLを照合する回復は、元failed3files/DB bytesを変えず、追加fitなしで成功した。そのfinallyのTracking復帰は`PROCESS_IDENTITY_CONFLICT`で失敗し、停止/cleanup確認後の別の所有起動が6.901秒で成功した。原因は未確定・未再現であり、根本原因修正とは主張しない。pendingの通常再送は追加fitなしで拒否し、完成再表示はbackup引数なしで1.333秒、602filesと全状態を保持した。
+
+最終保持は旧594immutable files・MLflow全59tablesの旧行/schema・旧22artifacts・Registry model1/version1・AgentHouse585行を確認した。新計23runs/1388metric points/23artifacts、Serving PID95852は不変。初回保持helperはmutable3filesを含む597files不変を要求して失敗したため、元ログを保持し期待する変更と不変対象を分けて再検証した。
+
+cold exportと健康復帰は8.015秒で成功。元失敗/回復記録を含む非稼働clone復元・SDK全履歴/HTML読戻しは初回4.318秒で成功し、7experiments/23runs/1388points/23artifacts・Registry1/1・source保持を確認した。全回帰は115suites・3574実行（3573PASS＋既存1skip）、88.156秒。新Reader/LLM/監査書込は0、一般品質・Notebook kernel autolog・本番・clone切替は受入対象外である。
+
+保存範囲は事前/事後cold export・clone・autolog記録/index/HTMLを含む230files、11,018,429 logical bytes／11,505,664 allocated bytes。これはAPFS上の一意な物理占有量ではない。実証と保持・回復・容量の詳細は`tmp/local-experiment/mlflow-autolog-checks/231900f9cb9347e59f77d6c69cf466a1/`の`recovery-final-verification.json`、`retention-final01.json`、`clone01.json`、`storage-and-usage.json`、`full01.json`へ保持する。
 
 ## 2026-09-20: fixed-version loopback inference: local acceptance complete
 

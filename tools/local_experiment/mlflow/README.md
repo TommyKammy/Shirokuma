@@ -4,7 +4,8 @@ WP-L4-ML-001 tracks a fixed supervised training workload, saved Agent evaluation
 and Spark/Trino benchmark receipts. This is a dedicated single-user local
 Tracking service with a limited local Registry for completed Iceberg Ridge
 models. A separate loopback API provides bounded predictions from an explicit
-Registry version. Hub integration, autolog, MLflow pyfunc Serving and production
+Registry version. A fixed worker can also record sklearn autolog results.
+Hub integration, kernel-side training, MLflow pyfunc Serving and production
 work packages remain separate.
 
 MLflow **3.16.1** and Python **3.12** run in their own pinned environment. The UI
@@ -78,6 +79,49 @@ checks. The failed attempt and cleanup result remain recorded. The final service
 used about 32 MiB RSS at observation, and its seven private state files totaled
 2,462 logical bytes. The prior 590 protected files, 22 MLflow runs, 1,383 metric
 points, 22 artifacts, one Registry model/version and 585 audit rows were unchanged.
+
+## Verify sklearn autolog on saved training data
+
+The `fixed-ridge-autolog-v1` worker uses the original 48 training rows of a
+completed Iceberg training token and fits Ridge with alpha 1 once. The existing
+16 holdout rows are excluded from the fit and automatic training metrics. A
+dedicated `shirokuma-local-ridge-autolog-v1` experiment separates this run from
+the original training and the registered model.
+
+Before the first write, use the owned stop and cold export procedure described
+under [Local Ridge Model Registry](#local-ridge-model-registry). Keep the prior
+Tracking runtime state and restore it after the worker finishes, including when
+it fails. The read-only serving process can remain running with its fixed model.
+Set the source token and the completed backup manifest, then run:
+
+```sh
+rtk proxy make local-mlflow-autolog
+```
+
+Set `SHIROKUMA_LAKE_TRAINING_TOKEN`; `SHIROKUMA_MLFLOW_BACKUP_MANIFEST` is
+required only for the initial write. The worker requires the owned Tracking
+service to be stopped for a new write. It enables sklearn autolog in its own
+process, verifies the automatically logged parameters and training metrics,
+then checks the generated `estimator.html` artifact. Model serialization,
+datasets, input examples, model signatures and post-training metrics are
+disabled. No pickle, `MLmodel`, registered version or held-out metric is created.
+
+A completed call returns the validated saved receipt without another fit,
+write, backup or service operation. An uncertain attempt is retained and is
+not automatically submitted again. The source training files and existing
+Registry model remain unchanged. This verifies dedicated-worker autolog; it
+does not establish Notebook kernel autolog, general model quality or promotion.
+
+If a completed fit was rejected solely by the old HTML envelope check, stop the
+owned Tracking service and run `rtk proxy make local-mlflow-autolog-recover` with
+the same training token, then restore its prior runtime state. This narrow
+recovery reads the existing finished run, checks every parameter, metric history
+and artifact against the saved evidence, and recomputes the training metrics
+without fitting. It preserves the original failed receipt, adds `recovery.json`,
+and completes the saved index. Incomplete or mismatched runs remain blocked;
+recovery never submits another fit or changes the MLflow database.
+
+## Prepare and use Tracking
 
 ```sh
 rtk make local-mlflow-sync

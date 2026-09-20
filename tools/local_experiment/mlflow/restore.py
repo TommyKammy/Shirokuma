@@ -575,15 +575,114 @@ def registry_plan(before, export, clone_artifacts, store_id, *, root):
         raise RestoreError(code) from None
 
 
+def autolog_profile(export, store_id):
+    """Read the optional completed autolog index, without importing its SDK writer."""
+    path = export / 'autolog-index.json'
+    if not path.exists() and not path.is_symlink():
+        return None
+    code = 'RESTORE_AUTOLOG_INVALID'
+    try:
+        code_root = str(Path(__file__).resolve().parents[3])
+        if code_root not in sys.path: sys.path.insert(0, code_root)
+        from tools.local_experiment.mlflow import autolog_contract as A
+        index = A.validate_index(parse(read(path, MAX_MANIFEST)), store_id=store_id)
+        require(type(index['experiment_id']) is str
+                and re.fullmatch(r'[1-9][0-9]{0,18}', index['experiment_id'])
+                and int(index['experiment_id']) <= 2**63-1
+                and index['runs'], code)
+        return A, index
+    except Exception as error:
+        if isinstance(error, RestoreError): raise
+        raise RestoreError(code) from None
+
+
+def autolog_plan(records, export, clone_artifacts, store_id, profile):
+    """Validate the one safe HTML profile against inert source and every saved SDK field."""
+    code = 'RESTORE_AUTOLOG_INVALID'; A, index = profile
+    try:
+        experiment_id = index['experiment_id']
+        runs = {r['run_uuid']:r for r in records('runs') if str(r['experiment_id']) == experiment_id}
+        training_runs = {r['run_uuid']:r for r in records('runs') if str(r['experiment_id']) == '4'}
+        seen = set()
+        for training_token, entry in index['runs'].items():
+            require(type(training_token) is str and TOKEN.fullmatch(training_token)
+                    and type(entry) is dict and type(entry.get('evidence_token')) is str
+                    and TOKEN.fullmatch(entry['evidence_token']), code)
+            evidence = export / 'autolog' / entry['evidence_token']; private(evidence, True)
+            names = {p.name for p in evidence.iterdir()}
+            recovered = 'recovery.json' in names
+            require(names == {'source.json','result.json','backup.json'}
+                    | ({'recovery.json'} if recovered else set()), code)
+            source = parse(read(evidence / 'source.json', MAX_MANIFEST))
+            original_raw = read(evidence / 'result.json', MAX_MANIFEST)
+            result = parse(original_raw)
+            if recovered:
+                recovery_raw = read(evidence / 'recovery.json', MAX_MANIFEST)
+                recovery = parse(recovery_raw)
+                require(original_raw == A.canonical(result)
+                        and recovery_raw == A.canonical(recovery), code)
+                result = A.completed_result(source, result, recovery)
+                A.validate_recovery_entry(recovery, entry)
+            backup = parse(read(evidence / 'backup.json', MAX_MANIFEST))
+            # Backup metadata is immutable provenance, never an external read dependency.
+            require(type(backup) is dict and set(backup) == {'manifest','sha256','store_id'}
+                    and backup['store_id'] == store_id and type(backup['sha256']) is str
+                    and HEX.fullmatch(backup['sha256']), code)
+            manifest = relative(backup['manifest'])
+            require(manifest.startswith('tmp/local-experiment/') and Path(manifest).name == 'backup-manifest.json', code)
+            training_dir = export / 'lake-training' / training_token
+            receipt = parse(read(training_dir / 'result.json', MAX_MANIFEST))
+            workload = parse(read(training_dir / 'workload.json', 128 * 1024))
+            A.validate_source(source, workload, receipt, store_id=store_id)
+            require(source['binding']['training_token'] == training_token
+                    and source['binding']['run_id'] in training_runs, code)
+            run_id = result['run_id']
+            require(run_id in runs and run_id not in seen and result['evidence_token'] == entry['evidence_token'], code)
+            seen.add(run_id)
+            artifact = clone_artifacts / A.NAMESPACE / run_id / 'artifacts' / A.ARTIFACT
+            raw = read(artifact, A.MAX_ARTIFACT_BYTES)
+            A.validate_completed(index, source, result, raw, store_id=store_id, backup=backup)
+            A.validate_calculation(result, workload)
+            run = runs[run_id]
+            require(all(type(run[name]) is int for name in ('start_time','end_time')), code)
+            selected = lambda name: [row for row in records(name) if row['run_uuid'] == run_id]
+            info = {name:run[name] for name in ('status','start_time','end_time','lifecycle_stage','artifact_uri','user_id')}
+            info.update(run_id=run_id, experiment_id=experiment_id, run_name=run['name'])
+            params, tags, latest = selected('params'), selected('tags'), selected('latest_metrics')
+            require(all(len(values) == len({r['key'] for r in values}) for values in (params,tags,latest)), code)
+            histories = {}
+            for row in selected('metrics'):
+                require(row['is_nan'] == 0 and type(row['timestamp']) is int and type(row['step']) is int, code)
+                histories.setdefault(row['key'], []).append([row['key'],row['timestamp'],row['step'],row['value']])
+            require(all(row['is_nan'] == 0 and type(row['timestamp']) is int and type(row['step']) is int
+                        for row in latest), code)
+            view = dict(info=info, params={r['key']:r['value'] for r in params},
+                tags={r['key']:r['value'] for r in tags}, metrics={r['key']:r['value'] for r in latest},
+                histories={k:sorted(v) for k,v in histories.items()})
+            require(view == result['run'], code)
+            for row in latest:
+                require(histories[row['key']] == [[row['key'],row['timestamp'],row['step'],row['value']]], code)
+        require(seen == set(runs), code)
+    except Exception as error:
+        if isinstance(error, RestoreError): raise
+        raise RestoreError(code) from None
+
+
 def profile_plan(before, export, clone_artifacts, *, root):
     """Validate saved profile/index/artifacts and plan URI changes without SQL writes."""
     records = lambda table: [dict(zip(before[table]['columns'], row)) for row in before[table]['rows']]
     experiments, runs = records('experiments'), records('runs')
     known = {**EXPERIMENTS, **TRAINING_EXPERIMENTS, **COMPARISON_EXPERIMENTS}
+    store_id = parse(read(export / 'store.json'))['store_id']
+    autolog = autolog_profile(export, store_id)
+    autolog_id = None
+    if autolog is not None:
+        A, index = autolog; autolog_id = index['experiment_id']
+        require(autolog_id not in known, 'RESTORE_AUTOLOG_INVALID')
+        known[autolog_id] = (A.EXPERIMENT, A.NAMESPACE)
     ids = {str(x['experiment_id']) for x in experiments}
     require(len(experiments) == len(ids) and set(EXPERIMENTS) <= ids <= set(known),
             'RESTORE_PROFILE_UNSUPPORTED')
-    store_id = parse(read(export / 'store.json'))['store_id']
     old_artifacts = root / SOURCE / 'store/artifacts'
     mutations = {'experiments': [], 'runs': []}
     for item in experiments:
@@ -593,10 +692,12 @@ def profile_plan(before, export, clone_artifacts, *, root):
                 and artifact_suffix(item['artifact_location'], old_artifacts) == suffix,
                 'RESTORE_ARTIFACT_URI_INVALID')
         mutations['experiments'].append((item['experiment_id'], (clone_artifacts / suffix).as_uri()))
-        if key in TRAINING_EXPERIMENTS or key in COMPARISON_EXPERIMENTS:
+        if key in TRAINING_EXPERIMENTS or key in COMPARISON_EXPERIMENTS or key == autolog_id:
             tags = [x for x in records('experiment_tags') if str(x['experiment_id']) == key]
-            require(len(tags) == 2 and {x['key']: x['value'] for x in tags} == {
-                    'shirokuma.owner': name, 'shirokuma.store_id': store_id},
+            expected_tags = (autolog[0].experiment_tags(store_id) if key == autolog_id else
+                             {'shirokuma.owner': name, 'shirokuma.store_id': store_id})
+            require(len(tags) == len(expected_tags) and {x['key']: x['value'] for x in tags} == expected_tags,
+                    'RESTORE_AUTOLOG_INVALID' if key == autolog_id else
                     'RESTORE_COMPARISON_INVALID' if key in COMPARISON_EXPERIMENTS else 'RESTORE_TRAINING_INVALID')
     require(0 < len(runs) <= 1024 and len({x['run_uuid'] for x in runs}) == len(runs),
             'RESTORE_PROFILE_UNSUPPORTED')
@@ -611,7 +712,8 @@ def profile_plan(before, export, clone_artifacts, *, root):
         target = clone_artifacts / suffix
         require(target.exists(), 'RESTORE_ARTIFACT_MISSING')
         private(target, True)
-        require({p.name for p in target.iterdir()} == {'safe-projection.json'}, 'RESTORE_ARTIFACT_MISSING')
+        artifact_name = autolog[0].ARTIFACT if key == autolog_id else 'safe-projection.json'
+        require({p.name for p in target.iterdir()} == {artifact_name}, 'RESTORE_ARTIFACT_MISSING')
         if key in TRAINING_EXPERIMENTS:
             tags = [x for x in records('tags') if x['run_uuid'] == run_id]
             training_receipt(item, key, tags, export, target / 'safe-projection.json', store_id)
@@ -660,6 +762,9 @@ def profile_plan(before, export, clone_artifacts, *, root):
         comparison_plan(records, export, clone_artifacts, store_id)
     else:
         require(not (export / 'comparison-import-index.json').exists(), 'RESTORE_COMPARISON_INVALID')
+    if autolog is not None:
+        require(autolog_id in ids and '4' in ids, 'RESTORE_AUTOLOG_INVALID')
+        autolog_plan(records, export, clone_artifacts, store_id, autolog)
     mutations.update(registry_plan(before, export, clone_artifacts, store_id, root=root))
     return mutations
 

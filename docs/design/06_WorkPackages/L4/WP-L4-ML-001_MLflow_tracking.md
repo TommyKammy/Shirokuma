@@ -5,7 +5,7 @@ title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "1.11"
+version: "1.12"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -14,6 +14,7 @@ tags: [shirokuma, workpackage, l4, ml]
 
 ## Summary
 
+保存48学習行の固定sklearn autologを実証した。初回HTML検証失敗を追加fitなしで回復し、完成再表示・非稼働clone復元・既存データ保持を確認した。
 固定Registry versionをloopbackのsafe JSON推論APIへ接続し、修正後の予測・認証拒否・所有停止/再起動と既存データ保持を確認した。
 固定local Ridge Registryへの初回登録・同token再利用の追加write0・明示version解決と予測・非稼働clone復元を確認した。
 保存比較候補のMLflow記録と同token再表示による追加write0を実UIで確認した。完成profileを含む非稼働clone復元とSDK読戻しも成功した。
@@ -31,6 +32,14 @@ Notebookから所有workerへ固定学習を依頼し、1runを追加する実�
 保存比較候補の一覧・再fit不要な新入力予測も、cold計算とLab実UIで確認した。
 Labの固定学習workbenchで、初回unknownの保存結果を追加fitなしで回復し、別の新規正常実行から表示・編集予測・保存/再読込も確認した。
 Hub連携・kernel内fit/autolog、Registryのalias/stage運用・標準MLflow pyfunc Serving、clone切替・他host移行は未達。
+
+## 2026-09-20: fixed train-only sklearn autolog: local acceptance complete
+
+保存Icebergの固定48学習行だけを専用workerへ渡し、Ridge alpha1を1回fitした。既存16holdout行をfit/自動指標から除外し、専用experimentへ8params・5training metrics・`estimator.html`だけを記録する。model serialization・datasets・Registry登録・Reader・LLMは追加しない。初回writeは所有Trackingの停止とcold exportを要求し、既存Servingは維持する。
+
+実初回はfitと記録を完了したが、HTML開始タグの属性を旧検証が拒否した。元failed記録を保持し、停止storeの固定experiment/run・全指標履歴・保存source/model/HTMLを読取照合して追加fitなしで回復した。回復後のTracking復帰は所有検査で一度失敗し、別の所有起動で復帰した。原因は未確定である。pendingの通常再送は拒否、完成再表示は追加fit/write/backupなしを実証した。
+
+旧594immutable files・既存MLflow全行/22artifacts・Registry1/1・AgentHouse585行・Servingを保持し、新1run/5metric points/HTML1件だけを追加した。完成profileと元失敗/回復記録を含む非稼働clone復元・SDK読戻し、全回帰も成功した。標準UIで指標/params/HTML一覧を確認したが、HTML本文表示成功は主張しない。Hub/kernel内fit・一般モデル品質・標準pyfunc Serving・本番は未達、WPはlocal-partialを維持する。操作は[MLflow runbook](../../../../tools/local_experiment/mlflow/README.md)、実測は[Milestones](../061_Local_Experiment_Milestones.md)を参照する。
 
 ## 2026-09-20: fixed-version loopback inference: local acceptance complete
 

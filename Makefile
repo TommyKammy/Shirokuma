@@ -1109,3 +1109,14 @@ local-mlflow-serving-stop:
 test-local-mlflow-serving:
 	@tools/local_experiment/mlflow/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_mlflow_serving*.py'
 verify-local-experiment: test-local-mlflow-serving
+
+.PHONY: local-mlflow-autolog test-local-mlflow-autolog
+local-mlflow-autolog:
+	@tools/local_experiment/mlflow/.venv/bin/python -B tools/local_experiment/mlflow/autolog.py --training-token "$${SHIROKUMA_LAKE_TRAINING_TOKEN:?set the saved Iceberg training token}" --backup-manifest "$${SHIROKUMA_MLFLOW_BACKUP_MANIFEST:-}"
+test-local-mlflow-autolog:
+	@tools/local_experiment/mlflow/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_mlflow_autolog*.py'
+verify-local-experiment: test-local-mlflow-autolog
+
+.PHONY: local-mlflow-autolog-recover
+local-mlflow-autolog-recover:
+	@tools/local_experiment/mlflow/.venv/bin/python -B tools/local_experiment/mlflow/autolog.py --training-token "$${SHIROKUMA_LAKE_TRAINING_TOKEN:?set the saved Iceberg training token}" --recover
