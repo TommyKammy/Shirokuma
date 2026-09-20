@@ -108,6 +108,50 @@ class LabRuntimeTests(unittest.TestCase):
                 R._trainings_idle()
             check.assert_not_called()
 
+    def test_recording_guard_blocks_lifecycle_and_other_workflows(self):
+        from tools.local_experiment.notebook_lab import record_comparison, query, compare, train, runtime
+        self.state.mkdir(mode=0o700)
+        (self.state / 'comparison-recordings').mkdir(mode=0o700)
+        with patch.object(record_comparison, 'LAB_STATE', self.state), \
+                patch.object(record_comparison, 'check_idle', return_value=False):
+            for action in (R.start, R.stop):
+                with self.subTest(action=action.__name__), self.assertRaisesRegex(R.LabError, 'LAB_RECORD_ACTIVE_OR_UNKNOWN'):
+                    action()
+        self.assertFalse((self.state / 'workspace').exists())
+        with patch.object(runtime, 'STATE', self.state), patch.object(runtime, '_recordings_idle', return_value=False):
+            for module in (query, compare, train):
+                with self.subTest(module=module.__name__), self.assertRaisesRegex(module.N.NotebookError, 'CLEANUP_UNKNOWN'):
+                    with module._lock():
+                        self.fail('blocked operation entered')
+
+    def test_recording_template_preserves_edits_and_clears_stale_result(self):
+        self.prepared()
+        target = self.state / 'workspace/comparison_recording.ipynb'
+        self.assertEqual(target.read_bytes(), R.COMPARISON_RECORDING_TEMPLATE.read_bytes())
+        target.write_bytes(b'edited recording and saved receipt')
+        before = (target.read_bytes(), target.stat().st_mtime_ns, target.stat().st_mode)
+        R._prepare()
+        self.assertEqual((target.read_bytes(), target.stat().st_mtime_ns, target.stat().st_mode), before)
+        cells = [''.join(c['source']) for c in json.loads(R.COMPARISON_RECORDING_TEMPLATE.read_bytes())['cells']
+                 if c['cell_type'] == 'code']
+        token = 'b' * 32
+        value = dict(reused=True, comparison={'candidate': {'alpha': 10}}, import_receipt={'run_id': 'c' * 32})
+        scope = dict(inventory={'result': 'complete', 'runs': [{'comparison_token': token}]},
+                     comparison_token=token, record_comparison=Mock(return_value=value), display=Mock(), JSON=lambda x: x)
+        with patch('sys.stdout', new_callable=io.StringIO):
+            exec(cells[-1], scope)
+        scope['record_comparison'].assert_called_once_with(token)
+        self.assertEqual(scope['recording'], value)
+        scope['record_comparison'].side_effect = ValueError('private-body')
+        with patch('sys.stdout', new_callable=io.StringIO) as output:
+            exec(cells[-1], scope)
+        self.assertIsNone(scope['recording'])
+        self.assertNotIn('private-body', output.getvalue())
+        scope['record_comparison'].reset_mock(); scope['comparison_token'] = 'unknown'
+        with patch('sys.stdout', new_callable=io.StringIO):
+            exec(cells[-1], scope)
+        scope['record_comparison'].assert_not_called()
+
     def test_training_template_uses_new_token_and_clears_failed_results(self):
         cells = [''.join(c['source']) for c in json.loads(R.LAKE_TRAINING_TEMPLATE.read_bytes())['cells']
                  if c['cell_type'] == 'code']

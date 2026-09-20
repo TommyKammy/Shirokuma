@@ -1011,3 +1011,15 @@ test-local-ray:
 	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_local_ray_prediction.py'
 	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_local_ray_runtime.py'
 verify-local-experiment: test-local-ray
+
+.PHONY: local-mlflow-comparison-plan local-mlflow-comparison-import test-local-mlflow-comparison-import test-local-notebook-lab-record-comparison
+local-mlflow-comparison-plan:
+	@$(PYTHON) -B tools/local_experiment/mlflow/import_comparisons.py --comparison-token "$${COMPARISON_TOKEN:-}" --plan
+local-mlflow-comparison-import:
+	@tools/local_experiment/mlflow/.venv/bin/python -B tools/local_experiment/mlflow/import_comparisons.py --comparison-token "$${COMPARISON_TOKEN:-}"
+test-local-mlflow-comparison-import:
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_mlflow_import_comparisons.py'
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_mlflow_comparison_restore.py'
+test-local-notebook-lab-record-comparison:
+	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_record_comparison.py'
+verify-local-experiment: test-local-mlflow-comparison-import test-local-notebook-lab-record-comparison

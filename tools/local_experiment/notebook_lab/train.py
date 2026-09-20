@@ -158,7 +158,7 @@ def _lock(*, recovery_token=None):
     try:
         with R._lock():
             try:
-                require(R._queries_idle() and R._comparisons_idle() and _idle(recovery_token),
+                require(R._recordings_idle() and R._queries_idle() and R._comparisons_idle() and _idle(recovery_token),
                         'LAB_TRAINING_CLEANUP_UNKNOWN')
                 yield
             except BaseException as error:

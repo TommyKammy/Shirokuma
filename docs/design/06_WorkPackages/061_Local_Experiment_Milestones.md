@@ -5,13 +5,14 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.58"
+version: "3.59"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
+保存比較のMLflow記録・同token再表示の追加write0は実UIで成功した。clone復元・SDK読戻しと最終回帰も成功した。
 Rayの保存64行/固定2actor予測は、初回unknownを原記録保持のまま閉鎖した後、新規実02で逐次一致・loopback・所有終了を確認した。
 最新の到達点（2026-09-20）：Labの固定学習で初回unknownを追加fitなしで回復し、別途明示した新規正常実行からレビュー・一覧・編集予測・保存/再読込まで成功した。
 固定Data Activatorのalert→Dagster sensor→SRE診断1回と重複抑止・normal復帰も、修正後28.475秒で成功した。
@@ -40,6 +41,32 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: saved comparison recording in MLflow — local acceptance complete
+
+完成済み比較を再fitせず、専用MLflow experimentへcandidate/reference/deltaの18指標とidentity/JSON artifactを1回記録する機能を実UIで確認した。
+Labの明示token→共有lock→専用ML workerで、初回だけ同store停止/cold backup/import/読戻し/元状態復帰を行う。完成receiptの再検証による再表示ではworker・backup・runtime/API・追加writeは0。
+元比較の不明時刻を偽造せずimport時刻と区別する。pending/unknownは再送せず保持し、元保存予測は継続する。
+新fit/Reader/LLM・自動model昇格は追加しない。既視holdoutで悪化したalpha10候補の記録であり、品質改善や独立評価を主張しない。
+対象比較 `b393842b6c9a4f8db7da8da19672c449` を初回登録し、同token再表示の追加write0も確認した。追加profileを含む非稼働clone復元と全回帰も成功した。
+
+実Lab `7990ffee66d242f6a7e9d3aee05c59fb`はexit0/passed・cleanup true。MLflow experiment5/run `63e78552215b4c36929daed620b105cb`へ18metrics・34params・1artifactを追加し、同storeをhealthy/runningへ戻した。
+実MLflow UIで18metrics/34params、alpha10/reference1、元run、比較時刻not-recordedを確認した。holdout RMSEは候補0.5436330450898472・参照0.16304261434308936・差0.38059043074675786で、改善は主張しない。
+再呼出し前後のsnapshotはruntime PIDまで完全一致し、attempt/backupは各1件のまま。MLflow22runs/1383points/22artifacts、40保護不変files・旧21runsのtyped行/schema/artifact・AgentHouse560件は保持照合0.377/0.379秒で確認した。
+focusedは7suites/138tests PASS（5.570秒）。最終全回帰101suites/3220実行＝3219PASS＋既存1skip（80.888秒）。初回/再表示Notebook・reuse proofを保存した。
+Notebook再読込でも選択tokenと同receiptを表示し、9,229 B/mode0600/mtime/bytesを保持した。旧kernel内moduleへ新guardを適用するため、所有6kernel→0のLab停止2.689秒・再起動2.056秒も実施し、全6Notebookのbytes/mtime/modeを保持した。新server healthy/0kernelと旧server不在を確認した。その後のBrowser再読込でも同token/run/再利用receiptを表示した。画面復帰による6sessionsはIdleで、セル再実行は0。
+独立cold予測18行（編集2＋holdout16）は、60桁Decimalと最大差8.43540599623373029e-16で一致した。
+
+登録後のcold exportは55files/2,869,074 B、8.624秒で成功し、元同storeをhealthy/runningへ復帰した。clone `938185ad537e4042b2219b9b0832353b`は0.217秒でverified/activation false。全59tablesのうちartifact URI 28値（experiments6/runs22）だけを書換えた。
+SDK読戻し `e7df2f8441f44d0dace41d813774ace8`は3.237秒で6experiments/22runs/1383points/22artifactsを照合し、logical/retained unchangedを確認した。復元後も40不変files・旧21runs・AgentHouse560件を保持した。
+全回帰log SHA `d762d9fd2ace8e76de7d545e0c1266230c87d021248bd202ab4448ce289aa412`、SDK読戻しlog SHA `981071c1efb6ab65dc73849f0723e48a48f4a79b9b3b348512d85480fe33690b`。
+
+独立保存検証は155入力のfingerprint不変、全59table/schemaのURI28値以外の一致、22artifacts・新18metrics/34params・元比較時刻nullを照合し、記録worker/readback PIDの不在も確認した。
+`independent-final-verification.json` SHA `dc42b5446e498c0011bed1a054e473794208e0be942fab30f44c82b2f0e37094`。検証helper初回のPython 3.9非対応比較演算は保存検査だけを訂正して完了し、製品失敗や追加書込みはない。
+4つの非重複証跡root（Lab attempt/事前backup、事後backup、export/clone/readback全体、ML import）は計208files/280dirs、10,295,653 B（allocated 10,727,424 B）。内包backupを二重加算せず、全files0600/dirs0700を保持した。allocated値はAPFS物理unique使用量を表さない。
+
+手順と境界は[MLflow WP](L4/WP-L4-ML-001_MLflow_tracking.md)、[Notebook WP](L4/WP-L4-NB-001_JupyterHub_bootstrap.md)。
+証跡は `tmp/local-experiment/comparison-recording-checks/69217f1c6b924c44863eea1c477fb42e/`へ保持する。
 
 ## 2026-09-20: local Ray saved prediction — local acceptance complete
 

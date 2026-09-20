@@ -5,7 +5,7 @@ title: "WP-L4-NB-001 JupyterHub bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.14"
+version: "0.15"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, notebook]
 ---
@@ -14,6 +14,7 @@ tags: [shirokuma, workpackage, l4, notebook]
 
 ## Summary
 
+保存比較候補をMLflowへ1回記録し、同tokenの再表示で追加writeを避けるLab入口を実UIで確認した。最終保持・非稼働clone復元も成功した。
 Notebook環境を整備する。ADR-0034のlocal実験では、固定Notebookを専用Python kernelで実行し、
 既存ReaderとMLflow Trackingの読取へ接続する最小部分を先行した。実kernel2回と
 独立した保存証拠の62項目照合が成功した。さらに別の登録templateへcurrent-head Readerの
@@ -29,6 +30,16 @@ Labから自然文table previewを呼ぶ別Notebookも、修正後の等値previ
 保存比較一覧から候補を選び、再fitせず新入力を予測するLab入口も実UI受入を確認した。
 Labの固定学習workbenchで、初回unknownを追加fitなしで回復し、別の新規正常実行とレビュー/一覧/編集予測・保存/再読込を確認した。
 JupyterHub、複数ユーザー、直接PySpark、kernel内fit・autologの完了は含めない。
+
+## 2026-09-20: saved comparison recording in MLflow — local acceptance complete
+
+Labの[比較記録Notebook](../../../../examples/local_comparison_recording.ipynb)で、保存比較一覧から明示tokenを選び、`record_comparison(token)`で候補/参照/差の指標をMLflowへ1回記録する入口を実UIで確認した。
+既存Notebookは保持し、このtemplateは初回だけ配置する。元比較の実行時刻は未記録のまま保持し、今回の記録時刻と混同しない。
+
+共有Lab所有lockをcleanupまで保持する。初回は専用ML workerが同storeを停止・cold backup・import/読戻し・元runtime状態へ復帰し、完成receiptの再表示ではworker/backup/runtime操作/API/追加writeを行わない。
+未解消pending/unknownは再送を拒否し、source/保存receipt/artifactの変化も成功扱いにしない。元比較と保存予測は保持し、新fit/Reader/LLMを呼ばない。
+実UIで初回登録と同tokenの再表示が成功し、後者の前後snapshotはruntime PIDを含め同一。attempt/backupは各1件だけで、初回/再表示Notebookを保持した。保存/再読込でtoken・出力・bytes/mtime/modeを保持し、cloneのSDK読戻しも成功した。旧kernelのmoduleを更新するため所有6kernelを正常終了し、Lab再起動後も全6Notebookのbytes/mtime/modeを保持した。記録しただけで品質改善・独立評価・Registry昇格やServingを意味しない。
+詳細は[MLflow WP](WP-L4-ML-001_MLflow_tracking.md)、[Lab runbook](../../../../tools/local_experiment/notebook_lab/README.md)、[Milestones](../061_Local_Experiment_Milestones.md)へ記録する。
 
 ## 2026-09-20: Lab fixed Iceberg training and prediction — local acceptance complete
 

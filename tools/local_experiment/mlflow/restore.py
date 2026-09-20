@@ -44,6 +44,7 @@ EXPERIMENTS = {'0': ('Default', '0'),
                '2': ('shirokuma-local-spark-benchmark-v1', 'spark-benchmarks')}
 TRAINING_EXPERIMENTS = {'3': ('shirokuma-local-supervised-training-v1', 'supervised-training'),
                         '4': ('shirokuma-local-iceberg-training-v1', 'iceberg-training')}
+COMPARISON_EXPERIMENTS = {'5': ('shirokuma-local-ridge-comparisons-v1', 'ridge-comparisons')}
 TRAINING_PROFILES = {'3': ('training', 'fixed-supervised-regression-v1', 'fixed-ridge-'),
                      '4': ('lake-training', 'fixed-iceberg-regression-v1', 'lake-ridge-')}
 TRAINING_RESULT_KEYS = {'schema_version', 'result', 'phase', 'token', 'store_id', 'source_sha256',
@@ -395,11 +396,72 @@ def training_receipt(run, key, tags, export, artifact, store_id):
     return attempt
 
 
+def comparison_plan(records, export, clone_artifacts, store_id):
+    """Verify imported comparisons from the inert export, without SDK or fit."""
+    code = 'RESTORE_COMPARISON_INVALID'
+    try:
+        code_root = str(Path(__file__).resolve().parents[3])
+        if code_root not in sys.path:
+            sys.path.insert(0, code_root)
+        from tools.local_experiment.mlflow import import_comparisons as I
+        importer = I.Importer(None, state=export, artifacts=clone_artifacts,
+                              store_id=store_id, comparison_token='0' * 32)
+        require(importer.index_path.is_file(), code)
+        importer.read_index()  # Strict completed-only index; performs no write.
+        index = importer.index
+        require(index['experiment_id'] == '5', code)
+        runs = {r['run_uuid']: r for r in records('runs') if str(r['experiment_id']) == '5'}
+        require(len(index['runs']) == len(runs)
+                and {entry['run_id'] for entry in index['runs'].values()} == set(runs), code)
+        for token, entry in index['runs'].items():
+            run_id = entry['run_id']
+            run = runs[run_id]
+            raw = read(clone_artifacts / I.NAMESPACE / run_id / 'artifacts/safe-projection.json', 256 * 1024)
+            source = I.validate_projection(parse(raw))
+            require(source['comparison_token'] == token and raw == I.canonical(source)
+                    and digest(raw) == entry['projection_sha256']
+                    and entry['source_key'] == I.digest(dict(comparison_token=token,
+                        request_sha256=source['comparison']['request_sha256'], model_sha256=source['model_sha256'])), code)
+            directory = export / I.FOLDER / entry['evidence_token']
+            private(directory, True)
+            require({p.name for p in directory.iterdir()} == {'source.json', 'result.json'}
+                    and read(directory / 'source.json', 256 * 1024) == raw, code)
+            result_raw = read(directory / 'result.json', MAX_MANIFEST)
+            result = I.validate_record(parse(result_raw), source, entry, experiment_id='5', store_id=store_id)
+            require(result_raw == I.canonical(result), code)
+            # The reference remains an actual retained training run, not a
+            # disconnected copy of an otherwise arithmetically valid model.
+            baseline = source['source_training']
+            reference = baseline['receipt']
+            require(any(r['run_uuid'] == reference['run_id'] and str(r['experiment_id']) == '4'
+                        for r in records('runs')), code)
+            original = export / 'lake-training' / reference['token']
+            require(read(original / 'result.json') == I.canonical(reference)
+                    and read(original / 'workload.json') == I.canonical(baseline['workload']), code)
+            params, tags, points = I.expected(source, store_id, entry['started_ms'])
+            require(type(run['start_time']) is int and run['start_time'] == entry['started_ms']
+                    and type(run.get('end_time')) is int and run['end_time'] == entry['finished_ms']
+                    and run.get('name') == tags['mlflow.runName'], code)
+            for table, expected in (('params', params), ('tags', tags)):
+                selected = [r for r in records(table) if r['run_uuid'] == run_id]
+                require(len(selected) == len(expected) and {r['key']: r['value'] for r in selected} == expected, code)
+            expected_points = sorted((p['key'], p['value'], p['timestamp'], p['step']) for p in points)
+            for table in ('metrics', 'latest_metrics'):
+                selected = [r for r in records(table) if r['run_uuid'] == run_id]
+                require(len(selected) == len(points) and all(type(r['timestamp']) is int and type(r['step']) is int
+                        and r['is_nan'] == 0 for r in selected)
+                        and sorted((r['key'], r['value'], r['timestamp'], r['step']) for r in selected) == expected_points, code)
+    except Exception as error:
+        if isinstance(error, RestoreError):
+            raise
+        raise RestoreError(code) from None
+
+
 def profile_plan(before, export, clone_artifacts, *, root):
     """Validate saved profile/index/artifacts and plan URI changes without SQL writes."""
     records = lambda table: [dict(zip(before[table]['columns'], row)) for row in before[table]['rows']]
     experiments, runs = records('experiments'), records('runs')
-    known = {**EXPERIMENTS, **TRAINING_EXPERIMENTS}
+    known = {**EXPERIMENTS, **TRAINING_EXPERIMENTS, **COMPARISON_EXPERIMENTS}
     ids = {str(x['experiment_id']) for x in experiments}
     require(len(experiments) == len(ids) and set(EXPERIMENTS) <= ids <= set(known),
             'RESTORE_PROFILE_UNSUPPORTED')
@@ -413,10 +475,11 @@ def profile_plan(before, export, clone_artifacts, *, root):
                 and artifact_suffix(item['artifact_location'], old_artifacts) == suffix,
                 'RESTORE_ARTIFACT_URI_INVALID')
         mutations['experiments'].append((item['experiment_id'], (clone_artifacts / suffix).as_uri()))
-        if key in TRAINING_EXPERIMENTS:
+        if key in TRAINING_EXPERIMENTS or key in COMPARISON_EXPERIMENTS:
             tags = [x for x in records('experiment_tags') if str(x['experiment_id']) == key]
             require(len(tags) == 2 and {x['key']: x['value'] for x in tags} == {
-                    'shirokuma.owner': name, 'shirokuma.store_id': store_id}, 'RESTORE_TRAINING_INVALID')
+                    'shirokuma.owner': name, 'shirokuma.store_id': store_id},
+                    'RESTORE_COMPARISON_INVALID' if key in COMPARISON_EXPERIMENTS else 'RESTORE_TRAINING_INVALID')
     require(0 < len(runs) <= 1024 and len({x['run_uuid'] for x in runs}) == len(runs),
             'RESTORE_PROFILE_UNSUPPORTED')
     for item in runs:
@@ -474,6 +537,11 @@ def profile_plan(before, export, clone_artifacts, *, root):
         require(len(set(indexed)) == len(indexed)
                 and set(indexed) == {x['run_uuid'] for x in runs if str(x['experiment_id']) == key},
                 'RESTORE_INDEX_INVALID')
+    if '5' in ids:
+        require('4' in ids, 'RESTORE_COMPARISON_INVALID')
+        comparison_plan(records, export, clone_artifacts, store_id)
+    else:
+        require(not (export / 'comparison-import-index.json').exists(), 'RESTORE_COMPARISON_INVALID')
     return mutations
 
 

@@ -430,6 +430,41 @@ Stopping use requires no activation rollback: retain the clone and its evidence.
 Cross-host migration, service cutover, training, registry and production
 recovery remain unverified.
 
+## Saved Ridge comparisons
+
+`comparison_recording.ipynb` in the local Lab records an existing verified
+comparison in `shirokuma-local-ridge-comparisons-v1`. It stores the candidate,
+reference and six differences as 18 metric points, along with 34 parameters and
+the source training identity. `safe-projection.json` embeds the verified source
+training data and comparison. The comparison's unrecorded execution times stay
+null; run and metric timestamps describe import time.
+
+The Lab wrapper handles a cold backup and restores the same store's prior
+running/stopped state. For a manual CLI import, first stop the owned server and
+retain a cold backup; the CLI requires an already-stopped store:
+
+```sh
+COMPARISON_TOKEN=<saved-token> make local-mlflow-comparison-plan
+COMPARISON_TOKEN=<saved-token> make local-mlflow-comparison-import
+```
+
+The importer binds `comparison-import-index.json` and immutable import receipts
+to the original projection. It marks an operation pending before SDK writes.
+An uncertain write is retained without automatic resubmission. A completed
+import is read back through the SDK before success. The Lab's later calls only
+validate and return that saved receipt; they do not create another worker,
+backup or run, and do not claim a fresh database readback.
+
+Local acceptance on 2026-09-20 recorded the saved alpha 10 candidate once and
+displayed all metrics and parameters in the MLflow UI. Calling again preserved
+the exact database snapshot and server identity. The active store contains
+22 runs, 1,383 metric points and 22 artifacts; all earlier runs and artifacts
+were retained. A new cold export restored into an inactive clone and the SDK
+read back all six experiments, 22 runs, 1,383 points and 22 artifacts. Exactly
+28 artifact URI fields changed in the clone. No model was fitted, promoted or
+served. The exploratory holdout RMSE was worse for alpha 10 than for alpha 1;
+recording a comparison does not endorse its candidate.
+
 ## Primary references
 
 - [Pinned MLflow release](https://pypi.org/project/mlflow/3.16.1/)

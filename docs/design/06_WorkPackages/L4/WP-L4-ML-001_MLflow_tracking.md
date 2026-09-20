@@ -5,7 +5,7 @@ title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "1.8"
+version: "1.9"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -14,6 +14,7 @@ tags: [shirokuma, workpackage, l4, ml]
 
 ## Summary
 
+保存比較候補のMLflow記録と同token再表示による追加write0を実UIで確認した。完成profileを含む非稼働clone復元とSDK読戻しも成功した。
 MLflowで固定合成データの学習、保存Agent evalとSpark/Trino測定を記録する。
 Icebergの固定64行を既存Readerから学習へ接続する実1回も、初回失敗の修正・別回収後に成功した。
 専用SQLite/loopback標準UIで旧16runsと固定合成1run・Iceberg4runsの計21runsを保存した。初回Lab試行のunknownと回復証跡を保持し、別の新規正常実行も確認した。
@@ -28,6 +29,20 @@ Notebookから所有workerへ固定学習を依頼し、1runを追加する実�
 保存比較候補の一覧・再fit不要な新入力予測も、cold計算とLab実UIで確認した。
 Labの固定学習workbenchで、初回unknownの保存結果を追加fitなしで回復し、別の新規正常実行から表示・編集予測・保存/再読込も確認した。
 Hub連携・kernel内fit/autolog、Registry/Serving、clone切替・他host移行は未達。
+
+## 2026-09-20: saved comparison recording in MLflow — local acceptance complete
+
+完成した保存比較を、再fitせず専用experiment `shirokuma-local-ridge-comparisons-v1`へ1回記録する入口を実UIで確認した。
+profile `saved-ridge-comparison-import-v1`・artifact namespace `ridge-comparisons`で、candidate/reference/deltaのtrain/test各3指標（計18 points）と元学習/比較/model/splitのidentityを保存する。
+元比較の未記録時刻はnull/未記録のまま保持し、MLflowのrun/metric時刻はimport時刻として区別する。
+
+Labの`record_comparison(token)`は共有所有lock下で、初回だけ既存ML専用workerに同storeの状態保存→停止→cold backup→import1回/読戻し→元runtime状態復帰を依頼する。
+完成index・元比較・receipt/artifactの再検証後は保存receiptを返し、worker/backup/runtime操作/SDK・API/追加writeを発生させない。この再表示は現在DBを再照会した保証ではない。
+pending/unknownは再送を拒否し、元候補・backup・失敗証跡を保持する。新fit/Reader/LLM、Registry昇格・Servingは対象外。
+
+非稼働clone復元validatorにこの完成profileを追加し、6experiments/22runs/1383points/22artifactsのSDK全履歴読戻しで確認した。
+実対象は比較 `b393842b6c9a4f8db7da8da19672c449`（alpha10、元学習 `6df9b9e5a40b4035b7865f8435fdd291`）。実UI登録・同token再表示の追加write0・旧データ保持は成功。MLflowは22runs/1383points/22artifactsとなり、40不変files・旧21runsのtyped行/schema/artifactとAgentHouse560件を保持した。clone復元・保存/再読込・既存予測18件と最終全回帰3219PASS＋既存1skipも成功した。
+操作は[MLflow runbook](../../../../tools/local_experiment/mlflow/README.md)と[Lab runbook](../../../../tools/local_experiment/notebook_lab/README.md)、実証は[Milestones](../061_Local_Experiment_Milestones.md)へ追記する。
 
 ## 2026-09-20: Lab fixed Iceberg training and prediction — local acceptance complete
 

@@ -65,7 +65,7 @@ pipeline owns the temporary table, Reader, tracking write, backup and cleanup.
 The Lab worker reuses its existing ML environment and the project-local Go
 cache. Existing saved runs remain available.
 
-Training, queries, comparisons and Lab lifecycle commands share one ownership
+Training, queries, comparisons, comparison recording and Lab lifecycle commands share one ownership
 lock. Interrupt once and let the worker finish its cleanup. An incomplete or
 unknown attempt prevents further execution and stop/start until its owned
 cleanup is established. Inputs, launch/status records, pipeline output and the
@@ -183,3 +183,38 @@ reloading retained the inputs and outputs. A separate cold CLI check matched
 18 predictions to independent arithmetic, including the original 16 holdout
 rows. The existing saved files, MLflow records and audit rows were unchanged;
 the edited Notebook also survived a Lab stop and restart.
+
+## Record a saved comparison in MLflow
+
+Start the Lab to seed `comparison_recording.ipynb` once. Run its inventory cell,
+copy a verified `comparison_token` into the selection cell, and run the final
+code cell. It records the saved candidate, reference and six metric differences
+in the `shirokuma-local-ridge-comparisons-v1` experiment. The original comparison
+time was not recorded; import time is stored separately and is not presented as
+the model's training time.
+
+The first call temporarily stops the owned MLflow server, saves a cold backup,
+imports through the existing ML environment and restores the same store's prior
+running or stopped state. The Notebook remains available. It performs no fit,
+Reader or LLM call and does not promote a model. Save the Notebook to retain the
+chosen token and receipt; open the linked MLflow UI to inspect the recorded run.
+
+Calling again validates the original saved receipt, source and artifact, then
+returns it without a new worker, backup, service restart or Tracking write. That
+saved receipt is not a fresh readback of the current database. An uncertain
+write remains pending and is not automatically resubmitted. Residual worker or
+runtime cleanup blocks further Lab workflows until separately resolved.
+
+Private records are retained under
+`tmp/local-experiment/notebook-lab/comparison-recordings/` and the MLflow store's
+`comparison-imports/` directory. Cold export and non-running clone verification
+include the comparison profile and preserve its source training relationship.
+
+Local acceptance recorded the saved alpha 10 candidate once, displayed its
+18 metrics and 34 parameters in MLflow, and returned the same receipt on a
+second call without changing the database or server identity. The selected
+token and output survived Notebook save and reload. A cold export restored all
+22 runs into an inactive clone and passed SDK readback. Saved-model predictions
+remained unchanged; no training or Reader operation was repeated.
+Stopping all six owned kernels and restarting the Lab applied the updated
+modules while retaining all six Notebook files, permissions and modification times.
