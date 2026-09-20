@@ -1063,3 +1063,10 @@ verify-local-experiment: test-local-notebook-lab-count
 test-local-notebook-count-client:
 	@tools/local_experiment/notebook/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_count_client.py'
 verify-local-experiment: test-local-notebook-count-client
+
+.PHONY: test-local-notebook-metadata-client test-local-notebook-lab-metadata
+test-local-notebook-metadata-client:
+	@tools/local_experiment/notebook/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_metadata_client.py'
+test-local-notebook-lab-metadata:
+	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_metadata.py'
+verify-local-experiment: test-local-notebook-metadata-client test-local-notebook-lab-metadata

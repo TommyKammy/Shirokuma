@@ -152,6 +152,46 @@ def _reader_frames(raw, exit_code, request=REQUEST):
     return token, public, True
 
 
+def _tables_request(schema):
+    try:
+        return C.normalize_request({'command': 'tables', 'schema': schema})
+    except C.ContractError:
+        raise NotebookError('NOTEBOOK_REQUEST_INVALID') from None
+
+
+def _tables_public(public, schema):
+    """Validate the same saved inventory without a Reader call or forged frames."""
+    request = _tables_request(schema)
+    _require(type(public) is dict and set(public) == {'schema_version', 'catalog', 'schema', 'tables', 'complete'}
+             and type(public['schema_version']) is int and public['schema_version'] == 1
+             and public['catalog'] == C.CATALOG and public['schema'] == request['schema']
+             and type(public['tables']) is list and len(public['tables']) <= C.MAX_TABLES
+             and type(public['complete']) is bool
+             and (public['complete'] or len(public['tables']) == C.MAX_TABLES),
+             'NOTEBOOK_READER_INVALID')
+    try:
+        for table in public['tables']:
+            _require(C._table(table)[0] == schema, 'NOTEBOOK_READER_INVALID')
+        _require(public['tables'] == sorted(set(public['tables'])), 'NOTEBOOK_READER_INVALID')
+    except C.ContractError:
+        raise NotebookError('NOTEBOOK_READER_INVALID') from None
+    return public
+
+
+def _tables_reader_frames(raw, exit_code, schema):
+    """Accept a bounded inventory; incomplete and empty are distinct observations."""
+    request = _tables_request(schema)
+    token, public, cleanup = _reader_envelope(raw, exit_code, 'query tables')
+    if public is None:
+        return token, None, cleanup
+    return token, _tables_public(public, request['schema']), True
+
+
+def _tables_arguments(binary, request):
+    return [str(binary), '--repo-root', str(ROOT), '--profile', 'local-experiment',
+            'query', 'tables', '--schema', request['schema']]
+
+
 def _describe_request(table):
     try:
         return C.normalize_request({'command': 'describe', 'table': table})
@@ -349,6 +389,13 @@ def read_count(request):
     request = _count_request(request)
     return _read_owned(request, _count_arguments,
                        lambda raw, code: _count_reader_frames(raw, code, request))
+
+
+def read_tables(schema):
+    """List one supported schema through the owned Reader, preserving completeness."""
+    request = _tables_request(schema)
+    return _read_owned(request, _tables_arguments,
+                       lambda raw, code: _tables_reader_frames(raw, code, request['schema']))
 
 
 def read_describe(table):

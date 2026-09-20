@@ -215,14 +215,14 @@ class LabRuntimeTests(unittest.TestCase):
         self.assertEqual(destination.read_bytes(), b'user query and saved results')
         self.assertEqual(destination.stat().st_mtime_ns, before)
 
-    def test_count_seed_preserves_all_six_existing_notebooks_and_saved_count(self):
+    def test_count_seed_preserves_existing_notebooks_and_saved_count(self):
         self.prepared()
         workspace = self.state / 'workspace'
         destination = workspace / 'count_workbench.ipynb'
         self.assertEqual(destination.read_bytes(), R.COUNT_TEMPLATE.read_bytes())
         destination.unlink()  # Simulate a workspace prepared before COUNT existed.
         before = {}
-        self.assertEqual(len(list(workspace.iterdir())), 6)
+        self.assertEqual(len(list(workspace.iterdir())), 7)
         for path in workspace.iterdir():
             path.write_bytes(b'saved user cells and outputs: ' + path.name.encode())
             before[path.name] = (path.read_bytes(), path.stat().st_mtime_ns, path.stat().st_mode)
@@ -231,6 +231,26 @@ class LabRuntimeTests(unittest.TestCase):
                                 (workspace / name).stat().st_mode) for name in before}, before)
         self.assertEqual(destination.read_bytes(), R.COUNT_TEMPLATE.read_bytes())
         destination.write_bytes(b'saved user count result')
+        saved = (destination.read_bytes(), destination.stat().st_mtime_ns, destination.stat().st_mode)
+        R._prepare()
+        self.assertEqual((destination.read_bytes(), destination.stat().st_mtime_ns, destination.stat().st_mode), saved)
+
+    def test_metadata_seed_preserves_all_seven_existing_notebooks_and_saved_metadata(self):
+        self.prepared()
+        workspace = self.state / 'workspace'
+        destination = workspace / 'table_workbench.ipynb'
+        self.assertEqual(destination.read_bytes(), R.TABLE_TEMPLATE.read_bytes())
+        destination.unlink()
+        before = {}
+        self.assertEqual(len(list(workspace.iterdir())), 7)
+        for path in workspace.iterdir():
+            path.write_bytes(b'user cells and saved output: ' + path.name.encode())
+            before[path.name] = (path.read_bytes(), path.stat().st_mtime_ns, path.stat().st_mode)
+        R._prepare()
+        self.assertEqual({name: ((workspace / name).read_bytes(), (workspace / name).stat().st_mtime_ns,
+                                (workspace / name).stat().st_mode) for name in before}, before)
+        self.assertEqual(destination.read_bytes(), R.TABLE_TEMPLATE.read_bytes())
+        destination.write_bytes(b'saved metadata result')
         saved = (destination.read_bytes(), destination.stat().st_mtime_ns, destination.stat().st_mode)
         R._prepare()
         self.assertEqual((destination.read_bytes(), destination.stat().st_mtime_ns, destination.stat().st_mode), saved)

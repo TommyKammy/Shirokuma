@@ -93,6 +93,37 @@ Interrupted shutdown can resume from the saved ownership record; it does not
 restart kernels or stop an unidentified process. Initial configuration and
 shutdown failures are retained in the local experiment evidence.
 
+## Browse tables and columns
+
+Run `make local-notebook-lab-start` to add `table_workbench.ipynb` once. The
+initial Run All lists both `smoke` and `local_experiment` in the fixed `iceberg`
+catalog. Explicitly select one listed table to inspect its column names, types
+and nullable flags. The existing Reader performs these operations without a model call.
+An empty complete list, an incomplete list at the existing limit, and a failed
+request are shown separately. A failed read never becomes an empty result.
+
+The initial Run All only requests those two table lists. It does not execute a preview
+or COUNT. After inspecting the schema, explicitly enable the existing preview
+or count operation and provide its request. Those operations retain their
+existing validation, ownership, model-call and cleanup behavior.
+
+`tables(schema)` and `describe(table)` share the Lab query lock and owned worker
+with the other reads. `recover_metadata(attempt_token)` displays a saved
+observation without a new Reader or model call. The acquisition time describes
+that saved observation; it does not prove the table still has the same schema.
+Existing Notebooks and their saved outputs are preserved when the new template
+is seeded.
+
+Local acceptance on 2026-09-20 displayed `smoke.fixture_v1` and a complete empty
+`local_experiment` list, then described `id bigint` and `name varchar` (both
+non-nullable) at snapshot `7141845066324476177`. Saving and reloading the Notebook
+kept the observed time and saved schema, with no additional reads. All three
+metadata attempts closed cleanly and used zero model calls. The prior 218
+protected files, MLflow's 22 runs / 1,383 metric points / 22 artifacts, and 582
+AgentHouse rows stayed unchanged. The full local regression executed 3,408 tests
+(3,407 passed, one skipped). Evidence:
+`tmp/local-experiment/notebook-metadata-checks/92c916c4bfb145db9f2601648ecbb5c2/`.
+
 ## Natural-language table preview
 
 Run `make local-notebook-lab-start` again to add `query_workbench.ipynb` to an

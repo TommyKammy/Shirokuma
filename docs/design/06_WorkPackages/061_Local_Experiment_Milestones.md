@@ -5,13 +5,14 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.62"
+version: "3.63"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
+Labの固定2schema一覧と明示tableの列情報表示を実UIで確認した。metadata3attempt・モデル呼出し0、保存再表示と既存データ保持が成功した。
 自然文からsnapshotの全件/typed単一等値件数を得るLab/Assist入口が、修正後5caseと保存再表示で成功した。
 FinOpsの固定3component・disk watermark・宣言model eventの読取レポートが修正後completeとなった。全FinOps受入とは区別する。
 CometのARM64 native gateと同一remote snapshotのstock Spark比較が成功した。固定順序の相対測定として記録し、Glutenは互換binary未確認につきskipped。
@@ -44,6 +45,18 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: Lab table and schema exploration — local acceptance complete
+
+既存のtables/describe Readerを、初回だけ配置する`table_workbench.ipynb`へ接続した。初回Run Allは固定2schemaの一覧だけを取得し、明示table選択後に列情報を表示する。preview/COUNTは別の明示フラグを有効にした場合だけ実行する。空一覧・100件上限の部分一覧・unknownを区別し、保存metadataは新しいReader/モデル呼出しなしで再表示できる。
+
+実UIの一覧2回とdescribe1回は全passed/cleanup=true。`smoke.fixture_v1`が列挙され、`local_experiment`はcomplete=trueの空一覧となった。明示describeは`id:bigint`/`name:varchar`、双方nullable=false、current snapshot `7141845066324476177`。Qwen/model・新監査eventは0。保存結果の再表示とsave/reloadでNotebook bytes/mode/mtimeを保持した。旧218files、MLflow全59tables/22runs/1383metric points/22artifacts、AgentHouse582行・MLflow runtimeを保持した。Labはhealthy、PID58429・8kernelsで継続稼働する。
+
+新規のmetadata実行3件と対応Readerの計6directoriesは48files/30,602,830 logical bytes。shared cache・workspace Notebook・checksは別で、物理一意使用量ではない。
+
+全回帰は107suites/3408実行（3407PASS・既存1skip）、82.562秒。独立コードレビューで8対象fileのfreezeを照合し、追加指摘なし。私有証跡は`tmp/local-experiment/notebook-metadata-checks/92c916c4bfb145db9f2601648ecbb5c2/`の`acceptance.json`、`ui-acceptance.json`、`full01.json/log`、`independent-code-review.json`。全回帰log SHAは`779fde24ae97c17d25155280367e830cbe3932531dca2c2aea30c091d4e57510`。
+
+新サービス/依存/LLMは追加せず、既存Readerの固定scopeを広げない。取得完了時刻とsnapshot作成時刻を区別する。WP-L4-NB-001はlocal-partialのままで、今回の新Notebook上の自然文preview/COUNT実行、任意catalog、JupyterHub/複数ユーザーは受入範囲外。操作は[Lab runbook](../../../tools/local_experiment/notebook_lab/README.md)、機能境界は[NB WP](L4/WP-L4-NB-001_JupyterHub_bootstrap.md)を参照する。
 
 ## 2026-09-20: natural-language snapshot count — local acceptance complete
 

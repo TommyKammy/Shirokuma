@@ -5,7 +5,7 @@ title: "WP-L4-NB-001 JupyterHub bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.16"
+version: "0.17"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, notebook]
 ---
@@ -14,6 +14,7 @@ tags: [shirokuma, workpackage, l4, notebook]
 
 ## Summary
 
+固定schemaの一覧からtableを選び、列情報を確認するLab探索入口を実UIで検証した。モデル呼出しなしで保存再表示・save/reloadを確認した。
 自然文からsnapshotの正確な件数を表示する限定Lab入口は、修正後5caseと保存再表示で受入を確認した。
 保存比較候補をMLflowへ1回記録し、同tokenの再表示で追加writeを避けるLab入口を実UIで確認した。最終保持・非稼働clone復元も成功した。
 Notebook環境を整備する。ADR-0034のlocal実験では、固定Notebookを専用Python kernelで実行し、
@@ -31,6 +32,14 @@ Labから自然文table previewを呼ぶ別Notebookも、修正後の等値previ
 保存比較一覧から候補を選び、再fitせず新入力を予測するLab入口も実UI受入を確認した。
 Labの固定学習workbenchで、初回unknownを追加fitなしで回復し、別の新規正常実行とレビュー/一覧/編集予測・保存/再読込を確認した。
 JupyterHub、複数ユーザー、直接PySpark、kernel内fit・autologの完了は含めない。
+
+## 2026-09-20: Lab table and schema exploration — local acceptance complete
+
+[table workbench](../../../../examples/local_table_workbench.ipynb)から、既存Readerの`tables(schema)`/`describe(table)`へ接続した。`smoke`/`local_experiment`だけを対象とし、初回Run Allは一覧取得2回のみ。選択tableの列名・型・NULL可否・current snapshotを確認した後、明示フラグを有効にすると既存preview/COUNTを呼べる。一覧は最大100件で、空・部分・取得失敗を区別する。新しい選択時に旧結果をクリアする。
+
+実UIで`smoke.fixture_v1`の一覧と`local_experiment`の正常な空一覧（complete=true）、明示describeの`id:bigint`/`name:varchar`（双方nullable=false）を確認した。3attemptは全passed/cleanup=true、モデル呼出しと監査追加は0。取得完了UTCはsnapshot作成時刻ではない。保存metadata再表示は当時の証跡だけを照合し追加読取0、保存/再読込でもNotebook bytes/mode/mtimeを保持した。
+
+既存Notebook・MLflow・監査データを保持し、旧preview/COUNTは互換のまま。今回の実受入はmetadata探索までで、この新Notebookからの任意自然文実験・任意catalog/JupyterHub/複数ユーザーの完了は含めない。操作は[Lab runbook](../../../../tools/local_experiment/notebook_lab/README.md)、検証結果は[Milestones](../061_Local_Experiment_Milestones.md)を参照する。
 
 ## 2026-09-20: natural-language snapshot count — local acceptance complete
 

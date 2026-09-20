@@ -71,10 +71,15 @@ def _input(directory):
     require(type(value) is dict and type(value.get('schema_version')) is int)
     if value['schema_version'] == 2:
         require(set(value) == {'schema_version', 'mode', 'input'} and value['mode'] == 'count')
+    elif value['schema_version'] == 3:
+        from tools.local_experiment.notebook_lab import metadata as M
+        require(set(value) == {'schema_version', 'mode', 'input'} and value['mode'] == 'metadata')
+        value['input'] = M.normalize_request(value['input'])
     else:
         require(set(value) == {'schema_version', 'filtered', 'input'}
                 and value['schema_version'] == 1 and type(value['filtered']) is bool)
-    value['input'] = C.normalize_input(value['input'])
+    if value['schema_version'] != 3:
+        value['input'] = C.normalize_input(value['input'])
     require(N._read(directory / 'input.json', 16384) == N._canonical(value))
     return value
 
@@ -105,10 +110,13 @@ def query_status(directory):
     return value
 
 
-def terminal_receipt(directory, exit_code, *, verify_count_source=False):
+def terminal_receipt(directory, exit_code, *, verify_count_source=False, verify_metadata_source=False):
     """Rebind terminal owner, original input, cleanup and typed Reader frames."""
     directory = _directory(directory)
     requested = _input(directory)
+    if requested['schema_version'] == 3:
+        from tools.local_experiment.notebook_lab import metadata as M
+        return M.terminal_receipt(directory, exit_code, verify_source=verify_metadata_source)
     counting = requested['schema_version'] == 2
     filtered, request = requested.get('filtered', False), requested['input']
     if counting:
@@ -225,7 +233,7 @@ def query_closed(directory):
         return True
     if value is None or not value['child_exited'] or not value['cleanup_verified']:
         return False
-    if _input(directory)['schema_version'] == 2 and value['state'] in ('passed', 'unsupported'):
+    if _input(directory)['schema_version'] in (2, 3) and value['state'] in ('passed', 'unsupported'):
         # The parent verified its owned process group before saving this result.
         # A later process with the same PID is not this completed COUNT's owner.
         token, public = terminal_receipt(directory, value['exit_code'])
@@ -354,6 +362,30 @@ def count(table, request):
     return _execute(value)
 
 
+def tables(schema):
+    """List one fixed local schema without a model call."""
+    from tools.local_experiment.notebook_lab import metadata as M
+    return _execute({'schema_version': 3, 'mode': 'metadata',
+                     'input': M.normalize_request({'command': 'tables', 'schema': schema})})
+
+
+def describe(table):
+    """Read one explicitly selected table's recorded column types and identity."""
+    from tools.local_experiment.notebook_lab import metadata as M
+    return _execute({'schema_version': 3, 'mode': 'metadata',
+                     'input': M.normalize_request({'command': 'describe', 'table': table})})
+
+
+def recover_metadata(attempt_token):
+    from tools.local_experiment.notebook_lab import metadata as M
+    return M.recover(attempt_token)
+
+
+def render_metadata(result):
+    from tools.local_experiment.notebook_lab import metadata as M
+    return M.render(result)
+
+
 def _execute(value):
     """Both modes share the same locks, worker ownership and residual checks."""
     with _lock():
@@ -404,7 +436,8 @@ def _execute(value):
                             status['cleanup_verified'] = True
                         else:
                             token, public = terminal_receipt(directory, child.returncode,
-                                verify_count_source=value['schema_version'] == 2)
+                                verify_count_source=value['schema_version'] == 2,
+                                verify_metadata_source=value['schema_version'] == 3)
                             status.update(evidence_token=token, cleanup_verified=public['cleanup_verified'])
                 require(status['cleanup_verified'], 'LAB_QUERY_CLEANUP_UNKNOWN')
                 if first is None:
@@ -442,6 +475,9 @@ def worker(directory, *, assist=None):
             and status['process_start'] == N._process_start(os.getpid())
             and _json(directory / 'launch.json') == {'pid': os.getpid(), 'ppid': os.getppid(),
                 'pgid': os.getpid(), 'process_start': status['process_start']})
+    if value['schema_version'] == 3:
+        from tools.local_experiment.notebook_lab import metadata as M
+        return M.worker(directory)
     flag = '--count-request-stdin' if value['schema_version'] == 2 else (
         '--filtered-request-stdin' if value['filtered'] else '--request-stdin')
     return (assist or A.main)([flag],
