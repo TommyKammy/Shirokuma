@@ -64,7 +64,7 @@ func queryCountCommand(request dataChildRequest) (*exec.Cmd, error) {
 	args := []string{"-I", "-B", filepath.Join(root, queryCountScript), request.Action, "--evidence-token", request.Token, "--request-stdin"}
 	cmd := exec.Command(filepath.Join(root, dataPython), args...)
 	cmd.Dir, cmd.Env = root, []string{}
-	for _, key := range []string{"PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "LC_ALL"} {
+	for _, key := range []string{"PATH", "HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "LC_ALL", "KUBECONFIG"} {
 		if value, ok := os.LookupEnv(key); ok {
 			cmd.Env = append(cmd.Env, key+"="+value)
 		}

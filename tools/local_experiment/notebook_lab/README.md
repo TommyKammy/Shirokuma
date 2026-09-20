@@ -129,6 +129,50 @@ records were retained under `queries-closed-failures`; the connection-setting
 propagation was repaired before a fresh attempt. This recovery is specific to
 that verified pre-resource failure, not permission to disregard unknown cleanup.
 
+## Ask for an exact row count
+
+Run `make local-notebook-lab-start` to add `count_workbench.ipynb` once. Existing
+Notebooks and their saved outputs are preserved. In the new Notebook, enter an
+explicit table and a request such as `全体は何件ですか` or
+`idが1の行は何件ですか`. Run the count cell once, then save the Notebook to
+retain the input, exact count and selected snapshot.
+
+The count profile supports all rows or one typed equality at the current head.
+It makes one local Qwen proposal and uses the existing Count Reader, with the
+same Lab ownership lock and cleanup handling as preview. It performs no asset
+materialization, training or MLflow write. A count of zero is a successful
+observation; unsupported, failed and unconfirmed outcomes remain distinct.
+The result is an exact decimal string, including counts too large for precise
+floating-point representation.
+
+COUNT may scan the selected snapshot. Existing time bounds remain in effect,
+and an uncertain attempt is not automatically retried. Each execution of the
+count cell requests a new observation; reopening its saved output does not
+execute a model or Reader. The original preview Notebook retains its original
+column/limit behavior and optional single equality.
+
+The final Notebook cell accepts a completed attempt token and calls
+`recover_count(token)` to display its saved observation. It checks the original
+result and receipts without calling Qwen or the Reader. The snapshot shown is
+the one observed during that execution, not a new current-head measurement.
+
+For a failed COUNT whose saved receipts prove that no Trino/Polaris runtime or
+query started, `close_unstarted_count(token)` can record a separate closure
+after checking the owned processes have exited. It preserves the failed status,
+summary and outputs and does not repeat inference or COUNT. A started query,
+missing or inconsistent receipt, or an active/unknown process is not eligible.
+This closure permits a later, explicit new attempt; it does not turn the failed
+attempt into a successful count or zero.
+
+Local verification displayed all 2 fixture rows as an exact count in the Lab,
+then redisplayed the saved result and preserved the Notebook through reload.
+Separate calls through the same Lab API returned 1 for `id=1`, 0 for
+`id=999999`, and unsupported for a range and an unknown column. All five
+completed with cleanup verified. An initial failed connection attempt is kept
+with its separate pre-runtime closure; the Count child now inherits the fixed
+`KUBECONFIG`, as the existing describe child already did. The original six
+Notebooks, MLflow records and prior audit rows were preserved.
+
 ## Compare Ridge settings
 
 Run `make local-notebook-lab-start` to add `ridge_comparison.ipynb` once. Open it,

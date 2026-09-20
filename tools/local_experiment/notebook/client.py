@@ -22,6 +22,7 @@ import urllib.request
 from tools.local_experiment.query_read import contract as C
 from tools.local_experiment.notebook import selection as S
 from tools.local_experiment.notebook import filtered_selection as FS
+from tools.local_experiment.query_count import contract as QC
 
 ROOT = Path(__file__).resolve().parents[3]
 INDEX = ROOT / 'tmp/local-experiment/mlflow-tracking/import-index.json'
@@ -315,6 +316,39 @@ def read_filtered(request):
     request = FS.normalize_request(request)
     return _read_owned(request, lambda binary, value: FS.arguments(binary, ROOT, value),
                        lambda raw, code: _filtered_reader_frames(raw, code, request))
+
+
+def _count_request(request):
+    request = QC.normalize_request(request)
+    _require(request['snapshot_id'] is None, 'NOTEBOOK_REQUEST_INVALID')
+    return request
+
+
+def _count_arguments(binary, request):
+    request = _count_request(request)
+    arguments = [str(binary), '--repo-root', str(ROOT), '--profile', 'local-experiment',
+                 'query', 'count', '--table', request['table']]
+    if request['where'] is not None:
+        arguments += ['--where-column', request['where']['column'], '--equals', request['where']['literal']]
+    return arguments
+
+
+def _count_reader_frames(raw, exit_code, request):
+    request = _count_request(request)
+    token, public, cleanup = _reader_envelope(raw, exit_code, 'query count',
+                                             schema_version=4, evidence_root='query-count')
+    if public is None:
+        return token, None, cleanup
+    try: public = QC.validate_public(public, request)
+    except QC.ContractError: raise NotebookError('NOTEBOOK_READER_INVALID') from None
+    return token, public, True
+
+
+def read_count(request):
+    """One exact current-snapshot COUNT through the existing owned Go Reader."""
+    request = _count_request(request)
+    return _read_owned(request, _count_arguments,
+                       lambda raw, code: _count_reader_frames(raw, code, request))
 
 
 def read_describe(table):

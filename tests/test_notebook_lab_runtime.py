@@ -215,6 +215,26 @@ class LabRuntimeTests(unittest.TestCase):
         self.assertEqual(destination.read_bytes(), b'user query and saved results')
         self.assertEqual(destination.stat().st_mtime_ns, before)
 
+    def test_count_seed_preserves_all_six_existing_notebooks_and_saved_count(self):
+        self.prepared()
+        workspace = self.state / 'workspace'
+        destination = workspace / 'count_workbench.ipynb'
+        self.assertEqual(destination.read_bytes(), R.COUNT_TEMPLATE.read_bytes())
+        destination.unlink()  # Simulate a workspace prepared before COUNT existed.
+        before = {}
+        self.assertEqual(len(list(workspace.iterdir())), 6)
+        for path in workspace.iterdir():
+            path.write_bytes(b'saved user cells and outputs: ' + path.name.encode())
+            before[path.name] = (path.read_bytes(), path.stat().st_mtime_ns, path.stat().st_mode)
+        R._prepare()
+        self.assertEqual({name: ((workspace / name).read_bytes(), (workspace / name).stat().st_mtime_ns,
+                                (workspace / name).stat().st_mode) for name in before}, before)
+        self.assertEqual(destination.read_bytes(), R.COUNT_TEMPLATE.read_bytes())
+        destination.write_bytes(b'saved user count result')
+        saved = (destination.read_bytes(), destination.stat().st_mtime_ns, destination.stat().st_mode)
+        R._prepare()
+        self.assertEqual((destination.read_bytes(), destination.stat().st_mtime_ns, destination.stat().st_mode), saved)
+
     def test_pending_query_prevents_stop_before_any_service_operation(self):
         self.prepared()
         with patch.object(R, '_queries_idle', return_value=False):

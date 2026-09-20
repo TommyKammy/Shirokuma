@@ -75,3 +75,8 @@ class NotebookAssistProvider(LocalProvider):
 class FilteredNotebookAssistProvider(NotebookAssistProvider):
     """Same local transport and schema-only context; a separate fixed proposal."""
     from tools.local_experiment.notebook_assist.filtered import PHASE as phase, INSTRUCTION as instruction
+
+
+class CountNotebookAssistProvider(NotebookAssistProvider):
+    """Same bounded local transport, with the separate current-snapshot COUNT contract."""
+    from tools.local_experiment.notebook_assist.count import PHASE as phase, INSTRUCTION as instruction

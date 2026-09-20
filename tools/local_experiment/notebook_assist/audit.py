@@ -76,6 +76,11 @@ def fingerprint(value):
 
 
 class NotebookAudit:
+    actions = ACTIONS
+    assess = ASSESS
+    read_actions = (DESCRIBE,)
+    execution_target = 'notebook-assets-local'
+
     def __init__(self, token, output, profile, progress, *, agenthouse=None, loki=None):
         require(type(token) is str and re.fullmatch(r'[0-9a-f]{32}', token) is not None)
         require(type(profile) is dict and all(type(profile.get(k)) is str and
@@ -92,6 +97,7 @@ class NotebookAudit:
         from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExporter, SpanExportResult
         from opentelemetry.sdk.trace.sampling import ALWAYS_ON
         from opentelemetry.trace import Status, StatusCode
+        actions, assess = self.actions, self.assess
 
         class SpanFile(SpanExporter):
             def __init__(self, path):
@@ -101,7 +107,7 @@ class NotebookAudit:
             def export(self, spans):
                 try:
                     for span in spans:
-                        require(span.name in (*ACTIONS, ASSESS))
+                        require(span.name in (*actions, assess))
                         ctx = span.get_span_context()
                         row = dict(name=span.name, trace_id=f'{ctx.trace_id:032x}', span_id=f'{ctx.span_id:016x}',
                                    start_time_unix_nano=span.start_time, end_time_unix_nano=span.end_time,
@@ -148,7 +154,7 @@ class NotebookAudit:
 
     def start(self):
         require(self.context is None and not self.closed)
-        self.context = self.tracer.start_as_current_span(ASSESS, context=self.Context(),
+        self.context = self.tracer.start_as_current_span(self.assess, context=self.Context(),
             record_exception=False, set_status_on_exception=False)
         self.root = self.context.__enter__()
         self.report['trace_id'] = f'{self.root.get_span_context().trace_id:032x}'
@@ -182,7 +188,7 @@ class NotebookAudit:
         self._verify_rows(value['data'], records)
 
     def emit(self, action, status, metrics, span, inference=False):
-        target = 'llm-local-compatible' if inference else 'trino-read-only' if action == DESCRIBE else 'notebook-assets-local'
+        target = 'llm-local-compatible' if inference else 'trino-read-only' if action in self.read_actions else self.execution_target
         event = self.agenthouse.event(action, target, agent_id='notebook-assist-local',
             task_id=self.report['task_id'], trace_id=self.report['trace_id'], status=status,
             blocked_by_policy=status == 'blocked', model_provider=self.profile['provider'] if inference else 'none',
@@ -210,8 +216,8 @@ class NotebookAudit:
 
     def phase(self, action, call, *, inference=False, validate=None):
         require(self.root is not None and not (self.closed or self.ready or self.failed))
-        require(type(inference) is bool and inference == (action == INFERENCE))
-        require(len(self.started_phases) < len(ACTIONS) and action == ACTIONS[len(self.started_phases)])
+        require(type(inference) is bool and inference == (action == self.actions[1]))
+        require(len(self.started_phases) < len(self.actions) and action == self.actions[len(self.started_phases)])
         require(all(value == 'success' for value in self.phases.values()))
         self.started_phases.append(action)
         with preserve_context(self.tracer.start_as_current_span(action, record_exception=False,
@@ -248,10 +254,10 @@ class NotebookAudit:
 
     def finish(self, status='success'):
         require(self.root is not None and not (self.ready or self.closed or self.failed))
-        expected = {DESCRIBE: 'success', INFERENCE: 'blocked'} if status == 'blocked' else dict.fromkeys(ACTIONS, 'success')
+        expected = {self.actions[0]: 'success', self.actions[1]: 'blocked'} if status == 'blocked' else dict.fromkeys(self.actions, 'success')
         require(status in ('success', 'blocked') and self.phases == expected)
-        require(not any(row['action_type'] == ASSESS for row in self.report['records']))
-        self.emit(ASSESS, status, safe_metrics({}, int((time.monotonic() - self.started) * 1000)), self.root)
+        require(not any(row['action_type'] == self.assess for row in self.report['records']))
+        self.emit(self.assess, status, safe_metrics({}, int((time.monotonic() - self.started) * 1000)), self.root)
         self._read_rows(self.report['records'])
         logs = self.loki.query_task(self.report['task_id'])
         expected_logs = [dict(task_id=row['task_id'], trace_id=row['trace_id'], span_id=row['span_id'],
@@ -295,9 +301,9 @@ class NotebookAudit:
         secondary = None
         try:
             if self.root is not None:
-                if not any(row['action_type'] == ASSESS for row in self.report['records']):
+                if not any(row['action_type'] == self.assess for row in self.report['records']):
                     try:
-                        self.emit(ASSESS, 'failed', safe_metrics({}, int((time.monotonic() - self.started) * 1000)), self.root)
+                        self.emit(self.assess, 'failed', safe_metrics({}, int((time.monotonic() - self.started) * 1000)), self.root)
                     except BaseException as error:
                         secondary = first(secondary, error)
                 success = original is None and secondary is None and self.ready
@@ -328,3 +334,12 @@ class NotebookAudit:
             if not isinstance(selected, Exception) or selected is original:
                 raise selected
             raise AuditError() from None
+
+
+class CountNotebookAudit(NotebookAudit):
+    """Separate COUNT action names; unchanged delivery and measured-usage handling."""
+    from tools.local_experiment.notebook_assist import count as contract
+    actions = (contract.DESCRIBE, contract.INFERENCE, contract.COUNT)
+    assess = contract.ASSESS
+    read_actions = (contract.DESCRIBE, contract.COUNT)
+    execution_target = 'notebook-count-local'

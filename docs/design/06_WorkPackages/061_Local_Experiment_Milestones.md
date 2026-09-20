@@ -5,13 +5,14 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.61"
+version: "3.62"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
+自然文からsnapshotの全件/typed単一等値件数を得るLab/Assist入口が、修正後5caseと保存再表示で成功した。
 FinOpsの固定3component・disk watermark・宣言model eventの読取レポートが修正後completeとなった。全FinOps受入とは区別する。
 CometのARM64 native gateと同一remote snapshotのstock Spark比較が成功した。固定順序の相対測定として記録し、Glutenは互換binary未確認につきskipped。
 保存比較のMLflow記録・同token再表示の追加write0は実UIで成功した。clone復元・SDK読戻しと最終回帰も成功した。
@@ -43,6 +44,15 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: natural-language snapshot count — local acceptance complete
+
+[Notebook WP](L4/WP-L4-NB-001_JupyterHub_bootstrap.md)/[Agent WP](L4/WP-L4-AGENT-001_Notebook_to_Dagster_Agent.md)で、明示tableの全件/typed単一等値をschema-only Qwen1call→既存Count Reader→Lab表示へ接続した。`recover_count`は過去の保存観測を追加model/readなしで表示する。0件・unsupported・送信後unknownを区別し、旧preview/6Notebookを保持する。
+初回Lab `16bf6b44cede461f9f724e027a32e771` はKUBECONFIG継承漏れによりruntime/SQL開始前にunknownとなった。元23filesのbytes/mode/mtimeとunknown statusを保ち、別`recovery.json`へ開始前closureを追記（0.583秒、追加model/Reader0）。開始済みSQL/tunnel・PID/PGID不明を対象にしない。Go子環境はKUBECONFIGだけを追加し、COUNT監査target対応も修正した。
+別実行の全件2（Lab `c9e9aad04b6a4b1e8ec368f20d88fc77`）を実UIで確認した。同じ`count()` APIの実接続では等値1（34.644秒）・等値0（33.644秒）がpassed、範囲（15.589秒）・未知列（16.586秒）がunsupported/COUNT0となり、5caseは3passed/2unsupported。全件2の保存再表示は追加model/Reader0、save/reloadでNotebook bytes/mode/mtimeが一致した（SHA `ddda14708c0419d4c20fc3ea2a37c934465a38747195135a5b13d280e3e39ea3`）。
+初回失敗込みQwen6callsの実測はprompt2352/completion77tokens・推論8128ms、cost null。保持検証0.889秒で旧71＋失敗23filesのbytes/mode/mtime、MLflow全59tables・22runs/1383points/22artifactsとruntimeが一致した。旧AgentHouse560行のhashを保持し、期待22eventsだけ増えて582行。旧誤target3eventsは修正せず保持し、新eventの正しいtarget_systemを実DBで照合した。Labはhealthy・PID49427・7kernelsで稼働している。
+full02は105suites/3386実行＝3385PASS＋既存1skip（83.322秒）、Go全体もPASS（16.555秒）。限定local受入は完了したが、general NL/JupyterHub・任意Notebook変換は未達。
+attempt22dirs/146filesは61,271,706 B（allocated61,693,952 B）。shared caches・workspace Notebook・checks領域は別で、APFS固有の物理容量とはしない。証跡は `tmp/local-experiment/notebook-count-checks/b8454968c954463e91d02bd1fc5f3c00/` のclosure01、ui-acceptance、acceptance、retention-after、storage-and-usage、full02、Go記録。元失敗と静的保存結果を現在source/dataの受入と混同しない。
 
 ## 2026-09-20: FinOps bounded read-only report — local partial acceptance
 

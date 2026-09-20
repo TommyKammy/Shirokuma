@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -343,6 +344,10 @@ func TestQueryCountFailedInterruptedAndUnknownAreNotPassed(t *testing.T) {
 func TestQueryCountChildPipesRequestAndKeepsFixedArgvEnvironment(t *testing.T) {
 	r := countRequest(true, true)
 	r.Root = countRoot(t)
+	home := filepath.Join(t.TempDir(), "dedicated-home")
+	kubeconfig := filepath.Join(t.TempDir(), "fixed kubeconfig")
+	t.Setenv("HOME", home)
+	t.Setenv("KUBECONFIG", kubeconfig)
 	t.Setenv("PRIVATE_SENTINEL", "forbidden")
 	cmd, err := queryCountCommand(r)
 	if err != nil {
@@ -351,6 +356,9 @@ func TestQueryCountChildPipesRequestAndKeepsFixedArgvEnvironment(t *testing.T) {
 	args := strings.Join(cmd.Args, " ")
 	if !strings.Contains(args, queryCountScript) || !strings.Contains(args, "count --evidence-token") || !strings.Contains(args, "--request-stdin") || strings.Contains(args, "fixture_v1") || strings.Contains(args, "9007199254740993") || strings.Contains(strings.Join(cmd.Env, " "), "PRIVATE_SENTINEL") || cmd.SysProcAttr == nil || !cmd.SysProcAttr.Setpgid {
 		t.Fatal("count child boundary differs")
+	}
+	if !slices.Contains(cmd.Env, "HOME="+home) || !slices.Contains(cmd.Env, "KUBECONFIG="+kubeconfig) {
+		t.Fatal("explicit kubeconfig was lost under the dedicated home")
 	}
 	raw, err := io.ReadAll(cmd.Stdin)
 	if err != nil || !bytes.Equal(raw, r.Request) {

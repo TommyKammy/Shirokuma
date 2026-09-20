@@ -1,10 +1,11 @@
-# Natural-language preview with local Qwen
+# Natural-language reads with local Qwen
 
 Translate a short request into a bounded current-head table preview, then
 materialize the two registered Notebook assets. The table is an explicit input;
 the model selects column names, a row limit and, in the filtered variant, one
 host-validated equality. It does not generate SQL,
-Notebook code or executable commands.
+Notebook code or executable commands. The separate count profile below reads
+an exact aggregate through the existing Count Reader.
 
 From this checkout, with the dedicated DataOps environment and local services
 already available:
@@ -122,6 +123,40 @@ Public predicate metadata omits the literal, but selected rows can contain it.
 Audit payloads do not include prompts, schema, literals or row data. Unknown
 results, save failures and cancellation retain evidence without automatic retry.
 
+## Count rows from a natural-language request
+
+```sh
+rtk proxy make local-notebook-assist-count <<'JSON'
+{"table":"smoke.fixture_v1","request":"全体は何件ですか"}
+JSON
+```
+
+The explicit count profile accepts all rows or one supported typed equality,
+such as `idが1の行は何件ですか`. It uses one local Qwen proposal and the existing
+Count Reader. The model receives the schema and request, and proposes only a
+condition or an unsupported result. The host supplies the table and selects
+the current Iceberg snapshot; the model supplies no SQL, code or snapshot ID.
+The original preview and filtered-preview profiles keep their existing behavior.
+
+Accepted counts use the same integer/bigint, decimal, date and boolean equality
+rules as filtered previews. Ranges, multiple conditions, groupings, sums,
+historical snapshots, varchar/float equality and NULL conditions are outside
+this profile. A valid proposal does not prove that the model understood every
+natural-language request correctly.
+
+The result retains its exact decimal count string and the selected snapshot.
+Zero is a valid observed count. Unsupported means the proposal was declined
+before COUNT execution; a failed or unknown attempt never becomes zero or
+unsupported. A COUNT that was submitted before a failure is not automatically
+repeated. COUNT can scan the selected snapshot, so the existing Reader execution
+and cleanup time bounds remain in effect.
+
+COUNT uses the owned Reader directly and does not materialize Notebook assets
+or read MLflow evaluations. Describe and COUNT occur separately: a current-head
+change is allowed, while the table UUID, schema and typed condition must still
+agree. Audit records retain the existing private-prompt boundary. Retained
+results describe their original observation, not a fresh count of current data.
+
 ## Results and retained evidence
 
 The runner's final stdout JSON contains `result`, `error_code`, `model_calls`,
@@ -131,26 +166,30 @@ can print its own nonzero-exit diagnostic separately. The Python owner exits:
 
 | Result | Owner exit | Meaning |
 | --- | --- | --- |
-| `passed` | 0 | Accepted selection, assets, identities, cleanup and audit verified |
-| `unsupported` | 2 | Model explicitly declined; describe and audit completed, no select/assets |
+| `passed` | 0 | Preview/assets or count, identities, cleanup and audit verified |
+| `unsupported` | 2 | Model explicitly declined; describe and audit completed, no data read/assets |
 | `failed` or `unknown` | 1 | No successful completion claim; inspect private evidence |
 | Interrupted | Signal-derived nonzero | Original cancellation retained; cleanup can remain unknown |
 
 Original-profile evidence stays under `tmp/local-experiment/notebook-assist/<token>/`;
-the filtered variant uses the separate directory above. Private
+the filtered variant uses the separate directory above. Count evidence uses
+`tmp/local-experiment/notebook-assist-count/<token>/` with schema 3 and profile
+`natural-language-notebook-count-v1`. Private
 `input.json` retains the supplied request; `model-context.json` retains the
 bounded schema input, and `model-response.json` retains the parsed proposal and
 measured usage. These are private experiment files, not committed documents or
 public audit payloads. Source/input/binary hashes and an exclusive execution
 intent bind the run and prevent same-directory replay.
 
-`describe/` holds the metadata Reader receipt. An accepted plan also creates
+`describe/` holds the metadata Reader receipt. An accepted preview plan also creates
 `assets/` with its canonical request, registered export, private Reader stdout,
 evaluation projection and dedicated Dagster store. Rows remain in private
 Reader output. `summary.json` tracks workflow progress and its result;
 `owner-result.json` separately records the terminal owner result and
 `summary_result`. A later save failure or cancellation does not rewrite an
 earlier business result into owner success.
+An accepted count instead saves its owned Count Reader records under `count/`
+and its validated aggregate under `count_result`. It creates no `assets/`.
 
 Directories are 0700, evidence files are 0600 and the local Go binary is 0700.
 Keep these files and the existing data, MLflow runs/artifacts and backups. To
@@ -159,12 +198,14 @@ exited; retained data deletion is not part of recovery.
 
 ## Audit and cancellation
 
-Accepted execution emits four Pawprints: describe, model, materialize and root
+Accepted preview execution emits four Pawprints: describe, model, materialize and root
 assessment. Normal unsupported emits three, omitting materialize. Each event
 uses the same task and trace, with a distinct span ID. Local OpenTelemetry spans
 are written privately, and AgentHouse insertion/readback plus Loki
 push/readback must agree before the audit is verified. The service and agent
 identity is `notebook-assist-local`; no global tracer provider is installed.
+Count uses its explicit count action profile, replacing materialization with
+the Count Reader phase while keeping preview actions unchanged.
 
 Only fixed actions/statuses, correlation IDs and bounded metrics enter these
 records. Prompts, schema, rows, model response bodies and exception text do not.
@@ -225,6 +266,38 @@ The seven nonoverlapping output directories contain 61 files/31,114,905 bytes
 `tmp/local-experiment/notebook-assist-filtered-checks/e719c8b8661a42e591fa2e7cb3826615/`.
 These three cases establish neither general language understanding nor general
 resistance to contract-override requests.
+
+## 2026-09-20 natural-language COUNT verification
+
+The retained fixture returned exact counts `2` for all rows, `1` for `id=1`,
+and `0` for `id=999999`, at snapshot `7141845066324476177`. A range request
+and an unknown column returned unsupported without a COUNT. The first case
+ran from the new JupyterLab Notebook; the other four used its same `count()`
+API. Saving, reloading and redisplaying the saved result made no new model or
+Reader call. These five requests do not establish general language accuracy.
+
+The initial attempt completed inference but failed before COUNT runtime setup:
+the Go Count child had omitted the explicit `KUBECONFIG`. Its 23 original
+files and failed audit events remain unchanged. After repairing that narrow
+environment boundary, `close_unstarted_count()` recorded a separate closure
+based on the absent runtime/query receipts and exited processes. A new attempt
+then succeeded. The COUNT audit now records describe/count against
+`trino-read-only` and assessment against `notebook-count-local`; prior incorrect
+target labels in the failed attempt were retained.
+
+Including that initial failure, the six model calls used 2352 input tokens,
+77 output tokens and 8128 ms of measured inference duration. Cost remains null.
+All 94 protected files retained their bytes, mode and modification time;
+MLflow retained 22 runs, 1383 metric points, 22 artifacts and its table contents.
+All 560 prior AgentHouse rows retained their hashes, with exactly 22 correlated
+events added. The 22 attempt directories contain 146 files, 61,271,706 bytes
+(61,693,952 allocated); shared caches, the Notebook and checks are separate.
+No retained data or backups were removed.
+
+The final local regression ran 3386 tests (3385 passed, one optional skip) in
+83.322 seconds. Go package tests and the focused CLI vet check passed.
+Evidence is private under
+`tmp/local-experiment/notebook-count-checks/b8454968c954463e91d02bd1fc5f3c00/`.
 
 ## 2026-09-20 local verification
 

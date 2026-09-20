@@ -5,7 +5,7 @@ title: "WP-L4-NB-001 JupyterHub bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.15"
+version: "0.16"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, notebook]
 ---
@@ -14,6 +14,7 @@ tags: [shirokuma, workpackage, l4, notebook]
 
 ## Summary
 
+自然文からsnapshotの正確な件数を表示する限定Lab入口は、修正後5caseと保存再表示で受入を確認した。
 保存比較候補をMLflowへ1回記録し、同tokenの再表示で追加writeを避けるLab入口を実UIで確認した。最終保持・非稼働clone復元も成功した。
 Notebook環境を整備する。ADR-0034のlocal実験では、固定Notebookを専用Python kernelで実行し、
 既存ReaderとMLflow Trackingの読取へ接続する最小部分を先行した。実kernel2回と
@@ -30,6 +31,13 @@ Labから自然文table previewを呼ぶ別Notebookも、修正後の等値previ
 保存比較一覧から候補を選び、再fitせず新入力を予測するLab入口も実UI受入を確認した。
 Labの固定学習workbenchで、初回unknownを追加fitなしで回復し、別の新規正常実行とレビュー/一覧/編集予測・保存/再読込を確認した。
 JupyterHub、複数ユーザー、直接PySpark、kernel内fit・autologの完了は含めない。
+
+## 2026-09-20: natural-language snapshot count — local acceptance complete
+
+[固定COUNT Notebook](../../../../examples/local_count_workbench.ipynb)を初回だけ配置し、`count(table, request)`で明示tableの全件またはtyped単一等値を数える。schemaと要求だけをQwenへ1回渡し、host検証後に既存Count Readerへ接続する。任意SQL/集計式/row limitは生成せず、assets実行・MLflow読取/書込もない。旧previewと既存6Notebookを保持する。
+成功時はcanonical文字列の正確な件数と集計snapshot/条件を表示する。観測した0件、計画unsupported、送信後unknownを区別する。`recover_count(token)`は当時のsource seal/receipt/resultを照合する保存再表示で、追加model/readは0、現行sourceや現在件数の受入とは分ける。過去PIDを現在のownerとして照会しない。
+初回unknownはCount Go childがKUBECONFIGを継承せずruntime開始前に失敗したもの。原23filesとunknown statusを保持し、`close_unstarted_count(token)`で開始前の厳密な保存状態とPID/PGID消失を確認して別recovery.jsonだけを追記した。SQL/tunnel開始済み・不明状態を閉じず、自動retryや成功/0件への変更もしない。
+Go環境継承とCOUNT監査targetの修正後、全件2を実UI、等値1・等値0・範囲/未知列拒否を同じ`count()` APIの実接続で確認した（3passed/2unsupported）。全件2の保存再表示とsave/reloadでもNotebook bytes/mode/mtimeが一致した。旧71＋初回失敗23files・MLflow/旧監査を保持し、期待する新監査だけを追加した。一般自然文理解、任意Notebook生成、JupyterHub/複数ユーザー・本番受入は未達。操作は[Lab runbook](../../../../tools/local_experiment/notebook_lab/README.md)、全実測は[Milestones](../061_Local_Experiment_Milestones.md)を参照する。
 
 ## 2026-09-20: saved comparison recording in MLflow — local acceptance complete
 

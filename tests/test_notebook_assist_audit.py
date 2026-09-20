@@ -103,6 +103,8 @@ class AuditTests(unittest.TestCase):
         self.assertTrue(self.audit.report['verified'])
         self.assertTrue(self.audit.report['saved_spans_verified'])
         self.assertEqual([r['action_type'] for r in self.audit.report['records']], [*A.ACTIONS, A.ASSESS])
+        self.assertEqual([event['target_system'] for event in self.house.events],
+                         ['trino-read-only','llm-local-compatible','notebook-assets-local','notebook-assets-local'])
         self.assertTrue(all(self.house.progress_bound))
         self.assertEqual(len(self.house.events), 4)
         self.assertEqual(self.house.events[1]['prompt_tokens'], 42)

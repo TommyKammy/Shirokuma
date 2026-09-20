@@ -5,7 +5,7 @@ title: "WP-L4-AGENT-001 Notebook to Dagster Agent"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.6"
+version: "0.7"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, agentops]
 ---
@@ -14,12 +14,20 @@ tags: [shirokuma, workpackage, l4, agentops]
 
 ## Summary
 
+schema-only Qwenから既存snapshot Countへ接続する限定増分は、修正後5caseで期待どおりとなった。
 Notebookを再現可能なDagster assetへ接続する。ADR-0034のlocal実験では、登録済みの固定Notebookだけを
 hostの定型2assetsへ対応付ける最小部分を実装し、実2回と独立最終照合が成功した。
 選択tableの登録previewもschema2の2assetsへ接続し、実1回と独立保存照合が成功した。
 さらに自然文から検証済みselectionを作る限定Assistを接続し、実5caseが期待どおりとなった。
 型付き単一等値条件の自然文previewも実3caseと独立保存照合で確認した。
 任意Notebookの解析・生成や一般的なLLM変換は含めない。
+
+## 2026-09-20: natural-language snapshot count — local acceptance complete
+
+`local-notebook-assist-count`（`--count-request-stdin`）はexact `{table,request}`から、describe由来のschema-only Qwen1callで全件または型付き単一等値COUNTを提案する。proposalは`{where,unsupported}`、hostがtableとcurrent snapshotを指定し、既存Count契約/所有Readerへ渡す。整数/bigint/decimal/date/boolean等値だけを対象とし、range・複数条件・groupby・他aggregate・NULL/varchar/float条件・過去snapshotを扱わない。
+Assist schema3/profile`natural-language-notebook-count-v1`で旧preview/filterを維持する。COUNTは定型assetsや保存ML評価を実行せず、独立したdescribe/model/count/assessmentの監査actionを使う。describeとCOUNTは別時点で、head更新を許しUUID/schema/条件型を照合する。
+明示unsupported/未検証proposalはCOUNTへ進めず、送信後unknownを未実行や0件と断定しない。正確な0件は成功結果。初回のruntime開始前失敗は原本を保持した別closureとし、Go KUBECONFIG継承・監査target修正後に全件2/等値1/等値0が成功した。範囲/未知列はunsupportedでCOUNT0となり、全5caseは3passed/2unsupported。初回失敗込みQwen6calls、期待22監査eventの帰属と既存データ・証跡の保持も確認した。
+一般自然文品質や任意Notebook→assets変換の完了は主張しない。[Count契約](../../../../tools/local_experiment/query_count/README.md)のtimeoutと全走査し得る境界を維持する。操作は[Assist runbook](../../../../tools/local_experiment/notebook_assist/README.md)、結果は[Milestones](../061_Local_Experiment_Milestones.md)へ記録する。
 
 ## 2026-09-20: natural-language typed equality preview — local acceptance complete
 
