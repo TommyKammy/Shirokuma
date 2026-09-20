@@ -241,8 +241,12 @@ class PodLogCollectionTests(unittest.TestCase):
 
 class PodLogTransportTests(unittest.TestCase):
     def process(self, chunks, *, error=None):
-        process = Mock(); process.stdout.fileno.return_value = 99
-        process.poll.return_value = None; process.pid = 9876; process.wait.return_value = 0
+        process = Mock(returncode=None); process.stdout.fileno.return_value = 99
+        process.pid = 9876
+        def wait(**kwargs):
+            process.returncode = 0
+            return 0
+        process.wait.side_effect = wait
         selector = Mock(); selector.select.return_value = [True]
         patches = [patch.object(U.subprocess, 'Popen', return_value=process),
                    patch.object(U.selectors, 'DefaultSelector', return_value=selector),
@@ -261,7 +265,8 @@ class PodLogTransportTests(unittest.TestCase):
         self.assertTrue(options['start_new_session'])
         self.assertEqual(options['stdin'], subprocess.DEVNULL)
         selector.close.assert_called_once(); process.stdout.close.assert_called_once()
-        mocks[4].assert_called_once_with(process.pid, signal.SIGKILL)
+        mocks[4].assert_not_called()
+        process.poll.assert_not_called()
 
     def test_pipe_limit_timeout_failure_and_original_cancel(self):
         scenarios = [('limit', [b'x' * 4096] * 9, None), ('timeout', [], None),
@@ -279,6 +284,8 @@ class PodLogTransportTests(unittest.TestCase):
                     with self.assertRaises(U.PodUsageError) as caught:
                         U._command_bytes([], deadline=8, environment={}, max_bytes=L.MAX_BYTES)
                     self.assertEqual(caught.exception.code, 'READ_LIMIT' if kind == 'limit' else 'READ_TIMEOUT')
+                mocks[4].assert_called_once_with(process.pid, signal.SIGKILL)
+                process.poll.assert_not_called()
                 process.wait.assert_called(); selector.close.assert_called_once(); process.stdout.close.assert_called_once()
                 self.doCleanups()
 

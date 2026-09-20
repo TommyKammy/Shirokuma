@@ -5,13 +5,14 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.60"
+version: "3.61"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
+FinOpsの固定3component・disk watermark・宣言model eventの読取レポートが修正後completeとなった。全FinOps受入とは区別する。
 CometのARM64 native gateと同一remote snapshotのstock Spark比較が成功した。固定順序の相対測定として記録し、Glutenは互換binary未確認につきskipped。
 保存比較のMLflow記録・同token再表示の追加write0は実UIで成功した。clone復元・SDK読戻しと最終回帰も成功した。
 Rayの保存64行/固定2actor予測は、初回unknownを原記録保持のまま閉鎖した後、新規実02で逐次一致・loopback・所有終了を確認した。
@@ -42,6 +43,15 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: FinOps bounded read-only report — local partial acceptance
+
+[WP-L6-FIN-001](L6/WP-L6-FIN-001_FinOps_Gatekeeper.md)で`rtk proxy make local-finops-report`を追加した。固定Trino/Polaris/SeaweedFSのCPU sample平均・memory working set・identity/window、host/Colima別空き容量、AgentHouse24時間の宣言model event/coverageを読む。新service/modelcall/AHwrite・stop/delete・budget変更はない。
+実02は0.931秒でcomplete/exit0。2026-09-20T08:57:46.723Zの3componentsはobserved、host空き61.670289%・Colima81.9312%はnormal。model event10件/1groupのprompt4000・completion178 tokens、event duration14288msを取得した。cost/CPU/memory proxyとcurrencyはunknown/nullを保持した。実験eventを含む集計で、実modelcall数・請求金額・純推論latencyを示さない。
+初回はPolarisにbootstrap podが混在しTARGET_AMBIGUOUS/partialとなった。元report/logを保持し、固定対象選択の修正後に別実02で成功した。focused29testsはPASS（0.113秒）。全回帰103suites/3324実行＝3323PASS＋既存1skip（81.390秒）。保持検証0.408秒で旧44files、MLflow全59tables・22runs/1383points/22artifacts、AgentHouse560行とruntime状態が前後一致した。
+追加で、親rtk終了後に子がstdoutを保持するtimeout経路のcleanupを修正した。transport26tests PASS（0.080秒）、実03は0.995秒でcomplete。観測09:06:21.343Z、3components observed、host/Colima空き61.669668%/81.929112%はnormal、宣言10eventsとcost/proxy unknownを保持した。実02/full01の記録は変更しない。保存JSONだけを読む`local-finops-html`で、実02から通常HTML19,993B（生成0.067秒）、初回partialから18,998Bを生成した。desktop/390px幅の実ブラウザで3components/2disks/10events、duration14288ms/cost null、Polaris TARGET_AMBIGUOUSとpartialの保持、keyboard横scrollを確認した。最小contrastは5.47:1。一時preview server/タブは終了し、常駐追加は0。
+追加focused45tests PASS（0.154秒）。full02/gateway02は共有process helperテストのwait/returncode mock不整合で失敗し、元logを保持した。test doubleの修正後gateway03はPASS（0.586秒）で、この訂正によるruntime source再変更はない。最終full03は103suites/3341実行＝3340PASS＋既存1skip（81.375秒）。retention02（0.394秒）でも旧44files/MLflow22runs・1383points・22artifacts/AgentHouse560とruntimeが元baselineに一致した。preview portは停止後のconnection refusedまで確認した。
+全components/PVC帰属、idle判断、価格、PR budget gate、履歴/自動更新/task別の継続dashboardは未達。host/Colima容量は非合算で、25/20/15%閾値は固定助言のみ。証跡は `tmp/local-experiment/finops-checks/013bc5048f8a4131bcb12edf7fc16137/` のactual02-report/proof/json（report SHA `45941cd18d747bc2efd5204ca27ed88b4872ccf99f22e02311a294eea60f0527`）に保持した。
 
 ## 2026-09-20: Comet ARM64 same-snapshot benchmark — local acceptance complete
 

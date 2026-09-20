@@ -1042,3 +1042,12 @@ local-spark-comet-benchmark:
 	@$(PYTHON) -B tools/local_experiment/spark_comet/benchmark.py run --stock-build-token "$(SPARK_ICEBERG_BUILD_TOKEN)" --comet-build-token "$(SPARK_COMET_BUILD_TOKEN)"
 local-spark-comet-benchmark-recover:
 	@$(PYTHON) -B tools/local_experiment/spark_comet/benchmark.py recover --run-token "$(SPARK_COMET_BENCHMARK_TOKEN)" --variant "$(SPARK_COMET_VARIANT)"
+
+.PHONY: local-finops-report local-finops-html test-local-finops
+local-finops-report:
+	@$(PYTHON) -B tools/local_experiment/finops/run.py
+local-finops-html:
+	@$(PYTHON) -B tools/local_experiment/finops/render.py
+test-local-finops:
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_local_finops*.py'
+verify-local-experiment: test-local-finops

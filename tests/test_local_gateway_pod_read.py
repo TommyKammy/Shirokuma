@@ -121,10 +121,13 @@ class FixedPodReadTests(unittest.TestCase):
 
 class FixedPodPipeTests(unittest.TestCase):
     def transport(self, chunks, *, read_error=None, kill_error=None, wait_error=None):
-        process = Mock(); process.stdout.fileno.return_value = 99; process.pid = 1234
-        process.poll.return_value = None
-        process.wait.side_effect = wait_error
-        process.wait.return_value = 0
+        process = Mock(returncode=None); process.stdout.fileno.return_value = 99; process.pid = 1234
+        def wait(**kwargs):
+            if wait_error is not None:
+                raise wait_error
+            process.returncode = 0
+            return 0
+        process.wait.side_effect = wait
         selector = Mock(); selector.select.return_value = [True]
         patches = [patch.object(U.subprocess, 'Popen', return_value=process),
                    patch.object(U.selectors, 'DefaultSelector', return_value=selector),

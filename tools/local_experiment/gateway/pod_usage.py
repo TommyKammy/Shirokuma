@@ -348,8 +348,10 @@ def _command(arguments, *, deadline, environment, _raw=False, _max_bytes=MAX_BYT
         try:
             if process is not None:
                 try:
-                    if process.poll() is None:
-                        # Unreaped live child retains its PID; never signal a saved PID.
+                    # poll() could reap an exited leader while its descendants
+                    # still hold stdout open. Signal before reaping; returncode
+                    # stays None until wait/poll releases this owned PID.
+                    if process.returncode is None:
                         try:
                             os.killpg(process.pid, signal.SIGKILL)
                         except ProcessLookupError:

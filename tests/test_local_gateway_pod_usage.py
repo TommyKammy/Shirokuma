@@ -224,12 +224,14 @@ class PodUsageTests(unittest.TestCase):
 
 class BoundedTransportTests(unittest.TestCase):
     def command(self, chunks, *, error=None, close_error=None, kill_error=None):
-        process = Mock()
+        process = Mock(returncode=None)
         process.stdout.fileno.return_value = 99
         process.stdout.close.side_effect = close_error
-        process.poll.return_value = None
         process.pid = 1234
-        process.wait.return_value = 0
+        def wait(**kwargs):
+            process.returncode = 0
+            return 0
+        process.wait.side_effect = wait
         selector = Mock()
         selector.select.return_value = [True]
         patches = [patch.object(U.subprocess, 'Popen', return_value=process),
@@ -281,7 +283,7 @@ class BoundedTransportTests(unittest.TestCase):
 
     def test_cleanup_first_cancellation_survives_secondary_close(self):
         cancel = KeyboardInterrupt()
-        self.command([b'{}', b''], close_error=OSError(SENTINEL), kill_error=cancel)
+        self.command([], error=U.PodUsageError('READ_TIMEOUT'), close_error=OSError(SENTINEL), kill_error=cancel)
         with self.assertRaises(KeyboardInterrupt) as caught:
             U._command([], deadline=8, environment={})
         self.assertIs(caught.exception, cancel)
@@ -310,11 +312,35 @@ class BoundedTransportTests(unittest.TestCase):
 
     def test_completed_process_is_never_signalled_and_all_handles_close(self):
         process, selector, mocks = self.command([b'{"safe":1}', b''])
-        process.poll.return_value = 0
         self.assertEqual(U._command([], deadline=8, environment={}), {'safe': 1})
         mocks[4].assert_not_called()
+        process.poll.assert_not_called()
         selector.close.assert_called_once()
         process.stdout.close.assert_called_once()
+
+    def test_exited_leader_with_inherited_stdout_is_signalled_before_reap(self):
+        process, selector, mocks = self.command([])
+        selector.select.return_value = []
+        order = []
+        def poll():
+            process.returncode = 0
+            return 0
+        def kill(pid, sig):
+            self.assertIsNone(process.returncode)
+            order.append(('kill', pid, sig))
+        def wait(**kwargs):
+            self.assertEqual(order, [('kill', 1234, signal.SIGKILL)])
+            order.append(('wait', kwargs['timeout']))
+            process.returncode = 0
+            return 0
+        process.poll.side_effect = poll; process.wait.side_effect = wait
+        mocks[4].side_effect = kill
+        with self.assertRaises(U.PodUsageError) as caught:
+            U._command(['get', '--raw', '/fixed'], deadline=8, environment={})
+        self.assertEqual(caught.exception.code, 'READ_TIMEOUT')
+        process.poll.assert_not_called()
+        self.assertEqual(order, [('kill', 1234, signal.SIGKILL), ('wait', 2)])
+        selector.close.assert_called_once(); process.stdout.close.assert_called_once()
 
     def test_fixed_get_scope_local_guard_and_minimal_environment(self):
         config = {'clusters': [{'cluster': {'server': 'https://127.0.0.1:55737'}}]}
