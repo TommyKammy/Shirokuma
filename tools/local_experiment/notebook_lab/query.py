@@ -252,12 +252,14 @@ def _lock():
     from tools.local_experiment.notebook_lab import runtime as R
     first = None
     try:
-        with R._lock(), _query_lock():
-            try:
-                yield
-            except BaseException as error:
-                first = error
-                raise
+        with R._lock():
+            require(R._comparisons_idle(), 'LAB_QUERY_CLEANUP_UNKNOWN')
+            with _query_lock():
+                try:
+                    yield
+                except BaseException as error:
+                    first = error
+                    raise
     except BaseException as error:
         first = T._keep(first, error)
         if not isinstance(first, Exception) or isinstance(first, N.NotebookError):

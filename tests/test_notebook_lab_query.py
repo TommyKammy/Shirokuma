@@ -30,6 +30,7 @@ class LabQueryTests(unittest.TestCase):
         self.stack.enter_context(patch.object(Q, 'LAB_STATE', self.lab))
         self.stack.enter_context(patch.object(Q, 'STATE', self.state))
         self.stack.enter_context(patch.object(R, 'STATE', self.lab))
+        self.stack.enter_context(patch.object(R, '_comparisons_idle', return_value=True, create=True))
         self.stack.enter_context(patch.object(Q.T, 'group_empty', return_value=True))
         self.stack.enter_context(patch.object(Q.subprocess, 'Popen', side_effect=AssertionError('real worker forbidden')))
 
@@ -199,6 +200,14 @@ class LabQueryTests(unittest.TestCase):
         with Q._lock():
             with self.assertRaisesRegex(R.LabError, 'LAB_BUSY'), R._lock():
                 self.fail('Lab stop acquired a running query owner lock')
+
+    def test_unknown_comparison_blocks_query_even_without_query_directory(self):
+        self.state.rmdir()
+        with patch.object(R, '_comparisons_idle', return_value=False) as check:
+            with self.assertRaisesRegex(Q.N.NotebookError, 'LAB_QUERY_CLEANUP_UNKNOWN'):
+                Q.preview('smoke.fixture_v1', 'nameとidを1件表示')
+        check.assert_called_once_with()
+        self.assertFalse(self.state.exists())
 
     def test_worker_uses_fixed_existing_kubeconfig_not_parent_override(self):
         before = dict(os.environ)

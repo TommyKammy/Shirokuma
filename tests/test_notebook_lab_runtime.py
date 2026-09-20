@@ -85,6 +85,31 @@ class LabRuntimeTests(unittest.TestCase):
             with self.assertRaisesRegex(R.LabError, 'LAB_QUERY_ACTIVE_OR_UNKNOWN'):
                 R.stop()
 
+    def test_comparison_template_retains_edited_notebook(self):
+        self.prepared()
+        destination = self.state / 'workspace/ridge_comparison.ipynb'
+        self.assertEqual(destination.read_bytes(), R.COMPARISON_TEMPLATE.read_bytes())
+        destination.write_bytes(b'edited alpha and saved comparison')
+        before = destination.stat().st_mtime_ns
+        R._prepare()
+        self.assertEqual(destination.read_bytes(), b'edited alpha and saved comparison')
+        self.assertEqual(destination.stat().st_mtime_ns, before)
+
+    def test_pending_comparison_prevents_stop_without_query_history(self):
+        self.prepared()
+        self.assertFalse((self.state / 'queries').exists())
+        with patch.object(R, '_comparisons_idle', return_value=False):
+            with self.assertRaisesRegex(R.LabError, 'LAB_COMPARISON_ACTIVE_OR_UNKNOWN'):
+                R.stop()
+
+    def test_pending_comparison_prevents_new_server_without_query_history(self):
+        self.prepared()
+        self.assertFalse((self.state / 'queries').exists())
+        with patch.object(R, 'status', return_value=R._public('stopped', kernels=0)), \
+                patch.object(R, '_comparisons_idle', return_value=False):
+            with self.assertRaisesRegex(R.LabError, 'LAB_COMPARISON_ACTIVE_OR_UNKNOWN'):
+                R.start()
+
     def test_pending_query_prevents_starting_a_new_server(self):
         self.prepared()
         with patch.object(R, 'status', return_value=R._public('stopped', kernels=0)), \

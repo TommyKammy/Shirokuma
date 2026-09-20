@@ -5,14 +5,15 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.53"
+version: "3.54"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
 
-最新の到達点（2026-09-20）：Labの自然文queryで等値preview/範囲拒否と保存/再読込が修正後に成功。
+最新の到達点（2026-09-20）：LabでRidge alpha10の候補1fitと保存モデル比較・保存/再読込が成功。同じholdoutでRMSEは悪化。
+Labの自然文queryの等値preview/範囲拒否と保存/再読込も修正後に成功。
 単一ユーザーJupyterLabの保存学習の選択・入力編集・予測・保存/再読込とstop/restartも成功。
 型付き単一等値の自然文previewも実3caseと独立保存照合で確認した。
 保存学習3件の一覧からtokenを選び、既存batch予測2行へ接続する実受入も成功。
@@ -35,6 +36,34 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: offline Ridge comparison — local acceptance complete
+
+Labの`ridge_comparison.ipynb`で保存Icebergモデルと異なるalphaの候補を比較する入口を追加した。
+保存alpha1を再fitせず参照し、同じ48 train行で候補1fit、同じ16 holdout行で指標と予測差を算出する。
+既存ML環境のworkerを使い、親kernel環境・元学習・MLflow登録を変えない。新依存/service/API/Reader/LLMは追加しない。
+保存token`6df9b9e5a40b4035b7865f8435fdd291`/alpha10を画面から選び、比較
+`b393842b6c9a4f8db7da8da19672c449`で候補1fitを完了した。3code cells、16行の比較表、保存/再読込を確認した。
+
+| 再利用holdout16行 | 保存alpha1 | 候補alpha10 |
+|---|---:|---:|
+| RMSE | 0.1630426143 | 0.5436330451 |
+| MAE | 0.1391413402 | 0.4536729880 |
+| R² | 0.9973235229 | 0.9702441086 |
+
+この分割では候補が悪化した。候補処理での新MLflow run/MLflow API/Reader/LLMは0。33保持files・MLflow19runs/1347points/19artifacts・
+AH554は前後一致（0.380秒）し、stop1.753秒/restart1.843秒後も保持一致（0.375秒）、
+Notebookのbytes/mode/mtimeと10sourcesは不変、kernel0で再利用可能となった。
+runtime34（1.360秒）とquery/compare/core37（1.477秒）のfocusedが成功。
+全回帰は87suites/3017実行（3016PASS・既存1skip、72.812秒）。独立60桁Decimal正規方程式との74数値照合も成功（最大差2.378e-15、許容1e-10）。
+8保存入力の前後identityを確認し、追加fit/APIは0。helperの元receipt状態の誤期待1件は失敗記録を残して訂正した。
+
+共有Lab所有lockと未確認実行の判定をpreview/compare/start/stopへ適用し、取消は所有workerを1回interruptして待つ。
+既視holdoutを再利用した探索であり、独立した最終評価ではない。指標差で自動model選択や一般品質改善を主張しない。
+操作は[Lab runbook](../../../tools/local_experiment/notebook_lab/README.md)、学習の境界は
+[ML WP](L4/WP-L4-ML-001_MLflow_tracking.md)を参照する。
+証跡：`tmp/local-experiment/mlflow-comparison-checks/6ea61296fa3842128ea2296ad825ace0/`。
+失敗/unknownと既存学習・Notebook・backupを保持し、結果を得るための自動retryや削除を行わない。
 
 ## 2026-09-20: interactive natural-language query workbench — local acceptance complete
 

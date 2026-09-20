@@ -94,3 +94,30 @@ data query. After verifying that no resources remained, its original failed
 records were retained under `queries-closed-failures`; the connection-setting
 propagation was repaired before a fresh attempt. This recovery is specific to
 that verified pre-resource failure, not permission to disregard unknown cleanup.
+
+## Compare Ridge settings
+
+Run `make local-notebook-lab-start` to add `ridge_comparison.ipynb` once. Open it,
+list the saved runs, copy an Iceberg `training_token` into the selection cell,
+and set `alpha` between `0.001` and `1000`. Run the comparison cell to fit one
+candidate in the existing ML environment. The tables show training and holdout
+metrics plus the prediction difference for each of the 16 holdout rows. Save
+the Notebook to retain the inputs and displayed comparison.
+
+The reference is the saved Ridge model with alpha 1. Both models use the same
+48 training rows and the same previously inspected 16 holdout rows. This is an
+exploratory comparison; it does not provide an independent final evaluation or
+select a model automatically. The worker reads validated saved data and makes
+no Reader, LLM, MLflow API or new tracking-run calls.
+
+Comparison execution shares the Lab ownership lock with query execution and
+start/stop. Both workflows check each other's residual attempts before starting
+new work. Interrupt sends one request to the owned worker and waits for its
+exit. Unconfirmed cleanup blocks further execution and lifecycle changes.
+Inputs, worker output and status are retained privately under
+`tmp/local-experiment/notebook-lab/comparisons/<attempt_token>`.
+
+Interactive verification fitted alpha 10 once, displayed its metrics and all
+16 prediction differences, and retained them through save and reload. The
+reused holdout RMSE rose from about 0.163 to 0.544 for this dataset. Existing
+training files, MLflow runs and audit records were preserved.

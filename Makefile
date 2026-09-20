@@ -965,3 +965,10 @@ verify-local-experiment: test-local-notebook-lab
 test-local-notebook-lab-query:
 	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_query.py'
 verify-local-experiment: test-local-notebook-lab-query
+
+.PHONY: test-local-mlflow-compare test-local-notebook-lab-compare
+test-local-mlflow-compare:
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_mlflow_compare.py'
+test-local-notebook-lab-compare:
+	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_compare.py'
+verify-local-experiment: test-local-mlflow-compare test-local-notebook-lab-compare

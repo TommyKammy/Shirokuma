@@ -36,6 +36,7 @@ PYTHON = VENV / 'bin/python'
 STATE = ROOT / 'tmp/local-experiment/notebook-lab'
 TEMPLATE = ROOT / 'examples/local_training_workbench.ipynb'
 QUERY_TEMPLATE = ROOT / 'examples/local_query_workbench.ipynb'
+COMPARISON_TEMPLATE = ROOT / 'examples/local_ridge_comparison.ipynb'
 PORT = 18560
 URL = 'http://127.0.0.1:' + str(PORT)
 VERSION = '4.6.3'
@@ -195,7 +196,8 @@ def _prepare():
         _save('data/kernels/' + KERNEL + '/kernel.json', _kernelspec())
     # A user-edited notebook is retained byte-for-byte, including saved outputs.
     for name, template in (('training_workbench.ipynb', TEMPLATE),
-                           ('query_workbench.ipynb', QUERY_TEMPLATE)):
+                           ('query_workbench.ipynb', QUERY_TEMPLATE),
+                           ('ridge_comparison.ipynb', COMPARISON_TEMPLATE)):
         destination = STATE / 'workspace' / name
         if not destination.exists() and not destination.is_symlink():
             _exclusive(destination, template.read_bytes())
@@ -210,6 +212,16 @@ def _queries_idle():
     from tools.local_experiment.notebook_lab import query
     require(query.LAB_STATE == STATE, 'LAB_QUERY_STATE_CHANGED')
     return query.check_idle()
+
+
+def _comparisons_idle():
+    path = STATE / 'comparisons'
+    M.no_symlinks(path)
+    if not path.exists():
+        return True
+    from tools.local_experiment.notebook_lab import compare
+    require(compare.LAB_STATE == STATE, 'LAB_COMPARISON_STATE_CHANGED')
+    return compare.check_idle()
 
 
 def _owner():
@@ -407,6 +419,7 @@ def start():
             return current
         require(current['state'] == 'stopped', 'LAB_START_UNCONFIRMED')
         require(_queries_idle(), 'LAB_QUERY_ACTIVE_OR_UNKNOWN')
+        require(_comparisons_idle(), 'LAB_COMPARISON_ACTIVE_OR_UNKNOWN')
         _port_free()
         require(PYTHON.is_file(), 'LAB_ENVIRONMENT_MISSING')
         log = STATE / 'server.log'
@@ -586,6 +599,7 @@ def stop():
         return current
     with _lock():
         require(_queries_idle(), 'LAB_QUERY_ACTIVE_OR_UNKNOWN')
+        require(_comparisons_idle(), 'LAB_COMPARISON_ACTIVE_OR_UNKNOWN')
         owner_path = STATE / 'owner.json'
         if not owner_path.exists() and not owner_path.is_symlink():
             require({path.name for path in STATE.iterdir()} == {'owner.lock'}, 'LAB_STOP_UNCONFIRMED')

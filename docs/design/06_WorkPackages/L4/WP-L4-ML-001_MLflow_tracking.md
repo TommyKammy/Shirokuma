@@ -5,7 +5,7 @@ title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "1.5"
+version: "1.6"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -24,7 +24,23 @@ Iceberg学習も保存artifactと所有MLflow読取からNotebook表示へ接続
 保存Icebergモデルへ新入力を渡すbatch prediction CLIも実22行で成功し、独立算術と一致した。
 Notebookから所有workerへ固定学習を依頼し、1runを追加する実行も初回で成功した。
 保存学習3件のtoken・指標・provenance一覧と、選択tokenによる既存予測も実受入で成功した。
+保存Icebergモデルの同一分割でalphaを変える未登録のoffline比較も、実1fitとLab表示で確認した。
 Hub連携・kernel内fit/autolog、Registry/Serving、clone切替・他host移行は未達。
+
+## 2026-09-20: offline Ridge comparison — local acceptance complete
+
+保存Iceberg学習のalpha=1 Ridgeを基準に、alphaだけを変えるoffline比較を追加した。
+検証済み保存artifactの同じ48 train行で候補を1回だけfitし、同じ16 holdout行で予測・指標差を算出する。
+source/model/dataset/splitとrequestを束縛し、worker出力は親で追加fitせず検証する。保存sourceが変化すれば成功としない。
+alphaは0.001〜1000の有限数値で、MLflow登録・API/Reader/LLM・元学習の更新は行わない。
+Labの[比較例](../../../../examples/local_ridge_comparison.ipynb)は既存ML専用環境のworkerを使い、入力・表をNotebookへ保存できる。
+
+実比較`b393842b6c9a4f8db7da8da19672c449`は保存token`6df9b9e5a40b4035b7865f8435fdd291`/alpha10で候補1fitを完了した。
+Labで16行比較表・保存/再読込を確認し、再利用holdoutのRMSEは0.163043→0.543633と悪化した。
+MLflow19runs/1347points/19artifactsと旧保存物を保持、新run/Reader/LLMは0。独立60桁Decimalとの74数値照合も成功し、追加fit/APIは0。
+既視holdoutの探索的再利用であり、独立した最終評価・generalization改善・自動model選択は主張しない。
+kernel内fit/autolog、候補のMLflow Tracking/Registry登録、Servingの受入は未達を維持する。
+[Notebook WP](WP-L4-NB-001_JupyterHub_bootstrap.md)と[Milestones](../061_Local_Experiment_Milestones.md)へ操作境界・結果を記録する。
 
 ## 2026-09-20: saved training inventory — local acceptance complete
 

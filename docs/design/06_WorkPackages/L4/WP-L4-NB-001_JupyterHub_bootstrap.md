@@ -5,7 +5,7 @@ title: "WP-L4-NB-001 JupyterHub bootstrap"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.11"
+version: "0.12"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, notebook]
 ---
@@ -25,7 +25,25 @@ Notebookから所有workerへ固定Iceberg学習を依頼する入口も、初�
 型付き単一等値条件の登録previewも自然文から定型assetsへ接続し、実3caseと独立保存照合で確認した。
 保存学習を選択・編集・予測する単一ユーザーJupyterLabで、画面実行・保存/再読込を確認した。所有kernel/serverの停止・再起動後の保持も確認した。
 Labから自然文table previewを呼ぶ別Notebookも、修正後の等値preview/unsupportedを実画面で確認した。
+保存データでRidgeのalphaを変えるoffline比較も、Labで実1fit・表示/保存/再読込を確認した。
 JupyterHub、複数ユーザー、直接PySpark、kernel内fit・autologの完了は含めない。
+
+## 2026-09-20: offline Ridge comparison — local acceptance complete
+
+Labに[固定Ridge比較例](../../../../examples/local_ridge_comparison.ipynb)を追加した。
+`ridge_comparison.ipynb`で保存Iceberg学習tokenとalphaを選び、既存ML専用環境のworkerへ1fitを依頼する。
+保存alpha=1モデルと同じ48行で候補を学習し、trainと再利用holdout16行の指標・予測差を表で表示する。
+alphaは0.001〜1000の有限数値。候補はMLflowへ登録せず、API/Reader/LLM呼出し、新依存/serviceを追加しない。
+入力・結果はNotebook保存とprivate比較証跡へ残す。kernel内fit/autologではない。
+
+preview/compareはLab所有lockを共用し、互いの未確認実行を点検する。未確認比較が残る場合は、
+queryの有無によらず新実行・start/stopを拒否する。Interruptは1回、所有workerの終了を待ち、自動retryしない。
+同じ既視holdoutを使う探索であり、独立した最終評価や一般品質の改善を示すものではない。自動model選択も行わない。
+保存token`6df9b9e5a40b4035b7865f8435fdd291`/alpha10で実1fitし、3code cells・16行の比較表と保存/再読込を確認した。
+再利用holdoutのRMSEは0.163043→0.543633へ悪化した。候補のMLflow登録は0、元学習は保持する。
+runtime34とquery/compare/core37のfocused、全回帰87suites/3017実行（3016PASS・既存1skip）が成功した。
+所有workerの終了・Lab stop/restart後のNotebook/旧データ保持も確認済み。独立60桁Decimalとの74数値照合も成功し、追加fit/APIは0。
+操作は[Lab runbook](../../../../tools/local_experiment/notebook_lab/README.md)、実測は[Milestones](../061_Local_Experiment_Milestones.md)を参照する。
 
 ## 2026-09-20: interactive natural-language query workbench — local acceptance complete
 
