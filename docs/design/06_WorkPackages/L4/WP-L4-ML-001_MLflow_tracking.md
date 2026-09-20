@@ -5,7 +5,7 @@ title: "WP-L4-ML-001 MLflow tracking"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "1.14"
+version: "1.15"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, ml]
 ---
@@ -14,6 +14,7 @@ tags: [shirokuma, workpackage, l4, ml]
 
 ## Summary
 
+保存学習tokenからDagster経由で固定autologを記録し、同tokenの追加fit/SDK writeなし再利用が成功した。DataOpsへML依存を追加せず、専用ML環境へ委譲する。
 保存48train内の固定3foldによるRidge候補選択は実UI初回で成功し、追加fitなしの保存再表示・reloadと既存データ保持を確認した。既視holdoutは保存モデルより悪化し、改善とは扱わない。
 MLflow起動中だけの有界待機と厳密な所有確認を接続し、実所有restart・既存データ保持を確認した。短命member待機はfakeで確認し、元incident原因は未確定とする。
 保存48学習行の固定sklearn autologを実証した。初回HTML検証失敗を追加fitなしで回復し、完成再表示・非稼働clone復元・既存データ保持を確認した。
@@ -34,6 +35,14 @@ Notebookから所有workerへ固定学習を依頼し、1runを追加する実�
 保存比較候補の一覧・再fit不要な新入力予測も、cold計算とLab実UIで確認した。
 Labの固定学習workbenchで、初回unknownの保存結果を追加fitなしで回復し、別の新規正常実行から表示・編集予測・保存/再読込も確認した。
 Hub連携・kernel内fit/autolog、Registryのalias/stage運用・標準MLflow pyfunc Serving、clone切替・他host移行は未達。
+
+## 2026-09-20: Dagster saved-training autolog: local acceptance complete
+
+登録済みNotebookを `saved_training_source` → `ridge_autolog` の2assetsへ接続し、保存source SHAを束縛した固定ML workerへ既存autologを委譲する。新規記録には停止storeとcold backupを要求する。同tokenの完成再利用では追加fit/SDK write/新backup作成を行わず、保存内backup receipt/HTML/sourceの検証を維持する。未閉鎖workerとpending/unknown記録は自動再送しない。
+
+実初回は48train行で1fitし、5metrics/8params/HTML1件を記録した。同tokenの再materializationは外部backup引数なしで同runを再利用し、追加fit/SDK write/新backup作成は0。MLは24runs/1393points/24artifactsとなり、旧データとRegistry/Servingを保持した。非稼働cloneで7experiments/24runs/1393points/24artifacts/Registry1/1を読戻し、source不変と最終保持を確認した。
+
+新依存・サービス・Registry昇格は加えず、既存previewとMLflow/Registry/Servingの保持を確認した。操作は[Notebook assets runbook](../../../../tools/local_experiment/notebook_assets/README.md#materialize-saved-training-and-autolog)、実測は[local milestones](../061_Local_Experiment_Milestones.md)を参照。
 
 ## 2026-09-20: train-only offline Ridge CV: local acceptance complete
 

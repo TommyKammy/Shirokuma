@@ -1134,3 +1134,16 @@ test-local-mlflow-tune:
 test-local-notebook-lab-tune:
 	@tools/local_experiment/notebook_lab/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_lab_tune.py'
 verify-local-experiment: test-local-mlflow-tune test-local-notebook-lab-tune
+
+.PHONY: local-notebook-assets-training test-local-notebook-assets-training test-local-notebook-assets-autolog-worker
+local-notebook-assets-training:
+	@if test -n "$${BACKUP_MANIFEST:-}"; then \
+		tools/local_experiment/dataops/.venv/bin/python -B tools/local_experiment/notebook_assets/training.py --training-token "$${TRAINING_TOKEN:-}" --backup-manifest "$$BACKUP_MANIFEST"; \
+	else \
+		tools/local_experiment/dataops/.venv/bin/python -B tools/local_experiment/notebook_assets/training.py --training-token "$${TRAINING_TOKEN:-}"; \
+	fi
+test-local-notebook-assets-training:
+	@tools/local_experiment/dataops/.venv/bin/python -B -m unittest discover -v -s tests -p 'test_notebook_assets_training.py'
+test-local-notebook-assets-autolog-worker:
+	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_notebook_assets_autolog_worker.py'
+verify-local-experiment: test-local-notebook-assets-training test-local-notebook-assets-autolog-worker

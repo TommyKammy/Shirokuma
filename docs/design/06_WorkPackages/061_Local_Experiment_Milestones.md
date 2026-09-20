@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.72"
+version: "3.73"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
@@ -54,6 +54,20 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: registered Notebook to Dagster autolog: local acceptance complete
+
+固定 `notebook-autolog-assets-v1` を追加し、登録済みNotebookを保存学習sourceの検証と `ridge_autolog` の2assetsへ接続する。source SHAを固定workerに渡し、DataOps環境から専用ML環境へ記録だけを委譲する。新規記録はcallerが停止storeとcold backupを用意する。完成済みの同tokenは保存receiptを検証して再利用し、追加fit/SDK write/新backup作成は0。外部caller manifestへのアクセスは不要だが、保存内backup receiptも検証する。
+
+実初回materializationは6.360秒で成功し、source `3da0a631a0e549f29aac96f9998da5bb` の48train行から1fit、autolog run `d0eece6e33414e3fa4b5b57b338eb116` に5metrics/8params/HTML1件を記録した。再materializationは1.018秒、backup引数なしで同じrunを再利用し、追加fit/SDK write/新backup作成は0。両回の2assetsとworker cleanupを確認した。60桁Decimalの独立再計算で5metricsの最大差は8.57e-17未満、holdout使用0・追加fit/SDK0だった。
+
+初回前後では850immutable filesと全旧ML行・artifactを保持し、MLは24runs/1393points/24artifactsへ増えた。再利用前後は854files・全ML状態・初回Dagster記録が一致。AgentHouse585行、Registry1/1、Lab13冊とPID20940、Serving PID95852を保持し、ML runtimeを元の稼働状態へ戻した。全回帰は121suites/3660実行=3659PASS＋既存1skip（92.631秒）。cold exportは8.319秒、非稼働cloneの復元とSDK読戻しは4.336秒で成功し、7experiments/24runs/1393points/24artifacts/Registry1/1を照合した。source不変・activationなし、元ML runtimeはhealthy（PID32246）へ戻った。保存Dagster SQLiteの独立照合でも、両runの成功・2assetsの順序・全metadataが一致した。
+
+今回の非重複範囲は280新規files、12,284,917 logical bytes / 12,980,224 allocated bytes（Dagster、前後backup、clone、autolog receipt、HTML）。checks領域・live DB/index/runtime/logは除外し、APFSの物理一意容量とは扱わない。Dagster内部の既定755/644はattempt/dagsterの0700親内に保持される。
+
+初回baseline/prepare helperのDB path・停止状態の期待値・検証interpreter・Dagster内部modeへの過剰な期待、および旧テストglobが新Dagster testを標準Pythonで集めた失敗は原本を保持して訂正した。製品materializationは両回とも初回成功であり、これらの検証修正による再fitはない。
+
+固定workerは180秒と取消猶予60秒を持ち、過去の未閉鎖処理を共有lockと最大128attemptの保存closure検査で拒否する。任意Notebook変換・自動昇格・新依存/サービス・Lab seedは含めない。操作は[Notebook assets runbook](../../../tools/local_experiment/notebook_assets/README.md#materialize-saved-training-and-autolog)。私有証跡は `tmp/local-experiment/notebook-autolog-assets-checks/cb730a8e478b4c8bbb57bb4d177ee477/` に保存する。
 
 ## 2026-09-20: train-only offline Ridge CV: local acceptance complete
 

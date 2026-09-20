@@ -5,7 +5,7 @@ title: "WP-L4-AGENT-001 Notebook to Dagster Agent"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-20
-version: "0.7"
+version: "0.8"
 area: "workpackage"
 tags: [shirokuma, workpackage, l4, agentops]
 ---
@@ -14,6 +14,7 @@ tags: [shirokuma, workpackage, l4, agentops]
 
 ## Summary
 
+登録済みNotebookから保存学習source検証→固定autologの2assetsを実行し、初回記録と同tokenの追加fitなし再利用が成功した。既存previewと一般Notebook変換の未達は維持する。
 schema-only Qwenから既存snapshot Countへ接続する限定増分は、修正後5caseで期待どおりとなった。
 Notebookを再現可能なDagster assetへ接続する。ADR-0034のlocal実験では、登録済みの固定Notebookだけを
 hostの定型2assetsへ対応付ける最小部分を実装し、実2回と独立最終照合が成功した。
@@ -21,6 +22,16 @@ hostの定型2assetsへ対応付ける最小部分を実装し、実2回と独�
 さらに自然文から検証済みselectionを作る限定Assistを接続し、実5caseが期待どおりとなった。
 型付き単一等値条件の自然文previewも実3caseと独立保存照合で確認した。
 任意Notebookの解析・生成や一般的なLLM変換は含めない。
+
+## 2026-09-20: saved training to Dagster autolog: local acceptance complete
+
+`notebook-autolog-assets-v1` は登録済み `local_autolog_assets.ipynb` を `saved_training_source` → `ridge_autolog` に対応付ける。前段で保存学習のsourceを検証し、そのSHAを後段の固定workerへ渡す。新規記録は停止store・一致するcold backupを必要とし、48train行だけの既存autologを専用ML環境で1回実行する。
+
+完成済みの同tokenは保存receiptを検証して再利用し、追加fit・SDK write・新backup作成は0。caller指定の外部manifestは読まないが、保存内backup receipt/HTML/sourceは検証する。過去の未閉鎖workerは全attemptの新規呼出しを拒否する。既存preview・依存・常駐サービス・Lab seedは変更しない。初回materializationは6.360秒で成功し、同tokenの2回目は1.018秒で同じMLflow runを再利用した。両回で2assetsのmaterializationとworker cleanupを確認した。非稼働cloneへの復元・SDK読戻しと、元データ保持・最終容量の照合も成功した。
+
+なお、任意Notebook変換・自律的な本番配備は対象外。
+
+操作は[Notebook assets runbook](../../../../tools/local_experiment/notebook_assets/README.md#materialize-saved-training-and-autolog)、結果は[local milestones](../061_Local_Experiment_Milestones.md)へ集約する。
 
 ## 2026-09-20: natural-language snapshot count — local acceptance complete
 

@@ -82,6 +82,11 @@ points, 22 artifacts, one Registry model/version and 585 audit rows were unchang
 
 ## Verify sklearn autolog on saved training data
 
+The [registered Notebook-to-Dagster profile](../notebook_assets/README.md#materialize-saved-training-and-autolog)
+can materialize source verification and this same autolog operation as two
+assets. Completed tokens reuse their saved receipt; the profile does not
+create another fit or Tracking record on re-materialization.
+
 The `fixed-ridge-autolog-v1` worker uses the original 48 training rows of a
 completed Iceberg training token and fits Ridge with alpha 1 once. The existing
 16 holdout rows are excluded from the fit and automatic training metrics. A

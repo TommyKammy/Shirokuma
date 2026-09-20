@@ -244,3 +244,76 @@ fixture, MLflow store and backups; no rollback requires deleting them.
 
 See the [Notebook client runbook](../notebook/README.md) and
 [DataOps environment](../dataops/README.md) for the reused boundaries.
+
+## Materialize saved training and autolog
+
+The `notebook-autolog-assets-v1` profile maps the registered, output-free
+[autolog Notebook](../../../examples/local_autolog_assets.ipynb) to two fixed
+assets: `saved_training_source` verifies a completed Iceberg training token,
+then `ridge_autolog` records or reuses its fixed sklearn autolog result. This
+connects the recorded experiment to its source data; it creates no new lake
+fixture and invokes no Reader or LLM.
+
+For an unrecorded token, stop the owned MLflow store and retain a cold backup
+using the [existing autolog procedure](../mlflow/README.md#verify-sklearn-autolog-on-saved-training-data).
+Pass that backup's repository-relative manifest to the fixed entry point:
+
+```sh
+TRAINING_TOKEN=<completed-token> BACKUP_MANIFEST=tmp/local-experiment/<backup>/backup-manifest.json rtk proxy make local-notebook-assets-training
+```
+
+The first recording fits the saved 48 training rows once and adds one run,
+eight parameters, five training metric points and `estimator.html`. Its
+previously seen 16 holdout rows do not enter the fit or autolog metrics.
+After the owned worker has exited and cleanup is confirmed, restore MLflow to
+its previous running state. An uncertain worker remains recorded and prevents
+another attempt; do not restart the store while its writer may still be active.
+
+A completed token can be materialized again while MLflow is running, without
+specifying a backup:
+
+```sh
+TRAINING_TOKEN=<completed-token> rtk proxy make local-notebook-assets-training
+```
+
+Both assets materialize again in a fresh private Dagster instance, while the
+second asset reuses the verified autolog receipt. It creates no additional fit,
+Tracking run, metric or artifact, and accesses no caller-supplied backup
+manifest. Validation still reads the retained source, HTML and original backup
+receipt. Pending or unknown autolog records are not automatically resubmitted
+or recovered.
+
+The fixed DataOps environment runs Dagster; a bounded owned process uses the
+existing ML environment when recording is necessary. No dependency, resident
+service or kernel is added. Attempts and generated definitions remain under
+`tmp/local-experiment/notebook-training-assets/`. Each attempt binds the
+canonical request, registered template, source and generated definitions;
+Notebook code and generated exports are not dynamically executed. The business
+materialization result and the owner's final outcome are recorded separately.
+The original preview profiles retain their existing behavior.
+
+Local acceptance on 2026-09-20 used training token
+`3da0a631a0e549f29aac96f9998da5bb`. The first materialization completed in
+6.360 seconds; a second completed in 1.018 seconds and reused MLflow run
+`d0eece6e33414e3fa4b5b57b338eb116`, with no further fit or Tracking write.
+Independent read-only inspection of both Dagster stores confirmed one successful
+job and the two ordered asset events per attempt. Decimal arithmetic reproduced
+all five training metrics without a further fit. The 850 retained immutable
+files and all prior MLflow rows/artifacts were preserved; the existing 13 Lab
+Notebooks, Serving process and 585 AgentHouse rows were unchanged.
+
+The post-recording cold export restored to an inactive clone and read back
+7 experiments, 24 runs, 1,393 metric points, 24 artifacts and the existing
+Registry model/version. Evidence is under
+`tmp/local-experiment/notebook-autolog-assets-checks/cb730a8e478b4c8bbb57bb4d177ee477/`.
+The two Dagster attempts and their shared lock allocate 1,196,032 bytes;
+including both cold backups, inactive restore, new autolog receipt and HTML,
+the 280 new files allocate 12,980,224 bytes. These figures exclude other
+verification evidence and ordinary mutable runtime files. Dagster's internal
+files retain its default modes behind owner-only attempt and Dagster directories;
+other new receipts, exports and restore files are owner-only.
+
+To stop using this profile, stop invoking it and confirm the owned worker is
+closed before restoring a previously running MLflow server. Keep the generated
+receipts, prior runs and backups. Local acceptance does not establish model
+quality, model promotion or production readiness.
