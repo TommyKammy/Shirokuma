@@ -1,9 +1,11 @@
 # Local resource and inference report
 
-This first FinOps increment reads the existing Shirokuma lab and returns one
-JSON report. It covers the fixed Trino, Polaris and SeaweedFS components,
-the workspace filesystem and the dedicated Colima filesystem, and the last
-24 hours of declared inference records in AgentHouse.
+The FinOps collector reads the existing Shirokuma lab and returns one JSON
+report. Fresh reports use schema version 2 and cover the fixed Trino, Polaris
+and SeaweedFS containers; the owned local MLflow, JupyterLab and Model Serving
+processes; the workspace and dedicated Colima filesystems; and the last 24 hours
+of declared inference records in AgentHouse. Saved version 1 reports remain
+valid and render with their original coverage.
 
 ```sh
 rtk make local-finops-report
@@ -25,10 +27,28 @@ The report includes observation times and coverage limits. An unavailable
 source produces a partial report with exit code 1; the JSON remains available
 for inspection. A complete collection does not imply complete FinOps coverage.
 
-CPU usage is a sample average over the reported metrics window; memory is
-the observed working set. A component's identity and start time must agree
+For Kubernetes containers, CPU usage is a sample average over the reported
+metrics window; memory is the observed working set. A component's identity and start time must agree
 with the sample window. Missing or inconsistent observations have a reason
 and null values. They do not become zero usage.
+
+Local process measurements use the existing Lab Python environment through a
+fixed, bounded read-only worker. It verifies each runtime's saved identity and
+owned process set before and after two PID-limited `ps` samples separated by
+one second. CPU cores are the cumulative CPU-time difference divided by the
+measured elapsed time; this short observation is quantized by `ps` and does
+not support idle decisions. RSS is the sum at the second sample and can count
+shared pages repeatedly. It is not a host-wide unique-memory total and must
+not be added to Kubernetes working-set measurements.
+
+JupyterLab includes its server and verified kernels in one group. Kernel child
+processes and unrelated host processes are not covered; an unverified process
+set yields an ownership-unknown row. PID or identity changes, missing samples
+and collection errors retain null values. A verified stopped service is shown
+as stopped with no numeric usage; it is a known state and does not alone make
+the report partial. Missing environments, uninitialized services and unknown
+ownership do make it partial. Public output contains only an identity digest
+and process/kernel counts, without PID lists, command lines or credentials.
 
 Host and Colima space are reported separately. They share physical storage
 and must not be added together. Warnings apply when available space is at or
@@ -71,3 +91,24 @@ cleanup-path repair prevents an exited command leader from leaving descendants
 holding stdout open. A fresh collection after that repair also completed in
 0.995 seconds and is retained as `actual03-report.json`; the earlier reports
 remain unchanged.
+
+The 2026-09-20 version 2 acceptance report observed 2 MLflow processes,
+14 JupyterLab processes including 13 kernels, and 1 Serving process. Their RSS
+sums were 487.40625, 1354.859375 and 32.375 MiB. The 1.0314595-second sample
+recorded no CPU-time increment at `ps` resolution; this does not establish that
+the services were idle. The three Kubernetes observations, both filesystems and
+17 declared model events were also collected. The full CLI, HTML generation and
+retention verification completed in 4.931 seconds.
+
+Evidence and the saved report are under
+`tmp/local-experiment/finops-process-checks/861e64255e6e437d93f0030115975ebc/`.
+The public JSON and HTML add 33,232 logical bytes (36,864 allocated bytes);
+verification files are separate. All 1,134 retained files, 13 Lab Notebooks,
+MLflow/Registry records and 585 AgentHouse rows were unchanged. No runtime was
+restarted. Static HTML structure, numeric units and version 1 compatibility
+passed; browser visual inspection remains unverified because the browser URL
+policy rejected the local file URL. No workaround was used.
+
+To stop using this observation, stop invoking the report command. It installs
+nothing and has no persistent collector or rollback step; retained reports and
+other experiment data can remain in place.

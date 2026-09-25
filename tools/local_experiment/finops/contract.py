@@ -10,6 +10,7 @@ import re
 import uuid
 
 from tools.local_experiment.gateway import pod_usage as U
+from tools.local_experiment.finops import local_processes as P
 
 COMPONENTS = {'trino': ('shirokuma-dev', 'trino-local', 'trino'),
               'polaris': ('shirokuma-dev', 'polaris', 'polaris'),
@@ -36,6 +37,12 @@ UNITS = {'prompt_tokens': 'tokens', 'completion_tokens': 'tokens', 'event_durati
          'inference_cost_estimate': 'producer-defined-estimate', 'cpu_seconds': 'seconds',
          'memory_mb_seconds': 'producer-recorded-MB-seconds; MB-definition-not-recorded'}
 MAX_PUBLIC_BYTES = 256 * 1024
+PROCESS_LIMITS = [
+    'THREE_OWNED_LOCAL_PROCESS_GROUPS_NOT_FULL_HOST_COVERAGE',
+    'LOCAL_CPU_CUMULATIVE_TIME_DELTA_QUANTIZED_BY_PS',
+    'LOCAL_RSS_SUM_COUNTS_SHARED_PAGES_MORE_THAN_ONCE',
+    'LOCAL_PROCESSES_AND_KUBERNETES_SAMPLES_HAVE_DIFFERENT_WINDOWS',
+    'LOCAL_KERNEL_DESCENDANTS_AND_UNOWNED_PROCESSES_UNSUPPORTED']
 
 
 class FinOpsError(ValueError):
@@ -202,7 +209,7 @@ def inference(rows, *, end, reason=None):
     return value
 
 
-def build_report(components, disks, recorded, *, observed_at):
+def build_report(components, disks, recorded, *, observed_at, local_processes=None):
     components = [validate_component(row) for row in components]
     require([row['component'] for row in components] == list(COMPONENTS), 'SCOPE_INVALID')
     require([row['scope'] for row in disks] == list(DISKS), 'SCOPE_INVALID')
@@ -213,13 +220,24 @@ def build_report(components, disks, recorded, *, observed_at):
              'result': 'complete' if all(row['state'] == 'observed' for row in components+disks+[recorded]) else 'partial',
              'observed_at': stamp(observed_at)[0], 'components': components, 'disks': deepcopy(disks),
              'inference': deepcopy(recorded), 'recommendations': recommendations, 'limits': deepcopy(LIMITS)}
+    if local_processes is not None:
+        processes = deepcopy(P.validate(local_processes))
+        for item in processes['components']:
+            if item['observed_at'] is not None:
+                require(stamp(item['observed_at'])[1] <= stamp(observed_at)[1], 'SAMPLE_INVALID')
+        value.update(schema_version=2, local_processes=processes)
+        value['limits'].extend(PROCESS_LIMITS)
+        if any(item['state'] not in ('observed', 'stopped') for item in processes['components']):
+            value['result'] = 'partial'
     require(len(json.dumps(value, ensure_ascii=True, allow_nan=False).encode()) <= MAX_PUBLIC_BYTES, 'READ_LIMIT')
     return value
 
 
 def validate_public(value):
-    require(type(value) is dict and set(value) == {'schema_version', 'command', 'result', 'observed_at',
-            'components', 'disks', 'inference', 'recommendations', 'limits'})
+    require(type(value) is dict and type(value.get('schema_version')) is int and value['schema_version'] in (1, 2))
+    fields = {'schema_version', 'command', 'result', 'observed_at',
+              'components', 'disks', 'inference', 'recommendations', 'limits'}
+    require(set(value) == fields | ({'local_processes'} if value['schema_version'] == 2 else set()))
     disks = [disk(row['scope'], None if row['total_bytes'] is None else integer(row['total_bytes']),
                   None if row['free_bytes'] is None else integer(row['free_bytes']),
                   observed_at=row['observed_at'], reason=row['reason']) for row in value['disks']]
@@ -230,6 +248,7 @@ def validate_public(value):
                     **{m+'_known': str(row[PUBLIC_METRICS[m]]['known_events']) for m in METRICS},
                     **{m+'_sum': row[PUBLIC_METRICS[m]]['known_sum'] for m in METRICS}})
     expected = build_report(value['components'], disks,
-        inference(raw, end=recorded['window']['end'], reason=recorded['reason']), observed_at=value['observed_at'])
+        inference(raw, end=recorded['window']['end'], reason=recorded['reason']), observed_at=value['observed_at'],
+        local_processes=value.get('local_processes'))
     require(json.dumps(value, sort_keys=True, allow_nan=False) == json.dumps(expected, sort_keys=True, allow_nan=False))
     return deepcopy(value)

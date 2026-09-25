@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.73"
+version: "3.74"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
@@ -54,6 +54,16 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-20: FinOps local owned processes: observation passed
+
+FinOps新規収集をv2へ拡張し、`local_processes` としてMLflow・Notebook Lab（serverと所有kernel）・固定model-servingの3群を追加する。固定read-only workerが前後identityを照合し、1秒CPU累積時間差とRSS合計を返す。保存済みv1 JSON/HTMLはそのまま読む。停止を確定できた群はnullのidentity/sampleと「停止中」で表し、他の取得成功時はcomplete、unknownはpartialとする。
+
+実01は4.931秒でcompleteとなり、2026-09-20T14:38:57.093ZにKubernetes3件とローカル3群がすべてobservedだった。MLflow2processのRSSは511,082,496bytes（487.40625MiB）、Labはserver＋13kernelの14processで1,420,673,024bytes（1354.859375MiB）、Serving1processは33,947,648bytes（32.375MiB）。1.0314595秒のCPU累積時間差は全群0msだった。宣言model eventは17件、host空き61.639773%・Colima81.875775%はいずれもnormal。実model呼出し件数とは区別する。
+
+1134保護filesとML全状態（24runs/1393points/24artifacts）、Registry1/1、AgentHouse585行、Lab PID20940＋13kernel、Serving PID95852、ML PID32246は当時の前後で不変。保存したv1実03 JSONの再検証とHTML生成も成功した。新HTMLは静的構造・数値・外部resource/script/formなしを確認した。Browserのfile URL policy拒否のためpixel確認は未実施で、迂回しなかった。製品収集の失敗とは分ける。全回帰は121suites・3682実行＝3681PASS＋既存1skip（93.749秒）、log SHA256 `33c15e7647556f23c77fac8ac658ca77137f2a8d57d53886eee60b1a2b077f77`。最終保持も1134files/13Notebook/ML・Registry・AgentHouseの当時の同一性を確認した。保存JSON＋HTMLの2filesは33,232 logical bytes／36,864 allocated bytes（0600）。checks証拠は別で、APFSの物理一意容量ではない。
+
+CPUの短時間量子化とRSSの共有ページ重複を明示し、idle判定・物理一意容量・費用換算には使わない。新依存/サービス・start/stop・model/ML/AgentHouse書込を行わない限定観測であり、全component/PVC帰属や継続dashboardの完了ではない。操作は[FinOps runbook](../../../tools/local_experiment/finops/README.md)。私有証跡は `tmp/local-experiment/finops-process-checks/861e64255e6e437d93f0030115975ebc/` の`actual-source.json`、`actual01.json`、`full01.json/log`、`final-retention.json`、`storage-and-usage.json`等に保存する。2026-09-25のread-only `ps`では当時の3つのserver PIDは見つからず、現在の稼働は未受入。停止時の新規収集は別途確認する。
 
 ## 2026-09-20: registered Notebook to Dagster autolog: local acceptance complete
 

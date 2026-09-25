@@ -16,7 +16,8 @@ from tools.local_experiment.finops import contract as C
 MAX_INPUT_BYTES = C.MAX_PUBLIC_BYTES
 ERROR = 'FINOPS_REPORT_INVALID'
 NAMES = {'host': 'macOS · 作業領域', 'colima': 'Colima · Kubernetes保存領域',
-         'trino': 'Trino', 'polaris': 'Polaris', 'seaweedfs': 'SeaweedFS'}
+         'trino': 'Trino', 'polaris': 'Polaris', 'seaweedfs': 'SeaweedFS',
+         'mlflow': 'MLflow', 'notebook-lab': 'JupyterLab', 'model-serving': 'Model Serving'}
 SEVERITIES = {'normal': ('normal', '25%超'), 'warning': ('warning', '注意 · 25%以下'),
               'low': ('warning', '残量低下 · 20%以下'), 'critical': ('critical', '要対応 · 15%以下'),
               'unknown': ('unknown', '未取得')}
@@ -25,7 +26,9 @@ REASONS = {'READ_FAILED': '取得に失敗', 'READ_LIMIT': '取得上限を超�
            'TARGET_MISSING': '対象が見つからず', 'TARGET_AMBIGUOUS': '対象が複数あり特定できず',
            'IDENTITY_CHANGED': '取得中に対象が変化', 'SAMPLE_INVALID': '観測値を確認できず',
            'SAMPLE_STALE': '観測時刻が許容範囲外', 'DISK_INVALID': '容量を確認できず',
-           'INFERENCE_INVALID': '宣言eventの集計を確認できず'}
+           'INFERENCE_INVALID': '宣言eventの集計を確認できず',
+           'STOPPED': '停止中', 'UNINITIALIZED': '未初期化',
+           'OWNERSHIP_UNKNOWN': 'Shirokumaのプロセスと確認できず'}
 METRICS = [('prompt_tokens', '入力トークン', 'トークン'), ('completion_tokens', '出力トークン', 'トークン'),
            ('inference_cost_estimate', '費用見積り', 'producer定義値・通貨未記録'),
            ('event_duration_ms', 'event duration', 'ms・推論latencyとは限りません'),
@@ -163,6 +166,34 @@ def _components(report):
     return _table('固定3サービスの主コンテナ。CPUは観測区間内の平均値。', ['対象', 'CPU平均', 'メモリ（working set）', '観測区間 / サンプル時刻', '取得状態'], rows)
 
 
+def _local_processes(report):
+    if 'local_processes' not in report: return ''
+    rows = []
+    states = {'stopped': '停止中', 'unavailable': '未取得', 'ownership-unknown': '所有確認不能'}
+    for item in report['local_processes']['components']:
+        label, detail = NAMES[item['component']], ''
+        if item['state'] == 'observed':
+            sample, identity = item['sample'], item['identity']
+            detail = f'<span class="sub">{identity["process_count"]} processes'
+            if item['component'] == 'notebook-lab': detail += f' · kernel {identity["kernel_count"]}個を含む'
+            detail += '</span>'
+            cells = (f'<td class="numeric">{_scaled(str(int(sample["cpu_time_delta_ms"])*10**6), sample["elapsed_ns"], "cores", 6)}</td>'
+                     f'<td class="numeric">{_scaled(sample["rss_bytes"], 2**20, "MiB")}</td>'
+                     f'<td>{_scaled(sample["elapsed_ns"], 10**9, "秒", 3)}<span class="sub">{_time(item["observed_at"])}</span></td>')
+            state = '<span class="status normal">観測済み</span>'
+        else:
+            cells = '<td>対象なし</td><td>対象なし</td><td>—</td>' if item['state'] == 'stopped' else '<td>未取得</td><td>未取得</td><td>未取得</td>'
+            state = f'<span class="status unknown">{states[item["state"]]}</span>'
+            if item['reason'] != 'STOPPED': state += _reason(item['reason'])
+        rows.append(f'<tr><th scope="row">{label}{detail}</th>{cells}<td>{state}</td></tr>')
+    table = _table('Shirokumaが所有を確認したmacOSプロセス。JupyterLabにはkernelを含みます。',
+                   ['対象', 'CPU平均', 'メモリ（RSS合計）', '観測区間 / 終了時刻', '取得状態'], rows)
+    return ('<section id="local-processes"><h2>ローカル学習サービス</h2>'
+            '<p>短い観測区間のCPU時間差と、区間終了時のRSS合計です。1 coreはCPU 1個を占有する量に相当します。</p>'
+            + table + '<p class="thresholds">RSSは共有ページを重複して数えます。上のコンテナのworking setやホスト全体の使用量とは合算しません。'
+            'CPU時間には計測の刻みがあり、0 coresでもidleとは判定できません。kernelが起動した子プロセスは対象外です。</p></section>')
+
+
 def _metric(metric):
     headline = _number(metric['total']) if metric['total'] is not None else '全体不明'
     subtotal = '' if metric['total'] is not None else f'<span class="sub">既知小計 {_e(_number(metric["known_sum"]))}</span>'
@@ -193,25 +224,29 @@ def _inference(report):
 def render(report):
     report = _validated(report)
     complete = report['result'] == 'complete'
-    status = '全取得項目を観測' if complete else '一部の取得項目が未取得'
+    status = ('全取得項目を確認' if report['schema_version'] == 2 else '全取得項目を観測') if complete else '一部の取得項目が未取得'
     warnings = [f'{NAMES[item["scope"]]}: {_e(item["message"])}' for item in report['recommendations']]
     notice = ('<p><strong>次の大容量実験の前に</strong></p><p>' + '<br>'.join(warnings) + '</p>') if warnings else '<p>容量の判定と未取得項目を確認して、次の実験を判断してください。</p>'
     window = report['inference']['window']
     raw = _e(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False))
+    local_link = '<a href="#local-processes">ローカル学習サービス</a>' if report['schema_version'] == 2 else ''
+    coverage = ('固定3コンテナ、所有するローカル3サービス（JupyterLabのkernelを含む）、2ファイルシステム、24時間の宣言event'
+                if report['schema_version'] == 2 else '固定3サービス、2ファイルシステム、24時間の宣言event')
     return f'''<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><title>実験環境の容量と使用量 | Shirokuma</title><style>{STYLE}</style></head>
 <body><header><div class="inner"><p class="brand">Shirokuma · Local experiment</p><h1>実験環境の容量と使用量</h1>
 <p class="intro">保存済みスナップショットです。このページを開いても再取得しません。</p>
 <div class="meta"><span>観測時刻 {_time(report['observed_at'])}</span><span class="status {'normal' if complete else 'warning'}">{status}</span></div>
-<nav aria-label="レポート内の移動"><a href="#capacity">容量</a><a href="#components">サービス使用量</a><a href="#inference">モデルの記録</a><a href="#scope">観測範囲</a></nav></div></header>
+<nav aria-label="レポート内の移動"><a href="#capacity">容量</a><a href="#components">サービス使用量</a>{local_link}<a href="#inference">モデルの記録</a><a href="#scope">観測範囲</a></nav></div></header>
 <main><div class="notice {'warning' if warnings else ''}">{notice}</div>
 <section id="capacity"><h2>空き容量</h2><p>ホストとVMは物理ストレージを共有します。2行は合算せず、それぞれのファイルシステムで判断してください。</p>{_disks(report)}
 <p class="thresholds">空き率: 25%以下は注意 / 20%以下は残量低下 / 15%以下は要対応。判定には丸め前のbytesを使います。≈ は表示上の丸めです。</p></section>
 <section id="components"><h2>サービス使用量</h2><p>CPU平均とメモリ（working set）の点観測です。高負荷の原因や増減傾向は判定しません。</p>{_components(report)}</section>
+{_local_processes(report)}
 <section id="inference"><h2>モデルの記録</h2><p>{_time(window['start'])} 以上、{_time(window['end'])} 未満の24時間。</p>
 <p>synthetic記録を含むAgentHouseの宣言値です。event数は実モデル呼出し数とは限りません。費用は請求額ではなく、通貨は未記録です。</p>{_inference(report)}</section>
-<section id="scope"><h2>観測範囲</h2><p>全取得項目を観測できても、FinOps全体の対応完了を示しません。対象は固定3サービス、2ファイルシステム、24時間の宣言eventです。</p>
+<section id="scope"><h2>観測範囲</h2><p>全取得項目を観測できても、FinOps全体の対応完了を示しません。対象は{coverage}です。</p>
 <p>PVC別・サービス別のストレージ帰属、電力・価格換算、idle判断は未対応です。自動停止・削除・budget変更は行いません。</p>
 <details><summary>対象identity・原値・制約を確認する</summary><pre>{raw}</pre></details></section></main>
 <footer>保存値の表示専用。CPU cores = nanocores / 1,000,000,000、MiB = bytes / 1,048,576。未知値を0へ補いません。</footer></body></html>'''

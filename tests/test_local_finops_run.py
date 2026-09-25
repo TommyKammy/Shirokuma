@@ -18,6 +18,9 @@ class RuntimeTests(unittest.TestCase):
         value.component.side_effect = component_args
         value.disk.return_value = (1000, 260)
         value.inference.return_value = [row(known='0')]
+        value.local_processes.return_value = {'schema_version': 1, 'components': [
+            dict(component=name, state='stopped', reason='STOPPED', request_started_at=None,
+                 observed_at=None, identity=None, sample=None) for name in R.P.COMPONENTS]}
         return value
 
     def test_complete_collection_with_unknown_recorded_cost_and_no_lifecycle(self):

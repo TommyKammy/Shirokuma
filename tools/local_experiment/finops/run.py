@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'tools/local_experiment'))
 from tools.local_experiment.finops import contract as C
+from tools.local_experiment.finops import local_processes as P
 from tools.local_experiment.gateway import pod_usage as U
 from tools.local_experiment.agenthouse import manage as AH
 from tools.local_experiment import local_session as SESSION
@@ -197,6 +198,13 @@ class Backend:
         C.require(len(raw.encode()) <= 1024**2, 'READ_LIMIT')
         return [_json(line) for line in raw.splitlines() if line.strip()]
 
+    def local_processes(self):
+        # Runtime imports are isolated in the already installed Lab environment.
+        # No caller-supplied command, PID, environment or service can be selected.
+        raw = self._command([str(ROOT/'tools/local_experiment/notebook_lab/.venv/bin/python'),
+            '-I', '-B', str(ROOT/'tools/local_experiment/finops/local_processes.py'), '--worker'], timeout=20)
+        return P.validate(_json(raw))
+
 
 def reason(error, fallback='READ_FAILED'):
     if isinstance(error, U.PodUsageCleanupError): return 'CLEANUP_UNVERIFIED'
@@ -230,8 +238,14 @@ def collect(backend=None):
         if unsafe: raise C.FinOpsError('CLEANUP_UNVERIFIED')
         inference = C.inference(backend.inference(end), end=end)
     except Exception as error:
-        inference = C.inference(None, end=end, reason=reason(error))
-    value = C.build_report(components, disks, inference, observed_at=backend.now())
+        code = reason(error); unsafe = unsafe or code == 'CLEANUP_UNVERIFIED'
+        inference = C.inference(None, end=end, reason=code)
+    try:
+        if unsafe: raise C.FinOpsError('CLEANUP_UNVERIFIED')
+        processes = P.validate(backend.local_processes())
+    except Exception as error:
+        processes = P.unknown_all(reason(error))
+    value = C.build_report(components, disks, inference, observed_at=backend.now(), local_processes=processes)
     return C.validate_public(value)
 
 
