@@ -18,6 +18,41 @@ To inspect a saved JSON observation as a standalone Japanese HTML report:
 rtk proxy make local-finops-html < report.json > report.html
 ```
 
+To display a bounded history, explicitly select 2–8 saved public reports in
+one JSON array and render it offline:
+
+```sh
+rtk proxy make local-finops-history < selected.json > history.html
+```
+
+The selection must contain full v1/v2 report objects, not file paths. No
+directory search, file opening, service start, collection or automatic refresh
+occurs. Input is capped at 8 × 256 KiB plus array framing and output at 4 MiB;
+invalid or duplicate-key inputs fail without partial HTML. The view sorts by
+validated observation time, keeps equal-time selection order, and displays
+content SHA-256 only as an identifier, not an authenticity proof. Each entry
+retains its own status, scope, component/process identity, sample window,
+disk severity and inference coverage. Version 1 does not contain local process
+measurements; that absence is not a stopped service. No usage/cost deltas or
+event sums across overlapping windows are calculated. Old disk advice is not
+presented as a current alert. Keep the selected array and generated HTML in a
+private directory (0700/0600); do not commit generated evidence. Stop using the
+view by deleting no data and simply not invoking the renderer.
+
+On 2026-09-25, with Colima stopped, the read-only v2 CLI produced `partial`:
+three owned local groups were `STOPPED` with null usage; Kubernetes/Colima and
+inference were unavailable, while host disk was observed. `make` returned 2
+because the underlying report command returned 1 for partial, not because the
+JSON was malformed. The saved contract and HTML validated. Evidence is under
+`tmp/local-experiment/finops-offline-checks/20260925-stopped/`.
+
+On 2026-09-26, the offline history renderer accepted an explicitly selected
+old v1, observed v2 and stopped v2 report, retained all source bytes, and
+repeated byte-identical output. Evidence is under
+`tmp/local-experiment/finops-history-checks/20260926-offline/`. Browser visual
+inspection is not verified. This is a static saved-observation view, not the
+continuous/task-cost dashboard or chill decision in the full WP.
+
 Create reports in a private directory with `umask 077`. The HTML renderer reads
 only the supplied JSON, validates its report contract, and performs no new
 collection. It uses no external fonts, scripts or network resources. Observation

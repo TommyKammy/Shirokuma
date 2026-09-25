@@ -1059,11 +1059,13 @@ local-spark-comet-benchmark:
 local-spark-comet-benchmark-recover:
 	@$(PYTHON) -B tools/local_experiment/spark_comet/benchmark.py recover --run-token "$(SPARK_COMET_BENCHMARK_TOKEN)" --variant "$(SPARK_COMET_VARIANT)"
 
-.PHONY: local-finops-report local-finops-html test-local-finops
+.PHONY: local-finops-report local-finops-html local-finops-history test-local-finops
 local-finops-report:
 	@$(PYTHON) -B tools/local_experiment/finops/run.py
 local-finops-html:
 	@$(PYTHON) -B tools/local_experiment/finops/render.py
+local-finops-history:
+	@$(PYTHON) -B tools/local_experiment/finops/history.py
 test-local-finops:
 	@$(PYTHON) -B -m unittest discover -v -s tests -p 'test_local_finops*.py'
 verify-local-experiment: test-local-finops

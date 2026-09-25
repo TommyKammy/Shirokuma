@@ -5,7 +5,7 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-20
-version: "3.74"
+version: "3.75"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
@@ -54,6 +54,14 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-26: FinOps saved-report history: bounded offline acceptance
+
+WP-L6-FIN-001の未達dashboardのうち、明示選択した保存public JSON 2–8件だけを時刻順に表示する静的HTML入口を追加した。v1/v2の範囲差、停止/unknown/null、主コンテナと所有processのidentity・sample区間、diskの当時の判定と宣言event各24時間windowを別々に表示する。差分/期間合計・idle/chill・現在の警報・継続収集は行わない。SHA-256は内容識別子で真正性証明ではない。入力上限8×256KiB＋framing、出力上限4MiB。原本を開くのは呼出し側だけで、rendererはstdin以外を読まず、新service/依存はない。
+
+2026-09-25のread-only状態ではColima停止、旧MLflow/Lab/Serving PIDは不在。v2 CLIは1.380秒でpartial、所有3群はSTOPPED/identity・sample null、Kubernetes3件・Colima disk・宣言eventはREAD_FAILED、host diskだけobserved。`make` exit2は内部report exit1の伝播。契約検証と静的HTML生成は成功。runtime restart/fit/DB書込はない。当時の稼働時v2実01と混同しない。
+
+保存v1・稼働時v2・停止時v2の3入力（schema 1/2/2）でHTMLを生成し、原本SHA不変・反復byte一致・3節の範囲表示を確認した。選択array 17,130B、HTML 28,837B、計45,967 logical bytes／53,248 allocated bytes（0600。検証補助を除き、物理一意容量ではない）。focused FinOps 72tests PASS。全ローカル回帰の最終full02は121suites/3687実行＝3686PASS＋既存1skip、87.242秒、log SHA256 `f0fc5baec79d9b551629f67c625bdccd6240121a6181441356fc0a1d0d57f2d9`（full01も原記録保持）。Browserでの見た目は未検証。私有証跡は`tmp/local-experiment/finops-offline-checks/20260925-stopped/`と`tmp/local-experiment/finops-history-checks/20260926-offline/`、操作は[FinOps runbook](../../../tools/local_experiment/finops/README.md)。WPはlocal-partialであり、全component/PVC帰属・chill・費用/電力換算・budget強制・自動更新/task別dashboardは未達。
 
 ## 2026-09-20: FinOps local owned processes: observation passed
 
