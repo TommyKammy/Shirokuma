@@ -115,6 +115,9 @@ reports continue to publish `null / NOT_MEASURED` for this volume.
 The subsequent fixture-only Linux worker and offline Docker preflight are not
 wired to retained volumes or public reports; see the plan for their unresolved
 per-open mount and remote-cleanup gates.
+The private transport for bounded, allowlisted Docker metadata snapshots is
+also offline-tested, but is not invoked by `local-finops-report` and does not
+turn a saved mount reference into a byte observation.
 
 ## Fixed host directory references (v5)
 

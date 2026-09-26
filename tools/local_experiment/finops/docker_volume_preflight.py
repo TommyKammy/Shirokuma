@@ -67,8 +67,9 @@ def _mounts(container):
 def _project(snapshot):
     require(type(snapshot) is dict and
             set(snapshot) == {'context', 'daemon', 'container', 'volume', 'listed_ids',
-                              'containers', 'boot_id', 'observed_at', 'listing_complete'} and
+                              'containers', 'boot_id', 'started_at', 'observed_at', 'listing_complete'} and
             snapshot['listing_complete'] is True)
+    C.stamp(snapshot['started_at'])
     C.stamp(snapshot['observed_at'])
     context = snapshot['context']
     require(type(context) is dict and context.get('Name') == AH.CONTEXT)
@@ -140,8 +141,11 @@ def validate_pair(before, after, *, now):
     """Compare checked projections; continuous writer quiescence is unproven."""
     first, second = _project(before), _project(after)
     require(first == second, 'IDENTITY_CHANGED')
-    begin, end, current = (C.stamp(value)[1] for value in
-                            (before['observed_at'], after['observed_at'], now))
-    require(0 <= end-begin <= 30*10**9 and 0 <= current-end <= 30*10**9, 'SAMPLE_STALE')
+    begin, middle, later, end, current = (C.stamp(value)[1] for value in
+        (before['started_at'], before['observed_at'], after['started_at'],
+         after['observed_at'], now))
+    require(0 <= middle-begin <= 20*10**9 and 0 <= later-middle and
+            0 <= end-later <= 20*10**9 and 0 <= current-end and
+            current-begin <= 30*10**9, 'SAMPLE_STALE')
     return {'state':'metadata_eligible', 'container_count':len(first[6]),
             'vm_host_writers_unresolved':True, 'volume_traversal_authorized':False}

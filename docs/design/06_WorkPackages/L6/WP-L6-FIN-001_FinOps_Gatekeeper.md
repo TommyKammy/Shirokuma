@@ -5,12 +5,18 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-27
-version: "0.12"
+version: "0.13"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## AgentHouse private Docker metadata transport（2026-09-27・offline）
+
+前増分のoffline preflightへ渡すprivate transportを追加。固定contextのUnix socketを**daemon読取より前**に照合し、以後は`--host`で固定する。daemon/root/ARM64・volumeのdriver/Options/固定pathを確認してから、label有無にかかわらず全container IDを上限付きでinspectし、環境変数・余分なlabel・state error等を投影時に捨てる。前後listとdaemon identityを比較し、全処理20秒上限と開始/終了時刻を保持する。誤context・Options内credential・欠損volume・一覧/daemon driftをfake backendで拒否。専用Colimaは停止のまま、live preflight/保持volume走査は行わない。workerのremote cleanupとper-open mount境界、VM-host writer確認は引き続き未達。Docker公開schemaはv1のまま、`null / NOT_MEASURED`を維持し、WPはlocal-partial。
+
+focused124tests＝121PASS＋Linux専用3skip、全回帰121suites/3739実行＝3735PASS＋4skip（既存1＋Linux専用3、log SHA256 `dda8e0a964e7fef1b76a91399e30657883f8bb8eb202ad35e83f2dcaa4235fb6`）。design-context/secret scan PASS、専用Colima停止・保存v7原本SHA不変。限定private証拠は`tmp/local-experiment/finops-volume-transport-checks/20260927/`。transportのlive検証・数値測定とは区別する。
 
 ## AgentHouse volume fixture-only worker / offline preflight（2026-09-27）
 

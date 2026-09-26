@@ -135,3 +135,23 @@ writer quiescence between observations. It explicitly returns
 `volume_traversal_authorized=False`: Docker inventory cannot rule out VM-host
 writers or mount aliases. There is **no public schema change** and no numeric
 Docker storage row at this milestone.
+
+## 2026-09-27 private metadata transport follow-up
+
+`docker_volume_transport.py` now gathers **only** private preflight snapshots
+through fixed, bounded Docker/boot-ID reads. It validates the dedicated Unix
+socket *before* any daemon inspection, then pins `--host` to that endpoint.
+It rejects a foreign daemon and nonempty local-driver Options before inspecting
+containers. It strips environment, arbitrary labels, state errors and extra
+mount properties immediately; no raw inspect JSON is persisted or returned.
+It accepts unrelated unlabeled containers (`Labels: null`) so they cannot be
+silently excluded from the all-container inventory. The 20-second transport
+deadline, second complete ID listing and daemon reread fail closed on drift.
+Start/end timestamps preserve the age of earlier reads for the offline pair
+validator. Mocked negative tests cover foreign contexts/options, missing
+volume, incomplete/drifting lists and daemon replacement. The Colima profile
+remained stopped; these are **transport contract tests**, not a live preflight.
+The result still says `volume_traversal_authorized=False` and no Docker bytes
+are published. A Colima SSH boot-ID read can outlive a killed host client;
+this metadata-only operation does not establish the verified remote-worker
+cleanup required before any volume traversal.

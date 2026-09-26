@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "3.82"
+version: "3.83"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: AgentHouse Docker private metadata transport (offline)
+
+固定contextを検証後にUnix endpointを固定し、daemonとOptions空のnamed volumeを照合してから全containerをbounded inspectするprivate transportを追加。Env/state error/余分なlabelsと生inspect JSONを公開/保存せず、unlabeled container（Docker `Labels=null`）も列挙。前後ID一覧・daemon ID再読と20秒上限、開始/終了時刻をoffline preflightに渡す。@architectレビューでの外部context先読み/秘密Options返却/一覧1回/開始時刻欠落を修正し、最後のunlabeled container拒否も修正。テストはfake backendのみ。専用ColimaはStoppedのまま、live inventory、Linux retained-volume、remote worker cleanupは未検証。public bytesは`null / NOT_MEASURED`でWP-L6-FIN-001はlocal-partial。
+
+focused124tests＝121PASS＋Linux専用3skip、全回帰121suites/3739実行＝3735PASS＋4skip（既存1＋Linux専用3、87.576秒、log SHA256 `dda8e0a964e7fef1b76a91399e30657883f8bb8eb202ad35e83f2dcaa4235fb6`）。design-context/secret scan PASS。private証拠は`tmp/local-experiment/finops-volume-transport-checks/20260927/`。次は`openat2`のper-open mount境界とremote supervisorを先に準備し、同一のfixture-only VM起動で検証する。owner判断ではなく技術的未達。
 
 ## 2026-09-27: AgentHouse volume fixture worker / Docker offline preflight
 

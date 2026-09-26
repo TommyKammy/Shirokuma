@@ -21,7 +21,8 @@ def snapshot():
         'Architecture':'aarch64','DockerRootDir':'/var/lib/docker'},container=container,
         volume=volume,listed_ids=[container['Id'],other['Id']],containers=[container,other],
         boot_id='01234567-89ab-cdef-0123-456789abcdef',
-        observed_at='2026-09-27T00:00:00Z',listing_complete=True)
+        started_at='2026-09-27T00:00:00Z',observed_at='2026-09-27T00:00:00Z',
+        listing_complete=True)
 
 
 def validate(before, after):
@@ -95,6 +96,12 @@ class VolumePreflightTests(unittest.TestCase):
             V.validate_pair(first,second,now='2026-09-27T00:00:45Z')
         with self.assertRaisesRegex(V.PreflightError,'SAMPLE_STALE'):
             V.validate_pair(first,deepcopy(first),now='2026-09-27T00:01:00Z')
+        early=snapshot();late=deepcopy(early)
+        early['observed_at']='2026-09-27T00:00:19Z'
+        late['started_at']='2026-09-27T00:00:19Z'
+        late['observed_at']='2026-09-27T00:00:20Z'
+        with self.assertRaisesRegex(V.PreflightError,'SAMPLE_STALE'):
+            V.validate_pair(early,late,now='2026-09-27T00:00:31Z')
 
 
 if __name__=='__main__':unittest.main()
