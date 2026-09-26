@@ -5,12 +5,20 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-27
-version: "0.16"
+version: "0.17"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## Model Serving HOMEの限定論理bytes（2026-09-27・v8 local増分）
+
+AgentHouse volumeのauthenticated SSH server key bindingは保存済み専用profile/設計記録に見つからず、live依存作業はunknownのままとした。独立して進められる固定Model Serving HOMEを、既存owner/configの`HOME`参照とroot device/inodeを確認後、サービス停止中にbounded/no-follow二走査で測定した。通常ファイル**0件・子directory 0件・論理0 bytes**。別の後続metadata走査でも同値、前後のowner/root identityとServing停止状態も一致。Notebook LabとMLflow storeは各行の限定値を維持し合算しない。全v8レポートは他の取得項目が未取得で`partial`。旧v1–v7のServingは未計測のままで、旧レポートの数値注入を拒否する。詳細は`tools/local_experiment/finops/README.md`。
+
+HOMEの0はServing全体の0ではない。sibling tmp/log/runtime/venvや共有モデルartifactは対象外で、filesystemの物理占有・APFS共有extent・backup/restore・削除可能量、内容不変を示さない。directory metadata読取によるatime影響も排除していない。専用ColimaとServingは起動せず、保持HOMEを削除/修復していない。保存v7 report原本SHAは不変。限定private証拠は`tmp/local-experiment/finops-serving-usage-checks/20260927/`。WPはlocal-partial。
+
+focused149件＝142PASS＋Linux専用7skip。全回帰121suites/3764実行＝3756PASS＋8skip（既存1＋Linux専用7）、log SHA256 `cf70fbb1635a5dff3e08b89acbbd11b852b76da2ab20570fdc3dc47c475b30cd`。design-context/secret scan PASS。既存v7と新規v8のoffline HTML/history契約を確認し、ブラウザaccessibility tableでも3行の分離とServing HOME 0 bytesを確認（pixel visualの受入ではない）。
 
 ## AgentHouse receipt wire / SSH設定境界（2026-09-27・offline）
 

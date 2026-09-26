@@ -254,7 +254,10 @@ def _host_storage(report):
                          + ' · ' + _time(item['usage_started_at']) + ' → ' + _time(item['usage_observed_at']) + '</span>')
             else: usage = '未取得' + _reason(item['usage_reason'])
         rows.append(f'<tr><th scope="row">{names[item["component"]]}</th><td>{detail}</td><td>{usage}</td></tr>')
-    note = ('MLflow storeとLab workspaceの論理bytesは通常ファイルのst_size合計で、SQLite DBの整合性・'
+    note = ('Serving HOME、MLflow store、Lab workspaceは別々の通常ファイルst_size合計です。'
+             'Servingの一時領域・logs・共有モデルartifactを含まず、全体量・backup復旧・物理占有を示しません。'
+             if report['schema_version'] == 8 else
+             'MLflow storeとLab workspaceの論理bytesは通常ファイルのst_size合計で、SQLite DBの整合性・'
             'backup復旧・割当量・共有extent・物理占有を示しません。Serving HOMEは未計測です。'
             if report['schema_version'] == 7 else
             'Workspaceの論理bytesは通常ファイルのst_size合計で、割当量・共有extent・物理占有・'
@@ -312,6 +315,7 @@ def render(report):
     if report['schema_version'] >= 5: coverage += '、固定3ホストディレクトリ参照'
     if report['schema_version'] == 6: coverage += '、Lab workspaceの限定論理bytes'
     if report['schema_version'] == 7: coverage += '、Lab workspaceとMLflow storeの個別論理bytes'
+    if report['schema_version'] == 8: coverage += '、Lab workspace・MLflow store・Serving HOMEの個別論理bytes'
     return f'''<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><title>実験環境の容量と使用量 | Shirokuma</title><style>{STYLE}</style></head>

@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "3.86"
+version: "3.87"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: FinOps Model Serving HOME separate logical bytes (v8)
+
+@architect相談でAgentHouseのSSH trust bootstrapに依存しない固定Serving HOMEを次対象とした。専用Colimaは停止のまま、Model Serving owned process stopped、owner/configの固定`HOME`参照・root所有/0700・device/inodeを確認。既存bounded no-follow metadata scannerの独立した3行目としてhost schema v4/report v8を実装。停止中の実01はServing HOMEの通常ファイル0件/子directory0件/論理0 bytes、別の後続走査も一致。MLflow store 25file/55directory/1,767,968 bytes、Lab workspace26file/1directory/244,438 bytesは各行で保持。全reportは他source未取得でpartial。保存v7原本SHA `b21ff1ec38ee62029aa128a7ff15b7d4388381ffc95b917c736eecc81e08e824`不変、repo/Vault外のprivate証拠は`tmp/local-experiment/finops-serving-usage-checks/20260927/`。Servingのsibling tmp/logs/venv・共有model artifacts、内容/backup・物理占有は測定外。VM起動・データ削除・runtime修復なし。本番/全容量受入ではなくWP-L6-FIN-001はlocal-partial。
+
+focused149件＝142PASS＋Linux専用7skip、全回帰121suites/3764実行＝3756PASS＋8skip（既存1＋Linux専用7）、86.627秒、log SHA256 `cf70fbb1635a5dff3e08b89acbbd11b852b76da2ab20570fdc3dc47c475b30cd`。design-context/secret scan PASS。@architectの実装レビューは追加重大指摘なし。browser accessibility tableは3行を個別表示、Serving HOME 0 bytesを確認。pixel visualの受入やbackup検証とは区別。
 
 ## 2026-09-27: AgentHouse receipt wire / SSH config contract (offline)
 

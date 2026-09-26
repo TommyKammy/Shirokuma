@@ -31,7 +31,12 @@ MLFLOW_LIMITS = ['THREE_FIXED_DIRECTORIES_ONLY_NOTEBOOK_WORKSPACE_AND_MLFLOW_STO
                  'MLFLOW_STORE_INCLUDES_SQLITE_SIDECARS_AND_ARTIFACTS_NOT_DB_CONSISTENCY',
                  'LOGICAL_REGULAR_FILE_SIZE_NOT_ALLOCATED_OR_UNIQUE_PHYSICAL_BYTES',
                  'SYMLINK_HARDLINK_SPECIAL_AND_FOREIGN_DEVICE_REJECTED',
-                 'BOUNDED_TWO_PASS_METADATA_SCAN_NOT_ATOMIC_OR_BACKUP_VALIDATION']
+                  'BOUNDED_TWO_PASS_METADATA_SCAN_NOT_ATOMIC_OR_BACKUP_VALIDATION']
+SERVING_LIMITS = ['THREE_FIXED_DIRECTORIES_EACH_MEASURED_SEPARATELY_NOT_FULL_COMPONENT_STORAGE',
+                  'SERVING_HOME_EXCLUDES_SIBLING_TMP_LOGS_AND_SHARED_MODEL_ARTIFACTS',
+                  'LOGICAL_REGULAR_FILE_SIZE_NOT_ALLOCATED_OR_UNIQUE_PHYSICAL_BYTES',
+                  'SYMLINK_HARDLINK_SPECIAL_AND_FOREIGN_DEVICE_REJECTED',
+                  'BOUNDED_TWO_PASS_METADATA_SCAN_NOT_ATOMIC_OR_BACKUP_VALIDATION']
 REASONS_V1 = frozenset(('READ_FAILED', 'READ_LIMIT', 'READ_TIMEOUT', 'CLEANUP_UNVERIFIED',
                         'SCOPE_INVALID', 'TARGET_MISSING', 'IDENTITY_CHANGED', 'SAMPLE_INVALID'))
 REASONS = REASONS_V1 | {'TREE_CHANGED'}
@@ -52,13 +57,19 @@ def unknown(component, reason):
                 used_bytes=None, usage_reason='NOT_MEASURED')
 
 
+def selected(component, version):
+    return (component == 'notebook-lab' or
+            (version >= 3 and component == 'mlflow') or
+            (version >= 4 and component == 'model-serving'))
+
+
 def measured_row(row, *, version=2):
-    require(version in (2,3))
+    require(version in (2,3,4))
     row = deepcopy(row)
-    selected = row['component'] == 'notebook-lab' or (version == 3 and row['component'] == 'mlflow')
-    row.update(usage_state='unknown' if selected and row['state'] == 'unknown'
-               else 'not_measured', usage_basis='logical_regular_file_size_sum' if selected else None,
-               usage_reason=row['reason'] if selected and row['state'] == 'unknown' else 'NOT_MEASURED',
+    measured = selected(row['component'], version)
+    row.update(usage_state='unknown' if measured and row['state'] == 'unknown'
+                else 'not_measured', usage_basis='logical_regular_file_size_sum' if measured else None,
+                usage_reason=row['reason'] if measured and row['state'] == 'unknown' else 'NOT_MEASURED',
                regular_file_count=None,directory_count=None,usage_started_at=None,usage_observed_at=None)
     return row
 
@@ -111,12 +122,12 @@ def project(component, before, after, *, request_started_at, observed_at):
 
 
 def validate_row(row, *, version=1):
-    require(version in (1,2,3))
-    selected = row.get('component') == 'notebook-lab' or (version == 3 and row.get('component') == 'mlflow')
+    require(version in (1,2,3,4))
+    measured = selected(row.get('component'), version)
     require(type(row) is dict and row.get('component') in TARGETS and
             set(row) == set(measured_row(unknown('mlflow', 'READ_FAILED')) if version >= 2 else unknown('mlflow', 'READ_FAILED')) and
             row['directory'] == TARGETS[row['component']] and
-            (row['used_bytes'] is None if version == 1 or not selected or
+             (row['used_bytes'] is None if version == 1 or not measured or
              row['state'] == 'unknown' else True) and
             (row['usage_reason'] == 'NOT_MEASURED' if version == 1 else True))
     if row['state'] == 'unknown':
@@ -136,7 +147,7 @@ def validate_row(row, *, version=1):
         start, end = U.stamp(row['request_started_at']), U.stamp(row['observed_at'])
         require(0 <= end[1]-start[1] <= 30*10**9)
     if version >= 2 and row['state'] == 'observed':
-        if not selected:
+        if not measured:
             require(row == measured_row({k:row[k] for k in unknown('mlflow','READ_FAILED')},version=version))
         else:
             require(row['usage_basis'] == 'logical_regular_file_size_sum' and
@@ -166,8 +177,8 @@ def validate_row(row, *, version=1):
 
 def validate(value):
     require(type(value) is dict and set(value) == {'schema_version','components','limits'} and
-            type(value['schema_version']) is int and value['schema_version'] in (1,2,3) and
-            value['limits'] == {1:LIMITS,2:MEASURED_LIMITS,3:MLFLOW_LIMITS}[value['schema_version']] and type(value['components']) is list and
+            type(value['schema_version']) is int and value['schema_version'] in (1,2,3,4) and
+            value['limits'] == {1:LIMITS,2:MEASURED_LIMITS,3:MLFLOW_LIMITS,4:SERVING_LIMITS}[value['schema_version']] and type(value['components']) is list and
             len(value['components']) == len(TARGETS))
     require([r.get('component') for r in value['components']] == list(TARGETS))
     return dict(schema_version=value['schema_version'], components=[validate_row(r, version=value['schema_version'])
@@ -175,26 +186,27 @@ def validate(value):
 
 
 def unknown_all(reason, *, version=1):
-    require(version in (1,2,3))
+    require(version in (1,2,3,4))
     return dict(schema_version=version, components=[measured_row(unknown(n,reason),version=version) if version >= 2 else unknown(n,reason)
-                for n in TARGETS], limits={1:LIMITS,2:MEASURED_LIMITS,3:MLFLOW_LIMITS}[version][:])
+                for n in TARGETS], limits={1:LIMITS,2:MEASURED_LIMITS,3:MLFLOW_LIMITS,4:SERVING_LIMITS}[version][:])
 
 
-def collect(backend, *, measure=False, measure_mlflow=False):
-    require(not measure_mlflow or measure)
-    version = 3 if measure_mlflow else 2 if measure else 1
+def collect(backend, *, measure=False, measure_mlflow=False, measure_serving=False):
+    require((not measure_mlflow or measure) and (not measure_serving or measure_mlflow))
+    version = 4 if measure_serving else 3 if measure_mlflow else 2 if measure else 1
     rows = []
     for component in TARGETS:
         try:
             started = backend.now(); before = backend.snapshot(component)
             attempt_start = outcome = attempt_end = None
-            selected = measure and (component == 'notebook-lab' or (measure_mlflow and component == 'mlflow'))
-            if selected:
+            scan = measure and selected(component,version)
+            if scan:
                 from tools.local_experiment.finops import workspace_usage as W
                 failure = 'READ_FAILED'
                 attempt_start = backend.now()
                 try:
-                    method = backend.measure_mlflow if component == 'mlflow' else backend.measure_workspace
+                    method = (backend.measure_mlflow if component == 'mlflow' else
+                              backend.measure_serving if component == 'model-serving' else backend.measure_workspace)
                     outcome = method(int(before['directory_identity']['device']),
                                      int(before['directory_identity']['inode']))
                 except Exception as error:
@@ -204,7 +216,7 @@ def collect(backend, *, measure=False, measure_mlflow=False):
             row = project(component,before,after,request_started_at=started,observed_at=backend.now())
             if measure:
                 row = measured_row(row,version=version)
-                if selected:
+                if scan:
                     row.update(usage_started_at=U.stamp(attempt_start)[0],usage_observed_at=U.stamp(attempt_end)[0])
                     if outcome is None:
                         row.update(usage_state='unknown',usage_reason=failure)
@@ -216,7 +228,7 @@ def collect(backend, *, measure=False, measure_mlflow=False):
             code = str(error) if isinstance(error, HostStorageError) and str(error) in REASONS else 'READ_FAILED'
             rows.append(measured_row(unknown(component,code),version=version) if measure else unknown(component,code))
     return validate(dict(schema_version=version,components=rows,
-                         limits={1:LIMITS,2:MEASURED_LIMITS,3:MLFLOW_LIMITS}[version][:]))
+                          limits={1:LIMITS,2:MEASURED_LIMITS,3:MLFLOW_LIMITS,4:SERVING_LIMITS}[version][:]))
 
 
 class Backend:
@@ -231,24 +243,30 @@ class Backend:
     def measure_mlflow(device, inode):
         from tools.local_experiment.finops import workspace_usage as W
         return W.measure(ROOT/TARGETS['mlflow'],device=device,inode=inode,
-                         required_root_entries=(('tracking.sqlite','file'),('artifacts','directory')))
+                          required_root_entries=(('tracking.sqlite','file'),('artifacts','directory')))
+    @staticmethod
+    def measure_serving(device, inode):
+        from tools.local_experiment.finops import workspace_usage as W
+        return W.measure(ROOT/TARGETS['model-serving'],device=device,inode=inode)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--measure-workspace',action='store_true')
     parser.add_argument('--measure-mlflow-store',action='store_true')
+    parser.add_argument('--measure-serving-home',action='store_true')
     args=parser.parse_args(argv)
     original = None
-    if args.measure_workspace or args.measure_mlflow_store:
+    if args.measure_workspace or args.measure_mlflow_store or args.measure_serving_home:
         original = signal.getsignal(signal.SIGALRM)
         def timeout(*_): raise WorkerTimeout()
         signal.signal(signal.SIGALRM,timeout)
         signal.setitimer(signal.ITIMER_REAL,18)
     try:
-        try: value = collect(Backend(),measure=args.measure_workspace or args.measure_mlflow_store,
-                             measure_mlflow=args.measure_mlflow_store)
-        except WorkerTimeout: value = unknown_all('READ_TIMEOUT',version=3 if args.measure_mlflow_store else 2)
+        try: value = collect(Backend(),measure=args.measure_workspace or args.measure_mlflow_store or args.measure_serving_home,
+                             measure_mlflow=args.measure_mlflow_store or args.measure_serving_home,
+                             measure_serving=args.measure_serving_home)
+        except WorkerTimeout: value = unknown_all('READ_TIMEOUT',version=4 if args.measure_serving_home else 3 if args.measure_mlflow_store else 2)
     finally:
         if original is not None:
             signal.setitimer(signal.ITIMER_REAL,0)

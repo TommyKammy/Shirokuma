@@ -1,14 +1,14 @@
 # Local resource and inference report
 
 The FinOps collector reads the existing Shirokuma lab and returns one JSON
-report. Fresh reports use schema version 7 and cover the fixed Trino, Polaris
+report. Fresh reports use schema version 8 and cover the fixed Trino, Polaris
 and SeaweedFS containers; the owned local MLflow, JupyterLab and Model Serving
 processes; the workspace and dedicated Colima filesystems; and the last 24 hours
 of declared inference records in AgentHouse. A bounded read-only Kubernetes
 storage reference inventory covers SeaweedFS, Polaris PostgreSQL, Polaris and
 Trino, plus one fixed AgentHouse Docker named-volume reference and three fixed
-host directory references. The Notebook Lab workspace and MLflow store have
-separate bounded logical-file-byte measurements. Saved version 1–6 reports
+host directory references. The Notebook Lab workspace, MLflow store and Model
+Serving HOME have separate bounded logical-file-byte measurements. Saved version 1–7 reports
 retain their original coverage.
 
 ```sh
@@ -29,7 +29,7 @@ one JSON array and render it offline:
 rtk proxy make local-finops-history < selected.json > history.html
 ```
 
-The selection must contain full v1/v2/v3/v4/v5/v6/v7 report objects, not file paths. No
+The selection must contain full v1/v2/v3/v4/v5/v6/v7/v8 report objects, not file paths. No
 directory search, file opening, service start, collection or automatic refresh
 occurs. Input is capped at 8 × 256 KiB plus array framing and output at 4 MiB;
 invalid or duplicate-key inputs fail without partial HTML. The view sorts by
@@ -202,6 +202,29 @@ them. MLflow and Lab rows are not added into a platform storage total, and
 neither is physical APFS occupancy, unique extent usage, quota, cost, or
 reclaimable bytes. Host storage schema v3/report v7 introduces the MLflow row;
 saved v5 (reference-only) and v6 (Lab-only measurement) remain unchanged.
+
+## Model Serving HOME logical regular-file bytes (v8)
+
+The fixed owner/config check confirms the configured Serving `HOME` reference
+to `tmp/local-experiment/ridge-serving/home`. The same bounded two-pass metadata
+scanner observes that directory without opening file contents, starting the
+service, or imposing invented required model files. A verified empty HOME may
+report `"0"`, zero files and zero child directories. Hidden, old, cache and
+sparse regular files count by their logical `st_size` if present; links, special
+entries, foreign owners/devices, replacement, drift and bounds failures yield
+unknown bytes. A missing directory never becomes zero. The Lab and MLflow rows
+remain independently measured, and a Serving scan failure leaves their valid
+values intact. The 18-second alarm covers the entire worker; a hard timeout can
+conservatively mark all host rows unknown.
+
+HOME excludes Serving's sibling temporary directory, logs and runtime records,
+virtual environment, and shared model artifacts. Its logical size is **not**
+the component's full footprint or physical occupancy, unique allocation,
+reclaimability, application consistency or backup/recovery evidence. Directory
+enumeration may change access metadata depending on filesystem policy; the
+worker intentionally reads metadata only but does not claim unchanged atime.
+Host storage schema v4/report v8 adds this one row; saved v1–v7 semantics and
+historical unmeasured labels remain unchanged. Do not sum the three rows.
 
 Create reports in a private directory with `umask 077`. The HTML renderer reads
 only the supplied JSON, validates its report contract, and performs no new
