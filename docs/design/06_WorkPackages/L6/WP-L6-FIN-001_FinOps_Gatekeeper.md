@@ -4,13 +4,21 @@ doc_id: "WP-L6-FIN-001"
 title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-20
-version: "0.5"
+updated: 2026-09-26
+version: "0.6"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## Fixed Kubernetes storage references（2026-09-26・限定local受入）
+
+@architectの判断により、まず固定4workloadのAPI参照関係をread-onlyで検証するv3を追加した。SeaweedFSとPolaris PostgreSQLはworkload→Pod owner→container mount→名前空間付きPVC→PV claimRef UIDを照合し、Trino/Polaris本体は直接PVC参照なしを確認する。要求容量とPVC/PV宣言容量は別々で、実使用量は常に`null / NOT_MEASURED`。20Gi＋5Giは実占有・物理予約・quota・削除可能容量ではない。S3利用者にSeaweedFSの容量を重複帰属しない。保存v1/v2の契約と表示は維持し、履歴ではv3のUID/観測windowを確認できる。
+
+起動前の専用profile停止・構成SHA・保持領域・空き容量を保存し、既存`mac-studio-solo`を`--activate=false --save-config=false --ssh-config=false`で起動した。起動直後のroot Flux suspend=true、storage child suspend=false/patch1、PVC UID・既存volume名を記録。Fluxには変更を加えなかった。実05は2026-09-26T10:38:40.979Zに2PVCがBound、SeaweedFS 20Gi/Polaris PostgreSQL 5Gi（各request/PVC status/PV spec）、Polaris/Trinoは`no_direct_pvc`。PV reclaimはいずれもDeleteで、StatefulSetのwhenDeleted/whenScaled Retainやtemplate pruneとは別の制御。MLflow/Lab/Servingは停止中、AgentHouse宣言eventはSCOPE_INVALIDのため全reportはpartialだがstorage4行の限定観測は成功。実使用bytes、mount健全性や保存データの内訳は未確認。最終sourceの実06でも同じstorage4状態・PVC identity/宣言容量を確認した（`live06.json`、report SHA256 `a1513f0d659dece8c121af4f53d9a6b697dbc5db72f2e9779a83321e4279e70d`）。
+
+停止時v3は全storageがunknown/null、実初回のPodList kind省略とPostgreSQL container名の投影失敗は原reportを保持して狭く修正した。live PVC/PV UIDとclaimRefの独立readback、Flux patch・構成不変、保持directoryの存在を確認。保存v1/v2/v3のHTML/history互換とnegative fixtureで誤owner・別namespace・stale UID・量/retention drift・cleanup境界を検証した。実際のPVC/PV削除やresizeは行わない。手順・証拠と残る制約は[runbook](../../../../tools/local_experiment/finops/README.md)と[Milestones](../061_Local_Experiment_Milestones.md)。focused FinOps 81tests、最終全回帰121suites/3696実行＝3695PASS＋既存1skip。保存public JSON＋2HTMLは69,299 logical bytes／73,728 allocated bytes（0600、物理一意容量ではない）。起動前の状態に戻すため専用Colimaを通常stopし、保持VM disk/backupを削除せず、profile config SHAと保持host directoryを再確認した。停止後のPVC API照合は行えない。WPはlocal-partial、Bound PVCのPV読取失敗時は要求値も未取得に倒す保守的な境界を維持する。
 
 ## Saved-report history（2026-09-26・限定offline受入）
 

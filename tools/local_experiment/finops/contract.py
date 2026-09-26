@@ -11,6 +11,7 @@ import uuid
 
 from tools.local_experiment.gateway import pod_usage as U
 from tools.local_experiment.finops import local_processes as P
+from tools.local_experiment.finops import storage as S
 
 COMPONENTS = {'trino': ('shirokuma-dev', 'trino-local', 'trino'),
               'polaris': ('shirokuma-dev', 'polaris', 'polaris'),
@@ -209,7 +210,7 @@ def inference(rows, *, end, reason=None):
     return value
 
 
-def build_report(components, disks, recorded, *, observed_at, local_processes=None):
+def build_report(components, disks, recorded, *, observed_at, local_processes=None, storage=None):
     components = [validate_component(row) for row in components]
     require([row['component'] for row in components] == list(COMPONENTS), 'SCOPE_INVALID')
     require([row['scope'] for row in disks] == list(DISKS), 'SCOPE_INVALID')
@@ -229,15 +230,27 @@ def build_report(components, disks, recorded, *, observed_at, local_processes=No
         value['limits'].extend(PROCESS_LIMITS)
         if any(item['state'] not in ('observed', 'stopped') for item in processes['components']):
             value['result'] = 'partial'
+    if storage is not None:
+        require(local_processes is not None, 'SCOPE_INVALID')
+        inventory = S.validate(storage)
+        for item in inventory['components']:
+            if item['observed_at'] is not None:
+                require(stamp(item['observed_at'])[1] <= stamp(observed_at)[1], 'SAMPLE_INVALID')
+        value.update(schema_version=3, storage=inventory)
+        value['limits'].remove('PVC_AND_PER_COMPONENT_STORAGE_ATTRIBUTION_UNSUPPORTED')
+        value['limits'].extend(S.LIMITS)
+        if any(item['state'] == 'unknown' for item in inventory['components']):
+            value['result'] = 'partial'
     require(len(json.dumps(value, ensure_ascii=True, allow_nan=False).encode()) <= MAX_PUBLIC_BYTES, 'READ_LIMIT')
     return value
 
 
 def validate_public(value):
-    require(type(value) is dict and type(value.get('schema_version')) is int and value['schema_version'] in (1, 2))
+    require(type(value) is dict and type(value.get('schema_version')) is int and value['schema_version'] in (1, 2, 3))
     fields = {'schema_version', 'command', 'result', 'observed_at',
               'components', 'disks', 'inference', 'recommendations', 'limits'}
-    require(set(value) == fields | ({'local_processes'} if value['schema_version'] == 2 else set()))
+    require(set(value) == fields | ({'local_processes'} if value['schema_version'] >= 2 else set()) |
+            ({'storage'} if value['schema_version'] == 3 else set()))
     disks = [disk(row['scope'], None if row['total_bytes'] is None else integer(row['total_bytes']),
                   None if row['free_bytes'] is None else integer(row['free_bytes']),
                   observed_at=row['observed_at'], reason=row['reason']) for row in value['disks']]
@@ -249,6 +262,6 @@ def validate_public(value):
                     **{m+'_sum': row[PUBLIC_METRICS[m]]['known_sum'] for m in METRICS}})
     expected = build_report(value['components'], disks,
         inference(raw, end=recorded['window']['end'], reason=recorded['reason']), observed_at=value['observed_at'],
-        local_processes=value.get('local_processes'))
+        local_processes=value.get('local_processes'), storage=value.get('storage'))
     require(json.dumps(value, sort_keys=True, allow_nan=False) == json.dumps(expected, sort_keys=True, allow_nan=False))
     return deepcopy(value)

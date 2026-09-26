@@ -194,6 +194,40 @@ def _local_processes(report):
             'CPU時間には計測の刻みがあり、0 coresでもidleとは判定できません。kernelが起動した子プロセスは対象外です。</p></section>')
 
 
+def _storage(report):
+    if 'storage' not in report: return ''
+    names = {'polaris-postgresql': 'Polaris PostgreSQL', **NAMES}
+    rows = []
+    for item in report['storage']['components']:
+        if item['state'] == 'unknown':
+            detail = '未取得' + _reason(item['reason'])
+            capacity = '<td>未取得</td><td>未取得</td>'
+        elif item['state'] == 'no_direct_pvc':
+            detail = '直接のPVC参照なし（disk不使用の証明ではありません）'
+            capacity = '<td>対象なし</td><td>対象なし</td>'
+        else:
+            pvc = item['pvc']; pv = item['pv']
+            detail = f'{_e(item["namespace"])} / {_e(pvc["name"])} <span class="sub">PVC {_e(pvc["phase"])}'
+            if pv: detail += f' · PV {_e(pv["name"])} · reclaim {_e(pv["reclaim_policy"])}'
+            detail += (' · StatefulSet削除/縮小 ' + _e(item['retention']['when_deleted']) + '/'
+                       + _e(item['retention']['when_scaled']) + ' · template prune '
+                       + _e(item['retention']['template_prune'] or '未設定') + '</span>')
+            capacity = (f'<td class="numeric">{_scaled(pvc["requested_bytes"],2**30,"GiB")}</td>'
+                        + (f'<td class="numeric">{_scaled(pvc["capacity_bytes"],2**30,"GiB")}</td>'
+                           if pvc['capacity_bytes'] is not None else '<td>未取得</td>'))
+            if pv: capacity += f'<td class="numeric">{_scaled(pv["capacity_bytes"],2**30,"GiB")}</td>'
+            else: capacity += '<td>未取得</td>'
+        if item['state'] == 'unknown': capacity += '<td>未取得</td>'
+        if item['state'] == 'no_direct_pvc': capacity += '<td>対象なし</td>'
+        rows.append(f'<tr><th scope="row">{names[item["component"]]}</th><td>{detail}</td>{capacity}'
+                    '<td>未計測（NOT_MEASURED）</td></tr>')
+    return ('<section id="storage"><h2>保存領域の参照関係</h2>'
+            '<p>PVC要求・宣言容量は実使用量、物理予約やquotaではありません。使用bytesは計測していません。</p>'
+            + _table('固定4workloadのKubernetes API参照。PVCは共有先を重複計上しません。',
+                     ['対象','PVC/PV関係','PVC要求','PVC宣言容量','PV宣言容量','実使用量'],rows)
+            + '<p class="thresholds">host/ColimaのdfやコンテナのRSSとも合算しません。参照関係はI/Oやmount健全性を証明しません。</p></section>')
+
+
 def _metric(metric):
     headline = _number(metric['total']) if metric['total'] is not None else '全体不明'
     subtotal = '' if metric['total'] is not None else f'<span class="sub">既知小計 {_e(_number(metric["known_sum"]))}</span>'
@@ -224,26 +258,29 @@ def _inference(report):
 def render(report):
     report = _validated(report)
     complete = report['result'] == 'complete'
-    status = ('全取得項目を確認' if report['schema_version'] == 2 else '全取得項目を観測') if complete else '一部の取得項目が未取得'
+    status = ('全取得項目を確認' if report['schema_version'] >= 2 else '全取得項目を観測') if complete else '一部の取得項目が未取得'
     warnings = [f'{NAMES[item["scope"]]}: {_e(item["message"])}' for item in report['recommendations']]
     notice = ('<p><strong>次の大容量実験の前に</strong></p><p>' + '<br>'.join(warnings) + '</p>') if warnings else '<p>容量の判定と未取得項目を確認して、次の実験を判断してください。</p>'
     window = report['inference']['window']
     raw = _e(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False))
-    local_link = '<a href="#local-processes">ローカル学習サービス</a>' if report['schema_version'] == 2 else ''
+    local_link = '<a href="#local-processes">ローカル学習サービス</a>' if report['schema_version'] >= 2 else ''
+    storage_link = '<a href="#storage">保存領域</a>' if report['schema_version'] == 3 else ''
     coverage = ('固定3コンテナ、所有するローカル3サービス（JupyterLabのkernelを含む）、2ファイルシステム、24時間の宣言event'
-                if report['schema_version'] == 2 else '固定3サービス、2ファイルシステム、24時間の宣言event')
+                if report['schema_version'] >= 2 else '固定3サービス、2ファイルシステム、24時間の宣言event')
+    if report['schema_version'] == 3: coverage += '、固定4workloadのPVC参照'
     return f'''<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><title>実験環境の容量と使用量 | Shirokuma</title><style>{STYLE}</style></head>
 <body><header><div class="inner"><p class="brand">Shirokuma · Local experiment</p><h1>実験環境の容量と使用量</h1>
 <p class="intro">保存済みスナップショットです。このページを開いても再取得しません。</p>
 <div class="meta"><span>観測時刻 {_time(report['observed_at'])}</span><span class="status {'normal' if complete else 'warning'}">{status}</span></div>
-<nav aria-label="レポート内の移動"><a href="#capacity">容量</a><a href="#components">サービス使用量</a>{local_link}<a href="#inference">モデルの記録</a><a href="#scope">観測範囲</a></nav></div></header>
+<nav aria-label="レポート内の移動"><a href="#capacity">容量</a><a href="#components">サービス使用量</a>{local_link}{storage_link}<a href="#inference">モデルの記録</a><a href="#scope">観測範囲</a></nav></div></header>
 <main><div class="notice {'warning' if warnings else ''}">{notice}</div>
 <section id="capacity"><h2>空き容量</h2><p>ホストとVMは物理ストレージを共有します。2行は合算せず、それぞれのファイルシステムで判断してください。</p>{_disks(report)}
 <p class="thresholds">空き率: 25%以下は注意 / 20%以下は残量低下 / 15%以下は要対応。判定には丸め前のbytesを使います。≈ は表示上の丸めです。</p></section>
 <section id="components"><h2>サービス使用量</h2><p>CPU平均とメモリ（working set）の点観測です。高負荷の原因や増減傾向は判定しません。</p>{_components(report)}</section>
 {_local_processes(report)}
+{_storage(report)}
 <section id="inference"><h2>モデルの記録</h2><p>{_time(window['start'])} 以上、{_time(window['end'])} 未満の24時間。</p>
 <p>synthetic記録を含むAgentHouseの宣言値です。event数は実モデル呼出し数とは限りません。費用は請求額ではなく、通貨は未記録です。</p>{_inference(report)}</section>
 <section id="scope"><h2>観測範囲</h2><p>全取得項目を観測できても、FinOps全体の対応完了を示しません。対象は{coverage}です。</p>

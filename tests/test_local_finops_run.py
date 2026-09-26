@@ -11,6 +11,25 @@ from tools.local_experiment.finops import run as R
 from test_local_finops_contract import NOW, component_args, pod, metrics, row
 
 
+def storage_complete():
+    records = []
+    for component in R.S.TARGETS:
+        entry = R.S.unknown(component, 'READ_FAILED')
+        entry.update(state='observed' if R.S.TARGETS[component][-1] else 'no_direct_pvc',
+                     reason=None, workload_uid='11111111-1111-4111-8111-111111111111',
+                     pod_uid='22222222-2222-4222-8222-222222222222',
+                     request_started_at='2026-09-20T00:00:20Z', observed_at=NOW)
+        if entry['state'] == 'observed':
+            entry['pvc'] = dict(name=R.S.TARGETS[component][-1],uid='33333333-3333-4333-8333-333333333333',
+                 phase='Bound',requested_bytes='5368709120',capacity_bytes='5368709120',
+                 storage_class='local-path',volume_mode='Filesystem',pv_name='pvc-33333333-3333-4333-8333-333333333333')
+            entry['pv'] = dict(name=entry['pvc']['pv_name'],uid='44444444-4444-4444-8444-444444444444',
+                               capacity_bytes='5368709120',reclaim_policy='Delete')
+            entry['retention'] = dict(when_deleted='Retain',when_scaled='Retain',template_prune=None)
+        records.append(entry)
+    return R.S.validate(dict(schema_version=1,components=records,limits=R.S.LIMITS[:]))
+
+
 class RuntimeTests(unittest.TestCase):
     def backend(self):
         value = Mock()
@@ -21,6 +40,7 @@ class RuntimeTests(unittest.TestCase):
         value.local_processes.return_value = {'schema_version': 1, 'components': [
             dict(component=name, state='stopped', reason='STOPPED', request_started_at=None,
                  observed_at=None, identity=None, sample=None) for name in R.P.COMPONENTS]}
+        value.storage.return_value = storage_complete()
         return value
 
     def test_complete_collection_with_unknown_recorded_cost_and_no_lifecycle(self):

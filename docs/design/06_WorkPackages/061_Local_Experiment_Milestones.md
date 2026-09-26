@@ -4,8 +4,8 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-09-20
-version: "3.75"
+updated: 2026-09-26
+version: "3.76"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
@@ -54,6 +54,16 @@ current/historical snapshotと型付き等値条件の正確なCount読取4件�
 登録Notebookへcurrent-head Reader requestを渡す選択table previewと無指定互換実行も成功した。
 Reader4版の保存metadata一覧も追加し、旧成功・失敗とinspectionの成否を分けて表示した。
 一般診断・最適化効果・修復品質・本番受入とは区別する。
+
+## 2026-09-26: FinOps Kubernetes storage references: bounded local acceptance
+
+@architectの判断で、v3に固定4workloadのKubernetes API参照を追加した。SeaweedFS・Polaris PostgreSQLの各StatefulSet→Pod mount→名前空間付きPVC→PV claimRef UIDをread-only照合し、Polaris/Trino本体の直接PVC参照なしを区別した。各PVC要求/PVC status/PV spec容量は宣言値、`used_bytes`は全行`null / NOT_MEASURED`。物理予約・quota・実使用・費用・S3 object帰属や安全な削除量を推定しない。保存v1/v2の契約を保持し、v3のhistoryはUIDと観測windowを表示する。
+
+起動前は専用Colima profile停止、設定SHA `d4c5281a9cd00ed24d3a404efac3cd2e59235f8e416241c47773f1617bb20949`、host空き約2.45TB、旧保持領域の存在を記録。既存profileを`--activate=false --save-config=false --ssh-config=false`で起動した。起動後root Fluxは既存suspend=true、storage childはactive/patch1、2PVCはBound。同taskではFlux変更なし。起動中にcontrollerが一度も調停しなかったとの主張はしない。
+
+停止時v3はstorage4行unknown/null。起動後の実01はPodList itemの省略kindで全unknown、実02はPostgreSQL container名の取り違えで同対象unknownとなり原reportを保持した。修正後実05は2026-09-26T10:38:40.979Z、SeaweedFS request/PVC/PV各21,474,836,480B、Polaris PostgreSQL各5,368,709,120B、Polaris/Trinoはno_direct_pvc。PV reclaimはいずれもDelete、StatefulSetの削除/縮小Retainとは別であり、SeaweedFS template prune disabledのみ観測。MLflow/Lab/ServingはSTOPPED、AgentHouse推論はSCOPE_INVALIDのため全reportはpartial、storage限定観測は成功。実際の使用bytesは未測定。最終sourceの実06でも同じstorage4状態・PVC identity/宣言容量を確認した（`live06.json`、report SHA256 `a1513f0d659dece8c121af4f53d9a6b697dbc5db72f2e9779a83321e4279e70d`）。
+
+実05の2PVC/PV UID・claimRefとlive requestを独立再読取し、root Flux suspend・storage patch・profile config・保持directory存在を照合した。保存v1/v2/v3でHTML/history生成と原本不変を確認。focused FinOps 81tests PASS、最終全回帰full03は121suites/3696実行＝3695PASS＋既存1skip（92.111秒）、log SHA256 `0fa7eb4af4ba85ffc737e4ff3d0205823b5c2f880aba5bacd84ffe3deb9dbe24`。full01/02の原記録も保持する。最終実05 public JSON＋単体HTML＋履歴HTMLは3files/69,299 logical bytes／73,728 allocated bytes（0600、checks・失敗report別、物理一意容量ではない）。Browserの視覚検証は未実施。終了時にPVC/PV/Fluxを再読取してから専用Colimaを通常stopし、起動前の停止状態へ復帰。VM persistent diskやbackupを削除せず、profile設定SHAと保持host directoryの存在を再確認した。停止後のPVC API再照合は行えない。私有証跡は`tmp/local-experiment/finops-storage-checks/20260926/`のstartup-before/after、stopped-report、live01〜06、full01〜03、pre-stop-final、runtime-recovery等へ保持。WPはlocal-partial、Docker/host directoryやS3 objectの帰属・実使用量・chill/budget/dashboardは未達。
 
 ## 2026-09-26: FinOps saved-report history: bounded offline acceptance
 

@@ -1,11 +1,12 @@
 # Local resource and inference report
 
 The FinOps collector reads the existing Shirokuma lab and returns one JSON
-report. Fresh reports use schema version 2 and cover the fixed Trino, Polaris
+report. Fresh reports use schema version 3 and cover the fixed Trino, Polaris
 and SeaweedFS containers; the owned local MLflow, JupyterLab and Model Serving
 processes; the workspace and dedicated Colima filesystems; and the last 24 hours
-of declared inference records in AgentHouse. Saved version 1 reports remain
-valid and render with their original coverage.
+of declared inference records in AgentHouse. A bounded read-only Kubernetes
+storage reference inventory covers SeaweedFS, Polaris PostgreSQL, Polaris and
+Trino. Saved version 1 and 2 reports retain their original coverage.
 
 ```sh
 rtk make local-finops-report
@@ -25,7 +26,7 @@ one JSON array and render it offline:
 rtk proxy make local-finops-history < selected.json > history.html
 ```
 
-The selection must contain full v1/v2 report objects, not file paths. No
+The selection must contain full v1/v2/v3 report objects, not file paths. No
 directory search, file opening, service start, collection or automatic refresh
 occurs. Input is capped at 8 × 256 KiB plus array framing and output at 4 MiB;
 invalid or duplicate-key inputs fail without partial HTML. The view sorts by
@@ -52,6 +53,35 @@ repeated byte-identical output. Evidence is under
 `tmp/local-experiment/finops-history-checks/20260926-offline/`. Browser visual
 inspection is not verified. This is a static saved-observation view, not the
 continuous/task-cost dashboard or chill decision in the full WP.
+
+## Fixed Kubernetes storage reference inventory (v3)
+
+The collector validates the fixed owner chain from workload and Pod (Deployment
+via ReplicaSet), through container mount, namespaced PVC and PV `claimRef` UID.
+SeaweedFS references the storage-namespace claim at `/data`; Polaris PostgreSQL
+references its own dev-namespace claim at `/var/lib/postgresql/data`. Polaris
+and Trino have no direct PVC reference in this inspected scope; this does not
+mean they use no disk. Service access to a catalog or S3 does not give its
+client a second copy of the provider's claim.
+
+PVC request, PVC status capacity and PV spec capacity are separate declarations.
+The repository requests 20Gi and 5Gi, but fresh reports read live objects,
+not those constants. `used_bytes` remains null with `NOT_MEASURED`. A local-path
+claim's declared size is not proof of bytes consumed, exclusive physical
+reservation, filesystem quota, writable headroom or safely reclaimable space.
+`df` describes a shared filesystem; `du` alone cannot prove unique occupancy,
+application-consistent usage or S3 object ownership. The page displays no
+grand storage total. StatefulSet retention, template prune and PV reclaim
+policy are distinct controls, not backup guarantees.
+
+Fixed scoped metadata GETs follow the dedicated k3s guard. PodList items may
+omit `kind`; explicit contradictory kinds, wrong owners, ambiguous listings,
+mismatched mounts/claimRef UID, changing request/capacity and terminating
+objects fail closed. Pending/Lost and zero-replica retained claims keep their
+known request without fabricating usage. If Kubernetes is stopped, storage is
+unknown, not empty. A missing/failed PV read on a Bound claim currently makes
+that row unknown rather than publishing an unverified binding. No collector
+call starts services, traverses a filesystem or changes a PVC/PV/workload.
 
 Create reports in a private directory with `umask 077`. The HTML renderer reads
 only the supplied JSON, validates its report contract, and performs no new

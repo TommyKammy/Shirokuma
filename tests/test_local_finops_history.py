@@ -20,7 +20,7 @@ class HistoryTests(unittest.TestCase):
         newer = report(local)
         older = report()
         html = H.render(H.parse(encoded([older, newer])))
-        self.assertEqual(html.count('このschemaには含まれません'), 1)
+        self.assertEqual(html.count('このschemaには含まれません（停止'), 1)
         self.assertIn('停止中（数値なし）', html)
         self.assertNotIn('0 cores</td>', html.split('停止中（数値なし）')[0])
         self.assertIn('重複windowの件数を合算・差し引きしません', html)
