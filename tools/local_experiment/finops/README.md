@@ -1,14 +1,15 @@
 # Local resource and inference report
 
 The FinOps collector reads the existing Shirokuma lab and returns one JSON
-report. Fresh reports use schema version 6 and cover the fixed Trino, Polaris
+report. Fresh reports use schema version 7 and cover the fixed Trino, Polaris
 and SeaweedFS containers; the owned local MLflow, JupyterLab and Model Serving
 processes; the workspace and dedicated Colima filesystems; and the last 24 hours
 of declared inference records in AgentHouse. A bounded read-only Kubernetes
 storage reference inventory covers SeaweedFS, Polaris PostgreSQL, Polaris and
 Trino, plus one fixed AgentHouse Docker named-volume reference and three fixed
-host directory references. Only the Notebook Lab workspace has a bounded
-logical-file-byte measurement. Saved version 1–5 reports retain their original coverage.
+host directory references. The Notebook Lab workspace and MLflow store have
+separate bounded logical-file-byte measurements. Saved version 1–6 reports
+retain their original coverage.
 
 ```sh
 rtk make local-finops-report
@@ -28,7 +29,7 @@ one JSON array and render it offline:
 rtk proxy make local-finops-history < selected.json > history.html
 ```
 
-The selection must contain full v1/v2/v3/v4/v5/v6 report objects, not file paths. No
+The selection must contain full v1/v2/v3/v4/v5/v6/v7 report objects, not file paths. No
 directory search, file opening, service start, collection or automatic refresh
 occurs. Input is capped at 8 × 256 KiB plus array framing and output at 4 MiB;
 invalid or duplicate-key inputs fail without partial HTML. The view sorts by
@@ -153,6 +154,32 @@ backup completeness and application consistency remain unknown. Saved host
 schema v1/report v5 still means reference-only with null bytes; host schema
 v2/report v6 adds this one logical-byte observation. Offline history labels
 the basis and never computes totals or deltas across reports.
+
+## MLflow store logical regular-file bytes (v7)
+
+The same bounded, no-follow, two-pass metadata scanner separately observes
+`tmp/local-experiment/mlflow-tracking/store` after validating the private store
+marker, expected SQLite backend path and artifact-root reference. Both passes
+require the `tracking.sqlite` regular file and `artifacts` directory; absent
+or changed entries yield unknown bytes, not a seemingly valid empty store. The scope
+includes `tracking.sqlite`, any present `-wal`/`-shm`/`-journal` files and all
+regular files under `artifacts`, including historical/archived files. It does
+not inspect DB records, unpack artifacts, create a cold export, take a lock or
+start MLflow. Changing files/entry sets make **only this usage row** unknown;
+the verified directory reference and an independent Lab workspace measurement
+can remain available. Each numeric row has its own file/directory count and
+measurement window. The 18-second worker alarm applies to the entire three-row
+collection; a hard timeout may conservatively invalidate all rows.
+
+This is the sum of stored regular-file logical lengths, not application-
+consistent SQLite state or a verified artifact inventory. A momentarily stable
+WAL/SHM is counted as a file but its presence/absence is not a backup receipt.
+The supported cold export's stopped-state lock, SQLite quick check, copy and
+source/clone verification are separate procedures; this collector does none of
+them. MLflow and Lab rows are not added into a platform storage total, and
+neither is physical APFS occupancy, unique extent usage, quota, cost, or
+reclaimable bytes. Host storage schema v3/report v7 introduces the MLflow row;
+saved v5 (reference-only) and v6 (Lab-only measurement) remain unchanged.
 
 Create reports in a private directory with `umask 077`. The HTML renderer reads
 only the supplied JSON, validates its report contract, and performs no new

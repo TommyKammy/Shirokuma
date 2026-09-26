@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-26
-version: "3.79"
+version: "3.80"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-26: FinOps MLflow store bounded logical bytes (v7)
+
+選択したpublic JSON/HTML/historyは3files/64,243 logical bytes・69,632 allocated bytes（0600、物理一意容量でない）。HTML生成の原本はSHA256で不変、Browser視覚確認は未実施。
+
+WP-L6-FIN-001はv6のLab workspaceと分離した固定MLflow storeの通常ファイル`st_size`合計を追加。private markerの固定SQLite/artifact参照、ownerとstore root device/inodeを前後で照合し、`tracking.sqlite`通常ファイルと`artifacts`ディレクトリを2passで必須とする。sidecarを含む配下通常ファイル（archive/旧ファイルも含む）を全部数える。DB/ファイル内容は開かない。symlink/hardlink/特殊file・別owner/device・root/ファイル差し替え・上限/timeoutで数値unknown、確認済み参照とLab独立行を維持できる。停止中の実02はMLflow 25files/55子directories/論理1,767,968 bytes、Lab 26files/1子directory/論理244,438 bytes、Serving HOME未計測。別のread-only metadata列挙でも同じ件数/数値を確認した（原子的な同時観測ではない）。他sourceがunknownで全report partial。保存v1–v6レポートを互換検証し、HTML/historyでMLflowとLabを別行表示、合計や差分なし。focused106tests PASS、全回帰121suites/3721実行＝3720PASS＋既存1skip（87.894秒、log SHA256 `245f499bb482d2adc2b74fb8530e6295a3f045363460b9c649e3d6581d43b3c7`）。回帰後も両root identity/metadata manifest/件数/論理量一致、Colima停止を確認。ただしファイル内容不変/backup復旧は証明しない。SQLiteの整合性・バックアップ復旧、APFSの物理一意占有、共有領域・全host容量や本番受入は未確認。証拠は`tmp/local-experiment/finops-mlflow-usage-checks/20260926/`。
 
 ## 2026-09-26: FinOps bounded Notebook workspace logical bytes (v6)
 

@@ -60,7 +60,7 @@ class HostStorageTests(unittest.TestCase):
             self.assertEqual(args[1:3],['-I','-B'])
             self.assertTrue(args[0].endswith('/notebook_lab/.venv/bin/python'))
             self.assertTrue(args[3].endswith('/finops/host_storage.py'))
-            self.assertEqual(args[4:],["--measure-workspace"])
+            self.assertEqual(args[4:],["--measure-mlflow-store"])
             self.assertNotIn('start',args)
 
     def test_public_v5_history_and_v4_absence(self):

@@ -5,12 +5,18 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-26
-version: "0.9"
+version: "0.10"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## MLflow storeの限定論理bytes（2026-09-26・v7 local増分）
+
+v6のNotebook workspace行とは別に、所有markerのSQLite backend URI・artifact rootを確認した固定`tmp/local-experiment/mlflow-tracking/store`を対象とする。`tracking.sqlite`通常ファイルと`artifacts`ディレクトリの存在を2回のdescriptor相対metadata走査で要求し、DB側car（存在する`-wal`/`-shm`/`-journal`）およびartifacts配下も含む全通常ファイルの`st_size`を合計する。内容・SQL・DB lockを読まず、MLflowの起動/backup export/復元も行わない。symlink/hardlink/特殊file・別owner/device・root差し替え・sidecarやartifactsの走査中変化・件数/名前/深さ/時間の上限超過ではMLflow bytes/countをnull/理由付きunknownとする。参照identityとNotebookの独立数値は維持し得る。host schema v3/report v7で行ごとの観測windowと基準を持たせ、保存v1–v6の意味は変えない。
+
+停止中の実02はMLflow storeの通常ファイル25件、子ディレクトリ55件、**論理1,767,968 bytes**。別の後続metadata走査でも同値、Lab workspaceも独立して論理244,438 bytes。Serving HOMEは未計測。Kubernetes等が未取得で全体partial。focused106tests PASS、全回帰121suites/3721実行＝3720PASS＋既存1skip。回帰後の両root identity・metadata manifest一致とColima停止を確認したが、内容/backupの不変や復旧の証明ではない。両行は合算せず、SQLiteの整合性、MLflow run/artifact論理帰属、冷バックアップの復旧可能性、APFSの一意物理占有・snapshot/圧縮・quota・削除可能量を主張しない。原観測/検証は`tmp/local-experiment/finops-mlflow-usage-checks/20260926/`に保存し、WPはlocal-partialのまま。
 
 ## Notebook workspaceの限定論理bytes（2026-09-26・v6 local増分）
 

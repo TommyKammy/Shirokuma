@@ -260,10 +260,10 @@ def build_report(components, disks, recorded, *, observed_at, local_processes=No
             if item['observed_at'] is not None:
                 require(stamp(item['observed_at'])[1] <= stamp(observed_at)[1], 'SAMPLE_INVALID')
         version = inventory['schema_version']
-        value.update(schema_version=5 if version == 1 else 6, host_storage=inventory)
-        value['limits'].extend(H.LIMITS if version == 1 else H.MEASURED_LIMITS)
+        value.update(schema_version=4+version, host_storage=inventory)
+        value['limits'].extend({1:H.LIMITS,2:H.MEASURED_LIMITS,3:H.MLFLOW_LIMITS}[version])
         if any(item['state'] == 'unknown' or
-               (version == 2 and item['component'] == 'notebook-lab' and item['usage_state'] == 'unknown')
+               (version >= 2 and item['usage_state'] == 'unknown')
                for item in inventory['components']):
             value['result'] = 'partial'
     require(len(json.dumps(value, ensure_ascii=True, allow_nan=False).encode()) <= MAX_PUBLIC_BYTES, 'READ_LIMIT')
@@ -271,7 +271,7 @@ def build_report(components, disks, recorded, *, observed_at, local_processes=No
 
 
 def validate_public(value):
-    require(type(value) is dict and type(value.get('schema_version')) is int and value['schema_version'] in (1, 2, 3, 4, 5, 6))
+    require(type(value) is dict and type(value.get('schema_version')) is int and value['schema_version'] in (1, 2, 3, 4, 5, 6, 7))
     fields = {'schema_version', 'command', 'result', 'observed_at',
               'components', 'disks', 'inference', 'recommendations', 'limits'}
     require(set(value) == fields | ({'local_processes'} if value['schema_version'] >= 2 else set()) |

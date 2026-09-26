@@ -1,4 +1,4 @@
-"""Bounded metadata-only logical regular-file sizes for one verified workspace."""
+"""Bounded metadata-only logical regular-file sizes for a verified directory."""
 from __future__ import annotations
 
 import os
@@ -53,7 +53,7 @@ def _root(root, device, inode):
         os.close(fd); raise
 
 
-def _pass(root, device, deadline, root_fd):
+def _pass(root, device, deadline, root_fd, required_root_entries=()):
     entries = {}; names_bytes = files = dirs = total = 0
     def walk(fd, relative, depth):
         nonlocal names_bytes, files, dirs, total
@@ -94,6 +94,10 @@ def _pass(root, device, deadline, root_fd):
     try:
         root_before = identity(os.fstat(fd))
         walk(fd, (), 0)
+        for name, kind in required_root_entries:
+            info = entries.get((name,))
+            require(info is not None and (stat.S_ISREG(info[0]) if kind == 'file'
+                                           else stat.S_ISDIR(info[0])))
         require(identity(os.fstat(fd)) == root_before and identity(root.lstat()) == root_before,
                 'TREE_CHANGED')
         _check(deadline)
@@ -101,12 +105,15 @@ def _pass(root, device, deadline, root_fd):
     finally: os.close(fd)
 
 
-def measure(root, *, device, inode):
+def measure(root, *, device, inode, required_root_entries=()):
+    require(type(required_root_entries) is tuple and all(
+        type(name) is str and name not in ('', '.', '..') and '/' not in name and
+        kind in ('file', 'directory') for name, kind in required_root_entries))
     deadline = time.monotonic() + MAX_SECONDS
     fd = _root(root, device, inode)
     try:
-        first = _pass(root, device, deadline, fd)
-        second = _pass(root, device, deadline, fd)
+        first = _pass(root, device, deadline, fd, required_root_entries)
+        second = _pass(root, device, deadline, fd, required_root_entries)
         require(first == second, 'TREE_CHANGED')
         _check(deadline)
         require(identity(os.fstat(fd)) == first[0] and identity(root.lstat()) == first[0], 'TREE_CHANGED')

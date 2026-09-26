@@ -247,14 +247,17 @@ def _host_storage(report):
     for item in report['host_storage']['components']:
         detail = (_e(item['directory']) if item['state'] == 'observed' else '未取得' + _reason(item['reason']))
         usage = '未計測（NOT_MEASURED）'
-        if 'usage_state' in item and item['component'] == 'notebook-lab':
+        if 'usage_state' in item and item['usage_basis'] is not None:
             if item['usage_state'] == 'observed':
                 usage = (_e(item['used_bytes']) + ' bytes（論理・通常ファイル）'
                          + f'<span class="sub">通常ファイル {item["regular_file_count"]}件 / 子ディレクトリ {item["directory_count"]}件'
                          + ' · ' + _time(item['usage_started_at']) + ' → ' + _time(item['usage_observed_at']) + '</span>')
             else: usage = '未取得' + _reason(item['usage_reason'])
         rows.append(f'<tr><th scope="row">{names[item["component"]]}</th><td>{detail}</td><td>{usage}</td></tr>')
-    note = ('Workspaceの論理bytesは通常ファイルのst_size合計で、割当量・共有extent・物理占有・'
+    note = ('MLflow storeとLab workspaceの論理bytesは通常ファイルのst_size合計で、SQLite DBの整合性・'
+            'backup復旧・割当量・共有extent・物理占有を示しません。Serving HOMEは未計測です。'
+            if report['schema_version'] == 7 else
+            'Workspaceの論理bytesは通常ファイルのst_size合計で、割当量・共有extent・物理占有・'
             'バックアップ状態を示しません。ほかの2対象は未計測です。' if report['schema_version'] == 6
             else 'このschemaでは配下ファイルの実使用bytesは未計測です。')
     return ('<section id="host-storage"><h2>固定ホストディレクトリ参照</h2>'
@@ -308,6 +311,7 @@ def render(report):
     if report['schema_version'] >= 4: coverage += '、AgentHouseの固定Docker volume参照'
     if report['schema_version'] >= 5: coverage += '、固定3ホストディレクトリ参照'
     if report['schema_version'] == 6: coverage += '、Lab workspaceの限定論理bytes'
+    if report['schema_version'] == 7: coverage += '、Lab workspaceとMLflow storeの個別論理bytes'
     return f'''<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><title>実験環境の容量と使用量 | Shirokuma</title><style>{STYLE}</style></head>
