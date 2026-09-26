@@ -228,6 +228,17 @@ def _storage(report):
             + '<p class="thresholds">host/ColimaのdfやコンテナのRSSとも合算しません。参照関係はI/Oやmount健全性を証明しません。</p></section>')
 
 
+def _docker_storage(report):
+    if 'docker_storage' not in report: return ''
+    row = report['docker_storage']['agenthouse']
+    detail = ('未取得' + _reason(row['reason']) if row['state'] == 'unknown' else
+              _e(row['container_name']) + ' → ' + _e(row['volume_name']) + ' → '
+              + _e(row['mount_destination']) + ('（コンテナ稼働）' if row['container_running'] else '（コンテナ停止）'))
+    return ('<section id="docker-storage"><h2>AgentHouseのDocker volume参照</h2><p>' + detail + '</p>'
+            '<p>実使用量: 未計測（NOT_MEASURED）。固定コンテナのmountとlabelの確認であり、排他的所有・'
+            '内容・他コンテナの参照・物理占有量・backupは確認しません。</p></section>')
+
+
 def _metric(metric):
     headline = _number(metric['total']) if metric['total'] is not None else '全体不明'
     subtotal = '' if metric['total'] is not None else f'<span class="sub">既知小計 {_e(_number(metric["known_sum"]))}</span>'
@@ -264,10 +275,12 @@ def render(report):
     window = report['inference']['window']
     raw = _e(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False))
     local_link = '<a href="#local-processes">ローカル学習サービス</a>' if report['schema_version'] >= 2 else ''
-    storage_link = '<a href="#storage">保存領域</a>' if report['schema_version'] == 3 else ''
+    storage_link = '<a href="#storage">保存領域</a>' if report['schema_version'] >= 3 else ''
+    if report['schema_version'] == 4: storage_link += '<a href="#docker-storage">Docker volume</a>'
     coverage = ('固定3コンテナ、所有するローカル3サービス（JupyterLabのkernelを含む）、2ファイルシステム、24時間の宣言event'
                 if report['schema_version'] >= 2 else '固定3サービス、2ファイルシステム、24時間の宣言event')
-    if report['schema_version'] == 3: coverage += '、固定4workloadのPVC参照'
+    if report['schema_version'] >= 3: coverage += '、固定4workloadのPVC参照'
+    if report['schema_version'] == 4: coverage += '、AgentHouseの固定Docker volume参照'
     return f'''<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><title>実験環境の容量と使用量 | Shirokuma</title><style>{STYLE}</style></head>
@@ -281,6 +294,7 @@ def render(report):
 <section id="components"><h2>サービス使用量</h2><p>CPU平均とメモリ（working set）の点観測です。高負荷の原因や増減傾向は判定しません。</p>{_components(report)}</section>
 {_local_processes(report)}
 {_storage(report)}
+{_docker_storage(report)}
 <section id="inference"><h2>モデルの記録</h2><p>{_time(window['start'])} 以上、{_time(window['end'])} 未満の24時間。</p>
 <p>synthetic記録を含むAgentHouseの宣言値です。event数は実モデル呼出し数とは限りません。費用は請求額ではなく、通貨は未記録です。</p>{_inference(report)}</section>
 <section id="scope"><h2>観測範囲</h2><p>全取得項目を観測できても、FinOps全体の対応完了を示しません。対象は{coverage}です。</p>

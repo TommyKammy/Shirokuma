@@ -1,12 +1,13 @@
 # Local resource and inference report
 
 The FinOps collector reads the existing Shirokuma lab and returns one JSON
-report. Fresh reports use schema version 3 and cover the fixed Trino, Polaris
+report. Fresh reports use schema version 4 and cover the fixed Trino, Polaris
 and SeaweedFS containers; the owned local MLflow, JupyterLab and Model Serving
 processes; the workspace and dedicated Colima filesystems; and the last 24 hours
 of declared inference records in AgentHouse. A bounded read-only Kubernetes
 storage reference inventory covers SeaweedFS, Polaris PostgreSQL, Polaris and
-Trino. Saved version 1 and 2 reports retain their original coverage.
+Trino, plus one fixed AgentHouse Docker named-volume reference. Saved version 1,
+2 and 3 reports retain their original coverage.
 
 ```sh
 rtk make local-finops-report
@@ -26,7 +27,7 @@ one JSON array and render it offline:
 rtk proxy make local-finops-history < selected.json > history.html
 ```
 
-The selection must contain full v1/v2/v3 report objects, not file paths. No
+The selection must contain full v1/v2/v3/v4 report objects, not file paths. No
 directory search, file opening, service start, collection or automatic refresh
 occurs. Input is capped at 8 × 256 KiB plus array framing and output at 4 MiB;
 invalid or duplicate-key inputs fail without partial HTML. The view sorts by
@@ -82,6 +83,25 @@ known request without fabricating usage. If Kubernetes is stopped, storage is
 unknown, not empty. A missing/failed PV read on a Bound claim currently makes
 that row unknown rather than publishing an unverified binding. No collector
 call starts services, traverses a filesystem or changes a PVC/PV/workload.
+
+## Fixed Docker volume reference (v4)
+
+Two bounded, read-only Docker inspect passes validate the dedicated context,
+the labeled AgentHouse container's immutable ID and pinned image, and the named
+local volume's label, driver, creation time and exact mount source/destination.
+The container can be stopped: the mount is a stored Docker configuration, not
+proof of a currently mounted or writable filesystem. Unknown identity, a
+foreign label, changed inspect data or a failed read stays unknown rather than
+claiming volume absence or zero usage. CreatedAt offsets are converted exactly
+to UTC; mountpoint paths, environment and credential values are not published.
+
+This verifies **one container's reference**, not exclusive ownership: other
+containers may also reference the volume, and a label is not proof of who wrote
+its data. `used_bytes` remains null/`NOT_MEASURED`; no volume size, `du`,
+physical reservation, ClickHouse table or backup coverage is inferred. The
+collector never creates/starts/stops AgentHouse or a Docker volume. Profile
+startup is a separate recorded runtime action; saved v1/v2/v3 reports have no
+Docker volume observation and cannot be read as volume absence.
 
 Create reports in a private directory with `umask 077`. The HTML renderer reads
 only the supplied JSON, validates its report contract, and performs no new

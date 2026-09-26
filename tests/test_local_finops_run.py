@@ -30,6 +30,15 @@ def storage_complete():
     return R.S.validate(dict(schema_version=1,components=records,limits=R.S.LIMITS[:]))
 
 
+def docker_storage_complete():
+    entry = R.D.unknown('READ_FAILED')
+    entry.update(state='observed',reason=None,container_id='a'*64,container_running=False,
+                 volume_created_at='2026-09-19T00:00:00.000000000Z',
+                 mount_destination='/var/lib/clickhouse',mount_read_write=True,
+                 request_started_at='2026-09-20T00:00:20Z',observed_at=NOW)
+    return R.D.validate(dict(schema_version=1,agenthouse=entry,limits=R.D.LIMITS[:]))
+
+
 class RuntimeTests(unittest.TestCase):
     def backend(self):
         value = Mock()
@@ -41,6 +50,7 @@ class RuntimeTests(unittest.TestCase):
             dict(component=name, state='stopped', reason='STOPPED', request_started_at=None,
                  observed_at=None, identity=None, sample=None) for name in R.P.COMPONENTS]}
         value.storage.return_value = storage_complete()
+        value.docker_storage.return_value = docker_storage_complete()
         return value
 
     def test_complete_collection_with_unknown_recorded_cost_and_no_lifecycle(self):

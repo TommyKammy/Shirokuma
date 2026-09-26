@@ -5,12 +5,18 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-26
-version: "0.6"
+version: "0.7"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## AgentHouse Docker named-volume参照（2026-09-26・限定local増分）
+
+v4は専用Docker contextの固定コンテナ`shirokuma-local-agenthouse`とnamed volume `shirokuma-local-agenthouse-data`を、二度のread-only inspectで検証する。container ID/所有label/pinned imageとvolume名/label/local driver/作成時刻/mountpoint、単一mountのsource・宛先`/var/lib/clickhouse`を照合する。Docker作成時刻のoffsetをUTCへ正規化する。コンテナ停止中でも保存されたmount参照は観測できるが、実際のmount健全性・排他的所有・他コンテナの参照やvolume内の使用量は分からない。`used_bytes=null / NOT_MEASURED`を維持する。設定環境変数・host側mountpoint・credentialは公開レポートに出さない。
+
+停止中v4の対象はunknown/null、専用profile一時起動後の実01はDocker作成時刻の`+09:00`でSAMPLE_INVALIDとして保持し、UTC正規化修正後の実02では停止中の既存AgentHouseコンテナとvolumeの参照を確認した。profile/Fluxに変更を加えず、AgentHouseコンテナやvolumeを起動・作成・削除しない。実レポート全体はAgentHouse推論記録等の未取得でpartial、参照限定の観測成功と区別する。元v1/v2/v3の契約は保持し、v4 HTML/historyはvolume参照/観測identityと旧schemaの未収録を区別する。focused 87testsと全回帰121suites/3702実行（3701PASS＋既存1skip）を確認。終了時にDocker identityとFluxを再読取し、通常stopでColimaを起動前の停止状態に復帰、設定SHA・保持host directoryを確認した。停止後のDocker API再確認はできない。証拠は`tmp/local-experiment/finops-docker-storage-checks/20260926/`。次の固定host directory・実使用量・他のDocker参照の網羅は別増分とする。
 
 ## Fixed Kubernetes storage references（2026-09-26・限定local受入）
 

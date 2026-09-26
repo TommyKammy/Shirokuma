@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-26
-version: "3.76"
+version: "3.77"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-26: AgentHouse Docker named-volume reference (bounded FinOps v4)
+
+WP-L6-FIN-001の次増分は`shirokuma-local-agenthouse`の固定Docker inspectを2回読み、専用context、container ID/所有label/pinned image、`shirokuma-local-agenthouse-data`のlocal driver/label/作成時刻と単一mount source/destinationを照合する。停止中レポートのunknownと`used_bytes=null`を確認後、既存`mac-studio-solo`を`--activate=false --save-config=false --ssh-config=false`で一時起動。AgentHouse自体は開始せず、初回のDocker作成日時`+09:00`の拒否を原reportで保持してUTC正規化修正後、実02では停止中のコンテナの保存mount参照を観測。独立Docker API再読取でvolume label/sourceと停止中identityを確認。root Flux既存suspend・storage child patch1、専用profile config SHA不変。報告対象は1コンテナの参照のみで、他コンテナのvolume利用・排他的所有・内容/実使用量・物理予約・backupを証明しない。全v4レポートは他source未取得でpartial。保存v3→v4のoffline HTML/historyは原本不変、旧schemaのvolume未収録を不在と誤読させない。focused 87tests PASS、全回帰121suites/3702実行＝3701PASS＋既存1skip（94.017秒、log SHA256 `aa678ffdcbfa2305419fa5cc7584299afc9f4f5e1922cd099574bd7de2823b78`）。pre-stop時もAgentHouseは停止中、volume参照とconfigは不変。専用Colimaを通常stopし起動前の停止状態、profile設定SHA、保持host directoryを確認。VM disk/backupは削除しない。Docker APIは停止後に再検証できない。Browser視覚確認・本番受入は未実施。私有証拠は`tmp/local-experiment/finops-docker-storage-checks/20260926/`。
 
 保存48train内の固定offline CVは実UI初回・独立算術・全回帰で成功した。既視holdoutの悪化を明記し、追加fitなしの保存/reload・容量・最終保持も確認した。
 Labの固定Catalog/Lineage読取が初回で成功し、所有者・列・8件の関連と追加GETなしの保存再表示を確認した。

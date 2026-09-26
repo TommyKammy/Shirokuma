@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT / 'tools/local_experiment'))
 from tools.local_experiment.finops import contract as C
 from tools.local_experiment.finops import local_processes as P
 from tools.local_experiment.finops import storage as S
+from tools.local_experiment.finops import docker_storage as D
 from tools.local_experiment.gateway import pod_usage as U
 from tools.local_experiment.agenthouse import manage as AH
 from tools.local_experiment import local_session as SESSION
@@ -214,6 +215,15 @@ class Backend:
     def storage(self):
         return S.collect(self)
 
+    def docker_storage_inspect(self, kind, name):
+        C.require((kind, name) in (('context', AH.CONTEXT), ('container', AH.NAME),
+                                  ('volume', AH.VOLUME)), 'SCOPE_INVALID')
+        return _json(self._command(['docker', '--context', AH.CONTEXT, kind, 'inspect', name]
+                                   if kind != 'context' else ['docker', 'context', 'inspect', name]))
+
+    def docker_storage(self):
+        return D.collect(self)
+
 
 def reason(error, fallback='READ_FAILED'):
     if isinstance(error, U.PodUsageCleanupError): return 'CLEANUP_UNVERIFIED'
@@ -261,9 +271,17 @@ def collect(backend=None):
         if unsafe: raise C.FinOpsError('CLEANUP_UNVERIFIED')
         storage = S.validate(backend.storage())
     except Exception as error:
-        storage = S.unknown_all(reason(error))
+        code = reason(error); unsafe = unsafe or code == 'CLEANUP_UNVERIFIED'
+        storage = S.unknown_all(code)
+    if any(item['reason'] == 'CLEANUP_UNVERIFIED' for item in storage['components']):
+        unsafe = True
+    try:
+        if unsafe: raise C.FinOpsError('CLEANUP_UNVERIFIED')
+        docker_storage = D.validate(backend.docker_storage())
+    except Exception as error:
+        docker_storage = D.validate(dict(schema_version=1, agenthouse=D.unknown(reason(error)), limits=D.LIMITS[:]))
     value = C.build_report(components, disks, inference, observed_at=backend.now(),
-                           local_processes=processes, storage=storage)
+                           local_processes=processes, storage=storage, docker_storage=docker_storage)
     return C.validate_public(value)
 
 

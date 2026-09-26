@@ -74,6 +74,15 @@ def _identities(report):
             rows.append(f'<tr><th scope="row">{label} · 保存領域</th><td>{detail}</td></tr>')
     else:
         rows.append('<tr><th scope="row">保存領域</th><td>このschemaには含まれません（容量0を意味しません）</td></tr>')
+    if 'docker_storage' in report:
+        item = report['docker_storage']['agenthouse']
+        detail = ('container <code>' + H._e(item['container_id']) + '</code> · volume '
+                  + H._e(item['volume_name']) + ' · created ' + H._time(item['volume_created_at'])
+                  + '<span class="sub">' + H._time(item['request_started_at']) + ' → '
+                  + H._time(item['observed_at']) + '</span>') if item['state'] == 'observed' else '未取得'
+        rows.append(f'<tr><th scope="row">AgentHouse Docker volume</th><td>{detail}</td></tr>')
+    else:
+        rows.append('<tr><th scope="row">Docker volume</th><td>このschemaには含まれません（volume不在を意味しません）</td></tr>')
     return H._table('保存された対象identity。digest一致は期間中の連続稼働の証明ではありません。', ['対象', '保存identity / 範囲'], rows)
 
 
@@ -90,8 +99,11 @@ def render(entries):
                 if report['schema_version'] == 1 else '')
         local = H._local_processes(report).replace('id="local-processes"', f'id="{anchor}-local-processes"')
         storage = H._storage(report).replace('id="storage"', f'id="{anchor}-storage"')
+        docker_storage = H._docker_storage(report).replace('id="docker-storage"', f'id="{anchor}-docker-storage"')
         if report['schema_version'] < 3:
             note += '<p>このschemaにはPVC参照は含まれません（容量0や保存領域なしを意味しません）。</p>'
+        if report['schema_version'] < 4:
+            note += '<p>このschemaにはDocker volume参照は含まれません（volume不在を意味しません）。</p>'
         sections.append(f'''<section id="{anchor}"><h2>保存観測 #{order}</h2>
 <p>観測時刻 {H._time(report['observed_at'])} · schema v{report['schema_version']} · {status} · 選択入力 #{selected_index + 1}
 <span class="sub">内容SHA-256 <code>{digest}</code>（真正性の証明ではありません）</span></p>
@@ -100,6 +112,7 @@ def render(entries):
 <h3>Kubernetes主コンテナ</h3>{H._components(report)}
 {local}
 {storage}
+{docker_storage}
 <h3>宣言model eventの24時間window</h3><p>{H._time(inference['window']['start'])} 以上、{H._time(inference['window']['end'])} 未満。
 重複windowの件数を合算・差し引きしません。</p>{H._inference(report)}
 </section>''')

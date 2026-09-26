@@ -66,7 +66,7 @@ class ProcessReportTests(unittest.TestCase):
     def test_collect_includes_local_groups_and_sanitizes_worker_failure(self):
         backend = RUN_TESTS.RuntimeTests().backend(); backend.local_processes.return_value = processes()
         value = R.collect(backend)
-        self.assertEqual(value['schema_version'], 3); self.assertEqual(value['result'], 'complete')
+        self.assertEqual(value['schema_version'], 4); self.assertEqual(value['result'], 'complete')
         backend.local_processes.assert_called_once_with()
         backend.local_processes.side_effect = RuntimeError('PRIVATE_PID_COMMAND_TOKEN')
         value = R.collect(backend); self.assertEqual(value['result'], 'partial')
