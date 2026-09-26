@@ -22,6 +22,7 @@ from tools.local_experiment.finops import contract as C
 from tools.local_experiment.finops import local_processes as P
 from tools.local_experiment.finops import storage as S
 from tools.local_experiment.finops import docker_storage as D
+from tools.local_experiment.finops import host_storage as H
 from tools.local_experiment.gateway import pod_usage as U
 from tools.local_experiment.agenthouse import manage as AH
 from tools.local_experiment import local_session as SESSION
@@ -224,6 +225,11 @@ class Backend:
     def docker_storage(self):
         return D.collect(self)
 
+    def host_storage(self):
+        raw = self._command([str(ROOT/'tools/local_experiment/notebook_lab/.venv/bin/python'),
+                             '-I', '-B', str(ROOT/'tools/local_experiment/finops/host_storage.py')], timeout=20)
+        return H.validate(_json(raw))
+
 
 def reason(error, fallback='READ_FAILED'):
     if isinstance(error, U.PodUsageCleanupError): return 'CLEANUP_UNVERIFIED'
@@ -279,9 +285,17 @@ def collect(backend=None):
         if unsafe: raise C.FinOpsError('CLEANUP_UNVERIFIED')
         docker_storage = D.validate(backend.docker_storage())
     except Exception as error:
-        docker_storage = D.validate(dict(schema_version=1, agenthouse=D.unknown(reason(error)), limits=D.LIMITS[:]))
+        code = reason(error); unsafe = unsafe or code == 'CLEANUP_UNVERIFIED'
+        docker_storage = D.validate(dict(schema_version=1, agenthouse=D.unknown(code), limits=D.LIMITS[:]))
+    if docker_storage['agenthouse']['reason'] == 'CLEANUP_UNVERIFIED': unsafe = True
+    try:
+        if unsafe: raise C.FinOpsError('CLEANUP_UNVERIFIED')
+        host_storage = H.validate(backend.host_storage())
+    except Exception as error:
+        host_storage = H.unknown_all(reason(error))
     value = C.build_report(components, disks, inference, observed_at=backend.now(),
-                           local_processes=processes, storage=storage, docker_storage=docker_storage)
+                           local_processes=processes, storage=storage, docker_storage=docker_storage,
+                           host_storage=host_storage)
     return C.validate_public(value)
 
 

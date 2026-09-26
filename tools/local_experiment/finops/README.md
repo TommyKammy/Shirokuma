@@ -1,13 +1,13 @@
 # Local resource and inference report
 
 The FinOps collector reads the existing Shirokuma lab and returns one JSON
-report. Fresh reports use schema version 4 and cover the fixed Trino, Polaris
+report. Fresh reports use schema version 5 and cover the fixed Trino, Polaris
 and SeaweedFS containers; the owned local MLflow, JupyterLab and Model Serving
 processes; the workspace and dedicated Colima filesystems; and the last 24 hours
 of declared inference records in AgentHouse. A bounded read-only Kubernetes
 storage reference inventory covers SeaweedFS, Polaris PostgreSQL, Polaris and
-Trino, plus one fixed AgentHouse Docker named-volume reference. Saved version 1,
-2 and 3 reports retain their original coverage.
+Trino, plus one fixed AgentHouse Docker named-volume reference and three fixed
+host directory references. Saved version 1–4 reports retain their original coverage.
 
 ```sh
 rtk make local-finops-report
@@ -27,7 +27,7 @@ one JSON array and render it offline:
 rtk proxy make local-finops-history < selected.json > history.html
 ```
 
-The selection must contain full v1/v2/v3/v4 report objects, not file paths. No
+The selection must contain full v1/v2/v3/v4/v5 report objects, not file paths. No
 directory search, file opening, service start, collection or automatic refresh
 occurs. Input is capped at 8 × 256 KiB plus array framing and output at 4 MiB;
 invalid or duplicate-key inputs fail without partial HTML. The view sorts by
@@ -102,6 +102,26 @@ physical reservation, ClickHouse table or backup coverage is inferred. The
 collector never creates/starts/stops AgentHouse or a Docker volume. Profile
 startup is a separate recorded runtime action; saved v1/v2/v3 reports have no
 Docker volume observation and cannot be read as volume absence.
+
+## Fixed host directory references (v5)
+
+The existing private owner/config validators are reused by an isolated, bounded
+read-only worker. For MLflow it confirms the store marker's fixed SQLite and
+artifact-root references to `tmp/local-experiment/mlflow-tracking/store`; for
+Notebook Lab it confirms the owner/config's `root_dir` reference to
+`tmp/local-experiment/notebook-lab/workspace`; for Model Serving it checks the
+owner and fixed `HOME` reference to `tmp/local-experiment/ridge-serving/home`.
+Each target is an existing, private, non-symlink directory; two owner/directory
+identity snapshots must match. These are three **selected references**, not
+the total host storage: other Lab state, MLflow home/cache, serving temporary
+files, derived model artifacts and shared stores are outside this increment.
+Even an empty directory is not a component's zero storage cost. The report
+contains only relative paths, a digest of the owner record and the directory's
+device/inode identity; private owner tokens and configuration contents are not
+published. No recursive traversal, file-byte accounting or filesystem mutation
+is done. `used_bytes` is always null/`NOT_MEASURED`; file-level ownership,
+exclusive physical allocation, quota and backup recovery are not established.
+The collector does not start MLflow, Notebook Lab, Model Serving or Colima.
 
 Create reports in a private directory with `umask 077`. The HTML renderer reads
 only the supplied JSON, validates its report contract, and performs no new

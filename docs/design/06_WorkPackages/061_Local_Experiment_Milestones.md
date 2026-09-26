@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-26
-version: "3.77"
+version: "3.78"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-26: FinOps fixed host directory references (bounded v5)
+
+WP-L6-FIN-001 v5はMLflow store、Notebook Lab workspace、Model Serving homeの3固定保存先に限定。所有recordと固定設定を既存private validatorで確認し、ディレクトリの非symlink/0700/device/inodeを前後照合する。root FluxやColimaは変更せず、サービスも起動しない。実01はColima停止のままhost3件observed/null/NOT_MEASURED、Docker/Kubernetes/推論はunknownで全report partial。空のServing homeも0使用量と主張しない。保存v4→v5の原JSON不変で静的HTML/historyを検証。symlink、permission、owner・inode差し替えとunknown理由のnegative testを追加した。focused92tests PASS、全回帰121suites/3707実行＝3706PASS＋既存1skip（86.311秒、log SHA256 `4648875ca0f6f0f7c5c617c4dbddf778a4c6a9c72e5d50bed6a716767695d41d`）。回帰後、3対象の所有digest・device/inode・直下entry数は事前記録と同じでColima停止も維持。保存public JSON/HTML/historyは3files/61,150 logical bytes・65,536 allocated bytes（0600、物理一意占有ではない）。配下ファイル、他host directory、shared MLflow model store、backup・実使用量・物理占有やquotaは未確認。Browser視覚確認・本番受入は未実施。私有証跡は`tmp/local-experiment/finops-host-storage-checks/20260926/`。
 
 ## 2026-09-26: AgentHouse Docker named-volume reference (bounded FinOps v4)
 

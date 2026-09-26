@@ -5,12 +5,18 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-26
-version: "0.7"
+version: "0.8"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 固定host directory参照（2026-09-26・限定local増分）
+
+v5は、MLflowのstore marker内の固定SQLite/artifact-root→`tmp/local-experiment/mlflow-tracking/store`、Notebook Labの所有record/configのroot_dir→`tmp/local-experiment/notebook-lab/workspace`、Model Servingのowner/固定HOME設定→`tmp/local-experiment/ridge-serving/home`の3参照だけを検証する。専用Lab仮想環境の固定read-only workerがprivate owner/config validatorを再利用し、所有情報のdigestと非symlink/0700ディレクトリのdevice/inodeを前後で照合する。owner token・設定内容・絶対pathは公開しない。配下ファイル・shared store・Lab cache/実験・Servingのモデル実体、実使用bytes・物理占有・backupやquotaは未確認。`used_bytes=null / NOT_MEASURED`を保持する。
+
+Colimaと3つのサービスを起動せずに、停止中の実v5レポートは3対象すべて`observed`、Docker/Kubernetes等はunknownで全体partialとなった。実取得と保存v4→v5 offline HTML/historyの原本不変・旧schema未収録区別を確認。symlink・permission・owner/directory差し替えのnegative testを含む。focused 92tests、全回帰121suites/3707実行＝3706PASS＋既存1skip。回帰後も所有digest・ディレクトリdevice/inode・直下entry数の前後一致、Colima停止を確認。直下entry数は配下内容・bytesの証明ではない。この増分は全ホストdirectory列挙ではなく、容量評価や実使用量の測定判断は後続に分ける。証拠は`tmp/local-experiment/finops-host-storage-checks/20260926/`。
 
 ## AgentHouse Docker named-volume参照（2026-09-26・限定local増分）
 

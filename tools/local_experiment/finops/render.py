@@ -239,6 +239,21 @@ def _docker_storage(report):
             '内容・他コンテナの参照・物理占有量・backupは確認しません。</p></section>')
 
 
+def _host_storage(report):
+    if 'host_storage' not in report: return ''
+    names = {'mlflow':'MLflow','notebook-lab':'Notebook Lab','model-serving':'Model Serving'}
+    rows = []
+    for item in report['host_storage']['components']:
+        detail = (_e(item['directory']) if item['state'] == 'observed' else '未取得' + _reason(item['reason']))
+        rows.append(f'<tr><th scope="row">{names[item["component"]]}</th><td>{detail}</td>'
+                    '<td>未計測（NOT_MEASURED）</td></tr>')
+    return ('<section id="host-storage"><h2>固定ホストディレクトリ参照</h2>'
+            '<p>設定と所有記録、および対象ディレクトリ自体のidentityを確認した範囲です。'
+            '配下ファイルの帰属・実使用bytes・物理占有・バックアップ状態は未確認です。</p>'
+            + _table('3つの固定ディレクトリ。cacheや一時領域を含む全ホスト保存領域ではありません。',
+                     ['対象','固定保存先','実使用量'],rows) + '</section>')
+
+
 def _metric(metric):
     headline = _number(metric['total']) if metric['total'] is not None else '全体不明'
     subtotal = '' if metric['total'] is not None else f'<span class="sub">既知小計 {_e(_number(metric["known_sum"]))}</span>'
@@ -276,11 +291,13 @@ def render(report):
     raw = _e(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False))
     local_link = '<a href="#local-processes">ローカル学習サービス</a>' if report['schema_version'] >= 2 else ''
     storage_link = '<a href="#storage">保存領域</a>' if report['schema_version'] >= 3 else ''
-    if report['schema_version'] == 4: storage_link += '<a href="#docker-storage">Docker volume</a>'
+    if report['schema_version'] >= 4: storage_link += '<a href="#docker-storage">Docker volume</a>'
+    if report['schema_version'] == 5: storage_link += '<a href="#host-storage">ホスト保存先</a>'
     coverage = ('固定3コンテナ、所有するローカル3サービス（JupyterLabのkernelを含む）、2ファイルシステム、24時間の宣言event'
                 if report['schema_version'] >= 2 else '固定3サービス、2ファイルシステム、24時間の宣言event')
     if report['schema_version'] >= 3: coverage += '、固定4workloadのPVC参照'
-    if report['schema_version'] == 4: coverage += '、AgentHouseの固定Docker volume参照'
+    if report['schema_version'] >= 4: coverage += '、AgentHouseの固定Docker volume参照'
+    if report['schema_version'] == 5: coverage += '、固定3ホストディレクトリ参照'
     return f'''<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><title>実験環境の容量と使用量 | Shirokuma</title><style>{STYLE}</style></head>
@@ -295,6 +312,7 @@ def render(report):
 {_local_processes(report)}
 {_storage(report)}
 {_docker_storage(report)}
+{_host_storage(report)}
 <section id="inference"><h2>モデルの記録</h2><p>{_time(window['start'])} 以上、{_time(window['end'])} 未満の24時間。</p>
 <p>synthetic記録を含むAgentHouseの宣言値です。event数は実モデル呼出し数とは限りません。費用は請求額ではなく、通貨は未記録です。</p>{_inference(report)}</section>
 <section id="scope"><h2>観測範囲</h2><p>全取得項目を観測できても、FinOps全体の対応完了を示しません。対象は{coverage}です。</p>

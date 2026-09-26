@@ -39,6 +39,17 @@ def docker_storage_complete():
     return R.D.validate(dict(schema_version=1,agenthouse=entry,limits=R.D.LIMITS[:]))
 
 
+def host_storage_complete():
+    rows=[]
+    for component in R.H.TARGETS:
+        entry=R.H.unknown(component,'READ_FAILED')
+        entry.update(state='observed',reason=None,owner_sha256='a'*64,
+                     directory_identity={'device':'1','inode':'42'},
+                     request_started_at='2026-09-20T00:00:20Z',observed_at=NOW)
+        rows.append(entry)
+    return R.H.validate(dict(schema_version=1,components=rows,limits=R.H.LIMITS[:]))
+
+
 class RuntimeTests(unittest.TestCase):
     def backend(self):
         value = Mock()
@@ -51,6 +62,7 @@ class RuntimeTests(unittest.TestCase):
                  observed_at=None, identity=None, sample=None) for name in R.P.COMPONENTS]}
         value.storage.return_value = storage_complete()
         value.docker_storage.return_value = docker_storage_complete()
+        value.host_storage.return_value = host_storage_complete()
         return value
 
     def test_complete_collection_with_unknown_recorded_cost_and_no_lifecycle(self):
