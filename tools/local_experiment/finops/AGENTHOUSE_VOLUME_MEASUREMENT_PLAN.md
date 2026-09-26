@@ -175,6 +175,20 @@ Before a retained scan, pin and verify the VM-side worker source and establish
 an independent reconnect/reap check. Neither the current Linux fixture nor
 the Docker metadata transport grants scan permission.
 
+## 2026-09-27 offline host receipt gate
+
+`linux_volume_receipt_gate.py` adds a pure acceptance boundary for a terminal
+VM receipt plus independently obtained same-boot process probe. It checks
+operation ID, caller-supplied worker correlation digest, VM and host boot IDs,
+canonical process-start ticks (including rejection of leading-zero aliases),
+bounded result integers and a 30-second window measured with the **same host
+monotonic clock** from the trusted operation start. A missing/stale probe or
+still-running exact child rejects bytes. This does not yet obtain, authenticate
+or transport a VM receipt or `/proc` probe; the caller must pin the operation
+start before launching the worker and securely reconnect to the same VM. A
+fabricated probe, host reboot, stale operation ID or unverified worker source
+must never be used as positive evidence. No report schema or saved bytes change.
+
 One bounded dedicated Colima boot tested disposable Linux fixtures: 17 tests,
 15 pass and two macOS-specific skips, including no-atime worker, supervisor
 timeout, TERM-resistant child and failed record registration. Attempting a

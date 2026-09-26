@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "3.84"
+version: "3.85"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: AgentHouse host receipt gate (offline)
+
+VM terminal receiptと別取得process probeを突き合わせ、操作UUID/相関digest/VM・host boot、PID/start tick、cleanup・result上限、同一host monotonic clockによる操作開始30秒窓を検査するprivate pure gateを実装。@architectレビューでleading-zero start tickの別名、古い測定へのfresh probe流用、巨大数値の無制限変換を拒否する修正。fake record/probeの試験だけであり、VMからのauthenticated取得・再接続、worker source照合、VM-host writer停止やbind mount実機検証は未達。専用Colimaは前増分停止から起動せず、保持volumeのbytesはunknownのまま。
+
+focused139件＝132PASS＋Linux専用7skip、全回帰121suites/3754実行＝3746PASS＋8skip（既存1＋Linux専用7）、86.869秒、log SHA256 `79f9e64fcdfed52e08d380b676085dbe722e8dcc7ad2e618d62ee5f7e6319d7b`。設計文脈/secret scan PASS。私有証拠は`tmp/local-experiment/finops-receipt-gate-checks/20260927/`。再相談でVM接続/receipt transportを次のoffline増分とし、owner判断は現時点で不要と整理。ただし、この受理gate単独は保持volume走査を許可しない。
 
 ## 2026-09-27: AgentHouse Linux openat2 / fixture supervisor
 

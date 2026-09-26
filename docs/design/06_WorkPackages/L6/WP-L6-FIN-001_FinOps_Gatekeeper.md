@@ -5,12 +5,18 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-27
-version: "0.14"
+version: "0.15"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## AgentHouse host receipt gate（2026-09-27・offline）
+
+VM supervisorのterminal receiptと、別に取得した同じbootのprocess probeを照合するprivate受理ゲートを追加。操作UUID、worker相関digest、VM/host boot、子PID/start tick、cleanup、結果上限と、同一host monotonic clockで操作開始から30秒以内の窓を条件とする。@architectレビューでstart tickの先頭ゼロ別名、古い測定＋新規probe、巨大数値の変換を拒否した。これは**入力が真正なVMから取得されたことや実際にremote workerが停止したことの証明ではない**。receipt/probeの安全な取得・再接続とworker sourceの検証は未実装で、保持volumeを走査せず`null / NOT_MEASURED`を維持。専用Colimaは停止したまま。
+
+focused139件＝132PASS＋Linux専用7skip、全回帰121suites/3754実行＝3746PASS＋8skip（既存1＋Linux専用7）、log SHA256 `79f9e64fcdfed52e08d380b676085dbe722e8dcc7ad2e618d62ee5f7e6319d7b`。設計文脈/secret scan PASS、既存v7 report原本不変。限定証拠は`tmp/local-experiment/finops-receipt-gate-checks/20260927/`。次は既存認証済みVM接続でのbounded receipt/probe transport、host sleep/bootとworker source同定の検証。
 
 ## AgentHouse openat2 / supervisorのfixture-only実機検証（2026-09-27）
 

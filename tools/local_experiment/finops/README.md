@@ -121,6 +121,9 @@ turn a saved mount reference into a byte observation.
 Linux `openat2` and supervisor code is fixture-only: the VM test covered
 ordinary disposable files and timeout/reap, but bind-mount kernel isolation
 could not be exercised under the current unprivileged namespace policy.
+The host-side receipt gate is offline-tested only and not wired to a remote
+receipt transport or the public collector. Caller-supplied evidence is not
+proof of VM worker termination.
 
 ## Fixed host directory references (v5)
 
