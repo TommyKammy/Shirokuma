@@ -112,6 +112,9 @@ traversal and remote-cleanup prerequisites for any future byte claim. The
 dedicated Colima profile was stopped and was not started for that design
 milestone. Docker inspect/`system df` is not a byte measurement; existing
 reports continue to publish `null / NOT_MEASURED` for this volume.
+The subsequent fixture-only Linux worker and offline Docker preflight are not
+wired to retained volumes or public reports; see the plan for their unresolved
+per-open mount and remote-cleanup gates.
 
 ## Fixed host directory references (v5)
 

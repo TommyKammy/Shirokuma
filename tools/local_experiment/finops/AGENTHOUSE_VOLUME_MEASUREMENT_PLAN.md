@@ -106,3 +106,32 @@ For this design milestone, only offline contract checks and stopped-profile
 status are evidence. No retained volume contents, writer inventory, Linux
 no-atime support, backup recovery or byte count were inspected. Functional
 acceptance of a numeric measurement and production acceptance are both open.
+
+## 2026-09-27 fixture-only implementation update
+
+`linux_volume_worker.py` now implements the **private, unconnected** Linux
+metadata scanner. macOS rejects before traversal. VM-local disposable fixtures
+confirmed two fresh no-atime passes, unchanged root/child directory atimes,
+logical sparse/hidden file sizes and fail-closed links, special files, root
+replacement and limits. The first Linux test failed on `PosixPath` type
+checking and was repaired; no retained volume was scanned. The dedicated
+Colima profile was started only for this fixture, then ordinarily stopped.
+AgentHouse remained exited with restart policy `no`; Docker volume metadata
+showed local driver and empty Options. Profile config SHA and VM disk identity
+were unchanged after shutdown. k3s shutdown logged normal pod mountpoint
+cleanup plus `/var/lib/cni` busy; these facts do **not** establish byte-level
+retention or backup restoration. Avoid a further VM start until a justified
+remote-lifecycle and mount-boundary implementation is ready.
+
+The worker's mountinfo checks are best-effort. Same-device bind mounts arriving
+and disappearing during traversal are not prevented by before/after checks;
+per-open mount boundaries and worker/supervisor termination still need proof.
+The `mountinfo` parameter is a test seam only, never a retained-volume input.
+`docker_volume_preflight.py` adds a pure, offline two-snapshot guard for exact
+daemon/container/volume metadata, bounded all-container references, bind-path
+overlap, container lifecycle/restart count, projected mount references and
+sample freshness. Endpoint equality is not proof of uninterrupted stoppage or
+writer quiescence between observations. It explicitly returns
+`volume_traversal_authorized=False`: Docker inventory cannot rule out VM-host
+writers or mount aliases. There is **no public schema change** and no numeric
+Docker storage row at this milestone.

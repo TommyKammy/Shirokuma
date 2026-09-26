@@ -4,13 +4,23 @@ doc_id: "WP-L6-FIN-001"
 title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
-updated: 2026-09-26
-version: "0.11"
+updated: 2026-09-27
+version: "0.12"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## AgentHouse volume fixture-only worker / offline preflight（2026-09-27）
+
+前回の設計ゲートから継続し、Linux専用の非接続metadata workerと、Docker参照のoffline二時点preflightを実装。macOSではworkerが列挙前に拒否する。VM-local使い捨てfixtureのLinux試験でno-atime二走査、root/子directory atime不変、sparse/hiddenの論理値、symlink/hardlink/特殊file/変更/上限拒否を確認した。初回Linux試験は`PosixPath`型判定で失敗し、修正後に再実行して成功。VMは専用Colimaを明示起動/通常停止し、AgentHouseはexited/restart=no、volumeのlocal driver/Options nullをmetadataだけで確認した。設定SHA/VM disk identityは停止後も一致。k3sの通常停止にpod mountpoint cleanupと`/var/lib/cni` busy warningがあり、保持データやbackup不変の証明ではない。追加起動はremote終了確認とmount越境防止の実装まで見送る。
+
+offline preflightは全Docker container ID・mount参照、bind overlap・固定daemon/volume/container identityと時刻鮮度を検査するが、結果は`volume_traversal_authorized=False`のまま。VM-host writerや同一device bind mountの走査中の出現・消滅、remote cleanupの未確立を理由に**保持volumeの走査、公開schema変更、使用bytesの数値化は未実施**。現行v4–v7の`null / NOT_MEASURED`を維持。コードと未達条件は[測定境界計画](../../../../tools/local_experiment/finops/AGENTHOUSE_VOLUME_MEASUREMENT_PLAN.md)を参照。WPはlocal-partial。
+
+focused117tests＝114PASS＋Linux専用3skip（macOS）、Linux VM-local fixture5tests＝4PASS＋macOS用1skip。全回帰121suites/3732実行＝3728PASS＋4skip（既存1＋Linux専用3）、`make verify-design-context`とsecret scanもPASS。VM起動/停止以外のruntime設定・GitHub変更なし。証拠は`tmp/local-experiment/finops-volume-worker-checks/20260927/`。
+
+preflightの他container mount・稼働履歴の比較漏れを@architect再レビューで修正し、最終全回帰も同じ121suites/3732実行＝3728PASS＋4skip（log SHA256 `361101fe47433e510df0c1895f50f446b5afab4ab7ee37a6cdc3c742ed9f0764`）。二時点の一致は中間のwriter不在を証明しない。修正後のLinux実機再試験は追加起動を避け未実施で、先行fixture結果をその範囲で保持する。
 
 ## AgentHouse named-volume実使用量の測定境界（2026-09-26・設計のみ）
 

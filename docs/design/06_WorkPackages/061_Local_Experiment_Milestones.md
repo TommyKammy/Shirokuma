@@ -4,13 +4,23 @@ doc_id: "WP-LOCAL-MILESTONES"
 title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
-updated: 2026-09-26
-version: "3.81"
+updated: 2026-09-27
+version: "3.82"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: AgentHouse volume fixture worker / Docker offline preflight
+
+@architectレビュー後、先頭`//`でmount境界照合を迂回するpathとmountinfo escapeの判定を修正。preflightは対象containerのstart/finish/restart countと全containerの投影mount・稼働metadataも二時点比較する。比較した時点の一致は間の稼働やVM-host writerの不在を証明しない。追加のVM起動はしていない。
+
+修正後の最終全回帰は同じ121suites/3732実行＝3728PASS＋4skip、log SHA256 `361101fe47433e510df0c1895f50f446b5afab4ab7ee37a6cdc3c742ed9f0764`。先行Linux fixtureの原passは後続のpath/mountinfo修正より前であり、その修正後のLinux実機再試験は追加起動を避け未実施。数値使用量の受入とは区別する。
+
+@architect再相談後、public schemaは変えず、Linux専用の非接続workerをVM-local使い捨てfixtureで検証した。初回Linux試験の`PosixPath`型判定失敗を修正して再試験4PASS/1 macOS用skip。macOS側は実走査を拒否し、Linux側はroot/child no-atime、2pass・論理file数値とlink/special/root差し替え/上限を検証。専用ColimaはStopped→明示起動→通常stopで復帰、AgentHouseはexited/restart=no、volume driver local/Options null、profile config SHAとVM disk identityは終了時一致。k3s停止のpod mountpoint cleanup・`/var/lib/cni` busy warningがあったため、保持内容不変は主張しない。offline二時点Docker guardは全container参照・bind overlap・鮮度を確認し、走査許可は常にfalse。VM-host writer、走査中のsame-device bindの越境とremote cleanupは未解決で、volume内部を走査せず`null / NOT_MEASURED`を維持。限定証拠は`tmp/local-experiment/finops-volume-worker-checks/20260927/`。本番/数値受入は未達。
+
+focused117tests＝114PASS＋Linux専用3skip（macOS）、Linux VM-local fixture5tests＝4PASS＋macOS用1skip（log SHA256 `1684b9a6f9c49e81da6d30ddce8cca5cf2fde26ab2a85e477c524f268bda9cbe`）。全回帰121suites/3732実行＝3728PASS＋4skip（既存1＋Linux専用3）、88.875秒、log SHA256 `00074977f25f1650c1af54f1c15bbc716d96e8b872d2a5de2da2f3e84c0bc5b6`。設計文脈・secret scan PASS。macOSの3skipはLinux実行済みのfixtureで補い、同一環境で全回帰したとの主張はしない。
 
 ## 2026-09-26: AgentHouse volume usage boundary, design-only
 
