@@ -5,12 +5,18 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-27
-version: "0.13"
+version: "0.14"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## AgentHouse openat2 / supervisorのfixture-only実機検証（2026-09-27）
+
+Linux workerのroot/子directory/file metadataを`openat2`の`NO_XDEV|NO_SYMLINKS|BENEATH`で固定rootから解決し、anchorのdevice/inode/mount IDも検査する。VM-side fixture supervisorは子の登録後起動、期限超過TERM/KILL、reap、terminal receipt照合まで数値を受理しない。専用Colimaを一時起動し、disposable fixtureのLinux17件＝15PASS＋macOS専用2skipを確認した。bind mountの隔離namespaceは`uid_map: Operation not permitted`で拒否され、mountは作らずカーネルのbind越境拒否は**未検証**。再起動後は通常停止でStoppedへ復帰し、設定SHA/retained VM disk device/inode一致を確認したが、k3s通常停止のpod mountpoint cleanupと`/var/lib/cni` busyを伴い、guest保持内容・backup不変は証明しない。supervisorのdisk I/O無期限block、host切断後のreceipt再取得、VM-host writerの継続停止も未達。保持volumeは読取・走査せずpublic Docker bytesは`null / NOT_MEASURED`、WPはlocal-partial。限定証拠は`tmp/local-experiment/finops-openat2-supervisor-checks/20260927/`。
+
+最終macOS focused136件＝129PASS＋Linux専用7skip。全回帰121suites/3751実行＝3743PASS＋8skip（既存1＋Linux専用7）、log SHA256 `3f604c264e5a1b83ab48e810bc526ead0b6390a16e081ef89a92915c67f38335`。設計文脈とsecret scanもPASS。Linux fixture15PASSはその時点の実装に対するもので、後続のmacOS側receipt symlink拒否の追加、未実行bind fixtureは別扱い。保存v7 report原本SHAは不変。
 
 ## AgentHouse private Docker metadata transport（2026-09-27・offline）
 

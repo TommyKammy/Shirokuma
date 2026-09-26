@@ -155,3 +155,33 @@ The result still says `volume_traversal_authorized=False` and no Docker bytes
 are published. A Colima SSH boot-ID read can outlive a killed host client;
 this metadata-only operation does not establish the verified remote-worker
 cleanup required before any volume traversal.
+
+## 2026-09-27 openat2 / supervisor fixture boundary
+
+The unconnected Linux worker now uses `openat2` with `RESOLVE_BENEATH |
+RESOLVE_NO_SYMLINKS | RESOLVE_NO_XDEV` for root, directory and ordinary-file
+metadata, resolving descendants from its pinned root rather than a potentially
+relocated child descriptor. A caller-supplied trusted anchor device/inode and
+mount ID are checked, but the caller still must establish trusted anchor
+identity and writer/topology quiescence. No unsafe syscall fallback is used.
+The private VM-side fixture supervisor gates child execution on a registered
+record, bounds runtime, escalates TERM/KILL, reaps the exact child and accepts
+bytes only with a terminal, matching cleanup receipt. Disk-backed receipt I/O
+can block and host disconnect/remote record retrieval are **not** integrated;
+this is not yet a retained-volume execution contract.
+The caller-provided `worker_digest` is only an operation correlation field in
+the fixture protocol; it does not attest to executable source or remote code.
+Before a retained scan, pin and verify the VM-side worker source and establish
+an independent reconnect/reap check. Neither the current Linux fixture nor
+the Docker metadata transport grants scan permission.
+
+One bounded dedicated Colima boot tested disposable Linux fixtures: 17 tests,
+15 pass and two macOS-specific skips, including no-atime worker, supervisor
+timeout, TERM-resistant child and failed record registration. Attempting a
+private user/mount namespace for same-device directory and file bind fixtures
+failed at `uid_map` with `Operation not permitted`; no mount was created.
+Do not broaden VM privilege or claim kernel bind-boundary acceptance from
+mocked `openat2` flag tests. The profile was ordinarily stopped again; its
+config SHA and retained disk device/inode match pre-boot, while guest contents
+and backups remain unverified. k3s shutdown again cleaned pod mountpoints and
+reported `/var/lib/cni` busy. Retained-volume bytes remain `NOT_MEASURED`.

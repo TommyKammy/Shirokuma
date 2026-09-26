@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "3.83"
+version: "3.84"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: AgentHouse Linux openat2 / fixture supervisor
+
+@architect再相談後、保持volumeと接続しないLinux workerに固定root相対の`openat2(NO_XDEV|NO_SYMLINKS|BENEATH)`を導入。directory/fileのmetadata取得もper-openで守り、trusted anchorのmount IDを照合。supervisorは子processの登録、期限/TERM/KILL/reapとterminal receiptを実装したが、disk I/O blockとremote receipt再取得は未解決。専用ColimaをStopped→一時起動→通常停止し、Linux disposable fixture17件＝15PASS/2 macOS専用skip。private user/mount namespaceの`uid_map`権限拒否によりbind fixtureは未実施・mount変更なし。設定SHAとVM disk identityは停止後一致。k3s停止のpod mountpoint cleanup・`/var/lib/cni` busyがあり、保持guest contents/backupは未検証。AgentHouse保持volumeには触れず、Docker storageの使用bytesは引き続きunknown。証拠は`tmp/local-experiment/finops-openat2-supervisor-checks/20260927/`。WP-L6-FIN-001はlocal-partial。
+
+最終macOS focused136件＝129PASS＋Linux専用7skip、全回帰121suites/3751実行＝3743PASS＋8skip（既存1＋Linux専用7）、86.797秒、log SHA256 `3f604c264e5a1b83ab48e810bc526ead0b6390a16e081ef89a92915c67f38335`。設計文脈/secret scan PASS。Linux側15PASSは後続のreceipt symlink拒否追加前のfixture試験であり、再起動して同一source全試験をした主張ではない。保存v7原本SHA不変。次はhost切断後のoperation receipt再取得とwatchdog・VM-host writer境界、権限を変えないbind試験手段を検討する。
 
 ## 2026-09-27: AgentHouse Docker private metadata transport (offline)
 

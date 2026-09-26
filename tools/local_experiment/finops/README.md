@@ -118,6 +118,9 @@ per-open mount and remote-cleanup gates.
 The private transport for bounded, allowlisted Docker metadata snapshots is
 also offline-tested, but is not invoked by `local-finops-report` and does not
 turn a saved mount reference into a byte observation.
+Linux `openat2` and supervisor code is fixture-only: the VM test covered
+ordinary disposable files and timeout/reap, but bind-mount kernel isolation
+could not be exercised under the current unprivileged namespace policy.
 
 ## Fixed host directory references (v5)
 

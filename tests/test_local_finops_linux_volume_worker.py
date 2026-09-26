@@ -33,7 +33,9 @@ class LinuxVolumeWorkerContractTests(unittest.TestCase):
     def test_macos_rejects_before_opening_or_enumerating_any_directory(self):
         with patch.object(W.os, 'open') as opened, patch.object(W.os, 'scandir') as enumerated:
             with self.assertRaisesRegex(W.ScanError, 'UNSUPPORTED_PLATFORM'):
-                W.measure(Path('/fixture'), device=1, inode=1,
+                W.measure(Path('/fixture'), anchor=Path('/'), anchor_device=1, anchor_inode=1,
+                          anchor_mount_id=1,
+                          device=1, inode=1,
                           allowed_uids=frozenset({0}), allowed_modes=frozenset({0o700}))
         opened.assert_not_called();enumerated.assert_not_called()
 
@@ -48,8 +50,16 @@ class LinuxVolumeWorkerFixtureTests(unittest.TestCase):
 
     def measure(self):
         s = self.root.stat()
+        parent=self.root.parent.stat()
         return W.measure(self.root, device=s.st_dev, inode=s.st_ino,
+                         anchor=self.root.parent,anchor_device=parent.st_dev,anchor_inode=parent.st_ino,
+                         anchor_mount_id=self.parent_mount_id(),
                          allowed_uids=frozenset({os.getuid()}), allowed_modes=frozenset({0o700}))
+
+    def parent_mount_id(self):
+        fd=os.open(self.root.parent,os.O_PATH|os.O_CLOEXEC)
+        try:return W._mount_id(fd)
+        finally:os.close(fd)
 
     def test_empty_nested_sparse_and_noatime_both_passes(self):
         self.assertEqual(self.measure(), {'logical_regular_file_bytes':'0',
@@ -87,16 +97,28 @@ class LinuxVolumeWorkerFixtureTests(unittest.TestCase):
     def test_root_inode_replacement_and_nested_mount_boundary(self):
         s=self.root.stat();other=self.root.with_name('other');self.root.rename(other)
         self.root.mkdir(mode=0o700)
+        parent=self.root.parent.stat()
         with self.assertRaisesRegex(W.ScanError,'IDENTITY_CHANGED'):
             W.measure(self.root,device=s.st_dev,inode=s.st_ino,
+                      anchor=self.root.parent,anchor_device=parent.st_dev,anchor_inode=parent.st_ino,
+                      anchor_mount_id=self.parent_mount_id(),
                       allowed_uids=frozenset({os.getuid()}),allowed_modes=frozenset({0o700}))
         with self.assertRaisesRegex(W.ScanError,'MOUNT_CHANGED'):
             W.measure(self.root,device=self.root.stat().st_dev,inode=self.root.stat().st_ino,
+                      anchor=self.root.parent,anchor_device=parent.st_dev,anchor_inode=parent.st_ino,
+                      anchor_mount_id=self.parent_mount_id(),
                       allowed_uids=frozenset({os.getuid()}),allowed_modes=frozenset({0o700}),
                       mountinfo=f'1 0 8:1 / / rw - ext4 /dev/a rw\n'
                                 f'2 1 8:1 /alias {self.root}/nested rw - ext4 /dev/a rw\n')
         with self.assertRaisesRegex(W.ScanError,'SCOPE_INVALID'):
             W.measure(Path('/'+str(self.root)),device=self.root.stat().st_dev,inode=self.root.stat().st_ino,
+                      anchor=self.root.parent,anchor_device=parent.st_dev,anchor_inode=parent.st_ino,
+                      anchor_mount_id=self.parent_mount_id(),
+                      allowed_uids=frozenset({os.getuid()}),allowed_modes=frozenset({0o700}))
+        with self.assertRaisesRegex(W.ScanError,'IDENTITY_CHANGED'):
+            W.measure(self.root,device=self.root.stat().st_dev,inode=self.root.stat().st_ino,
+                      anchor=self.root.parent,anchor_device=parent.st_dev,anchor_inode=parent.st_ino,
+                      anchor_mount_id=self.parent_mount_id()+1,
                       allowed_uids=frozenset({os.getuid()}),allowed_modes=frozenset({0o700}))
 
 

@@ -7,12 +7,15 @@ This module deliberately has no CLI and does not create/mount a volume.
 from __future__ import annotations
 
 import fcntl
+import errno
 import os
 from pathlib import Path
 import platform
 import re
 import stat
 import time
+
+from tools.local_experiment.finops import linux_openat2 as AT
 
 MAX_ENTRIES = 10_000
 MAX_DEPTH = 32
@@ -80,16 +83,47 @@ def _read_mountinfo():
     return raw.decode('utf-8')
 
 
-def _open_root(root, device, inode, allowed_uids, allowed_modes):
-    # Ancestors are O_PATH: pathname resolution does not enumerate or update
-    # directory atime. Only the pinned root is opened for enumeration.
+def _mount_id(fd):
+    with open(f'/proc/self/fdinfo/{fd}', 'rb', buffering=0) as source:
+        raw=source.read(4097)
+    require(len(raw) <= 4096, 'READ_LIMIT')
+    matches=re.findall(rb'^mnt_id:\s*([0-9]+)$',raw,re.M)
+    require(len(matches)==1 and 0 < int(matches[0]) <= 2**63-1)
+    return int(matches[0])
+
+
+def _guarded(fd, relative, flags):
+    try:
+        return AT.open_beneath(fd, relative, flags)
+    except OSError as error:
+        reason = ('MOUNT_CHANGED' if error.errno == errno.EXDEV else
+                  'UNSUPPORTED_PLATFORM' if error.errno in (errno.ENOSYS, errno.EINVAL) else
+                  'NOATIME_UNAVAILABLE' if flags & os.O_NOATIME and error.errno in
+                  (errno.EPERM, errno.EACCES) else 'SCOPE_INVALID')
+        raise ScanError(reason) from None
+
+
+def _open_anchor(anchor, device, inode, mount_id):
+    # Explicit trusted filesystem anchor: mount crossings above this point
+    # are verified by the caller, not by the worker. O_PATH doesn't enumerate.
     fd = os.open('/', os.O_PATH | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
     try:
-        for part in root.parts[1:]:
+        for part in anchor.parts[1:]:
             next_fd = os.open(part, os.O_PATH | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=fd)
             os.close(fd);fd = next_fd
-        next_fd = os.open('.', _flags(), dir_fd=fd)
-        os.close(fd);fd = next_fd
+        info=os.fstat(fd)
+        require(stat.S_ISDIR(info.st_mode) and (info.st_dev,info.st_ino)==(device,inode) and
+                _mount_id(fd)==mount_id,
+                'IDENTITY_CHANGED')
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def _open_root(anchor_fd, relative, device, inode, allowed_uids, allowed_modes):
+    fd = _guarded(anchor_fd, relative, _flags())
+    try:
         require(fcntl.fcntl(fd, fcntl.F_GETFL) & os.O_NOATIME, 'NOATIME_UNAVAILABLE')
         info = os.fstat(fd)
         require(stat.S_ISDIR(info.st_mode) and (info.st_dev, info.st_ino) == (device, inode) and
@@ -101,7 +135,7 @@ def _open_root(root, device, inode, allowed_uids, allowed_modes):
         raise
 
 
-def _pass(root, pinned, device, allowed_uids, allowed_modes, deadline):
+def _pass(pinned, device, allowed_uids, allowed_modes, deadline):
     entries = {}; names = files = directories = total = 0
 
     def walk(fd, relative, depth):
@@ -118,7 +152,12 @@ def _pass(root, pinned, device, allowed_uids, allowed_modes, deadline):
                 names += len(os.fsencode(name))
                 require(len(entries) < MAX_ENTRIES and names <= MAX_NAMES, 'READ_LIMIT')
                 path = relative + (name,)
-                info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+                root_relative='/'.join(relative+(name,))
+                item = _guarded(pinned, root_relative, os.O_PATH | os.O_CLOEXEC)
+                try:
+                    info = os.fstat(item)
+                finally:
+                    os.close(item)
                 require(info.st_dev == device and info.st_uid in allowed_uids)
                 if stat.S_ISREG(info.st_mode):
                     require(info.st_nlink == 1)
@@ -133,21 +172,25 @@ def _pass(root, pinned, device, allowed_uids, allowed_modes, deadline):
                 first = _identity(info)
                 entries[path] = first
                 if stat.S_ISDIR(info.st_mode):
-                    child = os.open(name, _flags(), dir_fd=fd)
+                    child = _guarded(pinned, root_relative, _flags())
                     try:
                         require(fcntl.fcntl(child, fcntl.F_GETFL) & os.O_NOATIME, 'NOATIME_UNAVAILABLE')
                         require(_identity(os.fstat(child)) == first, 'TREE_CHANGED')
                         walk(child, path, depth + 1)
                     finally:
                         os.close(child)
-                require(_identity(os.stat(name, dir_fd=fd, follow_symlinks=False)) == first, 'TREE_CHANGED')
+                item = _guarded(pinned, root_relative, os.O_PATH | os.O_CLOEXEC)
+                try:
+                    require(_identity(os.fstat(item)) == first, 'TREE_CHANGED')
+                finally:
+                    os.close(item)
                 _check(deadline)
         require(_identity(os.fstat(fd)) == before, 'TREE_CHANGED')
         _check(deadline)
 
     # Reopen '.' rather than dup(): dup shares the directory offset and could
     # make the second pass appear empty after the first enumeration.
-    fd = os.open('.', _flags(), dir_fd=pinned)
+    fd = _guarded(pinned, '.', _flags())
     try:
         require(fcntl.fcntl(fd, fcntl.F_GETFL) & os.O_NOATIME, 'NOATIME_UNAVAILABLE')
         root_before = _identity(os.fstat(fd))
@@ -158,37 +201,55 @@ def _pass(root, pinned, device, allowed_uids, allowed_modes, deadline):
         os.close(fd)
 
 
-def measure(root, *, device, inode, allowed_uids, allowed_modes, mountinfo=None):
+def measure(root, *, anchor, anchor_device, anchor_inode, anchor_mount_id, device, inode,
+            allowed_uids, allowed_modes, mountinfo=None):
     """Return private aggregate bytes/counts, never a public FinOps report row."""
     _native()
     require(isinstance(root, Path) and root.is_absolute() and '..' not in root.parts and
             str(root).startswith('/') and not str(root).startswith('//') and
             os.path.normpath(str(root)) == str(root) and
+            isinstance(anchor, Path) and anchor.is_absolute() and '..' not in anchor.parts and
+            str(anchor).startswith('/') and not str(anchor).startswith('//') and
+            os.path.normpath(str(anchor)) == str(anchor) and
+            type(anchor_device) is int and anchor_device > 0 and
+            type(anchor_inode) is int and anchor_inode > 0 and
+            type(anchor_mount_id) is int and anchor_mount_id > 0 and
             type(device) is int and device > 0 and type(inode) is int and inode > 0 and
             type(allowed_uids) is frozenset and allowed_uids and
             all(type(x) is int and x >= 0 for x in allowed_uids) and
             type(allowed_modes) is frozenset and allowed_modes and
             all(type(x) is int and 0 <= x <= 0o777 for x in allowed_modes))
+    try:
+        relative = root.relative_to(anchor)
+    except ValueError:
+        raise ScanError('SCOPE_INVALID') from None
+    require(relative.parts and str(relative) != '.')
     deadline = time.monotonic() + MAX_SECONDS
     # mountinfo injection is exclusively a fixture seam. A future retained
     # volume wrapper must use fresh kernel mountinfo and stronger per-open
     # mount controls; this worker cannot prove absence of transient bind mounts.
     mountpoints = _mountpoints(_read_mountinfo() if mountinfo is None else mountinfo)
     _topology(root, mountpoints)
-    pinned = _open_root(root, device, inode, allowed_uids, allowed_modes)
+    trusted = _open_anchor(anchor, anchor_device, anchor_inode, anchor_mount_id)
     try:
-        results = []
-        for _ in range(2):
-            results.append(_pass(root, pinned, device, allowed_uids, allowed_modes, deadline))
-            _topology(root, _mountpoints(_read_mountinfo() if mountinfo is None else mountinfo))
-            verify = _open_root(root, device, inode, allowed_uids, allowed_modes)
-            try:
-                require(_identity(os.fstat(verify)) == _identity(os.fstat(pinned)), 'TREE_CHANGED')
-            finally:
-                os.close(verify)
-        require(results[0] == results[1], 'TREE_CHANGED')
-        _check(deadline)
-        return {'logical_regular_file_bytes':str(results[0][2]),
-                'regular_file_count':results[0][3], 'directory_count':results[0][4]}
+        pinned = _open_root(trusted, str(relative), device, inode, allowed_uids, allowed_modes)
+        try:
+            results = []
+            for _ in range(2):
+                results.append(_pass(pinned, device, allowed_uids, allowed_modes, deadline))
+                _topology(root, _mountpoints(_read_mountinfo() if mountinfo is None else mountinfo))
+                verify = _open_root(trusted, str(relative), device, inode, allowed_uids, allowed_modes)
+                try:
+                    require(_identity(os.fstat(verify)) == _identity(os.fstat(pinned)), 'TREE_CHANGED')
+                finally:
+                    os.close(verify)
+                check_anchor = _open_anchor(anchor, anchor_device, anchor_inode, anchor_mount_id)
+                os.close(check_anchor)
+            require(results[0] == results[1], 'TREE_CHANGED')
+            _check(deadline)
+            return {'logical_regular_file_bytes':str(results[0][2]),
+                    'regular_file_count':results[0][3], 'directory_count':results[0][4]}
+        finally:
+            os.close(pinned)
     finally:
-        os.close(pinned)
+        os.close(trusted)
