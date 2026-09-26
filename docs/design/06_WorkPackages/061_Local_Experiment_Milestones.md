@@ -5,12 +5,20 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "3.85"
+version: "3.86"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: AgentHouse receipt wire / SSH config contract (offline)
+
+@architect相談に基づき、host keyのenrollmentなしにprofile名/boot IDから認証済みと呼ばない境界を追加。private wireはnonce・bundle相関digest、VM boot・namespace/procfs前後identity、receiptとchild probeのbounded parseをfail-closedで検査。固定loopbackへのOpenSSH argv候補は既に信頼されたkey/known-hostsを必須とし、危険なpath展開・mutable user/global設定、forwarding/対話認証を拒否する。@architectレビューでknown-hosts pathのSSH解釈差、無制限読取、wireの型緩さを修正した。OpenSSH `ssh -G`はofflineのconfig parseだけで接続なし。host keyの信頼根拠、known-hostsのrun中immutable snapshot、VM実procfs/namespace、source bundle/host sleepは未確認。Colima停止、保持volume未走査で`used_bytes=null / NOT_MEASURED`を維持。
+
+専用Colimaの保存済み`ssh.config`をread-only確認し、既存経路は`StrictHostKeyChecking no`/`UserKnownHostsFile /dev/null`でhost keyをpinしていないと判明。鍵やcredentialの中身は読まず、first-contact鍵を認証根拠に採用しない。live接続/VM応答のauthenticityは未達。
+
+focused145件＝138PASS＋Linux専用7skip。最終全回帰121suites/3760実行＝3752PASS＋8skip（既存1＋Linux専用7）、86.626秒、log SHA256 `b7aaaabc7b0b4bc5cc04ce022255da5d00c974dbabb5e5e9f1f2552715bca540`。design-context/secret scan PASS。限定証拠は`tmp/local-experiment/finops-receipt-wire-checks/20260927/`。SSH host keyの真正性とlive receiptは未証明。
 
 ## 2026-09-27: AgentHouse host receipt gate (offline)
 

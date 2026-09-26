@@ -5,12 +5,20 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-27
-version: "0.15"
+version: "0.16"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## AgentHouse receipt wire / SSH設定境界（2026-09-27・offline）
+
+bounded 16KiBのprivate responseでversion・nonce・VM boot/namespace/procfs前後identity、operation receiptと独立process probeを照合し、重複JSON key・oversize・不正数値・稼働中の同一childを拒否。既存の**信頼済み**server keyを前提にした固定loopback OpenSSH argv候補も作り、user/global config・proxy・agent・forwarding・対話認証を無効化。既知host fileをbounded no-followで検査し、`ssh -G`のoffline設定解釈を確認。ただしhost keyの真正なenrollmentは未確立、SSH自体の起動なし。検証したknown-hosts pathnameをSSHが再openする競合とworker実行source照合、host sleep/boot、VM `/proc`可視性は未達。wireの成功だけでは接続先認証・終了確認・保持volume走査許可と呼ばず、数値は引き続き`null / NOT_MEASURED`。
+
+専用profileの既存`ssh.config`はread-onlyで設定項目のみ確認し、`StrictHostKeyChecking no`/`UserKnownHostsFile /dev/null`を確認。鍵の内容や秘密credentialは読んでいない。この既存接続は信頼済みserver keyのenrollment根拠にならず、first-contact鍵採用や無検証でのlive transportを行わない。別の真正なkey provenanceが必要。
+
+focused145件＝138PASS＋Linux専用7skip、最終全回帰121suites/3760実行＝3752PASS＋8skip（既存1＋Linux専用7、log SHA256 `b7aaaabc7b0b4bc5cc04ce022255da5d00c974dbabb5e5e9f1f2552715bca540`）。design-context/secret scan PASS。限定private証拠は`tmp/local-experiment/finops-receipt-wire-checks/20260927/`。live SSH/remote process・保持volumeは観測していない。
 
 ## AgentHouse host receipt gate（2026-09-27・offline）
 

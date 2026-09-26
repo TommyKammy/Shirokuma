@@ -124,6 +124,8 @@ could not be exercised under the current unprivileged namespace policy.
 The host-side receipt gate is offline-tested only and not wired to a remote
 receipt transport or the public collector. Caller-supplied evidence is not
 proof of VM worker termination.
+The versioned receipt wire and strict SSH argument builder are offline
+contracts, not a live connection: no host key has been enrolled by this work.
 
 ## Fixed host directory references (v5)
 

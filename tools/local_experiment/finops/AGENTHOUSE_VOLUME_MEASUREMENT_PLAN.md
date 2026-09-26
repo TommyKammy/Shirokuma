@@ -189,6 +189,37 @@ start before launching the worker and securely reconnect to the same VM. A
 fabricated probe, host reboot, stale operation ID or unverified worker source
 must never be used as positive evidence. No report schema or saved bytes change.
 
+## 2026-09-27 offline receipt wire / SSH configuration contract
+
+`linux_volume_receipt_wire.py` validates a bounded (16 KiB), duplicate-key-free
+versioned response, with nonce, expected bundle correlation digest, VM boot and
+PID/mount namespace plus procfs identity before/after, exact operation receipt,
+and a complete independent child-process observation. Invalid UTF-8, unknown
+fields, oversized/noncanonical numbers, still-running child and identity drift
+fail closed. `linux_volume_ssh_contract.py` constructs a fixed loopback-only
+OpenSSH configuration using an **already enrolled** ed25519 server key in a
+private exact known-hosts file, no user/global SSH configuration, no proxy,
+agent, forwarding or interactive authentication. Literal paths, ancestor
+permissions and a bounded no-follow read are checked. Offline OpenSSH `ssh -G`
+tests confirm the relevant parsed options without making a connection.
+
+Neither module makes an SSH call or enrolls a VM host key. The argv builder
+cannot preserve its known-hosts validation through SSH reopening that pathname
+later; a future runner needs an immutable, protected trust-file snapshot held
+through process completion. The bundle digest is still caller-supplied
+correlation, not executed-source attestation. Host sleep/reboot clocks, VM
+procfs visibility, authenticated source bundle, worker-writer quiescence and
+blocked-I/O cleanup remain unproven. These structural checks **do not** grant
+retained-volume traversal or change `NOT_MEASURED`.
+
+The existing dedicated Colima `ssh.config` was inspected read-only (no
+credential/key bytes copied). It specifies `StrictHostKeyChecking no` and
+`UserKnownHostsFile /dev/null`. That configuration provides **no previously
+enrolled server-key binding** for this transport. Do not reuse it as proof of
+authentication, generate an enrollment from `ssh-keyscan`/first contact, or
+enable live receipt collection by relaxing this prerequisite. A separately
+trustworthy key provenance is required before a strict SSH runner is attached.
+
 One bounded dedicated Colima boot tested disposable Linux fixtures: 17 tests,
 15 pass and two macOS-specific skips, including no-atime worker, supervisor
 timeout, TERM-resistant child and failed record registration. Attempting a
