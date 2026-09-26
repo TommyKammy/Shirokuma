@@ -5,12 +5,18 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-26
-version: "0.8"
+version: "0.9"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## Notebook workspaceの限定論理bytes（2026-09-26・v6 local増分）
+
+@architectと相談し、実使用量の最初の数値対象を**Notebook Labの固定workspaceだけ**に限定した。既存owner/config・root device/inodeを確認し、非追従のdirectory descriptorを保持して2回のmetadata走査で通常ファイル`st_size`の合計とfile/子directory件数を比較する。hidden/checkpoint/旧・archiveファイルも含むが内容は開かない。symlink、hardlink、特殊file、別device/owner、identity・metadataの変化、走査上限（10,000 entries、depth32、name data4MiB、10秒）超過ではbytesをnullにする。18秒のworker alarmと20秒の親transport timeoutを持つ。MLflow store・Serving HOMEは意図的に未計測のまま。保存v1–v5の公開契約を保持し、新規host schema v2/report v6で基準・観測window・件数と失敗理由を区別する。
+
+Colima/サービス停止中の実02でNotebook workspaceは**26通常ファイル・子directory1件・論理244,438 bytes**。別のread-only metadata走査でも同じ件数・論理合計だが、独立観測は原子的同時刻比較ではない。host3件の参照はobserved、他のDocker/Kubernetes等の未取得により全reportはpartial。focused102tests、全回帰121suites/3717実行＝3716PASS＋既存1skip。回帰後のworkspace root identity・metadata manifestも独立列挙時と一致し、Colimaは停止したまま。内容bytesやbackup復旧は確認していない。数値はAPFSの物理占有・clone共有・snapshot/圧縮・quota・回収可能量・MLflow/Servingや全Labの容量・backupの証明ではなく、他disk値とも合算しない。限定証跡は`tmp/local-experiment/finops-workspace-usage-checks/20260926/`。WPはlocal-partial。
 
 ## 固定host directory参照（2026-09-26・限定local増分）
 

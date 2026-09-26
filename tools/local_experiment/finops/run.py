@@ -227,7 +227,8 @@ class Backend:
 
     def host_storage(self):
         raw = self._command([str(ROOT/'tools/local_experiment/notebook_lab/.venv/bin/python'),
-                             '-I', '-B', str(ROOT/'tools/local_experiment/finops/host_storage.py')], timeout=20)
+                             '-I', '-B', str(ROOT/'tools/local_experiment/finops/host_storage.py'),
+                             '--measure-workspace'], timeout=20)
         return H.validate(_json(raw))
 
 
@@ -292,7 +293,7 @@ def collect(backend=None):
         if unsafe: raise C.FinOpsError('CLEANUP_UNVERIFIED')
         host_storage = H.validate(backend.host_storage())
     except Exception as error:
-        host_storage = H.unknown_all(reason(error))
+        host_storage = H.unknown_all(reason(error), version=2)
     value = C.build_report(components, disks, inference, observed_at=backend.now(),
                            local_processes=processes, storage=storage, docker_storage=docker_storage,
                            host_storage=host_storage)

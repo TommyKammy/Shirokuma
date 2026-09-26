@@ -5,12 +5,16 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-26
-version: "3.78"
+version: "3.79"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-26: FinOps bounded Notebook workspace logical bytes (v6)
+
+@architect判断により、初の数値保存量はNotebook Lab固定workspaceの通常ファイル`st_size`合計だけ。MLflow/Servingは参照-onlyのまま。既存owner/root device/inodeとno-follow descriptor chainを検証して2pass metadata走査を比較し、symlink/hardlink/特殊file・別owner/device・差し替え・時間/件数/深さ/name上限をfail-closedにした。worker18秒/親20秒の上限、usage unknownでも参照identity保持、TREE_CHANGED表示と保存v1–v5互換を検証。@architect再レビューの4件の指摘を修正し、追加の重大指摘なし。停止中Colima/各サービスを起動せず実02で26通常ファイル、子directory1、論理244,438 bytes。同じ値を別のmetadata-only後続走査で確認したが原子的同時観測ではない。focused102tests PASS、全回帰121suites/3717実行＝3716PASS＋既存1skip（87.793秒、log SHA256 `ba4f13d8950b10c5e5b37d320df529927c4d02d0e564b339310ca164499f8951`）。回帰後もroot identity、独立列挙のmetadata manifestと件数/論理量は同じ、Colima停止を確認した。ただし内容bytesの不変やbackup復旧はこの確認では証明できない。保存public JSON/HTML/historyは3files/62,224 logical bytes・65,536 allocated bytes（0600、物理一意占有でない）。全reportは他source未取得でpartial。APFS clone/圧縮・snapshot/physical・hardlink dedup・backups・他の保存先は未計測。Browser視覚検証・本番受入も未実施。証跡は`tmp/local-experiment/finops-workspace-usage-checks/20260926/`。
 
 ## 2026-09-26: FinOps fixed host directory references (bounded v5)
 

@@ -50,6 +50,17 @@ def host_storage_complete():
     return R.H.validate(dict(schema_version=1,components=rows,limits=R.H.LIMITS[:]))
 
 
+def host_usage_complete():
+    rows=[]
+    for row in host_storage_complete()['components']:
+        item=R.H.measured_row(row)
+        if item['component']=='notebook-lab':
+            item.update(usage_state='observed',usage_reason=None,used_bytes='16',regular_file_count=2,
+                        directory_count=1,usage_started_at='2026-09-20T00:00:20Z',usage_observed_at=NOW)
+        rows.append(item)
+    return R.H.validate(dict(schema_version=2,components=rows,limits=R.H.MEASURED_LIMITS[:]))
+
+
 class RuntimeTests(unittest.TestCase):
     def backend(self):
         value = Mock()
@@ -62,7 +73,7 @@ class RuntimeTests(unittest.TestCase):
                  observed_at=None, identity=None, sample=None) for name in R.P.COMPONENTS]}
         value.storage.return_value = storage_complete()
         value.docker_storage.return_value = docker_storage_complete()
-        value.host_storage.return_value = host_storage_complete()
+        value.host_storage.return_value = host_usage_complete()
         return value
 
     def test_complete_collection_with_unknown_recorded_cost_and_no_lifecycle(self):

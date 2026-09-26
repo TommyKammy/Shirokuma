@@ -1,13 +1,14 @@
 # Local resource and inference report
 
 The FinOps collector reads the existing Shirokuma lab and returns one JSON
-report. Fresh reports use schema version 5 and cover the fixed Trino, Polaris
+report. Fresh reports use schema version 6 and cover the fixed Trino, Polaris
 and SeaweedFS containers; the owned local MLflow, JupyterLab and Model Serving
 processes; the workspace and dedicated Colima filesystems; and the last 24 hours
 of declared inference records in AgentHouse. A bounded read-only Kubernetes
 storage reference inventory covers SeaweedFS, Polaris PostgreSQL, Polaris and
 Trino, plus one fixed AgentHouse Docker named-volume reference and three fixed
-host directory references. Saved version 1–4 reports retain their original coverage.
+host directory references. Only the Notebook Lab workspace has a bounded
+logical-file-byte measurement. Saved version 1–5 reports retain their original coverage.
 
 ```sh
 rtk make local-finops-report
@@ -27,7 +28,7 @@ one JSON array and render it offline:
 rtk proxy make local-finops-history < selected.json > history.html
 ```
 
-The selection must contain full v1/v2/v3/v4/v5 report objects, not file paths. No
+The selection must contain full v1/v2/v3/v4/v5/v6 report objects, not file paths. No
 directory search, file opening, service start, collection or automatic refresh
 occurs. Input is capped at 8 × 256 KiB plus array framing and output at 4 MiB;
 invalid or duplicate-key inputs fail without partial HTML. The view sorts by
@@ -122,6 +123,36 @@ published. No recursive traversal, file-byte accounting or filesystem mutation
 is done. `used_bytes` is always null/`NOT_MEASURED`; file-level ownership,
 exclusive physical allocation, quota and backup recovery are not established.
 The collector does not start MLflow, Notebook Lab, Model Serving or Colima.
+
+## Notebook workspace logical regular-file bytes (v6)
+
+As decided with @architect, the first numerical storage increment measures
+**only** the verified Notebook Lab workspace, summing `st_size` for every
+accepted regular file, including hidden, checkpoint, old and archived files.
+An empty verified directory may report `"0"` with zero file and descendant
+directory counts. Sparse holes count toward logical size; APFS clone/shared
+extents and compression are **not** measured. MLflow store and Serving HOME
+stay reference-only (`not_measured`), and neither their empty/retained paths
+nor the workspace count is a full component or host storage total.
+
+The fixed Lab worker uses descriptor-relative, no-follow directory opens,
+checks the previously verified root inode/device, and retains that descriptor
+across two metadata passes. It rejects symlinks, hardlinked regular files,
+special entries, foreign owners/devices, changed identities/entry metadata
+and overflow. Bounds are 10,000 entries, depth 32, 4 MiB names and a 10-second
+two-pass deadline; an 18-second worker alarm and the parent's existing
+20-second process timeout cover blocked operations. No file contents are opened.
+On failure, bytes/counts are null with a fixed reason, not a partial sum or
+zero. A valid reference can remain observed when its usage is unknown; that
+usage failure makes the full report partial.
+
+Two matching passes are best-effort metadata stability, not an atomic snapshot.
+The selected filesystem's same-device aliases, APFS allocation, snapshot costs,
+physical reservation, unique bytes, reclaimability, quota, content provenance,
+backup completeness and application consistency remain unknown. Saved host
+schema v1/report v5 still means reference-only with null bytes; host schema
+v2/report v6 adds this one logical-byte observation. Offline history labels
+the basis and never computes totals or deltas across reports.
 
 Create reports in a private directory with `umask 077`. The HTML renderer reads
 only the supplied JSON, validates its report contract, and performs no new

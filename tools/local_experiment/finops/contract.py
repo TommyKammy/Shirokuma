@@ -259,26 +259,31 @@ def build_report(components, disks, recorded, *, observed_at, local_processes=No
         for item in inventory['components']:
             if item['observed_at'] is not None:
                 require(stamp(item['observed_at'])[1] <= stamp(observed_at)[1], 'SAMPLE_INVALID')
-        value.update(schema_version=5, host_storage=inventory)
-        value['limits'].extend(H.LIMITS)
-        if any(item['state'] == 'unknown' for item in inventory['components']):
+        version = inventory['schema_version']
+        value.update(schema_version=5 if version == 1 else 6, host_storage=inventory)
+        value['limits'].extend(H.LIMITS if version == 1 else H.MEASURED_LIMITS)
+        if any(item['state'] == 'unknown' or
+               (version == 2 and item['component'] == 'notebook-lab' and item['usage_state'] == 'unknown')
+               for item in inventory['components']):
             value['result'] = 'partial'
     require(len(json.dumps(value, ensure_ascii=True, allow_nan=False).encode()) <= MAX_PUBLIC_BYTES, 'READ_LIMIT')
     return value
 
 
 def validate_public(value):
-    require(type(value) is dict and type(value.get('schema_version')) is int and value['schema_version'] in (1, 2, 3, 4, 5))
+    require(type(value) is dict and type(value.get('schema_version')) is int and value['schema_version'] in (1, 2, 3, 4, 5, 6))
     fields = {'schema_version', 'command', 'result', 'observed_at',
               'components', 'disks', 'inference', 'recommendations', 'limits'}
     require(set(value) == fields | ({'local_processes'} if value['schema_version'] >= 2 else set()) |
             ({'storage'} if value['schema_version'] >= 3 else set()) |
             ({'docker_storage'} if value['schema_version'] >= 4 else set()) |
-            ({'host_storage'} if value['schema_version'] == 5 else set()))
+            ({'host_storage'} if value['schema_version'] >= 5 else set()))
     disks = [disk(row['scope'], None if row['total_bytes'] is None else integer(row['total_bytes']),
                   None if row['free_bytes'] is None else integer(row['free_bytes']),
                   observed_at=row['observed_at'], reason=row['reason']) for row in value['disks']]
     recorded = value['inference']; raw = []
+    if value['schema_version'] >= 5:
+        require(value['host_storage'].get('schema_version') == value['schema_version'] - 4, 'SCOPE_INVALID')
     for row in recorded['groups']:
         raw.append({'model_provider': row['model_provider'], 'model_name': row['model_name'],
                     'events': str(row['recorded_model_events']),

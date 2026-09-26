@@ -24,7 +24,8 @@ SEVERITIES = {'normal': ('normal', '25%超'), 'warning': ('warning', '注意 · 
 REASONS = {'READ_FAILED': '取得に失敗', 'READ_LIMIT': '取得上限を超過', 'READ_TIMEOUT': '取得が時間切れ',
            'CLEANUP_UNVERIFIED': '取得処理の終了を確認できず', 'SCOPE_INVALID': '対象を確認できず',
            'TARGET_MISSING': '対象が見つからず', 'TARGET_AMBIGUOUS': '対象が複数あり特定できず',
-           'IDENTITY_CHANGED': '取得中に対象が変化', 'SAMPLE_INVALID': '観測値を確認できず',
+            'IDENTITY_CHANGED': '取得中に対象が変化', 'TREE_CHANGED': '取得中にディレクトリが変化',
+            'SAMPLE_INVALID': '観測値を確認できず',
            'SAMPLE_STALE': '観測時刻が許容範囲外', 'DISK_INVALID': '容量を確認できず',
            'INFERENCE_INVALID': '宣言eventの集計を確認できず',
            'STOPPED': '停止中', 'UNINITIALIZED': '未初期化',
@@ -245,11 +246,19 @@ def _host_storage(report):
     rows = []
     for item in report['host_storage']['components']:
         detail = (_e(item['directory']) if item['state'] == 'observed' else '未取得' + _reason(item['reason']))
-        rows.append(f'<tr><th scope="row">{names[item["component"]]}</th><td>{detail}</td>'
-                    '<td>未計測（NOT_MEASURED）</td></tr>')
+        usage = '未計測（NOT_MEASURED）'
+        if 'usage_state' in item and item['component'] == 'notebook-lab':
+            if item['usage_state'] == 'observed':
+                usage = (_e(item['used_bytes']) + ' bytes（論理・通常ファイル）'
+                         + f'<span class="sub">通常ファイル {item["regular_file_count"]}件 / 子ディレクトリ {item["directory_count"]}件'
+                         + ' · ' + _time(item['usage_started_at']) + ' → ' + _time(item['usage_observed_at']) + '</span>')
+            else: usage = '未取得' + _reason(item['usage_reason'])
+        rows.append(f'<tr><th scope="row">{names[item["component"]]}</th><td>{detail}</td><td>{usage}</td></tr>')
+    note = ('Workspaceの論理bytesは通常ファイルのst_size合計で、割当量・共有extent・物理占有・'
+            'バックアップ状態を示しません。ほかの2対象は未計測です。' if report['schema_version'] == 6
+            else 'このschemaでは配下ファイルの実使用bytesは未計測です。')
     return ('<section id="host-storage"><h2>固定ホストディレクトリ参照</h2>'
-            '<p>設定と所有記録、および対象ディレクトリ自体のidentityを確認した範囲です。'
-            '配下ファイルの帰属・実使用bytes・物理占有・バックアップ状態は未確認です。</p>'
+            '<p>設定と所有記録、および対象ディレクトリ自体のidentityを確認した範囲です。' + note + '</p>'
             + _table('3つの固定ディレクトリ。cacheや一時領域を含む全ホスト保存領域ではありません。',
                      ['対象','固定保存先','実使用量'],rows) + '</section>')
 
@@ -292,12 +301,13 @@ def render(report):
     local_link = '<a href="#local-processes">ローカル学習サービス</a>' if report['schema_version'] >= 2 else ''
     storage_link = '<a href="#storage">保存領域</a>' if report['schema_version'] >= 3 else ''
     if report['schema_version'] >= 4: storage_link += '<a href="#docker-storage">Docker volume</a>'
-    if report['schema_version'] == 5: storage_link += '<a href="#host-storage">ホスト保存先</a>'
+    if report['schema_version'] >= 5: storage_link += '<a href="#host-storage">ホスト保存先</a>'
     coverage = ('固定3コンテナ、所有するローカル3サービス（JupyterLabのkernelを含む）、2ファイルシステム、24時間の宣言event'
                 if report['schema_version'] >= 2 else '固定3サービス、2ファイルシステム、24時間の宣言event')
     if report['schema_version'] >= 3: coverage += '、固定4workloadのPVC参照'
     if report['schema_version'] >= 4: coverage += '、AgentHouseの固定Docker volume参照'
-    if report['schema_version'] == 5: coverage += '、固定3ホストディレクトリ参照'
+    if report['schema_version'] >= 5: coverage += '、固定3ホストディレクトリ参照'
+    if report['schema_version'] == 6: coverage += '、Lab workspaceの限定論理bytes'
     return f'''<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><title>実験環境の容量と使用量 | Shirokuma</title><style>{STYLE}</style></head>

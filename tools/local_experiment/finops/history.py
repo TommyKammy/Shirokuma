@@ -89,6 +89,11 @@ def _identities(report):
                       + H._e(item['directory']) + '<span class="sub">'
                       + H._time(item['request_started_at']) + ' → ' + H._time(item['observed_at']) + '</span>'
                       if item['state'] == 'observed' else '未取得')
+            if 'usage_state' in item and item['component'] == 'notebook-lab':
+                detail += (' · Workspace logical regular-file bytes: ' + H._e(item['used_bytes'])
+                           + ' · files ' + str(item['regular_file_count']) + ' / directories ' + str(item['directory_count'])
+                           + ' · ' + H._time(item['usage_started_at']) + ' → ' + H._time(item['usage_observed_at'])
+                           if item['usage_state'] == 'observed' else ' · 測定未取得')
             rows.append(f'<tr><th scope="row">{H.NAMES[item["component"]]} · ホスト保存先</th><td>{detail}</td></tr>')
     else:
         rows.append('<tr><th scope="row">ホスト保存先</th><td>このschemaには含まれません（ディレクトリ不在を意味しません）</td></tr>')
