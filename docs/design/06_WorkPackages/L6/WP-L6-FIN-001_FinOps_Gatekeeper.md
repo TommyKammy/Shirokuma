@@ -5,12 +5,20 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-26
-version: "0.10"
+version: "0.11"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## AgentHouse named-volume実使用量の測定境界（2026-09-26・設計のみ）
+
+@architectと相談し、この増分は**inspect-onlyの設計ゲート**とした。専用Colimaが停止しており、Docker inspectは参照関係だけを示し、Linux volumeの論理ファイルbytesや排他的所有を示さない。Colima起動は他workloadの保持領域書込みを伴い得る。Docker `system df`、ClickHouse起動後のexec、read-onlyと称するhelper container、macOSからのVM disk mountは、安全で限定された無変更走査を現時点で証明できない。今回は起動・volume走査・bytes発表をせず、既存Docker schema v1/report v4–v7の`used_bytes=null / NOT_MEASURED`を維持する。欠測を0と呼ばない。
+
+後続数値化の条件は、固定daemon/volume/停止containerのidentityと他のrunning/stopped container/bind参照を前後照合、driver options/実mount topologyを確認し、Linux側のdescriptor相対・no-follow・`O_NOATIME`走査とremote worker終了確認を備えること。symlink/hardlink・別device・走査中の変化や上限/cleanup不明ではunknownを返す。成立時も論理通常ファイル`st_size`だけで、共有物理extent、VM/APFS占有・ClickHouse table帰属・backupや回収可能量ではない。詳しいgo/no-go・negative test・回復条件は[測定境界計画](../../../../tools/local_experiment/finops/AGENTHOUSE_VOLUME_MEASUREMENT_PLAN.md)。この設計記録は数値計測の機能受入ではなく、WPはlocal-partial。
+
+offlineのDocker size hint/既存v7への数値注入拒否を追加してfocused108tests PASS。全回帰121suites/3723実行＝3722PASS＋既存1skip。回帰後も専用Colima停止と保存v7原本SHA不変を確認した。私有証拠は`tmp/local-experiment/finops-agenthouse-usage-boundary/20260926/`。volume内部の保持状態やbackupは観測しておらず、回復操作も不要だった。
 
 ## MLflow storeの限定論理bytes（2026-09-26・v7 local増分）
 

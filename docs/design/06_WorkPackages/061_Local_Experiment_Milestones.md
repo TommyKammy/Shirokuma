@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-26
-version: "3.80"
+version: "3.81"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-26: AgentHouse volume usage boundary, design-only
+
+@architectと協議し、AgentHouse named volumeの使用量測定はまだ行わないと決定。停止中の専用Colimaは起動せず、Docker inspectや`system df`からbyte数を作らない。Linuxでno-atime/非追従のbounded metadata走査、driver options/他のDocker参照とVM-host writer限界、remote timeout/cleanup、schema v4–v7保存互換、初回symlink/hardlink拒否の条件を[計画](../../../tools/local_experiment/finops/AGENTHOUSE_VOLUME_MEASUREMENT_PLAN.md)に記録。現行レポートは`null / NOT_MEASURED`のまま。既存schemaへ偽のDockerサイズを混入できないoffline negative testを追加。Linux volume内容・参照inventory・backupや物理占有は観測せず、数値測定の機能受入ではない。WP-L6-FIN-001はlocal-partial。
+
+focused108tests PASS、全回帰121suites/3723実行＝3722PASS＋既存1skip（86.567秒、log SHA256 `20bc76190844c38923add8a027093c5bfb207bcda1633a196cf86acdb2a29395`）。検証後も専用ColimaはStopped、保存v7原JSON SHA不変。Docker APIへのliveアクセスやVM volume内部走査を行っていないため、保持データ内容・backup復旧は検証外。private証跡は`tmp/local-experiment/finops-agenthouse-usage-boundary/20260926/`。
 
 ## 2026-09-26: FinOps MLflow store bounded logical bytes (v7)
 

@@ -105,6 +105,14 @@ collector never creates/starts/stops AgentHouse or a Docker volume. Profile
 startup is a separate recorded runtime action; saved v1/v2/v3 reports have no
 Docker volume observation and cannot be read as volume absence.
 
+**Next measurement gate (2026-09-26):** [AgentHouse named-volume measurement
+plan](AGENTHOUSE_VOLUME_MEASUREMENT_PLAN.md) records the @architect-reviewed
+inspect-only decision and the Linux-side no-atime, writer-inventory, bounded
+traversal and remote-cleanup prerequisites for any future byte claim. The
+dedicated Colima profile was stopped and was not started for that design
+milestone. Docker inspect/`system df` is not a byte measurement; existing
+reports continue to publish `null / NOT_MEASURED` for this volume.
+
 ## Fixed host directory references (v5)
 
 The existing private owner/config validators are reused by an isolated, bounded

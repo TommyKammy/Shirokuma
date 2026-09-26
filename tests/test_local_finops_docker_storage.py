@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 from tools.local_experiment.finops import docker_storage as D, contract as C, render as H, history as HISTORY, run as R
 from test_local_finops_contract import NOW
 from test_local_finops_process_report import report, processes
-from test_local_finops_run import storage_complete, docker_storage_complete
+from test_local_finops_run import storage_complete, docker_storage_complete, mlflow_usage_complete
 
 
 def fixture():
@@ -34,6 +34,17 @@ class DockerStorageTests(unittest.TestCase):
         self.assertNotIn('PRIVATE_SECRET',json.dumps(row));self.assertNotIn('/var/lib/docker/volumes/',json.dumps(row))
         data=fixture();data[2][0]['CreatedAt']='2026-09-19T09:00:00+09:00'
         self.assertEqual(projected(data)['volume_created_at'],'2026-09-19T00:00:00.000000000Z')
+
+    def test_daemon_size_hints_do_not_become_agenthouse_usage(self):
+        data=fixture()
+        # Neither daemon summary hints nor private mountpoints prove a safe,
+        # exclusive, non-mutating per-volume traversal.
+        data[2][0]['UsageData']={'Size':123456,'RefCount':1}
+        data[2][0]['Size']=123456
+        row=projected(data)
+        self.assertIsNone(row['used_bytes'])
+        self.assertEqual(row['usage_reason'],'NOT_MEASURED')
+        self.assertNotIn('/var/lib/docker/volumes/',json.dumps(row))
 
     def test_foreign_context_owner_image_mount_and_source_fail_closed(self):
         changes=[lambda x:x[0][0]['Endpoints']['docker'].update(Host='tcp://elsewhere'),
@@ -100,6 +111,18 @@ class DockerStorageTests(unittest.TestCase):
         self.assertEqual(historical.count('このschemaにはDocker volume参照は含まれません'),2)
         current['docker_storage']['agenthouse']['used_bytes']='10'
         with self.assertRaises((C.FinOpsError,D.DockerStorageError)):C.validate_public(current)
+
+    def test_saved_v7_cannot_gain_volume_bytes_retroactively(self):
+        old=report(processes())
+        current=C.build_report(old['components'],old['disks'],old['inference'],observed_at=NOW,
+            local_processes=processes(),storage=storage_complete(),docker_storage=docker_storage_complete(),
+            host_storage=mlflow_usage_complete())
+        self.assertEqual(current['schema_version'],7)
+        self.assertIsNone(current['docker_storage']['agenthouse']['used_bytes'])
+        for field,value in (('used_bytes','123'),('usage_reason',None)):
+            changed=deepcopy(current);changed['docker_storage']['agenthouse'][field]=value
+            with self.subTest(field=field),self.assertRaises((C.FinOpsError,D.DockerStorageError)):
+                C.validate_public(changed)
 
 
 if __name__=='__main__': unittest.main()
