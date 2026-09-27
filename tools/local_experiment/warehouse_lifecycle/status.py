@@ -114,9 +114,14 @@ def project(raw,token,request_id=None):
             request=RPC.parse_request(json.dumps(request).encode(),token,allow_query=True)
             RPC.validate_response(reply,request)
             original=seen.get(request['request_id']);require(original is not None)
-            if reply['result'] in ('verified','noop'):
-                require(original['state']=='completed' and original['request']==request and
-                        original['response']==reply)
+            # A reply is either the exact saved outcome for the original
+            # request, or the owner-generated evidence-free uncertainty for
+            # an in-flight request / same-ID conflicting action. In particular
+            # a conflicting action cannot carry an operation or receipt hash.
+            saved=(original['request']==request and original['response']==reply and
+                   original['state']!='pending')
+            interim=(reply==RPC._uncertain(request) and reply['result']=='unknown')
+            require(saved or interim)
         output={'schema_version':1,'session_id':token,'journal_sha256':hashlib.sha256(raw).hexdigest(),
                 'observation':'saved-journal-only','runtime_state':'unknown',
                 'recorded_actions':actions,'reply_count':len(value['replies']),

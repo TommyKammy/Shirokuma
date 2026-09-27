@@ -73,6 +73,13 @@ query-mode commands remain unchanged. This does **not** implement owner restart
 recovery or a durable queue. To stop using the view, stop invoking this command;
 no saved run or backup needs to be removed or migrated.
 
+All saved replies, including `busy`, `failed` and `unknown`, must now match
+either the exact stored response of their original request or the owner's
+evidence-free `unknown` reply for an in-flight/same-ID conflicting request.
+A conflicting action carrying an operation ID/hash or a fabricated interim
+`busy` cannot be projected. Real pending and same-ID conflict replies remain
+valid; this is internal journal consistency, not proof of the owner's identity.
+
 Opt in to cross-checking a **saved completion claim** against the final owner
 receipt and all referenced operation files:
 

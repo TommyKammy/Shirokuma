@@ -1,5 +1,6 @@
 import json
 import io
+from copy import deepcopy
 import os
 from pathlib import Path
 import tempfile
@@ -55,6 +56,27 @@ class SessionStatusTests(unittest.TestCase):
         for source in cases:
             with self.subTest(source=source[:120]),self.assertRaises(S.StatusError):S.project(source,TOKEN)
         with self.assertRaises(S.StatusError):S.project(raw([e]),'../outside')
+
+    def test_non_success_replies_must_be_original_or_uncertain_without_evidence(self):
+        e=entry(state='completed')
+        interim=RPC._uncertain(e['request'])
+        collision=RPC._uncertain({**e['request'],'action':'wake'})
+        valid=S.project(raw([e],[interim,collision,e['response']]),TOKEN,ID)
+        self.assertEqual(valid['request_lookup']['recorded_result'],'verified')
+        self.assertEqual(valid['reply_count'],3)
+        for bad in (
+            {**interim,'operation_id':ID,'receipt_sha256':'b'*64},
+            {**collision,'operation_id':ID,'receipt_sha256':'b'*64},
+            {**interim,'result':'busy'},
+            {**e['response'],'result':'failed'},
+        ):
+            with self.subTest(bad=bad),self.assertRaises(S.StatusError):
+                S.project(raw([e],[bad]),TOKEN,ID)
+        # The stored busy response itself is replayable; not every negative
+        # response is a fabricated interim reply.
+        busy=deepcopy(e)
+        busy['response']=RPC._uncertain(e['request'],'busy')
+        self.assertEqual(S.project(raw([busy],[busy['response']]),TOKEN)['reply_count'],1)
 
     def test_private_filesystem_rejects_redirects_and_mutation_without_output(self):
         with tempfile.TemporaryDirectory(dir=S.ROOT/'tmp/local-experiment') as temp:

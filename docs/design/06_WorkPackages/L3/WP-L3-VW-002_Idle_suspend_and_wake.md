@@ -5,7 +5,7 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-27
-version: "0.10"
+version: "0.11"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
@@ -18,6 +18,12 @@ tags: [shirokuma, wp, l3, warehouse]
 | Level | L3 |
 | Workstream | Warehouse |
 | Depends-on | WP-L3-VW-001, WP-L0-OBS-001 |
+
+## 2026-09-27 archived RPC negative-reply correlation — offline
+
+保存statusが成功replyは元request/保存応答と相関していた一方、`unknown/busy/failed` replyは同UUIDだけで受け入れる隙間を修正。元requestと完全一致した**保存responseそのもの**、または実ownerが処理中/同ID別action競合時に出す**operation/receiptなしの`unknown`**だけを許す。元actionと異なるreplyがoperation ID/hashを主張する場合や、保存結果にない`busy`を捏造した場合は`JOURNAL_UNVERIFIED`で部分JSONなし。修正前に不正3種が誤受理されることを再現し、修正後拒否。実Unix ownerの同ID競合・query replay、正当な処理中replyを確認。archived2 sessionの旧status JSONはbyte不変、保存完了claimも通過、元journal SHA不変。保存物は同一owner由来であり、独立実行・監査配送・現backend/cleanupは証明しない。owner/SQL/Colima/保持backupは変更せず、WP local-partial。private証拠は`tmp/local-experiment/warehouse-journal-reply-contract-checks/20260927/`。
+
+warehouse focused5 suites/164件PASS、全回帰121 suites/3795実行＝3787PASS＋8skip、87.473秒、log SHA256 `f463db4631dada04df4ac6b9292743a6a3b04b8f6147a6ded70c48947abd6421`。design-context/secret scan PASS、専用Colima Stopped、archived2 sessionの元journal SHA不変。
 
 ## 2026-09-27 lost-reply guidance across CLI paths — offline
 

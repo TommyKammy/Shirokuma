@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "3.98"
+version: "3.99"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: archived RPC negative-reply correlation
+
+WP-L3-VW-002の保存statusで`unknown/busy/failed` replyも元requestの保存response完全一致か、処理中/同UUID別actionでownerが生成するoperation/receiptなしの`unknown`に限定。元actionと違うoperation ID/hash付きreplyや捏造`busy`の誤受理を修正前に再現、修正後拒否。実Unix ownerのquery/transition競合と正当な途中replyを通し、archived2 sessionの旧status JSON byte不変と保存完了claim通過を確認。独立したowner署名や現backend/cleanup証明ではない。owner/Trino/Colima/保持run/backup変更なし、WP local-partial。private証拠は`tmp/local-experiment/warehouse-journal-reply-contract-checks/20260927/`。
+
+warehouse focused5 suites/164件PASS、全回帰121 suites/3795実行＝3787PASS＋8skip、87.473秒、log SHA256 `f463db4631dada04df4ac6b9292743a6a3b04b8f6147a6ded70c48947abd6421`。design-context/secret scan PASS。専用Colima Stopped、元保存journal SHA不変。
 
 ## 2026-09-27: lost-reply safe lookup guidance
 

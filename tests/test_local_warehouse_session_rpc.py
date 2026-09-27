@@ -13,6 +13,7 @@ from unittest import mock
 import uuid
 
 from tools.local_experiment.warehouse_lifecycle import session_rpc as R
+from tools.local_experiment.warehouse_lifecycle import status as S
 
 
 class SessionRPCTest(unittest.TestCase):
@@ -157,6 +158,8 @@ class SessionRPCTest(unittest.TestCase):
         self.assertEqual(self.calls, [('query', request['request_id'])])
         saved = json.loads(self.rpc.journal_path.read_text())
         self.assertEqual(saved['requests'][0]['response'], answer[1])
+        self.assertEqual(S.project(self.rpc.journal_path.read_bytes(),self.token,request['request_id'])
+                         ['request_lookup']['recorded_result'],'verified')
 
     def test_query_disconnect_and_inflight_retry_do_not_repeat_owner_call(self):
         entered = threading.Event()
@@ -233,6 +236,9 @@ class SessionRPCTest(unittest.TestCase):
         journal = json.loads(self.rpc.journal_path.read_text())
         self.assertEqual(journal['requests'][0]['response'], original)
         self.assertEqual(journal['replies'][1], refused)
+        projected=S.project(self.rpc.journal_path.read_bytes(),self.token,request['request_id'])
+        self.assertEqual(projected['reply_count'],3)
+        self.assertEqual(projected['request_lookup']['recorded_action'],'chill')
 
     def test_disconnect_does_not_cancel_handler_and_retry_replays(self):
         entered = threading.Event()
