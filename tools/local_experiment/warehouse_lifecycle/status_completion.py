@@ -99,6 +99,18 @@ def correlate(raw_journal,raw_receipt,operations,token):
         # The owner hashed the on-disk operation file bytes, including whitespace.
         S.require(hashlib.sha256(operations[name]).hexdigest()==response['receipt_sha256'])
     S.require(set(operations)==names)
+    # The owner appends a reply to its journal before attempting to send it.
+    # Interim unknowns from a retry are valid, but a completed saved claim
+    # needs at least one exact final reply per operation. A denied request
+    # with the same UUID and a different action is not a clean completion.
+    originals={entry['request']['request_id']:entry for entry in entries}
+    final=set()
+    for reply in journal['replies']:
+        entry=originals[reply['request_id']]
+        S.require(all(reply[key]==entry['request'][key] for key in RPC.REQUEST_KEYS))
+        if reply==entry['response']:
+            final.add(reply['request_id'])
+    S.require(final==set(originals))
     return {'recorded_completion':'correlated-saved-claim','saved_receipt_sha256':hashlib.sha256(raw_receipt).hexdigest(),
             'operation_count':len(entries),'runtime_state':'unknown'}
 

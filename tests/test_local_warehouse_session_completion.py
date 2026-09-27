@@ -49,6 +49,27 @@ class SavedCompletionTests(unittest.TestCase):
         self.assertEqual((projected['operation_count'],projected['runtime_state']),(1,'unknown'))
         self.assertNotIn('cleanup_verified',projected)
 
+    def test_completion_excludes_cross_action_replay_but_keeps_pending_same_request(self):
+        journal,receipt,op=fixture();name=OPERATION_ID+'.json'
+        interim=RPC._uncertain(journal['requests'][0]['request'])
+        journal['replies'].insert(0,interim)
+        receipt['session']['server_result']['requests']=2
+        self.assertEqual(C.correlate(raw(journal),raw(receipt),{name:op},TOKEN)
+                         ['recorded_completion'],'correlated-saved-claim')
+        conflict=deepcopy(journal)
+        conflict['replies'][0]=RPC._uncertain({**journal['requests'][0]['request'],'action':'chill'})
+        # The base saved journal accepts this as a real denied same-ID action;
+        # a clean completed-session claim must not erase its presence.
+        self.assertEqual(S.project(raw(conflict),TOKEN)['reply_count'],2)
+        with self.assertRaises(S.StatusError):
+            C.correlate(raw(conflict),raw(receipt),{name:op},TOKEN)
+        missing_final=deepcopy(journal)
+        missing_final['replies']=[interim]
+        receipt['session']['server_result']['requests']=1
+        self.assertEqual(S.project(raw(missing_final),TOKEN)['reply_count'],1)
+        with self.assertRaises(S.StatusError):
+            C.correlate(raw(missing_final),raw(receipt),{name:op},TOKEN)
+
     def test_conflicting_saved_claims_cannot_be_promoted(self):
         journal,receipt,op=fixture();name=OPERATION_ID+'.json'
         cases=[]
@@ -78,6 +99,19 @@ class SavedCompletionTests(unittest.TestCase):
                 p.write_bytes(data);p.chmod(0o600)
             with patch.object(S,'RUNS',root):
                 self.assertEqual(C.read(TOKEN,root)['recorded_completion'],'correlated-saved-claim')
+            collision=deepcopy(journal)
+            collision['replies'].insert(0,RPC._uncertain({**journal['requests'][0]['request'],'action':'chill'}))
+            claimed=deepcopy(receipt)
+            claimed['session']['server_result']['requests']+=1
+            (rpc/'journal.json').write_bytes(raw(collision))
+            (run/'receipt.json').write_bytes(raw(claimed))
+            with patch.object(S,'RUNS',root),patch('sys.stdout',new_callable=io.StringIO) as output,\
+                 patch('sys.stderr',new_callable=io.StringIO) as errors:
+                self.assertEqual(S.main(['--with-saved-completion',TOKEN]),1)
+            self.assertEqual(output.getvalue(),'')
+            self.assertEqual(errors.getvalue().strip(),'SAVED_COMPLETION_UNVERIFIED')
+            (rpc/'journal.json').write_bytes(raw(journal))
+            (run/'receipt.json').write_bytes(raw(receipt))
             (run/'receipt.json').chmod(0o644)
             with self.assertRaises(S.StatusError):C.read(TOKEN,root)
             with patch.object(S,'RUNS',root),patch('sys.stdout',new_callable=io.StringIO) as output,\

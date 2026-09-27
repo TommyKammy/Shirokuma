@@ -98,6 +98,13 @@ independent check of actual cleanup, backend state, audit delivery or execution
 provenance. `runtime_state` stays `unknown`, and nothing is restarted or replayed.
 The original journal-only status command and its output remain unchanged.
 
+For this stronger completion view, every saved operation must also have an
+exact final RPC reply (persisted before sending); interim `unknown` for the
+same original request is allowed. A denied same-UUID **different-action** reply
+prevents a clean saved-completion claim even though the journal-only view can
+still show the correctly refused attempt. This does not prove the reply reached
+the caller or that the owner actually performed cleanup.
+
 To locate **one original request UUID** after its reply is lost, without
 retransmitting it:
 

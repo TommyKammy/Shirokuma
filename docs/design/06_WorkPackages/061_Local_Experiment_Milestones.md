@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "3.99"
+version: "4.0"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: saved completion requires final RPC replies
+
+WP-L3-VW-002のopt-in `correlated-saved-claim`を強化。同UUID・別actionの拒否reply、または最終reply欠損を含む保存journal＋件数を合わせたreceiptが誤って通ることを修正前に再現。completionに限り全replyの元request一致、全operationに保存responseと完全一致した最終replyを要求。正当な同request処理中`unknown`は許可。競合/欠損では部分JSONなし。archived2 sessionのcompletion不変、journal SHA不変。旧journal-only statusやowner/SQL/Colima/保持run/backupは変更せず、callerへの実到達・現backend/cleanup独立実証とは区別。WP local-partial。private証拠は`tmp/local-experiment/warehouse-completion-reply-checks/20260927/`。
+
+warehouse focused5 suites/165件PASS、全回帰121 suites/3796実行＝3788PASS＋8skip、87.429秒、log SHA256 `5cccc7b5774c123ec1b97cbc2f9b49ebc14f35db208fe81c100883f1a6a1ae3d`。design-context/secret scan PASS、archived2 sessionの旧completion JSON byte一致、journal SHA不変、専用Colima Stopped。
 
 ## 2026-09-27: archived RPC negative-reply correlation
 

@@ -5,7 +5,7 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-27
-version: "0.11"
+version: "0.12"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
@@ -18,6 +18,12 @@ tags: [shirokuma, wp, l3, warehouse]
 | Level | L3 |
 | Workstream | Warehouse |
 | Depends-on | WP-L3-VW-001, WP-L0-OBS-001 |
+
+## 2026-09-27 saved completion requires exact final replies — offline
+
+`correlated-saved-claim`が同UUID・別actionの拒否replyや最終reply欠損を含むjournalでも、receipt件数を合わせれば通ることを修正前に再現。opt-in completion照合に限り、全replyが元requestの完全一致を要し、全operationに保存responseそのものの**最終replyが1件以上**あることを確認する。正当な同requestの処理中`unknown`は許可。競合・最終reply欠損は`SAVED_COMPLETION_UNVERIFIED`、CLI stdoutなし。journal-only statusは拒否された競合をなお表示可能で、旧入口は変更しない。実archived2 sessionのcompletionは通過し、元journal SHA不変。これは同じownerの保存物の整合性のみで、callerへのreply到達、実backend/cleanup/監査の独立証明ではない。owner/SQL/Colima/保持run/backup変更なし、WP local-partial。private証拠は`tmp/local-experiment/warehouse-completion-reply-checks/20260927/`。
+
+warehouse focused5 suites/165件PASS、全回帰121 suites/3796実行＝3788PASS＋8skip、87.429秒、log SHA256 `5cccc7b5774c123ec1b97cbc2f9b49ebc14f35db208fe81c100883f1a6a1ae3d`。design-context/secret scan PASS、archived2 sessionのcompletion JSONは旧出力とbyte一致、元journal SHA不変、専用Colima Stopped。
 
 ## 2026-09-27 archived RPC negative-reply correlation — offline
 
