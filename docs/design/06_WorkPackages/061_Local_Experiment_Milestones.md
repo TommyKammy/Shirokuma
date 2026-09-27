@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-28
-version: "4.6"
+version: "4.7"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-28: bounded live Policy candidate response check
+
+WP-L2-POL-001の新しいallowed-response照合を専用Colima/k3sで1回だけ確認。起動前のprofile設定SHA記録、固定context・16件のnative policy/binding ready後、適合Podのserver dry-run 1件は`passed/allowed`、v2 marker `matched`、Pod前後不存在・inventory安定。後続の独立API readでも対象Pod不存在、policy status詳細は起動時と一致。モデル/AgentHouse/CLI全経路・policy mutation・実workload作成は行わない。通常stopでprofileはStopped、設定SHAは不変。起動時TCP 53 forward競合、停止時`/var/lib/cni/` busyとpod volume unmountが出力され、保持PVC/backupの内容や停止後guestは未照合。これらを完全不変と扱わず、WP local-partialを維持する。private記録は`tmp/local-experiment/policy-live-response-checks/20260928/`。
+
+全回帰121 suites/3808実行＝3800PASS＋8skip、log SHA256 `1cb6a2ae8456275b1bb6d306c0842bfd07b2f245e7b0aca3160a0f2fecefb1ff`。design-context/secret scan、diff check PASS。raw API応答の保存・独立認証ではない。
 
 ## 2026-09-28: saved Policy response-check coverage by producer revision
 

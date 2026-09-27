@@ -5,12 +5,20 @@ title: "WP-L2-POL-001 Policy Gatekeeper Bear"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-28
-version: "0.10"
+version: "0.11"
 area: "workpackage"
 tags: [shirokuma, workpackage, l2, policy]
 ---
 
 # WP-L2-POL-001 Policy Gatekeeper Bear
+
+## 2026-09-28: bounded live allowed-response recheck
+
+停止中の専用`mac-studio-solo`を設定SHA記録後に`--activate=false --save-config=false --ssh-config=false`で一時起動。固定contextのnative policy/binding 16件readyを確認し、適合Pod候補**1件だけ**を候補observerでserver dry-runした。request_count=1、`passed/allowed`、v2 `response_content_check=matched`、Podの前後不存在・policy inventory安定を確認。別のread-only `local-policy-status`では16件のinventory詳細が事前と同一、固定名Podは独立したAPI readでも不存在。Qwen・AgentHouse・CLI全経路は実行せず、policy apply/delete・workload作成なし。private記録は`tmp/local-experiment/policy-live-response-checks/20260928/`。これは**この1回のlive API応答に対するproducer照合**であり、保存物の独立認証、後日のcluster状態、モデル連携、本番受入ではない。WP local-partialを維持する。
+
+通常`colima stop`後に専用profileがStoppedへ戻り、host profile設定SHA不変。起動時にhost TCP 53 forwardのbind競合警告、停止時のk3s killallに`/var/lib/cni/` busy警告とpod volume unmount出力があった。停止前のpolicy inventoryと対象Pod不存在は確認したが、保持PVC/backup内容や停止後のguest状態は独立照合していない。起動に伴う保持workloadの通常稼働やguestの変化まで不変とは主張しない。再実行は新tokenと固定contextで事前inventory確認後のbounded dry-runに限り、未知結果の自動再POSTは行わない。
+
+全回帰`make verify-local-experiment` 121 suites/3808実行＝3800PASS＋8skip、log SHA256 `1cb6a2ae8456275b1bb6d306c0842bfd07b2f245e7b0aca3160a0f2fecefb1ff`。design-context/secret scanとdiff check PASS。live run固有の持続証拠はprivate summary/progressおよび前後inventory/statusで、raw API応答は保存していない。
 
 ## 2026-09-28: saved allowed-response coverage is revision-scoped
 
