@@ -5,7 +5,7 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.5"
+version: "0.6"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
@@ -18,6 +18,14 @@ tags: [shirokuma, wp, l3, warehouse]
 | Level | L3 |
 | Workstream | Warehouse |
 | Depends-on | WP-L3-VW-001, WP-L0-OBS-001 |
+
+## 2026-09-27 archived warehouse RPC status — read-only local increment
+
+`make local-warehouse-session-status WAREHOUSE_LIFECYCLE_RUN_TOKEN=<session-id>`を追加。固定warehouse runs rootの一つのprivate `rpc/journal.json`のみを有界no-followで読み、owner/mode/link/root deviceと読取前後metadata、session/request/response/replyの保存契約を照合する。`recorded_result`は当時のjournalの記録であり、出力の`runtime_state`は**常にunknown**。保留中・失敗・不正/途中変更を成功に昇格させず、欠損/不正は`JOURNAL_UNVERIFIED`で拒否。取引時のreceipt本文・操作の実在・owner最終cleanup・現warehouse readinessを独立証明しない。journal SHAは相関用で署名ではない。
+
+既存短命owner・Go CLI/ query送信の契約を変更せず、owner再起動後の実行再開・再POST・永続queue・自動復旧は未実装。停止中Colimaへ接続/起動せず、既存2件のarchived journalをread-onlyで投影した。記録上の結果は一方が2 actions、他方が4 actions、両方の現状態はunknown。内容SHAとmode/inode/size/mtimeは前後で一致し、credentials・旧run・backupの書換え/削除なし。作業を止めるにはoffline statusコマンドを使わず、旧記録の復元操作は不要。証拠は`tmp/local-experiment/warehouse-session-status-checks/20260927/`。WP local-partial。
+
+warehouse focusedは5 suites/158件すべてPASS。最終全回帰121 suites/3789実行＝3781PASS＋8skip、85.694秒、log SHA256 `1cc7f6a2e0d7f59fa37f234086e8b23716ea442fd39be4be6c5e098909146f0d`。design-context/secret scan PASS。journalの`sha256`は同一保存bytesの相関だけで、同一ユーザー等による偽造や保存後の変化を排除しない。読取に伴うatime影響は除外せず、backup復旧の検証はしていない。
 
 ## 2026-09-18 query-triggered wake plan
 

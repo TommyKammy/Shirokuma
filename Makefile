@@ -693,6 +693,10 @@ local-warehouse-lifecycle-session:
 .PHONY: local-warehouse-query-session
 local-warehouse-query-session:
 	@tools/local_experiment/llm/.venv/bin/python tools/local_experiment/warehouse_lifecycle/session.py run --query-mode --build-token "$(GATEWAY_WAREHOUSE_BUILD_TOKEN)"
+
+.PHONY: local-warehouse-session-status
+local-warehouse-session-status:
+	@$(PYTHON) tools/local_experiment/warehouse_lifecycle/status.py
 local-warehouse-lifecycle-recover:
 	@$(PYTHON) tools/local_experiment/warehouse_lifecycle/run.py recover --run-token "$(WAREHOUSE_LIFECYCLE_RUN_TOKEN)"
 test-local-warehouse-lifecycle:

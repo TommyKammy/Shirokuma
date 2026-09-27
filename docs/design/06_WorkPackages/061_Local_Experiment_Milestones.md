@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "3.93"
+version: "3.94"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: archived warehouse session status without replay
+
+WP-L3-VW-002の既存短命XS sessionにread-onlyのarchived RPC journal status入口を追加。固定root/単一sessionのprivate journalのみ有界no-followで読み、owner/mode/link・request/response/reply/重複・前後metadataを確認。保存`verified/noop/pending`を記録時点の結果として表示し、現runtimeは常にunknown。owner/Trino/k3s接続・新query/scale/再実行・backup変更なし。実保存2journal（記録2/4 actions）を投影し、前後SHAと主要metadataを照合。journalの相関hashは真正なowner・backend結果・最終cleanupの証明ではなく、owner restart recoveryは未達。証拠は`tmp/local-experiment/warehouse-session-status-checks/20260927/`。WP local-partial。
+
+warehouse focused5 suites/158件すべてPASS、全回帰121 suites/3789実行＝3781PASS＋8skip、85.694秒、log SHA256 `1cc7f6a2e0d7f59fa37f234086e8b23716ea442fd39be4be6c5e098909146f0d`。design-context/secret scan PASS。新Make入口はsession IDをrecipeに展開せず環境変数で受け取る。実CLIの現状態unknownと両保存journal SHA不変、専用Colima Stoppedを再確認。atime不変・backup復旧・現backendへの照会は主張しない。
 
 ## 2026-09-27: FinOps saved-history storage scope matrix
 

@@ -53,6 +53,26 @@ cancel an operation already running in the owner. Inspect the private session
 receipt for the final outcome if the owner has closed. Recovery uses the same
 `local-warehouse-lifecycle-recover` target and the session ID as the run token.
 
+### Archived RPC status (read-only)
+
+```sh
+rtk make local-warehouse-session-status WAREHOUSE_LIFECYCLE_RUN_TOKEN=<session-id>
+```
+
+This reads **only** that session's private `rpc/journal.json` under the fixed
+warehouse-lifecycle runs directory. It checks bounded size, ownership, mode,
+single link, exact schema/request IDs, stored replies, and the RPC response
+contract. A saved `verified` result is labeled `recorded_result`, never a fresh
+warehouse observation: `runtime_state` is always `unknown`. A pending journal
+is shown as `pending`, not resumed. A missing, changed or invalid journal fails
+with `JOURNAL_UNVERIFIED` rather than guessing success. The output includes a
+snapshot SHA only for correlation, not authentication or proof that the final
+owner, query or cleanup ran. It does not open credentials, connect to the owner,
+call Trino/Kubernetes, replay SQL, or invoke recovery. Existing session and
+query-mode commands remain unchanged. This does **not** implement owner restart
+recovery or a durable queue. To stop using the view, stop invoking this command;
+no saved run or backup needs to be removed or migrated.
+
 ## Query-triggered wake
 
 The optional query session accepts a fixed caller SELECT after XS is chilled:
