@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-28
-version: "4.9"
+version: "4.10"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-28: retain empty Warehouse socket directory instead of unsafe rmdir
+
+WP-L3-VW-002のsocket終了後、空directoryをpathで`rmdir`する直前の差し替えにより、隔離tempの模擬別dirが消える負例を再現。条件付きinode削除ができないため自動`rmdir`をやめ、所有socketを相対unlink後にprivate directoryを残す。開いた元dirに余分なentryがあれば削除せず終了拒否。同じsession IDは衝突拒否、新UUIDは通常運転。実Unix owner/Go CLIの2経路を確認し、固定IDのtest-owned空dirだけテスト側で検証・削除。保存cleanup claimをhost全path消滅の証明としない。空dirのinode/entry残置・同UID socket entry競合、現在backend/最終cleanup、owner再起動要求回復は未達。保持run/backup/VM不変更、WP local-partial。private記録は`tmp/local-experiment/warehouse-socket-directory-retention-checks/20260928/`。
+
+Warehouse focused143件PASS、最終全回帰121 suites/3815実行＝3807PASS＋8skip、89.155秒、log SHA256 `b0522bf0eef046f6f9fc87b8f88cf636099fc8b4f6a51e8945f2cdbe5af51e88`。design-context/secret scan・diff check PASS、専用Colima Stopped。初回integrationは旧dir不存在期待で失敗し、固定IDの生成済み空dirのみ検証・除去後に新契約へ修正。余分なentryの有界fd走査追加後、全回帰再実行。
 
 ## 2026-09-28: Warehouse session socket close is directory-bound
 

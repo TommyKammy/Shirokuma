@@ -37,6 +37,11 @@ class SessionRPCTest(unittest.TestCase):
             self.assertFalse(self.thread.is_alive(), 'test server did not drain')
         if self.rpc and self.rpc._directory_identity:
             self.rpc.close()
+            directory = self.rpc.socket_directory
+            state = directory.lstat()
+            self.assertEqual((state.st_dev, state.st_ino), self.rpc._directory_identity)
+            self.assertEqual(list(directory.iterdir()), [])
+            directory.rmdir()  # Test-owned disposable directory, not the owner contract.
         self.temp.cleanup()
 
     def request(self, action='chill', request_id=None):
@@ -299,7 +304,8 @@ class SessionRPCTest(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(self.rpc.journal_path.stat().st_mode), 0o600)
         self.stop()
         self.rpc.close()
-        self.assertFalse(self.rpc.socket_directory.exists())
+        self.assertTrue(self.rpc.socket_directory.is_dir())
+        self.assertEqual(list(self.rpc.socket_directory.iterdir()), [])
 
     def test_same_id_different_action_cannot_execute_or_overwrite(self):
         self.start()
@@ -650,6 +656,56 @@ class SessionRPCTest(unittest.TestCase):
                 directory.unlink()
             if moved.exists():
                 moved.rename(directory)
+
+    def test_empty_socket_directory_swap_at_rmdir_does_not_delete_other_directory(self):
+        self.start()
+        self.stop()
+        directory = self.rpc.socket_directory
+        owned_identity = self.rpc._directory_identity
+        moved = directory.with_name(directory.name + '-moved')
+        decoy = self.output / 'decoy'
+        decoy.mkdir(mode=0o700)
+        original_rmdir = Path.rmdir
+        swapped = False
+
+        def swap_at_rmdir(path):
+            nonlocal swapped
+            if path == directory and not swapped:
+                swapped = True
+                directory.rename(moved)
+                decoy.rename(directory)
+            return original_rmdir(path)
+
+        try:
+            with mock.patch.object(Path, 'rmdir', swap_at_rmdir):
+                self.rpc.close()
+            self.assertFalse(swapped, 'close attempted an unsafe path-based rmdir')
+            self.assertTrue(decoy.is_dir())
+            self.assertTrue(directory.is_dir())
+            self.assertEqual(list(directory.iterdir()), [])
+        finally:
+            if swapped:
+                if directory.exists():
+                    directory.rename(decoy)
+                if moved.exists():
+                    moved.rename(directory)
+            if (self.rpc._directory_identity is None and directory.exists()
+                    and (directory.stat().st_dev, directory.stat().st_ino) == owned_identity
+                    and not any(directory.iterdir())):
+                directory.rmdir()  # Only this test's own disposable directory.
+
+    def test_unexpected_socket_directory_entry_is_not_removed_or_accepted(self):
+        self.start()
+        self.stop()
+        foreign = self.rpc.socket_directory / 'other-actor-entry'
+        foreign.write_text('do not remove')
+        try:
+            with self.assertRaisesRegex(R.RPCError, 'SOCKET_DIRECTORY_NOT_EMPTY'):
+                self.rpc.close()
+            self.assertEqual(foreign.read_text(), 'do not remove')
+            self.assertFalse(self.rpc.socket_path.exists())
+        finally:
+            foreign.unlink()  # Only this test's injected disposable entry.
 
     def test_symlink_output_and_socket_directory_are_rejected(self):
         link = self.output / 'link'

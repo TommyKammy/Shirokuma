@@ -40,8 +40,15 @@ private, same-user Unix socket under `/private/tmp/shirokuma-wl-<session-id>`;
 commands cannot select arbitrary endpoints or execute host commands. The owner
 keeps the UID inventory, query ledger, local forwards and telemetry context alive.
 New connections are accepted for up to ten minutes and sixteen connections,
-including retries, after preparation. It removes
-its known resources after a completed wake or when the session stops.
+including retries, after preparation. It cleans up its verified lab resources
+after a completed wake or when the session stops.
+The Unix listener socket is unlinked on close, but its empty private
+`/private/tmp/shirokuma-wl-<session-id>` directory is intentionally retained:
+path-based `rmdir` cannot atomically require the owner's verified inode if a
+same-UID actor replaces the directory. Unexpected entries in the opened owner
+directory fail close without deleting them. A retained empty directory prevents
+reusing that session ID. Do not treat saved cleanup receipts as proof that all
+host paths have been removed, or automatically delete an unverified directory.
 
 Every request has a UUID. If a response is lost, retry with the same
 `--request-id <uuid>` printed by the command; the owner replays its saved response

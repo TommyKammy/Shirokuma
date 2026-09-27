@@ -5,7 +5,7 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-28
-version: "0.15"
+version: "0.16"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
@@ -18,6 +18,14 @@ tags: [shirokuma, wp, l3, warehouse]
 | Level | L3 |
 | Workstream | Warehouse |
 | Depends-on | WP-L3-VW-001, WP-L0-OBS-001 |
+
+## 2026-09-28 safe empty socket directory retention — offline
+
+前増分はsocket `unlink`を元directory fdへ固定したが、その後の空directory `rmdir`はpathで実行していた。隔離tempで元の空dirを退避して同pathに別の空dirを置くと、旧`close()`は模擬別dirを削除。POSIXのpath-based `rmdir`には確認済みinodeとの原子的な一致条件がないため、ownerはsocketを閉じて相対unlinkした後、private `shirokuma-wl-<session-id>` directoryを**自動削除せず残す**。close中に開いた元dirで余分なentryの不在を確認し、存在すれば削除せず`SOCKET_DIRECTORY_NOT_EMPTY`で拒否。通常の新UUID sessionは従来どおり動作し、同IDの再利用は既存dir衝突で拒否。実Unix owner/Go query integrationを2経路で確認し、テストが作成した固定IDの空dirのみowner/inode/mode/空内容を照合してテスト側で除去。実保持run/backup、Colima/SQLには接続せずWP local-partial。
+
+残置は1 sessionあたり空directoryのinode/entryを消費し、OSの一時領域管理に依存する。host backup/exportへの包含は未確認で、保持backupには触れない。保持するrootや別actorのdirを自動cleanupせず、operatorが個別のidentityと使用状況を確認する。既存保存`cleanup.verified`はKubernetes等のowner cleanup claimであり、host上の全path不在や残置dirの独立確認を意味しない。同UID actorによる元dir内socketのcheck/unlink間改変、owner再起動後の未知request回復と現在backend/最終cleanup独立証明は未達。復旧時は新ownerを止め、保存runを残してコードだけ以前のrevisionへ戻し、unknown要求は再POSTしない。private検証は`tmp/local-experiment/warehouse-socket-directory-retention-checks/20260928/`。
+
+Warehouse focused143件PASS、最終全回帰121 suites/3815実行＝3807PASS＋8skip、89.155秒、log SHA256 `b0522bf0eef046f6f9fc87b8f88cf636099fc8b4f6a51e8945f2cdbe5af51e88`。design-context/secret scan・diff check PASS、専用Colima Stopped。初回integrationは旧「dir不存在」期待で失敗し、固定IDの新規空dirだけ検証して除去した後に新契約へ合わせて通過。余分なentry拒否・有界fd走査追加後に全回帰を再実行した。
 
 ## 2026-09-28 descriptor-bound socket unlink on session close — offline
 

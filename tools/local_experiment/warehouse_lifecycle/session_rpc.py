@@ -486,16 +486,16 @@ class SessionRPC:
         if self._directory_identity is not None:
             require(_identity(self.socket_directory, stat.S_ISDIR, 0o700) == self._directory_identity,
                     'SOCKET_DIRECTORY_CHANGED')
-            if self._socket_identity is not None:
-                try:
-                    directory = os.open(self.socket_directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-                except OSError:
-                    raise RPCError('SOCKET_DIRECTORY_CHANGED') from None
-                try:
-                    state = os.fstat(directory)
-                    require((state.st_dev, state.st_ino) == self._directory_identity and
-                            state.st_uid == os.getuid() and stat.S_IMODE(state.st_mode) == 0o700,
-                            'SOCKET_DIRECTORY_CHANGED')
+            try:
+                directory = os.open(self.socket_directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            except OSError:
+                raise RPCError('SOCKET_DIRECTORY_CHANGED') from None
+            try:
+                state = os.fstat(directory)
+                require((state.st_dev, state.st_ino) == self._directory_identity and
+                        state.st_uid == os.getuid() and stat.S_IMODE(state.st_mode) == 0o700,
+                        'SOCKET_DIRECTORY_CHANGED')
+                if self._socket_identity is not None:
                     try:
                         current = os.stat('control.sock', dir_fd=directory, follow_symlinks=False)
                     except OSError:
@@ -506,15 +506,15 @@ class SessionRPC:
                             'SOCKET_IDENTITY_CHANGED')
                     os.unlink('control.sock', dir_fd=directory)
                     self._socket_identity = None
-                    require(_identity(self.socket_directory, stat.S_ISDIR, 0o700) == self._directory_identity,
-                            'SOCKET_DIRECTORY_CHANGED')
-                finally:
-                    os.close(directory)
-            try:
-                self.socket_directory.rmdir()
-            except OSError:
-                raise RPCError('SOCKET_DIRECTORY_NOT_EMPTY') from None
-            self._directory_identity = None
+                with os.scandir(directory) as entries:
+                    require(next(entries, None) is None, 'SOCKET_DIRECTORY_NOT_EMPTY')
+                # rmdir cannot atomically require the verified inode: a same-UID
+                # replacement of this shared-parent path could delete another
+                # empty directory. Retain our private directory instead.
+                require(_identity(self.socket_directory, stat.S_ISDIR, 0o700) == self._directory_identity,
+                        'SOCKET_DIRECTORY_CHANGED')
+            finally:
+                os.close(directory)
 
     def __exit__(self, exc_type, exc, traceback):
         self.close()

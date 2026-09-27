@@ -1,8 +1,10 @@
 """Fixed caller provenance, one POST, failure and owner cleanup boundaries."""
 import copy
 import json
+import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import tempfile
 import threading
@@ -380,10 +382,13 @@ class QueryUnixGoIntegrationTests(unittest.TestCase):
                         item.stop()
                     owner = fixture.owner()
                     ready, errors, results = threading.Event(), [], []
+                    rpc_instances = []
                     def factory(token, output, handler, **options):
                         self.assertTrue(options['allow_query'])
-                        return session_rpc.SessionRPC(token, output, handler, allow_query=True,
+                        rpc = session_rpc.SessionRPC(token, output, handler, allow_query=True,
                             ttl_seconds=15, max_requests=3 if chilled else 1, replay_grace_seconds=2)
+                        rpc_instances.append(rpc)
+                        return rpc
                     owner.rpc_factory = factory
                     owner.announce = lambda value: ready.set()
                     def run():
@@ -429,7 +434,12 @@ class QueryUnixGoIntegrationTests(unittest.TestCase):
                         self.assertTrue(fixture.saved()['cleanup']['verified'])
                         self.assertFalse(bool(fixture.kube.objects))
                         self.assertFalse(fixture.forwards.active)
-                        self.assertFalse((session_rpc.SOCKET_ROOT / ('shirokuma-wl-' + F.TOKEN)).exists())
+                        self.assertEqual(len(rpc_instances), 1)
+                        socket_directory = rpc_instances[0].socket_directory
+                        self.assertEqual((socket_directory.lstat().st_dev, socket_directory.lstat().st_ino),
+                            rpc_instances[0]._directory_identity)
+                        self.assertFalse(rpc_instances[0].socket_path.exists())
+                        self.assertEqual(list(socket_directory.iterdir()), [])
                         if chilled:
                             journal = json.loads((fixture.output / 'rpc/journal.json').read_text())
                             self.assertEqual(len(journal['requests']), 2)
@@ -441,6 +451,16 @@ class QueryUnixGoIntegrationTests(unittest.TestCase):
                         owner.done = True
                         if thread.is_alive():
                             thread.join(20)
+                        if rpc_instances:
+                            rpc = rpc_instances[0]
+                            directory = rpc.socket_directory
+                            if rpc._directory_identity is not None:
+                                state = directory.lstat()
+                                self.assertEqual((state.st_dev, state.st_ino), rpc._directory_identity)
+                                self.assertEqual(state.st_uid, os.getuid())
+                                self.assertEqual(stat.S_IMODE(state.st_mode), 0o700)
+                                self.assertEqual(list(directory.iterdir()), [])
+                                directory.rmdir()  # Only this test's fixed-token disposable directory.
                         fixture.doCleanups()
 
 
