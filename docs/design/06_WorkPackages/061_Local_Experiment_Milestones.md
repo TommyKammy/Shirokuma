@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "3.94"
+version: "3.95"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: archived XS session saved completion correlation
+
+WP-L3-VW-002で既存read-only journal statusへ明示opt-inの最終receipt/operation照合を追加。元statusのJSON bytesは不変。private単一sessionからjournal/receipt/全operationをno-follow boundedで2回照合し、保存closed/passed/cleanup・telemetry claimとoperation raw bytes hash、RPC response/reply・余分なfile不在が揃う場合だけ`correlated-saved-claim`を出す。初回はoperationにないhash field、次は誤ったcanonical hashで拒否されたが、ownerが用いるraw file SHAへ合わせて修正し、保持fileを変更せず実archived2件（operation2/4件）で整合を確認。欠損・改変・矛盾/途中変更は部分JSONなしで拒否する。claimのsourceは同じownerで、**独立実行/cleanup実証ではない**。runtime_state unknown、Colima停止、owner再開/SQL再送/scaleなし、WP local-partial。private証拠は`tmp/local-experiment/warehouse-session-completion-checks/20260927/`。
+
+warehouse focused5 suites/161件すべてPASS、最終全回帰121 suites/3792実行＝3784PASS＋8skip、87.615秒、log SHA256 `c44f9e33dfc479526591b41bda8f69f89e869f556edd9d73ab3c64ea14c5efd1`。design-context/secret scan PASS。元2sessionのjournal/receipt/operation集合・SHA・mode/inode/mtime前後一致、Colima Stopped。atime不変・backup復旧・現backendへの照会は主張しない。
 
 ## 2026-09-27: archived warehouse session status without replay
 

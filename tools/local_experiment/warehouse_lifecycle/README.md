@@ -73,6 +73,24 @@ query-mode commands remain unchanged. This does **not** implement owner restart
 recovery or a durable queue. To stop using the view, stop invoking this command;
 no saved run or backup needs to be removed or migrated.
 
+Opt in to cross-checking a **saved completion claim** against the final owner
+receipt and all referenced operation files:
+
+```sh
+rtk make local-warehouse-session-completion WAREHOUSE_LIFECYCLE_RUN_TOKEN=<session-id>
+```
+
+This rereads the bounded private journal and owner receipt, checks the recorded
+closed/passed/cleanup/telemetry fields, matches each durable RPC response to a
+session request and the exact operation file's raw SHA-256, and rejects extra
+operation files or conflicting replays. Only a fully correlated saved claim
+produces `recorded_completion: correlated-saved-claim`. Absent, incomplete,
+changed, or contradictory evidence fails with `SAVED_COMPLETION_UNVERIFIED`
+and no partial JSON. The files share one original owner; this is **not** an
+independent check of actual cleanup, backend state, audit delivery or execution
+provenance. `runtime_state` stays `unknown`, and nothing is restarted or replayed.
+The original journal-only status command and its output remain unchanged.
+
 ## Query-triggered wake
 
 The optional query session accepts a fixed caller SELECT after XS is chilled:

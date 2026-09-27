@@ -5,7 +5,7 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-18
-version: "0.6"
+version: "0.7"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
@@ -18,6 +18,14 @@ tags: [shirokuma, wp, l3, warehouse]
 | Level | L3 |
 | Workstream | Warehouse |
 | Depends-on | WP-L3-VW-001, WP-L0-OBS-001 |
+
+## 2026-09-27 saved owner completion claim correlation — offline
+
+既存journal-only statusを維持したまま、opt-in `make local-warehouse-session-completion WAREHOUSE_LIFECYCLE_RUN_TOKEN=<session-id>`を追加。固定sessionのprivate最終`receipt.json`、全`operations/<operation-id>.json`とRPC journalを有界no-followで読取・再読し、closed/passed/cleanup・telemetryの保存claim、request/response順、operation結果と**raw file bytes** SHA、reply数と余分なoperation file不在を照合する。欠損・矛盾・途中差替えは部分JSONを出さず`SAVED_COMPLETION_UNVERIFIED`。旧status入口のJSON bytesは変えず、実保存2sessionsは記録2/4 operationsで`correlated-saved-claim`。両セッションの元journal/receipt/operationのSHA、inode/mode/mtimeは前後一致。
+
+初回の新CLIはoperationに存在しない`receipt_sha256`をfile fieldとして比較し拒否。修正後もcanonical dict hashを試して拒否されたが、ownerが実際にはoperation **file生bytes**をhashしていると確認して修正した。失敗を隠さず、既存保存ファイルを再生成・修復せずに成功。`correlated-saved-claim`は**同じownerが残した複数保存物の内部整合のみ**で、実backend query、独立audit delivery、VM/owner現在状態、最終cleanup実施の独立証明ではない。表示`runtime_state=unknown`を維持し、owner再起動・再POST/scale・recoveryなし。Colima停止、保持run/backup変更なし、WP local-partial。使わなければofflineコマンドを呼ばず、移行/削除は不要。private証拠は`tmp/local-experiment/warehouse-session-completion-checks/20260927/`。
+
+warehouse focused5 suites/161件すべてPASS、最終全回帰121 suites/3792実行＝3784PASS＋8skip、87.615秒、log SHA256 `c44f9e33dfc479526591b41bda8f69f89e869f556edd9d73ab3c64ea14c5efd1`。design-context/secret scan PASS。元2sessionのjournal/receipt/operation file集合・SHAとmode/inode/mtimeは前後一致。
 
 ## 2026-09-27 archived warehouse RPC status — read-only local increment
 

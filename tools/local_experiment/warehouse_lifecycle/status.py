@@ -126,13 +126,23 @@ def read(token,root=RUNS):
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('session_id',nargs='?')
+    parser.add_argument('--with-saved-completion',action='store_true')
     args=parser.parse_args(argv)
     # Make exports command-line variables as environment, avoiding token text
     # interpolation into its shell recipe. Direct CLI calls can pass an argument.
     token=args.session_id if args.session_id is not None else os.environ.get('WAREHOUSE_LIFECYCLE_RUN_TOKEN')
-    try: result=read(token)
-    except StatusError:
-        print('JOURNAL_UNVERIFIED',file=sys.stderr);return 1
+    try:
+        result=read(token,RUNS)
+        if args.with_saved_completion:
+            from tools.local_experiment.warehouse_lifecycle import status_completion as completion
+            claim=completion.read(token,RUNS)
+            if result['journal_sha256']!=claim['journal_sha256']:
+                raise StatusError('SAVED_COMPLETION_UNVERIFIED')
+            result.update(claim)
+    except ValueError as error:
+        print(str(error) if str(error) in ('JOURNAL_UNVERIFIED','SAVED_COMPLETION_UNVERIFIED')
+              else 'SAVED_COMPLETION_UNVERIFIED',file=sys.stderr)
+        return 1
     print(json.dumps(result,sort_keys=True,separators=(',',':')))
     return 0
 
