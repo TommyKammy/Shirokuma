@@ -100,7 +100,7 @@ class ServingUsageTests(unittest.TestCase):
         backend.storage.side_effect=RuntimeError('not running')
         backend.docker_storage.side_effect=RuntimeError('not running')
         value=R.collect(backend)
-        self.assertEqual((value['schema_version'],value['host_storage']['schema_version']),(8,4))
+        self.assertEqual((value['schema_version'],value['host_storage']['schema_version']),(9,5))
         self.assertTrue(all(row['usage_state']=='unknown' for row in value['host_storage']['components']))
         with patch.object(H,'collect',side_effect=H.WorkerTimeout()),patch('sys.stdout',new_callable=io.StringIO) as output:
             self.assertEqual(H.main(['--measure-serving-home']),0)

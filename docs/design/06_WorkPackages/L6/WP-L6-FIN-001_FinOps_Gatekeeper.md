@@ -5,12 +5,20 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-27
-version: "0.21"
+version: "0.22"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## Model Serving TMPの独立論理bytes（2026-09-27・v9 local増分）
+
+AgentHouseについて停止中の専用profileの既存記録・設定key名/ファイル種類をread-onlyで再棚卸ししたが、独立して信頼済みのSSH server key bindingや、認証済みguest receiptを返す別経路は確認できなかった。profile設定テキストはkey名を抽出し値を出力・保存・trust採用せず、`vz-identifier`や`guestSocket`設定名をserver認証とはみなさない。別の秘密鍵/credentialファイル、VM disk/iso/guest logは未読。live receipt/保持volume走査を引き続き保留し、独立して進められるServing `TMPDIR/TMP/TEMP`固定rootを選択。
+
+既存Serving ownerと固定environment参照、private0700/root device-inode、process停止を確認してから、no-follow・上限付きの二走査metadata測定をhost schema v5/report v9の**第四行**に追加。停止中の実01はTMP通常ファイル0件/子directory0件/論理0 bytes。別の後続metadata走査も同じで、HOMEは別行0 bytes、MLflow store 1,767,968 bytes・Lab workspace 244,438 bytesは独立したまま。保存v5–v8は元の3行、v1–v4はhost行なしという旧範囲を維持し、旧v8へTMP行を注入しても拒否。全v9レポートは他source未取得で`partial`。TMPは**削除可能量を意味しない**。Serving sibling logs/runtime records/共有model artifacts、物理占有・backup復旧・全component footprintは対象外。Colima/Serving起動・保持データ変更なし、AgentHouse `null / NOT_MEASURED`、WP local-partial。証拠は`tmp/local-experiment/finops-serving-tmp-checks/20260927/`。
+
+focused167件＝160PASS＋Linux専用7skip。全回帰121suites/3782実行＝3774PASS＋8skip（既存1＋Linux専用7）、85.712秒、log SHA256 `57808a4f30c36b962995d901d8ccd4d2da71bbd8fe994adf58aa4f701366ee6b`。design-context/secret scan PASS。保存v8 report原本SHA `5ac068bafbc2f86d49165ba3dee2838f41c48057b12daa32fa1e831e0b2eb71b`不変。v8/v9のoffline HTML/historyとbrowser accessibility tableの4独立行を確認（pixel visual・本番受入ではない）。
 
 ## AgentHouse VM procfs visibility（2026-09-27・offline fixture）
 

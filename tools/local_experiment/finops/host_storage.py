@@ -1,4 +1,4 @@
-"""Three fixed host references and bounded logical-file metadata measurements."""
+"""Fixed host references and bounded logical-file metadata measurements."""
 from __future__ import annotations
 
 import argparse
@@ -18,7 +18,8 @@ from tools.local_experiment.gateway import pod_usage as U
 
 TARGETS = {'mlflow': 'tmp/local-experiment/mlflow-tracking/store',
            'notebook-lab': 'tmp/local-experiment/notebook-lab/workspace',
-           'model-serving': 'tmp/local-experiment/ridge-serving/home'}
+           'model-serving': 'tmp/local-experiment/ridge-serving/home',
+           'model-serving-tmp': 'tmp/local-experiment/ridge-serving/tmp'}
 LIMITS = ['THREE_FIXED_DIRECTORIES_NOT_ALL_HOST_STORAGE',
           'DIRECTORY_REFERENCE_NOT_FILE_OWNERSHIP_OR_EXCLUSIVE_USAGE',
           'DIRECTORY_USED_BYTES_AND_PHYSICAL_OCCUPANCY_NOT_MEASURED',
@@ -36,7 +37,15 @@ SERVING_LIMITS = ['THREE_FIXED_DIRECTORIES_EACH_MEASURED_SEPARATELY_NOT_FULL_COM
                   'SERVING_HOME_EXCLUDES_SIBLING_TMP_LOGS_AND_SHARED_MODEL_ARTIFACTS',
                   'LOGICAL_REGULAR_FILE_SIZE_NOT_ALLOCATED_OR_UNIQUE_PHYSICAL_BYTES',
                   'SYMLINK_HARDLINK_SPECIAL_AND_FOREIGN_DEVICE_REJECTED',
-                  'BOUNDED_TWO_PASS_METADATA_SCAN_NOT_ATOMIC_OR_BACKUP_VALIDATION']
+                   'BOUNDED_TWO_PASS_METADATA_SCAN_NOT_ATOMIC_OR_BACKUP_VALIDATION']
+SERVING_TMP_LIMITS = ['FOUR_FIXED_DIRECTORIES_MEASURED_SEPARATELY_NOT_FULL_COMPONENT_STORAGE',
+                      'SERVING_TMP_LOGICAL_BYTES_NOT_DISPOSABLE_OR_RECLAIMABLE_BYTES',
+                      'SERVING_HOME_AND_TMP_EXCLUDE_SIBLING_LOGS_AND_SHARED_MODEL_ARTIFACTS',
+                      'LOGICAL_REGULAR_FILE_SIZE_NOT_ALLOCATED_OR_UNIQUE_PHYSICAL_BYTES',
+                      'SYMLINK_HARDLINK_SPECIAL_AND_FOREIGN_DEVICE_REJECTED',
+                      'BOUNDED_TWO_PASS_METADATA_SCAN_NOT_ATOMIC_OR_BACKUP_VALIDATION']
+LIMITS_BY_VERSION = {1:LIMITS,2:MEASURED_LIMITS,3:MLFLOW_LIMITS,
+                     4:SERVING_LIMITS,5:SERVING_TMP_LIMITS}
 REASONS_V1 = frozenset(('READ_FAILED', 'READ_LIMIT', 'READ_TIMEOUT', 'CLEANUP_UNVERIFIED',
                         'SCOPE_INVALID', 'TARGET_MISSING', 'IDENTITY_CHANGED', 'SAMPLE_INVALID'))
 REASONS = REASONS_V1 | {'TREE_CHANGED'}
@@ -60,11 +69,16 @@ def unknown(component, reason):
 def selected(component, version):
     return (component == 'notebook-lab' or
             (version >= 3 and component == 'mlflow') or
-            (version >= 4 and component == 'model-serving'))
+            (version >= 4 and component == 'model-serving') or
+            (version >= 5 and component == 'model-serving-tmp'))
+
+
+def targets(version):
+    return list(TARGETS) if version >= 5 else list(TARGETS)[:3]
 
 
 def measured_row(row, *, version=2):
-    require(version in (2,3,4))
+    require(version in (2,3,4,5))
     row = deepcopy(row)
     measured = selected(row['component'], version)
     row.update(usage_state='unknown' if measured and row['state'] == 'unknown'
@@ -104,9 +118,14 @@ def snapshot(component):
         owner = L._owner()
         require(L.STATE/'workspace' == ROOT/TARGETS[component] and
                 L._config(L._token())['ServerApp']['root_dir'] == str(L.STATE/'workspace'))
-    else:
+    elif component == 'model-serving':
         owner = S._owner()
         require(S.STATE/'home' == ROOT/TARGETS[component] and S.environment()['HOME'] == str(S.STATE/'home'))
+    else:
+        owner = S._owner()
+        env=S.environment()
+        require(S.STATE/'tmp' == ROOT/TARGETS[component] and
+                all(env[key] == str(S.STATE/'tmp') for key in ('TMPDIR','TMP','TEMP')))
     return dict(owner_sha256=_digest(owner), directory_identity=_directory(ROOT/TARGETS[component]))
 
 
@@ -118,15 +137,19 @@ def project(component, before, after, *, request_started_at, observed_at):
     row.update(state='observed', reason=None, owner_sha256=before.get('owner_sha256'),
                directory_identity=before.get('directory_identity'),
                request_started_at=start[0], observed_at=end[0])
-    return validate_row(row)
+    # The fourth reference exists only in v5. Validate its reference fields
+    # before attaching usage without admitting it to saved v1-v4 reports.
+    return validate_row(row,allow_tmp_reference=True)
 
 
-def validate_row(row, *, version=1):
-    require(version in (1,2,3,4))
+def validate_row(row, *, version=1, allow_tmp_reference=False):
+    require(version in LIMITS_BY_VERSION)
     measured = selected(row.get('component'), version)
     require(type(row) is dict and row.get('component') in TARGETS and
             set(row) == set(measured_row(unknown('mlflow', 'READ_FAILED')) if version >= 2 else unknown('mlflow', 'READ_FAILED')) and
-            row['directory'] == TARGETS[row['component']] and
+             (row['component'] in targets(version) or
+              version == 1 and allow_tmp_reference and row['component'] == 'model-serving-tmp') and
+             row['directory'] == TARGETS[row['component']] and
              (row['used_bytes'] is None if version == 1 or not measured or
              row['state'] == 'unknown' else True) and
             (row['usage_reason'] == 'NOT_MEASURED' if version == 1 else True))
@@ -177,25 +200,26 @@ def validate_row(row, *, version=1):
 
 def validate(value):
     require(type(value) is dict and set(value) == {'schema_version','components','limits'} and
-            type(value['schema_version']) is int and value['schema_version'] in (1,2,3,4) and
-            value['limits'] == {1:LIMITS,2:MEASURED_LIMITS,3:MLFLOW_LIMITS,4:SERVING_LIMITS}[value['schema_version']] and type(value['components']) is list and
-            len(value['components']) == len(TARGETS))
-    require([r.get('component') for r in value['components']] == list(TARGETS))
+            type(value['schema_version']) is int and value['schema_version'] in LIMITS_BY_VERSION and
+            value['limits'] == LIMITS_BY_VERSION[value['schema_version']] and type(value['components']) is list and
+            len(value['components']) == len(targets(value['schema_version'])))
+    require([r.get('component') for r in value['components']] == targets(value['schema_version']))
     return dict(schema_version=value['schema_version'], components=[validate_row(r, version=value['schema_version'])
             for r in value['components']], limits=value['limits'][:])
 
 
 def unknown_all(reason, *, version=1):
-    require(version in (1,2,3,4))
+    require(version in LIMITS_BY_VERSION)
     return dict(schema_version=version, components=[measured_row(unknown(n,reason),version=version) if version >= 2 else unknown(n,reason)
-                for n in TARGETS], limits={1:LIMITS,2:MEASURED_LIMITS,3:MLFLOW_LIMITS,4:SERVING_LIMITS}[version][:])
+                for n in targets(version)], limits=LIMITS_BY_VERSION[version][:])
 
 
-def collect(backend, *, measure=False, measure_mlflow=False, measure_serving=False):
-    require((not measure_mlflow or measure) and (not measure_serving or measure_mlflow))
-    version = 4 if measure_serving else 3 if measure_mlflow else 2 if measure else 1
+def collect(backend, *, measure=False, measure_mlflow=False, measure_serving=False, measure_serving_tmp=False):
+    require((not measure_mlflow or measure) and (not measure_serving or measure_mlflow) and
+            (not measure_serving_tmp or measure_serving))
+    version = 5 if measure_serving_tmp else 4 if measure_serving else 3 if measure_mlflow else 2 if measure else 1
     rows = []
-    for component in TARGETS:
+    for component in targets(version):
         try:
             started = backend.now(); before = backend.snapshot(component)
             attempt_start = outcome = attempt_end = None
@@ -205,7 +229,8 @@ def collect(backend, *, measure=False, measure_mlflow=False, measure_serving=Fal
                 failure = 'READ_FAILED'
                 attempt_start = backend.now()
                 try:
-                    method = (backend.measure_mlflow if component == 'mlflow' else
+                    method = (backend.measure_serving_tmp if component == 'model-serving-tmp' else
+                              backend.measure_mlflow if component == 'mlflow' else
                               backend.measure_serving if component == 'model-serving' else backend.measure_workspace)
                     outcome = method(int(before['directory_identity']['device']),
                                      int(before['directory_identity']['inode']))
@@ -228,7 +253,7 @@ def collect(backend, *, measure=False, measure_mlflow=False, measure_serving=Fal
             code = str(error) if isinstance(error, HostStorageError) and str(error) in REASONS else 'READ_FAILED'
             rows.append(measured_row(unknown(component,code),version=version) if measure else unknown(component,code))
     return validate(dict(schema_version=version,components=rows,
-                          limits={1:LIMITS,2:MEASURED_LIMITS,3:MLFLOW_LIMITS,4:SERVING_LIMITS}[version][:]))
+                          limits=LIMITS_BY_VERSION[version][:]))
 
 
 class Backend:
@@ -248,6 +273,10 @@ class Backend:
     def measure_serving(device, inode):
         from tools.local_experiment.finops import workspace_usage as W
         return W.measure(ROOT/TARGETS['model-serving'],device=device,inode=inode)
+    @staticmethod
+    def measure_serving_tmp(device, inode):
+        from tools.local_experiment.finops import workspace_usage as W
+        return W.measure(ROOT/TARGETS['model-serving-tmp'],device=device,inode=inode)
 
 
 def main(argv=None):
@@ -255,18 +284,20 @@ def main(argv=None):
     parser.add_argument('--measure-workspace',action='store_true')
     parser.add_argument('--measure-mlflow-store',action='store_true')
     parser.add_argument('--measure-serving-home',action='store_true')
+    parser.add_argument('--measure-serving-tmp',action='store_true')
     args=parser.parse_args(argv)
     original = None
-    if args.measure_workspace or args.measure_mlflow_store or args.measure_serving_home:
+    if args.measure_workspace or args.measure_mlflow_store or args.measure_serving_home or args.measure_serving_tmp:
         original = signal.getsignal(signal.SIGALRM)
         def timeout(*_): raise WorkerTimeout()
         signal.signal(signal.SIGALRM,timeout)
         signal.setitimer(signal.ITIMER_REAL,18)
     try:
-        try: value = collect(Backend(),measure=args.measure_workspace or args.measure_mlflow_store or args.measure_serving_home,
-                             measure_mlflow=args.measure_mlflow_store or args.measure_serving_home,
-                             measure_serving=args.measure_serving_home)
-        except WorkerTimeout: value = unknown_all('READ_TIMEOUT',version=4 if args.measure_serving_home else 3 if args.measure_mlflow_store else 2)
+        try: value = collect(Backend(),measure=args.measure_workspace or args.measure_mlflow_store or args.measure_serving_home or args.measure_serving_tmp,
+                             measure_mlflow=args.measure_mlflow_store or args.measure_serving_home or args.measure_serving_tmp,
+                             measure_serving=args.measure_serving_home or args.measure_serving_tmp,
+                             measure_serving_tmp=args.measure_serving_tmp)
+        except WorkerTimeout: value = unknown_all('READ_TIMEOUT',version=5 if args.measure_serving_tmp else 4 if args.measure_serving_home else 3 if args.measure_mlflow_store else 2)
     finally:
         if original is not None:
             signal.setitimer(signal.ITIMER_REAL,0)

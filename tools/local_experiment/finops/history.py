@@ -91,7 +91,7 @@ def _identities(report):
                       if item['state'] == 'observed' else '未取得')
             if 'usage_state' in item and item['usage_basis'] is not None:
                 label = {'mlflow':'MLflow store','notebook-lab':'Workspace',
-                         'model-serving':'Serving HOME'}[item['component']]
+                         'model-serving':'Serving HOME','model-serving-tmp':'Serving TMP'}[item['component']]
                 detail += (' · ' + label + ' logical regular-file bytes: ' + H._e(item['used_bytes'])
                            + ' · files ' + str(item['regular_file_count']) + ' / directories ' + str(item['directory_count'])
                            + ' · ' + H._time(item['usage_started_at']) + ' → ' + H._time(item['usage_observed_at'])

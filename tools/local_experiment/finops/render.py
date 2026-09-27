@@ -17,7 +17,8 @@ MAX_INPUT_BYTES = C.MAX_PUBLIC_BYTES
 ERROR = 'FINOPS_REPORT_INVALID'
 NAMES = {'host': 'macOS · 作業領域', 'colima': 'Colima · Kubernetes保存領域',
          'trino': 'Trino', 'polaris': 'Polaris', 'seaweedfs': 'SeaweedFS',
-         'mlflow': 'MLflow', 'notebook-lab': 'JupyterLab', 'model-serving': 'Model Serving'}
+          'mlflow': 'MLflow', 'notebook-lab': 'JupyterLab', 'model-serving': 'Model Serving',
+          'model-serving-tmp': 'Model Serving TMP'}
 SEVERITIES = {'normal': ('normal', '25%超'), 'warning': ('warning', '注意 · 25%以下'),
               'low': ('warning', '残量低下 · 20%以下'), 'critical': ('critical', '要対応 · 15%以下'),
               'unknown': ('unknown', '未取得')}
@@ -242,7 +243,8 @@ def _docker_storage(report):
 
 def _host_storage(report):
     if 'host_storage' not in report: return ''
-    names = {'mlflow':'MLflow','notebook-lab':'Notebook Lab','model-serving':'Model Serving'}
+    names = {'mlflow':'MLflow','notebook-lab':'Notebook Lab','model-serving':'Model Serving',
+             'model-serving-tmp':'Model Serving TMP'}
     rows = []
     for item in report['host_storage']['components']:
         detail = (_e(item['directory']) if item['state'] == 'observed' else '未取得' + _reason(item['reason']))
@@ -253,8 +255,13 @@ def _host_storage(report):
                          + f'<span class="sub">通常ファイル {item["regular_file_count"]}件 / 子ディレクトリ {item["directory_count"]}件'
                          + ' · ' + _time(item['usage_started_at']) + ' → ' + _time(item['usage_observed_at']) + '</span>')
             else: usage = '未取得' + _reason(item['usage_reason'])
-        rows.append(f'<tr><th scope="row">{names[item["component"]]}</th><td>{detail}</td><td>{usage}</td></tr>')
-    note = ('Serving HOME、MLflow store、Lab workspaceは別々の通常ファイルst_size合計です。'
+        label = ('Model Serving HOME' if report['schema_version'] == 9 and item['component'] == 'model-serving'
+                 else names[item['component']])
+        rows.append(f'<tr><th scope="row">{label}</th><td>{detail}</td><td>{usage}</td></tr>')
+    note = ('Serving HOME/TMP、MLflow store、Lab workspaceは別々の通常ファイルst_size合計です。'
+             'TMPの論理bytesは削除可能量ではなく、sibling logs・共有モデルartifactや物理占有・backup復旧は対象外です。'
+             if report['schema_version'] == 9 else
+             'Serving HOME、MLflow store、Lab workspaceは別々の通常ファイルst_size合計です。'
              'Servingの一時領域・logs・共有モデルartifactを含まず、全体量・backup復旧・物理占有を示しません。'
              if report['schema_version'] == 8 else
              'MLflow storeとLab workspaceの論理bytesは通常ファイルのst_size合計で、SQLite DBの整合性・'
@@ -265,7 +272,8 @@ def _host_storage(report):
             else 'このschemaでは配下ファイルの実使用bytesは未計測です。')
     return ('<section id="host-storage"><h2>固定ホストディレクトリ参照</h2>'
             '<p>設定と所有記録、および対象ディレクトリ自体のidentityを確認した範囲です。' + note + '</p>'
-            + _table('3つの固定ディレクトリ。cacheや一時領域を含む全ホスト保存領域ではありません。',
+             + _table(('4つの固定ディレクトリ。全ホスト保存領域ではありません。' if report['schema_version'] == 9
+                       else '3つの固定ディレクトリ。cacheや一時領域を含む全ホスト保存領域ではありません。'),
                      ['対象','固定保存先','実使用量'],rows) + '</section>')
 
 
@@ -312,10 +320,11 @@ def render(report):
                 if report['schema_version'] >= 2 else '固定3サービス、2ファイルシステム、24時間の宣言event')
     if report['schema_version'] >= 3: coverage += '、固定4workloadのPVC参照'
     if report['schema_version'] >= 4: coverage += '、AgentHouseの固定Docker volume参照'
-    if report['schema_version'] >= 5: coverage += '、固定3ホストディレクトリ参照'
+    if report['schema_version'] >= 5: coverage += '、固定' + ('4' if report['schema_version'] == 9 else '3') + 'ホストディレクトリ参照'
     if report['schema_version'] == 6: coverage += '、Lab workspaceの限定論理bytes'
     if report['schema_version'] == 7: coverage += '、Lab workspaceとMLflow storeの個別論理bytes'
     if report['schema_version'] == 8: coverage += '、Lab workspace・MLflow store・Serving HOMEの個別論理bytes'
+    if report['schema_version'] == 9: coverage += '、Lab workspace・MLflow store・Serving HOME/TMPの個別論理bytes'
     return f'''<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><title>実験環境の容量と使用量 | Shirokuma</title><style>{STYLE}</style></head>

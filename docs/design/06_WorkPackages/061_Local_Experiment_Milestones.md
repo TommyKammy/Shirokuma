@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "3.91"
+version: "3.92"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: FinOps separate Serving TMP logical bytes (v9)
+
+AgentHouseのlive依存項目を進める前に停止中専用profileの既存保存物の名前とconfig keyをread-only棚卸し。設定テキストの値は出力・保存・trust採用せず、別の秘密鍵/credentialファイルやVM disk/iso/guest logは未読。信頼済みSSH server key bindingや認証済みguest制御経路は得られず、`guestSocket`/VM identifierを真正性の証拠としない。別のWP-L6-FIN-001固定Serving `TMPDIR/TMP/TEMP`保存先でowner/config/0700/root identityと所有process停止を照合し、host schema v5/report v9の第四行としてbounded二走査通常ファイル`st_size`を独立観測。実01は通常ファイル0件/子directory0件/論理0 bytes、後続独立metadata走査も一致。HOME 0、Lab244,438、MLflow1,767,968 bytesは別行であり合算しない。保存v5–v8は元の3行、v1–v4はhost行なしを維持、全v9 reportはpartial。TMPの0は削除可能量・Serving全体・物理占有/backupの0を示さない。Colimaは停止のまま、サービス起動・SSH・保持AgentHouse volume走査なし、AgentHouse bytesは`null / NOT_MEASURED`。private証拠は`tmp/local-experiment/finops-serving-tmp-checks/20260927/`。WP local-partial。
+
+focused167件＝160PASS＋Linux専用7skip、全回帰121suites/3782実行＝3774PASS＋8skip（既存1＋Linux専用7）、85.712秒、log SHA256 `57808a4f30c36b962995d901d8ccd4d2da71bbd8fe994adf58aa4f701366ee6b`。design-context/secret scan PASS。回帰後TMP root identity・Serving/Colima停止・保存v8原本SHA `5ac068bafbc2f86d49165ba3dee2838f41c48057b12daa32fa1e831e0b2eb71b`不変。v8→v9の静的HTML/historyとbrowser accessibility tableで4行の分離を確認（pixel visualの受入ではない）。
 
 ## 2026-09-27: AgentHouse VM procfs visibility fixture contract
 

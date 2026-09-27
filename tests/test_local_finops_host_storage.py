@@ -19,14 +19,15 @@ class HostStorageTests(unittest.TestCase):
         backend=Mock();backend.now.return_value=NOW;backend.snapshot.return_value=identity()
         result=H.collect(backend)
         self.assertEqual([c.args[0] for c in backend.snapshot.call_args_list],
-                         [x for component in H.TARGETS for x in (component,component)])
-        self.assertEqual([x['directory'] for x in result['components']],list(H.TARGETS.values()))
+                          [x for component in H.targets(1) for x in (component,component)])
+        self.assertEqual([x['directory'] for x in result['components']],
+                         [H.TARGETS[component] for component in H.targets(1)])
         self.assertTrue(all(x['state']=='observed' and x['used_bytes'] is None and
                             x['usage_reason']=='NOT_MEASURED' for x in result['components']))
         self.assertNotIn(str(H.ROOT),json.dumps(result))
 
     def test_owner_or_directory_identity_drift_and_invalid_public_shape(self):
-        for component in H.TARGETS:
+        for component in H.targets(1):
             before=identity();after=deepcopy(before);after['directory_identity']['inode']='43'
             with self.assertRaisesRegex(H.HostStorageError,'IDENTITY_CHANGED'):
                 H.project(component,before,after,request_started_at=NOW,observed_at=NOW)
@@ -60,7 +61,7 @@ class HostStorageTests(unittest.TestCase):
             self.assertEqual(args[1:3],['-I','-B'])
             self.assertTrue(args[0].endswith('/notebook_lab/.venv/bin/python'))
             self.assertTrue(args[3].endswith('/finops/host_storage.py'))
-            self.assertEqual(args[4:],["--measure-serving-home"])
+            self.assertEqual(args[4:],["--measure-serving-tmp"])
             self.assertNotIn('start',args)
 
     def test_public_v5_history_and_v4_absence(self):

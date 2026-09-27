@@ -41,7 +41,7 @@ def docker_storage_complete():
 
 def host_storage_complete():
     rows=[]
-    for component in R.H.TARGETS:
+    for component in R.H.targets(1):
         entry=R.H.unknown(component,'READ_FAILED')
         entry.update(state='observed',reason=None,owner_sha256='a'*64,
                      directory_identity={'device':'1','inode':'42'},

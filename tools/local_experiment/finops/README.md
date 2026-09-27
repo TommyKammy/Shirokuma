@@ -1,14 +1,15 @@
 # Local resource and inference report
 
 The FinOps collector reads the existing Shirokuma lab and returns one JSON
-report. Fresh reports use schema version 8 and cover the fixed Trino, Polaris
+report. Fresh reports use schema version 9 and cover the fixed Trino, Polaris
 and SeaweedFS containers; the owned local MLflow, JupyterLab and Model Serving
 processes; the workspace and dedicated Colima filesystems; and the last 24 hours
 of declared inference records in AgentHouse. A bounded read-only Kubernetes
 storage reference inventory covers SeaweedFS, Polaris PostgreSQL, Polaris and
 Trino, plus one fixed AgentHouse Docker named-volume reference and three fixed
-host directory references. The Notebook Lab workspace, MLflow store and Model
-Serving HOME have separate bounded logical-file-byte measurements. Saved version 1–7 reports
+host directory references (four as of v9). The Notebook Lab workspace, MLflow
+store, Model Serving HOME and Serving TMP have separate bounded logical-file-byte
+measurements. Saved version 1–8 reports
 retain their original coverage.
 
 ```sh
@@ -29,7 +30,7 @@ one JSON array and render it offline:
 rtk proxy make local-finops-history < selected.json > history.html
 ```
 
-The selection must contain full v1/v2/v3/v4/v5/v6/v7/v8 report objects, not file paths. No
+The selection must contain full v1/v2/v3/v4/v5/v6/v7/v8/v9 report objects, not file paths. No
 directory search, file opening, service start, collection or automatic refresh
 occurs. Input is capped at 8 × 256 KiB plus array framing and output at 4 MiB;
 invalid or duplicate-key inputs fail without partial HTML. The view sorts by
@@ -241,6 +242,28 @@ enumeration may change access metadata depending on filesystem policy; the
 worker intentionally reads metadata only but does not claim unchanged atime.
 Host storage schema v4/report v8 adds this one row; saved v1–v7 semantics and
 historical unmeasured labels remain unchanged. Do not sum the three rows.
+
+## Model Serving TMP logical regular-file bytes (v9)
+
+The serving owner and fixed `environment()` values for `TMPDIR`, `TMP` and
+`TEMP` identify `tmp/local-experiment/ridge-serving/tmp`. The same bounded,
+two-pass, descriptor-relative metadata scanner counts its regular-file
+`st_size` separately from Serving HOME, Notebook Lab and MLflow store. The
+verified private 0700 directory may be empty and report `"0"` with zero files
+and child directories. Hidden/old/cache files count if accepted. A missing
+directory, symlink, hardlink, special entry, foreign owner/device, tree drift
+or exceeded bound produces unknown, not zero; other valid rows may remain.
+The 18-second worker alarm covers all four rows and can invalidate them all.
+
+The name `TMP` is a configured launch directory, **not** an instruction to
+delete anything. Logical bytes do not imply disposable/reclaimable bytes.
+Serving logs, sibling records, shared model artifacts, APFS physical/unique
+allocation, backup integrity and recovery remain outside this observation.
+No content is opened and no runtime is started. Host schema v5/report v9 adds
+this fourth row; saved v5–v8 keep their three-row coverage and v1–v4 still have
+no host directory rows. Neither
+Serving row is a complete component footprint, and the four rows are not a
+platform total.
 
 Create reports in a private directory with `umask 077`. The HTML renderer reads
 only the supplied JSON, validates its report contract, and performs no new
