@@ -5,12 +5,22 @@ title: "FinOps Gatekeeper with inference and disk watermark cost"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-27
-version: "0.22"
+version: "0.23"
 area: "workpackage"
 tags: [shirokuma, wp, l6, finops]
 ---
 
 # FinOps Gatekeeper with inference and disk watermark cost
+
+## 保存レポートの保存領域観測範囲表（2026-09-27・offline履歴）
+
+保存v1–v9の履歴HTMLにAgentHouse Docker volume、MLflow store、Notebook Lab workspace、Serving HOME/TMPの固定5行×選択観測の範囲表を追加。各reportのvalidated JSONだけで、schema対象外・参照未取得・参照確認/未計測・論理bytes未取得・観測した通常ファイル`st_size`を分ける。0は**当該directoryの実際に保存された論理0**のセルだけに表示。AgentHouseのvolumeは参照が成功していても使用量`NOT_MEASURED`を維持。合計/増減、観測間の連続性、TMP削除可能量、物理占有、backupは推定しない。公開schema・collector・保存JSONは変更せず、選択2–8報をoffline表示するだけ。
+
+実v8/v9保存レポートをread-onlyでレンダリングし、v8ではServing TMPがschema対象外、v9では論理0 bytes、AgentHouseは両方`READ_FAILED / NOT_MEASURED`の別セルとなることをbrowser accessibility tableでも確認。保存原本SHA256 v8 `5ac068bafbc2f86d49165ba3dee2838f41c48057b12daa32fa1e831e0b2eb71b`、v9 `d6f188631b4fd446bd3a8f4472fded5475e430cb489ccd81174a0a68d1a176a6`の一致を前後で確認。見た目のpixel受入・実VM認証・保持volume数値化ではない。Colima/Serving起動・runtime変更なし、AgentHouse `null / NOT_MEASURED`、WP local-partial。private証拠は`tmp/local-experiment/finops-history-coverage-checks/20260927/`。
+
+保存データ・backup/exportへの変更なし。scope表を使わない場合はrendererの呼出しを止めればよく、回復のために保存reportやbackupを削除・再作成しない。旧schemaで参照失敗した対象を「測定失敗」へ誤昇格させない負例も固定した。
+
+focused171件＝164PASS＋Linux専用7skip。全回帰121suites/3786実行＝3778PASS＋8skip（既存1＋Linux専用7）、87.537秒、最終log SHA256 `c1cf06b26ad3ff467147353280a8af2ca79f7a03e8debac307d812f71a19cdbc`。design-context/secret scan PASS。private HTMLは32,268 bytes、SHA256 `22d4b9d80fc145fba270cc169ad7f8df76a1c6b6d428a40a3e97f6956a354d84`。
 
 ## Model Serving TMPの独立論理bytes（2026-09-27・v9 local増分）
 

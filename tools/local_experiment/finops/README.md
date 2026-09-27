@@ -44,6 +44,17 @@ presented as a current alert. Keep the selected array and generated HTML in a
 private directory (0700/0600); do not commit generated evidence. Stop using the
 view by deleting no data and simply not invoking the renderer.
 
+The history page also displays a fixed five-row **storage observation-scope
+matrix** across the selected reports: AgentHouse Docker volume, MLflow store,
+Notebook Lab workspace, Serving HOME and Serving TMP. Each cell distinguishes
+schema absence, failed reference, verified reference with no measurement,
+failed logical measurement and an observed regular-file `st_size` (including an
+actual zero). A Docker reference is always unmeasured, even if its container
+metadata was observed. It does not compute totals or differences, infer changes
+between samples, identify disposable TMP bytes, or establish physical usage and
+backup integrity. The matrix is only an offline rendering of validated saved
+reports; it does not change their schema or their recorded values.
+
 On 2026-09-25, with Colima stopped, the read-only v2 CLI produced `partial`:
 three owned local groups were `STOPPED` with null usage; Kubernetes/Colima and
 inference were unavailable, while host disk was observed. `make` returned 2

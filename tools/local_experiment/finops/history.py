@@ -102,6 +102,44 @@ def _identities(report):
     return H._table('保存された対象identity。digest一致は期間中の連続稼働の証明ではありません。', ['対象', '保存identity / 範囲'], rows)
 
 
+def _storage_coverage(entries):
+    """Per-report scope only: no totals, deltas or claims between samples."""
+    targets = (('docker','AgentHouse Docker volume'),('mlflow','MLflow store'),
+               ('notebook-lab','Notebook Lab workspace'),('model-serving','Serving HOME'),
+               ('model-serving-tmp','Serving TMP'))
+
+    def cell(report, component):
+        if component == 'docker':
+            if 'docker_storage' not in report: return 'このschemaには含まれません'
+            item=report['docker_storage']['agenthouse']
+            return ('参照確認 / 使用量未計測（NOT_MEASURED）' if item['state']=='observed' else
+                    '参照未取得 / 使用量未計測（NOT_MEASURED）'+H._reason(item['reason']))
+        if 'host_storage' not in report: return 'このschemaには含まれません'
+        item=next((row for row in report['host_storage']['components']
+                   if row['component']==component),None)
+        if item is None: return 'このschemaには含まれません'
+        if item['state']=='unknown':
+            return ('参照未取得 / '+('未計測（NOT_MEASURED）' if item.get('usage_basis') is None
+                    else '論理bytes未取得') + H._reason(item['reason']))
+        if item.get('usage_basis') is None: return '参照確認 / 未計測（NOT_MEASURED）'
+        if item['usage_state']=='unknown':
+            return '参照確認 / 論理bytes未取得'+H._reason(item['usage_reason'])
+        return ('参照確認 / 論理 '+H._e(item['used_bytes'])+' bytes'
+                +f'<span class="sub">通常ファイル {item["regular_file_count"]}件 / 子ディレクトリ {item["directory_count"]}件</span>')
+
+    rows=[]
+    for component,label in targets:
+        rows.append('<tr><th scope="row">'+H._e(label)+'</th>'+''.join(
+            '<td>'+cell(report,component)+'</td>' for _,(report,_) in entries)+'</tr>')
+    headers=['対象']+[f'#{order} / v{pair[1][0]["schema_version"]}'
+                    for order,pair in enumerate(entries,1)]
+    return ('<section id="storage-coverage"><h2>保存領域の観測範囲</h2>'
+            '<p>選択した各レポートの記録範囲だけを並べます。対象外・未取得・未計測と論理0 bytesは異なります。'
+            '合計・増減・連続稼働・削除可能量は判定しません。</p>'
+            +H._table('保存した各観測の固定保存領域の範囲。合計や差分ではありません。',headers,rows)
+            +'</section>')
+
+
 def render(entries):
     if type(entries) is not list or not 2 <= len(entries) <= MAX_REPORTS: raise HistoryError()
     sections, navigation = [], []
@@ -140,9 +178,9 @@ def render(entries):
 <meta name="referrer" content="no-referrer"><title>保存FinOps観測履歴 | Shirokuma</title><style>{H.STYLE}</style></head>
 <body><header><div class="inner"><p class="brand">Shirokuma · Local experiment</p><h1>保存FinOps観測履歴</h1>
 <p class="intro">明示選択した保存値のみ。並びは観測時刻の昇順で、現在の稼働や期間中の変化を示しません。</p>
-<nav aria-label="保存観測へ移動">{''.join(navigation)}</nav></div></header>
+    <nav aria-label="保存観測へ移動"><a href="#storage-coverage">保存領域の範囲</a>{''.join(navigation)}</nav></div></header>
 <main><div class="notice"><p>数値の差分・合計は算出しません。CPUは別々の短い観測区間です。RSSの共有ページとコンテナworking set、ホストとColimaの空き容量を合算しません。</p>
-<p>disk助言は観測当時のもので現在の警報ではありません。宣言eventは実呼出し数とは限らず、費用見積りは通貨未記録です。</p></div>{''.join(sections)}</main>
+<p>disk助言は観測当時のもので現在の警報ではありません。宣言eventは実呼出し数とは限らず、費用見積りは通貨未記録です。</p></div>{_storage_coverage(entries)}{''.join(sections)}</main>
 <footer>保存JSONの表示専用。自動収集・更新・停止・予算変更は行いません。見た目のブラウザ検証は別の受入です。</footer></body></html>'''
     if len(html.encode('utf-8')) > MAX_OUTPUT_BYTES: raise HistoryError()
     return html

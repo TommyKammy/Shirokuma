@@ -5,12 +5,20 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "3.92"
+version: "3.93"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: FinOps saved-history storage scope matrix
+
+WP-L6-FIN-001のoffline履歴に固定5対象×選択2–8保存観測の横比較表を追加。保存v1–v9のvalidated JSONのみを使い、schema不在、参照失敗、参照確認/未計測、論理bytes失敗、測定済み`st_size`（真の0を含む）を分離。AgentHouse Docker volumeの使用bytesは常に`NOT_MEASURED`。合計・delta・観測間継続・物理占有・TMP削除可能量・backup整合性の推定はしない。実v8/v9をoffline CLI/HTMLとbrowser accessibility tableで照合し、TMPの「旧schemaには存在しない」と「新観測の論理0」を分離、原本v8/v9 SHA不変。公開schema/collector/元のreport/runtimeに変更なし。Colima/Servingは起動せず保持volume未読、WP local-partial。private証拠は`tmp/local-experiment/finops-history-coverage-checks/20260927/`。
+
+新規fixtureの初回focused実行は`observed_at`だけを改変した無効レポートが既存public時刻契約に拒否されて失敗。契約は緩めず、等時刻の安定したselection順を試すfixtureへ修正して再実行した。旧schemaの参照失敗は測定未実施のままとする負例も追加。停止中の保存JSON/backupに回復変更は不要で、表示をやめるにはoffline履歴CLIを呼び出さない。
+
+focused171件＝164PASS＋Linux専用7skip、全回帰121suites/3786実行＝3778PASS＋8skip（既存1＋Linux専用7）、87.537秒、最終log SHA256 `c1cf06b26ad3ff467147353280a8af2ca79f7a03e8debac307d812f71a19cdbc`。design-context/secret scan PASS。実v8/v9保存JSON SHAの前後一致を記録し、静的HTMLは32,268 bytes、SHA256 `22d4b9d80fc145fba270cc169ad7f8df76a1c6b6d428a40a3e97f6956a354d84`。
 
 ## 2026-09-27: FinOps separate Serving TMP logical bytes (v9)
 
