@@ -110,6 +110,22 @@ are passed through environment variables, not interpolated into a shell recipe.
 The old all-entries status output remains byte-identical; the optional saved
 completion claim refers to its entire session, never an absent request ID.
 
+The same archived request can be inspected from the Go CLI while in this checkout:
+
+```sh
+rtk proxy go run ./cmd/shirokuma warehouse saved-request \
+  --session <session-id> --request-id <original-request-uuid> \
+  --profile local-experiment
+```
+
+This is a separate command from live `warehouse query`. It starts only the fixed
+offline status script with validated IDs using the dedicated local Python, with
+no inherited environment or socket client. The CLI checks the bounded report's
+identity and `runtime_state=unknown` and emits no partial JSON on child failure.
+Use `--repo-root` only if running outside the checkout. Missing UUIDs still
+mean `not-recorded-in-snapshot`, **not** proof of non-execution. No owner recovery,
+SQL retry, backend observation or cleanup verification is performed.
+
 ## Query-triggered wake
 
 The optional query session accepts a fixed caller SELECT after XS is chilled:

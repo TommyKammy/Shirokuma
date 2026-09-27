@@ -5,7 +5,7 @@ title: "Idle suspend and wake for VirtualWarehouse"
 status: local-partial
 created: 2026-07-05
 updated: 2026-09-27
-version: "0.8"
+version: "0.9"
 area: "workpackage"
 tags: [shirokuma, wp, l3, warehouse]
 ---
@@ -18,6 +18,12 @@ tags: [shirokuma, wp, l3, warehouse]
 | Level | L3 |
 | Workstream | Warehouse |
 | Depends-on | WP-L3-VW-001, WP-L0-OBS-001 |
+
+## 2026-09-27 archived request lookup in Go CLI — offline
+
+`shirokuma warehouse saved-request --session <session-id> --request-id <original-uuid> --profile local-experiment`を追加。既存live query/transitionとは別コマンドで、固定checkoutの既存保存status scriptを専用Pythonで1回だけ起動。session/UUID/profileの事前検証、固定子プロセス引数・空環境、上限付き1行JSONのsession/UUID・`runtime_state=unknown`検査、失敗時の部分JSON抑止を行う。任意socket/SQL/owner回復/scaleの入口は追加せず、旧Make/Python・live queryの契約を維持。archived2 sessionの元UUIDをGo CLIからread-only確認し、保存記録上のquery/wakeとruntime unknownを確認。欠損IDは`not-recorded-in-snapshot`で未実行証明ではない。元保持journal/backup変更なし、Colima起動なし、owner再起動後の要求回復・現在のbackend/cleanup独立確認は未達。取り消す場合は新CLIを使用せず、保持物の復元・移行不要。private証拠は`tmp/local-experiment/warehouse-saved-request-cli-checks/20260927/`。WP local-partial。
+
+`gofmt`、`go test ./...`、`go vet ./...` PASS。Go CLIで不在UUIDはnullの保存状態、無効UUIDはstdoutなしで失敗。最終全回帰121 suites/3794実行＝3786PASS＋8skip、88.396秒、log SHA256 `7e6250d2889d5bd20b99900fb63123b50a34dfa0569d428863695f4e98f4a350`。design-context/secret scan PASS。変更前後の保持journal SHAは不変、専用ColimaはStopped。
 
 ## 2026-09-27 archived request-ID lookup without replay — offline
 

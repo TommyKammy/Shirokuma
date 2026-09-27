@@ -5,12 +5,18 @@ title: "Local Experiment Milestones"
 status: active
 created: 2026-09-16
 updated: 2026-09-27
-version: "3.96"
+version: "3.97"
 area: work-packages
 tags: [shirokuma, local, evidence]
 ---
 
 # Local Experiment Milestones
+
+## 2026-09-27: archived warehouse request lookup from Go CLI
+
+WP-L3-VW-002の既存保存request UUID照会を`shirokuma warehouse saved-request`から利用できるよう固定offline childを追加。live queryの再送とは分離し、profile/session/UUID・専用Pythonと固定script・空環境・有界1行JSON・identity/unknown検証後だけ結果を表示。archived2 sessionの元UUIDをread-only実行し、記録上query/wake、現在runtime unknownを確認。欠損IDは実未実行の証明ではない。Colima/owner/SQL/scale接続なし、保持run/backup変更なし、WP local-partial。private証拠は`tmp/local-experiment/warehouse-saved-request-cli-checks/20260927/`。
+
+`gofmt`、`go test ./...`、`go vet ./...` PASS。CLIから不在UUIDのnull表示と無効UUIDの部分stdoutなしを確認。最終全回帰121 suites/3794実行＝3786PASS＋8skip、88.396秒、log SHA256 `7e6250d2889d5bd20b99900fb63123b50a34dfa0569d428863695f4e98f4a350`。design-context/secret scan PASS、保持journal SHA不変、専用Colima Stopped。
 
 ## 2026-09-27: archived XS request-ID lookup without replay
 

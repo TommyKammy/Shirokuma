@@ -46,7 +46,9 @@ func newRootCommandWithWarehouse(output io.Writer, runner commandRunner, warehou
 	root.AddCommand(newCatalogCommand(execCatalogChild{}))
 	root.AddCommand(newSRECommand(execSREChild{}))
 	root.AddCommand(newPolicyCommand(execPolicyChild{}))
-	root.AddCommand(newWarehouseQueryCommand(unixWarehouseClient{}))
+	warehouse := newWarehouseQueryCommand(unixWarehouseClient{})
+	warehouse.AddCommand(newWarehouseSavedRequestCommand(execWarehouseSavedRequestChild{}))
+	root.AddCommand(warehouse)
 
 	return root
 }
